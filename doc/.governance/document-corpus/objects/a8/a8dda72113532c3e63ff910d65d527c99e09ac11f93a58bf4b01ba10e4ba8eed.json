@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/p2p/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "19d447f835f7fce58385a7924b51f77be50f82083a641bc37ed08dbe41aa03a9",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd",
+    "path": "doc/p2p/network/readme-p1-network-production-hardening.prd.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "p2p-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "blockchain_ops_engineer",
+    "structural_owner": "blockchain_ops_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

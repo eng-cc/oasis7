@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "40c23f1e2e36d1615f98056d6614b0ec5bb9a182e783078c36fd915a1d1f8ba7",
+    "current_authority": "doc/engineering/workflow/source-of-truth.md",
+    "decision_owner": "agent_engineer",
+    "disposition": "retain_historical_decision_background",
+    "note": "2026-03 object-model background only; not current task truth evidence sink or workflow authority",
+    "path": "doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

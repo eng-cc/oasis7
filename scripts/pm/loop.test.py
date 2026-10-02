@@ -262,11 +262,34 @@ class LoopTests(unittest.TestCase):
             git('config', 'user.email', 'fixture@example.invalid')
             helpers = root / 'scripts/pm'
             helpers.mkdir(parents=True)
+            repository = Path(__file__).resolve().parents[2]
             for filename in ('loop.py', 'loop_gate.py', 'loop_recovery.py', 'loop_policy.py', 'loop_contracts.py', 'loop_terminal.py', 'loop-policy.v1.json'):
                 shutil.copy2(Path(__file__).with_name(filename), helpers / filename)
+            shutil.copy2(repository / 'scripts/document_corpus.py', root / 'scripts/document_corpus.py')
+            for relative in (
+                'doc/.governance/document-corpus-inventory.json',
+                'doc/.governance/top-level-directory-registry.json',
+                'doc/testing/evidence/inventory.json',
+            ):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(repository / relative, target)
             product = root / 'doc/product/a.md'
             product.parent.mkdir(parents=True)
             product.write_text('before')
+
+            product_path = product.relative_to(root).as_posix()
+            registry_path = 'doc/.governance/top-level-directory-registry.json'
+
+            def sync_objects(*paths):
+                command = [sys.executable, str(repository / 'scripts/document-corpus-inventory.py'),
+                           '--repo-root', str(root), 'sync', '--worktree', '--apply']
+                for path in paths:
+                    command.extend(('--path', path))
+                result = subprocess.run(command, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            sync_objects(registry_path, product_path)
             git('add', '.')
             git('commit', '-qm', 'effective')
             base = git('rev-parse', 'HEAD')
@@ -274,11 +297,18 @@ class LoopTests(unittest.TestCase):
             trusted = Path(tmp) / 'trusted'
             git('worktree', 'add', '--detach', str(trusted), base)
             product.write_text('after')
+            sync_objects(product_path)
             git('add', '.')
             git('commit', '-qm', 'candidate')
             uid = 'task_' + 'a' * 32
-            binding = dict(schema='oasis7.loop-task/v1', task_uid=uid, change_id='c', loop='product', owner_role='gameplay_designer', bootstrap_epoch=1, manual_request_ref='user-1', request_key='r', write_scope=['doc/product/**'], out_of_scope=[], input_contracts=[], acceptance_refs=['a'], dependencies=[], target_delivery='pilot', policy_commit=base, policy_digest='sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest())
+            product_key = hashlib.sha256(product_path.encode('utf-8')).hexdigest()
+            product_record = f'doc/.governance/document-corpus/objects/{product_key[:2]}/{product_key}.json'
+            binding = dict(schema='oasis7.loop-task/v1', task_uid=uid, change_id='c', loop='product', owner_role='gameplay_designer', bootstrap_epoch=1, manual_request_ref='user-1', request_key='r', write_scope=['doc/product/**', product_record], out_of_scope=[], input_contracts=[], acceptance_refs=['a'], dependencies=[], target_delivery='pilot', policy_commit=base, policy_digest='sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest())
             task = dict(task_uid=uid, owner_role='gameplay_designer', bootstrap_epoch=1, loop_binding=binding)
+            binding['write_scope'] = ['doc/product/**']
+            result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
+            self.assertEqual(result['status'], 'blocked', result)
+            binding['write_scope'] = ['doc/product/**', product_record]
             result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
             self.assertEqual(result['status'], 'passed', result)
             (trusted / 'scripts/pm/loop_policy.py').write_text('raise Exception("tampered")')

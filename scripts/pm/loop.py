@@ -115,17 +115,41 @@ def _trusted_module(root, target, binding, name):
     if common_dir(root) != common_dir(target):
         raise ValueError('tool root belongs to another repository')
     # Check every executable dependency before importing any candidate-controlled code.
-    files = _git(target, 'ls-tree', '-r', '--name-only', commit, '--', 'scripts/pm').splitlines()
+    trusted_import_files = (
+        'scripts/document_corpus.py',
+        'scripts/product-doc-content-check.py',
+        'scripts/product_doc_markdown.py',
+    )
+    files = _git(
+        root, 'ls-tree', '-r', '--name-only', commit, '--', 'scripts/pm',
+        *trusted_import_files,
+    ).splitlines()
+    trusted_root = Path(root).resolve()
     for relative in files:
         if not relative.endswith(('.py', '.sh', '.json')): continue
         expected = subprocess.check_output(['git', '-C', str(target), 'show', commit + ':' + relative])
-        if (root / relative).is_symlink() or (root / relative).read_bytes() != expected:
+        path = trusted_root / relative
+        if (path.is_symlink() or not path.resolve().is_relative_to(trusted_root)
+                or path.read_bytes() != expected):
             raise ValueError('effective helper bytes differ: ' + relative)
-    tracked = set(files)
-    for path in (root / 'scripts/pm').glob('*.py'):
-        if str(path.relative_to(root)) not in tracked:
-            raise ValueError('untracked executable in trusted tool root')
+    untracked = _git(
+        trusted_root, 'ls-files', '--others', '--', 'scripts/pm',
+        *trusted_import_files, ':(exclude)**/__pycache__/**',
+    ).splitlines()
+    if untracked:
+        raise ValueError('untracked executable in trusted tool root: ' + untracked[0])
+    sys.dont_write_bytecode = True
     sys.path.insert(0, str(root / 'scripts/pm'))
+    if name == 'loop_policy':
+        # loop_policy imports loop_contracts by module name. Replace any
+        # preloaded candidate object with the exact effective-root module.
+        contracts_path = trusted_root / 'scripts/pm/loop_contracts.py'
+        contract_spec = importlib.util.spec_from_file_location('loop_contracts', contracts_path)
+        if contract_spec is None or contract_spec.loader is None:
+            raise ValueError('trusted loop_contracts helper unavailable')
+        contracts = importlib.util.module_from_spec(contract_spec)
+        sys.modules['loop_contracts'] = contracts
+        contract_spec.loader.exec_module(contracts)
     path = root / 'scripts/pm' / (name + '.py')
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)

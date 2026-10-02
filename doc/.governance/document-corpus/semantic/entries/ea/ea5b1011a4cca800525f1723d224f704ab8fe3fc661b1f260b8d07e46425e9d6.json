@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "f3e5087d8a642bfd1e607db1e59f8ac09ce54b9b0c0951647a9a51d149206bf1",
+    "current_authority": "doc/world-simulator/llm/provider-agent-experience-parity.prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_dated_window_evidence",
+    "note": "2026-03-17 window only; current parity default-enable and readiness require fresh re-sign",
+    "path": "doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

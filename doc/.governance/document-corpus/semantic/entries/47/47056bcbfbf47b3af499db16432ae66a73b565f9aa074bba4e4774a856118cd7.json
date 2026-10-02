@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "aca6dc0e75427badb911849886e872bb69e59cd663d616ca77ec89e7571bc206",
+    "current_authority": "doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current trend design; date is establishment date",
+    "path": "doc/testing/governance/testing-quality-trend-tracking-2026-03-11.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

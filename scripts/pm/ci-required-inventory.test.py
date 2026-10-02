@@ -448,10 +448,30 @@ class RequiredInventoryTests(unittest.TestCase):
                 item["unit_contract"] for item in result["unit_specs"]
                 if item["unit_id"] == "required_gate_baseline"
             )
+            baseline_spec = next(
+                item for item in result["unit_specs"]
+                if item["unit_id"] == "required_gate_baseline"
+            )
             self.assertEqual(
                 baseline_contract["trusted_W"]["planner_invocation_digest"],
                 result["planner_invocation"]["digest"],
             )
+            self.assertIn("required_gate_baseline", result["selected_test_units"])
+            self.assertIn("required_gate_baseline", result["input_scope"]["required_test_units"])
+            self.assertIn("document-corpus-v3-check", baseline_contract["commands_and_obligations"])
+            self.assertTrue({
+                "scripts/document_corpus.py",
+                "scripts/document_evidence_policy.py",
+                "scripts/document-corpus-inventory-check.py",
+                "scripts/doc-evidence-inventory-check.py",
+                "doc/.governance/document-corpus-inventory.json",
+                "doc/testing/evidence/inventory.json",
+            }.issubset(set(baseline_spec["command_checker_paths"])))
+            # The required-artifact renderer consumes this exact obligation set
+            # when selecting the baseline result receipt.
+            self.assertTrue(any(
+                "document-corpus-v3-check" in item for item in baseline_spec["obligation_set"]
+            ))
 
     def test_planner_unit_list_always_includes_baseline_and_matches_selected_capabilities(self):
         plan = {

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "0e4f6b0d1333fcfae2bb2305f65c337971abe8afd4ca11e9b344f75333a431f8",
+    "current_authority": "doc/product/agents-world-simulation/player-readable-world-stage.prd.md",
+    "decision_owner": "game_visual_interaction_designer",
+    "disposition": "retain_current_authority",
+    "note": "canonical current Viewer visual authority; not runtime compatibility or release evidence",
+    "path": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1260,43 +1260,75 @@ def loop_lineage_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
 def validate_loop_inputs(root: pathlib.Path, binding: dict[str, Any], repository: str, purpose: str) -> None:
     """Admission of selected manual inputs; never scan unrelated tasks."""
     tool_root = pathlib.Path(__file__).resolve().parents[2]
+    trusted_import_files = (
+        "scripts/document_corpus.py",
+        "scripts/product-doc-content-check.py",
+        "scripts/product_doc_markdown.py",
+    )
     commit = binding.get("policy_commit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         die("manual admission requires immutable policy commit")
     if run_text(["git", "-C", str(tool_root), "rev-parse", "HEAD"]) != commit:
         die("manual admission helper is not running from pinned effective policy")
-    run_text(["git", "-C", str(tool_root), "diff", "--no-ext-diff", "--no-textconv", "--exit-code", commit, "--", "scripts/pm"])
-    shadows = run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm"])
+    run_text(["git", "-C", str(tool_root), "diff", "--no-ext-diff", "--no-textconv", "--exit-code", commit, "--", "scripts/pm", *trusted_import_files])
+    shadows = run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm", *trusted_import_files, ":(exclude)**/__pycache__/**"])
     if any(path.endswith((".py", ".sh", ".json")) for path in shadows.splitlines()):
         die("untracked executable authority in manual helper root")
-    sys.path.insert(0, str(pathlib.Path(__file__).parent))
-    try:
-        import loop_policy
-        import loop_contracts
-        for result in (loop_policy.validate_tool_root(tool_root, root, binding),
-                       loop_contracts.validate_contracts(tool_root, root, binding, purpose=purpose)):
-            if result.get("status") != "passed":
-                die("manual input admission blocked: " + str(result.get("blockers")))
-        bindings = {binding["task_uid"]: binding}
-        pending = list(binding["dependencies"])
-        while pending:
-            uid = pending.pop()
-            if uid in bindings:
-                continue
-            if len(bindings) >= 64:
-                die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
-            live = github_issue_record(repository, uid)
-            require_loop_dependency_ready(live or {}, uid, repository, root)
-            dependency = (live or {}).get("loop_binding")
-            if not isinstance(dependency, dict):
-                die("selected dependency binding unavailable: " + uid)
-            bindings[uid] = validate_loop_binding(dependency)
-            pending.extend(dependency["dependencies"])
-        result = loop_policy.validate_dependencies(binding, bindings)
+    if run_text(["git", "-C", str(tool_root), "rev-parse", "--path-format=absolute", "--git-common-dir"]) != run_text(["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"]):
+        die("manual helper root belongs to another repository")
+
+    def load_pinned_module(name: str):
+        relative = f"scripts/pm/{name}.py"
+        entries = run_text(["git", "-C", str(tool_root), "ls-tree", commit, "--", relative]).splitlines()
+        if len(entries) != 1 or "\t" not in entries[0]:
+            die("effective helper module missing or ambiguous: " + relative)
+        metadata, recorded_path = entries[0].split("\t", 1)
+        mode, object_type, _oid = metadata.split()
+        path = tool_root / relative
+        if (recorded_path != relative or mode != "100644" or object_type != "blob"
+                or path.is_symlink() or not path.resolve().is_relative_to(tool_root.resolve())
+                or path.read_bytes() != subprocess.check_output(["git", "-C", str(tool_root), "show", commit + ":" + relative])):
+            die("effective helper bytes or mode differ: " + relative)
+        if run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", relative]):
+            die("untracked effective helper shadow: " + relative)
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            die("effective helper module unavailable: " + relative)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    sys.dont_write_bytecode = True
+    # loop_policy imports loop_contracts by name; replace any preloaded module
+    # with the exact pinned helper before executing the policy bytes.
+    loop_contracts = load_pinned_module("loop_contracts")
+    loop_policy = load_pinned_module("loop_policy")
+    for result in (loop_policy.validate_tool_root(tool_root, root, binding),
+                   loop_contracts.validate_contracts(tool_root, root, binding, purpose=purpose)):
         if result.get("status") != "passed":
-            die("manual dependency admission blocked: " + str(result.get("blockers")))
-    finally:
-        sys.path.pop(0)
+            die("manual input admission blocked: " + str(result.get("blockers")))
+    bindings = {binding["task_uid"]: binding}
+    pending = list(binding["dependencies"])
+    while pending:
+        uid = pending.pop()
+        if uid in bindings:
+            continue
+        if len(bindings) >= 64:
+            die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
+        live = github_issue_record(repository, uid)
+        require_loop_dependency_ready(live or {}, uid, repository, root)
+        dependency = (live or {}).get("loop_binding")
+        if not isinstance(dependency, dict):
+            die("selected dependency binding unavailable: " + uid)
+        binding_result = loop_policy.validate_binding(dependency)
+        if binding_result.get("status") != "passed":
+            die("invalid selected dependency binding: " + str(binding_result.get("blockers")))
+        bindings[uid] = dependency
+        pending.extend(dependency["dependencies"])
+    result = loop_policy.validate_dependencies(binding, bindings)
+    if result.get("status") != "passed":
+        die("manual dependency admission blocked: " + str(result.get("blockers")))
 
 
 def require_loop_dependency_ready(live: dict[str, Any], task_uid: str, repository: str = DEFAULT_REPO,
@@ -3312,6 +3344,599 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     return 0
 
 
+class PublicationRecoveryAuthority:
+    """Read-only admission for one current, professionally reviewed recovery.
+
+    The live TPM envelope locates evidence; each evidence surface is checked
+    independently. Neither the envelope nor an old journal grants authority.
+    """
+
+    marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
+    roles = ("runtime_engineer", "repository_health_engineer", "qa_engineer")
+    issue_owned = {"status", "workflow_phase", "pr_number", "pr_url"}
+    project_owned = {"Status", "PM Status", "Workflow Phase", "PR"}
+
+    @staticmethod
+    def encoded(value: Any) -> bytes:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+
+    @staticmethod
+    def sha(raw: bytes) -> str:
+        return hashlib.sha256(raw).hexdigest()
+
+    def __init__(self, args: argparse.Namespace, record: dict[str, Any], binding: dict[str, Any],
+                 intent: dict[str, Any], module: Any, comments: list[dict[str, Any]]):
+        self.args, self.record, self.binding, self.intent, self.module = args, dict(record), binding, intent, module
+        self.root = args.root.resolve()
+        project_id, _ = load_sync_module().project_context(args.project_owner, args.project_number)
+        self.record["project_id"] = project_id
+        selected = [c for c in comments if self.marker in c["body"]]
+        if len(selected) != 1:
+            raise ValueError("recovery requires one unique current TPM admission")
+        body = selected[0]["body"]
+        match = re.fullmatch(re.escape(self.marker) + r"\s*```json\s*\n(.*?)\n```\s*", body, re.S)
+        if not match:
+            raise ValueError("malformed recovery admission")
+        self.envelope = json.loads(match[1], object_pairs_hook=module._unique_object)
+        self.comment = selected[0]
+        self.envelope_body = body
+        self._closed(self.envelope, {"schema", "identity", "operation", "scope_evidence", "current_action",
+                                    "predecessor", "helper_review", "unrelated_snapshot"})
+        if (self.envelope["schema"] != "oasis7-publication-recovery-admission/v1"
+                or self.envelope["operation"] != "record_pr_publication_recovery"):
+            raise ValueError("unsupported recovery operation")
+        identity = self.envelope["identity"]
+        expected = {"repository": args.repo, "task_uid": args.task_uid, "issue_number": record["issue_number"],
+                    "issue_url": record["issue_url"], "pr_number": binding["pr_number"], "pr_url": binding["pr_url"],
+                    "project_id": project_id, "project_item_id": record["project_item_id"],
+                    "canonical_worktree": str(self.root), "source_ref": record["task_branch"],
+                    "target_ref": record["default_branch"]}
+        if identity != expected:
+            raise ValueError("recovery admission task identity mismatch")
+        self._scope(comments)
+        self._helpers()
+        self._lineage(comments)
+        self.issue_baseline: dict[str, Any] | None = None
+        self.project_baseline: dict[str, Any] | None = None
+        self.check()
+
+    @staticmethod
+    def _closed(value: Any, keys: set[str]) -> None:
+        if not isinstance(value, dict) or set(value) != keys:
+            raise ValueError("recovery evidence fields are incomplete or unsupported")
+
+    def _comment_identity(self, comment: dict[str, Any], actor: str) -> None:
+        if (type(comment.get("id")) is not int
+                or comment.get("html_url") != self.record["issue_url"] + "#issuecomment-" + str(comment["id"])
+                or comment.get("issue_url") != f"https://api.github.com/repos/{self.args.repo}/issues/{self.record['issue_number']}"
+                or (comment.get("user") or {}).get("login") != actor):
+            raise ValueError("unauthenticated recovery comment")
+
+    def _scope(self, comments: list[dict[str, Any]]) -> None:
+        refs = self.envelope["scope_evidence"]
+        if not isinstance(refs, list) or len(refs) != 5 or len({r.get("comment_id") for r in refs}) != 5:
+            raise ValueError("incomplete recovery scope chain")
+        bodies = []
+        for ref in refs:
+            self._closed(ref, {"comment_id", "comment_url", "body_sha256", "author_login"})
+            matches = [c for c in comments if c.get("id") == ref["comment_id"]]
+            if len(matches) != 1:
+                raise ValueError("scope comment missing or duplicated")
+            c = matches[0]
+            self._comment_identity(c, ref["author_login"])
+            if c["html_url"] != ref["comment_url"] or self.sha(c["body"].encode()) != ref["body_sha256"]:
+                raise ValueError("scope comment digest mismatch")
+            bodies.append(c["body"])
+        plans = [b for b in bodies if "Plan-Gap Evidence:" in b]
+        if len(plans) != 1:
+            raise ValueError("unique structured user Plan-Gap evidence required")
+        rows, end = json.JSONDecoder(object_pairs_hook=self.module._unique_object).raw_decode(
+            plans[0].split("Plan-Gap Evidence:", 1)[1].strip())
+        if not isinstance(rows, list):
+            raise ValueError("Plan-Gap evidence must be an array")
+        keys = {"step_id", "acceptance_refs", "dependencies", "verification_command", "verification_evidence",
+                "write_scope", "out_of_scope", "required_role_slices"}
+        for row in rows:
+            self._closed(row, keys)
+            if not all(isinstance(v, str) and v.strip() for v in row.values()):
+                raise ValueError("incomplete Plan-Gap row")
+        by_step = {row["step_id"]: row for row in rows}
+        if len(by_step) != len(rows) or set(by_step) != {"REC-SPEC", "REC-RED", "REC-GREEN", "REC-RESTORE", "REC-DELIVER"}:
+            raise ValueError("recovery step scope incomplete")
+        paths = set(re.findall(r"scripts/pm/[\w.-]+", by_step["REC-GREEN"]["write_scope"]))
+        if paths != {"scripts/pm/github-project-task.py", "scripts/pm/pr_projection_publish.py"}:
+            raise ValueError("unapproved recovery helper scope")
+        if set(re.findall(r"scripts/pm/[\w.-]+", by_step["REC-RED"]["write_scope"])) != {
+                "scripts/pm/github-project-task.test.sh", "scripts/pm/pr_projection_publication.test.py"}:
+            raise ValueError("unapproved recovery test scope")
+        if ("approved helpers" not in by_step["REC-RESTORE"]["write_scope"]
+                or not re.search(r"seven|7", by_step["REC-DELIVER"]["write_scope"], re.I)):
+            raise ValueError("recovery restoration/delivery bounds missing")
+        if set(re.findall(r"(?:doc|scripts)/[\w./-]+", by_step["REC-SPEC"]["write_scope"])) != {
+                "doc/engineering/workflow/source-of-truth.md"}:
+            raise ValueError("unapproved recovery specification scope")
+        history = "\n".join(bodies)
+        if not all(path in history for path in ("scripts/pm/ci-reuse-validation.py", "scripts/pm/ci-reuse-validation.test.py")):
+            raise ValueError("original approved CLI path scope missing")
+        admissions = [b for b in bodies if re.search(r"REC-GREEN|GREEN ADMITTED", b)
+                      and "scripts/pm/github-project-task.py" in b and "Plan-Gap Evidence:" not in b]
+        if len(admissions) != 1 or not re.search(r"[0-9a-f]{64}", admissions[0]):
+            raise ValueError("explicit frozen RED / helper GREEN admission missing")
+
+    def _local(self, relative: str) -> pathlib.Path:
+        path = (self.root / relative).resolve()
+        if not path.is_relative_to(self.root / ".pm" / "scratch" / self.args.task_uid):
+            raise ValueError("review artifact outside selected task scratch")
+        return path
+
+    def _helpers(self) -> None:
+        review = self.envelope["helper_review"]
+        self._closed(review, {"helper_source_oid", "helper_closure_sha256", "closure_manifest",
+                              "ledger_path", "ledger_sha256", "role_returns"})
+        head = run_text(["git", "-C", str(self.root), "rev-parse", "HEAD"])
+        if review["helper_source_oid"] != head or self.intent["source_head_oid"] != head:
+            raise ValueError("reviewed helper source is not current HEAD")
+        manifest = review["closure_manifest"]
+        if not isinstance(manifest, list) or self.sha(self.encoded(manifest)) != review["helper_closure_sha256"]:
+            raise ValueError("helper closure digest mismatch")
+        paths = []
+        tree = {}
+        for line in run_text(["git", "-C", str(self.root), "ls-tree", "-r", head]).splitlines():
+            meta, path = line.split("\t", 1); mode, kind, oid = meta.split()
+            tree[path] = (mode, kind, oid)
+        for row in manifest:
+            self._closed(row, {"path", "mode", "blob_oid"})
+            path = row["path"]
+            if (not isinstance(path, str) or not path.isascii() or pathlib.PurePosixPath(path).is_absolute()
+                    or ".." in pathlib.PurePosixPath(path).parts or row["mode"] not in {"100644", "100755"}
+                    or tree.get(path) != (row["mode"], "blob", row["blob_oid"])):
+                raise ValueError("helper closure tree identity mismatch")
+            local = self.root / path
+            if local.is_symlink() or not local.is_file():
+                raise ValueError("helper closure source unavailable")
+            if bool(local.stat().st_mode & 0o111) != (row["mode"] == "100755"):
+                raise ValueError("helper closure executable mode mismatch")
+            raw = local.read_bytes()
+            oid = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+            if oid != row["blob_oid"]:
+                raise ValueError("helper closure working bytes differ from reviewed source")
+            paths.append(path)
+        if paths != sorted(set(paths)):
+            raise ValueError("helper closure must be sorted and unique")
+        # All repository-owned PM code is included, conservatively closing
+        # dynamic module and subprocess selection before any metadata effect.
+        required = {p for p, (_, kind, _) in tree.items() if p.startswith("scripts/pm/") and kind == "blob"}
+        if not required.issubset(paths) or not pathlib.Path(__file__).resolve().is_relative_to(self.root / "scripts/pm"):
+            raise ValueError("helper execution closure incomplete")
+        ledger = self._local(review["ledger_path"])
+        if self.sha(ledger.read_bytes()) != review["ledger_sha256"]:
+            raise ValueError("helper review ledger digest mismatch")
+        returns = review["role_returns"]
+        if not isinstance(returns, list) or sorted(r.get("role", "") for r in returns) != sorted(self.roles):
+            raise ValueError("helper review roles incomplete")
+        environment = dict(os.environ)
+        environment.pop("OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS", None)
+        for returned in returns:
+            self._closed(returned, {"role", "slice_id", "packet_sha256", "source_head_oid", "return_path", "return_sha256", "verdict"})
+            packet = self._local(f".pm/scratch/{self.args.task_uid}/slice-packets/{returned['slice_id']}.json")
+            artifact = self._local(returned["return_path"])
+            if (returned["source_head_oid"] != head or returned["verdict"] != "approved"
+                    or self.sha(packet.read_bytes()) != returned["packet_sha256"]
+                    or self.sha(artifact.read_bytes()) != returned["return_sha256"]):
+                raise ValueError("role return binding mismatch")
+            value = json.loads(artifact.read_text())
+            for key, expected in {"task_uid": self.args.task_uid, "role": returned["role"],
+                    "slice_id": returned["slice_id"], "head": head, "status": "completed",
+                    "scope_verdict": "approved", "risk_verdict": "approved", "findings": "no_findings",
+                    "helper_source_oid": head, "helper_closure_sha256": review["helper_closure_sha256"]}.items():
+                if value.get(key) != expected:
+                    raise ValueError("role return does not approve exact helper closure")
+            if not getattr(self, "validated_reviews", False):
+                subprocess.run([sys.executable, str(self.root / "scripts/pm/subagent-task-packet.py"), "validate", str(packet)],
+                               cwd=self.root, env=environment, capture_output=True, text=True, check=True, timeout=30)
+        if not getattr(self, "validated_reviews", False):
+            subprocess.run([sys.executable, str(self.root / "scripts/pm/validate-review-provenance.py"),
+                  "--mode", "human-operated", "--root", str(self.root), "--task-uid", self.args.task_uid,
+                  "--ledger", str(ledger), "--roles", ",".join(self.roles), "--source-head", head],
+                           cwd=self.root, env=environment, capture_output=True, text=True, check=True, timeout=30)
+            self.validated_reviews = True
+
+    def _lineage(self, comments: list[dict[str, Any]]) -> None:
+        from pr_projection_journal import publication_paths
+        common = pathlib.Path(run_text(["git", "-C", str(self.root), "rev-parse", "--path-format=absolute", "--git-common-dir"]))
+        found = []
+        for name in ("current_action", "predecessor"):
+            evidence = self.envelope[name]
+            self._closed(evidence, {"publication_id", "action_id", "journal_sha256", "H", "B", "S", "D",
+                                    "intent_comment_id", "intent_body_sha256"})
+            candidates = [c for c in comments if c.get("id") == evidence["intent_comment_id"]]
+            if len(candidates) != 1 or self.sha(candidates[0]["body"].encode()) != evidence["intent_body_sha256"]:
+                raise ValueError("publication intent digest/identity mismatch")
+            self._comment_identity(candidates[0], (self.comment.get("user") or {}).get("login"))
+            intent = self.module.parse_publication_comment(candidates[0]["body"])
+            unique = [c for c in comments if "<!-- oasis7-ci-publication/v1 -->" in c["body"]
+                      and self.module.parse_publication_comment(c["body"])["publication_id"] == intent["publication_id"]]
+            if len(unique) != 1:
+                raise ValueError("publication lineage intent is not unique")
+            for key, field in {"publication_id": "publication_id", "H": "source_head_oid", "B": "planner_authority_oid",
+                               "S": "source_scope_oid", "D": "projection_digest"}.items():
+                if intent[field] != evidence[key]:
+                    raise ValueError("publication lineage tuple mismatch")
+            for key in ("repository", "repository_id", "source_repository_id", "task_uid", "source_ref", "target_ref"):
+                if intent[key] != self.intent[key]:
+                    raise ValueError("publication lineage repository/task/ref mismatch")
+            for oid in (evidence["H"], evidence["B"], evidence["S"]):
+                if run_text(["git", "-C", str(self.root), "rev-parse", "--verify", oid + "^{commit}"]) != oid:
+                    raise ValueError("publication lineage Git identity mismatch")
+            path, _ = publication_paths(common, self.args.repo, intent["source_ref"], intent["publication_id"])
+            raw = path.read_bytes(); journal = json.loads(raw)
+            if raw != self.encoded(journal) + b"\n":
+                raise ValueError("publication journal bytes are not canonical producer output")
+            if self.sha(raw) != evidence["journal_sha256"]:
+                # A confirmed retry preserves the core's observed journal.
+                # Prove the exact known observation delta against the admitted
+                # raw preimage; arbitrary edits never become lineage evidence.
+                # The only additional migration is the legacy root-tail anchor
+                # written after exact Task-comment readback. It reconstructs
+                # the admitted bytes by removing that one field and validates
+                # the complete anchored READ_MATCH/RESOLVED sidecar.
+                observed = name == "current_action" and self._observed_preimage(journal, evidence)
+                anchored_readback = (
+                    name == "current_action"
+                    and self._legacy_exact_readback_anchor(
+                        path, common, journal, evidence, intent, unique[0],
+                    )
+                )
+                if not (observed or anchored_readback):
+                    raise ValueError("raw publication journal hash mismatch")
+            expected_identity = dict(repository=self.args.repo, branch=intent["source_ref"], publication_id=intent["publication_id"],
+                task_uid=self.args.task_uid, source_head_oid=evidence["H"], scope_base_oid=evidence["S"], projection_digest=evidence["D"])
+            if journal.get("schema") != "oasis7-pr-publication-journal/v1" or journal.get("identity") != expected_identity:
+                raise ValueError("publication journal identity mismatch")
+            actions = [a for a in journal["actions"] if a.get("action_id") == evidence["action_id"]]
+            if (len(actions) != 1 or evidence["action_id"] != "record-pr:" + intent["publication_id"]
+                    or actions[0].get("kind") != "record_pr" or actions[0].get("expected") != {
+                        "publication_id": intent["publication_id"], "task_uid": self.args.task_uid, "pr_number": self.binding["pr_number"]}
+                    or actions[0].get("state") not in ({"uncertain"} if name == "predecessor" else {"intent", "uncertain", "observed"})):
+                raise ValueError("publication lineage action is not authentic")
+            action = actions[0]
+            if (set(action) - {"action_id", "kind", "expected", "state", "observed"}
+                    or (action["state"] == "intent" and "observed" in action)
+                    or (action["state"] == "observed" and "observed" not in action)
+                    or ("observed" in action and action["observed"] != {"pr_number": self.binding["pr_number"]})):
+                raise ValueError("publication record action observation is malformed")
+            if name == "current_action":
+                bindings = self._binding_actions(journal)
+                if (journal.get("phase") not in {"PREPARED", "HEAD_CONFIRMED", "METADATA_CONFIRMED"}
+                        or journal.get("disposition") not in {None, "NETWORK_UNCERTAIN"}):
+                    raise ValueError("current publication phase/disposition is malformed")
+                if bindings and action.get("observed") != {"pr_number": self.binding["pr_number"]}:
+                    raise ValueError("binding action precedes confirmed record-pr observation")
+            found.append(intent)
+        if found[0] != self.intent or found[0]["publication_id"] == found[1]["publication_id"]:
+            raise ValueError("current/predecessor publication identity conflict")
+        run_text(["git", "-C", str(self.root), "merge-base", "--is-ancestor", found[1]["source_head_oid"], found[0]["source_head_oid"]])
+
+    def _legacy_exact_readback_anchor(self, path: pathlib.Path, common: pathlib.Path,
+                                      journal: dict[str, Any], evidence: dict[str, Any],
+                                      intent: dict[str, Any], task_comment: dict[str, Any]) -> bool:
+        """Recognize only the exact legacy-tail addition proven by Task readback."""
+        from pr_projection_journal import (
+            JournalError, PublicationJournal, TASK_POST_EVENTS_FILE, TASK_POST_TAIL_SCHEMA,
+        )
+
+        try:
+            tail = journal.get("task_post_tail")
+            if (not isinstance(tail, dict) or set(tail) != {"schema", "sequence", "digest"}
+                    or tail.get("schema") != TASK_POST_TAIL_SCHEMA
+                    or type(tail.get("sequence")) is not int or tail["sequence"] < 0
+                    or not isinstance(tail.get("digest"), str)
+                    or re.fullmatch(r"sha256:[0-9a-f]{64}", tail["digest"]) is None):
+                return False
+
+            # Removing exactly the anchor must recreate the admitted canonical
+            # root bytes. Any changed action, phase, identity, or other field
+            # therefore remains outside this compatibility exception.
+            preimage = dict(journal)
+            del preimage["task_post_tail"]
+            if self.sha(self.encoded(preimage) + b"\n") != evidence["journal_sha256"]:
+                return False
+
+            events_path = path.with_name(TASK_POST_EVENTS_FILE)
+            exists = events_path.exists()
+            event_raw = events_path.read_bytes() if exists else b""
+            if not exists or not event_raw.endswith(b"\n"):
+                return False
+            reader = PublicationJournal(path, path.parent / "publisher.lock", journal["identity"],
+                                        common_dir=common, canonical_worktree=self.root)
+            events = reader._decode_task_events(event_raw, exists=exists)
+            # The sidecar is producer-canonical, not merely semantically
+            # equivalent JSON. This also rejects duplicate keys and byte drift.
+            for line, event in zip(event_raw.splitlines(keepends=True), events):
+                if line != self.encoded(event) + b"\n":
+                    return False
+            if (tail["sequence"] != len(events)
+                    or tail["digest"] != "sha256:" + self.sha(event_raw)
+                    or len(events) < 2):
+                return False
+
+            publication_id = intent["publication_id"]
+            action_id = "task-intent:" + publication_id
+            read_match, resolved = events[-2:]
+            if (read_match.get("event") != "READ_MATCH"
+                    or resolved.get("event") != "RESOLVED"
+                    or read_match.get("action_id") != action_id
+                    or resolved.get("action_id") != action_id
+                    or read_match.get("identity") != resolved.get("identity")):
+                return False
+
+            actor = (self.comment.get("user") or {}).get("login")
+            self._comment_identity(task_comment, actor)
+            if task_comment.get("body") != self.module.publication_comment(intent):
+                return False
+            identity = read_match.get("identity")
+            payload = task_comment["body"]
+            expected = {
+                "schema": "oasis7-pr-task-post-action/v1",
+                "repository": intent["repository"],
+                "repository_id": intent["repository_id"],
+                "task_issue_number": self.record["issue_number"],
+                "task_uid": self.args.task_uid,
+                "bootstrap_epoch": intent["bootstrap_epoch"],
+                "publication": intent,
+                "canonical_worktree": str(self.root.resolve()),
+                "git_common_dir": str(common.resolve()),
+                "source_ref": intent["source_ref"],
+                "target_ref": intent["target_ref"],
+                "source_head_oid": intent["source_head_oid"],
+                "scope_base_oid": intent["source_scope_oid"],
+                "planner_authority_oid": intent["planner_authority_oid"],
+                "planner_config_sha256": intent["planner_config_sha256"],
+                "policy_digest": intent["policy_digest"],
+                "projection_digest": intent["projection_digest"],
+                "publisher_login": actor,
+                "payload_utf8": payload,
+                "payload_sha256": "sha256:" + self.sha(payload.encode("utf-8")),
+            }
+            if (not isinstance(identity, dict)
+                    or set(identity) != set(expected) | {"pr_binding"}
+                    or any(identity.get(key) != value for key, value in expected.items())):
+                return False
+            pr_binding = identity.get("pr_binding")
+            if not isinstance(pr_binding, dict):
+                return False
+            # Accept only exact producer encodings. The create producer emits
+            # state=unbound or state=bound/pr_number; the update producer also
+            # pins its unbound candidate PR. Retain the older task_uid/pr_number
+            # shape for journals written before these producer encodings.
+            producer_binding = (
+                pr_binding == {"state": "unbound"}
+                or (set(pr_binding) == {"state", "pr_number"}
+                    and pr_binding.get("state") == "bound"
+                    and type(pr_binding.get("pr_number")) is int
+                    and pr_binding["pr_number"] == self.binding["pr_number"])
+                or (set(pr_binding) == {"state", "candidate_pr_number"}
+                    and pr_binding.get("state") == "unbound"
+                    and type(pr_binding.get("candidate_pr_number")) is int
+                    and pr_binding["candidate_pr_number"] == self.binding["pr_number"])
+            )
+            legacy_binding = (
+                set(pr_binding) == {"task_uid", "pr_number"}
+                and pr_binding.get("task_uid") == self.args.task_uid
+                and (pr_binding.get("pr_number") is None
+                     or (type(pr_binding.get("pr_number")) is int
+                         and pr_binding["pr_number"] == self.binding["pr_number"]))
+            )
+            if not producer_binding and not legacy_binding:
+                return False
+            if (read_match.get("evidence") != {
+                    "phase": "prewrite", "publication_id": publication_id,
+                    "author_login": actor, "payload_sha256": expected["payload_sha256"],
+                }
+                    or resolved.get("evidence") != {"publication_id": publication_id}):
+                return False
+            return True
+        except (JournalError, OSError, ValueError, KeyError, TypeError, UnicodeError):
+            return False
+
+    def _binding_actions(self, journal: dict[str, Any]) -> list[dict[str, Any]]:
+        binding_id = "reciprocal-binding:" + self.binding["publication_id"]
+        binds = [a for a in journal["actions"] if a.get("action_id") == binding_id]
+        if len(binds) > 1:
+            raise ValueError("duplicate reciprocal binding journal action")
+        for action in binds:
+            if (set(action) - {"action_id", "kind", "expected", "state", "observed"}
+                    or action.get("kind") != "publish_reciprocal_binding"
+                    or action.get("expected") != {"publication_id": self.binding["publication_id"],
+                        "pr_number": self.binding["pr_number"], "binding_digest": self.binding["binding_digest"]}
+                    or action.get("state") not in {"intent", "uncertain", "observed"}
+                    or (action.get("state") == "intent" and "observed" in action)
+                    or (action.get("state") == "observed" and "observed" not in action)
+                    or ("observed" in action and action["observed"] != {"binding_digest": self.binding["binding_digest"]})):
+                raise ValueError("reciprocal binding journal action is malformed")
+        return binds
+
+    def _observed_preimage(self, journal: dict[str, Any], evidence: dict[str, Any]) -> bool:
+        binds = self._binding_actions(journal)
+        if (journal.get("phase") not in {"PREPARED", "HEAD_CONFIRMED", "METADATA_CONFIRMED"}
+                or journal.get("disposition") not in {None, "NETWORK_UNCERTAIN"}):
+            return False
+        copy = json.loads(json.dumps(journal))
+        # _intent and _push reset the global fields independently of retained
+        # metadata observations. Prove that exact reset without changing any
+        # action, rather than treating an aggregate phase as action authority.
+        for phase in ("PREPARED", "HEAD_CONFIRMED", "METADATA_CONFIRMED"):
+            for disposition in (None, "NETWORK_UNCERTAIN"):
+                copy["phase"], copy["disposition"] = phase, disposition
+                if self.sha(self.encoded(copy) + b"\n") == evidence["journal_sha256"]:
+                    return True
+        actions = copy.get("actions", [])
+        current = [a for a in actions if a.get("action_id") == evidence["action_id"]]
+        if len(current) != 1 or current[0].get("state") not in {"observed", "uncertain"} or current[0].get("observed") != {"pr_number": self.binding["pr_number"]}:
+            return False
+        binding_id = "reciprocal-binding:" + evidence["publication_id"]
+        binding_variants = [json.loads(json.dumps(binds)), []]
+        if binds:
+            for state in ("intent", "uncertain"):
+                pending = json.loads(json.dumps(binds))
+                pending[0]["state"] = state
+                pending[0].pop("observed", None)
+                binding_variants.append(pending)
+        non_binding = [a for a in actions if a.get("action_id") != binding_id]
+        binding_position = next((i for i, a in enumerate(actions) if a.get("action_id") == binding_id), len(actions))
+        current[0].pop("observed")
+        # These are the only prior states admitted for the current action.
+        # Hash equality proves every other byte/value of the original journal.
+        for binding_variant in binding_variants:
+            copy["actions"] = non_binding[:binding_position] + binding_variant + non_binding[binding_position:]
+            for state, disposition in (("uncertain", "NETWORK_UNCERTAIN"), ("uncertain", None), ("intent", None)):
+                current[0]["state"] = state
+                copy["disposition"] = disposition
+                for phase in ("PREPARED", "HEAD_CONFIRMED", "METADATA_CONFIRMED"):
+                    copy["phase"] = phase
+                    if self.sha(self.encoded(copy) + b"\n") == evidence["journal_sha256"]:
+                        return True
+        return False
+
+    def check(self, *, final: bool = False) -> tuple[dict[str, Any], dict[str, str]]:
+        args = self.args
+        actor = json.loads(run_text(["gh", "api", "user"])).get("login")
+        self._comment_identity(self.comment, actor)
+        if run_text(["git", "-C", str(self.root), "rev-parse", "HEAD"]) != self.intent["source_head_oid"]:
+            raise ValueError("current HEAD drift during recovery")
+        owner, repo = args.repo.split("/")
+        query = '''query($owner:String!,$repo:String!,$issue:Int!,$ids:[ID!]!) {
+          repository(owner:$owner,name:$repo) { issue(number:$issue) { number url body state viewerCanUpdate } }
+          nodes(ids:$ids) { ... on ProjectV2Item { id project { id number viewerCanUpdate owner { ... on User { login } ... on Organization { login } } }
+            content { __typename ... on Issue { number url repository { nameWithOwner } } }
+            fieldValues(first:100) { pageInfo { hasNextPage } nodes {
+              __typename
+              ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
+              ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+              ... on ProjectV2ItemFieldRepositoryValue { repository { id nameWithOwner } field { ... on ProjectV2FieldCommon { name } } }
+            } } } }
+        }'''
+        data = project_refresh_graphql(
+            query,
+            {"owner": owner, "repo": repo, "issue": self.record["issue_number"],
+             "ids": [self.record["project_item_id"]]},
+            operation="project_task_publication_recovery_readback",
+            task_uid=args.task_uid,
+        )
+        if data.get("errors"):
+            raise ValueError("permission/readback GraphQL uncertainty")
+        data = data.get("data") or {}; issue_permission = (data.get("repository") or {}).get("issue") or {}
+        nodes = data.get("nodes") or []
+        if len(nodes) != 1 or nodes[0].get("id") != self.record["project_item_id"]:
+            raise ValueError("selected Project item identity mismatch")
+        node = nodes[0]
+        refresh_project_identity(node, args.project_owner, args.project_number, self.record["project_id"])
+        content = node.get("content")
+        if (not isinstance(content, dict) or content.get("__typename") != "Issue"
+                or type(content.get("number")) is not int
+                or content["number"] != self.record["issue_number"]
+                or content.get("url") != self.record["issue_url"]
+                or not isinstance(content.get("repository"), dict)
+                or content["repository"].get("nameWithOwner") != args.repo):
+            raise ValueError("selected Project item content does not match canonical Task Issue")
+        if (issue_permission.get("number") != self.record["issue_number"]
+                or issue_permission.get("url") != self.record["issue_url"]
+                or issue_permission.get("state") != "OPEN" or issue_permission.get("viewerCanUpdate") is not True
+                or node["project"].get("viewerCanUpdate") is not True):
+            raise ValueError("fresh Issue/Project writer permissions unavailable")
+        values = {}
+        for row in node["fieldValues"]["nodes"]:
+            name = (row.get("field") or {}).get("name")
+            if not name or name in values:
+                raise ValueError("ambiguous Project field")
+            if row.get("__typename") == "ProjectV2ItemFieldRepositoryValue":
+                repository = row.get("repository")
+                if (not isinstance(repository, dict) or set(repository) != {"id", "nameWithOwner"}
+                        or not isinstance(repository["id"], str) or not repository["id"].strip()
+                        or not isinstance(repository["nameWithOwner"], str)
+                        or re.fullmatch(r"[^/\s]+/[^/\s]+", repository["nameWithOwner"]) is None):
+                    raise ValueError("malformed Project Repository field")
+                values[name] = {"type": "repository", "id": repository["id"],
+                                "name_with_owner": repository["nameWithOwner"]}
+            elif row.get("__typename") not in (None, "ProjectV2ItemFieldTextValue", "ProjectV2ItemFieldSingleSelectValue"):
+                raise ValueError("unsupported Project field value type")
+            else:
+                values[name] = row.get("name", row.get("text", ""))
+        raw_issue = (json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{self.record['issue_number']}"]))
+                     if final else {"body": issue_permission.get("body"), "state": issue_permission.get("state", "").lower()})
+        raw_body = raw_issue.get("body")
+        if not isinstance(raw_body, str):
+            raise ValueError("malformed authoritative Issue body")
+        for key in self.issue_owned:
+            lines = re.findall(rf"^- {key}:.*$", raw_body, re.M)
+            if len(lines) > 1 or any(not re.fullmatch(rf"- {key}: `[^`\n]+`", line) for line in lines):
+                raise ValueError("ambiguous Issue publication metadata")
+        unrelated_body = re.sub(r"^- (?:status|workflow_phase|pr_number|pr_url):.*\n?", "", raw_body, flags=re.M)
+        if hasattr(self, "unrelated_body") and self.unrelated_body != unrelated_body:
+            raise ValueError("unrelated Issue body changed during recovery")
+        self.unrelated_body = unrelated_body
+        self.live_body = raw_body
+        live = github_issue_record(args.repo, args.task_uid)
+        if not live or raw_issue.get("state") != "open":
+            raise ValueError("fresh Task Issue is not OPEN")
+        adjusted = dict(self.record)
+        for key in self.issue_owned:
+            adjusted[key] = live.get(key)
+        validate_record_pr_live_identity(args, adjusted, self.binding["pr_number"])
+        pr = github_pull_request(args.repo, self.binding["pr_number"])
+        if not has_exact_task_pr_linkage(pr.get("body"), args.task_uid, self.record["issue_number"]):
+            raise ValueError("live PR Task/Refs drift")
+        projection = self.module.decode_marker(pr.get("body"))
+        if any(projection.get(k) != v for k, v in {"task_uid": args.task_uid,
+                "source_head_oid": self.intent["source_head_oid"], "scope_base_oid": self.intent["source_scope_oid"],
+                "projection_digest": self.intent["projection_digest"]}.items()):
+            raise ValueError("live PR projection drift")
+        issue_post = {"status": "committed", "workflow_phase": "verification",
+                      "pr_number": self.binding["pr_number"], "pr_url": self.binding["pr_url"]}
+        issue_pre = {"status": "committed", "workflow_phase": "execution", "pr_number": None, "pr_url": None}
+        for key, post in issue_post.items():
+            actual = live.get(key) or None
+            if key == "pr_number" and actual is not None:
+                actual = int(actual)
+            if actual != post and (final or actual != issue_pre[key]):
+                raise ValueError("Issue field outside trusted pre/post transition: " + key)
+        project_post = {"Status": "In Progress", "PM Status": "committed", "Workflow Phase": "verification", "PR": self.binding["pr_url"]}
+        project_pre = {**project_post, "Workflow Phase": "execution", "PR": ""}
+        for key, post in project_post.items():
+            actual = values.get(key) or ""
+            if actual != post and (final or actual != project_pre[key]):
+                raise ValueError("Project field outside trusted pre/post transition: " + key)
+        unrelated_issue = {k: live.get(k) for k in ("task_uid", "owner_role", "module", "priority", "worktree_hint", "primary_package")}
+        unrelated_project = {k: v for k, v in values.items() if k not in self.project_owned}
+        expected = self.envelope["unrelated_snapshot"]
+        self._closed(expected, {"issue_sha256", "project_sha256"})
+        if (self.sha(self.encoded(unrelated_issue)) != expected["issue_sha256"]
+                or self.sha(self.encoded(unrelated_project)) != expected["project_sha256"]):
+            raise ValueError("unrelated Issue/Project snapshot drift")
+        # Preserve every non-owned Issue field, beyond the compact admission
+        # snapshot. Observation timestamps are not task fields.
+        baseline = {k: v for k, v in live.items() if k not in self.issue_owned | {"updated_at"}}
+        if self.issue_baseline is None:
+            self.issue_baseline = baseline
+        elif baseline != self.issue_baseline:
+            raise ValueError("unrelated Issue content changed during recovery")
+        current_comments = github_issue_comments(args.repo, self.record["issue_number"])
+        admitted = [c for c in current_comments if self.marker in c["body"]]
+        if len(admitted) != 1 or admitted[0]["body"] != self.envelope_body:
+            raise ValueError("current recovery action admission drift")
+        self._comment_identity(admitted[0], actor)
+        self._scope(current_comments)
+        self._lineage(current_comments)
+        self._helpers()
+        if final:
+            bindings = [self.module.parse_publication_binding_comment(c["body"]) for c in current_comments
+                        if "<!-- oasis7-ci-publication-binding/v1 -->" in c["body"]]
+            matches = [b for b in bindings if b["publication_id"] == self.binding["publication_id"]]
+            if matches != [self.binding]:
+                raise ValueError("exact unique final reciprocal binding missing")
+        return live, values
+
+
 def command_record_pr(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
@@ -3349,6 +3974,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
     publication_binding_path = getattr(args, "publication_binding_json", None)
+    recovery_required = bool(getattr(args, "recovery_required", False))
     publication_binding = None
     publication_intent = None
     publication_module = None
@@ -3413,7 +4039,25 @@ def command_record_pr(args: argparse.Namespace) -> int:
             if len(matching_bindings) != 1 or matching_bindings[0] != publication_binding:
                 die("record-pr: conflicting reciprocal CI publication binding already exists")
             binding_comment_exists = True
-    live_issue = validate_record_pr_live_identity(
+    if recovery_required and (publication_binding is None or not is_draft_candidate):
+        die("record-pr: required recovery needs an exact draft publication binding")
+    recovery = None
+    recovery_admissions = [
+        c for c in comments
+        if PublicationRecoveryAuthority.marker in c["body"]
+    ]
+    if recovery_required and len(recovery_admissions) != 1:
+        die("record-pr: required publication recovery admission is missing or ambiguous")
+    if (publication_binding is not None and is_draft_candidate
+            and (recovery_required or recovery_admissions)):
+        try:
+            recovery = PublicationRecoveryAuthority(args, record, publication_binding,
+                                                     publication_intent, publication_module, comments)
+            live_issue, _ = recovery.check()
+        except (ValueError, OSError, RuntimeError, subprocess.SubprocessError, KeyError, TypeError) as exc:
+            die(f"record-pr: recovery admission rejected: {exc}")
+    else:
+        live_issue = validate_record_pr_live_identity(
         args,
         record,
         requested_pr_number,
@@ -3438,12 +4082,34 @@ def command_record_pr(args: argparse.Namespace) -> int:
         "recorded_at": now(),
     })
     record["updated_at"] = now()
-    cleared_traceability = synchronize_live_issue_traceability(
+    cleared_traceability = set() if recovery else synchronize_live_issue_traceability(
         args.repo, args.task_uid, record, live=live_issue,
     )
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
-    if record.get("project_item_id"):
+    pending_issue_body = None
+    if recovery:
+        sync = load_sync_module()
+        project_id, fields = sync.project_context(args.project_owner, args.project_number)
+        if project_id != recovery.record["project_id"]:
+            die("record-pr: recovery Project context drift")
+        desired = sync.project_field_values(task)
+        for name in sorted(recovery.project_owned):
+            live_issue, values = recovery.check()
+            if str(values.get(name) or "") == str(desired.get(name) or ""):
+                continue
+            try:
+                updated, skipped = sync.update_fields(project_id, record["project_item_id"], task, fields,
+                                                      only_fields={name}, current_values=values)
+            except subprocess.TimeoutExpired:
+                _, observed = recovery.check()
+                if str(observed.get(name) or "") != str(desired.get(name) or ""):
+                    raise
+                updated, skipped = 1, []
+            if updated != 1:
+                die("record-pr: recovery Project effect not confirmed: " + str(skipped))
+            updated_fields += updated
+    elif record.get("project_item_id"):
         if is_draft_candidate:
             # A draft candidate owns the explicit committed/verification
             # projection. Updating only the PR field left Project Workflow
@@ -3456,7 +4122,36 @@ def command_record_pr(args: argparse.Namespace) -> int:
             )
         else:
             updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
-    update_issue_body(args.repo, int(record["issue_number"]), task)
+    if recovery:
+        live_issue, _ = recovery.check()
+        if any(not same_pr_number(live_issue.get(k), v) if k == "pr_number" else live_issue.get(k) != v
+               for k, v in {"status": target_status, "workflow_phase": target_phase,
+                            "pr_number": number, "pr_url": args.pr_url}.items()):
+            body = recovery.live_body
+            for key, value in {"status": target_status, "workflow_phase": target_phase,
+                               "pr_number": number, "pr_url": args.pr_url}.items():
+                line = f"- {key}: `{value}`"
+                if re.search(rf"^- {key}:.*$", body, re.M):
+                    body = re.sub(rf"^- {key}:.*$", lambda _: line, body, flags=re.M)
+                else:
+                    body = body.replace("Task metadata:\n", "Task metadata:\n" + line + "\n", 1)
+            pending_issue_body = body
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+                handle.write(pending_issue_body)
+                path = pathlib.Path(handle.name)
+            try:
+                try:
+                    run_text(["gh", "issue", "edit", str(record["issue_number"]), "-R", args.repo, "--body-file", str(path)])
+                except subprocess.TimeoutExpired:
+                    observed, _ = recovery.check()
+                    if not all(same_pr_number(observed.get(k), v) if k == "pr_number" else observed.get(k) == v
+                               for k, v in {"status": target_status, "workflow_phase": target_phase,
+                                            "pr_number": number, "pr_url": args.pr_url}.items()):
+                        raise
+            finally:
+                path.unlink(missing_ok=True)
+    else:
+        update_issue_body(args.repo, int(record["issue_number"]), task)
     evidence_comment = evidence_body(
         args.task_uid,
         args.role,
@@ -3487,6 +4182,8 @@ def command_record_pr(args: argparse.Namespace) -> int:
             if not comment_url:
                 die("record-pr: existing lifecycle evidence comment lacks URL identity")
         else:
+            if recovery:
+                recovery.check()
             comment_url = verified_issue_comment(
                 args.repo, int(record["issue_number"]), evidence_comment,
             )
@@ -3497,6 +4194,8 @@ def command_record_pr(args: argparse.Namespace) -> int:
     binding_comment_url = None
     if publication_binding is not None and not binding_comment_exists:
         body = publication_module.publication_binding_comment(publication_binding)
+        if recovery:
+            recovery.check()
         binding_comment_url = verified_issue_comment(
             args.repo, int(record["issue_number"]), body,
         )
@@ -3513,6 +4212,8 @@ def command_record_pr(args: argparse.Namespace) -> int:
         binding_comment_url = matching_comment_urls[0]
         if binding_comment_url not in record.setdefault("evidence_comments", []):
             record["evidence_comments"].append(binding_comment_url)
+    if recovery:
+        recovery.check(final=True)
     merge_task_mapping(mapping_path, args.task_uid, record, clear_keys=cleared_traceability)
     payload = {
         "task_uid": args.task_uid,
@@ -3548,7 +4249,7 @@ def github_issue_comments(repository: str, issue_number: int) -> list[dict[str, 
         ]))
     except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
         die(f"record-pr: Task publication comment readback failed: {exc}")
-    if not isinstance(pages, list):
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
         die("record-pr: Task publication comment response is malformed")
     comments = [item for page in pages for item in (page if isinstance(page, list) else [page])]
     if any(not isinstance(item, dict) or not isinstance(item.get("body"), str) for item in comments):
@@ -3730,6 +4431,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--draft-candidate", action="store_true")
     record_pr.add_argument("--existing-ready-update", action="store_true")
     record_pr.add_argument("--publication-binding-json")
+    record_pr.add_argument("--recovery-required", action="store_true")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 

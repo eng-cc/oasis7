@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "f932f1c3cfb33cf262d84bd069e653abcf8d9dd4fda7c91ec151c01c2012b6ad",
+    "current_authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
+    "decision_owner": "producer_system_designer",
+    "disposition": "retain_mixed_contract_snapshot",
+    "note": "environment taxonomy and claim prohibitions durable; hosts services lanes endpoints and readiness are dated snapshots",
+    "path": "doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

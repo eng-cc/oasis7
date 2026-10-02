@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "9fd1406539ced5f661f43b2a66ba42a5d0d9ff52121874340bf6f946b5f570cd",
+    "current_authority": "testing-manual.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_design_companion",
+    "note": "current runtime test-harness design suggestions; not executed test evidence",
+    "path": "doc/world-runtime/testing/testing.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

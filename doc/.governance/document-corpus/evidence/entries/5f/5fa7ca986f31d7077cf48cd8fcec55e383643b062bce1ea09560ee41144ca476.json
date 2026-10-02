@@ -1,0 +1,22 @@
+{
+  "record": {
+    "authority": "doc/world-simulator/m4/industrial-resource-flow-contract.prd.md",
+    "backlink": "doc/testing/evidence/README.md",
+    "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
+    "content_sha256": "c2f857e3ac5e3547a8867d43f0aefc4e568ba1087c0ea1ab2b7a4a4b7b412495",
+    "disposition": "retain",
+    "domain_owner": "qa_engineer",
+    "evidence_window": "dated-historical-or-supporting-evidence",
+    "lifecycle": "HISTORICAL_PROVENANCE",
+    "path": "doc/testing/evidence/issue-162-industrial-chain-legibility-closeout-2026-05-04.md",
+    "rationale": "Batch-6 cross-role disposition: retained historical candidate/validation/closeout, manifest-backed visual provenance, supporting asset, or explicit non-evidence template.",
+    "required_followup_roles": [
+      "qa_engineer",
+      "producer_system_designer"
+    ],
+    "residual_risk": "Historical pass/closeout/visual/signer wording and captured assets are window-bound; templates are never evidence, and current claims require fresh candidate-bound validation.",
+    "retention_owner": "qa_engineer",
+    "semantic_role": "historical_issue_closeout"
+  },
+  "schema": "oasis7.document-evidence-entry/v1"
+}

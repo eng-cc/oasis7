@@ -1,0 +1,23 @@
+{
+  "record": {
+    "authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
+    "backlink": "doc/testing/evidence/README.md",
+    "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
+    "content_sha256": "4367a60e75fbbe81d98d5514936dc81dc5b00787df9d9d9262bf4ab0c83acccd",
+    "disposition": "retain",
+    "domain_owner": "blockchain_ops_engineer",
+    "evidence_window": "dated-historical-or-supporting-evidence",
+    "lifecycle": "HISTORICAL_PROVENANCE",
+    "path": "doc/testing/evidence/testnet-upgrade-preflight-drill-2026-06-01.md",
+    "rationale": "Batch-6 cross-role disposition: retained historical candidate/validation/closeout, manifest-backed visual provenance, supporting asset, or explicit non-evidence template.",
+    "required_followup_roles": [
+      "blockchain_ops_engineer",
+      "runtime_engineer",
+      "qa_engineer"
+    ],
+    "residual_risk": "Historical pass/closeout/visual/signer wording and captured assets are window-bound; templates are never evidence, and current claims require fresh candidate-bound validation.",
+    "retention_owner": "qa_engineer",
+    "semantic_role": "testnet_preflight_history"
+  },
+  "schema": "oasis7.document-evidence-entry/v1"
+}
