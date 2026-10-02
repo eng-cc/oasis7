@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Legacy-safe loop metadata transport and bootstrap identity regressions."""
+import hashlib
 import importlib.util
 import pathlib
+import shutil
 import tempfile
 import json
 import subprocess
@@ -47,17 +49,35 @@ class LoopTransport(unittest.TestCase):
         terminal.validate_terminal_delivery.assert_called_with('eng-cc/oasis7',UID,11)
 
     def test_new_tasks_eligibility_is_distinct_from_resume(self):
-        policy = mock.Mock()
-        policy.validate_tool_root.return_value = {'status':'passed'}
-        policy.validate_dependencies.return_value = {'status':'passed'}
-        contracts = mock.Mock()
-        contracts.validate_contracts.side_effect = lambda *a, **kw: ({'status':'blocked','blockers':['new_tasks prohibited']} if kw['purpose']=='new_tasks' else {'status':'passed'})
-        with mock.patch.dict('sys.modules', {'loop_policy':policy, 'loop_contracts':contracts}), \
-             mock.patch.object(TASK,'run_text',side_effect=lambda args:BINDING['policy_commit'] if args[-2:]==['rev-parse','HEAD'] else ''):
-            with self.assertRaises(SystemExit):
-                TASK.validate_loop_inputs(pathlib.Path('.'), BINDING, 'eng-cc/oasis7', 'new_tasks')
-            TASK.validate_loop_inputs(pathlib.Path('.'), BINDING, 'eng-cc/oasis7', 'in_flight')
-        policy.validate_dependencies.assert_called_once()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            helpers = root / 'scripts/pm'
+            helpers.mkdir(parents=True)
+            for filename in ('github-project-task.py', 'loop-policy.v1.json', 'loop_policy.py', 'loop_contracts.py'):
+                shutil.copy2(ROOT / filename, helpers / filename)
+            git = lambda *args: subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
+            git('init', '-q')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            git('add', '.')
+            git('commit', '-qm', 'pinned helper fixture')
+            policy_commit = git('rev-parse', 'HEAD')
+            git('update-ref', 'refs/remotes/origin/main', policy_commit)
+            policy_digest = 'sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest()
+            binding = dict(BINDING, policy_commit=policy_commit, policy_digest=policy_digest, delivery_obligations=[])
+
+            # Deliberately preseed candidate modules; admission must replace them
+            # with the exact helper bytes from the pinned Git commit.
+            policy = mock.Mock()
+            contracts = mock.Mock()
+            with mock.patch.object(TASK, '__file__', str(helpers / 'github-project-task.py')), \
+                 mock.patch.dict('sys.modules', {'loop_policy': policy, 'loop_contracts': contracts}):
+                with self.assertRaisesRegex(SystemExit, 'new code tasks require at least one technical input contract'):
+                    TASK.validate_loop_inputs(root, binding, 'eng-cc/oasis7', 'new_tasks')
+                TASK.validate_loop_inputs(root, binding, 'eng-cc/oasis7', 'in_flight')
+            policy.validate_tool_root.assert_not_called()
+            policy.validate_dependencies.assert_not_called()
+            contracts.validate_contracts.assert_not_called()
 
     def test_archive_and_reload_preserve_binding(self):
         retire = module('github-project-retire-tasks')
