@@ -297,6 +297,15 @@ if args[0] == "api":
             save()
             raise SystemExit("403 injected incomplete Issue comment pagination")
         comments = state["comments"]
+        if (state.get("edit_c1_on_third_locked_comments_read") is True
+                and state.get("pr") is not None
+                and not any(item.get("kind") == "issue:body" and item.get("effect")
+                            for item in state.get("mutations", []))):
+            state["record_pr_c1_reads"] = state.get("record_pr_c1_reads", 0) + 1
+            if state["record_pr_c1_reads"] == 3:
+                for comment in comments:
+                    if "<!-- oasis7-ci-publication/v1 -->" in comment.get("body", ""):
+                        comment["updated_at"] = "2026-10-02T02:00:59Z"
         emit([comments] if "--slurp" in args else comments)
     if endpoint.startswith("repos/" + state["repository"] + "/pulls?"):
         if (state.get("pr") is not None
@@ -915,6 +924,66 @@ class PublisherProcessTests(unittest.TestCase):
         self.assertEqual(1, len(c1), "an edited immutable publication must not be reposted")
         self.assertEqual(1, state["post_attempts"]["C1"])
         self.assertIsNone(state["pr"])
+
+    def test_locked_record_pr_reread_rejects_c1_edited_after_initial_validation(self):
+        self.state["edit_c1_on_third_locked_comments_read"] = True
+        self._save_state()
+
+        first = self.run_publisher()
+        state = self._load_state()
+        c1 = [item for item in state["comments"]
+              if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]
+        protected_effects = [item for item in state["mutations"]
+                             if item.get("effect") and
+                             (item["kind"] == "issue:body"
+                              or item["kind"].startswith("project:"))]
+        first_evidence = {
+            "returncode": first.returncode,
+            "record_pr_c1_reads": state.get("record_pr_c1_reads"),
+            "c1_count": len(c1),
+            "c1_timestamps": [
+                {key: item.get(key) for key in ("created_at", "updated_at")}
+                for item in c1
+            ],
+            "pr_create_effects": len(self._effects("pr:create", state)),
+            "protected_effects": protected_effects,
+            "stdout": first.stdout,
+            "stderr": first.stderr,
+        }
+        self.assertTrue(
+            first.returncode != 0
+            and state.get("record_pr_c1_reads") == 3
+            and len(c1) == 1
+            and c1[0].get("created_at") != c1[0].get("updated_at")
+            and len(self._effects("pr:create", state)) == 1
+            and protected_effects == [],
+            "record-pr must revalidate exact C1 server timestamps on its locked "
+            "fresh read before any Issue/Project binding write; observed "
+            + json.dumps(first_evidence, sort_keys=True),
+        )
+        self.assertEqual(1, state["post_attempts"]["C1"], first_evidence)
+
+        mutations_before_retry = list(state["mutations"])
+        retry = self.run_publisher()
+        retried = self._load_state()
+        retry_evidence = {
+            "returncode": retry.returncode,
+            "c1_count": len([item for item in retried["comments"]
+                             if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]),
+            "post_attempts": retried["post_attempts"],
+            "new_mutations": retried["mutations"][len(mutations_before_retry):],
+            "stdout": retry.stdout,
+            "stderr": retry.stderr,
+        }
+        self.assertTrue(
+            retry.returncode != 0
+            and retry_evidence["c1_count"] == 1
+            and retried["post_attempts"]["C1"] == 1
+            and retried["mutations"] == mutations_before_retry,
+            "an edited immutable C1 must remain pending on replay without another "
+            "comment or binding write; observed "
+            + json.dumps(retry_evidence, sort_keys=True),
+        )
 
     def test_uncertain_pr_create_is_reconciled_to_the_unique_live_draft(self):
         self.state["faults"]["pr:create"] = "after"

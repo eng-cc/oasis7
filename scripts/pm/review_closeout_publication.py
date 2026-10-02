@@ -211,6 +211,95 @@ def all_issue_comments(issue_number: int) -> list[dict[str, Any]]:
     return comments
 
 
+def _server_c1_comment_snapshot(comment: dict[str, Any]) -> dict[str, Any]:
+    """Copy the immutable server fields that bind one resolved C1 comment."""
+    comment_id = comment.get("id")
+    body = comment.get("body")
+    created_at = comment.get("created_at")
+    updated_at = comment.get("updated_at")
+    user = comment.get("user")
+    association = comment.get("author_association")
+    if (type(comment_id) is not int or comment_id < 1 or not isinstance(body, str)
+            or not isinstance(created_at, str) or not created_at
+            or not isinstance(updated_at, str) or not updated_at
+            or not isinstance(user, dict) or not isinstance(user.get("login"), str)
+            or not user.get("login") or user.get("type") != "User"
+            or not isinstance(association, str) or not association):
+        raise CloseoutPublicationError("resolved C1 server comment identity is malformed")
+    return {
+        "comment_id": comment_id,
+        "body": body,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "author": {"login": user["login"], "type": user["type"]},
+        "author_association": association,
+    }
+
+
+def _validated_c1_context(comments: list[dict[str, Any]], expected_identity: dict[str, Any],
+                          live_task_author: dict[str, Any], pr_binding: dict[str, Any],
+                          resolution: dict[str, Any]) -> dict[str, Any]:
+    """Retain the independently resolved C1 and its exact server comment binding."""
+    if resolution.get("status") != "passed" or resolution.get("publication") is None:
+        raise CloseoutPublicationError("cannot retain an unresolved C1 validation context")
+    comment_identity = resolution.get("comment")
+    comment_id = comment_identity.get("comment_id") if isinstance(comment_identity, dict) else None
+    matches = [comment for comment in comments if comment.get("id") == comment_id]
+    if len(matches) != 1:
+        raise CloseoutPublicationError("resolved C1 comment ID is missing or ambiguous")
+    server_comment = _server_c1_comment_snapshot(matches[0])
+    body_digest = "sha256:" + hashlib.sha256(server_comment["body"].encode("utf-8")).hexdigest()
+    if (not isinstance(comment_identity, dict)
+            or comment_identity.get("comment_id") != server_comment["comment_id"]
+            or comment_identity.get("created_at") != server_comment["created_at"]
+            or comment_identity.get("author") != server_comment["author"]
+            or comment_identity.get("author_association") != server_comment["author_association"]
+            or comment_identity.get("body_digest") != body_digest):
+        raise CloseoutPublicationError("resolved C1 identity differs from its raw server comment")
+    return {
+        "expected_identity": dict(expected_identity),
+        "live_task_author": dict(live_task_author),
+        "pr_binding": dict(pr_binding),
+        "comment_identity": dict(comment_identity),
+        "server_comment": server_comment,
+    }
+
+
+def _validate_locked_c1_snapshot(context: dict[str, Any], comments: list[dict[str, Any]]) -> None:
+    """Revalidate the exact trusted C1 before any closeout match or journal write."""
+    guard = context.get("c1_validation")
+    if not isinstance(guard, dict):
+        raise CloseoutPublicationError("lock-held C1 validation context is missing")
+    expected_identity = guard.get("expected_identity")
+    live_task_author = guard.get("live_task_author")
+    pr_binding = guard.get("pr_binding")
+    original_comment_identity = guard.get("comment_identity")
+    original_server_comment = guard.get("server_comment")
+    if (not isinstance(expected_identity, dict) or not isinstance(live_task_author, dict)
+            or not isinstance(pr_binding, dict) or not isinstance(original_comment_identity, dict)
+            or not isinstance(original_server_comment, dict)):
+        raise CloseoutPublicationError("lock-held C1 validation context is malformed")
+
+    publication_module = load_module(
+        Path(context["root"]), "review_closeout_locked_c1_publication", "pr_projection_publication.py",
+    )
+    result = publication_module.resolve_task_publication(
+        {"complete": True, "repository": REPOSITORY,
+         "issue_number": int(context["issue_number"]), "comments": comments},
+        expected_identity, live_task_author=live_task_author, pr_binding=pr_binding,
+    )
+    if (result.get("status") != "passed" or result.get("publication") != context.get("publication")
+            or result.get("comment") != original_comment_identity):
+        blockers = result.get("blockers")
+        detail = "; ".join(str(item) for item in blockers) if isinstance(blockers, list) else "C1 identity changed"
+        raise CloseoutPublicationError(f"lock-held C1 revalidation failed: {detail}")
+
+    comment_id = original_server_comment.get("comment_id")
+    matches = [comment for comment in comments if comment.get("id") == comment_id]
+    if len(matches) != 1 or _server_c1_comment_snapshot(matches[0]) != original_server_comment:
+        raise CloseoutPublicationError("lock-held C1 server comment ID, body, author, or timestamps changed")
+
+
 def _one_live_pr(root: Path, issue_number: int, task_uid: str,
                  source_ref: str, target_ref: str, asserted_number: int) -> dict[str, Any]:
     owner = REPOSITORY.split("/", 1)[0]
@@ -383,6 +472,19 @@ def resolve_context(root: Path, task_uid: str, plan: dict[str, Any]) -> dict[str
         "policy_digest": planner_digest,
         "projection_digest": projection["projection_digest"],
     }
+    live_task_author = {"login": task_author["login"], "type": task_author["type"]}
+    pr_binding = {
+        "repository": REPOSITORY, "number": asserted_pr_number,
+        "url": f"https://github.com/{REPOSITORY}/pull/{asserted_pr_number}",
+        "state": pull.get("state"), "merged": merged, "draft": pull.get("draft"),
+        "source_ref": head_info.get("ref"), "target_ref": base_info.get("ref"),
+        "source_head_oid": head_info.get("sha"), "task_uid": task_uid,
+        "issue_number": issue_number, "task_pr_number": issue_pr_number,
+        "task_pr_url": pr_url, "pr_author": user.get("login"),
+        "pr_author_type": user.get("type"), "created_at": pull.get("created_at"),
+        "updated_at": pull.get("updated_at"), "task_status": status,
+        "task_phase": phase,
+    }
     authority_oid = resolve_c1_planner_authority(
         root, comments, expected, comparison_oid, target_ref, head, scope_oid,
         planner_config, publication_module,
@@ -392,19 +494,8 @@ def resolve_context(root: Path, task_uid: str, plan: dict[str, Any]) -> dict[str
         {"complete": True, "repository": REPOSITORY, "issue_number": issue_number,
          "comments": comments},
         expected,
-        live_task_author={"login": task_author["login"], "type": task_author["type"]},
-        pr_binding={
-            "repository": REPOSITORY, "number": asserted_pr_number,
-            "url": f"https://github.com/{REPOSITORY}/pull/{asserted_pr_number}",
-            "state": pull.get("state"), "merged": merged, "draft": pull.get("draft"),
-            "source_ref": head_info.get("ref"), "target_ref": base_info.get("ref"),
-            "source_head_oid": head_info.get("sha"), "task_uid": task_uid,
-            "issue_number": issue_number, "task_pr_number": issue_pr_number,
-            "task_pr_url": pr_url, "pr_author": user.get("login"),
-            "pr_author_type": user.get("type"), "created_at": pull.get("created_at"),
-            "updated_at": pull.get("updated_at"), "task_status": status,
-            "task_phase": phase,
-        },
+        live_task_author=live_task_author,
+        pr_binding=pr_binding,
     )
     if result.get("status") != "passed" or not isinstance(result.get("publication"), dict):
         blockers = result.get("blockers")
@@ -436,7 +527,10 @@ def resolve_context(root: Path, task_uid: str, plan: dict[str, Any]) -> dict[str
         projection_digest=publication["projection_digest"],
     )
     return {"journal": journal, "publication": publication, "issue_number": issue_number,
-            "root": root, "task_uid": task_uid, "head": head}
+            "root": root, "task_uid": task_uid, "head": head,
+            "c1_validation": _validated_c1_context(
+                comments, expected, live_task_author, pr_binding, result,
+            )}
 
 
 def current_admin_login() -> str:
@@ -472,6 +566,7 @@ def publish_comment(context: dict[str, Any], *, action_id: str, kind: str,
                 journal.uncertain(action_id, "NETWORK_UNCERTAIN")
                 raise CloseoutPublicationError("closeout publication is pending; exact live readback is unavailable")
             raise
+        _validate_locked_c1_snapshot(context, comments)
         matches = find_matches(comments)
         if len(matches) > 1:
             journal.disposition("CONFLICT")

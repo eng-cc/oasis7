@@ -4852,7 +4852,7 @@ def command_record_pr_c1_draft(
                     or latest_issue.get("issue_state") != "OPEN"):
                 raise record_pr_module.RecordPRConflict("Task Issue identity changed before journaled write")
             latest_comments = github_issue_comments(args.repo, issue_number)
-            exact_latest = []
+            exact_latest: list[tuple[dict[str, Any], dict[str, Any]]] = []
             for item in latest_comments:
                 text = str(item.get("body") or "")
                 if "<!-- oasis7-ci-publication/v1 -->" in text:
@@ -4861,9 +4861,27 @@ def command_record_pr_c1_draft(
                     except ValueError as exc:
                         raise record_pr_module.RecordPRConflict("live Task has malformed C1 evidence") from exc
                     if parsed.get("publication_id") == publication_binding["publication_id"]:
-                        exact_latest.append(parsed)
-            if exact_latest != [publication_intent]:
+                        exact_latest.append((item, parsed))
+            if len(exact_latest) != 1 or exact_latest[0][1] != publication_intent:
                 raise record_pr_module.RecordPRConflict("unique C1 publication changed before record-pr")
+            latest_publication_comment = exact_latest[0][0]
+            latest_publisher = (latest_publication_comment.get("user")
+                                if isinstance(latest_publication_comment.get("user"), dict) else {})
+            if (
+                type(latest_publication_comment.get("id")) is not int
+                or latest_publication_comment.get("id") != publication_comment.get("id")
+                or latest_publication_comment.get("body") != publication_comment.get("body")
+                or latest_publication_comment.get("created_at") != publication_comment.get("created_at")
+                or latest_publication_comment.get("updated_at") != publication_comment.get("updated_at")
+                or not publication_module.comment_timestamps_are_unchanged(latest_publication_comment)
+                or latest_publisher.get("type") != "User"
+                or latest_publisher.get("login") != publisher.get("login")
+                or latest_publication_comment.get("author_association")
+                   != publication_comment.get("author_association")
+            ):
+                raise record_pr_module.RecordPRConflict(
+                    "unique C1 server identity or timestamps changed before record-pr",
+                )
             validate_record_pr_live_identity(
                 args, record, pr_number,
                 allow_exact_publication_poststate=True,
