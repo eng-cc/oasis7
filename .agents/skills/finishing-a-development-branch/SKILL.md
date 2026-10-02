@@ -86,6 +86,7 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 ```
 
 10. Merge only with trusted gate evidence and the gate-selected repository path.
+   Follow the [native readiness binding](../../../doc/engineering/workflow/source-of-truth.md#native-readiness-binding) for version-selected raw-byte capture and server readback; the first-migration admin transport is non-promotable before compatible merge/readback. Retain both exact claim-input and final authorization gate outputs for the linked historical delivery proof.
    A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
    or informational `BEHIND` defaults to admin merge
    when the gate emits `use_admin_merge: true`; do not request separate task or

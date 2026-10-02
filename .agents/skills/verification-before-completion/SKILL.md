@@ -50,6 +50,7 @@ Earlier successful output is background only.
 ```
 
 4. Read both the command output and the exit status.
+   For `ready_for_merge`, follow the [native readiness binding](../../../doc/engineering/workflow/source-of-truth.md#native-readiness-binding): inspect the version-selected exact gate digest/epoch, source closure and unique server comment readback. A candidate implementation or local result cannot activate that contract; the registered first-migration transport records human capture only.
    When verification output is broad, use `./scripts/pm/bounded-command-output.py` and cite both its bounded summary and full artifact digest; truncation must remain explicit.
 5. Only make the claim if the verification succeeded in the current run.
 
