@@ -3,13 +3,16 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -3380,11 +3383,22 @@ class PublicationRecoveryAuthority:
         self.envelope = json.loads(match[1], object_pairs_hook=module._unique_object)
         self.comment = selected[0]
         self.envelope_body = body
-        self._closed(self.envelope, {"schema", "identity", "operation", "scope_evidence", "current_action",
-                                    "predecessor", "helper_review", "unrelated_snapshot"})
-        if (self.envelope["schema"] != "oasis7-publication-recovery-admission/v1"
+        if self.marker == "<!-- oasis7-publication-recovery-admission/v2 -->":
+            envelope_keys = {"schema", "identity", "operation", "recovery_request", "plan_scope",
+                             "current_action", "helper_review", "unrelated_snapshot", "admission_author_login"}
+            supported_schema = "oasis7-publication-recovery-admission/v2"
+        else:
+            envelope_keys = {"schema", "identity", "operation", "scope_evidence", "current_action",
+                             "predecessor", "helper_review", "unrelated_snapshot"}
+            supported_schema = "oasis7-publication-recovery-admission/v1"
+        self._closed(self.envelope, envelope_keys)
+        if (self.envelope["schema"] != supported_schema
                 or self.envelope["operation"] != "record_pr_publication_recovery"):
             raise ValueError("unsupported recovery operation")
+        if (self.marker == "<!-- oasis7-publication-recovery-admission/v2 -->"
+                and (not isinstance(self.envelope["admission_author_login"], str)
+                     or self.envelope["admission_author_login"] != (self.comment.get("user") or {}).get("login"))):
+            raise ValueError("v2 admission author is not bound to its authenticated server comment")
         identity = self.envelope["identity"]
         expected = {"repository": args.repo, "task_uid": args.task_uid, "issue_number": record["issue_number"],
                     "issue_url": record["issue_url"], "pr_number": binding["pr_number"], "pr_url": binding["pr_url"],
@@ -3542,6 +3556,13 @@ class PublicationRecoveryAuthority:
             self.validated_reviews = True
 
     def _lineage(self, comments: list[dict[str, Any]]) -> None:
+        # A current-only envelope is the separately versioned first-attempt
+        # route.  Keep the v1 two-lineage branch below intact; the v2 class
+        # uses this narrow journal proof as one input to its larger live
+        # admission/closure checks.
+        if "predecessor" not in self.envelope:
+            self._single_current_lineage(comments)
+            return
         from pr_projection_journal import publication_paths
         common = pathlib.Path(run_text(["git", "-C", str(self.root), "rev-parse", "--path-format=absolute", "--git-common-dir"]))
         found = []
@@ -3616,6 +3637,86 @@ class PublicationRecoveryAuthority:
         if found[0] != self.intent or found[0]["publication_id"] == found[1]["publication_id"]:
             raise ValueError("current/predecessor publication identity conflict")
         run_text(["git", "-C", str(self.root), "merge-base", "--is-ancestor", found[1]["source_head_oid"], found[0]["source_head_oid"]])
+
+    def _single_current_lineage(self, comments: list[dict[str, Any]]) -> None:
+        """Validate one exact current uncertain record-pr action without history."""
+        from pr_projection_journal import publication_paths
+
+        evidence = self.envelope["current_action"]
+        evidence_keys = {"publication_id", "action_id", "journal_sha256", "H", "B", "S", "D",
+                         "intent_comment_id", "intent_body_sha256"}
+        if self.marker == "<!-- oasis7-publication-recovery-admission/v2 -->":
+            evidence_keys.add("intent_author_login")
+        self._closed(evidence, evidence_keys)
+        if evidence["action_id"] != "record-pr:" + evidence["publication_id"]:
+            raise ValueError("single recovery action selector is malformed")
+        candidates = [c for c in comments if c.get("id") == evidence["intent_comment_id"]]
+        if len(candidates) != 1 or self.sha(candidates[0]["body"].encode()) != evidence["intent_body_sha256"]:
+            raise ValueError("single publication intent digest/identity mismatch")
+        candidate = candidates[0]
+        actor = (evidence.get("intent_author_login")
+                 or (self.comment.get("user") or {}).get("login"))
+        self._comment_identity(candidate, actor)
+        intent = self.module.parse_publication_comment(candidate["body"])
+        if intent != self.intent or intent["publication_id"] != evidence["publication_id"]:
+            raise ValueError("single publication intent differs from the current binding")
+        self.module.reject_competing_current_publications(intent, [
+            self.module.parse_publication_comment(c["body"])
+            for c in comments
+            if "<!-- oasis7-ci-publication/v1 -->" in str(c.get("body") or "")
+        ])
+        if any(c.get("id") != candidate.get("id")
+               and "<!-- oasis7-ci-publication/v1 -->" in str(c.get("body") or "")
+               and self.module.parse_publication_comment(c["body"]).get("publication_id") == intent["publication_id"]
+               for c in comments):
+            raise ValueError("single publication intent is duplicated")
+        for key, field in {"publication_id": "publication_id", "H": "source_head_oid",
+                           "B": "planner_authority_oid", "S": "source_scope_oid",
+                           "D": "projection_digest"}.items():
+            if intent[field] != evidence[key]:
+                raise ValueError("single publication H/B/S/D tuple mismatch")
+        for key in ("repository", "repository_id", "source_repository_id", "task_uid", "source_ref", "target_ref"):
+            if intent[key] != self.intent[key]:
+                raise ValueError("single publication repository/task/ref mismatch")
+        for oid in (evidence["H"], evidence["B"], evidence["S"]):
+            if run_text(["git", "-C", str(self.root), "rev-parse", "--verify", oid + "^{commit}"]) != oid:
+                raise ValueError("single publication Git identity mismatch")
+        common = pathlib.Path(run_text(["git", "-C", str(self.root), "rev-parse", "--path-format=absolute", "--git-common-dir"]))
+        path, _ = publication_paths(common, self.args.repo, intent["source_ref"], intent["publication_id"])
+        raw = path.read_bytes()
+        journal = json.loads(raw)
+        if raw != self.encoded(journal) + b"\n" or self.sha(raw) != evidence["journal_sha256"]:
+            # Only the existing exact legacy task-post anchor can explain a
+            # post-intent tail write; all other journal bytes stay immutable.
+            if not self._legacy_exact_readback_anchor(path, common, journal, evidence, intent, candidate):
+                raise ValueError("single publication raw journal digest mismatch")
+        expected_identity = {
+            "repository": self.args.repo, "branch": intent["source_ref"],
+            "publication_id": intent["publication_id"], "task_uid": self.args.task_uid,
+            "source_head_oid": evidence["H"], "scope_base_oid": evidence["S"],
+            "projection_digest": evidence["D"],
+        }
+        if journal.get("schema") != "oasis7-pr-publication-journal/v1" or journal.get("identity") != expected_identity:
+            raise ValueError("single publication journal identity mismatch")
+        actions = [a for a in journal.get("actions", []) if a.get("action_id") == evidence["action_id"]]
+        record_actions = [a for a in journal.get("actions", []) if a.get("kind") == "record_pr"]
+        if len(actions) != 1 or len(record_actions) != 1:
+            raise ValueError("single publication requires exactly one current record-pr action")
+        action = actions[0]
+        if (set(action) - {"action_id", "kind", "expected", "state", "observed"}
+                or action.get("kind") != "record_pr"
+                or action.get("expected") != {"publication_id": intent["publication_id"],
+                                               "task_uid": self.args.task_uid,
+                                               "pr_number": self.binding["pr_number"]}
+                or action.get("state") != "uncertain"
+                or (action["state"] == "intent" and "observed" in action)
+                or ("observed" in action and action["observed"] != {"pr_number": self.binding["pr_number"]})):
+            raise ValueError("single current record-pr action is not authentic and uncertain")
+        binds = self._binding_actions(journal)
+        if (journal.get("phase") not in {"PREPARED", "HEAD_CONFIRMED", "METADATA_CONFIRMED"}
+                or journal.get("disposition") not in {None, "NETWORK_UNCERTAIN"}
+                or (binds and action.get("observed") != {"pr_number": self.binding["pr_number"]})):
+            raise ValueError("single publication phase/disposition is malformed")
 
     def _legacy_exact_readback_anchor(self, path: pathlib.Path, common: pathlib.Path,
                                       journal: dict[str, Any], evidence: dict[str, Any],
@@ -3739,6 +3840,7 @@ class PublicationRecoveryAuthority:
         except (JournalError, OSError, ValueError, KeyError, TypeError, UnicodeError):
             return False
 
+
     def _binding_actions(self, journal: dict[str, Any]) -> list[dict[str, Any]]:
         binding_id = "reciprocal-binding:" + self.binding["publication_id"]
         binds = [a for a in journal["actions"] if a.get("action_id") == binding_id]
@@ -3798,10 +3900,11 @@ class PublicationRecoveryAuthority:
                         return True
         return False
 
-    def check(self, *, final: bool = False) -> tuple[dict[str, Any], dict[str, str]]:
+    def check(self, *, final: bool = False, pre_admission: bool = False) -> tuple[dict[str, Any], dict[str, str]]:
         args = self.args
         actor = json.loads(run_text(["gh", "api", "user"])).get("login")
-        self._comment_identity(self.comment, actor)
+        if not pre_admission:
+            self._comment_identity(self.comment, actor)
         if run_text(["git", "-C", str(self.root), "rev-parse", "HEAD"]) != self.intent["source_head_oid"]:
             raise ValueError("current HEAD drift during recovery")
         owner, repo = args.repo.split("/")
@@ -3831,6 +3934,12 @@ class PublicationRecoveryAuthority:
             raise ValueError("selected Project item identity mismatch")
         node = nodes[0]
         refresh_project_identity(node, args.project_owner, args.project_number, self.record["project_id"])
+        field_values = node.get("fieldValues")
+        if (not isinstance(field_values, dict)
+                or not isinstance(field_values.get("pageInfo"), dict)
+                or field_values["pageInfo"].get("hasNextPage") is not False
+                or not isinstance(field_values.get("nodes"), list)):
+            raise ValueError("Project field readback is incomplete")
         content = node.get("content")
         if (not isinstance(content, dict) or content.get("__typename") != "Issue"
                 or type(content.get("number")) is not int
@@ -3908,11 +4017,15 @@ class PublicationRecoveryAuthority:
                 raise ValueError("Project field outside trusted pre/post transition: " + key)
         unrelated_issue = {k: live.get(k) for k in ("task_uid", "owner_role", "module", "priority", "worktree_hint", "primary_package")}
         unrelated_project = {k: v for k, v in values.items() if k not in self.project_owned}
-        expected = self.envelope["unrelated_snapshot"]
-        self._closed(expected, {"issue_sha256", "project_sha256"})
-        if (self.sha(self.encoded(unrelated_issue)) != expected["issue_sha256"]
-                or self.sha(self.encoded(unrelated_project)) != expected["project_sha256"]):
-            raise ValueError("unrelated Issue/Project snapshot drift")
+        snapshots = {"issue_sha256": self.sha(self.encoded(unrelated_issue)),
+                     "project_sha256": self.sha(self.encoded(unrelated_project))}
+        if pre_admission:
+            self.envelope["unrelated_snapshot"] = snapshots
+        else:
+            expected = self.envelope["unrelated_snapshot"]
+            self._closed(expected, {"issue_sha256", "project_sha256"})
+            if expected != snapshots:
+                raise ValueError("unrelated Issue/Project snapshot drift")
         # Preserve every non-owned Issue field, beyond the compact admission
         # snapshot. Observation timestamps are not task fields.
         baseline = {k: v for k, v in live.items() if k not in self.issue_owned | {"updated_at"}}
@@ -3921,10 +4034,11 @@ class PublicationRecoveryAuthority:
         elif baseline != self.issue_baseline:
             raise ValueError("unrelated Issue content changed during recovery")
         current_comments = github_issue_comments(args.repo, self.record["issue_number"])
-        admitted = [c for c in current_comments if self.marker in c["body"]]
-        if len(admitted) != 1 or admitted[0]["body"] != self.envelope_body:
-            raise ValueError("current recovery action admission drift")
-        self._comment_identity(admitted[0], actor)
+        if not pre_admission:
+            admitted = [c for c in current_comments if self.marker in c["body"]]
+            if len(admitted) != 1 or admitted[0]["body"] != self.envelope_body:
+                raise ValueError("current recovery action admission drift")
+            self._comment_identity(admitted[0], actor)
         self._scope(current_comments)
         self._lineage(current_comments)
         self._helpers()
@@ -3935,6 +4049,1767 @@ class PublicationRecoveryAuthority:
             if matches != [self.binding]:
                 raise ValueError("exact unique final reciprocal binding missing")
         return live, values
+
+
+class SinglePublicationRecoveryAuthority(PublicationRecoveryAuthority):
+    """Independent consumer for one exact current uncertain record-pr action."""
+
+    marker = "<!-- oasis7-publication-recovery-admission/v2 -->"
+    roles = ("runtime_engineer", "repository_health_engineer", "qa_engineer")
+
+    def _scope(self, comments: list[dict[str, Any]]) -> None:
+        request_ref = self.envelope["recovery_request"]
+        plan_ref = self.envelope["plan_scope"]
+        self._closed(request_ref, {"comment_id", "comment_url", "body_sha256", "author_login"})
+        self._closed(plan_ref, {"comment_id", "comment_url", "body_sha256", "author_login"})
+        if request_ref["author_login"] != plan_ref["author_login"]:
+            raise ValueError("recovery request author is not the approved Plan-Gap author")
+        if request_ref["comment_id"] == plan_ref["comment_id"]:
+            raise ValueError("recovery request cannot authorize itself as Plan-Gap scope")
+        request_matches = [c for c in comments if c.get("id") == request_ref["comment_id"]]
+        plan_matches = [c for c in comments if c.get("id") == plan_ref["comment_id"]]
+        if len(request_matches) != 1 or len(plan_matches) != 1:
+            raise ValueError("recovery request or approved Plan-Gap comment is missing/duplicated")
+        request_comment, plan_comment = request_matches[0], plan_matches[0]
+        for comment, ref in ((request_comment, request_ref), (plan_comment, plan_ref)):
+            self._comment_identity(comment, ref["author_login"])
+            if (comment.get("html_url") != ref["comment_url"]
+                    or self.sha(comment["body"].encode("utf-8")) != ref["body_sha256"]):
+                raise ValueError("recovery scope comment readback mismatch")
+        self.request_comment = request_comment
+        self.plan_comment = plan_comment
+        marker = "<!-- oasis7-publication-recovery-request/v1 -->"
+        all_requests = [c for c in comments if marker in c["body"]]
+        if len(all_requests) != 1 or all_requests[0] != request_comment:
+            raise ValueError("exactly one independent user recovery request is required")
+        match = re.fullmatch(re.escape(marker) + r"\s*```json\s*\n(.*?)\n```\s*", request_comment["body"], re.S)
+        if not match:
+            raise ValueError("malformed user recovery request")
+        request = json.loads(match[1], object_pairs_hook=self.module._unique_object)
+        self._closed(request, {"schema", "operation", "repository", "task_uid", "issue_number", "issue_url",
+                               "pr_number", "pr_url", "publication_id", "action_id"})
+        canonical_request = self.encoded(request).decode("utf-8")
+        if (request_comment["body"] != marker + "\n```json\n" + canonical_request + "\n```"
+                or request.get("schema") != "oasis7-publication-recovery-request/v1"
+                or request.get("operation") != "resume_uncertain_record_pr"):
+            raise ValueError("user recovery request is not canonical or supported")
+        action = self.envelope["current_action"]
+        expected_request = {"repository": self.args.repo, "task_uid": self.args.task_uid,
+                            "issue_number": self.record["issue_number"], "issue_url": self.record["issue_url"],
+                            "pr_number": self.binding["pr_number"], "pr_url": self.binding["pr_url"],
+                            "publication_id": action["publication_id"], "action_id": action["action_id"]}
+        if any(request.get(key) != value for key, value in expected_request.items()):
+            raise ValueError("user recovery request identity/action mismatch")
+
+        plan_marker = "Plan-Gap Evidence:"
+        plans = [c for c in comments if plan_marker in c["body"]]
+        if len(plans) != 1 or plans[0] != plan_comment:
+            raise ValueError("unique approved live Plan-Gap scope is required")
+        plan_payload = plan_comment["body"].split(plan_marker, 1)[1].strip()
+        rows, _ = json.JSONDecoder(object_pairs_hook=self.module._unique_object).raw_decode(plan_payload)
+        if not isinstance(rows, list) or not rows or any(not isinstance(row, dict) for row in rows):
+            raise ValueError("approved Plan-Gap scope is malformed")
+        scope_paths = set()
+        for row in rows:
+            scope_paths.update(re.findall(r"scripts/pm/[\w.-]+", str(row.get("write_scope") or "")))
+        required_paths = {"scripts/pm/github-project-task.py", "scripts/pm/pr_projection_publish.py",
+                          "scripts/pm/pr_projection_publication.py"}
+        if not required_paths.issubset(scope_paths):
+            raise ValueError("approved live Plan-Gap scope does not include this recovery action")
+        refs = [c for c in comments if self.marker in c["body"]]
+        if len(refs) > 1:
+            raise ValueError("multiple current v2 recovery admissions are ambiguous")
+
+    def _helpers(self) -> None:
+        self.validated_reviews = True
+        review = self.envelope["helper_review"]
+        self._closed(review, {"helper_task_uid", "archive_manifest_sha256", "helper_source_oid",
+                              "helper_closure_sha256", "closure_manifest", "plan_path", "plan_sha256",
+                              "ledger_path", "ledger_sha256", "role_returns"})
+        validate_helper_review_archive(self, review)
+
+    def _lineage(self, comments: list[dict[str, Any]]) -> None:
+        if "predecessor" in self.envelope:
+            raise ValueError("v2 single-publication recovery cannot carry predecessor evidence")
+        super()._single_current_lineage(comments)
+
+    def check(self, *, final: bool = False, pre_admission: bool = False) -> tuple[dict[str, Any], dict[str, str]]:
+        validate_recovery_pr(self)
+        return super().check(final=final, pre_admission=pre_admission)
+
+
+HELPER_REVIEW_ARCHIVE = "publication-helper-review-v1"
+HELPER_REVIEW_ARCHIVE_SCHEMA = "oasis7-publication-helper-review-archive/v1"
+
+
+def effective_helper_root() -> tuple[pathlib.Path, str, list[dict[str, str]], str]:
+    """Resolve and hash the canonical default-branch helper execution closure."""
+    script = pathlib.Path(__file__).resolve(strict=True)
+    root = script.parents[2].resolve(strict=True)
+    if pathlib.Path(run_text(["git", "-C", str(root), "rev-parse", "--show-toplevel"])).resolve() != root:
+        raise ValueError("effective recovery helper is outside its Git worktree")
+    branch = run_text(["git", "-C", str(root), "branch", "--show-current"])
+    default_ref = run_text(["git", "-C", str(root), "symbolic-ref", "refs/remotes/origin/HEAD"])
+    default_branch = default_ref.removeprefix("refs/remotes/origin/")
+    if not branch or branch != default_branch:
+        raise ValueError("effective recovery helper is not running from the canonical default branch")
+    if run_text(["git", "-C", str(root), "status", "--porcelain=v1", "--untracked-files=all", "--", "scripts/pm/"]):
+        raise ValueError("effective scripts/pm helper tree is not clean")
+    head = run_text(["git", "-C", str(root), "rev-parse", "HEAD"])
+    manifest = pm_closure_manifest(root, head, verify_worktree=True)
+    return root, head, manifest, hashlib.sha256(PublicationRecoveryAuthority.encoded(manifest)).hexdigest()
+
+
+def pm_closure_manifest(root: pathlib.Path, commit: str, *, verify_worktree: bool) -> list[dict[str, str]]:
+    tree: dict[str, tuple[str, str, str]] = {}
+    for line in run_text(["git", "-C", str(root), "ls-tree", "-r", commit]).splitlines():
+        meta, path = line.split("\t", 1)
+        mode, kind, oid = meta.split()
+        if path.startswith("scripts/pm/"):
+            if mode not in {"100644", "100755"} or kind != "blob":
+                raise ValueError("effective scripts/pm closure contains a non-regular path")
+            tree[path] = (mode, kind, oid)
+    if not tree:
+        raise ValueError("effective scripts/pm closure is empty")
+    result = []
+    for path, (mode, _kind, oid) in sorted(tree.items()):
+        if verify_worktree:
+            local = root / path
+            if local.is_symlink() or not local.is_file():
+                raise ValueError("effective helper closure member is unavailable")
+            if bool(local.stat().st_mode & 0o111) != (mode == "100755"):
+                raise ValueError("effective helper closure mode differs from its tracked source")
+            raw = local.read_bytes()
+            actual_oid = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+            if actual_oid != oid:
+                raise ValueError("effective helper closure bytes differ from its tracked source")
+        result.append({"path": path, "mode": mode, "blob_oid": oid})
+    return result
+
+
+def unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate JSON key")
+        value[key] = item
+    return value
+
+
+def strict_json(path: pathlib.Path) -> tuple[dict[str, Any], bytes]:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"JSON evidence is missing or uses symlink substitution: {path}")
+    raw = path.read_bytes()
+    value = json.loads(raw, object_pairs_hook=unique_json_object)
+    if not isinstance(value, dict):
+        raise ValueError(f"expected JSON object: {path}")
+    return value, raw
+
+
+def canonical_receipt_root(root: pathlib.Path, task_uid: str) -> pathlib.Path:
+    helper = root / "scripts/pm/canonical-receipt-root.py"
+    raw = run_text([sys.executable, str(helper), "--default-worktree", str(root), "--task-uid", task_uid, "--json"])
+    value = json.loads(raw, object_pairs_hook=unique_json_object)
+    if not isinstance(value, dict) or value.get("task_uid") != task_uid:
+        raise ValueError("canonical receipt root identity is malformed")
+    common = pathlib.Path(run_text([
+        "git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir",
+    ])).resolve()
+    receipts = common / "oasis7-workflow-receipts"
+    expected = receipts / task_uid
+    if receipts.is_symlink() or expected.is_symlink():
+        raise ValueError("canonical receipt root must not use symlink substitution")
+    path = pathlib.Path(str(value.get("receipt_root") or "")).resolve(strict=True)
+    if path != expected.resolve(strict=True) or path.parent != receipts.resolve() or path.name != task_uid:
+        raise ValueError("receipt root is outside the canonical task layout")
+    return path
+
+
+def validate_recovery_pr(authority: SinglePublicationRecoveryAuthority) -> dict[str, Any]:
+    """Re-read the exact open draft PR before every recovery effect."""
+    intent, binding = authority.intent, authority.binding
+    pr = github_pull_request(authority.args.repo, binding["pr_number"])
+    base, head = pr.get("base") or {}, pr.get("head") or {}
+    repository = head.get("repo") or {}
+    if (type(pr.get("number")) is not int or pr["number"] != binding["pr_number"]
+            or pr.get("html_url") != binding["pr_url"] or pr.get("state") != "open"
+            or pr.get("merged") is not False or pr.get("draft") is not True
+            or repository.get("full_name") != authority.args.repo
+            or head.get("ref") != intent["source_ref"] or head.get("sha") != intent["source_head_oid"]
+            or base.get("ref") != intent["target_ref"]
+            or (base.get("repo") or {}).get("full_name") != authority.args.repo):
+        raise ValueError("single recovery requires the exact open unmerged draft PR")
+    if not has_exact_task_pr_linkage(pr.get("body"), authority.args.task_uid, authority.record["issue_number"]):
+        raise ValueError("single recovery live PR Task/Refs identity mismatch")
+    projection = authority.module.decode_marker(pr.get("body"))
+    if any(projection.get(k) != v for k, v in {
+            "task_uid": authority.args.task_uid,
+            "source_head_oid": intent["source_head_oid"],
+            "scope_base_oid": intent["source_scope_oid"],
+            "projection_digest": intent["projection_digest"]}.items()):
+        raise ValueError("single recovery live PR projection differs from the publication intent")
+    return pr
+
+
+def _project_task_identity(root: pathlib.Path, task_uid: str, record: dict[str, Any], repo: str) -> None:
+    mapping = load_mapping(root / ".pm/github-project-sync/tasks.json")
+    project = mapping.get("project") or {}
+    project_id = str(project.get("id") or "")
+    owner = str(project.get("owner") or "")
+    number = project.get("number")
+    item_id = str(record.get("project_item_id") or "")
+    if (not project_id or not owner or type(number) is not int or number < 1 or not item_id
+            or record.get("task_uid") != task_uid or record.get("repository") != repo):
+        raise ValueError("canonical Project-backed Task identity is incomplete")
+    query = """query($ids:[ID!]!) { nodes(ids:$ids) { ... on ProjectV2Item { id
+      project { id number owner { ... on User { login } ... on Organization { login } } }
+      content { __typename ... on Issue { number url repository { nameWithOwner } } }
+      fieldValues(first:100) { pageInfo { hasNextPage } nodes { __typename field { ... on ProjectV2FieldCommon { name } }
+        ... on ProjectV2ItemFieldTextValue { text } ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } }"""
+    data = project_refresh_graphql(query, {"ids": [item_id]}, operation="publication_recovery_task_identity",
+                                   task_uid=task_uid).get("data") or {}
+    nodes = data.get("nodes") or []
+    if len(nodes) != 1 or not isinstance(nodes[0], dict):
+        raise ValueError("live Project item is missing or ambiguous")
+    item = nodes[0]
+    live_project = item.get("project") or {}
+    content = item.get("content") or {}
+    owner_value = live_project.get("owner") or {}
+    if (item.get("id") != item_id or live_project.get("id") != project_id
+            or live_project.get("number") != number or owner_value.get("login") != owner
+            or content.get("__typename") != "Issue" or content.get("number") != record.get("issue_number")
+            or content.get("url") != record.get("issue_url")
+            or (content.get("repository") or {}).get("nameWithOwner") != repo
+            or ((item.get("fieldValues") or {}).get("pageInfo") or {}).get("hasNextPage") is not False):
+        raise ValueError("live Project item does not match the canonical Task")
+
+
+def _task_record(root: pathlib.Path, task_uid: str, repo: str) -> dict[str, Any]:
+    mapping = load_mapping(root / ".pm/github-project-sync/tasks.json")
+    try:
+        retired = durable_store.retired_task(mapping, task_uid)
+    except ValueError as exc:
+        raise ValueError(f"Task retirement ledger is invalid: {exc}") from exc
+    if retired is not None:
+        raise ValueError("Task UID is retired")
+    record = mapping.get("tasks", {}).get(task_uid)
+    if not isinstance(record, dict) or record.get("task_uid") != task_uid or record.get("repository") != repo:
+        raise ValueError("canonical task mapping does not contain the selected UID/repository")
+    live = github_issue_record(repo, task_uid)
+    if (not isinstance(live, dict) or live.get("task_uid") != task_uid
+            or live.get("issue_number") != record.get("issue_number")
+            or live.get("issue_url") != record.get("issue_url")):
+        raise ValueError("fresh live Task Issue does not match canonical mapping")
+    _project_task_identity(root, task_uid, record, repo)
+    return record
+
+
+def _verify_merged_task(root: pathlib.Path, task_uid: str, repo: str,
+                        record: dict[str, Any]) -> tuple[pathlib.Path, dict[str, Any], dict[str, Any], str]:
+    if record.get("status") != "done" or record.get("workflow_phase") not in {"main_sync", "post_merge_done"}:
+        raise ValueError("helper Task has not completed merged main-sync")
+    default_ref = run_text(["git", "-C", str(root), "symbolic-ref", "refs/remotes/origin/HEAD"])
+    if default_ref != "refs/remotes/origin/" + str(record.get("default_branch") or ""):
+        raise ValueError("helper Task default branch differs from current repository authority")
+    pr_number = record.get("pr_number")
+    pr_url = record.get("pr_url")
+    if type(pr_number) is not int or pr_number < 1 or pr_url != f"https://github.com/{repo}/pull/{pr_number}":
+        raise ValueError("helper Task has no exact canonical PR binding")
+    pr = github_pull_request(repo, pr_number)
+    head = pr.get("head") or {}
+    base = pr.get("base") or {}
+    source_oid = str(head.get("sha") or "")
+    if (pr.get("number") != pr_number or pr.get("html_url") != pr_url or pr.get("state") != "closed"
+            or pr.get("merged") is not True or not source_oid
+            or (head.get("repo") or {}).get("full_name") != repo
+            or head.get("ref") != record.get("task_branch")
+            or base.get("ref") != record.get("default_branch")
+            or (base.get("repo") or {}).get("full_name") != repo):
+        raise ValueError("live helper PR is not the exact merged source PR")
+    comments = github_issue_comments(repo, int(record["issue_number"]))
+    publication_module = load_pr_projection_publication_module()
+    bindings = []
+    for comment in comments:
+        if "<!-- oasis7-ci-publication-binding/v1 -->" in comment["body"]:
+            binding = publication_module.parse_publication_binding_comment(comment["body"])
+            if (binding.get("task_uid") == task_uid and binding.get("pr_number") == pr_number
+                    and binding.get("pr_url") == pr_url):
+                bindings.append((comment, binding))
+    if len(bindings) != 1:
+        raise ValueError("helper Task lacks one unique reciprocal publication binding")
+    comment, binding = bindings[0]
+    if (type(comment.get("id")) is not int
+            or comment.get("issue_url") != f"https://api.github.com/repos/{repo}/issues/{record['issue_number']}"
+            or comment.get("html_url") != record["issue_url"] + "#issuecomment-" + str(comment["id"])
+            or binding.get("task_uid") != task_uid):
+        raise ValueError("helper reciprocal binding server identity is malformed")
+    receipt_root = canonical_receipt_root(root, task_uid)
+    merge_path = receipt_root / "merge-receipt.json"
+    sync_path = receipt_root / "main-sync-receipt.json"
+    merge, _merge_raw = strict_json(merge_path)
+    main_sync, _sync_raw = strict_json(sync_path)
+    if (merge.get("receipt_type") != "oasis7_pr_merge" or merge.get("issuer") != "github_live_query"
+            or merge.get("evidence_mode") != "production" or merge.get("state") != "MERGED"
+            or merge.get("repository") != repo or merge.get("pr_number") != pr_number
+            or merge.get("pr_url") != pr_url or merge.get("head_oid") != source_oid
+            or merge.get("base_ref") != record.get("default_branch")
+            or merge.get("default_branch") != record.get("default_branch")
+            or not merge.get("merged_at") or not merge.get("observed_at")):
+        raise ValueError("canonical merge receipt does not match the live helper PR")
+    main_commit = str(main_sync.get("main_commit") or "")
+    if (main_sync.get("receipt_type") != "oasis7_main_sync" or main_sync.get("issuer") != "post-merge-main-sync"
+            or main_sync.get("task_uid") != task_uid or main_sync.get("repository") != repo
+            or main_sync.get("default_branch") != record.get("default_branch")
+            or main_sync.get("merge_receipt_sha256") != hashlib.sha256(merge_path.read_bytes()).hexdigest()
+            or not main_sync.get("observed_at")
+            or not re.fullmatch(r"[0-9a-f]{40,64}", main_commit)):
+        raise ValueError("canonical main-sync receipt does not match the helper merge receipt")
+    current_main = run_text(["git", "-C", str(root), "rev-parse", f"refs/heads/{record['default_branch']}"])
+    if (main_sync.get("remote_main_commit") != main_commit
+            or subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", main_commit, current_main],
+                              capture_output=True).returncode != 0):
+        raise ValueError("default branch does not contain the exact main-sync receipt commit")
+    patch_path = receipt_root / "patch-equivalence-receipt.json"
+    if main_sync.get("integration_mode") == "ancestry":
+        if any(key in main_sync for key in (
+                "patch_equivalence_receipt_sha256", "patch_id", "projected_tree_oid", "main_tree_oid",
+                "integration_commit", "integration_parent")):
+            raise ValueError("ancestry main-sync receipt contains patch-equivalence fields")
+        run_text(["git", "-C", str(root), "merge-base", "--is-ancestor", source_oid, main_commit])
+        if patch_path.exists() or patch_path.is_symlink():
+            raise ValueError("unexpected patch-equivalence receipt for ancestry integration")
+    elif main_sync.get("integration_mode") == "patch_equivalence":
+        patch, _patch_raw = strict_json(patch_path)
+        integration_commit = str(main_sync.get("integration_commit") or "")
+        integration_parent = str(main_sync.get("integration_parent") or "")
+        projected_tree = str(main_sync.get("projected_tree_oid") or "")
+        main_tree = str(main_sync.get("main_tree_oid") or "")
+        if (patch.get("receipt_type") != "oasis7_patch_equivalence"
+                or patch.get("schema_version") != 2
+                or patch.get("issuer") != "oasis7_patch_equivalence_helper"
+                or patch.get("branch_tip") != source_oid or patch.get("main_commit") != integration_commit
+                or patch.get("main_parent") != integration_parent
+                or patch.get("patch_id") != main_sync.get("patch_id")
+                or patch.get("projected_tree_oid") != projected_tree
+                or patch.get("main_tree_oid") != main_tree
+                or not re.fullmatch(r"[0-9a-f]{40,64}", integration_commit)
+                or not re.fullmatch(r"[0-9a-f]{40,64}", integration_parent)
+                or not re.fullmatch(r"[0-9a-f]{40,64}", projected_tree)
+                or not re.fullmatch(r"[0-9a-f]{40,64}", main_tree)
+                or projected_tree != main_tree
+                or run_text(["git", "-C", str(root), "rev-parse", f"{integration_commit}^{{tree}}"])
+                    != main_tree
+                or subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor",
+                                   integration_commit, current_main], capture_output=True).returncode != 0
+                or main_sync.get("patch_equivalence_receipt_sha256") != hashlib.sha256(patch_path.read_bytes()).hexdigest()):
+            raise ValueError("patch-equivalence receipt does not bind the merged helper source")
+    else:
+        raise ValueError("main-sync receipt integration mode is unsupported")
+    return receipt_root, merge, main_sync, source_oid
+
+
+def _collect_review_archive_closure(task_root: pathlib.Path, task_uid: str, source_oid: str,
+                                    plan_path: pathlib.Path) -> list[dict[str, Any]]:
+    """Select only schema-referenced review evidence for the bounded archive.
+
+    The production caller invokes this after authenticating and validating the
+    live task, frozen plan, handoff, packets, returns and provenance. This
+    selector does not establish authority; it closes the exact file-reference
+    graph those validators consumed.
+    """
+    if not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        raise ValueError("archive closure Task UID is invalid")
+    if not re.fullmatch(r"[0-9a-f]{40,64}", source_oid):
+        raise ValueError("archive closure source OID is invalid")
+    root = pathlib.Path(task_root).resolve(strict=True)
+    scratch = root / ".pm" / "scratch" / task_uid
+    for component in (root / ".pm", root / ".pm" / "scratch", scratch):
+        if component.is_symlink() or not component.is_dir():
+            raise ValueError("archive closure Task scratch path is missing or symlinked")
+
+    members: dict[str, tuple[pathlib.Path, bytes]] = {}
+    def add_member(raw_path: object, label: str, *, expected: str | None = None) -> tuple[str, bytes]:
+        if not isinstance(raw_path, (str, pathlib.Path)) or not str(raw_path):
+            raise ValueError(f"archive closure {label} path is missing")
+        raw = str(raw_path)
+        if "\\" in raw or "\x00" in raw:
+            raise ValueError(f"archive closure {label} path is not canonical")
+        supplied = pathlib.Path(raw).expanduser()
+        if supplied.is_absolute():
+            if str(supplied) != raw:
+                raise ValueError(f"archive closure {label} absolute path is not canonical")
+            try:
+                relative = supplied.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"archive closure {label} escapes the authenticated task root") from exc
+        else:
+            posix = pathlib.PurePosixPath(raw)
+            if posix.is_absolute() or posix.as_posix() != raw:
+                raise ValueError(f"archive closure {label} relative path is not canonical")
+            relative = pathlib.Path(*posix.parts)
+        if (not relative.parts or any(part in {"", ".", ".."} for part in relative.parts)
+                or relative.parts[:3] != (".pm", "scratch", task_uid)):
+            raise ValueError(f"archive closure {label} is outside canonical Task scratch")
+        relative_posix = pathlib.PurePosixPath(*relative.parts).as_posix()
+        if expected is not None and relative_posix != expected:
+            raise ValueError(f"archive closure {label} path is not its canonical reference")
+        path = root.joinpath(*relative.parts)
+        current = root
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError(f"archive closure {label} contains a symlink component")
+        if not path.is_file():
+            raise ValueError(f"archive closure {label} is missing or not a regular file")
+        resolved = path.resolve(strict=True)
+        if resolved != path:
+            raise ValueError(f"archive closure {label} resolves through an alias")
+        prior = members.get(relative_posix)
+        if prior is None:
+            before = path.stat()
+            raw_bytes = path.read_bytes()
+            after = path.stat()
+            if (before.st_ino != after.st_ino or before.st_size != after.st_size
+                    or before.st_mtime_ns != after.st_mtime_ns or len(raw_bytes) != after.st_size):
+                raise ValueError(f"archive closure {label} changed while being read")
+            members[relative_posix] = (path, raw_bytes)
+        else:
+            raw_bytes = prior[1]
+        return relative_posix, raw_bytes
+
+    def read_json_member(raw_path: object, label: str, *, expected: str | None = None
+                         ) -> tuple[str, bytes, dict[str, Any]]:
+        relative, raw = add_member(raw_path, label, expected=expected)
+        value = json.loads(raw, object_pairs_hook=unique_json_object)
+        if not isinstance(value, dict):
+            raise ValueError(f"archive closure {label} is not a JSON object")
+        return relative, raw, value
+
+    def reject_unknown_refs(value: dict[str, Any], allowed: set[str], label: str) -> None:
+        for key in value:
+            lower = str(key).lower()
+            # Ledger metadata such as ``artifact_digest`` describes bytes; it
+            # is not a path edge. Restrict discovery to reference-shaped field
+            # names so that digest/count metadata remains valid schema.
+            is_reference = (
+                lower in {"artifact", "artifacts"}
+                or lower.endswith(("_path", "_paths"))
+                or ("artifact" in lower and lower.endswith(("_ref", "_refs")))
+            )
+            if is_reference and key not in allowed:
+                raise ValueError(f"archive closure {label} has an unknown reference field: {key}")
+
+    def checked_rows(raw: bytes, label: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        try:
+            for line_number, line in enumerate(raw.decode("utf-8").splitlines(), 1):
+                if not line.strip():
+                    continue
+                row = json.loads(line, object_pairs_hook=unique_json_object)
+                if not isinstance(row, dict):
+                    raise ValueError(f"archive closure {label} line {line_number} is not an object")
+                rows.append(row)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"archive closure {label} is malformed") from exc
+        return rows
+
+    def slice_identities(value: object) -> list[tuple[str, str]] | None:
+        if not isinstance(value, list) or not value:
+            return None
+        identities: list[tuple[str, str]] = []
+        for row in value:
+            if not isinstance(row, dict) or set(row) != {"role", "slice_id"}:
+                return None
+            role, slice_id = row.get("role"), row.get("slice_id")
+            if not isinstance(role, str) or not role or not isinstance(slice_id, str) or not slice_id:
+                return None
+            identities.append((role, slice_id))
+        if (len(set(identities)) != len(identities)
+                or len({role for role, _slice_id in identities}) != len(identities)
+                or len({slice_id for _role, slice_id in identities}) != len(identities)):
+            return None
+        return identities
+
+    def canonical_slice_order(identities: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        return sorted(identities, key=lambda item: (item[0].encode("utf-8"), item[1].encode("utf-8")))
+
+    def add_return_rows(ledger_rows: list[dict[str, Any]], task: str, head: str, epoch: str,
+                        expected_slices: list[dict[str, Any]], label: str) -> set[str]:
+        expected = {(row.get("role"), row.get("slice_id")) for row in expected_slices}
+        if (not expected or len(expected) != len(expected_slices)
+                or any(not isinstance(role, str) or not isinstance(slice_id, str)
+                       for role, slice_id in expected)):
+            raise ValueError(f"archive closure {label} has duplicate or malformed expected slices")
+        seen: set[tuple[object, object]] = set()
+        artifacts: set[str] = set()
+        for row in ledger_rows:
+            reject_unknown_refs(row, {"artifacts"}, f"{label} ledger row")
+            identity = (row.get("role"), row.get("slice_id"))
+            if identity in seen or identity not in expected:
+                raise ValueError(f"archive closure {label} ledger has duplicate or unexpected slices")
+            seen.add(identity)
+            if (row.get("task_uid") != task or row.get("head") != head
+                    or row.get("epoch", row.get("review_epoch")) != epoch
+                    or row.get("status") != "completed"):
+                raise ValueError(f"archive closure {label} ledger identity is inconsistent")
+            named = row.get("artifacts")
+            if not isinstance(named, list) or len(named) != 1 or not isinstance(named[0], str):
+                raise ValueError(f"archive closure {label} ledger must name exactly one return artifact")
+            return_path, return_raw = add_member(named[0], f"{label} role return")
+            expected_digest = row.get("artifact_digest")
+            if not isinstance(expected_digest, str) or hashlib.sha256(return_raw).hexdigest() != expected_digest:
+                raise ValueError(f"archive closure {label} return digest mismatch")
+            returned = json.loads(return_raw, object_pairs_hook=unique_json_object)
+            if (not isinstance(returned, dict) or returned.get("task_uid") != task
+                    or returned.get("role") != identity[0] or returned.get("slice_id") != identity[1]
+                    or returned.get("head") != head or returned.get("epoch") != epoch
+                    or returned.get("status") != "completed"):
+                raise ValueError(f"archive closure {label} return identity is inconsistent")
+            artifacts.add(return_path)
+        if seen != expected:
+            raise ValueError(f"archive closure {label} ledger does not cover every expected slice")
+        return artifacts
+
+    def collect_prior_context(context: object, *, current_head: str) -> None:
+        if not isinstance(context, dict):
+            raise ValueError("archive closure incremental review context is malformed")
+        reject_unknown_refs(context, {"prior_plan_path", "prior_collection_path", "delta_paths"},
+                            "incremental review context")
+        if (context.get("schema") != "oasis7-review-context/v1"
+                or context.get("authority") != "context_only"
+                or context.get("task_uid") != task_uid
+                or context.get("current_head_oid") != current_head):
+            raise ValueError("archive closure incremental context identity is inconsistent")
+        prior_head = context.get("prior_head_oid")
+        prior_epoch = context.get("prior_epoch")
+        if (not isinstance(prior_head, str) or not re.fullmatch(r"[0-9a-f]{40,64}", prior_head)
+                or prior_head == current_head or not isinstance(prior_epoch, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", prior_epoch)):
+            raise ValueError("archive closure prior review identity is malformed")
+        prior_plan_expected = f".pm/scratch/{task_uid}/review-plans/{prior_epoch}.json"
+        prior_plan_rel, prior_plan_raw, prior_plan = read_json_member(
+            context.get("prior_plan_path"), "prior review plan", expected=prior_plan_expected,
+        )
+        reject_unknown_refs(prior_plan, {"batch_path", "collection_path", "packet_refs"}, "prior review plan")
+        if (prior_plan.get("task_uid") != task_uid or prior_plan.get("frozen_head") != prior_head
+                or prior_plan.get("epoch") != prior_epoch
+                or context.get("prior_plan_digest") != hashlib.sha256(prior_plan_raw).hexdigest()):
+            raise ValueError("archive closure prior review plan digest or identity mismatch")
+        prior_batch_expected = f".pm/scratch/{task_uid}/review-batches/{prior_epoch}.json"
+        prior_batch_rel, prior_batch_raw, prior_batch = read_json_member(
+            prior_plan.get("batch_path"), "prior review batch", expected=prior_batch_expected,
+        )
+        prior_slices = prior_plan.get("expected_slices")
+        prior_plan_identities = slice_identities(prior_slices)
+        prior_batch_identities = slice_identities(prior_batch.get("expected_slices"))
+        prior_roles = prior_plan.get("roles")
+        if (not isinstance(prior_slices, list) or not prior_slices
+                or prior_batch.get("schema") != "oasis7-review-batch/v1"
+                or prior_batch.get("task_uid") != task_uid
+                or prior_batch.get("frozen_head") != prior_head
+                or prior_batch.get("epoch") != prior_epoch
+                or prior_plan_identities is None or prior_batch_identities is None
+                or canonical_slice_order(prior_plan_identities)
+                    != canonical_slice_order(prior_batch_identities)
+                or not isinstance(prior_roles, list)
+                or prior_roles != [role for role, _slice_id in prior_plan_identities]):
+            raise ValueError("archive closure prior plan/batch identity mismatch")
+        expected_collection = f".pm/scratch/{task_uid}/review-batches/{prior_epoch}.collection.json"
+        collection_rel, collection_raw, collection = read_json_member(
+            context.get("prior_collection_path"), "prior review collection", expected=expected_collection,
+        )
+        prior_preflight = prior_plan.get("preflight")
+        if not isinstance(prior_preflight, dict) or not isinstance(prior_preflight.get("ledger_path"), str):
+            raise ValueError("archive closure prior plan has no ledger reference")
+        prior_ledger_rel, prior_ledger_raw = add_member(prior_preflight["ledger_path"], "prior review ledger")
+        prior_rows = checked_rows(prior_ledger_raw, "prior review ledger")
+        prior_return_paths = add_return_rows(prior_rows, task_uid, prior_head, prior_epoch,
+                                             prior_slices, "prior review")
+        prior_ledger_digest = hashlib.sha256(prior_ledger_raw).hexdigest()
+        if (context.get("prior_source_review_digest") != prior_plan.get("source_review_digest",
+                                                                      prior_plan.get("relevant_evidence_digest"))
+                or context.get("prior_integration_ci_digest") != prior_plan.get("integration_ci_digest")
+                or context.get("prior_roles") != prior_plan.get("roles")
+                or context.get("prior_collection_digest") != hashlib.sha256(collection_raw).hexdigest()
+                or context.get("prior_collection_ledger_digest") != prior_ledger_digest
+                or collection.get("schema") != "oasis7-review-collection/v1"
+                or collection.get("status") != "passed" or collection.get("task_uid") != task_uid
+                or collection.get("epoch") != prior_epoch or collection.get("frozen_head") != prior_head
+                or collection.get("ledger_digest") != prior_ledger_digest
+                or sorted(collection.get("roles", [])) != sorted(row.get("role") for row in prior_slices)):
+            raise ValueError("archive closure prior review collection does not bind its ledger/context")
+        collection_plan_path = prior_plan.get("collection_path")
+        if collection_plan_path is not None:
+            normalized_collection, _ = add_member(collection_plan_path, "prior plan collection reference",
+                                                   expected=expected_collection)
+            if normalized_collection != collection_rel:
+                raise ValueError("archive closure prior plan collection path conflicts with context")
+        # These locals document that graph edges were resolved, while membership
+        # is coalesced by canonical path in add_member.
+        del prior_plan_rel, prior_batch_rel, prior_return_paths
+
+    current_plan_expected_prefix = f".pm/scratch/{task_uid}/review-plans/"
+    plan_rel, plan_raw, plan = read_json_member(plan_path, "frozen review plan")
+    if (not plan_rel.startswith(current_plan_expected_prefix) or not plan_rel.endswith(".json")
+            or plan.get("task_uid") != task_uid or plan.get("frozen_head") != source_oid):
+        raise ValueError("archive closure selected plan is outside the exact Task/head review")
+    reject_unknown_refs(plan, {"batch_path", "collection_path", "packet_refs", "incremental_review_context",
+                               "comparison_ref", "source_ref", "target_ref"}, "frozen review plan")
+    epoch = plan.get("epoch")
+    if not isinstance(epoch, str) or not re.fullmatch(r"[0-9a-f]{64}", epoch):
+        raise ValueError("archive closure selected plan epoch is malformed")
+    expected_batch = f".pm/scratch/{task_uid}/review-batches/{epoch}.json"
+    batch_rel, batch_raw, batch = read_json_member(plan.get("batch_path"), "review batch", expected=expected_batch)
+    expected_slices = plan.get("expected_slices")
+    plan_identities = slice_identities(expected_slices)
+    batch_identities = slice_identities(batch.get("expected_slices"))
+    roles = plan.get("roles")
+    if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("task_uid") != task_uid
+            or batch.get("frozen_head") != source_oid or batch.get("epoch") != epoch
+            or plan_identities is None or batch_identities is None
+            or canonical_slice_order(plan_identities) != canonical_slice_order(batch_identities)
+            or not isinstance(roles, list) or len(set(roles)) != len(roles)
+            or roles != [role for role, _slice_id in plan_identities]):
+        raise ValueError("archive closure selected plan/batch role or identity mismatch")
+    identities = plan_identities
+
+    snapshot_rel = f".pm/scratch/{task_uid}/bootstrap-task-snapshot.json"
+    _snapshot_path, _snapshot_raw, snapshot = read_json_member(
+        snapshot_rel, "bootstrap snapshot", expected=snapshot_rel,
+    )
+    snapshot_task = snapshot.get("task")
+    if not isinstance(snapshot_task, dict) or snapshot_task.get("uid") != task_uid:
+        raise ValueError("archive closure bootstrap snapshot Task UID mismatch")
+
+    preflight = plan.get("preflight")
+    if not isinstance(preflight, dict):
+        raise ValueError("archive closure selected plan preflight is malformed")
+    reject_unknown_refs(preflight, {"ledger_path", "artifact_paths"}, "review plan preflight")
+    ledger_rel, ledger_raw = add_member(preflight.get("ledger_path"), "review ledger")
+    current_rows = checked_rows(ledger_raw, "review ledger")
+    current_return_paths = add_return_rows(current_rows, task_uid, source_oid, epoch,
+                                           expected_slices, "current review")
+    if "artifact_paths" in preflight:
+        listed = preflight["artifact_paths"]
+        if not isinstance(listed, list) or len(listed) != len(current_return_paths):
+            raise ValueError("archive closure preflight return list is incomplete")
+        resolved_list: set[str] = set()
+        for item in listed:
+            path, _ = add_member(item, "preflight role return")
+            if path in resolved_list:
+                raise ValueError("archive closure preflight return list has duplicate paths")
+            resolved_list.add(path)
+        if resolved_list != current_return_paths:
+            raise ValueError("archive closure preflight returns differ from ledger")
+
+    packet_refs = plan.get("packet_refs")
+    if not isinstance(packet_refs, list) or len(packet_refs) != len(expected_slices):
+        raise ValueError("archive closure plan packet reference set is incomplete")
+    refs_by_identity: dict[tuple[str, str], str] = {}
+    packet_paths: dict[tuple[str, str], str] = {}
+    for reference in packet_refs:
+        if not isinstance(reference, dict) or set(reference) != {"role", "slice_id", "packet_ref"}:
+            raise ValueError("archive closure packet reference is malformed")
+        identity = (reference.get("role"), reference.get("slice_id"))
+        if identity not in identities or identity in refs_by_identity:
+            raise ValueError("archive closure packet references duplicate or unexpected slices")
+        expected_packet = f".pm/scratch/{task_uid}/slice-packets/{identity[1]}.json"
+        packet_rel, packet_raw, packet = read_json_member(
+            reference.get("packet_ref"), "review packet", expected=expected_packet,
+        )
+        packet_identity = packet.get("identity")
+        packet_slice = packet.get("slice")
+        if (not isinstance(packet_identity, dict) or not isinstance(packet_slice, dict)
+                or packet_identity.get("task_uid") != task_uid or packet_identity.get("head") != source_oid
+                or packet_slice.get("role") != identity[0] or packet_slice.get("slice_id") != identity[1]):
+            raise ValueError("archive closure review packet identity mismatch")
+        unsigned = {key: value for key, value in packet.items() if key != "packet_digest"}
+        packet_digest = hashlib.sha256(json.dumps(
+            unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        if packet.get("packet_digest") != packet_digest:
+            raise ValueError("archive closure review packet digest mismatch")
+        refs_by_identity[identity] = packet_rel
+        packet_paths[identity] = packet_rel
+        review_context = packet.get("review_context")
+        if review_context is not None:
+            collect_prior_context(review_context, current_head=source_oid)
+    if set(refs_by_identity) != set(identities):
+        raise ValueError("archive closure packet references do not cover every role/slice")
+    plan_context = plan.get("incremental_review_context")
+    if plan_context is not None:
+        collect_prior_context(plan_context, current_head=source_oid)
+
+    collection_rel = None
+    collection_reference = plan.get("collection_path")
+    expected_collection = f".pm/scratch/{task_uid}/review-batches/{epoch}.collection.json"
+    if collection_reference is not None:
+        collection_rel, collection_raw, collection = read_json_member(
+            collection_reference, "review collection", expected=expected_collection,
+        )
+        if (collection.get("schema") != "oasis7-review-collection/v1"
+                or collection.get("status") != "passed" or collection.get("task_uid") != task_uid
+                or collection.get("epoch") != epoch or collection.get("frozen_head") != source_oid
+                or collection.get("ledger_digest") != hashlib.sha256(ledger_raw).hexdigest()
+                or sorted(collection.get("roles", [])) != sorted(roles)):
+            raise ValueError("archive closure current review collection does not bind the ledger")
+    else:
+        optional_collection = root / expected_collection
+        if optional_collection.exists() or optional_collection.is_symlink():
+            collection_rel, collection_raw, collection = read_json_member(
+                expected_collection, "review collection", expected=expected_collection,
+            )
+            if (collection.get("schema") != "oasis7-review-collection/v1"
+                    or collection.get("status") != "passed" or collection.get("task_uid") != task_uid
+                    or collection.get("epoch") != epoch or collection.get("frozen_head") != source_oid
+                    or collection.get("ledger_digest") != hashlib.sha256(ledger_raw).hexdigest()
+                    or sorted(collection.get("roles", [])) != sorted(roles)):
+                raise ValueError("archive closure current review collection does not bind the ledger")
+
+    handoff_rel = f".pm/scratch/{task_uid}/review-handoffs/{epoch}.json"
+    handoff_rel, handoff_raw, handoff = read_json_member(handoff_rel, "review handoff", expected=handoff_rel)
+    reject_unknown_refs(handoff, {"plan_path", "batch_path", "preflight_ledger_path", "rows"}, "review handoff")
+    for key, selected in (("plan_path", plan_rel), ("batch_path", batch_rel),
+                          ("preflight_ledger_path", ledger_rel)):
+        normalized, _ = add_member(handoff.get(key), f"handoff {key}")
+        if normalized != selected:
+            raise ValueError("archive closure handoff does not bind selected plan/batch/ledger")
+    handoff_rows = handoff.get("rows")
+    if not isinstance(handoff_rows, list) or len(handoff_rows) != len(identities):
+        raise ValueError("archive closure handoff rows are incomplete")
+    handoff_seen: set[tuple[object, object]] = set()
+    for row in handoff_rows:
+        if not isinstance(row, dict):
+            raise ValueError("archive closure handoff row is malformed")
+        reject_unknown_refs(row, {"artifact_path", "packet_path"}, "review handoff row")
+        identity = (row.get("role"), row.get("slice_id"))
+        if identity not in identities or identity in handoff_seen:
+            raise ValueError("archive closure handoff has duplicate or unexpected slices")
+        packet_rel, _ = add_member(row.get("packet_path"), "handoff packet")
+        return_rel, _ = add_member(row.get("artifact_path"), "handoff return")
+        if packet_rel != packet_paths[identity] or return_rel not in current_return_paths:
+            raise ValueError("archive closure handoff points outside the selected packet/return set")
+        handoff_seen.add(identity)
+    if handoff_seen != set(identities):
+        raise ValueError("archive closure handoff does not cover every role/slice")
+
+    origin_rel = f".pm/scratch/{task_uid}/publication-helper-review-origin.json"
+    origin_rel, origin_raw, origin = read_json_member(origin_rel, "review origin", expected=origin_rel)
+    if (origin.get("schema") != "oasis7-publication-helper-review-origin/v1"
+            or origin.get("task_uid") != task_uid):
+        raise ValueError("archive closure origin identity mismatch")
+    for wrapper_key, expected_value, expected_raw in (
+            ("bootstrap_snapshot", snapshot, members[snapshot_rel][1]),
+            ("review_plan", plan, plan_raw), ("review_batch", batch, batch_raw)):
+        wrapper = origin.get(wrapper_key)
+        if (not isinstance(wrapper, dict) or wrapper.get("value") != expected_value
+                or wrapper.get("raw_sha256") != hashlib.sha256(expected_raw).hexdigest()):
+            raise ValueError("archive closure origin wrapper differs from selected evidence")
+    origin_packets = origin.get("packets")
+    if not isinstance(origin_packets, list) or len(origin_packets) != len(identities):
+        raise ValueError("archive closure origin packet set is incomplete")
+    origin_seen: set[tuple[object, object]] = set()
+    for row in origin_packets:
+        if not isinstance(row, dict) or set(row) != {"role", "slice_id", "repo_path", "raw_sha256", "value"}:
+            raise ValueError("archive closure origin packet row is malformed")
+        identity = (row.get("role"), row.get("slice_id"))
+        if identity not in packet_paths or identity in origin_seen:
+            raise ValueError("archive closure origin packet rows duplicate or escape planned slices")
+        packet_rel = packet_paths[identity]
+        packet_raw = members[packet_rel][1]
+        if (row.get("repo_path") != packet_rel or row.get("raw_sha256") != hashlib.sha256(packet_raw).hexdigest()
+                or row.get("value") != json.loads(packet_raw, object_pairs_hook=unique_json_object)):
+            raise ValueError("archive closure origin packet does not match its immutable bytes")
+        origin_seen.add(identity)
+    if origin_seen != set(identities):
+        raise ValueError("archive closure origin packets do not cover every planned slice")
+
+    if len(members) > 512 or sum(len(raw) for _path, raw in members.values()) > 50 * 1024 * 1024:
+        raise ValueError("required helper review archive closure exceeds bounded size")
+    return [
+        {"path": path, "sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
+        for path, (_file, raw) in sorted(members.items())
+    ]
+
+
+def _review_inputs(task_root: pathlib.Path, task_uid: str, source_oid: str,
+                   effective_root: pathlib.Path, live_task_record: dict[str, Any]) -> tuple[
+                       dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], pathlib.Path, pathlib.Path,
+                   ]:
+    scratch = task_root / ".pm" / "scratch" / task_uid
+    if scratch.is_symlink() or not scratch.is_dir():
+        raise ValueError("helper task review scratch is unavailable")
+    plan_dir = scratch / "review-plans"
+    plans = []
+    for path in sorted(plan_dir.glob("*.json")):
+        value, _raw = strict_json(path)
+        if (value.get("schema") in {"oasis7-review-plan/v1", "oasis7-review-plan/v2"}
+                and value.get("task_uid") == task_uid and value.get("frozen_head") == source_oid):
+            plans.append((path, value))
+    if len(plans) != 1:
+        raise ValueError("helper source requires one exact frozen review plan")
+    plan_path, plan = plans[0]
+    roles = plan.get("roles")
+    slices = plan.get("expected_slices")
+    preflight = plan.get("preflight")
+    if (not isinstance(roles, list) or not roles or len(roles) != len(set(roles))
+            or not isinstance(slices, list) or not isinstance(preflight, dict)
+            or not isinstance(preflight.get("ledger_path"), str)):
+        raise ValueError("review plan role/ledger contract is incomplete")
+    epoch = str(plan.get("epoch") or "")
+    canonical_batch = scratch / "review-batches" / f"{epoch}.json"
+    batch_path = pathlib.Path(str(plan.get("batch_path"))).expanduser()
+    if not batch_path.is_absolute():
+        batch_path = task_root / batch_path
+    if batch_path.is_symlink() or batch_path.resolve() != canonical_batch.resolve():
+        raise ValueError("review plan batch path is not canonical")
+    batch, _batch_raw = strict_json(canonical_batch)
+    def normalized_slice_identities(value: Any) -> list[tuple[str, str]] | None:
+        if not isinstance(value, list) or not value:
+            return None
+        identities: list[tuple[str, str]] = []
+        for item in value:
+            if not isinstance(item, dict) or set(item) != {"role", "slice_id"}:
+                return None
+            role, slice_id = item.get("role"), item.get("slice_id")
+            if (not isinstance(role, str) or not role
+                    or not isinstance(slice_id, str) or not slice_id):
+                return None
+            identities.append((role, slice_id))
+        if (len(set(identities)) != len(identities)
+                or len({role for role, _slice_id in identities}) != len(identities)):
+            return None
+        return sorted(identities)
+
+    plan_slice_identities = normalized_slice_identities(slices)
+    batch_slices = batch.get("expected_slices")
+    batch_slice_identities = normalized_slice_identities(batch_slices)
+    if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("task_uid") != task_uid
+            or batch.get("frozen_head") != source_oid or batch.get("epoch") != epoch
+            or plan_slice_identities is None or batch_slice_identities is None
+            or plan_slice_identities != batch_slice_identities):
+        raise ValueError("review plan batch identity mismatch")
+    snapshot_path = scratch / "bootstrap-task-snapshot.json"
+    if snapshot_path.is_symlink() or not snapshot_path.is_file():
+        raise ValueError("helper bootstrap snapshot is unavailable for archived packet origin")
+    packet_helper_path = effective_root / "scripts/pm/subagent-task-packet.py"
+    packet_spec = importlib.util.spec_from_file_location("subagent_task_packet_archive_origin", packet_helper_path)
+    if packet_spec is None or packet_spec.loader is None:
+        raise ValueError("cannot load the effective packet validator for archive origin")
+    packet_helper = importlib.util.module_from_spec(packet_spec)
+    packet_spec.loader.exec_module(packet_helper)
+    snapshot = packet_helper.validate_bootstrap_snapshot(task_root, snapshot_path, task_uid)
+    ledger_path = pathlib.Path(preflight["ledger_path"]).expanduser()
+    if not ledger_path.is_absolute():
+        ledger_path = task_root / ledger_path
+    if ledger_path.is_symlink():
+        raise ValueError("role-return ledger must not be a symlink")
+    ledger_path = ledger_path.resolve(strict=True)
+    if not ledger_path.is_relative_to(scratch.resolve()):
+        raise ValueError("role-return ledger escapes helper task scratch")
+    ledger_rows = [json.loads(line, object_pairs_hook=unique_json_object)
+                   for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not ledger_rows or any(not isinstance(row, dict) for row in ledger_rows):
+        raise ValueError("role-return ledger is empty or malformed")
+    by_role = {str(row.get("role") or ""): row for row in ledger_rows}
+    if len(by_role) != len(ledger_rows) or set(by_role) != set(roles):
+        raise ValueError("role-return ledger does not exactly cover the frozen role set")
+    slices_by_role = {str(row.get("role") or ""): row for row in slices if isinstance(row, dict)}
+    if len(slices_by_role) != len(slices) or set(slices_by_role) != set(roles):
+        raise ValueError("review plan slice set differs from its required roles")
+    closure_manifest = pm_closure_manifest(effective_root, source_oid, verify_worktree=False)
+    closure_digest = hashlib.sha256(PublicationRecoveryAuthority.encoded(closure_manifest)).hexdigest()
+    handoff_script = effective_root / "scripts/pm/review_preflight_handoff.py"
+    handoff_spec = importlib.util.spec_from_file_location("review_preflight_handoff_archive_origin", handoff_script)
+    if handoff_spec is None or handoff_spec.loader is None:
+        raise ValueError("cannot load the effective review handoff validator")
+    handoff_helper = importlib.util.module_from_spec(handoff_spec)
+    handoff_spec.loader.exec_module(handoff_helper)
+    returns = []
+    for role in roles:
+        ledger_row = by_role[role]
+        slice_id = str(slices_by_role[role].get("slice_id") or "")
+        packet_path = scratch / "slice-packets" / f"{slice_id}.json"
+        artifacts = ledger_row.get("artifacts")
+        if ledger_row.get("status") != "completed" or ledger_row.get("slice_id") != slice_id:
+            raise ValueError("review role is incomplete or bound to another slice")
+        if not packet_path.is_file() or packet_path.is_symlink():
+            raise ValueError("review role packet is missing or not a regular file")
+        packet_raw = packet_path.read_bytes()
+        if not isinstance(artifacts, list) or len(artifacts) != 1 or not isinstance(artifacts[0], str):
+            raise ValueError("review role ledger does not name exactly one return artifact")
+        artifact_path = pathlib.Path(artifacts[0]).expanduser()
+        if not artifact_path.is_absolute():
+            artifact_path = task_root / artifact_path
+        if artifact_path.is_symlink():
+            raise ValueError("review return artifact must not be a symlink")
+        artifact_path = artifact_path.resolve(strict=True)
+        if not artifact_path.is_relative_to(task_root.resolve()):
+            raise ValueError("review return artifact escapes helper task worktree")
+        artifact_raw = artifact_path.read_bytes()
+        value = json.loads(artifact_raw, object_pairs_hook=unique_json_object)
+        handoff_helper.validate_return(
+            value, role=role, slice_id=slice_id, task_uid=task_uid, head=source_oid, epoch=epoch,
+        )
+        if (value.get("scope_verdict") != "approved" or value.get("risk_verdict") != "approved"
+                or value.get("disposition") != "no_findings" or value.get("findings") != []
+                or value.get("helper_source_oid") != source_oid
+                or value.get("helper_closure_sha256") != closure_digest):
+            raise ValueError("independent role return does not approve the exact helper closure")
+        returns.append({
+            "role": role, "slice_id": slice_id, "packet_sha256": hashlib.sha256(packet_raw).hexdigest(),
+            "source_head_oid": source_oid, "packet_path": str(packet_path.relative_to(task_root)),
+            "return_path": str(artifact_path.relative_to(task_root)),
+            "return_sha256": hashlib.sha256(artifact_raw).hexdigest(), "verdict": "approved",
+        })
+    env = {k: v for k, v in os.environ.items() if k != "OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS"}
+    subprocess.run([sys.executable, str(effective_root / "scripts/pm/validate-review-provenance.py"),
+                    "--mode", "human-operated", "--root", str(task_root), "--task-uid", task_uid,
+                    "--ledger", str(ledger_path), "--roles", ",".join(roles), "--source-head", source_oid],
+                   cwd=task_root, capture_output=True, text=True, check=True, timeout=60, env=env)
+
+    # A v2 handoff contains an independently reread authenticated dispatch
+    # comment.  Revalidate that handoff now, while the original checkout and
+    # all reviewed bytes still exist, then preserve the exact inputs needed by
+    # the post-cleanup packet-contract validator.
+    handoff_path = scratch / "review-handoffs" / f"{epoch}.json"
+    validated_handoff = handoff_helper.validate_handoff(
+        task_root, handoff_path, expected_plan_path=plan_path,
+    )
+    handoff = validated_handoff.get("handoff")
+    dispatch_evidence = handoff.get("dispatch_evidence") if isinstance(handoff, dict) else None
+    if (not isinstance(handoff, dict) or handoff.get("schema") != handoff_helper.HANDOFF_SCHEMA_V2
+            or not isinstance(dispatch_evidence, dict)
+            or set(dispatch_evidence) != handoff_helper.DISPATCH_EVIDENCE_FIELDS):
+        raise ValueError("archived helper review requires one authenticated v2 dispatch handoff")
+    dispatch_payload = handoff_helper.dispatch_payload_for_plan(
+        task_root, plan_path, allow_promoted_ledger=True,
+    )
+    plan_raw = plan_path.read_bytes()
+    batch_raw = canonical_batch.read_bytes()
+    snapshot_raw = snapshot_path.read_bytes()
+    origin_packets = []
+    for expected in slices:
+        role = str(expected["role"])
+        slice_id = str(expected["slice_id"])
+        packet_path = scratch / "slice-packets" / f"{slice_id}.json"
+        if packet_path.is_symlink() or not packet_path.is_file():
+            raise ValueError("authenticated review packet is unavailable for archive origin")
+        packet_raw = packet_path.read_bytes()
+        packet_value = json.loads(packet_raw, object_pairs_hook=unique_json_object)
+        origin_packets.append({
+            "role": role, "slice_id": slice_id,
+            "repo_path": str(packet_path.relative_to(task_root)),
+            "raw_sha256": hashlib.sha256(packet_raw).hexdigest(), "value": packet_value,
+        })
+    source_identity = plan.get("source_review_identity")
+    source_scope_oid = (source_identity.get("source_scope_oid")
+                        if isinstance(source_identity, dict) else plan.get("source_scope_oid"))
+    if source_scope_oid is None:
+        source_scope_oid = plan.get("comparison_oid")
+    origin_context = {
+        "schema": "oasis7-publication-helper-review-origin/v1", "task_uid": task_uid,
+        "bootstrap_snapshot": {"value": snapshot, "raw_sha256": hashlib.sha256(snapshot_raw).hexdigest()},
+        "review_plan": {"value": plan, "raw_sha256": hashlib.sha256(plan_raw).hexdigest()},
+        "review_batch": {"value": batch, "raw_sha256": hashlib.sha256(batch_raw).hexdigest()},
+        "dispatch_readback": {**dispatch_evidence, "payload": dispatch_payload},
+        "packets": origin_packets,
+        "reviewed_git": {
+            "comparison_oid": plan.get("comparison_oid"),
+            "source_scope_oid": source_scope_oid,
+            "head_oid": plan.get("frozen_head"),
+        },
+    }
+    live_task_identity = {
+        "task_uid": task_uid, "issue_number": live_task_record.get("issue_number"),
+        "issue_url": live_task_record.get("issue_url"),
+        "project_item_id": live_task_record.get("project_item_id"),
+        "repository": live_task_record.get("repository"),
+        "canonical_worktree": live_task_record.get("canonical_worktree"),
+        "task_branch": live_task_record.get("task_branch"),
+        "owner_role": live_task_record.get("owner_role"),
+        "pr_number": live_task_record.get("pr_number"), "pr_url": live_task_record.get("pr_url"),
+    }
+    for optional in ("primary_package", "loop_binding"):
+        if optional in live_task_record:
+            live_task_identity[optional] = live_task_record[optional]
+    for packet_origin in origin_packets:
+        packet_helper.validate_archived_packet(
+            packet_origin["value"], origin_context, archive_root=task_root,
+            live_task_identity=live_task_identity, reviewed_source_oid=source_oid,
+        )
+    origin_path = scratch / "publication-helper-review-origin.json"
+    origin_raw = (json.dumps(origin_context, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    if origin_path.exists() or origin_path.is_symlink():
+        if origin_path.is_symlink() or not origin_path.is_file() or origin_path.read_bytes() != origin_raw:
+            raise ValueError("publication helper review origin is create-once and contains different evidence")
+    else:
+        with origin_path.open("xb") as handle:
+            handle.write(origin_raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+    files = _collect_review_archive_closure(task_root, task_uid, source_oid, plan_path)
+    return plan, returns, files, plan_path, ledger_path
+
+
+def _archive_dir(root: pathlib.Path, task_uid: str) -> pathlib.Path:
+    return canonical_receipt_root(root, task_uid) / HELPER_REVIEW_ARCHIVE
+
+
+def _unique_helper_archive(root: pathlib.Path, closure_digest: str,
+                           closure_manifest: list[dict[str, str]]) -> tuple[str, pathlib.Path, dict[str, Any], bytes]:
+    common = pathlib.Path(run_text([
+        "git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir",
+    ])).resolve()
+    receipts = common / "oasis7-workflow-receipts"
+    matches = []
+    if receipts.is_dir() and not receipts.is_symlink():
+        for candidate in sorted(receipts.glob(f"task_*/{HELPER_REVIEW_ARCHIVE}/manifest.json")):
+            uid = candidate.parent.parent.name
+            if not re.fullmatch(r"task_[0-9a-f]{32}", uid):
+                continue
+            expected_root = canonical_receipt_root(root, uid)
+            expected_dir = expected_root / HELPER_REVIEW_ARCHIVE
+            if (candidate.parent != expected_dir or expected_dir.is_symlink()
+                    or candidate.is_symlink() or not candidate.is_file()):
+                raise ValueError("helper review archive path is not canonical")
+            try:
+                manifest, raw = strict_json(candidate)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if (manifest.get("task_uid") == uid
+                    and manifest.get("helper_closure_sha256") == closure_digest
+                    and manifest.get("closure_manifest") == closure_manifest):
+                matches.append((uid, candidate.parent, manifest, raw))
+    if len(matches) != 1:
+        raise ValueError("one unique merged helper review archive must match the effective closure")
+    return matches[0]
+
+
+def _validate_archive_files(archive_dir: pathlib.Path, manifest: dict[str, Any]) -> pathlib.Path:
+    manifest_path = archive_dir / "manifest.json"
+    data_root = archive_dir / "artifacts"
+    if (archive_dir.is_symlink() or manifest_path.is_symlink() or data_root.is_symlink()
+            or not archive_dir.is_dir() or not data_root.is_dir()):
+        raise ValueError("helper archive root is missing or uses symlink substitution")
+    rows = manifest.get("files")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("helper archive file manifest is empty")
+    expected = set()
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"path", "sha256", "size"}:
+            raise ValueError("helper archive file entry is malformed")
+        relative = pathlib.PurePosixPath(str(row["path"]))
+        if (not str(row["path"]).isascii() or relative.is_absolute()
+                or any(part in {"", ".", ".."} for part in relative.parts)
+                or type(row["size"]) is not int or row["size"] < 0
+                or not isinstance(row["sha256"], str)
+                or re.fullmatch(r"[0-9a-f]{64}", row["sha256"]) is None):
+            raise ValueError("helper archive path escapes its fixed root")
+        if relative.as_posix() in expected:
+            raise ValueError("helper archive manifest repeats a path")
+        path = data_root.joinpath(*relative.parts)
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(data_root.resolve()):
+            raise ValueError("helper archive member is missing or escapes its root")
+        raw = path.read_bytes()
+        if len(raw) != row["size"] or hashlib.sha256(raw).hexdigest() != row["sha256"]:
+            raise ValueError("helper archive member digest mismatch")
+        expected.add(relative.as_posix())
+    actual = {str(path.relative_to(data_root)) for path in data_root.rglob("*") if path.is_file()}
+    if any(path.is_symlink() for path in data_root.rglob("*")) or actual != expected:
+        raise ValueError("helper archive has missing or unmanifested members")
+    return data_root
+
+
+def _require_finalized_issue_phase_projection(issue_phase: object, mapping_phase: object) -> None:
+    """Allow the finalizer's documented Issue-body/mapping phase pair after receipt validation."""
+    if issue_phase == mapping_phase or (issue_phase == "task_done" and mapping_phase == "post_merge_done"):
+        return
+    raise ValueError("fresh live helper terminal phase lacks the receipt-backed mapping projection")
+
+
+def _normalize_archived_helper_return_path(artifact: object, original_worktree: object,
+                                          expected_return_path: object) -> str:
+    """Map one old absolute ledger path through authenticated origin to its archive member."""
+    if (not isinstance(artifact, str) or not artifact or artifact != artifact.strip()
+            or not isinstance(original_worktree, str) or not original_worktree
+            or not isinstance(expected_return_path, str) or not expected_return_path):
+        raise ValueError("archived role return path identity is malformed")
+    origin = pathlib.Path(original_worktree)
+    expected = pathlib.PurePosixPath(expected_return_path)
+    if (not origin.is_absolute() or ".." in origin.parts or str(origin) != original_worktree
+            or expected.is_absolute() or ".." in expected.parts or expected.as_posix() != expected_return_path):
+        raise ValueError("archived role return origin or member path is not canonical")
+    relative = expected.as_posix()
+    absolute = str(origin / pathlib.Path(*expected.parts))
+    if artifact not in {relative, absolute}:
+        raise ValueError("role-return ledger artifact differs from its authenticated archive member")
+    return relative
+
+
+def _safe_archived_helper_member(data_root: pathlib.Path, member: str) -> pathlib.Path:
+    relative = pathlib.PurePosixPath(member)
+    if (not member or relative.is_absolute() or ".." in relative.parts
+            or relative.as_posix() != member or not relative.parts):
+        raise ValueError("archived helper member path is not canonical")
+    root = data_root.resolve(strict=True)
+    candidate = root
+    for part in relative.parts:
+        candidate = candidate / part
+        if candidate.is_symlink():
+            raise ValueError("archived helper member path contains a symlink")
+    resolved = candidate.resolve(strict=True)
+    if not resolved.is_relative_to(root) or not resolved.is_file():
+        raise ValueError("archived helper member escapes its data root or is not a file")
+    return resolved
+
+
+def validate_helper_review_archive(authority: SinglePublicationRecoveryAuthority,
+                                   review: dict[str, Any]) -> None:
+    root, current_head, current_manifest, current_digest = effective_helper_root()
+    if (review.get("helper_closure_sha256") != current_digest
+            or review.get("closure_manifest") != current_manifest):
+        raise ValueError("recovery is not executing from the independently reviewed effective helper closure")
+    helper_uid = str(review.get("helper_task_uid") or "")
+    if not re.fullmatch(r"task_[0-9a-f]{32}", helper_uid):
+        raise ValueError("helper Task locator is malformed")
+    selected_uid, selected_dir, selected_manifest, selected_raw = _unique_helper_archive(
+        root, current_digest, current_manifest,
+    )
+    if selected_uid != helper_uid:
+        raise ValueError("v2 helper Task locator differs from the independently resolved archive identity")
+    archive_dir = selected_dir
+    manifest, raw = strict_json(archive_dir / "manifest.json")
+    if raw != selected_raw or manifest != selected_manifest or hashlib.sha256(raw).hexdigest() != review.get("archive_manifest_sha256"):
+        raise ValueError("helper archive manifest digest mismatch")
+    manifest_keys = {
+        "schema", "task_uid", "repository", "issue_number", "issue_url", "project_item_id",
+        "pr_number", "pr_url", "source_head_oid", "merge_receipt_sha256",
+        "main_sync_receipt_sha256", "main_commit", "patch_equivalence_receipt_sha256",
+        "helper_closure_sha256", "closure_manifest", "plan_path", "plan_sha256",
+        "ledger_path", "ledger_sha256", "roles", "role_returns", "files",
+    }
+    if set(manifest) != manifest_keys:
+        raise ValueError("helper archive manifest contains unsupported fields")
+    if (manifest.get("schema") != HELPER_REVIEW_ARCHIVE_SCHEMA or manifest.get("task_uid") != helper_uid
+            or manifest.get("repository") != authority.args.repo
+            or manifest.get("helper_closure_sha256") != current_digest
+            or manifest.get("closure_manifest") != current_manifest):
+        raise ValueError("helper archive source/closure identity mismatch")
+    helper_record = _task_record(root, helper_uid, authority.args.repo)
+    live_helper = github_issue_record(authority.args.repo, helper_uid)
+    if not isinstance(live_helper, dict):
+        raise ValueError("fresh live helper Task Issue is unavailable")
+    live_helper_pairs = {
+        "task_uid": helper_uid, "issue_number": helper_record.get("issue_number"),
+        "issue_url": helper_record.get("issue_url"), "owner_role": helper_record.get("owner_role"),
+        "worktree_hint": helper_record.get("canonical_worktree"),
+        "status": helper_record.get("status"),
+        "pr_number": helper_record.get("pr_number"), "pr_url": helper_record.get("pr_url"),
+    }
+    if any(live_helper.get(key) != expected for key, expected in live_helper_pairs.items()):
+        raise ValueError("fresh live helper Task fields differ from canonical task mapping")
+    if str(live_helper.get("issue_state") or "").upper() != "CLOSED":
+        raise ValueError("terminal helper Task Issue is not closed")
+    if helper_record.get("status") != "done" or helper_record.get("workflow_phase") != "post_merge_done":
+        raise ValueError("helper Task has not completed terminal cleanup/finalization")
+    receipt_root, _merge, _sync, source_oid = _verify_merged_task(root, helper_uid, authority.args.repo, helper_record)
+    terminal_path = receipt_root / "terminal-cleanup-receipt.json"
+    terminal, terminal_raw = strict_json(terminal_path)
+    terminal_digest = hashlib.sha256(terminal_raw).hexdigest()
+    merge_path = receipt_root / "merge-receipt.json"
+    main_sync_path = receipt_root / "main-sync-receipt.json"
+    merge_digest = hashlib.sha256(merge_path.read_bytes()).hexdigest()
+    main_sync_digest = hashlib.sha256(main_sync_path.read_bytes()).hexdigest()
+    if (terminal.get("receipt_type") != "oasis7_terminal_cleanup"
+            or terminal.get("issuer") != "post-merge-cleanup"
+            or terminal.get("task_uid") != helper_uid
+            or terminal.get("repository") != authority.args.repo
+            or terminal.get("issue_number") != helper_record.get("issue_number")
+            or terminal.get("pr_number") != helper_record.get("pr_number")
+            or terminal.get("worktree") != helper_record.get("canonical_worktree")
+            or terminal.get("branch") != helper_record.get("task_branch")
+            or terminal.get("merge_receipt_sha256") != merge_digest
+            or terminal.get("main_sync_receipt_sha256") != main_sync_digest
+            or (helper_record.get("phase_receipts") or {}).get("post_merge_done") != terminal
+            or (helper_record.get("phase_receipt_sha256") or {}).get("post_merge_done") != terminal_digest):
+        raise ValueError("helper terminal cleanup receipt does not match the live Task and receipt chain")
+    finalizer_path = root / "scripts/pm/post-merge-finalize.py"
+    finalizer_spec = importlib.util.spec_from_file_location("post_merge_finalize_readonly", finalizer_path)
+    if finalizer_spec is None or finalizer_spec.loader is None:
+        raise ValueError("cannot load the effective terminal cleanup validator")
+    finalizer = importlib.util.module_from_spec(finalizer_spec)
+    finalizer_spec.loader.exec_module(finalizer)
+    try:
+        finalizer._validate_cleanup_intent(terminal_path, helper_uid, helper_record, terminal, True)
+    except SystemExit as exc:
+        raise ValueError(f"helper terminal cleanup intent validation failed: {exc}") from exc
+    _require_finalized_issue_phase_projection(
+        live_helper.get("workflow_phase"), helper_record.get("workflow_phase"),
+    )
+    if (source_oid != manifest.get("source_head_oid") or source_oid != review.get("helper_source_oid")
+            or manifest.get("main_commit") != _sync.get("main_commit")
+            or manifest.get("issue_number") != helper_record.get("issue_number")
+            or manifest.get("issue_url") != helper_record.get("issue_url")
+            or manifest.get("project_item_id") != helper_record.get("project_item_id")
+            or manifest.get("pr_number") != helper_record.get("pr_number")
+            or manifest.get("pr_url") != helper_record.get("pr_url")
+            or manifest.get("merge_receipt_sha256") != hashlib.sha256((receipt_root / "merge-receipt.json").read_bytes()).hexdigest()
+            or manifest.get("main_sync_receipt_sha256") != hashlib.sha256((receipt_root / "main-sync-receipt.json").read_bytes()).hexdigest()):
+        raise ValueError("helper archive Task/PR/receipt identity mismatch")
+    data_root = _validate_archive_files(archive_dir, manifest)
+    plan_path = (data_root / str(manifest.get("plan_path") or "")).resolve(strict=True)
+    ledger_path = (data_root / str(manifest.get("ledger_path") or "")).resolve(strict=True)
+    if not plan_path.is_relative_to(data_root.resolve()) or not ledger_path.is_relative_to(data_root.resolve()):
+        raise ValueError("helper archive plan or ledger escapes its data root")
+    plan, plan_raw = strict_json(plan_path)
+    if (hashlib.sha256(plan_raw).hexdigest() != manifest.get("plan_sha256")
+            or plan.get("task_uid") != helper_uid or plan.get("frozen_head") != source_oid):
+        raise ValueError("archived frozen review plan identity/digest mismatch")
+    if hashlib.sha256(ledger_path.read_bytes()).hexdigest() != manifest.get("ledger_sha256"):
+        raise ValueError("archived review ledger digest mismatch")
+    roles = manifest.get("roles")
+    role_returns = manifest.get("role_returns")
+    if (not isinstance(roles, list) or sorted(roles) != sorted(SinglePublicationRecoveryAuthority.roles)
+            or len(roles) != len(set(roles)) or plan.get("roles") != roles
+            or not isinstance(role_returns, list) or not all(isinstance(row, dict) for row in role_returns)
+            or len(role_returns) != len(roles)
+            or sorted(row.get("role", "") for row in role_returns) != sorted(roles)):
+        raise ValueError("archived independent review role set is incomplete")
+    files_by_path = {str(row["path"]): row for row in manifest["files"]}
+    origin_relative = f".pm/scratch/{helper_uid}/publication-helper-review-origin.json"
+    if origin_relative not in files_by_path:
+        raise ValueError("archive omits its manifest-bound packet origin context")
+    origin_context, _origin_raw = strict_json(data_root / origin_relative)
+    dispatch_origin = origin_context.get("dispatch_readback") if isinstance(origin_context, dict) else None
+    dispatch_payload = dispatch_origin.get("payload") if isinstance(dispatch_origin, dict) else None
+    dispatch_comment_id = dispatch_origin.get("comment_id") if isinstance(dispatch_origin, dict) else None
+    handoff_helper_path = root / "scripts/pm/review_preflight_handoff.py"
+    handoff_helper_spec = importlib.util.spec_from_file_location(
+        "review_preflight_handoff_archived_recovery", handoff_helper_path,
+    )
+    if handoff_helper_spec is None or handoff_helper_spec.loader is None:
+        raise ValueError("cannot load the effective live dispatch reader")
+    handoff_helper = importlib.util.module_from_spec(handoff_helper_spec)
+    handoff_helper_spec.loader.exec_module(handoff_helper)
+    if not isinstance(dispatch_payload, dict):
+        raise ValueError("archived packet origin omits its authenticated dispatch payload")
+    fresh_dispatch = handoff_helper.live_dispatch_readback(root, dispatch_payload, dispatch_comment_id)
+    for field in ("issue_number", "issue_url", "comment_id", "author", "body_digest", "payload"):
+        if not isinstance(dispatch_origin, dict) or dispatch_origin.get(field) != fresh_dispatch.get(field):
+            raise ValueError("fresh authenticated dispatch readback differs from archived packet origin")
+    packet_helper_path = root / "scripts/pm/subagent-task-packet.py"
+    packet_helper_spec = importlib.util.spec_from_file_location(
+        "subagent_task_packet_archived_recovery", packet_helper_path,
+    )
+    if packet_helper_spec is None or packet_helper_spec.loader is None:
+        raise ValueError("cannot load the effective shared packet validator")
+    packet_helper = importlib.util.module_from_spec(packet_helper_spec)
+    packet_helper_spec.loader.exec_module(packet_helper)
+    archived_packet_validator = getattr(packet_helper, "validate_archived_packet", None)
+    if not callable(archived_packet_validator):
+        raise ValueError("effective packet validator lacks archived-origin validation")
+    live_task_identity = {
+        "task_uid": helper_uid, "issue_number": helper_record.get("issue_number"),
+        "issue_url": helper_record.get("issue_url"),
+        "project_item_id": helper_record.get("project_item_id"),
+        "repository": helper_record.get("repository"),
+        "canonical_worktree": helper_record.get("canonical_worktree"),
+        "task_branch": helper_record.get("task_branch"),
+        "owner_role": helper_record.get("owner_role"),
+        "pr_number": helper_record.get("pr_number"), "pr_url": helper_record.get("pr_url"),
+    }
+    for optional in ("primary_package", "loop_binding"):
+        if optional in helper_record:
+            live_task_identity[optional] = helper_record[optional]
+    expected_slices = plan.get("expected_slices")
+    if not isinstance(expected_slices, list):
+        raise ValueError("archived review plan slice set is malformed")
+    slices_by_role = {str(row.get("role") or ""): row for row in expected_slices if isinstance(row, dict)}
+    if len(slices_by_role) != len(expected_slices) or set(slices_by_role) != set(roles):
+        raise ValueError("archived review plan does not cover its exact role set")
+    ledger_rows = [json.loads(line, object_pairs_hook=unique_json_object)
+                   for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    ledger_by_role = {str(row.get("role") or ""): row for row in ledger_rows if isinstance(row, dict)}
+    if len(ledger_by_role) != len(ledger_rows) or set(ledger_by_role) != set(roles):
+        raise ValueError("archived provenance ledger does not cover its exact role set")
+    seen_return_paths: set[str] = set()
+    ledger_artifact_members: dict[str, str] = {}
+    resolved_ledger_members: set[str] = set()
+    for returned in role_returns:
+        PublicationRecoveryAuthority._closed(returned, {
+            "role", "slice_id", "packet_sha256", "source_head_oid", "packet_path",
+            "return_path", "return_sha256", "verdict",
+        })
+        role = returned["role"]
+        slice_id = str(slices_by_role[role].get("slice_id") or "")
+        expected_packet_path = f".pm/scratch/{helper_uid}/slice-packets/{slice_id}.json"
+        packet_path = str(returned["packet_path"])
+        return_path = str(returned["return_path"])
+        if (returned["slice_id"] != slice_id or packet_path != expected_packet_path
+                or not return_path.startswith(f".pm/scratch/{helper_uid}/")
+                or returned["source_head_oid"] != source_oid or returned["verdict"] != "approved"):
+            raise ValueError("archived role return does not bind its exact packet/head")
+        packet_row = files_by_path.get(packet_path)
+        return_row = files_by_path.get(return_path)
+        if (not packet_row or not return_row
+                or packet_row["sha256"] != returned["packet_sha256"]
+                or return_row["sha256"] != returned["return_sha256"]):
+            raise ValueError("archived packet/return digest is not bound to the file manifest")
+        packet = json.loads((data_root / packet_path).read_bytes(), object_pairs_hook=unique_json_object)
+        if not isinstance(packet, dict):
+            raise ValueError("archived review packet is not an object")
+        try:
+            archived_packet_validator(
+                packet, origin_context, archive_root=data_root,
+                live_task_identity=live_task_identity, reviewed_source_oid=source_oid,
+            )
+        except Exception as exc:
+            raise ValueError(f"archived packet contract validation failed: {exc}") from exc
+        snapshot_wrapper = origin_context.get("bootstrap_snapshot")
+        snapshot = snapshot_wrapper.get("value") if isinstance(snapshot_wrapper, dict) else None
+        snapshot_git = snapshot.get("git") if isinstance(snapshot, dict) else None
+        original_worktree = snapshot_git.get("worktree") if isinstance(snapshot_git, dict) else None
+        if original_worktree != helper_record.get("canonical_worktree"):
+            raise ValueError("authenticated bootstrap worktree differs from the live helper Task")
+        packet_identity = packet.get("identity") or {}
+        packet_slice = packet.get("slice") or {}
+        if not isinstance(packet_identity, dict) or not isinstance(packet_slice, dict):
+            raise ValueError("archived review packet identity/slice is malformed")
+        packet_unsigned = {key: value for key, value in packet.items() if key != "packet_digest"}
+        packet_preimage = json.dumps(packet_unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        packet_digest = hashlib.sha256(packet_preimage.encode("utf-8")).hexdigest()
+        if (packet.get("schema") != "oasis7-subagent-task-packet/v1"
+                or packet.get("packet_digest") != packet_digest
+                or packet_identity.get("task_uid") != helper_uid
+                or packet_identity.get("head") != source_oid
+                or packet_identity.get("project_item_id") != helper_record.get("project_item_id")
+                or packet_identity.get("repository") != authority.args.repo
+                or packet_identity.get("issue_url") != helper_record.get("issue_url")
+                or packet_slice.get("owner_role") != helper_record.get("owner_role")
+                or packet_slice.get("formal_sink") != helper_record.get("issue_url")
+                or packet_slice.get("role") != role or packet_slice.get("slice_id") != slice_id):
+            raise ValueError("archived review packet does not bind its canonical task/role/head")
+        archive_return_path = _safe_archived_helper_member(data_root, return_path)
+        returned_value = json.loads(archive_return_path.read_bytes(), object_pairs_hook=unique_json_object)
+        if not isinstance(returned_value, dict):
+            raise ValueError("archived independent return is not an object")
+        try:
+            handoff_helper.validate_return(
+                returned_value, role=role, slice_id=slice_id, task_uid=helper_uid,
+                head=source_oid, epoch=str(plan.get("epoch") or ""),
+            )
+        except Exception as exc:
+            raise ValueError(f"archived independent return contract is invalid: {exc}") from exc
+        if any(returned_value.get(key) != expected for key, expected in {
+                "task_uid": helper_uid, "role": role, "slice_id": slice_id,
+                "head": source_oid, "status": "completed", "scope_verdict": "approved",
+                "risk_verdict": "approved", "disposition": "no_findings", "findings": [],
+                "helper_source_oid": source_oid,
+                "helper_closure_sha256": manifest["helper_closure_sha256"],
+        }.items()):
+            raise ValueError("archived independent return does not approve the exact helper closure")
+        ledger_row = ledger_by_role[role]
+        ledger_artifacts = ledger_row.get("artifacts")
+        if (ledger_row.get("task_uid") != helper_uid or ledger_row.get("slice_id") != slice_id
+                or ledger_row.get("status") != "completed"
+                or ledger_row.get("artifact_digest") != returned["return_sha256"]
+                or not isinstance(ledger_artifacts, list) or len(ledger_artifacts) != 1):
+            raise ValueError("archived provenance ledger does not bind the exact role return")
+        ledger_return_path = _normalize_archived_helper_return_path(
+            ledger_artifacts[0], original_worktree, return_path,
+        )
+        if ledger_return_path in seen_return_paths:
+            raise ValueError("archived provenance ledger duplicates a role return path")
+        seen_return_paths.add(ledger_return_path)
+        archived_return = _safe_archived_helper_member(data_root, ledger_return_path)
+        if (ledger_return_path != return_path
+                or hashlib.sha256(archived_return.read_bytes()).hexdigest() != returned["return_sha256"]):
+            raise ValueError("archived provenance ledger path or bytes differ from its manifest-bound return")
+        absolute_ledger_path = str(pathlib.Path(original_worktree) / pathlib.Path(*pathlib.PurePosixPath(return_path).parts))
+        for ledger_path_key in (ledger_return_path, absolute_ledger_path):
+            previous = ledger_artifact_members.get(ledger_path_key)
+            if previous is not None and previous != ledger_return_path:
+                raise ValueError("archived provenance ledger path maps to multiple archive members")
+            ledger_artifact_members[ledger_path_key] = ledger_return_path
+
+    provenance_script = root / "scripts/pm/validate-review-provenance.py"
+    provenance_spec = importlib.util.spec_from_file_location(
+        "validate_review_provenance_archived_recovery", provenance_script,
+    )
+    if provenance_spec is None or provenance_spec.loader is None:
+        raise ValueError("cannot load the effective shared provenance validator")
+    provenance_validator = importlib.util.module_from_spec(provenance_spec)
+    provenance_spec.loader.exec_module(provenance_validator)
+
+    def archived_artifact_resolver(raw: str, archive_root: pathlib.Path) -> pathlib.Path:
+        if archive_root.resolve(strict=True) != data_root.resolve(strict=True):
+            raise ValueError("provenance validator archive root differs from the authenticated archive")
+        member = ledger_artifact_members.get(raw)
+        if member is None:
+            raise ValueError("provenance ledger artifact has no exact authenticated archive mapping")
+        if member in resolved_ledger_members:
+            raise ValueError("provenance ledger repeats an authenticated archive member")
+        file_entry = files_by_path.get(member)
+        if not isinstance(file_entry, dict):
+            raise ValueError("provenance ledger archive member is not listed in the immutable manifest")
+        archived_file = _safe_archived_helper_member(data_root, member)
+        archived_bytes = archived_file.read_bytes()
+        if (len(archived_bytes) != file_entry.get("size")
+                or hashlib.sha256(archived_bytes).hexdigest() != file_entry.get("sha256")):
+            raise ValueError("provenance ledger archive member differs from its immutable manifest")
+        resolved_ledger_members.add(member)
+        return archived_file
+
+    provenance_args = argparse.Namespace(
+        root=data_root, task_uid=helper_uid, ledger=str(ledger_path),
+        roles=",".join(roles), source_head=source_oid, mode="human-operated",
+    )
+    validator_stdout = io.StringIO()
+    validator_stderr = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(validator_stdout), contextlib.redirect_stderr(validator_stderr):
+            validation_result = provenance_validator.validate_ledger(
+                provenance_args, argparse.ArgumentParser(prog="validate-review-provenance-archive"),
+                archived_artifact_resolver=archived_artifact_resolver,
+            )
+    except SystemExit as exc:
+        detail = validator_stderr.getvalue().strip()
+        raise ValueError(f"archived provenance ledger validation failed: {detail or exc}") from exc
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise ValueError(f"archived provenance ledger validation failed: {exc}") from exc
+    expected_validation = {
+        "status": "passed", "mode": "human-operated", "roles": sorted(roles),
+        "source_head": source_oid,
+    }
+    try:
+        actual_validation = json.loads(validator_stdout.getvalue())
+    except json.JSONDecodeError as exc:
+        raise ValueError("shared provenance validator returned malformed validation evidence") from exc
+    if validation_result != 0 or actual_validation != expected_validation or resolved_ledger_members != seen_return_paths:
+        raise ValueError("shared provenance validator did not verify every exact archived role return")
+    archive_projection = {
+        "helper_task_uid": manifest.get("task_uid"),
+        "helper_source_oid": manifest.get("source_head_oid"),
+        "helper_closure_sha256": manifest.get("helper_closure_sha256"),
+        "closure_manifest": manifest.get("closure_manifest"),
+        "plan_path": manifest.get("plan_path"),
+        "plan_sha256": manifest.get("plan_sha256"),
+        "ledger_path": manifest.get("ledger_path"),
+        "ledger_sha256": manifest.get("ledger_sha256"),
+        "role_returns": manifest.get("role_returns"),
+    }
+    for key, expected in archive_projection.items():
+        if review.get(key) != expected:
+            raise ValueError("v2 admission review binding differs from the canonical archive")
+
+
+def command_archive_publication_helper_review(args: argparse.Namespace) -> int:
+    if not re.fullmatch(r"task_[0-9a-f]{32}", args.task_uid):
+        raise ValueError("invalid canonical helper Task UID")
+    root, _effective_head, effective_manifest, effective_digest = effective_helper_root()
+    record = _task_record(root, args.task_uid, DEFAULT_REPO)
+    task_root = pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve(strict=True)
+    identity = authoritative_repository_identity(root, DEFAULT_REPO, str(task_root))
+    if (identity["canonical_worktree"] != str(task_root) or identity["task_branch"] != record.get("task_branch")
+            or identity["default_branch"] != record.get("default_branch")):
+        raise ValueError("helper Task canonical worktree identity is invalid")
+    receipt_root, _merge, main_sync, source_oid = _verify_merged_task(root, args.task_uid, DEFAULT_REPO, record)
+    if run_text(["git", "-C", str(task_root), "rev-parse", "HEAD"]) != source_oid:
+        raise ValueError("helper Task worktree is not at the merged source head")
+    source_manifest = pm_closure_manifest(root, source_oid, verify_worktree=False)
+    main_commit = str(main_sync["main_commit"])
+    main_manifest = pm_closure_manifest(root, main_commit, verify_worktree=False)
+    if source_manifest != effective_manifest or main_manifest != source_manifest:
+        raise ValueError("reviewed source, integrated main and effective helper closures differ")
+    plan, returns, files, plan_path, ledger_path = _review_inputs(
+        task_root, args.task_uid, source_oid, root, record,
+    )
+    closure_digest = hashlib.sha256(PublicationRecoveryAuthority.encoded(source_manifest)).hexdigest()
+    manifest = {
+        "schema": HELPER_REVIEW_ARCHIVE_SCHEMA, "task_uid": args.task_uid, "repository": DEFAULT_REPO,
+        "issue_number": record["issue_number"], "issue_url": record["issue_url"],
+        "project_item_id": record["project_item_id"], "pr_number": record["pr_number"], "pr_url": record["pr_url"],
+        "source_head_oid": source_oid,
+        "merge_receipt_sha256": hashlib.sha256((receipt_root / "merge-receipt.json").read_bytes()).hexdigest(),
+        "main_sync_receipt_sha256": hashlib.sha256((receipt_root / "main-sync-receipt.json").read_bytes()).hexdigest(),
+        "main_commit": main_commit,
+        "patch_equivalence_receipt_sha256": hashlib.sha256((receipt_root / "patch-equivalence-receipt.json").read_bytes()).hexdigest()
+            if (receipt_root / "patch-equivalence-receipt.json").is_file() else None,
+        "helper_closure_sha256": closure_digest, "closure_manifest": source_manifest,
+        "plan_path": str(plan_path.relative_to(task_root)), "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+        "ledger_path": str(ledger_path.relative_to(task_root)), "ledger_sha256": hashlib.sha256(ledger_path.read_bytes()).hexdigest(),
+        "roles": plan["roles"], "role_returns": returns, "files": files,
+    }
+    archive_dir = _archive_dir(root, args.task_uid)
+    archive_root = archive_dir.parent
+    archive_root.mkdir(parents=True, exist_ok=True)
+    manifest_bytes = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    if archive_dir.exists():
+        old, old_raw = strict_json(archive_dir / "manifest.json")
+        _validate_archive_files(archive_dir, old)
+        if old_raw != manifest_bytes:
+            raise ValueError("helper review archive is create-once and contains different evidence")
+    else:
+        stage = pathlib.Path(tempfile.mkdtemp(prefix=".publication-helper-review.", dir=archive_root))
+        try:
+            data_root = stage / "artifacts"
+            for entry in files:
+                relative = pathlib.PurePosixPath(entry["path"])
+                source = task_root.joinpath(*relative.parts)
+                destination = data_root.joinpath(*relative.parts)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                raw = source.read_bytes()
+                if hashlib.sha256(raw).hexdigest() != entry["sha256"]:
+                    raise ValueError("review artifact changed while creating helper archive")
+                with destination.open("xb") as handle:
+                    handle.write(raw)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            with (stage / "manifest.json").open("xb") as handle:
+                handle.write(manifest_bytes)
+                handle.flush()
+                os.fsync(handle.fileno())
+            _validate_archive_files(stage, manifest)
+            os.rename(stage, archive_dir)
+        finally:
+            if stage.exists():
+                shutil.rmtree(stage)
+    readback, readback_raw = strict_json(archive_dir / "manifest.json")
+    _validate_archive_files(archive_dir, readback)
+    if readback_raw != manifest_bytes:
+        raise ValueError("helper archive manifest readback mismatch")
+    print(json.dumps({
+        "status": "archived", "task_uid": args.task_uid, "source_head_oid": source_oid,
+        "archive_path": str(archive_dir), "manifest_sha256": hashlib.sha256(readback_raw).hexdigest(),
+        "helper_closure_sha256": effective_digest,
+    }, sort_keys=True))
+    return 0
+
+
+def _comment_ref(comment: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "comment_id": comment["id"], "comment_url": comment["html_url"],
+        "body_sha256": hashlib.sha256(comment["body"].encode("utf-8")).hexdigest(),
+        "author_login": (comment.get("user") or {}).get("login"),
+    }
+
+
+def _parse_recovery_request(comment: dict[str, Any]) -> dict[str, Any]:
+    marker = "<!-- oasis7-publication-recovery-request/v1 -->"
+    fence = chr(96) * 3
+    match = re.fullmatch(re.escape(marker) + r"\s*" + re.escape(fence) + r"json\s*\n(.*?)\n"
+                         + re.escape(fence) + r"\s*", str(comment.get("body") or ""), re.S)
+    if not match:
+        raise ValueError("malformed user recovery request")
+    value = json.loads(match[1], object_pairs_hook=unique_json_object)
+    keys = {"schema", "operation", "repository", "task_uid", "issue_number", "issue_url",
+            "pr_number", "pr_url", "publication_id", "action_id"}
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ValueError("user recovery request has unsupported fields")
+    canonical = PublicationRecoveryAuthority.encoded(value).decode("utf-8")
+    expected_body = marker + "\n" + fence + "json\n" + canonical + "\n" + fence
+    if (comment.get("body") != expected_body
+            or value.get("schema") != "oasis7-publication-recovery-request/v1"
+            or value.get("operation") != "resume_uncertain_record_pr"):
+        raise ValueError("user recovery request is not canonical")
+    return value
+
+
+def _parse_record_pr_recovery_action_id(value: object) -> str:
+    match = re.fullmatch(r"record-pr:(sha256:[0-9a-f]{64})", value) if isinstance(value, str) else None
+    if match is None:
+        raise ValueError("recovery requires one exact persisted record-pr action selector")
+    return match.group(1)
+
+
+def command_admit_record_pr_recovery(args: argparse.Namespace) -> int:
+    root, effective_head, effective_manifest, effective_digest = effective_helper_root()
+    task_uid = args.task_uid
+    if not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        raise ValueError("invalid canonical Task UID")
+    publication_id = _parse_record_pr_recovery_action_id(args.action_id)
+    mapping = load_mapping(root / ".pm/github-project-sync/tasks.json")
+    record = _task_record(root, task_uid, DEFAULT_REPO)
+    target_root = pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve(strict=True)
+    identity = authoritative_repository_identity(root, DEFAULT_REPO, str(target_root))
+    if any(record.get(key) != identity.get(key) for key in
+           ("repository", "canonical_worktree", "task_branch", "default_branch")):
+        raise ValueError("canonical target worktree/branch identity differs from Task mapping")
+    if record.get("worktree_hint") != str(target_root):
+        raise ValueError("target Task worktree hint differs from its canonical mapping")
+
+    comments = github_issue_comments(DEFAULT_REPO, int(record["issue_number"]))
+    admissions = [c for c in comments if any(marker in c["body"] for marker in (
+        PublicationRecoveryAuthority.marker, SinglePublicationRecoveryAuthority.marker,
+    ))]
+    if admissions:
+        raise ValueError("an existing recovery admission must be consumed through the public publisher")
+    request_marker = "<!-- oasis7-publication-recovery-request/v1 -->"
+    requests = [c for c in comments if request_marker in c["body"]]
+    if len(requests) != 1:
+        raise ValueError("exactly one user-authorized recovery request is required")
+    request_comment = requests[0]
+    request = _parse_recovery_request(request_comment)
+
+    publication_module = load_pr_projection_publication_module()
+    publication_comments = []
+    binding_comments = []
+    for comment in comments:
+        body = str(comment.get("body") or "")
+        if "<!-- oasis7-ci-publication/v1 -->" in body:
+            publication_comments.append((comment, publication_module.parse_publication_comment(body)))
+        if "<!-- oasis7-ci-publication-binding/v1 -->" in body:
+            binding_comments.append((comment, publication_module.parse_publication_binding_comment(body)))
+    current = [(c, p) for c, p in publication_comments if p.get("publication_id") == publication_id]
+    if len(current) != 1:
+        raise ValueError("exact unique current publication intent is missing or ambiguous")
+    intent_comment, intent = current[0]
+    publication_module.reject_competing_current_publications(
+        intent, [publication for _comment, publication in publication_comments],
+    )
+    common = pathlib.Path(run_text([
+        "git", "-C", str(target_root), "rev-parse", "--path-format=absolute", "--git-common-dir",
+    ])).resolve()
+    from pr_projection_journal import publication_paths
+    journal_path, _lock_path = publication_paths(common, DEFAULT_REPO, identity["task_branch"], publication_id)
+    raw = journal_path.read_bytes()
+    journal = json.loads(raw, object_pairs_hook=unique_json_object)
+    if raw != PublicationRecoveryAuthority.encoded(journal) + b"\n":
+        raise ValueError("current publication journal is not canonical")
+    action_rows = [a for a in journal.get("actions", []) if a.get("action_id") == args.action_id]
+    all_record_actions = [a for a in journal.get("actions", []) if a.get("kind") == "record_pr"]
+    if len(action_rows) != 1 or len(all_record_actions) != 1:
+        raise ValueError("one unique current record-pr action is required")
+    action = action_rows[0]
+    expected_action = action.get("expected") or {}
+    if (action.get("kind") != "record_pr" or action.get("state") != "uncertain"
+            or expected_action.get("publication_id") != publication_id
+            or expected_action.get("task_uid") != task_uid
+            or type(expected_action.get("pr_number")) is not int):
+        raise ValueError("current record-pr action is not a persisted uncertain action")
+    pr_number = expected_action["pr_number"]
+    pr_url = f"https://github.com/{DEFAULT_REPO}/pull/{pr_number}"
+    binding = publication_module.build_publication_binding(intent, pr_number, pr_url)
+    request_identity = {
+        "repository": DEFAULT_REPO, "task_uid": task_uid,
+        "issue_number": record["issue_number"], "issue_url": record["issue_url"],
+        "pr_number": pr_number, "pr_url": pr_url, "publication_id": publication_id,
+        "action_id": args.action_id,
+    }
+    if request != {"schema": "oasis7-publication-recovery-request/v1",
+                   "operation": "resume_uncertain_record_pr", **request_identity}:
+        raise ValueError("user recovery request does not bind the exact persisted action")
+    matching_bindings = [(c, b) for c, b in binding_comments if b.get("publication_id") == publication_id]
+    if len(matching_bindings) > 1 or (matching_bindings and matching_bindings[0][1] != binding):
+        raise ValueError("reciprocal publication binding is duplicate or conflicting")
+
+    project_info = mapping.get("project") or {}
+    project_owner = str(project_info.get("owner") or DEFAULT_PROJECT_OWNER)
+    project_number = int(project_info.get("number") or DEFAULT_PROJECT_NUMBER)
+    project_id, _fields = load_sync_module().project_context(project_owner, project_number)
+    plan_comments = [c for c in comments if "Plan-Gap Evidence:" in c["body"]]
+    if len(plan_comments) != 1:
+        raise ValueError("unique live Plan-Gap scope comment is required")
+    plan_comment = plan_comments[0]
+    current_actor = json.loads(run_text(["gh", "api", "user"])).get("login")
+    if not isinstance(current_actor, str) or not current_actor:
+        raise ValueError("authenticated current GitHub actor is unavailable")
+
+    archive_uid, _archive_dir, archive_manifest, archive_raw = _unique_helper_archive(
+        root, effective_digest, effective_manifest,
+    )
+    helper_review = {
+        "helper_task_uid": archive_uid,
+        "archive_manifest_sha256": hashlib.sha256(archive_raw).hexdigest(),
+        "helper_source_oid": archive_manifest.get("source_head_oid"),
+        "helper_closure_sha256": archive_manifest.get("helper_closure_sha256"),
+        "closure_manifest": archive_manifest.get("closure_manifest"),
+        "plan_path": archive_manifest.get("plan_path"),
+        "plan_sha256": archive_manifest.get("plan_sha256"),
+        "ledger_path": archive_manifest.get("ledger_path"),
+        "ledger_sha256": archive_manifest.get("ledger_sha256"),
+        "role_returns": archive_manifest.get("role_returns"),
+    }
+    current_action = {
+        "publication_id": publication_id, "action_id": args.action_id,
+        "journal_sha256": hashlib.sha256(raw).hexdigest(),
+        "H": intent["source_head_oid"], "B": intent["planner_authority_oid"],
+        "S": intent["source_scope_oid"], "D": intent["projection_digest"],
+        "intent_comment_id": intent_comment["id"],
+        "intent_body_sha256": hashlib.sha256(intent_comment["body"].encode("utf-8")).hexdigest(),
+        "intent_author_login": (intent_comment.get("user") or {}).get("login"),
+    }
+    admission_envelope = {
+        "schema": "oasis7-publication-recovery-admission/v2",
+        "identity": {
+            "repository": DEFAULT_REPO, "task_uid": task_uid, "issue_number": record["issue_number"],
+            "issue_url": record["issue_url"], "pr_number": pr_number, "pr_url": pr_url,
+            "project_id": project_id, "project_item_id": record["project_item_id"],
+            "canonical_worktree": str(target_root), "source_ref": record["task_branch"],
+            "target_ref": record["default_branch"],
+        },
+        "operation": "record_pr_publication_recovery",
+        "recovery_request": _comment_ref(request_comment),
+        "plan_scope": _comment_ref(plan_comment),
+        "current_action": current_action,
+        "helper_review": helper_review,
+        "unrelated_snapshot": None,
+        "admission_author_login": current_actor,
+    }
+    args_obj = argparse.Namespace(
+        root=target_root, task_uid=task_uid, repo=DEFAULT_REPO,
+        project_owner=project_owner, project_number=project_number,
+        mapping=".pm/github-project-sync/tasks.json", pr_url=pr_url, draft_candidate=True,
+        existing_ready_update=False, role="tpm", publication_binding_json=None,
+        recovery_required=True,
+    )
+    authority = object.__new__(SinglePublicationRecoveryAuthority)
+    authority.args, authority.record, authority.binding = args_obj, dict(record), binding
+    authority.record["project_id"] = project_id
+    authority.intent, authority.module = intent, publication_module
+    authority.root = target_root
+    authority.envelope = admission_envelope
+    authority.comment = intent_comment
+    authority.envelope_body = ""
+    authority.issue_baseline = None
+    authority.project_baseline = None
+    authority._scope(comments)
+    authority._helpers()
+    authority._lineage(comments)
+    authority.check(pre_admission=True)
+    fence = chr(96) * 3
+    body = (SinglePublicationRecoveryAuthority.marker + "\n" + fence + "json\n"
+            + authority.encoded(authority.envelope).decode("utf-8") + "\n" + fence)
+    if len(body.encode("utf-8")) > 60 * 1024:
+        raise ValueError("recovery admission exceeds the supported Task Issue comment size")
+
+    post_url = None
+    post_error = None
+    try:
+        post_url = issue_comment(DEFAULT_REPO, int(record["issue_number"]), body)
+    except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+        post_error = exc
+    readback_comments = github_issue_comments(DEFAULT_REPO, int(record["issue_number"]))
+    matches = [c for c in readback_comments if c.get("body") == body]
+    if len(matches) != 1:
+        raise ValueError("recovery admission POST is uncertain; exact complete readback did not find one comment") from post_error
+    posted = matches[0]
+    authority._comment_identity(posted, current_actor)
+    if post_url is not None and post_url != posted.get("html_url"):
+        raise ValueError("recovery admission POST URL differs from authoritative comment readback")
+    admitted = SinglePublicationRecoveryAuthority(
+        args_obj, record, binding, intent, publication_module, readback_comments,
+    )
+    admitted.check()
+    print(json.dumps({
+        "status": "admitted", "task_uid": task_uid, "action_id": args.action_id,
+        "comment_id": posted["id"], "comment_url": posted["html_url"],
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+        "helper_task_uid": archive_uid, "helper_source_oid": helper_review["helper_source_oid"],
+        "effective_helper_head": effective_head,
+    }, sort_keys=True))
+    return 0
 
 
 def command_record_pr(args: argparse.Namespace) -> int:
@@ -4042,17 +5917,26 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if recovery_required and (publication_binding is None or not is_draft_candidate):
         die("record-pr: required recovery needs an exact draft publication binding")
     recovery = None
+    recovery_markers = {
+        PublicationRecoveryAuthority.marker,
+        SinglePublicationRecoveryAuthority.marker,
+    }
     recovery_admissions = [
         c for c in comments
-        if PublicationRecoveryAuthority.marker in c["body"]
+        if any(marker in c["body"] for marker in recovery_markers)
     ]
     if recovery_required and len(recovery_admissions) != 1:
         die("record-pr: required publication recovery admission is missing or ambiguous")
     if (publication_binding is not None and is_draft_candidate
             and (recovery_required or recovery_admissions)):
         try:
-            recovery = PublicationRecoveryAuthority(args, record, publication_binding,
-                                                     publication_intent, publication_module, comments)
+            if len(recovery_admissions) != 1:
+                raise ValueError("one unique record-pr recovery admission is required")
+            authority_type = (SinglePublicationRecoveryAuthority
+                              if SinglePublicationRecoveryAuthority.marker in recovery_admissions[0]["body"]
+                              else PublicationRecoveryAuthority)
+            recovery = authority_type(args, record, publication_binding,
+                                      publication_intent, publication_module, comments)
             live_issue, _ = recovery.check()
         except (ValueError, OSError, RuntimeError, subprocess.SubprocessError, KeyError, TypeError) as exc:
             die(f"record-pr: recovery admission rejected: {exc}")
@@ -4434,6 +6318,15 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--recovery-required", action="store_true")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
+
+    archive_review = subparsers.add_parser("archive-publication-helper-review")
+    archive_review.add_argument("--task-uid", required=True)
+    archive_review.set_defaults(func=command_archive_publication_helper_review)
+
+    admit_recovery = subparsers.add_parser("admit-record-pr-recovery")
+    admit_recovery.add_argument("--task-uid", required=True)
+    admit_recovery.add_argument("--action-id", required=True)
+    admit_recovery.set_defaults(func=command_admit_record_pr_recovery)
 
     hold = subparsers.add_parser("set-merge-hold")
     add_common(hold)

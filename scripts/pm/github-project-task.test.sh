@@ -38,6 +38,24 @@ PY_INNER
   cp "$ROOT_DIR/.agents/roles/"{runtime_engineer,repository_health_engineer,qa_engineer}.md "$TMPDIR/.agents/roles/"
 fi
 
+if [[ "${OASIS7_ADMIT_RECOVERY_HELP_ONLY:-0}" == "1" ]]; then
+  if ! python3 "$TMPDIR/github-project-task.py" admit-record-pr-recovery --help \
+      >"$TMPDIR/admit-record-pr-recovery-help.txt" 2>&1; then
+    echo "FAIL test_admit_record_pr_recovery_command: canonical producer command is unavailable" >&2
+    cat "$TMPDIR/admit-record-pr-recovery-help.txt" >&2
+    exit 1
+  fi
+  for option in --task-uid --action-id; do
+    if ! grep -Fq -- "$option" "$TMPDIR/admit-record-pr-recovery-help.txt"; then
+      echo "FAIL test_admit_record_pr_recovery_command: producer selector $option is missing" >&2
+      cat "$TMPDIR/admit-record-pr-recovery-help.txt" >&2
+      exit 1
+    fi
+  done
+  echo "PASS test_admit_record_pr_recovery_command"
+  exit 0
+fi
+
 cat > "$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
