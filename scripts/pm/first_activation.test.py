@@ -464,6 +464,59 @@ class OverlayShapeTests(unittest.TestCase):
         self.assertNotIn("project_item_id", result)
 
 
+class PayloadSnapshotValidationTests(unittest.TestCase):
+    def test_payload_snapshot_hashes_canonical_request_and_acceptance_bytes(self):
+        value = overlay()
+        request_snapshot = {
+            "identity": "Upgrade Wasmtime to patched 48.0.4",
+            "acceptance": ["fresh executor verification", "existing lawful gates"],
+        }
+        value["snapshot_sha256"] = SHA
+        value["request_sha256"] = "sha256:" + hashlib.sha256(
+            MODULE._canonical(request_snapshot["identity"]),
+        ).hexdigest()
+        value["acceptance_sha256"] = "sha256:" + hashlib.sha256(
+            MODULE._canonical(request_snapshot["acceptance"]),
+        ).hexdigest()
+        binding = {
+            "snapshot": {"digest": SHA},
+            "snapshot_task": {"uid": UID, "bootstrap_epoch": 1},
+            "request_snapshot": request_snapshot,
+            "task": {"issue_number": 4269, "repository": "eng-cc/oasis7"},
+            "root": pathlib.Path("."),
+            "client": type("Client", (), {
+                "rest": lambda self, method, path, *args, **kwargs: {
+                    "id": 123456, "path": ".github/workflows/rust.yml",
+                }
+            })(),
+        }
+        changed = [
+            ".github/workflows/rust.yml",
+            "Cargo.lock",
+            "crates/oasis7_wasm_executor/Cargo.toml",
+        ]
+
+        def git(_root, *args):
+            return {
+                ("rev-parse", "HEAD"): HEAD,
+                ("status", "--porcelain", "--untracked-files=all"): "",
+                ("symbolic-ref", "--quiet", "--short", "HEAD"): "codex/test",
+            }[tuple(args)]
+
+        with mock.patch.object(MODULE, "_git", side_effect=git), \
+             mock.patch.object(MODULE, "_changed_paths", return_value=changed), \
+             mock.patch.object(MODULE, "_git_blob_sha256", return_value=SHA):
+            parsed = MODULE._validate_payload_snapshot(value, binding, BASE, HEAD)
+            self.assertTrue(parsed["validation_only"])
+            for field in ("request_sha256", "acceptance_sha256"):
+                bad = dict(value)
+                bad[field] = "sha256:" + "b" * 64
+                with self.subTest(field=field), self.assertRaisesRegex(
+                    MODULE.OverlayError, "immutable Task epoch, snapshot, request, or acceptance",
+                ):
+                    MODULE._validate_payload_snapshot(bad, binding, BASE, HEAD)
+
+
 class RequiredRunLeafProofTests(unittest.TestCase):
     HEADER = "historical_required_location\ttest_paths\tnew_required_selection\tlegacy_required_coverage\tfull_full_core_full_support\n"
 

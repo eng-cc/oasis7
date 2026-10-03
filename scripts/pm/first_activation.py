@@ -1631,8 +1631,8 @@ def _validate_payload_snapshot(payload: dict[str, Any], binding: dict[str, Any],
                               issue_number=issue_number, base_oid=base_oid,
                               head_oid=head_oid, expected_raw_primary=raw)
     expected_snapshot_sha = "sha256:" + str(snapshot.get("digest", "")).removeprefix("sha256:")
-    request_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("identity")).encode("utf-8")).hexdigest()
-    acceptance_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("acceptance")).encode("utf-8")).hexdigest()
+    request_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("identity"))).hexdigest()
+    acceptance_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("acceptance"))).hexdigest()
     if (payload["bootstrap_epoch"] != snapshot_task.get("bootstrap_epoch")
             or payload["snapshot_sha256"] != expected_snapshot_sha
             or payload["request_sha256"] != request_sha
@@ -1979,8 +1979,8 @@ def read_project_overlay(
         _fail("overlay does not bind the immutable bootstrap snapshot")
     if overlay_payload["bootstrap_epoch"] != (snapshot.get("task") or {}).get("bootstrap_epoch"):
         _fail("overlay bootstrap epoch differs from immutable snapshot")
-    request_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("identity")).decode("utf-8").encode("utf-8")).hexdigest()
-    acceptance_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("acceptance")).decode("utf-8").encode("utf-8")).hexdigest()
+    request_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("identity"))).hexdigest()
+    acceptance_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("acceptance"))).hexdigest()
     if overlay_payload["request_sha256"] != request_sha or overlay_payload["acceptance_sha256"] != acceptance_sha:
         _fail("overlay request or acceptance digest differs from immutable snapshot")
     review_comments = _comments(client, repository, task["issue_number"])
