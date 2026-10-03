@@ -513,6 +513,7 @@ class CIGateTests(unittest.TestCase):
                 "id": 7001,
                 "body": publication_api.publication_comment(c1),
                 "created_at": "2026-09-12T00:00:00Z",
+                "updated_at": "2026-09-12T00:00:00Z",
                 "user": {"login": "fixture-owner", "type": "User"},
                 "author_association": "MEMBER",
             }
@@ -563,11 +564,17 @@ class CIGateTests(unittest.TestCase):
                         "--pr-number", "2",
                         "--base", head,
                         "--head", head,
+                        "--phase", "start",
+                        "--scope-base-oid", head,
+                        "--planner-config-sha256", planner_config_digest,
+                        "--planner-digest", planner_digest,
+                        "--projection-digest", projection_digest,
                     ],
                     env={
                         **os.environ,
                         "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
                         "GH_FIXTURE": str(fixture),
+                        "GITHUB_OUTPUT": str(fixture / "negative-output.txt"),
                         "PYTHONPYCACHEPREFIX": "/",
                     },
                     text=True,
@@ -626,6 +633,15 @@ class CIGateTests(unittest.TestCase):
                     }),
                 }),
             }
+            expected_blockers = {
+                "missing comment": "live authority comment identity mismatch",
+                "foreign Issue URL": "live authority comment identity mismatch",
+                "wrong comment ID": "live authority comment identity mismatch",
+                "task UID mismatch": "canonical task_uid mismatch",
+                "changed record body": "body_digest mismatch",
+                "malformed record": "coordinating authority body is not valid JSON",
+                "no usable projection": "coordinating authority comment has no usable record projection",
+            }
             for label, mutate in cases.items():
                 with self.subTest(case=label):
                     (fixture / "coordination-issue.json").write_text(
@@ -637,16 +653,21 @@ class CIGateTests(unittest.TestCase):
                     output = negative.stdout + negative.stderr
                     self.assertEqual(negative.returncode, 2, output)
                     self.assertTrue(output.strip(), output)
+                    self.assertIn(expected_blockers[label], output)
                     observed = calls.read_text(encoding="utf-8").splitlines()
                     self.assertTrue(observed, output)
                     self.assertTrue(
                         set(observed).issubset({
                         "repos/eng-cc/oasis7/pulls/2",
                         "repos/eng-cc/oasis7/issues/1",
+                        "repos/eng-cc/oasis7/issues/1/comments?per_page=100",
                         "repos/eng-cc/oasis7",
                         "repos/eng-cc/oasis7/issues/3671",
                             "repos/eng-cc/oasis7/issues/comments/5636938574",
                             "repos/eng-cc/oasis7/issues/3671/comments?per_page=100",
+                            "repos/eng-cc/oasis7/branches/main",
+                            f"repos/eng-cc/oasis7/contents/scripts/pm/loop-policy.v1.json?ref={head}",
+                            f"repos/eng-cc/oasis7/contents/doc/engineering/workflow/source-of-truth.md?ref={head}",
                         }),
                         observed,
                     )
