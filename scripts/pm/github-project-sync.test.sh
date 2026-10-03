@@ -177,6 +177,89 @@ else:
     raise AssertionError("wrong Project identity was accepted")
 PY
 
+python3 - "$ROOT_DIR/scripts/pm/github-project-sync.py" <<'PY'
+import importlib.util
+import sys
+
+spec = importlib.util.spec_from_file_location("sync_live_project", sys.argv[1])
+sync = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sync)
+sync.github_token = lambda: "TEST_TOKEN"
+membership_pages = [
+    {"repository": {"issue": {
+        "id": "ISSUE_NODE", "number": 101,
+        "url": "https://github.com/eng-cc/oasis7/issues/101", "state": "OPEN",
+        "body": "task_uid: task_11111111111111111111111111111111",
+        "projectItems": {
+            "nodes": [{"id": "OTHER_ITEM", "isArchived": False,
+                       "project": {"id": "OTHER", "number": 1,
+                                   "viewerCanUpdate": True, "owner": {"login": "eng-cc"}}}],
+            "pageInfo": {"hasNextPage": True, "endCursor": "membership-next"},
+        },
+    }}},
+    {"repository": {"issue": {
+        "id": "ISSUE_NODE", "number": 101,
+        "url": "https://github.com/eng-cc/oasis7/issues/101", "state": "OPEN",
+        "body": "task_uid: task_11111111111111111111111111111111",
+        "projectItems": {
+            "nodes": [{"id": "ITEM_ID", "isArchived": False,
+                       "project": {"id": "PROJECT_ID", "number": 1,
+                                   "viewerCanUpdate": True, "owner": {"login": "eng-cc"}}}],
+            "pageInfo": {"hasNextPage": False, "endCursor": None},
+        },
+    }}},
+]
+project_identity = {"id": "PROJECT_ID", "number": 1,
+                    "viewerCanUpdate": True, "owner": {"login": "eng-cc"}}
+field_pages = [
+    {"node": {"id": "ITEM_ID", "isArchived": False, "project": project_identity,
+              "fieldValues": {
+                  "nodes": [{"name": "committed", "field": {"name": "PM Status"}}],
+                  "pageInfo": {"hasNextPage": True, "endCursor": "fields-next"},
+              }}},
+    {"node": {"id": "ITEM_ID", "isArchived": False, "project": project_identity,
+              "fieldValues": {
+                  "nodes": [{"name": "execution", "field": {"name": "Workflow Phase"}}],
+                  "pageInfo": {"hasNextPage": False, "endCursor": None},
+              }}},
+]
+calls = []
+def read_page(_token, query, variables=None, **_request_metadata):
+    variables = variables or {}
+    calls.append((query, variables))
+    if "projectItems(first: 100" in query:
+        return membership_pages.pop(0)
+    return field_pages.pop(0)
+sync.graphql_request = read_page
+result = sync.read_live_issue_project_item("eng-cc/oasis7", 101, "PROJECT_ID", 1)
+assert result["complete"] is True, result
+assert result["issue"]["id"] == "ISSUE_NODE", result
+assert result["project"] == {
+    "id": "PROJECT_ID", "number": 1, "owner": "eng-cc", "viewer_can_update": True,
+}, result
+assert result["item"] == {
+    "id": "ITEM_ID", "is_archived": False,
+    "field_values": {"PM Status": "committed", "Workflow Phase": "execution"},
+}, result
+assert len(calls) == 4, calls
+assert calls[0][1]["after"] is None and calls[1][1]["after"] == "membership-next", calls
+assert calls[2][1]["after"] is None and calls[3][1]["after"] == "fields-next", calls
+
+membership_pages[:] = [{"repository": {"issue": {
+    "id": "ISSUE_NODE", "number": 101,
+    "url": "https://github.com/eng-cc/oasis7/issues/101", "state": "OPEN",
+    "body": "task_uid: task_11111111111111111111111111111111",
+    "projectItems": {"nodes": [], "pageInfo": {"hasNextPage": True, "endCursor": None}},
+}}}]
+field_pages[:] = []
+try:
+    sync.read_live_issue_project_item("eng-cc/oasis7", 101, "PROJECT_ID", 1)
+except RuntimeError as exc:
+    assert "cursor is missing or repeated" in str(exc), exc
+else:
+    raise AssertionError("incomplete membership pagination was accepted")
+PY
+
 python3 - "$TMPDIR/github-project-sync.py" <<'PY'
 import importlib.util
 import sys
@@ -245,6 +328,101 @@ assert sync.confirmed_project_field_values(
     {}, empty_task, ["Blocked Reason:empty_value"], only_fields={"Blocked Reason"}
 ) == {}
 print("github-project-sync.project-fields: OK")
+PY
+
+python3 - "$ROOT_DIR/scripts/pm/github-project-sync.py" "$ROOT_DIR/scripts/pm/github-project-task.py" <<'PY'
+import contextlib
+import importlib.util
+import io
+import pathlib
+import sys
+
+sync_path, task_path = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(sync_path.parent))
+sync_spec = importlib.util.spec_from_file_location("sync_shared_client", sync_path)
+sync = importlib.util.module_from_spec(sync_spec)
+sync_spec.loader.exec_module(sync)
+
+project = {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"},
+           "viewerCanUpdate": True}
+membership_pages = [
+    {"repository": {"issue": {"id": "ISSUE_NODE", "number": 101,
+        "url": "https://github.com/eng-cc/oasis7/issues/101", "state": "OPEN",
+        "body": "task_uid: task_11111111111111111111111111111111",
+        "projectItems": {"nodes": [{"id": "OTHER", "isArchived": False,
+            "project": {**project, "id": "OTHER_PROJECT"}}],
+            "pageInfo": {"hasNextPage": True, "endCursor": "membership-next"}}}}},
+    {"repository": {"issue": {"id": "ISSUE_NODE", "number": 101,
+        "url": "https://github.com/eng-cc/oasis7/issues/101", "state": "OPEN",
+        "body": "task_uid: task_11111111111111111111111111111111",
+        "projectItems": {"nodes": [{"id": "ITEM_ID", "isArchived": False,
+            "project": project}], "pageInfo": {"hasNextPage": False, "endCursor": None}}}}},
+]
+field_pages = [
+    {"node": {"id": "ITEM_ID", "isArchived": False, "project": project,
+        "fieldValues": {"nodes": [{"name": "committed", "field": {"name": "PM Status"}}],
+            "pageInfo": {"hasNextPage": True, "endCursor": "fields-next"}}}},
+    {"node": {"id": "ITEM_ID", "isArchived": False, "project": project,
+        "fieldValues": {"nodes": [{"name": "execution", "field": {"name": "Workflow Phase"}}],
+            "pageInfo": {"hasNextPage": False, "endCursor": None}}}},
+]
+
+class PageClient:
+    def __init__(self):
+        self.calls = []
+    def graphql(self, query, variables=None, *, operation, mutation=False, context=None):
+        self.calls.append((query, variables, operation, mutation, context))
+        if "projectItems(first: 100" in query:
+            return membership_pages.pop(0)
+        return field_pages.pop(0)
+    def rest(self, *args, **kwargs):
+        raise AssertionError("unexpected REST request")
+
+client = PageClient()
+sync.github_api_client = lambda token=None: client
+result = sync.read_live_issue_project_item("eng-cc/oasis7", 101, "PROJECT_ID", 1)
+assert result["complete"] is True, result
+assert len(client.calls) == 4, client.calls
+assert [call[1].get("after") for call in client.calls] == [None, "membership-next", None, "fields-next"]
+assert all(call[3] is False for call in client.calls), client.calls
+assert [call[2] for call in client.calls] == [
+    "project_sync_live_issue_memberships", "project_sync_live_issue_memberships",
+    "project_sync_live_item_fields", "project_sync_live_item_fields",
+], client.calls
+assert len({id(sync.github_api_client(token)) for token in (client, client, client, client)}) == 1
+
+# The task helper must allow the typed shared-client failure to reach its
+# process boundary instead of flattening external_wait into an ordinary die().
+task_spec = importlib.util.spec_from_file_location("task_project_api_error", task_path)
+task = importlib.util.module_from_spec(task_spec)
+task_spec.loader.exec_module(task)
+sync = task.load_sync_module()
+task.load_sync_module = lambda: sync
+api = sync.github_api_module()
+rate_error = api.APIError("bounded external wait", kind="primary_rate_limit", retry_after_seconds=120)
+
+class RateLimitedClient:
+    def graphql(self, *args, **kwargs):
+        raise rate_error
+    def rest(self, *args, **kwargs):
+        raise AssertionError("unexpected REST request")
+
+sync.github_api_client = lambda token=None: RateLimitedClient()
+sync.project_context = lambda owner, number: ("PROJECT_ID", {})
+args = type("Args", (), {"project_owner": "eng-cc", "project_number": 1,
+    "repo": "eng-cc/oasis7", "task_uid": "task_11111111111111111111111111111111"})()
+record = {"task_uid": args.task_uid, "project_item_id": "ITEM_ID"}
+try:
+    task.validate_authoritative_project_fields(
+        args, {"project": {"id": "PROJECT_ID"}}, record,
+        {"issue_number": 101, "task_uid": args.task_uid, "status": "committed",
+         "workflow_phase": "execution"},
+    )
+except api.APIError as exc:
+    assert exc is rate_error and exc.exit_code == 75
+else:
+    raise AssertionError("task Project wrapper flattened typed external_wait")
+print("github-project-sync.shared-client-and-api-error: OK")
 PY
 
 DRY_JSON="$TMPDIR/dry.json"
