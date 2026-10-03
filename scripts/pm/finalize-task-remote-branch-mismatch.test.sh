@@ -124,11 +124,31 @@ assert record["phase_receipt_type"]["post_merge_done"]=="oasis7_terminal_deliver
 assert record["phase_receipt_sha256"]["post_merge_done"]==hashlib.sha256(raw).hexdigest()
 assert record["phase_receipts"]["post_merge_done"]==receipt
 assert receipt["task_uid"]==uid and receipt["repository"]==record["repository"]
+with (root/".git/readiness-unit-order").open("a") as trace: trace.write("producer\n")
 log=pathlib.Path(__import__("os").environ["V2_CALL_LOG"])
 with log.open("a",encoding="utf-8") as stream: stream.write(" ".join(args)+"\n")
 print(json.dumps({"delivery":{"state":"complete","protocol_version":2,"task_uid":uid}}))
 PY
 chmod +x "$REPO/scripts/pm/post-merge-finalize.py"
+
+# Checked wrapper dependency only; real server-proof validation has separate suites.
+cat >"$REPO/scripts/pm/readiness_transport.py" <<'PY'
+import hashlib,json,pathlib,sys
+root=pathlib.Path(__file__).resolve().parents[2]
+uid="task_11111111111111111111111111111111"
+expected=["--repo-root",str(root),"--task-uid",uid]
+assert sys.argv[1:] in (expected,expected+["--create"]), "invalid readiness dependency arguments"
+record=json.loads((root/".pm/github-project-sync/tasks.json").read_text())["tasks"][uid]
+raw=(root/".git/oasis7-workflow-receipts"/uid/"terminal-delivery-receipt.json").read_bytes()
+receipt=json.loads(raw)
+assert record["phase_receipt_type"]["post_merge_done"]=="oasis7_terminal_delivery"
+assert record["phase_receipt_sha256"]["post_merge_done"]==hashlib.sha256(raw).hexdigest()
+assert record["phase_receipts"]["post_merge_done"]==receipt
+assert receipt["task_uid"]==uid and receipt["repository"]==record["repository"]=="eng-cc/oasis7"
+with (root/".git/readiness-unit-order").open("a") as trace:
+    trace.write("create\n" if sys.argv[-1]=="--create" else "readonly\n")
+print(json.dumps({"status":"passed","test_dependency":"checked readiness"}))
+PY
 
 # Preserve the canonical GitHub origin string for repo-identity checks, while
 # routing only isolated remote reads/deletes to the local bare test remote.
@@ -192,6 +212,12 @@ PY
 
 # The wrapper must read back delivery before invoking the cleanup executor's
 # producer preflight. The retained remote ref does not revoke delivery.
+python3 - "$REPO/.git/readiness-unit-order" <<'PY'
+import pathlib,sys
+rows=pathlib.Path(sys.argv[1]).read_text().splitlines()
+assert rows[:2]==["readonly","create"] and len(rows[2:])>=2 and all(row=="producer" for row in rows[2:]),rows
+print("checked readiness readonly/create precede producer/cleanup preflight")
+PY
 python3 - "$V2_CALL_LOG" <<'PY'
 import sys
 rows=open(sys.argv[1],encoding="utf-8").read().splitlines()
