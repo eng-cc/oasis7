@@ -6,6 +6,7 @@ import hashlib
 import json
 import pathlib
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -1068,6 +1069,20 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         ]
         return root, base_worktree, base_oid, head_oid, proof_overlay, "\n".join(logs) + "\n"
 
+    def test_trusted_inventory_import_restores_bytecode_setting_when_loader_raises(self):
+        observed_settings = []
+
+        class FailingLoader:
+            def exec_module(self, _module):
+                observed_settings.append(sys.dont_write_bytecode)
+                raise RuntimeError("synthetic inventory loader failure")
+
+        with mock.patch.object(sys, "dont_write_bytecode", False):
+            with self.assertRaisesRegex(RuntimeError, "synthetic inventory loader failure"):
+                MODULE._exec_trusted_inventory_module(FailingLoader(), object())
+            self.assertEqual(observed_settings, [True])
+            self.assertIs(sys.dont_write_bytecode, False)
+
     def test_full_reconstruction_uses_actual_job_step_commands_and_additive_candidate_test(self):
         class Client:
             def __init__(self, fail_step=False):
@@ -1099,13 +1114,29 @@ class RequiredRunLeafProofTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_name:
             temp = pathlib.Path(temp_name)
-            root, _base, base_oid, head_oid, bound_overlay, logs = self._fixture(temp)
+            root, base_worktree, base_oid, head_oid, bound_overlay, logs = self._fixture(temp)
             client = Client()
             client.head_oid = head_oid
-            positive = MODULE.reconstruct_full_required_run(
-                root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
-                log_reader=lambda _run, _attempt: logs,
-            )
+
+            def reconstruct(log_text, *, run_client=client):
+                with mock.patch.object(sys, "dont_write_bytecode", False), \
+                     mock.patch.object(sys, "pycache_prefix", None):
+                    try:
+                        return MODULE.reconstruct_full_required_run(
+                            root, "eng-cc/oasis7", UID, bound_overlay, 99, 1,
+                            client=run_client,
+                            log_reader=lambda _run, _attempt: log_text,
+                        )
+                    finally:
+                        self.assertIs(sys.dont_write_bytecode, False)
+                        self.assertIsNone(sys.pycache_prefix)
+                        self.assertEqual(
+                            self._git(base_worktree, "status", "--porcelain", "--untracked-files=all"),
+                            "",
+                            "trusted frozen-base worktree must remain clean after every reconstruction",
+                        )
+
+            positive = reconstruct(logs)
             self.assertEqual(positive["workflow_run_id"], 99)
             self.assertGreater(positive["obligation_count"], 1)
             self.assertRegex(positive["workflow_logs_sha256"], r"^sha256:[0-9a-f]{64}$")
@@ -1115,42 +1146,27 @@ class RequiredRunLeafProofTests(unittest.TestCase):
                 "+ echo ./scripts/lint-skills.sh",
             )
             with self.assertRaisesRegex(MODULE.OverlayError, "actual command mapped to lint-skills"):
-                MODULE.reconstruct_full_required_run(
-                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
-                    log_reader=lambda _run, _attempt: echo_decoy,
-                )
+                reconstruct(echo_decoy)
 
             cargo_skip = logs.replace(
                 "--features test_tier_required --verbose\n",
                 "--features test_tier_required --verbose -- --skip offline_server_accepts_client_and_emits_snapshot_and_event\n",
             )
             with self.assertRaisesRegex(MODULE.OverlayError, "direct command for oasis7_required"):
-                MODULE.reconstruct_full_required_run(
-                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
-                    log_reader=lambda _run, _attempt: cargo_skip,
-                )
+                reconstruct(cargo_skip)
 
             missing_test = "\n".join(
                 line for line in logs.splitlines() if "first_activation.test.py" not in line
             )
             with self.assertRaisesRegex(MODULE.OverlayError, "candidate-added test command"):
-                MODULE.reconstruct_full_required_run(
-                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
-                    log_reader=lambda _run, _attempt: missing_test,
-                )
+                reconstruct(missing_test)
             wrong_job = logs.replace("required-gate\tRun required test tier", "other-job\tRun required test tier")
             with self.assertRaisesRegex(MODULE.OverlayError, "required-gate Run required test tier"):
-                MODULE.reconstruct_full_required_run(
-                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
-                    log_reader=lambda _run, _attempt: wrong_job,
-                )
+                reconstruct(wrong_job)
             failed = Client(fail_step=True)
             failed.head_oid = head_oid
             with self.assertRaisesRegex(MODULE.OverlayError, "required-gate has a failed"):
-                MODULE.reconstruct_full_required_run(
-                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=failed,
-                    log_reader=lambda _run, _attempt: logs,
-                )
+                reconstruct(logs, run_client=failed)
 
     def test_checker_leaf_requires_exact_commands_observations_and_candidate_binding(self):
         overlay_value = {"task_uid": UID, "base_oid": BASE, "head_oid": HEAD}

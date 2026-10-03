@@ -975,6 +975,15 @@ def _git(root: pathlib.Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def _exec_trusted_inventory_module(loader: Any, module: Any) -> None:
+    previous_dont_write_bytecode = sys.dont_write_bytecode
+    try:
+        sys.dont_write_bytecode = True
+        loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous_dont_write_bytecode
+
+
 def _trusted_base_worktree(repo_root: pathlib.Path, base_oid: str) -> pathlib.Path:
     raw = _git(repo_root, "worktree", "list", "--porcelain")
     rows: list[pathlib.Path] = []
@@ -1467,7 +1476,7 @@ def reconstruct_full_required_run(
             _fail("trusted required-tier inventory helper is unavailable")
         inventory_module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = inventory_module
-        spec.loader.exec_module(inventory_module)
+        _exec_trusted_inventory_module(spec.loader, inventory_module)
         environ_keys = ("GITHUB_REPOSITORY", "GITHUB_EVENT_NAME", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT")
         saved_env = {key: os.environ.get(key) for key in environ_keys}
         os.environ.update({"GITHUB_REPOSITORY": repository, "GITHUB_EVENT_NAME": "workflow_dispatch",
