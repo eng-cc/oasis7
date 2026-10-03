@@ -43,6 +43,7 @@ mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync"
 for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh review_closeout_complete.py review_closeout_publication.py validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py workflow-impact-projection.py ci_ready_receipt_identity.py pr_projection_publication.py pr_projection_publish.py pr_projection_journal.py projection_publication_contract.py portable_file_lock.py github-project-task.py workflow-durable-store.py loop_leaf_result.py loop_policy.py loop_contracts.py; do
   cp "$ROOT_DIR/scripts/pm/$helper" "$REPO/scripts/pm/$helper"
 done
+cp "$ROOT_DIR/.gitignore" "$REPO/.gitignore"
 chmod +x "$REPO/scripts/pm/review-closeout.sh" "$REPO/scripts/pm/record-pre-pr-review.sh"
 printf 'scratch/\n' >"$REPO/.pm/.gitignore"
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
@@ -54,7 +55,8 @@ git -C "$REPO" config user.email test@example.invalid
 git -C "$REPO" config user.name Test
 printf 'base\n' >"$REPO/README.md"
 cp "$ROOT_DIR/scripts/ci-required-scope.v2.json" "$REPO/scripts/ci-required-scope.v2.json"
-git -C "$REPO" add README.md .pm/.gitignore .pm/github-project-sync/tasks.json scripts
+git -C "$REPO" add README.md .gitignore .pm/.gitignore scripts
+git -C "$REPO" add -f .pm/github-project-sync/tasks.json
 git -C "$REPO" commit -qm base
 BASE_OID="$(git -C "$REPO" rev-parse HEAD)"
 git -C "$REPO" branch review-base "$BASE_OID"
