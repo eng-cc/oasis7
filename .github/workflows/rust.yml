@@ -189,6 +189,37 @@ jobs:
           destination.write_text(json.dumps(record,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
           print("first-activation dispatch provenance: exact live Issue, workflow, run, base, and head; validation_only=true")
           PY
+      - id: pr_target
+        name: Freeze current PR target independently of historical PR base
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" "${GITHUB_OUTPUT}" <<'PY'
+          import json,re,subprocess,sys
+          repository,number,head,output=sys.argv[1:]
+          def read(path): return json.loads(subprocess.check_output(['gh','api',path],text=True))
+          pr=read(f'repos/{repository}/pulls/{number}')
+          repo=read(f'repos/{repository}')
+          branch=repo.get('default_branch')
+          if (repo.get('full_name')!=repository or not isinstance(branch,str) or not branch
+              or pr.get('state')!='open' or pr.get('merged')
+              or pr.get('base',{}).get('ref')!=branch
+              or pr.get('base',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('sha')!=head):
+              raise SystemExit('PR repository/ref/head identity changed before target freeze')
+          ref=f'repos/{repository}/git/ref/heads/{branch}'
+          target=read(ref).get('object',{}).get('sha')
+          if not isinstance(target,str) or not re.fullmatch(r'[0-9a-f]{40,64}',target):
+              raise SystemExit('current PR target is unavailable')
+          fresh=read(f'repos/{repository}/pulls/{number}')
+          if fresh!=pr or read(ref).get('object',{}).get('sha')!=target:
+              raise SystemExit('PR or current target moved during target freeze')
+          with open(output,'a') as stream: stream.write(f'oid={target}\n')
+          PY
+
       - id: impact
         name: Resolve Project task and materialize PR workflow impact projection
         if: github.event_name == 'pull_request'
@@ -308,37 +339,6 @@ jobs:
           with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
               output.write("worktree="+identity.get("integration_worktree","")+"\n")
           PY
-      - id: pr_target
-        name: Freeze current PR target independently of historical PR base
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number }}" \
-            "${{ github.event.pull_request.head.sha }}" "${GITHUB_OUTPUT}" <<'PY'
-          import json,re,subprocess,sys
-          repository,number,head,output=sys.argv[1:]
-          def read(path): return json.loads(subprocess.check_output(['gh','api',path],text=True))
-          pr=read(f'repos/{repository}/pulls/{number}')
-          repo=read(f'repos/{repository}')
-          branch=repo.get('default_branch')
-          if (repo.get('full_name')!=repository or not isinstance(branch,str) or not branch
-              or pr.get('state')!='open' or pr.get('merged')
-              or pr.get('base',{}).get('ref')!=branch
-              or pr.get('base',{}).get('repo',{}).get('full_name')!=repository
-              or pr.get('head',{}).get('repo',{}).get('full_name')!=repository
-              or pr.get('head',{}).get('sha')!=head):
-              raise SystemExit('PR repository/ref/head identity changed before target freeze')
-          ref=f'repos/{repository}/git/ref/heads/{branch}'
-          target=read(ref).get('object',{}).get('sha')
-          if not isinstance(target,str) or not re.fullmatch(r'[0-9a-f]{40,64}',target):
-              raise SystemExit('current PR target is unavailable')
-          fresh=read(f'repos/{repository}/pulls/{number}')
-          if fresh!=pr or read(ref).get('object',{}).get('sha')!=target:
-              raise SystemExit('PR or current target moved during target freeze')
-          with open(output,'a') as stream: stream.write(f'oid={target}\n')
-          PY
-
       - name: Validate trusted loop repository scope and content
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
         env:

@@ -1410,9 +1410,20 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         self.assertIn('impact_args=(--impact-projection "${authority_dir}/impact-projection.json"', scope)
         self.assertIn('run_mode_args=(--run-mode full_escalation)', scope)
 
+        pr_target_start = workflow.index("- id: pr_target\n")
         impact_start = workflow.index("- id: impact\n")
+        self.assertLess(
+            pr_target_start,
+            impact_start,
+            "impact must read the current target only after pr_target emits its OID",
+        )
         impact_end = workflow.index("- id: integration", impact_start)
         impact = workflow[impact_start:impact_end]
+        self.assertIn("PR_BASE_OID: ${{ steps.pr_target.outputs.oid }}", impact)
+        pr_target_end = workflow.find("\n      - ", pr_target_start)
+        self.assertGreater(pr_target_end, pr_target_start)
+        pr_target = workflow[pr_target_start:pr_target_end]
+        self.assertIn("stream.write(f'oid={target}\\n')", pr_target)
         self.assertIn("OASIS7_PROJECT_READ_TOKEN: ${{ secrets.OASIS7_PROJECT_READ_TOKEN }}", impact)
         self.assertEqual(workflow.count("secrets.OASIS7_PROJECT_READ_TOKEN"), 1)
         self.assertIn("resolve_project_task_issue(task_uid)", impact)
