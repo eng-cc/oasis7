@@ -137,11 +137,25 @@ class ArchiveClosureFixture:
         current_batch_raw = canonical(current_batch) + b"\n"
         self.put(current_batch_path, current_batch_raw)
         snapshot_path = self.scratch / "bootstrap-task-snapshot.json"
-        snapshot = {
-            "schema": "oasis7-bootstrap-task-snapshot/v1", "task": {"task_uid": TASK_UID},
-            "git": {"head": HEAD},
+        snapshot_unsigned = {
+            "schema": "oasis7.bootstrap-task-snapshot/v1",
+            "task": {
+                "uid": TASK_UID,
+                "issue": {"number": 4265, "url": "https://github.com/eng-cc/oasis7/issues/4265"},
+                "project": {"owner": "eng-cc", "number": 7, "item_id": "PVT_fixture", "status": "committed"},
+                "owner_role": "repository_health_engineer",
+                "acceptance": ["archive fixture is behavior data only"],
+                "bootstrap_epoch": 1,
+            },
+            "repository": "eng-cc/oasis7",
+            "git": {
+                "worktree": str(self.root), "branch": "codex/archive-closure-fixture",
+                "base": {"branch": "main", "ref": "refs/heads/main", "oid": PRIOR_HEAD},
+                "head": HEAD,
+            },
         }
-        snapshot_raw = canonical(snapshot) + b"\n"
+        snapshot = {**snapshot_unsigned, "digest": "sha256:" + digest(canonical(snapshot_unsigned))}
+        snapshot_raw = (json.dumps(snapshot, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
         self.put(snapshot_path, snapshot_raw)
         current_ledger_path = self.scratch / "review-plans" / "preflight" / f"{current_epoch}.jsonl"
         current_rows = []
@@ -272,8 +286,13 @@ class PublicationHelperArchiveClosureTests(unittest.TestCase):
         return collector(self.fixture.root, TASK_UID, HEAD, self.fixture.plan_path)
 
     def rejected(self) -> None:
-        with self.assertRaises((ValueError, OSError, SystemExit)):
+        with self.assertRaises((ValueError, OSError, SystemExit)) as caught:
             self.collect()
+        self.assertNotEqual(
+            str(caught.exception),
+            "archive closure bootstrap snapshot Task UID mismatch",
+            "probe was masked by the incorrect legacy snapshot field instead of reaching its requested boundary",
+        )
 
     def test_selects_schema_references_and_ignores_unrelated_count_and_size(self) -> None:
         unrelated = self.fixture.scratch / "unrelated"
@@ -350,6 +369,24 @@ class PublicationHelperArchiveClosureTests(unittest.TestCase):
         rows_path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
         self.rejected()
 
+    def _rewrite_snapshot_identity(self, uid: str | None, legacy_uid: str) -> None:
+        snapshot_path = self.fixture.scratch / "bootstrap-task-snapshot.json"
+        snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        task = snapshot["task"]
+        if uid is None:
+            task.pop("uid", None)
+        else:
+            task["uid"] = uid
+        task["task_uid"] = legacy_uid
+        unsigned = {key: value for key, value in snapshot.items() if key != "digest"}
+        snapshot["digest"] = "sha256:" + digest(canonical(unsigned))
+        snapshot_raw = (json.dumps(snapshot, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+        snapshot_path.write_bytes(snapshot_raw)
+        origin_path = self.fixture.scratch / "publication-helper-review-origin.json"
+        origin = json.loads(origin_path.read_text(encoding="utf-8"))
+        origin["bootstrap_snapshot"] = {"value": snapshot, "raw_sha256": digest(snapshot_raw)}
+        origin_path.write_bytes((json.dumps(origin, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8"))
+
     def test_revalidates_task_uid_and_current_packet_head_binding(self) -> None:
         collector = getattr(HELPER, "_collect_review_archive_closure", None)
         self.assertTrue(callable(collector), "RED: canonical archive closure collector is missing")
@@ -358,9 +395,23 @@ class PublicationHelperArchiveClosureTests(unittest.TestCase):
         packet_path = self.fixture.scratch / "slice-packets" / f"{SLICES[0]}.json"
         packet = json.loads(packet_path.read_text(encoding="utf-8"))
         packet["identity"]["head"] = "f" * 40
+        packet["packet_digest"] = digest(canonical({key: value for key, value in packet.items() if key != "packet_digest"}))
         packet_path.write_bytes(canonical(packet) + b"\n")
-        with self.assertRaises((ValueError, OSError, SystemExit)):
+        with self.assertRaisesRegex(ValueError, "review packet identity mismatch"):
             collector(self.fixture.root, TASK_UID, HEAD, self.fixture.plan_path)
+
+    def test_legacy_task_uid_alias_cannot_replace_canonical_task_uid(self) -> None:
+        collector = getattr(HELPER, "_collect_review_archive_closure", None)
+        self.assertTrue(callable(collector), "RED: canonical archive closure collector is missing")
+        for canonical_uid in (None, "task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"):
+            with self.subTest(canonical_uid=canonical_uid):
+                if canonical_uid is not None:
+                    self.temp.cleanup()
+                    self.temp = tempfile.TemporaryDirectory(prefix="archive-closure-", dir=SCRATCH)
+                    self.fixture = ArchiveClosureFixture(Path(self.temp.name) / "task")
+                self._rewrite_snapshot_identity(canonical_uid, TASK_UID)
+                with self.assertRaisesRegex(ValueError, "bootstrap snapshot Task UID mismatch"):
+                    collector(self.fixture.root, TASK_UID, HEAD, self.fixture.plan_path)
 
 
 if __name__ == "__main__":

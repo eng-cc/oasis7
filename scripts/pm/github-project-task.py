@@ -4673,7 +4673,7 @@ def _collect_review_archive_closure(task_root: pathlib.Path, task_uid: str, sour
         snapshot_rel, "bootstrap snapshot", expected=snapshot_rel,
     )
     snapshot_task = snapshot.get("task")
-    if not isinstance(snapshot_task, dict) or snapshot_task.get("task_uid") != task_uid:
+    if not isinstance(snapshot_task, dict) or snapshot_task.get("uid") != task_uid:
         raise ValueError("archive closure bootstrap snapshot Task UID mismatch")
 
     preflight = plan.get("preflight")
