@@ -17,6 +17,12 @@ SPEC = importlib.util.spec_from_file_location("first_activation_under_test", PAT
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+GATE_SPEC = importlib.util.spec_from_file_location(
+    "first_activation_gate_under_test", ROOT / "scripts/pm/pr-lifecycle-gate.py"
+)
+assert GATE_SPEC and GATE_SPEC.loader
+GATE = importlib.util.module_from_spec(GATE_SPEC)
+GATE_SPEC.loader.exec_module(GATE)
 TASK_HELPER_SPEC = importlib.util.spec_from_file_location(
     "first_activation_task_helper_test", ROOT / "scripts/pm/github-project-task.py"
 )
@@ -663,6 +669,263 @@ class IssueOverlayHistoryTests(unittest.TestCase):
                 MODULE.publish_overlay(pathlib.Path("."), "eng-cc/oasis7", UID,
                                        BASE, HEAD, payload, mapping_path=pathlib.Path("mapping"))
         self.assertEqual(posted_body, [])
+
+
+class ProjectActivationMarkerTests(unittest.TestCase):
+    REPOSITORY = "eng-cc/oasis7"
+    ISSUE_NUMBER = 4269
+    PROJECT_ID = "PVT_test"
+    ITEM_ID = "PVTI_test"
+    ISSUE_BODY = f"task_uid: {UID}\n- acceptance: `test acceptance`\n"
+
+    @classmethod
+    def _item(cls, *, item_id=None, issue_number=None, body=None, repository=None,
+              state="OPEN", archived=False):
+        number = cls.ISSUE_NUMBER if issue_number is None else issue_number
+        return {
+            "id": item_id or cls.ITEM_ID,
+            "isArchived": archived,
+            "content": {
+                "__typename": "Issue",
+                "number": number,
+                "url": f"https://api.github.com/repos/{repository or cls.REPOSITORY}/issues/{number}",
+                "state": state,
+                "body": cls.ISSUE_BODY if body is None else body,
+                "repository": {"nameWithOwner": repository or cls.REPOSITORY},
+            },
+        }
+
+    @classmethod
+    def _project_page(cls, items, *, has_next=False, cursor=None, project_id=None):
+        return {"node": {
+            "id": project_id or cls.PROJECT_ID,
+            "number": 1,
+            "owner": {"login": "eng-cc"},
+            "items": {"nodes": items,
+                      "pageInfo": {"hasNextPage": has_next, "endCursor": cursor}},
+        }}
+
+    class Client:
+        def __init__(self, pages, *, issue=None, comments=None, graphql_error=None,
+                     rest_error=None, comments_error=None):
+            self.pages = pages
+            self.issue = issue
+            self.comments = comments or []
+            self.graphql_error = graphql_error
+            self.rest_error = rest_error
+            self.comments_error = comments_error
+            self.graphql_calls = []
+            self.rest_calls = []
+
+        def graphql(self, query, variables, *, operation):
+            self.graphql_calls.append((query, variables, operation))
+            if self.graphql_error:
+                raise self.graphql_error
+            if variables.get("after") not in self.pages:
+                raise AssertionError(f"unexpected Project cursor: {variables.get('after')}")
+            return self.pages[variables.get("after")]
+
+        def rest(self, method, path, payload=None, **kwargs):
+            self.rest_calls.append((method, path, kwargs.get("operation")))
+            if method == "GET" and path.startswith(
+                    f"repos/{ProjectActivationMarkerTests.REPOSITORY}/issues/{ProjectActivationMarkerTests.ISSUE_NUMBER}/comments?"):
+                if self.comments_error:
+                    raise self.comments_error
+                return self.comments
+            if self.rest_error:
+                raise self.rest_error
+            if method == "GET" and path == f"repos/{ProjectActivationMarkerTests.REPOSITORY}/issues/{ProjectActivationMarkerTests.ISSUE_NUMBER}":
+                return self.issue
+            raise AssertionError(f"unexpected request: {method} {path}")
+
+    def _binding(self, client, *, item_id=None, issue_number=None):
+        return {
+            "project": {"id": self.PROJECT_ID, "number": 1, "owner": "eng-cc"},
+            "task": {"task_uid": UID, "issue_number": issue_number or self.ISSUE_NUMBER,
+                     "project_item_id": item_id or self.ITEM_ID},
+            "snapshot": {"repository": self.REPOSITORY},
+            "snapshot_task": {
+                "uid": UID,
+                "issue": {"number": self.ISSUE_NUMBER,
+                          "url": PACKET_ISSUE_URL},
+                "project": {"item_id": self.ITEM_ID, "number": 1, "owner": "eng-cc"},
+            },
+            "issue": {"number": self.ISSUE_NUMBER,
+                      "url": ISSUE_URL, "state": "open", "body": self.ISSUE_BODY},
+            "client": client,
+        }
+
+    def _read_marker(self, client, binding):
+        with mock.patch.object(MODULE, "_read_project_task_binding", return_value=binding):
+            return MODULE.read_project_activation_marker(
+                pathlib.Path("."), self.REPOSITORY, UID,
+                mapping_path=pathlib.Path("mapping.json"), client=client,
+            )
+
+    def _client(self, items, *, comments=None, extra_pages=None, **kwargs):
+        pages = {None: self._project_page(items)}
+        pages.update(extra_pages or {})
+        issue = {
+            "number": self.ISSUE_NUMBER,
+            "url": ISSUE_URL,
+            "state": "open",
+            "body": self.ISSUE_BODY,
+        }
+        return self.Client(pages, issue=issue, comments=comments, **kwargs)
+
+    def test_absent_marker_uses_complete_unique_live_project_and_issue_binding(self):
+        unrelated = self._item(item_id="PVTI_other", issue_number=777,
+                                body="task_uid: task_" + "b" * 32 + "\n")
+        second_page = self._project_page([self._item()], project_id=self.PROJECT_ID)
+        client = self._client([unrelated], extra_pages={"next-page": second_page})
+        client.pages[None] = self._project_page([unrelated], has_next=True, cursor="next-page")
+
+        self.assertFalse(self._read_marker(client, self._binding(client)))
+        self.assertEqual(len(client.graphql_calls), 2)
+        self.assertTrue(any(path == f"repos/{self.REPOSITORY}/issues/{self.ISSUE_NUMBER}"
+                            for method, path, _ in client.rest_calls if method == "GET"))
+        self.assertTrue(any(path.startswith(
+            f"repos/{self.REPOSITORY}/issues/{self.ISSUE_NUMBER}/comments?")
+                            for method, path, _ in client.rest_calls))
+
+    def test_overlay_or_activation_marker_is_only_reported_after_binding(self):
+        for marker in (MODULE.OVERLAY_MARKER, MODULE.ACTIVATION_MARKER):
+            with self.subTest(marker=marker):
+                comment = {"id": 1, "issue_url": ISSUE_URL, "body": marker + "\n{}"}
+                client = self._client([self._item()], comments=[comment])
+                self.assertTrue(self._read_marker(client, self._binding(client)))
+
+    def test_missing_duplicate_or_mismatched_project_uid_binding_fails_closed(self):
+        cases = {
+            "missing item": [],
+            "duplicate UID on another issue": [
+                self._item(), self._item(item_id="PVTI_duplicate", issue_number=4270),
+            ],
+            "duplicate mapped issue item": [
+                self._item(), self._item(item_id="PVTI_duplicate", body="no task marker\n"),
+            ],
+            "foreign UID on mapped issue": [
+                self._item(body="task_uid: task_" + "c" * 32 + "\n"),
+            ],
+            "mapped item ID mismatch": [self._item()],
+        }
+        for label, items in cases.items():
+            with self.subTest(label=label):
+                client = self._client(items)
+                binding = self._binding(
+                    client, item_id="PVTI_wrong" if label == "mapped item ID mismatch" else None,
+                )
+                with self.assertRaises(MODULE.OverlayError):
+                    self._read_marker(client, binding)
+
+        client = self._client([self._item()])
+        with self.assertRaisesRegex(MODULE.OverlayError, "snapshot"):
+            self._read_marker(client, self._binding(client, issue_number=4270))
+
+    def test_duplicate_task_uid_on_later_project_page_is_not_hidden(self):
+        first = self._item()
+        duplicate = self._item(item_id="PVTI_later_duplicate", issue_number=4270)
+        client = self._client([first], extra_pages={
+            "next-page": self._project_page([duplicate]),
+        })
+        client.pages[None] = self._project_page([first], has_next=True, cursor="next-page")
+        with self.assertRaisesRegex(MODULE.OverlayError, "exactly one live Project item"):
+            self._read_marker(client, self._binding(client))
+
+    def test_malformed_project_pagination_identity_and_rest_errors_fail_closed(self):
+        valid_item = self._item()
+        wrong_project = self._client([valid_item])
+        wrong_project.pages[None] = self._project_page([valid_item], project_id="PVT_wrong")
+        broken_cursor = self._client([valid_item])
+        broken_cursor.pages[None] = self._project_page([valid_item], has_next=True, cursor=None)
+        changed_issue = self._client([valid_item])
+        changed_issue.issue = {**changed_issue.issue, "body": "task_uid: task_" + "d" * 32 + "\n"}
+        wrong_comment = self._client([valid_item], comments=[{"id": 1, "body": "ordinary"}])
+        comments_failure = self._client([valid_item], comments_error=RuntimeError("comments failure"))
+        cases = (
+            (wrong_project, self._binding(wrong_project)),
+            (broken_cursor, self._binding(broken_cursor)),
+            (changed_issue, self._binding(changed_issue)),
+            (wrong_comment, self._binding(wrong_comment)),
+            (self._client([valid_item], graphql_error=RuntimeError("GraphQL failure")),
+             self._binding(self._client([valid_item]))),
+            (self._client([valid_item], rest_error=RuntimeError("REST failure")),
+             self._binding(self._client([valid_item]))),
+            (comments_failure, self._binding(comments_failure)),
+        )
+        for client, binding in cases:
+            binding["client"] = client
+            with self.subTest(error=client.graphql_error or client.rest_error or "identity"):
+                with self.assertRaises((MODULE.OverlayError, RuntimeError)):
+                    self._read_marker(client, binding)
+
+
+class ProductionGateActivationRouteTests(unittest.TestCase):
+    def _run(self, marker_result, *, issue_hint=False):
+        data = {
+            "number": 4269,
+            "repository": "eng-cc/oasis7",
+            "baseRefOid": BASE,
+            "headRefOid": HEAD,
+            "state": "OPEN",
+            "isDraft": False,
+            "body": f"Task: {UID}",
+            "baseRefName": "main",
+            "headRefName": "codex/test",
+            "policy_discovery": {"status": "resolved", "required_status_checks": []},
+        }
+        pending = {"ready_for_merge": True, "status": "ready", "blockers": []}
+        final = {**pending, "readiness_receipt": {"head_oid": HEAD}}
+        helper = mock.Mock()
+        helper.read_project_activation_marker.return_value = marker_result
+        helper.OVERLAY_MARKER = MODULE.OVERLAY_MARKER
+        with mock.patch.object(GATE, "decision", side_effect=[pending, final]), \
+             mock.patch.object(GATE, "live_target_oid", return_value=BASE), \
+             mock.patch.object(GATE, "local_loop_admission", return_value={"status": "legacy"}), \
+             mock.patch.object(GATE, "live_integration_admission", return_value=None), \
+             mock.patch.object(GATE, "read_pr_identity", return_value=data), \
+             mock.patch.object(GATE, "_load_effective_helper", return_value=helper):
+            result = GATE.production_decision(
+                data, False, ROOT, UID, str(ROOT), api_client=object(),
+                activation_overlay_present=issue_hint,
+            )
+        return result, helper
+
+    def test_negative_local_issue_hint_still_requires_fresh_project_reader(self):
+        result, helper = self._run(False, issue_hint=False)
+        self.assertTrue(result["ready_for_merge"], result)
+        helper.read_project_activation_marker.assert_called_once()
+        helper.read_project_activation.assert_not_called()
+
+    def test_positive_canonical_marker_requires_exact_head_activation_proof(self):
+        result, helper = self._run(True, issue_hint=False)
+        self.assertTrue(result["ready_for_merge"], result)
+        helper.read_project_activation_marker.assert_called_once()
+        helper.read_project_activation.assert_called_once_with(
+            ROOT, "eng-cc/oasis7", UID, BASE, HEAD,
+            mapping_path=ROOT / ".pm/github-project-sync/tasks.json",
+            client=mock.ANY,
+        )
+
+    def test_project_reader_errors_block_production_readiness(self):
+        data = {
+            "number": 4269, "repository": "eng-cc/oasis7", "baseRefOid": BASE,
+            "headRefOid": HEAD, "state": "OPEN", "isDraft": False,
+            "body": f"Task: {UID}", "baseRefName": "main", "headRefName": "codex/test",
+            "policy_discovery": {"status": "resolved", "required_status_checks": []},
+        }
+        pending = {"ready_for_merge": True, "status": "ready", "blockers": []}
+        helper = mock.Mock()
+        helper.read_project_activation_marker.side_effect = MODULE.OverlayError("Project readback failed")
+        with mock.patch.object(GATE, "decision", return_value=pending), \
+             mock.patch.object(GATE, "live_target_oid", return_value=BASE), \
+             mock.patch.object(GATE, "_load_effective_helper", return_value=helper):
+            result = GATE.production_decision(
+                data, False, ROOT, UID, str(ROOT), api_client=object(),
+                activation_overlay_present=False,
+            )
+        self.assertFalse(result["ready_for_merge"], result)
+        self.assertIn("Project readback failed", " ".join(result["blockers"]))
 
 
 class RequiredRunLeafProofTests(unittest.TestCase):

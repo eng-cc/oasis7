@@ -1639,6 +1639,174 @@ def _read_project_task_binding(
             "request_snapshot": request_snapshot, "issue": live_issue, "client": client}
 
 
+def _project_membership_for_task(binding: dict[str, Any], repository: str,
+                                 task_uid: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Resolve exactly one live Project item for this Task UID and mapped Issue."""
+    project = binding.get("project")
+    task = binding.get("task")
+    client = binding.get("client")
+    if not isinstance(project, dict) or not isinstance(task, dict) or client is None:
+        _fail("live Project task binding is unavailable")
+    project_id = project.get("id")
+    project_number = project.get("number")
+    project_owner = project.get("owner")
+    issue_number = task.get("issue_number")
+    item_id = task.get("project_item_id")
+    if (not isinstance(project_id, str) or not project_id
+            or type(project_number) is not int or project_number < 1
+            or not isinstance(project_owner, str) or not project_owner
+            or type(issue_number) is not int or issue_number < 1
+            or not isinstance(item_id, str) or not item_id):
+        _fail("canonical Project task locator is malformed")
+    snapshot = binding.get("snapshot")
+    snapshot_task = binding.get("snapshot_task")
+    snapshot_issue = snapshot_task.get("issue") if isinstance(snapshot_task, dict) else None
+    snapshot_project = snapshot_task.get("project") if isinstance(snapshot_task, dict) else None
+    if (task.get("task_uid") != task_uid
+            or not isinstance(snapshot, dict) or snapshot.get("repository") != repository
+            or not isinstance(snapshot_task, dict) or snapshot_task.get("uid") != task_uid
+            or not isinstance(snapshot_issue, dict)
+            or snapshot_issue.get("number") != issue_number
+            or snapshot_issue.get("url") != f"https://github.com/{repository}/issues/{issue_number}"
+            or not isinstance(snapshot_project, dict)
+            or snapshot_project.get("item_id") != item_id
+            or snapshot_project.get("number") != project_number
+            or snapshot_project.get("owner") != project_owner):
+        _fail("Task mapping differs from its immutable canonical Project/Issue snapshot")
+
+    query = """
+    query($project: ID!, $after: String) {
+      node(id: $project) {
+        ... on ProjectV2 {
+          id number owner { ... on Organization { login } ... on User { login } }
+          items(first: 100, after: $after) {
+            nodes {
+              id isArchived
+              content {
+                __typename
+                ... on Issue {
+                  number url state body repository { nameWithOwner }
+                }
+              }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }
+    }
+    """
+    cursor = None
+    cursors: set[str] = set()
+    item_ids: set[str] = set()
+    uid_items: list[dict[str, Any]] = []
+    issue_items: list[dict[str, Any]] = []
+    expected_identity = (project_id, project_number, project_owner)
+    for _page in range(MAX_PAGES):
+        response = client.graphql(
+            query, {"project": project_id, "after": cursor},
+            operation="first_activation_project_membership_readback",
+        )
+        node = response.get("node") if isinstance(response, dict) else None
+        owner = ((node or {}).get("owner") or {}) if isinstance(node, dict) else {}
+        identity = ((node or {}).get("id"), (node or {}).get("number"), owner.get("login"))
+        if not isinstance(node, dict) or identity != expected_identity:
+            _fail("live Project identity differs from the canonical Task mapping")
+        connection = node.get("items")
+        if (not isinstance(connection, dict) or not isinstance(connection.get("nodes"), list)
+                or len(connection["nodes"]) > 100):
+            _fail("live Project membership page is malformed")
+        page_info = connection.get("pageInfo")
+        if (not isinstance(page_info, dict)
+                or type(page_info.get("hasNextPage")) is not bool):
+            _fail("live Project membership pagination is incomplete")
+        for item in connection["nodes"]:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]:
+                _fail("live Project membership contains an invalid item identity")
+            if item["id"] in item_ids:
+                _fail("live Project membership repeated an item identity")
+            item_ids.add(item["id"])
+            content = item.get("content")
+            if not isinstance(content, dict) or content.get("__typename") != "Issue":
+                continue
+            body = content.get("body")
+            if body is not None and not isinstance(body, str):
+                _fail("live Project Task Issue body is malformed")
+            body_text = body or ""
+            uid_rows = re.findall(r"(?m)^task_uid:[ \t]*(.*)$", body_text.replace("\r\n", "\n"))
+            if task_uid in [row.strip() for row in uid_rows]:
+                if [row.strip() for row in uid_rows] != [task_uid]:
+                    _fail("live Project Task UID marker is ambiguous")
+                uid_items.append(item)
+            issue_repository = ((content.get("repository") or {}).get("nameWithOwner")
+                                if isinstance(content.get("repository"), dict) else None)
+            if (issue_repository == repository and type(content.get("number")) is int
+                    and content.get("number") == issue_number):
+                issue_items.append(item)
+        if not page_info["hasNextPage"]:
+            break
+        next_cursor = page_info.get("endCursor")
+        if not isinstance(next_cursor, str) or not next_cursor or next_cursor in cursors:
+            _fail("live Project membership cursor is missing or repeated")
+        cursors.add(next_cursor)
+        cursor = next_cursor
+    else:
+        _fail("live Project membership pagination limit exhausted")
+
+    if len(uid_items) != 1 or len(issue_items) != 1:
+        _fail("Task UID does not resolve to exactly one live Project item and Task Issue")
+    item = uid_items[0]
+    content = item.get("content") or {}
+    if (item.get("id") != item_id or item.get("isArchived") is not False
+            or item is not issue_items[0]
+            or content.get("state") != "OPEN"
+            or content.get("repository", {}).get("nameWithOwner") != repository
+            or content.get("number") != issue_number
+            or content.get("url") != f"https://api.github.com/repos/{repository}/issues/{issue_number}"
+            or _body_uid(str(content.get("body") or "")) != [task_uid]
+            or content.get("body") != (binding.get("issue") or {}).get("body")):
+        _fail("unique live Project item does not match the canonical Task Issue")
+
+    # Re-read the canonical Issue after the Project enumeration. The comments
+    # scan below is never allowed to inherit identity from the local mapping.
+    issue = client.rest("GET", f"repos/{repository}/issues/{issue_number}",
+                        operation="first_activation_task_issue_readback")
+    if (not isinstance(issue, dict) or issue.get("number") != issue_number
+            or issue.get("state") != "open"
+            or issue.get("url") != f"https://api.github.com/repos/{repository}/issues/{issue_number}"
+            or issue.get("body") != content.get("body")
+            or _body_uid(str(issue.get("body") or "")) != [task_uid]):
+        _fail("live Task Issue changed during Project membership readback")
+    return item, issue
+
+
+def read_project_activation_marker(
+    repo_root: pathlib.Path,
+    repository: str,
+    task_uid: str,
+    *,
+    mapping_path: pathlib.Path,
+    client: Any = None,
+) -> bool:
+    """Freshly resolve Project membership and Task Issue before reading marker absence."""
+    root = pathlib.Path(repo_root).resolve()
+    binding = _read_project_task_binding(root, repository, task_uid,
+                                         mapping_path=mapping_path, client=client)
+    _, issue = _project_membership_for_task(binding, repository, task_uid)
+    comments = _comments(binding["client"], repository, int(issue["number"]))
+    expected_issue_url = f"https://api.github.com/repos/{repository}/issues/{issue['number']}"
+    for comment in comments:
+        if (comment.get("issue_url") != expected_issue_url
+                or not isinstance(comment.get("body"), str)):
+            _fail("Task Issue comments are malformed or bound to another Issue")
+    markers = (OVERLAY_MARKER, ACTIVATION_MARKER)
+    return any(
+        isinstance(comment.get("body"), str)
+        and any(comment["body"].replace("\r\n", "\n").startswith(marker)
+                for marker in markers)
+        for comment in comments
+    )
+
+
 FIRST_ACTIVATION_REVIEWED_PATHS = {
     "doc/engineering/workflow/source-of-truth.md",
     "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",

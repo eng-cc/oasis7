@@ -1762,9 +1762,19 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
         if not all(re.fullmatch(r'[0-9a-f]{40}', value) for value in (base, head)):
             raise ValueError('current PR base/head OIDs unavailable')
         first_activation_path = Path(root) / 'scripts/pm/first_activation.py'
-        if first_activation_path.is_file() and not first_activation_path.is_symlink():
-            if activation_overlay_present is True:
-                activation_helper = _load_effective_helper(Path(root), 'first_activation')
+        if activation_overlay_present is not None:
+            if first_activation_path.is_symlink() or not first_activation_path.is_file():
+                raise ValueError('first-activation identity reader is unavailable')
+            activation_helper = _load_effective_helper(Path(root), 'first_activation')
+            # The earlier Task Issue comment scan is only an inexpensive hint.
+            # A negative marker is trusted only after a fresh, unique live
+            # Project-item and Task-Issue readback for this exact Task UID.
+            marker_present = activation_helper.read_project_activation_marker(
+                Path(root), str(data['repository']), uid,
+                mapping_path=Path(root) / '.pm/github-project-sync/tasks.json',
+                client=api_client,
+            )
+            if marker_present:
                 activation_helper.read_project_activation(
                     Path(root), str(data['repository']), uid, base, head,
                     mapping_path=Path(root) / '.pm/github-project-sync/tasks.json',
@@ -1989,6 +1999,8 @@ def main() -> int:
                 activation_overlay_marker = _load_effective_helper(
                     task_root, "first_activation",
                 ).OVERLAY_MARKER
+            elif (task_root / ".git").exists():
+                raise ValueError("first-activation identity reader is unavailable in the canonical worktree")
             selector = _resolve_pr_selection(
                 args.pr, repository_hint=record["repository"], number_hint=record["pr_number"],
                 client=None, snapshot_module=snapshot_module,
