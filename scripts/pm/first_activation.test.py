@@ -600,9 +600,11 @@ class OverlayShapeTests(unittest.TestCase):
         parsed["overlay_comment_id"] = 44
         parsed["overlay_sha256"] = SHA
         proof = {
-            "schema": "oasis7-cargo-dependency-floor-required-tier-proof/v1",
+            "schema": "oasis7-cargo-dependency-floor-required-tier-proof/v2",
             "workflow_run_id": 99,
             "run_attempt": 1,
+            "task_pr_number": 4285,
+            "impact_projection_digest": SHA,
             "required_gate_job_id": 101,
             "required_gate_check_run_id": 102,
             "required_gate_check_app_id": 103,
@@ -973,7 +975,7 @@ class ProjectActivationMarkerTests(unittest.TestCase):
                             for method, path, _ in client.rest_calls))
 
     def test_overlay_or_activation_marker_is_only_reported_after_binding(self):
-        for marker in (*MODULE.OVERLAY_MARKERS, MODULE.ACTIVATION_MARKER):
+        for marker in (*MODULE.OVERLAY_MARKERS, *MODULE.ACTIVATION_MARKERS):
             with self.subTest(marker=marker):
                 comment = {"id": 1, "issue_url": ISSUE_URL, "body": marker + "\n{}"}
                 client = self._client([self._item()], comments=[comment])
@@ -1143,7 +1145,21 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         inventory_path = root / "scripts/ci-required-capability-test-inventory.tsv"
         inventory_path.write_text(self.HEADER + base_row, encoding="utf-8")
         (root / "scripts/plan-rust-required-scope.py").write_text(
-            "print('scope=full')\n", encoding="utf-8",
+            "import argparse, json\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--impact-projection', required=True)\n"
+            "args, _ = parser.parse_known_args()\n"
+            "projection = json.loads(open(args.impact_projection, encoding='utf-8').read())\n"
+            "print('scope=full')\n"
+            "print('impact_projection_status=verified')\n"
+            "print('impact_projection_digest=' + projection['projection_digest'])\n"
+            "print('execution_contract=required-domain-split/v1')\n"
+            "print('run_required_gate_baseline=true')\n"
+            "print('run_operational_contracts=true')\n"
+            "print('run_packaging_contracts=true')\n", encoding="utf-8",
+        )
+        (root / "scripts/pm/workflow-impact-projection.py").write_bytes(
+            (pathlib.Path(__file__).with_name("workflow-impact-projection.py")).read_bytes(),
         )
         test_inventory = {
             "unit_specs": [
@@ -1208,6 +1224,29 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         self._git(root, "add", ".")
         self._git(root, "commit", "-m", "candidate head fixture")
         head_oid = self._git(root, "rev-parse", "HEAD")
+        changed_paths = sorted(self._git(root, "diff", "--name-only", base_oid, head_oid).splitlines())
+        projection = self._projection_fixture(changed_paths)
+        projection.update({"task_uid": UID, "source_head_oid": head_oid, "scope_base_oid": base_oid})
+        projection["changed_paths_digest"] = "sha256:" + hashlib.sha256(
+            MODULE._canonical(changed_paths),
+        ).hexdigest()
+        planner_identity = {
+            "schema": "oasis7-required-plan-v1",
+            "planner_config_sha256": projection["planner_config_sha256"],
+            "scope": projection["ci_scope"],
+            "selected_capabilities": projection["ci_capabilities"],
+            "test_profile": projection["test_profile"],
+            "declared_tests": projection["declared_tests"],
+        }
+        projection["planner_identity"] = planner_identity
+        projection["planner_digest"] = "sha256:" + hashlib.sha256(
+            MODULE._canonical(planner_identity),
+        ).hexdigest()
+        projection.pop("projection_digest")
+        projection["projection_digest"] = "sha256:" + hashlib.sha256(
+            MODULE._canonical(projection),
+        ).hexdigest()
+        projection_b64 = __import__("base64").b64encode(MODULE._canonical(projection)).decode("ascii")
         base_worktree = temp / "trusted-base"
         self._git(root, "worktree", "add", "--detach", str(base_worktree), base_oid)
         proof_overlay = {
@@ -1219,6 +1258,8 @@ class RequiredRunLeafProofTests(unittest.TestCase):
                 {"path": "scripts/pm/first_activation.test.py"},
             ],
         }
+        projection_path = temp / "first-activation-base-authority" / "impact-projection.json"
+        authority_path = projection_path.parent
         logs = [
             "required-gate\tRun required test tier\t2026-10-03T00:00:01Z\t+ ./scripts/doc-governance-check.sh --full-corpus",
             "required-gate\tRun required test tier\t2026-10-03T00:00:02Z\tproduct-doc-content: checked 0: reason=no new or substantive product-document changes in selected range",
@@ -1231,7 +1272,8 @@ class RequiredRunLeafProofTests(unittest.TestCase):
             "required-gate\tRun required test tier\t2026-10-03T00:00:09Z\tok: checked 123 tracked paths for Windows checkout compatibility",
             "required-gate\tRun required test tier\t2026-10-03T00:00:10Z\t+ bash ./scripts/check-script-executable-bits.sh",
             "required-gate\tRun required test tier\t2026-10-03T00:00:11Z\tok: required release scripts are tracked and executable",
-            f"required-gate\tRun required test tier\t2026-10-03T00:00:12Z\t+ python3 - /tmp/impact-projection.json {root} {root}/scripts",
+            f"required-gate\tRun required test tier\t2026-10-03T00:00:12Z\t+ python3 - {projection_path} {root} {authority_path}",
+            f"required-gate\tRun required test tier\t2026-10-03T00:00:12Z\tfirst-activation impact projection digest: {projection['projection_digest']}",
             "required-gate\tRun required test tier\t2026-10-03T00:00:13Z\tworkflow-impact-projection-consumer: verified status",
             f"required-gate\tRun required test tier\t2026-10-03T00:00:14Z\t+ python3 /tmp/trusted-check-cargo-package-scope --repo-root {root} --base {base_oid} --head {head_oid} --primary-package auto --policy {root}/.pm/cargo-package-scope-policy.json --json",
             'required-gate\tRun required test tier\t2026-10-03T00:00:15Z\t{"status":"rejected","reason":"ambiguous_package_attribution"}',
@@ -1250,7 +1292,99 @@ class RequiredRunLeafProofTests(unittest.TestCase):
             "required-gate\tRun required test tier\t2026-10-03T00:00:23Z\t+ env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required --verbose",
             "required-gate\tRun required test tier\t2026-10-03T00:00:24Z\t+ python3 ./scripts/pm/first_activation.test.py",
         ]
-        return root, base_worktree, base_oid, head_oid, proof_overlay, "\n".join(logs) + "\n"
+        issue = {
+            "number": 4269, "state": "open",
+            "body": f"task_uid: {UID}\n- pr_number: `4285`\n- pr_url: `https://github.com/eng-cc/oasis7/pull/4285`\n",
+        }
+        pr = {
+            "number": 4285, "state": "open", "merged": False,
+            "base": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": "main", "sha": base_oid},
+            "head": {"repo": {"full_name": "eng-cc/oasis7"}, "sha": head_oid},
+            "body": f"Task: {UID}\nRefs #4269\n\n<!-- oasis7-impact-projection-b64: {projection_b64} -->\n",
+        }
+        return (root, base_worktree, base_oid, head_oid, proof_overlay,
+                "\n".join(logs) + "\n", issue, pr, projection)
+
+    def test_first_activation_workflow_wires_live_task_pr_projection_into_trusted_full_gate(self):
+        workflow = (ROOT / ".github/workflows/rust.yml").read_text(encoding="utf-8")
+        provenance_start = workflow.index("- id: first-activation-provenance")
+        provenance_end = workflow.index("- id: impact", provenance_start)
+        provenance = workflow[provenance_start:provenance_end]
+        self.assertIn("materialize_first_activation_task_pr_projection(", provenance)
+        self.assertIn('"first-activation-base-authority/impact-projection.json"', provenance)
+        self.assertIn('"IMPACT_PROJECTION_B64"', provenance)
+
+        scope_start = workflow.index("- id: scope\n")
+        scope_end = workflow.index("- name: Report planned scope", scope_start)
+        scope = workflow[scope_start:scope_end]
+        self.assertIn('git show "${base_ref}:scripts/pm/workflow-impact-projection.py"', scope)
+        self.assertIn('impact_args=(--impact-projection "${authority_dir}/impact-projection.json"', scope)
+        self.assertIn('run_mode_args=(--run-mode full_escalation)', scope)
+
+        tier_start = workflow.index('if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "first_activation_validation_only" ]]')
+        tier_end = workflow.index('elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]', tier_start)
+        tier = workflow[tier_start:tier_end]
+        self.assertIn('echo "first-activation impact projection digest:', tier)
+        self.assertIn('"${RUNNER_TEMP}/first-activation-base-authority/ci-tests.sh" required', tier)
+        self.assertIn('--impact-projection "${RUNNER_TEMP}/first-activation-base-authority/impact-projection.json"', tier)
+
+    def test_first_activation_step_inventory_rejects_a_missing_named_required_step(self):
+        steps = [
+            {"name": "Checkout", "status": "completed", "conclusion": "success"},
+            {"name": "Run required test tier", "status": "completed", "conclusion": "success"},
+        ]
+        with self.assertRaisesRegex(MODULE.OverlayError, "lacks applicable workflow steps: Install pinned Rust toolchains"):
+            MODULE._verify_first_activation_step_coverage(
+                steps, job_name="required-gate",
+                required_steps={"Checkout", "Install pinned Rust toolchains"},
+                allowed_skipped_steps=set(),
+            )
+
+    def test_legacy_activation_marker_remains_terminal_and_cannot_claim_v2_projection_proof(self):
+        legacy_body = MODULE.LEGACY_ACTIVATION_MARKER + "\n{}\n"
+        self.assertTrue(MODULE._is_activation_comment(legacy_body))
+        self.assertEqual(
+            MODULE._decode_activation_comment(legacy_body), {},
+        )
+        parsed = MODULE.validate_overlay(overlay(), task_uid=UID, issue_number=4269,
+                                         base_oid=BASE, head_oid=HEAD)
+        legacy_payload = MODULE._activation_payload(parsed, {}, 99, 1)
+        legacy_payload["schema"] = MODULE.LEGACY_ACTIVATION_SCHEMA
+        with self.assertRaisesRegex(MODULE.OverlayError, "legacy v1 activation evidence is recognized"):
+            MODULE._validate_activation_payload(legacy_payload, parsed)
+
+    @staticmethod
+    def _projection_fixture(changed_paths):
+        return {
+            "schema": "oasis7-workflow-impact-projection/v2",
+            "task_uid": UID,
+            "source_head_oid": HEAD,
+            "scope_base_oid": BASE,
+            "changed_paths": changed_paths,
+            "changed_paths_digest": "sha256:" + hashlib.sha256(MODULE._canonical(changed_paths)).hexdigest(),
+            "change_class": "mixed",
+            "manual_roles": [],
+            "domain_role": None,
+            "test_profile": "full",
+            "declared_tests": ["scripts/pm/first_activation.test.py"],
+            "consumed_contracts": [],
+            "public_semantics": [],
+            "affected_consumers": [],
+            "closure_status": {"status": "unverified", "reason": "fixture", "evidence": []},
+            "ci_scope": "full",
+            "ci_capabilities": ["required_gate_baseline"],
+            "ci_reasons": [],
+            "review_roles": ["repository_health_engineer"],
+            "ordered_role_ids": ["repository_health_engineer"],
+            "review_scope": "full",
+            "review_escalated": True,
+            "review_reasons": [],
+            "planner_config_sha256": "sha256:" + "c" * 64,
+            "planner_identity": {},
+            "planner_digest": "sha256:" + "c" * 64,
+            "verification_affected": False,
+            "projection_digest": "sha256:" + "c" * 64,
+        }
 
     def test_trusted_inventory_import_restores_bytecode_setting_when_loader_raises(self):
         observed_settings = []
@@ -1268,8 +1402,67 @@ class RequiredRunLeafProofTests(unittest.TestCase):
 
     def test_full_reconstruction_uses_actual_job_step_commands_and_additive_candidate_test(self):
         class Client:
-            def __init__(self, fail_step=False):
+            def __init__(self, issue, pr, *, fail_step=False, skipped_step=False,
+                         job_overrides=None, missing_jobs=(), extra_jobs=()):
                 self.fail_step = fail_step
+                self.skipped_step = skipped_step
+                self.issue = issue
+                self.pr = pr
+                self.job_overrides = job_overrides or {}
+                self.missing_jobs = set(missing_jobs)
+                self.extra_jobs = list(extra_jobs)
+
+            @staticmethod
+            def _step(name, conclusion="success"):
+                return {"name": name, "status": "completed", "conclusion": conclusion}
+
+            def _jobs(self):
+                required_conclusion = "failure" if self.fail_step else "skipped" if self.skipped_step else "success"
+                gate_steps = [self._step(name) for name in sorted(MODULE.FIRST_ACTIVATION_REQUIRED_GATE_STEPS)]
+                gate_steps.extend(
+                    self._step(name, "skipped")
+                    for name in sorted(MODULE.FIRST_ACTIVATION_SKIPPED_GATE_STEPS)
+                )
+                gate_steps = [
+                    self._step(step["name"], required_conclusion)
+                    if step["name"] == "Run required test tier" else step
+                    for step in gate_steps
+                ]
+                gate = {
+                    "id": 101, "name": "required-gate", "status": "completed",
+                    "conclusion": "success", "check_run_url": "https://api.github.com/repos/eng-cc/oasis7/check-runs/102",
+                    "steps": gate_steps,
+                }
+                rows = [gate]
+                auxiliary = {
+                    "windows-package-rollout-behavior": "Run disposable Windows PowerShell rollout behavior fixture",
+                    "testnet-packages-macos-arm64-contract": "Verify additive macOS arm64 package contract",
+                }
+                for name, test_step in auxiliary.items():
+                    rows.append({
+                        "id": len(rows) + 101, "name": name, "status": "completed", "conclusion": "success",
+                        "steps": [self._step("Checkout"),
+                                  self._step("Prepare exact manual integration from trusted default workflow", "skipped"),
+                                  self._step(test_step)],
+                    })
+                for runner in MODULE.FIRST_ACTIVATION_MATRIX_OS:
+                    name = f"public-testnet-fleet-health-contract ({runner})"
+                    rows.append({
+                        "id": len(rows) + 101, "name": name, "status": "completed", "conclusion": "success",
+                        "steps": [self._step("Checkout"),
+                                  self._step("Prepare exact manual integration from trusted default workflow", "skipped"),
+                                  self._step("Verify fleet-health collection contract")],
+                    })
+                rows.extend({
+                    "id": len(rows) + 101, "name": name, "status": "completed", "conclusion": "skipped",
+                    "steps": [],
+                } for name in sorted(MODULE.FIRST_ACTIVATION_INAPPLICABLE_JOBS))
+                rows = [row for row in rows if row["name"] not in self.missing_jobs]
+                for row in rows:
+                    if row["name"] in self.job_overrides:
+                        row["conclusion"] = self.job_overrides[row["name"]]
+                rows.extend(self.extra_jobs)
+                return rows
 
             def rest(self, method, path, *args, **kwargs):
                 if "/actions/runs/" in path and "/attempts/" not in path:
@@ -1281,13 +1474,11 @@ class RequiredRunLeafProofTests(unittest.TestCase):
                         "status": "completed", "conclusion": "success",
                     }
                 if "/attempts/1/jobs?" in path:
-                    conclusion = "failure" if self.fail_step else "success"
-                    return [{
-                        "id": 101, "name": "required-gate", "status": "completed",
-                        "conclusion": "success", "check_run_url": "https://api.github.com/repos/eng-cc/oasis7/check-runs/102",
-                        "steps": [{"name": "Run required test tier", "status": "completed",
-                                   "conclusion": conclusion}],
-                    }]
+                    return self._jobs()
+                if path.startswith("repos/eng-cc/oasis7/issues?state=all"):
+                    return [{**self.issue, "id": 4269}]
+                if path == "repos/eng-cc/oasis7/pulls/4285":
+                    return self.pr
                 if path == "repos/eng-cc/oasis7/check-runs/102":
                     return {"name": "required-gate", "head_sha": self.head_oid,
                             "status": "completed", "conclusion": "success", "app": {"id": 103}}
@@ -1297,8 +1488,8 @@ class RequiredRunLeafProofTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_name:
             temp = pathlib.Path(temp_name)
-            root, base_worktree, base_oid, head_oid, bound_overlay, logs = self._fixture(temp)
-            client = Client()
+            root, base_worktree, base_oid, head_oid, bound_overlay, logs, issue, pr, projection = self._fixture(temp)
+            client = Client(issue, pr)
             client.head_oid = head_oid
 
             def reconstruct(log_text, *, run_client=client):
@@ -1346,10 +1537,66 @@ class RequiredRunLeafProofTests(unittest.TestCase):
             wrong_job = logs.replace("required-gate\tRun required test tier", "other-job\tRun required test tier")
             with self.assertRaisesRegex(MODULE.OverlayError, "required-gate Run required test tier"):
                 reconstruct(wrong_job)
-            failed = Client(fail_step=True)
+            failed = Client(issue, pr, fail_step=True)
             failed.head_oid = head_oid
             with self.assertRaisesRegex(MODULE.OverlayError, "required-gate has a failed"):
                 reconstruct(logs, run_client=failed)
+
+            skipped_required_step = Client(issue, pr, skipped_step=True)
+            skipped_required_step.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "required-gate.*skipped"):
+                reconstruct(logs, run_client=skipped_required_step)
+
+            skipped_applicable_matrix = Client(
+                issue, pr,
+                job_overrides={"public-testnet-fleet-health-contract (ubuntu-24.04)": "skipped"},
+            )
+            skipped_applicable_matrix.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "applicable.*public-testnet-fleet-health-contract"):
+                reconstruct(logs, run_client=skipped_applicable_matrix)
+
+            missing_applicable_matrix = Client(
+                issue, pr, missing_jobs={"public-testnet-fleet-health-contract (macos-14)"},
+            )
+            missing_applicable_matrix.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "missing applicable job/matrix.*macos-14"):
+                reconstruct(logs, run_client=missing_applicable_matrix)
+
+            duplicate_applicable_matrix = Client(issue, pr, extra_jobs=(
+                {"id": 999, "name": "public-testnet-fleet-health-contract (windows-2022)",
+                 "status": "completed", "conclusion": "success", "steps": []},
+            ))
+            duplicate_applicable_matrix.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "duplicate job/matrix identity"):
+                reconstruct(logs, run_client=duplicate_applicable_matrix)
+
+            unclassified_job = Client(issue, pr, extra_jobs=(
+                {"id": 1000, "name": "unreviewed-first-activation-job", "status": "completed",
+                 "conclusion": "skipped", "steps": []},
+            ))
+            unclassified_job.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "contains an unclassified job"):
+                reconstruct(logs, run_client=unclassified_job)
+
+            missing_projection_pr = {**pr, "body": pr["body"].replace(
+                f"<!-- oasis7-impact-projection-b64: {__import__('base64').b64encode(MODULE._canonical(projection)).decode('ascii')} -->\n",
+                "",
+            )}
+            missing_projection = Client(issue, missing_projection_pr)
+            missing_projection.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "does not contain exactly one impact projection"):
+                reconstruct(logs, run_client=missing_projection)
+
+            forged_projection = dict(projection)
+            forged_projection["task_uid"] = "task_" + "b" * 32
+            forged_pr_body = pr["body"].replace(
+                __import__('base64').b64encode(MODULE._canonical(projection)).decode('ascii'),
+                __import__('base64').b64encode(MODULE._canonical(forged_projection)).decode('ascii'),
+            )
+            forged_projection_client = Client(issue, {**pr, "body": forged_pr_body})
+            forged_projection_client.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "trusted base rejected the reciprocal Task PR"):
+                reconstruct(logs, run_client=forged_projection_client)
 
     def test_checker_leaf_requires_exact_commands_observations_and_candidate_binding(self):
         overlay_value = {"task_uid": UID, "base_oid": BASE, "head_oid": HEAD}

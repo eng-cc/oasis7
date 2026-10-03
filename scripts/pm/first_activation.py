@@ -14,6 +14,7 @@ import sys
 import argparse
 import csv
 import shlex
+import base64
 from collections import Counter
 from datetime import datetime
 from typing import Any
@@ -26,8 +27,11 @@ OVERLAY_V2_MARKER = "<!-- oasis7-cargo-dependency-floor-overlay/v2 -->"
 OVERLAY_MARKERS = (OVERLAY_MARKER, OVERLAY_V2_MARKER)
 SCOPE_AMENDMENT_SCHEMA = "oasis7-cargo-dependency-floor-scope-amendment/v1"
 SCOPE_AMENDMENT_MARKER = "<!-- oasis7-cargo-dependency-floor-scope-amendment/v1 -->"
-ACTIVATION_SCHEMA = "oasis7-cargo-dependency-floor-activation/v1"
-ACTIVATION_MARKER = "<!-- oasis7-cargo-dependency-floor-activation/v1 -->"
+LEGACY_ACTIVATION_SCHEMA = "oasis7-cargo-dependency-floor-activation/v1"
+LEGACY_ACTIVATION_MARKER = "<!-- oasis7-cargo-dependency-floor-activation/v1 -->"
+ACTIVATION_SCHEMA = "oasis7-cargo-dependency-floor-activation/v2"
+ACTIVATION_MARKER = "<!-- oasis7-cargo-dependency-floor-activation/v2 -->"
+ACTIVATION_MARKERS = (LEGACY_ACTIVATION_MARKER, ACTIVATION_MARKER)
 REVIEW_SCHEMA = "oasis7-cargo-first-activation-review/v1"
 REVIEW_MARKER = "<!-- oasis7-cargo-first-activation-review/v1 -->"
 FIRST_REVIEW_PLAN_SCHEMA = "oasis7-cargo-first-activation-review-plan/v1"
@@ -44,6 +48,43 @@ SHA_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 VERSION_RE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 MAX_PAGES = 100
+FIRST_ACTIVATION_MATRIX_OS = ("ubuntu-24.04", "windows-2022", "macos-14")
+FIRST_ACTIVATION_INAPPLICABLE_JOBS = {
+    "v1-reuse-validation-only", "required-result-v2", "full-regression",
+    "full-escalation", "newapi-bridge-package",
+}
+FIRST_ACTIVATION_REQUIRED_GATE_STEPS = {
+    "Checkout",
+    "Validate exact first-activation dispatch provenance",
+    "Plan required gate scope",
+    "Report planned scope",
+    "Build attempt-scoped required-plan v2 from trusted W and M",
+    "Write required planner artifact",
+    "Upload required planner artifact",
+    "Install pinned Rust toolchains",
+    "Install cargo-deny",
+    "Install viewer web dependencies",
+    "Install trunk",
+    "Install system deps",
+    "Install product-document Markdown parser",
+    "Run required test tier",
+    "Upload first-activation validation evidence",
+    "Upload selected Viewer performance evidence",
+    "Run execution bridge binary unit suite",
+}
+FIRST_ACTIVATION_SKIPPED_GATE_STEPS = {
+    "Materialize PR workflow impact projection",
+    "Prepare exact manual integration from trusted default workflow",
+    "Freeze current PR target independently of historical PR base",
+    "Validate trusted loop repository scope and content",
+    "Install pinned Markdown runtime for keyed inventory observation",
+    "Upload exact-attempt required plan v2",
+    "Upload Cargo package profile plan",
+    "Upload Cargo package profile results",
+    "Upload Cargo package profile receipt",
+    "Upload Cargo package profile envelope",
+}
+FIRST_ACTIVATION_GATE_LIFECYCLE_STEPS = {"Set up job", "Complete job", "Post Checkout"}
 
 
 class OverlayError(ValueError):
@@ -473,6 +514,113 @@ def _issue_by_uid(client: Any, repository: str, task_uid: str) -> dict[str, Any]
     if issue.get("state") != "open" or type(issue.get("number")) is not int:
         _fail("Task Issue is not open or has invalid number")
     return issue
+
+
+def _first_activation_task_pr_projection(
+    repo_root: pathlib.Path,
+    repository: str,
+    task_uid: str,
+    base_oid: str,
+    head_oid: str,
+    *,
+    client: Any,
+) -> tuple[int, dict[str, Any]]:
+    """Resolve and verify the projection from the one live Task's reciprocal PR."""
+    root = pathlib.Path(repo_root).resolve()
+    issue = _issue_by_uid(client, repository, task_uid)
+    issue_number = issue.get("number")
+    issue_body = issue.get("body")
+    if (type(issue_number) is not int or issue_number < 1 or not isinstance(issue_body, str)
+            or _body_uid(issue_body) != [task_uid]):
+        _fail("first-activation projection source Task Issue is malformed or ambiguous")
+    pr_numbers = re.findall(r"(?m)^- pr_number: `([1-9][0-9]*)`\s*$", issue_body)
+    pr_urls = re.findall(r"(?m)^- pr_url: `(https://github\.com/[^`]+)`\s*$", issue_body)
+    if len(pr_numbers) != 1 or len(pr_urls) != 1:
+        _fail("Task Issue does not resolve to exactly one canonical reciprocal PR")
+    pr_number = int(pr_numbers[0])
+    if pr_urls[0] != f"https://github.com/{repository}/pull/{pr_number}":
+        _fail("Task Issue PR URL does not identify its exact reciprocal PR")
+    pr = client.rest("GET", f"repos/{repository}/pulls/{pr_number}",
+                     operation="first_activation_projection_pr_readback")
+    repository_state = client.rest("GET", f"repos/{repository}",
+                                   operation="first_activation_projection_repository_readback")
+    default_branch = repository_state.get("default_branch") if isinstance(repository_state, dict) else None
+    base = pr.get("base") if isinstance(pr, dict) else None
+    head = pr.get("head") if isinstance(pr, dict) else None
+    body = pr.get("body") if isinstance(pr, dict) else None
+    if (not isinstance(pr, dict) or pr.get("number") != pr_number or pr.get("state") != "open"
+            or pr.get("merged") is not False
+            or not isinstance(default_branch, str) or not default_branch
+            or not isinstance(base, dict) or not isinstance(head, dict)
+            or (base.get("repo") or {}).get("full_name") != repository
+            or (head.get("repo") or {}).get("full_name") != repository
+            or base.get("ref") != default_branch or base.get("sha") != base_oid
+            or head.get("sha") != head_oid or not isinstance(body, str)):
+        _fail("live reciprocal PR does not bind the exact Task, base, and head")
+    task_lines = re.findall(r"(?m)^Task: ([^\n]+)$", body)
+    issue_refs = re.findall(r"(?m)^Refs #([1-9][0-9]*)$", body)
+    if task_lines != [task_uid] or issue_refs != [str(issue_number)]:
+        _fail("live reciprocal PR does not bind the exact Task Issue")
+    markers = re.findall(
+        r"(?m)^<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+|missing) -->$", body,
+    )
+    if len(markers) != 1 or markers[0] == "missing":
+        _fail("live reciprocal PR does not contain exactly one impact projection")
+    try:
+        raw = base64.b64decode(markers[0], validate=True)
+        projection = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        _fail(f"live reciprocal PR impact projection is malformed: {exc}")
+    if not isinstance(projection, dict):
+        _fail("live reciprocal PR impact projection must be an object")
+
+    trusted_root = _trusted_base_worktree(root, base_oid)
+    helper_path = trusted_root / "scripts/pm/workflow-impact-projection.py"
+    spec = importlib.util.spec_from_file_location("first_activation_trusted_projection", helper_path)
+    if spec is None or spec.loader is None:
+        _fail("trusted base impact projection validator is unavailable")
+    helper = importlib.util.module_from_spec(spec)
+    try:
+        _exec_trusted_inventory_module(spec.loader, helper)
+        helper.validate_projection_value(
+            projection,
+            expected={
+                "task_uid": task_uid,
+                "source_head_oid": head_oid,
+                "scope_base_oid": base_oid,
+                "changed_paths": _changed_paths(root, base_oid, head_oid),
+            },
+            repo_root=root,
+        )
+    except Exception as exc:
+        _fail(f"trusted base rejected the reciprocal Task PR impact projection: {exc}")
+    return pr_number, projection
+
+
+def materialize_first_activation_task_pr_projection(
+    repo_root: pathlib.Path,
+    repository: str,
+    task_uid: str,
+    base_oid: str,
+    head_oid: str,
+    destination: pathlib.Path,
+    *,
+    client: Any,
+) -> str:
+    """Write the live reciprocal Task PR projection once and return its verified digest."""
+    _pr_number, projection = _first_activation_task_pr_projection(
+        repo_root, repository, task_uid, base_oid, head_oid, client=client,
+    )
+    path = pathlib.Path(destination)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("xb") as handle:
+            handle.write(_canonical(projection))
+    except FileExistsError as exc:
+        _fail(f"refusing to replace an existing first-activation projection: {path}")
+    except OSError as exc:
+        _fail(f"cannot materialize first-activation projection: {exc}")
+    return str(projection["projection_digest"])
 
 
 def _comments(client: Any, repository: str, issue_number: int) -> list[dict[str, Any]]:
@@ -1184,9 +1332,7 @@ def _validated_overlay_history(
                 or _comment_time(amendment_comment, "scope amendment")
                 <= _comment_time(superseded[0][0], "superseded v1 overlay")):
             _fail("scope amendment does not supersede its exact prior v1 overlay")
-        if any(isinstance(item.get("body"), str)
-               and item["body"].replace("\r\n", "\n").startswith(ACTIVATION_MARKER + "\n")
-               for item in comments):
+        if any(_is_activation_comment(item.get("body")) for item in comments):
             _fail("activated dependency-floor history cannot be superseded by a scope amendment")
         if v2_rows:
             require_one_lineage(v2_rows, "amended v2")
@@ -1245,8 +1391,7 @@ def _read_live_activation_proof(
             continue
         if overlay.get(key) != value:
             _fail("live overlay identity differs from the exact validated Task/base/head")
-    matches = [item for item in comments if isinstance(item.get("body"), str)
-               and item["body"].replace("\r\n", "\n").startswith(ACTIVATION_MARKER + "\n")]
+    matches = [item for item in comments if _is_activation_comment(item.get("body"))]
     if len(matches) != 1:
         _fail("Task Issue must contain exactly one activation evidence comment")
     activation_comment = matches[0]
@@ -1338,9 +1483,7 @@ def publish_activation(
     overlay = read_project_overlay(root, repository, task_uid, base_oid, head_oid,
                                    mapping_path=mapping_path, client=client)
     comments = _comments(client, repository, overlay["issue_number"])
-    if any(isinstance(item.get("body"), str)
-           and item["body"].replace("\r\n", "\n").startswith(ACTIVATION_MARKER + "\n")
-           for item in comments):
+    if any(_is_activation_comment(item.get("body")) for item in comments):
         _fail("activation evidence already exists; immutable records cannot be replaced")
     overlay_comment = _unique_comment(comments, overlay["overlay_comment_id"], "overlay")
     context = dict(overlay)
@@ -1573,15 +1716,20 @@ def _checker_invocation_logged(
 
 
 def _workflow_impact_projection_logged(
-    command_lines: list[str], candidate_root: pathlib.Path,
+    command_lines: list[str], candidate_root: pathlib.Path, *,
+    projection_digest: str, step_log: list[str],
 ) -> bool:
     root = candidate_root.resolve()
+    if not SHA_RE.fullmatch(projection_digest):
+        return False
     for argv in _logged_command_argvs(command_lines):
         if (len(argv) == 5 and argv[0] in {"python3", "python3.12"}
                 and argv[1] == "-"
                 and pathlib.Path(argv[2]).name == "impact-projection.json"
                 and pathlib.Path(argv[3]).resolve() == root
-                and pathlib.Path(argv[4]).resolve() == root / "scripts"):
+                and pathlib.Path(argv[4]).name == "first-activation-base-authority"
+                and pathlib.Path(argv[2]).resolve().parent == pathlib.Path(argv[4]).resolve()
+                and f"first-activation impact projection digest: {projection_digest}" in step_log):
             return True
     return False
 
@@ -1697,6 +1845,7 @@ def _verify_required_run_leaf_logs(
     trusted_root: pathlib.Path,
     candidate_root: pathlib.Path,
     overlay: dict[str, Any],
+    projection_digest: str,
 ) -> set[str]:
     step_log = _required_test_step_log(logs)
     commands = _log_command_lines(step_log)
@@ -1760,7 +1909,10 @@ def _verify_required_run_leaf_logs(
                     _fail(f"required-gate logs lack the successful leaf diagnostic: {item}")
                 mapped_commands = semantic_commands[item]
                 if item == "workflow-impact-projection-consumer":
-                    logged_mapping = _workflow_impact_projection_logged(commands, candidate_root)
+                    logged_mapping = _workflow_impact_projection_logged(
+                        commands, candidate_root, projection_digest=projection_digest,
+                        step_log=step_log,
+                    )
                 elif item == "cargo-package-scope-and-profile-completion":
                     logged_mapping = _valid_checker_json_leaf(
                         step_log, overlay, candidate_root=candidate_root,
@@ -1832,6 +1984,115 @@ def _verify_required_run_leaf_logs(
     return covered
 
 
+def _first_activation_expected_jobs(planner_plan: dict[str, str]) -> set[str]:
+    """Derive first-activation jobs from the trusted full planner outputs."""
+    if (planner_plan.get("scope") != "full"
+            or planner_plan.get("run_required_gate_baseline") != "true"
+            or planner_plan.get("run_operational_contracts") != "true"
+            or planner_plan.get("run_packaging_contracts") != "true"):
+        _fail("trusted first-activation planner omitted full baseline, operational, or packaging scope")
+    expected = {"required-gate", "windows-package-rollout-behavior"}
+    expected.update(
+        f"public-testnet-fleet-health-contract ({runner})"
+        for runner in FIRST_ACTIVATION_MATRIX_OS
+    )
+    if (planner_plan.get("execution_contract") == "required-domain-split/v1"
+            and planner_plan.get("run_packaging_contracts") == "true"):
+        expected.add("testnet-packages-macos-arm64-contract")
+    elif (planner_plan.get("execution_contract") != "required-domain-split/v1"
+          and planner_plan.get("run_operational_contracts") == "true"):
+        expected.add("testnet-packages-macos-arm64-contract")
+    return expected
+
+
+def _verify_first_activation_step_coverage(
+    steps: Any,
+    *,
+    job_name: str,
+    required_steps: set[str],
+    allowed_skipped_steps: set[str],
+) -> None:
+    if not isinstance(steps, list) or not steps:
+        _fail(f"{job_name} step evidence is unavailable")
+    names: list[str] = []
+    for step in steps:
+        if not isinstance(step, dict) or not isinstance(step.get("name"), str) or not step["name"]:
+            _fail(f"{job_name} has malformed workflow step evidence")
+        names.append(step["name"])
+    if len(names) != len(set(names)):
+        _fail(f"{job_name} has duplicate workflow step identities")
+    missing = sorted(required_steps - set(names))
+    if missing:
+        _fail(f"{job_name} lacks applicable workflow steps: {', '.join(missing)}")
+    for step in steps:
+        name = step["name"]
+        if step.get("status") != "completed":
+            _fail(f"{job_name} has an incomplete workflow step: {name}")
+        conclusion = step.get("conclusion")
+        if conclusion == "skipped":
+            if name not in allowed_skipped_steps:
+                _fail(f"{job_name} has an applicable skipped workflow step: {name}")
+        elif conclusion != "success":
+            _fail(f"{job_name} has a failed or cancelled workflow step: {name}")
+
+
+def _verify_first_activation_job_coverage(
+    jobs: Any,
+    planner_plan: dict[str, str],
+) -> dict[str, Any]:
+    expected = _first_activation_expected_jobs(planner_plan)
+    if not isinstance(jobs, list) or not jobs:
+        _fail("first-activation workflow job evidence is unavailable")
+    by_name: dict[str, dict[str, Any]] = {}
+    for job in jobs:
+        if not isinstance(job, dict) or not isinstance(job.get("name"), str) or not job["name"]:
+            _fail("first-activation workflow job identity is malformed")
+        name = job["name"]
+        if name in by_name:
+            _fail(f"first-activation workflow contains duplicate job/matrix identity: {name}")
+        if name not in expected and name not in FIRST_ACTIVATION_INAPPLICABLE_JOBS:
+            _fail(f"first-activation workflow contains an unclassified job: {name}")
+        by_name[name] = job
+    missing = sorted(expected - set(by_name))
+    if missing:
+        _fail(f"first-activation workflow is missing applicable job/matrix entries: {', '.join(missing)}")
+    for name, job in by_name.items():
+        if name in FIRST_ACTIVATION_INAPPLICABLE_JOBS:
+            if job.get("status") != "completed" or job.get("conclusion") != "skipped":
+                _fail(f"first-activation workflow ran an inapplicable job: {name}")
+            continue
+        if job.get("status") != "completed" or job.get("conclusion") != "success":
+            _fail(f"applicable first-activation workflow job did not succeed: {name}")
+
+    gate = by_name["required-gate"]
+    _verify_first_activation_step_coverage(
+        gate.get("steps"), job_name="required-gate",
+        required_steps=FIRST_ACTIVATION_REQUIRED_GATE_STEPS,
+        allowed_skipped_steps=FIRST_ACTIVATION_SKIPPED_GATE_STEPS,
+    )
+    _verify_first_activation_step_coverage(
+        by_name["windows-package-rollout-behavior"].get("steps"),
+        job_name="windows-package-rollout-behavior",
+        required_steps={"Checkout", "Run disposable Windows PowerShell rollout behavior fixture"},
+        allowed_skipped_steps={"Prepare exact manual integration from trusted default workflow"},
+    )
+    if "testnet-packages-macos-arm64-contract" in expected:
+        _verify_first_activation_step_coverage(
+            by_name["testnet-packages-macos-arm64-contract"].get("steps"),
+            job_name="testnet-packages-macos-arm64-contract",
+            required_steps={"Checkout", "Verify additive macOS arm64 package contract"},
+            allowed_skipped_steps={"Prepare exact manual integration from trusted default workflow"},
+        )
+    for runner in FIRST_ACTIVATION_MATRIX_OS:
+        name = f"public-testnet-fleet-health-contract ({runner})"
+        _verify_first_activation_step_coverage(
+            by_name[name].get("steps"), job_name=name,
+            required_steps={"Checkout", "Verify fleet-health collection contract"},
+            allowed_skipped_steps={"Prepare exact manual integration from trusted default workflow"},
+        )
+    return gate
+
+
 def reconstruct_full_required_run(
     repo_root: pathlib.Path,
     repository: str,
@@ -1863,35 +2124,6 @@ def reconstruct_full_required_run(
         _fail("local candidate worktree is not clean")
     job_path = f"repos/{repository}/actions/runs/{run_id}/attempts/{run_attempt}/jobs"
     jobs = _pages(client, job_path, "first_activation_workflow_jobs")
-    gates = [job for job in jobs if job.get("name") == "required-gate"]
-    if len(gates) != 1:
-        _fail("live validation attempt lacks exactly one required-gate job")
-    gate = gates[0]
-    if gate.get("status") != "completed" or gate.get("conclusion") != "success":
-        _fail("live required-gate job did not complete successfully")
-    for job in jobs:
-        if job is gate:
-            continue
-        if job.get("status") != "completed" or job.get("conclusion") not in {"success", "skipped"}:
-            _fail("another applicable workflow job failed or is incomplete")
-    steps = gate.get("steps")
-    if not isinstance(steps, list) or not steps:
-        _fail("required-gate step evidence is unavailable")
-    for step in steps:
-        if not isinstance(step, dict) or step.get("status") != "completed" or step.get("conclusion") not in {"success", "skipped"}:
-            _fail("required-gate has a failed, skipped-unknown, or incomplete step")
-    check_url = str(gate.get("check_run_url") or "")
-    match = re.fullmatch(r"https://api\.github\.com/repos/[^/]+/[^/]+/check-runs/([1-9][0-9]*)", check_url)
-    if not match:
-        _fail("required-gate job lacks a canonical check-run identity")
-    check_run_id = int(match.group(1))
-    check_run = client.rest("GET", f"repos/{repository}/check-runs/{check_run_id}",
-                            operation="first_activation_required_gate_check")
-    check_app_id = ((check_run.get("app") or {}).get("id") if isinstance(check_run, dict) else None)
-    if (not isinstance(check_run, dict) or check_run.get("name") != "required-gate"
-            or check_run.get("head_sha") != head_oid or check_run.get("status") != "completed"
-            or check_run.get("conclusion") != "success" or type(check_app_id) is not int or check_app_id < 1):
-        _fail("server-observed required-gate check run is not exact successful evidence")
     try:
         default_branch = client.rest("GET", f"repos/{repository}", operation="first_activation_repository")
         branch = default_branch.get("default_branch") if isinstance(default_branch, dict) else None
@@ -1901,15 +2133,39 @@ def reconstruct_full_required_run(
         _fail("repository default branch is unavailable")
     trusted_root = _trusted_base_worktree(pathlib.Path(repo_root).resolve(), base_oid)
     paths = _changed_paths(pathlib.Path(repo_root).resolve(), base_oid, head_oid)
+    task_pr_number, projection = _first_activation_task_pr_projection(
+        pathlib.Path(repo_root).resolve(), repository, task_uid, base_oid, head_oid,
+        client=client,
+    )
     planner = trusted_root / "scripts/plan-rust-required-scope.py"
     planner_command = [sys.executable, str(planner), "--event-name", "workflow_dispatch",
                        "--run-mode", "full_escalation", "--base-ref", base_oid,
                        "--head-ref", head_oid, "--task-uid", task_uid,
                        "--scope-base-oid", base_oid]
     try:
-        planner_output = subprocess.run(planner_command, cwd=trusted_root, check=True,
-                                        capture_output=True, text=True, timeout=120).stdout
+        with tempfile.TemporaryDirectory(prefix="oasis7-first-activation-projection-") as directory:
+            projection_path = pathlib.Path(directory) / "impact-projection.json"
+            projection_path.write_bytes(_canonical(projection))
+            planner_command.extend(("--impact-projection", str(projection_path)))
+            planner_output = subprocess.run(planner_command, cwd=trusted_root, check=True,
+                                            capture_output=True, text=True, timeout=120).stdout
         planner_plan = dict(line.split("=", 1) for line in planner_output.splitlines() if "=" in line)
+        if (planner_plan.get("impact_projection_status") != "verified"
+                or planner_plan.get("impact_projection_digest") != projection.get("projection_digest")):
+            _fail("trusted full-tier planner did not preserve the live Task PR projection identity")
+        gate = _verify_first_activation_job_coverage(jobs, planner_plan)
+        check_url = str(gate.get("check_run_url") or "")
+        match = re.fullmatch(r"https://api\.github\.com/repos/[^/]+/[^/]+/check-runs/([1-9][0-9]*)", check_url)
+        if not match:
+            _fail("required-gate job lacks a canonical check-run identity")
+        check_run_id = int(match.group(1))
+        check_run = client.rest("GET", f"repos/{repository}/check-runs/{check_run_id}",
+                                operation="first_activation_required_gate_check")
+        check_app_id = ((check_run.get("app") or {}).get("id") if isinstance(check_run, dict) else None)
+        if (not isinstance(check_run, dict) or check_run.get("name") != "required-gate"
+                or check_run.get("head_sha") != head_oid or check_run.get("status") != "completed"
+                or check_run.get("conclusion") != "success" or type(check_app_id) is not int or check_app_id < 1):
+            _fail("server-observed required-gate check run is not exact successful evidence")
         spec = importlib.util.spec_from_file_location("first_activation_inventory", trusted_root / "scripts/pm/ci_required_inventory.py")
         if spec is None or spec.loader is None:
             _fail("trusted required-tier inventory helper is unavailable")
@@ -1960,6 +2216,7 @@ def reconstruct_full_required_run(
     covered = _verify_required_run_leaf_logs(
         inventory, logs, trusted_root=trusted_root,
         candidate_root=pathlib.Path(repo_root).resolve(), overlay=overlay,
+        projection_digest=str(projection["projection_digest"]),
     )
     if not covered:
         _fail("live workflow logs do not prove any trusted full-tier command/unit")
@@ -1976,9 +2233,11 @@ def reconstruct_full_required_run(
     if not isinstance(inventory_digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", inventory_digest):
         _fail("trusted full-tier inventory digest is missing")
     return {
-        "schema": "oasis7-cargo-dependency-floor-required-tier-proof/v1",
+        "schema": "oasis7-cargo-dependency-floor-required-tier-proof/v2",
         "workflow_run_id": run_id,
         "run_attempt": run_attempt,
+        "task_pr_number": task_pr_number,
+        "impact_projection_digest": projection["projection_digest"],
         "required_gate_job_id": gate.get("id"),
         "required_gate_check_run_id": check_run_id,
         "required_gate_check_app_id": check_app_id,
@@ -1996,6 +2255,12 @@ def _load_json(path: pathlib.Path, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         _fail(f"{label} must be an object")
     return value
+
+
+def _is_activation_comment(body: Any) -> bool:
+    return (isinstance(body, str)
+            and any(body.replace("\r\n", "\n").startswith(marker)
+                    for marker in ACTIVATION_MARKERS))
 
 
 def _read_project_task_binding(
@@ -2246,7 +2511,7 @@ def read_project_activation_marker(
         if (comment.get("issue_url") != expected_issue_url
                 or not isinstance(comment.get("body"), str)):
             _fail("Task Issue comments are malformed or bound to another Issue")
-    markers = (*OVERLAY_MARKERS, ACTIVATION_MARKER)
+    markers = (*OVERLAY_MARKERS, *ACTIVATION_MARKERS)
     return any(
         isinstance(comment.get("body"), str)
         and any(comment["body"].replace("\r\n", "\n").startswith(marker)
@@ -2475,9 +2740,7 @@ def publish_overlay(
         _fail("overlay publication payload must be an object")
     parsed = _validate_payload_snapshot(payload, binding, base_oid, head_oid)
     comments = _comments(binding["client"], repository, binding["task"]["issue_number"])
-    if any(isinstance(item.get("body"), str)
-           and item["body"].replace("\r\n", "\n").startswith(ACTIVATION_MARKER)
-           for item in comments):
+    if any(_is_activation_comment(item.get("body")) for item in comments):
         _fail("activated dependency-floor history cannot start another first-activation sequence")
     existing_overlays = [item for item in comments if isinstance(item.get("body"), str)
                          and any(item["body"].replace("\r\n", "\n").startswith(marker + "\n")
@@ -2519,10 +2782,12 @@ def publish_overlay(
 
 def _decode_activation_comment(body: str) -> dict[str, Any]:
     normalized = body.replace("\r\n", "\n")
-    if not normalized.startswith(ACTIVATION_MARKER + "\n"):
+    marker = next((value for value in ACTIVATION_MARKERS
+                   if normalized.startswith(value + "\n")), None)
+    if marker is None:
         _fail("activation comment marker is malformed")
-    value = json.loads(normalized[len(ACTIVATION_MARKER) + 1:], object_pairs_hook=_unique_object)
-    if not isinstance(value, dict) or ACTIVATION_MARKER + "\n" + _canonical(value).decode("utf-8") + "\n" != normalized:
+    value = json.loads(normalized[len(marker) + 1:], object_pairs_hook=_unique_object)
+    if not isinstance(value, dict) or marker + "\n" + _canonical(value).decode("utf-8") + "\n" != normalized:
         _fail("activation comment is not canonical immutable JSON")
     return value
 
@@ -2561,6 +2826,8 @@ def _validate_activation_payload(payload: Any, overlay: dict[str, Any]) -> tuple
         "request_sha256", "acceptance_sha256", "overlay_comment_id", "overlay_sha256",
         "authorization", "reviews", "base_oid", "head_oid", "workflow", "required_tier_proof",
     }, "activation evidence")
+    if top["schema"] == LEGACY_ACTIVATION_SCHEMA:
+        _fail("legacy v1 activation evidence is recognized but cannot establish the projection-bound v2 proof")
     workflow = _object(top["workflow"], {
         "id", "path", "ref", "sha", "file_sha256", "event", "run_id", "run_attempt",
     }, "activation workflow")
@@ -2586,17 +2853,20 @@ def _validate_activation_payload(payload: Any, overlay: dict[str, Any]) -> tuple
         _fail("activation workflow run identity is invalid")
     proof = _object(top["required_tier_proof"], {
         "schema", "workflow_run_id", "run_attempt", "required_gate_job_id",
-        "required_gate_check_run_id", "required_gate_check_app_id", "inventory_digest",
+        "task_pr_number", "impact_projection_digest", "required_gate_check_run_id",
+        "required_gate_check_app_id", "inventory_digest",
         "obligation_count", "workflow_logs_sha256",
     }, "required-tier proof")
-    if (proof["schema"] != "oasis7-cargo-dependency-floor-required-tier-proof/v1"
+    if (proof["schema"] != "oasis7-cargo-dependency-floor-required-tier-proof/v2"
             or proof["workflow_run_id"] != run_id or proof["run_attempt"] != run_attempt
+            or type(proof["task_pr_number"]) is not int or proof["task_pr_number"] < 1
             or type(proof["required_gate_job_id"]) is not int or proof["required_gate_job_id"] < 1
             or type(proof["required_gate_check_run_id"]) is not int or proof["required_gate_check_run_id"] < 1
             or type(proof["required_gate_check_app_id"]) is not int or proof["required_gate_check_app_id"] < 1
             or type(proof["obligation_count"]) is not int or proof["obligation_count"] < 1):
         _fail("activation required-tier proof is malformed")
     _digest(proof["inventory_digest"], "required-tier inventory digest")
+    _digest(proof["impact_projection_digest"], "required-tier impact projection digest")
     _digest(proof["workflow_logs_sha256"], "required-tier log digest")
     return run_id, run_attempt, proof
 

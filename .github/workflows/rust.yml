@@ -156,6 +156,12 @@ jobs:
           client=module._github_client(root)
           overlay=module.read_issue_overlay(root,repository,uid,base,head,client=client)
           if overlay.get("validation_only") is not True: raise SystemExit("Issue reader did not return validation-only authority")
+          projection_digest=module.materialize_first_activation_task_pr_projection(
+              root,repository,uid,base,head,
+              pathlib.Path(os.environ["RUNNER_TEMP"])/"first-activation-base-authority/impact-projection.json",
+              client=client)
+          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a",encoding="utf-8") as output:
+              output.write("projection_digest="+projection_digest+"\n")
           repository_state=client.rest("GET",f"repos/{repository}",operation="first_activation_repository_readback")
           default_branch=repository_state.get("default_branch") if isinstance(repository_state,dict) else None
           if not isinstance(default_branch,str) or not default_branch or overlay.get("workflow_ref")==f"refs/heads/{default_branch}":
@@ -383,13 +389,16 @@ jobs:
             }
             scope_base_oid="${base_ref}"
             authority_dir="${RUNNER_TEMP}/first-activation-base-authority"
-            mkdir -p "${authority_dir}"
+            mkdir -p "${authority_dir}/pm"
             git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
             git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
             git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
+            git show "${base_ref}:scripts/viewer-dependency-preflight.sh" >"${authority_dir}/viewer-dependency-preflight.sh"
+            git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py" --config "${authority_dir}/ci-required-scope.v2.json")
             run_mode_args=(--run-mode full_escalation)
             task_uid="${{ inputs.task_uid }}"
+            impact_args=(--impact-projection "${authority_dir}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
           else
             scope_base_oid="$(git merge-base --all "${base_ref}" "${head_ref}")"
           fi
@@ -470,10 +479,19 @@ jobs:
       - name: Report planned scope
         env:
           SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
+          EXPECTED_FIRST_ACTIVATION_PROJECTION_DIGEST: ${{ steps.first-activation-provenance.outputs.projection_digest }}
+          FIRST_ACTIVATION_MODE: ${{ inputs.run_mode }}
         run: |
           python3 -I - <<'PY'
           import json, os, pathlib
           source = json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
+          if os.environ.get("FIRST_ACTIVATION_MODE") == "first_activation_validation_only":
+              expected=os.environ.get("EXPECTED_FIRST_ACTIVATION_PROJECTION_DIGEST","")
+              if (not expected.startswith("sha256:") or source.get("impact_projection_status")!="verified"
+                  or source.get("impact_projection_digest")!=expected or source.get("scope")!="full"
+                  or source.get("run_operational_contracts")!="true"
+                  or source.get("run_packaging_contracts")!="true"):
+                  raise SystemExit("first-activation planner did not preserve the exact verified full projection")
           fields = (
               "execution_contract", "scope", "selected_capabilities", "reason_summary", "changed_path_count",
               "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests", "run_oasis7_node_tests",
@@ -485,6 +503,7 @@ jobs:
               "run_site_contract_tests", "run_codex_agent_config_validation", "run_compile_metrics_contract_tests",
               "run_required_gate_baseline", "needs_node", "needs_python", "needs_markdown", "needs_system_deps",
               "needs_trunk", "needs_wasm_target", "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
+              "impact_projection_status", "impact_projection_digest",
           )
           for field in fields:
               print(f"{field}={source.get(field, '')}")
@@ -862,6 +881,7 @@ jobs:
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
           OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID: ${{ github.event_name == 'pull_request' && steps.scope.outputs.task_uid || inputs.task_uid }}
+          OASIS7_FIRST_ACTIVATION_PROJECTION_DIGEST: ${{ steps.scope.outputs.impact_projection_digest }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
@@ -882,7 +902,16 @@ jobs:
               export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${OASIS7_CARGO_SCOPE_HEAD}"
             fi
           fi
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "first_activation_validation_only" ]]; then
+            [[ "${OASIS7_FIRST_ACTIVATION_PROJECTION_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "first-activation verified projection digest is unavailable" >&2
+              exit 1
+            }
+            echo "first-activation impact projection digest: ${OASIS7_FIRST_ACTIVATION_PROJECTION_DIGEST}"
+            CI_VERBOSE=1 bash "${RUNNER_TEMP}/first-activation-base-authority/ci-tests.sh" required \
+              --repo-root "${GITHUB_WORKSPACE}" \
+              --impact-projection "${RUNNER_TEMP}/first-activation-base-authority/impact-projection.json"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
             [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" && -n "${OASIS7_CARGO_PROFILE_PLANNER:-}" && -n "${OASIS7_CARGO_PROFILE_DRIVER:-}" ]] || {
               echo "trusted Cargo package profile authority is unavailable" >&2
               exit 1
