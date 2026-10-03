@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
+capability_inventory="$repo_root/scripts/ci-required-capability-test-inventory.tsv"
 versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
 legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
 active_config="$repo_root/scripts/ci-required-scope.v2.json"
@@ -223,6 +224,20 @@ if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$workfl
 fi
 if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$workflow_governance_operational_source"; then
   echo "required scope audit contract is not wired into run_workflow_governance_operational_contract_tests" >&2
+  exit 1
+fi
+if ! grep -Fqx '  run python3 ./scripts/pm/first_activation.test.py' <<<"$workflow_governance_operational_source"; then
+  echo "first-activation overlay and provenance contracts are not wired into workflow-governance operational tests" >&2
+  exit 1
+fi
+if ! awk -F '\t' '
+  $1 == "run_workflow_governance_operational_contract_tests" &&
+  $2 == "scripts/pm/first_activation.test.py" &&
+  $3 == "workflow_governance" &&
+  $5 == "all five groups run" { found=1 }
+  END { exit(found ? 0 : 1) }
+' "$capability_inventory"; then
+  echo "first-activation test obligation is absent from the additive workflow-governance capability inventory" >&2
   exit 1
 fi
 
