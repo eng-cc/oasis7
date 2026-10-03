@@ -50,6 +50,7 @@ JSON
       denied) exit 1 ;;
     esac ;;
   "api repos/eng-cc/oasis7") printf '{"default_branch":"main"}\n' ;;
+  "api repos/eng-cc/oasis7/git/ref/heads/main") printf '{"ref":"refs/heads/main","object":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}\n' ;;
   "api repos/eng-cc/oasis7/issues/comments/IC_hold") printf '{"body":"","user":{"login":"workflow"},"html_url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-hold"}\n' ;;
   "api repos/eng-cc/oasis7/issues/1/comments"*) printf '[{"id":101,"body":"<!-- oasis7-merge-hold -->\\n- task_uid: `task_11111111111111111111111111111111`\\n- repository: `eng-cc/oasis7`\\n- issue_number: `1`\\n- pr_number: `9`\\n- head_oid: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\\n- node_id: `merge_hold`\\n- kind: `merge_hold`\\n- disposition: `cleared`\\n- hold_kind: `normal_pr_ci_watch`\\n- active: `false`\\n- requester: `workflow`\\n- reason: `normal`\\n- resume_authority: `workflow`\\n","user":{"login":"workflow"},"created_at":"2026-07-11T00:00:00Z","html_url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-101"}]\n' ;;
   *) echo "unexpected gh: $*" >&2; exit 9 ;;
