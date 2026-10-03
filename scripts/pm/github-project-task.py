@@ -4508,6 +4508,26 @@ def _collect_review_archive_closure(task_root: pathlib.Path, task_uid: str, sour
             raise ValueError(f"archive closure {label} is malformed") from exc
         return rows
 
+    def slice_identities(value: object) -> list[tuple[str, str]] | None:
+        if not isinstance(value, list) or not value:
+            return None
+        identities: list[tuple[str, str]] = []
+        for row in value:
+            if not isinstance(row, dict) or set(row) != {"role", "slice_id"}:
+                return None
+            role, slice_id = row.get("role"), row.get("slice_id")
+            if not isinstance(role, str) or not role or not isinstance(slice_id, str) or not slice_id:
+                return None
+            identities.append((role, slice_id))
+        if (len(set(identities)) != len(identities)
+                or len({role for role, _slice_id in identities}) != len(identities)
+                or len({slice_id for _role, slice_id in identities}) != len(identities)):
+            return None
+        return identities
+
+    def canonical_slice_order(identities: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        return sorted(identities, key=lambda item: (item[0].encode("utf-8"), item[1].encode("utf-8")))
+
     def add_return_rows(ledger_rows: list[dict[str, Any]], task: str, head: str, epoch: str,
                         expected_slices: list[dict[str, Any]], label: str) -> set[str]:
         expected = {(row.get("role"), row.get("slice_id")) for row in expected_slices}
@@ -4575,12 +4595,19 @@ def _collect_review_archive_closure(task_root: pathlib.Path, task_uid: str, sour
             prior_plan.get("batch_path"), "prior review batch", expected=prior_batch_expected,
         )
         prior_slices = prior_plan.get("expected_slices")
+        prior_plan_identities = slice_identities(prior_slices)
+        prior_batch_identities = slice_identities(prior_batch.get("expected_slices"))
+        prior_roles = prior_plan.get("roles")
         if (not isinstance(prior_slices, list) or not prior_slices
                 or prior_batch.get("schema") != "oasis7-review-batch/v1"
                 or prior_batch.get("task_uid") != task_uid
                 or prior_batch.get("frozen_head") != prior_head
                 or prior_batch.get("epoch") != prior_epoch
-                or prior_batch.get("expected_slices") != prior_slices):
+                or prior_plan_identities is None or prior_batch_identities is None
+                or canonical_slice_order(prior_plan_identities)
+                    != canonical_slice_order(prior_batch_identities)
+                or not isinstance(prior_roles, list)
+                or prior_roles != [role for role, _slice_id in prior_plan_identities]):
             raise ValueError("archive closure prior plan/batch identity mismatch")
         expected_collection = f".pm/scratch/{task_uid}/review-batches/{prior_epoch}.collection.json"
         collection_rel, collection_raw, collection = read_json_member(
@@ -4629,19 +4656,17 @@ def _collect_review_archive_closure(task_root: pathlib.Path, task_uid: str, sour
     expected_batch = f".pm/scratch/{task_uid}/review-batches/{epoch}.json"
     batch_rel, batch_raw, batch = read_json_member(plan.get("batch_path"), "review batch", expected=expected_batch)
     expected_slices = plan.get("expected_slices")
+    plan_identities = slice_identities(expected_slices)
+    batch_identities = slice_identities(batch.get("expected_slices"))
     roles = plan.get("roles")
     if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("task_uid") != task_uid
             or batch.get("frozen_head") != source_oid or batch.get("epoch") != epoch
-            or not isinstance(expected_slices, list) or not expected_slices
-            or batch.get("expected_slices") != expected_slices
+            or plan_identities is None or batch_identities is None
+            or canonical_slice_order(plan_identities) != canonical_slice_order(batch_identities)
             or not isinstance(roles, list) or len(set(roles)) != len(roles)
-            or roles != [row.get("role") for row in expected_slices]):
+            or roles != [role for role, _slice_id in plan_identities]):
         raise ValueError("archive closure selected plan/batch role or identity mismatch")
-    identities = [(row.get("role"), row.get("slice_id")) for row in expected_slices if isinstance(row, dict)]
-    if (len(identities) != len(expected_slices) or len(set(identities)) != len(identities)
-            or any(not isinstance(role, str) or not role or not isinstance(slice_id, str) or not slice_id
-                   for role, slice_id in identities)):
-        raise ValueError("archive closure selected plan has duplicate or malformed slices")
+    identities = plan_identities
 
     snapshot_rel = f".pm/scratch/{task_uid}/bootstrap-task-snapshot.json"
     _snapshot_path, _snapshot_raw, snapshot = read_json_member(
