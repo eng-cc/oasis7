@@ -372,7 +372,7 @@ run_cargo_tooling_contract_tests() {
 
 run_workflow_governance_baseline_contract_tests() {
   run bash ./scripts/testing-manual-active-contract.test.sh
-  run bash ./scripts/ci-tests-argument-contract.test.sh
+  run env -u INTEGRATION_MODE -u OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID bash ./scripts/ci-tests-argument-contract.test.sh
   run bash ./scripts/ci-tests-full-superset-contract.test.sh
   run bash ./scripts/rust-required-gate-apt-contract.test.sh
   run ./scripts/plan-rust-required-scope.test.sh
