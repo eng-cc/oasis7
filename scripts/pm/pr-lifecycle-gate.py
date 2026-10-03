@@ -94,13 +94,18 @@ def verified_evidence(receipt: Any, data: dict[str, Any], head_oid: str, *, task
             and str(comment.get("html_url") or "") == str(receipt.get("url")))
 
 
-def rebuild_issue_evidence(repo: str, issue_number: int, task_uid: str, data: dict[str, Any], *, client=None) -> dict[str, Any]:
+def rebuild_issue_evidence(repo: str, issue_number: int, task_uid: str, data: dict[str, Any], *, client=None,
+                           activation_overlay_marker: str | None = None) -> dict[str, Any]:
     api_client = _github_api_client(_effective_tool_root(), client)
-    return _rebuild_issue_evidence_with_client(api_client, repo, issue_number, task_uid, data)
+    return _rebuild_issue_evidence_with_client(
+        api_client, repo, issue_number, task_uid, data,
+        activation_overlay_marker=activation_overlay_marker,
+    )
 
 
 def _rebuild_issue_evidence_with_client(api_client, repo: str, issue_number: int,
-                                        task_uid: str, data: dict[str, Any]) -> dict[str, Any]:
+                                        task_uid: str, data: dict[str, Any], *,
+                                        activation_overlay_marker: str | None = None) -> dict[str, Any]:
     comments = _rest_pages(
         api_client, f"repos/{repo}/issues/{issue_number}/comments",
         operation="task_issue_comments",
@@ -108,6 +113,14 @@ def _rebuild_issue_evidence_with_client(api_client, repo: str, issue_number: int
                                      pr_number=int(data.get("number") or 0)),
     )
     result: dict[str, Any] = {"comment_dispositions":[],"review_dispositions":[],"admin_merge_authority":None}
+    if activation_overlay_marker is not None:
+        if not isinstance(activation_overlay_marker, str) or not activation_overlay_marker:
+            raise ValueError("first-activation overlay marker is malformed")
+        result["activation_overlay_present"] = any(
+            isinstance(comment.get("body"), str)
+            and comment["body"].replace("\r\n", "\n").startswith(activation_overlay_marker)
+            for comment in comments
+        )
     for comment in comments or []:
         body = str(comment.get("body") or "")
         fields = dict(re.findall(r"^- ([a-z_]+): `?([^`\n]+)`?$", body, re.M))
@@ -1723,7 +1736,7 @@ def live_target_oid(data, api_client=None, uid=None):
 
 
 def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None,
-                        *, api_client=None):
+                        *, api_client=None, activation_overlay_present: bool | None = None):
     # Endpoint cache lives for one decision only; healthy polls issue no
     # provenance readbacks and advisory scan identity never enters CI digests.
     advisory_cache = {}
@@ -1750,9 +1763,8 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
             raise ValueError('current PR base/head OIDs unavailable')
         first_activation_path = Path(root) / 'scripts/pm/first_activation.py'
         if first_activation_path.is_file() and not first_activation_path.is_symlink():
-            activation_helper = _load_effective_helper(Path(root), 'first_activation')
-            if activation_helper.has_issue_overlay(
-                    Path(root), str(data['repository']), uid, client=api_client):
+            if activation_overlay_present is True:
+                activation_helper = _load_effective_helper(Path(root), 'first_activation')
                 activation_helper.read_project_activation(
                     Path(root), str(data['repository']), uid, base, head,
                     mapping_path=Path(root) / '.pm/github-project-sync/tasks.json',
@@ -1971,6 +1983,12 @@ def main() -> int:
                 parser.error("--merge-hold is fixture-only; live hold truth is rebuilt from the GitHub task issue")
             # Load helper bytes and validate selection before reading credentials or making any request.
             snapshot_module = _load_effective_helper(effective, "github_pr_snapshot")
+            first_activation_path = task_root / "scripts/pm/first_activation.py"
+            activation_overlay_marker = None
+            if first_activation_path.is_file() and not first_activation_path.is_symlink():
+                activation_overlay_marker = _load_effective_helper(
+                    task_root, "first_activation",
+                ).OVERLAY_MARKER
             selector = _resolve_pr_selection(
                 args.pr, repository_hint=record["repository"], number_hint=record["pr_number"],
                 client=None, snapshot_module=snapshot_module,
@@ -2014,8 +2032,9 @@ def main() -> int:
                 raise ValueError("PR head branch does not match the selected branch")
             rebuilt = rebuild_issue_evidence(
                 str(data["repository"]), record["issue_number"], args.task_uid, data,
-                client=api_client,
+                client=api_client, activation_overlay_marker=activation_overlay_marker,
             )
+            activation_overlay_present = rebuilt.get("activation_overlay_present") is True
             rebuilt_hold = rebuilt.get("merge_hold")
             recorded_hold = record.get("merge_hold")
             selector_matches_bound_pr = (
@@ -2053,7 +2072,8 @@ def main() -> int:
         result = (decision(data, args.admin_merge_authorized, evidence_mode=evidence_mode) if args.fixture else
                   production_decision(data, args.admin_merge_authorized, task_root, args.task_uid,
                                       str(effective), args.integration_run_id,
-                                      api_client=data.pop("_api_client", None)))
+                                      api_client=data.pop("_api_client", None),
+                                      activation_overlay_present=activation_overlay_present))
     except Exception as exc:
         # The final identity read is deliberately inside production_decision,
         # after the initial live-read boundary above. Preserve the shared
