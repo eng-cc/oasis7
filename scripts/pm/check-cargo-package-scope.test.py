@@ -20,6 +20,8 @@ self-contained and cannot accidentally depend on a production fixture.
 from __future__ import annotations
 
 import json
+import importlib.machinery
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -30,6 +32,13 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "scripts" / "pm" / "check-cargo-package-scope"
+_CHECKER_SPEC = importlib.util.spec_from_loader(
+    "cargo_package_scope_checker",
+    importlib.machinery.SourceFileLoader("cargo_package_scope_checker", str(CHECKER)),
+)
+assert _CHECKER_SPEC is not None and _CHECKER_SPEC.loader is not None
+CHECKER_MODULE = importlib.util.module_from_spec(_CHECKER_SPEC)
+_CHECKER_SPEC.loader.exec_module(CHECKER_MODULE)
 
 
 class CargoPackageScopeContract(unittest.TestCase):
@@ -298,6 +307,7 @@ path = "src/lib.rs"
             )
 
         self._assert_allowed(repo, base, "alpha", mutate)
+
 
     def test_new_normal_dependency_executes_target_build_script_into_source_package(self) -> None:
         repo, _ = self._fixture()
@@ -2063,6 +2073,271 @@ path = "src/lib.rs"
             )
 
         self._assert_allowed(repo, base, "alpha", mutate)
+
+
+class DependencyFloorManifestContract(unittest.TestCase):
+    def _allowed(self, old: str, new: str, old_req: str, new_req: str) -> bool:
+        return CHECKER_MODULE.dependency_floor_manifest_delta_is_exact(
+            old.encode(), new.encode(), "wasmtime", old_req, new_req
+        )
+
+    def test_one_existing_plain_registry_requirement_patch_floor_is_allowed(self) -> None:
+        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = { version = "48.0.3", default-features = false, features = ["cranelift"] }\n'''
+        new = old.replace('version = "48.0.3"', 'version = "48.0.4"')
+        self.assertTrue(self._allowed(old, new, "48.0.3", "48.0.4"))
+
+    def test_rejects_requirement_not_bound_to_verified_overlay(self) -> None:
+        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n'''
+        new = old.replace("48.0.3", "48.0.4")
+        self.assertFalse(self._allowed(old, new, "48.0.2", "48.0.4"))
+
+    def test_rejects_unrelated_manifest_edit_alongside_floor_change(self) -> None:
+        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = { version = "48.0.3", default-features = false }\n'''
+        new = old.replace('version = "48.0.3"', 'version = "48.0.4"').replace(
+            "default-features = false", "default-features = true"
+        )
+        self.assertFalse(self._allowed(old, new, "48.0.3", "48.0.4"))
+
+    def test_rejects_alias_and_non_crates_io_source(self) -> None:
+        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = { package = "wasmtime-alt", version = "48.0.3" }\n'''
+        new = old.replace('version = "48.0.3"', 'version = "48.0.4"')
+        self.assertFalse(self._allowed(old, new, "48.0.3", "48.0.4"))
+
+    def test_rejects_non_patch_or_noncanonical_floor(self) -> None:
+        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n'''
+        for new_req in ("48.1.0", "49.0.0", "48.0.04", "48.0.4-beta.1", "48.0.2"):
+            with self.subTest(new_req=new_req):
+                new = old.replace('"48.0.3"', f'"{new_req}"')
+                self.assertFalse(self._allowed(old, new, "48.0.3", new_req))
+
+    def test_rejects_duplicate_target_specific_or_non_normal_dependency(self) -> None:
+        normal = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n\n[target.'cfg(windows)'.dependencies]\nwasmtime = "48.0.3"\n'''
+        updated = normal.replace('wasmtime = "48.0.3"', 'wasmtime = "48.0.4"', 1)
+        self.assertFalse(self._allowed(normal, updated, "48.0.3", "48.0.4"))
+        dev = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dev-dependencies]\nwasmtime = "48.0.3"\n'''
+        self.assertFalse(
+            self._allowed(dev, dev.replace("48.0.3", "48.0.4"), "48.0.3", "48.0.4")
+        )
+
+
+class DependencyFloorGraphContract(unittest.TestCase):
+    registry = "registry+https://github.com/rust-lang/crates.io-index"
+
+    def _world(self, candidate: bool, *, quinn_version: str = "0.5.0") -> tuple[dict[str, object], bytes]:
+        wasmtime_version = "48.0.4" if candidate else "48.0.3"
+        getrandom_version = "0.3.4" if candidate else "0.4.3"
+        identities = [
+            ("oasis7_wasm_executor", "0.1.0", None),
+            ("oasis7_ui", "0.1.0", None),
+            ("wasmtime", wasmtime_version, self.registry),
+            ("tempfile", "3.27.0", self.registry),
+            ("getrandom", getrandom_version, self.registry),
+            ("windows-sys", "0.61.2", self.registry),
+            ("windows-sys", "0.59.0", self.registry),
+            ("bevy-platform", "0.16.0", self.registry),
+            ("quinn-udp", quinn_version, self.registry),
+        ]
+        if candidate:
+            identities.append(("windows-sys", "0.52.0", self.registry))
+
+        def package_id(identity: tuple[str, str, str | None]) -> str:
+            name, version, source = identity
+            if source is None:
+                return f"path+file:///workspace/{name}#{name}@{version}"
+            return f"{source}#{name}@{version}"
+
+        id_by_identity = {identity: package_id(identity) for identity in identities}
+        edges: list[
+            tuple[
+                tuple[str, str, str | None],
+                tuple[str, str, str | None],
+                str,
+                tuple[tuple[str | None, str | None], ...],
+            ]
+        ] = []
+
+        def edge(
+            source: tuple[str, str, str | None],
+            target: tuple[str, str, str | None],
+            name: str,
+            target_platform: str | None = None,
+        ) -> None:
+            edges.append((source, target, name, ((None, target_platform),)))
+
+        executor = identities[0]
+        ui = identities[1]
+        wasmtime = next(identity for identity in identities if identity[0] == "wasmtime")
+        tempfile_id = next(identity for identity in identities if identity[0] == "tempfile")
+        getrandom = next(identity for identity in identities if identity[0] == "getrandom")
+        windows_61 = next(identity for identity in identities if identity[0] == "windows-sys" and identity[1] == "0.61.2")
+        windows_59 = next(identity for identity in identities if identity[0] == "windows-sys" and identity[1] == "0.59.0")
+        bevy = next(identity for identity in identities if identity[0] == "bevy-platform")
+        quinn = next(identity for identity in identities if identity[0] == "quinn-udp")
+        edge(executor, wasmtime, "wasmtime")
+        edge(wasmtime, tempfile_id, "tempfile")
+        edge(wasmtime, windows_61, "windows-sys", 'cfg(target_os = "windows")')
+        edge(tempfile_id, getrandom, "getrandom")
+        edge(
+            tempfile_id,
+            next(identity for identity in identities if identity[0] == "windows-sys" and identity[1] == ("0.52.0" if candidate else "0.61.2")),
+            "windows-sys",
+            'cfg(target_os = "windows")',
+        )
+        edge(ui, bevy, "bevy-platform")
+        edge(ui, windows_59, "windows-sys", 'cfg(target_os = "windows")')
+        edge(ui, quinn, "quinn-udp")
+        edge(
+            bevy,
+            windows_59 if candidate else windows_61,
+            "windows-sys",
+            'cfg(target_os = "windows")',
+        )
+
+        packages: list[dict[str, object]] = []
+        nodes: list[dict[str, object]] = []
+        for identity in identities:
+            name, version, source = identity
+            dependencies: list[dict[str, object]] = []
+            if identity == executor:
+                dependencies.append(
+                    {
+                        "name": "wasmtime",
+                        "source": self.registry,
+                        "req": "^48.0.4" if candidate else "^48.0.3",
+                        "rename": None,
+                        "registry": None,
+                        "path": None,
+                        "kind": None,
+                        "target": None,
+                    }
+                )
+            packages.append(
+                {
+                    "id": id_by_identity[identity],
+                    "name": name,
+                    "version": version,
+                    "source": source,
+                    "dependencies": dependencies,
+                    "manifest_path": (
+                        f"/workspace/{name}/Cargo.toml" if source is None else f"/registry/{name}/Cargo.toml"
+                    ),
+                }
+            )
+            node_deps: list[dict[str, object]] = []
+            for source_identity, target_identity, dependency_name, kinds in edges:
+                if source_identity != identity:
+                    continue
+                node_deps.append(
+                    {
+                        "name": dependency_name,
+                        "pkg": id_by_identity[target_identity],
+                        "dep_kinds": [
+                            {"kind": kind, "target": target} for kind, target in kinds
+                        ],
+                    }
+                )
+            nodes.append({"id": id_by_identity[identity], "deps": node_deps})
+
+        references: dict[tuple[str, str, str | None], str] = {}
+        by_name: dict[str, list[tuple[str, str, str | None]]] = {}
+        for identity in identities:
+            by_name.setdefault(identity[0], []).append(identity)
+        for name, candidates in by_name.items():
+            for identity in candidates:
+                if len(candidates) == 1:
+                    reference = name
+                else:
+                    reference = f"{name} {identity[1]}"
+                    same_version = [item for item in candidates if item[1] == identity[1]]
+                    if len(same_version) > 1 and identity[2] is not None:
+                        reference += f" ({identity[2]})"
+                references[identity] = reference
+
+        lock_lines = ["# This file is automatically @generated by Cargo.\n", "version = 4\n"]
+        for identity in sorted(identities):
+            name, version, source = identity
+            lock_lines.extend(("\n[[package]]\n", f'name = "{name}"\n', f'version = "{version}"\n'))
+            if source is not None:
+                lock_lines.append(f'source = "{source}"\n')
+                import hashlib
+
+                lock_lines.append(
+                    f'checksum = "{hashlib.sha256((name + version).encode()).hexdigest()}"\n'
+                )
+            dependency_refs = sorted(
+                {
+                    references[target]
+                    for source_identity, target, _dependency_name, _kinds in edges
+                    if source_identity == identity
+                }
+            )
+            if dependency_refs:
+                import json as json_module
+
+                lock_lines.append(
+                    "dependencies = ["
+                    + ", ".join(json_module.dumps(reference) for reference in dependency_refs)
+                    + "]\n"
+                )
+        metadata: dict[str, object] = {
+            "packages": packages,
+            "workspace_members": [id_by_identity[executor], id_by_identity[ui]],
+            "resolve": {"nodes": nodes},
+        }
+        return metadata, "".join(lock_lines).encode()
+
+    def test_full_target_graph_allows_dependency_closure_and_windows_reference_normalization(self) -> None:
+        base_metadata, base_lock = self._world(False)
+        head_metadata, head_lock = self._world(True)
+        self.assertTrue(
+            CHECKER_MODULE.dependency_floor_lock_graph_is_safe(
+                base_lock,
+                head_lock,
+                base_metadata,
+                head_metadata,
+                "oasis7_wasm_executor",
+                "wasmtime",
+                "48.0.3",
+                "48.0.4",
+            )
+        )
+
+    def test_unrelated_external_version_change_is_rejected(self) -> None:
+        base_metadata, base_lock = self._world(False)
+        head_metadata, head_lock = self._world(True, quinn_version="0.6.0")
+        self.assertFalse(
+            CHECKER_MODULE.dependency_floor_lock_graph_is_safe(
+                base_lock,
+                head_lock,
+                base_metadata,
+                head_metadata,
+                "oasis7_wasm_executor",
+                "wasmtime",
+                "48.0.3",
+                "48.0.4",
+            )
+        )
+
+    def test_unresolved_target_specific_lock_reference_is_rejected(self) -> None:
+        base_metadata, base_lock = self._world(False)
+        head_metadata, head_lock = self._world(True)
+        head_lock = head_lock.replace(
+            b'dependencies = ["getrandom", "windows-sys 0.52.0"]',
+            b'dependencies = ["getrandom"]',
+            1,
+        )
+        self.assertFalse(
+            CHECKER_MODULE.dependency_floor_lock_graph_is_safe(
+                base_lock,
+                head_lock,
+                base_metadata,
+                head_metadata,
+                "oasis7_wasm_executor",
+                "wasmtime",
+                "48.0.3",
+                "48.0.4",
+            )
+        )
 
 
 if __name__ == "__main__":
