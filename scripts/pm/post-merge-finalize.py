@@ -844,8 +844,6 @@ def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
     root=pathlib.Path(root).resolve()
     if not re.fullmatch(r"task_[0-9a-f]{32}",task_uid):
         raise ValueError("invalid Task UID for delivery finalizer lock")
-    # Fail before lock/ledger/receipt creation, then revalidate under the lock.
-    _delivery_live_context(root,task_uid)
     mapping_path=root/".pm/github-project-sync/tasks.json"
     lock=mapping_path.with_name(f"{mapping_path.name}.{task_uid}.finalizer-lock")
     lock.parent.mkdir(parents=True,exist_ok=True)
