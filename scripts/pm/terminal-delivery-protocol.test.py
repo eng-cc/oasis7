@@ -15,6 +15,7 @@ import sys
 import tempfile
 import uuid
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/pm"))
@@ -258,8 +259,7 @@ class DeliveryFixture:
             claim_message="accepted native readiness", frozen_source_head=None, frozen_source_tree=None,
             comparison_ref=None, verification_mode="live_nonfinal",
             readiness_binding=binding, readiness_comment=capture)
-        self.comments.append(native_comment)
-        self.state["comments"] = self.comments
+        self.state["readiness_comments"] = [native_comment]
         self._write_state()
         native_root = self.receipt_root / "native-readiness" / sha(canonical(binding))
         native_root.mkdir(parents=True)
@@ -313,10 +313,10 @@ elif args[:1] == ["api"]:
         out({"ref":"refs/heads/main","object":{"sha":state["target_oid"]}})
     elif endpoint == "repos/fixture/repo/compare/" + state["merge_oid"] + "..." + state["target_oid"]:
         out({"status":"identical","base_commit":{"sha":state["merge_oid"]},"head_commit":{"sha":state["target_oid"]}})
-    elif endpoint == f"repos/fixture/repo/issues/{state['issue']['number']}/comments": out([state["comments"]])
+    elif endpoint == f"repos/fixture/repo/issues/{state['issue']['number']}/comments": out([state.get("readiness_comments", []) + state["comments"]])
     elif endpoint.startswith("repos/fixture/repo/issues/comments/"):
         identifier = int(endpoint.rsplit("/", 1)[1])
-        matches = [c for c in state["comments"] if c.get("id") == identifier]
+        matches = [c for c in state.get("readiness_comments", []) + state["comments"] if c.get("id") == identifier]
         if len(matches) != 1: raise SystemExit("missing or ambiguous fixture comment")
         out(matches[0])
     elif endpoint == "repos/fixture/repo/collaborators/fixture/permission":
@@ -497,7 +497,7 @@ for pid in args[args.index("-p") + 1].split(","):
                               "head_commit": {"sha": state["target_oid"]}},
             "observed_target_compare": None,
         }
-        return record, state["issue"], state["project_item"], state["pr"], live_repo, state["comments"]
+        return record, state["issue"], state["project_item"], state["pr"], live_repo, state.get("readiness_comments", []) + state["comments"]
 
 
 class TerminalDeliveryProtocolTests(unittest.TestCase):
@@ -512,11 +512,12 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
 
     def read_proof(self):
         record, issue, item, pr, live_repo, comments = self.fixture.live_inputs()
-        return terminal_proof.read_terminal_proof(
-            self.fixture.root, UID, record, live_issue=issue,
-            live_project_item=item, live_pr=pr, live_repository=live_repo,
-            comments=comments,
-        )
+        with mock.patch.dict(os.environ, self.fixture.env(), clear=True):
+            return terminal_proof.read_terminal_proof(
+                self.fixture.root, UID, record, live_issue=issue,
+                live_project_item=item, live_pr=pr, live_repository=live_repo,
+                comments=comments,
+            )
 
     def _prepare_existing_delivery_receipt(self, mutate_receipt):
         state_before = copy.deepcopy(json.loads(self.fixture.state_path.read_text(encoding="utf-8")))
@@ -750,6 +751,9 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
         self.assertEqual(sum(call[:2] == ["issue", "comment"] for call in final_calls), 1)
 
     def test_shared_reader_rejects_selector_digest_comment_claim_and_tombstone_drift(self):
+        environment = mock.patch.dict(os.environ, self.fixture.env(), clear=True)
+        environment.start()
+        self.addCleanup(environment.stop)
         produced = self.fixture.run_producer()
         self.assertEqual(produced.returncode, 0, produced.stderr)
         self.assertEqual(self.read_proof()["status"], "passed")
