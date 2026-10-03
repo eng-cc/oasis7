@@ -250,7 +250,9 @@ fn turn_context() -> ContinuousAgentTurnContextV1 {
 }
 
 fn completed_turn(runner: &mut AsyncAgentRunner) -> AsyncAgentTurnOutcome {
-    for _ in 0..1024 {
+    let timeout = std::time::Duration::from_secs(2);
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
         if let Some(outcome) = runner
             .poll_completed()
             .expect("poll memory candidate actor")
@@ -259,9 +261,61 @@ fn completed_turn(runner: &mut AsyncAgentRunner) -> AsyncAgentTurnOutcome {
         {
             return outcome;
         }
-        std::thread::yield_now();
+        assert!(
+            std::time::Instant::now() < deadline,
+            "memory candidate actor did not complete before {timeout:?} deadline"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
-    panic!("memory candidate actor did not complete within bounded polling budget");
+}
+
+struct GatedMemoryCandidateBehavior {
+    started: std::sync::mpsc::Sender<()>,
+    release: std::sync::mpsc::Receiver<()>,
+}
+
+impl AgentBehavior for GatedMemoryCandidateBehavior {
+    fn agent_id(&self) -> &str {
+        AGENT_ID
+    }
+
+    fn decide(&mut self, _observation: &Observation) -> AgentDecision {
+        self.started.send(()).expect("announce gated actor start");
+        self.release.recv().expect("release gated actor");
+        AgentDecision::Wait
+    }
+
+    fn take_memory_write_intents(&mut self) -> Vec<MemoryWriteIntent> {
+        MemoryCandidateBehavior.take_memory_write_intents()
+    }
+}
+
+#[test]
+fn memory_candidate_completion_waits_for_pending_worker() {
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let mut runner = AsyncAgentRunner::new(1).expect("create gated memory runner");
+    runner
+        .register(GatedMemoryCandidateBehavior {
+            started: started_tx,
+            release: release_rx,
+        })
+        .expect("register gated memory actor");
+    runner
+        .start_turn_with_context(AGENT_ID, turn_context())
+        .expect("open gated memory turn");
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .expect("worker must start before completion polling");
+    // Keep a real worker pending across repeated empty mailbox polls.
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        release_tx.send(()).expect("release pending memory worker");
+    });
+    let outcome = completed_turn(&mut runner);
+    release.join().expect("join memory worker release");
+    assert_eq!(outcome.agent_id, AGENT_ID);
+    assert_eq!(outcome.memory_write_intents.len(), 1);
 }
 
 #[test]
