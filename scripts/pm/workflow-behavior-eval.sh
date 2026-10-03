@@ -130,6 +130,10 @@ OASIS7_PM_TEST_SCRATCH="$OASIS7_WORKFLOW_EVAL_SCRATCH/bootstrap" \
 "$ROOT_DIR/scripts/pm/post-merge-finalizer-comment-readback-red.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-finalizer-project-ledger-red.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/recover-terminal-task-mapping.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-transport.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-repeat.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-prior-receipt.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-legacy-repeat.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-trust.test.sh" >/dev/null

@@ -186,6 +186,41 @@ class RecoveryTest(unittest.TestCase):
             helper.import_recovered(RacingStore, self.mapping, UID, self.record)
         self.assertEqual(before, self.mapping.read_bytes())
 
+    def test_v2_recovery_preserves_delivery_and_cleanup_preflights(self) -> None:
+        protocol, fixture, mapping, record = self.prepare_v2_delivery()
+        baseline = fixture.run_producer("--preflight")
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        self.assertEqual(json.loads(baseline.stdout)["delivery"]["state"], "complete")
+        self.assertEqual(record["phase_receipt_type"]["post_merge_done"],
+                         "oasis7_terminal_delivery")
+        fixture.install_process_probe("unavailable")
+        baseline_cleanup = fixture.run_cleanup("--preflight")
+        self.assertEqual(baseline_cleanup.returncode, 3,
+                         baseline_cleanup.stdout + baseline_cleanup.stderr)
+        baseline_payload = json.loads(baseline_cleanup.stdout)
+        self.assertEqual(baseline_payload["status"], "blocked")
+        self.assertEqual(baseline_payload["delivery"]["state"], "complete")
+        self.assertEqual(baseline_payload["cleanup_blockers"], [
+            "worktree:process_use_readback_unavailable", "local_branch:branch_checked_out",
+        ])
+        mapping["tasks"].pop(protocol.UID)
+        fixture.mapping_path.write_text(
+            json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8",
+        )
+        recovered = self.run_v2_recovery(fixture, protocol.UID)
+        self.assertEqual(recovered.returncode, 0, recovered.stderr)
+        self.assertEqual(recovered.stdout.strip(), "imported")
+
+        # Recovery must preserve both delivery and the exact safe resource decision.
+        retry = fixture.run_producer("--preflight")
+        cleanup = fixture.run_cleanup("--preflight")
+        with self.subTest(consumer="delivery"):
+            self.assertEqual(retry.returncode, 0, retry.stderr)
+            self.assertEqual(json.loads(retry.stdout)["delivery"]["state"], "complete")
+        with self.subTest(consumer="cleanup"):
+            self.assertEqual(cleanup.returncode, 3, cleanup.stdout + cleanup.stderr)
+            self.assertEqual(json.loads(cleanup.stdout), baseline_payload)
+
     def test_v2_recovery_imports_exact_live_delivery_when_default_row_is_absent(self) -> None:
         protocol, fixture, mapping, record = self.prepare_v2_delivery()
         uid = protocol.UID

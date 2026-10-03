@@ -496,7 +496,7 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str, *,
     if not isinstance(record,dict) or record.get("task_uid") not in (None,task_uid):
         raise ValueError("canonical task mapping is missing or has a conflicting UID")
     if (record.get("status")!="done" or record.get("workflow_phase") not in {"task_done","main_sync","post_merge_done"}
-            or record.get("completion_mode") not in (None,"single_pr")):
+            or record.get("completion_mode") not in (None,"pr_task","single_pr")):
         raise ValueError("delivery finalization requires the canonical single-PR task_done mapping")
     repository=str(record.get("repository") or "")
     issue_number=record.get("issue_number"); pr_number=record.get("pr_number")

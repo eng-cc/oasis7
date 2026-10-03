@@ -428,6 +428,10 @@ run_workflow_governance_operational_contract_tests() {
   run bash ./scripts/pm/finalize-task-red.test.sh
   run bash ./scripts/pm/finalize-task-remote-branch-mismatch.test.sh
   run python3 ./scripts/pm/recover-terminal-task-mapping.test.py
+  run python3 ./scripts/pm/readiness-transport.test.py
+  run python3 ./scripts/pm/readiness-repeat.test.py
+  run python3 ./scripts/pm/readiness-prior-receipt.test.py
+  run python3 ./scripts/pm/readiness-legacy-repeat.test.py
   run bash ./scripts/pm/post-merge-cleanup.test.sh
   run bash ./scripts/pm/post-merge-cleanup-trust.test.sh
   run bash ./scripts/pm/post-merge-cleanup-fault-isolation.test.sh
