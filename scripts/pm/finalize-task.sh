@@ -52,7 +52,6 @@ SCRIPT_DIR="$repo_root/scripts/pm"
 mapping="$repo_root/.pm/github-project-sync/tasks.json"
 [[ -f "$mapping" ]] || fail "canonical task mapping is unavailable"
 receipt_root_args=(--default-worktree "$repo_root" --task-uid "$task_uid")
-[[ "$preflight" == 0 && "$cleanup_only" == 0 ]] && receipt_root_args+=(--create)
 receipt_root="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" "${receipt_root_args[@]}")" \
   || fail "cannot resolve canonical receipt root"
 merge_receipt="$receipt_root/merge-receipt.json"
@@ -235,6 +234,13 @@ task_branch="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["task_bra
 owner_role="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["owner_role"])' <<<"$identity_json")"
 
 if [[ "$preflight" == 1 ]]; then
+  # Unselected preflight is the original mutation-free premerge identity check.
+  # A postmerge proof cannot exist while that reciprocal PR is still OPEN.
+  # Explicit delivered-v2 preflight instead revalidates its required proof.
+  if [[ "$protocol_selector" == v2 ]]; then
+    python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$repo_root" --task-uid "$task_uid" >/dev/null \
+      || fail "readiness read-only preflight failed"
+  fi
   cleanup_blockers='[]'
   if [[ "$protocol_selector" == v2 ]]; then
     cleanup_preflight_rc=0
@@ -321,6 +327,12 @@ if [[ "$protocol_selector" == v1 ]]; then
   cleanup_json='{}'
 else
   [[ -z "$supplied_patch" ]] || fail "patch-equivalence input is not part of v2 delivery finalization"
+  # Before merge-receipt creation, task_complete publication or TaskDone,
+  # validate the exact delivered human-readiness artifacts read-only.
+  python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$repo_root" --task-uid "$task_uid" >/dev/null \
+    || fail "readiness artifacts must validate before terminal effects"
+  python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$repo_root" --task-uid "$task_uid" --create >/dev/null \
+    || fail "readiness proof could not be created from validated artifacts"
   if [[ "$protocol_selector" != v2 ]]; then
     [[ -d "$task_worktree" ]] || fail "canonical task worktree is missing before task_done; identity mismatch cannot be repaired here"
     (cd "$task_worktree" && python3 "$SCRIPT_DIR/pr-merge-receipt.py" "$pr_number" --json >"$merge_receipt")

@@ -55,6 +55,23 @@ $body
 EOF
   chmod +x "$REPO/scripts/pm/$name"
 }
+# Checked unit dependency seam; real native validation is covered separately.
+READINESS_TRACE="$TMP/readiness-trace.jsonl"
+: >"$READINESS_TRACE"
+export TEST_READINESS_TRACE="$READINESS_TRACE" TEST_EXPECTED_UID="$UID_VALUE" TEST_EXPECTED_REPO="$REPO"
+cat >"$REPO/scripts/pm/readiness_transport.py" <<'PY'
+import json, os, pathlib, sys
+args=sys.argv[1:]
+expected=["--repo-root",str(pathlib.Path(os.environ["TEST_EXPECTED_REPO"]).resolve()),"--task-uid",os.environ["TEST_EXPECTED_UID"]]
+assert args in (expected, expected+["--create"]), args
+mode="create" if "--create" in args else "readonly"
+sequence=pathlib.Path(os.environ["TEST_SEQUENCE"])
+with open(os.environ["TEST_READINESS_TRACE"],"a") as handle:
+    handle.write(json.dumps({"argv":args,"mode":mode,"sequence":sequence.read_text() if sequence.exists() else ""})+"\n")
+if os.environ.get("TEST_READINESS_FAIL")==mode:
+    raise SystemExit(39)
+print(json.dumps({"status":"passed","test_dependency":"readiness"}))
+PY
 make_mock refresh-task-cache.sh "echo refresh >>\"\$TEST_SEQUENCE\"; printf \"{}\\n\""
 cat >"$REPO/scripts/pm/canonical-receipt-root.py" <<'PY'
 #!/usr/bin/env python3
@@ -171,6 +188,7 @@ TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
   }
 test ! -s "$PREFLIGHT_SEQUENCE"
 test ! -e "$REPO/.git/receipts"
+test ! -s "$READINESS_TRACE"
 mkdir -p "$REPO/.git/receipts"
 python3 - "$TMP/preflight.json" <<'PY'
 import json, sys
@@ -242,6 +260,13 @@ v2_preflight_cleanup_case blocked_json_no_resources "process-use readback unavai
 v2_preflight_cleanup_case nonzero_no_json "no result;status 37"
 v2_preflight_cleanup_case empty_success "no result"
 v2_preflight_cleanup_case malformed_json "invalid JSON"
+python3 - "$READINESS_TRACE" <<'PY'
+import json, sys
+rows=[json.loads(line) for line in open(sys.argv[1])]
+assert len(rows)==5 and all(row["mode"]=="readonly" for row in rows), rows
+assert all(row["sequence"]=="" for row in rows), rows
+PY
+: >"$READINESS_TRACE"
 python3 - "$REPO/.pm/github-project-sync/tasks.json" "$UID_VALUE" <<'PY'
 import json, sys
 path, uid = sys.argv[1:]
@@ -320,10 +345,31 @@ preflight_blocker foreign-repo 7 repository
 set_task_field repository fixture/repo
 set_task_field pr_url https://github.com/fixture/repo/pull/7
 
+# Dependency failures must precede every terminal effect.
+for readiness_failure in readonly create; do
+  : >"$SEQUENCE"
+  : >"$READINESS_TRACE"
+  before_mapping="$(shasum -a 256 "$REPO/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+  before_receipts="$(find "$REPO/.git/receipts" -type f -print | sort)"
+  if TEST_READINESS_FAIL="$readiness_failure" TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+    "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/readiness-fail-$readiness_failure.out" 2>"$TMP/readiness-fail-$readiness_failure.err"; then
+    echo "readiness dependency failure unexpectedly succeeded" >&2; exit 1
+  fi
+  test ! -s "$SEQUENCE"
+  [[ "$before_mapping" == "$(shasum -a 256 "$REPO/.pm/github-project-sync/tasks.json" | awk '{print $1}')" ]]
+  [[ "$before_receipts" == "$(find "$REPO/.git/receipts" -type f -print | sort)" ]]
+done
+: >"$READINESS_TRACE"
 TEST_SEQUENCE="$SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
   "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --resume --json >"$TMP/result.json"
 printf '%s\n' merge-receipt task-closeout refresh finalize cleanup >"$TMP/expected"
 cmp "$TMP/expected" "$SEQUENCE"
+python3 - "$READINESS_TRACE" <<'PY'
+import json, sys
+rows=[json.loads(line) for line in open(sys.argv[1])]
+assert [row["mode"] for row in rows]==["readonly","create"], rows
+assert all(row["sequence"]=="" for row in rows), rows
+PY
 python3 - "$TMP/result.json" <<'PY'
 import json,sys
 r=json.load(open(sys.argv[1])); assert r["status"]=="finalized" and r["pr_number"]==7 and r["resume"] is True,r

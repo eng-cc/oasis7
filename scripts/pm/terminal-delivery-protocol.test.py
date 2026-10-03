@@ -177,6 +177,102 @@ class DeliveryFixture:
         self._install_gh_stub()
         self._install_git_network_stub()
 
+    def prepare_native_v2_readiness(self):
+        """Explicit positive-v2 setup; default/v1 constructors stay unprepared.
+
+        Build source T before accepted H and merge M. Encode independent native
+        artifacts; the real production validator alone creates the proof.
+        """
+        spec = importlib.util.spec_from_file_location(
+            "fixture_readiness_transport", self.pm_tools / "readiness_transport.py")
+        readiness = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(readiness)
+        base = self._git("rev-parse", "HEAD^1", cwd=self.root)
+        self._git("reset", "--hard", base, cwd=self.root)
+        self._git("add", "scripts/pm/pr-lifecycle-gate.py", "scripts/pm/claim-ready.sh", cwd=self.root)
+        self._git("commit", "-qm", "trusted native-v2 tool entries", cwd=self.root)
+        source = readiness.source_identity(self.root)
+        self._git("reset", "--hard", source["oid"], cwd=self.task)
+        (self.task / "README.md").write_text("base\nmerged task change\n", encoding="utf-8")
+        self._git("add", "README.md", cwd=self.task)
+        self._git("commit", "-qm", "accepted v2 task change", cwd=self.task)
+        self.head_oid = self._git("rev-parse", "HEAD", cwd=self.task)
+        self.head_tree = self._git("rev-parse", "HEAD^{tree}", cwd=self.task)
+        self._git("merge", "--no-ff", "-qm", "merge accepted v2 task",
+                  "task/protocol-fixture", cwd=self.root)
+        self.merge_oid = self._git("rev-parse", "HEAD", cwd=self.root)
+        self.claim.update(frozen_source_head=self.head_oid, frozen_source_tree=self.head_tree,
+                          repository_head=self.head_oid)
+        history = base64.urlsafe_b64encode(canonical([self.claim])).decode().rstrip("=")
+        self.issue_body = (
+            f"task_uid: {UID}\n- pr_number: {TICK}{PR}{TICK}\n- pr_url: {TICK}{PR_URL}{TICK}\n"
+            f"- claim_verifications_b64: {TICK}{history}{TICK}\n")
+        self.issue["body"] = self.issue_body
+        self.project_item["content"]["body"] = self.issue_body
+        self.pr["head"]["sha"] = self.head_oid
+        self.pr["base"]["sha"] = source["oid"]
+        self.pr["merge_commit_sha"] = self.merge_oid
+        self.comments[0]["body"] = task_complete_claim._claim_comment_body(UID, self.claim)
+        merge_receipt = dict(self.record["merge_receipt"], head_oid=self.head_oid,
+                             merge_commit_oid=self.merge_oid)
+        merge_raw = canonical(merge_receipt) + b"\n"
+        self.record.update(claim_verifications=[self.claim], merge_receipt=merge_receipt,
+                           merge_receipt_sha256=sha(merge_raw))
+        mapping = self.mapping()
+        mapping["tasks"][UID] = self.record
+        self.mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
+        (self.receipt_root / "merge-receipt.json").write_bytes(merge_raw)
+        self.state.update(issue=self.issue, pr=self.pr, project_item=self.project_item,
+                          merge_oid=self.merge_oid, target_oid=self.merge_oid)
+        self.remote_state_path.write_text(
+            json.dumps({"refs/heads/task/protocol-fixture": self.head_oid}), encoding="utf-8")
+
+        verified_at = "2026-09-30T15:59:40+08:00"
+        policy = {"status": "resolved", "label": "审查", "ci_digest": "sha256:" + "a" * 64}
+        preimage = {"repository": REPOSITORY, "pr_number": PR, "head_oid": self.head_oid,
+                    "blockers": [], "policy": policy, "hold": None}
+        epoch = sha(json.dumps(preimage, sort_keys=True, separators=(",", ":")).encode())
+        gate = {"evidence_mode": "production", "status": "ready", "ready_for_merge": True,
+                "blockers": [], "pr_number": PR, "pr_url": PR_URL,
+                "policy_discovery": policy, "merge_hold": None,
+                "readiness_receipt": {"receipt_type": "oasis7_pr_lifecycle_ready",
+                    "issuer": "oasis7_pr_lifecycle_gate/v1", "repository": REPOSITORY,
+                    "pr_number": PR, "head_oid": self.head_oid,
+                    "observed_at": "2026-09-30T07:59:35Z", "gate_epoch": epoch}}
+        gate_raw = json.dumps(gate, ensure_ascii=False, indent=2).encode() + b"\n"
+        binding = {"schema": "oasis7-native-readiness/v2", "task_uid": UID,
+            "repository": REPOSITORY, "issue_number": ISSUE, "pr_number": PR,
+            "pr_url": PR_URL, "head_oid": self.head_oid, "claim_type": "ready_for_merge",
+            "status": "verified", "exit_code": 0, "verified_at": verified_at,
+            "gate_raw_sha256": sha(gate_raw), "gate_epoch": epoch,
+            "gate_observed_at": gate["readiness_receipt"]["observed_at"], "source": source}
+        body = "<!-- oasis7-native-readiness/v2 -->\n" + canonical(binding).decode()
+        native_comment = {"id": 802, "body": body, "user": {"login": "fixture"},
+            "created_at": "2026-09-30T07:59:41Z", "updated_at": "2026-09-30T07:59:41Z",
+            "html_url": f"{ISSUE_URL}#issuecomment-802",
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{ISSUE}"}
+        capture = {"id": 802, "body_b64": base64.b64encode(body.encode()).decode(),
+            "body_sha256": sha(body.encode()), "author": "fixture",
+            "created_at": native_comment["created_at"], "updated_at": native_comment["updated_at"]}
+        native_result = dict(self.claim, claim_type="ready_for_merge", verified_at=verified_at,
+            claim_message="accepted native readiness", frozen_source_head=None, frozen_source_tree=None,
+            comparison_ref=None, verification_mode="live_nonfinal",
+            readiness_binding=binding, readiness_comment=capture)
+        self.comments.append(native_comment)
+        self.state["comments"] = self.comments
+        self._write_state()
+        native_root = self.receipt_root / "native-readiness" / sha(canonical(binding))
+        native_root.mkdir(parents=True)
+        (native_root / "gate.stdout").write_bytes(gate_raw)
+        (native_root / "result.stdout").write_bytes(
+            json.dumps(native_result, ensure_ascii=False).encode() + b"\n")
+        (native_root / "comment.json").write_bytes(canonical(capture))
+        created = subprocess.run([sys.executable, str(self.pm_tools / "readiness_transport.py"),
+            "--repo-root", str(self.root), "--task-uid", UID, "--create"],
+            text=True, capture_output=True, env=self.env())
+        if created.returncode:
+            raise AssertionError("positive native readiness validation failed: " + created.stdout + created.stderr)
+
     @staticmethod
     def _git(*args: str, cwd: pathlib.Path | None = None) -> str:
         proc = subprocess.run(["git", *args], cwd=cwd, text=True, capture_output=True)
@@ -210,14 +306,21 @@ elif args[:1] == ["api"] and len(args) > 1 and args[1] == "graphql":
         out({"data":{"repository":{"issue":{"projectItems":{"pageInfo":{"hasNextPage":False},"nodes":[item]}}}}})
 elif args[:1] == ["api"]:
     endpoint = next((x for x in args[1:] if x.startswith("repos/")), "")
-    if endpoint == "repos/fixture/repo/issues/11": out(state["issue"])
-    elif endpoint == "repos/fixture/repo/pulls/12": out(state["pr"])
+    if endpoint == f"repos/fixture/repo/issues/{state['issue']['number']}": out(state["issue"])
+    elif endpoint == f"repos/fixture/repo/pulls/{state['pr']['number']}": out(state["pr"])
     elif endpoint == "repos/fixture/repo": out({"full_name":"fixture/repo","default_branch":"main"})
     elif endpoint == "repos/fixture/repo/git/ref/heads/main":
         out({"ref":"refs/heads/main","object":{"sha":state["target_oid"]}})
     elif endpoint == "repos/fixture/repo/compare/" + state["merge_oid"] + "..." + state["target_oid"]:
         out({"status":"identical","base_commit":{"sha":state["merge_oid"]},"head_commit":{"sha":state["target_oid"]}})
-    elif endpoint == "repos/fixture/repo/issues/11/comments": out([state["comments"]])
+    elif endpoint == f"repos/fixture/repo/issues/{state['issue']['number']}/comments": out([state["comments"]])
+    elif endpoint.startswith("repos/fixture/repo/issues/comments/"):
+        identifier = int(endpoint.rsplit("/", 1)[1])
+        matches = [c for c in state["comments"] if c.get("id") == identifier]
+        if len(matches) != 1: raise SystemExit("missing or ambiguous fixture comment")
+        out(matches[0])
+    elif endpoint == "repos/fixture/repo/collaborators/fixture/permission":
+        out({"permission":"admin","user":{"login":"fixture"}})
     else: raise SystemExit("unsupported fixture gh api: " + endpoint)
 elif args[:2] == ["issue", "comment"]:
     body = pathlib.Path(args[args.index("--body-file") + 1]).read_text()
@@ -401,6 +504,8 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="oasis7-delivery-protocol-")
         self.fixture = DeliveryFixture(pathlib.Path(self.temp.name))
+        if "v1" not in self._testMethodName:
+            self.fixture.prepare_native_v2_readiness()
 
     def tearDown(self):
         self.temp.cleanup()
@@ -742,6 +847,7 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
             with self.subTest(author=label):
                 with tempfile.TemporaryDirectory(prefix="oasis7-delivery-author-") as scratch:
                     fixture = DeliveryFixture(pathlib.Path(scratch))
+                    fixture.prepare_native_v2_readiness()
                     result = fixture.run_producer(**options)
                     self.assertNotEqual(result.returncode, 0,
                                         "producer accepted a terminal comment without repository-owner provenance")

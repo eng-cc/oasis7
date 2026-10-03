@@ -488,7 +488,9 @@ def _delivery_mapping_receipt(record: dict, root: pathlib.Path,
 def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
     root=pathlib.Path(root).resolve()
     mapping_path=root/".pm/github-project-sync/tasks.json"
-    mapping=durable_store.recover_atomic_journal(mapping_path)
+    # Read-only admission must not reconcile a journal before readiness is
+    # known. Unreadable/uncertain mapping stops before terminal effects.
+    _,mapping=_load_json_object(mapping_path,"canonical task mapping")
     record=(mapping.get("tasks") or {}).get(task_uid) or {}
     if not isinstance(record,dict) or record.get("task_uid") not in (None,task_uid):
         raise ValueError("canonical task mapping is missing or has a conflicting UID")
@@ -563,7 +565,11 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
                  and (record.get("phase_receipts") or {}).get("post_merge_done", {}).get("receipt_type") == "oasis7_terminal_cleanup")
     if legacy_v1:
         claim,claim_digest = None,None
+        readiness = None
     else:
+        from readiness_transport import validate_readiness_proof
+        readiness = validate_readiness_proof(root, task_uid, record,
+            live_pr=pr, comments=comments, live_issue=issue)
         claim,claim_digest,_claim_comment=select_historical_task_complete_claim(
             repository,task_uid,record,issue,comments,accepted_head=head_oid)
     return {"root":root,"mapping_path":mapping_path,"mapping":mapping,"record":record,
@@ -574,7 +580,8 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
             "head_oid":head_oid,"merge_commit_oid":merge_oid,"default_branch":default_branch,
             "observed_target_oid":prior_target or target_oid,"target_oid":target_oid,
             "merge_receipt":merge_receipt,"merge_receipt_sha256":merge_digest,
-            "claim":claim,"task_complete_claim_sha256":claim_digest,"existing_delivery":existing}
+            "claim":claim,"task_complete_claim_sha256":claim_digest,"existing_delivery":existing,
+            "readiness_proof_sha256":readiness["digest"] if readiness else None}
 
 
 def _validate_existing_delivery_record(existing: dict, expected: dict) -> None:
@@ -609,6 +616,7 @@ def _delivery_record(context: dict) -> dict:
         "default_branch":context["default_branch"],"observed_target_oid":context["observed_target_oid"],
         "merge_receipt_sha256":context["merge_receipt_sha256"],
         "task_complete_claim_sha256":context["task_complete_claim_sha256"],
+        "readiness_proof_sha256":context["readiness_proof_sha256"],
         "worktree":str(pathlib.Path(str(context["record"].get("canonical_worktree"))).expanduser().resolve()),
         "branch":str(context["record"].get("task_branch")),"completion_semantics":"delivery_only",
         "observed_at":dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -809,6 +817,8 @@ def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
     root=pathlib.Path(root).resolve()
     if not re.fullmatch(r"task_[0-9a-f]{32}",task_uid):
         raise ValueError("invalid Task UID for delivery finalizer lock")
+    # Fail before lock/ledger/receipt creation, then revalidate under the lock.
+    _delivery_live_context(root,task_uid)
     mapping_path=root/".pm/github-project-sync/tasks.json"
     lock=mapping_path.with_name(f"{mapping_path.name}.{task_uid}.finalizer-lock")
     lock.parent.mkdir(parents=True,exist_ok=True)

@@ -88,6 +88,7 @@ class RecoveryTest(unittest.TestCase):
         parent = self.root / "v2"
         parent.mkdir()
         fixture = protocol.DeliveryFixture(parent)
+        fixture.prepare_native_v2_readiness()
         produced = fixture.run_producer()
         self.assertEqual(produced.returncode, 0, produced.stderr)
 

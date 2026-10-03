@@ -753,6 +753,7 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                     mock.patch.object(protocol, "PR_URL", v2_pr_url), \
                     mock.patch.object(protocol, "ISSUE_URL", v2_issue_url):
                 v2_fixture = protocol.DeliveryFixture(delivery_parent)
+                v2_fixture.prepare_native_v2_readiness()
                 producer = v2_fixture.bin / "gh"
                 producer_source = producer.read_text(encoding="utf-8")
                 comment_write = 'state["comments"].append(comment); state_path.write_text(json.dumps(state))'

@@ -220,7 +220,7 @@ DELIVERY_RECEIPT_FIELDS = frozenset({
     "repository", "issue_number", "pr_number", "pr_url", "head_oid",
     "merge_commit_oid", "default_branch", "observed_target_oid",
     "merge_receipt_sha256", "task_complete_claim_sha256", "worktree",
-    "branch", "completion_semantics", "observed_at",
+    "branch", "completion_semantics", "observed_at", "readiness_proof_sha256",
 })
 DELIVERY_MARKER = "<!-- oasis7-pm-evidence/v2 -->"
 OID_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -263,7 +263,7 @@ def _canonical_root(repo_root: pathlib.Path, task_uid: str) -> pathlib.Path:
 
 def _read_v2_files(repo_root: pathlib.Path, task_uid: str) -> dict[str, dict]:
     root = _canonical_root(repo_root, task_uid)
-    result = {}
+    result = {"root": repo_root}
     for key, filename in (
         ("merge", "merge-receipt.json"),
         ("delivery", "terminal-delivery-receipt.json"),
@@ -442,6 +442,7 @@ def _v2_comment_payload(receipt: dict, delivery_digest: str) -> dict:
         "head_oid": receipt["head_oid"], "merge_commit_oid": receipt["merge_commit_oid"],
         "merge_receipt_sha256": receipt["merge_receipt_sha256"],
         "task_complete_claim_sha256": receipt["task_complete_claim_sha256"],
+        "readiness_proof_sha256": receipt["readiness_proof_sha256"],
         "terminal_delivery_receipt_sha256": delivery_digest,
     }
     payload["receipt_chain_sha256"] = hashlib.sha256(_canonical_json(payload)).hexdigest()
@@ -476,6 +477,12 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
             or pr_url != f"https://github.com/{repository}/pull/{pr_number}"):
         raise ValueError("terminal delivery receipt identity mismatch")
     _validate_mapping_identity(task_uid, task_record, repository, issue_number, pr_number, pr_url)
+    from readiness_transport import validate_readiness_proof
+    readiness = validate_readiness_proof(
+        pathlib.Path(files["root"]), task_uid, task_record,
+        live_pr=live_pr, comments=comments, live_issue=live_issue)
+    if receipt.get("readiness_proof_sha256") != readiness["digest"]:
+        raise ValueError("terminal delivery readiness proof raw digest mismatch")
     for key in ("head_oid", "merge_commit_oid", "observed_target_oid"):
         if not isinstance(receipt.get(key), str) or not OID_RE.fullmatch(receipt[key]):
             raise ValueError(f"terminal delivery receipt {key} is invalid")
@@ -617,6 +624,7 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
         "merge_commit_oid": receipt["merge_commit_oid"], "default_branch": receipt["default_branch"],
         "observed_target_oid": receipt["observed_target_oid"], "live_target_oid": target,
         "merge_receipt_sha256": merge_digest, "task_complete_claim_sha256": claim_digest,
+        "readiness_proof_sha256": readiness["digest"],
         "terminal_receipt_sha256": delivery_digest, "delivery_receipt_sha256": delivery_digest,
         "comment_id": comment["id"], "comment_sha256": comment_digest,
         "finalizer_ledger_sha256": ledger_digest, "tombstone_sha256": tombstone_digest,
