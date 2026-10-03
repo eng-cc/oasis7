@@ -860,7 +860,7 @@ jobs:
           OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
-          OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID: ${{ inputs.task_uid }}
+          OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID: ${{ github.event_name == 'pull_request' && steps.scope.outputs.task_uid || inputs.task_uid }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"

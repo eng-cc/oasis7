@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 import sys
 import argparse
+import csv
+from collections import Counter
 from datetime import datetime
 from typing import Any
 
@@ -495,15 +497,40 @@ def _comment_time(comment: dict[str, Any], label: str) -> datetime:
     return parsed
 
 
-def _plan_comment(comments: list[dict[str, Any]], issue_url: str) -> tuple[dict[str, Any], dict[str, Any], str]:
+def _plan_comment(
+    comments: list[dict[str, Any]], issue_url: str, overlay: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], str]:
     marked = [item for item in comments if isinstance(item.get("body"), str)
               and FIRST_REVIEW_PLAN_MARKER in item["body"]]
-    if len(marked) != 1:
-        _fail("Task Issue must contain exactly one first-activation review plan")
-    comment = marked[0]
-    _human_issue_comment(comment, issue_url, "first-activation review plan")
-    plan = _decode_marked_json(str(comment["body"]), FIRST_REVIEW_PLAN_MARKER,
-                               "first-activation review plan")
+    source = overlay.get("_overlay", overlay)
+    issue_number_match = re.fullmatch(
+        r"https://api\.github\.com/repos/[^/]+/[^/]+/issues/([1-9][0-9]*)", issue_url,
+    )
+    if not issue_number_match:
+        _fail("first-activation review plan Issue URL is malformed")
+    identity = {
+        "schema": FIRST_REVIEW_PLAN_SCHEMA,
+        "task_uid": source.get("task_uid"),
+        "issue_number": int(issue_number_match.group(1)),
+        "bootstrap_epoch": source.get("bootstrap_epoch"),
+        "snapshot_sha256": source.get("snapshot_sha256"),
+        "request_sha256": source.get("request_sha256"),
+        "acceptance_sha256": source.get("acceptance_sha256"),
+        "base_oid": source.get("base_oid"),
+        "head_oid": source.get("head_oid"),
+    }
+    matches: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for comment in marked:
+        _human_issue_comment(comment, issue_url, "first-activation review plan")
+        plan = _decode_marked_json(str(comment["body"]), FIRST_REVIEW_PLAN_MARKER,
+                                   "first-activation review plan")
+        if not isinstance(plan, dict):
+            _fail("first-activation review plan must be an object")
+        if all(plan.get(key) == value for key, value in identity.items()):
+            matches.append((comment, plan))
+    if len(matches) != 1:
+        _fail("Task Issue must contain exactly one review plan for the exact Task/Issue/epoch/base/head")
+    comment, plan = matches[0]
     return comment, plan, _comment_sha256(comment, "first-activation review plan")
 
 
@@ -548,7 +575,7 @@ def _validate_referenced_evidence(
     uid = fields["task_uid"]
     head = fields["head_oid"]
     auth = fields["authorization"]
-    plan_comment, plan_payload, plan_sha = _plan_comment(comments, canonical_issue_url)
+    plan_comment, plan_payload, plan_sha = _plan_comment(comments, canonical_issue_url, overlay)
     plan = _validate_first_review_plan(plan_payload, overlay, repository=repository,
                                        issue_number=issue_number, comments=comments)
     plan_time = _comment_time(plan_comment, "first-activation review plan")
@@ -655,7 +682,7 @@ def read_issue_overlay(
     if int(comment["id"]) in referenced_ids:
         _fail("overlay cannot reference itself as authority evidence")
     plan_comment, _, _ = _plan_comment(
-        comments, f"https://api.github.com/repos/{repository}/issues/{issue['number']}"
+        comments, f"https://api.github.com/repos/{repository}/issues/{issue['number']}", parsed,
     )
     if _comment_time(plan_comment, "first-activation review plan") >= overlay_time:
         _fail("dependency-floor overlay must follow the frozen review plan")
@@ -683,27 +710,33 @@ def has_issue_overlay(repo_root: pathlib.Path, repository: str, task_uid: str,
                for item in comments)
 
 
-def read_project_activation(
+def _read_live_activation_proof(
     repo_root: pathlib.Path,
     repository: str,
     task_uid: str,
-    base_oid: str,
-    head_oid: str,
+    overlay: dict[str, Any],
     *,
-    mapping_path: pathlib.Path,
-    client: Any = None,
+    client: Any,
     log_reader=None,
 ) -> dict[str, Any]:
-    """Fresh local Project/Task and hosted run readback for activated authority."""
     root = pathlib.Path(repo_root).resolve()
-    client = client or _github_client(root)
-    overlay = read_project_overlay(root, repository, task_uid, base_oid, head_oid,
-                                   mapping_path=mapping_path, client=client)
     comments = _comments(client, repository, overlay["issue_number"])
     overlay_comment = _unique_comment(comments, overlay["overlay_comment_id"], "overlay")
+    overlay_body = str(overlay_comment.get("body") or "")
+    if "sha256:" + hashlib.sha256(overlay_body.encode("utf-8")).hexdigest() != overlay.get("overlay_sha256"):
+        _fail("live overlay bytes differ from the exact validated overlay")
     overlay_payload = _decode_overlay_comment(str(overlay_comment["body"]))
-    context = dict(overlay)
-    context["_overlay"] = overlay_payload
+    context = validate_overlay(
+        overlay_payload, task_uid=task_uid, issue_number=overlay["issue_number"],
+        base_oid=overlay["base_oid"], head_oid=overlay["head_oid"],
+    )
+    context["overlay_comment_id"] = int(overlay_comment["id"])
+    context["overlay_sha256"] = "sha256:" + hashlib.sha256(overlay_body.encode("utf-8")).hexdigest()
+    for key, value in context.items():
+        if key == "_overlay":
+            continue
+        if overlay.get(key) != value:
+            _fail("live overlay identity differs from the exact validated Task/base/head")
     matches = [item for item in comments if isinstance(item.get("body"), str)
                and item["body"].replace("\r\n", "\n").startswith(ACTIVATION_MARKER + "\n")]
     if len(matches) != 1:
@@ -729,6 +762,52 @@ def read_project_activation(
         "activation_sha256": "sha256:" + hashlib.sha256(str(activation_comment["body"]).encode("utf-8")).hexdigest(),
         "required_tier_proof": proof,
     })
+    return result
+
+
+def read_issue_activation(
+    repo_root: pathlib.Path,
+    repository: str,
+    task_uid: str,
+    base_oid: str,
+    head_oid: str,
+    *,
+    client: Any = None,
+    log_reader=None,
+) -> dict[str, Any]:
+    """Validate live hosted activation evidence without asserting Project admission."""
+    root = pathlib.Path(repo_root).resolve()
+    client = client or _github_client(root)
+    overlay = read_issue_overlay(root, repository, task_uid, base_oid, head_oid, client=client)
+    result = _read_live_activation_proof(
+        root, repository, task_uid, overlay, client=client, log_reader=log_reader,
+    )
+    result["validation_only"] = True
+    result["project_membership_verified"] = False
+    return result
+
+
+def read_project_activation(
+    repo_root: pathlib.Path,
+    repository: str,
+    task_uid: str,
+    base_oid: str,
+    head_oid: str,
+    *,
+    mapping_path: pathlib.Path,
+    client: Any = None,
+    log_reader=None,
+) -> dict[str, Any]:
+    """Fresh local Project/Task reads followed by the shared hosted activation proof."""
+    root = pathlib.Path(repo_root).resolve()
+    client = client or _github_client(root)
+    overlay = read_project_overlay(root, repository, task_uid, base_oid, head_oid,
+                                   mapping_path=mapping_path, client=client)
+    result = _read_live_activation_proof(
+        root, repository, task_uid, overlay, client=client, log_reader=log_reader,
+    )
+    result.update(overlay)
+    result["project_membership_verified"] = True
     return result
 
 
@@ -858,6 +937,286 @@ def _changed_paths(repo_root: pathlib.Path, base_oid: str, head_oid: str) -> lis
     return sorted(paths)
 
 
+def _required_test_step_log(logs: str) -> list[str]:
+    """Select only the authenticated required-gate test step from gh's run log."""
+    selected: list[str] = []
+    for line in logs.splitlines():
+        columns = line.split("\t", 3)
+        if len(columns) == 4 and columns[0] == "required-gate" and columns[1] == "Run required test tier":
+            selected.append(columns[3])
+    if not selected:
+        _fail("live workflow logs lack the required-gate Run required test tier step")
+    return selected
+
+
+def _log_command_lines(step_log: list[str]) -> list[str]:
+    return [" ".join(line.strip().split()) for line in step_log if line.lstrip().startswith("+ ")]
+
+
+def _command_is_logged(command_lines: list[str], command: str) -> bool:
+    normalized = " ".join(command.strip().split())
+    return any(normalized in line for line in command_lines)
+
+
+def _path_is_logged(command_lines: list[str], path: str) -> bool:
+    token = re.compile(r"(?<![A-Za-z0-9_.-])(?:\./)?" + re.escape(path) + r"(?![A-Za-z0-9_.-])")
+    return any(token.search(line) for line in command_lines)
+
+
+def _required_semantic_diagnostic(obligation: str, step_log: list[str]) -> bool:
+    joined = "\n".join(step_log)
+    patterns = {
+        "document-corpus-v3-check": r"(?m)^document-corpus-inventory-check: OK$",
+        "product-doc-changed-range": r"(?m)^product-doc-content: (?:OK \(checked [1-9][0-9]* changed/new documents\)|checked 0: reason=)",
+        "product-doc-full-corpus": r"(?m)^product-doc-content: OK \(full-corpus checked [1-9][0-9]* current-tree product documents\)$",
+        "workflow-process-identity": r"(?m)^workflow-process-identity-check: PASS$",
+        "lint-skills": r"(?m)^lint-skills: OK \(",
+        "windows-paths": r"(?m)^ok: checked [1-9][0-9]* tracked paths for Windows checkout compatibility$",
+        "script-executable-bits": r"(?m)^ok: required release scripts are tracked and executable$",
+        "workflow-impact-projection-consumer": r"(?m)^workflow-impact-projection-consumer: verified status$",
+        "cargo-package-scope-and-profile-completion": r"(?m)^cargo-package-scope-and-profile-completion: activated candidate checker passed$",
+        "unified-world-terminology": r"(?m)^unified-world-code-terminology-scan: OK$",
+        "rust-file-size-regression-and-check": r"(?m)^check-rust-file-size: OK$",
+        "required-domain-selector-validation": r"(?m)^required-domain-selector-validation: PASS$",
+    }
+    pattern = patterns.get(obligation)
+    return bool(pattern and re.search(pattern, joined))
+
+
+def _valid_checker_json_leaf(step_log: list[str], overlay: dict[str, Any]) -> bool:
+    """Bind both logged checker payloads to the actual activation candidate."""
+    commands = _log_command_lines(step_log)
+    base_oid = str(overlay.get("base_oid") or "")
+    head_oid = str(overlay.get("head_oid") or "")
+    task_uid = str(overlay.get("task_uid") or "")
+    trusted_command = any(
+        "check-cargo-package-scope" in line
+        and "--base " + base_oid in line
+        and "--head " + head_oid in line
+        and "--primary-package auto" in line
+        and "--json" in line
+        for line in commands
+    )
+    candidate_command = any(
+        "check-cargo-package-scope" in line
+        and "--base " + base_oid in line
+        and "--head " + head_oid in line
+        and "--first-activation-task-uid " + task_uid in line
+        and "--json" in line
+        for line in commands
+    )
+    payloads: list[dict[str, Any]] = []
+    for line in step_log:
+        try:
+            payload = json.loads(line)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(payload, dict):
+            payloads.append(payload)
+    trusted_reasons = {"policy_self_modification", "ambiguous_package_attribution"}
+    trusted_payloads = [
+        payload for payload in payloads
+        if payload.get("status") == "rejected" and payload.get("reason") in trusted_reasons
+    ]
+    trusted_observation = any(
+        any(
+            line == f"{lane} trusted checker observation: exit=1 reason={payload['reason']} status=failed"
+            for lane in ("first-activation", "ordinary pull-request")
+            for line in step_log
+        )
+        for payload in trusted_payloads
+    )
+    candidate_payloads = [
+        payload for payload in payloads
+        if payload.get("status") == "allowed"
+        and payload.get("validation_only") is True
+        and payload.get("task_uid") == task_uid
+        and payload.get("mode") == "dependency_floor_update"
+    ]
+    candidate_observation = any(
+        line in {
+            "first-activation candidate checker observation: status=passed exit=0 validation_only=true",
+            "ordinary pull-request candidate checker observation: status=passed exit=0 validation_only=true",
+        }
+        for line in step_log
+    )
+    return bool(
+        trusted_command and candidate_command and trusted_observation
+        and candidate_payloads and candidate_observation
+    )
+
+
+def _read_test_inventory_rows(path: pathlib.Path) -> tuple[list[dict[str, str]], set[str]]:
+    expected_fields = [
+        "historical_required_location", "test_paths", "new_required_selection",
+        "legacy_required_coverage", "full_full_core_full_support",
+    ]
+    try:
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle, delimiter="\t")
+            if reader.fieldnames != expected_fields:
+                _fail("trusted/candidate required-capability inventory header is unsupported")
+            rows = [dict(row) for row in reader]
+    except OSError as exc:
+        _fail(f"required-capability test inventory is unavailable: {exc}")
+    paths: set[str] = set()
+    for row in rows:
+        if set(row) != set(expected_fields) or any(not isinstance(value, str) for value in row.values()):
+            _fail("required-capability test inventory row is malformed")
+        for raw in row["test_paths"].split(","):
+            value = raw.strip()
+            if not value:
+                _fail("required-capability test inventory contains an empty test path")
+            paths.add(_validate_path(value))
+    return rows, paths
+
+
+def _verify_required_run_leaf_logs(
+    inventory: dict[str, Any],
+    logs: str,
+    *,
+    trusted_root: pathlib.Path,
+    candidate_root: pathlib.Path,
+    overlay: dict[str, Any],
+) -> set[str]:
+    step_log = _required_test_step_log(logs)
+    commands = _log_command_lines(step_log)
+    if not commands:
+        _fail("required-gate test step has no directly logged leaf commands")
+
+    full_corpus_command = "./scripts/doc-governance-check.sh --full-corpus"
+    full_corpus_proven = (
+        _command_is_logged(commands, full_corpus_command)
+        and _required_semantic_diagnostic("product-doc-full-corpus", step_log)
+    )
+    if not full_corpus_proven:
+        _fail("required-gate logs lack the successful full-corpus document/link command and diagnostic")
+
+    covered: set[str] = set()
+    semantic_commands = {
+        "document-corpus-v3-check": ("./scripts/doc-governance-check.sh --full-corpus",),
+        "product-doc-changed-range": ("./scripts/doc-governance-check.sh --full-corpus",),
+        "product-doc-full-corpus": ("./scripts/doc-governance-check.sh --full-corpus",),
+        "workflow-process-identity": ("./scripts/doc-governance-check.sh --full-corpus",),
+        "lint-skills": ("./scripts/lint-skills.sh",),
+        "windows-paths": ("./scripts/check-windows-paths.sh",),
+        "script-executable-bits": ("bash ./scripts/check-script-executable-bits.sh",),
+        "workflow-impact-projection-consumer": ("python3 -",),
+        "cargo-package-scope-and-profile-completion": ("scripts/pm/check-cargo-package-scope",),
+        "unified-world-terminology": ("./scripts/unified-world-code-terminology-scan.sh",),
+        "rust-file-size-regression-and-check": (
+            "./scripts/check-rust-file-size.test.sh", "./scripts/check-rust-file-size.sh",
+        ),
+        "required-domain-selector-validation": (
+            "./scripts/ci-required-baseline-routing.test.sh",
+            "./scripts/ci-required-domain-isolation.test.sh",
+        ),
+    }
+    for unit in inventory.get("unit_specs") or []:
+        if not isinstance(unit, dict) or not isinstance(unit.get("unit_contract"), dict):
+            _fail("trusted full-tier command/unit inventory is malformed")
+        unit_id = str(unit.get("unit_id") or "")
+        if unit_id.startswith("product"):
+            # The trusted full-corpus checker visits each current product document and every
+            # link/fragment before returning this diagnostic; it is the real leaf for these units.
+            covered.add(unit_id)
+            continue
+        contract = unit["unit_contract"]
+        obligations = contract.get("commands_and_obligations")
+        if not isinstance(obligations, list) or not obligations:
+            _fail(f"trusted required unit has no command or test leaves: {unit_id}")
+        concrete_count = 0
+        for item in obligations:
+            if not isinstance(item, str) or not item:
+                _fail(f"trusted required unit contains a malformed leaf: {unit_id}")
+            if item in {
+                "document-corpus-v3-check", "product-doc-changed-range", "product-doc-full-corpus",
+                "workflow-process-identity", "lint-skills", "windows-paths", "script-executable-bits",
+                "workflow-impact-projection-consumer", "cargo-package-scope-and-profile-completion",
+                "unified-world-terminology", "rust-file-size-regression-and-check",
+                "required-domain-selector-validation",
+            }:
+                if (item != "required-domain-selector-validation"
+                        and not _required_semantic_diagnostic(item, step_log)):
+                    _fail(f"required-gate logs lack the successful leaf diagnostic: {item}")
+                mapped_commands = semantic_commands[item]
+                if item == "workflow-impact-projection-consumer":
+                    logged_mapping = any(command in line for line in commands for command in mapped_commands)
+                elif item == "cargo-package-scope-and-profile-completion":
+                    logged_mapping = (
+                        any("check-cargo-package-scope" in line and "--primary-package auto" in line
+                            for line in commands)
+                        and any("check-cargo-package-scope" in line
+                                and "--first-activation-task-uid" in line for line in commands)
+                        and _valid_checker_json_leaf(step_log, overlay)
+                    )
+                else:
+                    logged_mapping = all(_command_is_logged(commands, command)
+                                         for command in mapped_commands)
+                if not logged_mapping:
+                    _fail(f"required-gate logs lack the actual command mapped to {item}")
+                if item in {"product-doc-full-corpus"}:
+                    covered.add(item)
+                else:
+                    covered.add(item)
+                continue
+            if item.startswith("required runner function: "):
+                continue
+            if item.startswith(("scripts/", ".github/", "doc/", "Cargo", "cargo ", "trunk ", "node ", "npm ")):
+                logged = (_path_is_logged(commands, item) if "/" in item and not item.startswith("cargo ")
+                          else _command_is_logged(commands, item))
+                if not logged:
+                    _fail(f"required-gate logs lack the direct command for {unit_id}: {item}")
+                concrete_count += 1
+                covered.add(item)
+                continue
+            if not _command_is_logged(commands, item):
+                _fail(f"required-gate logs lack the exact trusted command for {unit_id}: {item}")
+            concrete_count += 1
+            covered.add(item)
+        if concrete_count == 0:
+            _fail(f"required unit has no direct command/test leaf proof: {unit_id}")
+
+    base_rows, base_paths = _read_test_inventory_rows(
+        trusted_root / "scripts/ci-required-capability-test-inventory.tsv",
+    )
+    candidate_rows, candidate_paths = _read_test_inventory_rows(
+        candidate_root / "scripts/ci-required-capability-test-inventory.tsv",
+    )
+    missing_rows = Counter(tuple(row[field] for field in row) for row in base_rows) - Counter(
+        tuple(row[field] for field in row) for row in candidate_rows
+    )
+    if missing_rows:
+        _fail("candidate required-capability inventory removed or rewrote trusted BASE rows")
+    added_paths = candidate_paths - base_paths
+    added_rows = Counter(tuple(row[field] for field in row) for row in candidate_rows) - Counter(
+        tuple(row[field] for field in row) for row in base_rows
+    )
+    reviewed_paths = {row["path"] for row in overlay.get("workflow_change_paths", [])
+                      if isinstance(row, dict) and isinstance(row.get("path"), str)}
+    if added_paths - reviewed_paths:
+        _fail("candidate required-capability inventory adds an unreviewed test path")
+    if added_rows:
+        added_row_paths: set[str] = set()
+        for row_tuple, count in added_rows.items():
+            row = dict(zip(candidate_rows[0].keys(), row_tuple)) if candidate_rows else {}
+            row_paths = {item.strip() for item in row.get("test_paths", "").split(",") if item.strip()}
+            if count < 1 or not row_paths or row_paths - added_paths:
+                _fail("candidate required-capability inventory addition is not a pure additive test obligation")
+            if not row.get("new_required_selection"):
+                _fail("candidate test obligation lacks its required capability selector")
+            added_row_paths.update(row_paths)
+        if added_row_paths != added_paths:
+            _fail("candidate test inventory rows do not exactly bind every additive test path")
+    elif added_paths:
+        _fail("candidate required-capability test path lacks an additive inventory row")
+    for path in sorted(added_paths):
+        if not _path_is_logged(commands, path):
+            _fail(f"required-gate logs lack the direct candidate-added test command: {path}")
+        covered.add(path)
+    return covered
+
+
 def reconstruct_full_required_run(
     repo_root: pathlib.Path,
     repository: str,
@@ -983,14 +1342,20 @@ def reconstruct_full_required_run(
         logs = log_reader(run_id, run_attempt)
     if not isinstance(logs, str) or not logs.strip():
         _fail("live workflow log payload is empty")
+    covered = _verify_required_run_leaf_logs(
+        inventory, logs, trusted_root=trusted_root,
+        candidate_root=pathlib.Path(repo_root).resolve(), overlay=overlay,
+    )
+    if not covered:
+        _fail("live workflow logs do not prove any trusted full-tier command/unit")
     obligations: set[str] = set()
     for unit in inventory.get("unit_specs") or []:
-        if not isinstance(unit, dict) or not isinstance(unit.get("obligation_set"), list):
-            _fail("trusted full-tier command/unit inventory is malformed")
-        obligations.update(str(item) for item in unit["obligation_set"] if isinstance(item, str) and item)
-    missing = sorted(obligation for obligation in obligations if obligation not in logs)
-    if not obligations or missing:
-        _fail("live workflow logs do not prove every trusted full-tier command/unit")
+        rows = unit.get("obligation_set") if isinstance(unit, dict) else None
+        if not isinstance(rows, list) or any(not isinstance(item, str) or not item for item in rows):
+            _fail("trusted full-tier obligation inventory is malformed")
+        obligations.update(rows)
+    if not obligations:
+        _fail("trusted full-tier obligation inventory is empty")
     issuer = inventory.get("planner_inventory_issuer") or {}
     inventory_digest = issuer.get("inventory_digest")
     if not isinstance(inventory_digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", inventory_digest):
@@ -1242,7 +1607,7 @@ def _validate_local_review_artifacts(repo_root: pathlib.Path, repository: str, t
     """Revalidate no-PR Issue plan and local reviewer packets before Project admission."""
     root = pathlib.Path(repo_root).resolve()
     issue_url = f"https://api.github.com/repos/{repository}/issues/{overlay['issue_number']}"
-    plan_comment, plan_payload, plan_sha = _plan_comment(comments, issue_url)
+    plan_comment, plan_payload, plan_sha = _plan_comment(comments, issue_url, overlay)
     wrapper = {"_overlay": overlay}
     plan = _validate_first_review_plan(plan_payload, wrapper, repository=repository,
                                        issue_number=overlay["issue_number"], comments=comments)

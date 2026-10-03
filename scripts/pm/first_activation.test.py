@@ -5,7 +5,10 @@ import importlib.util
 import hashlib
 import json
 import pathlib
+import subprocess
+import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -319,7 +322,11 @@ class OverlayShapeTests(unittest.TestCase):
         parsed = MODULE.validate_overlay(value, task_uid=UID, issue_number=4269,
                                          base_oid=BASE, head_oid=HEAD)
         MODULE._validate_referenced_evidence("eng-cc/oasis7", {"number": 4269}, comments, parsed)
-        plan_comment, payload, plan_sha = MODULE._plan_comment(comments, ISSUE_URL)
+        plan_comment, payload, plan_sha = MODULE._plan_comment(
+            comments, ISSUE_URL, MODULE.validate_overlay(
+                value, task_uid=UID, issue_number=4269, base_oid=BASE, head_oid=HEAD,
+            ),
+        )
         self.assertEqual(plan_sha, comments[2]["body"] and "sha256:" + hashlib.sha256(comments[2]["body"].encode()).hexdigest())
         wrapper = {"_overlay": parsed["_overlay"]}
         checked = MODULE._validate_first_review_plan(payload, wrapper, repository="eng-cc/oasis7",
@@ -331,6 +338,25 @@ class OverlayShapeTests(unittest.TestCase):
         with self.assertRaises(MODULE.OverlayError):
             MODULE._validate_first_review_plan(bad, wrapper, repository="eng-cc/oasis7",
                                                issue_number=4269, comments=comments)
+
+    def test_plan_history_selects_exact_head_and_rejects_duplicate_or_wrong_identity(self):
+        value = overlay()
+        comments, _ = review_evidence(value)
+        parsed = MODULE.validate_overlay(value, task_uid=UID, issue_number=4269,
+                                         base_oid=BASE, head_oid=HEAD)
+        stale = json.loads(comments[2]["body"].split("\n", 1)[1])
+        stale["head_oid"] = BASE
+        stale_body = MODULE.FIRST_REVIEW_PLAN_MARKER + "\n" + MODULE._canonical(stale).decode() + "\n"
+        historical = _comment(30, stale_body, 30)
+        selected, _, selected_digest = MODULE._plan_comment(
+            [*comments, historical], ISSUE_URL, parsed,
+        )
+        self.assertEqual(selected["id"], comments[2]["id"])
+        self.assertEqual(selected_digest, "sha256:" + hashlib.sha256(comments[2]["body"].encode()).hexdigest())
+        with self.assertRaises(MODULE.OverlayError):
+            MODULE._plan_comment([*comments, comments[2] | {"id": 31}], ISSUE_URL, parsed)
+        with self.assertRaises(MODULE.OverlayError):
+            MODULE._plan_comment([historical], ISSUE_URL, parsed)
 
     def test_typed_return_digest_must_resolve_to_matching_exact_head_record(self):
         value = overlay()
@@ -414,6 +440,248 @@ class OverlayShapeTests(unittest.TestCase):
         payload["workflow"]["run_attempt"] = 2
         with self.assertRaises(MODULE.OverlayError):
             MODULE._validate_activation_payload(payload, parsed)
+
+    def test_issue_only_activation_reader_reuses_exact_live_proof_without_project_claim(self):
+        raw = overlay()
+        parsed = MODULE.validate_overlay(raw, task_uid=UID, issue_number=4269,
+                                         base_oid=BASE, head_oid=HEAD)
+        parsed["overlay_comment_id"] = 44
+        parsed["overlay_sha256"] = "sha256:" + hashlib.sha256(
+            MODULE.canonical_overlay_body(raw).encode(),
+        ).hexdigest()
+        with mock.patch.object(MODULE, "read_issue_overlay", return_value=parsed) as issue_reader, \
+             mock.patch.object(MODULE, "_read_live_activation_proof", return_value={
+                 **parsed, "activated": True, "required_tier_proof": {"workflow_run_id": 99},
+             }) as proof_reader:
+            result = MODULE.read_issue_activation(
+                pathlib.Path("."), "eng-cc/oasis7", UID, BASE, HEAD, client=object(),
+            )
+        issue_reader.assert_called_once()
+        proof_reader.assert_called_once()
+        self.assertTrue(result["activated"])
+        self.assertTrue(result["validation_only"])
+        self.assertFalse(result["project_membership_verified"])
+        self.assertNotIn("project_item_id", result)
+
+
+class RequiredRunLeafProofTests(unittest.TestCase):
+    HEADER = "historical_required_location\ttest_paths\tnew_required_selection\tlegacy_required_coverage\tfull_full_core_full_support\n"
+
+    @staticmethod
+    def _git(root: pathlib.Path, *args: str) -> str:
+        return subprocess.run(["git", "-C", str(root), *args], check=True,
+                              text=True, capture_output=True).stdout.strip()
+
+    def _fixture(self, temp: pathlib.Path) -> tuple[pathlib.Path, pathlib.Path, str, str, dict, str]:
+        root = temp / "repository"
+        root.mkdir()
+        self._git(root, "init", "-b", "codex/test")
+        self._git(root, "config", "user.name", "Activation Test")
+        self._git(root, "config", "user.email", "activation-test@example.invalid")
+        (root / "scripts/pm").mkdir(parents=True)
+        (root / "scripts").mkdir(exist_ok=True)
+        base_row = (
+            "run_workflow_governance_baseline_contract_tests\t"
+            "scripts/ci-required-baseline-routing.test.sh,scripts/ci-required-domain-isolation.test.sh\t"
+            "workflow_governance\tbaseline retained\tall full groups\n"
+        )
+        inventory_path = root / "scripts/ci-required-capability-test-inventory.tsv"
+        inventory_path.write_text(self.HEADER + base_row, encoding="utf-8")
+        (root / "scripts/plan-rust-required-scope.py").write_text(
+            "print('scope=full')\n", encoding="utf-8",
+        )
+        test_inventory = {
+            "unit_specs": [
+                {
+                    "unit_id": "required_gate_baseline",
+                    "obligation_set": ["required_gate_baseline:000:required-domain-selector-validation"],
+                    "unit_contract": {"commands_and_obligations": [
+                        "document-corpus-v3-check", "product-doc-changed-range", "product-doc-full-corpus",
+                        "workflow-process-identity", "lint-skills", "windows-paths", "script-executable-bits",
+                        "workflow-impact-projection-consumer", "cargo-package-scope-and-profile-completion",
+                        "unified-world-terminology", "rust-file-size-regression-and-check",
+                        "required-domain-selector-validation", "scripts/ci-required-baseline-routing.test.sh",
+                        "scripts/ci-required-domain-isolation.test.sh", "scripts/check-rust-file-size.test.sh",
+                        "scripts/check-rust-file-size.sh", "scripts/unified-world-code-terminology-scan.sh",
+                    ]},
+                },
+                {
+                    "unit_id": "oasis7_required",
+                    "obligation_set": ["oasis7_required:000:cargo-test"],
+                    "unit_contract": {"commands_and_obligations": [
+                        "cargo test -p oasis7 --tests --features test_tier_required",
+                    ]},
+                },
+                {
+                    "unit_id": "workflow_governance",
+                    "obligation_set": ["workflow_governance:000:baseline-routing-test"],
+                    "unit_contract": {"commands_and_obligations": [
+                        "scripts/ci-required-baseline-routing.test.sh",
+                    ]},
+                },
+                {
+                    "unit_id": "product_document:doc/product/example.prd.md",
+                    "obligation_set": ["product_document:doc/product/example.prd.md"],
+                    "unit_contract": {"commands_and_obligations": [
+                        "product-document:doc/product/example.prd.md",
+                    ]},
+                },
+            ],
+            "planner_output": {"scope": "full"},
+            "planner_inventory_issuer": {"inventory_digest": SHA},
+        }
+        module_source = (
+            "def build_required_inventory(*args, **kwargs):\n"
+            f"    return {test_inventory!r}\n"
+        )
+        (root / "scripts/pm/ci_required_inventory.py").write_text(module_source, encoding="utf-8")
+        (root / ".github").mkdir()
+        (root / ".github/workflows").mkdir()
+        (root / ".github/workflows/rust.yml").write_text("name: Rust\n", encoding="utf-8")
+        (root / "scripts/ci-tests.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "trusted base fixture")
+        base_oid = self._git(root, "rev-parse", "HEAD")
+        (root / "scripts/pm/first_activation.test.py").write_text("# candidate test\n", encoding="utf-8")
+        inventory_path.write_text(
+            self.HEADER + base_row
+            + "run_workflow_governance_operational_contract_tests\t"
+            + "scripts/pm/first_activation.test.py\tworkflow_governance\tadditive test\tall full groups\n",
+            encoding="utf-8",
+        )
+        (root / "scripts/ci-tests.sh").write_text("#!/usr/bin/env bash\n# candidate runner\n", encoding="utf-8")
+        self._git(root, "add", ".")
+        self._git(root, "commit", "-m", "candidate head fixture")
+        head_oid = self._git(root, "rev-parse", "HEAD")
+        base_worktree = temp / "trusted-base"
+        self._git(root, "worktree", "add", "--detach", str(base_worktree), base_oid)
+        proof_overlay = {
+            "task_uid": UID, "issue_number": 4269, "base_oid": base_oid, "head_oid": head_oid,
+            "workflow_id": 123456, "workflow_path": ".github/workflows/rust.yml",
+            "workflow_ref": "refs/heads/codex/test", "workflow_sha": head_oid,
+            "workflow_change_paths": [
+                {"path": "scripts/ci-required-capability-test-inventory.tsv"},
+                {"path": "scripts/pm/first_activation.test.py"},
+            ],
+        }
+        logs = [
+            "required-gate\tRun required test tier\t2026-10-03T00:00:01Z\t+ ./scripts/doc-governance-check.sh --full-corpus",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:02Z\tproduct-doc-content: checked 0: reason=no new or substantive product-document changes in selected range",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:03Z\tdocument-corpus-inventory-check: OK",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:04Z\tworkflow-process-identity-check: PASS",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:05Z\tproduct-doc-content: OK (full-corpus checked 4 current-tree product documents)",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:06Z\t+ ./scripts/lint-skills.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:07Z\tlint-skills: OK (8 default skill entrypoints, 2 library skill entries checked)",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:08Z\t+ ./scripts/check-windows-paths.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:09Z\tok: checked 123 tracked paths for Windows checkout compatibility",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:10Z\t+ bash ./scripts/check-script-executable-bits.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:11Z\tok: required release scripts are tracked and executable",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:12Z\t+ python3 - /tmp/impact-projection.json",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:13Z\tworkflow-impact-projection-consumer: verified status",
+            f"required-gate\tRun required test tier\t2026-10-03T00:00:14Z\t+ python3 /tmp/trusted-check-cargo-package-scope --repo-root {root} --base {base_oid} --head {head_oid} --primary-package auto --policy {root}/.pm/cargo-package-scope-policy.json --json",
+            'required-gate\tRun required test tier\t2026-10-03T00:00:15Z\t{"status":"rejected","reason":"ambiguous_package_attribution"}',
+            "required-gate\tRun required test tier\t2026-10-03T00:00:16Z\tfirst-activation trusted checker observation: exit=1 reason=ambiguous_package_attribution status=failed",
+            f"required-gate\tRun required test tier\t2026-10-03T00:00:17Z\t+ python3 {root}/scripts/pm/check-cargo-package-scope --repo-root {root} --base {base_oid} --head {head_oid} --first-activation-task-uid {UID} --policy {root}/.pm/cargo-package-scope-policy.json --json",
+            f'required-gate\tRun required test tier\t2026-10-03T00:00:18Z\t{{"status":"allowed","primary_package":"oasis7","mode":"dependency_floor_update","task_uid":"{UID}","validation_only":true}}',
+            "required-gate\tRun required test tier\t2026-10-03T00:00:19Z\tfirst-activation candidate checker observation: status=passed exit=0 validation_only=true",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:20Z\tcargo-package-scope-and-profile-completion: activated candidate checker passed",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:16Z\t+ ./scripts/unified-world-code-terminology-scan.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:17Z\tunified-world-code-terminology-scan: OK",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:18Z\t+ ./scripts/check-rust-file-size.test.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:19Z\t+ ./scripts/check-rust-file-size.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:20Z\tcheck-rust-file-size: OK",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:21Z\t+ bash ./scripts/ci-required-baseline-routing.test.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:22Z\t+ bash ./scripts/ci-required-domain-isolation.test.sh",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:23Z\t+ env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required --verbose",
+            "required-gate\tRun required test tier\t2026-10-03T00:00:24Z\t+ python3 ./scripts/pm/first_activation.test.py",
+        ]
+        return root, base_worktree, base_oid, head_oid, proof_overlay, "\n".join(logs) + "\n"
+
+    def test_full_reconstruction_uses_actual_job_step_commands_and_additive_candidate_test(self):
+        class Client:
+            def __init__(self, fail_step=False):
+                self.fail_step = fail_step
+
+            def rest(self, method, path, *args, **kwargs):
+                if "/actions/runs/" in path and "/attempts/" not in path:
+                    return {
+                        "id": 99, "run_attempt": 1, "event": "workflow_dispatch",
+                        "workflow_id": 123456, "path": ".github/workflows/rust.yml",
+                        "head_branch": "codex/test", "head_sha": self.head_oid,
+                        "repository": {"full_name": "eng-cc/oasis7"},
+                        "status": "completed", "conclusion": "success",
+                    }
+                if "/attempts/1/jobs?" in path:
+                    conclusion = "failure" if self.fail_step else "success"
+                    return [{
+                        "id": 101, "name": "required-gate", "status": "completed",
+                        "conclusion": "success", "check_run_url": "https://api.github.com/repos/eng-cc/oasis7/check-runs/102",
+                        "steps": [{"name": "Run required test tier", "status": "completed",
+                                   "conclusion": conclusion}],
+                    }]
+                if path == "repos/eng-cc/oasis7/check-runs/102":
+                    return {"name": "required-gate", "head_sha": self.head_oid,
+                            "status": "completed", "conclusion": "success", "app": {"id": 103}}
+                if path == "repos/eng-cc/oasis7":
+                    return {"default_branch": "main"}
+                raise AssertionError(f"unexpected GitHub API call: {path}")
+
+        with tempfile.TemporaryDirectory() as temp_name:
+            temp = pathlib.Path(temp_name)
+            root, _base, base_oid, head_oid, bound_overlay, logs = self._fixture(temp)
+            client = Client()
+            client.head_oid = head_oid
+            positive = MODULE.reconstruct_full_required_run(
+                root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
+                log_reader=lambda _run, _attempt: logs,
+            )
+            self.assertEqual(positive["workflow_run_id"], 99)
+            self.assertGreater(positive["obligation_count"], 1)
+            self.assertRegex(positive["workflow_logs_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+            missing_test = "\n".join(
+                line for line in logs.splitlines() if "first_activation.test.py" not in line
+            )
+            with self.assertRaisesRegex(MODULE.OverlayError, "candidate-added test command"):
+                MODULE.reconstruct_full_required_run(
+                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
+                    log_reader=lambda _run, _attempt: missing_test,
+                )
+            wrong_job = logs.replace("required-gate\tRun required test tier", "other-job\tRun required test tier")
+            with self.assertRaisesRegex(MODULE.OverlayError, "required-gate Run required test tier"):
+                MODULE.reconstruct_full_required_run(
+                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
+                    log_reader=lambda _run, _attempt: wrong_job,
+                )
+            failed = Client(fail_step=True)
+            failed.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "required-gate has a failed"):
+                MODULE.reconstruct_full_required_run(
+                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=failed,
+                    log_reader=lambda _run, _attempt: logs,
+                )
+
+    def test_checker_leaf_requires_exact_commands_observations_and_candidate_binding(self):
+        overlay_value = {"task_uid": UID, "base_oid": BASE, "head_oid": HEAD}
+        lines = [
+            f"+ python3 /tmp/trusted-check-cargo-package-scope --base {BASE} --head {HEAD} --primary-package auto --json",
+            '{"status":"rejected","reason":"ambiguous_package_attribution"}',
+            "ordinary pull-request trusted checker observation: exit=1 reason=ambiguous_package_attribution status=failed",
+            f"+ python3 ./scripts/pm/check-cargo-package-scope --base {BASE} --head {HEAD} --first-activation-task-uid {UID} --json",
+            f'{{"status":"allowed","mode":"dependency_floor_update","task_uid":"{UID}","validation_only":true}}',
+            "ordinary pull-request candidate checker observation: status=passed exit=0 validation_only=true",
+        ]
+        self.assertTrue(MODULE._valid_checker_json_leaf(lines, overlay_value))
+        self.assertFalse(MODULE._valid_checker_json_leaf(
+            [line.replace("ambiguous_package_attribution", "checker_internal_error") for line in lines],
+            overlay_value,
+        ))
+        self.assertFalse(MODULE._valid_checker_json_leaf(
+            [line.replace(HEAD, "3" * 40) for line in lines], overlay_value,
+        ))
+        self.assertFalse(MODULE._valid_checker_json_leaf(
+            [line.replace(UID, "task_" + "b" * 32) for line in lines], overlay_value,
+        ))
 
 
 if __name__ == "__main__":

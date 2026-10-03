@@ -751,6 +751,8 @@ for required in \
   'if [[ "${INTEGRATION_MODE:-}" == "first_activation_validation_only" ]]; then' \
   '    local trusted_checker="${OASIS7_CARGO_SCOPE_TRUSTED_CHECKER:-$checker}"' \
   '      --first-activation-task-uid "$task_uid" --policy "$repo_root/$policy" --json' \
+  '[[ "$trusted_reason" != "policy_self_modification" && "$trusted_reason" != "ambiguous_package_attribution" ]]' \
+  '--base "$base_oid" --head "$head_oid"' \
   '"trusted_checker":{"status":"failed" if int(trusted_code) else "passed"' \
   '"candidate_checker":{"status":candidate_status'; do
   if ! grep -Fq -- "$required" <<<"$first_activation_hook"; then
@@ -758,6 +760,24 @@ for required in \
     exit 1
   fi
 done
+ordinary_pr_hook="$(sed -n '/^run_activated_pull_request_scope_check() {/,/^}/p' "$ci_tests")"
+for required in \
+  'module.has_issue_overlay(root,"eng-cc/oasis7",sys.argv[2])' \
+  'module.read_issue_activation(root,"eng-cc/oasis7",sys.argv[2],sys.argv[3],sys.argv[4])' \
+  'proof.get("project_membership_verified") is not False' \
+  'echo "ordinary pull-request trusted checker observation:' \
+  'echo "ordinary pull-request candidate checker observation:' \
+  '"trusted_checker":{"status":"failed","exit_code":int(trusted_code)' \
+  '"candidate_checker":{"status":candidate_status'; do
+  if ! grep -Fq -- "$required" <<<"$ordinary_pr_hook"; then
+    echo "ordinary PR activation route is missing its exact proof or separate checker evidence: $required" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq 'steps.scope.outputs.task_uid || inputs.task_uid' "$workflow"; then
+  echo "first-activation selector is not bound to the trusted PR task lookup output" >&2
+  exit 1
+fi
 eval "$first_activation_hook"
 INTEGRATION_MODE=first_activation_validation_only
 OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID=malformed
