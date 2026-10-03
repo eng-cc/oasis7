@@ -895,41 +895,40 @@ PY
   [[ "$candidate_status" == "passed" ]]
 }
 
-run_cargo_package_scope_check() {
+run_first_activation_cargo_package_scope_check() {
   local base_oid="${OASIS7_CARGO_SCOPE_BASE:-}"
   local head_oid="${OASIS7_CARGO_SCOPE_HEAD:-}"
   local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
   local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
-  if [[ "${INTEGRATION_MODE:-}" == "first_activation_validation_only" ]]; then
-    local task_uid="${OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID:-}"
-    local trusted_checker="${OASIS7_CARGO_SCOPE_TRUSTED_CHECKER:-$checker}"
-    local candidate_checker="./scripts/pm/check-cargo-package-scope"
-    local evidence_dir="output/first-activation-validation"
-    local results_path="${evidence_dir}/cargo-package-scope-results.json"
-    [[ "$task_uid" =~ ^task_[0-9a-f]{32}$ ]] || {
-      echo "error: first-activation validation requires a canonical Task UID assertion" >&2
-      return 1
-    }
-    [[ -n "$base_oid" && -n "$head_oid" && -x "$trusted_checker" && -x "$candidate_checker" && -f "$policy" ]] || {
-      echo "error: first-activation validation requires exact base/head and both checker versions" >&2
-      return 1
-    }
-    git cat-file -e "${base_oid}:.pm/cargo-package-scope-policy.json" 2>/dev/null || {
-      echo "error: first-activation trusted base policy is unavailable" >&2
-      return 1
-    }
-    local tmp_dir trusted_file candidate_file trusted_rc=0 candidate_rc=0 trusted_reason="" trusted_status="" candidate_status="not_run"
-    tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-first-activation-scope.XXXXXX")"
-    trusted_file="${tmp_dir}/trusted.json"
-    candidate_file="${tmp_dir}/candidate.json"
-    mkdir -p "$evidence_dir"
-    echo "+ python3 ${trusted_checker} --repo-root ${repo_root} --base ${base_oid} --head ${head_oid} --primary-package ${primary_package} --policy ${repo_root}/${policy} --json"
-    python3 "$trusted_checker" \
-      --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" \
-      --primary-package "$primary_package" --policy "$repo_root/$policy" --json \
-      >"$trusted_file" || trusted_rc=$?
-    read -r trusted_status trusted_reason < <(python3 - "$trusted_file" <<'PY'
+  local task_uid="${OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID:-}"
+  local trusted_checker="${OASIS7_CARGO_SCOPE_TRUSTED_CHECKER:-$checker}"
+  local candidate_checker="./scripts/pm/check-cargo-package-scope"
+  local evidence_dir="output/first-activation-validation"
+  local results_path="${evidence_dir}/cargo-package-scope-results.json"
+  [[ "$task_uid" =~ ^task_[0-9a-f]{32}$ ]] || {
+    echo "error: first-activation validation requires a canonical Task UID assertion" >&2
+    return 1
+  }
+  [[ -n "$base_oid" && -n "$head_oid" && -x "$trusted_checker" && -x "$candidate_checker" && -f "$policy" ]] || {
+    echo "error: first-activation validation requires exact base/head and both checker versions" >&2
+    return 1
+  }
+  git cat-file -e "${base_oid}:.pm/cargo-package-scope-policy.json" 2>/dev/null || {
+    echo "error: first-activation trusted base policy is unavailable" >&2
+    return 1
+  }
+  local tmp_dir trusted_file candidate_file trusted_rc=0 candidate_rc=0 trusted_reason="" trusted_status="" candidate_status="not_run"
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-first-activation-scope.XXXXXX")"
+  trusted_file="${tmp_dir}/trusted.json"
+  candidate_file="${tmp_dir}/candidate.json"
+  mkdir -p "$evidence_dir"
+  echo "+ python3 ${trusted_checker} --repo-root ${repo_root} --base ${base_oid} --head ${head_oid} --primary-package ${primary_package} --policy ${repo_root}/${policy} --json"
+  python3 "$trusted_checker" \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" \
+    --primary-package "$primary_package" --policy "$repo_root/$policy" --json \
+    >"$trusted_file" || trusted_rc=$?
+  read -r trusted_status trusted_reason < <(python3 - "$trusted_file" <<'PY'
 import json, pathlib, sys
 try:
     payload=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
@@ -939,7 +938,7 @@ else:
     print(str(payload.get("status", "")), str(payload.get("reason", "")))
 PY
 )
-    python3 - "$results_path" "$trusted_file" "$trusted_rc" "$candidate_file" "$candidate_rc" <<'PY'
+  python3 - "$results_path" "$trusted_file" "$trusted_rc" "$candidate_file" "$candidate_rc" <<'PY'
 import json, pathlib, sys
 result_path, trusted_path, trusted_code, candidate_path, candidate_code=sys.argv[1:]
 try: trusted=json.loads(pathlib.Path(trusted_path).read_text(encoding="utf-8"))
@@ -950,30 +949,30 @@ record={"schema":"oasis7-first-activation-checker-observations/v1","validation_o
         "candidate_checker":{"status":"not_run","exit_code":None,"payload":None}}
 pathlib.Path(result_path).write_text(json.dumps(record,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
 PY
-    echo "first-activation trusted checker observation: exit=${trusted_rc} reason=${trusted_reason:-none} status=$([[ "$trusted_rc" == 0 ]] && echo passed || echo failed)"
-    if (( trusted_rc != 1 )) || [[ "$trusted_status" != "rejected" ]] || \
-       [[ "$trusted_reason" != "policy_self_modification" && "$trusted_reason" != "ambiguous_package_attribution" ]]; then
-      echo "error: trusted checker must retain an approved exact rejection before candidate validation" >&2
-      rm -rf "$tmp_dir"
-      return 1
-    fi
-    echo "+ python3 ${candidate_checker} --repo-root ${repo_root} --base ${base_oid} --head ${head_oid} --first-activation-task-uid ${task_uid} --policy ${repo_root}/${policy} --json"
-    python3 "$candidate_checker" \
-      --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" \
-      --first-activation-task-uid "$task_uid" --policy "$repo_root/$policy" --json \
-      >"$candidate_file" || candidate_rc=$?
-    candidate_status="failed"
-if (( candidate_rc == 0 )) && python3 - "$candidate_file" "$task_uid" <<'PY'
+  echo "first-activation trusted checker observation: exit=${trusted_rc} reason=${trusted_reason:-none} status=$([[ "$trusted_rc" == 0 ]] && echo passed || echo failed)"
+  if (( trusted_rc != 1 )) || [[ "$trusted_status" != "rejected" ]] || \
+     [[ "$trusted_reason" != "policy_self_modification" && "$trusted_reason" != "ambiguous_package_attribution" ]]; then
+    echo "error: trusted checker must retain an approved exact rejection before candidate validation" >&2
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+  echo "+ python3 ${candidate_checker} --repo-root ${repo_root} --base ${base_oid} --head ${head_oid} --first-activation-task-uid ${task_uid} --policy ${repo_root}/${policy} --json"
+  python3 "$candidate_checker" \
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" \
+    --first-activation-task-uid "$task_uid" --policy "$repo_root/$policy" --json \
+    >"$candidate_file" || candidate_rc=$?
+  candidate_status="failed"
+  if (( candidate_rc == 0 )) && python3 - "$candidate_file" "$task_uid" <<'PY'
 import json, pathlib, sys
 try: payload=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 except (OSError, ValueError): raise SystemExit(1)
 raise SystemExit(0 if payload.get("status")=="allowed" and payload.get("validation_only") is True
                  and payload.get("task_uid")==sys.argv[2] and payload.get("mode")=="dependency_floor_update" else 1)
 PY
-    then
-      candidate_status="passed"
-    fi
-    python3 - "$results_path" "$trusted_file" "$trusted_rc" "$candidate_file" "$candidate_rc" "$candidate_status" <<'PY'
+  then
+    candidate_status="passed"
+  fi
+  python3 - "$results_path" "$trusted_file" "$trusted_rc" "$candidate_file" "$candidate_rc" "$candidate_status" <<'PY'
 import json, pathlib, sys
 result_path, trusted_path, trusted_code, candidate_path, candidate_code, candidate_status=sys.argv[1:]
 try: trusted=json.loads(pathlib.Path(trusted_path).read_text(encoding="utf-8"))
@@ -986,15 +985,26 @@ record={"schema":"oasis7-first-activation-checker-observations/v1","validation_o
         "candidate_checker":{"status":candidate_status,"exit_code":int(candidate_code),"payload":candidate}}
 pathlib.Path(result_path).write_text(json.dumps(record,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
 PY
-    cat "$trusted_file"
-    cat "$candidate_file"
-    echo "first-activation candidate checker observation: status=${candidate_status} exit=${candidate_rc} validation_only=true"
-    if [[ "$candidate_status" == "passed" ]]; then
-      echo "cargo-package-scope-and-profile-completion: activated candidate checker passed"
-    fi
-    rm -rf "$tmp_dir"
-    [[ "$candidate_status" == "passed" ]] || return 1
-    return 0
+  cat "$trusted_file"
+  cat "$candidate_file"
+  echo "first-activation candidate checker observation: status=${candidate_status} exit=${candidate_rc} validation_only=true"
+  if [[ "$candidate_status" == "passed" ]]; then
+    echo "cargo-package-scope-and-profile-completion: activated candidate checker passed"
+  fi
+  rm -rf "$tmp_dir"
+  [[ "$candidate_status" == "passed" ]] || return 1
+  return 0
+}
+
+run_cargo_package_scope_check() {
+  local base_oid="${OASIS7_CARGO_SCOPE_BASE:-}"
+  local head_oid="${OASIS7_CARGO_SCOPE_HEAD:-}"
+  local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
+  local policy="./.pm/cargo-package-scope-policy.json"
+  local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
+  if [[ "${INTEGRATION_MODE:-}" == "first_activation_validation_only" ]]; then
+    run_first_activation_cargo_package_scope_check
+    return $?
   fi
   if [[ "${GITHUB_EVENT_NAME:-}" == "pull_request" ]]; then
     run_activated_pull_request_scope_check

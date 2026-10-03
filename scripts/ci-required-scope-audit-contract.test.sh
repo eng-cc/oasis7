@@ -830,17 +830,29 @@ if ! grep -Fqx '          - first_activation_validation_only' "$workflow"; then
   echo "Rust workflow lacks the bounded first-activation validation-only dispatch mode" >&2
   exit 1
 fi
-first_activation_hook="$(sed -n '/^run_cargo_package_scope_check() {/,/^}/p' "$ci_tests")"
+first_activation_dispatcher="$(sed -n '/^run_cargo_package_scope_check() {/,/^}/p' "$ci_tests")"
+first_activation_evidence_helper="$(sed -n '/^run_first_activation_cargo_package_scope_check() {/,/^}/p' "$ci_tests")"
+if ! grep -Fq 'run_first_activation_cargo_package_scope_check' <<<"$first_activation_dispatcher"; then
+  echo "first-activation dispatcher does not route through its evidence helper" >&2
+  exit 1
+fi
 for required in \
   'if [[ "${INTEGRATION_MODE:-}" == "first_activation_validation_only" ]]; then' \
-  '    local trusted_checker="${OASIS7_CARGO_SCOPE_TRUSTED_CHECKER:-$checker}"' \
-  '      --first-activation-task-uid "$task_uid" --policy "$repo_root/$policy" --json' \
+  'run_first_activation_cargo_package_scope_check'; do
+  if ! grep -Fq -- "$required" <<<"$first_activation_dispatcher"; then
+    echo "first-activation CI dispatcher is missing its validation-only boundary: $required" >&2
+    exit 1
+  fi
+done
+for required in \
+  '  local trusted_checker="${OASIS7_CARGO_SCOPE_TRUSTED_CHECKER:-$checker}"' \
+  '    --first-activation-task-uid "$task_uid" --policy "$repo_root/$policy" --json' \
   '[[ "$trusted_reason" != "policy_self_modification" && "$trusted_reason" != "ambiguous_package_attribution" ]]' \
   '--base "$base_oid" --head "$head_oid"' \
   '"trusted_checker":{"status":"failed" if int(trusted_code) else "passed"' \
   '"candidate_checker":{"status":candidate_status'; do
-  if ! grep -Fq -- "$required" <<<"$first_activation_hook"; then
-    echo "first-activation CI hook is missing an exact trust/candidate boundary: $required" >&2
+  if ! grep -Fq -- "$required" <<<"$first_activation_evidence_helper"; then
+    echo "first-activation evidence helper is missing an exact trust/candidate boundary: $required" >&2
     exit 1
   fi
 done
@@ -862,7 +874,8 @@ if ! grep -Fq 'steps.scope.outputs.task_uid || inputs.task_uid' "$workflow"; the
   echo "first-activation selector is not bound to the trusted PR task lookup output" >&2
   exit 1
 fi
-eval "$first_activation_hook"
+eval "$first_activation_evidence_helper"
+eval "$first_activation_dispatcher"
 INTEGRATION_MODE=first_activation_validation_only
 OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID=malformed
 if run_cargo_package_scope_check 2>/dev/null; then
