@@ -789,7 +789,11 @@ impl World {
                         | DomainEvent::ModuleUpgraded { .. }
                         | DomainEvent::ModuleRollbackApplied { .. }
                 ) {
-                    let prepared = self.state.prepare_module_instance_event(event, time)?;
+                    let prepared = self.state.prepare_module_instance_event_with_registry(
+                        event,
+                        time,
+                        Some(&self.module_registry),
+                    )?;
                     let schedule = self.prepare_module_instance_schedule(event, time)?;
                     prepared.install_infallible(&mut self.state);
                     self.install_prepared_module_instance_schedule(schedule);
