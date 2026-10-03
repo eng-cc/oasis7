@@ -485,7 +485,8 @@ def _delivery_mapping_receipt(record: dict, root: pathlib.Path,
     return raw,receipt,digest
 
 
-def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
+def _delivery_live_context(root: pathlib.Path, task_uid: str, *,
+                           prospective_readiness: dict | None = None) -> dict:
     root=pathlib.Path(root).resolve()
     mapping_path=root/".pm/github-project-sync/tasks.json"
     # Read-only admission must not reconcile a journal before readiness is
@@ -569,7 +570,8 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
     else:
         from readiness_transport import validate_readiness_proof
         readiness = validate_readiness_proof(root, task_uid, record,
-            live_pr=pr, comments=comments, live_issue=issue)
+            live_pr=pr, comments=comments, live_issue=issue,
+            proof=(prospective_readiness if not (receipt_root/"readiness-proof.json").exists() else None))
         claim,claim_digest,_claim_comment=select_historical_task_complete_claim(
             repository,task_uid,record,issue,comments,accepted_head=head_oid)
     return {"root":root,"mapping_path":mapping_path,"mapping":mapping,"record":record,
@@ -789,6 +791,31 @@ def _validate_resumable_v2(context: dict) -> None:
             "terminal_receipt_sha256":digest,"checkout_recreation_forbidden":True}
         if value!=expected_tombstone:
             raise ValueError("selected v2 terminal tombstone conflicts with receipt")
+
+
+def validate_prior_delivery_admission(root: pathlib.Path, task_uid: str,
+                                      readiness: dict) -> None:
+    """Reuse authoritative prior-delivery admission before any proof writes.
+
+    The prospective readiness record is revalidated in memory. No missing
+    proof file is manufactured to let the existing receipt/recovery parser run.
+    First delivery without prior terminal evidence stays outside this prior-only
+    path, including its pre-TaskDone completion-claim boundary.
+    """
+    root=pathlib.Path(root).resolve()
+    _,mapping=_load_json_object(root/".pm/github-project-sync/tasks.json","canonical task mapping")
+    record=(mapping.get("tasks") or {}).get(task_uid) or {}
+    receipt_root=_delivery_receipt_root(root,task_uid)
+    phase="post_merge_done"
+    selected=any(isinstance(record.get(key),dict) and phase in record[key]
+                 for key in ("phase_receipt_type","phase_receipt_sha256","phase_receipts",
+                             "phase_receipt_comment_id","phase_receipt_comment_sha256"))
+    prior=any((receipt_root/name).exists() for name in
+              ("terminal-delivery-receipt.json","finalizer-ledger.json","terminal-tombstone.json"))
+    if not selected and not prior:
+        return
+    context=_delivery_live_context(root,task_uid,prospective_readiness=readiness)
+    _delivery_status(context)
 
 
 def _delivery_comment_readback(context: dict, body: str) -> dict | None:

@@ -9,6 +9,7 @@ import argparse
 import base64
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -702,7 +703,9 @@ def create_readiness_proof(root: Path, uid: str, *, write: bool = False) -> dict
         raise ValueError("readiness Project Task UID differs")
     dest = receipt_root(root, uid)
     if (dest / "readiness-proof.json").exists():
-        return validate_readiness_proof(root, uid, record, live_pr=pr, comments=comments, live_issue=issue)
+        validated = validate_readiness_proof(root, uid, record, live_pr=pr, comments=comments, live_issue=issue)
+        _prior_delivery_admission(root, uid, validated["record"])
+        return validated
     natives = [c for c in comments if NATIVE in str(c.get("body") or "")]
     migrations = [c for c in comments if MIGRATION in str(c.get("body") or "")]
     if natives and migrations:
@@ -739,9 +742,21 @@ def create_readiness_proof(root: Path, uid: str, *, write: bool = False) -> dict
     else:
         raise ValueError("required readiness proof/native artifacts/unique migration unavailable")
     validated = validate_readiness_proof(root, uid, record, live_pr=pr, comments=comments, live_issue=issue, proof=proof)
+    _prior_delivery_admission(root, uid, validated["record"])
     if write:
         _store_once(dest / "readiness-proof.json", validated["bytes"])
     return validated
+
+
+def _prior_delivery_admission(root: Path, uid: str, readiness: dict) -> None:
+    """Call the existing producer's complete prior-receipt/recovery parser."""
+    path = Path(__file__).with_name("post-merge-finalize.py")
+    spec = importlib.util.spec_from_file_location("readiness_prior_delivery", path)
+    if spec is None or spec.loader is None:
+        raise ValueError("readiness prior-delivery admission helper unavailable")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    helper.validate_prior_delivery_admission(root, uid, readiness)
 
 
 def main() -> int:
