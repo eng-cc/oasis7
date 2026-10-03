@@ -107,7 +107,7 @@ class ArchivedReviewProvenanceTests(unittest.TestCase):
         ledger.parent.mkdir(parents=True, exist_ok=True)
         ledger.write_text(json.dumps(_ledger_entry(artifact.relative_to(repo), self.payload), sort_keys=True) + "\n", encoding="utf-8")
         run = subprocess.run(
-            ["rtk", "proxy", sys.executable, str(SCRIPT), "--root", str(repo), "--task-uid", TASK_UID,
+            [sys.executable, str(SCRIPT), "--root", str(repo), "--task-uid", TASK_UID,
              "--ledger", str(ledger.relative_to(repo)), "--roles", ROLE, "--source-head", HEAD],
             text=True, capture_output=True, check=False,
         )
@@ -117,7 +117,7 @@ class ArchivedReviewProvenanceTests(unittest.TestCase):
 
     def test_live_cli_has_no_caller_selectable_archive_authority(self) -> None:
         run = subprocess.run(
-            ["rtk", "proxy", sys.executable, str(SCRIPT), "--root", str(self.archive_root), "--task-uid", TASK_UID,
+            [sys.executable, str(SCRIPT), "--root", str(self.archive_root), "--task-uid", TASK_UID,
              "--ledger", str(self.ledger_rel), "--roles", ROLE, "--source-head", HEAD,
              "--archive-root", str(self.archive_root)],
             text=True, capture_output=True, check=False,
