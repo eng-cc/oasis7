@@ -729,20 +729,71 @@ PY
   fi
   git -C "$TMPDIR" commit --allow-empty -qm current-recovery-source
   export GH_PR_HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
-  python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$REC_PUBLICATION_OLD_HEAD" <<'PY'
-import json, pathlib, sys
+python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$REC_PUBLICATION_OLD_HEAD" <<'PY'
+import json, os, pathlib, sys
 import pr_projection_publication as publication
 import pr_projection_journal as journal
 from projection_publication_contract import digest
 root, uid, old_head, current_head, branch, old_publication_head = sys.argv[1:]
 root = pathlib.Path(root)
+
+def full_projection(head, scope, config):
+    planner = {
+        "schema": "oasis7-required-plan-v1",
+        "planner_config_sha256": config,
+        "scope": "full",
+        "selected_capabilities": [],
+        "test_profile": "required",
+        "declared_tests": ["required-baseline"],
+    }
+    value = {
+        "schema": "oasis7-workflow-impact-projection/v2",
+        "task_uid": uid,
+        "source_head_oid": head,
+        "scope_base_oid": scope,
+        "changed_paths": [],
+        "changed_paths_digest": digest([]),
+        "change_class": "unknown",
+        "manual_roles": [],
+        "domain_role": None,
+        "test_profile": "required",
+        "declared_tests": ["required-baseline"],
+        "consumed_contracts": [],
+        "public_semantics": [],
+        "affected_consumers": [],
+        "closure_status": {"status": "incomplete", "reason": None, "evidence": []},
+        "ci_scope": "full",
+        "ci_capabilities": [],
+        "ci_reasons": [],
+        "review_roles": ["qa_engineer"],
+        "ordered_role_ids": ["qa_engineer"],
+        "review_scope": {},
+        "review_escalated": False,
+        "review_reasons": [],
+        "planner_config_sha256": config,
+        "planner_identity": planner,
+        "planner_digest": digest(planner),
+        "verification_affected": True,
+    }
+    value["projection_digest"] = digest(value)
+    return value
+
 for index, head in enumerate((old_publication_head, current_head), 1):
+    config = "sha256:" + "c" * 64
+    policy_digest = digest({"policy": "fixture"})
+    projection_digest = digest({"head": head})
+    projection_kwargs = {}
+    if os.environ.get("OASIS7_REC_TASK_PUBLICATION_V2") == "1":
+        leaf = full_projection(head, old_head, config)
+        policy_digest = leaf["planner_digest"]
+        projection_digest = leaf["projection_digest"]
+        projection_kwargs["workflow_impact_projection"] = leaf
     value = publication.build_task_publication(
         repository="eng-cc/oasis7", repository_id=7, task_uid=uid,
         bootstrap_epoch=1, source_repository_id=7, source_ref=branch,
         target_ref=branch, source_head_oid=head, source_scope_oid=old_head,
-        planner_authority_oid=old_head, planner_config_sha256="sha256:" + "c" * 64,
-        policy_digest=digest({"policy": "fixture"}), projection_digest=digest({"head": head}))
+        planner_authority_oid=old_head, planner_config_sha256=config,
+        policy_digest=policy_digest, projection_digest=projection_digest, **projection_kwargs)
     local = journal.open_journal(root / ".git", value["repository"], branch,
         value["publication_id"], task_uid=uid, source_head_oid=head,
         scope_base_oid=old_head, projection_digest=value["projection_digest"])
