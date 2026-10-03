@@ -1705,8 +1705,9 @@ def _validate_local_review_artifacts(repo_root: pathlib.Path, repository: str, t
                                      overlay: dict[str, Any], comments: list[dict[str, Any]]) -> None:
     """Revalidate no-PR Issue plan and local reviewer packets before Project admission."""
     root = pathlib.Path(repo_root).resolve()
-    issue_url = f"https://api.github.com/repos/{repository}/issues/{overlay['issue_number']}"
-    plan_comment, plan_payload, plan_sha = _plan_comment(comments, issue_url, overlay)
+    issue_api_url = f"https://api.github.com/repos/{repository}/issues/{overlay['issue_number']}"
+    packet_issue_url = f"https://github.com/{repository}/issues/{overlay['issue_number']}"
+    plan_comment, plan_payload, plan_sha = _plan_comment(comments, issue_api_url, overlay)
     wrapper = {"_overlay": overlay}
     plan = _validate_first_review_plan(plan_payload, wrapper, repository=repository,
                                        issue_number=overlay["issue_number"], comments=comments)
@@ -1736,7 +1737,7 @@ def _validate_local_review_artifacts(repo_root: pathlib.Path, repository: str, t
                 or identity.get("base_sha") != overlay["base_oid"]
                 or identity.get("base_binding") != "immutable_oid"
                 or identity.get("repository") != repository
-                or identity.get("issue_url") != issue_url
+                or identity.get("issue_url") != packet_issue_url
                 or identity.get("project_item_id") != project_item_id
                 or identity.get("branch") != overlay["workflow"]["ref"].removeprefix("refs/heads/")
                 or slice_contract.get("role") != plan_role

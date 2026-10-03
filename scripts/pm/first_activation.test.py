@@ -29,6 +29,7 @@ BASE = "1" * 40
 HEAD = "2" * 40
 SHA = "sha256:" + "a" * 64
 ISSUE_URL = "https://api.github.com/repos/eng-cc/oasis7/issues/4269"
+PACKET_ISSUE_URL = "https://github.com/eng-cc/oasis7/issues/4269"
 
 
 def _comment(comment_id: int, body: str, second: int) -> dict:
@@ -389,7 +390,7 @@ class OverlayShapeTests(unittest.TestCase):
                     "base_sha": BASE,
                     "base_binding": "immutable_oid",
                     "repository": "eng-cc/oasis7",
-                    "issue_url": ISSUE_URL,
+                    "issue_url": PACKET_ISSUE_URL,
                     "project_item_id": "project-item",
                     "branch": "codex/test",
                 },
@@ -413,6 +414,25 @@ class OverlayShapeTests(unittest.TestCase):
             MODULE._validate_local_review_artifacts(
                 pathlib.Path(temp), "eng-cc/oasis7", UID, "project-item", value, comments,
             )
+            wrong_issue_value = overlay()
+            wrong_issue_packet = json.loads(raw_packets["repository_health_engineer"])
+            wrong_issue_packet["identity"]["issue_url"] = "https://github.com/eng-cc/oasis7/issues/4268"
+            wrong_issue_packet["packet_digest"] = MODULE._packet_digest(wrong_issue_packet)
+            wrong_issue_raw = (
+                json.dumps(wrong_issue_packet, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+            ).encode()
+            wrong_issue_digests = dict(packet_values)
+            wrong_issue_digests["repository_health_engineer"] = (
+                "sha256:" + hashlib.sha256(wrong_issue_raw).hexdigest()
+            )
+            wrong_issue_comments, _ = review_evidence(wrong_issue_value, wrong_issue_digests)
+            (packet_dir / "first-rh.json").write_bytes(wrong_issue_raw)
+            with self.assertRaisesRegex(MODULE.OverlayError, "not an exact read-only Task/base/head packet"):
+                MODULE._validate_local_review_artifacts(
+                    pathlib.Path(temp), "eng-cc/oasis7", UID, "project-item", wrong_issue_value,
+                    wrong_issue_comments,
+                )
+            (packet_dir / "first-rh.json").write_bytes(raw_packets["repository_health_engineer"])
             (packet_dir / "first-rh.json").write_bytes(raw_packets["repository_health_engineer"] + b" ")
             with self.assertRaises(MODULE.OverlayError):
                 MODULE._validate_local_review_artifacts(
