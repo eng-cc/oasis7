@@ -33,7 +33,7 @@ def validate_ledger(args: argparse.Namespace, parser: argparse.ArgumentParser, *
                     resolved.relative_to(root)
                 except ValueError:
                     p.error(f"review artifact escapes repository root: {raw}")
-            return resolved
+                return resolved
         return options[0].resolve()
 
     def resolve_artifact(raw: str, base: Path | None = None) -> Path:

@@ -125,6 +125,25 @@ class ArchivedReviewProvenanceTests(unittest.TestCase):
         self.assertNotEqual(run.returncode, 0)
         self.assertIn("unrecognized arguments", run.stderr)
 
+    def test_live_cli_resolves_ledger_relative_artifact_when_root_candidate_is_absent(self) -> None:
+        repo = self.base / "live-fallback-repo"
+        ledger = repo / ".pm/scratch" / TASK_UID / "slice-ledger.jsonl"
+        ledger.parent.mkdir(parents=True)
+        artifact = ledger.parent / "role-return.md"
+        artifact.write_bytes(self.payload)
+        self.assertFalse((repo / artifact.name).exists())
+        ledger.write_text(
+            json.dumps(_ledger_entry(Path(artifact.name), self.payload), sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        run = subprocess.run(
+            [sys.executable, str(SCRIPT), "--root", str(repo), "--task-uid", TASK_UID,
+             "--ledger", str(ledger.relative_to(repo)), "--roles", ROLE, "--source-head", HEAD],
+            text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(0, run.returncode, run.stderr)
+        self.assertEqual("passed", json.loads(run.stdout)["status"])
+
     def test_removed_checkout_artifact_resolves_from_archive_and_keeps_digest(self) -> None:
         self.assertFalse(self.origin_root.exists(), "fixture must model a removed source checkout")
         calls: list[tuple[str, Path]] = []

@@ -379,6 +379,49 @@ class BoundedRecoveryCLITests(unittest.TestCase):
                     f"the consumer still requires a predecessor: {exc}"
                 )
 
+    def test_v2_consumer_rejects_competing_publication_added_after_admission(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case = self.legacy_anchor_lineage_case(temp)
+            original = case["authority"]
+            single_type = original._lineage.__func__.__globals__["SinglePublicationRecoveryAuthority"]
+            authority = object.__new__(single_type)
+            authority.__dict__.update(original.__dict__)
+            action = copy.deepcopy(original.envelope["current_action"])
+            current_comment = next(
+                item for item in case["comments"] if item["id"] == action["intent_comment_id"]
+            )
+            action["intent_author_login"] = current_comment["user"]["login"]
+            authority.envelope = {"current_action": action}
+
+            # Admission sees one authentic current publication. A later fresh
+            # read sees another publication with the same task/head/scope but
+            # a different projection and publication identity.
+            authority._lineage([current_comment])
+            current = case["current"]
+            competing = publication_module.build_task_publication(**{
+                key: (digest({"competing": True}) if key == "projection_digest" else current[key])
+                for key in (
+                    "repository", "repository_id", "task_uid", "bootstrap_epoch",
+                    "source_repository_id", "source_ref", "target_ref", "source_head_oid",
+                    "source_scope_oid", "planner_authority_oid", "planner_config_sha256",
+                    "policy_digest", "projection_digest",
+                )
+            })
+            self.assertNotEqual(current["publication_id"], competing["publication_id"])
+            for key in ("repository", "task_uid", "source_head_oid", "source_scope_oid"):
+                self.assertEqual(current[key], competing[key])
+            competing_comment = copy.deepcopy(current_comment)
+            competing_comment.update(
+                id=1003,
+                html_url="https://github.com/eng-cc/oasis7/issues/1#issuecomment-1003",
+                body=publication_module.publication_comment(competing),
+            )
+            before = case["current_journal"].path.read_bytes()
+            with self.assertRaisesRegex(ValueError, "compet|ambig|duplic"):
+                authority._lineage([current_comment, competing_comment])
+            self.assertEqual(before, case["current_journal"].path.read_bytes())
+            self.assertEqual([], case["adapter"].metadata_writes)
+
     def legacy_anchor_lineage_case(self, temp):
         root = Path(temp).resolve()
         root.mkdir(parents=True, exist_ok=True)

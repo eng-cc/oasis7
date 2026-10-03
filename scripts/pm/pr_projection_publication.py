@@ -77,6 +77,24 @@ def parse_publication_comment(body: str) -> dict[str, Any]:
     return validate_ci_publication(value)
 
 
+def reject_competing_current_publications(
+    current: dict[str, Any], publications: list[dict[str, Any]],
+) -> None:
+    """Require a single publication identity for the current task/head/scope.
+
+    Callers supply publications parsed from their fresh authoritative comment
+    read, after binding the selected current intent. Historical other-head
+    publications remain eligible for the separate dual-lineage route.
+    """
+    fields = ("repository", "task_uid", "source_head_oid", "source_scope_oid")
+    if any(
+        publication["publication_id"] != current["publication_id"]
+        and all(publication[field] == current[field] for field in fields)
+        for publication in publications
+    ):
+        raise ValueError("competing same-task/head/scope publication blocks recovery")
+
+
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result = {}
     for key, value in pairs:

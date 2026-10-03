@@ -3660,6 +3660,11 @@ class PublicationRecoveryAuthority:
         intent = self.module.parse_publication_comment(candidate["body"])
         if intent != self.intent or intent["publication_id"] != evidence["publication_id"]:
             raise ValueError("single publication intent differs from the current binding")
+        self.module.reject_competing_current_publications(intent, [
+            self.module.parse_publication_comment(c["body"])
+            for c in comments
+            if "<!-- oasis7-ci-publication/v1 -->" in str(c.get("body") or "")
+        ])
         if any(c.get("id") != candidate.get("id")
                and "<!-- oasis7-ci-publication/v1 -->" in str(c.get("body") or "")
                and self.module.parse_publication_comment(c["body"]).get("publication_id") == intent["publication_id"]
@@ -5660,15 +5665,9 @@ def command_admit_record_pr_recovery(args: argparse.Namespace) -> int:
     if len(current) != 1:
         raise ValueError("exact unique current publication intent is missing or ambiguous")
     intent_comment, intent = current[0]
-    conflicts = [
-        publication for _comment, publication in publication_comments
-        if publication.get("task_uid") == task_uid
-        and publication.get("source_head_oid") == intent.get("source_head_oid")
-        and publication.get("source_scope_oid") == intent.get("source_scope_oid")
-        and publication.get("publication_id") != publication_id
-    ]
-    if conflicts:
-        raise ValueError("competing same-task/head/scope publication blocks recovery")
+    publication_module.reject_competing_current_publications(
+        intent, [publication for _comment, publication in publication_comments],
+    )
     common = pathlib.Path(run_text([
         "git", "-C", str(target_root), "rev-parse", "--path-format=absolute", "--git-common-dir",
     ])).resolve()
