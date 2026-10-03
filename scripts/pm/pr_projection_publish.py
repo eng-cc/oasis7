@@ -709,12 +709,17 @@ class GitHubPublicationAdapter:
               }
               fieldValues(first: 100, after: $after) {
                 nodes {
+                  __typename
                   ... on ProjectV2ItemFieldTextValue {
                     text
                     field { ... on ProjectV2FieldCommon { name } }
                   }
                   ... on ProjectV2ItemFieldSingleSelectValue {
                     name
+                    field { ... on ProjectV2FieldCommon { name } }
+                  }
+                  ... on ProjectV2ItemFieldRepositoryValue {
+                    repository { id nameWithOwner }
                     field { ... on ProjectV2FieldCommon { name } }
                   }
                 }
@@ -774,13 +779,36 @@ class GitHubPublicationAdapter:
                     raise publication.PublicationError(
                         "TASK_IDENTITY_CONFLICT", "completed replay Project field value is duplicated",
                     )
-                raw = value.get("name")
-                if raw is None:
-                    raw = value.get("text")
-                if raw is not None and not isinstance(raw, str):
+                typename = value.get("__typename")
+                if typename == "ProjectV2ItemFieldRepositoryValue":
+                    repository = value.get("repository")
+                    if (not isinstance(repository, dict)
+                            or set(repository) != {"id", "nameWithOwner"}
+                            or not isinstance(repository.get("id"), str)
+                            or not repository["id"].strip()
+                            or not isinstance(repository.get("nameWithOwner"), str)
+                            or re.fullmatch(r"[^/\s]+/[^/\s]+", repository["nameWithOwner"]) is None):
+                        raise publication.PublicationError(
+                            "TASK_IDENTITY_CONFLICT", "completed replay Project Repository field is malformed",
+                        )
+                    if repository["nameWithOwner"] != self.args.repo:
+                        raise publication.PublicationError(
+                            "TASK_IDENTITY_CONFLICT",
+                            "completed replay Project Repository field differs from the canonical repository",
+                        )
+                    raw = repository["nameWithOwner"]
+                elif typename not in (None, "ProjectV2ItemFieldTextValue", "ProjectV2ItemFieldSingleSelectValue"):
                     raise publication.PublicationError(
-                        "TASK_IDENTITY_CONFLICT", "completed replay Project field value is malformed",
+                        "TASK_IDENTITY_CONFLICT", "completed replay Project field type is unsupported",
                     )
+                else:
+                    raw = value.get("name")
+                    if raw is None:
+                        raw = value.get("text")
+                    if raw is not None and not isinstance(raw, str):
+                        raise publication.PublicationError(
+                            "TASK_IDENTITY_CONFLICT", "completed replay Project field value is malformed",
+                        )
                 live_values[name] = raw or ""
             if not page_info["hasNextPage"]:
                 break

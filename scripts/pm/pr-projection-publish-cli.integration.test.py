@@ -101,6 +101,9 @@ def field_nodes():
         else:
             node["__typename"] = "ProjectV2ItemFieldTextValue"
             node["text"] = value
+        overrides = state.get("project_field_node_overrides", {})
+        if isinstance(overrides, dict) and isinstance(overrides.get(name), dict):
+            node.update(overrides[name])
         result.append(node)
     return result
 
@@ -1110,6 +1113,73 @@ class PublisherProcessTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self._assert_complete(after)
         self.assertEqual(mutations, after["mutations"], "read-only replay must remain a no-write operation")
+
+    def _completed_replay_no_write_snapshot(self):
+        first = self.run_publisher()
+        self.assertEqual(0, first.returncode, first.stderr)
+        state = self._load_state()
+        self._assert_complete(state)
+        journal_paths = list((self.repo / ".git/oasis7/pr-publication").glob("*/*/journal.json"))
+        self.assertEqual(1, len(journal_paths), f"expected one publication journal, found {journal_paths}")
+        mapping_path = self.task_root / ".pm/github-project-sync/tasks.json"
+        return {
+            "mutations": list(state["mutations"]),
+            "comments": list(state["comments"]),
+            "mapping_path": mapping_path,
+            "mapping": mapping_path.read_bytes(),
+            "journal_path": journal_paths[0],
+            "journal": journal_paths[0].read_bytes(),
+        }
+
+    def _assert_completed_replay_rejected_without_writes(self, result, snapshot, expected_error):
+        self.assertNotEqual(0, result.returncode, "invalid completed replay must fail closed")
+        self.assertIn(expected_error, result.stderr)
+        after = self._load_state()
+        self.assertEqual(snapshot["mutations"], after["mutations"],
+                         "rejected completed replay must not write Issue, Project, or PR state")
+        self.assertEqual(snapshot["comments"], after["comments"],
+                         "rejected completed replay must not append publication comments")
+        self.assertEqual(snapshot["mapping"], snapshot["mapping_path"].read_bytes(),
+                         "rejected completed replay must not rewrite Task cache")
+        self.assertEqual(snapshot["journal"], snapshot["journal_path"].read_bytes(),
+                         "rejected completed replay must not rewrite publication history")
+
+    def test_completed_replay_rejects_malformed_repository_union_value(self):
+        snapshot = self._completed_replay_no_write_snapshot()
+        self.state = self._load_state()
+        self.state["project_values"]["Repository"] = {
+            "type": "repository", "id": "", "name_with_owner": REPOSITORY,
+        }
+        self._save_state()
+        result = self.run_publisher()
+        self._assert_completed_replay_rejected_without_writes(
+            result, snapshot, "completed replay Project Repository field is malformed",
+        )
+
+    def test_completed_replay_rejects_unsupported_repository_union_type(self):
+        snapshot = self._completed_replay_no_write_snapshot()
+        self.state = self._load_state()
+        self.state["project_values"]["Repository"] = {
+            "type": "repository", "id": "R_fixture_oasis7", "name_with_owner": REPOSITORY,
+        }
+        self.state["project_field_node_overrides"] = {
+            "Repository": {"__typename": "ProjectV2ItemFieldUserValue"},
+        }
+        self._save_state()
+        result = self.run_publisher()
+        self._assert_completed_replay_rejected_without_writes(
+            result, snapshot, "completed replay Project field type is unsupported",
+        )
+
+    def test_completed_replay_rejects_missing_required_task_project_field(self):
+        snapshot = self._completed_replay_no_write_snapshot()
+        self.state = self._load_state()
+        self.state["project_values"].pop("Workflow Phase")
+        self._save_state()
+        result = self.run_publisher()
+        self._assert_completed_replay_rejected_without_writes(
+            result, snapshot, "completed replay live Project fields differ from the completed Task vector",
+        )
     def test_record_pr_rejects_c1_timestamp_edit_on_locked_reread_before_writes(self):
         self.state["edit_c1_on_locked_comments_read"] = True
         self._save_state()
