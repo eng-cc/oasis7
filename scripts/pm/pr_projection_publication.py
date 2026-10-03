@@ -323,13 +323,28 @@ def _publication_body(result: dict[str, Any], publication_id: str) -> str | None
 def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, Any], *,
             pr_binding: dict[str, Any], resume_action_id: str | None = None) -> None:
     action = "task-intent:" + publication["publication_id"]
+    record_pr_action = "record-pr:" + publication["publication_id"]
     action, identity = _task_intent_identity(adapter, journal, publication, pr_binding)
-    if resume_action_id is not None and resume_action_id != action:
+    selecting_record_pr = resume_action_id == record_pr_action
+    if (resume_action_id is not None
+            and (not isinstance(resume_action_id, str)
+                 or resume_action_id not in {action, record_pr_action})):
         raise PublicationError("TASK_IDENTITY_CONFLICT", "recovery selector does not match the exact publication action")
+    if selecting_record_pr:
+        record_pr_prior = _prior(journal, record_pr_action)
+        expected = record_pr_prior.get("expected") if isinstance(record_pr_prior, dict) else None
+        if (not isinstance(record_pr_prior, dict) or record_pr_prior.get("kind") != "record_pr"
+                or record_pr_prior.get("state") != "uncertain" or not isinstance(expected, dict)
+                or expected.get("publication_id") != publication["publication_id"]
+                or expected.get("task_uid") != publication["task_uid"]
+                or type(expected.get("pr_number")) is not int or expected["pr_number"] < 1):
+            raise PublicationError("TASK_IDENTITY_CONFLICT", "recovery selector is not the exact current uncertain record-pr action")
     prior = _prior(journal, action)
     history_anchored = journal.has_task_post_tail()
     events = journal.read_task_events(action, allow_unanchored=True)
     resolved = any(item["event"] == "RESOLVED" for item in events)
+    if selecting_record_pr and not resolved:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "record-pr recovery requires the exact Task intent to be resolved")
     if events:
         original_identity = events[0]["identity"]
         if resolved:
@@ -664,7 +679,18 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
                 "recovery admission check is unavailable for a persisted record-pr action",
             )
         try:
-            require_admission()
+            # The canonical publisher owns the handoff and binds it to the
+            # exact current Task/action. Preserve the zero-argument adapter
+            # shape used by older in-memory adapters without weakening the
+            # production command, which accepts both selectors.
+            try:
+                inspect.signature(require_admission).bind(
+                    publication["task_uid"], action,
+                )
+            except (TypeError, ValueError):
+                require_admission()
+            else:
+                require_admission(publication["task_uid"], action)
         except PublicationError:
             raise
         except Exception as exc:

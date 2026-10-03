@@ -452,14 +452,35 @@ class GitHubPublicationAdapter:
             binding["existing_ready_update"] = True
         return binding
 
-    def require_record_pr_recovery_admission(self) -> None:
-        """Require a unique live recovery marker before retrying record-pr."""
+    def require_record_pr_recovery_admission(self, task_uid: str, action_id: str) -> None:
+        """Create or reconcile one admission for this exact persisted action."""
         if not self.task_helper.is_file():
             raise RuntimeError("canonical recovery helper is unavailable")
-        marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
+        canonical_helper = (HERE / "github-project-task.py").resolve()
+        if self.task_helper != canonical_helper:
+            raise RuntimeError("recovery requires the canonical effective task helper")
+        expected_action = "record-pr:" + self.publication["publication_id"]
+        if task_uid != self.publication["task_uid"] or action_id != expected_action:
+            raise RuntimeError("recovery admission selector differs from current publication action")
+        marker_v1 = "<!-- oasis7-publication-recovery-admission/v1 -->"
+        marker_v2 = "<!-- oasis7-publication-recovery-admission/v2 -->"
         comments = self._issue_comments()
-        if sum(marker in comment["body"] for comment in comments) != 1:
+        existing = [comment for comment in comments
+                    if marker_v1 in comment["body"] or marker_v2 in comment["body"]]
+        if len(existing) > 1:
+            raise RuntimeError("multiple current record-pr recovery admissions are ambiguous")
+        if not existing:
+            command_output([
+                sys.executable, str(self.task_helper), "admit-record-pr-recovery",
+                "--task-uid", task_uid, "--action-id", action_id,
+            ], timeout=180, reservation_fd=self.reservation_fd)
+            comments = self._issue_comments()
+            existing = [comment for comment in comments
+                        if marker_v1 in comment["body"] or marker_v2 in comment["body"]]
+        if len(existing) != 1:
             raise RuntimeError("one unique current record-pr recovery admission is required")
+        if marker_v2 in existing[0]["body"] and marker_v1 in existing[0]["body"]:
+            raise RuntimeError("recovery admission mixes version markers")
         # record_pr() re-reads comments and reconstructs the full authority
         # before helper launch, so a changed/removed admission fails closed.
         self.record_pr_recovery_required = True
@@ -492,12 +513,14 @@ class GitHubPublicationAdapter:
             # An unavailable helper cannot execute recovery. Leave its normal
             # command failure intact before making discovery network requests.
             comments = self._issue_comments() if self.task_helper.is_file() else []
-            marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
-            admissions = [c for c in comments if marker in c["body"]]
+            marker_v1 = "<!-- oasis7-publication-recovery-admission/v1 -->"
+            marker_v2 = "<!-- oasis7-publication-recovery-admission/v2 -->"
+            admissions = [c for c in comments
+                          if marker_v1 in c["body"] or marker_v2 in c["body"]]
             if self.record_pr_recovery_required and len(admissions) != 1:
                 raise RuntimeError("required record-pr recovery admission changed before helper launch")
             if admissions:
-                if self.task_helper != (self.root / "scripts/pm/github-project-task.py").resolve():
+                if self.task_helper != (HERE / "github-project-task.py").resolve():
                     raise RuntimeError("recovery requires the canonical reviewed task helper")
                 spec = importlib.util.spec_from_file_location("publication_task_recovery_impl", self.task_helper)
                 if spec is None or spec.loader is None:
@@ -507,8 +530,11 @@ class GitHubPublicationAdapter:
                 selected_args = helper.build_parser().parse_args(command[2:])
                 record = mapping_identity(self.root.resolve(), task_uid, self.args.repo, self.issue_number,
                                           self.args.source_ref, self.args.target_ref)
-                recovery = helper.PublicationRecoveryAuthority(selected_args, record, binding,
-                                                               self.publication, publication, comments)
+                authority_type = (helper.SinglePublicationRecoveryAuthority
+                                  if marker_v2 in admissions[0]["body"]
+                                  else helper.PublicationRecoveryAuthority)
+                recovery = authority_type(selected_args, record, binding,
+                                          self.publication, publication, comments)
             command_output(command, timeout=180 if recovery is not None else 60,
                            reservation_fd=self.reservation_fd)
             if recovery is not None:

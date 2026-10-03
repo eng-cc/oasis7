@@ -12,6 +12,8 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
+import review_preflight_handoff as HANDOFF
+
 
 SOURCE = Path(__file__).with_name("subagent-task-packet.py")
 _SPEC = importlib.util.spec_from_file_location("subagent_task_packet_under_test", SOURCE)
@@ -70,7 +72,7 @@ class PacketTest(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         shutil.copy2(SNAPSHOT_HELPER, self.repo / "scripts/pm/bootstrap-task-snapshot.py")
-        for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md", ".agents/roles/qa_engineer.md", "scope.txt"):
+        for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md", ".agents/roles/qa_engineer.md", ".agents/roles/repository_health_engineer.md", "scope.txt"):
             (self.repo / path).write_text(path + "\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "base"], check=True, capture_output=True)
@@ -190,6 +192,226 @@ class PacketTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "add", "new.txt"], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "advance"], check=True, capture_output=True)
         self.assertIn("stale or mismatched packet head", self.invoke(["validate", packet_path], ok=False).stderr)
+
+    def test_shared_packet_contract_accepts_origin_and_rejects_tampering(self) -> None:
+        created = self.invoke(self.create_args())
+        packet_path = self.repo / created.stdout.splitlines()[0]
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        snapshot_path = self.create_snapshot()
+        task_snapshot = self.normalized_task_snapshot(json.loads(snapshot_path.read_text(encoding="utf-8")))
+        identity = packet["identity"]
+        facts_snapshot = {key: identity[key] for key in
+                          ("worktree", "branch", "base_ref", "base_sha", "base_binding", "head")}
+        reference_tree_oid = self.git("rev-parse", f"{identity['head']}^{{tree}}")
+        validator = getattr(PACKET, "validate_packet_contract", None)
+        self.assertTrue(callable(validator), "missing shared validate_packet_contract validator")
+
+        validator(packet, task_snapshot, facts_snapshot,
+                  artifact_root=self.repo, reference_tree_oid=reference_tree_oid)
+
+        mutations = {
+            "schema": lambda value: value.update(schema="oasis7-subagent-task-packet/v0"),
+            "identity": lambda value: value["identity"].update(task_uid="task_22222222222222222222222222222222"),
+            "owner": lambda value: value["slice"].update(owner_role="repository_health_engineer"),
+            "branch": lambda value: value["identity"].update(branch="task/other"),
+            "head": lambda value: value["identity"].update(head="0" * len(identity["head"])),
+            "context": lambda value: value["context"].pop("work_item"),
+            "reference": lambda value: value["context"].update(scoped_refs=["../outside"]),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(mutation=label):
+                candidate = json.loads(json.dumps(packet))
+                mutate(candidate)
+                candidate["packet_digest"] = PACKET.canonical_digest(candidate)
+                with self.assertRaises(PACKET.PacketError):
+                    validator(candidate, task_snapshot, facts_snapshot,
+                              artifact_root=self.repo, reference_tree_oid=reference_tree_oid)
+
+        with self.subTest(mutation="digest"):
+            candidate = json.loads(json.dumps(packet))
+            candidate["packet_digest"] = "0" * 64
+            with self.assertRaises(PACKET.PacketError):
+                validator(candidate, task_snapshot, facts_snapshot,
+                          artifact_root=self.repo, reference_tree_oid=reference_tree_oid)
+
+    @staticmethod
+    def normalized_task_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
+        task = snapshot["task"]
+        project = task["project"]
+        git_identity = snapshot["git"]
+        result: dict[str, object] = {
+            "task_uid": task["uid"], "issue_number": task["issue"]["number"],
+            "issue_url": task["issue"]["url"], "project_item_id": project["item_id"],
+            "status": project["status"], "owner_role": task["owner_role"],
+            "acceptance": task["acceptance"], "bootstrap_epoch": task["bootstrap_epoch"],
+            "repository": snapshot["repository"], "canonical_worktree": git_identity["worktree"],
+            "task_branch": git_identity["branch"],
+        }
+        if "primary_package" in task:
+            result["primary_package"] = task["primary_package"]
+        if "loop_binding" in task:
+            result["loop_binding"] = task["loop_binding"]
+        return result
+
+    def test_archived_packet_validation_survives_checkout_removal(self) -> None:
+        qa_slice = "11111111-1111-4111-8111-111111111111"
+        rh_slice = "22222222-2222-4222-8222-222222222222"
+
+        def create_packet(role: str, slice_id: str) -> Path:
+            args = self.create_args()
+            args[args.index("--role") + 1] = role
+            args[args.index("--slice-id") + 1] = slice_id
+            args[args.index(".agents/roles/qa_engineer.md")] = f".agents/roles/{role}.md"
+            return self.repo / self.invoke(args).stdout.splitlines()[0]
+
+        qa_packet_path = create_packet("qa_engineer", qa_slice)
+        rh_packet_path = create_packet("repository_health_engineer", rh_slice)
+        qa_packet_raw = qa_packet_path.read_bytes()
+        rh_packet_raw = rh_packet_path.read_bytes()
+        qa_packet = json.loads(qa_packet_raw)
+        rh_packet = json.loads(rh_packet_raw)
+        snapshot_path = self.create_snapshot()
+        snapshot_raw = snapshot_path.read_bytes()
+        snapshot = json.loads(snapshot_raw)
+        plan_path = self.create_v2_review_plan(
+            qa_packet_path.relative_to(self.repo).as_posix(), snapshot["task"]["bootstrap_epoch"],
+            source_only=True,
+        )
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        expected_slices = sorted([
+            {"role": "repository_health_engineer", "slice_id": rh_slice},
+            {"role": "qa_engineer", "slice_id": qa_slice},
+        ], key=lambda item: (item["role"], item["slice_id"]))
+        batch_identity = {
+            "task_uid": TASK_UID, "frozen_head": plan["frozen_head"],
+            "relevant_evidence_digest": plan["relevant_evidence_digest"],
+            "expected_slices": expected_slices,
+        }
+        epoch = hashlib.sha256(json.dumps(
+            batch_identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        batch = {"schema": "oasis7-review-batch/v1", "epoch": epoch, **batch_identity}
+        batch_path = self.repo / ".pm/scratch" / TASK_UID / "review-batches" / f"{epoch}.json"
+        batch_path.write_text(json.dumps(batch, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        plan.update({
+            "epoch": epoch,
+            "batch_path": batch_path.relative_to(self.repo).as_posix(),
+            "expected_slices": expected_slices,
+            "packet_refs": [
+                {"role": "repository_health_engineer", "slice_id": rh_slice,
+                 "packet_ref": rh_packet_path.relative_to(self.repo).as_posix()},
+                {"role": "qa_engineer", "slice_id": qa_slice,
+                 "packet_ref": qa_packet_path.relative_to(self.repo).as_posix()},
+            ],
+        })
+        plan_path.write_text(json.dumps(plan, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        self.review_admission(
+            qa_packet_path.relative_to(self.repo).as_posix(), plan_path, snapshot_path,
+        )
+        plan_raw = plan_path.read_bytes()
+        batch_raw = batch_path.read_bytes()
+
+        rows = [
+            {"role": "repository_health_engineer", "slice_id": rh_slice,
+             "packet_path": rh_packet_path.relative_to(self.repo).as_posix(),
+             "packet_digest": rh_packet["packet_digest"]},
+            {"role": "qa_engineer", "slice_id": qa_slice,
+             "packet_path": qa_packet_path.relative_to(self.repo).as_posix(),
+             "packet_digest": qa_packet["packet_digest"]},
+        ]
+        rows.sort(key=lambda item: (item["role"].encode("utf-8"), item["slice_id"].encode("utf-8")))
+        payload = {
+            "schema": HANDOFF.DISPATCH_SCHEMA, "repository": "example/repo",
+            "task_uid": TASK_UID, "issue_number": 1, "pr_number": 1,
+            "frozen_head": plan["frozen_head"], "epoch": epoch,
+            "plan_path": plan_path.relative_to(self.repo).as_posix(),
+            "plan_sha256": hashlib.sha256(plan_raw).hexdigest(),
+            "batch_path": batch_path.relative_to(self.repo).as_posix(),
+            "batch_sha256": hashlib.sha256(batch_raw).hexdigest(), "rows": rows,
+        }
+        readback = {
+            "issue_number": 1, "issue_url": "https://github.com/example/repo/issues/1",
+            "comment_id": 123, "author": "fixture-admin",
+            "body_digest": hashlib.sha256(HANDOFF.dispatch_body(payload)).hexdigest(),
+            "payload": payload,
+        }
+        origin_context = {
+            "schema": "oasis7-publication-helper-review-origin/v1", "task_uid": TASK_UID,
+            "bootstrap_snapshot": {"value": snapshot, "raw_sha256": hashlib.sha256(snapshot_raw).hexdigest()},
+            "review_plan": {"value": plan, "raw_sha256": hashlib.sha256(plan_raw).hexdigest()},
+            "review_batch": {"value": batch, "raw_sha256": hashlib.sha256(batch_raw).hexdigest()},
+            "dispatch_readback": readback,
+            "packets": [
+                {"role": "repository_health_engineer", "slice_id": rh_slice,
+                 "repo_path": rh_packet_path.relative_to(self.repo).as_posix(),
+                 "raw_sha256": hashlib.sha256(rh_packet_raw).hexdigest(), "value": rh_packet},
+                {"role": "qa_engineer", "slice_id": qa_slice,
+                 "repo_path": qa_packet_path.relative_to(self.repo).as_posix(),
+                 "raw_sha256": hashlib.sha256(qa_packet_raw).hexdigest(), "value": qa_packet},
+            ],
+            "reviewed_git": {
+                "comparison_oid": plan["comparison_oid"],
+                "source_scope_oid": plan["source_review_identity"]["source_scope_oid"],
+                "head_oid": plan["frozen_head"],
+            },
+        }
+        task_identity = PACKET.load_task(self.repo, TASK_UID)
+        task_identity.update({"pr_number": 1, "pr_url": "https://github.com/example/repo/pull/1"})
+        source_head = plan["frozen_head"]
+
+        bare_git = Path(self.tmp.name) / "reviewed-source.git"
+        archive_root = Path(self.tmp.name) / "durable-archive-root"
+        subprocess.run(["git", "clone", "--bare", str(self.repo), str(bare_git)],
+                       check=True, capture_output=True, text=True)
+        subprocess.run(["git", "clone", str(bare_git), str(archive_root)],
+                       check=True, capture_output=True, text=True)
+        for source in (qa_packet_path, rh_packet_path, plan_path, batch_path):
+            relative = source.relative_to(self.repo)
+            target = archive_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+        shutil.rmtree(self.repo)
+        self.assertFalse(self.repo.exists(), "the original helper checkout must stay removed")
+        archived_qa_path = archive_root / qa_packet_path.relative_to(self.repo)
+        self.assertEqual(qa_packet_raw, archived_qa_path.read_bytes())
+
+        validator = getattr(PACKET, "validate_archived_packet", None)
+        self.assertTrue(callable(validator), "missing validate_archived_packet archive consumer")
+        validator(qa_packet, origin_context, archive_root=archive_root,
+                  live_task_identity=task_identity, reviewed_source_oid=source_head)
+
+        archived_qa_path.write_bytes(b"{}\n")
+        with self.assertRaises(PACKET.PacketError):
+            validator(qa_packet, origin_context, archive_root=archive_root,
+                      live_task_identity=task_identity, reviewed_source_oid=source_head)
+        archived_qa_path.unlink()
+        with self.assertRaises(PACKET.PacketError):
+            validator(qa_packet, origin_context, archive_root=archive_root,
+                      live_task_identity=task_identity, reviewed_source_oid=source_head)
+        archived_qa_path.write_bytes(qa_packet_raw)
+
+        mutations = {
+            "origin_schema": lambda value: value.update(schema="invalid/v0"),
+            "origin_uid": lambda value: value.update(task_uid="task_22222222222222222222222222222222"),
+            "snapshot_digest": lambda value: value["bootstrap_snapshot"].update(raw_sha256="0" * 64),
+            "plan_digest": lambda value: value["review_plan"].update(raw_sha256="0" * 64),
+            "batch_digest": lambda value: value["review_batch"].update(raw_sha256="0" * 64),
+            "dispatch_digest": lambda value: value["dispatch_readback"].update(body_digest="0" * 64),
+            "reviewed_head": lambda value: value["reviewed_git"].update(head_oid="0" * len(source_head)),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(origin_mutation=label):
+                candidate = json.loads(json.dumps(origin_context))
+                mutate(candidate)
+                with self.assertRaises(PACKET.PacketError):
+                    validator(qa_packet, candidate, archive_root=archive_root,
+                              live_task_identity=task_identity, reviewed_source_oid=source_head)
+
+        live_identity = dict(task_identity)
+        live_identity["issue_number"] = 2
+        with self.assertRaises(PACKET.PacketError):
+            validator(qa_packet, origin_context, archive_root=archive_root,
+                      live_task_identity=live_identity, reviewed_source_oid=source_head)
 
     def create_snapshot(self) -> Path:
         snapshot = self.repo / ".pm/scratch" / TASK_UID / "bootstrap-task-snapshot.json"

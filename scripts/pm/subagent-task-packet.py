@@ -33,6 +33,7 @@ INCREMENTAL_ESCALATION_REASONS = {
 INCREMENTAL_OBLIGATION_FIELDS = {
     "mode", "prior_head_oid", "current_head_oid", "delta_paths_digest", "scope_digest",
 }
+ARCHIVED_ORIGIN_SCHEMA = "oasis7-publication-helper-review-origin/v1"
 
 
 class PacketError(RuntimeError):
@@ -211,6 +212,73 @@ def repo_reference(root: Path, value: str, name: str) -> str:
     return path.as_posix()
 
 
+def _repository_root_for_artifacts(artifact_root: Path) -> Path:
+    """Select the Git object database for a live checkout or trusted archive consumer.
+
+    Archive members may live below the repository's common Git directory rather
+    than in a checkout. In that case the effective helper's own repository is
+    the only allowed object database; a caller-provided target checkout is not
+    an authority source.
+    """
+    candidate = artifact_root.resolve()
+    probe = subprocess.run(
+        ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
+        text=True, capture_output=True, check=False,
+    )
+    if probe.returncode == 0:
+        return Path(probe.stdout.strip()).resolve()
+    trusted_root = Path(__file__).resolve().parents[2]
+    probe = subprocess.run(
+        ["git", "-C", str(trusted_root), "rev-parse", "--show-toplevel"],
+        text=True, capture_output=True, check=False,
+    )
+    if probe.returncode != 0:
+        fail("trusted helper repository cannot resolve its Git object database")
+    return Path(probe.stdout.strip()).resolve()
+
+
+def _reference_at_tree(artifact_root: Path, value: str, name: str, *,
+                       reference_tree_oid: str, git_root: Path,
+                       archived: bool) -> str:
+    """Validate a repository-relative reference against the reviewed source tree.
+
+    Generated task evidence can exist only in the immutable archive, so archived
+    task-scratch references are resolved there. Other references must exist in
+    the reviewed Git tree. Live validation retains its historical allowance for
+    an existing untracked working-tree reference.
+    """
+    value = bounded(value, name)
+    path = Path(value)
+    if (path.is_absolute() or ".." in path.parts or not path.parts
+            or path.as_posix() != value):
+        fail(f"{name} must be a normalized repo-relative reference: {value}")
+    root = artifact_root.resolve()
+    candidate = root.joinpath(*path.parts)
+    current = root
+    for part in path.parts:
+        current = current / part
+        if current.is_symlink():
+            fail(f"{name} must not traverse a symlink: {value}")
+    try:
+        candidate.resolve().relative_to(root)
+    except (OSError, ValueError):
+        fail(f"{name} escapes the artifact root: {value}")
+
+    in_task_archive = len(path.parts) >= 3 and path.parts[:2] == (".pm", "scratch")
+    if archived and in_task_archive and candidate.exists():
+        return path.as_posix()
+    if not archived and candidate.exists():
+        return path.as_posix()
+
+    result = subprocess.run(
+        ["git", "-C", str(git_root), "cat-file", "-e", f"{reference_tree_oid}:{path.as_posix()}"],
+        text=True, capture_output=True, check=False,
+    )
+    if result.returncode == 0:
+        return path.as_posix()
+    fail(f"{name} does not exist in the reviewed source tree: {value}")
+
+
 def canonical_digest(packet: dict[str, object]) -> str:
     unsigned = {key: value for key, value in packet.items() if key != "packet_digest"}
     encoded = json.dumps(unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -342,7 +410,8 @@ def validate_collected_ledger(root: Path, batch: dict[str, object], ledger_path:
 def validate_incremental_context(root: Path, context: dict[str, object], task_uid: str,
                                  current_head: str, packet_role: str | None = None,
                                  required_roles: list[str] | None = None,
-                                 enforce_semantics: bool = True) -> None:
+                                 enforce_semantics: bool = True,
+                                 git_root: Path | None = None) -> None:
     if context.get("schema") != INCREMENTAL_CONTEXT_SCHEMA or context.get("authority") != "context_only":
         fail("review context is not advisory oasis7-review-context/v1")
     if context.get("task_uid") != task_uid or context.get("current_head_oid") != current_head:
@@ -459,7 +528,8 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
         fail("review context delta paths are invalid")
     if delta_paths != sorted(set(delta_paths)):
         fail("review context delta paths are not sorted and unique")
-    actual_paths = [line for line in git(root, "diff", "--name-only", "--no-renames", prior_head, current_head).splitlines() if line]
+    comparison_root = git_root or root
+    actual_paths = [line for line in git(comparison_root, "diff", "--name-only", "--no-renames", prior_head, current_head).splitlines() if line]
     if actual_paths != delta_paths:
         fail("review context delta paths do not match the prior-head to current-head diff")
     expected_delta_digest = hashlib.sha256(json.dumps(
@@ -467,7 +537,7 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
     ).encode("utf-8")).hexdigest()
     if context.get("delta_paths_digest") != expected_delta_digest:
         fail("review context delta paths digest is invalid")
-    expected_patch_digest = binary_diff_digest(root, prior_head, current_head)
+    expected_patch_digest = binary_diff_digest(comparison_root, prior_head, current_head)
     if context.get("delta_patch_digest") != expected_patch_digest:
         fail("review context patch digest does not match the prior-head to current-head diff")
 
@@ -560,9 +630,19 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
             fail("review context current packet role obligation does not match its mode")
 
 
-def validate_packet(root: Path, packet: dict[str, object],
-                    enforce_incremental_semantics: bool = True,
-                    allow_ready_review_commit: bool = False) -> None:
+def validate_packet_contract(packet: dict[str, object], task_snapshot: dict[str, object],
+                             facts_snapshot: dict[str, object], *, artifact_root: Path,
+                             reference_tree_oid: str,
+                             enforce_incremental_semantics: bool = True,
+                             allow_ready_review_commit: bool = False,
+                             archived: bool = False,
+                             git_root: Path | None = None) -> None:
+    """Validate immutable packet semantics against supplied, already-authenticated facts.
+
+    The live wrapper supplies canonical task mapping and Git facts. The archive
+    wrapper derives the same shape from its validated origin bundle and trusted
+    source objects. This function performs no task lookup or network read.
+    """
     if packet.get("schema") != SCHEMA:
         fail(f"unsupported packet schema: {packet.get('schema')}")
     identity = packet.get("identity")
@@ -572,20 +652,35 @@ def validate_packet(root: Path, packet: dict[str, object],
         fail("packet is missing identity, slice, or context objects")
     assert isinstance(identity, dict) and isinstance(slice_contract, dict) and isinstance(context, dict)
     task_uid = bounded(str(identity.get("task_uid") or ""), "identity.task_uid")
-    task = load_task(root, task_uid)
-    base_binding = str(identity.get("base_binding") or "live_ref")
-    frozen_base_oid = str(identity.get("base_sha")) if base_binding == "immutable_oid" else None
-    facts = current_facts(root, task, str(identity.get("base_ref") or ""), frozen_base_oid)
-    from loop_gate import admission
+    if not TASK_UID_RE.fullmatch(task_uid):
+        fail("identity.task_uid is invalid")
+    task = task_snapshot
+    facts = facts_snapshot
+    root = artifact_root.resolve()
+    if not isinstance(task, dict) or not isinstance(facts, dict):
+        fail("packet task and Git fact snapshots must be objects")
+    if task.get("task_uid") != task_uid:
+        fail("packet task UID does not match the authenticated task snapshot")
+    for field in ("worktree", "branch", "base_ref", "base_sha", "base_binding", "head"):
+        value = facts.get(field)
+        if not isinstance(value, str) or not value:
+            fail(f"packet Git fact snapshot is missing {field}")
+    if not re.fullmatch(r"[0-9a-f]{40,64}", reference_tree_oid):
+        fail("reference tree OID is invalid")
+    trusted_git_root = (git_root or _repository_root_for_artifacts(root)).resolve()
     try:
-        admission(root, task, facts['base_sha'], facts['head'])
-    except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
-        fail(str(exc))
+        exact_tree = git(trusted_git_root, "rev-parse", "--verify", f"{reference_tree_oid}^{{tree}}")
+    except PacketError as exc:
+        fail(f"reference tree is unavailable: {exc}")
+    if exact_tree != reference_tree_oid:
+        fail("reference_tree_oid must identify an exact Git tree object")
+
     if packet.get('loop_binding') != task.get('loop_binding'):
         fail('packet loop binding differs from canonical task')
     for field in ("worktree", "branch", "base_sha", "head"):
         if identity.get(field) != facts[field]:
             fail(f"stale or mismatched packet {field}: expected {facts[field]}, got {identity.get(field)}")
+    base_binding = str(identity.get("base_binding") or "live_ref")
     if base_binding != facts["base_binding"]:
         fail(f"stale or mismatched packet base_binding: expected {facts['base_binding']}, got {base_binding}")
     if identity.get("issue_url") != task.get("issue_url"):
@@ -609,7 +704,10 @@ def validate_packet(root: Path, packet: dict[str, object],
                 and slice_contract.get("slice_type") == "professional_review"
             )
             if ready_review_commit:
-                validate_live_project_review_admission(root, task, task_uid)
+                # The live wrapper has already established this exception by
+                # reading the exact current Project item. The archive wrapper
+                # never enables it: archived facts are constructed per packet.
+                pass
             else:
                 fail(f"packet {field} does not match task mapping")
     bounded(str(identity.get("packet_producer") or ""), "identity.packet_producer")
@@ -644,17 +742,564 @@ def validate_packet(root: Path, packet: dict[str, object],
     if not required.issubset(set(governance)):
         fail(f"governance refs must include: {', '.join(sorted(required))}")
     for value in governance + scoped:
-        repo_reference(root, str(value), "packet reference")
+        _reference_at_tree(root, str(value), "packet reference",
+                           reference_tree_oid=reference_tree_oid,
+                           git_root=trusted_git_root, archived=archived)
     review_context = packet.get("review_context")
     if review_context is not None:
         if not isinstance(review_context, dict):
             fail("packet review_context must be an object")
         validate_incremental_context(
             root, review_context, task_uid, str(identity["head"]), str(slice_contract["role"]),
-            enforce_semantics=enforce_incremental_semantics,
+            enforce_semantics=enforce_incremental_semantics, git_root=trusted_git_root,
         )
     if packet.get("packet_digest") != canonical_digest(packet):
         fail("packet digest mismatch")
+
+
+def validate_packet(root: Path, packet: dict[str, object],
+                    enforce_incremental_semantics: bool = True,
+                    allow_ready_review_commit: bool = False) -> None:
+    """Validate a packet against current canonical task and worktree facts."""
+    if packet.get("schema") != SCHEMA:
+        fail(f"unsupported packet schema: {packet.get('schema')}")
+    identity = packet.get("identity")
+    slice_contract = packet.get("slice")
+    if not isinstance(identity, dict) or not isinstance(slice_contract, dict):
+        fail("packet is missing identity, slice, or context objects")
+    task_uid = bounded(str(identity.get("task_uid") or ""), "identity.task_uid")
+    task = load_task(root, task_uid)
+    base_binding = str(identity.get("base_binding") or "live_ref")
+    frozen_base_oid = str(identity.get("base_sha")) if base_binding == "immutable_oid" else None
+    facts = current_facts(root, task, str(identity.get("base_ref") or ""), frozen_base_oid)
+    from loop_gate import admission
+    try:
+        admission(root, task, facts['base_sha'], facts['head'])
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
+        fail(str(exc))
+
+    ready_review_commit = (
+        allow_ready_review_commit
+        and identity.get("task_status") == "ready"
+        and task.get("status") == "committed"
+        and task.get("workflow_phase") == "verification"
+        and slice_contract.get("slice_type") == "professional_review"
+    )
+    if identity.get("task_status") != task.get("status") and ready_review_commit:
+        validate_live_project_review_admission(root, task, task_uid)
+
+    reference_tree_oid = git(root, "rev-parse", "--verify", f"{facts['head']}^{{tree}}")
+    validate_packet_contract(
+        packet, task, facts, artifact_root=root, reference_tree_oid=reference_tree_oid,
+        enforce_incremental_semantics=enforce_incremental_semantics,
+        allow_ready_review_commit=ready_review_commit,
+        archived=False, git_root=root,
+    )
+
+
+def _strict_json_object(raw: bytes, label: str) -> dict[str, object]:
+    def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                fail(f"{label} contains a duplicate JSON key: {key}")
+            result[key] = value
+        return result
+
+    try:
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=reject_duplicates)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        fail(f"{label} is not valid UTF-8 JSON: {exc}")
+    if not isinstance(value, dict):
+        fail(f"{label} must be a JSON object")
+    return value
+
+
+def _archive_member(root: Path, relative: str, label: str) -> tuple[Path, bytes, dict[str, object]]:
+    path = Path(relative)
+    if (path.is_absolute() or ".." in path.parts or not path.parts
+            or path.as_posix() != relative):
+        fail(f"{label} path is not a normalized archive-relative path")
+    base = root.resolve(strict=True)
+    candidate = base.joinpath(*path.parts)
+    current = base
+    for part in path.parts:
+        current = current / part
+        if current.is_symlink():
+            fail(f"{label} must not traverse a symlink")
+    try:
+        candidate.resolve(strict=True).relative_to(base)
+        raw = candidate.read_bytes()
+    except (OSError, ValueError) as exc:
+        fail(f"cannot read archived {label}: {exc}")
+    return candidate, raw, _strict_json_object(raw, f"archived {label}")
+
+
+def _json_file_bytes(value: dict[str, object], *, indent: int | None = None) -> bytes:
+    text = json.dumps(value, ensure_ascii=False, sort_keys=True, indent=indent)
+    return (text + "\n").encode("utf-8")
+
+
+def _bootstrap_task_record(snapshot: dict[str, object], packet_status: object | None) -> dict[str, object]:
+    if snapshot.get("schema") != "oasis7.bootstrap-task-snapshot/v1":
+        fail("archived bootstrap snapshot schema is invalid")
+    task = snapshot.get("task")
+    repository = snapshot.get("repository")
+    git_identity = snapshot.get("git")
+    if not isinstance(task, dict) or not isinstance(repository, str) or not isinstance(git_identity, dict):
+        fail("archived bootstrap snapshot identity is incomplete")
+    issue = task.get("issue")
+    project = task.get("project")
+    base = git_identity.get("base")
+    if not isinstance(issue, dict) or not isinstance(project, dict) or not isinstance(base, dict):
+        fail("archived bootstrap snapshot is missing Issue, Project, or Git identity")
+    if (not isinstance(task.get("uid"), str) or not TASK_UID_RE.fullmatch(str(task.get("uid")))
+            or type(issue.get("number")) is not int or issue["number"] < 1
+            or not isinstance(issue.get("url"), str) or not issue["url"]
+            or not isinstance(project.get("item_id"), str) or not project["item_id"]
+            or not isinstance(task.get("owner_role"), str) or not task["owner_role"]
+            or not isinstance(task.get("acceptance"), list) or not task["acceptance"]
+            or type(task.get("bootstrap_epoch")) is not int or task["bootstrap_epoch"] < 1
+            or not isinstance(git_identity.get("worktree"), str) or not git_identity["worktree"]
+            or not isinstance(git_identity.get("branch"), str) or not git_identity["branch"]
+            or not isinstance(base.get("branch"), str) or not base["branch"]
+            or not re.fullmatch(r"[0-9a-f]{40,64}", str(base.get("oid") or ""))
+            or not re.fullmatch(r"[0-9a-f]{40,64}", str(git_identity.get("head") or ""))
+            or (packet_status is not None and (not isinstance(packet_status, str) or not packet_status))):
+        fail("archived bootstrap snapshot stable fields are malformed")
+    record: dict[str, object] = {
+        "task_uid": task["uid"], "issue_number": issue["number"], "issue_url": issue["url"],
+        "project_item_id": project["item_id"],
+        "owner_role": task["owner_role"], "acceptance": task["acceptance"],
+        "bootstrap_epoch": task["bootstrap_epoch"], "repository": repository,
+        "canonical_worktree": git_identity["worktree"], "task_branch": git_identity["branch"],
+    }
+    if packet_status is not None:
+        record["status"] = packet_status
+    if "primary_package" in task:
+        record["primary_package"] = task["primary_package"]
+    if "loop_binding" in task:
+        record["loop_binding"] = task["loop_binding"]
+    return record
+
+
+def _validate_origin_snapshot(origin_context: dict[str, object], archive_root: Path,
+                              task_uid: str) -> dict[str, object]:
+    wrapper = origin_context.get("bootstrap_snapshot")
+    if (not isinstance(wrapper, dict) or set(wrapper) != {"value", "raw_sha256"}
+            or not isinstance(wrapper.get("value"), dict)
+            or not isinstance(wrapper.get("raw_sha256"), str)
+            or not SHA_RE.fullmatch(wrapper["raw_sha256"])):
+        fail("archived bootstrap snapshot wrapper is invalid")
+    snapshot = wrapper["value"]
+    unsigned = {key: value for key, value in snapshot.items() if key != "digest"}
+    digest = "sha256:" + hashlib.sha256(json.dumps(
+        unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    if snapshot.get("digest") != digest:
+        fail("archived bootstrap snapshot digest mismatch")
+    expected_file = f".pm/scratch/{task_uid}/bootstrap-task-snapshot.json"
+    raw = _json_file_bytes(snapshot, indent=2)
+    archived_path = archive_root / expected_file
+    if archived_path.exists() or archived_path.is_symlink():
+        _path, raw, saved = _archive_member(archive_root, expected_file, "bootstrap snapshot")
+        if saved != snapshot:
+            fail("archived bootstrap snapshot bytes differ from the origin context")
+    if hashlib.sha256(raw).hexdigest() != wrapper["raw_sha256"]:
+        fail("archived bootstrap snapshot file digest mismatch")
+    task = snapshot.get("task")
+    if not isinstance(task, dict) or task.get("uid") != task_uid:
+        fail("archived bootstrap snapshot Task UID mismatch")
+    # Validate stable bootstrap identity without synthesizing Task status:
+    # lifecycle status is temporal and is supplied by the packet-origin facts.
+    _bootstrap_task_record(snapshot, None)
+    return snapshot
+
+
+def _normalized_archived_batch_path(batch_path_raw: object, original_worktree: object,
+                                    canonical_batch_path: str) -> str:
+    if not isinstance(original_worktree, str) or not original_worktree:
+        fail("authenticated original worktree path is missing")
+    origin_root = Path(original_worktree)
+    if (not origin_root.is_absolute() or ".." in origin_root.parts
+            or str(origin_root) != original_worktree):
+        fail("authenticated original worktree path is not canonical")
+    if not isinstance(batch_path_raw, str):
+        fail("archived review plan batch path is missing")
+    batch_path = Path(batch_path_raw)
+    if batch_path.is_absolute():
+        try:
+            # Interpret the old absolute reference against the authenticated
+            # bootstrap identity, without resolving or accessing that worktree.
+            batch_path = batch_path.relative_to(origin_root)
+        except ValueError:
+            fail("archived review batch path escapes the authenticated original worktree")
+    batch_relative = batch_path.as_posix()
+    if batch_relative != canonical_batch_path:
+        fail("archived review batch path is not canonical")
+    return batch_relative
+
+
+def _github_issue_identity(url: object, repository: object, issue_number: object) -> tuple[str, int]:
+    if (not isinstance(repository, str)
+            or not re.fullmatch(r"[A-Za-z0-9._-]+/[A-Za-z0-9._-]+", repository)
+            or any(not part or part in {".", ".."} or any(ch.isspace() for ch in part)
+                   for part in repository.split("/"))
+            or type(issue_number) is not int or issue_number < 1):
+        fail("canonical repository or Issue number is malformed")
+    if (not isinstance(url, str) or not url or url != url.strip()
+            or any(ord(ch) <= 0x20 or ord(ch) == 0x7f for ch in url)
+            or any(ch in url for ch in "?#\\")):
+        fail("GitHub Issue URL is malformed")
+    try:
+        parsed = urlsplit(url)
+    except ValueError as exc:
+        fail(f"GitHub Issue URL is malformed: {exc}")
+    issue_path = f"/{repository}/issues/{issue_number}"
+    expected_paths = {
+        "github.com": issue_path,
+        "api.github.com": f"/repos{issue_path}",
+    }
+    if (parsed.scheme != "https" or parsed.netloc not in expected_paths
+            or parsed.path != expected_paths.get(parsed.netloc)
+            or parsed.query or parsed.fragment):
+        fail("GitHub Issue URL does not identify the canonical repository and Issue")
+    return repository, issue_number
+
+
+def _validate_origin_plan_batch(origin_context: dict[str, object], archive_root: Path,
+                                task_uid: str, origin_snapshot: dict[str, object]) -> tuple[dict[str, object], dict[str, object],
+                                                       str, str, str, str]:
+    plan_wrapper = origin_context.get("review_plan")
+    batch_wrapper = origin_context.get("review_batch")
+    if (not isinstance(plan_wrapper, dict) or set(plan_wrapper) != {"value", "raw_sha256"}
+            or not isinstance(batch_wrapper, dict) or set(batch_wrapper) != {"value", "raw_sha256"}
+            or not isinstance(plan_wrapper.get("value"), dict)
+            or not isinstance(batch_wrapper.get("value"), dict)
+            or not isinstance(plan_wrapper.get("raw_sha256"), str)
+            or not SHA_RE.fullmatch(plan_wrapper["raw_sha256"])
+            or not isinstance(batch_wrapper.get("raw_sha256"), str)
+            or not SHA_RE.fullmatch(batch_wrapper["raw_sha256"])):
+        fail("archived review plan or batch wrapper is invalid")
+    plan = plan_wrapper["value"]
+    batch = batch_wrapper["value"]
+    epoch = plan.get("epoch")
+    if (plan.get("schema") not in {"oasis7-review-plan/v1", "oasis7-review-plan/v2"}
+            or plan.get("task_uid") != task_uid
+            or not isinstance(epoch, str) or not re.fullmatch(r"[0-9a-f]{64}", epoch)):
+        fail("archived review plan schema or identity is invalid")
+    plan_path = plan.get("plan_path")
+    dispatch = origin_context.get("dispatch_readback")
+    payload = dispatch.get("payload") if isinstance(dispatch, dict) else None
+    if not isinstance(payload, dict):
+        fail("archived review dispatch payload is missing")
+    plan_path = payload.get("plan_path")
+    expected_plan_parent = f".pm/scratch/{task_uid}/review-plans"
+    if (not isinstance(plan_path, str) or Path(plan_path).parent.as_posix() != expected_plan_parent
+            or Path(plan_path).name in {"", ".", ".."}):
+        fail("dispatch plan path is not canonical for the archived Task")
+    plan_file, plan_raw, archived_plan = _archive_member(archive_root, plan_path, "review plan")
+    if archived_plan != plan or hashlib.sha256(plan_raw).hexdigest() != plan_wrapper["raw_sha256"]:
+        fail("archived review plan bytes or digest differ from the origin context")
+    batch_path_raw = plan.get("batch_path")
+    canonical_batch_path = f".pm/scratch/{task_uid}/review-batches/{epoch}.json"
+    snapshot_git = origin_snapshot.get("git")
+    if not isinstance(snapshot_git, dict):
+        fail("authenticated bootstrap snapshot lacks Git identity")
+    batch_relative = _normalized_archived_batch_path(
+        batch_path_raw, snapshot_git.get("worktree"), canonical_batch_path,
+    )
+    batch_file, batch_raw, archived_batch = _archive_member(archive_root, batch_relative, "review batch")
+    if archived_batch != batch or hashlib.sha256(batch_raw).hexdigest() != batch_wrapper["raw_sha256"]:
+        fail("archived review batch bytes or digest differ from the origin context")
+    batch_identity = {key: batch.get(key) for key in
+                      ("task_uid", "frozen_head", "relevant_evidence_digest", "expected_slices")}
+    expected_epoch = hashlib.sha256(json.dumps(
+        batch_identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
+    def normalized_slice_identities(value: object) -> list[tuple[str, str]] | None:
+        if not isinstance(value, list) or not value:
+            return None
+        identities: list[tuple[str, str]] = []
+        for item in value:
+            if not isinstance(item, dict) or set(item) != {"role", "slice_id"}:
+                return None
+            role, slice_id = item.get("role"), item.get("slice_id")
+            if (not isinstance(role, str) or not role
+                    or not isinstance(slice_id, str) or not slice_id):
+                return None
+            identities.append((role, slice_id))
+        if (len(set(identities)) != len(identities)
+                or len({role for role, _slice_id in identities}) != len(identities)):
+            return None
+        return sorted(identities)
+
+    plan_slice_identities = normalized_slice_identities(plan.get("expected_slices"))
+    batch_slice_identities = normalized_slice_identities(batch.get("expected_slices"))
+    if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("epoch") != expected_epoch
+            or expected_epoch != epoch or batch.get("task_uid") != task_uid
+            or batch.get("frozen_head") != plan.get("frozen_head")
+            or plan_slice_identities is None or batch_slice_identities is None
+            or plan_slice_identities != batch_slice_identities
+            or plan.get("relevant_evidence_digest") != batch.get("relevant_evidence_digest")):
+        fail("review plan does not match its immutable review batch")
+    plan_sha = hashlib.sha256(plan_raw).hexdigest()
+    batch_sha = hashlib.sha256(batch_raw).hexdigest()
+    return plan, batch, plan_sha, batch_sha, plan_path, batch_relative
+
+
+def _validate_review_dispatch(origin_context: dict[str, object], plan: dict[str, object],
+                              batch: dict[str, object], plan_sha: str, batch_sha: str,
+                              plan_path: str, batch_path: str, packet_rows: list[dict[str, object]],
+                              live_task_identity: dict[str, object]) -> dict[str, object]:
+    readback = origin_context.get("dispatch_readback")
+    fields = {"issue_number", "issue_url", "comment_id", "author", "body_digest", "payload"}
+    if not isinstance(readback, dict) or set(readback) != fields:
+        fail("original review dispatch readback is malformed")
+    payload = readback.get("payload")
+    if not isinstance(payload, dict):
+        fail("original review dispatch payload is malformed")
+    expected_rows = [
+        {"role": str(row["role"]), "slice_id": str(row["slice_id"]),
+         "packet_path": str(row["repo_path"]), "packet_digest": str(row["value"]["packet_digest"])}
+        for row in packet_rows
+    ]
+    expected_rows.sort(key=lambda row: (row["role"].encode("utf-8"), row["slice_id"].encode("utf-8")))
+    source_identity = plan.get("source_review_identity")
+    plan_repo = source_identity.get("repository") if isinstance(source_identity, dict) else None
+    if not isinstance(plan_repo, str) or not plan_repo:
+        plan_repo = live_task_identity.get("repository")
+    pr_number = source_identity.get("pr_number") if isinstance(source_identity, dict) else live_task_identity.get("pr_number")
+    expected_payload = {
+        "schema": "oasis7-review-dispatch/v1", "repository": plan_repo,
+        "task_uid": origin_context["task_uid"], "issue_number": readback.get("issue_number"),
+        "pr_number": pr_number, "frozen_head": plan.get("frozen_head"),
+        "epoch": plan.get("epoch"), "plan_path": plan_path, "plan_sha256": plan_sha,
+        "batch_path": batch_path, "batch_sha256": batch_sha, "rows": expected_rows,
+    }
+    if payload != expected_payload:
+        fail("authenticated original dispatch does not bind the exact archived review inputs")
+    issue_number = live_task_identity.get("issue_number")
+    issue_url = live_task_identity.get("issue_url")
+    repository = live_task_identity.get("repository")
+    if (type(readback.get("issue_number")) is not int or readback["issue_number"] < 1
+            or type(readback.get("comment_id")) is not int or readback["comment_id"] < 1
+            or not isinstance(readback.get("author"), str) or not readback["author"].strip()
+            or not isinstance(readback.get("body_digest"), str)
+            or not SHA_RE.fullmatch(readback["body_digest"])
+            or readback.get("issue_number") != issue_number or not isinstance(repository, str)):
+        fail("original dispatch readback does not match the canonical live Task Issue")
+    comment_identity = _github_issue_identity(readback.get("issue_url"), repository, issue_number)
+    task_identity = _github_issue_identity(issue_url, repository, issue_number)
+    if comment_identity != task_identity:
+        fail("original dispatch readback does not match the canonical live Task Issue")
+    canonical_payload = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                                   separators=(",", ":")).encode("utf-8")
+    expected_body = ("<!-- oasis7-review-dispatch/v1 -->\n```json\n".encode("utf-8")
+                     + canonical_payload + b"\n```")
+    if hashlib.sha256(expected_body).hexdigest() != readback["body_digest"]:
+        fail("original dispatch body digest does not match its exact canonical payload")
+    return payload
+
+
+def validate_archived_packet(packet: dict[str, object], origin_context: dict[str, object], *,
+                             archive_root: Path, live_task_identity: dict[str, object],
+                             reviewed_source_oid: str) -> None:
+    """Validate archived review-origin bytes after cleanup, without replaying live checkout gates.
+
+    The canonical recovery caller first verifies the UID-derived archive manifest,
+    current Task/Issue/Project/PR and helper closure, and performs a fresh live
+    dispatch readback. This internal validator cross-binds those readbacks with
+    the preserved origin artifacts and delegates packet semantics to the shared
+    contract validator above.
+    """
+    required_keys = {
+        "schema", "task_uid", "bootstrap_snapshot", "review_plan", "review_batch",
+        "dispatch_readback", "packets", "reviewed_git",
+    }
+    if not isinstance(origin_context, dict) or set(origin_context) != required_keys:
+        fail("archived packet origin context fields are invalid")
+    if origin_context.get("schema") != ARCHIVED_ORIGIN_SCHEMA:
+        fail("archived packet origin context schema is invalid")
+    task_uid = origin_context.get("task_uid")
+    if not isinstance(task_uid, str) or not TASK_UID_RE.fullmatch(task_uid):
+        fail("archived packet origin Task UID is invalid")
+    if not isinstance(live_task_identity, dict):
+        fail("fresh live Task identity is unavailable")
+    archive_root = archive_root.resolve(strict=True)
+    snapshot = _validate_origin_snapshot(origin_context, archive_root, task_uid)
+    plan, batch, plan_sha, batch_sha, plan_path, batch_path = _validate_origin_plan_batch(
+        origin_context, archive_root, task_uid, snapshot,
+    )
+    refs = plan.get("packet_refs")
+    expected_slices = plan.get("expected_slices")
+    roles = plan.get("roles")
+    rows = origin_context.get("packets")
+    if (not isinstance(refs, list) or not isinstance(expected_slices, list)
+            or not isinstance(roles, list) or not isinstance(rows, list)
+            or len(refs) != len(expected_slices) or len(rows) != len(expected_slices)):
+        fail("archived review plan packet coverage is incomplete")
+    expected_by_id: dict[tuple[str, str], dict[str, object]] = {}
+    for expected in expected_slices:
+        if not isinstance(expected, dict) or set(expected) != {"role", "slice_id"}:
+            fail("archived review expected slice entry is malformed")
+        identity = (expected["role"], expected["slice_id"])
+        if (not all(isinstance(item, str) and item for item in identity)
+                or identity in expected_by_id):
+            fail("archived review expected slices contain duplicate or invalid identities")
+        expected_by_id[identity] = expected
+    if roles != [item.get("role") for item in expected_slices] or len(set(roles)) != len(roles):
+        fail("archived review plan role order does not match its expected slices")
+    refs_by_id: dict[tuple[str, str], dict[str, object]] = {}
+    for ref in refs:
+        if not isinstance(ref, dict) or set(ref) != {"role", "slice_id", "packet_ref"}:
+            fail("archived review packet reference is malformed")
+        identity = (ref.get("role"), ref.get("slice_id"))
+        if identity not in expected_by_id or identity in refs_by_id:
+            fail("archived review packet references contain duplicate or unexpected identities")
+        if ref.get("packet_ref") != f".pm/scratch/{task_uid}/slice-packets/{identity[1]}.json":
+            fail("archived review packet reference is not canonical")
+        refs_by_id[identity] = ref
+    if set(refs_by_id) != set(expected_by_id):
+        fail("archived review packet references do not cover every planned slice")
+
+    packets_by_id: dict[tuple[str, str], dict[str, object]] = {}
+    for row in rows:
+        if (not isinstance(row, dict)
+                or set(row) != {"role", "slice_id", "repo_path", "raw_sha256", "value"}
+                or not isinstance(row.get("value"), dict)
+                or not isinstance(row.get("raw_sha256"), str)
+                or not SHA_RE.fullmatch(row["raw_sha256"])):
+            fail("archived packet origin row is malformed")
+        identity = (row["role"], row["slice_id"])
+        if identity not in expected_by_id or identity in packets_by_id:
+            fail("archived packet origin rows contain duplicate or unexpected identities")
+        expected_path = refs_by_id[identity]["packet_ref"]
+        if row.get("repo_path") != expected_path:
+            fail("archived packet origin path differs from its immutable review plan")
+        _path, raw, archived_packet = _archive_member(archive_root, str(expected_path), "review packet")
+        if (hashlib.sha256(raw).hexdigest() != row["raw_sha256"]
+                or archived_packet != row["value"]):
+            fail("archived packet bytes differ from the dispatch-bound origin")
+        packets_by_id[identity] = row
+    if set(packets_by_id) != set(expected_by_id):
+        fail("archived packet origins do not cover every planned slice")
+
+    dispatch_payload = _validate_review_dispatch(
+        origin_context, plan, batch, plan_sha, batch_sha, plan_path, batch_path, rows, live_task_identity,
+    )
+    snapshot_task = snapshot.get("task")
+    snapshot_git = snapshot.get("git")
+    if not isinstance(snapshot_task, dict) or not isinstance(snapshot_git, dict):
+        fail("archived bootstrap snapshot lacks stable Task/Git identity")
+    snapshot_issue = snapshot_task.get("issue")
+    snapshot_project = snapshot_task.get("project")
+    if not isinstance(snapshot_issue, dict) or not isinstance(snapshot_project, dict):
+        fail("archived bootstrap snapshot lacks stable Issue/Project identity")
+    stable_pairs = (
+        ("task_uid", task_uid), ("issue_number", snapshot_issue.get("number")),
+        ("issue_url", snapshot_issue.get("url")),
+        ("project_item_id", snapshot_project.get("item_id")),
+        ("repository", snapshot.get("repository")),
+        ("canonical_worktree", snapshot_git.get("worktree")),
+        ("task_branch", snapshot_git.get("branch")),
+        ("owner_role", snapshot_task.get("owner_role")),
+    )
+    for field, expected in stable_pairs:
+        if live_task_identity.get(field) != expected:
+            fail(f"fresh live Task identity {field} differs from the archived bootstrap origin")
+    if "primary_package" in snapshot_task and live_task_identity.get("primary_package") != snapshot_task["primary_package"]:
+        fail("fresh live Task primary package differs from the archived bootstrap origin")
+    if "loop_binding" in snapshot_task and live_task_identity.get("loop_binding") != snapshot_task["loop_binding"]:
+        fail("fresh live Task loop binding differs from the archived bootstrap origin")
+
+    reviewed_git = origin_context.get("reviewed_git")
+    if (not isinstance(reviewed_git, dict)
+            or set(reviewed_git) != {"comparison_oid", "source_scope_oid", "head_oid"}):
+        fail("archived reviewed Git identity is malformed")
+    source_identity = plan.get("source_review_identity")
+    source_scope_oid = (source_identity.get("source_scope_oid")
+                        if isinstance(source_identity, dict) else plan.get("source_scope_oid"))
+    if source_scope_oid is None:
+        source_scope_oid = plan.get("comparison_oid")
+    if (reviewed_git.get("comparison_oid") != plan.get("comparison_oid")
+            or reviewed_git.get("source_scope_oid") != source_scope_oid
+            or reviewed_git.get("head_oid") != reviewed_source_oid
+            or plan.get("frozen_head") != reviewed_source_oid
+            or batch.get("frozen_head") != reviewed_source_oid):
+        fail("archived reviewed Git objects do not match plan, batch, and current source OID")
+    if isinstance(source_identity, dict):
+        if (source_identity.get("task_uid") != task_uid
+                or source_identity.get("repository") != snapshot.get("repository")
+                or source_identity.get("source_head_oid") != reviewed_source_oid
+                or source_identity.get("pr_number") != dispatch_payload.get("pr_number")):
+            fail("archived v2 source review identity conflicts with its dispatch")
+        identity_module_path = Path(__file__).with_name("ci_ready_receipt_identity.py")
+        spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity_archived_packet", identity_module_path)
+        if spec is None or spec.loader is None:
+            fail("cannot load source review identity validator")
+        identity_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(identity_module)
+        try:
+            if plan.get("source_review_digest") != identity_module.source_review_digest(source_identity):
+                fail("archived v2 source review digest is invalid")
+            identity_module.validate_review_applicability(
+                source_identity, plan.get("professional_review_applicability"),
+            )
+        except (TypeError, ValueError) as exc:
+            fail(f"archived v2 source review applicability is invalid: {exc}")
+    elif plan.get("schema") == "oasis7-review-plan/v2":
+        fail("archived v2 review plan is missing its source review identity")
+    comparison_oid = str(plan.get("comparison_oid") or "")
+    if not re.fullmatch(r"[0-9a-f]{40,64}", comparison_oid):
+        fail("archived review comparison OID is invalid")
+    git_root = _repository_root_for_artifacts(archive_root)
+    try:
+        for oid in (comparison_oid, reviewed_source_oid,
+                    str(snapshot_git["head"]), str(snapshot_git["base"]["oid"])):
+            if git(git_root, "rev-parse", "--verify", f"{oid}^{{commit}}") != oid:
+                fail("archived review/bootstrap Git identity does not resolve exactly")
+    except (KeyError, PacketError) as exc:
+        fail(f"archived review/bootstrap Git object is unavailable: {exc}")
+    ancestry = subprocess.run(
+        ["git", "-C", str(git_root), "merge-base", "--is-ancestor", comparison_oid, reviewed_source_oid],
+        text=True, capture_output=True, check=False,
+    )
+    if ancestry.returncode != 0:
+        fail("archived review comparison OID is not an ancestor of its frozen source head")
+    tree_oid = git(git_root, "rev-parse", "--verify", f"{reviewed_source_oid}^{{tree}}")
+
+    for identity, row in packets_by_id.items():
+        archived_packet = row["value"]
+        packet_identity = archived_packet.get("identity") if isinstance(archived_packet, dict) else None
+        if not isinstance(packet_identity, dict):
+            fail("archived packet identity is missing")
+        if (packet_identity.get("base_ref") != plan.get("comparison_ref")
+                or packet_identity.get("base_sha") != plan.get("comparison_oid")
+                or packet_identity.get("head") != reviewed_source_oid):
+            fail("archived packet comparison/head facts differ from the frozen review")
+        if (packet_identity.get("task_uid") != task_uid
+                or packet_identity.get("repository") != snapshot.get("repository")
+                or packet_identity.get("project_item_id") != snapshot_project.get("item_id")
+                or packet_identity.get("issue_url") != snapshot_issue.get("url")):
+            fail("archived packet stable identity differs from the bootstrap snapshot")
+        task_snapshot = _bootstrap_task_record(snapshot, packet_identity.get("task_status"))
+        facts_snapshot = {key: packet_identity.get(key) for key in
+                          ("worktree", "branch", "base_ref", "base_sha", "base_binding", "head")}
+        validate_packet_contract(
+            archived_packet, task_snapshot, facts_snapshot, artifact_root=archive_root,
+            reference_tree_oid=tree_oid, archived=True, git_root=git_root,
+        )
+
+    target_identity = packet.get("identity") if isinstance(packet, dict) else None
+    target_slice = packet.get("slice") if isinstance(packet, dict) else None
+    if not isinstance(target_identity, dict) or not isinstance(target_slice, dict):
+        fail("requested archived packet identity is malformed")
+    target_key = (target_slice.get("role"), target_slice.get("slice_id"))
+    matching = packets_by_id.get(target_key) if isinstance(target_key[0], str) and isinstance(target_key[1], str) else None
+    if (matching is None or matching.get("value") != packet
+            or target_identity.get("task_uid") != task_uid):
+        fail("requested packet is not the exact packet in the authenticated review origin")
 
 
 def validate_bootstrap_snapshot(root: Path, snapshot: Path, task_uid: str) -> dict[str, object]:

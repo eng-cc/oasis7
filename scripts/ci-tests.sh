@@ -410,6 +410,8 @@ run_workflow_governance_operational_contract_tests() {
   run bash ./scripts/pm/pr-watch-loop.test.sh
   run bash ./scripts/pr-review-thread-closeout.test.sh
   run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr_projection_publication.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/publication_helper_review_archive.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/archived-review-provenance.test.py
   run bash ./scripts/pm/lint.test.sh
   run bash ./scripts/pm/github-project-workflow.test.sh
   run ./scripts/ci-required-scope-audit-contract.test.sh

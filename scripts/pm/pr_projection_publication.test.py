@@ -331,6 +331,54 @@ class BoundedRecoveryCLITests(unittest.TestCase):
             self.assertEqual(["project", "issue", "mapping"], adapter.metadata_writes)
             self.assertNotIn("check-record-pr-recovery-admission", adapter.events)
 
+    def test_first_only_resume_binds_admission_handoff_to_task_and_exact_action(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal, body = self.existing_uncertain_record_pr_case(
+                temp, 7243, surface_state="first-only current action",
+            )
+            requests = []
+
+            def admit(task_uid, action_id):
+                requests.append((task_uid, action_id))
+                raise publication_module.PublicationError("TEST_HANDOFF", "stop after admission arguments")
+
+            # The actual publisher must pass exactly the authenticated task
+            # selector and persisted action selector to its admission producer.
+            adapter.require_record_pr_recovery_admission = admit
+            with self.assertRaisesRegex(publication_module.PublicationError, "TEST_HANDOFF"):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body=body,
+                    expected_remote_oid=publication["source_head_oid"],
+                )
+
+            self.assertEqual(
+                [(UID, "record-pr:" + publication["publication_id"])], requests,
+            )
+            self.assertEqual([], adapter.metadata_writes)
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+
+    def test_single_uncertain_current_action_does_not_require_predecessor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case = self.legacy_anchor_lineage_case(temp)
+            authority = case["authority"]
+            current_action = authority.envelope["current_action"]
+            authority.envelope = {"current_action": current_action}
+            current_comment = [
+                item for item in case["comments"]
+                if item["id"] == current_action["intent_comment_id"]
+            ]
+
+            try:
+                authority._lineage(current_comment)
+            except Exception as exc:
+                self.fail(
+                    "one authentic uncertain record-pr action was rejected because "
+                    f"the consumer still requires a predecessor: {exc}"
+                )
+
     def legacy_anchor_lineage_case(self, temp):
         root = Path(temp).resolve()
         root.mkdir(parents=True, exist_ok=True)

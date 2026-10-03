@@ -15,15 +15,9 @@ def capability_blocked(role: str, reason: str) -> None:
     print(json.dumps(payload, sort_keys=True), file=__import__("sys").stderr)
     raise SystemExit(4)
 
-def main() -> int:
-    p = argparse.ArgumentParser()
-    p.add_argument("--root", type=Path, required=True)
-    p.add_argument("--task-uid", required=True)
-    p.add_argument("--ledger", required=True)
-    p.add_argument("--roles", required=True)
-    p.add_argument("--source-head", required=True)
-    p.add_argument("--mode", choices=("human-operated", "unattended"), default="human-operated")
-    args = p.parse_args()
+def validate_ledger(args: argparse.Namespace, parser: argparse.ArgumentParser, *,
+                    archived_artifact_resolver=None) -> int:
+    p = parser
     root = args.root.resolve()
     fixture_receipts = os.environ.get("OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS") == "1" and str(root).startswith(("/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/"))
     ledger = Path(args.ledger)
@@ -39,8 +33,38 @@ def main() -> int:
                     resolved.relative_to(root)
                 except ValueError:
                     p.error(f"review artifact escapes repository root: {raw}")
-                return resolved
+            return resolved
         return options[0].resolve()
+
+    def resolve_artifact(raw: str, base: Path | None = None) -> Path:
+        if archived_artifact_resolver is None:
+            return resolve_repo_path(raw, base)
+        candidate = Path(archived_artifact_resolver(raw, root))
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        try:
+            relative = candidate.relative_to(root)
+        except ValueError:
+            p.error(f"review artifact escapes archive root: {raw}")
+        if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+            p.error(f"review artifact archive path is not canonical: {raw}")
+        current = root
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                p.error(f"review artifact uses a symlink in archive root: {raw}")
+        try:
+            resolved = current.resolve(strict=True)
+        except OSError:
+            p.error(f"review artifact does not exist in archive root: {raw}")
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            p.error(f"review artifact escapes archive root: {raw}")
+        if not resolved.is_file():
+            p.error(f"review artifact is not a file in archive root: {raw}")
+        return resolved
+
     path = resolve_repo_path(str(ledger))
     if not path.is_file():
         p.error(f"slice ledger does not exist: {args.ledger}")
@@ -63,7 +87,7 @@ def main() -> int:
             p.error(f"slice_id is not a strict UUID for {role}")
         if str(item.get("head") or "") != args.source_head: p.error(f"source head mismatch for {role}")
         if args.mode == "unattended":
-            receipt_path = resolve_repo_path(str(item["dispatch_receipt"]), path)
+            receipt_path = resolve_artifact(str(item["dispatch_receipt"]), path)
             if not receipt_path.is_file(): capability_blocked(role, "dispatch receipt missing")
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             if receipt.get("receipt_type") != "oasis7_subagent_dispatch" or receipt.get("issuer") != "codex_runtime": p.error(f"untrusted dispatch receipt for {role}")
@@ -74,7 +98,7 @@ def main() -> int:
         digest = str(item["artifact_digest"])
         if not re.fullmatch(r"[0-9a-f]{64}", digest): p.error(f"invalid artifact digest for {role}")
         artifacts = item.get("artifacts") or []
-        artifact = resolve_repo_path(str(artifacts[0]), path) if artifacts else None
+        artifact = resolve_artifact(str(artifacts[0]), path) if artifacts else None
         if artifact is None or not artifact.is_file() or hashlib.sha256(artifact.read_bytes()).hexdigest() != digest:
             p.error(f"artifact digest mismatch for {role}")
         seen[role] = item
@@ -82,5 +106,16 @@ def main() -> int:
     if missing_roles: p.error("missing required role provenance: " + ",".join(missing_roles))
     print(json.dumps({"status":"passed","mode":args.mode,"roles":sorted(seen),"source_head":args.source_head}, sort_keys=True))
     return 0
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--root", type=Path, required=True)
+    p.add_argument("--task-uid", required=True)
+    p.add_argument("--ledger", required=True)
+    p.add_argument("--roles", required=True)
+    p.add_argument("--source-head", required=True)
+    p.add_argument("--mode", choices=("human-operated", "unattended"), default="human-operated")
+    args = p.parse_args()
+    return validate_ledger(args, p)
 
 if __name__ == "__main__": raise SystemExit(main())
