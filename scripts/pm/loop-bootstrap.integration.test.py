@@ -150,7 +150,7 @@ class BootstrapEndToEnd(unittest.TestCase):
             temp = Path(directory)
             root = temp / 'repo'
             (root / 'scripts').mkdir(parents=True)
-            shutil.copytree(ROOT / 'scripts/pm', root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copytree(ROOT / 'scripts/pm', root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__', '*.test.*'))
             shutil.copy2(
                 ROOT / 'scripts/pm/fixtures/github_api_test_adapter.py',
                 root / 'scripts/pm/github_api.py',
