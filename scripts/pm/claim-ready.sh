@@ -434,7 +434,8 @@ if [[ "$CLAIM_LABEL" == "task_complete" && -n "$TASK_UID" && -f "$ROOT_DIR/.pm/g
 import json,sys
 r=(json.load(open(sys.argv[1],encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
 v1=(r.get('phase_receipts') or {}).get('post_merge_done',{}).get('receipt_type')=='oasis7_terminal_cleanup'
-print('yes' if r.get('pr_number') and not v1 else 'no')
+non_pr=r.get('completion_mode')=='non_pr_task' and bool(r.get('non_pr_completion_evidence'))
+print('yes' if r.get('pr_number') and not v1 and not non_pr else 'no')
 PY
 )"
   if [[ "$READINESS_REQUIRED" == yes ]]; then
