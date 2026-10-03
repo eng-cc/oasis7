@@ -1846,7 +1846,7 @@ run_replace_fault_case() {
     echo "replacement fault was not attempted for mode $mode" >&2
     return 1
   }
-  [[ "$(rg -c '"event": "CAS_ATTEMPT"' "$TMPDIR/$mode.events" || true)" == 1 ]] || {
+  [[ "$(grep -F -c '"event": "CAS_ATTEMPT"' "$TMPDIR/$mode.events" || true)" == 1 ]] || {
     echo "uncertain replacement attempted more than one ledger CAS: $mode" >&2
     return 1
   }
@@ -1854,14 +1854,14 @@ run_replace_fault_case() {
     echo "ledger CAS did not attempt the independently expected payload bytes: $mode" >&2
     return 1
   }
-  event_count="$(rg -c '"event": "RECONCILE_START"' "$TMPDIR/$mode.events" || true)"
+  event_count="$(grep -F -c '"event": "RECONCILE_START"' "$TMPDIR/$mode.events" || true)"
   event_count="${event_count:-0}"
   [[ "$event_count" == 0 ]] || { echo "plan-owned $mode path invoked forbidden reconcile: count=$event_count" >&2; return 1; }
   case "$mode" in
     before)
       [[ "$rc" -ne 0 ]] || { echo "pre-replace injected failure was reported as success" >&2; return 1; }
       grep -q '"event": "INJECT_BEFORE_REPLACE"' "$TMPDIR/$mode.events"
-      event_count="$(rg -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
+      event_count="$(grep -F -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
       event_count="${event_count:-0}"
       [[ "$event_count" == 0 ]]
       cmp -s "$LEDGER" "$TMPDIR/original-preflight-ledger.jsonl"
@@ -1879,11 +1879,11 @@ run_replace_fault_case() {
         return 1
       }
       grep -q '"event": "INJECT_AFTER_REPLACE"' "$TMPDIR/$mode.events"
-      [[ "$(rg -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events")" == 1 ]] || {
+      [[ "$(grep -F -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events")" == 1 ]] || {
         echo "post-replace recovery attempted more than one replacement" >&2
         return 1
       }
-      [[ "$(rg -c '"event": "COLLECTION_CREATE"' "$TMPDIR/$mode.events")" == 1 ]] || {
+      [[ "$(grep -F -c '"event": "COLLECTION_CREATE"' "$TMPDIR/$mode.events")" == 1 ]] || {
         echo "expected-byte recovery did not create exactly one collection" >&2
         return 1
       }
@@ -1898,7 +1898,7 @@ run_replace_fault_case() {
       [[ "$rc" -ne 0 ]] || { echo "third-state ledger drift was reported as success" >&2; return 1; }
       [[ ! -e "$COLLECTION" ]] || { echo "third-state outcome created a collection" >&2; return 1; }
       [[ ! -s "$TMPDIR/$mode.out" ]]
-      event_count="$(rg -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
+      event_count="$(grep -F -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
       event_count="${event_count:-0}"
       [[ "$event_count" == 0 ]] || {
         echo "third-state outcome observed CAS_APPLIED count=$event_count" >&2
