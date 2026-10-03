@@ -15,6 +15,13 @@ UID = 'task_' + '1' * 32
 FAKE = r'''#!/usr/bin/env python3
 import fcntl, json, os, pathlib, sys
 a=sys.argv[1:]; p=pathlib.Path(os.environ['FAKE_GH_STATE'])
+mutation = (a[:2] in (['issue','create'], ['issue','edit'], ['issue','comment'],
+                     ['project','item-add'], ['project','item-edit'])
+            or (a[:1] == ['api'] and (any(x in a for x in ['POST','PATCH','PUT','DELETE'])
+                or any('mutation' in x.lower() for x in a))))
+if mutation and os.environ.get('FAKE_GH_MUTATIONS'):
+ with pathlib.Path(os.environ['FAKE_GH_MUTATIONS']).open('a') as log:
+  log.write(json.dumps(a)+'\n')
 lock_path=p.with_name(p.name+'.lock'); lock_handle=lock_path.open('a+')
 fcntl.flock(lock_handle.fileno(),fcntl.LOCK_EX)
 s=json.loads(p.read_text()) if p.exists() else {'creates':0,'fields':{}}
@@ -132,18 +139,30 @@ class BootstrapEndToEnd(unittest.TestCase):
     def test_uncertain_create_never_reposts(self):
         self.test_full_flags_and_explicit_resume_reuse_task(loss=True)
 
-    def test_full_flags_and_explicit_resume_reuse_task(self, advanced=False, loss=False, setup=None, lifecycle=None, identity_drift=False):
+    def test_tracked_executable_import_bootstrap_completes(self):
+        self.test_full_flags_and_explicit_resume_reuse_task(trusted_import='executable')
+
+    def test_tampered_regular_import_bootstrap_has_zero_mutations(self):
+        self.test_full_flags_and_explicit_resume_reuse_task(trusted_import='tampered')
+
+    def test_full_flags_and_explicit_resume_reuse_task(self, advanced=False, loss=False, setup=None, lifecycle=None, identity_drift=False, trusted_import=None):
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
             root = temp / 'repo'
             (root / 'scripts').mkdir(parents=True)
-            shutil.copytree(ROOT / 'scripts/pm', root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copytree(ROOT / 'scripts/pm', root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__', '*.test.*'))
             shutil.copy2(
                 ROOT / 'scripts/pm/fixtures/github_api_test_adapter.py',
                 root / 'scripts/pm/github_api.py',
             )
             for name in ['new-task-worktree.sh', 'worktree-harness-lib.sh']:
                 shutil.copy2(ROOT / 'scripts' / name, root / 'scripts' / name)
+            if trusted_import:
+                for name in ['document_corpus.py', 'product-doc-content-check.py', 'product_doc_markdown.py']:
+                    shutil.copy2(ROOT / 'scripts' / name, root / 'scripts' / name)
+                    (root / 'scripts' / name).chmod(0o644)
+                if trusted_import == 'executable':
+                    (root / 'scripts/product-doc-content-check.py').chmod(0o755)
             (root / '.gitignore').write_text('.pm/\ntarget\nconfig.toml\n__pycache__/\n')
             (root / 'config.toml').write_text('canonical = true\n')
             cargo = root / 'scripts/cargo-dev.sh'
@@ -152,6 +171,8 @@ class BootstrapEndToEnd(unittest.TestCase):
             def git(*args): return subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
             git('init','-q','-b','main'); git('config','user.email','test@example.invalid'); git('config','user.name','Test')
             git('add','.'); git('commit','-qm','fixture')
+            if trusted_import == 'executable':
+                self.assertTrue(git('ls-tree', 'HEAD', '--', 'scripts/product-doc-content-check.py').startswith('100755 blob '))
             origin = temp / 'origin.git'
             subprocess.run(['git','init','--bare','-q',str(origin)],check=True)
             git('remote','add','origin','https://github.com/eng-cc/oasis7.git')
@@ -167,6 +188,8 @@ class BootstrapEndToEnd(unittest.TestCase):
                        TEST_SHARED_TARGET=str(temp/'target'), PYTHONDONTWRITEBYTECODE='1')
             env.pop('GH_TOKEN', None)
             env.pop('GITHUB_TOKEN', None)
+            mutations = temp / 'mutations.jsonl'
+            env['FAKE_GH_MUTATIONS'] = str(mutations)
             # Bootstrap mechanics are loop-agnostic.  Use a system-loop fixture
             # so this suite does not counterfeit the technical input that a
             # newly admitted code task is now required to consume.
@@ -188,6 +211,30 @@ class BootstrapEndToEnd(unittest.TestCase):
             command = ['bash','scripts/new-task-worktree.sh','engineering','loop-test','--path',str(target),'--branch','codex/loop-test',
                 '--pm-owner-role','repository_health_engineer','--pm-title','fixture','--pm-source-ref','fixture','--pm-acceptance','M06',
                 '--pm-loop','system','--pm-loop-binding',str(source),'--pm-request-key','request:1','--pm-manual-request-ref','message:1','--json']
+            if trusted_import == 'tampered':
+                checker = root / 'scripts/product-doc-content-check.py'
+                checker.write_bytes(checker.read_bytes() + b'\n# untrusted byte drift\n')
+                def boundary():
+                    journals = {str(path.relative_to(root / '.git')): path.read_bytes()
+                                for directory in (root / '.git').glob('oasis7-*')
+                                for path in directory.glob('**/*') if path.is_file()}
+                    return (git('worktree', 'list', '--porcelain'), git('rev-parse', 'HEAD'),
+                            (root / '.git/FETCH_HEAD').read_bytes() if (root / '.git/FETCH_HEAD').exists() else None,
+                            state.read_bytes() if state.exists() else None, journals)
+                before = boundary()
+                rejected = subprocess.run(command, cwd=start, env=env, text=True, capture_output=True)
+                self.assertNotEqual(rejected.returncode, 0, rejected.stdout)
+                self.assertIn('loop-bootstrap: Command', rejected.stderr)
+                self.assertIn("'diff', '--no-ext-diff', '--no-textconv', '--exit-code'", rejected.stderr)
+                self.assertIn('scripts/product-doc-content-check.py', rejected.stderr)
+                self.assertIn('returned non-zero exit status 1', rejected.stderr)
+                self.assertEqual(boundary(), before)
+                self.assertFalse(target.exists())
+                self.assertEqual(subprocess.run(['git', '-C', str(root), 'show-ref', '--verify', '--quiet',
+                                                'refs/heads/codex/loop-test'], capture_output=True).returncode, 1)
+                self.assertFalse(mutations.exists(), mutations.read_text() if mutations.exists() else '')
+                self.assertFalse((root / '.pm/github-project-sync/tasks.json').exists())
+                return
             if loss:
                 env['FAKE_LOSS']='1'
             if lifecycle:

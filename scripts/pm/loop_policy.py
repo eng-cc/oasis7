@@ -197,7 +197,7 @@ def _trusted_file_errors(tool_root, commit, relative_paths):
                 continue
             metadata, raw_path = records[0].split(b"\t", 1)
             mode, object_type, _oid = metadata.decode("ascii").split()
-            if raw_path.decode("utf-8", "strict") != relative or mode != "100644" or object_type != "blob":
+            if raw_path.decode("utf-8", "strict") != relative or mode not in {"100644", "100755"} or object_type != "blob":
                 errors.append("trusted module has unsafe Git mode: " + relative)
                 continue
             path = tool / relative
