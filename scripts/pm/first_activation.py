@@ -14,7 +14,6 @@ import sys
 import argparse
 import csv
 import shlex
-import base64
 from collections import Counter
 from datetime import datetime
 from typing import Any
@@ -444,15 +443,44 @@ def validate_overlay(
     }
 
 
-def _github_client(repo_root: pathlib.Path):
+def _github_api_module(repo_root: pathlib.Path, module_name: str):
     path = repo_root / "scripts/pm/github_api.py"
-    spec = importlib.util.spec_from_file_location("first_activation_github_api", path)
+    spec = importlib.util.spec_from_file_location(module_name, path)
     if spec is None or spec.loader is None:
         _fail("shared GitHub API client is unavailable")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module.GitHubAPIClient.from_gh()
+    return module
+
+
+def _github_client(repo_root: pathlib.Path):
+    module = _github_api_module(repo_root, "first_activation_github_api")
+    project_token = os.environ.pop("OASIS7_PROJECT_READ_TOKEN", None)
+    try:
+        return module.GitHubAPIClient.from_gh()
+    finally:
+        if project_token:
+            os.environ["OASIS7_PROJECT_READ_TOKEN"] = project_token
+
+
+def _project_graphql_client(repo_root: pathlib.Path, repository_client: Any):
+    """Keep hosted Project reads on the dedicated token; preserve local human auth."""
+    token = os.environ.pop("OASIS7_PROJECT_READ_TOKEN", "").strip()
+    if not token:
+        if os.environ.get("GITHUB_ACTIONS", "").lower() == "true":
+            _fail("dedicated Project GraphQL read credential is unavailable")
+        if repository_client is None:
+            _fail("local authenticated Project reader is unavailable")
+        # Local operator commands retain their existing authenticated `gh` route.
+        # Hosted Actions never falls back to the repository-scoped token here.
+        return repository_client
+    try:
+        module = _github_api_module(repo_root, "first_activation_project_github_api")
+        return module.GitHubAPIClient(token)
+    except Exception as exc:
+        # Do not include credential or transport details in operator diagnostics.
+        _fail(f"dedicated Project GraphQL reader could not be initialized: {type(exc).__name__}")
 
 
 def _pages(client: Any, path: str, operation: str) -> list[dict[str, Any]]:
@@ -561,18 +589,72 @@ def _first_activation_task_pr_projection(
     issue_refs = re.findall(r"(?m)^Refs #([1-9][0-9]*)$", body)
     if task_lines != [task_uid] or issue_refs != [str(issue_number)]:
         _fail("live reciprocal PR does not bind the exact Task Issue")
-    markers = re.findall(
-        r"(?m)^<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+|missing) -->$", body,
-    )
-    if len(markers) != 1 or markers[0] == "missing":
-        _fail("live reciprocal PR does not contain exactly one impact projection")
     try:
-        raw = base64.b64decode(markers[0], validate=True)
-        projection = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        _fail(f"live reciprocal PR impact projection is malformed: {exc}")
+        publication_contract = _load_projection_publication_helper(root, "projection_publication_contract")
+        _load_projection_publication_helper(root, "pr_projection_journal")
+        publication_module = _load_projection_publication_helper(root, "pr_projection_publication")
+        resolver = _load_projection_publication_helper(root, "pr_projection_resolver")
+        comments = _comments(client, repository, issue_number)
+        publications = []
+        for comment in comments:
+            comment_body = comment.get("body")
+            if not isinstance(comment_body, str):
+                continue
+            if not comment_body.startswith((
+                "<!-- oasis7-ci-publication/v1 -->\n",
+                "<!-- oasis7-ci-publication/v2 -->\n",
+            )):
+                continue
+            publications.append(publication_module.parse_publication_comment(comment_body))
+        matching_publications = [
+            value for value in publications
+            if value.get("task_uid") == task_uid
+            and value.get("source_head_oid") == head_oid
+            and value.get("source_scope_oid") == base_oid
+        ]
+        if len(matching_publications) != 1:
+            _fail("Task Issue must contain one exact Task/H/B projection publication")
+        task_publication = matching_publications[0]
+        if task_publication.get("schema") != "oasis7-ci-publication/v2":
+            _fail("current first-activation route requires the full-leaf Task publication v2")
+
+        bindings = []
+        for comment in comments:
+            comment_body = comment.get("body")
+            if (isinstance(comment_body, str)
+                    and comment_body.startswith("<!-- oasis7-ci-publication-binding/v1 -->\n")):
+                bindings.append(publication_module.parse_publication_binding_comment(comment_body))
+        matching_bindings = [
+            value for value in bindings
+            if value.get("publication_id") == task_publication.get("publication_id")
+            and value.get("repository") == repository
+            and value.get("task_uid") == task_uid
+            and value.get("pr_number") == pr_number
+        ]
+        if len(matching_bindings) != 1:
+            _fail("Task publication does not have one exact reciprocal Task/PR binding")
+        resolved = resolver.resolve(
+            body, task_uid=task_uid, source_head_oid=head_oid, scope_base_oid=base_oid,
+            publication=task_publication, binding=matching_bindings[0],
+            repository=repository, pr_number=pr_number,
+            planner_config_sha256=task_publication.get("planner_config_sha256"),
+            required_protocol="v2",
+            live={
+                "repository": repository, "pr_number": pr_number,
+                "repository_id": (base.get("repo") or {}).get("id"),
+                "source_repository_id": (head.get("repo") or {}).get("id"),
+                "source_ref": head.get("ref"), "target_ref": base.get("ref"),
+                "head_oid": head.get("sha"), "state": pr.get("state"),
+                "merged": pr.get("merged"),
+            },
+        )
+        projection = resolved.get("workflow_impact_projection")
+    except OverlayError:
+        raise
+    except Exception as exc:
+        _fail(f"live Task publication and reciprocal PR projection could not be resolved: {exc}")
     if not isinstance(projection, dict):
-        _fail("live reciprocal PR impact projection must be an object")
+        _fail("current Task publication did not resolve a full workflow impact projection")
 
     trusted_root = _trusted_base_worktree(root, base_oid)
     helper_path = trusted_root / "scripts/pm/workflow-impact-projection.py"
@@ -595,6 +677,26 @@ def _first_activation_task_pr_projection(
     except Exception as exc:
         _fail(f"trusted base rejected the reciprocal Task PR impact projection: {exc}")
     return pr_number, projection
+
+
+def _load_projection_publication_helper(repo_root: pathlib.Path, name: str):
+    """Load a projection publication helper from the exact checked-out workflow tree."""
+    path = pathlib.Path(repo_root) / "scripts/pm" / f"{name}.py"
+    if not path.is_file() or path.is_symlink():
+        _fail(f"current Task publication helper is unavailable: {name}")
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        _fail(f"current Task publication helper cannot be loaded: {name}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    sys.path.insert(0, str(path.parent))
+    try:
+        _exec_trusted_inventory_module(spec.loader, module)
+    except (OSError, ImportError, ValueError) as exc:
+        _fail(f"current Task publication helper failed to load: {name}: {exc}")
+    finally:
+        sys.path.pop(0)
+    return module
 
 
 def materialize_first_activation_task_pr_projection(
@@ -1346,6 +1448,7 @@ def has_issue_overlay(repo_root: pathlib.Path, repository: str, task_uid: str,
     """Return whether the unique live Task Issue contains a first-activation marker."""
     root = pathlib.Path(repo_root).resolve()
     client = client or _github_client(root)
+    project_client = _project_graphql_client(root, client)
     issue = _issue_by_uid(client, repository, task_uid)
     comments = _comments(client, repository, int(issue["number"]))
     return any(isinstance(item.get("body"), str)
@@ -2306,7 +2409,9 @@ def _read_project_task_binding(
       }
     }
     """
-    data = client.graphql(query, {"item": task["project_item_id"]}, operation="first_activation_project_readback")
+    data = project_client.graphql(
+        query, {"item": task["project_item_id"]}, operation="first_activation_project_readback",
+    )
     node = data.get("node") if isinstance(data, dict) else None
     owner = ((node or {}).get("project") or {}).get("owner") or {}
     content = (node or {}).get("content") or {}
@@ -2349,7 +2454,8 @@ def _read_project_task_binding(
         _fail("live Task Issue request title differs from immutable snapshot")
     return {"root": root, "mapping": mapping, "task": task, "project": project,
             "worktree": worktree, "snapshot": snapshot, "snapshot_task": snapshot_task,
-            "request_snapshot": request_snapshot, "issue": live_issue, "client": client}
+            "request_snapshot": request_snapshot, "issue": live_issue, "client": client,
+            "project_client": project_client}
 
 
 def _project_membership_for_task(binding: dict[str, Any], repository: str,
@@ -2358,7 +2464,9 @@ def _project_membership_for_task(binding: dict[str, Any], repository: str,
     project = binding.get("project")
     task = binding.get("task")
     client = binding.get("client")
-    if not isinstance(project, dict) or not isinstance(task, dict) or client is None:
+    project_client = binding.get("project_client") or client
+    if (not isinstance(project, dict) or not isinstance(task, dict)
+            or client is None or project_client is None):
         _fail("live Project task binding is unavailable")
     project_id = project.get("id")
     project_number = project.get("number")
@@ -2415,7 +2523,7 @@ def _project_membership_for_task(binding: dict[str, Any], repository: str,
     issue_items: list[dict[str, Any]] = []
     expected_identity = (project_id, project_number, project_owner)
     for _page in range(MAX_PAGES):
-        response = client.graphql(
+        response = project_client.graphql(
             query, {"project": project_id, "after": cursor},
             operation="first_activation_project_membership_readback",
         )
@@ -2905,6 +3013,7 @@ def read_project_overlay(
     if snapshot.get("digest") != snapshot_module.digest(snapshot):
         _fail("immutable bootstrap snapshot digest is invalid")
     client = client or _github_client(root)
+    project_client = _project_graphql_client(root, client)
     query = """
     query($item: ID!) {
       node(id: $item) {
@@ -2916,7 +3025,9 @@ def read_project_overlay(
       }
     }
     """
-    data = client.graphql(query, {"item": task["project_item_id"]}, operation="first_activation_project_readback")
+    data = project_client.graphql(
+        query, {"item": task["project_item_id"]}, operation="first_activation_project_readback",
+    )
     node = data.get("node") if isinstance(data, dict) else None
     owner = ((node or {}).get("project") or {}).get("owner") or {}
     content = (node or {}).get("content") or {}

@@ -190,21 +190,69 @@ jobs:
           print("first-activation dispatch provenance: exact live Issue, workflow, run, base, and head; validation_only=true")
           PY
       - id: impact
-        name: Materialize PR workflow impact projection
+        name: Resolve Project task and materialize PR workflow impact projection
         if: github.event_name == 'pull_request'
         env:
+          GH_TOKEN: ${{ github.token }}
+          OASIS7_PROJECT_READ_TOKEN: ${{ secrets.OASIS7_PROJECT_READ_TOKEN }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_BASE_OID: ${{ steps.pr_target.outputs.oid }}
+          PR_HEAD_OID: ${{ github.event.pull_request.head.sha }}
         run: |
           python3 -I - <<'PY'
-          import base64, os, pathlib, re
-          matches=re.findall(r'<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+|missing) -->',os.environ.get('PR_BODY',''))
-          if len(matches)>1:
-              raise SystemExit('pull request has duplicate workflow impact projection markers')
-          enabled=bool(matches and matches[0]!='missing')
-          if enabled:
-              pathlib.Path(os.environ['RUNNER_TEMP'],'impact-projection.json').write_bytes(base64.b64decode(matches[0],validate=True))
+          import importlib.util, os, pathlib, re, sys
+          body=os.environ.get('PR_BODY','')
+          if 'oasis7-impact-projection-b64' in body:
+              raise SystemExit('legacy PR-body impact projections are not accepted')
+          task_lines=re.findall(r'(?m)^Task: ([^\r\n]+)$',body)
+          if not task_lines:
+              if re.search(r'<!-- oasis7-ci-impact-publication:v[12] -->',body):
+                  raise SystemExit('PR publication marker requires a canonical Task UID lookup key')
+              with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+                  output.write('enabled=false\n')
+              raise SystemExit(0)
+          if len(task_lines)!=1 or not re.fullmatch(r'task_[0-9a-f]{32}',task_lines[0]):
+              raise SystemExit('pull request must contain exactly one canonical Task UID lookup key')
+          task_uid=task_lines[0]
+          base=os.environ.get('PR_BASE_OID','')
+          head=os.environ.get('PR_HEAD_OID','')
+          if not re.fullmatch(r'[0-9a-f]{40}',base) or not re.fullmatch(r'[0-9a-f]{40}',head):
+              raise SystemExit('pull request base/head are unavailable as full commit OIDs')
+          root=pathlib.Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          readback_spec=importlib.util.spec_from_file_location(
+              'ci_reuse_validation_readback',root/'scripts/pm/ci_reuse_validation_readback.py')
+          if readback_spec is None or readback_spec.loader is None:
+              raise SystemExit('Project-backed Task resolver is unavailable')
+          readback=importlib.util.module_from_spec(readback_spec)
+          sys.modules[readback_spec.name]=readback
+          readback_spec.loader.exec_module(readback)
+          project_issue=readback.GitHubReadOnly().resolve_project_task_issue(task_uid)
+          activation_spec=importlib.util.spec_from_file_location(
+              'first_activation_projection',root/'scripts/pm/first_activation.py')
+          if activation_spec is None or activation_spec.loader is None:
+              raise SystemExit('trusted PR projection materializer is unavailable')
+          activation=importlib.util.module_from_spec(activation_spec)
+          sys.modules[activation_spec.name]=activation
+          activation_spec.loader.exec_module(activation)
+          repository=os.environ['GITHUB_REPOSITORY']
+          repository_client=activation._github_client(root)
+          issue=activation._issue_by_uid(repository_client,repository,task_uid)
+          if (issue.get('number')!=project_issue.get('number')
+              or issue.get('url')!=project_issue.get('url')
+              or issue.get('body')!=project_issue.get('body')):
+              raise SystemExit('Project item and repository Task Issue readbacks differ')
+          destination=pathlib.Path(os.environ['RUNNER_TEMP'])/'impact-projection.json'
+          digest=activation.materialize_first_activation_task_pr_projection(
+              root,repository,task_uid,base,head,destination,client=repository_client)
+          final_issue=activation._issue_by_uid(repository_client,repository,task_uid)
+          if (final_issue.get('number')!=project_issue.get('number')
+              or final_issue.get('url')!=project_issue.get('url')
+              or final_issue.get('body')!=project_issue.get('body')):
+              raise SystemExit('Project item and Task Issue changed during projection materialization')
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
-              output.write(f'enabled={str(enabled).lower()}\n')
+              output.write('enabled=true\n')
+              output.write(f'task_uid={task_uid}\n')
+              output.write(f'projection_digest={digest}\n')
           PY
       - id: integration
         name: Prepare exact manual integration from trusted default workflow
@@ -361,8 +409,6 @@ jobs:
 
       - id: scope
         name: Plan required gate scope
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           base_ref=""
           head_ref="${GITHUB_SHA}"
@@ -415,13 +461,11 @@ jobs:
             git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
             if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
-              task_uid="$(python3 - <<'PY'
-          import os,re
-          matches=re.findall(r'^Task: (task_[0-9a-f]{32})$',os.environ.get('PR_BODY',''),re.M)
-          if len(matches)!=1: raise SystemExit('pull request requires exactly one canonical Task UID')
-          print(matches[0])
-          PY
-              )"
+              task_uid='${{ steps.impact.outputs.task_uid }}'
+              [[ "${task_uid}" =~ ^task_[0-9a-f]{32}$ ]] || {
+                echo 'Project-resolved Task UID is unavailable' >&2
+                exit 1
+              }
               impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
             fi
           elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then

@@ -974,6 +974,57 @@ class ProjectActivationMarkerTests(unittest.TestCase):
             f"repos/{self.REPOSITORY}/issues/{self.ISSUE_NUMBER}/comments?")
                             for method, path, _ in client.rest_calls))
 
+    def test_project_membership_graphql_and_repository_issue_read_use_separate_clients(self):
+        project_client = self._client([self._item()])
+        repository_client = self.Client({}, issue=project_client.issue)
+        binding = self._binding(repository_client)
+        binding["project_client"] = project_client
+
+        item, issue = MODULE._project_membership_for_task(binding, self.REPOSITORY, UID)
+
+        self.assertEqual(item["id"], self.ITEM_ID)
+        self.assertEqual(issue["number"], self.ISSUE_NUMBER)
+        self.assertEqual(len(project_client.graphql_calls), 1)
+        self.assertEqual(project_client.rest_calls, [])
+        self.assertEqual(repository_client.graphql_calls, [])
+        self.assertTrue(any(
+            path == f"repos/{self.REPOSITORY}/issues/{self.ISSUE_NUMBER}"
+            for method, path, _ in repository_client.rest_calls if method == "GET"
+        ))
+
+    def test_project_graphql_credential_is_explicit_and_hosted_absence_fails_closed(self):
+        repository_client = object()
+
+        class FakeGitHubAPI:
+            def __init__(self, token):
+                self.token = token
+
+        class FakeModule:
+            GitHubAPIClient = FakeGitHubAPI
+
+        marker = "test-project-token-marker"
+        with mock.patch.dict("os.environ", {
+            "GITHUB_ACTIONS": "true",
+            "OASIS7_PROJECT_READ_TOKEN": marker,
+        }, clear=True), mock.patch.object(
+            MODULE, "_github_api_module", return_value=FakeModule,
+        ) as load_api:
+            selected = MODULE._project_graphql_client(ROOT, repository_client)
+        self.assertEqual(selected.token, marker)
+        load_api.assert_called_once_with(ROOT, "first_activation_project_github_api")
+
+        with mock.patch.dict("os.environ", {
+            "GITHUB_ACTIONS": "true",
+            "GH_TOKEN": "repository-token-marker",
+        }, clear=True):
+            with self.assertRaisesRegex(MODULE.OverlayError, "dedicated Project GraphQL"):
+                MODULE._project_graphql_client(ROOT, repository_client)
+
+        with mock.patch.dict("os.environ", {"GH_TOKEN": "human-token-marker"}, clear=True):
+            self.assertIs(
+                MODULE._project_graphql_client(ROOT, repository_client), repository_client,
+            )
+
     def test_overlay_or_activation_marker_is_only_reported_after_binding(self):
         for marker in (*MODULE.OVERLAY_MARKERS, *MODULE.ACTIVATION_MARKERS):
             with self.subTest(marker=marker):
@@ -1161,6 +1212,13 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         (root / "scripts/pm/workflow-impact-projection.py").write_bytes(
             (pathlib.Path(__file__).with_name("workflow-impact-projection.py")).read_bytes(),
         )
+        for helper_name in (
+            "portable_file_lock", "pr_projection_journal", "projection_publication_contract",
+            "pr_projection_publication", "pr_projection_resolver",
+        ):
+            (root / "scripts/pm" / f"{helper_name}.py").write_bytes(
+                (pathlib.Path(__file__).with_name(f"{helper_name}.py")).read_bytes(),
+            )
         test_inventory = {
             "unit_specs": [
                 {
@@ -1246,7 +1304,36 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         projection["projection_digest"] = "sha256:" + hashlib.sha256(
             MODULE._canonical(projection),
         ).hexdigest()
-        projection_b64 = __import__("base64").b64encode(MODULE._canonical(projection)).decode("ascii")
+        publication_module = MODULE._load_projection_publication_helper(
+            ROOT, "pr_projection_publication",
+        )
+
+        def task_publication_comments(leaf, *, include_full_leaf=True):
+            identity = dict(
+                repository="eng-cc/oasis7", repository_id=7, task_uid=UID,
+                bootstrap_epoch=1, source_repository_id=7, source_ref="codex/test",
+                target_ref="main", source_head_oid=head_oid, source_scope_oid=base_oid,
+                planner_authority_oid=base_oid,
+                planner_config_sha256=leaf["planner_config_sha256"],
+                policy_digest=leaf["planner_digest"],
+                projection_digest=leaf["projection_digest"],
+            )
+            if include_full_leaf:
+                identity["workflow_impact_projection"] = leaf
+            publication = publication_module.build_task_publication(**identity)
+            binding = publication_module.build_publication_binding(
+                publication, 4285, "https://github.com/eng-cc/oasis7/pull/4285",
+            )
+            _contract, pr_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=head_oid, scope_base_oid=base_oid,
+                projection_digest=leaf["projection_digest"],
+            )
+            return [
+                {"id": 1, "body": publication_module.publication_comment(publication)},
+                {"id": 2, "body": publication_module.publication_binding_comment(binding)},
+            ], pr_marker
+
+        task_comments, pr_marker = task_publication_comments(projection)
         base_worktree = temp / "trusted-base"
         self._git(root, "worktree", "add", "--detach", str(base_worktree), base_oid)
         proof_overlay = {
@@ -1298,12 +1385,14 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         }
         pr = {
             "number": 4285, "state": "open", "merged": False,
-            "base": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": "main", "sha": base_oid},
-            "head": {"repo": {"full_name": "eng-cc/oasis7"}, "sha": head_oid},
-            "body": f"Task: {UID}\nRefs #4269\n\n<!-- oasis7-impact-projection-b64: {projection_b64} -->\n",
+            "base": {"repo": {"id": 7, "full_name": "eng-cc/oasis7"}, "ref": "main", "sha": base_oid},
+            "head": {"repo": {"id": 7, "full_name": "eng-cc/oasis7"},
+                     "ref": "codex/test", "sha": head_oid},
+            "body": f"Task: {UID}\nRefs #4269\n\n{pr_marker}\n",
         }
         return (root, base_worktree, base_oid, head_oid, proof_overlay,
-                "\n".join(logs) + "\n", issue, pr, projection)
+                "\n".join(logs) + "\n", issue, pr, projection, task_comments,
+                task_publication_comments)
 
     def test_first_activation_workflow_wires_live_task_pr_projection_into_trusted_full_gate(self):
         workflow = (ROOT / ".github/workflows/rust.yml").read_text(encoding="utf-8")
@@ -1320,6 +1409,22 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         self.assertIn('git show "${base_ref}:scripts/pm/workflow-impact-projection.py"', scope)
         self.assertIn('impact_args=(--impact-projection "${authority_dir}/impact-projection.json"', scope)
         self.assertIn('run_mode_args=(--run-mode full_escalation)', scope)
+
+        impact_start = workflow.index("- id: impact\n")
+        impact_end = workflow.index("- id: integration", impact_start)
+        impact = workflow[impact_start:impact_end]
+        self.assertIn("OASIS7_PROJECT_READ_TOKEN: ${{ secrets.OASIS7_PROJECT_READ_TOKEN }}", impact)
+        self.assertEqual(workflow.count("secrets.OASIS7_PROJECT_READ_TOKEN"), 1)
+        self.assertIn("resolve_project_task_issue(task_uid)", impact)
+        self.assertIn("materialize_first_activation_task_pr_projection(", impact)
+        self.assertIn("legacy PR-body impact projections are not accepted", impact)
+        self.assertIn("PR publication marker requires a canonical Task UID lookup key", impact)
+        self.assertNotIn("base64.b64decode", impact)
+        self.assertIn("task_uid='${{ steps.impact.outputs.task_uid }}'", scope)
+        self.assertNotIn("PR_BODY", scope)
+        self.assertNotIn("projects:", workflow)
+        source = (ROOT / "doc/engineering/workflow/source-of-truth.md").read_text(encoding="utf-8")
+        self.assertIn("Hosted Project GraphQL credential isolation (normative)", source)
 
         tier_start = workflow.index('if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "first_activation_validation_only" ]]')
         tier_end = workflow.index('elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]', tier_start)
@@ -1403,11 +1508,12 @@ class RequiredRunLeafProofTests(unittest.TestCase):
     def test_full_reconstruction_uses_actual_job_step_commands_and_additive_candidate_test(self):
         class Client:
             def __init__(self, issue, pr, *, fail_step=False, skipped_step=False,
-                         job_overrides=None, missing_jobs=(), extra_jobs=()):
+                         job_overrides=None, missing_jobs=(), extra_jobs=(), comments=None):
                 self.fail_step = fail_step
                 self.skipped_step = skipped_step
                 self.issue = issue
                 self.pr = pr
+                self.comments = task_comments if comments is None else comments
                 self.job_overrides = job_overrides or {}
                 self.missing_jobs = set(missing_jobs)
                 self.extra_jobs = list(extra_jobs)
@@ -1477,6 +1583,8 @@ class RequiredRunLeafProofTests(unittest.TestCase):
                     return self._jobs()
                 if path.startswith("repos/eng-cc/oasis7/issues?state=all"):
                     return [{**self.issue, "id": 4269}]
+                if path.startswith("repos/eng-cc/oasis7/issues/4269/comments?"):
+                    return self.comments
                 if path == "repos/eng-cc/oasis7/pulls/4285":
                     return self.pr
                 if path == "repos/eng-cc/oasis7/check-runs/102":
@@ -1488,7 +1596,8 @@ class RequiredRunLeafProofTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_name:
             temp = pathlib.Path(temp_name)
-            root, base_worktree, base_oid, head_oid, bound_overlay, logs, issue, pr, projection = self._fixture(temp)
+            (root, base_worktree, base_oid, head_oid, bound_overlay, logs, issue, pr,
+             projection, task_comments, task_publication_comments) = self._fixture(temp)
             client = Client(issue, pr)
             client.head_oid = head_oid
 
@@ -1514,6 +1623,15 @@ class RequiredRunLeafProofTests(unittest.TestCase):
             self.assertEqual(positive["workflow_run_id"], 99)
             self.assertGreater(positive["obligation_count"], 1)
             self.assertRegex(positive["workflow_logs_sha256"], r"^sha256:[0-9a-f]{64}$")
+
+            legacy_comments, legacy_marker = task_publication_comments(
+                projection, include_full_leaf=False,
+            )
+            legacy_pr = {**pr, "body": f"Task: {UID}\nRefs #4269\n\n{legacy_marker}\n"}
+            legacy_publication_client = Client(issue, legacy_pr, comments=legacy_comments)
+            legacy_publication_client.head_oid = head_oid
+            with self.assertRaisesRegex(MODULE.OverlayError, "requires the full-leaf Task publication v2"):
+                reconstruct(logs, run_client=legacy_publication_client)
 
             echo_decoy = logs.replace(
                 "+ ./scripts/lint-skills.sh",
@@ -1578,22 +1696,26 @@ class RequiredRunLeafProofTests(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.OverlayError, "contains an unclassified job"):
                 reconstruct(logs, run_client=unclassified_job)
 
-            missing_projection_pr = {**pr, "body": pr["body"].replace(
-                f"<!-- oasis7-impact-projection-b64: {__import__('base64').b64encode(MODULE._canonical(projection)).decode('ascii')} -->\n",
-                "",
-            )}
+            missing_projection_pr = {**pr, "body": f"Task: {UID}\nRefs #4269\n"}
             missing_projection = Client(issue, missing_projection_pr)
             missing_projection.head_oid = head_oid
-            with self.assertRaisesRegex(MODULE.OverlayError, "does not contain exactly one impact projection"):
+            with self.assertRaisesRegex(MODULE.OverlayError, "publication and reciprocal PR projection"):
                 reconstruct(logs, run_client=missing_projection)
 
             forged_projection = dict(projection)
-            forged_projection["task_uid"] = "task_" + "b" * 32
-            forged_pr_body = pr["body"].replace(
-                __import__('base64').b64encode(MODULE._canonical(projection)).decode('ascii'),
-                __import__('base64').b64encode(MODULE._canonical(forged_projection)).decode('ascii'),
+            forged_projection["changed_paths"] = ["forged/path"]
+            forged_projection["changed_paths_digest"] = "sha256:" + hashlib.sha256(
+                MODULE._canonical(forged_projection["changed_paths"]),
+            ).hexdigest()
+            forged_projection.pop("projection_digest")
+            forged_projection["projection_digest"] = "sha256:" + hashlib.sha256(
+                MODULE._canonical(forged_projection),
+            ).hexdigest()
+            forged_comments, forged_marker = task_publication_comments(forged_projection)
+            forged_pr_body = f"Task: {UID}\nRefs #4269\n\n{forged_marker}\n"
+            forged_projection_client = Client(
+                issue, {**pr, "body": forged_pr_body}, comments=forged_comments,
             )
-            forged_projection_client = Client(issue, {**pr, "body": forged_pr_body})
             forged_projection_client.head_oid = head_oid
             with self.assertRaisesRegex(MODULE.OverlayError, "trusted base rejected the reciprocal Task PR"):
                 reconstruct(logs, run_client=forged_projection_client)

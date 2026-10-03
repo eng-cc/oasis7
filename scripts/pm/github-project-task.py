@@ -3557,7 +3557,8 @@ class PublicationRecoveryAuthority:
                 raise ValueError("publication intent digest/identity mismatch")
             self._comment_identity(candidates[0], (self.comment.get("user") or {}).get("login"))
             intent = self.module.parse_publication_comment(candidates[0]["body"])
-            unique = [c for c in comments if "<!-- oasis7-ci-publication/v1 -->" in c["body"]
+            unique = [c for c in comments
+                      if self.module.has_task_publication_marker(c.get("body"))
                       and self.module.parse_publication_comment(c["body"])["publication_id"] == intent["publication_id"]]
             if len(unique) != 1:
                 raise ValueError("publication lineage intent is not unique")
@@ -4001,7 +4002,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         binding_records = []
         for comment in comments:
             body = str(comment.get("body") or "")
-            if "<!-- oasis7-ci-publication/v1 -->" in body:
+            if publication_module.has_task_publication_marker(body):
                 try:
                     publication_records.append(publication_module.parse_publication_comment(body))
                 except ValueError as exc:

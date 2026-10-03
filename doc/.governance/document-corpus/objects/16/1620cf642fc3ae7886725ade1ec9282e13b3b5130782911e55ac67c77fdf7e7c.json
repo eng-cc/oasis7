@@ -1,17 +1,17 @@
 {
   "record": {
-    "authority_entry": "doc/world-runtime/README.md",
+    "authority_entry": "doc/p2p/README.md",
     "authority_layer": "professional_domain",
-    "content_sha256": "88373e3a19c82afd1f467b268cce4b18f845ce29a571a13c5dfd79b25b36f49a",
+    "content_sha256": "ea13baa1f6756ea38873ca4a160890e4ae56cfec1f64fee0b15c82ebdcf45c3a",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "active_candidate",
-    "object_kind": "design",
-    "path": "doc/world-runtime/wasm/wasm-executor.design.md",
+    "object_kind": "runbook",
+    "path": "doc/p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md",
     "registry_type": "professional_domain",
-    "routing_batch": "world-runtime-corpus-review",
+    "routing_batch": "p2p-corpus-review",
     "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
-    "semantic_decision_owner": "runtime_engineer",
-    "structural_owner": "runtime_engineer"
+    "semantic_decision_owner": "blockchain_ops_engineer",
+    "structural_owner": "blockchain_ops_engineer"
   },
   "schema": "oasis7.document-corpus-object/v1"
 }

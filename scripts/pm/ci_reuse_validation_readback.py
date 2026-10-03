@@ -15,6 +15,7 @@ import importlib.util
 import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -200,9 +201,24 @@ def _next_link(
 class GitHubReadOnly:
     """Small REST client that follows every live pagination relation."""
 
+    def __init__(self) -> None:
+        # Capture the dedicated value once and remove it from this process
+        # environment so later REST, artifact, and local helper subprocesses do
+        # not inherit it. GraphQL creates its own short-lived child environment.
+        self._project_read_token = os.environ.pop("OASIS7_PROJECT_READ_TOKEN", "").strip()
+        self._github_actions = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+
+    @staticmethod
+    def _repository_cli_environment() -> dict[str, str]:
+        environment = os.environ.copy()
+        environment.pop("OASIS7_PROJECT_READ_TOKEN", None)
+        return environment
+
     def _included_json(self, endpoint: str) -> tuple[dict[str, str], Any]:
         try:
-            raw = subprocess.check_output(["gh", "api", "--include", endpoint])
+            raw = subprocess.check_output(
+                ["gh", "api", "--include", endpoint], env=self._repository_cli_environment(),
+            )
         except (OSError, subprocess.CalledProcessError) as exc:
             raise ReadbackError(f"GitHub API read failed for {endpoint}") from exc
         headers, body = _decode_included_response(raw)
@@ -219,6 +235,17 @@ class GitHubReadOnly:
     def graphql(self, query: str, variables: Mapping[str, str]) -> Any:
         if type(query) is not str or not query or not isinstance(variables, Mapping):
             raise ReadbackError("GitHub Project query is malformed")
+        project_token = self._project_read_token
+        if not project_token and self._github_actions:
+            raise ReadbackError("dedicated Project GraphQL read credential is unavailable")
+        project_env = None
+        if project_token:
+            # `gh api graphql` is the only child process receiving this token.
+            # Keep repository credentials out of the Project-read environment.
+            project_env = os.environ.copy()
+            project_env["GH_TOKEN"] = project_token
+            project_env.pop("GITHUB_TOKEN", None)
+            project_env.pop("OASIS7_PROJECT_READ_TOKEN", None)
         command = ["gh", "api", "graphql", "-f", "query=" + query]
         for key, value in variables.items():
             if (type(key) is not str or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
@@ -226,7 +253,7 @@ class GitHubReadOnly:
                 raise ReadbackError("GitHub Project query variables are malformed")
             command.extend(("-f", key + "=" + value))
         try:
-            raw = subprocess.check_output(command)
+            raw = subprocess.check_output(command, env=project_env)
         except (OSError, subprocess.CalledProcessError) as exc:
             raise ReadbackError(
                 "GitHub Project-backed Task Issue lookup failed or lacks read permission",
@@ -307,7 +334,9 @@ class GitHubReadOnly:
 
     def get_bytes(self, endpoint: str) -> bytes:
         try:
-            value = subprocess.check_output(["gh", "api", endpoint])
+            value = subprocess.check_output(
+                ["gh", "api", endpoint], env=self._repository_cli_environment(),
+            )
         except (OSError, subprocess.CalledProcessError) as exc:
             raise ReadbackError("GitHub artifact download failed") from exc
         if type(value) is not bytes:
@@ -865,14 +894,14 @@ def _projection_digest_from_v2(body: str, expected: Mapping[str, Any], pr: Mappi
                                issue_comments: tuple[Mapping[str, Any], ...],
                                trusted_module_root: Path) -> str:
     """Resolve the live v2 PR projection through the exact-W resolver modules."""
-    marker = "<!-- oasis7-ci-publication/v1 -->"
+    marker = "<!-- oasis7-ci-publication/v2 -->"
     binding_marker = "<!-- oasis7-ci-publication-binding/v1 -->"
     publications = [item["body"] for item in issue_comments
                     if type(item.get("body")) is str and marker in item["body"]]
     bindings = [item["body"] for item in issue_comments
                 if type(item.get("body")) is str and binding_marker in item["body"]]
     if len(publications) != 1 or len(bindings) != 1:
-        raise ReadbackError("Task Issue must have one immutable CI publication and reciprocal binding")
+        raise ReadbackError("Task Issue must have one full-leaf Task publication v2 and reciprocal binding")
     try:
         projection_contract = _load_from_root(trusted_module_root, "projection_publication_contract")
         _load_from_root(trusted_module_root, "pr_projection_journal")
@@ -889,6 +918,8 @@ def _projection_digest_from_v2(body: str, expected: Mapping[str, Any], pr: Mappi
             live={"repository": REPOSITORY, "pr_number": expected["pr_number"],
                   "repository_id": pr.get("base", {}).get("repo", {}).get("id"),
                   "source_repository_id": pr.get("head", {}).get("repo", {}).get("id"),
+                  "source_ref": pr.get("head", {}).get("ref"),
+                  "target_ref": pr.get("base", {}).get("ref"),
                   "head_oid": pr.get("head", {}).get("sha"),
                   "state": pr.get("state"), "merged": pr.get("merged")},
         )

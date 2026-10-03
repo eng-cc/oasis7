@@ -46,6 +46,8 @@ def resolve(body: str, *, task_uid: str | None = None, source_head_oid: str | No
         raise ResolverError("UNSUPPORTED_RUN_PROTOCOL")
     if required_protocol == "v1":
         raise ResolverError("UNSUPPORTED_RUN_PROTOCOL")
+    if required_protocol == "v2" and publication is None:
+        raise ResolverError("current v2 resolution requires the full Task publication")
     contract = decode_marker(body)
     for field, expected in (("task_uid", task_uid), ("source_head_oid", source_head_oid),
                             ("scope_base_oid", scope_base_oid)):
@@ -56,6 +58,8 @@ def resolve(body: str, *, task_uid: str | None = None, source_head_oid: str | No
             publication = validate_ci_publication(publication)
         except ContractError as exc:
             raise ResolverError("Task publication is invalid") from exc
+        if required_protocol == "v2" and publication["schema"] != "oasis7-ci-publication/v2":
+            raise ResolverError("current v2 resolution requires a Task publication with the full projection leaf")
         for field, expected in (
             ("task_uid", task_uid), ("source_head_oid", source_head_oid),
             ("source_scope_oid", scope_base_oid),
@@ -80,6 +84,15 @@ def resolve(body: str, *, task_uid: str | None = None, source_head_oid: str | No
             raise ResolverError("reciprocal binding repository mismatch")
         if pr_number is not None and binding["pr_number"] != pr_number:
             raise ResolverError("reciprocal binding PR number mismatch")
+    if required_protocol == "v2":
+        if binding is None:
+            raise ResolverError("current v2 resolution requires the reciprocal Task/PR binding")
+        required_live = {
+            "repository", "pr_number", "repository_id", "source_repository_id",
+            "source_ref", "target_ref", "head_oid", "state", "merged",
+        }
+        if not isinstance(live, dict) or not required_live.issubset(live):
+            raise ResolverError("current v2 resolution requires complete live PR identity")
     if live is not None:
         for field in ("task_uid", "source_head_oid", "scope_base_oid"):
             if field in live and live[field] != contract[field]:
@@ -100,6 +113,10 @@ def resolve(body: str, *, task_uid: str | None = None, source_head_oid: str | No
             if (live.get("repository", binding["repository"]) != binding["repository"]
                     or live.get("pr_number", binding["pr_number"]) != binding["pr_number"]):
                 raise ResolverError("live reciprocal binding identity mismatch")
+    if publication is not None and publication.get("schema") == "oasis7-ci-publication/v2":
+        resolved = dict(contract)
+        resolved["workflow_impact_projection"] = publication["workflow_impact_projection"]
+        return resolved
     return contract
 
 
