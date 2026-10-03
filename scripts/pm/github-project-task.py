@@ -627,6 +627,11 @@ def issue_task_fields(body: str) -> dict[str, Any]:
     return fields
 
 
+def normalize_issue_title(title: str) -> str:
+    """Reconstruct the task title from the canonical [PM] Issue title form."""
+    return title[5:] if title.startswith("[PM] ") else title
+
+
 def require_supplied_uid_absent(repo: str, task_uid: str) -> None:
     """Search indexing cannot prove absence for a predetermined task identity."""
     seen_ids, seen_numbers = set(), set()
@@ -704,9 +709,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
     if re.findall(r"^task_uid:[^\n]*$", body, re.MULTILINE) != ["task_uid: " + task_uid]:
         return None
     record = issue_task_fields(body)
-    title = str(issue.get("title") or hits[0].get("title") or "")
-    if title.startswith("[PM] "):
-        title = title[5:]
+    title = normalize_issue_title(str(issue.get("title") or hits[0].get("title") or ""))
     record.update(
         {
             "task_uid": task_uid,

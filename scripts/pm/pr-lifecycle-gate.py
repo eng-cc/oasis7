@@ -1748,6 +1748,16 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
         head = data.get('headRefOid', '')
         if not all(re.fullmatch(r'[0-9a-f]{40}', value) for value in (base, head)):
             raise ValueError('current PR base/head OIDs unavailable')
+        first_activation_path = Path(root) / 'scripts/pm/first_activation.py'
+        if first_activation_path.is_file() and not first_activation_path.is_symlink():
+            activation_helper = _load_effective_helper(Path(root), 'first_activation')
+            if activation_helper.has_issue_overlay(
+                    Path(root), str(data['repository']), uid, client=api_client):
+                activation_helper.read_project_activation(
+                    Path(root), str(data['repository']), uid, base, head,
+                    mapping_path=Path(root) / '.pm/github-project-sync/tasks.json',
+                    client=api_client,
+                )
         admission = local_loop_admission(root, uid, base, head, tool_root)
         legacy_admission = isinstance(admission, dict) and admission.get('status') == 'legacy'
         integration = live_integration_admission(
