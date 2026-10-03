@@ -4403,6 +4403,405 @@ def _verify_merged_task(root: pathlib.Path, task_uid: str, repo: str,
     return receipt_root, merge, main_sync, source_oid
 
 
+def _collect_review_archive_closure(task_root: pathlib.Path, task_uid: str, source_oid: str,
+                                    plan_path: pathlib.Path) -> list[dict[str, Any]]:
+    """Select only schema-referenced review evidence for the bounded archive.
+
+    The production caller invokes this after authenticating and validating the
+    live task, frozen plan, handoff, packets, returns and provenance. This
+    selector does not establish authority; it closes the exact file-reference
+    graph those validators consumed.
+    """
+    if not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        raise ValueError("archive closure Task UID is invalid")
+    if not re.fullmatch(r"[0-9a-f]{40,64}", source_oid):
+        raise ValueError("archive closure source OID is invalid")
+    root = pathlib.Path(task_root).resolve(strict=True)
+    scratch = root / ".pm" / "scratch" / task_uid
+    for component in (root / ".pm", root / ".pm" / "scratch", scratch):
+        if component.is_symlink() or not component.is_dir():
+            raise ValueError("archive closure Task scratch path is missing or symlinked")
+
+    members: dict[str, tuple[pathlib.Path, bytes]] = {}
+    def add_member(raw_path: object, label: str, *, expected: str | None = None) -> tuple[str, bytes]:
+        if not isinstance(raw_path, (str, pathlib.Path)) or not str(raw_path):
+            raise ValueError(f"archive closure {label} path is missing")
+        raw = str(raw_path)
+        if "\\" in raw or "\x00" in raw:
+            raise ValueError(f"archive closure {label} path is not canonical")
+        supplied = pathlib.Path(raw).expanduser()
+        if supplied.is_absolute():
+            if str(supplied) != raw:
+                raise ValueError(f"archive closure {label} absolute path is not canonical")
+            try:
+                relative = supplied.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"archive closure {label} escapes the authenticated task root") from exc
+        else:
+            posix = pathlib.PurePosixPath(raw)
+            if posix.is_absolute() or posix.as_posix() != raw:
+                raise ValueError(f"archive closure {label} relative path is not canonical")
+            relative = pathlib.Path(*posix.parts)
+        if (not relative.parts or any(part in {"", ".", ".."} for part in relative.parts)
+                or relative.parts[:3] != (".pm", "scratch", task_uid)):
+            raise ValueError(f"archive closure {label} is outside canonical Task scratch")
+        relative_posix = pathlib.PurePosixPath(*relative.parts).as_posix()
+        if expected is not None and relative_posix != expected:
+            raise ValueError(f"archive closure {label} path is not its canonical reference")
+        path = root.joinpath(*relative.parts)
+        current = root
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError(f"archive closure {label} contains a symlink component")
+        if not path.is_file():
+            raise ValueError(f"archive closure {label} is missing or not a regular file")
+        resolved = path.resolve(strict=True)
+        if resolved != path:
+            raise ValueError(f"archive closure {label} resolves through an alias")
+        prior = members.get(relative_posix)
+        if prior is None:
+            before = path.stat()
+            raw_bytes = path.read_bytes()
+            after = path.stat()
+            if (before.st_ino != after.st_ino or before.st_size != after.st_size
+                    or before.st_mtime_ns != after.st_mtime_ns or len(raw_bytes) != after.st_size):
+                raise ValueError(f"archive closure {label} changed while being read")
+            members[relative_posix] = (path, raw_bytes)
+        else:
+            raw_bytes = prior[1]
+        return relative_posix, raw_bytes
+
+    def read_json_member(raw_path: object, label: str, *, expected: str | None = None
+                         ) -> tuple[str, bytes, dict[str, Any]]:
+        relative, raw = add_member(raw_path, label, expected=expected)
+        value = json.loads(raw, object_pairs_hook=unique_json_object)
+        if not isinstance(value, dict):
+            raise ValueError(f"archive closure {label} is not a JSON object")
+        return relative, raw, value
+
+    def reject_unknown_refs(value: dict[str, Any], allowed: set[str], label: str) -> None:
+        for key in value:
+            lower = str(key).lower()
+            # Ledger metadata such as ``artifact_digest`` describes bytes; it
+            # is not a path edge. Restrict discovery to reference-shaped field
+            # names so that digest/count metadata remains valid schema.
+            is_reference = (
+                lower in {"artifact", "artifacts"}
+                or lower.endswith(("_path", "_paths"))
+                or ("artifact" in lower and lower.endswith(("_ref", "_refs")))
+            )
+            if is_reference and key not in allowed:
+                raise ValueError(f"archive closure {label} has an unknown reference field: {key}")
+
+    def checked_rows(raw: bytes, label: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        try:
+            for line_number, line in enumerate(raw.decode("utf-8").splitlines(), 1):
+                if not line.strip():
+                    continue
+                row = json.loads(line, object_pairs_hook=unique_json_object)
+                if not isinstance(row, dict):
+                    raise ValueError(f"archive closure {label} line {line_number} is not an object")
+                rows.append(row)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"archive closure {label} is malformed") from exc
+        return rows
+
+    def add_return_rows(ledger_rows: list[dict[str, Any]], task: str, head: str, epoch: str,
+                        expected_slices: list[dict[str, Any]], label: str) -> set[str]:
+        expected = {(row.get("role"), row.get("slice_id")) for row in expected_slices}
+        if (not expected or len(expected) != len(expected_slices)
+                or any(not isinstance(role, str) or not isinstance(slice_id, str)
+                       for role, slice_id in expected)):
+            raise ValueError(f"archive closure {label} has duplicate or malformed expected slices")
+        seen: set[tuple[object, object]] = set()
+        artifacts: set[str] = set()
+        for row in ledger_rows:
+            reject_unknown_refs(row, {"artifacts"}, f"{label} ledger row")
+            identity = (row.get("role"), row.get("slice_id"))
+            if identity in seen or identity not in expected:
+                raise ValueError(f"archive closure {label} ledger has duplicate or unexpected slices")
+            seen.add(identity)
+            if (row.get("task_uid") != task or row.get("head") != head
+                    or row.get("epoch", row.get("review_epoch")) != epoch
+                    or row.get("status") != "completed"):
+                raise ValueError(f"archive closure {label} ledger identity is inconsistent")
+            named = row.get("artifacts")
+            if not isinstance(named, list) or len(named) != 1 or not isinstance(named[0], str):
+                raise ValueError(f"archive closure {label} ledger must name exactly one return artifact")
+            return_path, return_raw = add_member(named[0], f"{label} role return")
+            expected_digest = row.get("artifact_digest")
+            if not isinstance(expected_digest, str) or hashlib.sha256(return_raw).hexdigest() != expected_digest:
+                raise ValueError(f"archive closure {label} return digest mismatch")
+            returned = json.loads(return_raw, object_pairs_hook=unique_json_object)
+            if (not isinstance(returned, dict) or returned.get("task_uid") != task
+                    or returned.get("role") != identity[0] or returned.get("slice_id") != identity[1]
+                    or returned.get("head") != head or returned.get("epoch") != epoch
+                    or returned.get("status") != "completed"):
+                raise ValueError(f"archive closure {label} return identity is inconsistent")
+            artifacts.add(return_path)
+        if seen != expected:
+            raise ValueError(f"archive closure {label} ledger does not cover every expected slice")
+        return artifacts
+
+    def collect_prior_context(context: object, *, current_head: str) -> None:
+        if not isinstance(context, dict):
+            raise ValueError("archive closure incremental review context is malformed")
+        reject_unknown_refs(context, {"prior_plan_path", "prior_collection_path", "delta_paths"},
+                            "incremental review context")
+        if (context.get("schema") != "oasis7-review-context/v1"
+                or context.get("authority") != "context_only"
+                or context.get("task_uid") != task_uid
+                or context.get("current_head_oid") != current_head):
+            raise ValueError("archive closure incremental context identity is inconsistent")
+        prior_head = context.get("prior_head_oid")
+        prior_epoch = context.get("prior_epoch")
+        if (not isinstance(prior_head, str) or not re.fullmatch(r"[0-9a-f]{40,64}", prior_head)
+                or prior_head == current_head or not isinstance(prior_epoch, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", prior_epoch)):
+            raise ValueError("archive closure prior review identity is malformed")
+        prior_plan_expected = f".pm/scratch/{task_uid}/review-plans/{prior_epoch}.json"
+        prior_plan_rel, prior_plan_raw, prior_plan = read_json_member(
+            context.get("prior_plan_path"), "prior review plan", expected=prior_plan_expected,
+        )
+        reject_unknown_refs(prior_plan, {"batch_path", "collection_path", "packet_refs"}, "prior review plan")
+        if (prior_plan.get("task_uid") != task_uid or prior_plan.get("frozen_head") != prior_head
+                or prior_plan.get("epoch") != prior_epoch
+                or context.get("prior_plan_digest") != hashlib.sha256(prior_plan_raw).hexdigest()):
+            raise ValueError("archive closure prior review plan digest or identity mismatch")
+        prior_batch_expected = f".pm/scratch/{task_uid}/review-batches/{prior_epoch}.json"
+        prior_batch_rel, prior_batch_raw, prior_batch = read_json_member(
+            prior_plan.get("batch_path"), "prior review batch", expected=prior_batch_expected,
+        )
+        prior_slices = prior_plan.get("expected_slices")
+        if (not isinstance(prior_slices, list) or not prior_slices
+                or prior_batch.get("schema") != "oasis7-review-batch/v1"
+                or prior_batch.get("task_uid") != task_uid
+                or prior_batch.get("frozen_head") != prior_head
+                or prior_batch.get("epoch") != prior_epoch
+                or prior_batch.get("expected_slices") != prior_slices):
+            raise ValueError("archive closure prior plan/batch identity mismatch")
+        expected_collection = f".pm/scratch/{task_uid}/review-batches/{prior_epoch}.collection.json"
+        collection_rel, collection_raw, collection = read_json_member(
+            context.get("prior_collection_path"), "prior review collection", expected=expected_collection,
+        )
+        prior_preflight = prior_plan.get("preflight")
+        if not isinstance(prior_preflight, dict) or not isinstance(prior_preflight.get("ledger_path"), str):
+            raise ValueError("archive closure prior plan has no ledger reference")
+        prior_ledger_rel, prior_ledger_raw = add_member(prior_preflight["ledger_path"], "prior review ledger")
+        prior_rows = checked_rows(prior_ledger_raw, "prior review ledger")
+        prior_return_paths = add_return_rows(prior_rows, task_uid, prior_head, prior_epoch,
+                                             prior_slices, "prior review")
+        prior_ledger_digest = hashlib.sha256(prior_ledger_raw).hexdigest()
+        if (context.get("prior_source_review_digest") != prior_plan.get("source_review_digest",
+                                                                      prior_plan.get("relevant_evidence_digest"))
+                or context.get("prior_integration_ci_digest") != prior_plan.get("integration_ci_digest")
+                or context.get("prior_roles") != prior_plan.get("roles")
+                or context.get("prior_collection_digest") != hashlib.sha256(collection_raw).hexdigest()
+                or context.get("prior_collection_ledger_digest") != prior_ledger_digest
+                or collection.get("schema") != "oasis7-review-collection/v1"
+                or collection.get("status") != "passed" or collection.get("task_uid") != task_uid
+                or collection.get("epoch") != prior_epoch or collection.get("frozen_head") != prior_head
+                or collection.get("ledger_digest") != prior_ledger_digest
+                or sorted(collection.get("roles", [])) != sorted(row.get("role") for row in prior_slices)):
+            raise ValueError("archive closure prior review collection does not bind its ledger/context")
+        collection_plan_path = prior_plan.get("collection_path")
+        if collection_plan_path is not None:
+            normalized_collection, _ = add_member(collection_plan_path, "prior plan collection reference",
+                                                   expected=expected_collection)
+            if normalized_collection != collection_rel:
+                raise ValueError("archive closure prior plan collection path conflicts with context")
+        # These locals document that graph edges were resolved, while membership
+        # is coalesced by canonical path in add_member.
+        del prior_plan_rel, prior_batch_rel, prior_return_paths
+
+    current_plan_expected_prefix = f".pm/scratch/{task_uid}/review-plans/"
+    plan_rel, plan_raw, plan = read_json_member(plan_path, "frozen review plan")
+    if (not plan_rel.startswith(current_plan_expected_prefix) or not plan_rel.endswith(".json")
+            or plan.get("task_uid") != task_uid or plan.get("frozen_head") != source_oid):
+        raise ValueError("archive closure selected plan is outside the exact Task/head review")
+    reject_unknown_refs(plan, {"batch_path", "collection_path", "packet_refs", "incremental_review_context",
+                               "comparison_ref", "source_ref", "target_ref"}, "frozen review plan")
+    epoch = plan.get("epoch")
+    if not isinstance(epoch, str) or not re.fullmatch(r"[0-9a-f]{64}", epoch):
+        raise ValueError("archive closure selected plan epoch is malformed")
+    expected_batch = f".pm/scratch/{task_uid}/review-batches/{epoch}.json"
+    batch_rel, batch_raw, batch = read_json_member(plan.get("batch_path"), "review batch", expected=expected_batch)
+    expected_slices = plan.get("expected_slices")
+    roles = plan.get("roles")
+    if (batch.get("schema") != "oasis7-review-batch/v1" or batch.get("task_uid") != task_uid
+            or batch.get("frozen_head") != source_oid or batch.get("epoch") != epoch
+            or not isinstance(expected_slices, list) or not expected_slices
+            or batch.get("expected_slices") != expected_slices
+            or not isinstance(roles, list) or len(set(roles)) != len(roles)
+            or roles != [row.get("role") for row in expected_slices]):
+        raise ValueError("archive closure selected plan/batch role or identity mismatch")
+    identities = [(row.get("role"), row.get("slice_id")) for row in expected_slices if isinstance(row, dict)]
+    if (len(identities) != len(expected_slices) or len(set(identities)) != len(identities)
+            or any(not isinstance(role, str) or not role or not isinstance(slice_id, str) or not slice_id
+                   for role, slice_id in identities)):
+        raise ValueError("archive closure selected plan has duplicate or malformed slices")
+
+    snapshot_rel = f".pm/scratch/{task_uid}/bootstrap-task-snapshot.json"
+    _snapshot_path, _snapshot_raw, snapshot = read_json_member(
+        snapshot_rel, "bootstrap snapshot", expected=snapshot_rel,
+    )
+    snapshot_task = snapshot.get("task")
+    if not isinstance(snapshot_task, dict) or snapshot_task.get("task_uid") != task_uid:
+        raise ValueError("archive closure bootstrap snapshot Task UID mismatch")
+
+    preflight = plan.get("preflight")
+    if not isinstance(preflight, dict):
+        raise ValueError("archive closure selected plan preflight is malformed")
+    reject_unknown_refs(preflight, {"ledger_path", "artifact_paths"}, "review plan preflight")
+    ledger_rel, ledger_raw = add_member(preflight.get("ledger_path"), "review ledger")
+    current_rows = checked_rows(ledger_raw, "review ledger")
+    current_return_paths = add_return_rows(current_rows, task_uid, source_oid, epoch,
+                                           expected_slices, "current review")
+    if "artifact_paths" in preflight:
+        listed = preflight["artifact_paths"]
+        if not isinstance(listed, list) or len(listed) != len(current_return_paths):
+            raise ValueError("archive closure preflight return list is incomplete")
+        resolved_list: set[str] = set()
+        for item in listed:
+            path, _ = add_member(item, "preflight role return")
+            if path in resolved_list:
+                raise ValueError("archive closure preflight return list has duplicate paths")
+            resolved_list.add(path)
+        if resolved_list != current_return_paths:
+            raise ValueError("archive closure preflight returns differ from ledger")
+
+    packet_refs = plan.get("packet_refs")
+    if not isinstance(packet_refs, list) or len(packet_refs) != len(expected_slices):
+        raise ValueError("archive closure plan packet reference set is incomplete")
+    refs_by_identity: dict[tuple[str, str], str] = {}
+    packet_paths: dict[tuple[str, str], str] = {}
+    for reference in packet_refs:
+        if not isinstance(reference, dict) or set(reference) != {"role", "slice_id", "packet_ref"}:
+            raise ValueError("archive closure packet reference is malformed")
+        identity = (reference.get("role"), reference.get("slice_id"))
+        if identity not in identities or identity in refs_by_identity:
+            raise ValueError("archive closure packet references duplicate or unexpected slices")
+        expected_packet = f".pm/scratch/{task_uid}/slice-packets/{identity[1]}.json"
+        packet_rel, packet_raw, packet = read_json_member(
+            reference.get("packet_ref"), "review packet", expected=expected_packet,
+        )
+        packet_identity = packet.get("identity")
+        packet_slice = packet.get("slice")
+        if (not isinstance(packet_identity, dict) or not isinstance(packet_slice, dict)
+                or packet_identity.get("task_uid") != task_uid or packet_identity.get("head") != source_oid
+                or packet_slice.get("role") != identity[0] or packet_slice.get("slice_id") != identity[1]):
+            raise ValueError("archive closure review packet identity mismatch")
+        unsigned = {key: value for key, value in packet.items() if key != "packet_digest"}
+        packet_digest = hashlib.sha256(json.dumps(
+            unsigned, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")).hexdigest()
+        if packet.get("packet_digest") != packet_digest:
+            raise ValueError("archive closure review packet digest mismatch")
+        refs_by_identity[identity] = packet_rel
+        packet_paths[identity] = packet_rel
+        review_context = packet.get("review_context")
+        if review_context is not None:
+            collect_prior_context(review_context, current_head=source_oid)
+    if set(refs_by_identity) != set(identities):
+        raise ValueError("archive closure packet references do not cover every role/slice")
+    plan_context = plan.get("incremental_review_context")
+    if plan_context is not None:
+        collect_prior_context(plan_context, current_head=source_oid)
+
+    collection_rel = None
+    collection_reference = plan.get("collection_path")
+    expected_collection = f".pm/scratch/{task_uid}/review-batches/{epoch}.collection.json"
+    if collection_reference is not None:
+        collection_rel, collection_raw, collection = read_json_member(
+            collection_reference, "review collection", expected=expected_collection,
+        )
+        if (collection.get("schema") != "oasis7-review-collection/v1"
+                or collection.get("status") != "passed" or collection.get("task_uid") != task_uid
+                or collection.get("epoch") != epoch or collection.get("frozen_head") != source_oid
+                or collection.get("ledger_digest") != hashlib.sha256(ledger_raw).hexdigest()
+                or sorted(collection.get("roles", [])) != sorted(roles)):
+            raise ValueError("archive closure current review collection does not bind the ledger")
+    else:
+        optional_collection = root / expected_collection
+        if optional_collection.exists() or optional_collection.is_symlink():
+            collection_rel, collection_raw, collection = read_json_member(
+                expected_collection, "review collection", expected=expected_collection,
+            )
+            if (collection.get("schema") != "oasis7-review-collection/v1"
+                    or collection.get("status") != "passed" or collection.get("task_uid") != task_uid
+                    or collection.get("epoch") != epoch or collection.get("frozen_head") != source_oid
+                    or collection.get("ledger_digest") != hashlib.sha256(ledger_raw).hexdigest()
+                    or sorted(collection.get("roles", [])) != sorted(roles)):
+                raise ValueError("archive closure current review collection does not bind the ledger")
+
+    handoff_rel = f".pm/scratch/{task_uid}/review-handoffs/{epoch}.json"
+    handoff_rel, handoff_raw, handoff = read_json_member(handoff_rel, "review handoff", expected=handoff_rel)
+    reject_unknown_refs(handoff, {"plan_path", "batch_path", "preflight_ledger_path", "rows"}, "review handoff")
+    for key, selected in (("plan_path", plan_rel), ("batch_path", batch_rel),
+                          ("preflight_ledger_path", ledger_rel)):
+        normalized, _ = add_member(handoff.get(key), f"handoff {key}")
+        if normalized != selected:
+            raise ValueError("archive closure handoff does not bind selected plan/batch/ledger")
+    handoff_rows = handoff.get("rows")
+    if not isinstance(handoff_rows, list) or len(handoff_rows) != len(identities):
+        raise ValueError("archive closure handoff rows are incomplete")
+    handoff_seen: set[tuple[object, object]] = set()
+    for row in handoff_rows:
+        if not isinstance(row, dict):
+            raise ValueError("archive closure handoff row is malformed")
+        reject_unknown_refs(row, {"artifact_path", "packet_path"}, "review handoff row")
+        identity = (row.get("role"), row.get("slice_id"))
+        if identity not in identities or identity in handoff_seen:
+            raise ValueError("archive closure handoff has duplicate or unexpected slices")
+        packet_rel, _ = add_member(row.get("packet_path"), "handoff packet")
+        return_rel, _ = add_member(row.get("artifact_path"), "handoff return")
+        if packet_rel != packet_paths[identity] or return_rel not in current_return_paths:
+            raise ValueError("archive closure handoff points outside the selected packet/return set")
+        handoff_seen.add(identity)
+    if handoff_seen != set(identities):
+        raise ValueError("archive closure handoff does not cover every role/slice")
+
+    origin_rel = f".pm/scratch/{task_uid}/publication-helper-review-origin.json"
+    origin_rel, origin_raw, origin = read_json_member(origin_rel, "review origin", expected=origin_rel)
+    if (origin.get("schema") != "oasis7-publication-helper-review-origin/v1"
+            or origin.get("task_uid") != task_uid):
+        raise ValueError("archive closure origin identity mismatch")
+    for wrapper_key, expected_value, expected_raw in (
+            ("bootstrap_snapshot", snapshot, members[snapshot_rel][1]),
+            ("review_plan", plan, plan_raw), ("review_batch", batch, batch_raw)):
+        wrapper = origin.get(wrapper_key)
+        if (not isinstance(wrapper, dict) or wrapper.get("value") != expected_value
+                or wrapper.get("raw_sha256") != hashlib.sha256(expected_raw).hexdigest()):
+            raise ValueError("archive closure origin wrapper differs from selected evidence")
+    origin_packets = origin.get("packets")
+    if not isinstance(origin_packets, list) or len(origin_packets) != len(identities):
+        raise ValueError("archive closure origin packet set is incomplete")
+    origin_seen: set[tuple[object, object]] = set()
+    for row in origin_packets:
+        if not isinstance(row, dict) or set(row) != {"role", "slice_id", "repo_path", "raw_sha256", "value"}:
+            raise ValueError("archive closure origin packet row is malformed")
+        identity = (row.get("role"), row.get("slice_id"))
+        if identity not in packet_paths or identity in origin_seen:
+            raise ValueError("archive closure origin packet rows duplicate or escape planned slices")
+        packet_rel = packet_paths[identity]
+        packet_raw = members[packet_rel][1]
+        if (row.get("repo_path") != packet_rel or row.get("raw_sha256") != hashlib.sha256(packet_raw).hexdigest()
+                or row.get("value") != json.loads(packet_raw, object_pairs_hook=unique_json_object)):
+            raise ValueError("archive closure origin packet does not match its immutable bytes")
+        origin_seen.add(identity)
+    if origin_seen != set(identities):
+        raise ValueError("archive closure origin packets do not cover every planned slice")
+
+    if len(members) > 512 or sum(len(raw) for _path, raw in members.values()) > 50 * 1024 * 1024:
+        raise ValueError("required helper review archive closure exceeds bounded size")
+    return [
+        {"path": path, "sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
+        for path, (_file, raw) in sorted(members.items())
+    ]
+
+
 def _review_inputs(task_root: pathlib.Path, task_uid: str, source_oid: str,
                    effective_root: pathlib.Path, live_task_record: dict[str, Any]) -> tuple[
                        dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], pathlib.Path, pathlib.Path,
@@ -4619,21 +5018,7 @@ def _review_inputs(task_root: pathlib.Path, task_uid: str, source_oid: str,
             handle.write(origin_raw)
             handle.flush()
             os.fsync(handle.fileno())
-    files = []
-    total_bytes = 0
-    for path in sorted(scratch.rglob("*")):
-        if path.is_symlink():
-            raise ValueError("helper review archive refuses symlinks")
-        if path.is_dir():
-            continue
-        if not path.is_file():
-            raise ValueError("helper review archive contains a non-regular member")
-        raw = path.read_bytes()
-        total_bytes += len(raw)
-        if total_bytes > 50 * 1024 * 1024 or len(files) >= 512:
-            raise ValueError("helper review archive exceeds bounded size")
-        files.append({"path": str(path.relative_to(task_root)), "sha256": hashlib.sha256(raw).hexdigest(),
-                      "size": len(raw)})
+    files = _collect_review_archive_closure(task_root, task_uid, source_oid, plan_path)
     return plan, returns, files, plan_path, ledger_path
 
 
