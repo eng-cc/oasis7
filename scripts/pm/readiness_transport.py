@@ -226,11 +226,11 @@ def validate_comment(repository: str, issue: int, capture: dict, comments: list,
     if marker == "<!-- oasis7-pm-claim-verification -->":
         marked = [c for c in marked if "\nClaim Type: ready_for_merge\n" in str(c.get("body") or "")]
     exact = [c for c in marked if c.get("body") == body.decode() and c.get("id") == capture["id"]]
-    # Native claims are repeatable; uniqueness belongs to this exact binding.
+    # Legacy and native claims are repeatable; uniqueness belongs to this body.
     # Migration keeps its separate Task-global create-once marker contract.
-    if len(exact) != 1 or (marker != NATIVE and len(marked) != 1):
+    if len(exact) != 1 or (marker == MIGRATION and len(marked) != 1):
         raise ValueError("readiness native comment is missing, ambiguous or inconsistent")
-    if marker == NATIVE and len([c for c in marked if c.get("body") == body.decode()]) != 1:
+    if len([c for c in marked if c.get("body") == body.decode()]) != 1:
         raise ValueError("readiness exact native binding publication is duplicated")
     remote = query(repository, f"repos/{repository}/issues/comments/{capture['id']}")
     if not isinstance(remote, dict) or comment_capture(remote) != capture or comment_capture(exact[0]) != capture:
