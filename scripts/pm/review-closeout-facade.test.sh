@@ -34,6 +34,7 @@ done
 python3 "$SCRIPT_DIR/review_closeout_publication.test.py"
 
 TMPDIR="$(mktemp -d)"
+export TMPDIR
 trap 'if [[ "${KEEP_REVIEW_CLOSEOUT_TMPDIR:-0}" == 1 ]]; then printf "preserved review-closeout fixture: %s\n" "$TMPDIR" >&2; else rm -rf "$TMPDIR"; fi' EXIT
 REPO="$TMPDIR/repo"
 UID_VALUE="task_11111111111111111111111111111111"

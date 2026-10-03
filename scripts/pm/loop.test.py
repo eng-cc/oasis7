@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import json
 import io
+import os
 from contextlib import redirect_stdout
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -444,19 +445,46 @@ class LoopTests(unittest.TestCase):
             root = Path(tmp) / 'repo'
             root.mkdir()
             git = lambda *args: subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
-            git('init', '-q')
+            git('init', '-q', '-b', 'task/fixture')
             git('config', 'user.name', 'Fixture')
             git('config', 'user.email', 'fixture@example.invalid')
+            git('remote', 'add', 'origin', 'https://github.com/fixture/repo.git')
+            uid = 'task_' + 'a' * 32
             helpers = root / 'scripts/pm'
             helpers.mkdir(parents=True)
             repository = Path(__file__).resolve().parents[2]
             for filename in ('loop.py', 'loop_gate.py', 'loop_recovery.py', 'loop_policy.py', 'loop_contracts.py', 'loop_terminal.py', 'loop-policy.v1.json'):
                 shutil.copy2(Path(__file__).with_name(filename), helpers / filename)
+            binding_path = Path(tmp) / 'live-binding.json'
+            trusted_reader = helpers / 'github-project-task.py'
+            trusted_reader.write_text(f'''#!{sys.executable}
+import json, os, sys
+from pathlib import Path
+args = sys.argv[1:]
+if args[:1] != ['read-live-policy-context']:
+    raise SystemExit('unexpected trusted reader command')
+task_uid = args[args.index('--task-uid') + 1]
+binding = json.loads(Path(os.environ['FIXTURE_BINDING_PATH']).read_text(encoding='utf-8'))
+if binding.get('task_uid') != task_uid:
+    raise SystemExit('fixture Task UID mismatch')
+policy = {{'status': 'passed', 'blockers': [], 'policy_commit': binding['policy_commit'],
+           'policy_digest': binding['policy_digest'], 'pin_source': 'immutable_binding',
+           'adoption_chain_tip': None, 'binding': binding}}
+value = {{'schema': 'oasis7.workflow-policy-live-context/v1', 'status': 'passed',
+         'complete': True, 'task_uid': task_uid, 'repository': 'fixture/repo',
+         'live_task_identity': {{'task_uid': task_uid, 'repository': 'fixture/repo'}},
+         'binding': binding, 'effective_policy': policy,
+         'trusted_current_policy': {{'default_branch': 'main',
+                                    'default_branch_oid': binding['policy_commit']}}}}
+print(json.dumps(value, sort_keys=True))
+''', encoding='utf-8')
+            trusted_reader.chmod(0o755)
             shutil.copy2(repository / 'scripts/document_corpus.py', root / 'scripts/document_corpus.py')
             for relative in (
                 'doc/.governance/document-corpus-inventory.json',
                 'doc/.governance/top-level-directory-registry.json',
                 'doc/testing/evidence/inventory.json',
+                'doc/engineering/workflow/source-of-truth.md',
             ):
                 target = root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -482,26 +510,66 @@ class LoopTests(unittest.TestCase):
             base = git('rev-parse', 'HEAD')
             git('update-ref', 'refs/remotes/origin/main', base)
             trusted = Path(tmp) / 'trusted'
-            git('worktree', 'add', '--detach', str(trusted), base)
+            git('worktree', 'add', '-b', 'main', str(trusted), base)
             product.write_text('after')
             sync_objects(product_path)
             git('add', '.')
             git('commit', '-qm', 'candidate')
-            uid = 'task_' + 'a' * 32
+            fake_bin = Path(tmp) / 'bin'
+            fake_bin.mkdir()
+            gh = fake_bin / 'gh'
+            gh.write_text(f'''#!{sys.executable}
+import json, os, sys
+args = sys.argv[1:]
+endpoint = args[1] if len(args) > 1 and args[0] == 'api' else ''
+if endpoint == 'repos/fixture/repo':
+    value = {{'full_name': 'fixture/repo', 'default_branch': 'main'}}
+elif endpoint == 'repos/fixture/repo/branches/main':
+    value = {{'name': 'main', 'protected': True, 'commit': {{'sha': os.environ['FIXTURE_DEFAULT_OID']}}}}
+elif endpoint.startswith('repos/fixture/repo/contents/'):
+    path_query = endpoint.split('/contents/', 1)[1]
+    relative, separator, query = path_query.partition('?')
+    allowed = {{'scripts/pm/loop-policy.v1.json',
+               'doc/engineering/workflow/source-of-truth.md'}}
+    if not separator or query != 'ref=' + os.environ['FIXTURE_DEFAULT_OID'] or relative not in allowed:
+        print('unexpected fake gh contents request: ' + endpoint, file=sys.stderr)
+        raise SystemExit(2)
+    import base64, subprocess
+    raw = subprocess.check_output(['git', '-C', os.environ['FIXTURE_REPO_ROOT'], 'show',
+                                   os.environ['FIXTURE_DEFAULT_OID'] + ':' + relative])
+    value = {{'encoding': 'base64', 'content': base64.b64encode(raw).decode('ascii')}}
+elif endpoint == 'repos/fixture/repo/issues/1':
+    uid = os.environ['FIXTURE_TASK_UID']
+    value = {{'number': 1, 'html_url': 'https://github.com/fixture/repo/issues/1',
+             'body': 'task_uid: ' + uid, 'state': 'open'}}
+elif endpoint == 'repos/fixture/repo/issues/1/comments?per_page=100':
+    value = [[]]
+else:
+    print('unexpected fake gh endpoint: ' + endpoint, file=sys.stderr)
+    raise SystemExit(2)
+print(json.dumps(value))
+''', encoding='utf-8')
+            gh.chmod(0o755)
             product_key = hashlib.sha256(product_path.encode('utf-8')).hexdigest()
             product_record = f'doc/.governance/document-corpus/objects/{product_key[:2]}/{product_key}.json'
             binding = dict(schema='oasis7.loop-task/v1', task_uid=uid, change_id='c', loop='product', owner_role='gameplay_designer', bootstrap_epoch=1, manual_request_ref='user-1', request_key='r', write_scope=['doc/product/**', product_record], out_of_scope=[], input_contracts=[], acceptance_refs=['a'], dependencies=[], target_delivery='pilot', policy_commit=base, policy_digest='sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest())
             task = dict(task_uid=uid, owner_role='gameplay_designer', bootstrap_epoch=1,
                         repository='fixture/repo', issue_number=1, loop_binding=binding)
-            with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, '_validate_pinned_tool_root', return_value=({'status': 'passed', 'blockers': []}, None)):
+            fake_env = {'PATH': str(fake_bin) + os.pathsep + os.environ.get('PATH', ''),
+                        'FIXTURE_DEFAULT_OID': base, 'FIXTURE_TASK_UID': uid,
+                        'FIXTURE_BINDING_PATH': str(binding_path),
+                        'FIXTURE_REPO_ROOT': str(root)}
+            with patch.dict(os.environ, fake_env), patch.object(module, '_validate_pinned_tool_root', return_value=({'status': 'passed', 'blockers': []}, None)):
                 binding['write_scope'] = ['doc/product/**']
+                binding_path.write_text(json.dumps(binding, sort_keys=True), encoding='utf-8')
                 result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
                 self.assertEqual(result['status'], 'blocked', result)
                 binding['write_scope'] = ['doc/product/**', product_record]
+                binding_path.write_text(json.dumps(binding, sort_keys=True), encoding='utf-8')
                 result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
-            self.assertEqual(result['status'], 'passed', result)
-            (trusted / 'scripts/pm/loop_policy.py').write_text('raise Exception("tampered")')
-            with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, '_validate_pinned_tool_root', return_value=({'status': 'passed', 'blockers': []}, None)):
+                self.assertEqual(result['status'], 'passed', result)
+                (trusted / 'scripts/pm/loop_policy.py').write_text('raise Exception("tampered")')
+                binding_path.write_text(json.dumps(binding, sort_keys=True), encoding='utf-8')
                 result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
             self.assertEqual(result['status'], 'blocked', result)
 
