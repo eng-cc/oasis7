@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import sys
 import argparse
+from datetime import datetime
 from typing import Any
 
 
@@ -21,6 +22,11 @@ ACTIVATION_SCHEMA = "oasis7-cargo-dependency-floor-activation/v1"
 ACTIVATION_MARKER = "<!-- oasis7-cargo-dependency-floor-activation/v1 -->"
 REVIEW_SCHEMA = "oasis7-cargo-first-activation-review/v1"
 REVIEW_MARKER = "<!-- oasis7-cargo-first-activation-review/v1 -->"
+FIRST_REVIEW_PLAN_SCHEMA = "oasis7-cargo-first-activation-review-plan/v1"
+FIRST_REVIEW_PLAN_MARKER = "<!-- oasis7-cargo-first-activation-review-plan/v1 -->"
+FIRST_REVIEW_RETURN_SCHEMA = "oasis7-cargo-first-activation-return/v1"
+FIRST_REVIEW_RETURN_MARKER = "<!-- oasis7-cargo-first-activation-return/v1 -->"
+FIRST_REVIEW_WRITE_SCOPE = "read-only review; no code changes"
 TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 OID_RE = re.compile(r"[0-9a-f]{40}\Z")
 SHA_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
@@ -55,6 +61,14 @@ def _canonical(value: Any) -> bytes:
 
 def canonical_overlay_body(value: dict[str, Any]) -> str:
     return OVERLAY_MARKER + "\n" + _canonical(value).decode("utf-8") + "\n"
+
+
+def canonical_first_review_plan_body(value: dict[str, Any]) -> str:
+    return FIRST_REVIEW_PLAN_MARKER + "\n" + _canonical(value).decode("utf-8") + "\n"
+
+
+def canonical_first_review_return_body(value: dict[str, Any]) -> str:
+    return FIRST_REVIEW_RETURN_MARKER + "\n" + _canonical(value).decode("utf-8") + "\n"
 
 
 def _raw_primary(value: Any) -> dict[str, Any]:
@@ -306,6 +320,223 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _decode_marked_json(body: str, marker: str, label: str) -> dict[str, Any]:
+    normalized = body.replace("\r\n", "\n")
+    if normalized != body:
+        _fail(f"{label} must use canonical LF framing")
+    if not normalized.startswith(marker + "\n"):
+        _fail(f"{label} marker is malformed")
+    try:
+        value = json.loads(normalized[len(marker) + 1:], object_pairs_hook=_unique_object)
+    except (ValueError, json.JSONDecodeError) as exc:
+        _fail(f"{label} JSON is malformed: {exc}")
+    if not isinstance(value, dict) or marker + "\n" + _canonical(value).decode("utf-8") + "\n" != normalized:
+        _fail(f"{label} is not canonical immutable JSON")
+    return value
+
+
+def _human_issue_comment(comment: dict[str, Any], issue_url: str, label: str) -> None:
+    user = comment.get("user")
+    login = user.get("login") if isinstance(user, dict) else None
+    if (comment.get("issue_url") != issue_url or not isinstance(login, str) or not login
+            or login.endswith("[bot]") or type(comment.get("id")) is not int):
+        _fail(f"{label} is not a human-authored comment on the canonical Task Issue")
+
+
+def _comment_sha256(comment: dict[str, Any], label: str) -> str:
+    body = comment.get("body")
+    if not isinstance(body, str):
+        _fail(f"{label} body is unavailable")
+    return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+def _validate_plan_slice_rows(value: Any, *, label: str, roles: set[str],
+                              readonly: bool) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        _fail(f"first-activation {label} must be a non-empty array")
+    rows: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in value:
+        row = _object(item, {"role", "slice_id", "packet_sha256", "write_scope"},
+                      f"first-activation {label} row")
+        role, slice_id, write_scope = row["role"], row["slice_id"], row["write_scope"]
+        if (role not in roles or not isinstance(slice_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", slice_id)
+                or slice_id in seen or not isinstance(write_scope, str) or not write_scope.strip()):
+            _fail(f"first-activation {label} role/slice/scope is malformed or duplicated")
+        _digest(row["packet_sha256"], f"first-activation {label} packet digest")
+        if readonly and write_scope != FIRST_REVIEW_WRITE_SCOPE:
+            _fail("first-activation reviewer write_scope must be exactly read-only")
+        seen.add(slice_id)
+        rows.append({"role": role, "slice_id": slice_id,
+                     "packet_sha256": row["packet_sha256"], "write_scope": write_scope})
+    return rows
+
+
+def _validate_first_review_plan(
+    plan: Any,
+    overlay: dict[str, Any],
+    *,
+    repository: str,
+    issue_number: int,
+    comments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    row = _object(plan, {
+        "schema", "task_uid", "issue_number", "bootstrap_epoch", "snapshot_sha256",
+        "request_sha256", "acceptance_sha256", "raw_primary_package",
+        "effective_primary_package", "dependency", "base_oid", "head_oid",
+        "authorization", "workflow", "workflow_change_paths", "implementation_slices",
+        "review_slices",
+    }, "first-activation review plan")
+    payload = overlay["_overlay"]
+    expected_workflow = {key: payload["workflow"][key]
+                         for key in ("id", "path", "ref", "sha", "file_sha256")}
+    expected = {
+        "schema": FIRST_REVIEW_PLAN_SCHEMA,
+        "task_uid": payload["task_uid"],
+        "issue_number": issue_number,
+        "bootstrap_epoch": payload["bootstrap_epoch"],
+        "snapshot_sha256": payload["snapshot_sha256"],
+        "request_sha256": payload["request_sha256"],
+        "acceptance_sha256": payload["acceptance_sha256"],
+        "raw_primary_package": payload["raw_primary_package"],
+        "effective_primary_package": payload["effective_primary_package"],
+        "dependency": payload["dependency"],
+        "base_oid": payload["base_oid"],
+        "head_oid": payload["head_oid"],
+        "authorization": payload["authorization"],
+        "workflow": expected_workflow,
+        "workflow_change_paths": payload["workflow"]["change_paths"],
+    }
+    if any(row[key] != value for key, value in expected.items()):
+        _fail("first-activation review plan differs from the exact Task/overlay/workflow binding")
+    implementation = row["implementation_slices"]
+    if not isinstance(implementation, list) or not implementation:
+        _fail("first-activation implementation slice ownership is unavailable")
+    canonical_issue_url = f"https://api.github.com/repos/{repository}/issues/{issue_number}"
+    normalized_impl: list[dict[str, Any]] = []
+    impl_ids: set[str] = set()
+    dispatch_ids: set[int] = set()
+    covered_paths: set[str] = set()
+    for item in implementation:
+        impl = _object(item, {"role", "slice_id", "dispatch_comments", "write_scope_paths"},
+                       "first-activation implementation slice")
+        if (not isinstance(impl["role"], str) or not impl["role"]
+                or not isinstance(impl["slice_id"], str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", impl["slice_id"])
+                or impl["slice_id"] in impl_ids):
+            _fail("first-activation implementation slice identity is malformed or duplicated")
+        paths = impl["write_scope_paths"]
+        if (not isinstance(paths, list) or not paths or any(
+                not isinstance(path, str) or _validate_path(path) != path for path in paths)
+                or paths != sorted(set(paths))):
+            _fail("first-activation implementation write-scope paths are malformed")
+        if any(path not in FIRST_ACTIVATION_REVIEWED_PATHS for path in paths):
+            _fail("implementation slice claims a path outside the approved first-activation surface")
+        refs = impl["dispatch_comments"]
+        if not isinstance(refs, list) or not refs:
+            _fail("implementation slice dispatch comment bindings are unavailable")
+        normalized_refs: list[dict[str, Any]] = []
+        comment_text = []
+        ref_ids: list[int] = []
+        for ref in refs:
+            ref = _object(ref, {"comment_id", "body_sha256"}, "implementation dispatch comment reference")
+            comment_id = ref["comment_id"]
+            if type(comment_id) is not int or comment_id < 1 or comment_id in dispatch_ids:
+                _fail("implementation dispatch comment ID is invalid or reused")
+            _digest(ref["body_sha256"], "implementation dispatch comment digest")
+            comment = _unique_comment(comments, comment_id, "implementation dispatch")
+            _human_issue_comment(comment, canonical_issue_url, "implementation dispatch")
+            if _comment_sha256(comment, "implementation dispatch") != ref["body_sha256"]:
+                _fail("implementation dispatch comment bytes changed")
+            normalized_refs.append({"comment_id": comment_id, "body_sha256": ref["body_sha256"]})
+            comment_text.append(str(comment["body"]))
+            ref_ids.append(comment_id)
+            dispatch_ids.add(comment_id)
+        if ref_ids != sorted(set(ref_ids)):
+            _fail("implementation dispatch comments are not canonically ordered")
+        # The source dispatch records are the authority for slice ownership.  The
+        # approved plan may organize one logical slice across several records, but
+        # every listed path must be present in those exact, digest-bound records.
+        combined_text = "\n".join(comment_text)
+        if any(not _dispatch_scope_mentions(path, combined_text) for path in paths):
+            _fail("implementation path scope is not present in its pre-dispatch Issue evidence")
+        covered_paths.update(paths)
+        impl_ids.add(impl["slice_id"])
+        normalized_impl.append({"role": impl["role"], "slice_id": impl["slice_id"],
+                                "dispatch_comments": normalized_refs,
+                                "write_scope_paths": paths})
+    if normalized_impl != sorted(normalized_impl, key=lambda item: item["slice_id"]):
+        _fail("first-activation implementation slice list is not canonically sorted")
+    if covered_paths != {item["path"] for item in payload["workflow"]["change_paths"]}:
+        _fail("implementation slice scopes do not exactly cover the reviewed workflow change paths")
+    review = _validate_plan_slice_rows(
+        row["review_slices"], label="review slices",
+        roles={"repository_health_engineer", "qa_engineer"}, readonly=True,
+    )
+    if ([item["role"] for item in review] != ["qa_engineer", "repository_health_engineer"]
+            or len(review) != 2 or impl_ids.intersection(item["slice_id"] for item in review)):
+        _fail("first-activation review slices are incomplete or collide with implementation slices")
+    if [item["role"] for item in review] != sorted(item["role"] for item in review):
+        _fail("first-activation review slices are not canonically ordered")
+    return {**row, "implementation_slices": normalized_impl, "review_slices": review}
+
+
+def _comment_time(comment: dict[str, Any], label: str) -> datetime:
+    value = comment.get("created_at")
+    if not isinstance(value, str):
+        _fail(f"{label} creation time is unavailable")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        _fail(f"{label} creation time is malformed")
+    if parsed.tzinfo is None:
+        _fail(f"{label} creation time lacks a timezone")
+    return parsed
+
+
+def _plan_comment(comments: list[dict[str, Any]], issue_url: str) -> tuple[dict[str, Any], dict[str, Any], str]:
+    marked = [item for item in comments if isinstance(item.get("body"), str)
+              and FIRST_REVIEW_PLAN_MARKER in item["body"]]
+    if len(marked) != 1:
+        _fail("Task Issue must contain exactly one first-activation review plan")
+    comment = marked[0]
+    _human_issue_comment(comment, issue_url, "first-activation review plan")
+    plan = _decode_marked_json(str(comment["body"]), FIRST_REVIEW_PLAN_MARKER,
+                               "first-activation review plan")
+    return comment, plan, _comment_sha256(comment, "first-activation review plan")
+
+
+def _validate_typed_return(
+    comments: list[dict[str, Any]], *, issue_url: str, digest: str, role: str,
+    task_uid: str, issue_number: int, slice_id: str, base_oid: str, head_oid: str,
+    plan_sha256: str, packet_sha256: str,
+) -> dict[str, Any]:
+    matches = [item for item in comments if isinstance(item.get("body"), str)
+               and _comment_sha256(item, "first-activation return") == digest]
+    if len(matches) != 1:
+        _fail(f"{role} typed return comment is unavailable or ambiguous")
+    comment = matches[0]
+    _human_issue_comment(comment, issue_url, f"{role} typed return")
+    returned = _decode_marked_json(str(comment["body"]), FIRST_REVIEW_RETURN_MARKER,
+                                   f"{role} typed return")
+    _object(returned, {
+        "schema", "task_uid", "issue_number", "role", "slice_id", "base_oid", "head_oid",
+        "review_plan_sha256", "admitted_packet_sha256", "return_status", "disposition",
+        "findings", "unresolved_findings", "residual_risk",
+    }, f"{role} typed return")
+    if (returned["schema"] != FIRST_REVIEW_RETURN_SCHEMA or returned["task_uid"] != task_uid
+            or returned["issue_number"] != issue_number or returned["role"] != role
+            or returned["slice_id"] != slice_id or returned["base_oid"] != base_oid
+            or returned["head_oid"] != head_oid or returned["review_plan_sha256"] != plan_sha256
+            or returned["admitted_packet_sha256"] != packet_sha256
+            or returned["return_status"] != "completed" or returned["disposition"] != "no_findings"
+            or returned["findings"] != [] or returned["unresolved_findings"] != []
+            or not isinstance(returned["residual_risk"], list)):
+        _fail(f"{role} typed return is incomplete or differs from its frozen plan/packet")
+    return comment
+
+
 def _validate_referenced_evidence(
     repository: str, issue: dict[str, Any], comments: list[dict[str, Any]], overlay: dict[str, Any],
 ) -> None:
@@ -317,6 +548,10 @@ def _validate_referenced_evidence(
     uid = fields["task_uid"]
     head = fields["head_oid"]
     auth = fields["authorization"]
+    plan_comment, plan_payload, plan_sha = _plan_comment(comments, canonical_issue_url)
+    plan = _validate_first_review_plan(plan_payload, overlay, repository=repository,
+                                       issue_number=issue_number, comments=comments)
+    plan_time = _comment_time(plan_comment, "first-activation review plan")
     auth_comment = _unique_comment(comments, auth["comment_id"], "user authorization")
     if auth_comment.get("issue_url") != canonical_issue_url:
         _fail("user authorization is attached to a different Issue")
@@ -327,15 +562,26 @@ def _validate_referenced_evidence(
     auth_login = auth_user.get("login") if isinstance(auth_user, dict) else None
     if not isinstance(auth_login, str) or not auth_login or auth_login.endswith("[bot]") or not auth_body.strip():
         _fail("user authorization author/body is invalid")
+    if _comment_time(auth_comment, "user authorization") >= plan_time:
+        _fail("review plan must follow explicit user authorization")
+    for impl in plan["implementation_slices"]:
+        for ref in impl["dispatch_comments"]:
+            dispatch = _unique_comment(comments, ref["comment_id"], "implementation dispatch")
+            if _comment_time(dispatch, "implementation dispatch") >= plan_time:
+                _fail("implementation dispatch evidence must precede the frozen review plan")
+    plan_review_slices = {item["role"]: item for item in plan["review_slices"]}
     for role in ("repository_health", "qa"):
+        plan_role = "repository_health_engineer" if role == "repository_health" else "qa_engineer"
+        plan_review = plan_review_slices[plan_role]
         row = fields["reviews"][role]
         comment = _unique_comment(comments, row["comment_id"], f"{role} review")
-        if comment.get("issue_url") != canonical_issue_url:
-            _fail(f"{role} review is attached to a different Issue")
+        _human_issue_comment(comment, canonical_issue_url, f"{role} review")
         body = str(comment["body"])
         if "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest() != row["body_sha256"]:
             _fail(f"{role} review bytes changed")
         normalized = body.replace("\r\n", "\n")
+        if normalized != body:
+            _fail(f"{role} review must use canonical LF framing")
         if not normalized.startswith(REVIEW_MARKER + "\n"):
             _fail(f"{role} review is not a typed first-activation record")
         try:
@@ -352,20 +598,27 @@ def _validate_referenced_evidence(
             _fail(f"{role} review record has an unexpected shape")
         if (review["schema"] != REVIEW_SCHEMA or review["task_uid"] != uid
                 or review["issue_number"] != issue_number or review["role"] != role
-                or not isinstance(review["slice_id"], str) or not review["slice_id"].strip()
+                or review["slice_id"] != plan_review["slice_id"]
                 or review["base_oid"] != overlay["base_oid"] or review["head_oid"] != head):
             _fail(f"{role} review is not bound to the exact Task, Issue, base, head, or role")
         if review["workflow_change_paths"] != fields["workflow"]["change_paths"]:
             _fail(f"{role} review does not bind the exact reviewed workflow path set")
         for digest_name in ("review_plan_sha256", "admitted_packet_sha256", "return_sha256"):
             _digest(review[digest_name], f"{role} {digest_name}")
+        if (review["review_plan_sha256"] != plan_sha
+                or review["admitted_packet_sha256"] != plan_review["packet_sha256"]):
+            _fail(f"{role} review does not bind the exact no-PR plan and admitted packet")
         if review["return_status"] != "completed" or review["findings"] != [] or review["unresolved_findings"] != []:
             _fail(f"{role} review has incomplete return or unresolved findings")
-        reviewer = comment.get("user")
-        reviewer_name = reviewer.get("login") if isinstance(reviewer, dict) else None
-        if (not isinstance(reviewer_name, str) or not reviewer_name
-                or reviewer_name.endswith("[bot]")):
-            _fail(f"{role} review publication author is unavailable")
+        returned_comment = _validate_typed_return(
+            comments, issue_url=canonical_issue_url, digest=review["return_sha256"],
+            role=plan_role, task_uid=uid, issue_number=issue_number,
+            slice_id=plan_review["slice_id"], base_oid=overlay["base_oid"], head_oid=head,
+            plan_sha256=plan_sha, packet_sha256=plan_review["packet_sha256"],
+        )
+        if (_comment_time(plan_comment, f"{role} review plan") >= _comment_time(returned_comment, f"{role} typed return")
+                or _comment_time(returned_comment, f"{role} typed return") >= _comment_time(comment, f"{role} review")):
+            _fail(f"{role} typed return must follow the plan and precede its review envelope")
     expected_terms = (package, dependency["name"], dependency["head_requirement"])
     if any(term not in auth_body for term in expected_terms):
         _fail("user authorization does not name the exact package and dependency floor")
@@ -395,11 +648,23 @@ def read_issue_overlay(
     parsed = validate_overlay(payload, task_uid=task_uid, issue_number=int(issue["number"]),
                               base_oid=base_oid, head_oid=head_oid)
     _validate_referenced_evidence(repository, issue, comments, parsed)
+    overlay_time = _comment_time(comment, "dependency-floor overlay")
     referenced_ids = {payload["authorization"]["comment_id"],
                       payload["reviews"]["repository_health"]["comment_id"],
                       payload["reviews"]["qa"]["comment_id"]}
     if int(comment["id"]) in referenced_ids:
         _fail("overlay cannot reference itself as authority evidence")
+    plan_comment, _, _ = _plan_comment(
+        comments, f"https://api.github.com/repos/{repository}/issues/{issue['number']}"
+    )
+    if _comment_time(plan_comment, "first-activation review plan") >= overlay_time:
+        _fail("dependency-floor overlay must follow the frozen review plan")
+    for role in ("repository_health", "qa"):
+        review_comment = _unique_comment(
+            comments, payload["reviews"][role]["comment_id"], f"{role} review",
+        )
+        if _comment_time(review_comment, f"{role} review") >= overlay_time:
+            _fail("dependency-floor overlay must follow both independent role returns")
     parsed["overlay_comment_id"] = int(comment["id"])
     parsed["overlay_sha256"] = "sha256:" + hashlib.sha256(comment["body"].encode("utf-8")).hexdigest()
     parsed.pop("_overlay", None)
@@ -844,16 +1109,39 @@ def _read_project_task_binding(
 
 FIRST_ACTIVATION_REVIEWED_PATHS = {
     "doc/engineering/workflow/source-of-truth.md",
+    "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
     ".github/workflows/rust.yml",
     "scripts/ci-tests.sh",
     "scripts/ci-required-scope-audit-contract.test.sh",
+    "scripts/ci-required-capability-test-inventory.tsv",
     "scripts/pm/check-cargo-package-scope",
     "scripts/pm/check-cargo-package-scope.test.py",
     "scripts/pm/first_activation.py",
     "scripts/pm/first_activation.test.py",
+    "scripts/pm/github-project-task.py",
+    "scripts/pm/pr-lifecycle-gate.py",
     "scripts/prepare-task-pr.sh",
     "scripts/prepare-task-pr.test.sh",
 }
+
+# A few already-published PlanGap comments identify a bounded test/module by
+# its stem or role-owned category. Keep this mapping finite and exact: it is
+# not a prefix, glob, or caller-controlled path expansion.
+FIRST_ACTIVATION_DISPATCH_ALIASES = {
+    "doc/engineering/workflow/source-of-truth.md": ("canonical source",),
+    "scripts/pm/check-cargo-package-scope.test.py": (
+        "check-cargo-package-scope.test.py", "check-cargo-package-scope and its tests",
+    ),
+    "scripts/pm/first_activation.py": ("one focused typed activation proof module/test",),
+    "scripts/pm/first_activation.test.py": ("one focused typed activation proof module/test",),
+    "scripts/prepare-task-pr.test.sh": ("prepare-task-pr.sh and test",),
+}
+
+
+def _dispatch_scope_mentions(path: str, comments_text: str) -> bool:
+    return path in comments_text or any(
+        alias in comments_text for alias in FIRST_ACTIVATION_DISPATCH_ALIASES.get(path, ())
+    )
 
 
 def _git_blob_sha256(root: pathlib.Path, oid: str, path: str) -> str:
@@ -927,160 +1215,76 @@ def _inside_repo_file(root: pathlib.Path, value: str, label: str) -> pathlib.Pat
     if not isinstance(value, str) or not value:
         _fail(f"{label} path is missing")
     candidate = pathlib.Path(value)
-    path = (candidate if candidate.is_absolute() else root / candidate).resolve()
+    unresolved = candidate if candidate.is_absolute() else root / candidate
+    absolute = pathlib.Path(os.path.abspath(unresolved))
+    try:
+        relative = absolute.relative_to(root.resolve())
+    except ValueError:
+        _fail(f"{label} path escapes the canonical worktree")
+    cursor = root.resolve()
+    for part in relative.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            _fail(f"{label} path contains a symlink")
+    path = absolute.resolve()
     try:
         path.relative_to(root.resolve())
     except ValueError:
         _fail(f"{label} path escapes the canonical worktree")
-    if path.is_symlink() or not path.is_file():
-        _fail(f"{label} path is unavailable or symlinked")
+    if not path.is_file():
+        _fail(f"{label} path is unavailable")
     return path
 
 
-def _validate_local_review_artifacts(repo_root: pathlib.Path, task_uid: str,
+def _validate_local_review_artifacts(repo_root: pathlib.Path, repository: str, task_uid: str,
+                                     project_item_id: str,
                                      overlay: dict[str, Any], comments: list[dict[str, Any]]) -> None:
-    """Revalidate the frozen plan, packet, return and ledger behind typed role records."""
+    """Revalidate no-PR Issue plan and local reviewer packets before Project admission."""
     root = pathlib.Path(repo_root).resolve()
-    task_scratch = root / ".pm/scratch" / task_uid
-    plan_dir = task_scratch / "review-plans"
-    matching: list[tuple[pathlib.Path, dict[str, Any], bytes]] = []
-    if not plan_dir.is_dir() or plan_dir.is_symlink():
-        _fail("frozen professional review plan is unavailable")
-    for path in sorted(plan_dir.glob("*.json")):
-        if path.is_symlink() or not path.is_file():
-            continue
-        try:
-            raw = path.read_bytes()
-            plan = json.loads(raw, object_pairs_hook=_unique_object)
-        except (OSError, json.JSONDecodeError, ValueError):
-            continue
-        if (isinstance(plan, dict) and plan.get("schema") == "oasis7-review-plan/v2"
-                and plan.get("task_uid") == task_uid and plan.get("frozen_head") == overlay["head_oid"]
-                and plan.get("comparison_oid") == overlay["base_oid"]):
-            matching.append((path, plan, raw))
-    if len(matching) != 1:
-        _fail("frozen professional review plan is not uniquely bound to this base/head")
-    plan_path, plan, plan_raw = matching[0]
-    _inside_repo_file(root, str(plan.get("batch_path") or ""), "review batch")
-    expected_slices = plan.get("expected_slices")
-    preflight = plan.get("preflight")
-    if not isinstance(preflight, dict):
-        _fail("review plan lacks its preflight ledger binding")
-    ledger_path = _inside_repo_file(root, str(preflight.get("ledger_path") or ""), "review slice ledger")
-    if "scripts/pm/review-plan.py" in _changed_paths(root, overlay["base_oid"], overlay["head_oid"]):
-        _fail("review-plan validator changed inside the first-activation candidate")
-    review_plan_spec = importlib.util.spec_from_file_location("first_activation_review_plan", root / "scripts/pm/review-plan.py")
-    if review_plan_spec is None or review_plan_spec.loader is None:
-        _fail("trusted review-plan validator is unavailable")
-    review_plan_module = importlib.util.module_from_spec(review_plan_spec)
-    sys.modules[review_plan_spec.name] = review_plan_module
-    review_plan_spec.loader.exec_module(review_plan_module)
-    try:
-        checked_plan, plan_digest, collection = review_plan_module.validate_prior_plan(
-            root, plan_path, task_uid,
-        )
-    except Exception as exc:
-        _fail(f"professional review plan, batch, ledger, or returns are invalid: {exc}")
-    if checked_plan != plan:
-        _fail("professional review plan changed during local readback")
-    packet_refs = plan.get("packet_refs")
-    if not isinstance(packet_refs, list):
-        _fail("review plan packet references are malformed")
-    ledger_rows = []
-    try:
-        for line in ledger_path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                row = json.loads(line, object_pairs_hook=_unique_object)
-                if not isinstance(row, dict):
-                    _fail("review ledger contains a non-object row")
-                ledger_rows.append(row)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        _fail(f"review ledger cannot be read canonically: {exc}")
+    issue_url = f"https://api.github.com/repos/{repository}/issues/{overlay['issue_number']}"
+    plan_comment, plan_payload, plan_sha = _plan_comment(comments, issue_url)
+    wrapper = {"_overlay": overlay}
+    plan = _validate_first_review_plan(plan_payload, wrapper, repository=repository,
+                                       issue_number=overlay["issue_number"], comments=comments)
+    reviewer_rows = {item["role"]: item for item in plan["review_slices"]}
     for role, plan_role in (("repository_health", "repository_health_engineer"),
                             ("qa", "qa_engineer")):
         review_row = overlay["reviews"][role]
-        comment = _unique_comment(comments, review_row["comment_id"], f"{role} review")
-        body = str(comment["body"]).replace("\r\n", "\n")
-        try:
-            review = json.loads(body[len(REVIEW_MARKER) + 1:], object_pairs_hook=_unique_object)
-        except (ValueError, json.JSONDecodeError) as exc:
-            _fail(f"{role} typed review record cannot be decoded: {exc}")
-        slice_id = review.get("slice_id") if isinstance(review, dict) else None
-        if not isinstance(slice_id, str) or not slice_id:
-            _fail(f"{role} review slice identity is unavailable")
-        expected_row = {"role": plan_role, "slice_id": slice_id}
-        if expected_row not in expected_slices:
-            _fail(f"{role} review slice is absent from the frozen role plan")
-        packet_candidates = [item for item in packet_refs
-                             if isinstance(item, dict) and item.get("role") == plan_role
-                             and item.get("slice_id") == slice_id]
-        ledger_matches = [item for item in ledger_rows
-                          if item.get("role") == plan_role and item.get("slice_id") == slice_id]
-        if len(packet_candidates) != 1 or len(ledger_matches) != 1:
-            _fail(f"{role} review packet/return is not uniquely bound by the frozen plan")
-        packet_path = _inside_repo_file(root, str(packet_candidates[0].get("packet_ref") or ""),
-                                        f"{role} admitted packet")
+        review_comment = _unique_comment(comments, review_row["comment_id"], f"{role} review")
+        review = _decode_marked_json(str(review_comment["body"]), REVIEW_MARKER, f"{role} review")
+        plan_row = reviewer_rows[plan_role]
+        if review.get("review_plan_sha256") != plan_sha:
+            _fail(f"{role} review does not bind the exact first-activation plan")
+        if review.get("admitted_packet_sha256") != plan_row["packet_sha256"]:
+            _fail(f"{role} review does not bind its planned reviewer packet")
+        packet_path = root / ".pm" / "scratch" / task_uid / "slice-packets" / f"{plan_row['slice_id']}.json"
+        packet_path = _inside_repo_file(root, str(packet_path), f"{role} admitted reviewer packet")
         packet_raw = packet_path.read_bytes()
-        if "sha256:" + hashlib.sha256(packet_raw).hexdigest() != review_row.get("admitted_packet_sha256"):
-            _fail(f"{role} admitted packet digest differs from typed review record")
-        packet = _load_json(packet_path, f"{role} admitted packet")
-        slice_contract = packet.get("slice")
+        if "sha256:" + hashlib.sha256(packet_raw).hexdigest() != plan_row["packet_sha256"]:
+            _fail(f"{role} reviewer packet bytes differ from the frozen Issue plan")
+        packet = _load_json(packet_path, f"{role} admitted reviewer packet")
         identity = packet.get("identity")
-        if (not isinstance(slice_contract, dict) or not isinstance(identity, dict)
-                or slice_contract.get("role") != plan_role or slice_contract.get("slice_id") != slice_id
-                or identity.get("task_uid") != task_uid or identity.get("head") != overlay["head_oid"]):
-            _fail(f"{role} admitted packet identity differs from typed review record")
-        write_scope = str(slice_contract.get("write_scope") or "")
-        scope_lower = write_scope.lower()
-        if (slice_contract.get("slice_type") != "professional_review"
-                or not any(term in write_scope.lower() for term in
-                           ("read-only", "read only", "review-only", "review only", "no code changes"))
-                or re.search(r"\b(?:will|may|can|must|should)\s+(?:implement|modify|edit|write)\b",
-                             scope_lower)):
-            _fail(f"{role} review write scope is missing or includes implementation paths")
-        returned_refs = ledger_matches[0].get("artifacts")
-        if not isinstance(returned_refs, list) or len(returned_refs) != 1:
-            _fail(f"{role} review ledger does not name exactly one return artifact")
-        return_path = review_plan_module.resolve_collected_artifact(root, ledger_path, returned_refs[0])
-        return_raw = return_path.read_bytes()
-        if "sha256:" + hashlib.sha256(return_raw).hexdigest() != review_row.get("return_sha256"):
-            _fail(f"{role} structured return digest differs from typed review record")
-        returned = _load_json(return_path, f"{role} structured return")
-        if (returned.get("schema") != "oasis7-review-return/v1"
-                or returned.get("task_uid") != task_uid or returned.get("role") != plan_role
-                or returned.get("slice_id") != slice_id or returned.get("head") != overlay["head_oid"]
-                or returned.get("status") != "completed" or returned.get("disposition") != "no_findings"
-                or returned.get("findings") != []):
-            _fail(f"{role} structured return is not a completed no-findings review")
-        if plan_digest != review_row.get("review_plan_sha256"):
-            _fail(f"{role} review plan digest differs from typed review record")
-    packet_dir = task_scratch / "slice-packets"
-    implementation_slice_ids: set[str] = set()
-    if not packet_dir.is_dir() or packet_dir.is_symlink():
-        _fail("pre-dispatch Task slice packets are unavailable")
-    for path in sorted(packet_dir.glob("*.json")):
-        if path.is_symlink() or not path.is_file():
-            _fail("pre-dispatch Task slice packet is symlinked or not a regular file")
-        packet = _load_json(path, "pre-dispatch Task slice packet")
-        packet_identity = packet.get("identity")
         slice_contract = packet.get("slice")
-        if not isinstance(packet_identity, dict) or not isinstance(slice_contract, dict):
-            _fail("pre-dispatch Task slice packet identity is malformed")
-        if packet_identity.get("task_uid") != task_uid or packet_identity.get("head") != overlay["head_oid"]:
-            _fail("pre-dispatch Task slice packet is not bound to the frozen Task head")
-        slice_id = slice_contract.get("slice_id")
-        if not isinstance(slice_id, str) or not slice_id:
-            _fail("pre-dispatch Task slice ID is missing")
-        if slice_contract.get("slice_type") != "professional_review":
-            implementation_slice_ids.add(slice_id)
-    for role in ("repository_health", "qa"):
-        review_comment = _unique_comment(
-            comments, overlay["reviews"][role]["comment_id"], f"{role} review",
-        )
-        review_body = str(review_comment["body"]).replace("\r\n", "\n")
-        review = json.loads(review_body[len(REVIEW_MARKER) + 1:], object_pairs_hook=_unique_object)
-        if review["slice_id"] in implementation_slice_ids:
-            _fail(f"{role} review slice ID collides with an implementation slice")
+        if (packet.get("schema") != "oasis7-subagent-task-packet/v1"
+                or not isinstance(identity, dict) or not isinstance(slice_contract, dict)
+                or packet.get("packet_digest") != _packet_digest(packet)
+                or identity.get("task_uid") != task_uid or identity.get("head") != overlay["head_oid"]
+                or identity.get("base_sha") != overlay["base_oid"]
+                or identity.get("base_binding") != "immutable_oid"
+                or identity.get("repository") != repository
+                or identity.get("issue_url") != issue_url
+                or identity.get("project_item_id") != project_item_id
+                or identity.get("branch") != overlay["workflow"]["ref"].removeprefix("refs/heads/")
+                or slice_contract.get("role") != plan_role
+                or slice_contract.get("slice_id") != plan_row["slice_id"]
+                or slice_contract.get("slice_type") != "professional_review"
+                or slice_contract.get("write_scope") != FIRST_REVIEW_WRITE_SCOPE):
+            _fail(f"{role} reviewer packet is not an exact read-only Task/base/head packet")
+
+
+def _packet_digest(packet: dict[str, Any]) -> str:
+    unsigned = {key: value for key, value in packet.items() if key != "packet_digest"}
+    return hashlib.sha256(_canonical(unsigned)).hexdigest()
 
 
 def publish_overlay(
@@ -1316,7 +1520,8 @@ def read_project_overlay(
     if overlay_payload["request_sha256"] != request_sha or overlay_payload["acceptance_sha256"] != acceptance_sha:
         _fail("overlay request or acceptance digest differs from immutable snapshot")
     review_comments = _comments(client, repository, task["issue_number"])
-    _validate_local_review_artifacts(worktree, task_uid, overlay_payload, review_comments)
+    _validate_local_review_artifacts(worktree, repository, task_uid, task["project_item_id"],
+                                     overlay_payload, review_comments)
     parsed.pop("_overlay", None)
     parsed["project_item_id"] = task["project_item_id"]
     return parsed
