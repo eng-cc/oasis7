@@ -639,6 +639,16 @@ class RequiredRunLeafProofTests(unittest.TestCase):
             self.assertGreater(positive["obligation_count"], 1)
             self.assertRegex(positive["workflow_logs_sha256"], r"^sha256:[0-9a-f]{64}$")
 
+            echo_decoy = logs.replace(
+                "+ ./scripts/lint-skills.sh",
+                "+ echo ./scripts/lint-skills.sh",
+            )
+            with self.assertRaisesRegex(MODULE.OverlayError, "actual command mapped to lint-skills"):
+                MODULE.reconstruct_full_required_run(
+                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
+                    log_reader=lambda _run, _attempt: echo_decoy,
+                )
+
             missing_test = "\n".join(
                 line for line in logs.splitlines() if "first_activation.test.py" not in line
             )
@@ -681,6 +691,22 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         ))
         self.assertFalse(MODULE._valid_checker_json_leaf(
             [line.replace(UID, "task_" + "b" * 32) for line in lines], overlay_value,
+        ))
+
+    def test_command_identity_rejects_echo_and_accepts_runner_wrappers(self):
+        self.assertFalse(MODULE._command_is_logged(
+            ["+ echo ./scripts/lint-skills.sh"], "./scripts/lint-skills.sh",
+        ))
+        self.assertFalse(MODULE._path_is_logged(
+            ["+ echo ./scripts/lint-skills.sh"], "./scripts/lint-skills.sh",
+        ))
+        self.assertTrue(MODULE._command_is_logged(
+            ["+ env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required --verbose"],
+            "cargo test -p oasis7 --tests --features test_tier_required",
+        ))
+        self.assertTrue(MODULE._path_is_logged(
+            ["+ bash ./scripts/check-script-executable-bits.sh"],
+            "scripts/check-script-executable-bits.sh",
         ))
 
 

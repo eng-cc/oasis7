@@ -13,6 +13,7 @@ import tempfile
 import sys
 import argparse
 import csv
+import shlex
 from collections import Counter
 from datetime import datetime
 from typing import Any
@@ -953,14 +954,93 @@ def _log_command_lines(step_log: list[str]) -> list[str]:
     return [" ".join(line.strip().split()) for line in step_log if line.lstrip().startswith("+ ")]
 
 
+def _logged_command_argvs(command_lines: list[str]) -> list[list[str]]:
+    """Parse command records and remove only the known `env` prefix wrapper."""
+    result: list[list[str]] = []
+    for line in command_lines:
+        try:
+            argv = shlex.split(line[2:].strip())
+        except ValueError:
+            continue
+        if not argv or argv[0] in {"echo", "printf"}:
+            continue
+        if argv[0] == "env":
+            index = 1
+            while index < len(argv):
+                token = argv[index]
+                if token in {"-u", "--unset", "-C", "--chdir"}:
+                    index += 2
+                elif token == "--":
+                    index += 1
+                    break
+                elif re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", token):
+                    index += 1
+                elif token.startswith("-"):
+                    break
+                else:
+                    break
+            argv = argv[index:]
+        if argv:
+            result.append(argv)
+    return result
+
+
+def _normalize_logged_path(token: str) -> str:
+    return token[2:] if token.startswith("./") else token
+
+
 def _command_is_logged(command_lines: list[str], command: str) -> bool:
-    normalized = " ".join(command.strip().split())
-    return any(normalized in line for line in command_lines)
+    try:
+        expected = shlex.split(command.strip())
+    except ValueError:
+        return False
+    if not expected:
+        return False
+    expected = [_normalize_logged_path(token) for token in expected]
+    script_runners = {"bash", "sh", "python", "python3", "python3.12", "node"}
+    for argv in _logged_command_argvs(command_lines):
+        starts = [argv]
+        if argv[0] in script_runners and len(argv) > 1:
+            starts.append(argv[1:])
+        for actual in starts:
+            if (len(actual) >= len(expected)
+                    and [_normalize_logged_path(token) for token in actual[:len(expected)]] == expected):
+                return True
+    return False
 
 
 def _path_is_logged(command_lines: list[str], path: str) -> bool:
-    token = re.compile(r"(?<![A-Za-z0-9_.-])(?:\./)?" + re.escape(path) + r"(?![A-Za-z0-9_.-])")
-    return any(token.search(line) for line in command_lines)
+    expected = _normalize_logged_path(path)
+    script_runners = {"bash", "sh", "python", "python3", "python3.12", "node"}
+    for argv in _logged_command_argvs(command_lines):
+        if _normalize_logged_path(argv[0]) == expected:
+            return True
+        if (argv[0] in script_runners and len(argv) > 1
+                and _normalize_logged_path(argv[1]) == expected):
+            return True
+    return False
+
+
+def _checker_invocation_logged(
+    command_lines: list[str], *, base_oid: str, head_oid: str,
+    selector_flag: str, selector_value: str,
+) -> bool:
+    checker_names = {"check-cargo-package-scope"}
+    if selector_flag == "--primary-package":
+        checker_names.add("trusted-check-cargo-package-scope")
+    for argv in _logged_command_argvs(command_lines):
+        if (argv[0] not in {"python", "python3", "python3.12"} or len(argv) < 2
+                or pathlib.Path(argv[1]).name not in checker_names):
+            continue
+        required_pairs = (
+            ("--base", base_oid), ("--head", head_oid),
+            (selector_flag, selector_value),
+        )
+        if all(any(argv[index:index + 2] == [name, value]
+                   for index in range(len(argv) - 1))
+               for name, value in required_pairs) and "--json" in argv:
+            return True
+    return False
 
 
 def _required_semantic_diagnostic(obligation: str, step_log: list[str]) -> bool:
@@ -989,21 +1069,13 @@ def _valid_checker_json_leaf(step_log: list[str], overlay: dict[str, Any]) -> bo
     base_oid = str(overlay.get("base_oid") or "")
     head_oid = str(overlay.get("head_oid") or "")
     task_uid = str(overlay.get("task_uid") or "")
-    trusted_command = any(
-        "check-cargo-package-scope" in line
-        and "--base " + base_oid in line
-        and "--head " + head_oid in line
-        and "--primary-package auto" in line
-        and "--json" in line
-        for line in commands
+    trusted_command = _checker_invocation_logged(
+        commands, base_oid=base_oid, head_oid=head_oid,
+        selector_flag="--primary-package", selector_value="auto",
     )
-    candidate_command = any(
-        "check-cargo-package-scope" in line
-        and "--base " + base_oid in line
-        and "--head " + head_oid in line
-        and "--first-activation-task-uid " + task_uid in line
-        and "--json" in line
-        for line in commands
+    candidate_command = _checker_invocation_logged(
+        commands, base_oid=base_oid, head_oid=head_oid,
+        selector_flag="--first-activation-task-uid", selector_value=task_uid,
     )
     payloads: list[dict[str, Any]] = []
     for line in step_log:
@@ -1141,15 +1213,9 @@ def _verify_required_run_leaf_logs(
                     _fail(f"required-gate logs lack the successful leaf diagnostic: {item}")
                 mapped_commands = semantic_commands[item]
                 if item == "workflow-impact-projection-consumer":
-                    logged_mapping = any(command in line for line in commands for command in mapped_commands)
+                    logged_mapping = any(_command_is_logged(commands, command) for command in mapped_commands)
                 elif item == "cargo-package-scope-and-profile-completion":
-                    logged_mapping = (
-                        any("check-cargo-package-scope" in line and "--primary-package auto" in line
-                            for line in commands)
-                        and any("check-cargo-package-scope" in line
-                                and "--first-activation-task-uid" in line for line in commands)
-                        and _valid_checker_json_leaf(step_log, overlay)
-                    )
+                    logged_mapping = _valid_checker_json_leaf(step_log, overlay)
                 else:
                     logged_mapping = all(_command_is_logged(commands, command)
                                          for command in mapped_commands)
