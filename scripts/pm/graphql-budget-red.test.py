@@ -118,6 +118,7 @@ class GraphqlBudgetContracts(unittest.TestCase):
         )
         data["merge_hold"] = {"kind": "normal_pr_ci_watch", "active": False}
         with mock.patch.object(GATE, "local_loop_admission", return_value={"status": "legacy"}), \
+             mock.patch.object(GATE, 'live_target_oid', return_value=data['baseRefOid']), \
              mock.patch.object(GATE, "live_integration_admission", return_value=None), \
              mock.patch.object(GATE.subprocess, "check_output",
                                side_effect=AssertionError("formal hot path invoked gh subprocess")):

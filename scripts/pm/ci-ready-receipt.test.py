@@ -200,6 +200,7 @@ class ReceiptTest(unittest.TestCase):
       if actions is not None and ("/actions/jobs/" in path or "/attempts/" in path or "/artifacts?" in path):
         return actions(*args)
       if '/pulls/' in path:return r or pr()
+      if '/git/ref/heads/' in path:return {'object':{'sha':(r or pr())['base']['sha']}}
       if '/check-runs?' in path:return {"check_runs":runs if runs is not None else [run()]}
       if '/runs?' in path:return {'workflow_runs':[]}
       if '/compare/' in path:return {'merge_base_commit':{'sha':'b'*40}}
@@ -325,6 +326,7 @@ class ReceiptTest(unittest.TestCase):
       "tested_commit_oid":"d"*40,"workflow_sha":"e"*40,
       "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main"}
     with patch.object(M,"gh",side_effect=[pr(),pr()]), \
+         patch.object(integration_ci,"default_branch_head",return_value='b'*40), \
          patch.object(integration_ci,"current_request",side_effect=[request,request]), \
          patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
       _, observed, _, _=M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42")
@@ -347,6 +349,7 @@ class ReceiptTest(unittest.TestCase):
         raise ValueError("expected attempt is missing")
       with self.subTest(reason=reason), \
            patch.object(M,"gh",side_effect=[pr(),pr()]), \
+           patch.object(integration_ci,"default_branch_head",return_value='b'*40), \
            patch.object(integration_ci,"current_request",return_value=request), \
            patch.object(integration_ci,"verified_run",side_effect=verify) as verified, \
            patch.object(M,"live") as ordinary:
