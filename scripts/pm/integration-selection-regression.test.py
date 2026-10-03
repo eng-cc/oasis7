@@ -18,6 +18,7 @@ class SelectionTests(unittest.TestCase):
   self.runs=[run(20,conclusion='failure'),run(10)]
  def api(self,*args):
   path=args[-1]
+  if path=='repos/owner/repo/git/ref/heads/main':return {'object':{'sha':getattr(self,'target',BASE)}}
   if '/pulls/' in path:return self.pr
   if '/runs?' in path:
    if getattr(self,'read_error',False):raise OSError('authority read unavailable')
@@ -38,6 +39,27 @@ class SelectionTests(unittest.TestCase):
    return receipt.selected_live('owner/repo',UID,1,12,'required-gate',42,allow_ready_pr=allow_ready_pr,integration_run_id=locator,require_integration=require_integration,require_dispatch=require_dispatch)
  def test_new_failure_blocks_even_normal_green(self):
   with self.assertRaisesRegex((SystemExit,ValueError),'current request'):self.check()
+
+ def test_current_target_integration_accepts_historical_pr_base(self):
+  self.pr['base']['sha']='e'*40
+  self.runs=[run(20)]
+  selected=self.check(require_integration=True,require_dispatch=True)
+  self.assertEqual(selected[2],BASE)
+  self.assertEqual(selected[0]['base']['sha'],'e'*40)
+
+ def test_current_target_move_during_verified_result_blocks(self):
+  self.runs=[run(20)]
+  original=self.api
+  reads=0
+  def moving(*args):
+   nonlocal reads
+   if '/git/ref/heads/main' in args[-1]:
+    reads+=1
+    return {'object':{'sha':BASE if reads==1 else 'e'*40}}
+   return original(*args)
+  with patch.object(self,'api',side_effect=moving):
+   with self.assertRaisesRegex(SystemExit,'target moved'):
+    self.check(require_integration=True,require_dispatch=True)
  def test_explicit_old_green_does_not_bypass_new_failure(self):
   with self.assertRaisesRegex((SystemExit,ValueError),'current|superseded'):self.check(10)
  def test_verified_other_task_does_not_hide_current_green(self):
@@ -136,11 +158,13 @@ class SelectionTests(unittest.TestCase):
   prior='e'*40
   pr={**self.pr,'base':{'sha':prior,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
-   return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
+   if '/pulls/' in args[-1]:return pr
+   if '/git/ref/' in args[-1]:return {'object':{'sha':BASE}}
+   return {'default_branch':'main'}
   with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':BASE,'GITHUB_WORKFLOW_SHA':BASE}),patch.object(integration,'git',return_value=BASE) as git:
-   with self.assertRaisesRegex(ValueError,'no approved executor contract'):
+   with self.assertRaisesRegex(ValueError,'target moved'):
     integration.prepare(Path('/unused'), 'owner/repo',UID,12,prior,HEAD)
-   self.assertEqual([('rev-parse','HEAD')],[call.args[1:] for call in git.call_args_list])
+   git.assert_not_called()
 
  def test_workflow_base_diverge_accepts_only_approved_executor_and_keeps_b_frozen(self):
   approved='sha256:'+'8'*64
@@ -174,6 +198,7 @@ class SelectionTests(unittest.TestCase):
   workflow_sha='9'*40
   pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
+   if '/git/ref/' in args[-1]:return {'object':{'sha':BASE}}
    return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
   with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':workflow_sha,'GITHUB_WORKFLOW_SHA':workflow_sha}),patch.object(integration,'git',return_value=workflow_sha) as git,patch.object(integration,'compose') as compose:
    with self.assertRaisesRegex(ValueError,'no approved executor contract'):
