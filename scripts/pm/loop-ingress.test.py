@@ -82,6 +82,7 @@ class IngressTests(unittest.TestCase):
             python_shim.chmod(0o755)
             replacements = {
                 '${{ github.event.pull_request.base.sha || inputs.integration_base }}': base,
+                '${{ steps.pr_target.outputs.oid || inputs.integration_base }}': base,
                 '${{ github.event.pull_request.head.sha || inputs.expected_head }}': 'b' * 40,
                 '${{ github.repository }}': 'fixture/repo',
                 '${{ github.event.pull_request.number || inputs.pr_number }}': '2',

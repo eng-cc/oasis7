@@ -165,6 +165,7 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
         def render(script: str, *, start_only: bool = False, base_oid: str) -> str:
             rendered_replacements = dict(replacements)
             rendered_replacements["${{ github.event.pull_request.base.sha || inputs.integration_base }}"] = base_oid
+            rendered_replacements["${{ steps.pr_target.outputs.oid || inputs.integration_base }}"] = base_oid
             for source, target in rendered_replacements.items():
                 script = script.replace(source, target)
             return script.replace(
