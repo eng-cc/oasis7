@@ -1003,9 +1003,20 @@ def _command_is_logged(command_lines: list[str], command: str) -> bool:
         if argv[0] in script_runners and len(argv) > 1:
             starts.append(argv[1:])
         for actual in starts:
-            if (len(actual) >= len(expected)
-                    and [_normalize_logged_path(token) for token in actual[:len(expected)]] == expected):
+            normalized = [_normalize_logged_path(token) for token in actual]
+            if normalized == expected:
                 return True
+            if expected and expected[0] == "cargo":
+                # Required CI's run_cargo appends --verbose; run_cargo_clippy inserts it
+                # immediately after the `clippy` subcommand. No test-harness args or
+                # other trailing/inserted flags are part of the accepted command.
+                appended_verbose = normalized == [*expected, "--verbose"]
+                inserted_clippy_verbose = (
+                    len(expected) > 1 and expected[1] == "clippy"
+                    and normalized == [*expected[:2], "--verbose", *expected[2:]]
+                )
+                if appended_verbose or inserted_clippy_verbose:
+                    return True
     return False
 
 
@@ -1013,9 +1024,9 @@ def _path_is_logged(command_lines: list[str], path: str) -> bool:
     expected = _normalize_logged_path(path)
     script_runners = {"bash", "sh", "python", "python3", "python3.12", "node"}
     for argv in _logged_command_argvs(command_lines):
-        if _normalize_logged_path(argv[0]) == expected:
+        if len(argv) == 1 and _normalize_logged_path(argv[0]) == expected:
             return True
-        if (argv[0] in script_runners and len(argv) > 1
+        if (argv[0] in script_runners and len(argv) == 2
                 and _normalize_logged_path(argv[1]) == expected):
             return True
     return False
@@ -1023,22 +1034,38 @@ def _path_is_logged(command_lines: list[str], path: str) -> bool:
 
 def _checker_invocation_logged(
     command_lines: list[str], *, base_oid: str, head_oid: str,
-    selector_flag: str, selector_value: str,
+    selector_flag: str, selector_value: str, repo_root: pathlib.Path,
 ) -> bool:
+    root = repo_root.resolve()
+    policy = root / ".pm/cargo-package-scope-policy.json"
     checker_names = {"check-cargo-package-scope"}
     if selector_flag == "--primary-package":
         checker_names.add("trusted-check-cargo-package-scope")
     for argv in _logged_command_argvs(command_lines):
-        if (argv[0] not in {"python", "python3", "python3.12"} or len(argv) < 2
+        if (argv[0] not in {"python", "python3", "python3.12"} or len(argv) != 13
                 or pathlib.Path(argv[1]).name not in checker_names):
             continue
-        required_pairs = (
-            ("--base", base_oid), ("--head", head_oid),
-            (selector_flag, selector_value),
-        )
-        if all(any(argv[index:index + 2] == [name, value]
-                   for index in range(len(argv) - 1))
-               for name, value in required_pairs) and "--json" in argv:
+        if (selector_flag == "--first-activation-task-uid"
+                and pathlib.Path(argv[1]).resolve() != root / "scripts/pm/check-cargo-package-scope"):
+            continue
+        if (argv[2] == "--repo-root" and pathlib.Path(argv[3]).resolve() == root
+                and argv[4:10] == ["--base", base_oid, "--head", head_oid, selector_flag, selector_value]
+                and argv[10] == "--policy" and pathlib.Path(argv[11]).resolve() == policy
+                and argv[12] == "--json"):
+            return True
+    return False
+
+
+def _workflow_impact_projection_logged(
+    command_lines: list[str], candidate_root: pathlib.Path,
+) -> bool:
+    root = candidate_root.resolve()
+    for argv in _logged_command_argvs(command_lines):
+        if (len(argv) == 5 and argv[0] in {"python3", "python3.12"}
+                and argv[1] == "-"
+                and pathlib.Path(argv[2]).name == "impact-projection.json"
+                and pathlib.Path(argv[3]).resolve() == root
+                and pathlib.Path(argv[4]).resolve() == root / "scripts"):
             return True
     return False
 
@@ -1063,7 +1090,9 @@ def _required_semantic_diagnostic(obligation: str, step_log: list[str]) -> bool:
     return bool(pattern and re.search(pattern, joined))
 
 
-def _valid_checker_json_leaf(step_log: list[str], overlay: dict[str, Any]) -> bool:
+def _valid_checker_json_leaf(
+    step_log: list[str], overlay: dict[str, Any], *, candidate_root: pathlib.Path,
+) -> bool:
     """Bind both logged checker payloads to the actual activation candidate."""
     commands = _log_command_lines(step_log)
     base_oid = str(overlay.get("base_oid") or "")
@@ -1072,10 +1101,12 @@ def _valid_checker_json_leaf(step_log: list[str], overlay: dict[str, Any]) -> bo
     trusted_command = _checker_invocation_logged(
         commands, base_oid=base_oid, head_oid=head_oid,
         selector_flag="--primary-package", selector_value="auto",
+        repo_root=candidate_root,
     )
     candidate_command = _checker_invocation_logged(
         commands, base_oid=base_oid, head_oid=head_oid,
         selector_flag="--first-activation-task-uid", selector_value=task_uid,
+        repo_root=candidate_root,
     )
     payloads: list[dict[str, Any]] = []
     for line in step_log:
@@ -1213,9 +1244,11 @@ def _verify_required_run_leaf_logs(
                     _fail(f"required-gate logs lack the successful leaf diagnostic: {item}")
                 mapped_commands = semantic_commands[item]
                 if item == "workflow-impact-projection-consumer":
-                    logged_mapping = any(_command_is_logged(commands, command) for command in mapped_commands)
+                    logged_mapping = _workflow_impact_projection_logged(commands, candidate_root)
                 elif item == "cargo-package-scope-and-profile-completion":
-                    logged_mapping = _valid_checker_json_leaf(step_log, overlay)
+                    logged_mapping = _valid_checker_json_leaf(
+                        step_log, overlay, candidate_root=candidate_root,
+                    )
                 else:
                     logged_mapping = all(_command_is_logged(commands, command)
                                          for command in mapped_commands)

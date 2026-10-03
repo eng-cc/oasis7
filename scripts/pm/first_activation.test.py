@@ -576,7 +576,7 @@ class RequiredRunLeafProofTests(unittest.TestCase):
             "required-gate\tRun required test tier\t2026-10-03T00:00:09Z\tok: checked 123 tracked paths for Windows checkout compatibility",
             "required-gate\tRun required test tier\t2026-10-03T00:00:10Z\t+ bash ./scripts/check-script-executable-bits.sh",
             "required-gate\tRun required test tier\t2026-10-03T00:00:11Z\tok: required release scripts are tracked and executable",
-            "required-gate\tRun required test tier\t2026-10-03T00:00:12Z\t+ python3 - /tmp/impact-projection.json",
+            f"required-gate\tRun required test tier\t2026-10-03T00:00:12Z\t+ python3 - /tmp/impact-projection.json {root} {root}/scripts",
             "required-gate\tRun required test tier\t2026-10-03T00:00:13Z\tworkflow-impact-projection-consumer: verified status",
             f"required-gate\tRun required test tier\t2026-10-03T00:00:14Z\t+ python3 /tmp/trusted-check-cargo-package-scope --repo-root {root} --base {base_oid} --head {head_oid} --primary-package auto --policy {root}/.pm/cargo-package-scope-policy.json --json",
             'required-gate\tRun required test tier\t2026-10-03T00:00:15Z\t{"status":"rejected","reason":"ambiguous_package_attribution"}',
@@ -649,6 +649,16 @@ class RequiredRunLeafProofTests(unittest.TestCase):
                     log_reader=lambda _run, _attempt: echo_decoy,
                 )
 
+            cargo_skip = logs.replace(
+                "--features test_tier_required --verbose\n",
+                "--features test_tier_required --verbose -- --skip offline_server_accepts_client_and_emits_snapshot_and_event\n",
+            )
+            with self.assertRaisesRegex(MODULE.OverlayError, "direct command for oasis7_required"):
+                MODULE.reconstruct_full_required_run(
+                    root, "eng-cc/oasis7", UID, bound_overlay, 99, 1, client=client,
+                    log_reader=lambda _run, _attempt: cargo_skip,
+                )
+
             missing_test = "\n".join(
                 line for line in logs.splitlines() if "first_activation.test.py" not in line
             )
@@ -674,23 +684,28 @@ class RequiredRunLeafProofTests(unittest.TestCase):
     def test_checker_leaf_requires_exact_commands_observations_and_candidate_binding(self):
         overlay_value = {"task_uid": UID, "base_oid": BASE, "head_oid": HEAD}
         lines = [
-            f"+ python3 /tmp/trusted-check-cargo-package-scope --base {BASE} --head {HEAD} --primary-package auto --json",
+            f"+ python3 /tmp/trusted-check-cargo-package-scope --repo-root {ROOT} --base {BASE} --head {HEAD} --primary-package auto --policy {ROOT}/.pm/cargo-package-scope-policy.json --json",
             '{"status":"rejected","reason":"ambiguous_package_attribution"}',
             "ordinary pull-request trusted checker observation: exit=1 reason=ambiguous_package_attribution status=failed",
-            f"+ python3 ./scripts/pm/check-cargo-package-scope --base {BASE} --head {HEAD} --first-activation-task-uid {UID} --json",
+            f"+ python3 ./scripts/pm/check-cargo-package-scope --repo-root {ROOT} --base {BASE} --head {HEAD} --first-activation-task-uid {UID} --policy {ROOT}/.pm/cargo-package-scope-policy.json --json",
             f'{{"status":"allowed","mode":"dependency_floor_update","task_uid":"{UID}","validation_only":true}}',
             "ordinary pull-request candidate checker observation: status=passed exit=0 validation_only=true",
         ]
-        self.assertTrue(MODULE._valid_checker_json_leaf(lines, overlay_value))
+        self.assertTrue(MODULE._valid_checker_json_leaf(lines, overlay_value, candidate_root=ROOT))
         self.assertFalse(MODULE._valid_checker_json_leaf(
             [line.replace("ambiguous_package_attribution", "checker_internal_error") for line in lines],
-            overlay_value,
+            overlay_value, candidate_root=ROOT,
         ))
         self.assertFalse(MODULE._valid_checker_json_leaf(
-            [line.replace(HEAD, "3" * 40) for line in lines], overlay_value,
+            [line.replace(HEAD, "3" * 40) for line in lines], overlay_value, candidate_root=ROOT,
         ))
         self.assertFalse(MODULE._valid_checker_json_leaf(
             [line.replace(UID, "task_" + "b" * 32) for line in lines], overlay_value,
+            candidate_root=ROOT,
+        ))
+        self.assertFalse(MODULE._valid_checker_json_leaf(
+            [line.replace("--json", "--json --skip unreviewed-option") for line in lines],
+            overlay_value, candidate_root=ROOT,
         ))
 
     def test_command_identity_rejects_echo_and_accepts_runner_wrappers(self):
@@ -703,6 +718,18 @@ class RequiredRunLeafProofTests(unittest.TestCase):
         self.assertTrue(MODULE._command_is_logged(
             ["+ env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required --verbose"],
             "cargo test -p oasis7 --tests --features test_tier_required",
+        ))
+        self.assertFalse(MODULE._command_is_logged(
+            ["+ env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required --verbose -- --skip offline_test"],
+            "cargo test -p oasis7 --tests --features test_tier_required",
+        ))
+        self.assertTrue(MODULE._command_is_logged(
+            ["+ env -u RUSTC_WRAPPER cargo clippy --verbose -p oasis7 --lib -- -D warnings"],
+            "cargo clippy -p oasis7 --lib -- -D warnings",
+        ))
+        self.assertFalse(MODULE._command_is_logged(
+            ["+ env -u RUSTC_WRAPPER cargo clippy --verbose -p oasis7 --lib -- -D warnings --allow=all"],
+            "cargo clippy -p oasis7 --lib -- -D warnings",
         ))
         self.assertTrue(MODULE._path_is_logged(
             ["+ bash ./scripts/check-script-executable-bits.sh"],
