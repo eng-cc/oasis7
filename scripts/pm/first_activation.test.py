@@ -42,7 +42,8 @@ def _comment(comment_id: int, body: str, second: int) -> dict:
     }
 
 
-def review_evidence(value: dict, packet_digests: dict[str, str] | None = None) -> tuple[list[dict], dict[str, dict]]:
+def review_evidence(value: dict, packet_digests: dict[str, str] | None = None, *,
+                    base: str = BASE, head: str = HEAD, offset: int = 0) -> tuple[list[dict], dict[str, dict]]:
     packet_digests = packet_digests or {}
     auth_body = "User authorizes oasis7_wasm_executor wasmtime 48.0.3 to 48.0.4 effective_package_dependency_floor"
     value["authorization"]["body_sha256"] = "sha256:" + hashlib.sha256(auth_body.encode()).hexdigest()
@@ -59,8 +60,8 @@ def review_evidence(value: dict, packet_digests: dict[str, str] | None = None) -
         "raw_primary_package": value["raw_primary_package"],
         "effective_primary_package": value["effective_primary_package"],
         "dependency": value["dependency"],
-        "base_oid": BASE,
-        "head_oid": HEAD,
+        "base_oid": base,
+        "head_oid": head,
         "authorization": value["authorization"],
         "workflow": {key: value["workflow"][key] for key in
                      ("id", "path", "ref", "sha", "file_sha256")},
@@ -68,7 +69,7 @@ def review_evidence(value: dict, packet_digests: dict[str, str] | None = None) -
         "implementation_slices": [{
             "role": "repository_health_engineer",
             "slice_id": "implementation-checker",
-            "dispatch_comments": [{"comment_id": 2, "body_sha256": dispatch_digest}],
+            "dispatch_comments": [{"comment_id": 2 + offset, "body_sha256": dispatch_digest}],
             "write_scope_paths": [".github/workflows/rust.yml"],
         }],
         "review_slices": [
@@ -84,13 +85,13 @@ def review_evidence(value: dict, packet_digests: dict[str, str] | None = None) -
     plan_sha = "sha256:" + hashlib.sha256(plan_body.encode()).hexdigest()
     comments = [
         _comment(1, auth_body, 1),
-        _comment(2, dispatch_body, 2),
-        _comment(3, plan_body, 3),
+        _comment(2 + offset, dispatch_body, 2 + offset),
+        _comment(3 + offset, plan_body, 3 + offset),
     ]
     envelopes: dict[str, dict] = {}
     for return_id, review_id, envelope_role, plan_role, slice_id in (
-        (4, 5, "repository_health", "repository_health_engineer", "first-rh"),
-        (6, 7, "qa", "qa_engineer", "first-qa"),
+        (4 + offset, 5 + offset, "repository_health", "repository_health_engineer", "first-rh"),
+        (6 + offset, 7 + offset, "qa", "qa_engineer", "first-qa"),
     ):
         returned = {
             "schema": MODULE.FIRST_REVIEW_RETURN_SCHEMA,
@@ -98,8 +99,8 @@ def review_evidence(value: dict, packet_digests: dict[str, str] | None = None) -
             "issue_number": 4269,
             "role": plan_role,
             "slice_id": slice_id,
-            "base_oid": BASE,
-            "head_oid": HEAD,
+            "base_oid": base,
+            "head_oid": head,
             "review_plan_sha256": plan_sha,
             "admitted_packet_sha256": packet_digests.get(plan_role, SHA),
             "return_status": "completed",
@@ -116,8 +117,8 @@ def review_evidence(value: dict, packet_digests: dict[str, str] | None = None) -
             "issue_number": 4269,
             "role": envelope_role,
             "slice_id": slice_id,
-            "base_oid": BASE,
-            "head_oid": HEAD,
+            "base_oid": base,
+            "head_oid": head,
             "workflow_change_paths": value["workflow"]["change_paths"],
             "review_plan_sha256": plan_sha,
             "admitted_packet_sha256": packet_digests.get(plan_role, SHA),
@@ -135,7 +136,7 @@ def review_evidence(value: dict, packet_digests: dict[str, str] | None = None) -
     return comments, envelopes
 
 
-def overlay() -> dict:
+def overlay(*, head: str = HEAD) -> dict:
     return {
         "schema": MODULE.OVERLAY_SCHEMA,
         "task_uid": UID,
@@ -153,7 +154,7 @@ def overlay() -> dict:
             "head_requirement": "48.0.4",
         },
         "base_oid": BASE,
-        "head_oid": HEAD,
+        "head_oid": head,
         "authorization": {"comment_id": 1, "body_sha256": SHA, "scope": "effective_package_dependency_floor"},
         "reviews": {
             "repository_health": {"comment_id": 2, "body_sha256": SHA},
@@ -163,7 +164,7 @@ def overlay() -> dict:
             "id": 123456,
             "path": ".github/workflows/rust.yml",
             "ref": "refs/heads/codex/test",
-            "sha": HEAD,
+            "sha": head,
             "file_sha256": SHA,
             "change_paths": [
                 {"path": ".github/workflows/rust.yml", "base_sha256": SHA, "head_sha256": SHA}
@@ -535,6 +536,133 @@ class PayloadSnapshotValidationTests(unittest.TestCase):
                     MODULE.OverlayError, "immutable Task epoch, snapshot, request, or acceptance",
                 ):
                     MODULE._validate_payload_snapshot(bad, binding, BASE, HEAD)
+
+
+class IssueOverlayHistoryTests(unittest.TestCase):
+    OLD_HEAD = "3" * 40
+
+    class Client:
+        def __init__(self, comments: list[dict]):
+            self.comments = comments
+
+        def rest(self, method: str, path: str, **_kwargs):
+            if path.startswith("repos/eng-cc/oasis7/issues?state=all"):
+                return [{
+                    "id": 4269,
+                    "number": 4269,
+                    "state": "open",
+                    "body": f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n",
+                }] if "page=1" in path else []
+            if path.startswith("repos/eng-cc/oasis7/issues/4269/comments?"):
+                return self.comments if "page=1" in path else []
+            raise AssertionError(f"unexpected request: {method} {path}")
+
+    @staticmethod
+    def _history(current: dict | None = None, *, duplicate_current: bool = False,
+                 current_reviews: dict | None = None) -> list[dict]:
+        old = overlay(head=IssueOverlayHistoryTests.OLD_HEAD)
+        old_comments, _ = review_evidence(old, head=IssueOverlayHistoryTests.OLD_HEAD)
+        old_comment = _comment(40, MODULE.canonical_overlay_body(old), 8)
+        selected = current if current is not None else overlay()
+        current_comments, _ = review_evidence(selected, head=HEAD, offset=10)
+        if current_reviews is not None:
+            selected["reviews"] = current_reviews
+        current_comment = _comment(41, MODULE.canonical_overlay_body(selected), 18)
+        comments = [*old_comments, *current_comments[1:], old_comment, current_comment]
+        if duplicate_current:
+            comments.append(_comment(42, current_comment["body"], 19))
+        return comments
+
+    def _read(self, comments: list[dict], *, head: str = HEAD) -> dict:
+        return MODULE.read_issue_overlay(
+            pathlib.Path("."), "eng-cc/oasis7", UID, BASE, head,
+            client=self.Client(comments),
+        )
+
+    @staticmethod
+    def _publish_fixture():
+        old = overlay(head=IssueOverlayHistoryTests.OLD_HEAD)
+        old_comments, _ = review_evidence(old, head=IssueOverlayHistoryTests.OLD_HEAD)
+        old_comment = _comment(40, MODULE.canonical_overlay_body(old), 8)
+        current = overlay()
+        current_comments, _ = review_evidence(current, head=HEAD, offset=10)
+        comments = [*old_comments, *current_comments[1:], old_comment]
+        posted_body: list[str] = []
+
+        class Client:
+            def rest(self, method: str, path: str, payload=None, **_kwargs):
+                if method == "POST" and path == "repos/eng-cc/oasis7/issues/4269/comments":
+                    posted_body.append(payload["body"])
+                    return {"id": 50}
+                if method == "GET" and path == "repos/eng-cc/oasis7/issues/comments/50":
+                    return {
+                        "id": 50,
+                        "issue_url": ISSUE_URL,
+                        "body": posted_body[-1],
+                        "user": {"login": "human"},
+                    }
+                raise AssertionError(f"unexpected request: {method} {path}")
+
+        binding = {
+            "client": Client(),
+            "issue": {"number": 4269},
+            "task": {"issue_number": 4269},
+        }
+        return current, comments, posted_body, binding
+
+    def test_old_head_history_is_preserved_but_only_latest_exact_head_is_selected(self):
+        selected = self._read(self._history())
+        self.assertEqual(selected["head_oid"], HEAD)
+        self.assertEqual(selected["overlay_comment_id"], 41)
+        with self.assertRaisesRegex(MODULE.OverlayError, "older.*cannot authorize"):
+            self._read(self._history(), head=self.OLD_HEAD)
+
+    def test_duplicate_current_overlay_fails_closed(self):
+        with self.assertRaisesRegex(MODULE.OverlayError, "duplicate.*overlays"):
+            self._read(self._history(duplicate_current=True))
+
+    def test_current_overlay_must_preserve_authorized_task_and_package_binding(self):
+        changed = overlay()
+        changed["raw_primary_package"] = {"present": True, "value": "oasis7"}
+        with self.assertRaisesRegex(MODULE.OverlayError, "changes immutable Task"):
+            self._read(self._history(changed))
+
+    def test_current_head_cannot_reuse_previous_head_review_evidence(self):
+        old = overlay(head=self.OLD_HEAD)
+        review_evidence(old, head=self.OLD_HEAD)
+        with self.assertRaisesRegex(MODULE.OverlayError, "not bound to the exact Task, Issue, base, head, or role"):
+            self._read(self._history(current_reviews=old["reviews"]))
+
+    def test_publisher_appends_new_exact_head_without_replacing_history(self):
+        payload, comments, posted_body, binding = self._publish_fixture()
+        parsed = MODULE.validate_overlay(payload, task_uid=UID, issue_number=4269,
+                                         base_oid=BASE, head_oid=HEAD)
+        with mock.patch.object(MODULE, "_read_project_task_binding", return_value=binding), \
+             mock.patch.object(MODULE, "_validate_payload_snapshot", return_value=parsed), \
+             mock.patch.object(MODULE, "_comments", return_value=comments), \
+             mock.patch.object(MODULE, "_validate_referenced_evidence"), \
+             mock.patch.object(MODULE, "_authenticated_login", return_value="human"), \
+             mock.patch.object(MODULE, "read_project_overlay", return_value={"head_oid": HEAD}) as readback:
+            result = MODULE.publish_overlay(pathlib.Path("."), "eng-cc/oasis7", UID,
+                                            BASE, HEAD, payload, mapping_path=pathlib.Path("mapping"))
+        self.assertEqual(result, {"head_oid": HEAD})
+        self.assertEqual(len(posted_body), 1)
+        self.assertEqual(posted_body[0], MODULE.canonical_overlay_body(payload))
+        self.assertTrue(any(item["id"] == 40 for item in comments))
+        readback.assert_called_once()
+
+    def test_publisher_refuses_another_sequence_after_activation_evidence(self):
+        payload, comments, posted_body, binding = self._publish_fixture()
+        comments.append(_comment(49, MODULE.ACTIVATION_MARKER + "\n{}", 19))
+        parsed = MODULE.validate_overlay(payload, task_uid=UID, issue_number=4269,
+                                         base_oid=BASE, head_oid=HEAD)
+        with mock.patch.object(MODULE, "_read_project_task_binding", return_value=binding), \
+             mock.patch.object(MODULE, "_validate_payload_snapshot", return_value=parsed), \
+             mock.patch.object(MODULE, "_comments", return_value=comments):
+            with self.assertRaisesRegex(MODULE.OverlayError, "activated.*cannot start"):
+                MODULE.publish_overlay(pathlib.Path("."), "eng-cc/oasis7", UID,
+                                       BASE, HEAD, payload, mapping_path=pathlib.Path("mapping"))
+        self.assertEqual(posted_body, [])
 
 
 class RequiredRunLeafProofTests(unittest.TestCase):

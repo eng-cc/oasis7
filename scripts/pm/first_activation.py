@@ -667,14 +667,53 @@ def read_issue_overlay(
     client = client or _github_client(pathlib.Path(repo_root).resolve())
     issue = _issue_by_uid(client, repository, task_uid)
     comments = _comments(client, repository, int(issue["number"]))
-    matches = [item for item in comments if isinstance(item.get("body"), str)
-               and item["body"].replace("\r\n", "\n").startswith(OVERLAY_MARKER)]
-    if len(matches) != 1:
-        _fail("Task Issue must contain exactly one dependency-floor overlay")
-    comment = matches[0]
-    payload = _decode_overlay_comment(comment["body"])
-    parsed = validate_overlay(payload, task_uid=task_uid, issue_number=int(issue["number"]),
-                              base_oid=base_oid, head_oid=head_oid)
+    history = _validated_overlay_history(repository, issue, comments, task_uid, base_oid)
+    current = [(comment, payload, parsed) for comment, payload, parsed in history
+               if payload["head_oid"] == head_oid]
+    if len(current) != 1:
+        _fail("Task Issue must contain exactly one dependency-floor overlay for the exact current head")
+    comment, payload, parsed = current[0]
+    if history[-1][0]["id"] != comment["id"]:
+        _fail("an older dependency-floor overlay cannot authorize a superseded head")
+    parsed["overlay_comment_id"] = int(comment["id"])
+    parsed["overlay_sha256"] = "sha256:" + hashlib.sha256(comment["body"].encode("utf-8")).hexdigest()
+    parsed.pop("_overlay", None)
+    return parsed
+
+
+def _overlay_lineage(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the authority that must stay fixed across pre-activation head retries."""
+    workflow = payload["workflow"]
+    return {
+        "schema": payload["schema"],
+        "task_uid": payload["task_uid"],
+        "issue_number": payload["issue_number"],
+        "bootstrap_epoch": payload["bootstrap_epoch"],
+        "snapshot_sha256": payload["snapshot_sha256"],
+        "request_sha256": payload["request_sha256"],
+        "acceptance_sha256": payload["acceptance_sha256"],
+        "raw_primary_package": payload["raw_primary_package"],
+        "effective_primary_package": payload["effective_primary_package"],
+        "mode": payload["mode"],
+        "dependency": payload["dependency"],
+        "base_oid": payload["base_oid"],
+        "authorization": payload["authorization"],
+        "workflow": {
+            "id": workflow["id"],
+            "path": workflow["path"],
+            "ref": workflow["ref"],
+            "change_paths": [
+                {"path": row["path"], "base_sha256": row["base_sha256"]}
+                for row in workflow["change_paths"]
+            ],
+        },
+    }
+
+
+def _validate_overlay_comment_order(
+    comment: dict[str, Any], payload: dict[str, Any], parsed: dict[str, Any],
+    comments: list[dict[str, Any]], repository: str, issue: dict[str, Any],
+) -> None:
     _validate_referenced_evidence(repository, issue, comments, parsed)
     overlay_time = _comment_time(comment, "dependency-floor overlay")
     referenced_ids = {payload["authorization"]["comment_id"],
@@ -693,10 +732,39 @@ def read_issue_overlay(
         )
         if _comment_time(review_comment, f"{role} review") >= overlay_time:
             _fail("dependency-floor overlay must follow both independent role returns")
-    parsed["overlay_comment_id"] = int(comment["id"])
-    parsed["overlay_sha256"] = "sha256:" + hashlib.sha256(comment["body"].encode("utf-8")).hexdigest()
-    parsed.pop("_overlay", None)
-    return parsed
+
+
+def _validated_overlay_history(
+    repository: str, issue: dict[str, Any], comments: list[dict[str, Any]],
+    task_uid: str, base_oid: str,
+) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]:
+    marked = [item for item in comments if isinstance(item.get("body"), str)
+              and item["body"].replace("\r\n", "\n").startswith(OVERLAY_MARKER)]
+    if not marked:
+        _fail("Task Issue has no dependency-floor overlay history")
+    history: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+    seen_heads: set[str] = set()
+    lineage: dict[str, Any] | None = None
+    for comment in sorted(marked, key=lambda row: row["id"]):
+        payload = _decode_overlay_comment(comment["body"])
+        if payload.get("base_oid") != base_oid:
+            _fail("dependency-floor overlay history changes the approved base binding")
+        historical_head = payload.get("head_oid")
+        if not isinstance(historical_head, str) or not OID_RE.fullmatch(historical_head):
+            _fail("dependency-floor overlay history has a malformed frozen head")
+        if historical_head in seen_heads:
+            _fail("Task Issue contains duplicate dependency-floor overlays for one frozen head")
+        seen_heads.add(historical_head)
+        parsed = validate_overlay(payload, task_uid=task_uid, issue_number=int(issue["number"]),
+                                  base_oid=base_oid, head_oid=historical_head)
+        identity = _overlay_lineage(payload)
+        if lineage is None:
+            lineage = identity
+        elif identity != lineage:
+            _fail("dependency-floor overlay history changes immutable Task, authorization, package, floor, or workflow scope")
+        _validate_overlay_comment_order(comment, payload, parsed, comments, repository, issue)
+        history.append((comment, payload, parsed))
+    return history
 
 
 def has_issue_overlay(repo_root: pathlib.Path, repository: str, task_uid: str,
@@ -1771,9 +1839,19 @@ def publish_overlay(
     parsed = _validate_payload_snapshot(payload, binding, base_oid, head_oid)
     comments = _comments(binding["client"], repository, binding["task"]["issue_number"])
     if any(isinstance(item.get("body"), str)
-           and item["body"].replace("\r\n", "\n").startswith(OVERLAY_MARKER + "\n")
+           and item["body"].replace("\r\n", "\n").startswith(ACTIVATION_MARKER)
            for item in comments):
-        _fail("dependency-floor overlay already exists; immutable records cannot be replaced")
+        _fail("activated dependency-floor history cannot start another first-activation sequence")
+    existing_overlays = [item for item in comments if isinstance(item.get("body"), str)
+                         and item["body"].replace("\r\n", "\n").startswith(OVERLAY_MARKER)]
+    if existing_overlays:
+        history = _validated_overlay_history(
+            repository, binding["issue"], comments, task_uid, base_oid,
+        )
+        if any(row[1]["head_oid"] == head_oid for row in history):
+            _fail("dependency-floor overlay for this frozen head already exists and cannot be replaced")
+        if _overlay_lineage(history[0][1]) != _overlay_lineage(payload):
+            _fail("new dependency-floor overlay changes immutable Task, authorization, package, floor, or workflow scope")
     parsed["_overlay"] = payload
     _validate_referenced_evidence(repository, binding["issue"], comments, parsed)
     body = canonical_overlay_body(payload)

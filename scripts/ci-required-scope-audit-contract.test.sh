@@ -98,6 +98,90 @@ require_key "$full_validation_plan" scope full
 require_key "$full_validation_plan" run_required_gate_baseline true
 require_key "$full_validation_plan" run_oasis7_required_tests true
 require_key "$full_validation_plan" run_rust_baseline true
+
+# The validation-only workflow stages the trusted BASE planner outside the
+# checkout. Exercise its complete file dependency set and full-tier output.
+trusted_base_ref=""
+trusted_head_ref=""
+if [[ -n "${GITHUB_EVENT_PATH:-}" ]]; then
+  [[ -f "$GITHUB_EVENT_PATH" ]] || {
+    echo "trusted-base planner fixture requires a readable CI event" >&2
+    exit 1
+  }
+  python3 - "$GITHUB_EVENT_PATH" "${GITHUB_EVENT_NAME:-}" >"$fixture_dir/trusted-range" <<'PY'
+import json
+import re
+import sys
+
+event_path, event_name = sys.argv[1:]
+with open(event_path, encoding="utf-8") as handle:
+    event = json.load(handle)
+if event_name == "pull_request":
+    base = ((event.get("pull_request") or {}).get("base") or {}).get("sha")
+    head = ((event.get("pull_request") or {}).get("head") or {}).get("sha")
+elif event_name == "workflow_dispatch":
+    inputs = event.get("inputs") or {}
+    base, head = inputs.get("integration_base"), inputs.get("expected_head")
+elif event_name == "push":
+    base, head = event.get("before"), event.get("after")
+else:
+    raise SystemExit(f"unsupported CI event for trusted-base planner fixture: {event_name}")
+if not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40,64}", value)
+           for value in (base, head)):
+    raise SystemExit("CI event lacks full trusted base/head OIDs")
+print(base, head)
+PY
+  read -r trusted_base_ref trusted_head_ref <"$fixture_dir/trusted-range"
+elif [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  echo "trusted-base planner fixture cannot infer its CI event range" >&2
+  exit 1
+else
+  trusted_base_ref="$(git -C "$repo_root" rev-parse HEAD)"
+  trusted_head_ref="$trusted_base_ref"
+fi
+
+trusted_authority="$fixture_dir/trusted-base-authority"
+mkdir -p "$trusted_authority"
+git -C "$repo_root" show "${trusted_base_ref}:scripts/plan-rust-required-scope.py" >"$trusted_authority/plan-rust-required-scope.py"
+git -C "$repo_root" show "${trusted_base_ref}:scripts/ci-required-scope.v2.json" >"$trusted_authority/ci-required-scope.v2.json"
+git -C "$repo_root" show "${trusted_base_ref}:scripts/ci-tests.sh" >"$trusted_authority/ci-tests.sh"
+trusted_planner=(python3 -I "$trusted_authority/plan-rust-required-scope.py"
+  --config "$trusted_authority/ci-required-scope.v2.json")
+trusted_full_plan="$("${trusted_planner[@]}" --event-name workflow_dispatch --run-mode full_escalation \
+  --base-ref "$trusted_base_ref" --head-ref "$trusted_head_ref")"
+require_key "$trusted_full_plan" scope full
+require_key "$trusted_full_plan" run_required_gate_baseline true
+require_key "$trusted_full_plan" run_oasis7_required_tests true
+require_key "$trusted_full_plan" run_rust_baseline true
+trusted_config_sha="sha256:$(sha256sum "$trusted_authority/ci-required-scope.v2.json" | awk '{print $1}')"
+require_key "$trusted_full_plan" planner_config_sha256 "$trusted_config_sha"
+python3 - "$trusted_authority/ci-required-scope.v2.json" >"$fixture_dir/trusted-inventory" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = json.load(handle)
+capabilities = sorted(config["capabilities"])
+units = sorted({"required_gate_baseline", *capabilities})
+print(";".join(capabilities), ";".join(units))
+PY
+read -r trusted_capabilities trusted_units <"$fixture_dir/trusted-inventory"
+require_key "$trusted_full_plan" selected_capabilities "$trusted_capabilities"
+require_key "$trusted_full_plan" required_test_units "$trusted_units"
+if ! cmp -s "$trusted_authority/ci-tests.sh" <(git -C "$repo_root" show "${trusted_base_ref}:scripts/ci-tests.sh"); then
+  echo "staged selector inventory is not the exact trusted BASE ci-tests.sh" >&2
+  exit 1
+fi
+mv "$trusted_authority/ci-tests.sh" "$trusted_authority/ci-tests.hidden"
+if missing_selector_output="$("${trusted_planner[@]}" --event-name workflow_dispatch --run-mode full_escalation \
+    --base-ref "$trusted_base_ref" --head-ref "$trusted_head_ref" 2>&1)"; then
+  echo "trusted BASE planner succeeded without its ci-tests.sh selector source" >&2
+  exit 1
+fi
+if [[ "$missing_selector_output" != *"selector source is missing:"* ]]; then
+  echo "trusted BASE planner failed for an unexpected missing-selector reason: $missing_selector_output" >&2
+  exit 1
+fi
 effective_execution_contract="$(value_for_key "$minimal_plan" execution_contract)"
 effective_config_sha256="$(value_for_key "$minimal_plan" planner_config_sha256)"
 if [[ -z "$effective_execution_contract" && "$effective_config_sha256" == "$legacy_config_sha256" ]]; then
@@ -791,8 +875,9 @@ if ! grep -Fq 'module.read_issue_overlay(root,repository,uid,base,head,client=cl
    ! grep -Fq 'first-activation dispatch does not accept' "$workflow" || \
    ! grep -Fq 'workflow_file_sha256' "$workflow" || \
    ! grep -Fq 'git show "${base_ref}:scripts/plan-rust-required-scope.py"' "$workflow" || \
+   ! grep -Fq 'git show "${base_ref}:scripts/ci-tests.sh"' "$workflow" || \
    ! grep -Fq 'run_mode_args=(--run-mode full_escalation)' "$workflow"; then
-  echo "first-activation lane is missing live overlay/run provenance or frozen-base full-tier planning" >&2
+  echo "first-activation lane is missing live overlay/run provenance or a complete frozen-base planner staging set" >&2
   exit 1
 fi
 for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contract public-testnet-fleet-health-contract; do

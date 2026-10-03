@@ -386,6 +386,7 @@ jobs:
             mkdir -p "${authority_dir}"
             git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
             git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
+            git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py" --config "${authority_dir}/ci-required-scope.v2.json")
             run_mode_args=(--run-mode full_escalation)
             task_uid="${{ inputs.task_uid }}"
