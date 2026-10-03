@@ -31,7 +31,7 @@ fixture 的档案必须同时读出 factory/recipe authority 与 fit、两类 in
 <a id="single-constraint-decision-transfer"></a>
 ### 3.1 成功基线后的单约束决策理解样例
 
-本配对样例承接产品 [2.2.3 与 FS-16](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#223-首局决策理解迁移)。它使用本合同已有的两类 required inputs 与准备缺料动作，不新增材料、数值或玩法机制；仅在当前 authority 和 fresh evidence 支持该情境时执行，否则保留 `target-contract` 或未覆盖结论。
+本配对样例承接产品 [2.2.5 与 FS-16](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#225-首局决策理解迁移)。它使用本合同已有的两类 required inputs 与准备缺料动作，不新增材料、数值或玩法机制；仅在当前 authority 和 fresh evidence 支持该情境时执行，否则保留 `target-contract` 或未覆盖结论。
 
 | 配对阶段 | 已有事实与玩家决策 | 应观察的因果理解 |
 | --- | --- | --- |
