@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import shlex
 import shutil
 import subprocess
 import sys
@@ -937,6 +938,69 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
                                 text=True, capture_output=True)
         self.assertNotEqual(branch.returncode, 0, branch.stdout + branch.stderr)
         self.assertEqual(json.loads(self.fixture.remote_state_path.read_text(encoding="utf-8")), {})
+
+    def test_public_wrapper_resumes_task_done_before_selector_without_recompletion(self):
+        # This is the durable checkpoint after closeout and cache refresh, but
+        # before the delivery producer has selected its terminal protocol.
+        # A forbidden-closeout sentinel fails rather than pretending repeated
+        # completion succeeded; native readiness and delivery stay real.
+        fixture = self.fixture
+        original_claims = copy.deepcopy(fixture.mapping()["tasks"][UID]["claim_verifications"])
+        self.assertEqual(len(original_claims), 1)
+        self.assertEqual(original_claims[0]["frozen_source_head"], fixture.head_oid)
+        receipt_path = fixture.receipt_root / "merge-receipt.json"
+        original_receipt = receipt_path.read_bytes()
+        self.assertFalse((fixture.receipt_root / "terminal-delivery-receipt.json").exists())
+        self.assertEqual(fixture.mapping()["tasks"][UID]["workflow_phase"], "task_done")
+
+        sentinel = pathlib.Path(self.temp.name) / "forbidden-closeout"
+        closeout = fixture.pm_tools / "task-closeout.sh"
+        closeout.write_text(
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            + "printf '%s\\n' 'completion was already accepted at task_done' > "
+            + shlex.quote(str(sentinel)) + "\n"
+            + "echo 'forbidden task_done re-completion' >&2\nexit 86\n", encoding="utf-8")
+        closeout.chmod(0o755)
+
+        # Supply only metadata for the real receipt helper if the faulty
+        # wrapper calls it. Do not synthesize or normalize its resulting bytes.
+        original_gh = fixture.bin / "gh-native"
+        (fixture.bin / "gh").rename(original_gh)
+        (fixture.bin / "gh").write_text(r'''#!/usr/bin/env python3
+import json, os, pathlib, sys
+args = sys.argv[1:]
+state = json.loads(pathlib.Path(os.environ["QA_GH_STATE"]).read_text())
+if args[:2] == ["pr", "view"]:
+    pr = state["pr"]
+    print(json.dumps({"number":pr["number"],"url":pr["html_url"],"state":"MERGED",
+        "mergedAt":pr["merged_at"],"headRefOid":pr["head"]["sha"],"baseRefName":pr["base"]["ref"]}))
+elif args[:2] == ["repo", "view"]:
+    print(json.dumps({"nameWithOwner":"fixture/repo","defaultBranchRef":{"name":"main"}}))
+else:
+    original = pathlib.Path(__file__).with_name("gh-native")
+    os.execv(str(original), [str(original), *args])
+''', encoding="utf-8")
+        (fixture.bin / "gh").chmod(0o755)
+
+        # Finish fixture source setup before invoking the real public wrapper.
+        # The accepted H/T objects remain unchanged and available to readers.
+        (fixture.root / ".gitignore").write_text(".pm/\n__pycache__/\n", encoding="utf-8")
+        fixture._git("add", ".", cwd=fixture.root)
+        fixture._git("commit", "-qm", "complete task_done recovery fixture tools", cwd=fixture.root)
+        self.assertEqual(fixture._git("status", "--porcelain", cwd=fixture.root), "")
+
+        for attempt in (1, 2):
+            resumed = fixture.run_finalizer("--cleanup=defer")
+            with self.subTest(attempt=attempt, invariant="accepted merge receipt"):
+                self.assertEqual(receipt_path.read_bytes(), original_receipt,
+                    "public resume replaced accepted merge receipt before delivery; " + resumed.stderr)
+            with self.subTest(attempt=attempt, invariant="accepted completion"):
+                self.assertEqual(fixture.mapping()["tasks"][UID]["claim_verifications"], original_claims)
+                self.assertFalse(sentinel.exists(), "public resume invoked forbidden task_done re-completion")
+            self.assertEqual(resumed.returncode, 0, resumed.stdout + resumed.stderr)
+            self.assertEqual(json.loads(resumed.stdout)["delivery"],
+                             {"state":"complete", "protocol_version":2})
+            self.assertEqual(self.read_proof()["status"], "passed")
 
     def test_public_cleanup_preflight_consumes_the_same_strict_delivery_proof(self):
         produced = self.fixture.run_producer()

@@ -331,9 +331,32 @@ else
   # validate the exact delivered human-readiness artifacts read-only.
   python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$repo_root" --task-uid "$task_uid" >/dev/null \
     || fail "readiness artifacts must validate before terminal effects"
+  completion_checkpoint=0
+  if [[ "$protocol_selector" != v2 ]]; then
+    # Protocol selection follows task_done. A crash between those writes must
+    # reuse the accepted completion and exact merge receipt, not produce them
+    # again. Mapping state only selects the read-only admission path; the
+    # delivery authority checks still decide whether that checkpoint is valid.
+    completion_checkpoint="$(python3 - "$repo_root" "$task_uid" "$SCRIPT_DIR" <<'PY'
+import importlib.util,json,pathlib,sys
+root,uid,tools=pathlib.Path(sys.argv[1]),sys.argv[2],pathlib.Path(sys.argv[3])
+sys.path.insert(0,str(tools))
+record=(json.loads((root/'.pm/github-project-sync/tasks.json').read_text(encoding='utf-8')).get('tasks') or {}).get(uid) or {}
+checkpoint=record.get('status')=='done'
+if checkpoint:
+    from readiness_transport import create_readiness_proof
+    readiness=create_readiness_proof(root,uid,write=False)
+    spec=importlib.util.spec_from_file_location('finalizer_checkpoint',tools/'post-merge-finalize.py')
+    helper=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    helper._delivery_live_context(root,uid,prospective_readiness=readiness['record'])
+print('1' if checkpoint else '0')
+PY
+)" || fail "accepted completion checkpoint could not be validated"
+  fi
   python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$repo_root" --task-uid "$task_uid" --create >/dev/null \
     || fail "readiness proof could not be created from validated artifacts"
-  if [[ "$protocol_selector" != v2 ]]; then
+  if [[ "$protocol_selector" != v2 && "$completion_checkpoint" == 0 ]]; then
     [[ -d "$task_worktree" ]] || fail "canonical task worktree is missing before task_done; identity mismatch cannot be repaired here"
     (cd "$task_worktree" && python3 "$SCRIPT_DIR/pr-merge-receipt.py" "$pr_number" --json >"$merge_receipt")
     (cd "$task_worktree" && "$SCRIPT_DIR/task-closeout.sh" --role "$owner_role" --task-uid "$task_uid" \

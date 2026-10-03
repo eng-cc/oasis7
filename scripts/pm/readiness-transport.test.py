@@ -226,5 +226,69 @@ class DeliveryBindingRed(unittest.TestCase):
                 "missing readiness proof changed Task/Project/comments/receipt/ledger/tombstone sinks")
 
 
+class TaskCompleteMarkerRed(unittest.TestCase):
+    def _reject_without_effects(self, naked_marker: bool, terminal_phase: bool = False):
+        with tempfile.TemporaryDirectory(prefix="oasis7-complete-marker-") as temp:
+            fixture = NativeClaimFixture(Path(temp))
+            # Commit accepted H in the canonical disposable task checkout;
+            # failure must come from readiness, never a dirty-source refusal.
+            (fixture.root / "accepted-task.txt").write_text("accepted task change\n")
+            fixture.git("add", "accepted-task.txt")
+            fixture.git("commit", "-qm", "accepted task head")
+            fixture.head = fixture.git("rev-parse", "HEAD")
+            server = json.loads(fixture.state_path.read_text())
+            server["pr"]["head"]["sha"] = fixture.head
+            server["pr"].update(state="CLOSED", merged=True)
+            fixture.state_path.write_text(json.dumps(server))
+            mapping = json.loads(fixture.mapping_path.read_text())
+            record = mapping["tasks"][fixture.uid]
+            record.update(status="done", workflow_phase="task_done", completion_mode="single_pr")
+            if terminal_phase:
+                record["workflow_phase"] = "post_merge_done"
+            if naked_marker:
+                record["phase_receipts"] = {"post_merge_done": {
+                    "receipt_type": "oasis7_terminal_cleanup"}}
+            fixture.mapping_path.write_text(json.dumps(mapping))
+            receipt_root = Path(subprocess.check_output([sys.executable,
+                str(fixture.tools / "canonical-receipt-root.py"),
+                "--default-worktree", str(fixture.root), "--task-uid", fixture.uid,
+                "--create"], text=True).strip())
+            self.assertEqual(fixture.git("status", "--porcelain"), "")
+            self.assertFalse((receipt_root / "readiness-proof.json").exists())
+            self.assertFalse((receipt_root / "terminal-cleanup-receipt.json").exists())
+            def snapshot():
+                return (fixture.mapping_path.read_bytes(), fixture.state_path.read_bytes(),
+                    {str(p.relative_to(receipt_root)): p.read_bytes()
+                     for p in receipt_root.rglob("*") if p.is_file()})
+            before = snapshot()
+            env = dict(os.environ)
+            for name in ("GH_TOKEN", "GITHUB_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+                env.pop(name, None)
+            env.update(PATH=str(fixture.bin)+os.pathsep+env.get("PATH", ""),
+                PM_ROOT_DIR=str(fixture.root), READINESS_SERVER=str(fixture.state_path))
+            result = subprocess.run(["bash", str(fixture.tools / "claim-ready.sh"),
+                "--claim-type", "task_complete", "--verification-profile", "repository_required",
+                "--task-uid", fixture.uid, "--json"], cwd=fixture.root,
+                env=env, text=True, capture_output=True)
+            with self.subTest(invariant="readiness refusal"):
+                self.assertNotEqual(result.returncode, 0,
+                    "naked v1 marker bypassed readiness and published accepted-H completion: "
+                    + result.stdout + result.stderr)
+                self.assertIn("readiness", (result.stdout + result.stderr).lower())
+                self.assertNotIn('"allowed_to_claim": true', result.stdout)
+            with self.subTest(invariant="zero terminal effects"):
+                self.assertEqual(snapshot(), before,
+                    "unproved v1 marker changed mapping, server comments, or receipt sinks")
+
+    def test_no_marker_rejects_missing_readiness_before_publication(self):
+        self._reject_without_effects(False)
+
+    def test_naked_v1_marker_rejects_missing_readiness_before_publication(self):
+        self._reject_without_effects(True)
+
+    def test_naked_v1_marker_with_forged_terminal_phase_rejects_before_publication(self):
+        self._reject_without_effects(True, terminal_phase=True)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
