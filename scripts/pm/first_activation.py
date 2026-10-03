@@ -1761,7 +1761,7 @@ def _project_membership_for_task(binding: dict[str, Any], repository: str,
             or content.get("state") != "OPEN"
             or content.get("repository", {}).get("nameWithOwner") != repository
             or content.get("number") != issue_number
-            or content.get("url") != f"https://api.github.com/repos/{repository}/issues/{issue_number}"
+            or content.get("url") != f"https://github.com/{repository}/issues/{issue_number}"
             or _body_uid(str(content.get("body") or "")) != [task_uid]
             or content.get("body") != (binding.get("issue") or {}).get("body")):
         _fail("unique live Project item does not match the canonical Task Issue")

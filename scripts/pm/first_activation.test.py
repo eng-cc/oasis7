@@ -688,7 +688,7 @@ class ProjectActivationMarkerTests(unittest.TestCase):
             "content": {
                 "__typename": "Issue",
                 "number": number,
-                "url": f"https://api.github.com/repos/{repository or cls.REPOSITORY}/issues/{number}",
+                "url": f"https://github.com/{repository or cls.REPOSITORY}/issues/{number}",
                 "state": state,
                 "body": cls.ISSUE_BODY if body is None else body,
                 "repository": {"nameWithOwner": repository or cls.REPOSITORY},
@@ -794,6 +794,13 @@ class ProjectActivationMarkerTests(unittest.TestCase):
                 comment = {"id": 1, "issue_url": ISSUE_URL, "body": marker + "\n{}"}
                 client = self._client([self._item()], comments=[comment])
                 self.assertTrue(self._read_marker(client, self._binding(client)))
+
+    def test_project_graphql_issue_url_uses_browser_identity_not_rest_api_identity(self):
+        wrong_shape = self._item()
+        wrong_shape["content"]["url"] = ISSUE_URL
+        client = self._client([wrong_shape])
+        with self.assertRaisesRegex(MODULE.OverlayError, "unique live Project item"):
+            self._read_marker(client, self._binding(client))
 
     def test_missing_duplicate_or_mismatched_project_uid_binding_fails_closed(self):
         cases = {
