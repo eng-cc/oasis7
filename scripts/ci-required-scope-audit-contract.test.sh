@@ -92,6 +92,11 @@ require_key "$minimal_plan" run_required_gate_baseline true
 require_key "$minimal_plan" run_operational_contracts false
 require_key "$minimal_plan" selected_capabilities required_gate_baseline
 require_reason_contains "$minimal_plan" required_gate_baseline:always_on
+full_validation_plan="$("$planner" --event-name workflow_dispatch --run-mode full_escalation)"
+require_key "$full_validation_plan" scope full
+require_key "$full_validation_plan" run_required_gate_baseline true
+require_key "$full_validation_plan" run_oasis7_required_tests true
+require_key "$full_validation_plan" run_rust_baseline true
 effective_execution_contract="$(value_for_key "$minimal_plan" execution_contract)"
 effective_config_sha256="$(value_for_key "$minimal_plan" planner_config_sha256)"
 if [[ -z "$effective_execution_contract" && "$effective_config_sha256" == "$legacy_config_sha256" ]]; then
@@ -721,5 +726,63 @@ for step in \
     exit 1
   fi
 done
+
+if ! grep -Fqx '          - first_activation_validation_only' "$workflow"; then
+  echo "Rust workflow lacks the bounded first-activation validation-only dispatch mode" >&2
+  exit 1
+fi
+first_activation_hook="$(sed -n '/^run_cargo_package_scope_check() {/,/^}/p' "$ci_tests")"
+for required in \
+  'if [[ "${INTEGRATION_MODE:-}" == "first_activation_validation_only" ]]; then' \
+  '    local trusted_checker="${OASIS7_CARGO_SCOPE_TRUSTED_CHECKER:-$checker}"' \
+  '      --first-activation-task-uid "$task_uid" --policy "$repo_root/$policy" --json' \
+  '"trusted_checker":{"status":"failed" if int(trusted_code) else "passed"' \
+  '"candidate_checker":{"status":candidate_status'; do
+  if ! grep -Fq -- "$required" <<<"$first_activation_hook"; then
+    echo "first-activation CI hook is missing an exact trust/candidate boundary: $required" >&2
+    exit 1
+  fi
+done
+eval "$first_activation_hook"
+INTEGRATION_MODE=first_activation_validation_only
+OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID=malformed
+if run_cargo_package_scope_check 2>/dev/null; then
+  echo "first-activation scope hook accepted a malformed Task UID" >&2
+  exit 1
+fi
+unset INTEGRATION_MODE OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID
+if ! grep -Fq 'module.read_issue_overlay(root,repository,uid,base,head,client=client)' "$workflow" || \
+   ! grep -Fq 'module.validate_workflow_run_provenance(run' "$workflow" || \
+   ! grep -Fq 'first-activation dispatch does not accept' "$workflow" || \
+   ! grep -Fq 'workflow_file_sha256' "$workflow" || \
+   ! grep -Fq 'git show "${base_ref}:scripts/plan-rust-required-scope.py"' "$workflow" || \
+   ! grep -Fq 'run_mode_args=(--run-mode full_escalation)' "$workflow"; then
+  echo "first-activation lane is missing live overlay/run provenance or frozen-base full-tier planning" >&2
+  exit 1
+fi
+for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contract public-testnet-fleet-health-contract; do
+  if ! awk -v job="$job" '
+    $0 ~ "^  " job ":" { active=1 }
+    active && !($0 ~ "^  " job ":") && /^  [A-Za-z0-9_-]+:/ { active=0 }
+    active { body=body $0 "\n" }
+    END { exit(body ~ /first_activation_validation_only/ ? 0 : 1) }
+  ' "$workflow"; then
+    echo "first-activation full-tier inventory omits required job: $job" >&2
+    exit 1
+  fi
+done
+if awk '
+  $0 == "  required-gate:" { in_job=1; next }
+  in_job && /^  [A-Za-z0-9_-]+:/ { exit }
+  in_job && /^    permissions:/ { in_permissions=1; next }
+  in_permissions && /^    [A-Za-z0-9_-]+:/ { in_permissions=0 }
+  in_permissions { if ($0 ~ /write|secrets/) bad=1 }
+  END { exit(bad ? 1 : 0) }
+' "$workflow"; then
+  :
+else
+  echo "first-activation required-gate job has write-capable permissions" >&2
+  exit 1
+fi
 
 echo "ci required scope audit contract: passed"
