@@ -180,6 +180,66 @@ def overlay(*, head: str = HEAD) -> dict:
     }
 
 
+def scope_amendment() -> dict:
+    return {
+        "schema": MODULE.SCOPE_AMENDMENT_SCHEMA,
+        "task_uid": UID,
+        "issue_number": 4269,
+        "bootstrap_epoch": 1,
+        "snapshot_sha256": SHA,
+        "request_sha256": SHA,
+        "acceptance_sha256": SHA,
+        "raw_primary_package": {"present": False, "value": None},
+        "effective_primary_package": "oasis7_wasm_executor",
+        "mode": "dependency_floor_update",
+        "dependency": {
+            "name": "wasmtime",
+            "base_requirement": "48.0.3",
+            "previous_accepted_requirement": "48.0.4",
+            "replacement_requirement": "49.0.2",
+        },
+        "supersedes": {
+            "authorization_comment_id": 10,
+            "authorization_body_sha256": SHA,
+            "overlay_comment_id": 20,
+            "overlay_body_sha256": SHA,
+            "overlay_base_oid": BASE,
+            "overlay_head_oid": "3" * 40,
+        },
+        "authorization_evidence": {
+            "source": "direct_user_conversation_recorded_by_tpm",
+            "scope_record_comment_id": 11,
+            "scope_record_body_sha256": SHA,
+            "approval_record_comment_id": 12,
+            "approval_record_body_sha256": SHA,
+            "scope": "same_task_same_pr_wasmtime_49_0_2",
+        },
+        "approved_business_paths": [
+            "Cargo.lock",
+            "crates/oasis7_wasm_executor/Cargo.toml",
+            "crates/oasis7_wasm_executor/src/lib.rs",
+            "crates/oasis7_wasm_executor/src/tests.rs",
+        ],
+    }
+
+
+def amended_overlay(*, head: str = HEAD) -> dict:
+    row = overlay(head=head)
+    row["schema"] = MODULE.OVERLAY_V2_SCHEMA
+    row["dependency"]["head_requirement"] = "49.0.2"
+    row["authorization"] = {
+        "comment_id": 12,
+        "body_sha256": SHA,
+        "scope": "same_task_same_pr_wasmtime_49_0_2",
+    }
+    row["scope_amendment"] = {"comment_id": 13, "body_sha256": SHA}
+    row["business_change_paths"] = [
+        {"path": path, "base_sha256": SHA, "head_sha256": SHA}
+        for path in scope_amendment()["approved_business_paths"]
+    ]
+    return row
+
+
 class OverlayShapeTests(unittest.TestCase):
     def test_request_identity_uses_canonical_issue_title_reconstruction(self):
         self.assertEqual(
@@ -196,6 +256,93 @@ class OverlayShapeTests(unittest.TestCase):
         self.assertEqual(parsed["effective_primary_package"], "oasis7_wasm_executor")
         self.assertEqual(parsed["workflow_change_paths"][0]["path"], ".github/workflows/rust.yml")
         self.assertTrue(parsed["validation_only"])
+
+    def test_scope_amendment_v2_binds_exact_task_target_and_business_paths(self):
+        amendment = MODULE.validate_scope_amendment_payload(
+            scope_amendment(), task_uid=UID, issue_number=4269,
+        )
+        payload = amended_overlay()
+        parsed = MODULE.validate_overlay(
+            payload, task_uid=UID, issue_number=4269, base_oid=BASE, head_oid=HEAD,
+            expected_raw_primary={"present": False, "value": None},
+            scope_amendment=amendment,
+        )
+        self.assertEqual(parsed["schema"], MODULE.OVERLAY_V2_SCHEMA)
+        self.assertEqual(parsed["approved_business_paths"], amendment["approved_business_paths"])
+        self.assertEqual(parsed["head_requirement"], "49.0.2")
+
+    def test_scope_amendment_v2_rejects_missing_amendment_and_path_or_target_drift(self):
+        payload = amended_overlay()
+        with self.assertRaisesRegex(MODULE.OverlayError, "scope amendment"):
+            MODULE.validate_overlay(payload, task_uid=UID, issue_number=4269,
+                                    base_oid=BASE, head_oid=HEAD)
+        amendment = MODULE.validate_scope_amendment_payload(
+            scope_amendment(), task_uid=UID, issue_number=4269,
+        )
+        for mutate in (
+            lambda row: row["business_change_paths"].pop(),
+            lambda row: row["dependency"].update(head_requirement="49.0.3"),
+            lambda row: row.update(raw_primary_package={"present": True, "value": "oasis7"}),
+            lambda row: row.update(head_oid="4" * 40),
+        ):
+            changed = amended_overlay()
+            mutate(changed)
+            with self.subTest(changed=changed):
+                with self.assertRaises(MODULE.OverlayError):
+                    MODULE.validate_overlay(
+                        changed, task_uid=UID, issue_number=4269, base_oid=BASE,
+                        head_oid=HEAD, expected_raw_primary={"present": False, "value": None},
+                        scope_amendment=amendment,
+                    )
+        downgraded = scope_amendment()
+        downgraded["dependency"]["replacement_requirement"] = "48.0.4"
+        with self.assertRaisesRegex(MODULE.OverlayError, "exceed both"):
+            MODULE.validate_scope_amendment_payload(downgraded, task_uid=UID, issue_number=4269)
+
+    def test_live_scope_amendment_binds_superseded_records_and_direct_approval(self):
+        prior_authorization = "User authorized oasis7_wasm_executor wasmtime 48.0.3 to 48.0.4"
+        scope_record = f"Task scope record task_uid: {UID}; Wasmtime 49.0.2 same PR."
+        approval_record = f"User explicit approval task_uid: {UID}; Wasmtime 49.0.2 same PR."
+        old_overlay = overlay(head="3" * 40)
+        old_overlay["authorization"] = {
+            "comment_id": 10,
+            "body_sha256": "sha256:" + hashlib.sha256(prior_authorization.encode()).hexdigest(),
+            "scope": "effective_package_dependency_floor",
+        }
+        old_overlay_body = MODULE.canonical_overlay_body(old_overlay)
+        amendment = scope_amendment()
+        amendment["supersedes"]["authorization_body_sha256"] = old_overlay["authorization"]["body_sha256"]
+        amendment["supersedes"]["overlay_body_sha256"] = (
+            "sha256:" + hashlib.sha256(old_overlay_body.encode()).hexdigest()
+        )
+        amendment["authorization_evidence"]["scope_record_body_sha256"] = (
+            "sha256:" + hashlib.sha256(scope_record.encode()).hexdigest()
+        )
+        amendment["authorization_evidence"]["approval_record_body_sha256"] = (
+            "sha256:" + hashlib.sha256(approval_record.encode()).hexdigest()
+        )
+        amendment_body = MODULE.canonical_scope_amendment_body(amendment)
+        comments = [
+            _comment(10, prior_authorization, 1),
+            _comment(20, old_overlay_body, 2),
+            _comment(11, scope_record, 3),
+            _comment(12, approval_record, 4),
+            _comment(13, amendment_body, 5),
+        ]
+        _, parsed = MODULE._validated_scope_amendment(
+            comments, issue_url=ISSUE_URL, task_uid=UID, issue_number=4269,
+            overlay_ref={"comment_id": 13,
+                         "body_sha256": "sha256:" + hashlib.sha256(amendment_body.encode()).hexdigest()},
+        )
+        self.assertEqual(parsed["dependency"]["replacement_requirement"], "49.0.2")
+        with self.assertRaisesRegex(MODULE.OverlayError, "canonical Task Issue"):
+            MODULE._validated_scope_amendment(
+                [dict(comments[0], issue_url="https://api.github.com/repos/other/repo/issues/4269"),
+                 *comments[1:]],
+                issue_url=ISSUE_URL, task_uid=UID, issue_number=4269,
+                overlay_ref={"comment_id": 13,
+                             "body_sha256": "sha256:" + hashlib.sha256(amendment_body.encode()).hexdigest()},
+            )
 
     def test_exact_first_activation_path_set_and_rejects_business_manifest(self):
         expected_paths = {
@@ -531,7 +678,8 @@ class PayloadSnapshotValidationTests(unittest.TestCase):
                 ("symbolic-ref", "--quiet", "--short", "HEAD"): "codex/test",
             }[tuple(args)]
 
-        with mock.patch.object(MODULE, "_git", side_effect=git), \
+        with mock.patch.object(MODULE, "_comments", return_value=[]), \
+             mock.patch.object(MODULE, "_git", side_effect=git), \
              mock.patch.object(MODULE, "_changed_paths", return_value=changed), \
              mock.patch.object(MODULE, "_git_blob_sha256", return_value=SHA):
             parsed = MODULE._validate_payload_snapshot(value, binding, BASE, HEAD)
@@ -671,6 +819,41 @@ class IssueOverlayHistoryTests(unittest.TestCase):
                                        BASE, HEAD, payload, mapping_path=pathlib.Path("mapping"))
         self.assertEqual(posted_body, [])
 
+    def test_amendment_selects_only_current_v2_head_and_old_v1_becomes_audit_only(self):
+        prior_payload = overlay(head=self.OLD_HEAD)
+        prior_comment = _comment(20, MODULE.canonical_overlay_body(prior_payload), 8)
+        prior_parsed = MODULE.validate_overlay(
+            prior_payload, task_uid=UID, issue_number=4269,
+            base_oid=BASE, head_oid=self.OLD_HEAD,
+        )
+        amendment = MODULE.validate_scope_amendment_payload(
+            scope_amendment(), task_uid=UID, issue_number=4269,
+        )
+        current_payload = amended_overlay()
+        current_comment = _comment(40, MODULE.canonical_overlay_body(current_payload), 18)
+        current_parsed = MODULE.validate_overlay(
+            current_payload, task_uid=UID, issue_number=4269,
+            base_oid=BASE, head_oid=HEAD, scope_amendment=amendment,
+        )
+        amendment_comment = _comment(30, MODULE.canonical_scope_amendment_body(scope_amendment()), 10)
+        history = [
+            (prior_comment, prior_payload, prior_parsed),
+            (current_comment, current_payload, current_parsed),
+        ]
+        client = self.Client([prior_comment, amendment_comment, current_comment])
+        with mock.patch.object(MODULE, "_validated_overlay_history", return_value=history):
+            selected = MODULE.read_issue_overlay(
+                pathlib.Path("."), "eng-cc/oasis7", UID, BASE, HEAD, client=client,
+            )
+            self.assertEqual(selected["schema"], MODULE.OVERLAY_V2_SCHEMA)
+            self.assertEqual(selected["head_requirement"], "49.0.2")
+            self.assertEqual(selected["overlay_comment_id"], 40)
+            with self.assertRaisesRegex(MODULE.OverlayError, "superseded"):
+                MODULE.read_issue_overlay(
+                    pathlib.Path("."), "eng-cc/oasis7", UID, BASE, self.OLD_HEAD,
+                    client=client,
+                )
+
 
 class ProjectActivationMarkerTests(unittest.TestCase):
     REPOSITORY = "eng-cc/oasis7"
@@ -790,7 +973,7 @@ class ProjectActivationMarkerTests(unittest.TestCase):
                             for method, path, _ in client.rest_calls))
 
     def test_overlay_or_activation_marker_is_only_reported_after_binding(self):
-        for marker in (MODULE.OVERLAY_MARKER, MODULE.ACTIVATION_MARKER):
+        for marker in (*MODULE.OVERLAY_MARKERS, MODULE.ACTIVATION_MARKER):
             with self.subTest(marker=marker):
                 comment = {"id": 1, "issue_url": ISSUE_URL, "body": marker + "\n{}"}
                 client = self._client([self._item()], comments=[comment])

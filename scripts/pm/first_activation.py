@@ -21,12 +21,20 @@ from typing import Any
 
 OVERLAY_SCHEMA = "oasis7-cargo-dependency-floor-overlay/v1"
 OVERLAY_MARKER = "<!-- oasis7-cargo-dependency-floor-overlay/v1 -->"
+OVERLAY_V2_SCHEMA = "oasis7-cargo-dependency-floor-overlay/v2"
+OVERLAY_V2_MARKER = "<!-- oasis7-cargo-dependency-floor-overlay/v2 -->"
+OVERLAY_MARKERS = (OVERLAY_MARKER, OVERLAY_V2_MARKER)
+SCOPE_AMENDMENT_SCHEMA = "oasis7-cargo-dependency-floor-scope-amendment/v1"
+SCOPE_AMENDMENT_MARKER = "<!-- oasis7-cargo-dependency-floor-scope-amendment/v1 -->"
 ACTIVATION_SCHEMA = "oasis7-cargo-dependency-floor-activation/v1"
 ACTIVATION_MARKER = "<!-- oasis7-cargo-dependency-floor-activation/v1 -->"
 REVIEW_SCHEMA = "oasis7-cargo-first-activation-review/v1"
 REVIEW_MARKER = "<!-- oasis7-cargo-first-activation-review/v1 -->"
 FIRST_REVIEW_PLAN_SCHEMA = "oasis7-cargo-first-activation-review-plan/v1"
 FIRST_REVIEW_PLAN_MARKER = "<!-- oasis7-cargo-first-activation-review-plan/v1 -->"
+FIRST_REVIEW_PLAN_V2_SCHEMA = "oasis7-cargo-first-activation-review-plan/v2"
+FIRST_REVIEW_PLAN_V2_MARKER = "<!-- oasis7-cargo-first-activation-review-plan/v2 -->"
+FIRST_REVIEW_PLAN_MARKERS = (FIRST_REVIEW_PLAN_MARKER, FIRST_REVIEW_PLAN_V2_MARKER)
 FIRST_REVIEW_RETURN_SCHEMA = "oasis7-cargo-first-activation-return/v1"
 FIRST_REVIEW_RETURN_MARKER = "<!-- oasis7-cargo-first-activation-return/v1 -->"
 FIRST_REVIEW_WRITE_SCOPE = "read-only review; no code changes"
@@ -63,11 +71,17 @@ def _canonical(value: Any) -> bytes:
 
 
 def canonical_overlay_body(value: dict[str, Any]) -> str:
-    return OVERLAY_MARKER + "\n" + _canonical(value).decode("utf-8") + "\n"
+    marker = OVERLAY_V2_MARKER if value.get("schema") == OVERLAY_V2_SCHEMA else OVERLAY_MARKER
+    return marker + "\n" + _canonical(value).decode("utf-8") + "\n"
+
+
+def canonical_scope_amendment_body(value: dict[str, Any]) -> str:
+    return SCOPE_AMENDMENT_MARKER + "\n" + _canonical(value).decode("utf-8") + "\n"
 
 
 def canonical_first_review_plan_body(value: dict[str, Any]) -> str:
-    return FIRST_REVIEW_PLAN_MARKER + "\n" + _canonical(value).decode("utf-8") + "\n"
+    marker = FIRST_REVIEW_PLAN_V2_MARKER if value.get("schema") == FIRST_REVIEW_PLAN_V2_SCHEMA else FIRST_REVIEW_PLAN_MARKER
+    return marker + "\n" + _canonical(value).decode("utf-8") + "\n"
 
 
 def canonical_first_review_return_body(value: dict[str, Any]) -> str:
@@ -95,6 +109,124 @@ def _validate_path(value: Any) -> str:
     return value
 
 
+def validate_scope_amendment_payload(
+    value: Any,
+    *,
+    task_uid: str,
+    issue_number: int,
+) -> dict[str, Any]:
+    """Validate the finite Task-scope amendment shape; live refs are checked separately."""
+    top = _object(value, {
+        "schema", "task_uid", "issue_number", "bootstrap_epoch", "snapshot_sha256",
+        "request_sha256", "acceptance_sha256", "raw_primary_package",
+        "effective_primary_package", "mode", "dependency", "supersedes",
+        "authorization_evidence", "approved_business_paths",
+    }, "dependency-floor scope amendment")
+    if (top["schema"] != SCOPE_AMENDMENT_SCHEMA or top["task_uid"] != task_uid
+            or not TASK_UID_RE.fullmatch(task_uid)):
+        _fail("scope amendment schema or Task UID mismatch")
+    if type(top["issue_number"]) is not int or top["issue_number"] != issue_number or issue_number < 1:
+        _fail("scope amendment Issue identity mismatch")
+    if type(top["bootstrap_epoch"]) is not int or top["bootstrap_epoch"] < 1:
+        _fail("scope amendment bootstrap epoch is invalid")
+    for key in ("snapshot_sha256", "request_sha256", "acceptance_sha256"):
+        _digest(top[key], f"scope amendment {key}")
+    raw_primary = _raw_primary(top["raw_primary_package"])
+    package = top["effective_primary_package"]
+    if not isinstance(package, str) or not PACKAGE_RE.fullmatch(package):
+        _fail("scope amendment effective package is malformed")
+    if top["mode"] != "dependency_floor_update":
+        _fail("scope amendment mode is not the supported dependency-floor update")
+    dependency = _object(top["dependency"], {
+        "name", "base_requirement", "previous_accepted_requirement", "replacement_requirement",
+    }, "scope amendment dependency")
+    if not isinstance(dependency["name"], str) or not PACKAGE_RE.fullmatch(dependency["name"]):
+        _fail("scope amendment dependency name is malformed")
+    versions = {
+        key: VERSION_RE.fullmatch(str(dependency[key]))
+        for key in ("base_requirement", "previous_accepted_requirement", "replacement_requirement")
+    }
+    if any(match is None for match in versions.values()):
+        _fail("scope amendment dependency requirements must be canonical stable M.m.p versions")
+    parsed_versions = {
+        key: tuple(int(part) for part in str(dependency[key]).split("."))
+        for key in versions
+    }
+    if (parsed_versions["previous_accepted_requirement"] <= parsed_versions["base_requirement"]
+            or parsed_versions["replacement_requirement"] <= parsed_versions["previous_accepted_requirement"]):
+        _fail("scope amendment replacement must exceed both its trusted base and prior accepted target")
+
+    supersedes = _object(top["supersedes"], {
+        "authorization_comment_id", "authorization_body_sha256", "overlay_comment_id",
+        "overlay_body_sha256", "overlay_base_oid", "overlay_head_oid",
+    }, "scope amendment supersession")
+    for key in ("authorization_comment_id", "overlay_comment_id"):
+        if type(supersedes[key]) is not int or supersedes[key] < 1:
+            _fail(f"scope amendment superseded {key} is invalid")
+    for key in ("authorization_body_sha256", "overlay_body_sha256"):
+        _digest(supersedes[key], f"scope amendment {key}")
+    for key in ("overlay_base_oid", "overlay_head_oid"):
+        if not isinstance(supersedes[key], str) or not OID_RE.fullmatch(supersedes[key]):
+            _fail(f"scope amendment superseded {key} is malformed")
+    if supersedes["overlay_base_oid"] == supersedes["overlay_head_oid"]:
+        _fail("scope amendment superseded overlay is not a committed range")
+
+    evidence = _object(top["authorization_evidence"], {
+        "source", "scope_record_comment_id", "scope_record_body_sha256",
+        "approval_record_comment_id", "approval_record_body_sha256", "scope",
+    }, "scope amendment authorization evidence")
+    if evidence["source"] != "direct_user_conversation_recorded_by_tpm":
+        _fail("scope amendment authorization provenance is not the approved direct-conversation record")
+    for key in ("scope_record_comment_id", "approval_record_comment_id"):
+        if type(evidence[key]) is not int or evidence[key] < 1:
+            _fail(f"scope amendment {key} is invalid")
+    for key in ("scope_record_body_sha256", "approval_record_body_sha256"):
+        _digest(evidence[key], f"scope amendment {key}")
+    if (evidence["scope_record_comment_id"] == evidence["approval_record_comment_id"]
+            or not isinstance(evidence["scope"], str)
+            or not re.fullmatch(r"[a-z0-9_]{1,128}", evidence["scope"])):
+        _fail("scope amendment authorization evidence identity or scope is malformed")
+
+    paths = top["approved_business_paths"]
+    if not isinstance(paths, list) or not paths:
+        _fail("scope amendment business-path set is empty")
+    normalized: list[str] = []
+    for path in paths:
+        normalized.append(_validate_path(path))
+    if normalized != sorted(set(normalized)):
+        _fail("scope amendment business paths are not uniquely sorted")
+    if normalized.count("Cargo.lock") != 1:
+        _fail("scope amendment must approve exactly one root Cargo.lock path")
+    manifests = [path for path in normalized if path.endswith("/Cargo.toml") and path != "Cargo.toml"]
+    if len(manifests) != 1:
+        _fail("scope amendment must approve exactly one existing package manifest")
+    package_root = manifests[0].rsplit("/", 1)[0]
+    for path in normalized:
+        if path in {"Cargo.lock", manifests[0]}:
+            continue
+        if (not path.startswith(package_root + "/")
+                or not (path.startswith(package_root + "/src/")
+                        or path.startswith(package_root + "/tests/"))
+                or not path.endswith(".rs")):
+            _fail("scope amendment business paths must stay within one package manifest/source/test set")
+    return {
+        "schema": SCOPE_AMENDMENT_SCHEMA,
+        "task_uid": task_uid,
+        "issue_number": issue_number,
+        "bootstrap_epoch": top["bootstrap_epoch"],
+        "snapshot_sha256": top["snapshot_sha256"],
+        "request_sha256": top["request_sha256"],
+        "acceptance_sha256": top["acceptance_sha256"],
+        "raw_primary_package": raw_primary,
+        "effective_primary_package": package,
+        "mode": "dependency_floor_update",
+        "dependency": dict(dependency),
+        "supersedes": dict(supersedes),
+        "authorization_evidence": dict(evidence),
+        "approved_business_paths": normalized,
+    }
+
+
 def validate_overlay(
     value: Any,
     *,
@@ -103,15 +235,27 @@ def validate_overlay(
     base_oid: str,
     head_oid: str,
     expected_raw_primary: dict[str, Any] | None = None,
+    scope_amendment: Any = None,
 ) -> dict[str, Any]:
     """Validate immutable overlay bytes against caller assertions (which never select authority)."""
-    top = _object(value, {
+    schema = value.get("schema") if isinstance(value, dict) else None
+    common_keys = {
         "schema", "task_uid", "issue_number", "bootstrap_epoch", "snapshot_sha256",
         "request_sha256", "acceptance_sha256", "raw_primary_package",
         "effective_primary_package", "mode", "dependency", "base_oid", "head_oid",
         "authorization", "reviews", "workflow",
-    }, "overlay")
-    if top["schema"] != OVERLAY_SCHEMA or top["task_uid"] != task_uid or not TASK_UID_RE.fullmatch(task_uid):
+    }
+    if schema == OVERLAY_SCHEMA:
+        top = _object(value, common_keys, "overlay")
+        amendment = None
+    elif schema == OVERLAY_V2_SCHEMA:
+        top = _object(value, common_keys | {"scope_amendment", "business_change_paths"}, "overlay")
+        amendment = validate_scope_amendment_payload(
+            scope_amendment, task_uid=task_uid, issue_number=issue_number,
+        )
+    else:
+        _fail("overlay schema is unsupported")
+    if top["task_uid"] != task_uid or not TASK_UID_RE.fullmatch(task_uid):
         _fail("overlay schema or Task UID mismatch")
     if type(top["issue_number"]) is not int or top["issue_number"] != issue_number or issue_number < 1:
         _fail("overlay Issue identity mismatch")
@@ -127,6 +271,15 @@ def validate_overlay(
         _fail("effective primary package is malformed")
     if top["mode"] != "dependency_floor_update":
         _fail("overlay mode is not the supported dependency-floor update")
+    if (amendment is not None and (
+            top["bootstrap_epoch"] != amendment["bootstrap_epoch"]
+            or top["snapshot_sha256"] != amendment["snapshot_sha256"]
+            or top["request_sha256"] != amendment["request_sha256"]
+            or top["acceptance_sha256"] != amendment["acceptance_sha256"]
+            or raw_primary != amendment["raw_primary_package"]
+            or package != amendment["effective_primary_package"]
+            or top["mode"] != amendment["mode"])):
+        _fail("overlay differs from the exact scope amendment Task/snapshot/package binding")
     dependency = _object(top["dependency"], {"name", "base_requirement", "head_requirement"}, "dependency")
     if not isinstance(dependency["name"], str) or not PACKAGE_RE.fullmatch(dependency["name"]):
         _fail("dependency name is malformed")
@@ -134,8 +287,14 @@ def validate_overlay(
     head_version = VERSION_RE.fullmatch(str(dependency["head_requirement"]))
     if not base_version or not head_version:
         _fail("dependency requirements must be canonical stable M.m.p versions")
-    if base_version.group(1, 2) != head_version.group(1, 2) or int(head_version.group(3)) <= int(base_version.group(3)):
-        _fail("dependency floor must raise only the patch version")
+    if schema == OVERLAY_SCHEMA:
+        if (base_version.group(1, 2) != head_version.group(1, 2)
+                or int(head_version.group(3)) <= int(base_version.group(3))):
+            _fail("dependency floor v1 must raise only the patch version")
+    elif (dependency["name"] != amendment["dependency"]["name"]
+          or dependency["base_requirement"] != amendment["dependency"]["base_requirement"]
+          or dependency["head_requirement"] != amendment["dependency"]["replacement_requirement"]):
+        _fail("dependency floor v2 differs from the exact amended base/replacement requirements")
     if (not isinstance(top["base_oid"], str) or not OID_RE.fullmatch(top["base_oid"])
             or top["base_oid"] != base_oid or not isinstance(top["head_oid"], str)
             or not OID_RE.fullmatch(top["head_oid"]) or top["head_oid"] != head_oid):
@@ -144,8 +303,36 @@ def validate_overlay(
     if type(authorization["comment_id"]) is not int or authorization["comment_id"] < 1:
         _fail("authorization comment ID is invalid")
     _digest(authorization["body_sha256"], "authorization body digest")
-    if authorization["scope"] != "effective_package_dependency_floor":
-        _fail("authorization scope is not exact")
+    amendment_ref = None
+    business_rows: list[dict[str, str]] = []
+    if amendment is None:
+        if authorization["scope"] != "effective_package_dependency_floor":
+            _fail("authorization scope is not exact")
+    else:
+        amendment_ref = _object(top["scope_amendment"], {"comment_id", "body_sha256"}, "scope amendment reference")
+        if (type(amendment_ref["comment_id"]) is not int or amendment_ref["comment_id"] < 1
+                or authorization["comment_id"] != amendment["authorization_evidence"]["approval_record_comment_id"]
+                or authorization["body_sha256"] != amendment["authorization_evidence"]["approval_record_body_sha256"]
+                or authorization["scope"] != amendment["authorization_evidence"]["scope"]):
+            _fail("overlay authorization does not match the exact scope amendment evidence")
+        _digest(amendment_ref["body_sha256"], "scope amendment body digest")
+        rows = top["business_change_paths"]
+        if not isinstance(rows, list) or not rows:
+            _fail("overlay amended business-path digest set is empty")
+        seen_business: set[str] = set()
+        for item in rows:
+            row = _object(item, {"path", "base_sha256", "head_sha256"}, "business change path")
+            path = _validate_path(row["path"])
+            if path in seen_business:
+                _fail("overlay amended business-path set contains duplicates")
+            seen_business.add(path)
+            business_rows.append({
+                "path": path,
+                "base_sha256": _digest(row["base_sha256"], "business base path digest"),
+                "head_sha256": _digest(row["head_sha256"], "business head path digest"),
+            })
+        if ([row["path"] for row in business_rows] != amendment["approved_business_paths"]):
+            _fail("overlay amended business-path set differs from the exact approved set")
     reviews = _object(top["reviews"], {"repository_health", "qa"}, "reviews")
     for role in ("repository_health", "qa"):
         row = _object(reviews[role], {"comment_id", "body_sha256"}, f"{role} review")
@@ -153,6 +340,8 @@ def validate_overlay(
             _fail(f"{role} review comment ID is invalid")
         _digest(row["body_sha256"], f"{role} review digest")
     ids = [authorization["comment_id"], reviews["repository_health"]["comment_id"], reviews["qa"]["comment_id"]]
+    if amendment_ref is not None:
+        ids.append(amendment_ref["comment_id"])
     if len(set(ids)) != len(ids):
         _fail("authorization and independent review evidence must use distinct comments")
     workflow = _object(top["workflow"], {"id", "path", "ref", "sha", "file_sha256", "change_paths"}, "workflow")
@@ -186,7 +375,7 @@ def validate_overlay(
     if len(workflow_rows) != 1 or workflow_rows[0]["head_sha256"] != workflow["file_sha256"]:
         _fail("workflow file digest is not bound by the reviewed path set")
     return {
-        "schema": OVERLAY_SCHEMA,
+        "schema": schema,
         "task_uid": task_uid,
         "issue_number": issue_number,
         "mode": "dependency_floor_update",
@@ -202,6 +391,11 @@ def validate_overlay(
         "workflow_ref": workflow["ref"],
         "workflow_sha": workflow["sha"],
         "workflow_file_sha256": workflow["file_sha256"],
+        **({
+            "scope_amendment": amendment_ref,
+            "approved_business_paths": amendment["approved_business_paths"],
+            "business_change_paths": business_rows,
+        } if amendment is not None else {}),
         "overlay_comment_id": None,
         "overlay_sha256": None,
         "validation_only": True,
@@ -300,16 +494,143 @@ def _unique_comment(comments: list[dict[str, Any]], comment_id: int, label: str)
     return rows[0]
 
 
+def _decode_scope_amendment_comment(body: str) -> dict[str, Any]:
+    return _decode_marked_json(body, SCOPE_AMENDMENT_MARKER, "dependency-floor scope amendment")
+
+
+def _validated_scope_amendment(
+    comments: list[dict[str, Any]],
+    *,
+    issue_url: str,
+    task_uid: str,
+    issue_number: int,
+    overlay_ref: Any,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    ref = _object(overlay_ref, {"comment_id", "body_sha256"}, "scope amendment reference")
+    if type(ref["comment_id"]) is not int or ref["comment_id"] < 1:
+        _fail("scope amendment comment ID is invalid")
+    _digest(ref["body_sha256"], "scope amendment body digest")
+    marked = [row for row in comments if isinstance(row.get("body"), str)
+              and row["body"].replace("\r\n", "\n").startswith(SCOPE_AMENDMENT_MARKER + "\n")]
+    if len(marked) != 1 or marked[0].get("id") != ref["comment_id"]:
+        _fail("Task Issue must contain exactly one scope amendment matching the overlay reference")
+    comment = marked[0]
+    _human_issue_comment(comment, issue_url, "dependency-floor scope amendment")
+    if _comment_sha256(comment, "scope amendment") != ref["body_sha256"]:
+        _fail("scope amendment live body differs from the exact overlay reference")
+    payload = _decode_scope_amendment_comment(str(comment["body"]))
+    amendment = validate_scope_amendment_payload(
+        payload, task_uid=task_uid, issue_number=issue_number,
+    )
+    expected_ids = {
+        ref["comment_id"],
+        amendment["supersedes"]["authorization_comment_id"],
+        amendment["supersedes"]["overlay_comment_id"],
+        amendment["authorization_evidence"]["scope_record_comment_id"],
+        amendment["authorization_evidence"]["approval_record_comment_id"],
+    }
+    if len(expected_ids) != 5:
+        _fail("scope amendment reuses an authority or history comment identity")
+
+    def checked_record(comment_id: int, digest: str, label: str,
+                       *, require_task_uid: bool = True) -> dict[str, Any]:
+        row = _unique_comment(comments, comment_id, label)
+        _human_issue_comment(row, issue_url, label)
+        if _comment_sha256(row, label) != digest:
+            _fail(f"{label} live body differs from the scope amendment reference")
+        if require_task_uid and task_uid not in str(row["body"]):
+            _fail(f"{label} does not name the exact Task UID")
+        return row
+
+    old_authorization = checked_record(
+        amendment["supersedes"]["authorization_comment_id"],
+        amendment["supersedes"]["authorization_body_sha256"],
+        "superseded user authorization record",
+        require_task_uid=False,
+    )
+    old_overlay_comment = checked_record(
+        amendment["supersedes"]["overlay_comment_id"],
+        amendment["supersedes"]["overlay_body_sha256"],
+        "superseded dependency-floor overlay",
+    )
+    scope_record = checked_record(
+        amendment["authorization_evidence"]["scope_record_comment_id"],
+        amendment["authorization_evidence"]["scope_record_body_sha256"],
+        "scope authorization record",
+    )
+    approval_record = checked_record(
+        amendment["authorization_evidence"]["approval_record_comment_id"],
+        amendment["authorization_evidence"]["approval_record_body_sha256"],
+        "direct-approval evidence record",
+    )
+    old_body = str(old_authorization["body"]).lower()
+    for term in (
+        amendment["effective_primary_package"].lower(),
+        amendment["dependency"]["name"].lower(),
+        amendment["dependency"]["base_requirement"],
+        amendment["dependency"]["previous_accepted_requirement"],
+    ):
+        if term not in old_body:
+            _fail("superseded authorization does not bind the exact prior package/dependency target")
+    approval_body = str(approval_record["body"]).lower()
+    scope_body = str(scope_record["body"]).lower()
+    for body, label in ((approval_body, "approval record"), (scope_body, "scope record")):
+        if (amendment["dependency"]["name"].lower() not in body
+                or amendment["dependency"]["replacement_requirement"] not in body):
+            _fail(f"{label} does not record the exact dependency replacement target")
+    if "user explicit approval" not in approval_body:
+        _fail("approval record does not identify the direct user approval")
+
+    old_overlay = _decode_overlay_comment(str(old_overlay_comment["body"]))
+    old_top = _object(old_overlay, {
+        "schema", "task_uid", "issue_number", "bootstrap_epoch", "snapshot_sha256",
+        "request_sha256", "acceptance_sha256", "raw_primary_package",
+        "effective_primary_package", "mode", "dependency", "base_oid", "head_oid",
+        "authorization", "reviews", "workflow",
+    }, "superseded v1 overlay")
+    old_dependency = _object(old_top["dependency"], {
+        "name", "base_requirement", "head_requirement",
+    }, "superseded dependency")
+    if (old_top["schema"] != OVERLAY_SCHEMA or old_top["task_uid"] != task_uid
+            or old_top["issue_number"] != issue_number
+            or old_top["bootstrap_epoch"] != amendment["bootstrap_epoch"]
+            or old_top["snapshot_sha256"] != amendment["snapshot_sha256"]
+            or old_top["request_sha256"] != amendment["request_sha256"]
+            or old_top["acceptance_sha256"] != amendment["acceptance_sha256"]
+            or _raw_primary(old_top["raw_primary_package"]) != amendment["raw_primary_package"]
+            or old_top["effective_primary_package"] != amendment["effective_primary_package"]
+            or old_top["mode"] != amendment["mode"]
+            or old_top["base_oid"] != amendment["supersedes"]["overlay_base_oid"]
+            or old_top["head_oid"] != amendment["supersedes"]["overlay_head_oid"]
+            or old_dependency["name"] != amendment["dependency"]["name"]
+            or old_dependency["base_requirement"] != amendment["dependency"]["base_requirement"]
+            or old_dependency["head_requirement"] != amendment["dependency"]["previous_accepted_requirement"]):
+        _fail("scope amendment does not bind the exact superseded immutable overlay")
+    old_auth = _object(old_top["authorization"], {"comment_id", "body_sha256", "scope"},
+                       "superseded overlay authorization")
+    if (old_auth["comment_id"] != amendment["supersedes"]["authorization_comment_id"]
+            or old_auth["body_sha256"] != amendment["supersedes"]["authorization_body_sha256"]):
+        _fail("scope amendment superseded authorization differs from the prior overlay")
+
+    ordered_comments = (old_overlay_comment, scope_record, approval_record, comment)
+    timestamps = [_comment_time(row, "scope amendment evidence") for row in ordered_comments]
+    if timestamps != sorted(timestamps) or len(set(timestamps)) != len(timestamps):
+        _fail("scope amendment records are not append-only in authorization order")
+    return comment, amendment
+
+
 def _decode_overlay_comment(body: str) -> dict[str, Any]:
     normalized = body.replace("\r\n", "\n")
-    if not normalized.startswith(OVERLAY_MARKER + "\n"):
+    marker = next((item for item in OVERLAY_MARKERS if normalized.startswith(item + "\n")), None)
+    if marker is None:
         _fail("overlay comment marker is malformed")
-    raw = normalized[len(OVERLAY_MARKER) + 1:]
+    raw = normalized[len(marker) + 1:]
     try:
         value = json.loads(raw, object_pairs_hook=_unique_object)
     except (ValueError, json.JSONDecodeError) as exc:
         _fail(f"overlay comment JSON is malformed: {exc}")
-    if not isinstance(value, dict) or canonical_overlay_body(value) != normalized:
+    expected_marker = OVERLAY_V2_MARKER if isinstance(value, dict) and value.get("schema") == OVERLAY_V2_SCHEMA else OVERLAY_MARKER
+    if not isinstance(value, dict) or marker != expected_marker or canonical_overlay_body(value) != normalized:
         _fail("overlay comment is not canonical immutable JSON")
     return value
 
@@ -384,18 +705,23 @@ def _validate_first_review_plan(
     issue_number: int,
     comments: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    row = _object(plan, {
+    payload = overlay["_overlay"]
+    amended = payload["schema"] == OVERLAY_V2_SCHEMA
+    expected_schema = FIRST_REVIEW_PLAN_V2_SCHEMA if amended else FIRST_REVIEW_PLAN_SCHEMA
+    expected_keys = {
         "schema", "task_uid", "issue_number", "bootstrap_epoch", "snapshot_sha256",
         "request_sha256", "acceptance_sha256", "raw_primary_package",
         "effective_primary_package", "dependency", "base_oid", "head_oid",
         "authorization", "workflow", "workflow_change_paths", "implementation_slices",
         "review_slices",
-    }, "first-activation review plan")
-    payload = overlay["_overlay"]
+    }
+    if amended:
+        expected_keys |= {"scope_amendment", "business_change_paths"}
+    row = _object(plan, expected_keys, "first-activation review plan")
     expected_workflow = {key: payload["workflow"][key]
                          for key in ("id", "path", "ref", "sha", "file_sha256")}
     expected = {
-        "schema": FIRST_REVIEW_PLAN_SCHEMA,
+        "schema": expected_schema,
         "task_uid": payload["task_uid"],
         "issue_number": issue_number,
         "bootstrap_epoch": payload["bootstrap_epoch"],
@@ -411,6 +737,9 @@ def _validate_first_review_plan(
         "workflow": expected_workflow,
         "workflow_change_paths": payload["workflow"]["change_paths"],
     }
+    if amended:
+        expected["scope_amendment"] = payload["scope_amendment"]
+        expected["business_change_paths"] = payload["business_change_paths"]
     if any(row[key] != value for key, value in expected.items()):
         _fail("first-activation review plan differs from the exact Task/overlay/workflow binding")
     implementation = row["implementation_slices"]
@@ -501,16 +830,19 @@ def _comment_time(comment: dict[str, Any], label: str) -> datetime:
 def _plan_comment(
     comments: list[dict[str, Any]], issue_url: str, overlay: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    marked = [item for item in comments if isinstance(item.get("body"), str)
-              and FIRST_REVIEW_PLAN_MARKER in item["body"]]
     source = overlay.get("_overlay", overlay)
+    amended = source.get("schema") == OVERLAY_V2_SCHEMA
+    plan_schema = FIRST_REVIEW_PLAN_V2_SCHEMA if amended else FIRST_REVIEW_PLAN_SCHEMA
+    plan_marker = FIRST_REVIEW_PLAN_V2_MARKER if amended else FIRST_REVIEW_PLAN_MARKER
+    marked = [item for item in comments if isinstance(item.get("body"), str)
+              and item["body"].replace("\r\n", "\n").startswith(plan_marker + "\n")]
     issue_number_match = re.fullmatch(
         r"https://api\.github\.com/repos/[^/]+/[^/]+/issues/([1-9][0-9]*)", issue_url,
     )
     if not issue_number_match:
         _fail("first-activation review plan Issue URL is malformed")
     identity = {
-        "schema": FIRST_REVIEW_PLAN_SCHEMA,
+        "schema": plan_schema,
         "task_uid": source.get("task_uid"),
         "issue_number": int(issue_number_match.group(1)),
         "bootstrap_epoch": source.get("bootstrap_epoch"),
@@ -523,7 +855,7 @@ def _plan_comment(
     matches: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for comment in marked:
         _human_issue_comment(comment, issue_url, "first-activation review plan")
-        plan = _decode_marked_json(str(comment["body"]), FIRST_REVIEW_PLAN_MARKER,
+        plan = _decode_marked_json(str(comment["body"]), plan_marker,
                                    "first-activation review plan")
         if not isinstance(plan, dict):
             _fail("first-activation review plan must be an object")
@@ -576,10 +908,27 @@ def _validate_referenced_evidence(
     uid = fields["task_uid"]
     head = fields["head_oid"]
     auth = fields["authorization"]
+    scope_amendment_comment = None
+    if fields["schema"] == OVERLAY_V2_SCHEMA:
+        scope_amendment_comment, amendment = _validated_scope_amendment(
+            comments,
+            issue_url=canonical_issue_url,
+            task_uid=uid,
+            issue_number=issue_number,
+            overlay_ref=fields["scope_amendment"],
+        )
+        validate_overlay(
+            fields, task_uid=uid, issue_number=issue_number,
+            base_oid=overlay["base_oid"], head_oid=overlay["head_oid"],
+            scope_amendment=amendment,
+        )
     plan_comment, plan_payload, plan_sha = _plan_comment(comments, canonical_issue_url, overlay)
     plan = _validate_first_review_plan(plan_payload, overlay, repository=repository,
                                        issue_number=issue_number, comments=comments)
     plan_time = _comment_time(plan_comment, "first-activation review plan")
+    if (scope_amendment_comment is not None
+            and _comment_time(scope_amendment_comment, "scope amendment") >= plan_time):
+        _fail("scope amendment must precede the frozen v2 review plan")
     auth_comment = _unique_comment(comments, auth["comment_id"], "user authorization")
     if auth_comment.get("issue_url") != canonical_issue_url:
         _fail("user authorization is attached to a different Issue")
@@ -647,9 +996,13 @@ def _validate_referenced_evidence(
         if (_comment_time(plan_comment, f"{role} review plan") >= _comment_time(returned_comment, f"{role} typed return")
                 or _comment_time(returned_comment, f"{role} typed return") >= _comment_time(comment, f"{role} review")):
             _fail(f"{role} typed return must follow the plan and precede its review envelope")
-    expected_terms = (package, dependency["name"], dependency["head_requirement"])
-    if any(term not in auth_body for term in expected_terms):
-        _fail("user authorization does not name the exact package and dependency floor")
+    if fields["schema"] == OVERLAY_SCHEMA:
+        expected_terms = (package, dependency["name"], dependency["head_requirement"])
+        if any(term not in auth_body for term in expected_terms):
+            _fail("user authorization does not name the exact package and dependency floor")
+    elif (dependency["name"].lower() not in auth_body.lower()
+          or dependency["head_requirement"] not in auth_body):
+        _fail("direct-approval evidence does not name the exact dependency replacement")
 
 
 def read_issue_overlay(
@@ -669,10 +1022,14 @@ def read_issue_overlay(
     comments = _comments(client, repository, int(issue["number"]))
     history = _validated_overlay_history(repository, issue, comments, task_uid, base_oid)
     current = [(comment, payload, parsed) for comment, payload, parsed in history
-               if payload["head_oid"] == head_oid]
+               if payload["base_oid"] == base_oid and payload["head_oid"] == head_oid]
     if len(current) != 1:
         _fail("Task Issue must contain exactly one dependency-floor overlay for the exact current head")
     comment, payload, parsed = current[0]
+    if any(isinstance(item.get("body"), str)
+           and item["body"].replace("\r\n", "\n").startswith(SCOPE_AMENDMENT_MARKER + "\n")
+           for item in comments) and payload["schema"] != OVERLAY_V2_SCHEMA:
+        _fail("prior v1 dependency-floor target is superseded by a live scope amendment")
     if history[-1][0]["id"] != comment["id"]:
         _fail("an older dependency-floor overlay cannot authorize a superseded head")
     parsed["overlay_comment_id"] = int(comment["id"])
@@ -684,7 +1041,7 @@ def read_issue_overlay(
 def _overlay_lineage(payload: dict[str, Any]) -> dict[str, Any]:
     """Return the authority that must stay fixed across pre-activation head retries."""
     workflow = payload["workflow"]
-    return {
+    lineage = {
         "schema": payload["schema"],
         "task_uid": payload["task_uid"],
         "issue_number": payload["issue_number"],
@@ -708,6 +1065,13 @@ def _overlay_lineage(payload: dict[str, Any]) -> dict[str, Any]:
             ],
         },
     }
+    if payload["schema"] == OVERLAY_V2_SCHEMA:
+        lineage["scope_amendment"] = payload["scope_amendment"]
+        lineage["business_path_bases"] = [
+            {"path": row["path"], "base_sha256": row["base_sha256"]}
+            for row in payload["business_change_paths"]
+        ]
+    return lineage
 
 
 def _validate_overlay_comment_order(
@@ -719,6 +1083,8 @@ def _validate_overlay_comment_order(
     referenced_ids = {payload["authorization"]["comment_id"],
                       payload["reviews"]["repository_health"]["comment_id"],
                       payload["reviews"]["qa"]["comment_id"]}
+    if payload["schema"] == OVERLAY_V2_SCHEMA:
+        referenced_ids.add(payload["scope_amendment"]["comment_id"])
     if int(comment["id"]) in referenced_ids:
         _fail("overlay cannot reference itself as authority evidence")
     plan_comment, _, _ = _plan_comment(
@@ -739,31 +1105,93 @@ def _validated_overlay_history(
     task_uid: str, base_oid: str,
 ) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]:
     marked = [item for item in comments if isinstance(item.get("body"), str)
-              and item["body"].replace("\r\n", "\n").startswith(OVERLAY_MARKER)]
+              and any(item["body"].replace("\r\n", "\n").startswith(marker + "\n")
+                      for marker in OVERLAY_MARKERS)]
     if not marked:
         _fail("Task Issue has no dependency-floor overlay history")
+    issue_number = int(issue["number"])
+    issue_url = f"https://api.github.com/repos/{repository}/issues/{issue_number}"
+    amendment_comments = [item for item in comments if isinstance(item.get("body"), str)
+                          and item["body"].replace("\r\n", "\n").startswith(SCOPE_AMENDMENT_MARKER + "\n")]
+    if len(amendment_comments) > 1:
+        _fail("Task Issue contains multiple scope amendments")
+    amendment_comment = amendment_comments[0] if amendment_comments else None
+    amendment: dict[str, Any] | None = None
+    if amendment_comment is not None:
+        amendment_ref = {
+            "comment_id": amendment_comment.get("id"),
+            "body_sha256": _comment_sha256(amendment_comment, "scope amendment"),
+        }
+        amendment_comment, amendment = _validated_scope_amendment(
+            comments, issue_url=issue_url, task_uid=task_uid,
+            issue_number=issue_number, overlay_ref=amendment_ref,
+        )
     history: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
-    seen_heads: set[str] = set()
-    lineage: dict[str, Any] | None = None
-    for comment in sorted(marked, key=lambda row: row["id"]):
+    seen_ranges: set[tuple[str, str]] = set()
+    for comment in sorted(marked, key=lambda row: row.get("id", -1)):
+        if type(comment.get("id")) is not int or comment["id"] < 1:
+            _fail("dependency-floor overlay history has an invalid comment identity")
         payload = _decode_overlay_comment(comment["body"])
-        if payload.get("base_oid") != base_oid:
-            _fail("dependency-floor overlay history changes the approved base binding")
+        if payload.get("schema") == OVERLAY_V2_SCHEMA:
+            if amendment is None or amendment_comment is None:
+                _fail("v2 dependency-floor overlay has no live scope amendment")
+            if comment["id"] <= amendment_comment["id"]:
+                _fail("v2 dependency-floor overlay predates its scope amendment")
+            scope_amendment = amendment
+        elif payload.get("schema") == OVERLAY_SCHEMA:
+            if amendment_comment is not None and comment["id"] >= amendment_comment["id"]:
+                _fail("superseded v1 overlay was appended after the v2 scope amendment")
+            scope_amendment = None
+        else:
+            _fail("dependency-floor overlay history contains an unsupported schema")
         historical_head = payload.get("head_oid")
-        if not isinstance(historical_head, str) or not OID_RE.fullmatch(historical_head):
-            _fail("dependency-floor overlay history has a malformed frozen head")
-        if historical_head in seen_heads:
-            _fail("Task Issue contains duplicate dependency-floor overlays for one frozen head")
-        seen_heads.add(historical_head)
-        parsed = validate_overlay(payload, task_uid=task_uid, issue_number=int(issue["number"]),
-                                  base_oid=base_oid, head_oid=historical_head)
-        identity = _overlay_lineage(payload)
-        if lineage is None:
-            lineage = identity
-        elif identity != lineage:
-            _fail("dependency-floor overlay history changes immutable Task, authorization, package, floor, or workflow scope")
+        historical_base = payload.get("base_oid")
+        if (not isinstance(historical_head, str) or not OID_RE.fullmatch(historical_head)
+                or not isinstance(historical_base, str) or not OID_RE.fullmatch(historical_base)):
+            _fail("dependency-floor overlay history has a malformed frozen base/head")
+        key = (historical_base, historical_head)
+        if key in seen_ranges:
+            _fail("Task Issue contains duplicate dependency-floor overlays for one frozen base/head")
+        seen_ranges.add(key)
+        parsed = validate_overlay(
+            payload, task_uid=task_uid, issue_number=issue_number,
+            base_oid=historical_base, head_oid=historical_head,
+            scope_amendment=scope_amendment,
+        )
         _validate_overlay_comment_order(comment, payload, parsed, comments, repository, issue)
         history.append((comment, payload, parsed))
+
+    def require_one_lineage(rows: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]], label: str) -> None:
+        if not rows:
+            _fail(f"dependency-floor {label} history is empty")
+        expected = _overlay_lineage(rows[0][1])
+        if any(_overlay_lineage(row[1]) != expected for row in rows[1:]):
+            _fail(f"dependency-floor {label} history changes immutable Task, authorization, package, floor, or workflow scope")
+
+    v1_rows = [row for row in history if row[1]["schema"] == OVERLAY_SCHEMA]
+    v2_rows = [row for row in history if row[1]["schema"] == OVERLAY_V2_SCHEMA]
+    if amendment is None:
+        if any(row[1]["base_oid"] != base_oid for row in history):
+            _fail("dependency-floor v1 history changes the approved base binding")
+        require_one_lineage(history, "v1")
+    else:
+        if not v1_rows:
+            _fail("scope amendment has no immutable prior v1 overlay history")
+        require_one_lineage(v1_rows, "superseded v1")
+        superseded = [row for row in v1_rows
+                      if row[0]["id"] == amendment["supersedes"]["overlay_comment_id"]]
+        if (len(superseded) != 1
+                or _comment_time(amendment_comment, "scope amendment")
+                <= _comment_time(superseded[0][0], "superseded v1 overlay")):
+            _fail("scope amendment does not supersede its exact prior v1 overlay")
+        if any(isinstance(item.get("body"), str)
+               and item["body"].replace("\r\n", "\n").startswith(ACTIVATION_MARKER + "\n")
+               for item in comments):
+            _fail("activated dependency-floor history cannot be superseded by a scope amendment")
+        if v2_rows:
+            require_one_lineage(v2_rows, "amended v2")
+            if any(row[1]["base_oid"] != base_oid for row in v2_rows):
+                _fail("amended v2 overlay history changes the current trusted base")
     return history
 
 
@@ -775,7 +1203,8 @@ def has_issue_overlay(repo_root: pathlib.Path, repository: str, task_uid: str,
     issue = _issue_by_uid(client, repository, task_uid)
     comments = _comments(client, repository, int(issue["number"]))
     return any(isinstance(item.get("body"), str)
-               and item["body"].replace("\r\n", "\n").startswith(OVERLAY_MARKER)
+               and any(item["body"].replace("\r\n", "\n").startswith(marker)
+                       for marker in OVERLAY_MARKERS)
                for item in comments)
 
 
@@ -795,9 +1224,19 @@ def _read_live_activation_proof(
     if "sha256:" + hashlib.sha256(overlay_body.encode("utf-8")).hexdigest() != overlay.get("overlay_sha256"):
         _fail("live overlay bytes differ from the exact validated overlay")
     overlay_payload = _decode_overlay_comment(str(overlay_comment["body"]))
+    scope_amendment = None
+    if overlay_payload.get("schema") == OVERLAY_V2_SCHEMA:
+        _, scope_amendment = _validated_scope_amendment(
+            comments,
+            issue_url=f"https://api.github.com/repos/{repository}/issues/{overlay['issue_number']}",
+            task_uid=task_uid,
+            issue_number=overlay["issue_number"],
+            overlay_ref=overlay_payload["scope_amendment"],
+        )
     context = validate_overlay(
         overlay_payload, task_uid=task_uid, issue_number=overlay["issue_number"],
         base_oid=overlay["base_oid"], head_oid=overlay["head_oid"],
+        scope_amendment=scope_amendment,
     )
     context["overlay_comment_id"] = int(overlay_comment["id"])
     context["overlay_sha256"] = "sha256:" + hashlib.sha256(overlay_body.encode("utf-8")).hexdigest()
@@ -1807,7 +2246,7 @@ def read_project_activation_marker(
         if (comment.get("issue_url") != expected_issue_url
                 or not isinstance(comment.get("body"), str)):
             _fail("Task Issue comments are malformed or bound to another Issue")
-    markers = (OVERLAY_MARKER, ACTIVATION_MARKER)
+    markers = (*OVERLAY_MARKERS, ACTIVATION_MARKER)
     return any(
         isinstance(comment.get("body"), str)
         and any(comment["body"].replace("\r\n", "\n").startswith(marker)
@@ -1872,9 +2311,23 @@ def _validate_payload_snapshot(payload: dict[str, Any], binding: dict[str, Any],
     issue_number = binding["task"]["issue_number"]
     raw = {"present": "primary_package" in snapshot_task,
            "value": snapshot_task.get("primary_package")}
+    comments = _comments(binding["client"], binding["task"]["repository"], issue_number)
+    amendment = None
+    if payload.get("schema") == OVERLAY_V2_SCHEMA:
+        _, amendment = _validated_scope_amendment(
+            comments,
+            issue_url=f"https://api.github.com/repos/{binding['task']['repository']}/issues/{issue_number}",
+            task_uid=str(snapshot_task.get("uid") or ""), issue_number=issue_number,
+            overlay_ref=payload.get("scope_amendment"),
+        )
+    elif any(isinstance(item.get("body"), str)
+             and item["body"].replace("\r\n", "\n").startswith(SCOPE_AMENDMENT_MARKER + "\n")
+             for item in comments):
+        _fail("prior v1 dependency-floor target is superseded by a live scope amendment")
     parsed = validate_overlay(payload, task_uid=str(snapshot_task.get("uid") or ""),
                               issue_number=issue_number, base_oid=base_oid,
-                              head_oid=head_oid, expected_raw_primary=raw)
+                              head_oid=head_oid, expected_raw_primary=raw,
+                              scope_amendment=amendment)
     expected_snapshot_sha = "sha256:" + str(snapshot.get("digest", "")).removeprefix("sha256:")
     request_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("identity"))).hexdigest()
     acceptance_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("acceptance"))).hexdigest()
@@ -1900,13 +2353,20 @@ def _validate_payload_snapshot(payload: dict[str, Any], binding: dict[str, Any],
     if actual_nonbusiness != workflow_paths:
         _fail("overlay workflow path set differs from actual reviewed first-activation changes")
     business_paths = sorted(set(changed) - set(workflow_paths))
-    manifests = [path for path in business_paths if path.endswith("/Cargo.toml") and path != "Cargo.toml"]
-    if business_paths != sorted(["Cargo.lock", *manifests]) or len(manifests) != 1:
-        _fail("first-activation source changes are not exactly Cargo.lock and one package manifest")
+    if amendment is None:
+        manifests = [path for path in business_paths if path.endswith("/Cargo.toml") and path != "Cargo.toml"]
+        if business_paths != sorted(["Cargo.lock", *manifests]) or len(manifests) != 1:
+            _fail("first-activation source changes are not exactly Cargo.lock and one package manifest")
+    elif business_paths != amendment["approved_business_paths"]:
+        _fail("first-activation business paths differ from the exact typed scope amendment")
     for row in workflow_rows:
         for commit, field in ((base_oid, "base_sha256"), (head_oid, "head_sha256")):
             if _git_blob_sha256(binding["root"], commit, row["path"]) != row[field]:
                 _fail(f"overlay workflow path digest differs from frozen {field}: {row['path']}")
+    for row in payload.get("business_change_paths", []):
+        for commit, field in ((base_oid, "base_sha256"), (head_oid, "head_sha256")):
+            if _git_blob_sha256(binding["root"], commit, row["path"]) != row[field]:
+                _fail(f"overlay business path digest differs from frozen {field}: {row['path']}")
     workflow = payload["workflow"]
     if workflow["file_sha256"] != _git_blob_sha256(binding["root"], head_oid, workflow["path"]):
         _fail("overlay workflow file digest differs from frozen candidate bytes")
@@ -2020,15 +2480,21 @@ def publish_overlay(
            for item in comments):
         _fail("activated dependency-floor history cannot start another first-activation sequence")
     existing_overlays = [item for item in comments if isinstance(item.get("body"), str)
-                         and item["body"].replace("\r\n", "\n").startswith(OVERLAY_MARKER)]
+                         and any(item["body"].replace("\r\n", "\n").startswith(marker + "\n")
+                                 for marker in OVERLAY_MARKERS)]
     if existing_overlays:
         history = _validated_overlay_history(
             repository, binding["issue"], comments, task_uid, base_oid,
         )
         if any(row[1]["head_oid"] == head_oid for row in history):
             _fail("dependency-floor overlay for this frozen head already exists and cannot be replaced")
-        if _overlay_lineage(history[0][1]) != _overlay_lineage(payload):
-            _fail("new dependency-floor overlay changes immutable Task, authorization, package, floor, or workflow scope")
+        if payload.get("schema") == OVERLAY_SCHEMA:
+            if _overlay_lineage(history[0][1]) != _overlay_lineage(payload):
+                _fail("new dependency-floor overlay changes immutable Task, authorization, package, floor, or workflow scope")
+        else:
+            prior_v2 = [row for row in history if row[1]["schema"] == OVERLAY_V2_SCHEMA]
+            if prior_v2 and _overlay_lineage(prior_v2[-1][1]) != _overlay_lineage(payload):
+                _fail("new v2 overlay changes immutable amended Task, authorization, target, or workflow scope")
     parsed["_overlay"] = payload
     _validate_referenced_evidence(repository, binding["issue"], comments, parsed)
     body = canonical_overlay_body(payload)
@@ -2228,8 +2694,18 @@ def read_project_overlay(
     overlay_payload = _decode_overlay_comment(str(comment["body"]))
     expected_raw = {"present": "primary_package" in (snapshot.get("task") or {}),
                     "value": (snapshot.get("task") or {}).get("primary_package")}
+    review_comments = _comments(client, repository, task["issue_number"])
+    amendment = None
+    if overlay_payload.get("schema") == OVERLAY_V2_SCHEMA:
+        _, amendment = _validated_scope_amendment(
+            review_comments,
+            issue_url=f"https://api.github.com/repos/{repository}/issues/{task['issue_number']}",
+            task_uid=task_uid, issue_number=task["issue_number"],
+            overlay_ref=overlay_payload.get("scope_amendment"),
+        )
     validate_overlay(overlay_payload, task_uid=task_uid, issue_number=task["issue_number"],
-                     base_oid=base_oid, head_oid=head_oid, expected_raw_primary=expected_raw)
+                     base_oid=base_oid, head_oid=head_oid, expected_raw_primary=expected_raw,
+                     scope_amendment=amendment)
     expected_snapshot_sha = "sha256:" + str(snapshot.get("digest", "")).removeprefix("sha256:")
     if overlay_payload["snapshot_sha256"] != expected_snapshot_sha:
         _fail("overlay does not bind the immutable bootstrap snapshot")
@@ -2239,7 +2715,6 @@ def read_project_overlay(
     acceptance_sha = "sha256:" + hashlib.sha256(_canonical(request_snapshot.get("acceptance"))).hexdigest()
     if overlay_payload["request_sha256"] != request_sha or overlay_payload["acceptance_sha256"] != acceptance_sha:
         _fail("overlay request or acceptance digest differs from immutable snapshot")
-    review_comments = _comments(client, repository, task["issue_number"])
     _validate_local_review_artifacts(worktree, repository, task_uid, task["project_item_id"],
                                      overlay_payload, review_comments)
     parsed.pop("_overlay", None)

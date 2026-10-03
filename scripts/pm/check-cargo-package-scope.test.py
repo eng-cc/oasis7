@@ -20,6 +20,7 @@ self-contained and cannot accidentally depend on a production fixture.
 from __future__ import annotations
 
 import json
+import hashlib
 import importlib.machinery
 import importlib.util
 import subprocess
@@ -2076,9 +2077,11 @@ path = "src/lib.rs"
 
 
 class DependencyFloorManifestContract(unittest.TestCase):
-    def _allowed(self, old: str, new: str, old_req: str, new_req: str) -> bool:
+    def _allowed(self, old: str, new: str, old_req: str, new_req: str,
+                 *, allow_non_patch: bool = False) -> bool:
         return CHECKER_MODULE.dependency_floor_manifest_delta_is_exact(
-            old.encode(), new.encode(), "wasmtime", old_req, new_req
+            old.encode(), new.encode(), "wasmtime", old_req, new_req,
+            allow_non_patch=allow_non_patch,
         )
 
     def test_one_existing_plain_registry_requirement_patch_floor_is_allowed(self) -> None:
@@ -2110,6 +2113,14 @@ class DependencyFloorManifestContract(unittest.TestCase):
                 new = old.replace('"48.0.3"', f'"{new_req}"')
                 self.assertFalse(self._allowed(old, new, "48.0.3", new_req))
 
+    def test_major_floor_raise_requires_explicit_amended_scope(self) -> None:
+        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n'''
+        new = old.replace('"48.0.3"', '"49.0.2"')
+        self.assertFalse(self._allowed(old, new, "48.0.3", "49.0.2"))
+        self.assertTrue(self._allowed(old, new, "48.0.3", "49.0.2", allow_non_patch=True))
+        self.assertFalse(CHECKER_MODULE.canonical_dependency_floor_update_pair("49.0.2", "48.0.4"))
+        self.assertFalse(CHECKER_MODULE.canonical_dependency_floor_update_pair("48.0.3", "49.0.02"))
+
     def test_rejects_duplicate_target_specific_or_non_normal_dependency(self) -> None:
         normal = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n\n[target.'cfg(windows)'.dependencies]\nwasmtime = "48.0.3"\n'''
         updated = normal.replace('wasmtime = "48.0.3"', 'wasmtime = "48.0.4"', 1)
@@ -2119,6 +2130,97 @@ class DependencyFloorManifestContract(unittest.TestCase):
             self._allowed(dev, dev.replace("48.0.3", "48.0.4"), "48.0.3", "48.0.4")
         )
 
+
+class AmendedDependencyFloorPathContract(unittest.TestCase):
+    def _scope(self) -> dict[str, object]:
+        paths = [
+            "Cargo.lock",
+            "crates/alpha/Cargo.toml",
+            "crates/alpha/src/lib.rs",
+            "crates/alpha/tests/fuel.rs",
+        ]
+        return {
+            "schema": CHECKER_MODULE.DEPENDENCY_FLOOR_OVERLAY_V2,
+            "approved_business_paths": paths,
+            "business_change_paths": [
+                {"path": path, "base_sha256": "sha256:" + "a" * 64,
+                 "head_sha256": "sha256:" + "b" * 64}
+                for path in paths
+            ],
+        }
+
+    def test_v2_partition_matches_actual_changed_paths_and_effective_manifest(self) -> None:
+        scope = self._scope()
+        workflow = {"scripts/pm/check-cargo-package-scope",
+                    "scripts/pm/check-cargo-package-scope.test.py"}
+        changed = sorted(workflow | set(scope["approved_business_paths"]))
+        self.assertEqual(
+            CHECKER_MODULE.validate_first_activation_path_partition(
+                scope, "crates/alpha/Cargo.toml", workflow, changed,
+            ),
+            set(scope["approved_business_paths"]),
+        )
+
+    def test_v2_partition_rejects_unapproved_missing_and_foreign_package_paths(self) -> None:
+        workflow = {"scripts/pm/check-cargo-package-scope"}
+        for mutate, changed in (
+            (lambda scope: None, ["Cargo.lock", "crates/alpha/Cargo.toml", "scripts/extra.py"]),
+            (lambda scope: scope["approved_business_paths"].pop(),
+             ["Cargo.lock", "crates/alpha/Cargo.toml", "crates/alpha/src/lib.rs",
+              "scripts/pm/check-cargo-package-scope"]),
+            (lambda scope: scope["approved_business_paths"].append("crates/beta/src/lib.rs"),
+             ["Cargo.lock", "crates/alpha/Cargo.toml", "crates/alpha/src/lib.rs",
+              "crates/beta/src/lib.rs", "scripts/pm/check-cargo-package-scope"]),
+        ):
+            scope = self._scope()
+            mutate(scope)
+            with self.subTest(scope=scope), self.assertRaises(CHECKER_MODULE.ScopeError):
+                CHECKER_MODULE.validate_first_activation_path_partition(
+                    scope, "crates/alpha/Cargo.toml", workflow, changed,
+                )
+
+    def test_v2_business_digests_match_real_frozen_base_and_head_blobs(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="amended-business-paths-") as temp:
+            repo = Path(temp)
+            self._git(repo, "init", "-q", "-b", "main")
+            self._git(repo, "config", "user.email", "qa@example.invalid")
+            self._git(repo, "config", "user.name", "Amendment QA")
+            scope = self._scope()
+            paths = scope["approved_business_paths"]
+            for path in paths:
+                target = repo / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("base:" + path + "\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-qm", "base blobs")
+            base = self._git(repo, "rev-parse", "HEAD")
+            for path in paths:
+                (repo / path).write_text("head:" + path + "\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-qm", "head blobs")
+            head = self._git(repo, "rev-parse", "HEAD")
+            scope["business_change_paths"] = [
+                {
+                    "path": path,
+                    "base_sha256": "sha256:" + hashlib.sha256(
+                        CHECKER_MODULE.git_blob(repo, base, path)
+                    ).hexdigest(),
+                    "head_sha256": "sha256:" + hashlib.sha256(
+                        CHECKER_MODULE.git_blob(repo, head, path)
+                    ).hexdigest(),
+                }
+                for path in paths
+            ]
+            CHECKER_MODULE.validate_business_path_digests(repo, base, head, scope)
+            scope["business_change_paths"][2]["head_sha256"] = "sha256:" + "c" * 64
+            with self.assertRaisesRegex(CHECKER_MODULE.ScopeError, "business path digest differs"):
+                CHECKER_MODULE.validate_business_path_digests(repo, base, head, scope)
+
+    def _git(self, repo: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
+        )
+        return result.stdout.strip()
 
 class DependencyFloorGraphContract(unittest.TestCase):
     registry = "registry+https://github.com/rust-lang/crates.io-index"

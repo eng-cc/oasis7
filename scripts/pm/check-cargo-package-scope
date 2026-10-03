@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
+import hashlib
 import io
 import json
 import os
@@ -32,6 +33,7 @@ AUXILIARY_REGISTRY_PATH = ".pm/cargo-package-auxiliary-files.json"
 AUXILIARY_REGISTRY_SCHEMA = "oasis7-cargo-package-auxiliary-files/v1"
 CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
 DEPENDENCY_FLOOR_MODE = "dependency_floor_update"
+DEPENDENCY_FLOOR_OVERLAY_V2 = "oasis7-cargo-dependency-floor-overlay/v2"
 PINNED_CARGO_VERSION = "1.96.0"
 STABLE_TRIPLE = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z", re.ASCII)
 
@@ -89,6 +91,13 @@ def canonical_dependency_floor_pair(base_requirement: str, head_requirement: str
     )
 
 
+def canonical_dependency_floor_update_pair(base_requirement: str, head_requirement: str) -> bool:
+    """Accept any strictly increasing canonical stable triplet for exact amended scope only."""
+    base = stable_version_tuple(base_requirement)
+    head = stable_version_tuple(head_requirement)
+    return base is not None and head is not None and head > base
+
+
 def _manifest_dependency_entries(text: str, dependency_name: str) -> list[tuple[str, str]]:
     """Find literal dependency assignments while retaining their Cargo table."""
     section: str | None = None
@@ -130,6 +139,8 @@ def dependency_floor_manifest_delta_is_exact(
     dependency_name: str,
     base_requirement: str,
     head_requirement: str,
+    *,
+    allow_non_patch: bool = False,
 ) -> bool:
     """Accept exactly one existing direct crates.io version-string edit.
 
@@ -140,7 +151,8 @@ def dependency_floor_manifest_delta_is_exact(
     if (
         not isinstance(dependency_name, str)
         or not dependency_name
-        or not canonical_dependency_floor_pair(base_requirement, head_requirement)
+        or not (canonical_dependency_floor_update_pair(base_requirement, head_requirement)
+                if allow_non_patch else canonical_dependency_floor_pair(base_requirement, head_requirement))
     ):
         return False
     try:
@@ -564,6 +576,10 @@ def read_first_activation_scope(
         raise ScopeError("first_activation_overlay_invalid", str(exc)[:1000]) from exc
     if (
         not isinstance(scope, dict)
+        or scope.get("schema") not in {
+            "oasis7-cargo-dependency-floor-overlay/v1",
+            DEPENDENCY_FLOOR_OVERLAY_V2,
+        }
         or scope.get("task_uid") != task_uid
         or scope.get("mode") != DEPENDENCY_FLOOR_MODE
         or scope.get("base_oid") != base_oid
@@ -576,7 +592,80 @@ def read_first_activation_scope(
         or not isinstance(scope.get("workflow_change_paths"), list)
     ):
         raise ScopeError("first_activation_overlay_invalid", "reader returned an incomplete or non-validation binding")
+    if scope["schema"] == DEPENDENCY_FLOOR_OVERLAY_V2:
+        business_paths = scope.get("approved_business_paths")
+        rows = scope.get("business_change_paths")
+        if (not isinstance(business_paths, list) or not business_paths
+                or business_paths != sorted(set(business_paths))
+                or not isinstance(rows, list) or [row.get("path") for row in rows
+                                                   if isinstance(row, dict)] != business_paths):
+            raise ScopeError("first_activation_business_paths_invalid", "amended business path binding is incomplete")
     return scope
+
+
+def business_change_path_rows(scope: dict[str, Any]) -> list[dict[str, str]]:
+    rows = scope.get("business_change_paths")
+    approved = scope.get("approved_business_paths")
+    if (not isinstance(rows, list) or not rows or not isinstance(approved, list)
+            or approved != sorted(set(approved))):
+        raise ScopeError("first_activation_business_paths_invalid", "amended business path binding is malformed")
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"path", "base_sha256", "head_sha256"}:
+            raise ScopeError("first_activation_business_paths_invalid", "business path digest row is malformed")
+        path = row.get("path")
+        if not isinstance(path, str) or safe_relative(path) != path:
+            raise ScopeError("first_activation_business_paths_invalid", "business path is not normalized")
+        for key in ("base_sha256", "head_sha256"):
+            if not isinstance(row.get(key), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", row[key]):
+                raise ScopeError("first_activation_business_paths_invalid", f"{key} is malformed for {path}")
+        normalized.append({"path": path, "base_sha256": row["base_sha256"],
+                           "head_sha256": row["head_sha256"]})
+    if ([row["path"] for row in normalized] != approved
+            or normalized != sorted(normalized, key=lambda row: row["path"])):
+        raise ScopeError("first_activation_business_paths_invalid", "business path digests differ from approved paths")
+    return normalized
+
+
+def first_activation_business_path_set(scope: dict[str, Any], manifest_path: str) -> set[str]:
+    if scope.get("schema") != DEPENDENCY_FLOOR_OVERLAY_V2:
+        return {"Cargo.lock", manifest_path}
+    rows = business_change_path_rows(scope)
+    paths = set(scope["approved_business_paths"])
+    if "Cargo.lock" not in paths or manifest_path not in paths:
+        raise ScopeError("first_activation_business_paths_invalid", "amendment omits Cargo.lock or effective package manifest")
+    package_root = str(Path(manifest_path).parent).replace("\\", "/")
+    for path in paths - {"Cargo.lock", manifest_path}:
+        if not path.startswith(package_root + "/"):
+            raise ScopeError("first_activation_business_paths_invalid", "amendment source path escapes the effective package")
+    if len(rows) != len(paths):
+        raise ScopeError("first_activation_business_paths_invalid", "amended business path set is incomplete")
+    return paths
+
+
+def validate_first_activation_path_partition(
+    scope: dict[str, Any], manifest_path: str,
+    workflow_paths: set[str], changed: list[str],
+) -> set[str]:
+    business_paths = first_activation_business_path_set(scope, manifest_path)
+    if business_paths & workflow_paths:
+        raise ScopeError("first_activation_workflow_paths_invalid", "workflow binding overlaps Cargo business paths")
+    if set(changed) != business_paths | workflow_paths or len(changed) != len(set(changed)):
+        raise ScopeError(
+            "first_activation_changed_paths_invalid",
+            "changed paths must equal the bound workflow set and exact authorized business path set",
+        )
+    return business_paths
+
+
+def validate_business_path_digests(repo: Path, base: str, head: str,
+                                   scope: dict[str, Any]) -> None:
+    for row in business_change_path_rows(scope):
+        for revision, field in ((base, "base_sha256"), (head, "head_sha256")):
+            blob = git_blob(repo, revision, row["path"])
+            digest = None if blob is None else "sha256:" + hashlib.sha256(blob).hexdigest()
+            if digest != row[field]:
+                raise ScopeError("first_activation_business_paths_invalid", f"business path digest differs from frozen {field}: {row['path']}")
 
 
 def workflow_change_path_set(scope: dict[str, Any]) -> set[str]:
@@ -613,10 +702,14 @@ def evaluate_first_activation_dependency_floor(
     if renames:
         raise ScopeError("first_activation_changed_paths_invalid", "renames are not permitted")
     effective_package = scope["effective_primary_package"]
+    amended = scope.get("schema") == DEPENDENCY_FLOOR_OVERLAY_V2
     dependency_name = scope["dependency_name"]
     base_requirement, head_requirement = scope["base_requirement"], scope["head_requirement"]
-    if not canonical_dependency_floor_pair(base_requirement, head_requirement):
-        raise ScopeError("dependency_floor_manifest_invalid", "overlay requirements are not a canonical patch-floor raise")
+    valid_pair = (canonical_dependency_floor_update_pair(base_requirement, head_requirement)
+                  if amended else canonical_dependency_floor_pair(base_requirement, head_requirement))
+    if not valid_pair:
+        detail = "exact amended target is not a canonical increasing stable version" if amended else "overlay requirements are not a canonical patch-floor raise"
+        raise ScopeError("dependency_floor_manifest_invalid", detail)
 
     workflow_paths = workflow_change_path_set(scope)
     if not {
@@ -669,14 +762,11 @@ def evaluate_first_activation_dependency_floor(
         ):
             raise ScopeError("first_activation_package_invalid", "effective package identity is not stable in the workspace")
 
-        business_paths = {"Cargo.lock", head_manifest_path}
-        if set(changed) != business_paths | workflow_paths or len(changed) != len(set(changed)):
-            raise ScopeError(
-                "first_activation_changed_paths_invalid",
-                "changed paths must equal the bound workflow set plus root Cargo.lock and the effective package manifest",
-            )
-        if business_paths & workflow_paths:
-            raise ScopeError("first_activation_workflow_paths_invalid", "workflow binding overlaps Cargo business paths")
+        if amended:
+            validate_business_path_digests(repo, base, head, scope)
+        business_paths = validate_first_activation_path_partition(
+            scope, head_manifest_path, workflow_paths, changed,
+        )
 
         old_manifest = git_blob(repo, base, base_manifest_path)
         new_manifest = git_blob(repo, head, head_manifest_path)
@@ -691,6 +781,7 @@ def evaluate_first_activation_dependency_floor(
                 dependency_name,
                 base_requirement,
                 head_requirement,
+                allow_non_patch=amended,
             )
         ):
             raise ScopeError("dependency_floor_manifest_invalid", "manifest is not the exact bound dependency-floor edit")
