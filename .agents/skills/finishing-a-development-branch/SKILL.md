@@ -11,8 +11,7 @@ TPM is the coordinator/integrator for this sequence. Gate meanings, retry/dispos
 
 ## When to Use
 
-Use after verified implementation or a classified non-merge outcome; `not_planned` may enter this route from bootstrap, planning, or execution without implementation
-verification.
+Use after verified implementation or a classified non-merge outcome; `not_planned` may enter this route from bootstrap, planning, or execution without implementation verification.
 
 Read the bound task's compact resume state from the canonical worktree; follow only `next_command`, and stop on unbound identity or any blocker:
 
@@ -87,6 +86,7 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 ```
 
 10. Merge only with trusted gate evidence and the gate-selected repository path.
+   Follow the [native readiness binding](../../../doc/engineering/workflow/source-of-truth.md#native-readiness-binding) for exact claim-input/result/comment capture and server readback; the first-migration transport remains non-promotable before compatible merge/readback. Continue ordinary fresh live gates/preflight after capture; the latest live gate authorizes merge.
    A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
    or informational `BEHIND` defaults to admin merge
    when the gate emits `use_admin_merge: true`; do not request separate task or
@@ -117,7 +117,8 @@ python3 ./scripts/pm/non-merge-finalize.py \
 - frozen comparison range and fresh verification
 - canonical review and gate evidence links
 - PR URL and merged receipt; for ordered deliveries, report the milestone without terminal closeout until the canonical multi-PR adapter is active, using linked delivery tasks under the source-of-truth compatibility bridge meanwhile; or report a blocker with resume instruction
-- main-sync and cleanup result
+- selected terminal proof and protocol version; protocol v1 includes main-sync and cleanup in its historical closeout chain, while protocol v2 records delivery finalization separately from optional cleanup
+- cleanup result and any task-declared resource wait on a named artifact use
 
 Missing trusted runtime attestation is `capability_blocked` for unattended automation, not human-operated PRs. Never manufacture passed evidence or downgrade a blocker.
 ## Guardrails

@@ -2,6 +2,10 @@
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 REPO="$TMP/repo"; UID_VALUE="task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; mkdir -p "$REPO/.pm/github-project-sync" "$TMP/task" "$TMP/bin"
+PM_COPY="$TMP/pm-tools"
+cp -R "$ROOT_DIR/scripts/pm" "$PM_COPY"
+cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$PM_COPY/github_api.py"
+FINALIZER="$PM_COPY/post-merge-finalize.py"
 git init -q -b main "$REPO"; RECEIPT_ROOT="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$REPO" --task-uid "$UID_VALUE" --create)"
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
 {"project":{"owner":"fixture","number":1,"id":"P1"},"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","status":"done","owner_role":"qa_engineer","module":"engineering","repository":"fixture/repo","canonical_worktree":"$TMP/task","task_branch":"task/finalize","issue_number":11,"pr_number":22,"project_item_id":"ITEM1","workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
@@ -48,14 +52,14 @@ esac
 SH
 chmod +x "$TMP/bin/gh"; export PATH="$TMP/bin:$PATH" GH_LOG="$TMP/gh.log" EDIT_LOG="$TMP/edit.log" REMOTE_STATE="$TMP/remote-state" CRASHED="$TMP/crashed" ISSUE_CLOSED="$TMP/issue-closed" LIVE_BODY="$TMP/live-comment-body"
 set +e
-WRONG_CONTENT=1 python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null 2>&1
+WRONG_CONTENT=1 python3 "$FINALIZER" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null 2>&1
 wrong_content=$?; set -e
 [[ "$wrong_content" != 0 ]]
 [[ ! -s "$EDIT_LOG" ]] || { echo 'wrong bound item content caused Project edits before validation' >&2; cat "$EDIT_LOG" >&2; exit 1; }
 set +e
-python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null 2>&1
+python3 "$FINALIZER" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null 2>&1
 first=$?; set -e; [[ "$first" != 0 ]]
-python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null
+python3 "$FINALIZER" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null
 for field in F_STATUS F_PM F_PHASE; do
   [[ "$(grep -c "^$field$" "$EDIT_LOG")" -le 1 ]] || { echo "retry duplicated Project edit: $field" >&2; cat "$GH_LOG" >&2; exit 1; }
 done
@@ -71,14 +75,14 @@ grep -q '^api graphql ' "$GH_LOG"
 # External Project drift after finalization must be repaired on an idempotent
 # finalizer retry, even though the earlier ledger operation was committed.
 : >"$REMOTE_STATE"
-python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null
+python3 "$FINALIZER" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null
 [[ "$(sort -u "$REMOTE_STATE" | wc -l | tr -d ' ')" == 3 ]]
 for field in F_STATUS F_PM F_PHASE; do
   [[ "$(grep -c "^$field$" "$EDIT_LOG")" == 2 ]] || { echo "terminal retry did not repair Project drift: $field" >&2; exit 1; }
 done
-PYTHONPATH="$ROOT_DIR/scripts/pm${PYTHONPATH:+:$PYTHONPATH}" python3 - "$ROOT_DIR" "$UID_VALUE" <<'PY'
+PYTHONPATH="$PM_COPY${PYTHONPATH:+:$PYTHONPATH}" python3 - "$PM_COPY" "$UID_VALUE" <<'PY'
 import importlib.util,pathlib,sys
-path=pathlib.Path(sys.argv[1])/"scripts/pm/post-merge-finalize.py"
+path=pathlib.Path(sys.argv[1])/"post-merge-finalize.py"
 spec=importlib.util.spec_from_file_location("finalizer_identity_test",path)
 module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 base={"id":"ITEM1","_project_id":"P1","_project_number":1,

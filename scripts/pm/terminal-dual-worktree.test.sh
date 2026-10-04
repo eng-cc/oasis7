@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; TMPDIR="$(mktemp -d)"; trap 'rm -rf "$TMPDIR"' EXIT
+source "$ROOT_DIR/scripts/pm/test-fixtures/resource-cleanup-process-probe.sh"
 [[ ! -e "$ROOT_DIR/relative-main-sync.json" ]] || { echo "leaked relative main-sync artifact in repository root" >&2; exit 1; }
 REMOTE="$TMPDIR/origin.git"; DEFAULT="$TMPDIR/default"; TASK="$TMPDIR/task"
 UID_VALUE="task_11111111111111111111111111111111"; BRANCH="task/dual-terminal"
@@ -17,23 +18,44 @@ r['workflow_phase']=phase; r.setdefault('phase_receipts',{})[phase]=json.loads(r
 p.write_text(json.dumps(m)+'\n'); print('{}')
 PY
 chmod +x "$DEFAULT/scripts/pm/github-project-task.py"; git -C "$DEFAULT" add .; git -C "$DEFAULT" commit -qm base; git -C "$DEFAULT" push -q -u origin main
-git -C "$DEFAULT" worktree add -qb "$BRANCH" "$TASK"; printf 'merged\n' >>"$TASK/file"; git -C "$TASK" commit -qam merged
-HEAD_OID="$(git -C "$TASK" rev-parse HEAD)"; git -C "$DEFAULT" merge --ff-only "$BRANCH" >/dev/null; git -C "$DEFAULT" push -q origin main; git -C "$DEFAULT" reset -q --hard HEAD^
+git -C "$DEFAULT" worktree add -qb "$BRANCH" "$TASK"
+# Bind Git's canonical filesystem spelling into task authority. macOS temp
+# paths may enter through /var and resolve to /private/var.
+TASK="$(cd "$TASK" && pwd -P)"
+# The fixture represents a task whose exact worktree was just created through
+# the supported local creation path. Bind it immediately, using the production
+# helper, before any later task-state refresh. This does not retrofit legacy
+# worktrees or synthesize the protected registration marker by hand.
 mkdir -p "$TASK/.pm/github-project-sync"
 cat >"$TASK/.pm/github-project-sync/tasks.json" <<EOF
-{"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","status":"done","workflow_phase":"task_done","repository":"fixture/repo","issue_number":11,"pr_number":7,"pr_url":"https://example.invalid/pull/7","canonical_worktree":"$TASK","task_branch":"$BRANCH","default_branch":"main"}}}
+{"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","canonical_worktree":"$TASK","task_branch":"$BRANCH"}}}
 EOF
+python3 "$ROOT_DIR/scripts/pm/worktree_registration.py" --repo-root "$TASK" --task-uid "$UID_VALUE" >/dev/null
+# The durable task-map snapshot is external to the disposable checkout; leaving
+# it under ignored .pm/ would correctly make cleanup retain user data.
+TASK_MAP="$RECEIPTS/task-map.json"
+cp "$TASK/.pm/github-project-sync/tasks.json" "$TASK_MAP"
+rm -rf "$TASK/.pm"
+printf 'merged\n' >>"$TASK/file"; git -C "$TASK" commit -qam merged
+HEAD_OID="$(git -C "$TASK" rev-parse HEAD)"; git -C "$DEFAULT" merge --ff-only "$BRANCH" >/dev/null; git -C "$DEFAULT" push -q origin main; git -C "$DEFAULT" reset -q --hard HEAD^
+python3 - "$TASK_MAP" <<PY
+import json,sys
+p=sys.argv[1]; mapping=json.load(open(p)); task=mapping["tasks"]["$UID_VALUE"]
+task.update({"status":"done","workflow_phase":"task_done","repository":"fixture/repo","issue_number":11,"pr_number":7,"pr_url":"https://example.invalid/pull/7","canonical_worktree":"$TASK","task_branch":"$BRANCH","default_branch":"main"})
+open(p,"w").write(json.dumps(mapping)+"\\n")
+assert task.get("worktree_registration"), task
+PY
 NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"; cat >"$RECEIPTS/merge-receipt.json" <<EOF
 {"receipt_type":"oasis7_pr_merge","issuer":"github_live_query","evidence_mode":"production","repository":"fixture/repo","default_branch":"main","pr_number":7,"pr_url":"https://example.invalid/pull/7","state":"MERGED","merged_at":"$NOW","head_oid":"$HEAD_OID","base_ref":"main","observed_at":"$NOW"}
 EOF
-python3 - "$TASK/.pm/github-project-sync/tasks.json" "$RECEIPTS/merge-receipt.json" <<'PY'
+python3 - "$TASK_MAP" "$RECEIPTS/merge-receipt.json" <<'PY'
 import hashlib,json,sys
 p=sys.argv[1]; m=json.load(open(p)); r=next(iter(m['tasks'].values())); r['merge_receipt']=json.load(open(sys.argv[2])); r['merge_receipt_sha256']=hashlib.sha256(open(sys.argv[2],'rb').read()).hexdigest(); open(p,'w').write(json.dumps(m)+'\n')
 PY
 # Simulate authoritative refresh/readback into the default worktree. The merge
 # receipt is durable local authority and is not recoverable from Issue/Project
 # fields, so the refreshed default-worktree cache does not contain it yet.
-mkdir -p "$DEFAULT/.pm/github-project-sync"; cp "$TASK/.pm/github-project-sync/tasks.json" "$DEFAULT/.pm/github-project-sync/tasks.json"
+mkdir -p "$DEFAULT/.pm/github-project-sync"; cp "$TASK_MAP" "$DEFAULT/.pm/github-project-sync/tasks.json"
 python3 - "$DEFAULT/.pm/github-project-sync/tasks.json" <<'PY'
 import json,sys
 p=sys.argv[1]; mapping=json.load(open(p)); r=next(iter(mapping['tasks'].values()))
@@ -80,7 +102,12 @@ for bad_output in "relative-terminal.json" "$TASK/terminal.json"; do
   [[ ! -e "${bad_output}.intent.json" ]]
   grep -Eiq 'absolute|task worktree|receipt.*path' "$RECEIPTS/bad-cleanup.err"
 done
-"$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$DEFAULT" --worktree "$TASK" --branch "$BRANCH" --main-ref main --task-uid "$UID_VALUE" --pr-receipt "$RECEIPTS/merge-receipt.json" --main-sync-receipt "$RECEIPTS/main-sync-receipt.json" --terminal-receipt-output "$RECEIPTS/terminal-cleanup-receipt.json"
+# Keep this legacy end-to-end positive path deterministic across hosts. The
+# production cleanup still runs normally; only its child process-readback
+# commands receive a complete synthetic all-UID snapshot.
+oasis7_install_complete_process_probe "$TMPDIR/bin"
+env PATH="$TMPDIR/bin:$PATH" \
+  "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$DEFAULT" --worktree "$TASK" --branch "$BRANCH" --main-ref main --task-uid "$UID_VALUE" --pr-receipt "$RECEIPTS/merge-receipt.json" --main-sync-receipt "$RECEIPTS/main-sync-receipt.json" --terminal-receipt-output "$RECEIPTS/terminal-cleanup-receipt.json"
 python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$DEFAULT" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPTS/terminal-cleanup-receipt.json"
 python3 - "$DEFAULT/.pm/github-project-sync/tasks.json" <<'PY'
 import json,sys

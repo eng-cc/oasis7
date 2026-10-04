@@ -1297,18 +1297,6 @@ run_cargo_package_required_fixture() {
   if [[ "$primary_package" == "oasis7_node" ]]; then
     local observer_test_path="crates/oasis7_node/src/tests_observer_consensus_subscription.rs"
     local observer_test_source="$SMOKE_WORKTREE/$observer_test_path"
-    if ! "$REAL_PYTHON" - "$observer_test_source" <<'PY'
-from pathlib import Path
-import sys
-
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-expected = '"/../oasis7/src/bin/oasis7_chain_runtime.rs"'
-raise SystemExit(0 if expected in source else 1)
-PY
-    then
-      echo "node package command fixture no longer contains its known cross-package source edge" >&2
-      return 1
-    fi
     # This helper exercises prepare-task-pr command selection. The real
     # cross-package edge remains covered by check-cargo-package-scope tests;
     # replace only this source in the temporary fixture baseline so command

@@ -39,6 +39,19 @@ ACTUAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || die 
 [[ "$ACTUAL_BRANCH" == "$MAIN_REF" ]] || die "repo root is not checked out on the requested default branch"
 MAPPING="$REPO_ROOT/.pm/github-project-sync/tasks.json"
 [[ -f "$MAPPING" ]] || die "task mapping is unavailable"
+# Main sync remains an explicit local convenience for legacy tasks. A task
+# whose mapped protocol is already the immutable v2 delivery terminal may not
+# be moved back to the earlier main_sync phase.
+if ! python3 - "$MAPPING" "$TASK_UID" <<'PY'
+import json,pathlib,sys
+record=(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+kind=((record.get('phase_receipt_type') or {}).get('post_merge_done'))
+if kind=='oasis7_terminal_delivery':
+ raise SystemExit('post-merge-main-sync: completed v2 delivery cannot move back to main_sync')
+PY
+then
+  die "completed v2 delivery cannot move back to main_sync"
+fi
 # Validate receipt facts that do not depend on task-cache data before recovery
 # can mutate the default mapping. Full task/receipt binding remains below.
 python3 - "$PR_RECEIPT" "$MAIN_REF" <<'PY'
@@ -180,6 +193,8 @@ IMMUTABLE_MERGE_IDENTITY=(
 )
 def update(data):
  record=(data.get('tasks') or {}).get(sys.argv[3]) or {}; record['workflow_phase']='main_sync'
+ if ((record.get('phase_receipt_type') or {}).get('post_merge_done'))=='oasis7_terminal_delivery':
+  raise SystemExit('post-merge-main-sync: completed v2 delivery cannot move back to main_sync')
  stored_receipt=record.get('merge_receipt'); stored_digest=record.get('merge_receipt_sha256')
  if stored_receipt is None:
   if stored_digest is not None: raise SystemExit('post-merge-main-sync: stored merge receipt conflicts with validated receipt')
