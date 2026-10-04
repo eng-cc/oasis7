@@ -71,6 +71,16 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                 raise ValueError('integration current request identity unavailable before outcome')
             _,_,mode,request_uid,request_pr,request_base,request_head,*request_keys=parts
             if mode in ('full_escalation','newapi_bridge_package'): continue
+            if mode=='first_activation_validation_only':
+                if (not re.fullmatch(r'task_[0-9a-f]{32}',request_uid) or request_pr!=''
+                        or not OID.fullmatch(request_base) or not OID.fullmatch(request_head)
+                        or request_keys):
+                    raise ValueError('integration current request identity malformed')
+                if run['head_sha']!=request_head:
+                    raise ValueError('integration validation execution head differs from source')
+                # Historical candidate-checkout validation has no PR binding and
+                # can never satisfy production integration proof, even for uid.
+                continue
             if mode=='v1_reuse_validation_only':
                 if (not re.fullmatch(r'task_[0-9a-f]{32}',request_uid) or not re.fullmatch(r'[1-9][0-9]*',request_pr)
                         or not OID.fullmatch(request_base) or not OID.fullmatch(request_head)):
