@@ -6108,6 +6108,7 @@ dependencies = [
  "hmac 0.13.0",
  "lettre",
  "multiaddr",
+ "oasis7_client_api",
  "oasis7_distfs",
  "oasis7_launcher_ui",
  "oasis7_node",
