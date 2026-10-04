@@ -626,6 +626,11 @@ def issue_task_fields(body: str) -> dict[str, Any]:
     return fields
 
 
+def normalize_issue_title(title: str) -> str:
+    """Reconstruct the task title from the canonical [PM] Issue title form."""
+    return title[5:] if title.startswith("[PM] ") else title
+
+
 def require_supplied_uid_absent(repo: str, task_uid: str) -> None:
     """Search indexing cannot prove absence for a predetermined task identity."""
     seen_ids, seen_numbers = set(), set()
@@ -703,9 +708,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
     if re.findall(r"^task_uid:[^\n]*$", body, re.MULTILINE) != ["task_uid: " + task_uid]:
         return None
     record = issue_task_fields(body)
-    title = str(issue.get("title") or hits[0].get("title") or "")
-    if title.startswith("[PM] "):
-        title = title[5:]
+    title = normalize_issue_title(str(issue.get("title") or hits[0].get("title") or ""))
     record.update(
         {
             "task_uid": task_uid,
@@ -3493,7 +3496,8 @@ class PublicationRecoveryAuthority:
                 raise ValueError("publication intent digest/identity mismatch")
             self._comment_identity(candidates[0], (self.comment.get("user") or {}).get("login"))
             intent = self.module.parse_publication_comment(candidates[0]["body"])
-            unique = [c for c in comments if "<!-- oasis7-ci-publication/v1 -->" in c["body"]
+            unique = [c for c in comments
+                      if self.module.has_task_publication_marker(c.get("body"))
                       and self.module.parse_publication_comment(c["body"])["publication_id"] == intent["publication_id"]]
             if len(unique) != 1:
                 raise ValueError("publication lineage intent is not unique")
@@ -3937,7 +3941,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         binding_records = []
         for comment in comments:
             body = str(comment.get("body") or "")
-            if "<!-- oasis7-ci-publication/v1 -->" in body:
+            if publication_module.has_task_publication_marker(body):
                 try:
                     publication_records.append(publication_module.parse_publication_comment(body))
                 except ValueError as exc:

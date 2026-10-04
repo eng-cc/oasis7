@@ -13,21 +13,40 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
+import hashlib
 import io
 import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 
 POLICY_SCHEMA = "oasis7-cargo-package-scope-policy/v1"
 AUXILIARY_REGISTRY_PATH = ".pm/cargo-package-auxiliary-files.json"
 AUXILIARY_REGISTRY_SCHEMA = "oasis7-cargo-package-auxiliary-files/v1"
+CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
+DEPENDENCY_FLOOR_MODE = "dependency_floor_update"
+DEPENDENCY_FLOOR_OVERLAY_V2 = "oasis7-cargo-dependency-floor-overlay/v2"
+DEPENDENCY_FLOOR_OVERLAY_V3 = "oasis7-cargo-dependency-floor-overlay/v3"
+DEPENDENCY_FLOOR_SUPPORT_SCHEMA = "oasis7-cargo-dependency-floor-support-scope/v1"
+DEPENDENCY_FLOOR_SUPPORT_MARKER = "<!-- oasis7-cargo-dependency-floor-support-scope/v1 -->"
+DEPENDENCY_FLOOR_SUPPORT_PATHS = {
+    "doc/.governance/document-corpus/objects/16/1620cf642fc3ae7886725ade1ec9282e13b3b5130782911e55ac67c77fdf7e7c.json",
+    "doc/.governance/document-corpus/objects/94/942664886e9920ca269062b66c9a2d4cf918774dd5a522678de1f0687e9c427e.json",
+    "doc/.governance/document-corpus/objects/9a/9a812ec52c06d6c0a9633e3ce03eea09b1cc8ae34e94ad1ead1f245d03ea4a3b.json",
+    "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+    "doc/p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md",
+    "doc/world-runtime/wasm/wasm-executor.design.md",
+}
+PINNED_CARGO_VERSION = "1.96.0"
+STABLE_TRIPLE = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z", re.ASCII)
 
 AUXILIARY_FORBIDDEN_PREFIXES = (
     ".agents/",
@@ -60,6 +79,116 @@ class ScopeError(Exception):
         super().__init__(detail or reason)
         self.reason = reason
         self.detail = detail
+
+
+def stable_version_tuple(value: str) -> tuple[int, int, int] | None:
+    if not isinstance(value, str) or not STABLE_TRIPLE.fullmatch(value):
+        return None
+    try:
+        major, minor, patch = (int(part) for part in value.split("."))
+    except ValueError:
+        return None
+    return major, minor, patch
+
+
+def canonical_dependency_floor_pair(base_requirement: str, head_requirement: str) -> bool:
+    base = stable_version_tuple(base_requirement)
+    head = stable_version_tuple(head_requirement)
+    return (
+        base is not None
+        and head is not None
+        and base[:2] == head[:2]
+        and head[2] > base[2]
+    )
+
+
+def canonical_dependency_floor_update_pair(base_requirement: str, head_requirement: str) -> bool:
+    """Accept any strictly increasing canonical stable triplet for exact amended scope only."""
+    base = stable_version_tuple(base_requirement)
+    head = stable_version_tuple(head_requirement)
+    return base is not None and head is not None and head > base
+
+
+def _manifest_dependency_entries(text: str, dependency_name: str) -> list[tuple[str, str]]:
+    """Find literal dependency assignments while retaining their Cargo table."""
+    section: str | None = None
+    entries: list[tuple[str, str]] = []
+    key_pattern = re.compile(rf'^\s*{re.escape(dependency_name)}\s*=\s*(.*?)\s*(?:#.*)?$')
+    for line in text.splitlines():
+        header = re.fullmatch(r"\s*\[([^\]]+)\]\s*(?:#.*)?", line)
+        if header:
+            section = header.group(1)
+            continue
+        if section is None:
+            continue
+        if not (
+            section in {"dependencies", "dev-dependencies", "build-dependencies"}
+            or section.endswith(".dependencies")
+        ):
+            continue
+        match = key_pattern.fullmatch(line)
+        if match:
+            entries.append((section, match.group(1).strip()))
+    return entries
+
+
+def _dependency_rhs_has_exact_requirement(rhs: str, requirement: str) -> bool:
+    if rhs == f'"{requirement}"':
+        return True
+    if not (rhs.startswith("{") and rhs.endswith("}")):
+        return False
+    fields = re.findall(r"(?:^|,)\s*([A-Za-z0-9_-]+)\s*=", rhs[1:-1])
+    if not fields or any(name in {"package", "path", "git", "registry"} for name in fields):
+        return False
+    versions = re.findall(r'(?:^|,)\s*version\s*=\s*"([^"]*)"\s*(?=,|$)', rhs[1:-1])
+    return versions == [requirement]
+
+
+def dependency_floor_manifest_delta_is_exact(
+    base_manifest: bytes,
+    head_manifest: bytes,
+    dependency_name: str,
+    base_requirement: str,
+    head_requirement: str,
+    *,
+    allow_non_patch: bool = False,
+) -> bool:
+    """Accept exactly one existing direct crates.io version-string edit.
+
+    The caller must separately bind ``dependency_name`` and both requirements
+    to the live Task overlay and verify the resolved Cargo metadata identities.
+    This helper only proves the source text is the narrow mechanical edit.
+    """
+    if (
+        not isinstance(dependency_name, str)
+        or not dependency_name
+        or not (canonical_dependency_floor_update_pair(base_requirement, head_requirement)
+                if allow_non_patch else canonical_dependency_floor_pair(base_requirement, head_requirement))
+    ):
+        return False
+    try:
+        old_text = base_manifest.decode("utf-8")
+        new_text = head_manifest.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    old_entries = _manifest_dependency_entries(old_text, dependency_name)
+    new_entries = _manifest_dependency_entries(new_text, dependency_name)
+    if (
+        len(old_entries) != 1
+        or len(new_entries) != 1
+        or old_entries[0][0] != "dependencies"
+        or new_entries[0][0] != "dependencies"
+        or not _dependency_rhs_has_exact_requirement(old_entries[0][1], base_requirement)
+        or not _dependency_rhs_has_exact_requirement(new_entries[0][1], head_requirement)
+    ):
+        return False
+    old_token = f'"{base_requirement}"'
+    new_token = f'"{head_requirement}"'
+    if old_text.count(old_token) != 1 or new_text.count(new_token) != 1:
+        return False
+    return old_text.replace(old_token, '"__OASIS7_DEPENDENCY_FLOOR__"', 1) == new_text.replace(
+        new_token, '"__OASIS7_DEPENDENCY_FLOOR__"', 1
+    )
 
 
 def git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -299,9 +428,18 @@ def extract_git_tree(repo: Path, revision: str, target: Path) -> None:
         archive.close()
 
 
-def cargo_metadata(root: Path, *, locked: bool = False) -> dict[str, Any]:
-    command = ["cargo", "metadata"]
+def cargo_metadata(
+    root: Path,
+    *,
+    locked: bool = False,
+    all_features: bool = False,
+    cargo_binary: str = "cargo",
+    env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    command = [cargo_binary, "metadata"]
     command.append("--locked" if locked else "--no-deps")
+    if all_features:
+        command.append("--all-features")
     command.extend(
         ["--format-version", "1", "--manifest-path", str(root / "Cargo.toml")]
     )
@@ -311,6 +449,7 @@ def cargo_metadata(root: Path, *, locked: bool = False) -> dict[str, Any]:
         check=False,
         text=True,
         capture_output=True,
+        env=env,
     )
     if result.returncode != 0:
         raise ScopeError("cargo_metadata_unavailable", result.stderr.strip() or "cargo metadata failed")
@@ -321,6 +460,508 @@ def cargo_metadata(root: Path, *, locked: bool = False) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(payload.get("packages"), list):
         raise ScopeError("cargo_metadata_unavailable", "cargo metadata omitted packages")
     return payload
+
+
+def pinned_cargo_binaries() -> tuple[str, str]:
+    """Resolve direct binaries for the repository-pinned Cargo toolchain."""
+    rustup = shutil.which("rustup")
+    if rustup:
+        binaries: list[str] = []
+        for name in ("cargo", "rustc"):
+            result = subprocess.run(
+                [rustup, "which", name, "--toolchain", PINNED_CARGO_VERSION],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            path = result.stdout.strip()
+            if result.returncode != 0 or not path or not Path(path).is_file():
+                raise ScopeError(
+                    "pinned_cargo_unavailable",
+                    f"cannot resolve {name} from toolchain {PINNED_CARGO_VERSION}",
+                )
+            binaries.append(path)
+        return binaries[0], binaries[1]
+    cargo, rustc = shutil.which("cargo"), shutil.which("rustc")
+    if not cargo or not rustc:
+        raise ScopeError("pinned_cargo_unavailable", "cargo/rustc are unavailable")
+    return cargo, rustc
+
+
+def sanitized_cargo_environment(cargo_home: Path, rustc_binary: str) -> dict[str, str]:
+    """Keep only toolchain, isolated-home, and transport variables for Cargo."""
+    home = cargo_home / "home"
+    cargo_config = cargo_home / "cargo"
+    temp = cargo_home / "tmp"
+    for path in (home, cargo_config, temp):
+        path.mkdir(parents=True, exist_ok=True)
+    toolchain_bin = str(Path(rustc_binary).resolve().parent)
+    safe_path = os.pathsep.join(
+        [toolchain_bin, "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+    )
+    environment = {
+        "PATH": safe_path,
+        "HOME": str(home),
+        "CARGO_HOME": str(cargo_config),
+        "TMPDIR": str(temp),
+        "RUSTC": rustc_binary,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_SYSTEM": os.devnull,
+    }
+    for name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "CURL_CA_BUNDLE",
+    ):
+        value = os.environ.get(name)
+        if value:
+            environment[name] = value
+    return environment
+
+
+def require_pinned_cargo(cargo_binary: str, rustc_binary: str, env: dict[str, str]) -> None:
+    for binary, prefix, label in (
+        (cargo_binary, f"cargo {PINNED_CARGO_VERSION} ", "Cargo"),
+        (rustc_binary, f"rustc {PINNED_CARGO_VERSION} ", "rustc"),
+    ):
+        result = subprocess.run(
+            [binary, "--version"],
+            check=False,
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+        if result.returncode != 0 or not result.stdout.startswith(prefix):
+            raise ScopeError(
+                "pinned_cargo_unavailable",
+                f"{label} must be exactly from pinned toolchain {PINNED_CARGO_VERSION}",
+            )
+
+
+def remove_workspace_cargo_config(root: Path) -> None:
+    """Prevent source replacement and registry overrides from local Cargo config."""
+    config_dir = root / ".cargo"
+    for name in ("config", "config.toml"):
+        candidate = config_dir / name
+        if candidate.is_file() or candidate.is_symlink():
+            candidate.unlink()
+
+
+def canonical_github_repository(repo: Path) -> str:
+    result = git(repo, "remote", "get-url", "origin", check=False)
+    if result.returncode != 0:
+        raise ScopeError("first_activation_repository_unavailable", "origin remote is unavailable")
+    remote = result.stdout.strip()
+    if remote.startswith("git@github.com:"):
+        host, path = "github.com", remote.split(":", 1)[1]
+    else:
+        parsed = urlparse(remote)
+        host, path = parsed.hostname or "", parsed.path.lstrip("/")
+    if host.lower() != "github.com":
+        raise ScopeError("first_activation_repository_unavailable", "origin must be a github.com repository")
+    path = path.removesuffix(".git").strip("/")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", path):
+        raise ScopeError("first_activation_repository_unavailable", "origin repository path is malformed")
+    action_repository = os.environ.get("GITHUB_REPOSITORY")
+    if action_repository and action_repository.lower() != path.lower():
+        raise ScopeError("first_activation_repository_mismatch", "origin and Actions repository differ")
+    return path
+
+
+def read_first_activation_scope(
+    repo: Path, task_uid: str, base_oid: str, head_oid: str
+) -> dict[str, Any]:
+    try:
+        from first_activation import read_issue_overlay
+    except (ImportError, ModuleNotFoundError) as exc:
+        raise ScopeError("first_activation_reader_unavailable", "typed Task overlay reader is unavailable") from exc
+    repository = canonical_github_repository(repo)
+    try:
+        scope = read_issue_overlay(repo, repository, task_uid, base_oid, head_oid)
+    except Exception as exc:
+        raise ScopeError("first_activation_overlay_invalid", str(exc)[:1000]) from exc
+    if (
+        not isinstance(scope, dict)
+        or scope.get("schema") not in {
+            "oasis7-cargo-dependency-floor-overlay/v1",
+            DEPENDENCY_FLOOR_OVERLAY_V2,
+            DEPENDENCY_FLOOR_OVERLAY_V3,
+        }
+        or scope.get("task_uid") != task_uid
+        or scope.get("mode") != DEPENDENCY_FLOOR_MODE
+        or scope.get("base_oid") != base_oid
+        or scope.get("head_oid") != head_oid
+        or scope.get("validation_only") is not True
+        or not isinstance(scope.get("effective_primary_package"), str)
+        or not isinstance(scope.get("dependency_name"), str)
+        or not isinstance(scope.get("base_requirement"), str)
+        or not isinstance(scope.get("head_requirement"), str)
+        or not isinstance(scope.get("workflow_change_paths"), list)
+    ):
+        raise ScopeError("first_activation_overlay_invalid", "reader returned an incomplete or non-validation binding")
+    if scope["schema"] in {DEPENDENCY_FLOOR_OVERLAY_V2, DEPENDENCY_FLOOR_OVERLAY_V3}:
+        business_paths = scope.get("approved_business_paths")
+        rows = scope.get("business_change_paths")
+        if (not isinstance(business_paths, list) or not business_paths
+                or business_paths != sorted(set(business_paths))
+                or not isinstance(rows, list) or [row.get("path") for row in rows
+                                                   if isinstance(row, dict)] != business_paths):
+            raise ScopeError("first_activation_business_paths_invalid", "amended business path binding is incomplete")
+    if scope["schema"] == DEPENDENCY_FLOOR_OVERLAY_V3:
+        support_change_path_rows(scope)
+    return scope
+
+
+def business_change_path_rows(scope: dict[str, Any]) -> list[dict[str, str]]:
+    rows = scope.get("business_change_paths")
+    approved = scope.get("approved_business_paths")
+    if (not isinstance(rows, list) or not rows or not isinstance(approved, list)
+            or approved != sorted(set(approved))):
+        raise ScopeError("first_activation_business_paths_invalid", "amended business path binding is malformed")
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"path", "base_sha256", "head_sha256"}:
+            raise ScopeError("first_activation_business_paths_invalid", "business path digest row is malformed")
+        path = row.get("path")
+        if not isinstance(path, str) or safe_relative(path) != path:
+            raise ScopeError("first_activation_business_paths_invalid", "business path is not normalized")
+        for key in ("base_sha256", "head_sha256"):
+            if not isinstance(row.get(key), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", row[key]):
+                raise ScopeError("first_activation_business_paths_invalid", f"{key} is malformed for {path}")
+        normalized.append({"path": path, "base_sha256": row["base_sha256"],
+                           "head_sha256": row["head_sha256"]})
+    if ([row["path"] for row in normalized] != approved
+            or normalized != sorted(normalized, key=lambda row: row["path"])):
+        raise ScopeError("first_activation_business_paths_invalid", "business path digests differ from approved paths")
+    return normalized
+
+
+def first_activation_business_path_set(scope: dict[str, Any], manifest_path: str) -> set[str]:
+    if scope.get("schema") not in {DEPENDENCY_FLOOR_OVERLAY_V2, DEPENDENCY_FLOOR_OVERLAY_V3}:
+        return {"Cargo.lock", manifest_path}
+    rows = business_change_path_rows(scope)
+    paths = set(scope["approved_business_paths"])
+    if "Cargo.lock" not in paths or manifest_path not in paths:
+        raise ScopeError("first_activation_business_paths_invalid", "amendment omits Cargo.lock or effective package manifest")
+    package_root = str(Path(manifest_path).parent).replace("\\", "/")
+    for path in paths - {"Cargo.lock", manifest_path}:
+        if not path.startswith(package_root + "/"):
+            raise ScopeError("first_activation_business_paths_invalid", "amendment source path escapes the effective package")
+    if len(rows) != len(paths):
+        raise ScopeError("first_activation_business_paths_invalid", "amended business path set is incomplete")
+    return paths
+
+
+def _support_record_body(record: dict[str, Any]) -> bytes:
+    encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return (DEPENDENCY_FLOOR_SUPPORT_MARKER + "\n" + encoded + "\n").encode("utf-8")
+
+
+def support_change_path_rows(scope: dict[str, Any]) -> list[dict[str, str]]:
+    """Validate the v3 support class against its immutable typed-record reference."""
+    record = scope.get("support_scope_record")
+    ref = scope.get("support_scope")
+    if not isinstance(record, dict) or set(record) != {
+        "schema", "task_uid", "issue_number", "bootstrap_epoch", "snapshot_sha256",
+        "request_sha256", "acceptance_sha256", "base_oid", "head_oid",
+        "authorization", "scope_amendment", "dispatch_comments", "support_change_paths",
+    }:
+        raise ScopeError("first_activation_support_paths_invalid", "typed support record has an unexpected shape")
+    if (not isinstance(ref, dict) or set(ref) != {"comment_id", "body_sha256"}
+            or type(ref.get("comment_id")) is not int or ref["comment_id"] < 1
+            or not isinstance(ref.get("body_sha256"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", ref["body_sha256"])):
+        raise ScopeError("first_activation_support_paths_invalid", "support record comment reference is malformed")
+    expected_identity = {
+        "schema": DEPENDENCY_FLOOR_SUPPORT_SCHEMA,
+        "task_uid": scope.get("task_uid"),
+        "issue_number": scope.get("issue_number"),
+        "bootstrap_epoch": scope.get("bootstrap_epoch"),
+        "snapshot_sha256": scope.get("snapshot_sha256"),
+        "request_sha256": scope.get("request_sha256"),
+        "acceptance_sha256": scope.get("acceptance_sha256"),
+        "base_oid": scope.get("base_oid"),
+        "head_oid": scope.get("head_oid"),
+        "authorization": scope.get("authorization"),
+        "scope_amendment": scope.get("scope_amendment"),
+    }
+    if any(record.get(key) != value for key, value in expected_identity.items()):
+        raise ScopeError("first_activation_support_paths_invalid", "support record differs from the exact Task/overlay binding")
+    if (type(record.get("issue_number")) is not int or record["issue_number"] < 1
+            or type(record.get("bootstrap_epoch")) is not int or record["bootstrap_epoch"] < 1
+            or not isinstance(record.get("task_uid"), str)
+            or not re.fullmatch(r"task_[0-9a-f]{32}", record["task_uid"])):
+        raise ScopeError("first_activation_support_paths_invalid", "support record Task identity is malformed")
+    for key in ("snapshot_sha256", "request_sha256", "acceptance_sha256"):
+        if not isinstance(record.get(key), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", record[key]):
+            raise ScopeError("first_activation_support_paths_invalid", f"support record {key} is malformed")
+    for key in ("base_oid", "head_oid"):
+        if not isinstance(record.get(key), str) or not re.fullmatch(r"[0-9a-f]{40}", record[key]):
+            raise ScopeError("first_activation_support_paths_invalid", f"support record {key} is malformed")
+    for key in ("authorization", "scope_amendment"):
+        value = record.get(key)
+        expected_keys = {"comment_id", "body_sha256", "scope"} if key == "authorization" else {"comment_id", "body_sha256"}
+        if (not isinstance(value, dict) or set(value) != expected_keys
+                or type(value.get("comment_id")) is not int or value["comment_id"] < 1
+                or not isinstance(value.get("body_sha256"), str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", value["body_sha256"])):
+            raise ScopeError("first_activation_support_paths_invalid", f"support record {key} reference is malformed")
+        if key == "authorization" and (not isinstance(value.get("scope"), str) or not value["scope"]):
+            raise ScopeError("first_activation_support_paths_invalid", "support authorization scope is malformed")
+    dispatches = record.get("dispatch_comments")
+    if not isinstance(dispatches, list) or not dispatches:
+        raise ScopeError("first_activation_support_paths_invalid", "support dispatch evidence is unavailable")
+    dispatch_ids: list[int] = []
+    for dispatch in dispatches:
+        if (not isinstance(dispatch, dict) or set(dispatch) != {"comment_id", "body_sha256"}
+                or type(dispatch.get("comment_id")) is not int or dispatch["comment_id"] < 1
+                or not isinstance(dispatch.get("body_sha256"), str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", dispatch["body_sha256"])):
+            raise ScopeError("first_activation_support_paths_invalid", "support dispatch reference is malformed")
+        dispatch_ids.append(dispatch["comment_id"])
+    if dispatch_ids != sorted(set(dispatch_ids)):
+        raise ScopeError("first_activation_support_paths_invalid", "support dispatch references are duplicated or unsorted")
+    reserved_ids = {
+        ref["comment_id"],
+        record["authorization"]["comment_id"],
+        record["scope_amendment"]["comment_id"],
+        scope.get("reviews", {}).get("repository_health", {}).get("comment_id"),
+        scope.get("reviews", {}).get("qa", {}).get("comment_id"),
+    }
+    if any(value in reserved_ids for value in dispatch_ids) or ref["comment_id"] in {
+            record["authorization"]["comment_id"], record["scope_amendment"]["comment_id"]}:
+        raise ScopeError("first_activation_support_paths_invalid", "support reference reuses an authority or review comment")
+    rows = record.get("support_change_paths")
+    if not isinstance(rows, list) or not rows:
+        raise ScopeError("first_activation_support_paths_invalid", "support path digest set is empty")
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"path", "base_sha256", "head_sha256"}:
+            raise ScopeError("first_activation_support_paths_invalid", "support path digest row is malformed")
+        path = row.get("path")
+        if not isinstance(path, str) or safe_relative(path) != path or path not in DEPENDENCY_FLOOR_SUPPORT_PATHS:
+            raise ScopeError("first_activation_support_paths_invalid", "support path is outside the exact documentation support set")
+        for key in ("base_sha256", "head_sha256"):
+            if not isinstance(row.get(key), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", row[key]):
+                raise ScopeError("first_activation_support_paths_invalid", f"{key} is malformed for {path}")
+        normalized.append({"path": path, "base_sha256": row["base_sha256"], "head_sha256": row["head_sha256"]})
+    if normalized != sorted(normalized, key=lambda row: row["path"]) or {row["path"] for row in normalized} != DEPENDENCY_FLOOR_SUPPORT_PATHS:
+        raise ScopeError("first_activation_support_paths_invalid", "support path set differs from the exact six-path authorization")
+    if scope.get("support_change_paths") != normalized:
+        raise ScopeError("first_activation_support_paths_invalid", "overlay support path rows differ from the typed record")
+    digest = "sha256:" + hashlib.sha256(_support_record_body(record)).hexdigest()
+    if digest != ref["body_sha256"]:
+        raise ScopeError("first_activation_support_paths_invalid", "support record body digest differs from its canonical bytes")
+    return normalized
+
+
+def validate_support_change_path_digests(
+    repo: Path, base: str, head: str, scope: dict[str, Any],
+) -> None:
+    if scope.get("base_oid") != base or scope.get("head_oid") != head:
+        raise ScopeError("first_activation_support_paths_invalid", "support digests are being checked against a different frozen range")
+    for row in support_change_path_rows(scope):
+        for revision, field in ((base, "base_sha256"), (head, "head_sha256")):
+            blob = git_blob(repo, revision, row["path"])
+            digest = None if blob is None else "sha256:" + hashlib.sha256(blob).hexdigest()
+            if digest != row[field]:
+                raise ScopeError("first_activation_support_paths_invalid", f"support path digest differs from frozen {field}: {row['path']}")
+
+
+def validate_first_activation_path_partition(
+    scope: dict[str, Any], manifest_path: str,
+    workflow_paths: set[str], changed: list[str],
+) -> set[str]:
+    business_paths = first_activation_business_path_set(scope, manifest_path)
+    support_paths = (set(row["path"] for row in support_change_path_rows(scope))
+                     if scope.get("schema") == DEPENDENCY_FLOOR_OVERLAY_V3 else set())
+    if business_paths & workflow_paths:
+        raise ScopeError("first_activation_workflow_paths_invalid", "workflow binding overlaps Cargo business paths")
+    if (support_paths & (business_paths | workflow_paths)
+            or set(changed) != business_paths | workflow_paths | support_paths
+            or len(changed) != len(set(changed))):
+        raise ScopeError(
+            "first_activation_changed_paths_invalid",
+            "changed paths must equal the disjoint bound workflow, support, and exact authorized business path sets",
+        )
+    return business_paths
+
+
+def validate_business_path_digests(repo: Path, base: str, head: str,
+                                   scope: dict[str, Any]) -> None:
+    for row in business_change_path_rows(scope):
+        for revision, field in ((base, "base_sha256"), (head, "head_sha256")):
+            blob = git_blob(repo, revision, row["path"])
+            digest = None if blob is None else "sha256:" + hashlib.sha256(blob).hexdigest()
+            if digest != row[field]:
+                raise ScopeError("first_activation_business_paths_invalid", f"business path digest differs from frozen {field}: {row['path']}")
+
+
+def workflow_change_path_set(scope: dict[str, Any]) -> set[str]:
+    entries = scope.get("workflow_change_paths")
+    if not isinstance(entries, list) or not entries:
+        raise ScopeError("first_activation_workflow_paths_invalid", "workflow change path binding is empty")
+    paths: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"path", "base_sha256", "head_sha256"}:
+            raise ScopeError("first_activation_workflow_paths_invalid", "workflow path binding has unexpected fields")
+        path = entry.get("path")
+        if not isinstance(path, str) or safe_relative(path) != path:
+            raise ScopeError("first_activation_workflow_paths_invalid", "workflow path is not normalized")
+        for digest_name in ("base_sha256", "head_sha256"):
+            if not isinstance(entry.get(digest_name), str) or not re.fullmatch(
+                r"sha256:[0-9a-f]{64}", entry[digest_name]
+            ):
+                raise ScopeError("first_activation_workflow_paths_invalid", f"{digest_name} is malformed for {path}")
+        paths.append(path)
+    if len(paths) != len(set(paths)):
+        raise ScopeError("first_activation_workflow_paths_invalid", "workflow path binding contains duplicates")
+    return set(paths)
+
+
+def evaluate_first_activation_dependency_floor(
+    repo: Path,
+    base: str,
+    head: str,
+    task_uid: str,
+    scope: dict[str, Any],
+    changed: list[str],
+    renames: list[str],
+) -> dict[str, Any]:
+    if renames:
+        raise ScopeError("first_activation_changed_paths_invalid", "renames are not permitted")
+    effective_package = scope["effective_primary_package"]
+    amended = scope.get("schema") in {DEPENDENCY_FLOOR_OVERLAY_V2, DEPENDENCY_FLOOR_OVERLAY_V3}
+    dependency_name = scope["dependency_name"]
+    base_requirement, head_requirement = scope["base_requirement"], scope["head_requirement"]
+    valid_pair = (canonical_dependency_floor_update_pair(base_requirement, head_requirement)
+                  if amended else canonical_dependency_floor_pair(base_requirement, head_requirement))
+    if not valid_pair:
+        detail = "exact amended target is not a canonical increasing stable version" if amended else "overlay requirements are not a canonical patch-floor raise"
+        raise ScopeError("dependency_floor_manifest_invalid", detail)
+
+    workflow_paths = workflow_change_path_set(scope)
+    if not {
+        "doc/engineering/workflow/source-of-truth.md",
+        "scripts/pm/check-cargo-package-scope",
+        "scripts/pm/check-cargo-package-scope.test.py",
+    }.issubset(workflow_paths):
+        raise ScopeError("first_activation_workflow_paths_invalid", "first activation must bind its source, checker, and tests")
+
+    with tempfile.TemporaryDirectory(prefix="cargo-floor-snapshots-") as snapshots, tempfile.TemporaryDirectory(
+        prefix="cargo-floor-home-"
+    ) as isolated_home:
+        snapshot_root = Path(snapshots)
+        base_root, head_root = snapshot_root / "base", snapshot_root / "head"
+        extract_git_tree(repo, base, base_root)
+        extract_git_tree(repo, head, head_root)
+        remove_workspace_cargo_config(base_root)
+        remove_workspace_cargo_config(head_root)
+        cargo_binary, rustc_binary = pinned_cargo_binaries()
+        cargo_env = sanitized_cargo_environment(Path(isolated_home), rustc_binary)
+        require_pinned_cargo(cargo_binary, rustc_binary, cargo_env)
+
+        # `fetch --locked` validates registry archive checksums against a clean,
+        # standard crates.io home. It does not regenerate or rewrite the lock.
+        cargo_fetch_locked(head_root, cargo_binary, cargo_env)
+        base_metadata = cargo_metadata(
+            base_root, locked=True, all_features=True, cargo_binary=cargo_binary, env=cargo_env
+        )
+        head_metadata = cargo_metadata(
+            head_root, locked=True, all_features=True, cargo_binary=cargo_binary, env=cargo_env
+        )
+
+        base_primary = metadata_package(base_metadata, effective_package)
+        head_primary = metadata_package(head_metadata, effective_package)
+        if base_primary is None or head_primary is None:
+            raise ScopeError("unknown_primary_package", effective_package)
+        try:
+            base_manifest_path = Path(str(base_primary.get("manifest_path"))).resolve().relative_to(
+                base_root.resolve()
+            ).as_posix()
+            head_manifest_path = Path(str(head_primary.get("manifest_path"))).resolve().relative_to(
+                head_root.resolve()
+            ).as_posix()
+        except (OSError, ValueError) as exc:
+            raise ScopeError("first_activation_package_invalid", "effective package is not a workspace package") from exc
+        if (
+            base_manifest_path != head_manifest_path
+            or base_primary.get("source") is not None
+            or head_primary.get("source") is not None
+        ):
+            raise ScopeError("first_activation_package_invalid", "effective package identity is not stable in the workspace")
+
+        if amended:
+            validate_business_path_digests(repo, base, head, scope)
+        if scope.get("schema") == DEPENDENCY_FLOOR_OVERLAY_V3:
+            validate_support_change_path_digests(repo, base, head, scope)
+        business_paths = validate_first_activation_path_partition(
+            scope, head_manifest_path, workflow_paths, changed,
+        )
+
+        old_manifest = git_blob(repo, base, base_manifest_path)
+        new_manifest = git_blob(repo, head, head_manifest_path)
+        old_lock = git_blob(repo, base, "Cargo.lock")
+        new_lock = git_blob(repo, head, "Cargo.lock")
+        if (
+            old_manifest is None
+            or new_manifest is None
+            or not dependency_floor_manifest_delta_is_exact(
+                old_manifest,
+                new_manifest,
+                dependency_name,
+                base_requirement,
+                head_requirement,
+                allow_non_patch=amended,
+            )
+        ):
+            raise ScopeError("dependency_floor_manifest_invalid", "manifest is not the exact bound dependency-floor edit")
+        if (
+            old_lock is None
+            or new_lock is None
+            or lock_diff_has_unattributable_lines(repo, base, head)
+            or not dependency_floor_lock_graph_is_safe(
+                old_lock,
+                new_lock,
+                base_metadata,
+                head_metadata,
+                effective_package,
+                dependency_name,
+                base_requirement,
+                head_requirement,
+            )
+        ):
+            raise ScopeError("unattributable_lock_change", "Cargo.lock does not match the bound full dependency graph")
+
+    return {
+        "status": "allowed",
+        "primary_package": effective_package,
+        "changed_paths": changed,
+        "mode": DEPENDENCY_FLOOR_MODE,
+        "task_uid": task_uid,
+        "overlay_comment_id": scope.get("overlay_comment_id"),
+        "overlay_sha256": scope.get("overlay_sha256"),
+        "validation_only": True,
+    }
+
+
+def cargo_fetch_locked(root: Path, cargo_binary: str, env: dict[str, str]) -> None:
+    result = subprocess.run(
+        [cargo_binary, "fetch", "--locked", "--manifest-path", str(root / "Cargo.toml")],
+        cwd=root,
+        check=False,
+        text=True,
+        capture_output=True,
+        env=env,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "cargo fetch --locked failed"
+        raise ScopeError("cargo_locked_fetch_failed", detail[-2000:])
 
 
 def package_roots(root: Path, metadata: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
@@ -969,6 +1610,379 @@ def lock_reference_index(
     return references
 
 
+def cargo_metadata_graph(
+    metadata: dict[str, Any],
+) -> tuple[
+    dict[str, tuple[str, str, str | None]],
+    set[tuple[tuple[str, str, str | None], tuple[str, str, str | None], str, tuple[tuple[str | None, str | None], ...]]],
+    set[str],
+] | None:
+    """Normalize full Cargo metadata without discarding target-qualified edges."""
+    packages = metadata.get("packages")
+    workspace_members = metadata.get("workspace_members")
+    resolve = metadata.get("resolve")
+    nodes = resolve.get("nodes") if isinstance(resolve, dict) else None
+    if (
+        not isinstance(packages, list)
+        or not isinstance(workspace_members, list)
+        or not workspace_members
+        or not all(isinstance(item, str) and item for item in workspace_members)
+        or len(workspace_members) != len(set(workspace_members))
+        or not isinstance(nodes, list)
+    ):
+        return None
+
+    identities: dict[str, tuple[str, str, str | None]] = {}
+    identity_to_id: dict[tuple[str, str, str | None], str] = {}
+    for package in packages:
+        if not isinstance(package, dict):
+            return None
+        package_id = package.get("id")
+        name, version, source = package.get("name"), package.get("version"), package.get("source")
+        if (
+            not isinstance(package_id, str)
+            or not package_id
+            or not isinstance(name, str)
+            or not name
+            or not isinstance(version, str)
+            or not version
+            or (source is not None and (not isinstance(source, str) or not source))
+            or package_id in identities
+        ):
+            return None
+        identity = (name, version, source)
+        # A lockfile reference cannot distinguish duplicate name/version/source IDs.
+        if identity in identity_to_id:
+            return None
+        identities[package_id] = identity
+        identity_to_id[identity] = package_id
+
+    if set(workspace_members) - set(identities):
+        return None
+    node_ids: set[str] = set()
+    edges: set[
+        tuple[
+            tuple[str, str, str | None],
+            tuple[str, str, str | None],
+            str,
+            tuple[tuple[str | None, str | None], ...],
+        ]
+    ] = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            return None
+        source_id = node.get("id")
+        dependencies = node.get("deps")
+        if (
+            not isinstance(source_id, str)
+            or source_id not in identities
+            or source_id in node_ids
+            or not isinstance(dependencies, list)
+        ):
+            return None
+        node_ids.add(source_id)
+        for dependency in dependencies:
+            if not isinstance(dependency, dict):
+                return None
+            target_id = dependency.get("pkg")
+            name = dependency.get("name")
+            dep_kinds = dependency.get("dep_kinds")
+            if (
+                not isinstance(target_id, str)
+                or target_id not in identities
+                or not isinstance(name, str)
+                or not name
+                or not isinstance(dep_kinds, list)
+                or not dep_kinds
+            ):
+                return None
+            kinds: list[tuple[str | None, str | None]] = []
+            for kind in dep_kinds:
+                if (
+                    not isinstance(kind, dict)
+                    or kind.get("kind") not in (None, "normal", "build", "dev")
+                    or (kind.get("target") is not None and not isinstance(kind.get("target"), str))
+                ):
+                    return None
+                kinds.append((kind.get("kind"), kind.get("target")))
+            if len(kinds) != len(set(kinds)):
+                return None
+            edges.add((
+                identities[source_id],
+                identities[target_id],
+                name,
+                tuple(sorted(kinds, key=lambda item: (item[0] or "", item[1] or ""))),
+            ))
+    if node_ids != set(identities):
+        return None
+    return identities, edges, set(workspace_members)
+
+
+def lock_graph_edges(
+    records: dict[str, list[dict[str, Any]]],
+) -> set[tuple[tuple[str, str, str | None], tuple[str, str, str | None]]] | None:
+    references = lock_reference_index(records)
+    if references is None:
+        return None
+    edges: set[tuple[tuple[str, str, str | None], tuple[str, str, str | None]]] = set()
+    for name, package_records in records.items():
+        for record in package_records:
+            version, source = record.get("version"), record.get("source")
+            dependencies = record.get("dependencies", [])
+            if (
+                not isinstance(version, str)
+                or (source is not None and not isinstance(source, str))
+                or not isinstance(dependencies, list)
+                or not all(isinstance(reference, str) for reference in dependencies)
+            ):
+                return None
+            source_identity = (name, version, source)
+            for reference in dependencies:
+                target_identity = references.get(reference)
+                if target_identity is None:
+                    return None
+                edges.add((source_identity, target_identity))
+    return edges
+
+
+def dependency_closure(
+    root: tuple[str, str, str | None],
+    edges: set[tuple[tuple[str, str, str | None], tuple[str, str, str | None]]],
+) -> set[tuple[str, str, str | None]]:
+    adjacency: dict[tuple[str, str, str | None], set[tuple[str, str, str | None]]] = {}
+    for source, target in edges:
+        adjacency.setdefault(source, set()).add(target)
+    reached: set[tuple[str, str, str | None]] = set()
+    pending = [root]
+    while pending:
+        identity = pending.pop()
+        if identity in reached:
+            continue
+        reached.add(identity)
+        pending.extend(adjacency.get(identity, set()) - reached)
+    return reached
+
+
+def resolved_direct_registry_dependency(
+    metadata: dict[str, Any],
+    primary_package: str,
+    dependency_name: str,
+    floor: str,
+) -> tuple[str, str, str | None] | None:
+    """Resolve exactly one ordinary, unaliased direct crates.io dependency."""
+    graph = cargo_metadata_graph(metadata)
+    if graph is None:
+        return None
+    identities, edges, workspace_members = graph
+    packages = metadata.get("packages")
+    primary_matches = [
+        package
+        for package in packages
+        if isinstance(package, dict) and package.get("name") == primary_package
+    ]
+    if len(primary_matches) != 1:
+        return None
+    primary = primary_matches[0]
+    primary_id = primary.get("id")
+    if (
+        not isinstance(primary_id, str)
+        or primary_id not in workspace_members
+        or identities.get(primary_id) != (primary_package, primary.get("version"), None)
+    ):
+        return None
+    dependencies = primary.get("dependencies")
+    if not isinstance(dependencies, list):
+        return None
+    declarations = [
+        dependency
+        for dependency in dependencies
+        if isinstance(dependency, dict) and dependency.get("name") == dependency_name
+    ]
+    if len(declarations) != 1:
+        return None
+    declaration = declarations[0]
+    if (
+        declaration.get("source") != CRATES_IO_SOURCE
+        or declaration.get("req") != f"^{floor}"
+        or declaration.get("rename") is not None
+        or declaration.get("registry") is not None
+        or declaration.get("path") is not None
+        or declaration.get("kind") is not None
+        or declaration.get("target") is not None
+    ):
+        return None
+    resolved = metadata.get("resolve")
+    nodes = resolved.get("nodes") if isinstance(resolved, dict) else None
+    if not isinstance(nodes, list):
+        return None
+    source_nodes = [node for node in nodes if isinstance(node, dict) and node.get("id") == primary_id]
+    if len(source_nodes) != 1 or not isinstance(source_nodes[0].get("deps"), list):
+        return None
+    matching_edges: list[tuple[str, str, str | None]] = []
+    for edge in source_nodes[0]["deps"]:
+        if not isinstance(edge, dict) or edge.get("name") != dependency_name:
+            continue
+        target_id = edge.get("pkg")
+        kinds = edge.get("dep_kinds")
+        if (
+            not isinstance(target_id, str)
+            or target_id not in identities
+            or not isinstance(kinds, list)
+            or kinds != [{"kind": None, "target": None}]
+        ):
+            return None
+        matching_edges.append(identities[target_id])
+    if len(matching_edges) != 1:
+        return None
+    target = matching_edges[0]
+    all_named = [identity for identity in identities.values() if identity[0] == dependency_name]
+    version = stable_version_tuple(target[1])
+    bound = stable_version_tuple(floor)
+    if (
+        target[2] != CRATES_IO_SOURCE
+        or len(all_named) != 1
+        or version is None
+        or bound is None
+        or version[:2] != bound[:2]
+        or version[2] < bound[2]
+    ):
+        return None
+    return target
+
+
+def dependency_floor_lock_graph_is_safe(
+    base_lock: bytes,
+    head_lock: bytes,
+    base_metadata: dict[str, Any],
+    head_metadata: dict[str, Any],
+    primary_package: str,
+    dependency_name: str,
+    base_requirement: str,
+    head_requirement: str,
+) -> bool:
+    """Compare full lock identities/edges against all-target Cargo metadata."""
+    lock_headers: list[str] = []
+    for lock_blob in (base_lock, head_lock):
+        try:
+            lock_text = lock_blob.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+        header, marker, _packages = lock_text.partition("[[package]]")
+        if not marker or not re.fullmatch(
+            r"(?:[^\S\n]*#.*\n|\s)*version\s*=\s*\d+\s*\n?", header
+        ):
+            return False
+        lock_headers.append(header)
+    if lock_headers[0] != lock_headers[1]:
+        return False
+
+    base_target = resolved_direct_registry_dependency(
+        base_metadata, primary_package, dependency_name, base_requirement
+    )
+    head_target = resolved_direct_registry_dependency(
+        head_metadata, primary_package, dependency_name, head_requirement
+    )
+    if base_target is None or head_target is None:
+        return False
+    indices: list[dict[tuple[str, str, str | None], dict[str, Any]]] = []
+    edges_by_side: list[set[tuple[tuple[str, str, str | None], tuple[str, str, str | None]]]] = []
+    graphs: list[tuple[dict[str, tuple[str, str, str | None]], set[tuple[Any, ...]], set[str]]] = []
+    for lock_blob, metadata in ((base_lock, base_metadata), (head_lock, head_metadata)):
+        try:
+            text = lock_blob.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+        records = lock_records(text)
+        index = lock_record_index(records)
+        lock_edges = lock_graph_edges(records)
+        graph = cargo_metadata_graph(metadata)
+        if index is None or lock_edges is None or graph is None:
+            return False
+        identities, metadata_edges, _ = graph
+        metadata_pairs = {(source, target) for source, target, _, _ in metadata_edges}
+        if set(index) != set(identities.values()) or lock_edges != metadata_pairs:
+            return False
+        for key, record in index.items():
+            source = key[2]
+            checksum = record.get("checksum")
+            if source == CRATES_IO_SOURCE:
+                if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
+                    return False
+            elif checksum is not None and (not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum)):
+                return False
+        indices.append(index)
+        edges_by_side.append(lock_edges)
+        graphs.append(graph)
+
+    base_identities, base_metadata_edges, _ = graphs[0]
+    head_identities, head_metadata_edges, _ = graphs[1]
+    base_index, head_index = indices
+    base_lock_edges, head_lock_edges = edges_by_side
+    primary_base = [item for item in base_identities.values() if item[0] == primary_package]
+    primary_head = [item for item in head_identities.values() if item[0] == primary_package]
+    if len(primary_base) != 1 or primary_base != primary_head or primary_base[0][2] is not None:
+        return False
+
+    base_closure = dependency_closure(base_target, base_lock_edges)
+    head_closure = dependency_closure(head_target, head_lock_edges)
+    candidate_closure = head_closure
+    affected = base_closure | head_closure
+    changed_identities = (set(base_index) ^ set(head_index)) | {
+        identity
+        for identity in set(base_index).intersection(head_index)
+        if base_index[identity].get("checksum") != head_index[identity].get("checksum")
+    }
+    if not changed_identities or not changed_identities.issubset(affected):
+        return False
+
+    stable_identities = {
+        identity
+        for identity in set(base_index).intersection(head_index)
+        if {
+            key: value for key, value in base_index[identity].items() if key != "dependencies"
+        }
+        == {
+            key: value for key, value in head_index[identity].items() if key != "dependencies"
+        }
+    }
+    removed_edges = base_lock_edges - head_lock_edges
+    added_edges = head_lock_edges - base_lock_edges
+    for source, target in removed_edges:
+        if source in affected:
+            continue
+        if target not in base_closure and target not in stable_identities:
+            return False
+        if target not in set(base_identities.values()) | set(head_identities.values()):
+            return False
+    for source, target in added_edges:
+        if source in affected:
+            continue
+        if target not in candidate_closure and target not in stable_identities:
+            return False
+        if target not in set(base_identities.values()) | set(head_identities.values()):
+            return False
+
+    # Preserve the target/platform-qualified metadata evidence for every lock
+    # reference; the lock itself intentionally collapses target qualifications.
+    base_edge_details = {(source, target, name, kinds) for source, target, name, kinds in base_metadata_edges}
+    head_edge_details = {(source, target, name, kinds) for source, target, name, kinds in head_metadata_edges}
+    for source, target, name, kinds in base_edge_details - head_edge_details:
+        if source in affected:
+            continue
+        if target not in base_closure and target not in stable_identities:
+            return False
+        if not name or not kinds:
+            return False
+    for source, target, name, kinds in head_edge_details - base_edge_details:
+        if source in affected:
+            continue
+        if target not in candidate_closure and target not in stable_identities:
+            return False
+        if not name or not kinds:
+            return False
+    return True
+
+
 def lock_closure_matches_metadata(
     records: dict[tuple[str, str, str | None], dict[str, Any]],
     references: dict[str, tuple[str, str, str | None]],
@@ -1413,7 +2427,27 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if len(standalone_lock_paths) > 1:
         raise ScopeError("ambiguous_package_attribution", ", ".join(standalone_lock_paths))
     standalone_metadata: tuple[dict[str, Any], dict[str, Any]] | None = None
-    if policy_path in normalized_paths or protected.intersection(normalized_paths):
+    if policy_path in normalized_paths:
+        raise ScopeError("policy_self_modification", "protected scope policy changed")
+    if args.first_activation_task_uid is not None:
+        base_oid = git(repo, "rev-parse", "--verify", f"{args.base}^{{commit}}").stdout.strip()
+        head_oid = git(repo, "rev-parse", "--verify", f"{args.head}^{{commit}}").stdout.strip()
+        scope = read_first_activation_scope(
+            repo, args.first_activation_task_uid, base_oid, head_oid
+        )
+        bound_workflow_paths = workflow_change_path_set(scope)
+        if not protected.intersection(normalized_paths).issubset(bound_workflow_paths):
+            raise ScopeError("policy_self_modification", "protected path is not bound by the typed Task overlay")
+        return evaluate_first_activation_dependency_floor(
+            repo,
+            base_oid,
+            head_oid,
+            args.first_activation_task_uid,
+            scope,
+            normalized_paths,
+            renames,
+        )
+    if protected.intersection(normalized_paths):
         raise ScopeError("policy_self_modification", "protected scope policy changed")
     with tempfile.TemporaryDirectory(prefix="cargo-scope-base-") as base_dir, tempfile.TemporaryDirectory(
         prefix="cargo-scope-head-"
@@ -1648,7 +2682,9 @@ def main() -> int:
     parser.add_argument("--repo-root", required=True)
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
-    parser.add_argument("--primary-package", required=True)
+    selector = parser.add_mutually_exclusive_group(required=True)
+    selector.add_argument("--primary-package")
+    selector.add_argument("--first-activation-task-uid")
     parser.add_argument("--policy", required=True)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -1666,7 +2702,10 @@ def main() -> int:
     if args.json:
         print(json.dumps(payload, sort_keys=True))
     else:
-        print(f"allowed: {args.primary_package}")
+        if payload.get("validation_only") is True:
+            print(f"allowed validation-only dependency-floor scope: {payload['primary_package']}")
+        else:
+            print(f"allowed: {args.primary_package}")
     return 0
 
 
