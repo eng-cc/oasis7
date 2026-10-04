@@ -3,7 +3,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/root/.pm/github-project-sync" "$TMP/root/.pm/tasks"
 mkdir -p "$TMP/root/scripts/pm"
-cp "$ROOT/scripts/pm/github-project-task.py" "$ROOT/scripts/pm/github-project-sync.py" "$ROOT/scripts/pm/github-project-workflow.py" "$ROOT/scripts/pm/audit-pr-watch-issues.py" "$ROOT/scripts/pm/workflow-durable-store.py" "$ROOT/scripts/pm/loop_leaf_result.py" "$ROOT/scripts/pm/closed_duplicate_candidate_guard.py" "$ROOT/scripts/pm/portable_file_lock.py" "$TMP/root/scripts/pm/"
+cp "$ROOT/scripts/pm/github-project-task.py" \
+  "$ROOT/scripts/pm/task_complete_claim.py" \
+  "$ROOT/scripts/pm/loop_leaf_result.py" \
+  "$ROOT/scripts/pm/github-project-sync.py" \
+  "$ROOT/scripts/pm/github-project-workflow.py" \
+  "$ROOT/scripts/pm/audit-pr-watch-issues.py" \
+  "$ROOT/scripts/pm/workflow-durable-store.py" \
+  "$ROOT/scripts/pm/closed_duplicate_candidate_guard.py" \
+  "$ROOT/scripts/pm/portable_file_lock.py" \
+  "$TMP/root/scripts/pm/"
 cp "$ROOT/scripts/pm/fixtures/github_api_test_adapter.py" "$TMP/root/scripts/pm/github_api.py"
 printf '{"version":1,"project":{"owner":"eng-cc","number":1,"repo":"eng-cc/oasis7"},"tasks":{}}\n' >"$TMP/root/.pm/github-project-sync/tasks.json"
 cat >"$TMP/bin/gh" <<'SH'

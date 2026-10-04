@@ -16,6 +16,7 @@ from typing import Any
 
 PLAN_SCHEMA = "oasis7.aggregate-delivery-plan/v1"
 RECEIPT_SCHEMA = "oasis7.aggregate-task-completion/v1"
+RECEIPT_SCHEMA_V2 = "oasis7.aggregate-task-completion/v2"
 PLAN_MARKER = "<!-- oasis7-aggregate-delivery-plan/v1 -->"
 RECEIPT_TYPE = "oasis7_aggregate_task_complete"
 REPOSITORY = "eng-cc/oasis7"
@@ -46,11 +47,20 @@ RECEIPT_DELIVERY_EXTRA = {
     "task_complete_claim_sha256", "merge_receipt_sha256", "main_sync_receipt_sha256",
     "terminal_receipt_sha256", "terminal_tombstone_sha256",
 }
+RECEIPT_DELIVERY_V2_EXTRA = {
+    "merge_commit_oid", "head_oid", "base_ref", "merged_at",
+    "task_complete_claim_sha256", "merge_receipt_sha256",
+    "terminal_protocol_version", "selected_terminal_receipt_sha256", "terminal_comment_sha256",
+    "finalizer_ledger_sha256", "terminal_tombstone_sha256",
+}
 TERMINAL_CHECKS = (
     "mapping_post_merge_done", "terminal_receipt_chain_valid", "finalizer_ledger_committed",
     "terminal_tombstone_valid", "issue_closed", "project_item_bound", "project_item_identity",
-    "project_field_values_complete", "project_terminal", "pr_merged", "worktree_absent",
-    "task_branch_not_registered_elsewhere", "local_branch_absent", "remote_branch_absent",
+    "project_field_values_complete", "project_terminal", "pr_merged",
+)
+DELIVERY_PROOF_CHECKS = (
+    "completion_route_identity", "mapping_post_merge_done", "terminal_delivery_proof_valid",
+    "issue_closed", "project_item_bound", "project_terminal", "pr_merged",
 )
 
 
@@ -65,6 +75,15 @@ def canonical_bytes(value: Any) -> bytes:
 def digest_bytes(value: bytes, *, prefix: bool = False) -> str:
     result = hashlib.sha256(value).hexdigest()
     return f"sha256:{result}" if prefix else result
+
+
+def _raw_sha256(value: Any, label: str) -> str:
+    if not isinstance(value, str):
+        raise ReceiptError(f"{label} is not a SHA-256 digest")
+    raw = value.removeprefix("sha256:")
+    if not re.fullmatch(r"[0-9a-f]{64}", raw):
+        raise ReceiptError(f"{label} is not a SHA-256 digest")
+    return raw
 
 
 def canonical_digest(value: Any, *, prefix: bool = False) -> str:
@@ -306,8 +325,38 @@ def _validate_child_report(delivery: dict[str, Any], report: dict[str, Any], def
     }
     if any(str(task.get(key) or "") != str(value) for key, value in expected.items()):
         raise ReceiptError(f"child task/PR identity mismatch for {delivery['task_uid']}")
+    proof = report.get("proof")
+    if not isinstance(proof, dict):
+        raise ReceiptError("child terminal audit omitted receipt digests")
+    shared_proof = proof.get("status") == "passed"
+    protocol_version = proof.get("protocol_version")
+    if protocol_version is None and not shared_proof:
+        # Preserve the immutable pre-shared-reader v1 aggregate fixture shape.
+        protocol_version = 1
+    if protocol_version not in (1, 2) or (protocol_version == 2 and not shared_proof):
+        raise ReceiptError(f"child {delivery['task_uid']} has an unknown terminal protocol version")
+    if shared_proof:
+        # The report proof is already normalized for the selected child
+        # protocol. Reject version-specific fields from the opposite chain
+        # before projection so they cannot be silently dropped.
+        v1_chain_fields = {
+            "main_sync_receipt_sha256", "safe_cleanup_receipt_sha256",
+            "cleanup_receipt_sha256", "resource_cleanup_receipt_sha256",
+        }
+        v2_delivery_fields = {
+            "delivery_receipt_sha256", "terminal_delivery_receipt_sha256",
+            "selected_terminal_receipt_sha256", "live_target_oid",
+            "terminal_protocol_version",
+        }
+        incompatible = (v1_chain_fields if protocol_version == 2 else v2_delivery_fields).intersection(proof)
+        if incompatible:
+            fields = ", ".join(sorted(incompatible))
+            raise ReceiptError(
+                f"child {delivery['task_uid']} protocol-{protocol_version} proof contains incompatible fields: {fields}"
+            )
     checks = report.get("checks")
-    if not isinstance(checks, dict) or any(checks.get(key) is not True for key in TERMINAL_CHECKS):
+    required_checks = DELIVERY_PROOF_CHECKS if shared_proof else TERMINAL_CHECKS
+    if not isinstance(checks, dict) or any(checks.get(key) is not True for key in required_checks):
         raise ReceiptError(f"child {delivery['task_uid']} terminal receipt chain is incomplete")
     claims = task.get("claim_verifications")
     if not isinstance(claims, list):
@@ -338,26 +387,41 @@ def _validate_child_report(delivery: dict[str, Any], report: dict[str, Any], def
     if not OID_RE.fullmatch(str(pr["merge_commit_oid"])) or not OID_RE.fullmatch(str(pr["head_oid"])):
         raise ReceiptError("child PR live readback has an invalid commit identity")
 
-    proof = report.get("proof")
-    if not isinstance(proof, dict):
-        raise ReceiptError("child terminal audit omitted receipt digests")
-    required_proofs = (
-        "task_complete_claim_sha256", "merge_receipt_sha256", "main_sync_receipt_sha256",
-        "terminal_receipt_sha256", "terminal_tombstone_sha256",
-    )
+    if protocol_version == 1:
+        required_proofs = (
+            "task_complete_claim_sha256", "merge_receipt_sha256", "main_sync_receipt_sha256",
+            "terminal_receipt_sha256", "terminal_tombstone_sha256",
+        )
+    else:
+        required_proofs = (
+            "task_complete_claim_sha256", "merge_receipt_sha256",
+            "terminal_delivery_receipt_sha256", "terminal_comment_sha256",
+            "finalizer_ledger_sha256", "terminal_tombstone_sha256",
+        )
     for key in required_proofs:
-        if not isinstance(proof.get(key), str) or not SHA256_RE.fullmatch(proof[key]):
+        pattern = (
+            r"sha256:[0-9a-f]{64}"
+            if protocol_version == 2 and key == "task_complete_claim_sha256"
+            else r"[0-9a-f]{64}" if protocol_version == 2 else SHA256_RE.pattern
+        )
+        if not isinstance(proof.get(key), str) or not re.fullmatch(pattern, proof[key]):
             raise ReceiptError(f"child receipt digest is missing or invalid: {key}")
-    if proof["task_complete_claim_sha256"] != canonical_digest(verified_claims[-1], prefix=True):
+    if protocol_version == 1 and proof["task_complete_claim_sha256"] != canonical_digest(verified_claims[-1], prefix=True):
         raise ReceiptError("child task_complete claim digest does not match task truth")
-    return {
+    validated = {
         **delivery,
         "merge_commit_oid": pr["merge_commit_oid"],
         "head_oid": pr["head_oid"],
         "base_ref": pr["base_ref"],
         "merged_at": pr["merged_at"],
         **{key: proof[key] for key in required_proofs},
+        "_terminal_protocol_version": protocol_version,
     }
+    if protocol_version == 1 and isinstance(proof.get("terminal_comment_sha256"), str):
+        validated["_terminal_comment_sha256"] = proof["terminal_comment_sha256"]
+    if protocol_version == 1 and isinstance(proof.get("finalizer_ledger_sha256"), str):
+        validated["_terminal_finalizer_ledger_sha256"] = proof["finalizer_ledger_sha256"]
+    return validated
 
 
 def _build_receipt(
@@ -384,9 +448,45 @@ def _build_receipt(
         _validate_child_report(delivery, child_reports[delivery["task_uid"]], default_branch)
         for delivery in plan["required_deliveries"]
     ]
+    child_protocols = {row.pop("_terminal_protocol_version") for row in deliveries}
+    receipt_schema = RECEIPT_SCHEMA_V2 if 2 in child_protocols else RECEIPT_SCHEMA
+    if receipt_schema == RECEIPT_SCHEMA_V2:
+        for row, protocol_version in zip(deliveries, [
+            report.get("proof", {}).get("protocol_version", 1)
+            if isinstance(report.get("proof"), dict) else 1
+            for report in (child_reports[delivery["task_uid"]] for delivery in plan["required_deliveries"])
+        ]):
+            if protocol_version == 1:
+                selected_digest = _raw_sha256(row.pop("terminal_receipt_sha256"), "v1 terminal receipt digest")
+                row.pop("main_sync_receipt_sha256", None)
+                row["merge_receipt_sha256"] = _raw_sha256(row["merge_receipt_sha256"], "v1 merge receipt digest")
+                row["terminal_tombstone_sha256"] = _raw_sha256(
+                    row["terminal_tombstone_sha256"], "v1 terminal tombstone digest",
+                )
+                comment_digest = row.pop("_terminal_comment_sha256", None)
+                if comment_digest is None:
+                    raise ReceiptError("v2 aggregate requires the shared v1 Issue-comment digest")
+                row["finalizer_ledger_sha256"] = _raw_sha256(
+                    row.pop("_terminal_finalizer_ledger_sha256", None),
+                    "v1 finalizer ledger digest",
+                )
+            elif protocol_version == 2:
+                selected_digest = row.pop("terminal_delivery_receipt_sha256")
+                comment_digest = row.pop("terminal_comment_sha256")
+            else:
+                raise ReceiptError("aggregate child terminal protocol version is unknown")
+            row["terminal_protocol_version"] = protocol_version
+            row["selected_terminal_receipt_sha256"] = _raw_sha256(
+                selected_digest, "selected terminal receipt digest",
+            )
+            row["terminal_comment_sha256"] = _raw_sha256(comment_digest, "terminal comment digest")
+    else:
+        for row in deliveries:
+            row.pop("_terminal_comment_sha256", None)
+            row.pop("_terminal_finalizer_ledger_sha256", None)
     _validate_dependency_merge_chronology(deliveries)
     receipt = {
-        "schema": RECEIPT_SCHEMA,
+        "schema": receipt_schema,
         "receipt_type": RECEIPT_TYPE,
         "issuer": "github_live_query",
         "evidence_mode": "production",
@@ -426,8 +526,9 @@ def build_receipt(
 
 def validate_receipt(receipt: Any, *, now: dt.datetime | None = None) -> dict[str, Any]:
     receipt = _exact_keys(receipt, RECEIPT_KEYS, "aggregate task-complete receipt")
-    if receipt["schema"] != RECEIPT_SCHEMA or receipt["receipt_type"] != RECEIPT_TYPE:
+    if receipt["schema"] not in {RECEIPT_SCHEMA, RECEIPT_SCHEMA_V2} or receipt["receipt_type"] != RECEIPT_TYPE:
         raise ReceiptError("unsupported aggregate task-complete receipt")
+    protocol_version = 2 if receipt["schema"] == RECEIPT_SCHEMA_V2 else 1
     fixed = {
         "issuer": "github_live_query", "evidence_mode": "production",
         "status": "verified", "claim_type": "task_complete",
@@ -471,7 +572,9 @@ def validate_receipt(receipt: Any, *, now: dt.datetime | None = None) -> dict[st
     deliveries = receipt.get("deliveries")
     if not isinstance(deliveries, list) or len(deliveries) < 2:
         raise ReceiptError("aggregate task-complete receipt requires multiple deliveries")
-    expected_delivery_keys = DELIVERY_KEYS | RECEIPT_DELIVERY_EXTRA
+    expected_delivery_keys = DELIVERY_KEYS | (
+        RECEIPT_DELIVERY_V2_EXTRA if protocol_version == 2 else RECEIPT_DELIVERY_EXTRA
+    )
     seen_tasks: set[str] = set()
     seen_issues: set[int] = set()
     seen_prs: set[int] = set()
@@ -496,6 +599,8 @@ def validate_receipt(receipt: Any, *, now: dt.datetime | None = None) -> dict[st
         if (child_uid in seen_tasks or issue_number in seen_issues or pr_number in seen_prs
                 or obligation_id in seen_obligations):
             raise ReceiptError("aggregate receipt contains duplicate delivery identity")
+        if protocol_version == 2 and delivery.get("terminal_protocol_version") not in (1, 2):
+            raise ReceiptError(f"receipt delivery {index} selected terminal protocol version is invalid")
         seen_tasks.add(child_uid)
         seen_issues.add(issue_number)
         seen_prs.add(pr_number)
@@ -505,12 +610,21 @@ def validate_receipt(receipt: Any, *, now: dt.datetime | None = None) -> dict[st
                 raise ReceiptError(f"receipt delivery {index} {key} is invalid")
         _nonempty(delivery.get("base_ref"), f"receipt delivery {index} base_ref")
         _timestamp(delivery.get("merged_at"), f"receipt delivery {index} merged_at")
-        for key in (
-            "task_complete_claim_sha256", "merge_receipt_sha256", "main_sync_receipt_sha256",
-            "terminal_receipt_sha256", "terminal_tombstone_sha256",
-        ):
+        digest_keys = (
+            ("task_complete_claim_sha256", "merge_receipt_sha256", "selected_terminal_receipt_sha256",
+             "terminal_comment_sha256", "finalizer_ledger_sha256", "terminal_tombstone_sha256")
+            if protocol_version == 2 else
+            ("task_complete_claim_sha256", "merge_receipt_sha256", "main_sync_receipt_sha256",
+             "terminal_receipt_sha256", "terminal_tombstone_sha256")
+        )
+        for key in digest_keys:
             value = delivery.get(key)
-            if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
+            pattern = (
+                r"sha256:[0-9a-f]{64}"
+                if protocol_version == 2 and key == "task_complete_claim_sha256"
+                else r"[0-9a-f]{64}" if protocol_version == 2 else SHA256_RE.pattern
+            )
+            if not isinstance(value, str) or not re.fullmatch(pattern, value):
                 raise ReceiptError(f"receipt delivery {index} digest is invalid: {key}")
     _validate_dependency_merge_chronology(deliveries)
     current = now or dt.datetime.now(dt.timezone.utc)
@@ -715,6 +829,21 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
     if not isinstance(report, dict) or report.get("status") != "reconciled":
         raise ReceiptError(f"child task {delivery['task_uid']} terminal readback is not reconciled")
     _validate_child_project_readback(mapping, task, delivery, report)
+    terminal_proof = report.get("proof") if isinstance(report.get("proof"), dict) else None
+    if terminal_proof is None:
+        phase_receipts = task.get("phase_receipts")
+        phase_digests = task.get("phase_receipt_sha256")
+        if (isinstance(phase_receipts, dict) and "post_merge_done" in phase_receipts
+                and isinstance(phase_digests, dict) and "post_merge_done" in phase_digests):
+            try:
+                from loop_terminal import read_shared_terminal_proof
+                terminal_proof = read_shared_terminal_proof(
+                    REPOSITORY, delivery["task_uid"], repo_root=repo_root, record=task,
+                )
+            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+                raise ReceiptError(f"child shared v1/v2 proof readback failed: {exc}") from exc
+            if not isinstance(terminal_proof, dict) or terminal_proof.get("status") != "passed":
+                raise ReceiptError("child shared terminal proof did not pass")
 
     live_issue = _run_json([
         "gh", "issue", "view", str(delivery["issue_number"]), "-R", REPOSITORY,
@@ -781,17 +910,14 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
     if (audit_pr.get("state") != "MERGED" or not audit_pr.get("mergedAt")
             or audit_pr.get("headRefName") != task.get("task_branch")):
         raise ReceiptError(f"child PR #{delivery['pr_number']} terminal audit live readback disagrees")
+    if isinstance(terminal_proof, dict):
+        merge_oid = (live_pr.get("mergeCommit") or {}).get("oid")
+        if (terminal_proof.get("merge_commit_oid") != merge_oid
+                or terminal_proof.get("head_oid") != live_pr.get("headRefOid")
+                or terminal_proof.get("default_branch") != live_pr.get("baseRefName")):
+            raise ReceiptError(f"child PR #{delivery['pr_number']} disagrees with the selected shared terminal proof")
 
     receipt_root = pathlib.Path(str(report.get("receipt_root") or ""))
-    file_digests = {
-        key: digest_bytes((receipt_root / filename).read_bytes(), prefix=True)
-        for key, filename in (
-            ("merge_receipt_sha256", "merge-receipt.json"),
-            ("main_sync_receipt_sha256", "main-sync-receipt.json"),
-            ("terminal_receipt_sha256", "terminal-cleanup-receipt.json"),
-            ("terminal_tombstone_sha256", "terminal-tombstone.json"),
-        )
-    }
     claims = task.get("claim_verifications")
     if not isinstance(claims, list):
         raise ReceiptError(f"child {delivery['task_uid']} lacks task_complete claim history")
@@ -802,11 +928,50 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
     ]
     if not verified_claims:
         raise ReceiptError(f"child {delivery['task_uid']} lacks verified task_complete evidence")
-    proof = {"task_complete_claim_sha256": canonical_digest(verified_claims[-1], prefix=True), **file_digests}
-    merge = json.loads((receipt_root / "merge-receipt.json").read_text(encoding="utf-8"))
-    main_sync = json.loads((receipt_root / "main-sync-receipt.json").read_text(encoding="utf-8"))
-    terminal = json.loads((receipt_root / "terminal-cleanup-receipt.json").read_text(encoding="utf-8"))
-    tombstone = json.loads((receipt_root / "terminal-tombstone.json").read_text(encoding="utf-8"))
+    terminal_proof = terminal_proof if isinstance(terminal_proof, dict) else {}
+    protocol_version = terminal_proof.get("protocol_version", 1)
+    claim_digest = (
+        terminal_proof.get("task_complete_claim_sha256")
+        if protocol_version == 2 else canonical_digest(verified_claims[-1], prefix=True)
+    )
+    if protocol_version == 1:
+        file_digests = {
+            key: digest_bytes((receipt_root / filename).read_bytes(), prefix=True)
+            for key, filename in (
+                ("merge_receipt_sha256", "merge-receipt.json"),
+                ("main_sync_receipt_sha256", "main-sync-receipt.json"),
+                ("terminal_receipt_sha256", "terminal-cleanup-receipt.json"),
+                ("terminal_tombstone_sha256", "terminal-tombstone.json"),
+            )
+        }
+        proof = {
+            **({"status": "passed"} if terminal_proof.get("status") == "passed" else {}),
+            "protocol_version": 1, "task_complete_claim_sha256": claim_digest, **file_digests,
+            **({"terminal_comment_sha256": terminal_proof["comment_sha256"]}
+               if isinstance(terminal_proof.get("comment_sha256"), str) else {}),
+            **({"finalizer_ledger_sha256": terminal_proof["finalizer_ledger_sha256"]}
+               if isinstance(terminal_proof.get("finalizer_ledger_sha256"), str) else {}),
+        }
+    elif protocol_version == 2:
+        if not isinstance(claim_digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", claim_digest):
+            raise ReceiptError("child v2 accepted task_complete claim digest is invalid")
+        proof = {
+            "status": "passed",
+            "protocol_version": 2,
+            "task_complete_claim_sha256": claim_digest,
+            "merge_receipt_sha256": terminal_proof.get("merge_receipt_sha256"),
+            "terminal_delivery_receipt_sha256": terminal_proof.get("delivery_receipt_sha256"),
+            "terminal_comment_sha256": terminal_proof.get("comment_sha256"),
+            "finalizer_ledger_sha256": terminal_proof.get("finalizer_ledger_sha256"),
+            "terminal_tombstone_sha256": terminal_proof.get("tombstone_sha256"),
+        }
+    else:
+        raise ReceiptError(f"child {delivery['task_uid']} has no shared terminal proof version")
+    report_checks = report.get("checks") if isinstance(report.get("checks"), dict) else {}
+    if terminal_proof.get("status") == "passed":
+        report_checks = dict(report_checks)
+        report_checks["terminal_delivery_proof_valid"] = True
+        report = {**report, "checks": report_checks}
     record = dict(task)
     record["claim_verifications"] = claims
     normalized_live = {

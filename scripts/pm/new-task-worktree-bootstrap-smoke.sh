@@ -84,7 +84,7 @@ case "$*" in
   issue\ list\ -R\ eng-cc/oasis7\ --state\ all\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
     printf '[{"number":2401,"state":"OPEN","title":"[PM] smoke bootstrap task","url":"https://github.com/eng-cc/oasis7/issues/2401"}]\n'
     ;;
-  "issue view 2401 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+  "issue view 2401 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason,updatedAt")
     python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
 import json, pathlib, sys
 print(json.dumps({
@@ -94,6 +94,7 @@ print(json.dumps({
     "url": "https://github.com/eng-cc/oasis7/issues/2401",
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": "2026-10-01T00:00:00Z",
 }))
 PY
     ;;

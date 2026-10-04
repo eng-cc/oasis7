@@ -16,6 +16,9 @@ trap cleanup EXIT
 
 mkdir -p "$TMPDIR/.pm/github-project-sync" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-task.py" "$TMPDIR/github-project-task.py"
+cp "$ROOT_DIR/scripts/pm/closed_duplicate_candidate_guard.py" "$TMPDIR/closed_duplicate_candidate_guard.py"
+cp "$ROOT_DIR/scripts/pm/task_complete_claim.py" "$TMPDIR/task_complete_claim.py"
+cp "$ROOT_DIR/scripts/pm/loop_leaf_result.py" "$TMPDIR/loop_leaf_result.py"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
 cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 cp "$ROOT_DIR/scripts/pm/portable_file_lock.py" "$TMPDIR/portable_file_lock.py"
@@ -85,6 +88,9 @@ if auth_path and os.path.exists(auth_path):
         if "ProjectV2ItemFieldRepositoryValue" in sys.argv[2] else {})
 project_item={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":field_nodes}}
 issue={"number":next_record["issue_number"],"url":next_record["issue_url"],"body":f"task_uid: {uid}","projectItems":{"nodes":[project_item]}}
+issue_body_path=os.environ.get("GH_ISSUE_BODY_STATE_FILE")
+if issue_body_path and os.path.exists(issue_body_path):
+    issue["body"]=open(issue_body_path).read()
 # Keep both GraphQL response shapes used by the bounded workflow commands:
 # classify/refresh search uses the aliased s0 search result, while the selected
 # audit fetches the bound Project item through the top-level nodes result.
@@ -100,6 +106,7 @@ if evidence is not None:
 trace_lines.append("Acceptance:")
 project_content={"__typename":"Issue","number":next_record["issue_number"],
     "url":next_record["issue_url"],"repository":{"nameWithOwner":"eng-cc/oasis7"}}
+project_content["body"]=issue["body"]
 content_path=os.environ.get("GH_REC_PROJECT_ITEM_CONTENT_FILE")
 if content_path and os.path.exists(content_path):
     project_content=json.load(open(content_path))
@@ -142,10 +149,25 @@ if case == "guard_scope_comment_drift" and (directory / "7103").is_file():
         )
         assert changed != original, "scope drift fixture did not find its approved helper-path row"
         scope_comment.write_text(changed)
-print(json.dumps([[{"id": int(p.name), "body": p.read_text(), "user": {"login": "eng-cc"}, "author_association": "OWNER",
-                   "issue_url":"https://api.github.com/repos/eng-cc/oasis7/issues/2001",
-                   "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-" + p.name}
-                  for p in sorted(directory.iterdir()) if p.name.isdecimal()]]))
+comments = []
+for path in sorted(directory.iterdir(), key=lambda item: int(item.name) if item.name.isdecimal() else -1):
+    if not path.name.isdecimal():
+        continue
+    comment_id = int(path.name)
+    metadata_path = directory / f"comment-{comment_id}.json"
+    if metadata_path.is_file():
+        comment = json.loads(metadata_path.read_text(encoding="utf-8"))
+    else:
+        comment = {
+            "id": comment_id,
+            "user": {"login": "eng-cc"},
+            "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/2001",
+            "html_url": f"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-{comment_id}",
+        }
+    comment["body"] = path.read_text(encoding="utf-8")
+    comment.setdefault("author_association", "OWNER")
+    comments.append(comment)
+print(json.dumps([comments]))
 PY
     ;;
   "api repos/eng-cc/oasis7/issues/2001")
@@ -216,10 +238,12 @@ PY
     fi
     ;;
   issue\ view\ 2001\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason*)
-    python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+    python3 - "$GH_ISSUE_BODY_STATE_FILE" "$GH_ISSUE_UPDATED_AT_FILE" <<PY
 import json, os, pathlib, sys
 body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-auth=json.load(open(os.environ["GH_REC_AUTH_STATE_FILE"])) if os.environ.get("GH_REC_AUTH_STATE_FILE") else {}
+updated_at = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").strip()
+auth = (json.loads(pathlib.Path(os.environ["GH_REC_AUTH_STATE_FILE"]).read_text(encoding="utf-8"))
+        if os.environ.get("GH_REC_AUTH_STATE_FILE") else {})
 print(json.dumps({
     "body": body,
     "number": 2001,
@@ -227,6 +251,7 @@ print(json.dumps({
     "url": "https://github.com/eng-cc/oasis7/issues/2001",
     "state": auth.get("issue_state","OPEN").upper(),
     "stateReason": None,
+    "updatedAt": updated_at,
 }))
 PY
     ;;
@@ -234,21 +259,64 @@ PY
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
     mkdir -p "$GH_COMMENT_DIR"
     cat "${@: -1}" > "$GH_COMMENT_DIR/$n"
+    python3 - "$GH_COMMENT_DIR/$n" "$GH_COMMENT_DIR/comment-$n.json" "$GH_ISSUE_UPDATED_AT_FILE" "$n" <<'PY'
+from datetime import datetime, timedelta, timezone
+import json, pathlib, re, sys
+body_path, comment_path, issue_updated_path, raw_id = sys.argv[1:]
+comment_id = int(raw_id)
+body = pathlib.Path(body_path).read_text(encoding="utf-8")
+verified = re.search(r"^Verified At: ([^\n]+)$", body, re.MULTILINE)
+if verified:
+    created_at = verified.group(1)
+else:
+    created_at = (datetime(2000, 1, 1, tzinfo=timezone.utc)
+                  + timedelta(seconds=comment_id)).isoformat().replace("+00:00", "Z")
+comment = {
+    "id": comment_id,
+    "body": body,
+    "html_url": f"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-{comment_id}",
+    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/2001",
+    "created_at": created_at,
+    "updated_at": created_at,
+    "user": {"login": "eng-cc"},
+}
+pathlib.Path(comment_path).write_text(json.dumps(comment), encoding="utf-8")
+pathlib.Path(issue_updated_path).write_text(created_at + "\n", encoding="utf-8")
+PY
     if [[ "${OASIS7_REC_CASE:-}" == "pending_project_content_drift" ]] && grep -Fq 'oasis7-ci-publication-binding/v1' "${@: -1}"; then
       printf 'blocked\n' >"$GH_PROJECT_PHASE_STATE_FILE"
     fi
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2001#issuecomment-%s\n' "$n"
     ;;
+  "api repos/eng-cc/oasis7/issues/2001/comments --paginate --slurp")
+    python3 - "$GH_COMMENT_DIR" <<'PY'
+import json, pathlib, sys
+comment_dir = pathlib.Path(sys.argv[1])
+comments = [
+    json.loads(path.read_text(encoding="utf-8"))
+    for path in sorted(comment_dir.glob("comment-*.json"),
+                       key=lambda item: int(item.stem.split("-", 1)[1]))
+]
+print(json.dumps([comments]))
+PY
+    ;;
   api\ repos/eng-cc/oasis7/issues/comments/*)
     comment_id="${*: -1}"
     comment_id="${comment_id##*/}"
     python3 - "$GH_COMMENT_DIR/$comment_id" <<'PY'
 import json, pathlib, sys
-path=pathlib.Path(sys.argv[1]); print(json.dumps({"id":int(path.name),"body":path.read_text(),
-    "user":{"login":"eng-cc"},"author_association":"OWNER",
-    "issue_url":"https://api.github.com/repos/eng-cc/oasis7/issues/2001",
-    "html_url":"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-"+path.name}))
+path=pathlib.Path(sys.argv[1])
+metadata=path.parent / f"comment-{path.name}.json"
+if metadata.is_file():
+    comment=json.loads(metadata.read_text(encoding="utf-8"))
+else:
+    comment={"id":int(path.name),"user":{"login":"eng-cc"},
+        "issue_url":"https://api.github.com/repos/eng-cc/oasis7/issues/2001",
+        "html_url":"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-"+path.name}
+comment["body"]=path.read_text(encoding="utf-8")
+comment.setdefault("author_association","OWNER")
+print(json.dumps(comment))
 PY
     ;;
   "issue close 2001 -R eng-cc/oasis7 --reason completed")
@@ -268,6 +336,11 @@ PY
     printf '%s\n' '--- issue edit body ---' >> "$GH_EDIT_BODY_LOG"
     cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
     printf '\n' >> "$GH_EDIT_BODY_LOG"
+    if [[ "${GH_APPLY_ISSUE_EDIT_THEN_INTERRUPT:-0}" == "1" ]]; then
+      kill -TERM "${GH_INTERRUPT_TARGET:?missing explicit interrupt target}"
+      sleep 1
+      exit 143
+    fi
     printf 'edited\n'
     ;;
   "issue list -R eng-cc/oasis7 --search task_99999999999999999999999999999999 in:body --json number,url,title,state --limit 5")
@@ -296,13 +369,14 @@ print(json.dumps({
     "url": "https://github.com/eng-cc/oasis7/issues/2003",
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": "2026-10-01T00:00:00Z",
 }))
 PY
     ;;
   issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason*)
-    python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "${3}" <<'PY'
+    python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "${3}" "${GH_ISSUE_UPDATED_AT_FILE_2006:-}" <<'PY'
 import importlib.util, json, pathlib, sys
-script, mapping_path, number = sys.argv[1:]
+script, mapping_path, number = sys.argv[1:4]
 spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
 assert spec and spec.loader
 module = importlib.util.module_from_spec(spec)
@@ -314,6 +388,9 @@ if record is None:
     raise SystemExit("fixture has no selected Issue mapping")
 uid = str(record.get("task_uid") or "")
 body = module.issue_body(module.task_from_record(uid, record))
+updated_at = "2026-10-01T00:00:00Z"
+if int(number) == 2006 and len(sys.argv) > 4 and sys.argv[4]:
+    updated_at = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8").strip()
 print(json.dumps({
     "body": body,
     "number": int(number),
@@ -321,6 +398,7 @@ print(json.dumps({
     "url": str(record.get("issue_url") or ""),
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": updated_at,
 }))
 PY
     ;;
@@ -348,7 +426,48 @@ PY
     printf 'https://github.com/eng-cc/oasis7/issues/2003#issuecomment-%s\n' "$n"
     ;;
   "issue comment 2006 -R eng-cc/oasis7 --body-file "*)
-    printf 'https://github.com/eng-cc/oasis7/issues/2006#issuecomment-2006\n'
+    n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
+    mkdir -p "$GH_COMMENT_DIR"
+    cat "${@: -1}" > "$GH_COMMENT_DIR/$n"
+    python3 - "$GH_COMMENT_DIR/$n" "$GH_COMMENT_DIR/comment-$n.json" "$GH_ISSUE_UPDATED_AT_FILE_2006" "$n" <<'PY'
+from datetime import datetime, timedelta, timezone
+import json, pathlib, re, sys
+body_path, comment_path, issue_updated_path, raw_id = sys.argv[1:]
+comment_id = int(raw_id)
+body = pathlib.Path(body_path).read_text(encoding="utf-8")
+verified = re.search(r"^Verified At: ([^\n]+)$", body, re.MULTILINE)
+if verified:
+    created_at = verified.group(1)
+else:
+    created_at = (datetime(2000, 1, 1, tzinfo=timezone.utc)
+                  + timedelta(seconds=comment_id)).isoformat().replace("+00:00", "Z")
+comment = {
+    "id": comment_id,
+    "body": body,
+    "html_url": f"https://github.com/eng-cc/oasis7/issues/2006#issuecomment-{comment_id}",
+    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/2006",
+    "created_at": created_at,
+    "updated_at": created_at,
+    "user": {"login": "eng-cc"},
+}
+pathlib.Path(comment_path).write_text(json.dumps(comment), encoding="utf-8")
+pathlib.Path(issue_updated_path).write_text(created_at + "\n", encoding="utf-8")
+PY
+    printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
+    printf 'https://github.com/eng-cc/oasis7/issues/2006#issuecomment-%s\n' "$n"
+    ;;
+  "api repos/eng-cc/oasis7/issues/2006/comments --paginate --slurp")
+    python3 - "$GH_COMMENT_DIR" <<'PY'
+import json, pathlib, sys
+comment_dir = pathlib.Path(sys.argv[1])
+comments = [
+    item for path in sorted(comment_dir.glob("comment-*.json"),
+                             key=lambda item: int(item.stem.split("-", 1)[1]))
+    if (item := json.loads(path.read_text(encoding="utf-8"))).get("issue_url")
+       == "https://api.github.com/repos/eng-cc/oasis7/issues/2006"
+]
+print(json.dumps([comments]))
+PY
     ;;
   "project item-add 1 --owner eng-cc --url https://github.com/eng-cc/oasis7/issues/2001 --format json")
     printf '{"id":"ITEM_ID","content":{"url":"https://github.com/eng-cc/oasis7/issues/2001"}}\n'
@@ -472,6 +591,7 @@ git -C "$TMPDIR" commit -qm initial
 # root is registered and owns the task cache/evidence files used by the test.
 CANONICAL_WORKTREE_HINT="$(cd "$TMPDIR" && pwd -P)"
 export PATH="$TMPDIR/bin:$PATH"
+export PYTHONPATH="$TMPDIR${PYTHONPATH:+:$PYTHONPATH}"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 export GH_MAPPING_PATH="$TMPDIR/.pm/github-project-sync/tasks.json"
 export GH_PROJECT_STATE_FILE="$TMPDIR/project-live-state"
@@ -484,6 +604,8 @@ export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
 export GH_COMMENT_DIR="$TMPDIR/gh-comments"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
 export GH_ISSUE_BODY_STATE_FILE="$TMPDIR/issue-live-body.md"
+export GH_ISSUE_UPDATED_AT_FILE="$TMPDIR/.git/issue-updated-at"
+export GH_ISSUE_UPDATED_AT_FILE_2006="$TMPDIR/.git/issue-updated-at-2006"
 export GH_CANONICAL_WORKTREE_HINT="$CANONICAL_WORKTREE_HINT"
 export GH_PR_READ_COUNT_FILE="$TMPDIR/pr-read-count"
 export GH_PR_HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
@@ -494,6 +616,8 @@ export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
 : > "$GH_COMMENT_LOG"
 : > "$GH_EDIT_BODY_LOG"
 mkdir -p "$GH_COMMENT_DIR"
+printf '2026-10-01T00:00:00Z\n' > "$GH_ISSUE_UPDATED_AT_FILE"
+printf '2026-10-01T00:00:00Z\n' > "$GH_ISSUE_UPDATED_AT_FILE_2006"
 
 NEW_JSON="$TMPDIR/new.json"
 python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
@@ -1264,7 +1388,7 @@ import pr_projection_publication as publication
 expected_binding = json.loads((root / "recovery-binding.json").read_text())
 bindings = [publication.parse_publication_binding_comment(p.read_text())
             for p in (root / "gh-comments").iterdir()
-            if "<!-- oasis7-ci-publication-binding/v1 -->" in p.read_text()]
+            if p.name.isdecimal() and "<!-- oasis7-ci-publication-binding/v1 -->" in p.read_text()]
 assert [b for b in bindings if b["publication_id"] == expected_binding["publication_id"]] == [expected_binding], bindings
 # A successful CLI result must prove all remote poststates after the final
 # metadata effect. Pre-write admission reads cannot confirm publication.
@@ -1405,6 +1529,28 @@ if ! grep -Fq "refusing done without closeout" "$TMPDIR/move-done-without-closeo
   exit 1
 fi
 
+# Preserve an aligned snapshot for the independent retry fixture and for the
+# later lifecycle checks. The split-state case below is asserted before this
+# snapshot is reused to initialize separate disposable fixtures.
+PRE_SPLIT_DIR="$TMPDIR/.pm/scratch/pre-split-fixture"
+mkdir -p "$PRE_SPLIT_DIR"
+PRE_SPLIT_MAPPING="$PRE_SPLIT_DIR/tasks.json"
+PRE_SPLIT_ISSUE_BODY="$PRE_SPLIT_DIR/issue-body.md"
+PRE_SPLIT_PROJECT_STATE="$PRE_SPLIT_DIR/project-state"
+PRE_SPLIT_PROJECT_STATUS="$PRE_SPLIT_DIR/project-status"
+PRE_SPLIT_PROJECT_PHASE="$PRE_SPLIT_DIR/project-phase"
+PRE_SPLIT_ISSUE_UPDATED_AT="$PRE_SPLIT_DIR/issue-updated-at"
+PRE_SPLIT_COMMENT_LOG="$PRE_SPLIT_DIR/comment-log"
+PRE_SPLIT_COMMENT_DIR="$PRE_SPLIT_DIR/comment-dir"
+cp "$TMPDIR/.pm/github-project-sync/tasks.json" "$PRE_SPLIT_MAPPING"
+cp "$GH_ISSUE_BODY_STATE_FILE" "$PRE_SPLIT_ISSUE_BODY"
+cp "$GH_PROJECT_STATE_FILE" "$PRE_SPLIT_PROJECT_STATE"
+cp "$GH_PROJECT_STATUS_STATE_FILE" "$PRE_SPLIT_PROJECT_STATUS"
+cp "$GH_PROJECT_PHASE_STATE_FILE" "$PRE_SPLIT_PROJECT_PHASE"
+cp "$GH_ISSUE_UPDATED_AT_FILE" "$PRE_SPLIT_ISSUE_UPDATED_AT"
+cp "$GH_COMMENT_LOG" "$PRE_SPLIT_COMMENT_LOG"
+cp -R "$GH_COMMENT_DIR" "$PRE_SPLIT_COMMENT_DIR"
+
 CACHE_BEFORE_FAILURE="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 set +e
 GH_FAIL_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
@@ -1415,8 +1561,17 @@ set -e
 [[ "$FAILED_CLOSEOUT_STATUS" != "0" ]]
 CACHE_AFTER_FAILURE="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 [[ "$CACHE_BEFORE_FAILURE" == "$CACHE_AFTER_FAILURE" ]]
-if [[ "$(cat "$GH_PROJECT_STATE_FILE")" != "ready" ]]; then
-  echo "expected partial remote Project state to be ready before refresh" >&2
+for field in '- status: `committed`' '- workflow_phase: `verification`'; do
+  if ! grep -Fq -- "$field" "$GH_ISSUE_BODY_STATE_FILE"; then
+    echo "expected injected Issue edit failure to retain Issue field: $field" >&2
+    cat "$GH_ISSUE_BODY_STATE_FILE" >&2
+    exit 1
+  fi
+done
+if [[ "$(cat "$GH_PROJECT_STATE_FILE")" != "ready" \
+   || "$(cat "$GH_PROJECT_STATUS_STATE_FILE")" != "Ready / PR" \
+   || "$(cat "$GH_PROJECT_PHASE_STATE_FILE")" != "pre_pr_ready" ]]; then
+  echo "expected partial remote Project state to be ready/pre_pr_ready before refresh" >&2
   cat "$TMPDIR/failed-closeout.err" >&2
   cat "$GH_CALL_LOG" >&2
   exit 1
@@ -1432,35 +1587,260 @@ record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
 assert record["status"] == "ready", record
 assert record["workflow_phase"] == "pre_pr_ready", record
 assert record["project_status"] == "Ready / PR", record
-assert record["reconciled_from_project"] is True, record
 PY
-PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
-  --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json"
-# Refresh intentionally reconciles the partial remote Project state and rewrites
-# the local mapping. Bind the SIGTERM immutability check to that new baseline,
-# not to the pre-refresh cache captured for the failed closeout.
-CACHE_BEFORE_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
-
+for field in '- status: `committed`' '- workflow_phase: `verification`'; do
+  if ! grep -Fq -- "$field" "$GH_ISSUE_BODY_STATE_FILE"; then
+    echo "expected authoritative Issue body to retain field after refresh: $field" >&2
+    cat "$GH_ISSUE_BODY_STATE_FILE" >&2
+    exit 1
+  fi
+done
 set +e
-GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" /bin/bash -c \
-  'export GH_INTERRUPT_TARGET=$$; exec "$@"' bash "$TMPDIR/scripts/pm/task-closeout.sh" \
-  --role tpm --task-uid "$TASK_UID" --verification-profile fixture_repository_state --review-packet-file "$REVIEW_PACKET" --json \
-  >"$TMPDIR/interrupted-closeout.json" 2>"$TMPDIR/interrupted-closeout.err"
-INTERRUPTED_CLOSEOUT_STATUS=$?
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
+  --json audit --task-uid "$TASK_UID" \
+  >"$TMPDIR/audit-after-refresh.json" 2>"$TMPDIR/audit-after-refresh.err"
+AUDIT_AFTER_REFRESH_STATUS=$?
 set -e
-[[ "$INTERRUPTED_CLOSEOUT_STATUS" != "0" ]]
-CACHE_AFTER_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
-if [[ "$CACHE_BEFORE_INTERRUPT" != "$CACHE_AFTER_INTERRUPT" ]]; then
-  echo "github-project-task.test: interrupted closeout changed mapping" >&2
+if [[ "$AUDIT_AFTER_REFRESH_STATUS" == "0" ]]; then
+  echo "github-project-task.test: expected selected-task audit to reject the partial Issue/Project split" >&2
+  cat "$TMPDIR/audit-after-refresh.json" >&2
   exit 1
 fi
+python3 - "$TMPDIR/audit-after-refresh.json" "$TASK_UID" <<'PY'
+import json, pathlib, sys
+audit = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+uid = sys.argv[2]
+expected = f"{uid}: cached workflow_phase drift; refresh explicitly from authoritative GitHub issue"
+assert audit.get("status") == "failed", audit
+assert audit.get("errors") == [expected], audit
+selected = audit.get("selected_task")
+assert selected and selected.get("target") == "ready", selected
+assert selected.get("workflow_phase") == "pre_pr_ready", selected
+PY
+# The failed Issue edit above remains a complete negative case: refresh sees
+# the Project-ahead / Issue-behind split and the selected audit rejects it.
+# Exercise response-loss retry separately with a second synthetic task and an
+# isolated root whose Issue, Project, and cache begin aligned.
+(
+  set -euo pipefail
+  ALIGNED_ROOT="$TMPDIR/worktree/aligned-prepr-retry-root"
+  ALIGNED_UID="task_88888888888888888888888888888888"
+  mkdir -p "$TMPDIR/worktree"
+  git -C "$TMPDIR" worktree add -b aligned-prepr-retry "$ALIGNED_ROOT" HEAD >/dev/null 2>&1
+  ALIGNED_DATA="$ALIGNED_ROOT/.pm/scratch/aligned-prepr-fixture"
+  mkdir -p "$ALIGNED_DATA" "$ALIGNED_ROOT/.pm/github-project-sync"
 
-PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
-  --role tpm \
-  --task-uid "$TASK_UID" \
-  --verification-profile fixture_repository_state \
-  --review-packet-file "$REVIEW_PACKET" \
-  --json > "$TMPDIR/closeout.json"
+  cp "$PRE_SPLIT_MAPPING" "$ALIGNED_ROOT/.pm/github-project-sync/tasks.json"
+  ALIGNED_BRANCH="$(git -C "$ALIGNED_ROOT" branch --show-current)"
+  python3 - "$ALIGNED_ROOT/.pm/github-project-sync/tasks.json" "$ALIGNED_UID" "$ALIGNED_ROOT" "$ALIGNED_BRANCH" <<'PY'
+import copy, json, pathlib, sys
+path, uid, root, branch = pathlib.Path(sys.argv[1]), sys.argv[2], pathlib.Path(sys.argv[3]), sys.argv[4]
+mapping = json.loads(path.read_text(encoding="utf-8"))
+source = next(iter(mapping["tasks"].values()))
+record = copy.deepcopy(source)
+record["task_uid"] = uid
+record["title"] = "Aligned applied-write interruption fixture"
+record["worktree_hint"] = str(root.resolve())
+record["canonical_worktree"] = str(root.resolve())
+record["task_branch"] = branch
+record["status"] = "committed"
+record["workflow_phase"] = "verification"
+for key in (
+    "pr_url", "pr_number", "completion_mode", "non_pr_completion_evidence",
+    "non_pr_completion_evidence_sha256", "non_pr_completion_evidence_file",
+    "last_closed_at", "last_evidence_at", "last_claim_verification_at",
+    "claim_verifications", "evidence_comments",
+):
+    record.pop(key, None)
+mapping["tasks"] = {uid: record}
+path.write_text(json.dumps(mapping) + "\n", encoding="utf-8")
+PY
+
+  export GH_MAPPING_PATH="$ALIGNED_ROOT/.pm/github-project-sync/tasks.json"
+  export GH_PROJECT_STATE_FILE="$ALIGNED_DATA/project-live-state"
+  export GH_PROJECT_STATUS_STATE_FILE="$ALIGNED_DATA/project-live-status"
+  export GH_PROJECT_PHASE_STATE_FILE="$ALIGNED_DATA/project-live-phase"
+  export GH_PROJECT_PR_STATE_FILE="$ALIGNED_DATA/project-live-pr"
+  export GH_ISSUE_BODY_STATE_FILE="$ALIGNED_DATA/issue-live-body.md"
+  export GH_ISSUE_UPDATED_AT_FILE="$ALIGNED_DATA/issue-updated-at"
+  export GH_CALL_LOG="$ALIGNED_DATA/gh-calls.log"
+  export GH_COMMENT_LOG="$ALIGNED_DATA/gh-comments.log"
+  export GH_COMMENT_DIR="$ALIGNED_DATA/gh-comments"
+  export GH_EDIT_BODY_LOG="$ALIGNED_DATA/issue-body-edited.md"
+  export GH_CANONICAL_WORKTREE_HINT="$ALIGNED_ROOT"
+  unset GH_REC_AUTH_STATE_FILE GH_REC_PROJECT_ITEM_CONTENT_FILE GH_REC_FAIL_FINAL_ISSUE OASIS7_REC_CASE || true
+  printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
+  printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+  printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+  : >"$GH_PROJECT_PR_STATE_FILE"
+  : >"$GH_CALL_LOG"
+  : >"$GH_COMMENT_LOG"
+  mkdir -p "$GH_COMMENT_DIR"
+  printf '2026-10-01T00:00:00Z\n' >"$GH_ISSUE_UPDATED_AT_FILE"
+  python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "$ALIGNED_UID" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import importlib.util, json, pathlib, sys
+script, mapping_path, uid, issue_path = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("aligned_fixture_task_helper", script)
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+mapping = json.loads(pathlib.Path(mapping_path).read_text(encoding="utf-8"))
+record = mapping["tasks"][uid]
+pathlib.Path(issue_path).write_text(
+    module.issue_body(module.task_from_record(uid, record)), encoding="utf-8"
+)
+PY
+
+  ALIGNED_HEAD="$(git -C "$ALIGNED_ROOT" rev-parse HEAD)"
+  ALIGNED_LEDGER_DIR="$ALIGNED_ROOT/.pm/scratch/$ALIGNED_UID"
+  ALIGNED_REVIEW_PACKET="$ALIGNED_DATA/review-packet.md"
+  mkdir -p "$ALIGNED_LEDGER_DIR" "$ALIGNED_ROOT/.pm/scratch/$ALIGNED_UID/review-plans"
+  printf 'fixture return\n' >"$ALIGNED_LEDGER_DIR/return.md"
+  ALIGNED_RETURN_SHA="$(shasum -a 256 "$ALIGNED_LEDGER_DIR/return.md" | awk '{print $1}')"
+  printf '{"receipt_type":"oasis7_subagent_dispatch","issuer":"codex_runtime","dispatch_id":"22222222-2222-4222-8222-222222222222","role":"repository_health_engineer","source_head":"%s","contract_digest":"%064d"}\n' "$ALIGNED_HEAD" 0 >"$ALIGNED_LEDGER_DIR/dispatch.json"
+  printf '{"task_uid":"%s","role":"repository_health_engineer","status":"completed","head":"%s","slice_id":"22222222-2222-4222-8222-222222222222","dispatch_receipt":".pm/scratch/%s/dispatch.json","activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified: fixture","artifact_digest":"%s","scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"fixture","artifacts":[".pm/scratch/%s/return.md"]}\n' "$ALIGNED_UID" "$ALIGNED_HEAD" "$ALIGNED_UID" "$ALIGNED_RETURN_SHA" "$ALIGNED_UID" >"$ALIGNED_LEDGER_DIR/slice-ledger.jsonl"
+  ALIGNED_REVIEW_PLAN="$ALIGNED_ROOT/.pm/scratch/$ALIGNED_UID/review-plans/fixture.json"
+  python3 - "$ALIGNED_REVIEW_PLAN" "$ALIGNED_HEAD" "$ALIGNED_UID" <<'PY'
+import json, sys
+path, head, uid = sys.argv[1:]
+json.dump({
+  "schema": "oasis7-review-plan/v1", "task_uid": uid, "frozen_head": head,
+  "comparison_ref": "HEAD", "comparison_oid": head,
+  "relevant_evidence_digest": "a" * 64,
+  "roles": ["repository_health_engineer"],
+  "expected_slices": [{"role": "repository_health_engineer", "slice_id": "22222222-2222-4222-8222-222222222222"}],
+  "epoch": "b" * 64, "batch_path": ".pm/scratch/%s/review-batches/%s.json" % (uid, "b" * 64),
+  "preflight": {"status": "incomplete", "ledger_path": ".pm/scratch/%s/slice-ledger.jsonl" % uid},
+}, open(path, "w"))
+PY
+  printf -- '- Pre-PR Local Role Review: passed\n- Source Head: %s\n- Review Plan: .pm/scratch/%s/review-plans/fixture.json\n- Review Roles: stale_compatibility_role\n- Slice Ledger: n/a; derived from Review Plan\n' "$ALIGNED_HEAD" "$ALIGNED_UID" >"$ALIGNED_REVIEW_PACKET"
+
+  for field in '- status: `committed`' '- workflow_phase: `verification`'; do
+    grep -Fq -- "$field" "$GH_ISSUE_BODY_STATE_FILE"
+  done
+  [[ "$(cat "$GH_PROJECT_STATE_FILE")" == "committed" ]]
+  [[ "$(cat "$GH_PROJECT_STATUS_STATE_FILE")" == "In Progress" ]]
+  [[ "$(cat "$GH_PROJECT_PHASE_STATE_FILE")" == "verification" ]]
+  ALIGNED_CACHE_BEFORE="$(shasum -a 256 "$GH_MAPPING_PATH" | awk '{print $1}')"
+  set +e
+  GH_APPLY_ISSUE_EDIT_THEN_INTERRUPT=1 PM_ROOT_DIR="$ALIGNED_ROOT" /bin/bash -c \
+    'export GH_INTERRUPT_TARGET=$$; exec "$@"' bash "$TMPDIR/scripts/pm/task-closeout.sh" \
+    --role tpm --task-uid "$ALIGNED_UID" --verification-profile fixture_repository_state --review-packet-file "$ALIGNED_REVIEW_PACKET" --json \
+    >"$ALIGNED_DATA/interrupted-closeout.json" 2>"$ALIGNED_DATA/interrupted-closeout.err"
+  ALIGNED_INTERRUPT_STATUS=$?
+  set -e
+  [[ "$ALIGNED_INTERRUPT_STATUS" != "0" ]]
+  ALIGNED_CACHE_AFTER="$(shasum -a 256 "$GH_MAPPING_PATH" | awk '{print $1}')"
+  [[ "$ALIGNED_CACHE_BEFORE" == "$ALIGNED_CACHE_AFTER" ]]
+  if [[ "$(cat "$GH_PROJECT_STATE_FILE")" != "ready" ]]; then
+    echo "github-project-task.test: independent applied-write fixture failed before Project transition" >&2
+    cat "$ALIGNED_DATA/interrupted-closeout.err" >&2
+    cat "$GH_CALL_LOG" >&2
+    exit 1
+  fi
+  [[ "$(cat "$GH_PROJECT_STATE_FILE")" == "ready" ]]
+  [[ "$(cat "$GH_PROJECT_STATUS_STATE_FILE")" == "Ready / PR" ]]
+  [[ "$(cat "$GH_PROJECT_PHASE_STATE_FILE")" == "pre_pr_ready" ]]
+  cp "$GH_ISSUE_BODY_STATE_FILE" "$ALIGNED_DATA/issue-after-applied-interruption.md"
+  python3 - "$GH_ISSUE_BODY_STATE_FILE" "$ALIGNED_UID" <<'PY'
+import pathlib, sys
+body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+assert f"task_uid: {sys.argv[2]}" in body, body
+assert "- status: `ready`" in body, body
+assert "- workflow_phase: `pre_pr_ready`" in body, body
+PY
+
+  "$TMPDIR/bin/gh" issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason \
+    >"$ALIGNED_DATA/issue-after-interruption-readback.json"
+  python3 - "$ALIGNED_DATA/issue-after-interruption-readback.json" "$ALIGNED_UID" <<'PY'
+import json, pathlib, sys
+readback = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert readback["number"] == 2001 and readback["state"] == "OPEN", readback
+assert f"task_uid: {sys.argv[2]}" in readback["body"], readback
+assert "- status: `ready`" in readback["body"], readback
+assert "- workflow_phase: `pre_pr_ready`" in readback["body"], readback
+PY
+
+  PM_ROOT_DIR="$ALIGNED_ROOT" "$TMPDIR/scripts/pm/refresh-task-cache.sh" \
+    --task-uid "$ALIGNED_UID" --json >"$ALIGNED_DATA/refreshed-after-interruption.json"
+  python3 - "$GH_MAPPING_PATH" "$ALIGNED_UID" <<'PY'
+import json, pathlib, sys
+record=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["tasks"][sys.argv[2]]
+assert record["status"] == "ready", record
+assert record["workflow_phase"] == "pre_pr_ready", record
+assert record["project_status"] == "Ready / PR", record
+PY
+  PM_ROOT_DIR="$ALIGNED_ROOT" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
+    --json audit --task-uid "$ALIGNED_UID" >"$ALIGNED_DATA/audit-after-refresh.json"
+  python3 - "$ALIGNED_DATA/audit-after-refresh.json" "$ALIGNED_UID" <<'PY'
+import json, pathlib, sys
+audit=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert audit.get("status") == "ok", audit
+selected=audit.get("selected_task")
+assert selected and selected.get("task_uid") == sys.argv[2], selected
+assert selected.get("target") == "ready", selected
+assert selected.get("workflow_phase") == "pre_pr_ready", selected
+PY
+
+  COMMENTS_BEFORE_RETRY="$(wc -l < "$GH_COMMENT_LOG" | tr -d ' ')"
+  PM_ROOT_DIR="$ALIGNED_ROOT" "$TMPDIR/scripts/pm/task-closeout.sh" \
+    --role tpm --task-uid "$ALIGNED_UID" --verification-profile fixture_repository_state \
+    --review-packet-file "$ALIGNED_REVIEW_PACKET" --json >"$ALIGNED_DATA/retried-closeout.json"
+  COMMENTS_AFTER_RETRY="$(wc -l < "$GH_COMMENT_LOG" | tr -d ' ')"
+  python3 - "$ALIGNED_DATA/retried-closeout.json" "$ALIGNED_UID" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import json, pathlib, sys
+result=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert result["task_uid"] == sys.argv[2], result
+assert result["target_status"] == "ready" and result["final_status"] == "ready", result
+body=pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+assert body.count("- status: `ready`") == 1, body
+assert body.count("- workflow_phase: `pre_pr_ready`") == 1, body
+PY
+  printf 'observed aligned pre-PR evidence comments: after applied interruption=%s; after retry=%s\n' \
+    "$COMMENTS_BEFORE_RETRY" "$COMMENTS_AFTER_RETRY"
+)
+
+# End the negative and independent retry cases. The later legacy PR lifecycle
+# checks are a separate fixture scenario; initialize its cache, Issue, and
+# Project together at ready/pre_pr_ready. This reset is not a recovery path
+# for the failed split task.
+cp "$PRE_SPLIT_MAPPING" "$TMPDIR/.pm/github-project-sync/tasks.json"
+python3 - "$TMPDIR/github-project-task.py" "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import hashlib, importlib.util, json, pathlib, sys
+script, mapping_path, uid, issue_path = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("fresh_legacy_lifecycle_fixture", script)
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+mapping_file = pathlib.Path(mapping_path)
+mapping = json.loads(mapping_file.read_text(encoding="utf-8"))
+record = mapping["tasks"][uid]
+record["status"] = "ready"
+record["workflow_phase"] = "pre_pr_ready"
+record["completion_mode"] = "non_pr_task"
+record["non_pr_completion_evidence"] = "persisted fixture completion truth"
+record["non_pr_completion_evidence_sha256"] = hashlib.sha256(
+    (record["non_pr_completion_evidence"] + "\n").encode("utf-8")
+).hexdigest()
+evidence_path = pathlib.Path(record["non_pr_completion_evidence_file"])
+evidence_path.write_text(record["non_pr_completion_evidence"] + "\n", encoding="utf-8")
+for key in ("pr_url", "pr_number"):
+    record.pop(key, None)
+mapping_file.write_text(json.dumps(mapping) + "\n", encoding="utf-8")
+pathlib.Path(issue_path).write_text(
+    module.issue_body(module.task_from_record(uid, record)), encoding="utf-8"
+)
+PY
+LEGACY_READY_INITIAL_BODY="$TMPDIR/legacy-ready-initial-issue.md"
+cp "$GH_ISSUE_BODY_STATE_FILE" "$LEGACY_READY_INITIAL_BODY"
+printf 'ready\n' >"$GH_PROJECT_STATE_FILE"
+printf 'Ready / PR\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+printf 'pre_pr_ready\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+if [[ -n "${GH_PROJECT_PR_STATE_FILE:-}" ]]; then : >"$GH_PROJECT_PR_STATE_FILE"; fi
+cp "$PRE_SPLIT_ISSUE_UPDATED_AT" "$GH_ISSUE_UPDATED_AT_FILE"
+cp "$PRE_SPLIT_COMMENT_LOG" "$GH_COMMENT_LOG"
+rm -rf "$GH_COMMENT_DIR"
+cp -R "$PRE_SPLIT_COMMENT_DIR" "$GH_COMMENT_DIR"
 
 python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
   --repo eng-cc/oasis7 \
@@ -1492,21 +1872,37 @@ pathlib.Path(r['non_pr_completion_evidence_file']).write_text(
 open(p,'w',encoding='utf-8').write(json.dumps(m)+'\n')
 PY
 
+set +e
 PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
   --role tpm \
   --task-uid "$TASK_UID" \
   --to-status done \
-  --verification-profile fixture_repository_state \
+  --verification-profile repository_required \
   --claim-type task_complete \
-  --json > "$TMPDIR/done-closeout.json"
+  --json > "$TMPDIR/done-closeout.json" 2> "$TMPDIR/done-closeout.err"
+DONE_CLOSEOUT_STATUS=$?
+set -e
+if [[ "$DONE_CLOSEOUT_STATUS" != "0" ]]; then
+  set +e
+  PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
+    --json audit --task-uid "$TASK_UID" \
+    > "$TMPDIR/done-closeout-transition-audit.json" 2> "$TMPDIR/done-closeout-transition-audit.err"
+  set -e
+  echo "github-project-task.test: independent lifecycle done-closeout failed; selected audit follows" >&2
+  cat "$TMPDIR/done-closeout.err" >&2
+  cat "$TMPDIR/done-closeout-transition-audit.json" >&2
+  cat "$TMPDIR/done-closeout-transition-audit.err" >&2
+  exit 1
+fi
 
-python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" "$GH_COMMENT_LOG" "$TMPDIR/issue-body-edited.md" <<'PY'
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" "$GH_COMMENT_LOG" "$TMPDIR/issue-body-edited.md" "$LEGACY_READY_INITIAL_BODY" <<'PY'
 import json, pathlib, sys
 mapping = json.loads(pathlib.Path(sys.argv[1]).read_text())
 uid = sys.argv[2]
 calls = pathlib.Path(sys.argv[3]).read_text()
 comments = pathlib.Path(sys.argv[4]).read_text().splitlines()
 edited_body = pathlib.Path(sys.argv[5]).read_text()
+initial_body = pathlib.Path(sys.argv[6]).read_text()
 record = mapping["tasks"][uid]
 assert record["issue_url"] == "https://github.com/eng-cc/oasis7/issues/2001", record
 assert record["project_item_id"] == "ITEM_ID", record
@@ -1517,12 +1913,18 @@ assert record["worktree_hint"] == str(pathlib.Path(sys.argv[1]).parents[2].resol
 assert len(comments) >= 7, comments
 assert record["claim_verifications"][-1]["claim_type"] == "task_complete", record
 assert record["claim_verifications"][-1]["status"] == "verified", record
+assert record["claim_verifications"][-1]["verification_profile"] == "repository_required", record
+assert record["claim_verifications"][-1]["verify_command"] == "true", record
+assert record["claim_verifications"][-1]["repository_head"] == record["claim_verifications"][-1]["frozen_source_head"], record
+assert "api repos/eng-cc/oasis7/issues/2001/comments --paginate --slurp" in calls, calls
 assert "issue create" in calls, calls
 assert "issue edit 2001" in calls, calls
 assert "issue close 2001" not in calls, calls
 assert f"task_uid: {uid}" in edited_body, edited_body
+assert f"task_uid: {uid}" in initial_body, initial_body
+assert "- status: `ready`" in initial_body, initial_body
+assert "- workflow_phase: `pre_pr_ready`" in initial_body, initial_body
 assert "- status: `committed`" in edited_body, edited_body
-assert "- status: `ready`" in edited_body, edited_body
 assert "- status: `pr_watch`" in edited_body, edited_body
 assert "- status: `done`" in edited_body, edited_body
 assert f"- worktree_hint: `{record['worktree_hint']}`" in edited_body, edited_body
@@ -1757,8 +2159,16 @@ fi
 
 # `task_done` is an intermediate terminal workflow state. A Project whose live
 # schema exposes only the coarse `done` option must not strand remedial closeout;
-# fine terminal sequencing remains in the local mapping and receipts.
-CLOSEOUT_CLAIM='{"claim_type":"task_complete","status":"verified","allowed_to_claim":true,"verification_exit_code":0,"verified_at":"2026-07-01T12:00:00Z"}'
+# fine terminal sequencing remains in the local mapping and receipts. Generate
+# the claim from claim-ready so this path exercises the same canonical claim and
+# exact live Issue-comment readback as production closeout.
+PM_ROOT_DIR="$MISSING_OPTION_ROOT" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
+  --task-uid "$MISSING_OPTION_UID" \
+  --verification-profile repository_required \
+  --claim-type task_complete \
+  --json > "$TMPDIR/missing-option-claim.json"
+CLOSEOUT_CLAIM="$(cat "$TMPDIR/missing-option-claim.json")"
+cp "$GH_ISSUE_UPDATED_AT_FILE_2006" "$TMPDIR/missing-option-claim-issue-updated-at.txt"
 if ! python3 "$TMPDIR/github-project-task.py" closeout-task "$MISSING_OPTION_ROOT" \
   --repo eng-cc/oasis7 --project-owner eng-cc --project-number 3 \
   --task-uid "$MISSING_OPTION_UID" --role tpm --to-status done \
@@ -1768,13 +2178,51 @@ if ! python3 "$TMPDIR/github-project-task.py" closeout-task "$MISSING_OPTION_ROO
   exit 1
 fi
 export GH_MAPPING_PATH="$PRIMARY_GH_MAPPING_PATH"
-python3 - "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" "$MISSING_OPTION_UID" "$TMPDIR/missing-option-closeout.json" <<'PY'
-import json,sys
+python3 - "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" "$MISSING_OPTION_UID" "$TMPDIR/missing-option-closeout.json" "$TMPDIR/missing-option-claim.json" "$GH_COMMENT_DIR" "$TMPDIR/missing-option-claim-issue-updated-at.txt" <<'PY'
+import json,pathlib,re,sys
 record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
 payload=json.load(open(sys.argv[3],encoding="utf-8"))
+claim=json.load(open(sys.argv[4],encoding="utf-8"))
+comment_dir=pathlib.Path(sys.argv[5])
+issue_updated_at=pathlib.Path(sys.argv[6]).read_text(encoding="utf-8").strip()
 assert record["status"] == "done" and record["workflow_phase"] == "task_done", record
 assert payload["updated_field_values"] == 3, payload
+assert record["claim_verifications"][-1] == claim, (record["claim_verifications"][-1], claim)
+assert claim["claim_type"] == "task_complete" and claim["status"] == "verified", claim
+assert claim["verification_profile"] == "repository_required", claim
+assert claim["verify_command"] == "true", claim
+assert claim["verification_mode"] == "detached_frozen_tree", claim
+assert claim["repository_head"] == claim["frozen_source_head"], claim
+assert re.fullmatch(r"[0-9a-f]{40,64}", claim["frozen_source_head"]), claim
+assert re.fullmatch(r"[0-9a-f]{64}", claim["repository_fingerprint_before"]), claim
+assert claim["repository_fingerprint_before"] == claim["repository_fingerprint_after"], claim
+comments = [json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted(comment_dir.glob("comment-*.json"))]
+expected_body = "\n".join((
+    "<!-- oasis7-pm-claim-verification -->",
+    f"Task UID: {sys.argv[2]}",
+    f"Claim Type: {claim['claim_type']}",
+    f"Verified At: {claim['verified_at']}",
+    f"Verification Exit Code: {claim['verification_exit_code']}",
+    f"Verification Status: {claim['status']}",
+    f"Verify Command: {claim['verify_command']}",
+    f"Claim Message: {claim['claim_message']}",
+    "",
+))
+matches = [comment for comment in comments
+           if comment.get("issue_url") == "https://api.github.com/repos/eng-cc/oasis7/issues/2006"
+           and comment.get("body") == expected_body]
+assert len(matches) == 1, matches
+comment = matches[0]
+assert type(comment["id"]) is int and comment["id"] > 0, comment
+assert comment["html_url"] == f"https://github.com/eng-cc/oasis7/issues/2006#issuecomment-{comment['id']}", comment
+assert comment["created_at"] == comment["updated_at"] == claim["verified_at"] == issue_updated_at, comment
 PY
+if ! grep -Fq 'api repos/eng-cc/oasis7/issues/2006/comments --paginate --slurp' "$GH_CALL_LOG"; then
+  echo "github-project-task.test: remedial closeout must read back the exact Issue claim comment" >&2
+  cat "$GH_CALL_LOG" >&2
+  exit 1
+fi
 
 # Cross-layer traceability fields must survive the Issue serializer/parser and
 # remain section-scoped. The Project projection is intentionally coarse; the

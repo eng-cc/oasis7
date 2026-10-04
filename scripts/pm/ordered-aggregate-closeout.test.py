@@ -163,11 +163,20 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 "aggregate_plan_comment_id": "6001", "aggregate_plan_sha256": "sha256:" + "3" * 64,
                 "claim_verifications": [],
             }
-            live_updated_at = live_updated_at or str(claim.get("verified_at") or record["updated_at"])
+            # The caller-supplied claim is the value under test. Keep the live
+            # accepted comment fixed to the original repository-owned claim so
+            # malformed or altered candidates cannot mint their own provenance.
+            accepted_claim = self.production_task_complete_claim()
+            accepted_verified_at = dt.datetime.fromisoformat(
+                accepted_claim["verified_at"].replace("Z", "+00:00"),
+            )
+            accepted_comment_at = (accepted_verified_at + dt.timedelta(seconds=1))
+            accepted_comment_at_text = accepted_comment_at.isoformat().replace("+00:00", "Z")
+            live_updated_at = live_updated_at or accepted_comment_at_text
             if claim_comments is None:
-                claim_comments = ([{
-                    **self.task_complete_comment(self.task_complete_comment_body(claim), live_updated_at),
-                }] if claim.get("verified_at") else [])
+                claim_comments = [self.task_complete_comment(
+                    self.task_complete_comment_body(accepted_claim), accepted_comment_at_text,
+                )]
             issue_body = "\n".join((
                 f"task_uid: {UID}",
                 "- status: `committed`",
@@ -192,8 +201,9 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                     self.assertIn("updatedAt", command[command.index("--json") + 1])
                     return json.dumps(live_issue_payload)
                 if (command[:2] == ["gh", "api"]
-                        and command[2] == f"repos/{REPO}/issues/4035/comments?per_page=1&sort=created&direction=desc"):
-                    return json.dumps(claim_comments)
+                        and command[2] == f"repos/{REPO}/issues/4035/comments"):
+                    self.assertEqual(command[3:], ["--paginate", "--slurp"])
+                    return json.dumps([claim_comments])
                 raise AssertionError(f"unexpected live Issue read: {command}")
             args = Namespace(
                 root=ROOT, task_uid=UID, to_status="done", repo=REPO, role="tpm",
@@ -1103,9 +1113,12 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                   "owner_role": "tpm", "module": "engineering", "priority": "P2",
                   "worktree_hint": str(ROOT), "pr_number": 5101,
                   "pr_url": f"https://github.com/{REPO}/pull/5101", "claim_verifications": []}
+        claim = self.production_task_complete_claim()
+        verified_at = dt.datetime.fromisoformat(claim["verified_at"].replace("Z", "+00:00"))
+        comment_at = (verified_at + dt.timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
+        comment = self.task_complete_comment(self.task_complete_comment_body(claim), comment_at)
         args = Namespace(task_uid=UID, to_status="done", repo=REPO, role="tpm",
-                         claim_json=json.dumps({"claim_type": "task_complete", "status": "verified",
-                                                "allowed_to_claim": True, "verification_exit_code": 0}),
+                         claim_json=json.dumps(claim),
                          pr_receipt=None, aggregate_receipt=None, aggregate_plan=None,
                          aggregate_candidate=None, aggregate_evidence=None, json=False)
         effects = []
@@ -1113,7 +1126,10 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 mock.patch.object(self.task, "github_issue_record", return_value={
                     "task_uid": UID, "issue_number": 4035, "status": "committed",
                     "pr_number": 5101, "pr_url": f"https://github.com/{REPO}/pull/5101",
+                    "issue_url": f"https://github.com/{REPO}/issues/4035",
+                    "issue_state": "OPEN", "updated_at": comment_at,
                 }), \
+                mock.patch.object(self.task, "run_text", return_value=json.dumps([[comment]])), \
                 mock.patch.object(self.task, "synchronize_live_issue_traceability", return_value=frozenset()), \
                 mock.patch.object(self.task, "issue_comment", side_effect=lambda *a, **k: "comment-url"), \
                 mock.patch.object(self.task, "update_done_project_fields", side_effect=lambda *a, **k: effects.append("project") or 1), \

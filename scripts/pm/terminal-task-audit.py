@@ -551,6 +551,72 @@ def _route_drift_result(task_uid: str, record: dict, issue: dict, error: str) ->
     }
 
 
+def _audit_selected_delivery(root: pathlib.Path, task_uid: str, record: dict,
+                             issue: dict, completion_route_identity: bool,
+                             route_error: str | None) -> dict:
+    """Audit the mapped delivery protocol through its shared versioned reader."""
+    from loop_terminal import read_shared_terminal_proof
+
+    receipt_root = _receipt_root(root, task_uid)
+    proof = read_shared_terminal_proof(
+        str(record.get("repository") or ""), task_uid,
+        repo_root=root, record=record, include_readbacks=True,
+    )
+    readbacks = proof.pop("_readbacks", {})
+    live_issue = readbacks.get("issue") if isinstance(readbacks, dict) else {}
+    live_pr = readbacks.get("pr") if isinstance(readbacks, dict) else {}
+    item = readbacks.get("project_item") if isinstance(readbacks, dict) else {}
+    values = (item.get("fieldValues") or {}).get("nodes", []) if isinstance(item, dict) else []
+    project_fields = {}
+    for value in values:
+        name = ((value.get("field") or {}).get("name")) if isinstance(value, dict) else None
+        if isinstance(name, str):
+            project_fields[name] = value.get("name", value.get("text", ""))
+    project = item.get("project") if isinstance(item, dict) else {}
+    normalized_item = {
+        "id": item.get("id") if isinstance(item, dict) else None,
+        "_project_owner": ((project.get("owner") or {}).get("login")) if isinstance(project, dict) else None,
+        "_project_number": project.get("number") if isinstance(project, dict) else None,
+        "_field_values_has_next_page": ((item.get("fieldValues") or {}).get("pageInfo") or {}).get("hasNextPage") if isinstance(item, dict) else None,
+        "content": item.get("content") if isinstance(item, dict) else None,
+        **project_fields,
+    }
+    normalized_pr = {
+        "state": "MERGED" if isinstance(live_pr, dict) and live_pr.get("merged") is True else (live_pr.get("state") if isinstance(live_pr, dict) else None),
+        "mergedAt": live_pr.get("merged_at") if isinstance(live_pr, dict) else None,
+        "headRefName": ((live_pr.get("head") or {}).get("ref")) if isinstance(live_pr, dict) else None,
+    }
+    checks = {
+        "completion_route_identity": completion_route_identity,
+        "mapping_post_merge_done": record.get("workflow_phase") == "post_merge_done",
+        "terminal_delivery_proof_valid": proof.get("status") == "passed",
+        "issue_closed": str((live_issue or {}).get("state") or "").upper() == "CLOSED",
+        "project_item_bound": str(normalized_item.get("id") or "") == str(record.get("project_item_id") or ""),
+        "project_terminal": all(normalized_item.get(key) == value for key, value in {
+            "Status": "Done", "PM Status": "done", "Workflow Phase": "done",
+        }.items()),
+        "pr_merged": normalized_pr.get("state") == "MERGED" and bool(normalized_pr.get("mergedAt"))
+                     and normalized_pr.get("headRefName") == record.get("task_branch"),
+    }
+    drift = [name for name, ok in checks.items() if not ok]
+    return {
+        "schema": "oasis7_terminal_task_audit_v1",
+        "task_uid": task_uid,
+        "status": "reconciled" if not drift else "drifted",
+        "checks": checks,
+        "drift": drift,
+        "route_error": route_error,
+        "task": {key: record.get(key) for key in (
+            "repository", "issue_number", "pr_number", "status", "workflow_phase",
+            "canonical_worktree", "task_branch",
+        )},
+        "live": {"issue": live_issue, "pr": normalized_pr, "project_item": normalized_item},
+        "proof": {key: value for key, value in proof.items() if key != "_readbacks"},
+        "cleanup": {"status": "independent", "blocks_delivery": False},
+        "receipt_root": str(receipt_root),
+    }
+
+
 def aggregate_resume_command(
     root: pathlib.Path,
     task_uid: str,
@@ -628,6 +694,24 @@ def audit(
             task_uid, record, issue,
             route_error or "post_merge_done task lacks a recognized PR completion route",
         )
+    phase_receipts = record.get("phase_receipts")
+    has_v2_selector = any(key in record for key in (
+        "phase_receipt_type", "phase_receipt_comment_id", "phase_receipt_comment_sha256",
+    )) or ("phase_receipt_sha256" in record and not (
+        isinstance(phase_receipts, dict) and "post_merge_done" in phase_receipts
+    ))
+    if has_v2_selector:
+        if not completion_route_identity:
+            return _route_drift_result(
+                task_uid, record, issue,
+                route_error or "terminal proof selector is mixed with the cached completion route",
+            )
+        try:
+            return _audit_selected_delivery(
+                root, task_uid, record, issue, completion_route_identity, route_error,
+            )
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError, subprocess.SubprocessError) as exc:
+            return _route_drift_result(task_uid, record, issue, f"versioned delivery proof readback failed: {exc}")
     receipt_root_result = subprocess.run(
         [sys.executable, str(root / "scripts/pm/canonical-receipt-root.py"),
          "--default-worktree", str(root), "--task-uid", task_uid],
@@ -758,6 +842,11 @@ def audit(
         "local_branch_absent": not local_branch_present,
         "remote_branch_absent": remote_branch.returncode == 0 and not remote_branch.stdout.strip(),
     }
+    cleanup_check_names = (
+        "worktree_absent", "task_branch_not_registered_elsewhere",
+        "local_branch_absent", "remote_branch_absent",
+    )
+    cleanup_checks = {name: checks.pop(name) for name in cleanup_check_names}
     drift = [name for name, ok in checks.items() if not ok]
     return {
         "schema": "oasis7_terminal_task_audit_v1",
@@ -770,6 +859,11 @@ def audit(
                  ("repository", "issue_number", "pr_number", "status", "workflow_phase",
                   "canonical_worktree", "task_branch")},
         "live": {"issue": issue, "pr": pr, "project_item": project_live},
+        "cleanup": {
+            "status": "clear" if all(cleanup_checks.values()) else "retained_or_unknown",
+            "blocks_delivery": False,
+            "checks": cleanup_checks,
+        },
         "receipt_root": str(receipt_root),
     }
 

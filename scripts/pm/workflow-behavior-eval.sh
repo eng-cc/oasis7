@@ -108,6 +108,9 @@ python3 "$ROOT_DIR/scripts/pm/tpm-workflow-driver.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-workflow-doc-contract.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-transition-order.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/terminal-delivery-protocol.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/resource-cleanup-safety.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/terminal_proof.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-adversarial-contract.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" ruleset >/dev/null
 "$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" none >/dev/null
@@ -122,11 +125,21 @@ OASIS7_PM_TEST_SCRATCH="$OASIS7_WORKFLOW_EVAL_SCRATCH/bootstrap" \
   "$ROOT_DIR/scripts/pm/bootstrap-immutable-request.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-main-sync.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-main-sync-default-cache-recovery.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalize.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalizer-ledger-red.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalizer-comment-readback-red.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalizer-project-ledger-red.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/recover-terminal-task-mapping.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-transport.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-repeat.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-prior-receipt.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/readiness-legacy-repeat.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-trust.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-cleanup-fault-isolation.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-crash.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-cleanup-resume.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-reconciliation-contract.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-task-audit-project-semantics.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/non-merge-finalize-red.test.py" >/dev/null
@@ -311,7 +324,7 @@ checks = [
         root / "AGENTS.md",
         [
             "default-workflow-bootstrap",
-            f"确认标准 task worktree / GitHub Project-backed task truth / owner role 真值",
+            "每个需求只有一个 owner role、一个 GitHub Project-backed task truth、一个 canonical worktree、一个有序 PR 主链",
             f"{bt}tpm{bt} 主 Agent + 专业角色 subagents",
             "TPM 的 TODO decomposition",
             "mandatory context checklist",
@@ -321,7 +334,9 @@ checks = [
             "requesting-repo-owned-review/SKILL.md",
             "只读专业判断分流",
             "纯文件存在性、路径查找、命令输出复述",
-            "任何用户请求第一步都必须创建或进入标准 task worktree",
+            "普通及只读请求按 `default-workflow-bootstrap` 绑定 task truth",
+            "拟启动 workflow-change task 时，canonical prior-approval stop 必须先于 bootstrap/task binding、反思捕获、Issue/Project/worktree 创建或 scope promotion",
+            "用户请求的只读审计/诊断仍可正常 bootstrap，且不授权改 policy",
             "subagent slice contracts",
             "Subagent runtime",
             "inherit current parent selection",
@@ -334,7 +349,8 @@ checks = [
             "# Role: tpm",
             "TPM 只做 workflow coordination / integration",
             "默认由 `tpm` 作为新仓库变更任务的主 Agent、workflow coordinator / integrator",
-            "每个用户请求必须先创建或进入标准 task worktree",
+            "普通或只读用户请求按 bootstrap 创建或进入标准 task worktree，并绑定单一 GitHub task、owner、worktree、branch 和 PR 主链；workflow-change task 的 [canonical prior-approval rule]",
+            "只读审计/诊断仍按普通 bootstrap 处理，不授权改 policy",
             "专业角色以 subagent 形式提供切片工作",
             "不得用 TPM 自己的判断替代专业 subagent 结论",
             "仓库不在 `.codex/config.toml` 固定",
@@ -732,7 +748,7 @@ scenarios = [
             "Execution evidence is recorded in GitHub task issue evidence comments.",
             "Historical project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments",
             "but they do not replace them for task execution truth.",
-            "remain repo-local unless a later source-of-truth",
+            "and migration archives are ignored local caches; GitHub Issues/Project/evidence",
         ],
     },
     {
@@ -832,12 +848,14 @@ scenarios = [
         "required_markers": [
             "a branch is about to create a PR",
             "Use after implementation freeze and before the canonical Pre-PR Ready gate.",
-            "./scripts/pm/review-closeout.sh --task-uid <uid> --review-plan <plan>",
-            "generation to `record-pre-pr-review.sh`",
+            "./scripts/pm/review-closeout.sh --task-uid",
+            "--role-returns \"$ROLE_RETURNS\" --finding-resolution \"$MANIFEST\"",
+            "generates the canonical packet.",
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
-            "Before dispatch, record the plan and batch paths and digests in GitHub task issue evidence comments.",
-            "dispatch the complete role batch while exact-head CI runs independently",
+            "Before dispatch, record the plan and batch paths and digests in the single structured GitHub task-Issue dispatch comment described in step 4.",
+            "Before dispatching any role, publish and read back the complete plan-bound packet set once:",
+            "then runs source-bound PR CI and professional review concurrently.",
             "CI planner, role selector, plan, admission and closeout must bind the same projection digest",
             "Before Pre-PR Ready or promotion, perform the fail-closed",
             "A legacy `--evidence-digest` or audit-only shadow result",
@@ -1025,7 +1043,10 @@ if (
     or "Closeout and promotion live-validate the latest explicitly requested CI identity and join it with the completed source review; neither branch authorizes readiness alone" not in source_text
 ):
     raise SystemExit("workflow-behavior-eval: fail-closed parallel CI/review join contract is incomplete")
-if "dispatch the complete role batch while exact-head CI runs independently" not in review_skill:
+if (
+    "then runs source-bound PR CI and professional review concurrently." not in review_skill
+    or "publish and read back the complete plan-bound packet set once:" not in review_skill
+):
     raise SystemExit("workflow-behavior-eval: review skill does not activate concurrent CI/review scheduling")
 if join_marker not in review_skill and "fail-closed\njoin against the current PR" not in review_skill:
     raise SystemExit("workflow-behavior-eval: review skill does not require the current-identity join")
