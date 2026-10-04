@@ -137,55 +137,9 @@ def existing_ready_publication_fixture(
     marker_scope: str | None = None,
     marker_projection_digest: str | None = None,
     task_refs_body: str | None = None,
-    full_projection: bool = False,
 ) -> tuple[object, dict[str, object], pathlib.Path, str, list[dict[str, str]]]:
     publication_module = MODULE.load_pr_projection_publication_module()
-    planner_config_digest = "sha256:" + "d" * 64
-    policy_digest = publication_module.digest({"policy": "test"})
-    leaf = None
-    if full_projection:
-        planner = {
-            "schema": "oasis7-required-plan-v1",
-            "planner_config_sha256": planner_config_digest,
-            "scope": "full",
-            "selected_capabilities": [],
-            "test_profile": "required",
-            "declared_tests": ["required-baseline"],
-        }
-        leaf = {
-            "schema": "oasis7-workflow-impact-projection/v2",
-            "task_uid": UID,
-            "source_head_oid": publication_head,
-            "scope_base_oid": publication_scope,
-            "changed_paths": [],
-            "changed_paths_digest": publication_module.digest([]),
-            "change_class": "unknown",
-            "manual_roles": [],
-            "domain_role": None,
-            "test_profile": "required",
-            "declared_tests": ["required-baseline"],
-            "consumed_contracts": [],
-            "public_semantics": [],
-            "affected_consumers": [],
-            "closure_status": {"status": "incomplete", "reason": None, "evidence": []},
-            "ci_scope": "full",
-            "ci_capabilities": [],
-            "ci_reasons": [],
-            "review_roles": ["qa_engineer"],
-            "ordered_role_ids": ["qa_engineer"],
-            "review_scope": {},
-            "review_escalated": False,
-            "review_reasons": [],
-            "planner_config_sha256": planner_config_digest,
-            "planner_identity": planner,
-            "planner_digest": publication_module.digest(planner),
-            "verification_affected": True,
-        }
-        leaf["projection_digest"] = publication_module.digest(leaf)
-        policy_digest = leaf["planner_digest"]
-    projection_digest = (publication_projection_digest
-                         or (leaf["projection_digest"] if leaf is not None
-                             else publication_module.digest({"projection": "current"})))
+    projection_digest = publication_projection_digest or publication_module.digest({"projection": "current"})
     publication = publication_module.build_task_publication(
         repository=publication_repository,
         repository_id=7,
@@ -197,10 +151,9 @@ def existing_ready_publication_fixture(
         source_head_oid=publication_head,
         source_scope_oid=publication_scope,
         planner_authority_oid="c" * 40,
-        planner_config_sha256=planner_config_digest,
-        policy_digest=policy_digest,
+        planner_config_sha256="sha256:" + "d" * 64,
+        policy_digest=publication_module.digest({"policy": "test"}),
         projection_digest=projection_digest,
-        **({"workflow_impact_projection": leaf} if leaf is not None else {}),
     )
     binding = publication_module.build_publication_binding(
         publication, 2001, f"https://github.com/{publication_repository}/pull/2001",
@@ -854,37 +807,6 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             self.assertGreater(writer_counts["verified_comment"], 0)
             self.assertGreater(writer_counts["mapping"], 0)
             self.assertEqual(before, self.digest(mapping_path), "the mocked persistence seam must leave fixture bytes unchanged")
-
-    def test_existing_ready_record_pr_accepts_full_leaf_v2_task_publication(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = pathlib.Path(directory)
-            record = mapping_record(status="ready", phase="pre_pr_ready")
-            record.update(record_pr_identity(root))
-            record["pr_url"] = "https://github.com/eng-cc/oasis7/pull/2001"
-            record["pr_number"] = 2001
-            self.write_mapping(root, record)
-            publication_module, publication, binding_path, body, comments = existing_ready_publication_fixture(
-                root, full_projection=True,
-            )
-            self.assertEqual("oasis7-ci-publication/v2", publication["schema"])
-            self.assertEqual(
-                publication["projection_digest"],
-                publication["workflow_impact_projection"]["projection_digest"],
-            )
-            self.assertEqual(publication, publication_module.parse_publication_comment(comments[0]["body"]))
-            request = record_pr_args(
-                root, existing_ready_update=True, publication_binding_json=binding_path,
-            )
-            error, writer_details = self.invoke_existing_ready_writer(
-                request, record, record_pr_live_pr(body=body), comments,
-            )
-
-            self.assertIsNone(error, f"valid full-leaf v2 C1 admission was rejected: {error}")
-            writer_counts = writer_details["counts"]
-            self.assertGreater(writer_counts["project"], 0)
-            self.assertGreater(writer_counts["issue"], 0)
-            self.assertGreater(writer_counts["verified_comment"], 0)
-            self.assertGreater(writer_counts["mapping"], 0)
 
     def test_existing_ready_record_pr_rejects_missing_publication_binding_before_writers(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

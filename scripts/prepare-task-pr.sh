@@ -1525,7 +1525,6 @@ CARGO_PACKAGE_SCOPE_STATUS="not_run"
 CARGO_PACKAGE_SCOPE_COMMAND=""
 CARGO_PACKAGE_SCOPE_REASON=""
 CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE=""
-CARGO_PACKAGE_SCOPE_ACTIVATED="0"
 CLAIM_READY_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
@@ -1760,48 +1759,8 @@ else
   if ! CARGO_PACKAGE_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
     --repo-root "$SOURCE_WORKTREE" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
     --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json 2>&1)"; then
-    CARGO_PACKAGE_SCOPE_BASE_FAILURE="$CARGO_PACKAGE_SCOPE_OUTPUT"
-    if [[ -z "$BOUND_TASK_UID" || ! -f "$SOURCE_WORKTREE/scripts/pm/first_activation.py" ]]; then
-      printf '%s\n' "$CARGO_PACKAGE_SCOPE_BASE_FAILURE" >&2
-      die "Cargo package scope check failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
-    fi
-    TASK_REPOSITORY="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$BOUND_TASK_UID" <<'PY'
-import json
-import sys
-from pathlib import Path
-mapping = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-task = (mapping.get("tasks") or {}).get(sys.argv[2]) or {}
-project = mapping.get("project") or {}
-repository = project.get("repo") or task.get("repository") or ""
-if not isinstance(repository, str) or repository.count("/") != 1:
-    raise SystemExit("canonical task repository is unavailable")
-print(repository)
-PY
-)" || die "first-activation Project task repository lookup failed"
-    FIRST_ACTIVATION_HELPER="$SOURCE_WORKTREE/scripts/pm/first_activation.py"
-    if ! FIRST_ACTIVATION_PROOF="$(python3 "$FIRST_ACTIVATION_HELPER" \
-      --repo-root "$SOURCE_WORKTREE" --repository "$TASK_REPOSITORY" \
-      --task-uid "$BOUND_TASK_UID" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
-      --mapping "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" \
-      --verify-activation 2>&1)"; then
-      printf '%s\n' "$CARGO_PACKAGE_SCOPE_BASE_FAILURE" >&2
-      printf '%s\n' "$FIRST_ACTIVATION_PROOF" >&2
-      die "activated dependency-floor scope is unavailable for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
-    fi
-    git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:.pm/cargo-package-scope-policy.json" \
-      >"$CARGO_PACKAGE_SCOPE_POLICY" 2>/dev/null \
-      || die "trusted base Cargo package-scope policy is unavailable"
-    CARGO_PACKAGE_SCOPE_CHECKER="$SOURCE_WORKTREE/scripts/pm/check-cargo-package-scope"
-    CARGO_PACKAGE_SCOPE_COMMAND="$(render_cmd python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
-      --repo-root "$SOURCE_WORKTREE" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
-      --first-activation-task-uid "$BOUND_TASK_UID" --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json)"
-    if ! CARGO_PACKAGE_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
-      --repo-root "$SOURCE_WORKTREE" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
-      --first-activation-task-uid "$BOUND_TASK_UID" --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json 2>&1)"; then
-      printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
-      die "activated Cargo dependency-floor checker failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
-    fi
-    CARGO_PACKAGE_SCOPE_ACTIVATED="1"
+    printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
+    die "Cargo package scope check failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
   fi
   CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("primary_package") or "")' <<<"$CARGO_PACKAGE_SCOPE_OUTPUT")" \
     || die "Cargo package scope output is malformed"
@@ -1809,7 +1768,7 @@ PY
   # Ordinary local required-validation reads may inspect a Cargo diff without
   # selecting a task; keep those reads usable while making task-bound PR
   # preparation fail closed on missing or mismatched package intent.
-  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" && -n "$BOUND_TASK_UID" && "$CARGO_PACKAGE_SCOPE_ACTIVATED" != "1" ]]; then
+  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" && -n "$BOUND_TASK_UID" ]]; then
     [[ -n "$BOUND_TASK_PRIMARY_PACKAGE" ]] \
       || die "Cargo diff changes one business package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE) but canonical task primary_package is missing"
     [[ "$BOUND_TASK_PRIMARY_PACKAGE" == "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" ]] \

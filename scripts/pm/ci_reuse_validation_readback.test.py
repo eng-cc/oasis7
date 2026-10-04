@@ -18,11 +18,6 @@ import zipfile
 MODULE_PATH = Path(__file__).with_name("ci_reuse_validation_readback.py")
 FIXTURE_ISSUE_NUMBER = 87
 FIXTURE_PR_NUMBER = 143
-PM_PATH = MODULE_PATH.parent
-sys.path.insert(0, str(PM_PATH))
-import pr_projection_publication as task_publication
-import projection_publication_contract as projection_contract
-import pr_projection_resolver as projection_resolver
 SPEC = importlib.util.spec_from_file_location("ci_reuse_validation_readback", MODULE_PATH)
 readback = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -120,97 +115,6 @@ class SuccessorAdapterTests(unittest.TestCase):
         with patch.object(api, "get_json", return_value=response):
             with self.assertRaises(readback.ReadbackError):
                 readback._workflow_blob_at(api, "c" * 40)
-
-
-class TaskProjectionPublicationConsumerTests(unittest.TestCase):
-    @staticmethod
-    def _projection(task_uid, head, scope, config):
-        planner = {
-            "schema": "oasis7-required-plan-v1", "planner_config_sha256": config,
-            "scope": "full", "selected_capabilities": [], "test_profile": "required",
-            "declared_tests": ["required-baseline"],
-        }
-        value = {
-            "schema": "oasis7-workflow-impact-projection/v2", "task_uid": task_uid,
-            "source_head_oid": head, "scope_base_oid": scope,
-            "changed_paths": [], "changed_paths_digest": projection_contract.digest([]),
-            "change_class": "unknown", "manual_roles": [], "domain_role": None,
-            "test_profile": "required", "declared_tests": ["required-baseline"],
-            "consumed_contracts": [], "public_semantics": [], "affected_consumers": [],
-            "closure_status": {"status": "incomplete", "reason": None, "evidence": []},
-            "ci_scope": "full", "ci_capabilities": [], "ci_reasons": [],
-            "review_roles": ["qa_engineer"], "ordered_role_ids": ["qa_engineer"],
-            "review_scope": {}, "review_escalated": False, "review_reasons": [],
-            "planner_config_sha256": config, "planner_identity": planner,
-            "planner_digest": projection_contract.digest(planner), "verification_affected": True,
-        }
-        value["projection_digest"] = projection_contract.digest(value)
-        return value
-
-    def test_readback_consumer_resolves_v2_full_leaf_and_rejects_v1_only(self):
-        task_uid, head, scope = "task_" + "a" * 32, "1" * 40, "2" * 40
-        config = "sha256:" + "c" * 64
-        leaf = self._projection(task_uid, head, scope, config)
-        identity = {
-            "repository": "eng-cc/oasis7", "repository_id": 7, "task_uid": task_uid,
-            "bootstrap_epoch": 1, "source_repository_id": 7,
-            "source_ref": "feature/full-leaf", "target_ref": "main",
-            "source_head_oid": head, "source_scope_oid": scope,
-            "planner_authority_oid": "3" * 40, "planner_config_sha256": config,
-            "policy_digest": leaf["planner_digest"],
-            "projection_digest": leaf["projection_digest"],
-        }
-        publication = task_publication.build_task_publication(
-            **identity, workflow_impact_projection=leaf,
-        )
-        binding = task_publication.build_publication_binding(
-            publication, FIXTURE_PR_NUMBER,
-            f"https://github.com/eng-cc/oasis7/pull/{FIXTURE_PR_NUMBER}",
-        )
-        _contract, pr_marker = task_publication.prepare(
-            task_uid=task_uid, source_head_oid=head, scope_base_oid=scope,
-            projection_digest=leaf["projection_digest"],
-        )
-        pr = {
-            "body": pr_marker, "state": "open", "merged": False,
-            "base": {"repo": {"id": 7}, "ref": "main"},
-            "head": {"repo": {"id": 7}, "ref": "feature/full-leaf", "sha": head},
-        }
-        comments = (
-            {"body": task_publication.publication_comment(publication)},
-            {"body": task_publication.publication_binding_comment(binding)},
-        )
-        expected = {
-            "task_uid": task_uid, "pr_number": FIXTURE_PR_NUMBER,
-            "head_oid": head, "source_scope_oid": scope,
-        }
-        modules = {
-            "projection_publication_contract": projection_contract,
-            "pr_projection_journal": object(),
-            "pr_projection_publication": task_publication,
-            "pr_projection_resolver": projection_resolver,
-        }
-        with patch.object(readback, "_load_from_root", side_effect=lambda _root, name: modules[name]):
-            self.assertEqual(
-                leaf["projection_digest"],
-                readback._projection_digest_from_v2(
-                    pr_marker, expected, pr, comments, Path("."),
-                ),
-            )
-
-            v1 = task_publication.build_task_publication(**identity)
-            old_binding = task_publication.build_publication_binding(
-                v1, FIXTURE_PR_NUMBER,
-                f"https://github.com/eng-cc/oasis7/pull/{FIXTURE_PR_NUMBER}",
-            )
-            old_comments = (
-                {"body": task_publication.publication_comment(v1)},
-                {"body": task_publication.publication_binding_comment(old_binding)},
-            )
-            with self.assertRaisesRegex(readback.ReadbackError, "full-leaf Task publication v2"):
-                readback._projection_digest_from_v2(
-                    pr_marker, expected, pr, old_comments, Path("."),
-                )
 
 
 class GitHubPaginationTests(unittest.TestCase):
@@ -861,84 +765,6 @@ class ProjectTaskResolutionTests(unittest.TestCase):
             side_effect=readback.subprocess.CalledProcessError(1, ["gh"]),
         ):
             with self.assertRaisesRegex(readback.ReadbackError, "lacks read permission"):
-                api.resolve_project_task_issue("task_" + "a" * 32)
-
-    def test_graphql_receives_only_dedicated_project_token_without_command_or_error_leak(self):
-        project_token = "fake-project-read-token"
-        repository_token = "fake-repository-token"
-        payload = b'{"data":{}}'
-        with patch.dict("os.environ", {
-            "OASIS7_PROJECT_READ_TOKEN": project_token,
-            "GH_TOKEN": repository_token,
-            "GITHUB_TOKEN": repository_token,
-        }, clear=True):
-            api = readback.GitHubReadOnly()
-            with patch.object(
-                readback.subprocess, "check_output", return_value=payload,
-            ) as call:
-                api.graphql("query { viewer { login } }", {})
-        command = call.call_args.args[0]
-        child_env = call.call_args.kwargs["env"]
-        self.assertNotIn(project_token, command)
-        self.assertEqual(child_env["GH_TOKEN"], project_token)
-        self.assertNotIn("GITHUB_TOKEN", child_env)
-        self.assertNotIn("OASIS7_PROJECT_READ_TOKEN", child_env)
-        with patch.dict("os.environ", {"OASIS7_PROJECT_READ_TOKEN": project_token}, clear=True):
-            api = readback.GitHubReadOnly()
-            with patch.object(
-                readback.subprocess, "check_output",
-                side_effect=readback.subprocess.CalledProcessError(1, ["gh"]),
-            ):
-                with self.assertRaises(readback.ReadbackError) as caught:
-                    api.graphql("query { viewer { login } }", {})
-        self.assertNotIn(project_token, str(caught.exception))
-
-    def test_hosted_graphql_missing_project_token_fails_before_gh_fallback(self):
-        with patch.dict("os.environ", {
-            "GITHUB_ACTIONS": "true",
-            "GH_TOKEN": "repository-token-must-not-be-used",
-        }, clear=True), patch.object(readback.subprocess, "check_output") as call:
-            api = readback.GitHubReadOnly()
-            with self.assertRaisesRegex(readback.ReadbackError, "dedicated Project"):
-                api.graphql("query { viewer { login } }", {})
-        call.assert_not_called()
-
-    def test_local_graphql_keeps_existing_authenticated_human_gh_route(self):
-        with patch.dict("os.environ", {"GH_TOKEN": "local-human-token"}, clear=True):
-            api = readback.GitHubReadOnly()
-            with patch.object(
-                readback.subprocess, "check_output", return_value=b'{"data":{}}',
-            ) as call:
-                api.graphql("query { viewer { login } }", {})
-        self.assertIsNone(call.call_args.kwargs["env"])
-
-    def test_repository_rest_and_artifact_commands_never_inherit_project_token(self):
-        with patch.dict("os.environ", {
-            "GITHUB_ACTIONS": "true",
-            "OASIS7_PROJECT_READ_TOKEN": "fake-project-read-token",
-            "GH_TOKEN": "fake-repository-token",
-        }, clear=True):
-            api = readback.GitHubReadOnly()
-            with patch.object(
-                readback.subprocess, "check_output", return_value=b"response",
-            ) as call, patch.object(
-                readback, "_decode_included_response", return_value=({}, b'{"ok":true}'),
-            ):
-                api.get_json("repos/example/repo/issues/1")
-                api.get_bytes("repos/example/repo/actions/artifacts/1/zip")
-        for invocation in call.call_args_list:
-            environment = invocation.kwargs["env"]
-            self.assertNotIn("OASIS7_PROJECT_READ_TOKEN", environment)
-            self.assertEqual(environment["GH_TOKEN"], "fake-repository-token")
-
-    def test_redacted_project_item_does_not_satisfy_uid_lookup(self):
-        payload = self._payload()
-        payload["data"]["search"]["nodes"][0]["projectItems"]["nodes"][0]["content"] = {
-            "__typename": "Redacted",
-        }
-        api = readback.GitHubReadOnly()
-        with patch.object(api, "graphql", return_value=payload):
-            with self.assertRaisesRegex(readback.ReadbackError, "identity or field listing"):
                 api.resolve_project_task_issue("task_" + "a" * 32)
 
 

@@ -11,16 +11,12 @@ from typing import Any, Callable
 
 from pr_projection_journal import JournalError, PublicationJournal
 from projection_publication_contract import (
-    CI_PUBLICATION_IDENTITY_FIELDS, CI_PUBLICATION_V1_SCHEMA,
-    CI_PUBLICATION_V2_SCHEMA, MAX_BODY_BYTES, ContractError, build_contract,
-    digest, decode_marker, encode_marker, validate_ci_publication, validate_contract,
+    CI_PUBLICATION_IDENTITY_FIELDS, ContractError, build_contract, digest,
+    decode_marker, encode_marker, validate_ci_publication, validate_contract,
 )
 
 PUBLICATION_BINDING_SCHEMA = "oasis7-ci-publication-binding/v1"
 _BODY_MARKER = "<!-- oasis7-ci-impact-publication:v2 -->"
-_TASK_PUBLICATION_V1_MARKER = "<!-- oasis7-ci-publication/v1 -->"
-_TASK_PUBLICATION_V2_MARKER = "<!-- oasis7-ci-publication/v2 -->"
-_TASK_PUBLICATION_MARKERS = (_TASK_PUBLICATION_V1_MARKER, _TASK_PUBLICATION_V2_MARKER)
 _BINDING_MARKER = "<!-- oasis7-ci-publication-binding/v1 -->"
 _SHA1_OID_RE = re.compile(r"[0-9a-f]{40}\Z")
 
@@ -46,7 +42,6 @@ def prepare(*, task_uid: str, source_head_oid: str, scope_base_oid: str,
 
 
 def build_task_publication(**identity: Any) -> dict[str, Any]:
-    workflow_impact_projection = identity.pop("workflow_impact_projection", None)
     fields = (
         "repository", "repository_id", "task_uid", "bootstrap_epoch",
         "source_repository_id", "source_ref", "target_ref", "source_head_oid",
@@ -55,40 +50,23 @@ def build_task_publication(**identity: Any) -> dict[str, Any]:
     )
     if set(identity) != set(fields):
         raise ContractError("Task publication identity fields do not match contract")
-    schema = (CI_PUBLICATION_V2_SCHEMA if workflow_impact_projection is not None
-              else CI_PUBLICATION_V1_SCHEMA)
-    value = {"schema": schema, **identity, "projection_required": True}
-    if workflow_impact_projection is not None:
-        value["workflow_impact_projection"] = workflow_impact_projection
+    value = {"schema": "oasis7-ci-publication/v1", **identity, "projection_required": True}
     value["publication_id"] = digest({key: value[key] for key in CI_PUBLICATION_IDENTITY_FIELDS})
     return validate_ci_publication(value)
 
 
 def publication_comment(publication: dict[str, Any]) -> str:
     value = validate_ci_publication(publication)
-    marker = (_TASK_PUBLICATION_V2_MARKER if value["schema"] == CI_PUBLICATION_V2_SCHEMA
-              else _TASK_PUBLICATION_V1_MARKER)
-    body = marker + "\n" + json.dumps(
+    return "<!-- oasis7-ci-publication/v1 -->\n" + json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     )
-    if len(body.encode("utf-8")) > MAX_BODY_BYTES:
-        raise ContractError("CI publication comment exceeds 60KiB limit")
-    return body
-
-
-def has_task_publication_marker(body: Any) -> bool:
-    """Identify historical v1 and current v2 Task publication comments."""
-    return isinstance(body, str) and any(marker in body for marker in _TASK_PUBLICATION_MARKERS)
 
 
 def parse_publication_comment(body: str) -> dict[str, Any]:
-    markers = _TASK_PUBLICATION_MARKERS
-    if not isinstance(body, str) or len(body.encode("utf-8")) > MAX_BODY_BYTES:
-        raise ContractError("CI publication comment exceeds 60KiB limit")
-    present = [marker for marker in markers if marker in body]
-    if len(present) != 1 or body.count(present[0]) != 1 or not body.startswith(present[0] + "\n"):
+    marker = "<!-- oasis7-ci-publication/v1 -->"
+    if not isinstance(body, str) or body.count(marker) != 1 or not body.startswith(marker + "\n"):
         raise ContractError("CI publication marker must occur exactly once")
-    payload = body.split(present[0], 1)[1].strip()
+    payload = body.split(marker, 1)[1].strip()
     decoder = json.JSONDecoder(object_pairs_hook=_unique_object)
     try:
         value, end = decoder.raw_decode(payload)

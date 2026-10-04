@@ -195,7 +195,6 @@ def task_publication(root: Path, args: argparse.Namespace) -> tuple[dict[str, An
         planner_config_sha256=projection["planner_config_sha256"],
         policy_digest=projection["planner_digest"],
         projection_digest=projection["projection_digest"],
-        workflow_impact_projection=projection,
     )
     candidate_projection = {
         "task_uid": projection["task_uid"],
@@ -300,10 +299,7 @@ class GitHubPublicationAdapter:
         bodies = []
         for comment in self._issue_comments():
             body = comment["body"]
-            if not any(marker in body for marker in (
-                "<!-- oasis7-ci-publication/v1 -->",
-                "<!-- oasis7-ci-publication/v2 -->",
-            )):
+            if "<!-- oasis7-ci-publication/v1 -->" not in body:
                 continue
             value = publication.parse_publication_comment(body)
             if (value["task_uid"] == target["task_uid"]

@@ -8,7 +8,6 @@ import importlib.util
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,196 +33,24 @@ SCOPE = "b" * 40
 AUTHORITY = "d" * 40
 
 
-def make_full_projection(*, task_uid: str, head: str, scope: str,
-                         config: str = CONFIG) -> dict:
-    planner = {
-        "schema": "oasis7-required-plan-v1",
-        "planner_config_sha256": config,
-        "scope": "full",
-        "selected_capabilities": [],
-        "test_profile": "required",
-        "declared_tests": ["required-baseline"],
-    }
-    value = {
-        "schema": "oasis7-workflow-impact-projection/v2",
-        "task_uid": task_uid,
-        "source_head_oid": head,
-        "scope_base_oid": scope,
-        "changed_paths": [],
-        "changed_paths_digest": digest([]),
-        "change_class": "unknown",
-        "manual_roles": [],
-        "domain_role": None,
-        "test_profile": "required",
-        "declared_tests": ["required-baseline"],
-        "consumed_contracts": [],
-        "public_semantics": [],
-        "affected_consumers": [],
-        "closure_status": {"status": "incomplete", "reason": None, "evidence": []},
-        "ci_scope": "full",
-        "ci_capabilities": [],
-        "ci_reasons": [],
-        "review_roles": ["qa_engineer"],
-        "ordered_role_ids": ["qa_engineer"],
-        "review_scope": {},
-        "review_escalated": False,
-        "review_reasons": [],
-        "planner_config_sha256": config,
-        "planner_identity": planner,
-        "planner_digest": digest(planner),
-        "verification_affected": True,
-    }
-    value["projection_digest"] = digest(value)
-    return value
-
-
 def make_publication(index: int, *, head: str | None = None, branch: str | None = None,
                      repository: str = "eng-cc/oasis7", task_uid: str = UID):
     head = head or f"{index + 1:040x}"
     branch = branch or f"feature/c1-{index}"
-    projection = make_full_projection(task_uid=task_uid, head=head, scope=SCOPE)
-    projection_digest = projection["projection_digest"]
+    projection_digest = digest({"target": index})
     publication = publication_module.build_task_publication(
         repository=repository, repository_id=7, task_uid=task_uid,
         bootstrap_epoch=1, source_repository_id=7, source_ref=branch,
         target_ref="main", source_head_oid=head, source_scope_oid=SCOPE,
         planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
-        policy_digest=projection["planner_digest"], projection_digest=projection_digest,
-        workflow_impact_projection=projection,
+        policy_digest=digest({"policy": "test"}), projection_digest=projection_digest,
     )
-    candidate_projection = {
+    projection = {
         "task_uid": task_uid, "source_head_oid": head, "scope_base_oid": SCOPE,
         "planner_config_sha256": CONFIG, "projection_digest": projection_digest,
         "consumed_contracts": [],
     }
-    return publication, candidate_projection
-
-
-class TaskPublicationV2ContractTests(unittest.TestCase):
-    def test_trusted_task_publication_producer_carries_exact_verified_leaf(self):
-        with tempfile.TemporaryDirectory() as temp:
-            temp_root = Path(temp)
-            root = temp_root / "repo"
-            (root / "scripts" / "pm").mkdir(parents=True)
-            (root / "scripts").mkdir(exist_ok=True)
-            (root / ".pm" / "github-project-sync").mkdir(parents=True)
-            shutil.copyfile(ROOT / "workflow-impact-projection.py",
-                            root / "scripts" / "pm" / "workflow-impact-projection.py")
-            repository_root = ROOT.parent.parent
-            config_bytes = (repository_root / "scripts" / "ci-required-scope.v2.json").read_bytes()
-            (root / "scripts" / "ci-required-scope.v2.json").write_bytes(config_bytes)
-            branch = "feature/full-leaf-producer"
-            subprocess.run(["git", "init", "-q", str(root)], check=True)
-            subprocess.run(["git", "-C", str(root), "checkout", "-qb", branch], check=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.name", "Projection Fixture"], check=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.email", "projection@example.test"], check=True)
-            uid = "task_" + "8" * 32
-            task = {
-                "task_uid": uid, "repository": "eng-cc/oasis7", "issue_number": 123,
-                "task_branch": branch, "default_branch": "main",
-                "canonical_worktree": str(root.resolve()), "bootstrap_epoch": 1,
-            }
-            (root / ".pm" / "github-project-sync" / "tasks.json").write_text(
-                json.dumps({"tasks": {uid: task}}, sort_keys=True, separators=(",", ":")),
-                encoding="utf-8",
-            )
-            subprocess.run(["git", "-C", str(root), "add", "scripts", ".pm"], check=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-qm", "trusted authority fixture"], check=True)
-            head = subprocess.check_output(
-                ["git", "-C", str(root), "rev-parse", "HEAD"], text=True,
-            ).strip()
-            config_digest = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-            leaf = make_full_projection(task_uid=uid, head=head, scope=head, config=config_digest)
-            projection_path = temp_root / "impact-projection.json"
-            projection_path.write_text(json.dumps(leaf, sort_keys=True), encoding="utf-8")
-            args = type("Args", (), {
-                "repo": "eng-cc/oasis7", "task_uid": uid, "source_head": head,
-                "target_oid": head, "issue_number": 123, "source_ref": branch,
-                "target_ref": "main", "remote": "origin", "projection": str(projection_path),
-            })()
-            real_command_output = publish_module.command_output
-
-            def mocked_command_output(command, **kwargs):
-                if command[:2] == ["gh", "api"] and command[2] == "repos/eng-cc/oasis7":
-                    return json.dumps({"id": 7})
-                return real_command_output(command, **kwargs)
-
-            with patch.object(publish_module, "command_output", side_effect=mocked_command_output):
-                publication, _candidate_projection = publish_module.task_publication(root.resolve(), args)
-
-        self.assertEqual("oasis7-ci-publication/v2", publication["schema"])
-        self.assertEqual(leaf, publication["workflow_impact_projection"])
-        self.assertEqual(leaf["projection_digest"], publication["projection_digest"])
-
-    def test_full_leaf_round_trips_in_task_v2_comment_without_changing_pr_marker(self):
-        full_leaf = make_full_projection(task_uid=UID, head="a" * 40, scope=SCOPE)
-        publication = publication_module.build_task_publication(
-            repository="eng-cc/oasis7", repository_id=7, task_uid=UID,
-            bootstrap_epoch=1, source_repository_id=7, source_ref="feature/full-leaf",
-            target_ref="main", source_head_oid="a" * 40, source_scope_oid=SCOPE,
-            planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
-            policy_digest=full_leaf["planner_digest"],
-            projection_digest=full_leaf["projection_digest"],
-            workflow_impact_projection=full_leaf,
-        )
-
-        comment = publication_module.publication_comment(publication)
-        self.assertTrue(comment.startswith("<!-- oasis7-ci-publication/v2 -->\n"))
-        self.assertEqual(publication, publication_module.parse_publication_comment(comment))
-        self.assertEqual(full_leaf, publication["workflow_impact_projection"])
-        self.assertEqual(full_leaf["projection_digest"], publication["projection_digest"])
-        _pr_contract, pr_marker = publication_module.prepare(
-            task_uid=UID, source_head_oid="a" * 40, scope_base_oid=SCOPE,
-            projection_digest=full_leaf["projection_digest"],
-        )
-        self.assertTrue(pr_marker.startswith("<!-- oasis7-ci-impact-publication:v2 -->\n"))
-        self.assertNotIn("workflow_impact_projection", pr_marker)
-
-    def test_v2_rejects_mismatched_or_oversized_full_leaf(self):
-        full_leaf = make_full_projection(task_uid=UID, head="a" * 40, scope=SCOPE)
-        identity = {
-            "repository": "eng-cc/oasis7", "repository_id": 7, "task_uid": UID,
-            "bootstrap_epoch": 1, "source_repository_id": 7,
-            "source_ref": "feature/full-leaf", "target_ref": "main",
-            "source_head_oid": "a" * 40, "source_scope_oid": SCOPE,
-            "planner_authority_oid": AUTHORITY, "planner_config_sha256": CONFIG,
-            "policy_digest": full_leaf["planner_digest"],
-            "projection_digest": full_leaf["projection_digest"],
-        }
-        mismatched = copy.deepcopy(full_leaf)
-        mismatched["task_uid"] = "task_" + "f" * 32
-        mismatched["projection_digest"] = digest({
-            key: value for key, value in mismatched.items() if key != "projection_digest"
-        })
-        with self.assertRaisesRegex(publication_module.ContractError, "Task UID"):
-            publication_module.build_task_publication(
-                **identity, workflow_impact_projection=mismatched,
-            )
-
-        oversized = copy.deepcopy(full_leaf)
-        oversized["public_semantics"] = ["x" * (32 * 1024)]
-        oversized["projection_digest"] = digest({
-            key: value for key, value in oversized.items() if key != "projection_digest"
-        })
-        with self.assertRaisesRegex(publication_module.ContractError, "32KiB"):
-            publication_module.build_task_publication(
-                **{**identity, "projection_digest": oversized["projection_digest"]},
-                workflow_impact_projection=oversized,
-            )
-
-    def test_historical_v1_comment_remains_readable_but_has_no_full_leaf(self):
-        historical = publication_module.build_task_publication(
-            repository="eng-cc/oasis7", repository_id=7, task_uid=UID,
-            bootstrap_epoch=1, source_repository_id=7, source_ref="feature/history",
-            target_ref="main", source_head_oid="a" * 40, source_scope_oid=SCOPE,
-            planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
-            policy_digest=digest({"policy": "historic"}),
-            projection_digest=digest({"historic": True}),
-        )
-        comment = publication_module.publication_comment(historical)
-        self.assertTrue(comment.startswith("<!-- oasis7-ci-publication/v1 -->\n"))
-        self.assertEqual(historical, publication_module.parse_publication_comment(comment))
-        self.assertNotIn("workflow_impact_projection", historical)
+    return publication, projection
 
 
 class FakeAdapter:
