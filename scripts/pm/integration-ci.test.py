@@ -9,12 +9,13 @@ from unittest.mock import patch
 from pathlib import Path
 import subprocess
 import sys
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, contextmanager
 import tempfile
 import unittest
 import os
 import shutil
 import textwrap
+import time
 
 HERE=Path(__file__).parent
 
@@ -719,6 +720,285 @@ class IntegrationTests(unittest.TestCase):
    self.assertEqual(result['tested_tree_oid'],git(destination,'rev-parse','HEAD^{tree}'))
    self.assertEqual([base,head],git(destination,'rev-list','--parents','-n','1','HEAD').split()[1:])
    self.assertEqual(destination.resolve(),Path(result['integration_worktree']))
+
+class FirstActivationHistoryTests(unittest.TestCase):
+ # Isolated synthetic identities; workflow bytes retain the actual producer contract.
+ SOURCE_LIMIT = 1024 * 1024
+ PROJECTION = "oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}"
+ WORKFLOW_SOURCE = ('name: Rust\nrun-name: ' + PROJECTION + '\non:\n  workflow_dispatch:\n    inputs:\n      run_mode:\n        type: choice\n        options:\n          - integration_revalidation\n          - first_activation_validation_only\n      pr_number:\n        required: false\n')
+
+ def setUp(self):
+  spec=importlib.util.spec_from_file_location('first_activation_history',HERE/'integration_ci.py')
+  self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+  self.uid='task_'+'1'*32;self.base='a'*40;self.head='b'*40
+  self.producer='c'*40;self.reads=[]
+  self.tree_ids=['1'*40,'2'*40,'3'*40]
+
+ def row(self,n,validation=False,uid=None):
+  mode='first_activation_validation_only' if validation else 'integration_revalidation'
+  return {'id':n,'run_attempt':1,'created_at':'2026-09-26T00:00:00Z',
+   'event':'workflow_dispatch','path':self.api.WORKFLOW,'head_sha':self.producer if validation else self.base,
+   'head_branch':'candidate-producer' if validation else 'main','repository':{'full_name':'owner/repo'},
+   'status':'completed','conclusion':'success',
+   'display_title':f'oasis7-ci|workflow_dispatch|{mode}|{uid or self.uid}|'+('' if validation else '7')+f'|{self.base}|{self.head}'}
+
+ def response(self,source=None):
+  raw=(self.WORKFLOW_SOURCE if source is None else source).encode()
+  return {'type':'file','path':self.api.WORKFLOW,'encoding':'base64','size':len(raw),
+   'sha':hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest(),
+   'content':'\n'.join(textwrap.wrap(base64.b64encode(raw).decode(),60))+'\n'}
+
+ def select(self,rows,response=None,page_size=100,git_overrides=None,leaf_mode='100644'):
+  git_overrides=git_overrides or {}
+  tree_chains={r['head_sha']:(self.tree_ids if r['head_sha']==self.producer else
+   [hashlib.sha1((r['head_sha']+str(i)).encode()).hexdigest() for i in range(3)]) for r in rows}
+  def contents(commit):
+   if isinstance(response,Exception):raise response
+   path=f'repos/owner/repo/contents/{self.api.WORKFLOW}?ref={commit}'
+   return response(path) if callable(response) else self.response() if response is None else response
+  def blob(commit):
+   # Bind the tree to the actual case bytes, not the default valid workflow.
+   # Wrong declared Contents SHA and explicit wrong tree overrides stay negative.
+   try:
+    raw=base64.b64decode(''.join(contents(commit)['content'].splitlines()),validate=True)
+    return hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+   except (ValueError,TypeError,KeyError,AttributeError,OSError,subprocess.TimeoutExpired):
+    return self.response()['sha']
+  def read(*args):
+   path=args[-1];self.reads.append(path)
+   if '/runs?' in path:
+    page=int(path.rsplit('page=',1)[1]);return {'workflow_runs':rows[(page-1)*page_size:page*page_size]}
+   if '/git/commits/' in path:
+    oid=path.rsplit('/',1)[1]
+    self.assertIn(oid,[r['head_sha'] for r in rows])
+    value={'sha':oid,'tree':{'sha':tree_chains[oid][0]}}
+   elif '/git/trees/' in path:
+    oid=path.rsplit('/',1)[1]
+    matches=[(commit,chain) for commit,chain in tree_chains.items() if oid in chain]
+    self.assertEqual(len(matches),1);commit,chain=matches[0];i=chain.index(oid)
+    entry=({'path':['.github','workflows'][i],'mode':'040000','type':'tree','sha':chain[i+1]} if i<2 else
+     {'path':'rust.yml','mode':leaf_mode,'type':'blob','sha':blob(commit)})
+    value={'sha':oid,'truncated':False,'tree':[entry]}
+   else:
+    self.assertIn(path,[f'repos/owner/repo/contents/{self.api.WORKFLOW}?ref={r["head_sha"]}' for r in rows])
+    return contents(path.rsplit('ref=',1)[1])
+   if path in git_overrides:
+    value=git_overrides[path]
+    if isinstance(value,Exception):raise value
+   return value
+  with patch.object(self.api,'gh',side_effect=read),patch.object(self.api,'_historical_json',side_effect=lambda path,budget:read(path),create=True),patch.object(self.api,'DISCOVERY_PAGE_SIZE',page_size):
+   return self.api.current_request('owner/repo',self.uid,7,self.base,self.head,'main')
+
+ def test_actual_empty_pr_producer_preserves_own_current_request(self):
+  own=self.row(10);history=self.row(20,True,uid='task_'+'2'*32)
+  for rows in ([own,history],[history,own]):
+   with self.subTest(order=[r['id'] for r in rows]):
+    self.reads=[];self.assertEqual(self.select(rows)['id'],10)
+    self.assertIn(f'repos/owner/repo/contents/{self.api.WORKFLOW}?ref={self.producer}',self.reads)
+
+ def test_same_uid_and_all_validation_outcomes_are_ineligible(self):
+  for status,conclusion in [('completed','success'),('completed','failure'),('queued',None),('completed','cancelled')]:
+   with self.subTest(status=status,conclusion=conclusion):
+    row=self.row(20,True);row.update(status=status,conclusion=conclusion)
+    self.assertIsNone(self.select([row]))
+
+ def test_complete_pages_and_per_commit_proof_cache(self):
+  rows=[self.row(20,True),self.row(21,True),self.row(10)]
+  self.assertEqual(self.select(rows,page_size=1)['id'],10)
+  self.assertTrue(any('page=4' in p for p in self.reads))
+  self.assertEqual(sum('/contents/' in p for p in self.reads),1)
+
+ def test_producer_proof_is_never_reused_across_commits(self):
+  first=self.row(20,True);second={**self.row(21,True),'head_sha':'d'*40}
+  def proof(path):
+   return self.response() if path.endswith(self.producer) else self.response('name: Rust\n')
+  with self.assertRaises(ValueError):self.select([first,second,self.row(10)],proof)
+  self.assertTrue(any(p.endswith('d'*40) for p in self.reads))
+
+ def test_wrapped_base64_requires_exact_commit_tree_regular_leaf(self):
+  for mode in ['100644','100755']:
+   with self.subTest(mode=mode):
+    self.reads=[]
+    self.assertEqual(self.select([self.row(20,True),self.row(10)],leaf_mode=mode)['id'],10)
+    self.assertIn(f'repos/owner/repo/git/commits/{self.producer}',self.reads)
+    for oid in self.tree_ids:self.assertIn(f'repos/owner/repo/git/trees/{oid}',self.reads)
+    self.assertFalse(any('recursive=' in path for path in self.reads))
+
+ def test_official_contents_symlink_dereference_cannot_prove_regular_file(self):
+  # Official Contents may return type=file and target bytes for a symlink.
+  for mode,kind in [('120000','blob'),('160000','commit'),('040000','tree')]:
+   with self.subTest(mode=mode):
+    path=f'repos/owner/repo/git/trees/{self.tree_ids[2]}'
+    value={'sha':self.tree_ids[2],'truncated':False,'tree':[{'path':'rust.yml','mode':mode,'type':kind,'sha':self.response()['sha']}]}
+    with self.assertRaises(ValueError):self.select([self.row(20,True)],git_overrides={path:value})
+
+ def test_tree_chain_metadata_and_read_uncertainty_fail_closed(self):
+  commit_path=f'repos/owner/repo/git/commits/{self.producer}'
+  tree_path=f'repos/owner/repo/git/trees/{self.tree_ids[0]}'
+  leaf_path=f'repos/owner/repo/git/trees/{self.tree_ids[2]}'
+  root={'sha':self.tree_ids[0],'truncated':False,'tree':[{'path':'.github','mode':'040000','type':'tree','sha':self.tree_ids[1]}]}
+  leaf={'sha':self.tree_ids[2],'truncated':False,'tree':[{'path':'rust.yml','mode':'100644','type':'blob','sha':self.response()['sha']}]}
+  cases=[(commit_path,{'sha':'f'*40,'tree':{'sha':self.tree_ids[0]}}),
+   (commit_path,{'sha':self.producer,'tree':None}),
+   (commit_path,{'sha':self.producer,'tree':{'sha':'invalid'}}),
+   (commit_path,None),
+   (tree_path,{**root,'sha':'f'*40}),(tree_path,{**root,'truncated':True}),
+   (tree_path,{**root,'truncated':None}),(tree_path,{**root,'tree':[]}),
+   (tree_path,{**root,'tree':root['tree']*2}),(tree_path,{**root,'tree':None}),
+   (tree_path,{**root,'tree':[None]}),
+   (tree_path,{**root,'tree':[{**root['tree'][0],'sha':'invalid'}]}),
+   (tree_path,{**root,'tree':[{**root['tree'][0],'type':'blob'}]}),
+   (tree_path,{**root,'tree':[{**root['tree'][0],'mode':'120000'}]}),
+   (tree_path,{**root,'tree':[{**root['tree'][0],'path':'.github/workflows'}]}),
+   (leaf_path,{**leaf,'tree':[{**leaf['tree'][0],'sha':'f'*40}]}),
+   (leaf_path,{**leaf,'tree':[{**leaf['tree'][0],'path':'other.yml'}]}),
+   (leaf_path,{**leaf,'tree':[{**leaf['tree'][0],'mode':'100644','type':'tree'}]}),
+   (commit_path,OSError('commit read unavailable')),(tree_path,subprocess.TimeoutExpired('gh',30))]
+  for i in [1,2]:
+   path=f'repos/owner/repo/git/trees/{self.tree_ids[i]}'
+   entry=({'path':'workflows','mode':'040000','type':'tree','sha':self.tree_ids[2]} if i==1 else leaf['tree'][0])
+   cases.append((path,{'sha':'f'*40,'truncated':False,'tree':[entry]}))
+  for path,value in cases:
+   with self.subTest(path=path,value_type=type(value).__name__),self.assertRaises(ValueError):
+    self.select([self.row(20,True)],git_overrides={path:value})
+
+ def test_malformed_titles_remain_blocking(self):
+  row=self.row(20,True);parts=row['display_title'].split('|')
+  variants=[]
+  for index,value in [(0,'alias'),(1,'push'),(2,'first_activation_validation_only_typo'),(3,'task-invalid'),(4,'7'),(5,'A'*40),(6,'not-an-oid')]:
+   changed=parts.copy();changed[index]=value;variants.append('|'.join(changed))
+  variants += ['|'.join(parts[:-1]),'|'.join(parts+['']), '|'.join(parts+['sha256:'+'d'*64])]
+  for title in variants:
+   with self.subTest(title=title),self.assertRaises(ValueError):
+    self.select([{**row,'display_title':title}])
+
+ def test_workflow_proof_and_finite_source_bound_fail_closed(self):
+  valid=self.response()
+  variants=[{**valid,'type':'symlink'},{**valid,'path':'wrong.yml'},{**valid,'encoding':'none'},
+   {**valid,'content':None},{**valid,'content':'%%%invalid-base64%%%'},{**valid,'sha':'d'*40},
+   {**valid,'content':valid['content'].rstrip()[:-1]},
+   {**valid,'size':True},{**valid,'size':len(self.WORKFLOW_SOURCE.encode())+1},
+   self.response(self.WORKFLOW_SOURCE.replace(self.PROJECTION,'integration_revalidation')),
+   self.response(self.WORKFLOW_SOURCE.replace('          - first_activation_validation_only','          # - first_activation_validation_only')),
+   self.response('# first_activation_validation_only\nrun-name: '+self.PROJECTION+'\n'),
+   self.response(self.WORKFLOW_SOURCE+'#'+('x'*self.SOURCE_LIMIT)),
+   OSError('producer read unavailable'),subprocess.TimeoutExpired('gh',30)]
+  invalid_utf8=b'\xff';variants.append({**valid,'content':base64.b64encode(invalid_utf8).decode(),
+   'size':1,'sha':hashlib.sha1(b'blob 1\0'+invalid_utf8).hexdigest()})
+  for response in variants:
+   with self.subTest(response_kind=type(response).__name__),self.assertRaises(ValueError):
+    self.select([self.row(20,True)],response)
+
+ def test_wrong_row_provenance_and_overlap_fail_closed(self):
+  row=self.row(20,True)
+  for field,value in [('event','push'),('path','wrong.yml'),('repository',None),('head_sha','invalid'),('head_branch',None)]:
+   with self.subTest(field=field),self.assertRaises(ValueError):
+    self.select([{**row,field:value}])
+  with self.assertRaises(ValueError):self.select([row,row])
+
+ def test_later_page_uncertainty_never_returns_found_candidate(self):
+  bad=self.row(20,True);bad['display_title']=bad['display_title'].replace('first_activation_validation_only','unknown_mode')
+  with self.assertRaises(ValueError):self.select([self.row(10),bad],page_size=1)
+  with patch.object(self.api,'DISCOVERY_MAX_PAGES',1),self.assertRaises(ValueError):
+   self.select([self.row(10)],page_size=1)
+
+ def test_distinct_producer_commit_budget_is_not_proven_absence(self):
+  rows=[{**self.row(n+20,True),'head_sha':f'{n+100:040x}'} for n in range(33)]
+  with self.assertRaises(ValueError):self.select(rows+[self.row(10)])
+
+class HistoricalTransportTests(unittest.TestCase):
+ def setUp(self):
+  spec=importlib.util.spec_from_file_location('historical_transport',HERE/'integration_ci.py')
+  self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+  self.fixture_processes={}
+
+ def fake(self,body):
+  directory=tempfile.TemporaryDirectory();self.addCleanup(directory.cleanup)
+  root=Path(directory.name);program=root/'gh.py';pid=root/'pid'
+  program.write_text('import os,sys,time\nfrom pathlib import Path\nPath(os.environ["TEST_HISTORICAL_PID"]).write_text(str(os.getpid()))\n'+body)
+  script_bytes=program.read_bytes()
+  self.assertFalse(pid.exists())
+  real_popen=subprocess.Popen
+  records=[];self.fixture_processes[pid]=records
+  allowed_paths={'repos/owner/repo/git/commits/'+letter*40 for letter in ['a','b']}
+  def launch(argv,*args,**kwargs):
+   self.assertEqual(len(argv),3);self.assertEqual(argv[:2],['gh','api'])
+   self.assertIn(argv[2],allowed_paths);self.assertEqual(args,())
+   self.assertEqual(kwargs,{'stdin':subprocess.DEVNULL,'stdout':subprocess.PIPE,'stderr':subprocess.PIPE})
+   self.assertEqual(program.read_bytes(),script_bytes)
+   if pid.exists():
+    previous=int(pid.read_text());self.assertEqual(previous,records[-1]['pid'])
+    with self.assertRaises(ProcessLookupError):os.kill(previous,0)
+    pid.unlink()
+   launched=[sys.executable,'-S',str(program),*argv[1:]]
+   child=real_popen(launched,*args,**kwargs)
+   self.assertNotIn(child.pid,[record['pid'] for record in records])
+   record={'requested_argv':list(argv),'launched_argv':launched,'pid':child.pid,'kwargs':kwargs}
+   records.append(record);print(json.dumps({'historical_fixture_process':record},sort_keys=True))
+   return child
+  @contextmanager
+  def fixture():
+   # The production reader starts its clocks before this real launch adapter.
+   # No child is prelaunched and no process, stream or readiness is synthesized.
+   with patch.dict(os.environ,{'PATH':str(root),'TEST_HISTORICAL_PID':str(pid)}),patch.object(subprocess,'Popen',side_effect=launch):
+    yield
+  return fixture(),pid
+
+ def assert_reaped(self,pid):
+  self.assertTrue(pid.exists(),'controlled gh process must actually execute')
+  child=int(pid.read_text())
+  records=self.fixture_processes[pid]
+  self.assertTrue(records);self.assertEqual(child,records[-1]['pid'])
+  for record in records:
+   with self.assertRaises(ProcessLookupError):os.kill(record['pid'],0)
+
+ def test_frozen_numeric_reader_contract(self):
+  expected={'HISTORICAL_SOURCE_MAX_BYTES':1024*1024,'HISTORICAL_RESPONSE_MAX_BYTES':2*1024*1024,
+   'HISTORICAL_TOTAL_MAX_BYTES':16*1024*1024,'HISTORICAL_MAX_COMMITS':32,
+   'HISTORICAL_MAX_CALLS':160,'HISTORICAL_CALL_TIMEOUT_SECONDS':15,
+   'HISTORICAL_TOTAL_TIMEOUT_SECONDS':60}
+  for name,value in expected.items():
+   with self.subTest(name=name):self.assertEqual(getattr(self.api,name),value)
+
+ def test_real_process_response_overflow_is_stopped_and_reaped(self):
+  environment,pid=self.fake('sys.stdout.write("x"*4096);sys.stdout.flush();time.sleep(1)\n')
+  started=time.monotonic()
+  with environment,patch.object(self.api,'HISTORICAL_RESPONSE_MAX_BYTES',1024,create=True):
+   with self.assertRaises(ValueError):
+    self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,self.api._HistoricalReadBudget())
+  self.assert_reaped(pid)
+  self.assertLess(time.monotonic()-started,0.7,'overflow must stop the running producer promptly')
+
+ def test_real_process_timeout_is_stopped_and_reaped(self):
+  environment,pid=self.fake('time.sleep(1)\n')
+  started=time.monotonic()
+  with environment,patch.object(self.api,'HISTORICAL_CALL_TIMEOUT_SECONDS',0.1,create=True):
+   with self.assertRaises(ValueError):
+    self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,self.api._HistoricalReadBudget())
+  self.assert_reaped(pid)
+  self.assertLess(time.monotonic()-started,0.7,'timeout must stop the running producer promptly')
+
+ def test_real_process_total_bytes_and_calls_are_bounded(self):
+  environment,pid=self.fake('sys.stdout.write(\'{"padding":"\'+"x"*700+\'"}\')\n')
+  with environment,patch.object(self.api,'HISTORICAL_TOTAL_MAX_BYTES',1024,create=True):
+   budget=self.api._HistoricalReadBudget()
+   self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,budget)
+   with self.assertRaises(ValueError):self.api._historical_json('repos/owner/repo/git/commits/'+'b'*40,budget)
+  self.assert_reaped(pid)
+  environment,pid=self.fake('sys.stdout.write(\'{"ok":true}\')\n')
+  with environment,patch.object(self.api,'HISTORICAL_MAX_CALLS',2,create=True):
+   budget=self.api._HistoricalReadBudget()
+   for _ in range(2):self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,budget)
+   with self.assertRaises(ValueError):self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,budget)
+  self.assert_reaped(pid)
+
+ def test_real_process_aggregate_deadline_bounds_multiple_reads(self):
+  environment,pid=self.fake('time.sleep(0.08);sys.stdout.write(\'{"ok":true}\')\n')
+  with environment,patch.object(self.api,'HISTORICAL_TOTAL_TIMEOUT_SECONDS',0.15,create=True):
+   budget=self.api._HistoricalReadBudget()
+   self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,budget)
+   with self.assertRaises(ValueError):self.api._historical_json('repos/owner/repo/git/commits/'+'b'*40,budget)
+  self.assert_reaped(pid)
 
 class CurrentRequestSelectionTests(unittest.TestCase):
  def setUp(self):
