@@ -2222,6 +2222,212 @@ class AmendedDependencyFloorPathContract(unittest.TestCase):
         )
         return result.stdout.strip()
 
+
+class FirstActivationSupportPartitionContract(unittest.TestCase):
+    schema = "oasis7-cargo-dependency-floor-overlay/v3"
+    support_schema = "oasis7-cargo-dependency-floor-support-scope/v1"
+    support_marker = "<!-- oasis7-cargo-dependency-floor-support-scope/v1 -->"
+    sha_a = "sha256:" + "a" * 64
+    sha_b = "sha256:" + "b" * 64
+    workflow_paths = sorted({
+        ".github/workflows/rust.yml",
+        "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+        "doc/engineering/workflow/source-of-truth.md",
+        "scripts/ci-required-capability-test-inventory.tsv",
+        "scripts/ci-required-scope-audit-contract.test.sh",
+        "scripts/ci-tests.sh",
+        "scripts/pm/check-cargo-package-scope",
+        "scripts/pm/check-cargo-package-scope.test.py",
+        "scripts/pm/first_activation.py",
+        "scripts/pm/first_activation.test.py",
+        "scripts/pm/github-project-task.py",
+        "scripts/pm/pr-lifecycle-gate.py",
+        "scripts/prepare-task-pr.sh",
+        "scripts/pm/ci-reuse-validation.py",
+        "scripts/pm/ci-reuse-validation.test.py",
+        "scripts/pm/ci_reuse_validation_readback.py",
+        "scripts/pm/ci_reuse_validation_readback.test.py",
+        "scripts/pm/github-project-task-lifecycle.test.py",
+        "scripts/pm/github-project-task.test.sh",
+        "scripts/pm/pr_projection_publication.py",
+        "scripts/pm/pr_projection_publication.test.py",
+        "scripts/pm/pr_projection_publish.py",
+        "scripts/pm/pr_projection_resolver.py",
+        "scripts/pm/pr_projection_resolver.test.py",
+        "scripts/pm/projection_publication_contract.py",
+    })
+    support_paths = sorted({
+        "doc/.governance/document-corpus/objects/16/1620cf642fc3ae7886725ade1ec9282e13b3b5130782911e55ac67c77fdf7e7c.json",
+        "doc/.governance/document-corpus/objects/94/942664886e9920ca269062b66c9a2d4cf918774dd5a522678de1f0687e9c427e.json",
+        "doc/.governance/document-corpus/objects/9a/9a812ec52c06d6c0a9633e3ce03eea09b1cc8ae34e94ad1ead1f245d03ea4a3b.json",
+        "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+        "doc/p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md",
+        "doc/world-runtime/wasm/wasm-executor.design.md",
+    })
+    business_paths = [
+        "Cargo.lock",
+        "crates/oasis7_wasm_executor/Cargo.toml",
+        "crates/oasis7_wasm_executor/src/lib.rs",
+        "crates/oasis7_wasm_executor/src/tests.rs",
+    ]
+
+    def _scope(self, *, base: str = "1" * 40, head: str = "2" * 40) -> dict[str, object]:
+        business_rows = [
+            {"path": path, "base_sha256": self.sha_a, "head_sha256": self.sha_b}
+            for path in self.business_paths
+        ]
+        workflow_rows = [
+            {"path": path, "base_sha256": self.sha_a, "head_sha256": self.sha_b}
+            for path in self.workflow_paths
+        ]
+        support_rows = [
+            {"path": path, "base_sha256": self.sha_a, "head_sha256": self.sha_b}
+            for path in self.support_paths
+        ]
+        authorization = {
+            "comment_id": 12,
+            "body_sha256": self.sha_a,
+            "scope": "same_task_same_pr_wasmtime_49_0_2",
+        }
+        amendment_ref = {"comment_id": 13, "body_sha256": self.sha_b}
+        support_record = {
+            "schema": self.support_schema,
+            "task_uid": "task_" + "a" * 32,
+            "issue_number": 4269,
+            "bootstrap_epoch": 1,
+            "snapshot_sha256": self.sha_a,
+            "request_sha256": self.sha_a,
+            "acceptance_sha256": self.sha_a,
+            "base_oid": base,
+            "head_oid": head,
+            "authorization": authorization,
+            "scope_amendment": amendment_ref,
+            "dispatch_comments": [{"comment_id": 14, "body_sha256": self.sha_b}],
+            "support_change_paths": support_rows,
+        }
+        encoded = json.dumps(support_record, ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":"))
+        support_body = self.support_marker + "\n" + encoded + "\n"
+        support_ref = {
+            "comment_id": 15,
+            "body_sha256": "sha256:" + hashlib.sha256(support_body.encode()).hexdigest(),
+        }
+        return {
+            "schema": self.schema,
+            "task_uid": support_record["task_uid"],
+            "issue_number": 4269,
+            "bootstrap_epoch": 1,
+            "snapshot_sha256": self.sha_a,
+            "request_sha256": self.sha_a,
+            "acceptance_sha256": self.sha_a,
+            "base_oid": base,
+            "head_oid": head,
+            "authorization": authorization,
+            "scope_amendment": amendment_ref,
+            "support_scope": support_ref,
+            "support_scope_record": support_record,
+            "support_change_paths": support_rows,
+            "approved_business_paths": self.business_paths,
+            "business_change_paths": business_rows,
+            "workflow_change_paths": workflow_rows,
+        }
+
+    def test_v3_partition_accepts_exact_25_workflow_6_support_4_business_paths(self) -> None:
+        scope = self._scope()
+        changed = sorted(set(self.workflow_paths) | set(self.support_paths) | set(self.business_paths))
+        self.assertEqual(len(self.workflow_paths), 25)
+        self.assertEqual(len(self.support_paths), 6)
+        self.assertEqual(len(self.business_paths), 4)
+        self.assertEqual(
+            CHECKER_MODULE.validate_first_activation_path_partition(
+                scope, "crates/oasis7_wasm_executor/Cargo.toml",
+                set(self.workflow_paths), changed,
+            ),
+            set(self.business_paths),
+        )
+
+    def test_v3_partition_rejects_missing_extra_overlapping_or_wrong_authority_paths(self) -> None:
+        changed = sorted(set(self.workflow_paths) | set(self.support_paths) | set(self.business_paths))
+        for mutate, altered in (
+            (lambda scope: scope["support_change_paths"].pop(), changed),
+            (lambda scope: scope["support_change_paths"].append(
+                {"path": "doc/unrelated.md", "base_sha256": self.sha_a, "head_sha256": self.sha_b}),
+             sorted(set(changed) | {"doc/unrelated.md"})),
+            (lambda scope: scope["support_scope"].update(body_sha256=self.sha_b), changed),
+            (lambda scope: scope["support_scope"].update(comment_id=12), changed),
+            (lambda scope: scope["support_scope_record"].update(task_uid="task_" + "b" * 32), changed),
+            (lambda scope: scope["support_scope_record"].update(head_oid="3" * 40), changed),
+            (lambda scope: scope["support_change_paths"][0].update(path="Cargo.lock"), changed),
+        ):
+            scope = self._scope()
+            mutate(scope)
+            with self.subTest(scope=scope), self.assertRaises(CHECKER_MODULE.ScopeError):
+                CHECKER_MODULE.validate_first_activation_path_partition(
+                    scope, "crates/oasis7_wasm_executor/Cargo.toml",
+                    set(self.workflow_paths), altered,
+                )
+        scope = self._scope()
+        with self.assertRaises(CHECKER_MODULE.ScopeError):
+            CHECKER_MODULE.validate_first_activation_path_partition(
+                scope, "crates/oasis7_wasm_executor/Cargo.toml",
+                set(self.workflow_paths) | {self.support_paths[0]}, changed,
+            )
+        with self.assertRaises(CHECKER_MODULE.ScopeError):
+            CHECKER_MODULE.validate_first_activation_path_partition(
+                scope, "crates/oasis7_wasm_executor/Cargo.toml",
+                set(self.workflow_paths), changed[:-1],
+            )
+
+    def test_v3_support_path_digests_bind_trusted_base_and_candidate_blobs(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="first-activation-support-paths-") as temp:
+            repo = Path(temp)
+            self._git(repo, "init", "-q", "-b", "main")
+            self._git(repo, "config", "user.email", "qa@example.invalid")
+            self._git(repo, "config", "user.name", "Support Scope QA")
+            scope = self._scope()
+            for path in self.support_paths:
+                target = repo / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("base:" + path + "\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-qm", "support base")
+            base = self._git(repo, "rev-parse", "HEAD")
+            for path in self.support_paths:
+                (repo / path).write_text("head:" + path + "\n", encoding="utf-8")
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-qm", "support candidate")
+            head = self._git(repo, "rev-parse", "HEAD")
+            scope = self._scope(base=base, head=head)
+            rows = scope["support_change_paths"]
+            scope["support_scope_record"]["support_change_paths"] = rows
+            for row in rows:
+                row["base_sha256"] = "sha256:" + hashlib.sha256(
+                    CHECKER_MODULE.git_blob(repo, base, row["path"])
+                ).hexdigest()
+                row["head_sha256"] = "sha256:" + hashlib.sha256(
+                    CHECKER_MODULE.git_blob(repo, head, row["path"])
+                ).hexdigest()
+            scope["support_scope_record"]["support_change_paths"] = rows
+            encoded = json.dumps(scope["support_scope_record"], ensure_ascii=False, sort_keys=True,
+                                 separators=(",", ":"))
+            body = CHECKER_MODULE.DEPENDENCY_FLOOR_SUPPORT_MARKER + "\n" + encoded + "\n"
+            scope["support_scope"]["body_sha256"] = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
+            CHECKER_MODULE.validate_support_change_path_digests(repo, base, head, scope)
+            rows[0]["head_sha256"] = self.sha_a
+            scope["support_scope_record"]["support_change_paths"] = rows
+            encoded = json.dumps(scope["support_scope_record"], ensure_ascii=False, sort_keys=True,
+                                 separators=(",", ":"))
+            body = CHECKER_MODULE.DEPENDENCY_FLOOR_SUPPORT_MARKER + "\n" + encoded + "\n"
+            scope["support_scope"]["body_sha256"] = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
+            with self.assertRaisesRegex(CHECKER_MODULE.ScopeError, "support path digest differs"):
+                CHECKER_MODULE.validate_support_change_path_digests(repo, base, head, scope)
+
+    def _git(self, repo: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
+        )
+        return result.stdout.strip()
+
 class DependencyFloorGraphContract(unittest.TestCase):
     registry = "registry+https://github.com/rust-lang/crates.io-index"
 

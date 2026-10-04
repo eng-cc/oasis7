@@ -34,6 +34,17 @@ AUXILIARY_REGISTRY_SCHEMA = "oasis7-cargo-package-auxiliary-files/v1"
 CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
 DEPENDENCY_FLOOR_MODE = "dependency_floor_update"
 DEPENDENCY_FLOOR_OVERLAY_V2 = "oasis7-cargo-dependency-floor-overlay/v2"
+DEPENDENCY_FLOOR_OVERLAY_V3 = "oasis7-cargo-dependency-floor-overlay/v3"
+DEPENDENCY_FLOOR_SUPPORT_SCHEMA = "oasis7-cargo-dependency-floor-support-scope/v1"
+DEPENDENCY_FLOOR_SUPPORT_MARKER = "<!-- oasis7-cargo-dependency-floor-support-scope/v1 -->"
+DEPENDENCY_FLOOR_SUPPORT_PATHS = {
+    "doc/.governance/document-corpus/objects/16/1620cf642fc3ae7886725ade1ec9282e13b3b5130782911e55ac67c77fdf7e7c.json",
+    "doc/.governance/document-corpus/objects/94/942664886e9920ca269062b66c9a2d4cf918774dd5a522678de1f0687e9c427e.json",
+    "doc/.governance/document-corpus/objects/9a/9a812ec52c06d6c0a9633e3ce03eea09b1cc8ae34e94ad1ead1f245d03ea4a3b.json",
+    "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+    "doc/p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md",
+    "doc/world-runtime/wasm/wasm-executor.design.md",
+}
 PINNED_CARGO_VERSION = "1.96.0"
 STABLE_TRIPLE = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z", re.ASCII)
 
@@ -579,6 +590,7 @@ def read_first_activation_scope(
         or scope.get("schema") not in {
             "oasis7-cargo-dependency-floor-overlay/v1",
             DEPENDENCY_FLOOR_OVERLAY_V2,
+            DEPENDENCY_FLOOR_OVERLAY_V3,
         }
         or scope.get("task_uid") != task_uid
         or scope.get("mode") != DEPENDENCY_FLOOR_MODE
@@ -592,7 +604,7 @@ def read_first_activation_scope(
         or not isinstance(scope.get("workflow_change_paths"), list)
     ):
         raise ScopeError("first_activation_overlay_invalid", "reader returned an incomplete or non-validation binding")
-    if scope["schema"] == DEPENDENCY_FLOOR_OVERLAY_V2:
+    if scope["schema"] in {DEPENDENCY_FLOOR_OVERLAY_V2, DEPENDENCY_FLOOR_OVERLAY_V3}:
         business_paths = scope.get("approved_business_paths")
         rows = scope.get("business_change_paths")
         if (not isinstance(business_paths, list) or not business_paths
@@ -600,6 +612,8 @@ def read_first_activation_scope(
                 or not isinstance(rows, list) or [row.get("path") for row in rows
                                                    if isinstance(row, dict)] != business_paths):
             raise ScopeError("first_activation_business_paths_invalid", "amended business path binding is incomplete")
+    if scope["schema"] == DEPENDENCY_FLOOR_OVERLAY_V3:
+        support_change_path_rows(scope)
     return scope
 
 
@@ -628,7 +642,7 @@ def business_change_path_rows(scope: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def first_activation_business_path_set(scope: dict[str, Any], manifest_path: str) -> set[str]:
-    if scope.get("schema") != DEPENDENCY_FLOOR_OVERLAY_V2:
+    if scope.get("schema") not in {DEPENDENCY_FLOOR_OVERLAY_V2, DEPENDENCY_FLOOR_OVERLAY_V3}:
         return {"Cargo.lock", manifest_path}
     rows = business_change_path_rows(scope)
     paths = set(scope["approved_business_paths"])
@@ -643,17 +657,137 @@ def first_activation_business_path_set(scope: dict[str, Any], manifest_path: str
     return paths
 
 
+def _support_record_body(record: dict[str, Any]) -> bytes:
+    encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return (DEPENDENCY_FLOOR_SUPPORT_MARKER + "\n" + encoded + "\n").encode("utf-8")
+
+
+def support_change_path_rows(scope: dict[str, Any]) -> list[dict[str, str]]:
+    """Validate the v3 support class against its immutable typed-record reference."""
+    record = scope.get("support_scope_record")
+    ref = scope.get("support_scope")
+    if not isinstance(record, dict) or set(record) != {
+        "schema", "task_uid", "issue_number", "bootstrap_epoch", "snapshot_sha256",
+        "request_sha256", "acceptance_sha256", "base_oid", "head_oid",
+        "authorization", "scope_amendment", "dispatch_comments", "support_change_paths",
+    }:
+        raise ScopeError("first_activation_support_paths_invalid", "typed support record has an unexpected shape")
+    if (not isinstance(ref, dict) or set(ref) != {"comment_id", "body_sha256"}
+            or type(ref.get("comment_id")) is not int or ref["comment_id"] < 1
+            or not isinstance(ref.get("body_sha256"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", ref["body_sha256"])):
+        raise ScopeError("first_activation_support_paths_invalid", "support record comment reference is malformed")
+    expected_identity = {
+        "schema": DEPENDENCY_FLOOR_SUPPORT_SCHEMA,
+        "task_uid": scope.get("task_uid"),
+        "issue_number": scope.get("issue_number"),
+        "bootstrap_epoch": scope.get("bootstrap_epoch"),
+        "snapshot_sha256": scope.get("snapshot_sha256"),
+        "request_sha256": scope.get("request_sha256"),
+        "acceptance_sha256": scope.get("acceptance_sha256"),
+        "base_oid": scope.get("base_oid"),
+        "head_oid": scope.get("head_oid"),
+        "authorization": scope.get("authorization"),
+        "scope_amendment": scope.get("scope_amendment"),
+    }
+    if any(record.get(key) != value for key, value in expected_identity.items()):
+        raise ScopeError("first_activation_support_paths_invalid", "support record differs from the exact Task/overlay binding")
+    if (type(record.get("issue_number")) is not int or record["issue_number"] < 1
+            or type(record.get("bootstrap_epoch")) is not int or record["bootstrap_epoch"] < 1
+            or not isinstance(record.get("task_uid"), str)
+            or not re.fullmatch(r"task_[0-9a-f]{32}", record["task_uid"])):
+        raise ScopeError("first_activation_support_paths_invalid", "support record Task identity is malformed")
+    for key in ("snapshot_sha256", "request_sha256", "acceptance_sha256"):
+        if not isinstance(record.get(key), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", record[key]):
+            raise ScopeError("first_activation_support_paths_invalid", f"support record {key} is malformed")
+    for key in ("base_oid", "head_oid"):
+        if not isinstance(record.get(key), str) or not re.fullmatch(r"[0-9a-f]{40}", record[key]):
+            raise ScopeError("first_activation_support_paths_invalid", f"support record {key} is malformed")
+    for key in ("authorization", "scope_amendment"):
+        value = record.get(key)
+        expected_keys = {"comment_id", "body_sha256", "scope"} if key == "authorization" else {"comment_id", "body_sha256"}
+        if (not isinstance(value, dict) or set(value) != expected_keys
+                or type(value.get("comment_id")) is not int or value["comment_id"] < 1
+                or not isinstance(value.get("body_sha256"), str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", value["body_sha256"])):
+            raise ScopeError("first_activation_support_paths_invalid", f"support record {key} reference is malformed")
+        if key == "authorization" and (not isinstance(value.get("scope"), str) or not value["scope"]):
+            raise ScopeError("first_activation_support_paths_invalid", "support authorization scope is malformed")
+    dispatches = record.get("dispatch_comments")
+    if not isinstance(dispatches, list) or not dispatches:
+        raise ScopeError("first_activation_support_paths_invalid", "support dispatch evidence is unavailable")
+    dispatch_ids: list[int] = []
+    for dispatch in dispatches:
+        if (not isinstance(dispatch, dict) or set(dispatch) != {"comment_id", "body_sha256"}
+                or type(dispatch.get("comment_id")) is not int or dispatch["comment_id"] < 1
+                or not isinstance(dispatch.get("body_sha256"), str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", dispatch["body_sha256"])):
+            raise ScopeError("first_activation_support_paths_invalid", "support dispatch reference is malformed")
+        dispatch_ids.append(dispatch["comment_id"])
+    if dispatch_ids != sorted(set(dispatch_ids)):
+        raise ScopeError("first_activation_support_paths_invalid", "support dispatch references are duplicated or unsorted")
+    reserved_ids = {
+        ref["comment_id"],
+        record["authorization"]["comment_id"],
+        record["scope_amendment"]["comment_id"],
+        scope.get("reviews", {}).get("repository_health", {}).get("comment_id"),
+        scope.get("reviews", {}).get("qa", {}).get("comment_id"),
+    }
+    if any(value in reserved_ids for value in dispatch_ids) or ref["comment_id"] in {
+            record["authorization"]["comment_id"], record["scope_amendment"]["comment_id"]}:
+        raise ScopeError("first_activation_support_paths_invalid", "support reference reuses an authority or review comment")
+    rows = record.get("support_change_paths")
+    if not isinstance(rows, list) or not rows:
+        raise ScopeError("first_activation_support_paths_invalid", "support path digest set is empty")
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {"path", "base_sha256", "head_sha256"}:
+            raise ScopeError("first_activation_support_paths_invalid", "support path digest row is malformed")
+        path = row.get("path")
+        if not isinstance(path, str) or safe_relative(path) != path or path not in DEPENDENCY_FLOOR_SUPPORT_PATHS:
+            raise ScopeError("first_activation_support_paths_invalid", "support path is outside the exact documentation support set")
+        for key in ("base_sha256", "head_sha256"):
+            if not isinstance(row.get(key), str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", row[key]):
+                raise ScopeError("first_activation_support_paths_invalid", f"{key} is malformed for {path}")
+        normalized.append({"path": path, "base_sha256": row["base_sha256"], "head_sha256": row["head_sha256"]})
+    if normalized != sorted(normalized, key=lambda row: row["path"]) or {row["path"] for row in normalized} != DEPENDENCY_FLOOR_SUPPORT_PATHS:
+        raise ScopeError("first_activation_support_paths_invalid", "support path set differs from the exact six-path authorization")
+    if scope.get("support_change_paths") != normalized:
+        raise ScopeError("first_activation_support_paths_invalid", "overlay support path rows differ from the typed record")
+    digest = "sha256:" + hashlib.sha256(_support_record_body(record)).hexdigest()
+    if digest != ref["body_sha256"]:
+        raise ScopeError("first_activation_support_paths_invalid", "support record body digest differs from its canonical bytes")
+    return normalized
+
+
+def validate_support_change_path_digests(
+    repo: Path, base: str, head: str, scope: dict[str, Any],
+) -> None:
+    if scope.get("base_oid") != base or scope.get("head_oid") != head:
+        raise ScopeError("first_activation_support_paths_invalid", "support digests are being checked against a different frozen range")
+    for row in support_change_path_rows(scope):
+        for revision, field in ((base, "base_sha256"), (head, "head_sha256")):
+            blob = git_blob(repo, revision, row["path"])
+            digest = None if blob is None else "sha256:" + hashlib.sha256(blob).hexdigest()
+            if digest != row[field]:
+                raise ScopeError("first_activation_support_paths_invalid", f"support path digest differs from frozen {field}: {row['path']}")
+
+
 def validate_first_activation_path_partition(
     scope: dict[str, Any], manifest_path: str,
     workflow_paths: set[str], changed: list[str],
 ) -> set[str]:
     business_paths = first_activation_business_path_set(scope, manifest_path)
+    support_paths = (set(row["path"] for row in support_change_path_rows(scope))
+                     if scope.get("schema") == DEPENDENCY_FLOOR_OVERLAY_V3 else set())
     if business_paths & workflow_paths:
         raise ScopeError("first_activation_workflow_paths_invalid", "workflow binding overlaps Cargo business paths")
-    if set(changed) != business_paths | workflow_paths or len(changed) != len(set(changed)):
+    if (support_paths & (business_paths | workflow_paths)
+            or set(changed) != business_paths | workflow_paths | support_paths
+            or len(changed) != len(set(changed))):
         raise ScopeError(
             "first_activation_changed_paths_invalid",
-            "changed paths must equal the bound workflow set and exact authorized business path set",
+            "changed paths must equal the disjoint bound workflow, support, and exact authorized business path sets",
         )
     return business_paths
 
@@ -702,7 +836,7 @@ def evaluate_first_activation_dependency_floor(
     if renames:
         raise ScopeError("first_activation_changed_paths_invalid", "renames are not permitted")
     effective_package = scope["effective_primary_package"]
-    amended = scope.get("schema") == DEPENDENCY_FLOOR_OVERLAY_V2
+    amended = scope.get("schema") in {DEPENDENCY_FLOOR_OVERLAY_V2, DEPENDENCY_FLOOR_OVERLAY_V3}
     dependency_name = scope["dependency_name"]
     base_requirement, head_requirement = scope["base_requirement"], scope["head_requirement"]
     valid_pair = (canonical_dependency_floor_update_pair(base_requirement, head_requirement)
@@ -764,6 +898,8 @@ def evaluate_first_activation_dependency_floor(
 
         if amended:
             validate_business_path_digests(repo, base, head, scope)
+        if scope.get("schema") == DEPENDENCY_FLOOR_OVERLAY_V3:
+            validate_support_change_path_digests(repo, base, head, scope)
         business_paths = validate_first_activation_path_partition(
             scope, head_manifest_path, workflow_paths, changed,
         )

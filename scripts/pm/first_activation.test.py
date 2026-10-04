@@ -240,6 +240,44 @@ def amended_overlay(*, head: str = HEAD) -> dict:
     return row
 
 
+def supported_overlay(*, head: str = HEAD) -> tuple[dict, dict, str]:
+    row = amended_overlay(head=head)
+    row["schema"] = MODULE.OVERLAY_V3_SCHEMA
+    support_rows = [
+        {"path": path, "base_sha256": SHA, "head_sha256": SHA}
+        for path in sorted(MODULE.FIRST_ACTIVATION_SUPPORT_PATHS)
+    ]
+    dispatch_body = (
+        f"Task UID {UID} pre-dispatch support scope: "
+        + " ".join(sorted(MODULE.FIRST_ACTIVATION_SUPPORT_PATHS))
+    )
+    record = {
+        "schema": MODULE.SUPPORT_SCOPE_SCHEMA,
+        "task_uid": UID,
+        "issue_number": 4269,
+        "bootstrap_epoch": row["bootstrap_epoch"],
+        "snapshot_sha256": row["snapshot_sha256"],
+        "request_sha256": row["request_sha256"],
+        "acceptance_sha256": row["acceptance_sha256"],
+        "base_oid": BASE,
+        "head_oid": head,
+        "authorization": row["authorization"],
+        "scope_amendment": row["scope_amendment"],
+        "dispatch_comments": [{
+            "comment_id": 14,
+            "body_sha256": "sha256:" + hashlib.sha256(dispatch_body.encode()).hexdigest(),
+        }],
+        "support_change_paths": support_rows,
+    }
+    body = MODULE.SUPPORT_SCOPE_MARKER + "\n" + MODULE._canonical(record).decode("utf-8") + "\n"
+    row["support_scope"] = {
+        "comment_id": 15,
+        "body_sha256": "sha256:" + hashlib.sha256(body.encode()).hexdigest(),
+    }
+    row["support_change_paths"] = support_rows
+    return row, record, body
+
+
 class OverlayShapeTests(unittest.TestCase):
     def test_request_identity_uses_canonical_issue_title_reconstruction(self):
         self.assertEqual(
@@ -360,8 +398,28 @@ class OverlayShapeTests(unittest.TestCase):
             "scripts/pm/pr-lifecycle-gate.py",
             "scripts/prepare-task-pr.sh",
             "scripts/prepare-task-pr.test.sh",
+            "scripts/pm/ci-reuse-validation.py",
+            "scripts/pm/ci-reuse-validation.test.py",
+            "scripts/pm/ci_reuse_validation_readback.py",
+            "scripts/pm/ci_reuse_validation_readback.test.py",
+            "scripts/pm/github-project-task-lifecycle.test.py",
+            "scripts/pm/github-project-task.test.sh",
+            "scripts/pm/pr_projection_publication.py",
+            "scripts/pm/pr_projection_publication.test.py",
+            "scripts/pm/pr_projection_publish.py",
+            "scripts/pm/pr_projection_resolver.py",
+            "scripts/pm/pr_projection_resolver.test.py",
+            "scripts/pm/projection_publication_contract.py",
         }
         self.assertEqual(MODULE.FIRST_ACTIVATION_REVIEWED_PATHS, expected_paths)
+        self.assertEqual(MODULE.FIRST_ACTIVATION_SUPPORT_PATHS, {
+            "doc/.governance/document-corpus/objects/16/1620cf642fc3ae7886725ade1ec9282e13b3b5130782911e55ac67c77fdf7e7c.json",
+            "doc/.governance/document-corpus/objects/94/942664886e9920ca269062b66c9a2d4cf918774dd5a522678de1f0687e9c427e.json",
+            "doc/.governance/document-corpus/objects/9a/9a812ec52c06d6c0a9633e3ce03eea09b1cc8ae34e94ad1ead1f245d03ea4a3b.json",
+            "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+            "doc/p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md",
+            "doc/world-runtime/wasm/wasm-executor.design.md",
+        })
         self.assertTrue(MODULE._dispatch_scope_mentions(
             "scripts/pm/check-cargo-package-scope.test.py",
             "verification check-cargo-package-scope.test.py",
@@ -387,6 +445,93 @@ class OverlayShapeTests(unittest.TestCase):
         with self.assertRaises(MODULE.OverlayError):
             MODULE.validate_overlay(row, task_uid=UID, issue_number=4269,
                                     base_oid=BASE, head_oid=HEAD)
+
+    def test_v3_overlay_marker_is_parsed_without_reinterpreting_v2_history(self):
+        payload, _, _ = supported_overlay()
+        body = MODULE.canonical_overlay_body(payload)
+        self.assertEqual(MODULE._decode_overlay_comment(body)["schema"], payload["schema"])
+        self.assertEqual(MODULE._decode_overlay_comment(MODULE.canonical_overlay_body(amended_overlay()))["schema"],
+                         MODULE.OVERLAY_V2_SCHEMA)
+
+    def test_v3_overlay_requires_canonical_task_bound_support_record(self):
+        value, record, _ = supported_overlay()
+        amendment = MODULE.validate_scope_amendment_payload(
+            scope_amendment(), task_uid=UID, issue_number=4269,
+        )
+        parsed = MODULE.validate_overlay(
+            value, task_uid=UID, issue_number=4269, base_oid=BASE,
+            head_oid=HEAD, scope_amendment=amendment, support_scope=record,
+        )
+        self.assertEqual(parsed["support_change_paths"], value["support_change_paths"])
+        self.assertEqual(parsed["support_scope_record"], record)
+        for mutate in (
+            lambda row: row.update(task_uid="task_" + "b" * 32),
+            lambda row: row.update(head_oid="3" * 40),
+            lambda row: row["support_change_paths"].pop(),
+            lambda row: row["support_change_paths"][0].update(path="Cargo.lock"),
+        ):
+            changed_record = json.loads(json.dumps(record))
+            mutate(changed_record)
+            with self.subTest(record=changed_record), self.assertRaises(MODULE.OverlayError):
+                MODULE.validate_overlay(
+                    value, task_uid=UID, issue_number=4269, base_oid=BASE,
+                    head_oid=HEAD, scope_amendment=amendment,
+                    support_scope=changed_record,
+                )
+        with self.assertRaises(MODULE.OverlayError):
+            MODULE.validate_overlay(
+                value, task_uid=UID, issue_number=4269, base_oid=BASE,
+                head_oid=HEAD, scope_amendment=amendment,
+            )
+
+    def test_v3_support_record_requires_live_pre_dispatch_comment_bytes(self):
+        value, record, support_body = supported_overlay()
+        dispatch_body = (
+            f"Task UID {UID} pre-dispatch support scope: "
+            + " ".join(sorted(MODULE.FIRST_ACTIVATION_SUPPORT_PATHS))
+        )
+        comments = [
+            _comment(14, dispatch_body, 1),
+            _comment(15, support_body, 2),
+        ]
+        amendment = MODULE.validate_scope_amendment_payload(
+            scope_amendment(), task_uid=UID, issue_number=4269,
+        )
+        comment, checked = MODULE._validated_support_scope(
+            comments, issue_url=ISSUE_URL, task_uid=UID, issue_number=4269,
+            overlay=value, amendment=amendment, support_ref=value["support_scope"],
+        )
+        self.assertEqual(comment["id"], 15)
+        self.assertEqual(checked, record)
+        altered_dispatch = [dict(comments[0], body=dispatch_body + "\nchanged"), comments[1]]
+        with self.assertRaises(MODULE.OverlayError):
+            MODULE._validated_support_scope(
+                altered_dispatch, issue_url=ISSUE_URL, task_uid=UID, issue_number=4269,
+                overlay=value, amendment=amendment, support_ref=value["support_scope"],
+            )
+
+    def test_v3_review_plan_binds_workflow_support_and_business_classes(self):
+        value, _, _ = supported_overlay()
+        comments, _ = review_evidence(overlay())
+        plan = json.loads(comments[2]["body"].split("\n", 1)[1])
+        plan["schema"] = MODULE.FIRST_REVIEW_PLAN_V3_SCHEMA
+        plan["authorization"] = value["authorization"]
+        plan["dependency"] = value["dependency"]
+        plan["scope_amendment"] = value["scope_amendment"]
+        plan["business_change_paths"] = value["business_change_paths"]
+        plan["support_scope"] = value["support_scope"]
+        plan["support_change_paths"] = value["support_change_paths"]
+        checked = MODULE._validate_first_review_plan(
+            plan, {"_overlay": value}, repository="eng-cc/oasis7",
+            issue_number=4269, comments=comments,
+        )
+        self.assertEqual(checked["schema"], MODULE.FIRST_REVIEW_PLAN_V3_SCHEMA)
+        plan["support_scope"] = {"comment_id": 16, "body_sha256": SHA}
+        with self.assertRaises(MODULE.OverlayError):
+            MODULE._validate_first_review_plan(
+                plan, {"_overlay": value}, repository="eng-cc/oasis7",
+                issue_number=4269, comments=comments,
+            )
 
     def test_rejects_uid_head_mode_and_raw_primary_drift(self):
         for mutate in (
