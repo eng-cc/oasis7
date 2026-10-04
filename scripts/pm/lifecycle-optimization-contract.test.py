@@ -17,21 +17,31 @@ def _finalizer_lock_worker(repo_root, task_uid, entered, release):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    def critical_section(root, uid, receipt):
+    def locked_authority_read(root, uid):
         entered.set()
         release.wait(10)
-        return 0
+        raise RuntimeError("fixture stops after UID lock and before authority reads")
 
-    module._write_terminal_locked = critical_section
-    module._write_terminal(Path(repo_root), task_uid, Path(repo_root) / "receipt.json")
+    module._delivery_live_context = locked_authority_read
+    try:
+        module._write_delivery(Path(repo_root), task_uid)
+    except RuntimeError as exc:
+        if str(exc) != "fixture stops after UID lock and before authority reads":
+            raise
 
 class LifecycleOptimizationContractTests(unittest.TestCase):
-    def test_closeout_has_task_scoped_postcondition_readback_and_single_refresh_budget(self):
+    def test_closeout_has_task_scoped_postcondition_readback_and_one_refresh_per_schema_branch(self):
         source=(PM/"task-closeout.sh").read_text()
         self.assertIn("postcondition", source.lower())
         self.assertIn("task_uid", source.lower())
         self.assertIn("refresh-same-identity", source)
-        self.assertEqual(1, source.count("refresh-same-identity"), "closeout may integrate at most one CI freshness refresh")
+        start=source.index('if [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then')
+        end=source.index('CI_READY_RECEIPT="$REFRESHED_CI_READY_RECEIPT"', start)
+        branches=source[start:end].split("\n    else\n")
+        self.assertEqual(2, len(branches), "v2 and legacy refreshes must be mutually exclusive branches")
+        self.assertEqual(1, branches[0].count("refresh-same-identity"), "v2 branch must refresh once")
+        self.assertEqual(1, branches[1].count("refresh-same-identity"), "legacy branch must refresh once")
+        self.assertEqual(2, source.count("refresh-same-identity"), "no refresh call may sit outside the exclusive branches")
 
     def test_finalizer_uses_persistent_task_lock_in_git_common_state(self):
         source=(PM/"post-merge-finalize.py").read_text()
@@ -61,11 +71,11 @@ class LifecycleOptimizationContractTests(unittest.TestCase):
             ]
             try:
                 processes[0].start()
-                self.assertTrue(entered[0].wait(3), "first finalizer never acquired lock")
+                self.assertTrue(entered[0].wait(3), "first finalizer never acquired the task lock")
                 processes[1].start()
                 time.sleep(0.25)  # second process has opened the first lock inode and is waiting
                 release[0].set()
-                self.assertTrue(entered[1].wait(3), "second finalizer never acquired lock")
+                self.assertTrue(entered[1].wait(3), "second finalizer never acquired the task lock")
                 processes[2].start()
                 self.assertFalse(
                     entered[2].wait(0.75),

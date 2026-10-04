@@ -275,6 +275,14 @@ esac
 if [[ "$CLAIM_LABEL" == "ready_for_merge" ]]; then
   [[ -n "$PR_GATE_JSON" && -f "$PR_GATE_JSON" ]] || die "ready_for_merge requires --pr-gate-json from pr-lifecycle-gate.py"
   [[ -n "$TASK_UID" ]] || die "ready_for_merge requires --task-uid for live gate revalidation"
+  # Consume the supplied input once. All later parsing/publication uses these
+  # retained bytes, including a caller replacing its original path mid-run.
+  READINESS_GATE_CAPTURE="$(mktemp)"
+  python3 - "$PR_GATE_JSON" "$READINESS_GATE_CAPTURE" <<'PY'
+import pathlib,sys
+pathlib.Path(sys.argv[2]).write_bytes(pathlib.Path(sys.argv[1]).read_bytes())
+PY
+  PR_GATE_JSON="$READINESS_GATE_CAPTURE"
   python3 - "$PR_GATE_JSON" <<'PY'
 import datetime as dt, json, re, sys
 p = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -421,6 +429,28 @@ trap cleanup EXIT
 FROZEN_HEAD=""
 FROZEN_TREE=""
 VERIFICATION_MODE="live_nonfinal"
+if [[ "$CLAIM_LABEL" == "task_complete" && -n "$TASK_UID" && -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
+  READINESS_REQUIRED="$(python3 - "$ROOT_DIR" "$TASK_UID" "$SCRIPT_DIR" <<'PY'
+import json,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+r=(json.load(open(root/'.pm/github-project-sync/tasks.json',encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+v1=(r.get('phase_receipts') or {}).get('post_merge_done',{}).get('receipt_type')=='oasis7_terminal_cleanup'
+non_pr=r.get('completion_mode')=='non_pr_task' and bool(r.get('non_pr_completion_evidence'))
+if r.get('pr_number') and v1 and not non_pr:
+    sys.path.insert(0,sys.argv[3])
+    from loop_terminal import read_shared_terminal_proof
+    proof=read_shared_terminal_proof(r.get('repository'),sys.argv[2],repo_root=root,record=r)
+    if proof.get('status')!='passed' or proof.get('protocol_version')!=1:
+        raise SystemExit('task_complete legacy exemption requires exact valid v1 terminal proof')
+print('yes' if r.get('pr_number') and not v1 and not non_pr else 'no')
+PY
+)" || die "readiness or exact valid v1 terminal proof is required before task_complete claim publication"
+  if [[ "$READINESS_REQUIRED" == yes ]]; then
+    python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$ROOT_DIR" --task-uid "$TASK_UID" >/dev/null \
+      || die "readiness must validate before task_complete claim publication"
+  fi
+fi
+
 if [[ "$CLAIM_LABEL" == "task_complete" || "$CLAIM_LABEL" == "ready_for_pr" ]]; then
   git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
     || die "$CLAIM_LABEL requires a Git worktree with an immutable committed source"
@@ -528,7 +558,14 @@ print(json.dumps(payload, ensure_ascii=False))
 PY
 )"
 
-if [[ -n "$TASK_UID" ]]; then
+if [[ "$CLAIM_LABEL" == "ready_for_merge" && "$VERIFY_EXIT_CODE" == "0" ]]; then
+  # Native producer generation: oasis7-native-readiness/v2.
+  RESULT_JSON="$(python3 "$SCRIPT_DIR/readiness_transport.py" --publish-native \
+    --repo-root "$ROOT_DIR" --tool-root "$(cd "$SCRIPT_DIR/../.." && pwd)" \
+    --task-uid "$TASK_UID" --gate-input "$PR_GATE_JSON" --result-json "$RESULT_JSON")" \
+    || die "native readiness exact server readback failed"
+  rm -f "$READINESS_GATE_CAPTURE"
+elif [[ -n "$TASK_UID" ]]; then
   if [[ -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
     python3 - "$ROOT_DIR" "$TASK_UID" "$RESULT_JSON" <<'PY'
 from __future__ import annotations

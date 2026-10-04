@@ -19,6 +19,7 @@ TASK = ROOT / "scripts/pm/github-project-task.py"
 CLOSEOUT = ROOT / "scripts/pm/task-closeout.sh"
 MAIN_SYNC = ROOT / "scripts/pm/post-merge-main-sync.sh"
 CLEANUP = ROOT / "scripts/pm/post-merge-cleanup.sh"
+CLEANUP_EXECUTOR = ROOT / "scripts/pm/resource-cleanup-executor.py"
 FINALIZE = ROOT / "scripts/pm/post-merge-finalize.py"
 PR_WATCH_AUDIT = ROOT / "scripts/pm/audit-pr-watch-issues.py"
 SOURCE = ROOT / "doc/engineering/workflow/source-of-truth.md"
@@ -134,7 +135,9 @@ class TerminalTransitionOrder(unittest.TestCase):
         text = MAIN_SYNC.read_text(encoding="utf-8")
         self.assertIn('"workflow_phase":"main_sync"', re.sub(r"\s+", "", text).lower())
         self.assertRegex(text, r"github-project-task\.py[^\n]+(?:advance|transition|set-phase)")
-        self.assertLess(text.index("oasis7_main_sync"), text.index("main_sync"))
+        receipt_write = text.index("out={'receipt_type':'oasis7_main_sync'")
+        mapping_update = text.index('# {"workflow_phase":"main_sync"}')
+        self.assertLess(receipt_write, mapping_update)
 
     def test_cleanup_receipt_precedes_the_only_terminal_finalizer(self) -> None:
         cleanup = CLEANUP.read_text(encoding="utf-8")
@@ -283,6 +286,146 @@ module.commit_terminal(root,uid,{'receipt_type':'forged'},'0'*64)
             finally:
                 os.environ["PATH"] = previous_path
 
+    def test_v2_imported_writer_is_context_free_and_locks_before_live_authority(self) -> None:
+        """Only the UID entry may write v2, after acquiring its task lock."""
+        sys.path.insert(0, str(FINALIZE.parent))
+        spec = importlib.util.spec_from_file_location("caller_v2_finalizer", FINALIZE)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        writer = module._write_delivery
+        self.assertEqual(["root", "task_uid"], list(inspect.signature(writer).parameters))
+        for name in (
+            "_delivery_project_update", "_delivery_create_comment",
+            "_delivery_commit_mapping", "_write_delivery_tombstone",
+            "_write_delivery_locked", "_write_terminal_locked",
+            "_ensure_terminal_project", "_write_terminal_tombstone",
+            "_ledger_transition",
+        ):
+            with self.subTest(helper=name):
+                self.assertFalse(hasattr(module, name), f"unsafe imported writer remains: {name}")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            mapping_path = root / ".pm/github-project-sync/tasks.json"
+            mapping_path.parent.mkdir(parents=True)
+            uid = "task_11111111111111111111111111111111"
+            before = (json.dumps({"tasks": {uid: {"task_uid": uid, "workflow_phase": "main_sync"}}}) + "\n").encode()
+            mapping_path.write_bytes(before)
+            with self.assertRaises(TypeError):
+                writer(root, uid, {"record": {"workflow_phase": "post_merge_done"}})
+            self.assertEqual(before, mapping_path.read_bytes())
+
+            real_flock = module.fcntl.flock
+            acquired: list[int] = []
+            def observe_flock(handle, operation):
+                result = real_flock(handle, operation)
+                acquired.append(operation)
+                return result
+            original_context = module._delivery_live_context
+            def stop_after_locked_read(selected_root, selected_uid):
+                self.assertEqual([module.fcntl.LOCK_EX], acquired)
+                self.assertEqual(root.resolve(), selected_root.resolve())
+                self.assertEqual(uid, selected_uid)
+                raise RuntimeError("stop after lock-held authority boundary")
+            module.fcntl.flock = observe_flock
+            module._delivery_live_context = stop_after_locked_read
+            try:
+                with self.assertRaisesRegex(RuntimeError, "lock-held authority boundary"):
+                    writer(root, uid)
+            finally:
+                module.fcntl.flock = real_flock
+                module._delivery_live_context = original_context
+            self.assertEqual([module.fcntl.LOCK_EX], acquired)
+            self.assertEqual(before, mapping_path.read_bytes())
+
+    def test_v1_committed_comment_ledger_requires_exact_live_readback(self) -> None:
+        """A forged committed ledger result cannot substitute for GitHub evidence."""
+        sys.path.insert(0, str(FINALIZE.parent))
+        spec = importlib.util.spec_from_file_location("caller_v1_comment_finalizer", FINALIZE)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
+            task_worktree = Path(directory) / "task-worktree"
+            task_worktree.mkdir()
+            uid, repository, issue, pr = "task_11111111111111111111111111111111", "fixture/repo", 11, 22
+            mapping_path = root / ".pm/github-project-sync/tasks.json"
+            mapping_path.parent.mkdir(parents=True)
+            receipt_root = Path(subprocess.check_output([
+                sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+                "--default-worktree", str(root), "--task-uid", uid, "--create",
+            ], text=True).strip())
+            terminal = {
+                "receipt_type": "oasis7_terminal_cleanup", "issuer": "post-merge-cleanup",
+                "task_uid": uid, "repository": repository, "issue_number": issue,
+                "pr_number": pr, "worktree": str(task_worktree), "branch": "task/forged-comment",
+            }
+            terminal_path = receipt_root / "terminal-cleanup-receipt.json"
+            terminal_raw = (json.dumps(terminal, sort_keys=True) + "\n").encode()
+            terminal_path.write_bytes(terminal_raw)
+            digest = __import__("hashlib").sha256(terminal_raw).hexdigest()
+            operation_id = __import__("hashlib").sha256(f"{uid}:post_merge_done:evidence_comment".encode()).hexdigest()
+            comment_url = f"https://github.com/{repository}/issues/{issue}#issuecomment-42"
+            ledger_path = receipt_root / "finalizer-ledger.json"
+            ledger_path.write_text(json.dumps({
+                "schema": "oasis7_finalizer_ledger_v1", "task_uid": uid, "revision": 2,
+                "operations": {"evidence_comment": {
+                    "operation_id": operation_id, "effect": "evidence_comment",
+                    "committed": True, "result": comment_url,
+                }},
+            }) + "\n", encoding="utf-8")
+            record = {
+                "task_uid": uid, "status": "done", "workflow_phase": "post_merge_done",
+                "repository": repository, "issue_number": issue, "pr_number": pr,
+                "pr_url": f"https://github.com/{repository}/pull/{pr}",
+                "canonical_worktree": str(task_worktree), "task_branch": "task/forged-comment",
+                "merge_receipt": {"state": "MERGED"},
+                "phase_receipts": {"main_sync": {"receipt_type": "oasis7_main_sync"},
+                                   "post_merge_done": terminal},
+                "phase_receipt_sha256": {"post_merge_done": digest},
+                "evidence_comments": [comment_url],
+            }
+            mapping_path.write_text(json.dumps({"version": 1, "tasks": {uid: record}}) + "\n", encoding="utf-8")
+
+            bin_dir = Path(directory) / "bin"
+            bin_dir.mkdir()
+            gh_log = Path(directory) / "gh.log"
+            gh = bin_dir / "gh"
+            gh.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$*\" >> \"$GH_LOG\"\n"
+                "case \"$*\" in\n"
+                f"  'api repos/{repository}/issues/{issue}/comments --paginate --slurp') printf '%s\\n' '[]' ;;\n"
+                f"  'issue view {issue} -R {repository} --json state') printf '%s\\n' '{{\"state\":\"CLOSED\"}}' ;;\n"
+                "  *) exit 99 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            gh.chmod(0o755)
+            old_path, old_log = os.environ.get("PATH", ""), os.environ.get("GH_LOG")
+            os.environ["PATH"] = f"{bin_dir}:{old_path}"
+            os.environ["GH_LOG"] = str(gh_log)
+            before = mapping_path.read_bytes()
+            try:
+                with self.assertRaises((SystemExit, ValueError)):
+                    module._write_terminal(root, uid, terminal_path)
+            finally:
+                os.environ["PATH"] = old_path
+                if old_log is None:
+                    os.environ.pop("GH_LOG", None)
+                else:
+                    os.environ["GH_LOG"] = old_log
+            calls = gh_log.read_text(encoding="utf-8") if gh_log.exists() else ""
+            self.assertIn("api repos/fixture/repo/issues/11/comments", calls)
+            self.assertNotIn("issue close 11", calls)
+            self.assertEqual(before, mapping_path.read_bytes())
+            self.assertFalse((receipt_root / "terminal-tombstone.json").exists())
+
     def test_full_terminal_validation_precedes_already_finalized_and_issue_effects(self) -> None:
         text = FINALIZE.read_text(encoding="utf-8")
         validation_markers = (
@@ -397,8 +540,8 @@ module.commit_terminal(root,uid,{'receipt_type':'forged'},'0'*64)
         self.assertIn("<canonical-task-worktree>", body)
         self.assertIn("<canonical-default-worktree>", body)
         self.assertRegex(body, r"cd <canonical-task-worktree>[\s\S]{0,500}task-closeout\.sh")
-        self.assertRegex(body, r"cd <canonical-default-worktree>[\s\S]{0,500}post-merge-main-sync\.sh")
-        self.assertIn("--terminal-receipt-output", body)
+        self.assertIn("./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree>", body)
+        self.assertIn("--cleanup-only", body)
 
     def test_missing_merge_receipt_guidance_names_only_receipt_flag(self) -> None:
         text = CLOSEOUT.read_text(encoding="utf-8")
@@ -465,41 +608,54 @@ module.commit_terminal(root,uid,{'receipt_type':'forged'},'0'*64)
         self.assertRegex(text, r"(?is)merge_receipt_sha256.{0,800}(mismatch|disagrees)")
         self.assertRegex(text, r"(?is)main_sync_receipt_sha256.{0,800}(mismatch|disagrees)")
 
-    def test_cleanup_journals_intent_before_effects_and_retries_after_crash(self) -> None:
-        text = CLEANUP.read_text(encoding="utf-8")
-        for marker in (
-            "oasis7_cleanup_intent", "worktree_removed", "branch_deleted",
-            "terminal_receipt_committed",
-        ):
-            self.assertIn(marker, text)
-        self.assertLess(text.index("oasis7_cleanup_intent"), text.index('worktree remove "$WORKTREE"'))
-        self.assertRegex(text, r"(?is)worktree_removed.{0,1000}(already|missing|retry)")
-        self.assertRegex(text, r"(?is)branch_deleted.{0,1000}(already|missing|retry)")
+    def test_v2_cleanup_journals_intent_before_effects_and_preserves_v1_adapter(self) -> None:
+        shell = CLEANUP.read_text(encoding="utf-8")
+        executor = CLEANUP_EXECUTOR.read_text(encoding="utf-8")
+        self.assertIn('"$cleanup_arg" == "--delivery"', shell)
+        self.assertIn('exec python3 "$SCRIPT_DIR/resource-cleanup-executor.py" "$@"', shell)
+        self.assertLess(shell.index('"$cleanup_arg" == "--delivery"'), shell.index("legacy_worktree_operation()"))
+        self.assertIn("legacy_worktree_operation remove", shell)
+        intent = executor.index('intent("worktree", "git_worktree_remove")')
+        mutation = executor.index("mutate=True, history=history", intent)
+        self.assertLess(intent, mutation)
+        self.assertIn('"intent"', executor)
+        self.assertIn('"record"', executor)
 
     def test_production_cleanup_has_no_fixture_or_fault_environment_channel(self) -> None:
         text = CLEANUP.read_text(encoding="utf-8")
         self.assertNotRegex(text, r"TPM_CLEANUP_(?:FIXTURE|FAULT)")
         self.assertNotRegex(text, r"(?i)(fixture-only kill|fault injection)")
 
-    def test_runbook_uses_one_absolute_durable_receipt_root_across_worktrees(self) -> None:
+    def test_v2_runbook_uses_canonical_receipt_root_and_independent_cleanup(self) -> None:
         text = SOURCE.read_text(encoding="utf-8")
         runbook = re.search(r"(?ms)^### Terminal runbook\s*$\n(.*?)(?=^### |^## |\Z)", text)
         self.assertIsNotNone(runbook)
         body = runbook.group(1)
         self.assertIn("canonical-receipt-root.py", body)
         self.assertNotRegex(body, r"(?m)(?:>|--pr-receipt|--receipt-output|--main-sync-receipt)\s+\.pm/scratch/")
-        self.assertRegex(
-            body,
-            r"(?is)cd <canonical-default-worktree>.{0,500}refresh-task-cache\.sh.{0,500}post-merge-main-sync\.sh",
-        )
+        self.assertIn("finalize-task.sh --repo-root <canonical-default-worktree>", body)
+        self.assertIn("--cleanup=defer", body)
+        self.assertIn("--cleanup-only", body)
+        self.assertIn("Main sync is optional", body)
         self.assertRegex(body, r'(?m)^RECEIPT_ROOT="\$\(python3 scripts/pm/canonical-receipt-root\.py \\')
         self.assertRegex(body, r'--default-worktree <canonical-default-worktree>.*\n\s*--task-uid <TASK-UID> --create\)"')
         helpers = re.findall(
             r"(?:python3\s+)?(?:\./)?scripts/pm/(pr-merge-receipt\.py|task-closeout\.sh|"
             r"refresh-task-cache\.sh|post-merge-main-sync\.sh|post-merge-cleanup\.sh|"
             r"post-merge-finalize\.py)", body)
-        self.assertEqual(6, len(helpers), helpers)
-        self.assertRegex(body, r"(?i)all six (?:commands|transitions|steps)")
+        self.assertEqual(["pr-merge-receipt.py", "task-closeout.sh", "refresh-task-cache.sh"], helpers)
+
+    def test_v2_facade_reads_back_delivery_before_cleanup_and_has_no_main_sync_gate(self) -> None:
+        text = (ROOT / "scripts/pm/finalize-task.sh").read_text(encoding="utf-8")
+        delivery = text.index('delivery_json="$(python3 "$SCRIPT_DIR/post-merge-finalize.py"')
+        cleanup = text.index('cleanup_json="$(run_cleanup)"', delivery)
+        self.assertLess(delivery, cleanup)
+        self.assertIn('"$SCRIPT_DIR/post-merge-cleanup.sh" --repo-root "$repo_root" --task-uid "$task_uid" --delivery --json',
+                      text.split("run_cleanup() {", 1)[1].split("\n}", 1)[0])
+        self.assertNotIn("post-merge-main-sync.sh", text)
+        cleanup_only = text.split('if [[ "$cleanup_only" == 1 ]]; then', 1)[1]
+        self.assertLess(cleanup_only.index("--delivery --preflight --json"),
+                        cleanup_only.index('cleanup_json="$(run_cleanup)"'))
 
     def test_terminal_runbook_numbers_six_actions_with_readback_and_resume(self) -> None:
         text = SOURCE.read_text(encoding="utf-8")
@@ -507,25 +663,20 @@ module.commit_terminal(root,uid,{'receipt_type':'forged'},'0'*64)
         self.assertIsNotNone(match)
         body = match.group(1)
         numbered = re.findall(r"(?m)^([1-6])[.)]\s+", body)
-        self.assertEqual(["1", "2", "3", "4", "5", "6"], numbered)
-        for number in numbered:
+        self.assertEqual(["1", "2", "3", "4"], numbered)
+        for number in numbered[:3]:
             action = re.search(rf"(?ms)^{number}[.)]\s+.*?(?=^[1-6][.)]\s+|\Z)", body).group(0)
             self.assertRegex(action, r"(?i)readback")
             self.assertRegex(action, r"(?i)resume|retry")
+        optional_sync = re.search(r"(?ms)^4[.)]\s+.*?(?=^[1-6][.)]\s+|\Z)", body).group(0)
+        self.assertRegex(optional_sync, r"(?i)optional|not a delivery or cleanup precondition")
 
     def test_only_finalizer_has_terminal_semantics_in_current_source(self) -> None:
-        text = SOURCE.read_text(encoding="utf-8").split("## 7. Change Log", 1)[0]
-        paragraphs = [re.sub(r"\s+", " ", item).strip() for item in re.split(r"\n\s*\n", text)]
-        conflicting = [
-            paragraph for paragraph in paragraphs
-            if "task-closeout" in paragraph.lower()
-            and re.search(
-                r"(?i)(post_merge_done|close(?:s|d|ing)? (?:the )?(?:task )?issue|issue close)",
-                paragraph,
-            )
-        ]
-        self.assertEqual([], conflicting)
-        self.assertRegex(text, r"(?is)post-merge-finalize\.py.{0,300}(only|唯一).{0,300}(post_merge_done|close)")
+        text = SOURCE.read_text(encoding="utf-8")
+        done = text.split("**Terminal Done.**", 1)[1].split("## State, gate, and PM mapping", 1)[0]
+        self.assertIn("`post_merge_done` proves delivery and GitHub terminal-state readback", done)
+        self.assertIn("it does not prove resource cleanup", done)
+        self.assertIn("finalizer readback", done)
 
     def test_terminal_receipt_paths_are_absolute_and_outside_task_worktree(self) -> None:
         surfaces = {
@@ -548,8 +699,11 @@ module.commit_terminal(root,uid,{'receipt_type':'forged'},'0'*64)
         self.assertIn("is_absolute", cleanup)
         self.assertIn("is_absolute", finalizer)
         self.assertLess(sync.index("is_absolute"), sync.index('fetch --quiet'))
-        self.assertLess(cleanup.index("is_absolute"), cleanup.index('worktree remove "$WORKTREE"'))
+        self.assertLess(cleanup.index("is_absolute"), cleanup.index("legacy_worktree_operation remove"))
         self.assertLess(finalizer.index("is_absolute"), finalizer.index('"issue","close"'))
+        executor = CLEANUP_EXECUTOR.read_text(encoding="utf-8")
+        self.assertNotIn('add_argument("--worktree"', executor)
+        self.assertNotIn('add_argument("--branch"', executor)
 
 
 if __name__ == "__main__":

@@ -418,6 +418,26 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/first_activation.test.py
   run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
+  run python3 ./scripts/pm/terminal-delivery-protocol.test.py
+  run python3 ./scripts/pm/resource-cleanup-safety.test.py
+  run python3 ./scripts/pm/terminal_proof.test.py
+  run bash ./scripts/pm/post-merge-finalize.test.sh
+  run bash ./scripts/pm/post-merge-finalizer-ledger-red.test.sh
+  run bash ./scripts/pm/post-merge-finalizer-comment-readback-red.test.sh
+  run bash ./scripts/pm/post-merge-finalizer-project-ledger-red.test.sh
+  run bash ./scripts/pm/finalize-task.test.sh
+  run bash ./scripts/pm/finalize-task-red.test.sh
+  run bash ./scripts/pm/finalize-task-remote-branch-mismatch.test.sh
+  run python3 ./scripts/pm/recover-terminal-task-mapping.test.py
+  run python3 ./scripts/pm/readiness-transport.test.py
+  run python3 ./scripts/pm/readiness-repeat.test.py
+  run python3 ./scripts/pm/readiness-prior-receipt.test.py
+  run python3 ./scripts/pm/readiness-legacy-repeat.test.py
+  run bash ./scripts/pm/post-merge-cleanup.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-trust.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-fault-isolation.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-crash.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-resume.test.sh
   run python3 ./scripts/pm/ordered-aggregate-closeout.test.py
   run python3 ./scripts/pm/terminal-task-audit-aggregate.test.py
   run python3 ./scripts/pm/terminal-task-audit-project-semantics.test.py

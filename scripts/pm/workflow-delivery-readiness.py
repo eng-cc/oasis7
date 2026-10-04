@@ -16,6 +16,8 @@ REPOSITORY = "eng-cc/oasis7"
 REQUIRED_GATE_APP_ID = 15368
 ARTIFACT_DEPENDENCY_MARKER = "<!-- oasis7-artifact-dependency/v1 -->"
 ARTIFACT_DEPENDENCY_SCHEMA = "oasis7-artifact-dependency/v1"
+RESOURCE_DEPENDENCY_MARKER = "<!-- oasis7-resource-dependency/v1 -->"
+RESOURCE_DEPENDENCY_SCHEMA = "oasis7-resource-dependency/v1"
 ARTIFACT_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 OID_RE = re.compile(r"^[0-9a-f]{40,64}$")
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
@@ -36,6 +38,10 @@ class _DuplicateJSONKey(ValueError):
     """A JSON object repeats a key, making its binding ambiguous."""
 
 
+class _ResourceDependencyError(ValueError):
+    """A typed resource wait is invalid; it blocks only its declared consumption."""
+
+
 def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -52,8 +58,9 @@ def _action_blocker(
     blocks_actions: list[str],
     allowed_actions: list[str],
     next_action_kind: str,
+    blocked_artifacts: list[str] | None = None,
 ) -> dict[str, Any]:
-    return {
+    result = {
         "code": code,
         "blocks_actions": blocks_actions,
         "allowed_actions": allowed_actions,
@@ -61,6 +68,9 @@ def _action_blocker(
         "next_command": None,
         "reason": reason,
     }
+    if blocked_artifacts is not None:
+        result["blocked_artifacts"] = blocked_artifacts
+    return result
 
 
 BLOCKER_POLICY: dict[str, tuple[list[str], list[str], str]] = {
@@ -105,9 +115,14 @@ BLOCKER_POLICY: dict[str, tuple[list[str], list[str], str]] = {
         "obtain_archive_readback",
     ),
     "CLEANUP_DEFERRED": (
-        ["archive", "cleanup", "terminal"],
+        ["cleanup"],
         ["inspect", "consume_verified_artifact"],
         "resume_cleanup_when_readback_exists",
+    ),
+    "RESOURCE_RELEASE_PENDING": (
+        ["consume_artifact"],
+        ["inspect", "wait_for_resource_release"],
+        "verify_declared_resource_release",
     ),
     "UNCLASSIFIED_BLOCKER": (
         ["freeze", "publish", "merge", "consume_artifact", "cleanup", "terminal", "state_write"],
@@ -230,10 +245,22 @@ def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str,
     """
     declaration = proof.get("declaration") if isinstance(proof, dict) else None
     if not isinstance(declaration, dict):
+        resource_error = proof.get("resource_dependency_error") if isinstance(proof, dict) else None
+        resource = proof.get("resource_dependency") if isinstance(proof, dict) else None
+        blocked = []
+        wait_state = "not_applicable"
+        if resource_error or isinstance(resource, dict):
+            message = str(resource_error or "resource wait cannot be joined to one exact artifact dependency")
+            blocked.append(_action_blocker(
+                "RESOURCE_RELEASE_PENDING", message, blocks_actions=["consume_artifact"],
+                allowed_actions=["inspect"], next_action_kind="repair_resource_dependency_binding",
+            ))
+            wait_state = "blocked"
         return {
             "delivery_ready": None,
             "cleanup_state": "not_applicable",
-            "action_blockers": [],
+            "resource_wait_state": wait_state,
+            "action_blockers": blocked,
             "dependency": "legacy_or_unclassified_terminal_semantics",
         }
 
@@ -245,6 +272,10 @@ def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str,
     review = proof.get("review")
     source_ci = proof.get("source_ci")
     local_input = proof.get("local_input")
+    terminal_proof = proof.get("terminal_proof")
+    resource_dependency = proof.get("resource_dependency")
+    resource_release = proof.get("resource_release")
+    resource_dependency_error = proof.get("resource_dependency_error")
     pr_number = pr.get("number") if isinstance(pr, dict) else None
     pr_head_oid = pr.get("head_oid") if isinstance(pr, dict) else None
     upstream_uid = declaration.get("upstream_task_uid")
@@ -320,6 +351,10 @@ def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str,
         and local_input.get("artifacts_match") is True
     ):
         reasons.append(("SOURCE_NOT_PUBLISHED", "the downstream worktree does not contain every exact declared artifact from the merged source"))
+    if terminal_proof is not None and (
+        not isinstance(terminal_proof, dict) or terminal_proof.get("status") != "passed"
+    ):
+        reasons.append(("SOURCE_NOT_PUBLISHED", "the upstream terminal delivery proof is missing, ambiguous, or invalid"))
 
     action_blockers = []
     seen: set[tuple[str, str]] = set()
@@ -348,9 +383,32 @@ def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str,
                 allowed_actions=list(allowed),
                 next_action_kind=next_kind,
             ))
+    resource_wait_state = "not_applicable"
+    if isinstance(resource_dependency, dict) or resource_dependency_error:
+        if resource_dependency_error:
+            resource_wait_state = "blocked"
+            reason = str(resource_dependency_error)
+        elif not isinstance(resource_release, dict) or resource_release.get("ready") is not True:
+            resource_wait_state = "pending"
+            reasons_for_resources = (resource_release or {}).get("reasons")
+            reason = "; ".join(str(item) for item in reasons_for_resources or []) or "declared resources lack fresh release readback"
+        else:
+            resource_wait_state = "released"
+            reason = "all declared resources are released with fresh exact-identity readback"
+        if resource_wait_state != "released":
+            blocked, allowed, next_kind = BLOCKER_POLICY["RESOURCE_RELEASE_PENDING"]
+            artifacts = declaration.get("artifacts")
+            artifact_names = [str(item.get("path")) for item in artifacts
+                              if isinstance(item, dict) and isinstance(item.get("path"), str)] if isinstance(artifacts, list) else []
+            action_blockers.append(_action_blocker(
+                "RESOURCE_RELEASE_PENDING", reason,
+                blocks_actions=list(blocked), allowed_actions=list(allowed),
+                next_action_kind=next_kind, blocked_artifacts=artifact_names,
+            ))
     return {
         "delivery_ready": ready,
         "cleanup_state": cleanup_state,
+        "resource_wait_state": resource_wait_state,
         "action_blockers": action_blockers,
         "dependency": f"{upstream_uid}:artifact",
     }
@@ -439,7 +497,8 @@ def _is_admin(repository: str, login: str) -> bool:
 
 def _typed_record(
     comments: list[Any], marker: str, schema: str, issue_url: str, *,
-    repository: str, task_uid: str, issue_number: int,
+    repository: str, task_uid: str, issue_number: int, ensure_ascii: bool = True,
+    reject_unknown_schema: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
     """Select one authenticated declaration after excluding other types/bindings."""
     authorized: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -470,19 +529,34 @@ def _typed_record(
 
         if parse_error is None and isinstance(record, dict):
             if record.get("schema") != schema:
-                continue
-            candidate_uid = record.get("task_uid")
-            candidate_issue = record.get("task_issue_number")
-            candidate_repository = record.get("repository")
-            if isinstance(candidate_uid, str) and candidate_uid != task_uid:
-                continue
-            if type(candidate_issue) is int and candidate_issue != issue_number:
-                continue
-            if isinstance(candidate_repository, str) and candidate_repository != repository:
-                continue
-            if (candidate_uid != task_uid or type(candidate_issue) is not int
-                    or candidate_issue != issue_number or candidate_repository != repository):
-                parse_error = "typed evidence binding is incomplete or malformed"
+                if not reject_unknown_schema:
+                    continue
+                # Resource-wait marker versions are not interchangeable. If
+                # this record cannot be proven to belong to another Task, an
+                # unknown or missing schema must not erase a possible wait.
+                if (isinstance(record.get("task_uid"), str)
+                        and record["task_uid"] != task_uid):
+                    continue
+                if (type(record.get("task_issue_number")) is int
+                        and record["task_issue_number"] != issue_number):
+                    continue
+                if (isinstance(record.get("repository"), str)
+                        and record["repository"] != repository):
+                    continue
+                parse_error = "resource dependency schema is missing or unsupported"
+            else:
+                candidate_uid = record.get("task_uid")
+                candidate_issue = record.get("task_issue_number")
+                candidate_repository = record.get("repository")
+                if isinstance(candidate_uid, str) and candidate_uid != task_uid:
+                    continue
+                if type(candidate_issue) is int and candidate_issue != issue_number:
+                    continue
+                if isinstance(candidate_repository, str) and candidate_repository != repository:
+                    continue
+                if (candidate_uid != task_uid or type(candidate_issue) is not int
+                        or candidate_issue != issue_number or candidate_repository != repository):
+                    parse_error = "typed evidence binding is incomplete or malformed"
         elif parse_error is None:
             parse_error = "typed evidence must be a JSON object"
 
@@ -494,7 +568,7 @@ def _typed_record(
             raise ValueError(parse_error)
         assert isinstance(record, dict) and raw is not None
         if (item.get("issue_url") != issue_url
-                or json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":")) != raw
+                or json.dumps(record, ensure_ascii=ensure_ascii, sort_keys=True, separators=(",", ":")) != raw
                 or type(item.get("id")) is not int):
             raise ValueError("authorized typed evidence is noncanonical or bound to the wrong Task Issue")
         authorized.append((item, record))
@@ -693,6 +767,255 @@ def _artifact_matches(root: pathlib.Path, merge_oid: str, declaration_artifacts:
     return bool(declaration_artifacts), digests
 
 
+def _load_cached_task(root: pathlib.Path, task_uid: str) -> dict[str, Any] | None:
+    path = root / ".pm/github-project-sync/tasks.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_json_object)
+    except (OSError, json.JSONDecodeError, _DuplicateJSONKey):
+        return None
+    records = value.get("tasks") if isinstance(value, dict) else None
+    record = records.get(task_uid) if isinstance(records, dict) else None
+    return record if isinstance(record, dict) and record.get("task_uid") == task_uid else None
+
+
+def _canonical_receipt_root(root: pathlib.Path, task_uid: str) -> pathlib.Path:
+    helper = pathlib.Path(__file__).with_name("canonical-receipt-root.py")
+    result = subprocess.run(
+        [sys.executable, str(helper), "--default-worktree", str(root), "--task-uid", task_uid, "--json"],
+        text=True, capture_output=True, check=False,
+    )
+    if result.returncode:
+        raise _ResourceDependencyError("upstream cleanup evidence root is unavailable")
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise _ResourceDependencyError("upstream cleanup evidence root response is malformed") from exc
+    path = value.get("receipt_root") if isinstance(value, dict) else None
+    if not isinstance(path, str) or not pathlib.Path(path).is_absolute():
+        raise _ResourceDependencyError("upstream cleanup evidence root is malformed")
+    return pathlib.Path(path)
+
+
+def _canonical_absolute_path(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value or "*" in value or not pathlib.Path(value).is_absolute():
+        raise _ResourceDependencyError(f"resource {label} must be a concrete absolute path")
+    if str(pathlib.Path(value).expanduser().resolve(strict=False)) != value:
+        raise _ResourceDependencyError(f"resource {label} is not a canonical absolute path")
+    return value
+
+
+def _resource_selector_identity(
+    selector: Any,
+    *,
+    repository: str,
+    upstream: dict[str, Any],
+    expected_head_oid: str,
+) -> tuple[str, dict[str, Any]]:
+    if not isinstance(selector, dict) or set(selector) != {"kind", "resource_id", "required_state"}:
+        raise _ResourceDependencyError("resource selector fields are incomplete or unknown")
+    kind = selector.get("kind")
+    identity = selector.get("resource_id")
+    if kind not in {"worktree", "local_branch", "remote_branch"} or selector.get("required_state") != "released":
+        raise _ResourceDependencyError("resource selector kind or required_state is unsupported")
+    if not isinstance(identity, dict):
+        raise _ResourceDependencyError("resource selector resource_id must be an object")
+    if kind == "worktree":
+        expected_keys = {"path", "common_dir", "admin_dir", "instance_id", "expected_head_oid"}
+        if set(identity) != expected_keys:
+            raise _ResourceDependencyError("worktree resource_id fields are incomplete or unknown")
+        path = _canonical_absolute_path(identity.get("path"), "worktree path")
+        common_dir = _canonical_absolute_path(identity.get("common_dir"), "worktree common_dir")
+        admin_dir = _canonical_absolute_path(identity.get("admin_dir"), "worktree admin_dir")
+        try:
+            pathlib.Path(admin_dir).relative_to(pathlib.Path(common_dir) / "worktrees")
+        except ValueError as exc:
+            raise _ResourceDependencyError("worktree admin_dir is outside common_dir/worktrees") from exc
+        registration = upstream.get("worktree_registration")
+        if not isinstance(registration, dict) or set(registration) != {"common_dir", "admin_dir", "instance_id"}:
+            raise _ResourceDependencyError("upstream task has no trusted worktree registration identity")
+        if (path != str(pathlib.Path(str(upstream.get("canonical_worktree") or "")).expanduser().resolve(strict=False))
+                or common_dir != registration.get("common_dir")
+                or admin_dir != registration.get("admin_dir")
+                or identity.get("instance_id") != registration.get("instance_id")
+                or not isinstance(identity.get("instance_id"), str)
+                or not identity.get("instance_id")):
+            raise _ResourceDependencyError("worktree resource_id does not match the trusted upstream registration")
+        if identity.get("expected_head_oid") != expected_head_oid:
+            raise _ResourceDependencyError("worktree resource expected head differs from the accepted delivery tip")
+    elif kind == "local_branch":
+        if set(identity) != {"full_ref", "expected_oid"}:
+            raise _ResourceDependencyError("local branch resource_id fields are incomplete or unknown")
+        full_ref = identity.get("full_ref")
+        expected_oid = identity.get("expected_oid")
+        if (not isinstance(full_ref, str) or full_ref != f"refs/heads/{upstream.get('task_branch')}"
+                or not isinstance(expected_oid, str) or expected_oid != expected_head_oid
+                or not OID_RE.fullmatch(expected_oid)):
+            raise _ResourceDependencyError("local branch resource identity differs from the accepted delivery")
+    else:
+        if set(identity) != {"remote_repository", "full_ref", "expected_oid"}:
+            raise _ResourceDependencyError("remote branch resource_id fields are incomplete or unknown")
+        full_ref = identity.get("full_ref")
+        expected_oid = identity.get("expected_oid")
+        if (identity.get("remote_repository") != repository
+                or full_ref != f"refs/heads/{upstream.get('task_branch')}"
+                or not isinstance(expected_oid, str) or expected_oid != expected_head_oid
+                or not OID_RE.fullmatch(expected_oid)):
+            raise _ResourceDependencyError("remote branch resource identity differs from the accepted delivery")
+    return kind, identity
+
+
+def _validate_resource_declaration(record: Any, *, repository: str, task_uid: str,
+                                   issue_number: int, upstream_uid: str) -> list[dict[str, Any]]:
+    required = {"schema", "repository", "task_uid", "task_issue_number", "upstream_task_uid", "resources"}
+    if not isinstance(record, dict) or set(record) != required:
+        raise _ResourceDependencyError("resource dependency fields are incomplete or unknown")
+    if (record.get("schema") != RESOURCE_DEPENDENCY_SCHEMA
+            or record.get("repository") != repository or record.get("task_uid") != task_uid
+            or type(record.get("task_issue_number")) is not int
+            or record.get("task_issue_number") != issue_number
+            or record.get("upstream_task_uid") != upstream_uid):
+        raise _ResourceDependencyError("resource dependency does not bind the exact consuming/upstream Task Issues")
+    rows = record.get("resources")
+    if not isinstance(rows, list) or not rows:
+        raise _ResourceDependencyError("resource dependency requires a non-empty resources array")
+    identities = []
+    seen = set()
+    for selector in rows:
+        if not isinstance(selector, dict) or set(selector) != {"kind", "resource_id", "required_state"}:
+            raise _ResourceDependencyError("resource selector fields are incomplete or unknown")
+        kind = selector.get("kind")
+        identity = selector.get("resource_id")
+        if kind not in {"worktree", "local_branch", "remote_branch"} or selector.get("required_state") != "released":
+            raise _ResourceDependencyError("resource selector kind or required_state is unsupported")
+        if not isinstance(identity, dict):
+            raise _ResourceDependencyError("resource selector resource_id must be an object")
+        key = (kind, json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+        if key in seen:
+            raise _ResourceDependencyError("resource dependency contains a duplicate selector")
+        seen.add(key)
+        identities.append(selector)
+    return identities
+
+
+def _registered_worktree_paths(root: pathlib.Path) -> set[str]:
+    result = subprocess.run(
+        ["git", "-C", str(root), "worktree", "list", "--porcelain"],
+        text=True, capture_output=True, check=False,
+    )
+    if result.returncode:
+        raise _ResourceDependencyError("fresh Git worktree registration readback failed")
+    return {
+        str(pathlib.Path(line[len("worktree "):]).resolve(strict=False))
+        for line in result.stdout.splitlines() if line.startswith("worktree ")
+    }
+
+
+def _fresh_resource_absence(root: pathlib.Path, kind: str, identity: dict[str, Any]) -> bool:
+    if kind == "worktree":
+        common_dir = pathlib.Path(str(_git_value(root, "rev-parse", "--git-common-dir")))
+        if not common_dir.is_absolute():
+            common_dir = root / common_dir
+        common_dir = common_dir.resolve(strict=False)
+        if str(common_dir) != identity["common_dir"] or _repository_identity(root) != REPOSITORY:
+            raise _ResourceDependencyError("consumer repository is not the bound worktree common directory")
+        path = pathlib.Path(identity["path"])
+        admin_dir = pathlib.Path(identity["admin_dir"])
+        registrations = _registered_worktree_paths(root)
+        if str(path.resolve(strict=False)) in registrations or path.exists() or path.is_symlink():
+            return False
+        if admin_dir.exists() or admin_dir.is_symlink():
+            return False
+        return True
+    if kind == "local_branch":
+        ref = identity["full_ref"]
+        check = subprocess.run(["git", "-C", str(root), "check-ref-format", ref],
+                               text=True, capture_output=True, check=False)
+        if check.returncode:
+            raise _ResourceDependencyError("local branch full_ref is malformed")
+        result = subprocess.run(["git", "-C", str(root), "show-ref", "--verify", "--quiet", ref],
+                                text=True, capture_output=True, check=False)
+        if result.returncode == 0:
+            return False
+        if result.returncode == 1:
+            return True
+        raise _ResourceDependencyError("fresh local branch readback failed")
+
+    from urllib.parse import quote
+    repository = identity["remote_repository"]
+    ref = identity["full_ref"].removeprefix("refs/")
+    # An exact ref lookup returns the same HTTP 404 for a missing ref and for
+    # a caller that cannot read the private repository. First establish that
+    # this gh caller can read the repository's branch collection, which uses
+    # the Contents read permission required for Git ref reads.
+    access_endpoint = f"repos/{repository}/branches?per_page=1"
+    access_result = subprocess.run(
+        ["gh", "api", "--include", access_endpoint], text=True,
+        capture_output=True, check=False,
+    )
+    access_response = (access_result.stdout or "").replace("\r\n", "\n")
+    access_match = re.match(r"HTTP/\S+ ([0-9]{3})(?: [^\n]*)?\n", access_response)
+    if not access_match or access_result.returncode or int(access_match.group(1)) != 200:
+        raise _ResourceDependencyError("current caller cannot prove remote branch read access")
+    access_separator = access_response.find("\n\n")
+    try:
+        access_payload = json.loads(access_response[access_separator + 2:]) if access_separator >= 0 else None
+    except json.JSONDecodeError as exc:
+        raise _ResourceDependencyError("remote branch read-access response is malformed") from exc
+    if not isinstance(access_payload, list):
+        raise _ResourceDependencyError("remote branch read-access response is not a branch list")
+
+    endpoint = f"repos/{repository}/git/ref/{quote(ref, safe='/')}"
+    result = subprocess.run(["gh", "api", "--include", endpoint], text=True, capture_output=True, check=False)
+    response = (result.stdout or "").replace("\r\n", "\n")
+    match = re.match(r"HTTP/\S+ ([0-9]{3})(?: [^\n]*)?\n", response)
+    if not match:
+        raise _ResourceDependencyError("fresh remote branch readback status is unavailable")
+    status = int(match.group(1))
+    if status == 404:
+        return True
+    if result.returncode or not 200 <= status < 300:
+        raise _ResourceDependencyError(f"fresh remote branch readback failed with HTTP {status}")
+    separator = response.find("\n\n")
+    try:
+        payload = json.loads(response[separator + 2:]) if separator >= 0 else None
+    except json.JSONDecodeError as exc:
+        raise _ResourceDependencyError("fresh remote branch readback JSON is malformed") from exc
+    if not isinstance(payload, dict) or payload.get("ref") != identity["full_ref"]:
+        raise _ResourceDependencyError("fresh remote branch readback identity is mismatched")
+    return False
+
+
+def _resource_release_readback(root: pathlib.Path, upstream_uid: str, repository: str,
+                               selectors: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    helper_path = pathlib.Path(__file__).with_name("resource-cleanup-executor.py")
+    spec = importlib.util.spec_from_file_location("resource_cleanup_executor_readiness", helper_path)
+    if spec is None or spec.loader is None:
+        return {"ready": False, "rows": [], "reasons": ["repository cleanup evidence reader is unavailable"]}
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        receipt_root = _canonical_receipt_root(root, upstream_uid)
+    except _ResourceDependencyError as exc:
+        return {"ready": False, "rows": [], "reasons": [str(exc)]}
+    rows = []
+    reasons = []
+    for kind, identity in selectors:
+        try:
+            row = module.read_cleanup_record(receipt_root, upstream_uid, repository, kind, identity)
+            if row.get("state") not in {"removed", "already_absent"}:
+                reasons.append(f"{kind} cleanup state is {row.get('state') or 'missing'}")
+                rows.append({"kind": kind, "resource_id": identity, "state": row.get("state"), "released": False})
+                continue
+            released = _fresh_resource_absence(root, kind, identity)
+            if not released:
+                reasons.append(f"{kind} exact resource is present or its name has been reused")
+            rows.append({"kind": kind, "resource_id": identity, "state": row.get("state"), "released": released})
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            reasons.append(f"{kind} resource release readback failed: {exc}")
+            rows.append({"kind": kind, "resource_id": identity, "released": False})
+    return {"ready": not reasons, "rows": rows, "reasons": reasons}
+
+
 def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, Any]:
     """Resolve a typed artifact dependency from the bound Task Issue's live evidence."""
     task_uid = str(task.get("task_uid") or "")
@@ -713,12 +1036,28 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
             or _canonical_uid(body) != task_uid):
         raise ValueError("bound Task Issue live UID/number identity is invalid")
     comments = _pages(f"repos/{repository}/issues/{issue_number}/comments", None)
+    resource_typed = None
+    resource_dependency_error = None
+    try:
+        resource_typed = _typed_record(
+            comments, RESOURCE_DEPENDENCY_MARKER, RESOURCE_DEPENDENCY_SCHEMA, issue_url,
+            repository=repository, task_uid=task_uid, issue_number=issue_number,
+            ensure_ascii=False, reject_unknown_schema=True,
+        )
+    except (OSError, ValueError) as exc:
+        resource_dependency_error = str(exc)
     typed = _typed_record(
         comments, ARTIFACT_DEPENDENCY_MARKER, ARTIFACT_DEPENDENCY_SCHEMA, issue_url,
         repository=repository, task_uid=task_uid, issue_number=issue_number,
     )
     if typed is None:
-        return {}
+        if resource_typed is None and resource_dependency_error is None:
+            return {}
+        return {
+            "resource_dependency": resource_typed[1] if resource_typed else None,
+            "resource_dependency_error": resource_dependency_error or
+                "resource wait has no unique matching artifact-v1 declaration",
+        }
     issue = _resolve_project_task_issue(task_uid, issue_number)
     body = issue["body"]
     declaration_comment, declaration = typed
@@ -735,6 +1074,19 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
             or not isinstance(declaration.get("artifacts"), list) or not declaration["artifacts"]
             or not isinstance(declaration.get("source_ci"), dict)):
         raise ValueError("typed artifact dependency fields are incomplete or unknown")
+
+    resource_declaration = resource_typed[1] if resource_typed else None
+    if resource_declaration is not None and resource_dependency_error is None:
+        try:
+            resource_selectors = _validate_resource_declaration(
+                resource_declaration, repository=repository, task_uid=task_uid,
+                issue_number=issue_number, upstream_uid=declaration["upstream_task_uid"],
+            )
+        except _ResourceDependencyError as exc:
+            resource_dependency_error = str(exc)
+            resource_selectors = []
+    else:
+        resource_selectors = []
 
     upstream_issue = _resolve_project_task_issue(declaration["upstream_task_uid"])
     upstream_number = upstream_issue.get("number")
@@ -765,6 +1117,22 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
             or not isinstance(head_oid, str) or not OID_RE.fullmatch(head_oid)
             or not isinstance(head_branch, str) or not isinstance(merge_oid, str) or not OID_RE.fullmatch(merge_oid)):
         raise ValueError("reciprocal source PR is not a verified merged delivery to the default branch")
+
+    upstream_uid = declaration["upstream_task_uid"]
+    upstream_record = _load_cached_task(root, upstream_uid)
+    terminal_proof: dict[str, Any] = {"status": "blocked"}
+    if (isinstance(upstream_record, dict) and upstream_record.get("repository") == repository
+            and str(upstream_record.get("issue_number") or "") == str(upstream_number)
+            and upstream_record.get("pr_number") in (pr_number, str(pr_number))):
+        try:
+            from loop_terminal import read_shared_terminal_proof
+            terminal_proof = read_shared_terminal_proof(
+                repository, upstream_uid, repo_root=root, record=upstream_record,
+            )
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+            terminal_proof = {"status": "blocked", "reason": str(exc)}
+    else:
+        terminal_proof["reason"] = "upstream canonical task mapping is unavailable or mismatched"
 
     locator = declaration["source_ci"]
     source_ci = _verify_declared_ci(
@@ -801,6 +1169,24 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
         "artifacts_match": artifact_ok and ancestry and _repository_identity(root) == repository,
         "file_digests": file_digests,
     }
+    resource_release = None
+    if resource_declaration is not None and resource_dependency_error is None:
+        try:
+            if not isinstance(upstream_record, dict):
+                raise _ResourceDependencyError("upstream task mapping is unavailable for resource selection")
+            expected_head = terminal_proof.get("head_oid") if isinstance(terminal_proof, dict) else None
+            if not isinstance(expected_head, str) or not OID_RE.fullmatch(expected_head):
+                raise _ResourceDependencyError("accepted upstream delivery tip is unavailable for resource selection")
+            selectors = [
+                _resource_selector_identity(
+                    selector, repository=repository, upstream=upstream_record,
+                    expected_head_oid=expected_head,
+                )
+                for selector in resource_selectors
+            ]
+            resource_release = _resource_release_readback(root, upstream_uid, repository, selectors)
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+            resource_dependency_error = str(exc)
     hold_value = _body_field(upstream_body, "merge_hold_active")
     merge_hold_active = True if hold_value == "true" else False if hold_value == "false" else None
     proof = {
@@ -829,6 +1215,10 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
         "review": review,
         "source_ci": source_ci,
         "local_input": local_input,
+        "terminal_proof": terminal_proof,
+        "resource_dependency": resource_declaration,
+        "resource_release": resource_release,
+        "resource_dependency_error": resource_dependency_error,
     }
     return proof
 
@@ -1139,6 +1529,7 @@ def workflow_projection(root: pathlib.Path, task: dict[str, Any], legacy_blocker
     return {
         "delivery_ready": delivery.get("delivery_ready"),
         "cleanup_state": delivery.get("cleanup_state", "not_applicable"),
+        "resource_wait_state": delivery.get("resource_wait_state", "not_applicable"),
         "action_blockers": action_blockers,
         "candidate_head_oid": pull_request.get("local_candidate_head_oid"),
         "remote_pr_head_oid": pull_request.get("remote_pr_head_oid"),

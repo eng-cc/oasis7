@@ -775,6 +775,54 @@ class CurrentRequestSelectionTests(unittest.TestCase):
     'owner/repo',self.uid,7,self.base,self.head,'main',request_key=request_key,
    )
 
+ def first_activation_row(self,run_id,*,uid=None,pr='',base=None,head=None):
+  row=self.validation_only_row(run_id,uid=uid,pr=pr,base=base,head=head)
+  parts=row['display_title'].split('|')[:7]
+  parts[2]='first_activation_validation_only'
+  row['display_title']='|'.join(parts)
+  row['head_sha']=parts[6]
+  row['head_branch']='candidate-validation'
+  return row
+
+ def test_historical_first_activation_does_not_block_ordinary_integration(self):
+  key='sha256:'+'1'*64
+  historical=self.first_activation_row(101,uid='task_'+'2'*32,base='c'*40,head='d'*40)
+  selected=self.select([historical,self.run_row(102,key)],key)
+  self.assertEqual(102,selected['id'])
+
+ def test_first_activation_can_never_supply_integration_proof(self):
+  for uid in (self.uid,'task_'+'2'*32):
+   with self.subTest(uid=uid):
+    self.assertIsNone(self.select([self.first_activation_row(101,uid=uid)],'sha256:'+'1'*64))
+
+ def test_first_activation_malformed_identity_and_execution_are_rejected(self):
+  cases=[]
+  for field,value in ((3,'task_bad'),(4,'7'),(5,'G'*40),(6,'not-an-oid')):
+   row=self.first_activation_row(101)
+   parts=row['display_title'].split('|');parts[field]=value
+   row['display_title']='|'.join(parts)
+   cases.append(row)
+  for suffix in ('','e'*64,'sha256:'+'e'*64):
+   row=self.first_activation_row(101);row['display_title']+='|'+suffix
+   cases.append(row)
+  row=self.first_activation_row(101);row['head_sha']='f'*40
+  cases.append(row)
+  row=self.first_activation_row(101)
+  row['display_title']=row['display_title'].replace('first_activation_validation_only','unknown_validation_only')
+  cases.append(row)
+  for row in cases:
+   with self.subTest(row=row),self.assertRaises(ValueError):
+    self.select([row],'sha256:'+'1'*64)
+
+ def test_first_activation_preserves_discovery_provenance_and_pagination(self):
+  for field,value in (('event','push'),('path','other.yml'),('repository',{'full_name':'other/repo'})):
+   row=self.first_activation_row(101);row[field]=value
+   with self.subTest(field=field),self.assertRaisesRegex(ValueError,'provenance'):
+    self.select([row],'sha256:'+'1'*64)
+  rows=[self.first_activation_row(n) for n in range(100)]
+  with patch.object(self.api,'DISCOVERY_MAX_PAGES',1),self.assertRaisesRegex(ValueError,'coverage incomplete'):
+   self.select(rows,'sha256:'+'1'*64)
+
  def test_remote_selection_orders_run_ids_numerically_on_timestamp_tie(self):
   rows=[self.run_row(99,'sha256:'+'1'*64),self.run_row(100,'sha256:'+'1'*64)]
   selected=self.select(rows,'sha256:'+'1'*64)

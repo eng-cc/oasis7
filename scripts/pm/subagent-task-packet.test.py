@@ -70,6 +70,7 @@ class PacketTest(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         shutil.copy2(SNAPSHOT_HELPER, self.repo / "scripts/pm/bootstrap-task-snapshot.py")
+        shutil.copy2(SNAPSHOT_HELPER.with_name("worktree_registration.py"), self.repo / "scripts/pm/worktree_registration.py")
         for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md", ".agents/roles/qa_engineer.md", "scope.txt"):
             (self.repo / path).write_text(path + "\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
