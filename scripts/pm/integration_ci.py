@@ -261,6 +261,8 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                         or request_pr!='' or not OID.fullmatch(request_base)
                         or not OID.fullmatch(request_head)):
                     raise ValueError('integration current request identity malformed')
+                if run['head_sha']!=request_head:
+                    raise ValueError('integration validation execution head differs from source')
                 if run['head_sha'] not in historical_proofs:
                     _historical_first_activation_workflow(repository,run['head_sha'],historical_budget)
                     historical_proofs.add(run['head_sha'])

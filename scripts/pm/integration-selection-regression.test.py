@@ -67,7 +67,7 @@ on:
           - first_activation_validation_only
 """
   value=run(n,uid=uid)
-  value.update(head_sha='e'*40,head_branch='candidate-producer',display_title=f'oasis7-ci|workflow_dispatch|first_activation_validation_only|{uid}||{BASE}|{HEAD}')
+  value.update(head_sha='e'*40,head_branch='candidate-producer',display_title=f'oasis7-ci|workflow_dispatch|first_activation_validation_only|{uid}||{BASE}|{"e"*40}')
   return value
 
  def test_authenticated_validation_history_allows_exact_own_strict_receipt(self):

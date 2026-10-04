@@ -731,7 +731,7 @@ class FirstActivationHistoryTests(unittest.TestCase):
   spec=importlib.util.spec_from_file_location('first_activation_history',HERE/'integration_ci.py')
   self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
   self.uid='task_'+'1'*32;self.base='a'*40;self.head='b'*40
-  self.producer='c'*40;self.reads=[]
+  self.producer=self.head;self.reads=[]
   self.tree_ids=['1'*40,'2'*40,'3'*40]
 
  def row(self,n,validation=False,uid=None):
@@ -748,7 +748,7 @@ class FirstActivationHistoryTests(unittest.TestCase):
    'sha':hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest(),
    'content':'\n'.join(textwrap.wrap(base64.b64encode(raw).decode(),60))+'\n'}
 
- def select(self,rows,response=None,page_size=100,git_overrides=None,leaf_mode='100644'):
+ def select(self,rows,response=None,page_size=100,git_overrides=None,leaf_mode='100644',request_key=None):
   git_overrides=git_overrides or {}
   tree_chains={r['head_sha']:(self.tree_ids if r['head_sha']==self.producer else
    [hashlib.sha1((r['head_sha']+str(i)).encode()).hexdigest() for i in range(3)]) for r in rows}
@@ -787,7 +787,7 @@ class FirstActivationHistoryTests(unittest.TestCase):
     if isinstance(value,Exception):raise value
    return value
   with patch.object(self.api,'gh',side_effect=read),patch.object(self.api,'_historical_json',side_effect=lambda path,budget:read(path),create=True),patch.object(self.api,'DISCOVERY_PAGE_SIZE',page_size):
-   return self.api.current_request('owner/repo',self.uid,7,self.base,self.head,'main')
+   return self.api.current_request('owner/repo',self.uid,7,self.base,self.head,'main',request_key=request_key)
 
  def test_actual_empty_pr_producer_preserves_own_current_request(self):
   own=self.row(10);history=self.row(20,True,uid='task_'+'2'*32)
@@ -810,6 +810,7 @@ class FirstActivationHistoryTests(unittest.TestCase):
 
  def test_producer_proof_is_never_reused_across_commits(self):
   first=self.row(20,True);second={**self.row(21,True),'head_sha':'d'*40}
+  second['display_title']=second['display_title'].rsplit('|',1)[0]+'|'+'d'*40
   def proof(path):
    return self.response() if path.endswith(self.producer) else self.response('name: Rust\n')
   with self.assertRaises(ValueError):self.select([first,second,self.row(10)],proof)
@@ -903,7 +904,11 @@ class FirstActivationHistoryTests(unittest.TestCase):
    self.select([self.row(10)],page_size=1)
 
  def test_distinct_producer_commit_budget_is_not_proven_absence(self):
-  rows=[{**self.row(n+20,True),'head_sha':f'{n+100:040x}'} for n in range(33)]
+  rows=[]
+  for n in range(33):
+   row=self.row(n+20,True);oid=f'{n+100:040x}'
+   row.update(head_sha=oid,display_title=row['display_title'].rsplit('|',1)[0]+'|'+oid)
+   rows.append(row)
   with self.assertRaises(ValueError):self.select(rows+[self.row(10)])
 
 class HistoricalTransportTests(unittest.TestCase):
@@ -1050,10 +1055,62 @@ class CurrentRequestSelectionTests(unittest.TestCase):
   }
 
  def select(self,rows,request_key):
+  if any('|first_activation_validation_only|' in row.get('display_title','') for row in rows):
+   fixture=FirstActivationHistoryTests();fixture.setUp()
+   fixture.api=self.api;fixture.uid=self.uid;fixture.base=self.base;fixture.head=self.head
+   return fixture.select(rows,request_key=request_key)
   with patch.object(self.api,'gh',return_value={'workflow_runs':rows}):
    return self.api.current_request(
     'owner/repo',self.uid,7,self.base,self.head,'main',request_key=request_key,
    )
+
+ def first_activation_row(self,run_id,*,uid=None,pr='',base=None,head=None):
+  row=self.validation_only_row(run_id,uid=uid,pr=pr,base=base,head=head)
+  parts=row['display_title'].split('|')[:7]
+  parts[2]='first_activation_validation_only'
+  row['display_title']='|'.join(parts)
+  row['head_sha']=parts[6]
+  row['head_branch']='candidate-validation'
+  return row
+
+ def test_historical_first_activation_does_not_block_ordinary_integration(self):
+  key='sha256:'+'1'*64
+  historical=self.first_activation_row(101,uid='task_'+'2'*32,base='c'*40,head='d'*40)
+  selected=self.select([historical,self.run_row(102,key)],key)
+  self.assertEqual(102,selected['id'])
+
+ def test_first_activation_can_never_supply_integration_proof(self):
+  for uid in (self.uid,'task_'+'2'*32):
+   with self.subTest(uid=uid):
+    self.assertIsNone(self.select([self.first_activation_row(101,uid=uid)],'sha256:'+'1'*64))
+
+ def test_first_activation_malformed_identity_and_execution_are_rejected(self):
+  cases=[]
+  for field,value in ((3,'task_bad'),(4,'7'),(5,'G'*40),(6,'not-an-oid')):
+   row=self.first_activation_row(101)
+   parts=row['display_title'].split('|');parts[field]=value
+   row['display_title']='|'.join(parts)
+   cases.append(row)
+  for suffix in ('','e'*64,'sha256:'+'e'*64):
+   row=self.first_activation_row(101);row['display_title']+='|'+suffix
+   cases.append(row)
+  row=self.first_activation_row(101);row['head_sha']='f'*40
+  cases.append(row)
+  row=self.first_activation_row(101)
+  row['display_title']=row['display_title'].replace('first_activation_validation_only','unknown_validation_only')
+  cases.append(row)
+  for row in cases:
+   with self.subTest(row=row),self.assertRaises(ValueError):
+    self.select([row],'sha256:'+'1'*64)
+
+ def test_first_activation_preserves_discovery_provenance_and_pagination(self):
+  for field,value in (('event','push'),('path','other.yml'),('repository',{'full_name':'other/repo'})):
+   row=self.first_activation_row(101);row[field]=value
+   with self.subTest(field=field),self.assertRaisesRegex(ValueError,'provenance'):
+    self.select([row],'sha256:'+'1'*64)
+  rows=[self.first_activation_row(n) for n in range(100)]
+  with patch.object(self.api,'DISCOVERY_MAX_PAGES',1),self.assertRaisesRegex(ValueError,'coverage incomplete'):
+   self.select(rows,'sha256:'+'1'*64)
 
  def test_remote_selection_orders_run_ids_numerically_on_timestamp_tie(self):
   rows=[self.run_row(99,'sha256:'+'1'*64),self.run_row(100,'sha256:'+'1'*64)]
