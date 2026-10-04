@@ -53,27 +53,13 @@
 | `triad-testnet-windows-observer` | observer | Windows observer | `C:\oasis7-deploy` | scheduled task `Oasis7Observer` | `http://127.0.0.1:5121/v1/chain/status` |
 | `triad-testnet-fourth-local` | observer | macOS local observer | `$OASIS7_TESTNET_FOURTH_ROOT` | launchd `oasis7.testnet.fourth` | `http://127.0.0.1:19083/v1/chain/status` |
 
-The 204/sequencer row is intentionally not a full-status contract. Governed
-rebuild, rollout, and fleet evidence must use the signed
-`oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` and, once
-the identity-v2 capability is provisioned, a separately verified
-`oasis7.identity_receipt.v2` envelope. Legacy `oasis7.identity_receipt.v1` is
-raw runtime metadata only, retired for direct admission, and may be retained
-solely as the exact byte payload bound by the v2 digest; there is no v1
-compatibility fallback. The identity-v2 path is currently **NOT PROVISIONED /
-CAPABILITY BLOCKED**: a copied signature, callback, or `verified: true` field
-is not evidence. A 204 `/v1/chain/status` request is forbidden in this
-runbook; it may only be used under a separately recorded local diagnostic
-exception that is not deployment or readiness evidence.
+The 204/sequencer row is intentionally not a full-status contract. Governed rebuild, rollout, and fleet evidence must use the signed `oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` and, once the identity-v2 capability is provisioned, a separately verified `oasis7.identity_receipt.v2` envelope. Legacy `oasis7.identity_receipt.v1` is raw runtime metadata only, retired for direct admission, and may be retained solely as the exact byte payload bound by the v2 digest; there is no v1 compatibility fallback.
+The identity-v2 path is currently **NOT PROVISIONED / CAPABILITY BLOCKED**: a copied signature, callback, or `verified: true` field is not evidence. A 204 `/v1/chain/status` request is forbidden in this runbook; it may only be used under a separately recorded local diagnostic exception that is not deployment or readiness evidence.
 
 Credential files may be used by an operator as local access aids, but this runbook only records target identities and never records secret values.
 
 ### 2.2.1 Bounded 204 proof and identity-v2 contract
-The 204 proof remains a bounded, same-window artifact. Identity-v2 evidence is
-separate and is not created by the proof verifier. The current required set is
-exactly `sequencer-204`, `storage-205`, `linux-lan-observer`,
-`windows-observer`, and `macos-observer`, once each; a plan may not shrink it to
-nodes with convenient receipts.
+The 204 proof remains a bounded, same-window artifact. Identity-v2 evidence is separate and is not created by the proof verifier. The current required set is exactly `sequencer-204`, `storage-205`, `linux-lan-observer`, `windows-observer`, and `macos-observer`, once each; a plan may not shrink it to nodes with convenient receipts.
 
 1. `/v1/chain/rebuild-proof` returns `oasis7.rebuild_status.v1` with the
    bounded top-level fields `schema_version`, `observed_at_unix_ms`, `ok`,
@@ -443,7 +429,7 @@ any additional signing requirements.
 ## 9. Phase C - Clean Rebuild Validators
 ### Goal
 从零重建 validator pair。
-本 phase 的顺序是硬约束：`consumer-impact record gate -> preflight both -> reset both -> stage both -> sequencer liveness -> storage`。任一步未通过，都不得提前执行后一步；特别是 consumer-impact record 未通过时不得建立 SSH/network connection 或执行 host preflight，且不得在只 reset 一台 validator 后向任一 host staging。
+本 phase 的顺序是硬约束：`consumer-impact record gate -> preflight both/live baseline -> storage reset/stage/start/readback while sequencer remains live -> sequencer reset/stage/start/readback while storage remains live -> final pair readiness`。任一步未通过，都不得提前执行后一步；任何时刻最多一台既有 validator 可以停止。特别是 consumer-impact record 未通过时不得建立 SSH/network connection 或执行 host preflight；live baseline 未证明两台既有 validator 均运行时，不得执行第一台 reset。
 
 五节点 clean-room planner/adapter 也必须在同一 Phase C0 口径下工作：输入 envelope 必须携带 `consumer_impact_record: {"path": <absolute-record-path>, "sha256": <record-file-sha256>}`；planner 会在生成 plan 前读取并校验精确 schema、RFC3339 新鲜度及 `active`/`unknown` 的 outage/recovery/producer wording 绑定，`none` 仍要求三个字段存在但允许 `n/a`。生成的 plan、authority、transaction journal 与每份 provider receipt 固定该 path+SHA-256；adapter 在 trust-root、nonce reservation、provider connection 或 destructive callback 前再次校验。缺失、过期、内容/绑定漂移均 fail closed；record 只控制 testnet reset/redeploy，不扩大 testnet 边界，也不构成旧 chain state、资产或 mainnet continuity 的恢复承诺。
 
@@ -478,6 +464,21 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --known-hosts <same-pinned-known-hosts> \
   --host-adapter <governed-host-adapter>
 ```
+
+对于 `execution_mode=triad_staggered`，本地 state inventory 和
+`capacity_apply` 只作 `audit_only` 证据，不能授权停机、删除或 reset。executor
+必须在每个 `staggered-storage`/`staggered-sequencer` mutation callback 前，先持久化
+`staggered-*-backup` phase，并通过固定 inventory、pinned host-key 与 FD-only
+`FixedSSH` 在目标主机完成 remote forensic backup/capacity capture。receipt 必须绑定
+transaction、role/host/root、完整 reset-surface manifest digest、code-owned
+bytes/inodes threshold，并固定 `seed_eligible=false`；只有该 receipt 已通过校验并
+写入 transaction journal，才允许进入对应 stop/reset callback。partial、缺失、过期或
+binding/digest/capacity 不一致均 fail closed，不能回退到 local snapshot；resume 和
+target-only rollback 也必须重新校验同一 remote receipt，且另一台 validator 保持 live。
+receipt envelope 对 triad receipt 只校验该远端路径的固定字符串绑定、manifest
+digest、容量与 phase envelope，不在 transaction 所在机器上 `stat` 或读取 remote
+manifest；pair legacy 路径仍保留本地 manifest 的 fail-closed 校验。
+
 #### External nonce-ledger deployment prerequisite
 
 Before any `human_direct_ssh`, `plan`, `apply`, `resume`, or `rollback`, provision this executor-owned external replay barrier: `/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl`.
@@ -563,21 +564,28 @@ Apply receipt 必须包含 reset/stage/start 与 same-window fleet-health phase 
 4. 如果 validator 在 record 生成前已经停止，也不能跳过 determination：在任何 host preflight、目录删除、reset、staging、启动或其他 redeploy continuation 前，先取得 live GitHub human authority，并以固定 production inventory/pins 完成两角色 direct read-only observation。已停止这一事实本身、boolean 或 persisted receipt 都不能推断 `active`、`none` 或恢复完成。
 5. 本 record 只授权继续执行受治理的 testnet reset/redeploy，不改变 `testnet`、`resettable`、`non-mainnet` 边界，也不授权承诺旧 chain state、testnet asset 或 mainnet continuity。
 
-### C1. Preflight both validators
+### C1. Preflight both validators and establish the live baseline
 
-consumer-impact record 通过后，canonical `apply` 必须先进入 `preflight` phase，并在任何 backup、reset 或 stage 前调用 governed host adapter；两台 validator 必须由一份 transaction-bound `oasis7.validator_pair_rebuild_host_receipt.v1/v2` 同时闭合。Receipt 必须发出 `phase=preflight`、`observer_mutation=false`、非空 `transaction_id`、当前 `captured_at`、固定 mutation/startup order，以及恰好 `storage-205` 与 `sequencer-204` 两个 node。
-每个 node 必须发出 `role`、`root`、`active=false`、`running=false`、`service_state=stopped`、`independently_observed=true`、`preflight_observer_mutation=false`，以及均为 `true` 的 `preflight_verified`、`runtime_executable`、`repair_rebuild_helper_executable`、`generated_world_dir_contract`、`governance_registry_importer_executable`、`python_available`、`tar_available`、`systemd_available`、`process_inspection_available` 字段。任何缺失、role/root mismatch、stale receipt 或 gate=false 都必须 fail closed；未取得完整双 validator receipt 不得进入 backup、reset、stage。
+consumer-impact record 通过后，selected staggered executor 必须先进入 `preflight` phase，在任何 backup、reset 或 stage 前调用两台 host 的 capability checks，并分别取得当前 live status readback。两份 preflight readback 必须证明 `running=true` 且 `last_error` 为空；capability check 必须证明 runtime、repair helper、governance importer、Python、tar、systemd 和 process inspection 可用。任何缺失、stale readback 或 gate=false 都必须 fail closed；未取得完整双 validator live baseline 不得进入 reset/stage。
 
-### C2. Reset both validators
-以下 stop 是 live authority 下由人类单独执行的动作；`human_direct_ssh`
-executor 只在 stop 后 read-only 复观测，再允许受治理 destructive reset：
+The canonical pair transaction remains the authority-bound evidence and recovery surface for a full-pair operation, but must not be mixed with this live staggered cutover. The selected path is `scripts/p2p-public-testnet-rebuild-validators.sh`; its receipt contract below is the required one-member-at-a-time evidence. Do not invoke full-pair `apply` for this triad cutover: its stopped-pair admission contract is a different operation and violates the live-peer invariant below.
+
+For this cutover, every governed `plan`, `apply`, `resume`, and `rollback` invocation must pass `--execution-mode triad_staggered`. The wrapper dispatches that mode to the repository-owned staggered executor; the former positional SSH rebuild form is retired and fail-closed, while historical receipts remain forensic-only and never authorize a governed transaction. The host adapter owns the target-specific stop/reset/stage/start/readback callback after the executor has captured a read-only backup, so no local pair reset may run while the target is live. Each member receipt must include an independently observed `target_stopped_before_reset` readback and `reset_started_after_target_stop=true`; the executor also records fresh direct live observations immediately before and after every member callback.
+Resume phase names are exact and role-bound: `staggered_storage-205_in_progress` and `staggered_sequencer-204_in_progress`; aliases without the member id are rejected before any callback or re-observation.
+For the triad adapter boundary, credentials use FD-only transport: pass either one shared `--adapter-credential-fd <temporary-fd>` (or the legacy `--credential-fd <temporary-fd>` alias) or both `--adapter-storage-credential-fd <temporary-fd>` and `--adapter-sequencer-credential-fd <temporary-fd>`. The executor inherits and passes only these numeric descriptors; it scrubs `SSHPASS`-style environment values and never places credential bytes in argv, transaction JSON, receipts, or logs. A partial role mapping, mixed shared/role-specific mapping, missing descriptor, or unavailable identity-v2/external preflight fails closed and durably marks the callback `failed`.
+The production triad adapter also requires each mutation target's transaction-bound backup receipt to prove `remote_target=true`, the fixed inventory `remote_host` and `/opt/oasis7/p2p-testnet` `remote_root`, a SHA-256 `manifest_sha256`, and verified remote capacity with `available_bytes >= required_bytes`; a local-only or unbound backup is capability-blocked before archive/control-script generation. Service and health readbacks must carry independently observed `healthz_ok=true`, `ready=true`, `last_error=null`, `nrestarts=0`, and `oom_panic_segfault=false`; the adapter never synthesizes these values from process state or HTTP status alone.
+
+### C2. Reset one validator at a time
+以下 stop 是 live authority 下由人类按成员分别执行的动作；一次只处理当前成员，另一成员必须保持 running。`human_direct_ssh` executor 只在当前成员 stop 后 read-only 复观测，再允许受治理 destructive reset：
 
 ```bash
-systemctl stop oasis7-triad-sequencer.service
+# Step 1 only. Do not paste a second stop until the executor has completed
+# storage reset/stage/start/readback and the live-peer gate.
 systemctl stop oasis7-triad-storage.service
 ```
 
-人类必须分别停下两台 validator，并由同一 executor 在 reset 前及每次 mutation 前完成 direct read-only re-observation，之后才能 stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；旧 storage runtime 与新 sequencer staging 不得交错共存。
+同一 executor 必须在每次 reset 前对另一成员完成 direct read-only re-observation：先证明 sequencer-204 live，才可 reset/stage/start/readback storage-205；再证明 storage-205 live，才可 reset/stage/start/readback sequencer-204。不得先停两台，也不得在一台 reset 后把两台都留在 stopped 状态；旧 storage runtime 与新 sequencer staging 不得在没有 live peer 的情况下交错共存。
+第二台的 `systemctl stop oasis7-triad-sequencer.service` 只能作为下一次、独立的受治理动作，在上述 gate 成功后由 executor/adapter 生成；不得把两条 stop 命令放进同一个可复制代码块。
 
 从第一台 validator 停止到 Phase G full-fleet health criteria 全部通过，按 testnet outage 窗口处理；缓存可读、单个 endpoint 恢复或 sequencer 单机存活都不是网络恢复。
 
@@ -589,15 +597,12 @@ systemctl stop oasis7-triad-storage.service
 
 在删除目录前，脚本必须等待或终止 stack-local 残留 `start-node.sh` / `oasis7_chain_runtime` 进程，避免旧进程继续占用 gossip/status/replication 端口。若 `systemctl stop` 后端口仍被旧 runtime 占用，本轮 rebuild 必须视为未清干净，不能继续把后续 readiness 失败归因于链同步慢。
 
-### C3. Stage both validators
-reset 两台 validator 后，才向两台 host stage current package/runtime、manifest、
-genesis、validator registry、bootstrap peers 和 deployment-only world。使用上面的
-canonical pair transaction；旧 `p2p-public-testnet-rebuild-validators.sh` 只供历史审计，
-其 204 sequencer 参数不属于本 contract。两台 host staging 成功后才进入启动步骤。
+### C3. Stage one validator at a time
+先向当前已 reset 的 host stage current package/runtime、manifest、genesis、validator registry、bootstrap peers 和 deployment-only world，随后立即 start 并完成该成员的 readiness readback；只有 readback 成功且另一成员仍 live，才处理下一成员。使用 `scripts/p2p-public-testnet-rebuild-validators.sh` 的 staggered path；不得把旧 pair `node.env`、peerstore、runtime state 或 world 目录复制到另一 host，也不得把 staging 扩展成 simultaneous pair reset。
 
 ### C3.1. Validator-47 no-start staging and cold cutover
 The managed triad inventory at `scripts/public-testnet-validator-triad-inventory.v1.json` is authority for validator-47 host/service/role/port/provider/world/manifest/registry bindings. Retain its SHA-256 in deployment truth and the bootstrap receipt; stale pair `node.env`, wrong fields, or a different inventory digest fail preflight.
-The `--bootstrap-peers-file` input is also authority-bound: it must be byte-identical to `doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt` (SHA-256 `c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6`). The inventory's source registry path and digest are checked before any stage output is materialized; a stale, wrong, or merely self-consistent peer/registry file is rejected.
+The `--bootstrap-peers-file` input is also authority-bound: it must be byte-identical to `doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt` (SHA-256 `5e62e5b132fe083c18c637213baefebad161c675e2243b2e02dc8bcd5f70401c`). The inventory's source registry path and digest are checked before any stage output is materialized; a stale, wrong, or merely self-consistent peer/registry file is rejected.
 The source registry is a build input (`source_registry_ref`/`source_registry_sha256`), not the runtime registry identity. Stage generation records the exact generated `config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json` bytes (`generated_registry_sha256`) and its canonical effective-registry digest (`generated_registry_semantic_sha256`); runtime `validator.registry_sha256` must report the generated bytes digest.
 The inventory role is `validator`, while runtime `NODE_ROLE=storage` and `P2P_NODE_ROLE=full_storage` are independent supported settings; retain both provider flags in `node.env`. PoS validator identity comes from the governed consensus/registry truth, not an unsupported runtime `NODE_ROLE=validator`. The deployment-stage generator emits fixed triad inventory/source evidence and `deployment_inventory` only for the exact governed sequencer/storage/validator-47 set after identity/signer/stake/registry/bootstrap-peer checks; pair-only or arbitrary extra-validator stages bind their own generated registry by exact ref/raw SHA-256/semantic SHA-256, omit fixed-triad artifacts, and must not enter validator-47 bootstrap. During an existing pair→triad rebuild, the sequencer/storage stage must install that same triad inventory under `config/` and rewrite each existing host's own `node.env` with `DEPLOYMENT_INVENTORY_PATH` plus digest; never copy validator-47 `node.env` onto either host.
 The validator-47 node identity is a separately staged ceremony output. Require
@@ -626,20 +631,12 @@ after bootstrap returns successfully:
 Bootstrap renders but never enables or starts validator-47 and must prove
 `UnitFileState=disabled`, inactive/dead, `no_process=true`, and `no_listener=true`.
 Both bootstrap and independent readback perform a bounded scan for stack-local `start-node.sh` or `oasis7_chain_runtime` orphans under the canonical root (including when systemd reports `MainPID=0`); unrelated oasis7 processes outside that root are not treated as validator-47 evidence.
-Readback is independent and precedes launch. Keep the existing pair unchanged
-(pair preservation); an approved cold cutover is staggered: stop/read back one
-member, stage/verify it, then handle the second, never both at once.
-On any failure leave validator-47 disabled, preserve the pair, and retain receipt
-and readback. After proving no process and no `6634`/`6834` listeners, clean redeploy
-from a newly generated stage and newly ceremonied identity; never reuse pair `node.env`,
-peerstore, runtime state, or world directories as rollback material.
-### C4. Start sequencer and confirm liveness
-1. start `triad-testnet-sequencer`
-2. confirm sequencer liveness（`running=true` 且 `last_error` 为空）
-sequencer liveness 未通过时不得启动 storage，也不得开始恢复 observer 或对外 endpoint。
-### C5. Start storage after sequencer liveness
-1. start `triad-testnet-storage`
-2. confirm storage joins sequencer
+Readback is independent and precedes launch. Keep the existing pair unchanged until controlled cutover; pair preservation uses the fixed order storage-205 then sequencer-204: stop/read back one member, stage/start/read back it, then handle the second, never both at once. The executor records `max_simultaneously_stopped_validators=1`, live-peer readback before each reset, and rebuilt-member readiness before the next reset.
+On failure leave validator-47 disabled, preserve the live peer, and retain phase receipt/readback. Cleanup is target-only and must never stop the live peer as rollback. After proving no process and no `6634`/`6834` listeners, redeploy from a newly generated stage and newly ceremonied identity; never reuse pair `node.env`, peerstore, runtime state, or world directories as rollback material.
+### C4. Start the first rebuilt member and confirm liveness
+The staggered path starts and confirms `triad-testnet-storage` first while the existing sequencer remains live, then starts `triad-testnet-sequencer` after storage has passed readiness. Each member readback requires `running=true`, an empty `last_error`, and role readiness; the next member may not be reset or staged until the current readback succeeds.
+### C5. Start the second rebuilt member and confirm final readiness
+After both one-member cycles complete, independently read back sequencer and storage readiness in one evidence window. A single endpoint or member liveness is not network recovery; if final readiness fails, clean only the failed target and preserve the other live member.
 
 ### Validator launch invariants
 1. `NETWORK_TIER_MANIFEST_PATH` 必须指向 governed bootstrap manifest
