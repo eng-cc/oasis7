@@ -10,9 +10,11 @@ import json
 import os
 from pathlib import Path
 import re
+import selectors
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from urllib.parse import urlparse
 import zipfile
@@ -27,6 +29,251 @@ DISCOVERY_MAX_PAGES=10
 KEYED_RUN_NAME='oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != \'\' && format(\'|{0}\', inputs.request_key) || \'\' }}'
 LOCAL_TARGET_INVENTORY_SCHEMA='oasis7-ci-local-target-inventory/v1'
 IMPACT_PROJECTION_MARKER='<!-- oasis7-impact-projection-b64:'
+HISTORICAL_SOURCE_MAX_BYTES=1024*1024
+HISTORICAL_RESPONSE_MAX_BYTES=2*1024*1024
+HISTORICAL_TOTAL_MAX_BYTES=16*1024*1024
+HISTORICAL_MAX_COMMITS=32
+HISTORICAL_MAX_CALLS=160
+HISTORICAL_CALL_TIMEOUT_SECONDS=15
+HISTORICAL_TOTAL_TIMEOUT_SECONDS=60
+HISTORICAL_TREE_MAX_OBJECTS=96
+HISTORICAL_TREE_MAX_ENTRIES=8192
+HISTORICAL_TREE_OBJECT_MAX_BYTES=2*1024*1024
+HISTORICAL_TREE_TOTAL_MAX_BYTES=16*1024*1024
+
+class _HistoricalReadBudget:
+    """Invocation-local limits; an uncertain read never becomes proven absence."""
+    def __init__(self):
+        self.deadline=time.monotonic()+HISTORICAL_TOTAL_TIMEOUT_SECONDS
+        self.calls=0
+        self.bytes=0
+        self.commits=set()
+        self._tree_objects={}
+        self._tree_entries=0
+        self._tree_bytes=0
+
+    def remaining(self):
+        remaining=self.deadline-time.monotonic()
+        if remaining<=0:
+            raise ValueError('historical workflow proof aggregate deadline exhausted')
+        return remaining
+
+    def commit(self,oid):
+        self.remaining()
+        self.commits.add(oid)
+        if len(self.commits)>HISTORICAL_MAX_COMMITS:
+            raise ValueError('historical workflow proof commit budget exhausted')
+
+def _historical_json(path,budget):
+    """Bound the new proof reader's live process and both captured streams."""
+    budget.remaining()
+    budget.calls+=1
+    if budget.calls>HISTORICAL_MAX_CALLS:
+        raise ValueError('historical workflow proof call budget exhausted')
+    deadline=min(budget.deadline,time.monotonic()+HISTORICAL_CALL_TIMEOUT_SECONDS)
+    process=None
+    output=bytearray()
+    response_bytes=0
+    try:
+        process=subprocess.Popen(['gh','api',path],stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        with selectors.DefaultSelector() as reader:
+            reader.register(process.stdout,selectors.EVENT_READ,True)
+            reader.register(process.stderr,selectors.EVENT_READ,False)
+            while reader.get_map():
+                remaining=min(deadline-time.monotonic(),budget.remaining())
+                if remaining<=0:
+                    raise ValueError('historical workflow proof process timed out')
+                ready=reader.select(remaining)
+                if not ready:
+                    raise ValueError('historical workflow proof process timed out')
+                for key,_ in ready:
+                    chunk=os.read(key.fd,64*1024)
+                    if not chunk:
+                        reader.unregister(key.fileobj)
+                        continue
+                    response_bytes+=len(chunk)
+                    budget.bytes+=len(chunk)
+                    if (response_bytes>HISTORICAL_RESPONSE_MAX_BYTES
+                            or budget.bytes>HISTORICAL_TOTAL_MAX_BYTES):
+                        raise ValueError('historical workflow proof response byte budget exhausted')
+                    if key.data: output.extend(chunk)
+            remaining=min(deadline-time.monotonic(),budget.remaining())
+            if remaining<=0:
+                raise ValueError('historical workflow proof process timed out')
+            if process.wait(timeout=remaining)!=0:
+                raise ValueError('historical workflow proof authenticated read failed')
+        return json.loads(output.decode('utf-8'))
+    except (OSError,UnicodeDecodeError,ValueError,RecursionError,subprocess.SubprocessError) as exc:
+        raise ValueError('historical workflow proof read unavailable: '+str(exc)) from exc
+    finally:
+        if process is not None:
+            if process.poll() is None: process.kill()
+            process.wait(timeout=1)
+            process.stdout.close()
+            process.stderr.close()
+
+def _historical_tree(repository,oid,budget):
+    """Reuse only verified immutable tree data within this read invocation.
+
+    Canonical bytes isolate the retained object from both the server response
+    and each consumer. Commit, edge and Contents proof remain independent.
+    """
+    budget.remaining()
+    if not isinstance(oid,str) or not OID.fullmatch(oid):
+        raise ValueError('historical workflow tree object identity malformed')
+    key=(repository,'tree',oid)
+    def validate(response):
+        if (not isinstance(response,dict) or response.get('sha')!=oid
+                or response.get('type','tree')!='tree'
+                or response.get('truncated') is not False
+                or not isinstance(response.get('tree'),list)):
+            raise ValueError('historical workflow tree readback malformed or incomplete')
+        names=set()
+        modes={'040000':'tree','100644':'blob','100755':'blob',
+               '120000':'blob','160000':'commit'}
+        for entry in response['tree']:
+            if not isinstance(entry,dict):
+                raise ValueError('historical workflow tree entry malformed')
+            name=entry.get('path')
+            if (not isinstance(name,str) or not name or name in ('.','..')
+                    or '/' in name or '\0' in name or name in names
+                    or not isinstance(entry.get('sha'),str)
+                    or not OID.fullmatch(entry['sha'])
+                    or not isinstance(entry.get('mode'),str)
+                    or entry['mode'] not in modes
+                    or modes[entry['mode']]!=entry.get('type')):
+                raise ValueError('historical workflow tree entry malformed or overlapping')
+            names.add(name)
+        return response
+    if key in budget._tree_objects:
+        response=validate(json.loads(budget._tree_objects[key].decode('utf-8')))
+        budget.remaining()
+        return response
+    try:
+        response=validate(_historical_json(f'repos/{repository}/git/trees/{oid}',budget))
+    except (OSError,subprocess.SubprocessError) as exc:
+        raise ValueError('historical workflow proof read unavailable') from exc
+    try:
+        retained=json.dumps(response,ensure_ascii=False,sort_keys=True,
+                            separators=(',',':'),allow_nan=False).encode('utf-8')
+    except (ValueError,TypeError,UnicodeError,RecursionError) as exc:
+        raise ValueError('historical workflow tree canonical data malformed') from exc
+    entries=len(response['tree'])
+    budget.remaining()
+    if (len(budget._tree_objects)+1>HISTORICAL_TREE_MAX_OBJECTS
+            or budget._tree_entries+entries>HISTORICAL_TREE_MAX_ENTRIES
+            or len(retained)>HISTORICAL_TREE_OBJECT_MAX_BYTES
+            or budget._tree_bytes+len(retained)>HISTORICAL_TREE_TOTAL_MAX_BYTES):
+        raise ValueError('historical workflow tree retained data budget exhausted')
+    # Nothing is retained or charged until all metadata, bytes and bounds pass.
+    budget._tree_objects[key]=retained
+    budget._tree_entries+=entries
+    budget._tree_bytes+=len(retained)
+    return json.loads(retained.decode('utf-8'))
+
+def _first_activation_producer(workflow):
+    """Accept only the direct, structurally declared historical producer shape.
+
+    Like the existing readiness scanner, unsupported YAML formatting fails
+    closed. Comments, aliases and script/body substrings cannot supply keys.
+    """
+    entries=_yaml_mapping_entries(workflow)
+    def children(parent):
+        descendants=[]
+        for entry in entries:
+            if entry['line']<=parent['line']: continue
+            if entry['indent']<=parent['indent']: break
+            descendants.append(entry)
+        if not descendants: return []
+        indent=min(entry['indent'] for entry in descendants)
+        return [entry for entry in descendants if entry['indent']==indent]
+    def one(items,key,value=''):
+        found=[entry for entry in items if entry['key']==key]
+        return found[0] if len(found)==1 and found[0]['value']==value else None
+    roots=[entry for entry in entries if entry['indent']==0]
+    if one(roots,'run-name',KEYED_RUN_NAME) is None: return False
+    trigger=one(roots,'on')
+    if trigger is None: return False
+    dispatch=one(children(trigger),'workflow_dispatch')
+    if dispatch is None: return False
+    inputs=one(children(dispatch),'inputs')
+    if inputs is None: return False
+    mode=one(children(inputs),'run_mode')
+    if mode is None or one(children(mode),'type','choice') is None: return False
+    options=one(children(mode),'options')
+    if options is None: return False
+    end=next((entry['line'] for entry in entries
+              if entry['line']>options['line'] and entry['indent']<=options['indent']),len(workflow.splitlines()))
+    values=[]
+    option_indent=None
+    for line in workflow.splitlines()[options['line']+1:end]:
+        if not line.strip() or line.lstrip().startswith('#'): continue
+        match=re.fullmatch(r'( +)- ([A-Za-z0-9_]+)\s*(?:#.*)?',line)
+        if match is None or len(match.group(1))<=options['indent']: return False
+        if option_indent is None: option_indent=len(match.group(1))
+        if len(match.group(1))!=option_indent: return False
+        values.append(match.group(2))
+    return len(values)==len(set(values)) and 'first_activation_validation_only' in values
+
+def _historical_first_activation_workflow(repository,commit,budget):
+    """Bind regular path, blob bytes and producer declaration to one run commit."""
+    budget.commit(commit)
+    prefix=f'repos/{repository}/'
+    def read(path):
+        try: return _historical_json(path,budget)
+        except (OSError,subprocess.SubprocessError) as exc:
+            raise ValueError('historical workflow proof read unavailable') from exc
+    metadata=read(prefix+'git/commits/'+commit)
+    if not isinstance(metadata,dict) or metadata.get('sha')!=commit:
+        raise ValueError('historical workflow commit identity mismatch')
+    tree=metadata.get('tree')
+    oid=tree.get('sha') if isinstance(tree,dict) else None
+    if not isinstance(oid,str) or not OID.fullmatch(oid):
+        raise ValueError('historical workflow root tree identity malformed')
+    for index,component in enumerate(WORKFLOW.split('/')):
+        response=_historical_tree(repository,oid,budget)
+        if (not isinstance(response,dict) or response.get('sha')!=oid
+                or response.get('truncated') is not False
+                or not isinstance(response.get('tree'),list)):
+            raise ValueError('historical workflow tree readback malformed or incomplete')
+        entries=response['tree']
+        if any(not isinstance(entry,dict) or not isinstance(entry.get('path'),str)
+               for entry in entries):
+            raise ValueError('historical workflow tree entry malformed')
+        matches=[entry for entry in entries if entry['path']==component]
+        if len(matches)!=1:
+            raise ValueError('historical workflow path missing or overlapping')
+        entry=matches[0]
+        leaf=index==len(WORKFLOW.split('/'))-1
+        if (entry.get('type')!=('blob' if leaf else 'tree')
+                or entry.get('mode') not in (('100644','100755') if leaf else ('040000',))):
+            raise ValueError('historical workflow path is not a regular Git file')
+        oid=entry.get('sha')
+        if not isinstance(oid,str) or not OID.fullmatch(oid):
+            raise ValueError('historical workflow path object identity malformed')
+    source=read(prefix+f'contents/{WORKFLOW}?ref={commit}')
+    if (not isinstance(source,dict) or source.get('type')!='file'
+            or source.get('path')!=WORKFLOW or source.get('encoding')!='base64'
+            or source.get('sha')!=oid or not isinstance(source.get('content'),str)
+            or type(source.get('size')) is not int
+            or not 0<=source['size']<=HISTORICAL_SOURCE_MAX_BYTES):
+        raise ValueError('historical workflow content metadata mismatch or source too large')
+    # GitHub wraps base64 with CR/LF; discard only those permitted separators.
+    encoded=source['content'].replace('\r','').replace('\n','')
+    if len(encoded)>4*((HISTORICAL_SOURCE_MAX_BYTES+2)//3):
+        raise ValueError('historical workflow encoded source too large')
+    try:
+        raw=base64.b64decode(encoded,validate=True)
+        if len(raw)!=source['size'] or len(raw)>HISTORICAL_SOURCE_MAX_BYTES:
+            raise ValueError('historical workflow decoded size mismatch')
+        digest=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+        if digest!=oid: raise ValueError('historical workflow Git blob identity mismatch')
+        workflow=raw.decode('utf-8')
+    except (ValueError,UnicodeDecodeError) as exc:
+        raise ValueError('historical workflow content malformed: '+str(exc)) from exc
+    if not _first_activation_producer(workflow):
+        raise ValueError('historical workflow does not declare the exact validation-only producer')
 
 def gh(*args):
     return json.loads(subprocess.check_output(['gh',*args],text=True))
@@ -48,15 +295,20 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
     matches=[]
     seen=set()
     legacy_cannot_integrate={}
+    historical_proofs=set()
+    historical_budget=_HistoricalReadBudget()
     for page in range(1,DISCOVERY_MAX_PAGES+1):
         response=gh('api',f'repos/{repository}/actions/workflows/rust.yml/runs?event=workflow_dispatch&per_page={DISCOVERY_PAGE_SIZE}&page={page}')
-        batch=response.get('workflow_runs')
+        batch=response.get('workflow_runs') if isinstance(response,dict) else None
         if not isinstance(batch,list): raise ValueError('integration discovery readback malformed')
         for run in batch:
+            if not isinstance(run,dict): raise ValueError('integration discovery run metadata malformed')
             run_id=run.get('id')
             if type(run_id) is not int or run_id in seen: raise ValueError('integration discovery overlapping or invalid run identity')
             seen.add(run_id)
-            if run.get('event')!='workflow_dispatch' or run.get('path')!=WORKFLOW or run.get('repository',{}).get('full_name')!=repository:
+            run_repository=run.get('repository')
+            if (run.get('event')!='workflow_dispatch' or run.get('path')!=WORKFLOW
+                    or not isinstance(run_repository,dict) or run_repository.get('full_name')!=repository):
                 raise ValueError('integration discovery workflow provenance uncertain')
             if not OID.fullmatch(str(run.get('head_sha',''))) or not isinstance(run.get('head_branch'),str):
                 raise ValueError('integration discovery ref identity uncertain')
@@ -70,17 +322,21 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                 if legacy_cannot_integrate[run['head_sha']]: continue
                 raise ValueError('integration current request identity unavailable before outcome')
             _,_,mode,request_uid,request_pr,request_base,request_head,*request_keys=parts
-            if mode in ('full_escalation','newapi_bridge_package'): continue
             if mode=='first_activation_validation_only':
-                if (not re.fullmatch(r'task_[0-9a-f]{32}',request_uid) or request_pr!=''
-                        or not OID.fullmatch(request_base) or not OID.fullmatch(request_head)
-                        or request_keys):
+                if (len(parts)!=7 or not re.fullmatch(r'task_[0-9a-f]{32}',request_uid)
+                        or request_pr!='' or not OID.fullmatch(request_base)
+                        or not OID.fullmatch(request_head)):
                     raise ValueError('integration current request identity malformed')
                 if run['head_sha']!=request_head:
                     raise ValueError('integration validation execution head differs from source')
-                # Historical candidate-checkout validation has no PR binding and
-                # can never satisfy production integration proof, even for uid.
+                historical_budget.remaining()
+                if run['head_sha'] not in historical_proofs:
+                    _historical_first_activation_workflow(repository,run['head_sha'],historical_budget)
+                    historical_proofs.add(run['head_sha'])
+                # Proven history is permanently ineligible, even for this UID.
+                # It cannot order production requests or satisfy a receipt.
                 continue
+            if mode in ('full_escalation','newapi_bridge_package'): continue
             if mode=='v1_reuse_validation_only':
                 if (not re.fullmatch(r'task_[0-9a-f]{32}',request_uid) or not re.fullmatch(r'[1-9][0-9]*',request_pr)
                         or not OID.fullmatch(request_base) or not OID.fullmatch(request_head)):
@@ -127,6 +383,7 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                                 '_requested_at_sort':sort_time,
                                 'execution_sha':run['head_sha'],'execution_branch':run['head_branch']})
         if len(batch)<DISCOVERY_PAGE_SIZE:
+            if historical_proofs: historical_budget.remaining()
             if not matches: return None
             selected=max(matches,key=lambda item:(item['_requested_at_sort'],item['id'],item['run_attempt']))
             selected.pop('_requested_at_sort')
