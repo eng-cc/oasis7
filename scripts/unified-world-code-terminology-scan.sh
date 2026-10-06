@@ -80,7 +80,6 @@ allowed_snippets = {
     "testing-manual.md": (
         "summary.json.evidence_contract.claim_readiness.shared_network_pass_blockers",
         "evidence_contract.claim_readiness.shared_network_pass_blockers",
-        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
     ),
     "scripts/network-tier-manifest.sh": (
         '"$tier" == "shared_devnet"',
@@ -137,15 +136,8 @@ allowed_snippets = {
         "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
         "scripts/shared-network-track-gate.sh",
     ),
-    "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.design.md": (
-        "p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
-    ),
     "doc/p2p/prd.md": (
         "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md",
-        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
-    ),
-    "doc/p2p/prd.index.md": (
-        "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24",
     ),
 }
 allowed_path_names = {

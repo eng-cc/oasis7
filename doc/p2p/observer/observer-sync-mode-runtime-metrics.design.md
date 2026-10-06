@@ -4,9 +4,9 @@
 - 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 
 ## 1. 设计定位
-本文件记录 Observer 同步源运行态统计的历史设计合同及 dormant 状态，不表示当前 crate 提供这些运行时指标。`crates/oasis7_net/src/lib.rs` 当前未声明 `observer` 或 `observer_metrics`，也未从 crate facade 导出本设计所列 API；相关源文件和同文件测试未进入 `oasis7_net` 当前编译模块图或其 test targets。
+本文件记录 Observer 同步源运行态统计的历史设计合同及 dormant 状态，不表示当前 crate 提供这些运行时指标。`observer.rs` 与 `observer_metrics.rs` 已从当前 tracked source tree 删除；历史实现和同文件测试仅可从 Git history 追溯，也未进入 `oasis7_net` 当前编译模块图或 test targets。当前 `lib.rs` 未声明这些模块或从 crate facade 导出本设计所列 API。
 
-同步源选择、追平进度与回退状态只有在 runtime 变更单独接回模块图和所需 facade 后，才可成为可调用运行能力。文件存在、设计描述或 `test_tier_required` 标签均不构成编译、执行或测试通过证据；本文不声称任何当前 S9A tier 已通过。
+同步源选择、追平进度与回退状态只有在 runtime 变更重新实现并接入模块图和所需 facade 后，才可成为可调用运行能力。Git history、设计描述或 `test_tier_required` 标签均不构成当前编译、执行或测试通过证据；本文不声称任何当前 S9A tier 已通过。
 
 ## 2. 设计结构
 - 状态采集层（重新激活目标）：采集同步源选择、追平高度和延迟。
@@ -21,10 +21,10 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [PRD dormant status boundary](observer-sync-mode-runtime-metrics.prd.md#observer-metrics-dormant-status-requirement) | 当前保持 metrics source dormant；仅把接口、计数和测试列为重新激活目标，不把文件或 `test_tier_required` 读成 active API 或 pass evidence。 | [本设计的 dormant status contract](observer-sync-mode-runtime-metrics.design.md#observer-metrics-dormant-status-contract) | `runtime_engineer` 确认模块图/facade；`qa_engineer` 审核测试和 tier 证据边界。 | 不在此激活 Rust 模块、声称 S9A tier 通过、公开可达性或 release readiness。 |
+| [PRD dormant status boundary](observer-sync-mode-runtime-metrics.prd.md#observer-metrics-dormant-status-requirement) | 历史 metrics 实现已从 tracked tree 删除；接口、计数和测试仅列为重新激活目标，不把 Git history 或 `test_tier_required` 读成 active API 或 pass evidence。 | [本设计的 dormant status contract](observer-sync-mode-runtime-metrics.design.md#observer-metrics-dormant-status-contract) | `runtime_engineer` 确认模块图/facade；`qa_engineer` 审核测试和 tier 证据边界。 | 不在此激活 Rust 模块、声称 S9A tier 通过、公开可达性或 release readiness。 |
 
 ## 3. 关键接口 / 入口
-- 以下名称描述 dormant source 的设计目标，不是当前 crate 可调用接口：
+- 以下名称描述 Git history 中实现的设计目标，不是当前 crate 可调用接口：
   - 同步源运行时状态
   - `HeadSyncModeReport` / `HeadSyncModeWithDhtReport`
   - 单轮/follow metrics bridge
@@ -37,7 +37,7 @@
 - 字段命名需与 observer 其他文档保持一致。
 - fallback 标识必须在模式分发层计算，桥接不得引入隐式全局 metrics 或改变 `HeadFollowReport`。
 - 不在本专题定义完整告警策略。
-- 重新激活须由单独的 runtime 变更接回 source 模块与所需 facade，并让相关测试通过 `oasis7_net` 的受支持目标实际编译。colocated test 源码目前不属于 crate test targets。
+- 重新激活须由单独的 runtime 变更重新实现并接入所需模块与 facade，并让新补测试通过 `oasis7_net` 的受支持目标实际编译。历史 colocated tests 不属于当前 crate test targets。
 - PRD 中的 `test_tier_required` 表示未来重新激活前的验证义务，不是运行结果。`module_required`、`module_full`、`integration_required` 与 `release_full` 的范围及证据边界以 [S9A 多节点状态同步闭环设计](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md) 为准；其他 tier、代理或测试绿灯不能替代相应证据，也不证明公开可达性、testnet readiness 或完整游戏体验。
 
 ## 5. 设计演进计划
@@ -51,4 +51,4 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [PRD dormant status boundary](observer-sync-mode-runtime-metrics.prd.md#observer-metrics-dormant-status-requirement) | [本设计的 dormant status contract](observer-sync-mode-runtime-metrics.design.md#observer-metrics-dormant-status-contract) | 本次只核对 dormant 模块与测试状态；未来重新激活必须实际编译对应模块并按 S9A 适用 tier 单独取证。 | N/A: reason=metrics source is not in the active crate module graph; scope=this dormant-source documentation snapshot and not a future runtime activation; owner_role=blockchain_ops_engineer; evidence_ref=https://github.com/eng-cc/oasis7/issues/3935#issuecomment-5834239459; re-evaluate=when a runtime-owned change admits these modules into the crate. | 本 Issue 的 exact-head review 与 doc/required-CI receipts；未来 runtime activation task 的 Cargo/S9A evidence。 | 本次不证明 source 已编译、metrics 运行、任何 tier 通过、公开网络可达、testnet readiness 或完整游戏体验。 |
+| [PRD dormant status boundary](observer-sync-mode-runtime-metrics.prd.md#observer-metrics-dormant-status-requirement) | [本设计的 dormant status contract](observer-sync-mode-runtime-metrics.design.md#observer-metrics-dormant-status-contract) | 本次只核对历史模块代码和测试已删除的状态；未来重新激活必须实现对应模块并按 S9A 适用 tier 单独取证。 | N/A: reason=metrics implementation is not in the active crate module graph; scope=this historical-contract documentation snapshot and not a future runtime activation; owner_role=blockchain_ops_engineer; evidence_ref=https://github.com/eng-cc/oasis7/issues/3935#issuecomment-5834239459; re-evaluate=when a runtime-owned change implements and admits these modules into the crate. | 本 Issue 的 exact-head review 与 doc/required-CI receipts；未来 runtime activation task 的 Cargo/S9A evidence。 | 本次不证明 source 已编译、metrics 运行、任何 tier 通过、公开网络可达、testnet readiness 或完整游戏体验。 |
