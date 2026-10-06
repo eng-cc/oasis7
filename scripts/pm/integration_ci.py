@@ -1572,6 +1572,11 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
             'run_id':record.get('run_id'),'run_attempt':record.get('run_attempt')}
 
 def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None,approved_executor_contract_digests=None):
+    return _verified_run(repository,uid,number,base,head,run_id,app_id,
+        request_key=request_key,expected_attempt=expected_attempt,request_identity=request_identity,
+        effective_policy=effective_policy,approved_executor_contract_digests=approved_executor_contract_digests)
+
+def _verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None,approved_executor_contract_digests=None,_merged_branch=None):
     """Verify live CI provenance; keyed callers must supply trusted policy and request identity."""
     if type(number) is not int or number<1:
         raise ValueError('positive integer pull request number required')
@@ -1618,7 +1623,10 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
         })
     elif request_identity is not None or effective_policy is not None:
         raise ValueError('manual integration keyed request identity is incomplete')
-    _,branch=identity(repository,uid,number,base,head,allow_base_advance=request_key is not None)
+    if _merged_branch is None:
+        _,branch=identity(repository,uid,number,base,head,allow_base_advance=request_key is not None)
+    else:
+        branch=_merged_branch
     run=gh('api',f'repos/{repository}/actions/runs/{run_id}')
     expected={'event':'workflow_dispatch','head_branch':branch,'path':WORKFLOW,'status':'completed','conclusion':'success'}
     if request_key is None: expected['head_sha']=base
@@ -1707,6 +1715,108 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
             execution_jobs=execution_jobs,
         ))
     return selected[0],payload
+
+def verify_merged_delivery_integration(repository,uid,number,head,base,selected,context):
+    """Terminal-only legacy observation; locators never grant merged authority."""
+    fields={'repository_root','source_review_plan_path','source_review_handoff_path',
+        'source_review_resolution_path','source_scope_oid','merge_commit_oid',
+        'observed_target_oid','check_app_id','request_key'}
+    if not isinstance(context,dict) or set(context)!=fields:
+        raise ValueError('merged integration context closed schema mismatch')
+    if type(number) is not int or number<1 or any(not isinstance(x,str) or not OID.fullmatch(x)
+            for x in (head,base,context['source_scope_oid'],context['merge_commit_oid'],context['observed_target_oid'])):
+        raise ValueError('merged integration source identity invalid')
+    app=context['check_app_id']
+    if type(app) is not int or app<1:
+        raise ValueError('merged integration policy app identity invalid')
+    root=Path(context['repository_root']).resolve(strict=True)
+    review=_adjacent_module('review_preflight_handoff')
+    handoff=review.validate_handoff(root,Path(context['source_review_handoff_path']),
+        expected_plan_path=Path(context['source_review_plan_path']))
+    plan_value,plan_raw=review.read_json(Path(context['source_review_plan_path']),'review plan')
+    plan,_,_=review.validate_plan(plan_value,plan_raw)
+    if (plan.get('frozen_head')!=head or plan.get('task_uid')!=uid
+            or plan.get('source_scope_oid')!=context['source_scope_oid']
+            or handoff['handoff'].get('repository')!=repository
+            or handoff['handoff'].get('pr_number')!=number):
+        raise ValueError('merged integration review head identity mismatch')
+    resolution=_adjacent_module('review-findings-resolution')
+    resolution.validate_manifest(root,Path(context['source_review_resolution_path']),
+        Path(plan['preflight']['ledger_path']),uid,head)
+    pr=gh('api',f'repos/{repository}/pulls/{number}')
+    branch=(pr.get('base') or {}).get('ref')
+    issue=review.canonical_task_issue_number(root,uid)
+    terminal=_adjacent_module('terminal_proof')
+    merged=context['merge_commit_oid'];target=context['observed_target_oid']
+    terminal._validate_live_pr(pr,repository,uid,issue,number,
+        f'https://github.com/{repository}/pull/{number}',head,merged,branch)
+    ref=gh('api',f'repos/{repository}/git/ref/heads/{branch}')
+    if (ref.get('object') or {}).get('sha')!=target:
+        raise ValueError('merged target identity mismatch')
+    live={'repository':gh('api',f'repos/{repository}'),'ref':ref,
+        'merge_compare':gh('api',f'repos/{repository}/compare/{merged}...{target}')}
+    terminal._validate_live_repository(live,repository,merged,branch,target)
+    def object_bytes(*args):
+        return subprocess.check_output(['git','-C',str(root),*args])
+    parent=object_bytes('rev-parse',merged+'^').decode().strip()
+    scope=context['source_scope_oid']
+    if object_bytes('diff','--binary',scope,head)!=object_bytes('diff','--binary',parent,merged):
+        raise ValueError('merged source patch equivalence mismatch')
+    if object_bytes('merge-base',merged,target).decode().strip()!=merged:
+        raise ValueError('merged target ancestry mismatch')
+    # This bounded legacy seam admits only an unchanged delivered target.
+    # Related/unrelated advancement needs the separately admitted applicability reader.
+    if target!=merged:
+        raise ValueError('merged target applicability drift is unsupported')
+    gate=_adjacent_module('pr-lifecycle-gate')
+    class ReadOnlyTransport:
+        def rest(self,method,path,**kwargs):
+            if method!='GET':
+                raise ValueError('merged policy transport is read-only')
+            return gh('api',path)
+    policy=gate.discover_required_policy(repository,branch,client=ReadOnlyTransport())
+    if policy.get('status')!='resolved' or not any(x.get('context')=='required-gate'
+            and type(x.get('app_id')) is int and x['app_id']==app
+            for x in policy.get('required_status_checks',[])):
+        raise ValueError('merged integration required policy app identity mismatch')
+    key=context['request_key']
+    if key is not None:
+        trusted=trusted_policy_context(repository,branch,target,target)
+        effective=trusted['effective_policy']
+        identity_helper=_adjacent_module('ci_ready_receipt_identity')
+        if identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in effective['enabled_capabilities']:
+            raise ValueError('keyed request capability is disabled by trusted policy')
+        raise ValueError('keyed merged request identity is unsupported')
+    current=current_request(repository,uid,number,base,head,branch)
+    if not isinstance(selected,dict) or current!=selected:
+        raise ValueError('merged integration current request identity mismatch')
+    run_id=current.get('id');attempt=current.get('run_attempt')
+    if type(run_id) is not int or run_id<1 or type(attempt) is not int or attempt<1:
+        raise ValueError('merged integration run attempt identity invalid')
+    check,proof=_verified_run(repository,uid,number,base,head,run_id,app,
+        expected_attempt=attempt,_merged_branch=branch)
+    try:
+        jobs=attempt_execution_jobs(repository,run_id,attempt,base,app,require_completed=True)
+    except subprocess.CalledProcessError as exc:
+        raise ValueError('merged integration exact attempt job readback unavailable') from exc
+    gates=[j for j in jobs if j['job_name']=='required-gate']
+    if len(gates)!=1 or gates[0]['check_run_id']!=check.get('id') or gates[0]['conclusion']!='success':
+        raise ValueError('merged required check exact attempt job identity mismatch')
+    receipt=_adjacent_module('ci-ready-receipt')
+    actual_planner=receipt.planner_from_run(check)
+    projection=_adjacent_module('workflow-impact-projection')
+    raw_planner=projection.run_scope_planner(root,plan['impact_projection']['changed_paths'],
+        plan['impact_projection']['ci_scope']=='full')
+    if actual_planner!=receipt.canonical_planner(raw_planner):
+        raise ValueError('merged integration planner identity mismatch')
+    tree=object_bytes('rev-parse',head+'^{tree}').decode().strip()
+    if proof['tested_tree_oid']!=tree or proof['tested_commit_oid']!=head or proof['scope_base_oid']!=scope:
+        raise ValueError('merged artifact source tree authority mismatch')
+    if type(check.get('id')) is not int or check['id']<1:
+        raise ValueError('merged check identity invalid')
+    return {'base_oid':base,'run_id':run_id,'run_attempt':attempt,'app_id':app,
+        'check_run_id':check['id'],'workflow_sha':base,'tested_tree_oid':tree,
+        'request_key':None,'proof':proof}
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
