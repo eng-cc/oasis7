@@ -239,9 +239,14 @@ def resolve_task_publication(comments_read: dict[str, Any], expected_identity: d
                 except ValueError:
                     blockers.append("C1 publication or PR timestamps are malformed")
                 else:
-                    if pr_binding.get("draft") and not published < created:
+                    unbound_draft = (
+                        pr_binding.get("draft")
+                        and pr_binding.get("task_pr_number") is None
+                        and pr_binding.get("task_pr_url") is None
+                    )
+                    if unbound_draft and not published < created:
                         blockers.append("C1 publication was not recorded before draft PR creation")
-                    if not pr_binding.get("draft") and not published < updated:
+                    elif not published < updated:
                         blockers.append("C1 publication does not precede the existing PR candidate update")
             comment_identity = {
                 "comment_id": comment["id"], "created_at": comment["created_at"],

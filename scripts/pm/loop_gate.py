@@ -62,11 +62,34 @@ def admission(root, task, base, head, tool_root=None, reader=None):
     configured = tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT')
     if not configured:
         raise ValueError('activation prerequisite: explicit trusted --tool-root required')
-    path = Path(__file__).with_name('loop.py')
-    spec = importlib.util.spec_from_file_location('loop_facade_gate', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    result = module.validate_task(Path(root), task, Path(configured) if configured else None, base, head)
+    effective = Path(configured).resolve()
+    commit = binding.get('policy_commit', '')
+    if not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise ValueError('missing immutable effective policy commit')
+    if subprocess.check_output(
+            ['git', '-C', str(effective), 'rev-parse', 'HEAD'], text=True,
+    ).strip() != commit:
+        raise ValueError('effective tool HEAD mismatch')
+    if (subprocess.check_output(
+            ['git', '-C', str(effective), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+            text=True,
+    ).strip() != subprocess.check_output(
+            ['git', '-C', str(root), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+            text=True,
+    ).strip()):
+        raise ValueError('effective tool repository mismatch')
+    subprocess.run(
+        ['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ['git', '-C', str(root), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'],
+        check=True, capture_output=True,
+    )
+    for name in ('loop_recovery', 'loop_gate'):
+        _pinned_module(effective, commit, name)
+    module = _pinned_module(effective, commit, 'loop')
+    result = module.validate_task(Path(root), task, effective, base, head)
     if result['status'] != 'passed': raise ValueError('loop admission: ' + '; '.join(result['blockers']))
     return result
 

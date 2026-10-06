@@ -1085,22 +1085,40 @@ class PublicationMatrixTests(unittest.TestCase):
         self.assertEqual("passed", result["status"])
         self.assertNotIn("permissions", result)
 
-    def test_c1_live_resolver_requires_task_author_and_precreate_time_order(self):
+    def test_c1_live_resolver_accepts_bound_draft_update_before_update_and_rejects_late(self):
         value, comment, read, pr = self.c1_resolution_inputs(9913)
         expected = {key: value[key] for key in publication_module._TASK_PUBLICATION_FIELDS}
+        author = {"login": "task-author", "type": "User"}
+        initial = publication_module.resolve_task_publication(
+            read, expected, live_task_author=author, pr_binding=pr,
+        )
+        self.assertEqual("passed", initial["status"], initial)
+
         mismatch = publication_module.resolve_task_publication(
             read, expected, live_task_author={"login": "other-user", "type": "User"},
             pr_binding=pr,
         )
         self.assertEqual("blocked", mismatch["status"])
-        late = publication_module.resolve_task_publication(
-            {**read, "comments": [dict(comment, created_at="2026-09-30T12:02:00Z")]},
-            expected, live_task_author={"login": "task-author", "type": "User"},
-            pr_binding=pr,
+
+        updated_draft = {**pr, "created_at": "2026-09-30T12:01:00Z",
+                         "updated_at": "2026-09-30T12:03:00Z"}
+        between = publication_module.resolve_task_publication(
+            {**read, "comments": [dict(comment, created_at="2026-09-30T12:02:00Z",
+                                        updated_at="2026-09-30T12:02:00Z")]},
+            expected, live_task_author=author, pr_binding=updated_draft,
         )
-        self.assertEqual("blocked", late["status"])
+        self.assertEqual("passed", between["status"], between)
+        for timestamp in ("2026-09-30T12:03:00Z", "2026-09-30T12:04:00Z"):
+            with self.subTest(published_at=timestamp):
+                late = publication_module.resolve_task_publication(
+                    {**read, "comments": [dict(comment, created_at=timestamp,
+                                                updated_at=timestamp)]},
+                    expected, live_task_author=author, pr_binding=updated_draft,
+                )
+                self.assertEqual("blocked", late["status"], late)
+
         wrong_phase = publication_module.resolve_task_publication(
-            read, expected, live_task_author={"login": "task-author", "type": "User"},
+            read, expected, live_task_author=author,
             pr_binding={**pr, "task_status": "ready", "task_phase": "pre_pr_ready"},
         )
         self.assertEqual("blocked", wrong_phase["status"])
