@@ -17,7 +17,6 @@ on:
         type: choice
         options:
           - integration_revalidation
-          - first_activation_validation_only
           - full_escalation
           - newapi_bridge_package
           - v1_reuse_validation_only
@@ -31,7 +30,7 @@ on:
           - release
           - dev
       task_uid:
-        description: "Required for full_escalation or first_activation_validation_only: GitHub Project task UID"
+        description: "Required for full_escalation: GitHub Project task UID"
         required: false
         type: string
       pr_number:
@@ -39,7 +38,7 @@ on:
         required: false
         type: string
       expected_head:
-        description: "Required for full_escalation or first_activation_validation_only: exact checked-out commit SHA"
+        description: "Required for full_escalation: exact checked-out commit SHA"
         required: false
         type: string
       integration_base:
@@ -89,7 +88,7 @@ env:
 
 jobs:
   required-gate:
-    if: github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.run_mode == 'integration_revalidation' || inputs.run_mode == 'first_activation_validation_only'))
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -112,178 +111,22 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - id: first-activation-provenance
-        name: Validate exact first-activation dispatch provenance
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'first_activation_validation_only'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TASK_UID: ${{ inputs.task_uid }}
-          EXPECTED_HEAD: ${{ inputs.expected_head }}
-          INTEGRATION_BASE: ${{ inputs.integration_base }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-          SOURCE_SCOPE_OID: ${{ inputs.source_scope_oid }}
-          PROJECTION_DIGEST: ${{ inputs.projection_digest }}
-          ESCALATION_REASON: ${{ inputs.escalation_reason }}
-          EVIDENCE_URL: ${{ inputs.evidence_url }}
-          IMPACT_PROJECTION_B64: ${{ inputs.impact_projection_b64 }}
-          REQUEST_KEY: ${{ inputs.request_key }}
-          VALIDATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
-          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
-          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
-        run: |
-          python3 -I - <<'PY'
-          import hashlib, importlib.util, json, os, pathlib, re, subprocess, sys
-          root=pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
-          spec=importlib.util.spec_from_file_location("first_activation_dispatch",root/"scripts/pm/first_activation.py")
-          if spec is None or spec.loader is None: raise SystemExit("first-activation reader is unavailable")
-          module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module; spec.loader.exec_module(module)
-          repository=os.environ["GITHUB_REPOSITORY"]
-          uid=os.environ["TASK_UID"]
-          base=os.environ["INTEGRATION_BASE"]
-          head=os.environ["EXPECTED_HEAD"]
-          if not re.fullmatch(r"task_[0-9a-f]{32}",uid): raise SystemExit("Task UID assertion is malformed")
-          if not re.fullmatch(r"[0-9a-f]{40}",base) or not re.fullmatch(r"[0-9a-f]{40}",head):
-              raise SystemExit("base/head assertions must be full commit OIDs")
-          for name in ("PR_NUMBER","SOURCE_SCOPE_OID","PROJECTION_DIGEST","ESCALATION_REASON","EVIDENCE_URL",
-                       "IMPACT_PROJECTION_B64","REQUEST_KEY","VALIDATION_REQUEST_B64"):
-              if os.environ.get(name): raise SystemExit(f"first-activation dispatch does not accept {name}")
-          if os.environ.get("GITHUB_EVENT_NAME")!="workflow_dispatch" or os.environ.get("GITHUB_SHA")!=head:
-              raise SystemExit("dispatch event or live checkout head differs from the assertion")
-          if subprocess.check_output(["git","-C",str(root),"rev-parse","HEAD^{commit}"],text=True).strip()!=head:
-              raise SystemExit("checked-out commit differs from expected head")
-          ancestor=subprocess.run(["git","-C",str(root),"merge-base","--is-ancestor",base,head],check=False)
-          if ancestor.returncode!=0: raise SystemExit("integration base is not an ancestor of expected head")
-          client=module._github_client(root)
-          overlay=module.read_issue_overlay(root,repository,uid,base,head,client=client)
-          if overlay.get("validation_only") is not True: raise SystemExit("Issue reader did not return validation-only authority")
-          projection_digest=module.materialize_first_activation_task_pr_projection(
-              root,repository,uid,base,head,
-              pathlib.Path(os.environ["RUNNER_TEMP"])/"first-activation-base-authority/impact-projection.json",
-              client=client)
-          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a",encoding="utf-8") as output:
-              output.write("projection_digest="+projection_digest+"\n")
-          repository_state=client.rest("GET",f"repos/{repository}",operation="first_activation_repository_readback")
-          default_branch=repository_state.get("default_branch") if isinstance(repository_state,dict) else None
-          if not isinstance(default_branch,str) or not default_branch or overlay.get("workflow_ref")==f"refs/heads/{default_branch}":
-              raise SystemExit("first-activation validation requires the exact candidate branch ref")
-          if (os.environ.get("GITHUB_REF")!=overlay.get("workflow_ref")
-              or os.environ.get("GITHUB_WORKFLOW_SHA")!=overlay.get("workflow_sha")
-              or os.environ.get("GITHUB_WORKFLOW_REF")!=f"{repository}/{overlay.get('workflow_path')}@{overlay.get('workflow_ref')}"):
-              raise SystemExit("live workflow ref/SHA differs from the reviewed overlay")
-          workflow=overlay.get("workflow_path")
-          if not isinstance(workflow,str): raise SystemExit("reviewed workflow path is malformed")
-          file_sha="sha256:"+hashlib.sha256((root/workflow).read_bytes()).hexdigest()
-          if file_sha!=overlay.get("workflow_file_sha256"): raise SystemExit("workflow file bytes differ from the reviewed overlay")
-          run_id=int(os.environ["GITHUB_RUN_ID"]); attempt=int(os.environ["GITHUB_RUN_ATTEMPT"])
-          run=client.rest("GET",f"repos/{repository}/actions/runs/{run_id}",operation="first_activation_live_run_readback")
-          module.validate_workflow_run_provenance(run,repository=repository,overlay=overlay,run_id=run_id,
-              run_attempt=attempt,event_name=os.environ["GITHUB_EVENT_NAME"],workflow_ref=os.environ["GITHUB_REF"],
-              workflow_sha=os.environ["GITHUB_WORKFLOW_SHA"],allow_in_progress=True)
-          record={"validation_only":True,"task_uid":uid,"base_oid":base,"head_oid":head,
-              "run_id":run_id,"run_attempt":attempt,"event":"workflow_dispatch","repository":repository,
-              "workflow_id":overlay["workflow_id"],"workflow_path":workflow,"workflow_ref":overlay["workflow_ref"],
-              "workflow_sha":overlay["workflow_sha"],"workflow_file_sha256":file_sha,
-              "overlay_comment_id":overlay["overlay_comment_id"],"overlay_sha256":overlay["overlay_sha256"]}
-          destination=root/"output/first-activation-validation/dispatch-provenance.json"
-          destination.parent.mkdir(parents=True,exist_ok=True)
-          destination.write_text(json.dumps(record,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8")
-          print("first-activation dispatch provenance: exact live Issue, workflow, run, base, and head; validation_only=true")
-          PY
-      - id: pr_target
-        name: Freeze current PR target independently of historical PR base
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number }}" \
-            "${{ github.event.pull_request.head.sha }}" "${GITHUB_OUTPUT}" <<'PY'
-          import json,re,subprocess,sys
-          repository,number,head,output=sys.argv[1:]
-          def read(path): return json.loads(subprocess.check_output(['gh','api',path],text=True))
-          pr=read(f'repos/{repository}/pulls/{number}')
-          repo=read(f'repos/{repository}')
-          branch=repo.get('default_branch')
-          if (repo.get('full_name')!=repository or not isinstance(branch,str) or not branch
-              or pr.get('state')!='open' or pr.get('merged')
-              or pr.get('base',{}).get('ref')!=branch
-              or pr.get('base',{}).get('repo',{}).get('full_name')!=repository
-              or pr.get('head',{}).get('repo',{}).get('full_name')!=repository
-              or pr.get('head',{}).get('sha')!=head):
-              raise SystemExit('PR repository/ref/head identity changed before target freeze')
-          ref=f'repos/{repository}/git/ref/heads/{branch}'
-          target=read(ref).get('object',{}).get('sha')
-          if not isinstance(target,str) or not re.fullmatch(r'[0-9a-f]{40,64}',target):
-              raise SystemExit('current PR target is unavailable')
-          fresh=read(f'repos/{repository}/pulls/{number}')
-          if fresh!=pr or read(ref).get('object',{}).get('sha')!=target:
-              raise SystemExit('PR or current target moved during target freeze')
-          with open(output,'a') as stream: stream.write(f'oid={target}\n')
-          PY
-
       - id: impact
-        name: Resolve Project task and materialize PR workflow impact projection
+        name: Materialize PR workflow impact projection
         if: github.event_name == 'pull_request'
         env:
-          GH_TOKEN: ${{ github.token }}
-          OASIS7_PROJECT_READ_TOKEN: ${{ secrets.OASIS7_PROJECT_READ_TOKEN }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          PR_BASE_OID: ${{ steps.pr_target.outputs.oid }}
-          PR_HEAD_OID: ${{ github.event.pull_request.head.sha }}
         run: |
           python3 -I - <<'PY'
-          import importlib.util, os, pathlib, re, sys
-          body=os.environ.get('PR_BODY','')
-          if 'oasis7-impact-projection-b64' in body:
-              raise SystemExit('legacy PR-body impact projections are not accepted')
-          task_lines=re.findall(r'(?m)^Task: ([^\r\n]+)$',body)
-          if not task_lines:
-              if re.search(r'<!-- oasis7-ci-impact-publication:v[12] -->',body):
-                  raise SystemExit('PR publication marker requires a canonical Task UID lookup key')
-              with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
-                  output.write('enabled=false\n')
-              raise SystemExit(0)
-          if len(task_lines)!=1 or not re.fullmatch(r'task_[0-9a-f]{32}',task_lines[0]):
-              raise SystemExit('pull request must contain exactly one canonical Task UID lookup key')
-          task_uid=task_lines[0]
-          base=os.environ.get('PR_BASE_OID','')
-          head=os.environ.get('PR_HEAD_OID','')
-          if not re.fullmatch(r'[0-9a-f]{40}',base) or not re.fullmatch(r'[0-9a-f]{40}',head):
-              raise SystemExit('pull request base/head are unavailable as full commit OIDs')
-          root=pathlib.Path(os.environ['GITHUB_WORKSPACE']).resolve()
-          readback_spec=importlib.util.spec_from_file_location(
-              'ci_reuse_validation_readback',root/'scripts/pm/ci_reuse_validation_readback.py')
-          if readback_spec is None or readback_spec.loader is None:
-              raise SystemExit('Project-backed Task resolver is unavailable')
-          readback=importlib.util.module_from_spec(readback_spec)
-          sys.modules[readback_spec.name]=readback
-          readback_spec.loader.exec_module(readback)
-          project_issue=readback.GitHubReadOnly().resolve_project_task_issue(task_uid)
-          activation_spec=importlib.util.spec_from_file_location(
-              'first_activation_projection',root/'scripts/pm/first_activation.py')
-          if activation_spec is None or activation_spec.loader is None:
-              raise SystemExit('trusted PR projection materializer is unavailable')
-          activation=importlib.util.module_from_spec(activation_spec)
-          sys.modules[activation_spec.name]=activation
-          activation_spec.loader.exec_module(activation)
-          repository=os.environ['GITHUB_REPOSITORY']
-          repository_client=activation._github_client(root)
-          issue=activation._issue_by_uid(repository_client,repository,task_uid)
-          if (issue.get('number')!=project_issue.get('number')
-              or issue.get('url')!=project_issue.get('url')
-              or issue.get('body')!=project_issue.get('body')):
-              raise SystemExit('Project item and repository Task Issue readbacks differ')
-          destination=pathlib.Path(os.environ['RUNNER_TEMP'])/'impact-projection.json'
-          digest=activation.materialize_first_activation_task_pr_projection(
-              root,repository,task_uid,base,head,destination,client=repository_client)
-          final_issue=activation._issue_by_uid(repository_client,repository,task_uid)
-          if (final_issue.get('number')!=project_issue.get('number')
-              or final_issue.get('url')!=project_issue.get('url')
-              or final_issue.get('body')!=project_issue.get('body')):
-              raise SystemExit('Project item and Task Issue changed during projection materialization')
+          import base64, os, pathlib, re
+          matches=re.findall(r'<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+|missing) -->',os.environ.get('PR_BODY',''))
+          if len(matches)>1:
+              raise SystemExit('pull request has duplicate workflow impact projection markers')
+          enabled=bool(matches and matches[0]!='missing')
+          if enabled:
+              pathlib.Path(os.environ['RUNNER_TEMP'],'impact-projection.json').write_bytes(base64.b64decode(matches[0],validate=True))
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
-              output.write('enabled=true\n')
-              output.write(f'task_uid={task_uid}\n')
-              output.write(f'projection_digest={digest}\n')
+              output.write(f'enabled={str(enabled).lower()}\n')
           PY
       - id: integration
         name: Prepare exact manual integration from trusted default workflow
@@ -339,6 +182,37 @@ jobs:
           with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
               output.write("worktree="+identity.get("integration_worktree","")+"\n")
           PY
+      - id: pr_target
+        name: Freeze current PR target independently of historical PR base
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" "${GITHUB_OUTPUT}" <<'PY'
+          import json,re,subprocess,sys
+          repository,number,head,output=sys.argv[1:]
+          def read(path): return json.loads(subprocess.check_output(['gh','api',path],text=True))
+          pr=read(f'repos/{repository}/pulls/{number}')
+          repo=read(f'repos/{repository}')
+          branch=repo.get('default_branch')
+          if (repo.get('full_name')!=repository or not isinstance(branch,str) or not branch
+              or pr.get('state')!='open' or pr.get('merged')
+              or pr.get('base',{}).get('ref')!=branch
+              or pr.get('base',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('sha')!=head):
+              raise SystemExit('PR repository/ref/head identity changed before target freeze')
+          ref=f'repos/{repository}/git/ref/heads/{branch}'
+          target=read(ref).get('object',{}).get('sha')
+          if not isinstance(target,str) or not re.fullmatch(r'[0-9a-f]{40,64}',target):
+              raise SystemExit('current PR target is unavailable')
+          fresh=read(f'repos/{repository}/pulls/{number}')
+          if fresh!=pr or read(ref).get('object',{}).get('sha')!=target:
+              raise SystemExit('PR or current target moved during target freeze')
+          with open(output,'a') as stream: stream.write(f'oid={target}\n')
+          PY
+
       - name: Validate trusted loop repository scope and content
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
         env:
@@ -409,6 +283,8 @@ jobs:
 
       - id: scope
         name: Plan required gate scope
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           base_ref=""
           head_ref="${GITHUB_SHA}"
@@ -428,26 +304,7 @@ jobs:
           planner=(./scripts/plan-rust-required-scope.sh)
           impact_args=()
           run_mode_args=()
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ inputs.run_mode }}" == "first_activation_validation_only" ]]; then
-            [[ "${base_ref}" == "${{ inputs.integration_base }}" && "${head_ref}" == "${{ inputs.expected_head }}" ]] || {
-              echo "first-activation scope assertions differ from the selected Task overlay" >&2
-              exit 1
-            }
-            scope_base_oid="${base_ref}"
-            authority_dir="${RUNNER_TEMP}/first-activation-base-authority"
-            mkdir -p "${authority_dir}/pm"
-            git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
-            git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
-            git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
-            git show "${base_ref}:scripts/viewer-dependency-preflight.sh" >"${authority_dir}/viewer-dependency-preflight.sh"
-            git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
-            planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py" --config "${authority_dir}/ci-required-scope.v2.json")
-            run_mode_args=(--run-mode full_escalation)
-            task_uid="${{ inputs.task_uid }}"
-            impact_args=(--impact-projection "${authority_dir}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
-          else
-            scope_base_oid="$(git merge-base --all "${base_ref}" "${head_ref}")"
-          fi
+          scope_base_oid="$(git merge-base --all "${base_ref}" "${head_ref}")"
           if [[ ! "${scope_base_oid}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
             echo 'required scope requires one unique merge base' >&2
             exit 1
@@ -461,29 +318,24 @@ jobs:
             git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
             if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
-              task_uid='${{ steps.impact.outputs.task_uid }}'
-              [[ "${task_uid}" =~ ^task_[0-9a-f]{32}$ ]] || {
-                echo 'Project-resolved Task UID is unavailable' >&2
-                exit 1
-              }
+              task_uid="$(python3 - <<'PY'
+          import os,re
+          matches=re.findall(r'^Task: (task_[0-9a-f]{32})$',os.environ.get('PR_BODY',''),re.M)
+          if len(matches)!=1: raise SystemExit('pull request requires exactly one canonical Task UID')
+          print(matches[0])
+          PY
+              )"
               impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
             fi
           elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
-            if [[ "${{ inputs.run_mode }}" == "first_activation_validation_only" ]]; then
-              [[ "${scope_base_oid}" == "${base_ref}" ]] || {
-                echo "first-activation planner must use the asserted integration base" >&2
-                exit 1
-              }
-            else
-              planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
-              task_uid="${{ inputs.task_uid }}"
-              run_mode_args=(--run-mode "${{ inputs.run_mode }}")
-              impact_args=(
-                --impact-projection "${RUNNER_TEMP}/impact-projection.json"
-                --task-uid "${{ inputs.task_uid }}"
-                --scope-base-oid "${scope_base_oid}"
-              )
-            fi
+            planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+            task_uid="${{ inputs.task_uid }}"
+            run_mode_args=(--run-mode "${{ inputs.run_mode }}")
+            impact_args=(
+              --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+              --task-uid "${{ inputs.task_uid }}"
+              --scope-base-oid "${scope_base_oid}"
+            )
           fi
           "${planner[@]}" \
             --event-name "${GITHUB_EVENT_NAME}" \
@@ -523,19 +375,10 @@ jobs:
       - name: Report planned scope
         env:
           SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
-          EXPECTED_FIRST_ACTIVATION_PROJECTION_DIGEST: ${{ steps.first-activation-provenance.outputs.projection_digest }}
-          FIRST_ACTIVATION_MODE: ${{ inputs.run_mode }}
         run: |
           python3 -I - <<'PY'
           import json, os, pathlib
           source = json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
-          if os.environ.get("FIRST_ACTIVATION_MODE") == "first_activation_validation_only":
-              expected=os.environ.get("EXPECTED_FIRST_ACTIVATION_PROJECTION_DIGEST","")
-              if (not expected.startswith("sha256:") or source.get("impact_projection_status")!="verified"
-                  or source.get("impact_projection_digest")!=expected or source.get("scope")!="full"
-                  or source.get("run_operational_contracts")!="true"
-                  or source.get("run_packaging_contracts")!="true"):
-                  raise SystemExit("first-activation planner did not preserve the exact verified full projection")
           fields = (
               "execution_contract", "scope", "selected_capabilities", "reason_summary", "changed_path_count",
               "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests", "run_oasis7_node_tests",
@@ -547,7 +390,6 @@ jobs:
               "run_site_contract_tests", "run_codex_agent_config_validation", "run_compile_metrics_contract_tests",
               "run_required_gate_baseline", "needs_node", "needs_python", "needs_markdown", "needs_system_deps",
               "needs_trunk", "needs_wasm_target", "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
-              "impact_projection_status", "impact_projection_digest",
           )
           for field in fields:
               print(f"{field}={source.get(field, '')}")
@@ -924,18 +766,44 @@ jobs:
           OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
-          OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID: ${{ github.event_name == 'pull_request' && steps.scope.outputs.task_uid || inputs.task_uid }}
-          OASIS7_FIRST_ACTIVATION_PROJECTION_DIGEST: ${{ steps.scope.outputs.impact_projection_digest }}
+          OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
+          candidate_checker="${GITHUB_WORKSPACE}/scripts/pm/check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
           trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"
           trusted_profile_driver="${trusted_profile_authority}/cargo_package_profile_driver.py"
           if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
-            chmod +x "${trusted_checker}"
-            export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
-            export OASIS7_CARGO_SCOPE_TRUSTED_CHECKER="${trusted_checker}"
+            use_candidate_checker=false
+            if [[ "${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}" == "true" ]] && \
+               ! git diff --quiet --no-renames "${OASIS7_CARGO_SCOPE_BASE}" "${OASIS7_CARGO_SCOPE_HEAD}" -- .pm/cargo-package-auxiliary-files.json; then
+              mapfile -t scope_changed_paths < <(git diff --no-renames --name-only "${OASIS7_CARGO_SCOPE_BASE}" "${OASIS7_CARGO_SCOPE_HEAD}")
+              if ((${#scope_changed_paths[@]} > 0)); then
+                use_candidate_checker=true
+                for scope_path in "${scope_changed_paths[@]}"; do
+                  case "${scope_path}" in
+                    doc/engineering/workflow/source-of-truth.md|\
+                    doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json|\
+                    scripts/pm/check-cargo-package-scope|\
+                    scripts/pm/check-cargo-package-scope.test.py|\
+                    .pm/cargo-package-auxiliary-files.json|\
+                    scripts/ci-tests.sh|\
+                    scripts/ci-required-scope.v2.json|\
+                    scripts/ci-required-scope-audit-contract.test.sh|\
+                    .github/workflows/rust.yml)
+                      ;;
+                    *) use_candidate_checker=false; break ;;
+                  esac
+                done
+              fi
+            fi
+            if [[ "${use_candidate_checker}" == "true" ]]; then
+              export OASIS7_CARGO_SCOPE_CHECKER="${candidate_checker}"
+            else
+              git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
+              chmod +x "${trusted_checker}"
+              export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
+            fi
             mkdir -p "${trusted_profile_authority}/pm"
             if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/workflow-impact-projection.py" >"${trusted_profile_authority}/pm/workflow-impact-projection.py" 2>/dev/null &&
                git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
@@ -946,16 +814,7 @@ jobs:
               export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${OASIS7_CARGO_SCOPE_HEAD}"
             fi
           fi
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "first_activation_validation_only" ]]; then
-            [[ "${OASIS7_FIRST_ACTIVATION_PROJECTION_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
-              echo "first-activation verified projection digest is unavailable" >&2
-              exit 1
-            }
-            echo "first-activation impact projection digest: ${OASIS7_FIRST_ACTIVATION_PROJECTION_DIGEST}"
-            CI_VERBOSE=1 bash "${RUNNER_TEMP}/first-activation-base-authority/ci-tests.sh" required \
-              --repo-root "${GITHUB_WORKSPACE}" \
-              --impact-projection "${RUNNER_TEMP}/first-activation-base-authority/impact-projection.json"
-          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
             [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" && -n "${OASIS7_CARGO_PROFILE_PLANNER:-}" && -n "${OASIS7_CARGO_PROFILE_DRIVER:-}" ]] || {
               echo "trusted Cargo package profile authority is unavailable" >&2
               exit 1
@@ -1049,15 +908,6 @@ jobs:
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
-      - name: Upload first-activation validation evidence
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_mode == 'first_activation_validation_only' && steps.first-activation-provenance.outcome == 'success' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: oasis7-first-activation-validation-${{ github.run_id }}-${{ github.run_attempt }}
-          path: output/first-activation-validation/
-          if-no-files-found: error
-          retention-days: 7
-          overwrite: false
       - name: Upload Cargo package profile plan
         if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
         uses: actions/upload-artifact@v7
@@ -1188,7 +1038,7 @@ jobs:
       issues: read
       pull-requests: read
     needs: required-gate
-    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.run_mode == 'integration_revalidation' || inputs.run_mode == 'first_activation_validation_only'))) && needs.required-gate.outputs.run_operational_contracts == 'true'
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v6
@@ -1253,7 +1103,7 @@ jobs:
       pull-requests: read
     needs: required-gate
     if: >-
-      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.run_mode == 'integration_revalidation' || inputs.run_mode == 'first_activation_validation_only'))) &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) &&
       ((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' && needs.required-gate.outputs.run_packaging_contracts == 'true') ||
        (needs.required-gate.outputs.execution_contract != 'required-domain-split/v1' && needs.required-gate.outputs.run_operational_contracts == 'true'))
     runs-on: ubuntu-24.04
@@ -1318,7 +1168,7 @@ jobs:
       issues: read
       pull-requests: read
     needs: required-gate
-    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && (inputs.run_mode == 'integration_revalidation' || inputs.run_mode == 'first_activation_validation_only'))) && needs.required-gate.outputs.run_operational_contracts == 'true'
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
     strategy:
       fail-fast: false
       matrix:

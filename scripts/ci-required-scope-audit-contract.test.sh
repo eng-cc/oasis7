@@ -4,7 +4,6 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
-capability_inventory="$repo_root/scripts/ci-required-capability-test-inventory.tsv"
 versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
 legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
 active_config="$repo_root/scripts/ci-required-scope.v2.json"
@@ -93,95 +92,6 @@ require_key "$minimal_plan" run_required_gate_baseline true
 require_key "$minimal_plan" run_operational_contracts false
 require_key "$minimal_plan" selected_capabilities required_gate_baseline
 require_reason_contains "$minimal_plan" required_gate_baseline:always_on
-full_validation_plan="$("$planner" --event-name workflow_dispatch --run-mode full_escalation)"
-require_key "$full_validation_plan" scope full
-require_key "$full_validation_plan" run_required_gate_baseline true
-require_key "$full_validation_plan" run_oasis7_required_tests true
-require_key "$full_validation_plan" run_rust_baseline true
-
-# The validation-only workflow stages the trusted BASE planner outside the
-# checkout. Exercise its complete file dependency set and full-tier output.
-trusted_base_ref=""
-trusted_head_ref=""
-if [[ -n "${GITHUB_EVENT_PATH:-}" ]]; then
-  [[ -f "$GITHUB_EVENT_PATH" ]] || {
-    echo "trusted-base planner fixture requires a readable CI event" >&2
-    exit 1
-  }
-  python3 - "$GITHUB_EVENT_PATH" "${GITHUB_EVENT_NAME:-}" >"$fixture_dir/trusted-range" <<'PY'
-import json
-import re
-import sys
-
-event_path, event_name = sys.argv[1:]
-with open(event_path, encoding="utf-8") as handle:
-    event = json.load(handle)
-if event_name == "pull_request":
-    base = ((event.get("pull_request") or {}).get("base") or {}).get("sha")
-    head = ((event.get("pull_request") or {}).get("head") or {}).get("sha")
-elif event_name == "workflow_dispatch":
-    inputs = event.get("inputs") or {}
-    base, head = inputs.get("integration_base"), inputs.get("expected_head")
-elif event_name == "push":
-    base, head = event.get("before"), event.get("after")
-else:
-    raise SystemExit(f"unsupported CI event for trusted-base planner fixture: {event_name}")
-if not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40,64}", value)
-           for value in (base, head)):
-    raise SystemExit("CI event lacks full trusted base/head OIDs")
-print(base, head)
-PY
-  read -r trusted_base_ref trusted_head_ref <"$fixture_dir/trusted-range"
-elif [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
-  echo "trusted-base planner fixture cannot infer its CI event range" >&2
-  exit 1
-else
-  trusted_base_ref="$(git -C "$repo_root" rev-parse HEAD)"
-  trusted_head_ref="$trusted_base_ref"
-fi
-
-trusted_authority="$fixture_dir/trusted-base-authority"
-mkdir -p "$trusted_authority"
-git -C "$repo_root" show "${trusted_base_ref}:scripts/plan-rust-required-scope.py" >"$trusted_authority/plan-rust-required-scope.py"
-git -C "$repo_root" show "${trusted_base_ref}:scripts/ci-required-scope.v2.json" >"$trusted_authority/ci-required-scope.v2.json"
-git -C "$repo_root" show "${trusted_base_ref}:scripts/ci-tests.sh" >"$trusted_authority/ci-tests.sh"
-trusted_planner=(python3 -I "$trusted_authority/plan-rust-required-scope.py"
-  --config "$trusted_authority/ci-required-scope.v2.json")
-trusted_full_plan="$("${trusted_planner[@]}" --event-name workflow_dispatch --run-mode full_escalation \
-  --base-ref "$trusted_base_ref" --head-ref "$trusted_head_ref")"
-require_key "$trusted_full_plan" scope full
-require_key "$trusted_full_plan" run_required_gate_baseline true
-require_key "$trusted_full_plan" run_oasis7_required_tests true
-require_key "$trusted_full_plan" run_rust_baseline true
-trusted_config_sha="sha256:$(sha256sum "$trusted_authority/ci-required-scope.v2.json" | awk '{print $1}')"
-require_key "$trusted_full_plan" planner_config_sha256 "$trusted_config_sha"
-python3 - "$trusted_authority/ci-required-scope.v2.json" >"$fixture_dir/trusted-inventory" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as handle:
-    config = json.load(handle)
-capabilities = sorted(config["capabilities"])
-units = sorted({"required_gate_baseline", *capabilities})
-print(";".join(capabilities), ";".join(units))
-PY
-read -r trusted_capabilities trusted_units <"$fixture_dir/trusted-inventory"
-require_key "$trusted_full_plan" selected_capabilities "$trusted_capabilities"
-require_key "$trusted_full_plan" required_test_units "$trusted_units"
-if ! cmp -s "$trusted_authority/ci-tests.sh" <(git -C "$repo_root" show "${trusted_base_ref}:scripts/ci-tests.sh"); then
-  echo "staged selector inventory is not the exact trusted BASE ci-tests.sh" >&2
-  exit 1
-fi
-mv "$trusted_authority/ci-tests.sh" "$trusted_authority/ci-tests.hidden"
-if missing_selector_output="$("${trusted_planner[@]}" --event-name workflow_dispatch --run-mode full_escalation \
-    --base-ref "$trusted_base_ref" --head-ref "$trusted_head_ref" 2>&1)"; then
-  echo "trusted BASE planner succeeded without its ci-tests.sh selector source" >&2
-  exit 1
-fi
-if [[ "$missing_selector_output" != *"selector source is missing:"* ]]; then
-  echo "trusted BASE planner failed for an unexpected missing-selector reason: $missing_selector_output" >&2
-  exit 1
-fi
 effective_execution_contract="$(value_for_key "$minimal_plan" execution_contract)"
 effective_config_sha256="$(value_for_key "$minimal_plan" planner_config_sha256)"
 if [[ -z "$effective_execution_contract" && "$effective_config_sha256" == "$legacy_config_sha256" ]]; then
@@ -308,20 +218,6 @@ if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$workfl
 fi
 if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$workflow_governance_operational_source"; then
   echo "required scope audit contract is not wired into run_workflow_governance_operational_contract_tests" >&2
-  exit 1
-fi
-if ! grep -Fqx '  run python3 ./scripts/pm/first_activation.test.py' <<<"$workflow_governance_operational_source"; then
-  echo "first-activation overlay and provenance contracts are not wired into workflow-governance operational tests" >&2
-  exit 1
-fi
-if ! awk -F '\t' '
-  $1 == "run_workflow_governance_operational_contract_tests" &&
-  $2 == "scripts/pm/first_activation.test.py" &&
-  $3 == "workflow_governance" &&
-  $5 == "all five groups run" { found=1 }
-  END { exit(found ? 0 : 1) }
-' "$capability_inventory"; then
-  echo "first-activation test obligation is absent from the additive workflow-governance capability inventory" >&2
   exit 1
 fi
 
@@ -585,6 +481,16 @@ if not required_gate_match:
 required_gate_body = required_gate_match.group("body")
 if '--github-output "${GITHUB_OUTPUT}"' not in required_gate_body:
     raise SystemExit("required-gate planner output is not written to GITHUB_OUTPUT")
+for trusted_planner_fragment in (
+    'git show "${base_ref}:scripts/plan-rust-required-scope.py"',
+    'git show "${base_ref}:scripts/ci-required-scope.v2.json"',
+    'planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")',
+):
+    if trusted_planner_fragment not in required_gate_body:
+        raise SystemExit(
+            "required-gate scope must come from trusted base planner/config: "
+            f"{trusted_planner_fragment}"
+        )
 run_tier_match = re.search(
     r"(?ms)^      - name: Run required test tier\n(?P<body>.*?)(?=^      - |\Z)",
     required_gate_body,
@@ -592,6 +498,107 @@ run_tier_match = re.search(
 if not run_tier_match:
     raise SystemExit("required-gate test-tier env path is missing")
 run_tier_body = run_tier_match.group("body")
+
+policy_maintenance_paths = (
+    "doc/engineering/workflow/source-of-truth.md",
+    "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+    "scripts/pm/check-cargo-package-scope",
+    "scripts/pm/check-cargo-package-scope.test.py",
+    ".pm/cargo-package-auxiliary-files.json",
+    "scripts/ci-tests.sh",
+    "scripts/ci-required-scope.v2.json",
+    "scripts/ci-required-scope-audit-contract.test.sh",
+    ".github/workflows/rust.yml",
+)
+
+def planner_output(path):
+    command = [
+        str(planner_path),
+        "--event-name",
+        "pull_request",
+        "--config",
+        str(config_path),
+        "--changed-path",
+        path,
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"trusted required-scope planner failed for {path}: {result.stderr.strip()}"
+        )
+    return {
+        key: value
+        for line in result.stdout.splitlines()
+        if "=" in line
+        for key, value in [line.split("=", 1)]
+    }
+
+full_reference_plan = planner_output("scripts/ci-tests.sh")
+if full_reference_plan.get("scope") != "full":
+    raise SystemExit("ci-tests baseline no longer selects the full required plan")
+full_selector_fields = sorted(
+    {
+        item["planner_field"]
+        for item in ownership
+        if item.get("mode") == "planner-owned"
+    }
+)
+full_contract_fields = [
+    "scope",
+    "execution_contract",
+    "planner_config_sha256",
+    "selected_capabilities",
+    "required_test_units",
+    "run_rust_baseline",
+    "needs_python",
+    "needs_markdown",
+    "needs_rust_toolchain",
+    "needs_node",
+    "needs_system_deps",
+    "needs_trunk",
+    "needs_wasm_target",
+    *full_selector_fields,
+]
+for path in policy_maintenance_paths:
+    plan = planner_output(path)
+    if plan.get("scope") != "full":
+        raise SystemExit(f"policy-maintenance path is not full-gated: {path}: {plan}")
+    for field in full_contract_fields:
+        if plan.get(field) != full_reference_plan.get(field):
+            raise SystemExit(
+                f"policy-maintenance plan is not the complete full route for {path}: "
+                f"{field}={plan.get(field)!r}, expected {full_reference_plan.get(field)!r}"
+            )
+    if f"cargo_scope_policy_maintenance:{path}" not in plan.get("reason_summary", ""):
+        raise SystemExit(f"policy-maintenance path lacks its explicit full rule: {path}")
+
+trusted_full_marker = "OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}"
+if trusted_full_marker not in run_tier_body:
+    raise SystemExit("Cargo scope maintenance marker is not bound to the planned workflow scope")
+selection_start = run_tier_body.find('trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"')
+selection_end = run_tier_body.find('mkdir -p "${trusted_profile_authority}/pm"', selection_start)
+if selection_start < 0 or selection_end < 0:
+    raise SystemExit("Cargo scope checker selection block is missing or unbounded")
+checker_selection = run_tier_body[selection_start:selection_end]
+for fragment in (
+    '[[ "${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}" == "true" ]]',
+    "git diff --quiet --no-renames",
+    "git diff --no-renames --name-only",
+    ".pm/cargo-package-auxiliary-files.json",
+    'export OASIS7_CARGO_SCOPE_CHECKER="${candidate_checker}"',
+    'git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope"',
+    'export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"',
+    "*) use_candidate_checker=false; break ;;",
+):
+    if fragment not in checker_selection:
+        raise SystemExit(f"candidate checker selection omits trusted full-plan guard: {fragment}")
+for path in policy_maintenance_paths:
+    if path not in checker_selection:
+        raise SystemExit(f"candidate checker selection omits policy-maintenance path: {path}")
+ci_tests_source = ci_tests_path.read_text(encoding="utf-8")
+if 'local trusted_full_plan="${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}"' not in ci_tests_source or \
+   'run env OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN="$trusted_full_plan" python3 "$checker"' not in ci_tests_source:
+    raise SystemExit("ci-tests does not pass the workflow's trusted full-plan marker to the scope checker")
 
 canonical_workflow_text = (
     repo_root / "doc/engineering/workflow/source-of-truth.md"
@@ -825,97 +832,5 @@ for step in \
     exit 1
   fi
 done
-
-if ! grep -Fqx '          - first_activation_validation_only' "$workflow"; then
-  echo "Rust workflow lacks the bounded first-activation validation-only dispatch mode" >&2
-  exit 1
-fi
-first_activation_dispatcher="$(sed -n '/^run_cargo_package_scope_check() {/,/^}/p' "$ci_tests")"
-first_activation_evidence_helper="$(sed -n '/^run_first_activation_cargo_package_scope_check() {/,/^}/p' "$ci_tests")"
-if ! grep -Fq 'run_first_activation_cargo_package_scope_check' <<<"$first_activation_dispatcher"; then
-  echo "first-activation dispatcher does not route through its evidence helper" >&2
-  exit 1
-fi
-for required in \
-  'if [[ "${INTEGRATION_MODE:-}" == "first_activation_validation_only" ]]; then' \
-  'run_first_activation_cargo_package_scope_check'; do
-  if ! grep -Fq -- "$required" <<<"$first_activation_dispatcher"; then
-    echo "first-activation CI dispatcher is missing its validation-only boundary: $required" >&2
-    exit 1
-  fi
-done
-for required in \
-  '  local trusted_checker="${OASIS7_CARGO_SCOPE_TRUSTED_CHECKER:-$checker}"' \
-  '    --first-activation-task-uid "$task_uid" --policy "$repo_root/$policy" --json' \
-  '[[ "$trusted_reason" != "policy_self_modification" && "$trusted_reason" != "ambiguous_package_attribution" ]]' \
-  '--base "$base_oid" --head "$head_oid"' \
-  '"trusted_checker":{"status":"failed" if int(trusted_code) else "passed"' \
-  '"candidate_checker":{"status":candidate_status'; do
-  if ! grep -Fq -- "$required" <<<"$first_activation_evidence_helper"; then
-    echo "first-activation evidence helper is missing an exact trust/candidate boundary: $required" >&2
-    exit 1
-  fi
-done
-ordinary_pr_hook="$(sed -n '/^run_activated_pull_request_scope_check() {/,/^}/p' "$ci_tests")"
-for required in \
-  'module.has_issue_overlay(root,"eng-cc/oasis7",sys.argv[2])' \
-  'module.read_issue_activation(root,"eng-cc/oasis7",sys.argv[2],sys.argv[3],sys.argv[4])' \
-  'proof.get("project_membership_verified") is not False' \
-  'echo "ordinary pull-request trusted checker observation:' \
-  'echo "ordinary pull-request candidate checker observation:' \
-  '"trusted_checker":{"status":"failed","exit_code":int(trusted_code)' \
-  '"candidate_checker":{"status":candidate_status'; do
-  if ! grep -Fq -- "$required" <<<"$ordinary_pr_hook"; then
-    echo "ordinary PR activation route is missing its exact proof or separate checker evidence: $required" >&2
-    exit 1
-  fi
-done
-if ! grep -Fq 'steps.scope.outputs.task_uid || inputs.task_uid' "$workflow"; then
-  echo "first-activation selector is not bound to the trusted PR task lookup output" >&2
-  exit 1
-fi
-eval "$first_activation_evidence_helper"
-eval "$first_activation_dispatcher"
-INTEGRATION_MODE=first_activation_validation_only
-OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID=malformed
-if run_cargo_package_scope_check 2>/dev/null; then
-  echo "first-activation scope hook accepted a malformed Task UID" >&2
-  exit 1
-fi
-unset INTEGRATION_MODE OASIS7_CARGO_FIRST_ACTIVATION_TASK_UID
-if ! grep -Fq 'module.read_issue_overlay(root,repository,uid,base,head,client=client)' "$workflow" || \
-   ! grep -Fq 'module.validate_workflow_run_provenance(run' "$workflow" || \
-   ! grep -Fq 'first-activation dispatch does not accept' "$workflow" || \
-   ! grep -Fq 'workflow_file_sha256' "$workflow" || \
-   ! grep -Fq 'git show "${base_ref}:scripts/plan-rust-required-scope.py"' "$workflow" || \
-   ! grep -Fq 'git show "${base_ref}:scripts/ci-tests.sh"' "$workflow" || \
-   ! grep -Fq 'run_mode_args=(--run-mode full_escalation)' "$workflow"; then
-  echo "first-activation lane is missing live overlay/run provenance or a complete frozen-base planner staging set" >&2
-  exit 1
-fi
-for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contract public-testnet-fleet-health-contract; do
-  if ! awk -v job="$job" '
-    $0 ~ "^  " job ":" { active=1 }
-    active && !($0 ~ "^  " job ":") && /^  [A-Za-z0-9_-]+:/ { active=0 }
-    active { body=body $0 "\n" }
-    END { exit(body ~ /first_activation_validation_only/ ? 0 : 1) }
-  ' "$workflow"; then
-    echo "first-activation full-tier inventory omits required job: $job" >&2
-    exit 1
-  fi
-done
-if awk '
-  $0 == "  required-gate:" { in_job=1; next }
-  in_job && /^  [A-Za-z0-9_-]+:/ { exit }
-  in_job && /^    permissions:/ { in_permissions=1; next }
-  in_permissions && /^    [A-Za-z0-9_-]+:/ { in_permissions=0 }
-  in_permissions { if ($0 ~ /write|secrets/) bad=1 }
-  END { exit(bad ? 1 : 0) }
-' "$workflow"; then
-  :
-else
-  echo "first-activation required-gate job has write-capable permissions" >&2
-  exit 1
-fi
 
 echo "ci required scope audit contract: passed"

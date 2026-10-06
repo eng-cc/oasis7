@@ -482,16 +482,18 @@ def _resolve_projection_digest(
     head_oid: str, source_scope_oid: str,
     issue_comments: tuple[Mapping[str, Any], ...],
 ) -> str:
-    publication_module = _load_w_module(root, "pr_projection_publication")
+    publication_marker = "<!-- oasis7-ci-publication/v1 -->"
+    binding_marker = "<!-- oasis7-ci-publication-binding/v1 -->"
     publications = [item["body"] for item in issue_comments
-                    if publication_module.has_task_publication_marker(item.get("body"), version=2)]
+                    if type(item.get("body")) is str and publication_marker in item["body"]]
     bindings = [item["body"] for item in issue_comments
-                if publication_module.has_publication_binding_marker(item.get("body"))]
+                if type(item.get("body")) is str and binding_marker in item["body"]]
     if len(publications) != 1 or len(bindings) != 1:
-        raise ProducerError("Task Issue must have one exact full-leaf Task publication v2 and reciprocal PR binding")
+        raise ProducerError("Task Issue must have one exact CI publication and reciprocal PR binding")
     try:
         projection_contract = _load_w_module(root, "projection_publication_contract")
         _load_w_module(root, "pr_projection_journal")
+        publication_module = _load_w_module(root, "pr_projection_publication")
         resolver = _load_w_module(root, "pr_projection_resolver")
         publication = publication_module.parse_publication_comment(publications[0])
         binding = publication_module.parse_publication_binding_comment(bindings[0])
@@ -506,8 +508,6 @@ def _resolve_projection_digest(
                 "pr_number": pr_number,
                 "repository_id": pr.get("base", {}).get("repo", {}).get("id"),
                 "source_repository_id": pr.get("head", {}).get("repo", {}).get("id"),
-                "source_ref": pr.get("head", {}).get("ref"),
-                "target_ref": pr.get("base", {}).get("ref"),
                 "head_oid": pr.get("head", {}).get("sha"),
                 "state": pr.get("state"),
                 "merged": pr.get("merged"),

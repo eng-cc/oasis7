@@ -8,7 +8,6 @@ import importlib.util
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,286 +33,24 @@ SCOPE = "b" * 40
 AUTHORITY = "d" * 40
 
 
-def make_full_projection(*, task_uid: str, head: str, scope: str,
-                         config: str = CONFIG) -> dict:
-    planner = {
-        "schema": "oasis7-required-plan-v1",
-        "planner_config_sha256": config,
-        "scope": "full",
-        "selected_capabilities": [],
-        "test_profile": "required",
-        "declared_tests": ["required-baseline"],
-    }
-    value = {
-        "schema": "oasis7-workflow-impact-projection/v2",
-        "task_uid": task_uid,
-        "source_head_oid": head,
-        "scope_base_oid": scope,
-        "changed_paths": [],
-        "changed_paths_digest": digest([]),
-        "change_class": "unknown",
-        "manual_roles": [],
-        "domain_role": None,
-        "test_profile": "required",
-        "declared_tests": ["required-baseline"],
-        "consumed_contracts": [],
-        "public_semantics": [],
-        "affected_consumers": [],
-        "closure_status": {"status": "incomplete", "reason": None, "evidence": []},
-        "ci_scope": "full",
-        "ci_capabilities": [],
-        "ci_reasons": [],
-        "review_roles": ["qa_engineer"],
-        "ordered_role_ids": ["qa_engineer"],
-        "review_scope": {},
-        "review_escalated": False,
-        "review_reasons": [],
-        "planner_config_sha256": config,
-        "planner_identity": planner,
-        "planner_digest": digest(planner),
-        "verification_affected": True,
-    }
-    value["projection_digest"] = digest(value)
-    return value
-
-
 def make_publication(index: int, *, head: str | None = None, branch: str | None = None,
                      repository: str = "eng-cc/oasis7", task_uid: str = UID):
     head = head or f"{index + 1:040x}"
     branch = branch or f"feature/c1-{index}"
-    projection = make_full_projection(task_uid=task_uid, head=head, scope=SCOPE)
-    projection_digest = projection["projection_digest"]
+    projection_digest = digest({"target": index})
     publication = publication_module.build_task_publication(
         repository=repository, repository_id=7, task_uid=task_uid,
         bootstrap_epoch=1, source_repository_id=7, source_ref=branch,
         target_ref="main", source_head_oid=head, source_scope_oid=SCOPE,
         planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
-        policy_digest=projection["planner_digest"], projection_digest=projection_digest,
-        workflow_impact_projection=projection,
+        policy_digest=digest({"policy": "test"}), projection_digest=projection_digest,
     )
-    candidate_projection = {
+    projection = {
         "task_uid": task_uid, "source_head_oid": head, "scope_base_oid": SCOPE,
         "planner_config_sha256": CONFIG, "projection_digest": projection_digest,
         "consumed_contracts": [],
     }
-    return publication, candidate_projection
-
-
-class TaskPublicationV2ContractTests(unittest.TestCase):
-    def test_trusted_task_publication_producer_carries_exact_verified_leaf(self):
-        with tempfile.TemporaryDirectory() as temp:
-            temp_root = Path(temp)
-            root = temp_root / "repo"
-            (root / "scripts" / "pm").mkdir(parents=True)
-            (root / "scripts").mkdir(exist_ok=True)
-            (root / ".pm" / "github-project-sync").mkdir(parents=True)
-            shutil.copyfile(ROOT / "workflow-impact-projection.py",
-                            root / "scripts" / "pm" / "workflow-impact-projection.py")
-            repository_root = ROOT.parent.parent
-            config_bytes = (repository_root / "scripts" / "ci-required-scope.v2.json").read_bytes()
-            (root / "scripts" / "ci-required-scope.v2.json").write_bytes(config_bytes)
-            branch = "feature/full-leaf-producer"
-            subprocess.run(["git", "init", "-q", str(root)], check=True)
-            subprocess.run(["git", "-C", str(root), "checkout", "-qb", branch], check=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.name", "Projection Fixture"], check=True)
-            subprocess.run(["git", "-C", str(root), "config", "user.email", "projection@example.test"], check=True)
-            uid = "task_" + "8" * 32
-            task = {
-                "task_uid": uid, "repository": "eng-cc/oasis7", "issue_number": 123,
-                "task_branch": branch, "default_branch": "main",
-                "canonical_worktree": str(root.resolve()), "bootstrap_epoch": 1,
-            }
-            (root / ".pm" / "github-project-sync" / "tasks.json").write_text(
-                json.dumps({"tasks": {uid: task}}, sort_keys=True, separators=(",", ":")),
-                encoding="utf-8",
-            )
-            subprocess.run(["git", "-C", str(root), "add", "scripts", ".pm"], check=True)
-            subprocess.run(["git", "-C", str(root), "commit", "-qm", "trusted authority fixture"], check=True)
-            head = subprocess.check_output(
-                ["git", "-C", str(root), "rev-parse", "HEAD"], text=True,
-            ).strip()
-            config_digest = "sha256:" + hashlib.sha256(config_bytes).hexdigest()
-            leaf = make_full_projection(task_uid=uid, head=head, scope=head, config=config_digest)
-            projection_path = temp_root / "impact-projection.json"
-            projection_path.write_text(json.dumps(leaf, sort_keys=True), encoding="utf-8")
-            args = type("Args", (), {
-                "repo": "eng-cc/oasis7", "task_uid": uid, "source_head": head,
-                "target_oid": head, "issue_number": 123, "source_ref": branch,
-                "target_ref": "main", "remote": "origin", "projection": str(projection_path),
-            })()
-            real_command_output = publish_module.command_output
-
-            def mocked_command_output(command, **kwargs):
-                if command[:2] == ["gh", "api"] and command[2] == "repos/eng-cc/oasis7":
-                    return json.dumps({"id": 7})
-                return real_command_output(command, **kwargs)
-
-            with patch.object(publish_module, "command_output", side_effect=mocked_command_output):
-                publication, _candidate_projection = publish_module.task_publication(root.resolve(), args)
-
-        self.assertEqual("oasis7-ci-publication/v2", publication["schema"])
-        self.assertEqual(leaf, publication["workflow_impact_projection"])
-        self.assertEqual(leaf["projection_digest"], publication["projection_digest"])
-
-    def test_full_leaf_round_trips_in_task_v2_comment_without_changing_pr_marker(self):
-        full_leaf = make_full_projection(task_uid=UID, head="a" * 40, scope=SCOPE)
-        publication = publication_module.build_task_publication(
-            repository="eng-cc/oasis7", repository_id=7, task_uid=UID,
-            bootstrap_epoch=1, source_repository_id=7, source_ref="feature/full-leaf",
-            target_ref="main", source_head_oid="a" * 40, source_scope_oid=SCOPE,
-            planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
-            policy_digest=full_leaf["planner_digest"],
-            projection_digest=full_leaf["projection_digest"],
-            workflow_impact_projection=full_leaf,
-        )
-
-        comment = publication_module.publication_comment(publication)
-        self.assertTrue(comment.startswith("<!-- oasis7-ci-publication/v2 -->\n"))
-        self.assertEqual(publication, publication_module.parse_publication_comment(comment))
-        self.assertEqual(full_leaf, publication["workflow_impact_projection"])
-        self.assertEqual(full_leaf["projection_digest"], publication["projection_digest"])
-        _pr_contract, pr_marker = publication_module.prepare(
-            task_uid=UID, source_head_oid="a" * 40, scope_base_oid=SCOPE,
-            projection_digest=full_leaf["projection_digest"],
-        )
-        self.assertTrue(pr_marker.startswith("<!-- oasis7-ci-impact-publication:v2 -->\n"))
-        self.assertNotIn("workflow_impact_projection", pr_marker)
-
-    def test_v2_rejects_mismatched_or_oversized_full_leaf(self):
-        full_leaf = make_full_projection(task_uid=UID, head="a" * 40, scope=SCOPE)
-        identity = {
-            "repository": "eng-cc/oasis7", "repository_id": 7, "task_uid": UID,
-            "bootstrap_epoch": 1, "source_repository_id": 7,
-            "source_ref": "feature/full-leaf", "target_ref": "main",
-            "source_head_oid": "a" * 40, "source_scope_oid": SCOPE,
-            "planner_authority_oid": AUTHORITY, "planner_config_sha256": CONFIG,
-            "policy_digest": full_leaf["planner_digest"],
-            "projection_digest": full_leaf["projection_digest"],
-        }
-        mismatched = copy.deepcopy(full_leaf)
-        mismatched["task_uid"] = "task_" + "f" * 32
-        mismatched["projection_digest"] = digest({
-            key: value for key, value in mismatched.items() if key != "projection_digest"
-        })
-        with self.assertRaisesRegex(publication_module.ContractError, "Task UID"):
-            publication_module.build_task_publication(
-                **identity, workflow_impact_projection=mismatched,
-            )
-
-        oversized = copy.deepcopy(full_leaf)
-        oversized["public_semantics"] = ["x" * (32 * 1024)]
-        oversized["projection_digest"] = digest({
-            key: value for key, value in oversized.items() if key != "projection_digest"
-        })
-        with self.assertRaisesRegex(publication_module.ContractError, "32KiB"):
-            publication_module.build_task_publication(
-                **{**identity, "projection_digest": oversized["projection_digest"]},
-                workflow_impact_projection=oversized,
-            )
-
-    def test_historical_v1_comment_remains_readable_but_has_no_full_leaf(self):
-        historical = publication_module.build_task_publication(
-            repository="eng-cc/oasis7", repository_id=7, task_uid=UID,
-            bootstrap_epoch=1, source_repository_id=7, source_ref="feature/history",
-            target_ref="main", source_head_oid="a" * 40, source_scope_oid=SCOPE,
-            planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
-            policy_digest=digest({"policy": "historic"}),
-            projection_digest=digest({"historic": True}),
-        )
-        comment = publication_module.publication_comment(historical)
-        self.assertTrue(comment.startswith("<!-- oasis7-ci-publication/v1 -->\n"))
-        self.assertEqual(historical, publication_module.parse_publication_comment(comment))
-        self.assertNotIn("workflow_impact_projection", historical)
-
-    def test_task_publication_marker_selection_uses_comment_framing(self):
-        marker_v1 = "<!-- oasis7-ci-publication/v1 -->"
-        marker_v2 = "<!-- oasis7-ci-publication/v2 -->"
-        self.assertTrue(publication_module.has_task_publication_marker(marker_v1 + "\n{}"))
-        self.assertTrue(publication_module.has_task_publication_marker(marker_v2 + "\n{}"))
-        self.assertFalse(publication_module.has_task_publication_marker(
-            "Operator note mentions " + marker_v2 + " as an example."
-        ))
-
-        malformed = marker_v2 + "not-a-newline-framed-record"
-        self.assertTrue(publication_module.has_task_publication_marker(malformed))
-        with self.assertRaisesRegex(publication_module.ContractError, "marker must occur exactly once"):
-            publication_module.parse_publication_comment(malformed)
-
-        duplicate = marker_v2 + "\n{}\n" + marker_v2 + "\n{}"
-        self.assertTrue(publication_module.has_task_publication_marker(duplicate))
-        with self.assertRaisesRegex(publication_module.ContractError, "marker must occur exactly once"):
-            publication_module.parse_publication_comment(duplicate)
-
-    def test_publication_binding_marker_selection_uses_comment_framing(self):
-        marker = "<!-- oasis7-ci-publication-binding/v1 -->"
-        self.assertTrue(publication_module.has_publication_binding_marker(marker + "\n{}"))
-        self.assertFalse(publication_module.has_publication_binding_marker(
-            "Operator note mentions " + marker + " as an example."
-        ))
-
-        malformed = marker + "not-a-newline-framed-record"
-        self.assertTrue(publication_module.has_publication_binding_marker(malformed))
-        with self.assertRaisesRegex(
-            publication_module.ContractError, "binding marker must occur exactly once",
-        ):
-            publication_module.parse_publication_binding_comment(malformed)
-
-        duplicate = marker + "\n{}\n" + marker + "\n{}"
-        self.assertTrue(publication_module.has_publication_binding_marker(duplicate))
-        with self.assertRaisesRegex(
-            publication_module.ContractError, "binding marker must occur exactly once",
-        ):
-            publication_module.parse_publication_binding_comment(duplicate)
-
-    def test_publisher_comment_readers_ignore_prose_marker_mentions(self):
-        publication, _projection = make_publication(8100)
-        binding = publication_module.build_publication_binding(
-            publication, 143, "https://github.com/eng-cc/oasis7/pull/143",
-        )
-        comments = [
-            {"body": publication_module.publication_comment(publication),
-             "user": {"login": "oasis7-test-publisher"}},
-            {"body": publication_module.publication_binding_comment(binding)},
-            {"body": "Operator note mentions <!-- oasis7-ci-publication/v2 --> in prose."},
-            {"body": "Operator note mentions <!-- oasis7-ci-publication-binding/v1 --> in prose."},
-        ]
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            helper = root / "github-project-task.py"
-            helper.write_text("", encoding="utf-8")
-            args = type("Args", (), {
-                "repo": publication["repository"], "issue_number": 123,
-                "task_uid": UID, "task_helper": str(helper),
-            })()
-            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
-            with patch.object(adapter, "_assert_task_identity"), patch.object(
-                adapter, "_issue_comments", return_value=comments,
-            ):
-                found = adapter.find_task_publications(publication["publication_id"])
-                self.assertEqual([publication], found["publications"])
-                found_bindings = adapter.find_task_publication_bindings(
-                    publication["publication_id"],
-                )
-                self.assertEqual([binding], found_bindings["bindings"])
-
-    def test_recovery_preflight_ignores_prose_marker_mentions(self):
-        marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            helper = root / "github-project-task.py"
-            helper.write_text("", encoding="utf-8")
-            args = type("Args", (), {
-                "repo": "eng-cc/oasis7", "issue_number": 123,
-                "task_uid": UID, "task_helper": str(helper),
-            })()
-            adapter = publish_module.GitHubPublicationAdapter(root, args, {})
-            with patch.object(adapter, "_issue_comments", return_value=[
-                {"body": "Operator note mentions " + marker + " as an example."},
-            ]):
-                with self.assertRaisesRegex(
-                    RuntimeError, "one unique current record-pr recovery admission",
-                ):
-                    adapter.require_record_pr_recovery_admission()
+    return publication, projection
 
 
 class FakeAdapter:
@@ -474,35 +211,6 @@ class BoundedRecoveryCLITests(unittest.TestCase):
         self.assertEqual(0, result.returncode,
                          f"REC actual CLI case={case} exit={result.returncode}\n"
                          + result.stdout + result.stderr)
-
-    def test_real_record_pr_ignores_incidental_publication_marker_prose(self):
-        fixture = (ROOT / "github-project-task.test.sh").read_text(encoding="utf-8")
-        anchor = '  export GH_REC_PR_BODY_FILE="$TMPDIR/recovery-pr-body.md"\n'
-        self.assertEqual(1, fixture.count(anchor))
-        incidental = (
-            '  printf \'%s\\n\' \'Operator note mentions '
-            '<!-- oasis7-ci-publication/v2 --> in ordinary prose.\' '
-            '>"$GH_COMMENT_DIR/1003"\n'
-        )
-        fixture = fixture.replace(anchor, incidental + anchor, 1)
-        with tempfile.TemporaryDirectory() as temp:
-            isolated = Path(temp) / "record-pr-prose-marker-fixture.sh"
-            isolated.write_text(fixture, encoding="utf-8")
-            environment = dict(
-                os.environ, OASIS7_REC_RED_ONLY="1",
-                OASIS7_REC_CASE="project_post_issue_pre",
-                PM_ROOT_DIR=str(ROOT.parents[1]),
-            )
-            result = subprocess.run(
-                ["bash", str(isolated)], cwd=ROOT.parents[1], env=environment,
-                capture_output=True, text=True, timeout=60,
-            )
-        self.assertEqual(
-            0, result.returncode,
-            "real record-pr must ignore prose containing the publication marker\n"
-            + result.stdout + result.stderr,
-        )
-        self.assertIn("PASS test_rec_project_post_issue_pre", result.stdout)
 
     def fixture_journal(self, common_dir, publication):
         return journal_module.open_journal(

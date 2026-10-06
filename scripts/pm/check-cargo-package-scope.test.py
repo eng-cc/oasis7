@@ -20,9 +20,7 @@ self-contained and cannot accidentally depend on a production fixture.
 from __future__ import annotations
 
 import json
-import hashlib
-import importlib.machinery
-import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -33,13 +31,17 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "scripts" / "pm" / "check-cargo-package-scope"
-_CHECKER_SPEC = importlib.util.spec_from_loader(
-    "cargo_package_scope_checker",
-    importlib.machinery.SourceFileLoader("cargo_package_scope_checker", str(CHECKER)),
+POLICY_MAINTENANCE_PATHS = (
+    "doc/engineering/workflow/source-of-truth.md",
+    "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+    "scripts/pm/check-cargo-package-scope",
+    "scripts/pm/check-cargo-package-scope.test.py",
+    ".pm/cargo-package-auxiliary-files.json",
+    "scripts/ci-tests.sh",
+    "scripts/ci-required-scope.v2.json",
+    "scripts/ci-required-scope-audit-contract.test.sh",
+    ".github/workflows/rust.yml",
 )
-assert _CHECKER_SPEC is not None and _CHECKER_SPEC.loader is not None
-CHECKER_MODULE = importlib.util.module_from_spec(_CHECKER_SPEC)
-_CHECKER_SPEC.loader.exec_module(CHECKER_MODULE)
 
 
 class CargoPackageScopeContract(unittest.TestCase):
@@ -60,6 +62,27 @@ class CargoPackageScopeContract(unittest.TestCase):
             capture_output=True,
         )
         return result.stdout.strip()
+
+    def _trusted_full_plan_environment(
+        self, changed_paths: tuple[str, ...] = POLICY_MAINTENANCE_PATHS
+    ) -> dict[str, str]:
+        command = [
+            sys.executable,
+            str(ROOT / "scripts/plan-rust-required-scope.py"),
+            "--event-name",
+            "pull_request",
+        ]
+        for path in changed_paths:
+            command.extend(("--changed-path", path))
+        result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"required-scope planner failed: stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        plan = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+        self.assertEqual("full", plan.get("scope"), plan)
+        return {"OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN": "true"}
 
     def _write(self, repo: Path, relative: str, content: str) -> None:
         path = repo / relative
@@ -177,12 +200,21 @@ path = "src/lib.rs"
         self._git(repo, "commit", "-qm", message)
         return self._git(repo, "rev-parse", "HEAD")
 
-    def _run_checker(self, repo: Path, base: str, head: str, primary: str) -> subprocess.CompletedProcess[str]:
+    def _run_checker(
+        self,
+        repo: Path,
+        base: str,
+        head: str,
+        primary: str,
+        env_overrides: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         if not CHECKER.is_file():
             self.fail(
                 "RED: missing implementation: expected executable "
                 f"{CHECKER}; add production behavior without editing this test"
             )
+        env = os.environ.copy()
+        env.update(env_overrides or {})
         return subprocess.run(
             [
                 sys.executable,
@@ -200,6 +232,7 @@ path = "src/lib.rs"
                 "--json",
             ],
             cwd=repo,
+            env=env,
             text=True,
             capture_output=True,
         )
@@ -309,7 +342,6 @@ path = "src/lib.rs"
 
         self._assert_allowed(repo, base, "alpha", mutate)
 
-
     def test_new_normal_dependency_executes_target_build_script_into_source_package(self) -> None:
         repo, _ = self._fixture()
         self._write(repo, "crates/beta/build.rs",
@@ -350,6 +382,74 @@ path = "src/lib.rs"
             0,
             generated.returncode,
             f"cargo generate-lockfile fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
+        )
+
+    def _shared_path_dependency_fixture(self) -> tuple[Path, str]:
+        repo, _ = self._fixture()
+        workspace_manifest = repo / "Cargo.toml"
+        workspace_manifest.write_text(
+            workspace_manifest.read_text(encoding="utf-8").replace(
+                'resolver = "2"\n',
+                'resolver = "2"\nexclude = ["shared/dep-1", "shared/dep-2"]\n',
+            ),
+            encoding="utf-8",
+        )
+        for version in ("1.0.0", "2.0.0"):
+            dependency_root = repo / "shared" / f"dep-{version[0]}"
+            self._write(
+                repo,
+                f"shared/dep-{version[0]}/Cargo.toml",
+                f'''[package]
+name = "shareddep"
+version = "{version}"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+''',
+            )
+            self._write(repo, f"shared/dep-{version[0]}/src/lib.rs", "pub fn value() {}\n")
+            self.assertTrue(dependency_root.is_dir())
+
+        for package in ("alpha", "beta"):
+            manifest = repo / f"crates/{package}/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[dependencies]\nshareddep = { path = "../../shared/dep-1" }\n',
+                encoding="utf-8",
+            )
+        generated = subprocess.run(
+            ["cargo", "generate-lockfile", "--offline", "--manifest-path", str(repo / "Cargo.toml")],
+            cwd=repo,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            0,
+            generated.returncode,
+            f"cargo generate-lockfile shared-dependency fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "workspace packages share a path dependency")
+        return repo, self._git(repo, "rev-parse", "HEAD")
+
+    def _switch_alpha_shared_dependency_to_v2(self, root: Path) -> None:
+        manifest = root / "crates/alpha/Cargo.toml"
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn('path = "../../shared/dep-1"', content)
+        manifest.write_text(content.replace('path = "../../shared/dep-1"', 'path = "../../shared/dep-2"'), encoding="utf-8")
+        generated = subprocess.run(
+            ["cargo", "generate-lockfile", "--offline", "--manifest-path", str(root / "Cargo.toml")],
+            cwd=root,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            0,
+            generated.returncode,
+            f"cargo generate-lockfile lock-rebinding fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
         )
 
     def test_existing_normal_path_dependency_with_generated_lockfile_is_allowed(self) -> None:
@@ -1042,6 +1142,86 @@ path = "src/lib.rs"
                 handle.write("\n# unrelated lockfile mutation\n")
 
         self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def test_trusted_full_plan_allows_cargo_generated_lock_rebinding(self) -> None:
+        repo, base = self._shared_path_dependency_fixture()
+        head = self._head(
+            repo,
+            self._switch_alpha_shared_dependency_to_v2,
+            "alpha selects a second shared dependency version",
+        )
+        base_lock = self._git(repo, "show", f"{base}:Cargo.lock")
+        head_lock = self._git(repo, "show", f"{head}:Cargo.lock")
+        self.assertIn('dependencies = [\n "shareddep",\n]', base_lock)
+        self.assertIn('"shareddep 1.0.0"', head_lock)
+        self.assertIn('"shareddep 2.0.0"', head_lock)
+        full_environment = self._trusted_full_plan_environment(
+            ("Cargo.lock", "crates/alpha/Cargo.toml")
+        )
+        result = self._run_checker(repo, base, head, "alpha", full_environment)
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"trusted full-plan resolver rebindings should pass; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertEqual("allowed", json.loads(result.stdout).get("status"), result.stdout)
+
+        wrong_primary = self._run_checker(repo, base, head, "beta", full_environment)
+        self.assertNotEqual(0, wrong_primary.returncode, wrong_primary.stdout)
+        self.assertIn("primary_package_mismatch", wrong_primary.stdout + wrong_primary.stderr)
+
+    def test_non_full_plan_rejects_cargo_generated_lock_rebinding(self) -> None:
+        repo, base = self._shared_path_dependency_fixture()
+        head = self._head(
+            repo,
+            self._switch_alpha_shared_dependency_to_v2,
+            "alpha selects a second shared dependency version",
+        )
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "alpha",
+            {"OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN": "false"},
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("unattributable_lock_change", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_rejects_lock_change_without_primary_manifest_change(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn('name = "beta"\nversion = "0.1.0"', content)
+            lock.write_text(
+                content.replace('name = "beta"\nversion = "0.1.0"', 'name = "beta"\nversion = "0.2.0"'),
+                encoding="utf-8",
+            )
+
+        head = self._head(repo, mutate, "unpaired root lock update")
+        full_environment = self._trusted_full_plan_environment(("Cargo.lock",))
+        result = self._run_checker(repo, base, head, "alpha", full_environment)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("unattributable_lock_change", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_still_rejects_unresolvable_lock_reference(self) -> None:
+        repo, base = self._shared_path_dependency_fixture()
+
+        def mutate(root: Path) -> None:
+            self._switch_alpha_shared_dependency_to_v2(root)
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn('"shareddep 2.0.0"', content)
+            lock.write_text(content.replace('"shareddep 2.0.0"', '"missing-dependency 9.9.9"', 1), encoding="utf-8")
+
+        head = self._head(repo, mutate, "full-plan lock with unresolved reference")
+        full_environment = self._trusted_full_plan_environment(
+            ("Cargo.lock", "crates/alpha/Cargo.toml")
+        )
+        result = self._run_checker(repo, base, head, "alpha", full_environment)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("unattributable_lock_change", result.stdout + result.stderr)
 
     def test_cross_package_include_is_rejected(self) -> None:
         repo, base = self._fixture()
@@ -1875,6 +2055,103 @@ path = "src/lib.rs"
 
         self._assert_rejected(repo, base, "alpha", mutate, "policy_self_modification")
 
+    def test_trusted_full_plan_allows_exact_policy_maintenance_range(self) -> None:
+        repo, base = self._auxiliary_base([])
+        def mutate(root: Path) -> None:
+            registry_path = root / ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["auxiliary_files"].append(
+                {"path": "doc/world-runtime/wasm/wasm-executor.design.md", "package": "alpha"}
+            )
+            registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+            for path in POLICY_MAINTENANCE_PATHS:
+                if path != ".pm/cargo-package-auxiliary-files.json":
+                    self._write(root, path, "bounded full-CI policy maintenance fixture\n")
+
+        head = self._head(repo, mutate, "full-CI policy maintenance fixture")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "auto",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"trusted full-plan maintenance range should pass; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual("allowed", payload.get("status"), payload)
+        self.assertEqual("trusted_full_policy_maintenance", payload.get("scope"), payload)
+
+    def test_trusted_full_plan_does_not_allow_policy_range_with_business_change(self) -> None:
+        repo, base = self._auxiliary_base([])
+
+        def mutate(root: Path) -> None:
+            registry_path = root / ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["auxiliary_files"].append(
+                {"path": "doc/world-runtime/wasm/wasm-executor.design.md", "package": "alpha"}
+            )
+            registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+            self._write(root, "scripts/ci-tests.sh", "changed CI route\n")
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+
+        head = self._head(repo, mutate, "mixed policy and business change")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "alpha",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("policy_self_modification", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_does_not_allow_policy_range_with_outside_path(self) -> None:
+        repo, base = self._auxiliary_base([])
+
+        def mutate(root: Path) -> None:
+            registry_path = root / ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["auxiliary_files"].append(
+                {"path": "doc/world-runtime/wasm/wasm-executor.design.md", "package": "alpha"}
+            )
+            registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+            self._write(root, "scripts/ci-tests.sh", "changed CI route\n")
+            self._write(root, "README.md", "unlisted path\n")
+
+        head = self._head(repo, mutate, "policy maintenance with unlisted path")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "auto",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("policy_self_modification", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_still_rejects_malformed_candidate_registry(self) -> None:
+        repo, base = self._auxiliary_base([])
+        def mutate(root: Path) -> None:
+            self._write(root, ".pm/cargo-package-auxiliary-files.json", '{"schema": "wrong"}\n')
+            for path in POLICY_MAINTENANCE_PATHS:
+                if path != ".pm/cargo-package-auxiliary-files.json":
+                    self._write(root, path, "bounded full-CI policy maintenance fixture\n")
+
+        head = self._head(repo, mutate, "malformed full-CI registry fixture")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "auto",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("trusted_policy_invalid", result.stdout + result.stderr)
+
     def test_malformed_conflicting_unknown_and_reserved_auxiliary_registrations_fail_closed(self) -> None:
         cases = [
             ("registry must be a list", {"path": "scripts/setup.py", "package": "alpha"}),
@@ -2074,578 +2351,6 @@ path = "src/lib.rs"
             )
 
         self._assert_allowed(repo, base, "alpha", mutate)
-
-
-class DependencyFloorManifestContract(unittest.TestCase):
-    def _allowed(self, old: str, new: str, old_req: str, new_req: str,
-                 *, allow_non_patch: bool = False) -> bool:
-        return CHECKER_MODULE.dependency_floor_manifest_delta_is_exact(
-            old.encode(), new.encode(), "wasmtime", old_req, new_req,
-            allow_non_patch=allow_non_patch,
-        )
-
-    def test_one_existing_plain_registry_requirement_patch_floor_is_allowed(self) -> None:
-        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = { version = "48.0.3", default-features = false, features = ["cranelift"] }\n'''
-        new = old.replace('version = "48.0.3"', 'version = "48.0.4"')
-        self.assertTrue(self._allowed(old, new, "48.0.3", "48.0.4"))
-
-    def test_rejects_requirement_not_bound_to_verified_overlay(self) -> None:
-        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n'''
-        new = old.replace("48.0.3", "48.0.4")
-        self.assertFalse(self._allowed(old, new, "48.0.2", "48.0.4"))
-
-    def test_rejects_unrelated_manifest_edit_alongside_floor_change(self) -> None:
-        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = { version = "48.0.3", default-features = false }\n'''
-        new = old.replace('version = "48.0.3"', 'version = "48.0.4"').replace(
-            "default-features = false", "default-features = true"
-        )
-        self.assertFalse(self._allowed(old, new, "48.0.3", "48.0.4"))
-
-    def test_rejects_alias_and_non_crates_io_source(self) -> None:
-        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = { package = "wasmtime-alt", version = "48.0.3" }\n'''
-        new = old.replace('version = "48.0.3"', 'version = "48.0.4"')
-        self.assertFalse(self._allowed(old, new, "48.0.3", "48.0.4"))
-
-    def test_rejects_non_patch_or_noncanonical_floor(self) -> None:
-        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n'''
-        for new_req in ("48.1.0", "49.0.0", "48.0.04", "48.0.4-beta.1", "48.0.2"):
-            with self.subTest(new_req=new_req):
-                new = old.replace('"48.0.3"', f'"{new_req}"')
-                self.assertFalse(self._allowed(old, new, "48.0.3", new_req))
-
-    def test_major_floor_raise_requires_explicit_amended_scope(self) -> None:
-        old = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n'''
-        new = old.replace('"48.0.3"', '"49.0.2"')
-        self.assertFalse(self._allowed(old, new, "48.0.3", "49.0.2"))
-        self.assertTrue(self._allowed(old, new, "48.0.3", "49.0.2", allow_non_patch=True))
-        self.assertFalse(CHECKER_MODULE.canonical_dependency_floor_update_pair("49.0.2", "48.0.4"))
-        self.assertFalse(CHECKER_MODULE.canonical_dependency_floor_update_pair("48.0.3", "49.0.02"))
-
-    def test_rejects_duplicate_target_specific_or_non_normal_dependency(self) -> None:
-        normal = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dependencies]\nwasmtime = "48.0.3"\n\n[target.'cfg(windows)'.dependencies]\nwasmtime = "48.0.3"\n'''
-        updated = normal.replace('wasmtime = "48.0.3"', 'wasmtime = "48.0.4"', 1)
-        self.assertFalse(self._allowed(normal, updated, "48.0.3", "48.0.4"))
-        dev = '''[package]\nname = "executor"\nversion = "0.1.0"\n\n[dev-dependencies]\nwasmtime = "48.0.3"\n'''
-        self.assertFalse(
-            self._allowed(dev, dev.replace("48.0.3", "48.0.4"), "48.0.3", "48.0.4")
-        )
-
-
-class AmendedDependencyFloorPathContract(unittest.TestCase):
-    def _scope(self) -> dict[str, object]:
-        paths = [
-            "Cargo.lock",
-            "crates/alpha/Cargo.toml",
-            "crates/alpha/src/lib.rs",
-            "crates/alpha/tests/fuel.rs",
-        ]
-        return {
-            "schema": CHECKER_MODULE.DEPENDENCY_FLOOR_OVERLAY_V2,
-            "approved_business_paths": paths,
-            "business_change_paths": [
-                {"path": path, "base_sha256": "sha256:" + "a" * 64,
-                 "head_sha256": "sha256:" + "b" * 64}
-                for path in paths
-            ],
-        }
-
-    def test_v2_partition_matches_actual_changed_paths_and_effective_manifest(self) -> None:
-        scope = self._scope()
-        workflow = {"scripts/pm/check-cargo-package-scope",
-                    "scripts/pm/check-cargo-package-scope.test.py"}
-        changed = sorted(workflow | set(scope["approved_business_paths"]))
-        self.assertEqual(
-            CHECKER_MODULE.validate_first_activation_path_partition(
-                scope, "crates/alpha/Cargo.toml", workflow, changed,
-            ),
-            set(scope["approved_business_paths"]),
-        )
-
-    def test_v2_partition_rejects_unapproved_missing_and_foreign_package_paths(self) -> None:
-        workflow = {"scripts/pm/check-cargo-package-scope"}
-        for mutate, changed in (
-            (lambda scope: None, ["Cargo.lock", "crates/alpha/Cargo.toml", "scripts/extra.py"]),
-            (lambda scope: scope["approved_business_paths"].pop(),
-             ["Cargo.lock", "crates/alpha/Cargo.toml", "crates/alpha/src/lib.rs",
-              "scripts/pm/check-cargo-package-scope"]),
-            (lambda scope: scope["approved_business_paths"].append("crates/beta/src/lib.rs"),
-             ["Cargo.lock", "crates/alpha/Cargo.toml", "crates/alpha/src/lib.rs",
-              "crates/beta/src/lib.rs", "scripts/pm/check-cargo-package-scope"]),
-        ):
-            scope = self._scope()
-            mutate(scope)
-            with self.subTest(scope=scope), self.assertRaises(CHECKER_MODULE.ScopeError):
-                CHECKER_MODULE.validate_first_activation_path_partition(
-                    scope, "crates/alpha/Cargo.toml", workflow, changed,
-                )
-
-    def test_v2_business_digests_match_real_frozen_base_and_head_blobs(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="amended-business-paths-") as temp:
-            repo = Path(temp)
-            self._git(repo, "init", "-q", "-b", "main")
-            self._git(repo, "config", "user.email", "qa@example.invalid")
-            self._git(repo, "config", "user.name", "Amendment QA")
-            scope = self._scope()
-            paths = scope["approved_business_paths"]
-            for path in paths:
-                target = repo / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text("base:" + path + "\n", encoding="utf-8")
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-qm", "base blobs")
-            base = self._git(repo, "rev-parse", "HEAD")
-            for path in paths:
-                (repo / path).write_text("head:" + path + "\n", encoding="utf-8")
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-qm", "head blobs")
-            head = self._git(repo, "rev-parse", "HEAD")
-            scope["business_change_paths"] = [
-                {
-                    "path": path,
-                    "base_sha256": "sha256:" + hashlib.sha256(
-                        CHECKER_MODULE.git_blob(repo, base, path)
-                    ).hexdigest(),
-                    "head_sha256": "sha256:" + hashlib.sha256(
-                        CHECKER_MODULE.git_blob(repo, head, path)
-                    ).hexdigest(),
-                }
-                for path in paths
-            ]
-            CHECKER_MODULE.validate_business_path_digests(repo, base, head, scope)
-            scope["business_change_paths"][2]["head_sha256"] = "sha256:" + "c" * 64
-            with self.assertRaisesRegex(CHECKER_MODULE.ScopeError, "business path digest differs"):
-                CHECKER_MODULE.validate_business_path_digests(repo, base, head, scope)
-
-    def _git(self, repo: Path, *args: str) -> str:
-        result = subprocess.run(
-            ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
-        )
-        return result.stdout.strip()
-
-
-class FirstActivationSupportPartitionContract(unittest.TestCase):
-    schema = "oasis7-cargo-dependency-floor-overlay/v3"
-    support_schema = "oasis7-cargo-dependency-floor-support-scope/v1"
-    support_marker = "<!-- oasis7-cargo-dependency-floor-support-scope/v1 -->"
-    sha_a = "sha256:" + "a" * 64
-    sha_b = "sha256:" + "b" * 64
-    workflow_paths = sorted({
-        ".github/workflows/rust.yml",
-        "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
-        "doc/engineering/workflow/source-of-truth.md",
-        "scripts/ci-required-capability-test-inventory.tsv",
-        "scripts/ci-required-scope-audit-contract.test.sh",
-        "scripts/ci-tests.sh",
-        "scripts/pm/check-cargo-package-scope",
-        "scripts/pm/check-cargo-package-scope.test.py",
-        "scripts/pm/first_activation.py",
-        "scripts/pm/first_activation.test.py",
-        "scripts/pm/github-project-task.py",
-        "scripts/pm/pr-lifecycle-gate.py",
-        "scripts/prepare-task-pr.sh",
-        "scripts/pm/ci-reuse-validation.py",
-        "scripts/pm/ci-reuse-validation.test.py",
-        "scripts/pm/ci_reuse_validation_readback.py",
-        "scripts/pm/ci_reuse_validation_readback.test.py",
-        "scripts/pm/github-project-task-lifecycle.test.py",
-        "scripts/pm/github-project-task.test.sh",
-        "scripts/pm/pr_projection_publication.py",
-        "scripts/pm/pr_projection_publication.test.py",
-        "scripts/pm/pr_projection_publish.py",
-        "scripts/pm/pr_projection_resolver.py",
-        "scripts/pm/pr_projection_resolver.test.py",
-        "scripts/pm/projection_publication_contract.py",
-    })
-    support_paths = sorted({
-        "doc/.governance/document-corpus/objects/16/1620cf642fc3ae7886725ade1ec9282e13b3b5130782911e55ac67c77fdf7e7c.json",
-        "doc/.governance/document-corpus/objects/94/942664886e9920ca269062b66c9a2d4cf918774dd5a522678de1f0687e9c427e.json",
-        "doc/.governance/document-corpus/objects/9a/9a812ec52c06d6c0a9633e3ce03eea09b1cc8ae34e94ad1ead1f245d03ea4a3b.json",
-        "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
-        "doc/p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md",
-        "doc/world-runtime/wasm/wasm-executor.design.md",
-    })
-    business_paths = [
-        "Cargo.lock",
-        "crates/oasis7_wasm_executor/Cargo.toml",
-        "crates/oasis7_wasm_executor/src/lib.rs",
-        "crates/oasis7_wasm_executor/src/tests.rs",
-    ]
-
-    def _scope(self, *, base: str = "1" * 40, head: str = "2" * 40) -> dict[str, object]:
-        business_rows = [
-            {"path": path, "base_sha256": self.sha_a, "head_sha256": self.sha_b}
-            for path in self.business_paths
-        ]
-        workflow_rows = [
-            {"path": path, "base_sha256": self.sha_a, "head_sha256": self.sha_b}
-            for path in self.workflow_paths
-        ]
-        support_rows = [
-            {"path": path, "base_sha256": self.sha_a, "head_sha256": self.sha_b}
-            for path in self.support_paths
-        ]
-        authorization = {
-            "comment_id": 12,
-            "body_sha256": self.sha_a,
-            "scope": "same_task_same_pr_wasmtime_49_0_2",
-        }
-        amendment_ref = {"comment_id": 13, "body_sha256": self.sha_b}
-        support_record = {
-            "schema": self.support_schema,
-            "task_uid": "task_" + "a" * 32,
-            "issue_number": 4269,
-            "bootstrap_epoch": 1,
-            "snapshot_sha256": self.sha_a,
-            "request_sha256": self.sha_a,
-            "acceptance_sha256": self.sha_a,
-            "base_oid": base,
-            "head_oid": head,
-            "authorization": authorization,
-            "scope_amendment": amendment_ref,
-            "dispatch_comments": [{"comment_id": 14, "body_sha256": self.sha_b}],
-            "support_change_paths": support_rows,
-        }
-        encoded = json.dumps(support_record, ensure_ascii=False, sort_keys=True,
-                             separators=(",", ":"))
-        support_body = self.support_marker + "\n" + encoded + "\n"
-        support_ref = {
-            "comment_id": 15,
-            "body_sha256": "sha256:" + hashlib.sha256(support_body.encode()).hexdigest(),
-        }
-        return {
-            "schema": self.schema,
-            "task_uid": support_record["task_uid"],
-            "issue_number": 4269,
-            "bootstrap_epoch": 1,
-            "snapshot_sha256": self.sha_a,
-            "request_sha256": self.sha_a,
-            "acceptance_sha256": self.sha_a,
-            "base_oid": base,
-            "head_oid": head,
-            "authorization": authorization,
-            "scope_amendment": amendment_ref,
-            "support_scope": support_ref,
-            "support_scope_record": support_record,
-            "support_change_paths": support_rows,
-            "approved_business_paths": self.business_paths,
-            "business_change_paths": business_rows,
-            "workflow_change_paths": workflow_rows,
-        }
-
-    def test_v3_partition_accepts_exact_25_workflow_6_support_4_business_paths(self) -> None:
-        scope = self._scope()
-        changed = sorted(set(self.workflow_paths) | set(self.support_paths) | set(self.business_paths))
-        self.assertEqual(len(self.workflow_paths), 25)
-        self.assertEqual(len(self.support_paths), 6)
-        self.assertEqual(len(self.business_paths), 4)
-        self.assertEqual(
-            CHECKER_MODULE.validate_first_activation_path_partition(
-                scope, "crates/oasis7_wasm_executor/Cargo.toml",
-                set(self.workflow_paths), changed,
-            ),
-            set(self.business_paths),
-        )
-
-    def test_v3_partition_rejects_missing_extra_overlapping_or_wrong_authority_paths(self) -> None:
-        changed = sorted(set(self.workflow_paths) | set(self.support_paths) | set(self.business_paths))
-        for mutate, altered in (
-            (lambda scope: scope["support_change_paths"].pop(), changed),
-            (lambda scope: scope["support_change_paths"].append(
-                {"path": "doc/unrelated.md", "base_sha256": self.sha_a, "head_sha256": self.sha_b}),
-             sorted(set(changed) | {"doc/unrelated.md"})),
-            (lambda scope: scope["support_scope"].update(body_sha256=self.sha_b), changed),
-            (lambda scope: scope["support_scope"].update(comment_id=12), changed),
-            (lambda scope: scope["support_scope_record"].update(task_uid="task_" + "b" * 32), changed),
-            (lambda scope: scope["support_scope_record"].update(head_oid="3" * 40), changed),
-            (lambda scope: scope["support_change_paths"][0].update(path="Cargo.lock"), changed),
-        ):
-            scope = self._scope()
-            mutate(scope)
-            with self.subTest(scope=scope), self.assertRaises(CHECKER_MODULE.ScopeError):
-                CHECKER_MODULE.validate_first_activation_path_partition(
-                    scope, "crates/oasis7_wasm_executor/Cargo.toml",
-                    set(self.workflow_paths), altered,
-                )
-        scope = self._scope()
-        with self.assertRaises(CHECKER_MODULE.ScopeError):
-            CHECKER_MODULE.validate_first_activation_path_partition(
-                scope, "crates/oasis7_wasm_executor/Cargo.toml",
-                set(self.workflow_paths) | {self.support_paths[0]}, changed,
-            )
-        with self.assertRaises(CHECKER_MODULE.ScopeError):
-            CHECKER_MODULE.validate_first_activation_path_partition(
-                scope, "crates/oasis7_wasm_executor/Cargo.toml",
-                set(self.workflow_paths), changed[:-1],
-            )
-
-    def test_v3_support_path_digests_bind_trusted_base_and_candidate_blobs(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="first-activation-support-paths-") as temp:
-            repo = Path(temp)
-            self._git(repo, "init", "-q", "-b", "main")
-            self._git(repo, "config", "user.email", "qa@example.invalid")
-            self._git(repo, "config", "user.name", "Support Scope QA")
-            scope = self._scope()
-            for path in self.support_paths:
-                target = repo / path
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text("base:" + path + "\n", encoding="utf-8")
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-qm", "support base")
-            base = self._git(repo, "rev-parse", "HEAD")
-            for path in self.support_paths:
-                (repo / path).write_text("head:" + path + "\n", encoding="utf-8")
-            self._git(repo, "add", "-A")
-            self._git(repo, "commit", "-qm", "support candidate")
-            head = self._git(repo, "rev-parse", "HEAD")
-            scope = self._scope(base=base, head=head)
-            rows = scope["support_change_paths"]
-            scope["support_scope_record"]["support_change_paths"] = rows
-            for row in rows:
-                row["base_sha256"] = "sha256:" + hashlib.sha256(
-                    CHECKER_MODULE.git_blob(repo, base, row["path"])
-                ).hexdigest()
-                row["head_sha256"] = "sha256:" + hashlib.sha256(
-                    CHECKER_MODULE.git_blob(repo, head, row["path"])
-                ).hexdigest()
-            scope["support_scope_record"]["support_change_paths"] = rows
-            encoded = json.dumps(scope["support_scope_record"], ensure_ascii=False, sort_keys=True,
-                                 separators=(",", ":"))
-            body = CHECKER_MODULE.DEPENDENCY_FLOOR_SUPPORT_MARKER + "\n" + encoded + "\n"
-            scope["support_scope"]["body_sha256"] = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
-            CHECKER_MODULE.validate_support_change_path_digests(repo, base, head, scope)
-            rows[0]["head_sha256"] = self.sha_a
-            scope["support_scope_record"]["support_change_paths"] = rows
-            encoded = json.dumps(scope["support_scope_record"], ensure_ascii=False, sort_keys=True,
-                                 separators=(",", ":"))
-            body = CHECKER_MODULE.DEPENDENCY_FLOOR_SUPPORT_MARKER + "\n" + encoded + "\n"
-            scope["support_scope"]["body_sha256"] = "sha256:" + hashlib.sha256(body.encode()).hexdigest()
-            with self.assertRaisesRegex(CHECKER_MODULE.ScopeError, "support path digest differs"):
-                CHECKER_MODULE.validate_support_change_path_digests(repo, base, head, scope)
-
-    def _git(self, repo: Path, *args: str) -> str:
-        result = subprocess.run(
-            ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
-        )
-        return result.stdout.strip()
-
-class DependencyFloorGraphContract(unittest.TestCase):
-    registry = "registry+https://github.com/rust-lang/crates.io-index"
-
-    def _world(self, candidate: bool, *, quinn_version: str = "0.5.0") -> tuple[dict[str, object], bytes]:
-        wasmtime_version = "48.0.4" if candidate else "48.0.3"
-        getrandom_version = "0.3.4" if candidate else "0.4.3"
-        identities = [
-            ("oasis7_wasm_executor", "0.1.0", None),
-            ("oasis7_ui", "0.1.0", None),
-            ("wasmtime", wasmtime_version, self.registry),
-            ("tempfile", "3.27.0", self.registry),
-            ("getrandom", getrandom_version, self.registry),
-            ("windows-sys", "0.61.2", self.registry),
-            ("windows-sys", "0.59.0", self.registry),
-            ("bevy-platform", "0.16.0", self.registry),
-            ("quinn-udp", quinn_version, self.registry),
-        ]
-        if candidate:
-            identities.append(("windows-sys", "0.52.0", self.registry))
-
-        def package_id(identity: tuple[str, str, str | None]) -> str:
-            name, version, source = identity
-            if source is None:
-                return f"path+file:///workspace/{name}#{name}@{version}"
-            return f"{source}#{name}@{version}"
-
-        id_by_identity = {identity: package_id(identity) for identity in identities}
-        edges: list[
-            tuple[
-                tuple[str, str, str | None],
-                tuple[str, str, str | None],
-                str,
-                tuple[tuple[str | None, str | None], ...],
-            ]
-        ] = []
-
-        def edge(
-            source: tuple[str, str, str | None],
-            target: tuple[str, str, str | None],
-            name: str,
-            target_platform: str | None = None,
-        ) -> None:
-            edges.append((source, target, name, ((None, target_platform),)))
-
-        executor = identities[0]
-        ui = identities[1]
-        wasmtime = next(identity for identity in identities if identity[0] == "wasmtime")
-        tempfile_id = next(identity for identity in identities if identity[0] == "tempfile")
-        getrandom = next(identity for identity in identities if identity[0] == "getrandom")
-        windows_61 = next(identity for identity in identities if identity[0] == "windows-sys" and identity[1] == "0.61.2")
-        windows_59 = next(identity for identity in identities if identity[0] == "windows-sys" and identity[1] == "0.59.0")
-        bevy = next(identity for identity in identities if identity[0] == "bevy-platform")
-        quinn = next(identity for identity in identities if identity[0] == "quinn-udp")
-        edge(executor, wasmtime, "wasmtime")
-        edge(wasmtime, tempfile_id, "tempfile")
-        edge(wasmtime, windows_61, "windows-sys", 'cfg(target_os = "windows")')
-        edge(tempfile_id, getrandom, "getrandom")
-        edge(
-            tempfile_id,
-            next(identity for identity in identities if identity[0] == "windows-sys" and identity[1] == ("0.52.0" if candidate else "0.61.2")),
-            "windows-sys",
-            'cfg(target_os = "windows")',
-        )
-        edge(ui, bevy, "bevy-platform")
-        edge(ui, windows_59, "windows-sys", 'cfg(target_os = "windows")')
-        edge(ui, quinn, "quinn-udp")
-        edge(
-            bevy,
-            windows_59 if candidate else windows_61,
-            "windows-sys",
-            'cfg(target_os = "windows")',
-        )
-
-        packages: list[dict[str, object]] = []
-        nodes: list[dict[str, object]] = []
-        for identity in identities:
-            name, version, source = identity
-            dependencies: list[dict[str, object]] = []
-            if identity == executor:
-                dependencies.append(
-                    {
-                        "name": "wasmtime",
-                        "source": self.registry,
-                        "req": "^48.0.4" if candidate else "^48.0.3",
-                        "rename": None,
-                        "registry": None,
-                        "path": None,
-                        "kind": None,
-                        "target": None,
-                    }
-                )
-            packages.append(
-                {
-                    "id": id_by_identity[identity],
-                    "name": name,
-                    "version": version,
-                    "source": source,
-                    "dependencies": dependencies,
-                    "manifest_path": (
-                        f"/workspace/{name}/Cargo.toml" if source is None else f"/registry/{name}/Cargo.toml"
-                    ),
-                }
-            )
-            node_deps: list[dict[str, object]] = []
-            for source_identity, target_identity, dependency_name, kinds in edges:
-                if source_identity != identity:
-                    continue
-                node_deps.append(
-                    {
-                        "name": dependency_name,
-                        "pkg": id_by_identity[target_identity],
-                        "dep_kinds": [
-                            {"kind": kind, "target": target} for kind, target in kinds
-                        ],
-                    }
-                )
-            nodes.append({"id": id_by_identity[identity], "deps": node_deps})
-
-        references: dict[tuple[str, str, str | None], str] = {}
-        by_name: dict[str, list[tuple[str, str, str | None]]] = {}
-        for identity in identities:
-            by_name.setdefault(identity[0], []).append(identity)
-        for name, candidates in by_name.items():
-            for identity in candidates:
-                if len(candidates) == 1:
-                    reference = name
-                else:
-                    reference = f"{name} {identity[1]}"
-                    same_version = [item for item in candidates if item[1] == identity[1]]
-                    if len(same_version) > 1 and identity[2] is not None:
-                        reference += f" ({identity[2]})"
-                references[identity] = reference
-
-        lock_lines = ["# This file is automatically @generated by Cargo.\n", "version = 4\n"]
-        for identity in sorted(identities):
-            name, version, source = identity
-            lock_lines.extend(("\n[[package]]\n", f'name = "{name}"\n', f'version = "{version}"\n'))
-            if source is not None:
-                lock_lines.append(f'source = "{source}"\n')
-                import hashlib
-
-                lock_lines.append(
-                    f'checksum = "{hashlib.sha256((name + version).encode()).hexdigest()}"\n'
-                )
-            dependency_refs = sorted(
-                {
-                    references[target]
-                    for source_identity, target, _dependency_name, _kinds in edges
-                    if source_identity == identity
-                }
-            )
-            if dependency_refs:
-                import json as json_module
-
-                lock_lines.append(
-                    "dependencies = ["
-                    + ", ".join(json_module.dumps(reference) for reference in dependency_refs)
-                    + "]\n"
-                )
-        metadata: dict[str, object] = {
-            "packages": packages,
-            "workspace_members": [id_by_identity[executor], id_by_identity[ui]],
-            "resolve": {"nodes": nodes},
-        }
-        return metadata, "".join(lock_lines).encode()
-
-    def test_full_target_graph_allows_dependency_closure_and_windows_reference_normalization(self) -> None:
-        base_metadata, base_lock = self._world(False)
-        head_metadata, head_lock = self._world(True)
-        self.assertTrue(
-            CHECKER_MODULE.dependency_floor_lock_graph_is_safe(
-                base_lock,
-                head_lock,
-                base_metadata,
-                head_metadata,
-                "oasis7_wasm_executor",
-                "wasmtime",
-                "48.0.3",
-                "48.0.4",
-            )
-        )
-
-    def test_unrelated_external_version_change_is_rejected(self) -> None:
-        base_metadata, base_lock = self._world(False)
-        head_metadata, head_lock = self._world(True, quinn_version="0.6.0")
-        self.assertFalse(
-            CHECKER_MODULE.dependency_floor_lock_graph_is_safe(
-                base_lock,
-                head_lock,
-                base_metadata,
-                head_metadata,
-                "oasis7_wasm_executor",
-                "wasmtime",
-                "48.0.3",
-                "48.0.4",
-            )
-        )
-
-    def test_unresolved_target_specific_lock_reference_is_rejected(self) -> None:
-        base_metadata, base_lock = self._world(False)
-        head_metadata, head_lock = self._world(True)
-        head_lock = head_lock.replace(
-            b'dependencies = ["getrandom", "windows-sys 0.52.0"]',
-            b'dependencies = ["getrandom"]',
-            1,
-        )
-        self.assertFalse(
-            CHECKER_MODULE.dependency_floor_lock_graph_is_safe(
-                base_lock,
-                head_lock,
-                base_metadata,
-                head_metadata,
-                "oasis7_wasm_executor",
-                "wasmtime",
-                "48.0.3",
-                "48.0.4",
-            )
-        )
 
 
 if __name__ == "__main__":

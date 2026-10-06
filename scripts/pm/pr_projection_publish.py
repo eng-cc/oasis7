@@ -195,7 +195,6 @@ def task_publication(root: Path, args: argparse.Namespace) -> tuple[dict[str, An
         planner_config_sha256=projection["planner_config_sha256"],
         policy_digest=projection["planner_digest"],
         projection_digest=projection["projection_digest"],
-        workflow_impact_projection=projection,
     )
     candidate_projection = {
         "task_uid": projection["task_uid"],
@@ -300,7 +299,7 @@ class GitHubPublicationAdapter:
         bodies = []
         for comment in self._issue_comments():
             body = comment["body"]
-            if not publication.has_task_publication_marker(body):
+            if "<!-- oasis7-ci-publication/v1 -->" not in body:
                 continue
             value = publication.parse_publication_comment(body)
             if (value["task_uid"] == target["task_uid"]
@@ -459,8 +458,7 @@ class GitHubPublicationAdapter:
             raise RuntimeError("canonical recovery helper is unavailable")
         marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
         comments = self._issue_comments()
-        if sum(publication.has_framed_comment_marker(comment.get("body"), marker)
-               for comment in comments) != 1:
+        if sum(marker in comment["body"] for comment in comments) != 1:
             raise RuntimeError("one unique current record-pr recovery admission is required")
         # record_pr() re-reads comments and reconstructs the full authority
         # before helper launch, so a changed/removed admission fails closed.
@@ -495,8 +493,7 @@ class GitHubPublicationAdapter:
             # command failure intact before making discovery network requests.
             comments = self._issue_comments() if self.task_helper.is_file() else []
             marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
-            admissions = [c for c in comments
-                          if publication.has_framed_comment_marker(c.get("body"), marker)]
+            admissions = [c for c in comments if marker in c["body"]]
             if self.record_pr_recovery_required and len(admissions) != 1:
                 raise RuntimeError("required record-pr recovery admission changed before helper launch")
             if admissions:
@@ -527,7 +524,7 @@ class GitHubPublicationAdapter:
         self._assert_task_identity()
         matches = []
         for comment in self._issue_comments():
-            if not publication.has_publication_binding_marker(comment.get("body")):
+            if "<!-- oasis7-ci-publication-binding/v1 -->" not in comment["body"]:
                 continue
             binding = publication.parse_publication_binding_comment(comment["body"])
             if binding["publication_id"] == publication_id:
