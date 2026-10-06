@@ -774,6 +774,11 @@ run_cargo_package_scope_check() {
   local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
   local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
+  local trusted_full_plan="${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}"
+  if [[ "$trusted_full_plan" != true && "$trusted_full_plan" != false ]]; then
+    echo "error: trusted Cargo scope plan marker must be true or false" >&2
+    return 1
+  fi
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
     return 0
@@ -787,7 +792,7 @@ run_cargo_package_scope_check() {
     return 0
   fi
   local checker_result=0
-  run python3 "$checker" \
+  run env OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN="$trusted_full_plan" python3 "$checker" \
     --repo-root "$repo_root" \
     --base "$base_oid" \
     --head "$head_oid" \

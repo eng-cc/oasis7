@@ -28,6 +28,19 @@ from typing import Any, Iterable
 POLICY_SCHEMA = "oasis7-cargo-package-scope-policy/v1"
 AUXILIARY_REGISTRY_PATH = ".pm/cargo-package-auxiliary-files.json"
 AUXILIARY_REGISTRY_SCHEMA = "oasis7-cargo-package-auxiliary-files/v1"
+POLICY_MAINTENANCE_PATHS = frozenset(
+    {
+        "doc/engineering/workflow/source-of-truth.md",
+        "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+        "scripts/pm/check-cargo-package-scope",
+        "scripts/pm/check-cargo-package-scope.test.py",
+        AUXILIARY_REGISTRY_PATH,
+        "scripts/ci-tests.sh",
+        "scripts/ci-required-scope.v2.json",
+        "scripts/ci-required-scope-audit-contract.test.sh",
+        ".github/workflows/rust.yml",
+    }
+)
 
 AUXILIARY_FORBIDDEN_PREFIXES = (
     ".agents/",
@@ -179,11 +192,18 @@ def parse_auxiliary_registry(
 
 
 def trusted_auxiliary_registry(
-    repo: Path, base: str, head: str, policy_path: str, protected_paths: list[str]
+    repo: Path,
+    base: str,
+    head: str,
+    policy_path: str,
+    protected_paths: list[str],
+    allow_policy_maintenance: bool = False,
 ) -> dict[str, str]:
     base_bytes = git_blob(repo, base, AUXILIARY_REGISTRY_PATH)
     head_bytes = git_blob(repo, head, AUXILIARY_REGISTRY_PATH)
-    if base_bytes != head_bytes:
+    if base_bytes != head_bytes and (
+        not allow_policy_maintenance or base_bytes is None or head_bytes is None
+    ):
         raise ScopeError(
             "policy_self_modification",
             f"auxiliary registry differs from trusted base: {AUXILIARY_REGISTRY_PATH}",
@@ -191,7 +211,7 @@ def trusted_auxiliary_registry(
     if base_bytes is None:
         return {}
     try:
-        trusted = json.loads(
+        trusted_base = json.loads(
             base_bytes.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
         )
     except (UnicodeDecodeError, ValueError) as exc:
@@ -199,7 +219,43 @@ def trusted_auxiliary_registry(
             "trusted_policy_invalid",
             f"trusted auxiliary registry is not valid JSON: {AUXILIARY_REGISTRY_PATH}",
         ) from exc
-    return parse_auxiliary_registry(trusted, policy_path, protected_paths)
+    base_registry = parse_auxiliary_registry(trusted_base, policy_path, protected_paths)
+    if head_bytes == base_bytes:
+        return base_registry
+    try:
+        candidate = json.loads(
+            head_bytes.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
+        )
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ScopeError(
+            "trusted_policy_invalid",
+            f"candidate auxiliary registry is not valid JSON: {AUXILIARY_REGISTRY_PATH}",
+        ) from exc
+    return parse_auxiliary_registry(candidate, policy_path, protected_paths)
+
+
+def trusted_full_policy_maintenance_range(
+    repo: Path,
+    base: str,
+    head: str,
+    paths: list[str],
+    renames: list[str],
+) -> bool:
+    if os.environ.get("OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN") != "true" or renames:
+        return False
+    try:
+        normalized = {safe_relative(path) for path in paths}
+    except ScopeError:
+        return False
+    if (
+        not normalized
+        or AUXILIARY_REGISTRY_PATH not in normalized
+        or not normalized.issubset(POLICY_MAINTENANCE_PATHS)
+    ):
+        return False
+    base_registry = git_blob(repo, base, AUXILIARY_REGISTRY_PATH)
+    head_registry = git_blob(repo, head, AUXILIARY_REGISTRY_PATH)
+    return base_registry is not None and head_registry is not None and base_registry != head_registry
 
 
 def resolve_relative(source: str, target: str) -> str | None:
@@ -245,7 +301,11 @@ def resolve_manifest_relative(
 
 
 def parse_policy(
-    repo: Path, base: str, head: str, policy_arg: str
+    repo: Path,
+    base: str,
+    head: str,
+    policy_arg: str,
+    allow_policy_maintenance: bool = False,
 ) -> tuple[str, dict[str, Any], dict[str, str]]:
     policy_path = Path(policy_arg)
     if not policy_path.is_absolute():
@@ -275,7 +335,9 @@ def parse_policy(
     protected = trusted.get("protected_paths")
     if not isinstance(protected, list) or not all(isinstance(item, str) for item in protected):
         raise ScopeError("trusted_policy_invalid", "protected_paths must be a string list")
-    auxiliary_registry = trusted_auxiliary_registry(repo, base, head, relative, protected)
+    auxiliary_registry = trusted_auxiliary_registry(
+        repo, base, head, relative, protected, allow_policy_maintenance
+    )
     return relative, trusted, auxiliary_registry
 
 
@@ -969,6 +1031,30 @@ def lock_reference_index(
     return references
 
 
+def root_lockfile_validated_format(repo: Path, revision: str) -> str | None:
+    blob = git_blob(repo, revision, "Cargo.lock")
+    if blob is None:
+        return None
+    try:
+        text = blob.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    header, separator, _ = text.partition("[[package]]")
+    versions = re.findall(r"(?m)^\s*version\s*=\s*(\d+)\s*$", header)
+    if not separator or len(versions) != 1:
+        return None
+    records = lock_records(text)
+    indexed = lock_record_index(records)
+    references = lock_reference_index(records)
+    if indexed is None or references is None or not indexed:
+        return None
+    for record in indexed.values():
+        dependencies = record.get("dependencies", [])
+        if not isinstance(dependencies, list) or any(item not in references for item in dependencies):
+            return None
+    return versions[0]
+
+
 def lock_closure_matches_metadata(
     records: dict[tuple[str, str, str | None], dict[str, Any]],
     references: dict[str, tuple[str, str, str | None]],
@@ -1402,8 +1488,11 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if not repo.is_dir() or not (repo / ".git").exists():
         raise ScopeError("invalid_repository", f"not a git checkout: {repo}")
     paths, renames = changed_files(repo, args.base, args.head)
+    policy_maintenance = trusted_full_policy_maintenance_range(
+        repo, args.base, args.head, paths, renames
+    )
     policy_path, policy, auxiliary_owners = parse_policy(
-        repo, args.base, args.head, args.policy
+        repo, args.base, args.head, args.policy, policy_maintenance
     )
     protected = {safe_relative(path) for path in policy["protected_paths"]}
     normalized_paths = [safe_relative(path) for path in paths]
@@ -1433,6 +1522,14 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             base_packages,
             head_packages,
         )
+        if policy_maintenance:
+            return {
+                "status": "allowed",
+                "scope": "trusted_full_policy_maintenance",
+                "changed_paths": sorted(set(normalized_paths)),
+                "policy": policy_path,
+                "policy_version": policy["policy_version"],
+            }
         head_build_scripts = build_script_paths(head_root, head_metadata)
         changed = set(normalized_paths)
         package_changed = any(
@@ -1586,8 +1683,31 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         if lock_diff_has_unattributable_lines(repo, args.base, args.head):
             raise ScopeError("unattributable_lock_change", "Cargo.lock contains non-package or non-mechanical changes")
         lock_names = lock_change_names(repo, args.base, args.head)
-        if not lock_names or primary_package is None or not lock_names.issubset({primary_package}):
+        if not lock_names or primary_package is None:
             raise ScopeError("unattributable_lock_change", ", ".join(sorted(lock_names)) or "unknown lock change")
+        if not lock_names.issubset({primary_package}):
+            base_manifest_path = package_manifest_paths(base_packages).get(primary_package)
+            head_manifest_path = package_manifest_paths(head_packages).get(primary_package)
+            primary_manifest_changed = (
+                base_manifest_path is not None
+                and base_manifest_path == head_manifest_path
+                and base_manifest_path in normalized_paths
+                and git_blob(repo, args.base, base_manifest_path)
+                != git_blob(repo, args.head, head_manifest_path)
+            )
+            base_lock_format = root_lockfile_validated_format(repo, args.base)
+            head_lock_format = root_lockfile_validated_format(repo, args.head)
+            if (
+                os.environ.get("OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN") != "true"
+                or not primary_manifest_changed
+                or base_lock_format is None
+                or head_lock_format is None
+                or base_lock_format != head_lock_format
+            ):
+                raise ScopeError(
+                    "unattributable_lock_change",
+                    ", ".join(sorted(lock_names)),
+                )
         expected_dependencies = metadata_dependency_names(head_metadata, primary_package)
         actual_dependencies = lock_dependency_names(repo, args.head, primary_package)
         if expected_dependencies is None or actual_dependencies is None:
