@@ -36,6 +36,13 @@ fake-GitHub paths are test-only. See the [capability status](./source-of-truth.m
 The target is still subject to the same closed state enum and lifecycle order. Target behavior must not be described as implemented until the promotion
 criteria in section 11 are independently evidenced.
 
+### 2.1 需求承接与分配表
+
+| Upstream requirement / professional acceptance | Owner role | Local design clause | Allocated behavior | Disposition |
+| --- | --- | --- | --- | --- |
+| [Canonical state machine](./source-of-truth.md#canonical-state-machine) | producer_system_designer | [Terminal delivery and cleanup boundary](./production-supervisor-runtime.design.md#terminal-delivery-and-resource-release) | Preserve strict v1 history and exact-selector v2 delivery-before-cleanup semantics. | Required; v2 remains inactive until merge and readback. |
+| [Canonical state machine](./source-of-truth.md#canonical-state-machine) | runtime_engineer | [Resource-dependent artifact use](./production-supervisor-runtime.design.md#resource-dependent-artifact-use) | Gate only a declared artifact consume; require exact-instance journal evidence and fresh absence readback. | Required; unsupported resource kinds fail closed. |
+
 ## 3. Exactly four trusted producer classes
 
 The target has exactly four trusted producer classes. A class is a trust boundary, not a workflow state or a role title.
@@ -72,37 +79,11 @@ checkpoint, silently reset state, or infer completion from a process exit code.
 
 #### Durable checkpoint and journal contract
 
-The target checkpoint is a versioned `tpm-supervisor-checkpoint/v1` envelope.
-Its required identity fields are `task_uid`, `repository`,
-`canonical_worktree`, `task_branch`, `default_branch`, `checkpoint_path`,
-`bootstrap_epoch`, and `evidence_epoch` (the latter may be `null` only during
-bootstrap before the first acceptance, plan, producer, or review authority
-exists).  Its controller fields are the closed
-`workflow_state`, implementation `phase`, `next_result`, `revision`, the
-`lease` record, `head_oid` when a head is bound, `event_head_digest`,
-`transition_head_digest`, `state_digest`, and `journal_generation`.  The
-checkpoint also carries `rejection_head_digest`, which chains classified
-input rejections without treating them as lifecycle progress.  The
-checkpoint is authoritative only when its schema, identity, revision, and
-digests validate together; a cache or a caller-selected path is not a
-checkpoint.
+The target checkpoint is a versioned `tpm-supervisor-checkpoint/v1` envelope with identity fields `task_uid`, `repository`, `canonical_worktree`, `task_branch`, `default_branch`, `checkpoint_path`, `bootstrap_epoch`, and `evidence_epoch` (`null` only during bootstrap before the first acceptance, plan, producer, or review authority exists).
+Controller fields are closed `workflow_state`, implementation `phase`, `next_result`, `revision`, `lease`, `head_oid` when bound, `event_head_digest`, `transition_head_digest`, `state_digest`, `journal_generation`, and `rejection_head_digest` (which chains classified input rejections without lifecycle progress). The checkpoint is authoritative only when schema, identity, revision, and digests validate together; a cache or caller-selected path is not authority.
 
-The journal uses `tpm-supervisor-journal/v1` records with
-`journal_id`, `logical_action_id`, `idempotency_key`, `operation`,
-`state`, `intent_digest`, `effect_digest`, `readback_digest`,
-`revision_before`, `revision_after`, `bootstrap_epoch`, `evidence_epoch`,
-`lease_id`, `fencing_token`, and producer/observation timestamps.  The only
-effect states are `intent`, `acted`, `readback_validated`, `committed`, and
-`conflict`; `conflict` is terminal for that logical action until an
-authorized new epoch.  A durable intent is written before an external call;
-an acted response is written before attempting readback; a committed journal
-record and checkpoint transition are written only after the independent
-validator proof is accepted for an effect-bearing action.  A pre-action
-capability block or classified input rejection is a non-effect transition: it
-has no action, producer receipt, validator proof, or external effect and
-records only the blocker/rejection.  An uncertain call is therefore recovered
-by the same idempotency key and live readback, never by guessing from process
-exit status.
+The `tpm-supervisor-journal/v1` record binds `journal_id`, `logical_action_id`, `idempotency_key`, `operation`, `state`, `intent_digest`, `effect_digest`, `readback_digest`, `revision_before`, `revision_after`, `bootstrap_epoch`, `evidence_epoch`, `lease_id`, `fencing_token`, and producer/observation timestamps.
+Effect states are `intent`, `acted`, `readback_validated`, `committed`, and `conflict`; conflict is terminal for that logical action until an authorized new epoch. Durable intent precedes an external call, acted precedes readback, and commit/checkpoint transition follows accepted independent validator proof for an effect-bearing action. A pre-action blocker/rejection has no action, producer receipt, validator proof, or external effect and records only the blocker/rejection. Uncertain calls recover with the same idempotency key and live readback, never process exit status.
 
 Every local mutation is one lock-held transaction: acquire the persistent
 task lock, read and validate the current checkpoint, compare
@@ -359,23 +340,14 @@ the CAS/lease/fencing rules above.
 | `promote_draft` | Successful validated `Execute(promote_draft)` receipt with same-head CI/review evidence, open draft PR, and task-truth readback | `Wait(pr_watch)` once, entering the PR-watch action/wait; no second `promote_draft` emission / `pr_watch` |
 | `pr_watch` | Current-head required checks, mergeability, reviews, comments, threads, and holds | `Wait` for a temporary condition, `Dispatch(fix)` for actionable findings, or `Execute(merge)` only on the live gate receipt |
 | `fix` / `reverify` / `push` | Current-head fix artifact and fresh verification/readback | Return to `review`/`pr_watch`; any head change creates a new evidence epoch |
-| `merge` / `merge_receipt` | Live merged PR receipt bound to the reviewed head/epoch | `Execute(task_done)`; an intermediate merge receipt is not terminal |
-| `task_done` / `main_sync` / `safe_cleanup` | Ordered task truth, main-sync, cleanup journal, and finalizer readbacks | `Complete(post_merge_done)` only after finalization |
+| `merge` / `merge_receipt` | Live merged PR receipt bound to the reviewed head/epoch | Continue through the protocol selected by the exact mapped phase-receipt type and digest |
+| `task_done` | Accepted task-complete evidence bound to the task and merged PR | Protocol v1 continues its ordered closeout chain; protocol v2 binds the claim into delivery finalization |
+| `main_sync` / `safe_cleanup` | V1 ordered sync/cleanup; v2 independent resource cleanup | V1 completes after finalization; v2 delivery precedes optional cleanup, and only declared resource use waits |
 | Any permitted early non-merge entry | Classified reason, bounded evidence, verified task completion, and terminal tombstone | `Complete(closed_without_merge)` through the canonical non-merge finalizer |
 
-The final two rows preserve the canonical terminal order and the early
-non-merge route; no `merge`, `task_done`, `main_sync`, or `safe_cleanup`
-receipt alone can produce `completed`.
-
-For a merged task, `post_merge_done` is valid only after the canonical
-`merge receipt -> task done -> main sync -> safe cleanup receipt ->
-post-merge finalize` readbacks.  The merged path retains the task issue open
-until finalization.  For a classified non-merge task, `closed_without_merge`
-requires the evidence-bound non-merge receipt/ledger and the terminal
-`checkout_recreation_forbidden: true` tombstone.  These are the same terminal
-authorities and resume rules defined by the [canonical terminal
-runbook](./source-of-truth.md#terminal-runbook); this design does not add a
-second finalizer.
+<a id="terminal-delivery-and-resource-release"></a>The rows preserve protocol-specific order and the early non-merge route; no single receipt completes a task. Select by exact mapped phase-receipt type and digest, never by file or comment presence.
+For merged work, v1 requires `merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize`; v2 validates merged identity and accepted task-complete claim, then records delivery before independent cleanup. <a id="resource-dependent-artifact-use"></a>A typed resource wait gates only its matching artifact use and needs fresh absence readback there.
+The Issue stays open through delivery finalization. Classified non-merge work requires its evidence-bound receipt/ledger and `checkout_recreation_forbidden: true` tombstone under the same [terminal runbook](./source-of-truth.md#terminal-runbook); this design adds no finalizer.
 
 #### Deterministic timeout, rejection, and reconciliation outcomes
 
@@ -848,18 +820,11 @@ faults); no new outcome code may be invented by an adapter.
 | `O06` | migration / unsupported or partially published transform | `running` / `bootstrap` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `O07` | compaction / manifest or before-after hash mismatch | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
 | `O08` | replay / attempted external effect or forbidden final-state accept | `running` / `execute` | `canonical:capability_blocked` / `same_as_input` | `replay_mismatch` | `A=0/P=0/S=1/R=0/B=1/C=0` | `capability_unchanged(attempts<=1,elapsed_s<=60,new_epoch=false,same_key=false)` |
-The closed positive catalog is `positive-7001`, `positive-7002`, and `positive-7003` (one per fixed seed), each with typed assertions:
-`case_kind=positive`, input `action_required/bootstrap`,
-`final_status={kind:canonical,value:completed}`,
-`final_phase={kind:canonical,value:done}`, `terminal_outcome={schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done}`, `workflow_phase_projection={schema:"tpm-supervisor-workflow-phase/v1",sequence:[bootstrap,planning,execution,verification,pre_pr_review,pre_pr_ready,pr_watch,done]}`, `implementation_operation_sequence={schema:"tpm-supervisor-operation-sequence/v1",sequence:[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,create_pr,record_pr,comment,verify,review,ready,promote_draft,pr_watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize]}`,
-`expected_outcome={kind:code,code:accepted}`, `observed_outcome={kind:code,code:accepted}`, `verdict=pass` when all typed assertions match, exactly four independently read-back
-producer classes, and the exact phase sequence
-`[bootstrap,planning,execution,verification,pre_pr_review,pre_pr_ready,pr_watch,done]`.
-This is the canonical `Workflow Phase` projection from the source of truth; route/dispatch/execute/integrate/freeze/PR/merge/cleanup labels remain typed operation evidence and are not additional phases. `pre_pr_ready` is a required gate before promotion, `blocked` is not on a positive path, and `post_merge_done` is a terminal outcome rather than a workflow phase.
-`accepted_external_effects >= 1`, `phase_advances = 7`,
-`classified_rejections = 0`, `capability_blocks = 0`,
-`cleanup_mutations = 1`, and `all_effects_independently_readback = true`.
-Fix/reverify loops are not silently inserted into this positive catalog; a loop requires a separate catalog version and exact sequence.
+The closed positive catalog is `positive-7001`, `positive-7002`, and `positive-7003` (one per fixed seed), each with typed assertions: `case_kind=positive`, input `action_required/bootstrap`, `final_status={kind:canonical,value:completed}`, `final_phase={kind:canonical,value:done}`, `terminal_outcome={schema:"tpm-supervisor-terminal-outcome/v1",code:post_merge_done}`, `workflow_phase_projection={schema:"tpm-supervisor-workflow-phase/v1",sequence:[bootstrap,planning,execution,verification,pre_pr_review,pre_pr_ready,pr_watch,done]}`, and
+`implementation_operation_sequence={schema:"tpm-supervisor-operation-sequence/v1",sequence:[bootstrap,route,dispatch,execute,integrate,freeze,draft_candidate,create_pr,record_pr,comment,verify,review,ready,promote_draft,pr_watch,merge,merge_receipt,task_done,main_sync,safe_cleanup,post_merge_finalize]}`.
+`expected_outcome={kind:code,code:accepted}`, `observed_outcome={kind:code,code:accepted}`, and `verdict=pass` require exact match, four independently read-back producer classes, and phase sequence `[bootstrap,planning,execution,verification,pre_pr_review,pre_pr_ready,pr_watch,done]`. This is the canonical Workflow Phase projection; operation labels are evidence, not phases. `pre_pr_ready` is required before promotion; `blocked` is not on a positive path; `post_merge_done` is an outcome, not a phase.
+Counts are `accepted_external_effects >= 1`, `phase_advances = 7`, `classified_rejections = 0`, `capability_blocks = 0`, `cleanup_mutations = 1`, and `all_effects_independently_readback = true`.
+Fix/reverify loops are not inserted into this catalog; they require a separate version and exact sequence.
 The closed soak catalog is `soak-7001`, `soak-7002`, and `soak-7003`, each a cross-process run with `case_timeout_s >= 900` (ordinary case timeout remains `120 s`) and
 `input={workflow_state:external_wait,phase:execute}`, `expected_outcome={kind:code,code:accepted}`, `observed_outcome={kind:code,code:accepted}`, and typed assertions `wake_deliveries = 100`, `wake_consumes = 100`,
 `duplicate_consumes = 0`, `stale_wake_accepts = 0`,
@@ -928,16 +893,13 @@ ID arrays equal their closed catalogs. Supervisor-only output is not authority.
 
 The human `staging-report.md` mirrors `tpm-supervisor-staging-report/v1` with identity/authority, namespace, commands/results, M1–M4 links, timelines, budgets, reproduction, missing evidence, residual risk, and QA recommendation.
 Front matter carries epochs, frozen OIDs, manifest/catalog and aggregate digests, exact counts, verdict, and report digest. Its explicit partitions have one typed row per matrix/operational ID/seed (81 adversarial rows), one per positive seed (3), and one per soak seed (3): exactly 87 case/seed rows; omissions or human/aggregate mismatch are incomplete.
+
+The fixed positive catalog above is protocol-v1 compatibility: its operation sequence and cleanup mutation assertion remain unchanged. A v2 production evaluation needs a separately versioned catalog with delivery before optional cleanup; do not reinterpret v1 as requiring cleanup before v2 completion.
 ### 10.6 Promotion predicates
 
 The target acceptance set requires all of the following:
 
-- one complete production-adapter path is exercised end to end (initial
-  staging target: the three fixed-seed runs above), from bootstrap and route
-  through action, validator, collaboration, wake, freeze, verify, review/fix,
-  merge receipt, task done, main sync, safe cleanup, and final terminal
-  receipt; each producer identity and external effect is independently read
-  back;
+- One complete production-adapter path is exercised end to end (initial staging target: three fixed-seed runs), from bootstrap/route through action, validator, collaboration, wake, freeze, verify, review/fix, merge receipt, task done, selected terminal delivery, and independent readback. The v1 catalog keeps its main-sync/cleanup sequence; a v2 catalog puts delivery before optional cleanup. Each producer identity and effect is independently read back;
 - every matrix and operational row passes for all three repetitions/seeds,
   with no accepted effect, phase advance, accepted state change, integration,
   or cleanup on a rejected/forged/stale/partial input;
@@ -983,6 +945,13 @@ Non-goals for this design are:
   ordinary human-operated workflow changes; or
 - solving model tiering, cost optimization, or exactly-once external execution
   before trust boundaries and recovery are proven.
+
+### 11.1 验证映射表
+
+| Upstream requirement / professional acceptance | Local design clause | Obligation and conditions | Validation method | Evidence target | Unproven scope |
+| --- | --- | --- | --- | --- | --- |
+| [Canonical state machine](./source-of-truth.md#canonical-state-machine) | [Terminal delivery and cleanup boundary](./production-supervisor-runtime.design.md#terminal-delivery-and-resource-release) | Select only exact mapped receipt type+digest; preserve v1, and complete v2 delivery before cleanup. | [Terminal protocol regression](../../../scripts/pm/terminal-delivery-protocol.test.py) | Focused local test output and frozen test digest. | Fixtures do not prove hosted GitHub or production adapter behavior. |
+| [Canonical state machine](./source-of-truth.md#canonical-state-machine) | [Resource-dependent artifact use](./production-supervisor-runtime.design.md#resource-dependent-artifact-use) | Gate only the uniquely joined named artifact use; require journal linkage and fresh exact-resource absence readback. | [Resource cleanup safety regression](../../../scripts/pm/resource-cleanup-safety.test.py) | Focused local test output and cleanup record/journal readback. | Fixture cleanup does not prove external or hosted cleanup environments. |
 
 Promotion from `blocked` to an implemented unattended capability requires
 repository-owned evidence that all four producer classes are available and

@@ -663,6 +663,11 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
     exec "$PYTHON_BIN" "$ROOT_DIR/scripts/pm/loop-bootstrap.py" resume --root "$ROOT_DIR" --task-uid "$PM_TASK_UID" --manual-request-ref "$PM_MANUAL_REQUEST_REF" --loop "$PM_LOOP" --binding "$PM_LOOP_BINDING"
   fi
 
+  if [[ "$(extract_json_field resumed_existing_task "$PM_TASK_JSON")" != "true" ]]; then
+    "$PYTHON_BIN" "$ROOT_DIR/scripts/pm/worktree_registration.py" \
+      --repo-root "$TARGET_PATH" --task-uid "$PM_TASK_UID" >/dev/null
+  fi
+
   set +e
   (
     if [[ -n "$PM_LOOP" ]]; then
