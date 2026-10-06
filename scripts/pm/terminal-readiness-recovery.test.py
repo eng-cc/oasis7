@@ -461,7 +461,7 @@ class CurrentTargetComponent(unittest.TestCase):
         a=self.data;repo=a['repository'];t=self.target;m=a['merge']
         self.context={k:v for k,v in self.context.items() if k in {'repository_root','source_review_plan_path','source_review_handoff_path','source_review_resolution_path','source_scope_oid','check_app_id'}}
         self.responses[f'repos/{repo}/git/ref/heads/main']={'ref':'refs/heads/main','object':{'sha':t}}
-        self.responses[f'repos/{repo}/compare/{m}...{t}']={'base_commit':{'sha':m},'merge_base_commit':{'sha':m},'ahead_by':2,'behind_by':0,'total_commits':2,'status':'ahead'}
+        self.responses[f'repos/{repo}/compare/{m}...{t}']={'url':f'https://api.github.com/repos/{repo}/compare/{m}...{t}','base_commit':{'sha':m},'merge_base_commit':{'sha':m},'ahead_by':2,'behind_by':0,'total_commits':2,'status':'ahead'}
         self.push_run={'id':2701,'run_attempt':1,'event':'push','head_branch':'main','head_sha':t,'path':'.github/workflows/rust.yml','repository':{'full_name':repo},'status':'completed','conclusion':'success','check_suite_id':2801,'created_at':'2026-10-02T10:00:00Z','run_started_at':'2026-10-02T10:00:00Z'}
         self.push_steps=[{'number':i,'name':name,'status':'completed','conclusion':'success','started_at':f'2026-10-02T10:0{i}:00Z','completed_at':f'2026-10-02T10:0{i}:30Z'} for i,name in enumerate(['Plan required gate scope','Write required planner artifact','Upload required planner artifact','Run required test tier'],1)]
         self.push_job={'id':2901,'run_id':2701,'run_attempt':1,'head_sha':t,'name':'required-gate','check_run_url':f'https://api.github.com/repos/{repo}/check-runs/2901','status':'completed','conclusion':'success','labels':['ubuntu-latest'],'steps':self.push_steps}
@@ -539,7 +539,7 @@ class CurrentTargetComponent(unittest.TestCase):
         a=self.data;root=self.review['root'];c=self.review['harness'];repo=a['repository'];uid=a['task_uid']
         self.delivery_state_path=root/'offline-delivery-state.json'
         issue_url=f"https://github.com/{repo}/issues/{a['issue']}"
-        body=f"task_uid: {uid}\n- pr_number: `1`\n- pr_url: `{a['live_pr']['html_url']}`\n"
+        body=json.loads(c.gh_data.read_text())['issue']['body']
         self.project_item.update(project={'id':'PROJECT_offline','number':1,'owner':{'login':repo.split('/')[0]}},content={'number':a['issue'],'url':issue_url,'body':body})
         self.delivery_state={'repository':repo,'issue':{'number':a['issue'],'html_url':issue_url,'url':f"https://api.github.com/repos/{repo}/issues/{a['issue']}",'body':body,'state':'OPEN'},'pr':a['live_pr'],'project_item':self.project_item,'comments':[]}
         self.delivery_state_path.write_text(json.dumps(self.delivery_state))
