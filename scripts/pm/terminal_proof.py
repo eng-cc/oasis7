@@ -429,19 +429,22 @@ def validate_live_repository(live_repository: dict, repository: str,
                                      branch, observed_target_oid or target)
 
 
-def _project_values(item: dict) -> dict[str, object]:
+def _project_values(item: dict, repository: str | None = None) -> dict[str, object]:
     if not isinstance(item, dict) or not item.get("id"):
         raise ValueError("terminal delivery live Project item is unavailable")
-    project = item.get("project") or {}
-    values = item.get("fieldValues") or {}
-    if (values.get("pageInfo") or {}).get("hasNextPage") is not False:
-        raise ValueError("terminal delivery live Project field pagination is incomplete")
-    fields: dict[str, str] = {}
-    for value in values.get("nodes") or []:
-        name = ((value.get("field") or {}).get("name"))
-        if not isinstance(name, str) or name in fields:
-            raise ValueError("terminal delivery live Project field is missing or duplicated")
-        fields[name] = str(value.get("name", value.get("text", "")) or "")
+    project = item.get("project")
+    content = item.get("content")
+    if (not isinstance(project,dict) or not isinstance(project.get('owner'),dict)
+            or not isinstance(content,dict)):
+        raise ValueError('terminal delivery live Project context malformed')
+    if repository is None:
+        url=content.get('url')
+        match=re.fullmatch(r'https://github\.com/([^/\s]+/[^/\s]+)/issues/[1-9][0-9]*',str(url))
+        if match is None:
+            raise ValueError('terminal delivery canonical Project repository unavailable')
+        repository=match.group(1)
+    from loop_terminal import normalize_project_fields
+    fields=normalize_project_fields(item,repository)
     return {"id": str(item["id"]), "project_id": str(project.get("id") or ""),
             "project_number": project.get("number"),
             "project_owner": ((project.get("owner") or {}).get("login")),
@@ -554,7 +557,7 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
                       receipt["head_oid"], receipt["merge_commit_oid"], receipt["default_branch"])
     target = _validate_live_repository(live_repository, repository, receipt["merge_commit_oid"],
                                        receipt["default_branch"], receipt["observed_target_oid"])
-    project = _project_values(live_project_item)
+    project = _project_values(live_project_item, repository)
     issue_url = f"https://github.com/{repository}/issues/{issue_number}"
     if (str(live_project_item.get("id")) != str(task_record.get("project_item_id") or "")
             or project["project_number"] != 1
@@ -750,7 +753,7 @@ def read_terminal_proof(repo_root: pathlib.Path, task_uid: str, task_record: dic
                                      issue_number=issue_number, pr_number=pr_number,
                                      pr_url=pr_url, pr=live_pr)
     _validate_live_issue(live_issue, repository, task_uid, issue_number, pr_number, pr_url)
-    project = _project_values(live_project_item)
+    project = _project_values(live_project_item, repository)
     if (project["content"].get("number") != issue_number
             or project["content"].get("url") != f"https://github.com/{repository}/issues/{issue_number}"
             or not _has_task_uid(project["content"].get("body"), task_uid)

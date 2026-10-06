@@ -3,7 +3,8 @@
 from __future__ import annotations
 import argparse, datetime as dt, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
 from portable_file_lock import ensure_lock_byte, fcntl
-from loop_terminal import read_comments, read_issue, read_project, read_pull_request
+from loop_terminal import (read_comments, read_issue, read_project, read_pull_request,
+                           read_live_project_item, normalize_project_fields)
 from task_complete_claim import select_historical_task_complete_claim
 from terminal_proof import (DELIVERY_RECEIPT_FIELDS, read_live_repository, read_terminal_proof,
                             receipt_chain_digest, terminal_delivery_comment_body,
@@ -48,13 +49,10 @@ def _reconcile_comment(record: dict, operation_id: str, expected_body: str) -> s
 
 def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
                       issue_number: int, repository: str) -> dict[str,str]:
-    item=project_workflow.fetch_project_items_by_ids([item_id]).get(item_id) or {}
-    # The bound-node query exposes nested fieldValues pageInfo. A terminal
-    # decision must fail closed instead of silently accepting a truncated page.
-    if item.get("_field_values_has_next_page") is not False:
-        fail("bound Project item fieldValues pagination is incomplete")
-    if (str(item.get("id") or "")!=item_id or str(item.get("_project_id") or "")!=project_id
-            or str(item.get("_project_number") or "")!=str(number)):
+    item=read_live_project_item(repository,issue_number)
+    context=item.get('project') or {}
+    if (item.get("id")!=item_id or context.get('id')!=project_id
+            or type(context.get('number')) is not int or context['number']!=number):
         fail("bound Project item node readback identity mismatch")
     content=item.get("content") or {}; body=str(content.get("body") or "")
     url=urllib.parse.urlparse(str(content.get("url") or ""))
@@ -63,7 +61,8 @@ def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
             or url.scheme!="https" or url.netloc!="github.com"
             or url.path.rstrip("/")!=f"/{repository}/issues/{issue_number}"):
         fail("bound Project item content does not match task issue identity")
-    return {name:str(item.get(name) or "") for name in ("Status","PM Status","Workflow Phase")}
+    fields=normalize_project_fields(item,repository)
+    return {name:fields.get(name,"") for name in ("Status","PM Status","Workflow Phase")}
 
 def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
@@ -541,15 +540,7 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str, *,
     _delivery_issue_binding(issue,repository,task_uid,issue_number,pr_number,pr_url,
                             terminal=(record.get("workflow_phase")=="post_merge_done" and mapped_v1),
                             recovery=(selector=="oasis7_terminal_delivery"))
-    fields={}
-    values=(project_item.get("fieldValues") or {})
-    if (values.get("pageInfo") or {}).get("hasNextPage") is not False:
-        raise ValueError("bound Project item fieldValues pagination is incomplete")
-    for entry in values.get("nodes") or []:
-        name=((entry.get("field") or {}).get("name"))
-        if not isinstance(name,str) or name in fields:
-            raise ValueError("bound Project item fields are missing or duplicated")
-        fields[name]=str(entry.get("name",entry.get("text","")) or "")
+    fields=normalize_project_fields(project_item,repository)
     if any(fields.get(key)!=value for key,value in {"Status":"Done","PM Status":"done","Workflow Phase":"done"}.items()):
         raise ValueError("task_done Project projection is incomplete")
     if record.get("workflow_phase")=="post_merge_done":

@@ -128,10 +128,12 @@ class DeliveryFixture:
                 "owner": {"login": "fixture"}},
             "content": {"number": ISSUE, "url": ISSUE_URL, "body": self.issue_body},
             "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": [
-                {"name": "Done", "field": {"name": "Status"}},
-                {"name": "done", "field": {"name": "PM Status"}},
-                {"name": "done", "field": {"name": "Workflow Phase"}},
-                {"text": UID, "field": {"name": "Task UID"}},
+                {"__typename": "ProjectV2ItemFieldSingleSelectValue", "name": "Done", "field": {"name": "Status"}},
+                {"__typename": "ProjectV2ItemFieldSingleSelectValue", "name": "done", "field": {"name": "PM Status"}},
+                {"__typename": "ProjectV2ItemFieldSingleSelectValue", "name": "done", "field": {"name": "Workflow Phase"}},
+                {"__typename": "ProjectV2ItemFieldTextValue", "text": UID, "field": {"name": "Task UID"}},
+                {"__typename": "ProjectV2ItemFieldRepositoryValue", "field": {"name": "Repository"},
+                 "repository": {"nameWithOwner": REPOSITORY}},
             ]},
         }
         merge_receipt = {

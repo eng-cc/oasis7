@@ -675,7 +675,7 @@ def create_readiness_proof(root: Path, uid: str, *, write: bool = False) -> dict
     # checked before publishing even the proof file itself. Project status may
     # still be pre-task_done here; identity and complete pagination may not.
     from terminal_proof import read_live_repository, validate_live_repository
-    from loop_terminal import read_project
+    from loop_terminal import read_project, normalize_project_fields
     live_repository = read_live_repository(repo, pr.get("merge_commit_sha"))
     validate_live_repository(live_repository, repo, pr.get("merge_commit_sha"),
                             default_branch=(pr.get("base") or {}).get("ref"))
@@ -690,15 +690,7 @@ def create_readiness_proof(root: Path, uid: str, *, write: bool = False) -> dict
         and re.findall(r"^task_uid:\s*([^\n]+)$", str((item.get("content") or {}).get("body") or ""), re.M) == [uid]]
     if len(items) != 1 or items[0].get("id") != record.get("project_item_id"):
         raise ValueError("readiness unique Project Task binding unavailable")
-    values = (items[0].get("fieldValues") or {})
-    if (values.get("pageInfo") or {}).get("hasNextPage") is not False:
-        raise ValueError("readiness Project field pagination incomplete")
-    fields = {}
-    for value in values.get("nodes") or []:
-        name = (value.get("field") or {}).get("name")
-        if not isinstance(name, str) or name in fields:
-            raise ValueError("readiness Project fields duplicated/malformed")
-        fields[name] = value.get("name", value.get("text", ""))
+    fields = normalize_project_fields(items[0], repo)
     if fields.get("Task UID", uid) != uid:
         raise ValueError("readiness Project Task UID differs")
     dest = receipt_root(root, uid)
