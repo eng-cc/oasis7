@@ -1,146 +1,47 @@
 ---
 name: tdd-test-writer
-description: Use when a behavior-changing task needs failing tests first, RED/GREEN handoff, or automated behavior gates before implementation.
+description: Use when a behavior-changing task has a stable automated test surface and needs useful regression or protection tests.
 ---
 
 # TDD Test Writer
 
 ## When to Use
 
-Use this skill when:
+Use this skill when the user asks for test-first work, or when a stable automated
+harness can capture a behavior defect or protect an important invariant.
 
-- the user asks for TDD, RED/GREEN, failing tests first, or behavior-gated implementation
-- a behavior-changing task has a stable automated test surface and needs a strict implementation contract
+Do not use it as a universal gate for documentation work, behavior-preserving
+refactors, or changes whose only verification surface is manual or unstable.
 
-Do not use this skill when:
+## Oasis7 Test Contract
 
-- the task does not match the trigger conditions above
-
-
-Use this skill to complete the RED phase of TDD: define behavior with tests first, verify they fail for the right reason, then hand off implementation with objective pass criteria.
-
-## Oasis7 Bounded Usage
-
-Use this skill by default only when all of the following are true:
-
-- the task changes product, runtime, API, or UI behavior
-- there is a stable automated test surface for that behavior
-- a narrow RED command can be run locally in the current task worktree
-
-Do not treat this skill as a universal gate for:
-
-- documentation / governance / planning-only tasks
-- pure refactors with no behavior change
-- tasks whose only verification surface is manual, flaky, or not yet repo-owned
-
-When you skip RED phase in oasis7, record the skip reason in GitHub task issue evidence comments or an applicable handoff.
-
-## When To Use
-
-Use this skill when the user asks for:
-
-- test-first development
-- TDD / RED-GREEN-REFACTOR workflow
-- writing tests that implementation agents must satisfy
-- bugfixes that need regression tests before code changes
-
-Also use it in oasis7 when a behavior-changing implementation task already has a stable automated harness and the repo workflow needs a behavior-first guard before production edits.
-
-## Required Rules
-
-1. Do not modify production code while running this skill.
-2. RED-phase test authoring belongs to the currently assigned professional
-   implementation role. An optional `tdd_test_writer` specialist may be used
-   only when that role is registered in the canonical role inventory and
-   reachable on the current surface; an absent role must not be dispatched.
-3. Write behavior-focused tests, not placeholders.
-4. Every new/updated test must fail before handoff.
-5. Failures must come from missing or incorrect production behavior, not broken tests.
-6. Prefer deterministic, targeted test commands over full-suite runs when possible.
-7. For bugfix tasks, add a regression test that captures the reported failure mode.
-8. In oasis7, this skill complements `test_tier_required/full`; it does not replace them.
+- For a stable automated behavior defect, keep at least one valid defect-witness
+  test that fails against the old behavior and passes after the fix.
+- Protective cases that already describe correct behavior may start green. Do
+  not break correct behavior just to manufacture RED.
+- Syntax, fixture, environment, or harness failures are not defect witnesses.
+- Tests may change when a requirement or test assumption was wrong. Preserve the
+  diff and reason; do not weaken a valid assertion merely to get green.
+- Prefer deterministic, targeted commands. Local GREEN supports development but
+  does not replace frozen-candidate verification, independent review, or
+  required CI.
+- Respect an explicit user request for separate test-first work or a pause.
 
 ## Workflow
 
-### 1. Define Behavior Contract
-
-- Convert user request into explicit acceptance criteria.
-- Identify happy path, edge cases, and negative-path expectations.
-- If requirements are ambiguous, record `ASSUMPTION:` lines in output.
-
-### 2. Author RED Tests Under the Assigned Role
-
-- Have the currently assigned professional implementation role write/update tests only, with task scope, target files, and acceptance criteria.
-- Use an optional `tdd_test_writer` specialist only when it is registered and reachable; require tests-only changes and command output proving RED-state failure.
-- If the specialist is unavailable, continue directly and record `FALLBACK: tdd_test_writer unavailable; implementation role authored RED tests`.
-
-### 3. Discover Existing Test Conventions
-
-- Detect framework and runner from the repo (for example `vitest`, `jest`, `pytest`, `go test`, `cargo test`).
-- Follow existing directory, naming, and fixture conventions.
-- Reuse existing helpers instead of introducing duplicate test utilities.
-
-### 4. Author RED-Phase Tests
-
-- Create or update test files that encode the behavior contract.
-- Keep tests small and intention-revealing (clear names and assertions).
-- Include at least one negative-path assertion where applicable.
-- Avoid network/time randomness; mock or fixture external systems.
-
-### 5. Verify RED State
-
-- Run the narrowest command that executes the new tests.
-- Confirm they fail for the expected behavioral gap.
-- If failure is caused by test syntax/setup, fix tests and rerun.
-
-### 6. Produce Implementation Handoff
-
-Return a block that implementation agents must follow. The handoff must include:
-
-- assigned implementation role, plus optional `tdd_test_writer` only when registered/reachable, or an explicit fallback reason
-- exact test files created/updated
-- exact verification command(s)
-- short failure summary proving RED state
-- immutable test constraint (do not edit tests unless requirement changes)
-- pass criteria that define task completion
-
-## Required Output Format
-
-```markdown
-TDD RED PHASE COMPLETE
-
-## Authoring Mode
-- Assigned implementation role: [role responsible for the bounded change]
-- Optional specialist: `tdd_test_writer` only when registered and reachable;
-  otherwise fallback: [reason the assigned role authored the RED tests]
-
-## Test Files
-- [path]
-
-## Verification
-- Command: [exact command]
-- Result: FAIL (expected)
-- Failure reason: [1-2 lines tied to missing behavior]
-
-## Implementation Contract (for next agent)
-1. Do not modify these tests: [paths]
-2. Implement production changes only in: [paths or modules]
-3. Completion gate: [exact command] passes with no test weakening.
-4. Run broader safety check: [secondary command]
-5. Return evidence: changed files + command output summary.
-
-## Assumptions
-- ASSUMPTION: [only if needed]
-```
-
-## Quality Bar
-
-- Tests fail before implementation and are reproducible locally.
-- Assertions are specific enough to prevent false positives.
-- Regression coverage is present for bugfix-driven tasks.
-- Handoff is precise enough that another agent can execute without clarifications.
+1. State the behavior, affected paths, and relevant negative case.
+2. Reuse the repository's existing test runner and fixture conventions.
+3. For a stable bug, add one focused witness and verify its failure is caused
+   by the old production behavior. Add initially-green protection cases where
+   useful.
+4. Continue the same authorized task through implementation and targeted
+   verification unless the user or task boundary requires a handoff.
+5. Record the changed tests, exact command, result, and any residual gap in the
+   existing task truth when the task is write-authorized.
 
 ## Guardrails
 
-- Do not weaken tests to make GREEN easier.
-- Do not use TDD as a hard gate when no stable automated harness exists.
+- Do not weaken behavior assertions merely to make tests pass.
+- Do not treat a local test result as formal review or release readiness.
+- When no stable automated witness exists, explain the limitation and use the
+  strongest available verification without inventing a RED phase.
