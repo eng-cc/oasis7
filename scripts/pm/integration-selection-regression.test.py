@@ -97,6 +97,32 @@ on:
     with self.assertRaisesRegex(SystemExit,'current request'):
      self.check(require_integration=True,require_dispatch=True)
 
+ def test_expired_historical_proof_blocks_strict_receipt_with_explicit_locator(self):
+  for candidate in [False,True]:
+   with self.subTest(candidate=candidate):
+    first=self.validation(30);second={**first,'id':31}
+    self.runs=[first,second]+([run(10)] if candidate else [])
+    now=[0.0];original=self.api
+    def delayed(*args):
+     if '/runs?' in args[-1] and args[-1].endswith('page=2'):now[0]=60
+     return original(*args)
+    with patch.object(self,'api',side_effect=delayed),patch.object(integration.time,'monotonic',side_effect=lambda:now[0]),patch.object(integration,'DISCOVERY_PAGE_SIZE',1):
+     with self.assertRaisesRegex(SystemExit,'current request blocked.*deadline'):
+      self.check(10 if candidate else None,require_integration=True,require_dispatch=True)
+
+ def test_tree_reuse_keeps_distinct_history_ineligible_and_production_attempt_current(self):
+  first=self.validation(30);second={**first,'id':31,'head_sha':'f'*40}
+  second['display_title']=second['display_title'].rsplit('|',1)[0]+'|'+'f'*40
+  latest=run(20,status='queued',conclusion=None);latest['run_attempt']=2
+  self.runs=[first,second,latest,run(10)];reads=[];original=self.api
+  def recorded(*args):reads.append(args[-1]);return original(*args)
+  with patch.object(self,'api',side_effect=recorded):
+   with self.assertRaisesRegex(SystemExit,'current request'):self.check(10,require_integration=True,require_dispatch=True)
+  for commit in ['e'*40,'f'*40]:
+   self.assertIn('repos/owner/repo/git/commits/'+commit,reads)
+   self.assertIn('repos/owner/repo/contents/'+integration.WORKFLOW+'?ref='+commit,reads)
+  self.assertEqual(sum('/git/trees/' in path for path in reads),3)
+
  def test_current_target_integration_accepts_historical_pr_base(self):
   self.pr['base']['sha']='e'*40
   self.runs=[run(20)]

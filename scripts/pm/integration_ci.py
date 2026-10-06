@@ -36,6 +36,10 @@ HISTORICAL_MAX_COMMITS=32
 HISTORICAL_MAX_CALLS=160
 HISTORICAL_CALL_TIMEOUT_SECONDS=15
 HISTORICAL_TOTAL_TIMEOUT_SECONDS=60
+HISTORICAL_TREE_MAX_OBJECTS=96
+HISTORICAL_TREE_MAX_ENTRIES=8192
+HISTORICAL_TREE_OBJECT_MAX_BYTES=2*1024*1024
+HISTORICAL_TREE_TOTAL_MAX_BYTES=16*1024*1024
 
 class _HistoricalReadBudget:
     """Invocation-local limits; an uncertain read never becomes proven absence."""
@@ -44,6 +48,9 @@ class _HistoricalReadBudget:
         self.calls=0
         self.bytes=0
         self.commits=set()
+        self._tree_objects={}
+        self._tree_entries=0
+        self._tree_bytes=0
 
     def remaining(self):
         remaining=self.deadline-time.monotonic()
@@ -106,6 +113,65 @@ def _historical_json(path,budget):
             process.stdout.close()
             process.stderr.close()
 
+def _historical_tree(repository,oid,budget):
+    """Reuse only verified immutable tree data within this read invocation.
+
+    Canonical bytes isolate the retained object from both the server response
+    and each consumer. Commit, edge and Contents proof remain independent.
+    """
+    budget.remaining()
+    if not isinstance(oid,str) or not OID.fullmatch(oid):
+        raise ValueError('historical workflow tree object identity malformed')
+    key=(repository,'tree',oid)
+    def validate(response):
+        if (not isinstance(response,dict) or response.get('sha')!=oid
+                or response.get('type','tree')!='tree'
+                or response.get('truncated') is not False
+                or not isinstance(response.get('tree'),list)):
+            raise ValueError('historical workflow tree readback malformed or incomplete')
+        names=set()
+        modes={'040000':'tree','100644':'blob','100755':'blob',
+               '120000':'blob','160000':'commit'}
+        for entry in response['tree']:
+            if not isinstance(entry,dict):
+                raise ValueError('historical workflow tree entry malformed')
+            name=entry.get('path')
+            if (not isinstance(name,str) or not name or name in ('.','..')
+                    or '/' in name or '\0' in name or name in names
+                    or not isinstance(entry.get('sha'),str)
+                    or not OID.fullmatch(entry['sha'])
+                    or not isinstance(entry.get('mode'),str)
+                    or entry['mode'] not in modes
+                    or modes[entry['mode']]!=entry.get('type')):
+                raise ValueError('historical workflow tree entry malformed or overlapping')
+            names.add(name)
+        return response
+    if key in budget._tree_objects:
+        response=validate(json.loads(budget._tree_objects[key].decode('utf-8')))
+        budget.remaining()
+        return response
+    try:
+        response=validate(_historical_json(f'repos/{repository}/git/trees/{oid}',budget))
+    except (OSError,subprocess.SubprocessError) as exc:
+        raise ValueError('historical workflow proof read unavailable') from exc
+    try:
+        retained=json.dumps(response,ensure_ascii=False,sort_keys=True,
+                            separators=(',',':'),allow_nan=False).encode('utf-8')
+    except (ValueError,TypeError,UnicodeError,RecursionError) as exc:
+        raise ValueError('historical workflow tree canonical data malformed') from exc
+    entries=len(response['tree'])
+    budget.remaining()
+    if (len(budget._tree_objects)+1>HISTORICAL_TREE_MAX_OBJECTS
+            or budget._tree_entries+entries>HISTORICAL_TREE_MAX_ENTRIES
+            or len(retained)>HISTORICAL_TREE_OBJECT_MAX_BYTES
+            or budget._tree_bytes+len(retained)>HISTORICAL_TREE_TOTAL_MAX_BYTES):
+        raise ValueError('historical workflow tree retained data budget exhausted')
+    # Nothing is retained or charged until all metadata, bytes and bounds pass.
+    budget._tree_objects[key]=retained
+    budget._tree_entries+=entries
+    budget._tree_bytes+=len(retained)
+    return json.loads(retained.decode('utf-8'))
+
 def _first_activation_producer(workflow):
     """Accept only the direct, structurally declared historical producer shape.
 
@@ -166,7 +232,7 @@ def _historical_first_activation_workflow(repository,commit,budget):
     if not isinstance(oid,str) or not OID.fullmatch(oid):
         raise ValueError('historical workflow root tree identity malformed')
     for index,component in enumerate(WORKFLOW.split('/')):
-        response=read(prefix+'git/trees/'+oid)
+        response=_historical_tree(repository,oid,budget)
         if (not isinstance(response,dict) or response.get('sha')!=oid
                 or response.get('truncated') is not False
                 or not isinstance(response.get('tree'),list)):
@@ -263,6 +329,7 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                     raise ValueError('integration current request identity malformed')
                 if run['head_sha']!=request_head:
                     raise ValueError('integration validation execution head differs from source')
+                historical_budget.remaining()
                 if run['head_sha'] not in historical_proofs:
                     _historical_first_activation_workflow(repository,run['head_sha'],historical_budget)
                     historical_proofs.add(run['head_sha'])
@@ -316,6 +383,7 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                                 '_requested_at_sort':sort_time,
                                 'execution_sha':run['head_sha'],'execution_branch':run['head_branch']})
         if len(batch)<DISCOVERY_PAGE_SIZE:
+            if historical_proofs: historical_budget.remaining()
             if not matches: return None
             selected=max(matches,key=lambda item:(item['_requested_at_sort'],item['id'],item['run_attempt']))
             selected.pop('_requested_at_sort')

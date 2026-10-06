@@ -911,6 +911,203 @@ class FirstActivationHistoryTests(unittest.TestCase):
    rows.append(row)
   with self.assertRaises(ValueError):self.select(rows+[self.row(10)])
 
+class HistoricalTreeReuseTests(unittest.TestCase):
+ setUp=FirstActivationHistoryTests.setUp
+ row=FirstActivationHistoryTests.row
+ response=FirstActivationHistoryTests.response
+ WORKFLOW_SOURCE=FirstActivationHistoryTests.WORKFLOW_SOURCE
+ # Dedicated internal seam: no caller-supplied cache or object-type selector.
+ def tree(self,oid='1'*40,entries=None):
+  return {'sha':oid,'truncated':False,'tree':entries if entries is not None else
+   [{'path':'.github','mode':'040000','type':'tree','sha':'2'*40}]}
+
+ def cached(self,repository,oid,budget):
+  return self.api._historical_tree(repository,oid,budget)
+
+ def test_frozen_tree_store_caps(self):
+  expected={'HISTORICAL_TREE_MAX_OBJECTS':96,'HISTORICAL_TREE_MAX_ENTRIES':8192,
+   'HISTORICAL_TREE_OBJECT_MAX_BYTES':2*1024*1024,'HISTORICAL_TREE_TOTAL_MAX_BYTES':16*1024*1024}
+  for name,value in expected.items():
+   with self.subTest(name=name):self.assertEqual(getattr(self.api,name),value)
+
+ def test_shared_trees_keep_each_commit_and_contents_fresh(self):
+  commits=['b'*40,'d'*40];rows=[]
+  for n,commit in enumerate(commits):
+   row=self.row(20+n,True);row.update(head_sha=commit,
+    display_title=row['display_title'].rsplit('|',1)[0]+'|'+commit);rows.append(row)
+  rows.append(self.row(10));reads=[]
+  def read(path,budget):
+   reads.append(path)
+   if '/git/commits/' in path:return {'sha':path.rsplit('/',1)[1],'tree':{'sha':self.tree_ids[0]}}
+   if '/git/trees/' in path:
+    oid=path.rsplit('/',1)[1];i=self.tree_ids.index(oid)
+    entry=({'path':['.github','workflows'][i],'mode':'040000','type':'tree','sha':self.tree_ids[i+1]} if i<2 else
+     {'path':'rust.yml','mode':'100644','type':'blob','sha':self.response()['sha']})
+    return self.tree(oid,[entry])
+   self.assertIn(path,[f'repos/owner/repo/contents/{self.api.WORKFLOW}?ref={c}' for c in commits])
+   return self.response()
+  with patch.object(self.api,'gh',return_value={'workflow_runs':rows}),patch.object(self.api,'_historical_json',side_effect=read):
+   self.assertEqual(self.api.current_request('owner/repo',self.uid,7,self.base,self.head,'main')['id'],10)
+  self.assertEqual(sum('/git/trees/' in path for path in reads),3)
+  for commit in commits:
+   self.assertEqual(reads.count('repos/owner/repo/git/commits/'+commit),1)
+   self.assertEqual(reads.count(f'repos/owner/repo/contents/{self.api.WORKFLOW}?ref={commit}'),1)
+
+ def test_shared_tree_does_not_borrow_contents_or_complete_proof(self):
+  commits=['b'*40,'d'*40];budget=self.api._HistoricalReadBudget();reads=[]
+  def read(path,budget):
+   reads.append(path)
+   if '/git/commits/' in path:return {'sha':path.rsplit('/',1)[1],'tree':{'sha':self.tree_ids[0]}}
+   if '/git/trees/' in path:
+    oid=path.rsplit('/',1)[1];i=self.tree_ids.index(oid)
+    entry=({'path':['.github','workflows'][i],'mode':'040000','type':'tree','sha':self.tree_ids[i+1]} if i<2 else
+     {'path':'rust.yml','mode':'100644','type':'blob','sha':self.response()['sha']})
+    return self.tree(oid,[entry])
+   return self.response() if path.endswith(commits[0]) else self.response('name: Rust\n')
+  with patch.object(self.api,'_historical_json',side_effect=read):
+   self.api._historical_first_activation_workflow('owner/repo',commits[0],budget)
+   with self.assertRaises(ValueError):self.api._historical_first_activation_workflow('owner/repo',commits[1],budget)
+  self.assertEqual(sum('/git/trees/' in p for p in reads),3)
+  self.assertIn(f'repos/owner/repo/contents/{self.api.WORKFLOW}?ref={commits[1]}',reads)
+
+ def test_repository_oid_and_invocation_key_isolation(self):
+  calls=[]
+  def read(path,budget):calls.append(path);return self.tree(path.rsplit('/',1)[1])
+  with patch.object(self.api,'_historical_json',side_effect=read):
+   budget=self.api._HistoricalReadBudget()
+   for repo,oid,b in [('owner/repo','1'*40,budget),('owner/repo','1'*40,budget),
+     ('other/repo','1'*40,budget),('owner/repo','2'*40,budget),
+     ('owner/repo','1'*40,self.api._HistoricalReadBudget())]:self.cached(repo,oid,b)
+  self.assertEqual(calls,['repos/owner/repo/git/trees/'+'1'*40,'repos/other/repo/git/trees/'+'1'*40,
+   'repos/owner/repo/git/trees/'+'2'*40,'repos/owner/repo/git/trees/'+'1'*40])
+
+ def test_verified_only_all_entry_metadata_and_full_oid_guards(self):
+  good=self.tree();entry={'path':'other','mode':'100644','type':'blob','sha':'a'*40}
+  bad_entries=[None,{}, {**entry,'path':''},{**entry,'path':'a/b'},{**entry,'path':'.'},
+   {**entry,'path':'..'},{**entry,'path':'a\x00b'},{**entry,'sha':'A'*40},
+   {**entry,'sha':'bad'},{**entry,'mode':'100644','type':'tree'},
+   {**entry,'mode':'040000','type':'blob'},{**entry,'mode':'160000','type':'blob'},
+   {**entry,'mode':'120000','type':'tree'},{**entry,'mode':'bad'},{**entry,'type':'unknown'}]
+  cases=[None,{**good,'type':'blob'},{**good,'sha':'f'*40},{**good,'truncated':True},{**good,'truncated':None},
+   {**good,'tree':None},{**good,'tree':good['tree']+[entry,entry]}]
+  cases += [{**good,'tree':good['tree']+[entry]} for entry in bad_entries]
+  for response in cases:
+   with self.subTest(response=response):
+    budget=self.api._HistoricalReadBudget()
+    with patch.object(self.api,'_historical_json',side_effect=[response,good]) as read:
+     with self.assertRaises(ValueError):self.cached('owner/repo','1'*40,budget)
+     self.assertEqual(self.cached('owner/repo','1'*40,budget),good)
+     self.assertEqual(read.call_count,2,'failed response must not become reusable success')
+  for oid in ['A'*40,'short','1'*40+'?recursive=1']:
+   with self.subTest(oid=oid),patch.object(self.api,'_historical_json') as read:
+    with self.assertRaises(ValueError):self.cached('owner/repo',oid,self.api._HistoricalReadBudget())
+    read.assert_not_called()
+
+ def test_failed_read_is_not_cached_and_valid_unrelated_git_types_are_allowed(self):
+  good=self.tree(entries=self.tree()['tree']+[
+   {'path':'link','mode':'120000','type':'blob','sha':'a'*40},
+   {'path':'module','mode':'160000','type':'commit','sha':'b'*40}])
+  budget=self.api._HistoricalReadBudget()
+  with patch.object(self.api,'_historical_json',side_effect=[ValueError('authenticated read failed'),good]) as read:
+   with self.assertRaises(ValueError):self.cached('owner/repo','1'*40,budget)
+   self.assertEqual(self.cached('owner/repo','1'*40,budget),good)
+   self.assertEqual(self.cached('owner/repo','1'*40,budget),good);self.assertEqual(read.call_count,2)
+
+ def test_original_and_returned_nested_mutation_cannot_poison_store(self):
+  original=self.tree();expected=self.tree();budget=self.api._HistoricalReadBudget()
+  with patch.object(self.api,'_historical_json',return_value=original) as read:
+   first=self.cached('owner/repo','1'*40,budget)
+   original['tree'][0]['mode']='120000';original['tree'].append({'bad':True})
+   first['tree'][0]['sha']='f'*40;first['tree'].clear();first['sha']='bad'
+   self.assertEqual(self.cached('owner/repo','1'*40,budget),expected);read.assert_called_once()
+
+ def test_caps_exact_boundaries_and_plus_one_without_eviction_or_reset(self):
+  # Scaled caps preserve exact inclusive-boundary logic without huge fixtures.
+  a=self.tree('1'*40);b=self.tree('2'*40);c=self.tree('3'*40)
+  canonical=lambda value:len(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode('utf-8'))
+  for constant,cap in [('HISTORICAL_TREE_MAX_OBJECTS',2),('HISTORICAL_TREE_MAX_ENTRIES',2),
+    ('HISTORICAL_TREE_TOTAL_MAX_BYTES',canonical(a)+canonical(b))]:
+   with self.subTest(constant=constant),patch.object(self.api,constant,cap,create=True):
+    budget=self.api._HistoricalReadBudget()
+    with patch.object(self.api,'_historical_json',side_effect=[a,b,c,c]) as read:
+     self.cached('owner/repo','1'*40,budget);self.cached('owner/repo','2'*40,budget)
+     for _ in range(3):self.assertEqual(self.cached('owner/repo','1'*40,budget),a)
+     for _ in range(2):
+      with self.assertRaises(ValueError):self.cached('owner/repo','3'*40,budget)
+     self.assertEqual(self.cached('owner/repo','2'*40,budget),b)
+     self.assertGreaterEqual(read.call_count,2);self.assertLessEqual(read.call_count,4)
+  unicode_tree=self.tree(entries=[{'path':'é','mode':'100644','type':'blob','sha':'a'*40}])
+  for cap,accepted in [(canonical(unicode_tree),True),(canonical(unicode_tree)-1,False)]:
+   with self.subTest(object_cap=cap),patch.object(self.api,'HISTORICAL_TREE_OBJECT_MAX_BYTES',cap,create=True),patch.object(self.api,'_historical_json',return_value=unicode_tree):
+    budget=self.api._HistoricalReadBudget()
+    if accepted:self.assertEqual(self.cached('owner/repo','1'*40,budget),unicode_tree)
+    else:
+     with self.assertRaises(ValueError):self.cached('owner/repo','1'*40,budget)
+
+ def test_noncanonical_nonfinite_json_and_invalid_utf8_are_not_retained(self):
+  for extra in [float('nan'),float('inf'),'\ud800']:
+   with self.subTest(extra=repr(extra)),patch.object(self.api,'_historical_json',return_value={**self.tree(),'extra':extra}):
+    with self.assertRaises(ValueError):self.cached('owner/repo','1'*40,self.api._HistoricalReadBudget())
+
+ def test_hit_and_pending_insertion_preserve_deadline_and_transport_counters(self):
+  now=[0.0]
+  with patch.object(self.api.time,'monotonic',side_effect=lambda:now[0]):
+   budget=self.api._HistoricalReadBudget();budget.calls=9;budget.bytes=123
+   def read(path,b):b.calls+=1;b.bytes+=17;return self.tree()
+   with patch.object(self.api,'_historical_json',side_effect=read) as reader:
+    self.cached('owner/repo','1'*40,budget)
+    self.cached('owner/repo','1'*40,budget)
+    self.assertEqual((budget.calls,budget.bytes),(10,140));self.assertEqual(budget.deadline,60)
+    now[0]=60
+    with self.assertRaisesRegex(ValueError,'deadline'):self.cached('owner/repo','1'*40,budget)
+    self.assertEqual(reader.call_count,1)
+   now[0]=0;budget=self.api._HistoricalReadBudget()
+   def expire(path,b):now[0]=60;return self.tree()
+   with patch.object(self.api,'_historical_json',side_effect=expire):
+    with self.assertRaisesRegex(ValueError,'deadline'):self.cached('owner/repo','1'*40,budget)
+
+class HistoricalDiscoveryDeadlineTests(unittest.TestCase):
+ setUp=FirstActivationHistoryTests.setUp
+ row=FirstActivationHistoryTests.row
+ response=FirstActivationHistoryTests.response
+ WORKFLOW_SOURCE=FirstActivationHistoryTests.WORKFLOW_SOURCE
+ # Deterministic source-derived expiry hypothesis, not the observed D1 cause.
+ def discover(self,rows,expire_page=None,expire_after_proof=False):
+  now=[0.0];reads=[]
+  def page(*args):
+   n=int(args[-1].rsplit('page=',1)[1])
+   if n==expire_page:now[0]=60
+   return {'workflow_runs':rows[n-1:n]}
+  def read(path,budget):
+   reads.append(path)
+   if '/git/commits/' in path:return {'sha':self.producer,'tree':{'sha':self.tree_ids[0]}}
+   if '/git/trees/' in path:
+    oid=path.rsplit('/',1)[1];i=self.tree_ids.index(oid)
+    entry=({'path':['.github','workflows'][i],'mode':'040000','type':'tree','sha':self.tree_ids[i+1]} if i<2 else
+     {'path':'rust.yml','mode':'100644','type':'blob','sha':self.response()['sha']})
+    return {'sha':oid,'truncated':False,'tree':[entry]}
+   return self.response()
+  original=self.api._historical_first_activation_workflow
+  def prove(*args):
+   result=original(*args)
+   if expire_after_proof:now[0]=60
+   return result
+  with patch.object(self.api.time,'monotonic',side_effect=lambda:now[0]),patch.object(self.api,'gh',side_effect=page),patch.object(self.api,'_historical_json',side_effect=read),patch.object(self.api,'_historical_first_activation_workflow',side_effect=prove),patch.object(self.api,'DISCOVERY_PAGE_SIZE',1):
+   return self.api.current_request('owner/repo',self.uid,7,self.base,self.head,'main')
+
+ def test_repeated_commit_after_later_page_expiry_blocks_selection_and_absence(self):
+  for own in [[],[self.row(10)]]:
+   with self.subTest(own=bool(own)),self.assertRaisesRegex(ValueError,'deadline'):
+    self.discover([self.row(20,True),self.row(21,True)]+own,expire_page=2)
+
+ def test_final_return_after_last_historical_proof_expiry_blocks(self):
+  for own in [[],[self.row(10)]]:
+   with self.subTest(own=bool(own)),self.assertRaisesRegex(ValueError,'deadline'):
+    self.discover([self.row(20,True)]+own,expire_after_proof=True)
+
+ def test_ordinary_production_only_discovery_keeps_existing_no_history_contract(self):
+  self.assertEqual(self.discover([self.row(10)],expire_page=2)['id'],10)
+
 class HistoricalTransportTests(unittest.TestCase):
  def setUp(self):
   spec=importlib.util.spec_from_file_location('historical_transport',HERE/'integration_ci.py')
