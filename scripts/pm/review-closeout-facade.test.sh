@@ -41,7 +41,7 @@ UID_VALUE="task_11111111111111111111111111111111"
 ROLE="repository_health_engineer"
 SLICE="11111111-1111-4111-8111-111111111111"
 mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync"
-for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh review_closeout_complete.py review_closeout_publication.py validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py workflow-impact-projection.py ci_ready_receipt_identity.py pr_projection_publication.py pr_projection_publish.py pr_projection_journal.py projection_publication_contract.py portable_file_lock.py github-project-task.py workflow-durable-store.py loop_leaf_result.py loop_policy.py loop_contracts.py; do
+for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh review_closeout_complete.py review_closeout_publication.py validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py workflow-impact-projection.py ci_ready_receipt_identity.py pr_projection_publication.py pr_projection_publish.py pr_projection_journal.py projection_publication_contract.py portable_file_lock.py task_complete_claim.py github-project-task.py workflow-durable-store.py loop_leaf_result.py loop_policy.py loop_contracts.py; do
   cp "$ROOT_DIR/scripts/pm/$helper" "$REPO/scripts/pm/$helper"
 done
 cp "$ROOT_DIR/.gitignore" "$REPO/.gitignore"
