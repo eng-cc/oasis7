@@ -18,6 +18,12 @@ _SPEC = importlib.util.spec_from_file_location("subagent_task_packet_under_test"
 assert _SPEC is not None and _SPEC.loader is not None
 PACKET = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(PACKET)
+_PROJECTION_SPEC = importlib.util.spec_from_file_location(
+    "workflow_impact_projection_under_test", Path(__file__).with_name("workflow-impact-projection.py")
+)
+assert _PROJECTION_SPEC is not None and _PROJECTION_SPEC.loader is not None
+IMPACT_PROJECTION = importlib.util.module_from_spec(_PROJECTION_SPEC)
+_PROJECTION_SPEC.loader.exec_module(IMPACT_PROJECTION)
 SNAPSHOT_HELPER = Path(__file__).with_name("bootstrap-task-snapshot.py")
 TASK_UID = "task_11111111111111111111111111111111"
 
@@ -29,10 +35,16 @@ class PacketTest(unittest.TestCase):
         subprocess.run(["git", "init", "-b", "main", str(self.repo)], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(self.repo), "config", "user.email", "test@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(self.repo), "config", "user.name", "Test"], check=True)
-        for path in ("scripts/pm", ".pm/github-project-sync", ".agents/roles", "doc/engineering/workflow"):
+        for path in ("scripts/pm", ".pm/github-project-sync", ".agents/roles",
+                     ".agents/skills/requesting-repo-owned-review", "doc/engineering/workflow"):
             (self.repo / path).mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE, self.repo / "scripts/pm/subagent-task-packet.py")
         shutil.copy2(SOURCE.with_name("ci_ready_receipt_identity.py"), self.repo / "scripts/pm/ci_ready_receipt_identity.py")
+        shutil.copy2(SOURCE.with_name("review-plan.py"), self.repo / "scripts/pm/review-plan.py")
+        shutil.copy2(SOURCE.with_name("review-batch-epoch.py"), self.repo / "scripts/pm/review-batch-epoch.py")
+        shutil.copy2(SOURCE.with_name("review_preflight_handoff.py"), self.repo / "scripts/pm/review_preflight_handoff.py")
+        shutil.copy2(SOURCE.with_name("review-role-selector.py"), self.repo / "scripts/pm/review-role-selector.py")
+        shutil.copy2(SOURCE.with_name("workflow-impact-projection.py"), self.repo / "scripts/pm/workflow-impact-projection.py")
         shutil.copy2(SOURCE.with_name("workflow-durable-store.py"), self.repo / "scripts/pm/workflow-durable-store.py")
         shutil.copy2(SOURCE.with_name("github-project-workflow.py"), self.repo / "scripts/pm/github-project-workflow.py")
         shutil.copy2(SOURCE.with_name("github-project-sync.py"), self.repo / "scripts/pm/github-project-sync.py")
@@ -71,7 +83,9 @@ class PacketTest(unittest.TestCase):
         self.addCleanup(environment.stop)
         shutil.copy2(SNAPSHOT_HELPER, self.repo / "scripts/pm/bootstrap-task-snapshot.py")
         shutil.copy2(SNAPSHOT_HELPER.with_name("worktree_registration.py"), self.repo / "scripts/pm/worktree_registration.py")
-        for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md", ".agents/roles/qa_engineer.md", "scope.txt"):
+        for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md",
+                     ".agents/roles/qa_engineer.md", ".agents/roles/repository_health_engineer.md",
+                     ".agents/skills/requesting-repo-owned-review/SKILL.md", "scope.txt"):
             (self.repo / path).write_text(path + "\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "base"], check=True, capture_output=True)
@@ -202,6 +216,74 @@ class PacketTest(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         return snapshot
+
+    def create_actual_v2_review_plan(self, *, comparison_ref: str, name: str) -> tuple[Path, Path, str]:
+        """Build a v2 plan through review-plan.py for packet-admission integration coverage."""
+        self.write_mapping(pr_number=2, bootstrap_epoch=1)
+        snapshot = self.create_snapshot()
+        base_oid = self.git("rev-parse", "main")
+        self.git("update-ref", "refs/remotes/origin/main", base_oid)
+
+        source_path = self.repo / "doc/review-scope.md"
+        if not source_path.exists():
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text("review scope fixture\n", encoding="utf-8")
+            self.git("add", "doc/review-scope.md")
+            self.git("commit", "-m", "add review scope fixture")
+        head = self.git("rev-parse", "HEAD")
+        changed_paths = [
+            path for path in self.git("diff", "--name-only", "--no-renames", base_oid, head).splitlines()
+            if path
+        ]
+        projection = IMPACT_PROJECTION.build_projection(self.repo, {
+            "task_uid": TASK_UID,
+            "source_head_oid": head,
+            "scope_base_oid": base_oid,
+            "changed_paths": changed_paths,
+            "change_class": "workflow-doc",
+            "manual_roles": [],
+            "domain_role": None,
+            "test_profile": "required",
+            "declared_tests": ["required_gate_baseline"],
+            "consumed_contracts": ["workflow-contract"],
+            "public_semantics": [],
+            "affected_consumers": ["required-ci"],
+            "closure_status": {"status": "complete", "reason": "fixture", "evidence": [{
+                "path": "scope.txt",
+                "sha256": "sha256:" + hashlib.sha256((self.repo / "scope.txt").read_bytes()).hexdigest(),
+            }]},
+        })
+        projection_path = self.repo / ".pm/scratch" / TASK_UID / f"{name}-impact.json"
+        projection_path.parent.mkdir(parents=True, exist_ok=True)
+        projection_path.write_text(json.dumps(projection), encoding="utf-8")
+        plan_path = self.repo / ".pm/scratch" / TASK_UID / "review-plans" / f"{name}.json"
+        plan_path.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run([
+            "python3", "scripts/pm/review-plan.py", "--root", str(self.repo),
+            "--task-uid", TASK_UID, "--head", head, "--review-schema", "oasis7-review-plan/v2",
+            "--bootstrap-epoch", "1", "--impact-projection", str(projection_path),
+            "--change-class", "workflow-doc", "--comparison-ref", comparison_ref,
+            "--comparison-oid", base_oid, "--out", str(plan_path),
+        ], cwd=self.repo, text=True, capture_output=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        return plan_path, snapshot, base_oid
+
+    def create_packet_for_plan(self, plan_path: Path, *, base_ref: str) -> Path:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        qa_slice = next(item for item in plan["expected_slices"] if item["role"] == "qa_engineer")
+        args = self.create_args(slice_id=qa_slice["slice_id"])
+        args[args.index("main")] = base_ref
+        args.extend(("--frozen-base-oid", plan["comparison_oid"]))
+        result = self.invoke(args)
+        packet_path = Path(result.stdout.splitlines()[0])
+        return packet_path if packet_path.is_absolute() else self.repo / packet_path
+
+    def rewrite_packet_identity(self, packet_path: Path, **changes: str) -> None:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        packet["identity"].update(changes)
+        packet["packet_digest"] = PACKET.canonical_digest(packet)
+        packet_path.write_text(json.dumps(packet, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                               encoding="utf-8")
 
     def create_review_plan(self, packet_path: str, *, slice_id: str = "qa-review", **changes: object) -> Path:
         base_sha = self.git("rev-parse", "main")
@@ -656,6 +738,48 @@ class PacketTest(unittest.TestCase):
         snapshot = self.create_snapshot()
         plan = self.create_v2_review_plan(packet, bootstrap_epoch=1, source_only=True)
         admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+    def test_actual_v2_plan_packet_admission_normalizes_remote_shorthand(self) -> None:
+        plan_path, snapshot, base_oid = self.create_actual_v2_review_plan(
+            comparison_ref="origin/main", name="remote-shorthand",
+        )
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        self.assertEqual("refs/remotes/origin/main", plan["comparison_ref"])
+        packet_path = self.create_packet_for_plan(plan_path, base_ref="origin/main")
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        self.assertEqual(plan["comparison_ref"], packet["identity"]["base_ref"])
+        self.assertEqual(base_oid, packet["identity"]["base_sha"])
+        admitted = self.review_admission(str(packet_path), plan_path, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+        # Preserve valid historical packet bytes whose remote shorthand is
+        # equivalent to the plan's canonical tracking ref.
+        self.rewrite_packet_identity(packet_path, base_ref="origin/main")
+        admitted = self.review_admission(str(packet_path), plan_path, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+
+        # A local branch with the same current OID is a distinct ref and must
+        # remain rejected; matching only by OID would weaken the contract.
+        self.rewrite_packet_identity(packet_path, base_ref="main")
+        wrong_ref = self.review_admission(str(packet_path), plan_path, snapshot, ok=False)
+        self.assertIn("comparison ref", wrong_ref.stderr.lower())
+
+        self.rewrite_packet_identity(packet_path, base_ref="origin/main", base_sha=plan["frozen_head"])
+        wrong_oid = self.review_admission(str(packet_path), plan_path, snapshot, ok=False)
+        self.assertIn("comparison oid", wrong_oid.stderr.lower())
+
+    def test_actual_v2_plan_packet_admission_accepts_full_remote_ref(self) -> None:
+        plan_path, snapshot, base_oid = self.create_actual_v2_review_plan(
+            comparison_ref="refs/remotes/origin/main", name="remote-full-ref",
+        )
+        packet_path = self.create_packet_for_plan(
+            plan_path, base_ref="refs/remotes/origin/main",
+        )
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        self.assertEqual("refs/remotes/origin/main", packet["identity"]["base_ref"])
+        self.assertEqual(base_oid, packet["identity"]["base_sha"])
+        admitted = self.review_admission(str(packet_path), plan_path, snapshot)
         self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
 
     def test_review_admission_invalidates_after_head_or_comparison_ref_changes(self) -> None:

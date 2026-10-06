@@ -59,6 +59,20 @@ def git_bytes(root: Path, *args: str) -> bytes:
     return result.stdout
 
 
+def canonical_comparison_ref(root: Path, comparison_ref: str) -> str:
+    """Use the review-plan producer's proven remote-ref normalization."""
+    helper_path = Path(__file__).with_name("review-plan.py")
+    spec = importlib.util.spec_from_file_location("review_plan_ref_normalization", helper_path)
+    if spec is None or spec.loader is None:
+        fail("review plan comparison-ref normalizer is unavailable")
+    helper = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(helper)
+        return str(helper.canonicalize_comparison_ref(root, comparison_ref))
+    except (OSError, AttributeError, TypeError, ValueError) as exc:
+        fail(f"cannot canonicalize comparison ref {comparison_ref!r}: {exc}")
+
+
 def binary_diff_digest(root: Path, old_head: str, new_head: str) -> str:
     """Hash a diff without repository-configured output filters."""
     return hashlib.sha256(git_bytes(
@@ -161,6 +175,7 @@ def current_facts(root: Path, task: dict[str, object], base: str,
         fail(f"wrong branch: mapping requires {expected_branch}, current branch is {branch or '(detached)'}")
     if not base:
         fail("base ref is required")
+    comparison_ref = canonical_comparison_ref(root, base)
     head = git(root, "rev-parse", "HEAD")
     if frozen_base_oid:
         resolved = git(root, "rev-parse", "--verify", f"{frozen_base_oid}^{{commit}}")
@@ -178,7 +193,7 @@ def current_facts(root: Path, task: dict[str, object], base: str,
     return {
         "worktree": str(root),
         "branch": branch,
-        "base_ref": base,
+        "base_ref": comparison_ref,
         "base_sha": base_sha,
         "base_binding": "immutable_oid" if frozen_base_oid else "live_ref",
         "head": head,
@@ -793,7 +808,12 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         fail("review plan task UID does not match packet")
     if plan.get("frozen_head") != identity.get("head"):
         fail("review plan frozen head does not match current packet head")
-    if plan.get("comparison_ref") != identity.get("base_ref"):
+    plan_comparison_ref = plan.get("comparison_ref")
+    packet_comparison_ref = identity.get("base_ref")
+    if not isinstance(plan_comparison_ref, str) or not isinstance(packet_comparison_ref, str):
+        fail("review plan and packet comparison refs must be strings")
+    if canonical_comparison_ref(root, plan_comparison_ref) != canonical_comparison_ref(
+            root, packet_comparison_ref):
         fail("review plan comparison ref does not match packet base ref")
     if plan.get("comparison_oid") != identity.get("base_sha"):
         fail("review plan comparison OID does not match packet base SHA")
