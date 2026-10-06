@@ -687,7 +687,7 @@ def main() -> int:
     parser.add_argument("--out")
     parser.add_argument(
         "--planner-authority-oid",
-        help="load the required-scope planner and config from this immutable commit; must equal scope_base_oid",
+        help="load the required-scope planner and config from this immutable authority commit; authority may differ from scope_base_oid",
     )
     args = parser.parse_args()
     try:
