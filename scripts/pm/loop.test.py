@@ -597,6 +597,100 @@ print(json.dumps(value))
             self.assertEqual(git('worktree', 'list', '--porcelain'), before_worktrees)
             self.assertEqual(git('for-each-ref', '--format=%(refname) %(objectname)'), before_refs)
 
+    def test_existing_policy_tool_root_batches_exact_helper_reads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'repo'
+            root.mkdir()
+
+            def git(*args):
+                return subprocess.check_output(
+                    ['git', '-C', str(root), *args], text=True,
+                ).strip()
+
+            git('init', '-q', '-b', 'main')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            helpers = root / 'scripts' / 'pm'
+            helpers.mkdir(parents=True)
+            originals = {}
+            for index in range(8):
+                relative = f'scripts/pm/helper_{index:02}.py'
+                content = f'# trusted helper {index}\n'.encode()
+                (root / relative).write_bytes(content)
+                originals[relative] = content
+            git('add', 'scripts/pm')
+            git('commit', '-qm', 'small trusted helper tree')
+
+            def trace_read(name):
+                trace = Path(tmp) / f'{name}.trace2.jsonl'
+                with patch.dict(os.environ, {'GIT_TRACE2_EVENT': str(trace)}):
+                    selected = module.existing_policy_tool_root(
+                        root, {'policy_commit': git('rev-parse', 'HEAD')}, preferred=root,
+                    )
+                events = [json.loads(line) for line in trace.read_text().splitlines()]
+                starts = [event.get('argv', []) for event in events
+                          if event.get('event') == 'start']
+                return selected, starts
+
+            selected_small, small_commands = trace_read('small')
+            self.assertEqual(selected_small, root.resolve())
+
+            for index in range(8, 48):
+                relative = f'scripts/pm/helper_{index:02}.py'
+                content = f'# trusted helper {index}\n'.encode()
+                (root / relative).write_bytes(content)
+                originals[relative] = content
+            git('add', 'scripts/pm')
+            git('commit', '-qm', 'large trusted helper tree')
+            selected_large, large_commands = trace_read('large')
+
+            self.assertEqual(selected_large, root.resolve())
+            for commands in (small_commands, large_commands):
+                self.assertEqual(
+                    sum('show' in argv for argv in commands), 0,
+                    f'one git show launch per helper remains across {len(commands)} Git launches',
+                )
+                self.assertEqual(sum('cat-file' in argv for argv in commands), 1, commands)
+            self.assertEqual(len(large_commands), len(small_commands))
+
+            changed = 'scripts/pm/helper_00.py'
+            changed_path = root / changed
+            git('update-index', '--assume-unchanged', changed)
+            try:
+                changed_path.write_bytes(b'# modified while status is masked\n')
+                with self.assertRaisesRegex(ValueError, 'modified or shadowing helper bytes'):
+                    module.existing_policy_tool_root(
+                        root, {'policy_commit': git('rev-parse', 'HEAD')}, preferred=root,
+                    )
+            finally:
+                changed_path.write_bytes(originals[changed])
+                git('update-index', '--no-assume-unchanged', changed)
+
+            outside = Path(tmp) / 'outside.py'
+            outside.write_bytes(originals[changed])
+            git('update-index', '--assume-unchanged', changed)
+            try:
+                changed_path.unlink()
+                changed_path.symlink_to(outside)
+                with self.assertRaisesRegex(ValueError, 'modified or shadowing helper bytes'):
+                    module.existing_policy_tool_root(
+                        root, {'policy_commit': git('rev-parse', 'HEAD')}, preferred=root,
+                    )
+            finally:
+                changed_path.unlink(missing_ok=True)
+                changed_path.write_bytes(originals[changed])
+                git('update-index', '--no-assume-unchanged', changed)
+
+            untracked = helpers / 'shadow.py'
+            untracked.write_text('# untracked helper\n')
+            try:
+                with self.assertRaisesRegex(ValueError, 'modified or shadowing helper bytes'):
+                    module.existing_policy_tool_root(
+                        root, {'policy_commit': git('rev-parse', 'HEAD')}, preferred=root,
+                    )
+            finally:
+                untracked.unlink()
+
     def test_legacy_pin_fallback_requires_complete_no_marker_read(self):
         uid = 'task_' + 'a' * 32
         binding = {'task_uid': uid, 'bootstrap_epoch': 1, 'policy_commit': 'a' * 40,

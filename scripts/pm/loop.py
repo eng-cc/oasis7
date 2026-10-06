@@ -272,22 +272,66 @@ def existing_policy_tool_root(target_root, binding, preferred=None):
             if _git(candidate, 'status', '--porcelain', '--untracked-files=all', '--', 'scripts/pm'):
                 exact_checkout_conflict = True
                 continue
-            files = _git(candidate, 'ls-tree', '-r', '--name-only', commit, '--', 'scripts/pm').splitlines()
-            for relative in files:
+            tree = subprocess.check_output(
+                ['git', '-C', str(candidate), 'ls-tree', '-r', '-z', commit, '--', 'scripts/pm'],
+            )
+            helper_blobs = []
+            for entry in tree.split(b'\0'):
+                if not entry:
+                    continue
+                metadata, raw_relative = entry.split(b'\t', 1)
+                _mode, object_type, oid = metadata.split(b' ', 2)
+                relative = os.fsdecode(raw_relative)
                 if not relative.endswith(('.py', '.sh', '.json')):
                     continue
+                if object_type != b'blob':
+                    raise ValueError('trusted helper tree entry is not a blob')
+                helper_blobs.append((relative, oid))
+
+            for relative, _oid in helper_blobs:
                 path = candidate / relative
-                if path.is_symlink() or path.read_bytes() != subprocess.check_output(
-                        ['git', '-C', str(candidate), 'show', commit + ':' + relative]):
+                if path.is_symlink() or not path.resolve().is_relative_to(candidate):
                     exact_checkout_conflict = True
                     break
-            else:
-                tracked = set(files)
-                if any(str(path.relative_to(candidate)) not in tracked
-                       for path in (candidate / 'scripts/pm').glob('*.py')):
+            if exact_checkout_conflict:
+                continue
+
+            if helper_blobs:
+                blob_output = subprocess.check_output(
+                    ['git', '-C', str(candidate), 'cat-file', '--batch'],
+                    input=b''.join(oid + b'\n' for _relative, oid in helper_blobs),
+                )
+                expected_contents = []
+                offset = 0
+                for _relative, oid in helper_blobs:
+                    header_end = blob_output.find(b'\n', offset)
+                    if header_end < 0:
+                        raise ValueError('trusted helper batch response has a short header')
+                    header = blob_output[offset:header_end].split()
+                    if (len(header) != 3 or header[0] != oid or header[1] != b'blob'
+                            or not header[2].isdigit()):
+                        raise ValueError('trusted helper batch response has invalid object identity')
+                    size = int(header[2])
+                    content_start = header_end + 1
+                    content_end = content_start + size
+                    if (content_end >= len(blob_output)
+                            or blob_output[content_end:content_end + 1] != b'\n'):
+                        raise ValueError('trusted helper batch response has short or malformed content')
+                    expected_contents.append(blob_output[content_start:content_end])
+                    offset = content_end + 1
+                if offset != len(blob_output):
+                    raise ValueError('trusted helper batch response has trailing bytes')
+                if any((candidate / relative).read_bytes() != expected
+                       for (relative, _oid), expected in zip(helper_blobs, expected_contents)):
                     exact_checkout_conflict = True
                     continue
-                return candidate
+
+            tracked = {relative for relative, _oid in helper_blobs}
+            if any(str(path.relative_to(candidate)) not in tracked
+                   for path in (candidate / 'scripts/pm').glob('*.py')):
+                exact_checkout_conflict = True
+                continue
+            return candidate
         except (OSError, subprocess.CalledProcessError, ValueError):
             continue
     if exact_checkout_conflict:
