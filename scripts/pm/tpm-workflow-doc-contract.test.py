@@ -21,6 +21,7 @@ PM_README = ROOT / ".pm/README.md"
 VERIFICATION_SKILL = ROOT / ".agents/skills/verification-before-completion/SKILL.md"
 SUPERVISOR_SKILL = ROOT / ".agents/skills/tpm-production-supervisor/SKILL.md"
 SUPERVISOR_DESIGN = ROOT / "doc/engineering/workflow/production-supervisor-runtime.design.md"
+SIMPLIFICATION_DESIGN = ROOT / "doc/engineering/workflow/workflow-simplification.design.md"
 ENGINEERING_README = ROOT / "doc/engineering/README.md"
 ENGINEERING_PRD = ROOT / "doc/engineering/prd.md"
 ENGINEERING_PRD_INDEX = ROOT / "doc/engineering/prd.index.md"
@@ -52,6 +53,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.text = SOURCE.read_text(encoding="utf-8")
         cls.supervisor_design = SUPERVISOR_DESIGN.read_text(encoding="utf-8")
+        cls.simplification_design = SIMPLIFICATION_DESIGN.read_text(encoding="utf-8")
 
     def section(self, heading: str) -> str:
         match = re.search(
@@ -72,14 +74,6 @@ class WorkflowDocumentationContract(unittest.TestCase):
         while end < len(lines) and lines[end].startswith("|"):
             end += 1
         return "\n".join(lines[start:end])
-
-    def canonical_source_line_budget(self) -> int:
-        match = re.search(
-            r"one (\d+)-line budget, enforced by `scripts/pm/tpm-workflow-doc-contract\.test\.py`",
-            self.text,
-        )
-        self.assertIsNotNone(match, "source must define one canonical line budget")
-        return int(match.group(1))
 
     def test_capability_status_table_distinguishes_reality(self) -> None:
         table = self.section("Capability status")
@@ -279,10 +273,10 @@ class WorkflowDocumentationContract(unittest.TestCase):
         """The dispatch contract must preserve every authority/context boundary."""
         dispatch = self.section("5.2 TPM planning and subagent dispatch")
         match = re.search(
-            r"(?ms)^- The mandatory context checklist must include:\n((?:^  - .*\n)+)",
+            r"(?ms)^- The mandatory context checklist for a write-task slice must include:\n((?:^  - .*\n)+)",
             dispatch,
         )
-        self.assertIsNotNone(match, "5.2 must publish the mandatory context checklist")
+        self.assertIsNotNone(match, "5.2 must publish the mandatory write-slice context checklist")
         checklist = re.sub(r"\s+", " ", match.group(1).lower())
         required_items = (
             "identity and authority: assigned role, role card path, owner role, and tpm integration owner",
@@ -340,34 +334,16 @@ class WorkflowDocumentationContract(unittest.TestCase):
             r"(?:before|prior to).{0,100}(?:editing|execution).{0,160}plan-gap evidence",
         )
 
-    def test_execution_skill_enforces_the_same_plan_gap_schema(self) -> None:
-        """The operational entrypoint must consume, not weaken, the canonical schema."""
-        dispatch = self.section("5.2 TPM planning and subagent dispatch")
+    def test_execution_skill_points_to_the_canonical_plan_and_slice_contract(self) -> None:
+        """The operational entrypoint stays compact without weakening normative rules."""
         skill = EXECUTING_PROJECT_TASKS.read_text(encoding="utf-8")
         skill_normalized = re.sub(r"\s+", " ", skill.lower())
         self.assertIn("plan-gap evidence", skill_normalized)
         self.assertIn("github-backed task truth", skill_normalized)
-        for field in (
-            "step_id",
-            "acceptance_refs",
-            "dependencies",
-            "verification_command",
-            "verification_evidence",
-            "write_scope",
-            "out_of_scope",
-            "required_role_slices",
-        ):
-            with self.subTest(field=field):
-                self.assertIn(f"`{field}`", dispatch)
-                self.assertIn(f"`{field}`", skill)
-        self.assertRegex(
-            skill_normalized,
-            r"missing.{0,180}(?:field|evidence|mapping).{0,180}fail(?:s|ure)?[- ]closed",
-        )
-        self.assertRegex(
-            skill_normalized,
-            r"(?:before|prior to).{0,100}(?:editing|execution).{0,160}plan-gap evidence",
-        )
+        self.assertIn("source-of-truth.md#52-tpm-planning-and-subagent-dispatch", skill_normalized)
+        self.assertIn("task issue remains the sole mutable plan truth", skill_normalized)
+        self.assertIn("per-command", skill_normalized)
+        self.assertNotIn("new implementation permit", skill_normalized)
 
     def test_terminal_helpers_are_current_while_supervisor_automation_is_blocked(self) -> None:
         table = self.section("Capability status")
@@ -651,10 +627,25 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 with self.subTest(path=path, phrase=phrase):
                     self.assertNotIn(phrase.lower(), text.lower())
 
-    def test_ready_wording_is_pre_pr_gate_not_task_closeout(self) -> None:
+    def test_ready_gate_is_distinct_from_terminal_task_completion(self) -> None:
         gates = self.section("Ready and Done")
-        self.assertRegex(gates, r"(?is)Ready.*pre-PR gate")
-        self.assertNotRegex(gates, r"(?is)(close|complete).*task.*Ready")
+        state_machine = self.section("Canonical state machine")
+        pre_pr = gates.split("**Pre-PR Ready.**", 1)[1].split("**Draft candidate and promotion gate.**", 1)[0]
+        terminal = gates.split("**Terminal Done.**", 1)[1]
+        self.assertIn("pre-PR gate, not promotion or Done", pre_pr)
+        self.assertIn(
+            "task done -> post-merge delivery finalization -> post_merge_done",
+            state_machine.lower(),
+        )
+        self.assertIn("safe resource cleanup is a separate operation", state_machine.lower())
+        self.assertIn(
+            "`post_merge_done` proves delivery and github terminal-state readback",
+            terminal.lower(),
+        )
+        self.assertIn("it does not prove resource cleanup", terminal.lower())
+        self.assertIn("terminal tombstone", terminal.lower())
+        self.assertIn('id="pre-pr-ready-gate"', self.text)
+        self.assertIn('id="post-merge-done-gate"', self.text)
 
     def test_agents_links_instead_of_repeating_terminal_sequence(self) -> None:
         agents = AGENTS.read_text(encoding="utf-8")
@@ -859,14 +850,46 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertLessEqual(sum(pr_chain.count(role) for role in roles), 3)
 
-    def test_source_has_conciseness_and_canonical_marker_budgets(self) -> None:
-        self.assertLessEqual(len(self.text.splitlines()), self.canonical_source_line_budget())
-        self.assertLessEqual(self.text.count("Canonical definition:"), 6)
-        self.assertLessEqual(len(re.findall(r"(?m)^## ", self.text)), 16)
-        self.assertLessEqual(len(re.findall(r"(?m)^### ", self.text)), 22)
-        markers = re.findall(r"(?m)^Canonical definition: ([^.]+)\.$", self.text)
-        self.assertEqual(len(markers), len(set(markers)), "canonical markers must be unique")
-        self.assertLessEqual(len(markers), 6)
+    def test_source_keeps_canonical_structure_without_a_line_count_gate(self) -> None:
+        self.assertIn("workflow-simplification.design.md", self.text)
+        self.assertIn("FS-R01–FS-R10", self.text)
+        self.assertIn("T01–T42", self.text)
+        anchors = re.findall(r'(?m)^<a id="([^"]+)"></a>', self.text)
+        self.assertEqual(len(anchors), len(set(anchors)), "canonical section anchors must remain unique")
+        self.assertIn("Document length is an advisory signal, never a pass/fail gate.", self.text)
+        self.assertNotIn("Canonical definition:", self.text)
+
+    def test_simplification_companion_maps_every_requirement_and_test_case(self) -> None:
+        source = re.sub(r"\s+", " ", self.text)
+        design = self.simplification_design
+        self.assertIn("non-normative", design.lower())
+        self.assertIn("only workflow authority", design)
+
+        requirement_ids = set(re.findall(r"FS-R\d{2}", design))
+        self.assertEqual({f"FS-R{index:02d}" for index in range(1, 11)}, requirement_ids)
+
+        test_ids: set[str] = set()
+        for start, end in re.findall(r"T(\d{2})[–-]T(\d{2})", design):
+            test_ids.update(f"T{index:02d}" for index in range(int(start), int(end) + 1))
+        test_ids.update(f"T{number}" for number in re.findall(r"\bT(\d{2})\b", design))
+        self.assertEqual({f"T{index:02d}" for index in range(1, 43)}, test_ids)
+
+        for index in range(1, 11):
+            anchor = f"workflow-simplification-r{index:02d}"
+            with self.subTest(anchor=anchor):
+                self.assertIn(f"#{anchor}", design)
+                self.assertIn(f'id="{anchor}"', source)
+
+        for surface in (PM_README, ENGINEERING_README, SKILLS_README):
+            with self.subTest(surface=surface.name):
+                self.assertIn("workflow-simplification.design.md", surface.read_text(encoding="utf-8"))
+
+    def test_verification_skill_keeps_fresh_epoch_and_claim_ready_boundaries(self) -> None:
+        skill = re.sub(r"\s+", " ", VERIFICATION_SKILL.read_text(encoding="utf-8").lower())
+        self.assertIn("source-of-truth.md", skill)
+        self.assertIn("fresh verification claim must come from the current verification epoch", skill)
+        self.assertIn("claim-ready.sh", skill)
+        self.assertIn("do not use stale output", skill)
 
     def test_claim_ready_examples_use_the_real_claim_type_option(self) -> None:
         """Operator-facing commands must be directly copyable."""
@@ -2206,26 +2229,25 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("thin operational entrypoint", policy.lower())
         self.assertNotIn("link-only", policy.lower())
 
-    def test_canonical_spec_has_a_line_budget_and_no_boilerplate_labels(self) -> None:
+    def test_canonical_spec_avoids_repeated_boilerplate_labels(self) -> None:
         self.assertNotIn("Canonical definition:", self.text)
 
     def test_bootstrap_snapshot_example_supplies_required_repo_root(self) -> None:
         skill = BOOTSTRAP_SKILL.read_text(encoding="utf-8")
-        self.assertRegex(
-            skill,
-            r"bootstrap-task-snapshot\.py validate-or-create"
-            r" --repo-root <canonical-worktree> --task-uid <task_uid> --producer tpm",
-        )
+        self.assertIn("./scripts/new-task-worktree.sh <module> <task>", skill)
+        self.assertIn("--pm-owner-role <owner_role>", skill)
+        self.assertIn("pm_task.bootstrap_complete=true", skill)
+        self.assertIn("bootstrap_snapshot_digest", skill)
+        self.assertIn("workflow-report --phase start", skill)
 
-    def test_tdd_red_owner_is_reachable_with_explicit_specialist_fallback(self) -> None:
+    def test_tdd_skill_requires_valid_behavior_evidence_without_a_universal_red_phase(self) -> None:
         skill = TDD_TEST_WRITER.read_text(encoding="utf-8")
         normalized = re.sub(r"\s+", " ", skill.lower())
-        self.assertIn("currently assigned professional implementation role", normalized)
-        self.assertRegex(normalized, r"tdd_test_writer.{0,180}(only when|when) registered")
-        self.assertRegex(normalized, r"fallback:.{0,140}tdd_test_writer unavailable")
-        self.assertNotRegex(skill, r"(?i)spawn a `?tdd_test_writer`? subagent")
-        self.assertIn("Assigned implementation role", skill)
-        self.assertNotRegex(skill, r"(?im)^- Subagent: tdd_test_writer$")
+        self.assertIn("stable automated test surface", normalized)
+        self.assertIn("fails against the old behavior and passes after the fix", normalized)
+        self.assertIn("may start green", normalized)
+        self.assertIn("do not break correct behavior just to manufacture red", normalized)
+        self.assertIn("explicit user request for separate test-first work or a pause", normalized)
 
     def test_terminal_readiness_preflight_is_owned_by_canonical_source(self) -> None:
         preflight = self.section("Terminal readiness preflight")

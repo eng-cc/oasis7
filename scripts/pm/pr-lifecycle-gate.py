@@ -571,8 +571,32 @@ def read_pr_identity(repository, number, *, client=None, effective_root=None, ta
     )
 
 
+def _trusted_loop_facade(helper_root):
+    """Load loop orchestration only from the exact clean default-tip checkout."""
+    helper_root = Path(helper_root).resolve(strict=True)
+    pm_root = helper_root / 'scripts/pm'
+    saved = {name: sys.modules.pop(name, None) for name in ('loop_gate', 'loop_recovery')}
+    sys.path.insert(0, str(pm_root))
+    old_dont_write = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location(
+            'trusted_default_loop_facade', pm_root / 'loop.py',
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.dont_write_bytecode = old_dont_write
+        sys.path.remove(str(pm_root))
+        for name, old in saved.items():
+            sys.modules.pop(name, None)
+            if old is not None:
+                sys.modules[name] = old
+
+
 def local_loop_admission(root, uid, base, head, tool_root):
-    """Verify the effective ingress bytes before executing any loop helper."""
+    """Resolve the trusted active pin, then run its current gate wrapper."""
     root = Path(root).resolve()
     task = json.loads((root / '.pm/github-project-sync/tasks.json').read_text())['tasks'][uid]
     issue = json.loads(subprocess.check_output([
@@ -583,25 +607,37 @@ def local_loop_admission(root, uid, base, head, tool_root):
     if matches:
         if len(matches) != 1: raise ValueError('ambiguous live loop binding')
         binding = json.loads(base64.urlsafe_b64decode(matches[0] + '=' * (-len(matches[0]) % 4)))
-    effective = Path(tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT') or Path(__file__).resolve().parents[2]).resolve()
-    relative = 'scripts/pm/loop-local-gate.py'
-    helper = effective / relative
+    repository = str(task.get('repository') or '')
+    if not repository:
+        raise ValueError('local loop admission requires canonical repository identity')
+    current_facade = _trusted_loop_facade(Path(__file__).resolve().parents[2])
+    trusted_default = current_facade._existing_trusted_default_helper(root, repository)
+    def git(checkout, *arguments):
+        return subprocess.check_output(['git', '-C', str(checkout), *arguments], text=True).strip()
+    trusted_default_oid = git(trusted_default, 'rev-parse', 'HEAD')
     if binding is not None:
-        commit = binding.get('policy_commit', '')
-        if not re.fullmatch(r'[0-9a-f]{40}', commit): raise ValueError('invalid effective policy commit')
-        def git(checkout, *arguments):
-            return subprocess.check_output(['git', '-C', str(checkout), *arguments], text=True).strip()
-        if git(effective, 'rev-parse', 'HEAD') != commit:
-            raise ValueError('effective tool root HEAD differs from policy commit')
-        if git(effective, 'rev-parse', '--path-format=absolute', '--git-common-dir') != git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir'):
-            raise ValueError('effective helper belongs to a different repository')
-        subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
-        subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'], check=True, capture_output=True)
-        expected = subprocess.check_output(['git', '-C', str(effective), 'show', f'{commit}:{relative}'])
-        if helper.read_bytes() != expected: raise ValueError('effective local gate bytes differ from policy commit')
-        if subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() != head:
+        if binding != task.get('loop_binding'):
+            raise ValueError('live binding differs from task cache')
+        active, policy_context = current_facade.resolve_effective_binding(
+            root, {**task, 'loop_binding': binding}, return_context=True,
+        )
+        if not isinstance(active, dict):
+            raise ValueError('effective loop policy could not be resolved')
+        current_identity = (policy_context or {}).get('trusted_current_policy') or {}
+        trusted_default_oid = current_identity.get('default_branch_oid', trusted_default_oid)
+        effective = current_facade.existing_policy_tool_root(
+            root, active,
+            tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT') or trusted_default,
+        )
+        if git(root, 'rev-parse', 'HEAD') != head:
             raise ValueError('canonical worktree HEAD differs from current PR head')
-    command = [sys.executable, '-I', str(helper), '--root', str(root), '--task-uid', uid,
+        policy_commit = active.get('policy_commit')
+    else:
+        active = None
+        effective = trusted_default
+        policy_commit = trusted_default_oid
+    helper = trusted_default / 'scripts/pm/loop-local-gate.py'
+    command = [sys.executable, '-I', '-B', str(helper), '--root', str(root), '--task-uid', uid,
                '--base', base, '--head', head, '--tool-root', str(effective), '--json']
     completed = subprocess.run(command, text=True, capture_output=True)
     if completed.returncode:
@@ -610,7 +646,8 @@ def local_loop_admission(root, uid, base, head, tool_root):
     if result.get('status') not in ('passed', 'legacy'):
         raise ValueError('live loop admission did not pass')
     return {'status': result['status'], 'tool_root': str(effective),
-            'policy_commit': (binding or {}).get('policy_commit'), 'task': task}
+            'policy_commit': policy_commit, 'trusted_default_oid': trusted_default_oid,
+            'loop_binding': active, 'task': task}
 
 
 def requires_strict_integration(data: dict[str, Any]) -> bool:
@@ -1586,10 +1623,10 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
     effective = Path(admission['tool_root'])
     commit = admission.get('policy_commit')
     if not commit:
-        # Legacy tasks still use immutable main helper bytes, not candidate
-        # helpers or a caller-authored receipt as CI authority.
-        subprocess.run(['git','-C',str(root),'fetch','--no-tags','origin','main:refs/remotes/origin/main'],check=True,capture_output=True)
-        commit = subprocess.check_output(['git','-C',str(root),'rev-parse','refs/remotes/origin/main'],text=True).strip()
+        raise ValueError('trusted task admission omitted effective helper commit')
+    trusted_default_oid = admission.get('trusted_default_oid')
+    if trusted_default_oid is not None and not re.fullmatch(r'[0-9a-f]{40}', str(trusted_default_oid)):
+        raise ValueError('live trusted default-branch identity is malformed')
     task = admission['task']
     authority_helpers = (
         'ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'integration_ci.py',
@@ -1709,18 +1746,30 @@ print(json.dumps(proof))
 
 
 def live_target_oid(data, api_client=None, uid=None):
-    endpoint = f"repos/{data['repository']}/git/ref/heads/{data['baseRefName']}"
+    repository = data.get('repository')
+    branch = data.get('baseRefName')
+    if not isinstance(repository, str) or not repository or not isinstance(branch, str) or not branch:
+        raise ValueError('live default-branch target identity is unavailable')
+    context = _api_request_context('pr_target_identity', task_uid=uid,
+                                   pr_number=int(data.get('number') or 0))
+    if api_client is None:
+        repository_info = _run_json(['gh', 'api', f'repos/{repository}'])
+    else:
+        repository_info = api_client.rest('GET', f'repos/{repository}',
+                                          operation='pr_target_identity', context=context)
+    if (not isinstance(repository_info, dict)
+            or repository_info.get('full_name') != repository
+            or repository_info.get('default_branch') != branch):
+        raise ValueError('PR target ref is not the live repository default branch')
+    endpoint = f"repos/{repository}/git/ref/heads/{branch}"
     if api_client is None:
         ref = _run_json(['gh', 'api', endpoint])
     else:
-        ref = api_client.rest('GET', endpoint, operation='pr_target_identity',
-                             context=_api_request_context('pr_target_identity', task_uid=uid,
-                                                          pr_number=int(data.get('number') or 0)))
+        ref = api_client.rest('GET', endpoint, operation='pr_target_identity', context=context)
     oid = ref.get('object', {}).get('sha') if isinstance(ref, dict) else None
     if not isinstance(oid, str) or not re.fullmatch(r'[0-9a-f]{40}', oid):
         raise ValueError('live default-branch target OID unavailable')
     return oid
-
 
 def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None,
                         *, api_client=None):

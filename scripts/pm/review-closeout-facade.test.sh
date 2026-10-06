@@ -31,35 +31,46 @@ for ordering_contract in 'planned_roles=plan.get("roles")' 'rows=[by_role[role] 
     exit 1
   }
 done
+python3 "$SCRIPT_DIR/review_closeout_publication.test.py"
 
 TMPDIR="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR"' EXIT
+export TMPDIR
+trap 'if [[ "${KEEP_REVIEW_CLOSEOUT_TMPDIR:-0}" == 1 ]]; then printf "preserved review-closeout fixture: %s\n" "$TMPDIR" >&2; else rm -rf "$TMPDIR"; fi' EXIT
 REPO="$TMPDIR/repo"
 UID_VALUE="task_11111111111111111111111111111111"
 ROLE="repository_health_engineer"
 SLICE="11111111-1111-4111-8111-111111111111"
 mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync"
-for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py workflow-impact-projection.py ci_ready_receipt_identity.py; do
+for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh review_closeout_complete.py review_closeout_publication.py validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py workflow-impact-projection.py ci_ready_receipt_identity.py pr_projection_publication.py pr_projection_publish.py pr_projection_journal.py projection_publication_contract.py portable_file_lock.py task_complete_claim.py github-project-task.py workflow-durable-store.py loop_leaf_result.py loop_policy.py loop_contracts.py; do
   cp "$ROOT_DIR/scripts/pm/$helper" "$REPO/scripts/pm/$helper"
 done
+cp "$ROOT_DIR/.gitignore" "$REPO/.gitignore"
 chmod +x "$REPO/scripts/pm/review-closeout.sh" "$REPO/scripts/pm/record-pre-pr-review.sh"
 printf 'scratch/\n' >"$REPO/.pm/.gitignore"
 cat >"$REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$UID_VALUE":{"issue_number":3379}}}
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$UID_VALUE":{"issue_number":3379,"repository":"eng-cc/oasis7","canonical_worktree":"$REPO","task_branch":"task/test","default_branch":"main","status":"committed","workflow_phase":"verification","pr_number":4139,"pr_url":"https://github.com/eng-cc/oasis7/pull/4139"}}}
 EOF
 
 git -C "$REPO" init -q -b main
 git -C "$REPO" config user.email test@example.invalid
 git -C "$REPO" config user.name Test
 printf 'base\n' >"$REPO/README.md"
-git -C "$REPO" add README.md .pm/.gitignore .pm/github-project-sync/tasks.json scripts
+cp "$ROOT_DIR/scripts/ci-required-scope.v2.json" "$REPO/scripts/ci-required-scope.v2.json"
+git -C "$REPO" add README.md .gitignore .pm/.gitignore scripts
+git -C "$REPO" add -f .pm/github-project-sync/tasks.json
 git -C "$REPO" commit -qm base
 BASE_OID="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" branch review-base "$BASE_OID"
+printf 'default branch advanced after task fork\n' >"$REPO/default-tip.txt"
+git -C "$REPO" add default-tip.txt
+git -C "$REPO" commit -qm 'advance default branch'
+TARGET_OID="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" update-ref refs/remotes/origin/main "$TARGET_OID"
+git -C "$REPO" switch -q -c task/test "$BASE_OID"
 printf 'implementation\n' >>"$REPO/README.md"
 git -C "$REPO" add README.md
 git -C "$REPO" commit -qm implementation
 HEAD_OID="$(git -C "$REPO" rev-parse HEAD)"
-git -C "$REPO" branch review-base "$BASE_OID"
 
 TASK_ROOT="$REPO/.pm/scratch/$UID_VALUE"
 BATCH="$TASK_ROOT/review-batches/epoch.json"
@@ -194,7 +205,7 @@ packet_payload = {
         "issue_url": "https://github.com/eng-cc/oasis7/issues/3379",
         "repository": "eng-cc/oasis7", "project_item_id": "fixture-project-item",
         "task_status": "committed", "packet_producer": "tpm",
-        "worktree": str(pathlib.Path(plan).parents[4]), "branch": "main",
+        "worktree": str(pathlib.Path(plan).parents[4]), "branch": "task/test",
         "base_ref": "refs/heads/review-base", "base_binding": "immutable_oid",
         "base_sha": comparison, "head": head,
     },
@@ -397,6 +408,29 @@ manifest_path.with_name(f"{plan['epoch']}.readback.json").write_text(
 (manifest_path.parent / "expected-body.txt").write_text(body, encoding="utf-8")
 PY
 
+C1_BODY_FILE="$TASK_ROOT/review-dispatch/c1-publication.txt"
+python3 - "$ROOT_DIR" "$PROJECTION_PATH" "$C1_BODY_FILE" "$UID_VALUE" "$HEAD_OID" "$BASE_OID" "$TARGET_OID" <<'PY'
+import importlib.util, json, pathlib, sys
+root, projection_path, output, task_uid, head, scope, authority = sys.argv[1:]
+sys.path.insert(0, str(pathlib.Path(root) / "scripts/pm"))
+helper = pathlib.Path(root) / "scripts/pm/pr_projection_publication.py"
+spec = importlib.util.spec_from_file_location("facade_test_c1_publication", helper)
+assert spec is not None and spec.loader is not None
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+projection = json.loads(pathlib.Path(projection_path).read_text(encoding="utf-8"))
+publication = module.build_task_publication(
+    repository="eng-cc/oasis7", repository_id=1001, task_uid=task_uid,
+    bootstrap_epoch=None, source_repository_id=1001,
+    source_ref="task/test", target_ref="main", source_head_oid=head,
+    source_scope_oid=scope, planner_authority_oid=authority,
+    planner_config_sha256=projection["planner_config_sha256"],
+    policy_digest=projection["planner_digest"],
+    projection_digest=projection["projection_digest"],
+)
+pathlib.Path(output).write_text(module.publication_comment(publication), encoding="utf-8")
+PY
+
 mkdir -p "$TMPDIR/bin"
 cat >"$TMPDIR/bin/gh" <<'EOF'
 #!/usr/bin/env python3
@@ -405,13 +439,30 @@ args = sys.argv[1:]
 endpoint = None
 if args[:2] == ["api", "repos/eng-cc/oasis7/issues/3379"]:
     endpoint = "issue"
+elif args[:2] == ["api", "repos/eng-cc/oasis7"]:
+    endpoint = "repository"
+elif len(args) >= 2 and args[0] == "api" and args[1].startswith("repos/eng-cc/oasis7/branches/"):
+    endpoint = "default-branch"
+elif len(args) >= 2 and args[0] == "api" and args[1].startswith("repos/eng-cc/oasis7/pulls?"):
+    endpoint = "pulls"
 elif args[:2] == ["api", "repos/eng-cc/oasis7/issues/3379/comments?per_page=100"]:
     endpoint = "dispatch-comments"
+elif args[:2] == ["api", "repos/eng-cc/oasis7/issues/3379/comments"] and "--method" in args:
+    body_value = next((item.split("=", 1)[1] for item in args if item.startswith("body=")), "")
+    endpoint = "resolution-post" if "oasis7-review-resolution" in body_value else "packet-post"
+elif args[:2] == ["api", "user"]:
+    endpoint = "current-user"
+elif args[:2] == ["api", f"repos/eng-cc/oasis7/issues/comments/{int(os.environ.get('C1_COMMENT_ID', '3934018000'))}"]:
+    endpoint = "c1-comment"
+elif args[:2] == ["api", f"repos/eng-cc/oasis7/issues/comments/{int(os.environ.get('PACKET_COMMENT_ID', '3934018001'))}"]:
+    endpoint = "packet-comment"
 elif args[:2] == ["api", f"repos/eng-cc/oasis7/issues/comments/{int(os.environ.get('GH_COMMENT_ID', '3934017999'))}"]:
     endpoint = "resolution-comment"
 elif args[:2] == ["api", f"repos/eng-cc/oasis7/issues/comments/{int(os.environ.get('DISPATCH_COMMENT_ID', '3934017998'))}"]:
     endpoint = "dispatch-comment"
 elif args[:2] == ["api", "repos/eng-cc/oasis7/collaborators/repo-admin/permission"]:
+    endpoint = "permission"
+elif len(args) >= 2 and args[0] == "api" and args[1].startswith("repos/eng-cc/oasis7/collaborators/") and args[1].endswith("/permission"):
     endpoint = "permission"
 if endpoint is None:
     raise SystemExit("unexpected fake gh invocation: " + " ".join(args))
@@ -427,6 +478,8 @@ if endpoint == "issue":
     body = (
         "<!-- oasis7-pm-task -->\n"
         "task_uid: task_11111111111111111111111111111111\n"
+        "- status: `committed`\n"
+        "- workflow_phase: `verification`\n"
         "- pr_url: `https://github.com/eng-cc/oasis7/pull/4139`\n"
         "- pr_number: `4139`\n"
     )
@@ -434,15 +487,74 @@ if endpoint == "issue":
         body = body.replace("<!-- oasis7-pm-task -->\n", "")
     elif count >= 4 and mode == "issue-task-uid":
         body = body.replace("task_11111111111111111111111111111111", "task_22222222222222222222222222222222")
-    response = {"number": 3379, "body": body,
-                "html_url": "https://github.com/eng-cc/oasis7/issues/3379"}
+    response = {"number": 3379, "body": body, "state": "open",
+                "html_url": "https://github.com/eng-cc/oasis7/issues/3379",
+                "user": {"login": "repo-admin", "type": "User"}}
+elif endpoint == "repository":
+    response = {"id": 1001, "full_name": "eng-cc/oasis7", "default_branch": "main"}
+elif endpoint == "default-branch":
+    response = {"name": "main", "commit": {"sha": os.environ["TARGET_OID"]}}
+elif endpoint == "pulls":
+    pull = {
+        "number": 4139, "state": "open", "merged": False, "merged_at": None,
+        "draft": True, "body": (
+            "Task: task_11111111111111111111111111111111\n"
+            "Refs #3379\n"
+        ),
+        "head": {"ref": "task/test", "sha": os.environ.get("GH_HEAD_OVERRIDE", os.environ["HEAD_OID"]),
+                 "repo": {"full_name": "eng-cc/oasis7"}},
+        "base": {"ref": "main", "sha": os.environ["TARGET_OID"],
+                 "repo": {"full_name": "eng-cc/oasis7"}},
+        "user": {"login": "repo-admin", "type": "User"},
+        "created_at": "2026-09-06T10:00:00Z", "updated_at": "2026-09-06T10:00:00Z",
+    }
+    response = [[pull]] if "--slurp" in args else [pull]
 elif endpoint == "dispatch-comments":
     body = pathlib.Path(os.environ["DISPATCH_BODY_FILE"]).read_text()
     comment = {"id": int(os.environ.get("DISPATCH_COMMENT_ID", "3934017998")),
                "body": body, "user": {"login": "repo-admin"}}
-    response = [[comment]] if "--slurp" in args else [comment]
-elif endpoint in {"resolution-comment", "dispatch-comment"}:
-    if endpoint == "dispatch-comment":
+    c1_body = pathlib.Path(os.environ["C1_BODY_FILE"]).read_text()
+    c1 = {"id": int(os.environ.get("C1_COMMENT_ID", "3934018000")),
+          "body": c1_body, "user": {"login": "repo-admin", "type": "User"},
+          "author_association": "OWNER", "created_at": "2026-09-06T09:00:00Z",
+          "updated_at": os.environ.get("C1_UPDATED_AT", "2026-09-06T09:00:00Z")}
+    comments = [comment, c1]
+    posted_path = state / "published-resolution.json"
+    if posted_path.exists():
+        posted = json.loads(posted_path.read_text())
+        comments.append({"id": posted["id"], "body": posted["body"],
+                         "user": {"login": "repo-admin", "type": "User"}})
+    packet_path = state / "published-packet.json"
+    if packet_path.exists():
+        if os.environ.get("GH_LOSE_PACKET_READBACK") == "1" and not (state / "packet-readback-lost").exists():
+            (state / "packet-readback-lost").write_text("once")
+            raise SystemExit("synthetic post-apply comment readback outage")
+        packet = json.loads(packet_path.read_text())
+        comments.append({"id": packet["id"], "body": packet["body"],
+                         "user": {"login": "repo-admin", "type": "User"}})
+        if os.environ.get("GH_DUPLICATE_PACKET") == "1":
+            comments.append({"id": packet["id"] + 1, "body": packet["body"],
+                             "user": {"login": "repo-admin", "type": "User"}})
+    response = [comments] if "--slurp" in args else comments
+elif endpoint in {"c1-comment", "resolution-comment", "dispatch-comment", "packet-comment"}:
+    if endpoint == "c1-comment":
+        body = pathlib.Path(os.environ["C1_BODY_FILE"]).read_text()
+        comment_id = int(os.environ.get("C1_COMMENT_ID", "3934018000"))
+        response = {"id": comment_id, "body": body,
+                    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
+                    "html_url": f"https://github.com/eng-cc/oasis7/issues/3379#issuecomment-{comment_id}",
+                    "user": {"login": "repo-admin", "type": "User"},
+                    "created_at": "2026-09-06T09:00:00Z",
+                    "updated_at": os.environ.get("C1_UPDATED_AT", "2026-09-06T09:00:00Z")}
+    elif endpoint == "packet-comment":
+        posted = json.loads((state / "published-packet.json").read_text())
+        comment_id, body = int(posted["id"]), posted["body"]
+        response = {"id": comment_id, "body": body,
+                    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
+                    "html_url": f"https://github.com/eng-cc/oasis7/issues/3379#issuecomment-{comment_id}",
+                    "user": {"login": "repo-admin", "type": "User"},
+                    "created_at": "2026-09-06T11:00:00Z"}
+    elif endpoint == "dispatch-comment":
         body = pathlib.Path(os.environ["DISPATCH_BODY_FILE"]).read_text()
         comment_id = int(os.environ.get("DISPATCH_COMMENT_ID", "3934017998"))
         author = "repo-admin"
@@ -451,7 +563,9 @@ elif endpoint in {"resolution-comment", "dispatch-comment"}:
                     "html_url": f"https://github.com/eng-cc/oasis7/issues/3379#issuecomment-{comment_id}",
                     "user": {"login": author}, "created_at": "2026-09-06T10:00:00Z"}
     else:
-        body = pathlib.Path(os.environ["V2_BODY_FILE"]).read_text()
+        posted_path = state / "published-resolution.json"
+        posted = json.loads(posted_path.read_text()) if posted_path.exists() else None
+        body = posted["body"] if posted else pathlib.Path(os.environ["V2_BODY_FILE"]).read_text()
         author = "repo-admin"
         if count >= 2 and mode == "comment-body":
             payload = json.loads(body)
@@ -459,11 +573,33 @@ elif endpoint in {"resolution-comment", "dispatch-comment"}:
             body = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         elif count >= 2 and mode == "comment-author":
             author = "different-user"
-        comment_id = int(os.environ.get("GH_COMMENT_ID", "3934017999"))
+        comment_id = int(posted["id"] if posted else os.environ.get("GH_COMMENT_ID", "3934017999"))
         response = {"id": comment_id, "body": body,
                     "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
                     "html_url": f"https://github.com/eng-cc/oasis7/issues/3379#issuecomment-{comment_id}",
                     "user": {"login": author}, "created_at": "2026-09-06T10:00:00Z"}
+elif endpoint == "resolution-post":
+    body_value = next((item.split("=", 1)[1] for item in args if item.startswith("body=")), None)
+    if body_value is None:
+        raise SystemExit("fake GH resolution POST omitted body")
+    path = state / "published-resolution.json"
+    if path.exists():
+        raise SystemExit("fake GH received a duplicate resolution POST")
+    item = {"id": int(os.environ.get("GH_COMMENT_ID", "3934017999")), "body": body_value}
+    path.write_text(json.dumps(item))
+    response = {"id": item["id"]}
+elif endpoint == "packet-post":
+    body_value = next((item.split("=", 1)[1] for item in args if item.startswith("body=")), None)
+    if body_value is None:
+        raise SystemExit("fake GH packet POST omitted body")
+    path = state / "published-packet.json"
+    if path.exists():
+        raise SystemExit("fake GH received a duplicate packet POST")
+    item = {"id": int(os.environ.get("PACKET_COMMENT_ID", "3934018001")), "body": body_value}
+    path.write_text(json.dumps(item))
+    response = {"id": item["id"]}
+elif endpoint == "current-user":
+    response = {"login": "repo-admin"}
 else:
     permission = "write" if count >= 4 and mode == "permission" else "admin"
     response = {"permission": permission}
@@ -489,6 +625,8 @@ GH_COMMENT_ID=3934017999
 export V2_BODY_FILE
 export GH_STATE_DIR GH_MODE GH_COMMENT_ID
 export DISPATCH_BODY_FILE DISPATCH_COMMENT_ID
+export C1_BODY_FILE TARGET_OID HEAD_OID
+export C1_COMMENT_ID=3934018100 PACKET_COMMENT_ID=3934018101
 
 cp "$LEDGER" "$TMPDIR/original-preflight-ledger.jsonl"
 RED_FAILURES=()
@@ -1709,7 +1847,7 @@ run_replace_fault_case() {
     echo "replacement fault was not attempted for mode $mode" >&2
     return 1
   }
-  [[ "$(rg -c '"event": "CAS_ATTEMPT"' "$TMPDIR/$mode.events" || true)" == 1 ]] || {
+  [[ "$(grep -F -c '"event": "CAS_ATTEMPT"' "$TMPDIR/$mode.events" || true)" == 1 ]] || {
     echo "uncertain replacement attempted more than one ledger CAS: $mode" >&2
     return 1
   }
@@ -1717,14 +1855,14 @@ run_replace_fault_case() {
     echo "ledger CAS did not attempt the independently expected payload bytes: $mode" >&2
     return 1
   }
-  event_count="$(rg -c '"event": "RECONCILE_START"' "$TMPDIR/$mode.events" || true)"
+  event_count="$(grep -F -c '"event": "RECONCILE_START"' "$TMPDIR/$mode.events" || true)"
   event_count="${event_count:-0}"
   [[ "$event_count" == 0 ]] || { echo "plan-owned $mode path invoked forbidden reconcile: count=$event_count" >&2; return 1; }
   case "$mode" in
     before)
       [[ "$rc" -ne 0 ]] || { echo "pre-replace injected failure was reported as success" >&2; return 1; }
       grep -q '"event": "INJECT_BEFORE_REPLACE"' "$TMPDIR/$mode.events"
-      event_count="$(rg -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
+      event_count="$(grep -F -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
       event_count="${event_count:-0}"
       [[ "$event_count" == 0 ]]
       cmp -s "$LEDGER" "$TMPDIR/original-preflight-ledger.jsonl"
@@ -1742,11 +1880,11 @@ run_replace_fault_case() {
         return 1
       }
       grep -q '"event": "INJECT_AFTER_REPLACE"' "$TMPDIR/$mode.events"
-      [[ "$(rg -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events")" == 1 ]] || {
+      [[ "$(grep -F -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events")" == 1 ]] || {
         echo "post-replace recovery attempted more than one replacement" >&2
         return 1
       }
-      [[ "$(rg -c '"event": "COLLECTION_CREATE"' "$TMPDIR/$mode.events")" == 1 ]] || {
+      [[ "$(grep -F -c '"event": "COLLECTION_CREATE"' "$TMPDIR/$mode.events")" == 1 ]] || {
         echo "expected-byte recovery did not create exactly one collection" >&2
         return 1
       }
@@ -1761,7 +1899,7 @@ run_replace_fault_case() {
       [[ "$rc" -ne 0 ]] || { echo "third-state ledger drift was reported as success" >&2; return 1; }
       [[ ! -e "$COLLECTION" ]] || { echo "third-state outcome created a collection" >&2; return 1; }
       [[ ! -s "$TMPDIR/$mode.out" ]]
-      event_count="$(rg -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
+      event_count="$(grep -F -c '"event": "CAS_APPLIED"' "$TMPDIR/$mode.events" || true)"
       event_count="${event_count:-0}"
       [[ "$event_count" == 0 ]] || {
         echo "third-state outcome observed CAS_APPLIED count=$event_count" >&2
@@ -2262,6 +2400,132 @@ if ! (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" \
   exit 1
 fi
 grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/restored-valid.out" >/dev/null
+
+# Exercise the actual --complete process boundary: findings never gain an
+# invented disposition, a live-head mismatch is a no-write block, and an
+# uncertain post-apply packet readback is reconciled without a duplicate POST.
+COMPLETE_ARGS=(--task-uid "$UID_VALUE" --review-plan "$PLAN" --role-returns "$LEDGER" --complete)
+cp "$ARTIFACT" "$TMPDIR/complete-no-findings-artifact.json"
+cp "$LEDGER" "$TMPDIR/complete-no-findings-ledger.jsonl"
+cp "$MANIFEST" "$TMPDIR/complete-no-findings-manifest.json"
+rm -rf "$TMPDIR/complete-gh-state"
+mkdir -p "$TMPDIR/complete-gh-state"
+GH_STATE_DIR="$TMPDIR/complete-gh-state"
+export GH_STATE_DIR
+
+# The completed collection binds the original no-findings ledger bytes. The
+# finding fixture below deliberately changes those bytes, so do not present
+# that old receipt as authority for the synthetic changed return.
+rm -f "$COLLECTION"
+rm -f "$MANIFEST"
+python3 - "$ARTIFACT" "$LEDGER" <<'PY'
+import hashlib, json, sys
+artifact_path, ledger_path = sys.argv[1:]
+artifact = json.load(open(artifact_path, encoding="utf-8"))
+artifact.update({"disposition": "findings", "findings": [{
+    "id": "BLOCKING-FINDING", "summary": "must not be auto-disposed",
+    "triage": {"classification": "blocking", "basis": "fixture requires an authorized resolution"},
+}]})
+with open(artifact_path, "w", encoding="utf-8") as handle:
+    json.dump(artifact, handle, sort_keys=True)
+    handle.write("\n")
+rows = [json.loads(line) for line in open(ledger_path, encoding="utf-8") if line.strip()]
+for row in rows:
+    row["findings"] = "findings"
+    row["artifact_digest"] = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
+with open(ledger_path, "w", encoding="utf-8") as handle:
+    handle.write("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+PY
+if (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" "${COMPLETE_ARGS[@]}" \
+  >"$TMPDIR/complete-blocking-findings.out" 2>"$TMPDIR/complete-blocking-findings.err"); then
+  echo "review-closeout --complete auto-completed a blocking finding" >&2
+  exit 1
+fi
+grep -Eiq 'finding|disposition|resolution' "$TMPDIR/complete-blocking-findings.err" || {
+  cat "$TMPDIR/complete-blocking-findings.err" >&2
+  exit 1
+}
+if grep -Eiq 'non_actionable|addressed|rejected_with_evidence' "$TMPDIR/complete-blocking-findings.err"; then
+  echo "review-closeout --complete invented a finding disposition" >&2
+  exit 1
+fi
+[[ ! -e "$TMPDIR/complete-gh-state/published-resolution.json" && ! -e "$TMPDIR/complete-gh-state/published-packet.json" ]] || {
+  echo "blocked finding case performed a remote append" >&2
+  exit 1
+}
+cp "$TMPDIR/complete-no-findings-artifact.json" "$ARTIFACT"
+cp "$TMPDIR/complete-no-findings-ledger.jsonl" "$LEDGER"
+cp "$TMPDIR/complete-no-findings-manifest.json" "$MANIFEST"
+
+# A live PR head mismatch must stop before either resolution or packet append.
+if (cd "$TMPDIR" && GH_HEAD_OVERRIDE="$(printf 'f%.0s' {1..40})" \
+  "$REPO/scripts/pm/review-closeout.sh" "${COMPLETE_ARGS[@]}" \
+  >"$TMPDIR/complete-head-drift.out" 2>"$TMPDIR/complete-head-drift.err"); then
+  echo "review-closeout --complete accepted a drifted live PR head" >&2
+  exit 1
+fi
+grep -Eiq 'head|candidate|C1|PR' "$TMPDIR/complete-head-drift.err"
+[[ ! -e "$TMPDIR/complete-gh-state/published-resolution.json" && ! -e "$TMPDIR/complete-gh-state/published-packet.json" ]] || {
+  echo "live-head drift case performed a remote append" >&2
+  exit 1
+}
+
+MANIFEST_BEFORE="$(shasum -a 256 "$MANIFEST" | awk '{print $1}')"
+if (cd "$TMPDIR" && GH_LOSE_PACKET_READBACK=1 \
+  "$REPO/scripts/pm/review-closeout.sh" "${COMPLETE_ARGS[@]}" \
+  >"$TMPDIR/complete-uncertain-first.out" 2>"$TMPDIR/complete-uncertain-first.err"); then
+  echo "review-closeout --complete reported success after lost packet readback" >&2
+  exit 1
+fi
+grep -Eiq 'pending|readback|uncertain' "$TMPDIR/complete-uncertain-first.err"
+[[ -f "$TMPDIR/complete-gh-state/published-packet.json" ]] || {
+  cat "$TMPDIR/complete-uncertain-first.err" >&2
+  echo "uncertain packet test did not simulate a possible applied append" >&2
+  exit 1
+}
+
+if ! (cd "$TMPDIR" && GH_LOSE_PACKET_READBACK=1 \
+  "$REPO/scripts/pm/review-closeout.sh" "${COMPLETE_ARGS[@]}" \
+  >"$TMPDIR/complete-reconciled.out" 2>"$TMPDIR/complete-reconciled.err"); then
+  cat "$TMPDIR/complete-reconciled.err" >&2
+  exit 1
+fi
+[[ "$(<"$TMPDIR/complete-gh-state/packet-post.count")" == 1 ]] || {
+  echo "uncertain retry duplicated or omitted the packet append" >&2
+  exit 1
+}
+[[ "$(<"$TMPDIR/complete-gh-state/resolution-post.count")" == 1 ]] || {
+  echo "no-findings completion duplicated or omitted its resolution append" >&2
+  exit 1
+}
+
+# A completed unchanged epoch is read-only; a duplicate semantic packet is a
+# hard conflict and must never authorize another POST.
+if ! (cd "$TMPDIR" && "$REPO/scripts/pm/review-closeout.sh" "${COMPLETE_ARGS[@]}" \
+  >"$TMPDIR/complete-idempotent.out" 2>"$TMPDIR/complete-idempotent.err"); then
+  cat "$TMPDIR/complete-idempotent.err" >&2
+  exit 1
+fi
+[[ "$(<"$TMPDIR/complete-gh-state/packet-post.count")" == 1 && "$(<"$TMPDIR/complete-gh-state/resolution-post.count")" == 1 ]] || {
+  echo "unchanged completion epoch repeated a remote append" >&2
+  exit 1
+}
+[[ "$(shasum -a 256 "$MANIFEST" | awk '{print $1}')" == "$MANIFEST_BEFORE" ]] || {
+  echo "unchanged completion epoch rewrote the immutable resolution manifest" >&2
+  exit 1
+}
+if (cd "$TMPDIR" && GH_DUPLICATE_PACKET=1 \
+  "$REPO/scripts/pm/review-closeout.sh" "${COMPLETE_ARGS[@]}" \
+  >"$TMPDIR/complete-duplicate-packet.out" 2>"$TMPDIR/complete-duplicate-packet.err"); then
+  echo "review-closeout --complete accepted duplicate semantic packet comments" >&2
+  exit 1
+fi
+grep -Eiq 'duplicate|ambiguous|conflict' "$TMPDIR/complete-duplicate-packet.err"
+[[ "$(<"$TMPDIR/complete-gh-state/packet-post.count")" == 1 ]] || {
+  echo "duplicate semantic packet case performed another POST" >&2
+  exit 1
+}
+echo "review-closeout --complete process proof: blocked findings, divergent C1 target, post-apply retry, idempotent no-op, duplicate and head-drift guards passed"
 
 # An empty role-return ledger must be rejected before packet generation.
 : >"$LEDGER"

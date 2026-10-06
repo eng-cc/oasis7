@@ -31,9 +31,50 @@ spec.loader.exec_module(gate)
 
 class ProductionLoopTests(unittest.TestCase):
     def setUp(self):
+        self.live_target_oid = gate.live_target_oid
         target = patch.object(gate, 'live_target_oid', return_value='a' * 40)
         target.start()
         self.addCleanup(target.stop)
+
+    def test_live_target_requires_live_default_branch_identity(self):
+        class API:
+            def __init__(self):
+                self.paths = []
+
+            def rest(self, method, path, **_kwargs):
+                self.paths.append((method, path))
+                if path == 'repos/owner/repo':
+                    return {'full_name': 'owner/repo', 'default_branch': 'main'}
+                if path == 'repos/owner/repo/git/ref/heads/main':
+                    return {'object': {'sha': 'c' * 40}}
+                raise AssertionError(f'unexpected GitHub read: {path}')
+
+        api = API()
+        data = {'repository': 'owner/repo', 'baseRefName': 'main', 'number': 12}
+        self.assertEqual(self.live_target_oid(data, api_client=api, uid='task_' + '1' * 32), 'c' * 40)
+        self.assertEqual(api.paths, [
+            ('GET', 'repos/owner/repo'),
+            ('GET', 'repos/owner/repo/git/ref/heads/main'),
+        ])
+
+    def test_live_target_rejects_non_default_pr_ref_before_reading_target(self):
+        class API:
+            def __init__(self):
+                self.paths = []
+
+            def rest(self, method, path, **_kwargs):
+                self.paths.append((method, path))
+                if path == 'repos/owner/repo':
+                    return {'full_name': 'owner/repo', 'default_branch': 'main'}
+                if path == 'repos/owner/repo/git/ref/heads/release':
+                    return {'object': {'sha': 'd' * 40}}
+                raise AssertionError(f'unexpected GitHub read: {path}')
+
+        api = API()
+        data = {'repository': 'owner/repo', 'baseRefName': 'release', 'number': 12}
+        with self.assertRaisesRegex(ValueError, 'not the live repository default branch'):
+            self.live_target_oid(data, api_client=api, uid='task_' + '1' * 32)
+        self.assertEqual(api.paths, [('GET', 'repos/owner/repo')])
 
     def test_historical_pr_base_uses_live_target_before_proof(self):
         with patch.object(gate, 'live_target_oid', return_value='c' * 40), \
@@ -159,11 +200,15 @@ class TrustedIngressTests(unittest.TestCase):
             (root / '.pm/github-project-sync/tasks.json').write_text(json.dumps({'tasks': {'uid': task}}))
             encoded = base64.urlsafe_b64encode(json.dumps(binding).encode()).decode()
             issue = json.dumps({'body': f'- loop_binding_b64: `{encoded}`'})
-            with patch.object(gate.subprocess, 'check_output', side_effect=[issue, 'c' * 40, '/common', '/common']), patch.object(gate.subprocess, 'run', side_effect=[None, subprocess.CalledProcessError(1, ['git', 'merge-base'])]) as execute:
-                with self.assertRaises(subprocess.CalledProcessError):
+            facade = SimpleNamespace(
+                _existing_trusted_default_helper=lambda *_args: root,
+                resolve_effective_binding=lambda *_args, **_kwargs: (binding, {'trusted_current_policy': {'default_branch_oid': 'd' * 40}}),
+                existing_policy_tool_root=lambda *_args: (_ for _ in ()).throw(ValueError('pin helper unavailable')),
+            )
+            with patch.object(gate, '_trusted_loop_facade', return_value=facade), patch.object(gate.subprocess, 'check_output', side_effect=[issue, 'd' * 40]), patch.object(gate.subprocess, 'run') as execute:
+                with self.assertRaisesRegex(ValueError, 'pin helper unavailable'):
                     gate.local_loop_admission(root, 'uid', 'a' * 40, 'b' * 40, root)
-                self.assertEqual(execute.call_count, 2)
-                self.assertTrue(all(call.args[0][0] == 'git' for call in execute.call_args_list))
+                execute.assert_not_called()
 
 
 class IntegrationAuthorityTests(unittest.TestCase):
@@ -366,10 +411,15 @@ print(json.dumps(result))
             (root / '.pm/github-project-sync/tasks.json').write_text(json.dumps({'tasks': {'uid': task}}))
             encoded = base64.urlsafe_b64encode(json.dumps(binding).encode()).decode()
             issue = json.dumps({'body': f'- loop_binding_b64: `{encoded}`'})
-            with patch.object(gate.subprocess, 'check_output', side_effect=[issue, 'c' * 40, '/common', '/common', b'trusted code']), patch.object(gate.subprocess, 'run') as execute:
-                with self.assertRaisesRegex(ValueError, 'bytes differ'):
+            facade = SimpleNamespace(
+                _existing_trusted_default_helper=lambda *_args: root,
+                resolve_effective_binding=lambda *_args, **_kwargs: (binding, {'trusted_current_policy': {'default_branch_oid': 'd' * 40}}),
+                existing_policy_tool_root=lambda *_args: (_ for _ in ()).throw(ValueError('matching effective policy checkout has modified helper bytes')),
+            )
+            with patch.object(gate, '_trusted_loop_facade', return_value=facade), patch.object(gate.subprocess, 'check_output', side_effect=[issue, 'd' * 40]), patch.object(gate.subprocess, 'run') as execute:
+                with self.assertRaisesRegex(ValueError, 'modified helper bytes'):
                     gate.local_loop_admission(root, 'uid', 'a' * 40, 'b' * 40, root)
-                self.assertTrue(all(call.args[0][0] == 'git' for call in execute.call_args_list))
+                execute.assert_not_called()
 
     def test_canonical_head_drift_cannot_execute(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -383,10 +433,48 @@ print(json.dumps(result))
             (root / '.pm/github-project-sync/tasks.json').write_text(json.dumps({'tasks': {'uid': task}}))
             encoded = base64.urlsafe_b64encode(json.dumps(binding).encode()).decode()
             issue = json.dumps({'body': f'- loop_binding_b64: `{encoded}`'})
-            with patch.object(gate.subprocess, 'check_output', side_effect=[issue, 'c' * 40, '/common', '/common', b'trusted code', 'd' * 40]), patch.object(gate.subprocess, 'run') as execute:
+            facade = SimpleNamespace(
+                _existing_trusted_default_helper=lambda *_args: root,
+                resolve_effective_binding=lambda *_args, **_kwargs: (binding, {'trusted_current_policy': {'default_branch_oid': 'd' * 40}}),
+                existing_policy_tool_root=lambda *_args: root,
+            )
+            with patch.object(gate, '_trusted_loop_facade', return_value=facade), patch.object(gate.subprocess, 'check_output', side_effect=[issue, 'd' * 40, 'c' * 40]), patch.object(gate.subprocess, 'run') as execute:
                 with self.assertRaisesRegex(ValueError, 'worktree HEAD'):
                     gate.local_loop_admission(root, 'uid', 'a' * 40, 'b' * 40, root)
-                self.assertTrue(all(call.args[0][0] == 'git' for call in execute.call_args_list))
+                execute.assert_not_called()
+
+    def test_local_admission_executes_default_gate_with_active_pinned_tool_root_without_fetch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            mapping = root / '.pm/github-project-sync/tasks.json'
+            mapping.parent.mkdir(parents=True)
+            uid = 'task_' + 'a' * 32
+            binding = {'task_uid': uid, 'policy_commit': 'c' * 40,
+                       'policy_digest': 'sha256:' + '1' * 64}
+            task = {'task_uid': uid, 'repository': 'owner/repo', 'issue_number': 3,
+                    'loop_binding': binding}
+            mapping.write_text(json.dumps({'tasks': {uid: task}}))
+            encoded = base64.urlsafe_b64encode(json.dumps(binding).encode()).decode()
+            issue = json.dumps({'body': f'- loop_binding_b64: `{encoded}`'})
+            trusted = root / 'trusted-default'
+            pin = root / 'pinned'
+            facade = SimpleNamespace(
+                _existing_trusted_default_helper=lambda *_args: trusted,
+                resolve_effective_binding=lambda *_args, **_kwargs: (binding, {'trusted_current_policy': {'default_branch_oid': 'd' * 40}}),
+                existing_policy_tool_root=lambda *_args: pin,
+            )
+            command_result = subprocess.CompletedProcess([], 0, '{"status":"passed"}', '')
+            with patch.object(gate, '_trusted_loop_facade', return_value=facade), \
+                 patch.object(gate.subprocess, 'check_output', side_effect=[issue, 'e' * 40, 'e' * 40]), \
+                 patch.object(gate.subprocess, 'run', return_value=command_result) as execute:
+                result = gate.local_loop_admission(root, uid, 'a' * 40, 'e' * 40, pin)
+            self.assertEqual(result['policy_commit'], binding['policy_commit'])
+            self.assertEqual(result['trusted_default_oid'], 'd' * 40)
+            command = execute.call_args.args[0]
+            self.assertEqual(command[3], str(trusted / 'scripts/pm/loop-local-gate.py'))
+            self.assertIn('-B', command)
+            self.assertEqual(command[command.index('--tool-root') + 1], str(pin))
+            self.assertNotIn('fetch', command)
 
 
 class KeyedQApplicabilityTests(unittest.TestCase):

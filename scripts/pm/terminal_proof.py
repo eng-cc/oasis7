@@ -371,6 +371,28 @@ def read_live_repository(repository: str, merge_commit_oid: str,
             "merge_compare": compare, "observed_target_compare": observed_compare}
 
 
+def _compare_contains_base(compare: object, repository: str, base: str, target: str) -> bool:
+    """Bind the real REST compare summary to independently resolved OIDs."""
+    if not isinstance(compare, dict):
+        return False
+    if compare.get("url") != f"https://api.github.com/repos/{repository}/compare/{base}...{target}":
+        return False
+    for field in ("base_commit", "merge_base_commit"):
+        commit = compare.get(field)
+        if not isinstance(commit, dict) or commit.get("sha") != base:
+            return False
+    counts = [compare.get(field) for field in ("ahead_by", "behind_by", "total_commits")]
+    if any(type(count) is not int or count < 0 for count in counts):
+        return False
+    ahead, behind, total = counts
+    if behind != 0 or total != ahead:
+        return False
+    # Commit arrays can be truncated; endpoint identity and merge base establish
+    # ancestry without guessing a head_commit field or inspecting the last item.
+    return ((base == target and compare.get("status") == "identical" and ahead == 0)
+            or (base != target and compare.get("status") == "ahead" and ahead > 0))
+
+
 def _validate_live_repository(live_repository: dict, repository: str,
                               merge_commit_oid: str, default_branch: str,
                               observed_target_oid: str) -> str:
@@ -383,17 +405,11 @@ def _validate_live_repository(live_repository: dict, repository: str,
     target = ((ref.get("object") or {}).get("sha"))
     if not isinstance(target, str) or not OID_RE.fullmatch(target):
         raise ValueError("terminal delivery live target OID is invalid")
-    base_oid = ((compare.get("base_commit") or {}).get("sha"))
-    compare_head = ((compare.get("head_commit") or {}).get("sha"))
-    if (compare.get("status") not in {"ahead", "identical"}
-            or base_oid != merge_commit_oid or compare_head != target):
+    if not _compare_contains_base(compare, repository, merge_commit_oid, target):
         raise ValueError("terminal delivery live merge is not contained in target history")
     if observed_target_oid != target:
         observed_compare = live_repository.get("observed_target_compare") or {}
-        observed_base = ((observed_compare.get("base_commit") or {}).get("sha"))
-        observed_head = ((observed_compare.get("head_commit") or {}).get("sha"))
-        if (observed_compare.get("status") not in {"ahead", "identical"}
-                or observed_base != observed_target_oid or observed_head != target):
+        if not _compare_contains_base(observed_compare, repository, observed_target_oid, target):
             raise ValueError("terminal delivery observed target is not on live target history")
     return target
 

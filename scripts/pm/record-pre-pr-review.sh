@@ -41,6 +41,7 @@ Options:
   --allow-dirty                Allow dirty working tree only when --reviewed-paths
                                and --source-head are explicitly supplied.
   --print-only                 Print packet instead of posting to GitHub issue.
+  --idempotent-publish         Reuse one exact v2 packet for the unchanged plan/head.
   -h, --help                   Show help.
 USAGE
 }
@@ -135,6 +136,7 @@ SOURCE_HEAD=""
 SOURCE_BRANCH=""
 PRINT_ONLY="0"
 ALLOW_DIRTY="0"
+IDEMPOTENT_PUBLISH="0"
 COMPARISON_REF_EXPLICIT="0"
 
 while [[ $# -gt 0 ]]; do
@@ -165,6 +167,7 @@ while [[ $# -gt 0 ]]; do
     --source-branch) SOURCE_BRANCH="${2:-}"; shift 2 ;;
     --allow-dirty) ALLOW_DIRTY="1"; shift ;;
     --print-only) PRINT_ONLY="1"; shift ;;
+    --idempotent-publish) IDEMPOTENT_PUBLISH="1"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -894,4 +897,13 @@ if [[ "$PRINT_ONLY" == "1" ]]; then
 fi
 
 [[ -n "$ISSUE_NUMBER" ]] || die "could not infer issue number; pass --issue or use --print-only"
+if [[ "$IDEMPOTENT_PUBLISH" == "1" ]]; then
+  [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" && -n "$REVIEW_PLAN" ]] \
+    || die "--idempotent-publish requires an immutable v2 review plan"
+  COMPLETE_RESULT="$(printf '%s\n' "$PACKET" | python3 "$SCRIPT_DIR/review_closeout_complete.py" \
+    --root "$ROOT_DIR" --task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --head "$SOURCE_HEAD")" \
+    || die "idempotent review packet publication is pending or blocked"
+  printf '%s\n' "$PACKET"
+  exit 0
+fi
 gh issue comment "$ISSUE_NUMBER" -R "$REPO" --body "$PACKET"

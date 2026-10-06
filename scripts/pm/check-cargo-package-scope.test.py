@@ -20,6 +20,7 @@ self-contained and cannot accidentally depend on a production fixture.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -30,6 +31,17 @@ from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "scripts" / "pm" / "check-cargo-package-scope"
+POLICY_MAINTENANCE_PATHS = (
+    "doc/engineering/workflow/source-of-truth.md",
+    "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+    "scripts/pm/check-cargo-package-scope",
+    "scripts/pm/check-cargo-package-scope.test.py",
+    ".pm/cargo-package-auxiliary-files.json",
+    "scripts/ci-tests.sh",
+    "scripts/ci-required-scope.v2.json",
+    "scripts/ci-required-scope-audit-contract.test.sh",
+    ".github/workflows/rust.yml",
+)
 
 
 class CargoPackageScopeContract(unittest.TestCase):
@@ -50,6 +62,27 @@ class CargoPackageScopeContract(unittest.TestCase):
             capture_output=True,
         )
         return result.stdout.strip()
+
+    def _trusted_full_plan_environment(
+        self, changed_paths: tuple[str, ...] = POLICY_MAINTENANCE_PATHS
+    ) -> dict[str, str]:
+        command = [
+            sys.executable,
+            str(ROOT / "scripts/plan-rust-required-scope.py"),
+            "--event-name",
+            "pull_request",
+        ]
+        for path in changed_paths:
+            command.extend(("--changed-path", path))
+        result = subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"required-scope planner failed: stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        plan = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+        self.assertEqual("full", plan.get("scope"), plan)
+        return {"OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN": "true"}
 
     def _write(self, repo: Path, relative: str, content: str) -> None:
         path = repo / relative
@@ -167,12 +200,21 @@ path = "src/lib.rs"
         self._git(repo, "commit", "-qm", message)
         return self._git(repo, "rev-parse", "HEAD")
 
-    def _run_checker(self, repo: Path, base: str, head: str, primary: str) -> subprocess.CompletedProcess[str]:
+    def _run_checker(
+        self,
+        repo: Path,
+        base: str,
+        head: str,
+        primary: str,
+        env_overrides: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         if not CHECKER.is_file():
             self.fail(
                 "RED: missing implementation: expected executable "
                 f"{CHECKER}; add production behavior without editing this test"
             )
+        env = os.environ.copy()
+        env.update(env_overrides or {})
         return subprocess.run(
             [
                 sys.executable,
@@ -190,6 +232,7 @@ path = "src/lib.rs"
                 "--json",
             ],
             cwd=repo,
+            env=env,
             text=True,
             capture_output=True,
         )
@@ -339,6 +382,74 @@ path = "src/lib.rs"
             0,
             generated.returncode,
             f"cargo generate-lockfile fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
+        )
+
+    def _shared_path_dependency_fixture(self) -> tuple[Path, str]:
+        repo, _ = self._fixture()
+        workspace_manifest = repo / "Cargo.toml"
+        workspace_manifest.write_text(
+            workspace_manifest.read_text(encoding="utf-8").replace(
+                'resolver = "2"\n',
+                'resolver = "2"\nexclude = ["shared/dep-1", "shared/dep-2"]\n',
+            ),
+            encoding="utf-8",
+        )
+        for version in ("1.0.0", "2.0.0"):
+            dependency_root = repo / "shared" / f"dep-{version[0]}"
+            self._write(
+                repo,
+                f"shared/dep-{version[0]}/Cargo.toml",
+                f'''[package]
+name = "shareddep"
+version = "{version}"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+''',
+            )
+            self._write(repo, f"shared/dep-{version[0]}/src/lib.rs", "pub fn value() {}\n")
+            self.assertTrue(dependency_root.is_dir())
+
+        for package in ("alpha", "beta"):
+            manifest = repo / f"crates/{package}/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[dependencies]\nshareddep = { path = "../../shared/dep-1" }\n',
+                encoding="utf-8",
+            )
+        generated = subprocess.run(
+            ["cargo", "generate-lockfile", "--offline", "--manifest-path", str(repo / "Cargo.toml")],
+            cwd=repo,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            0,
+            generated.returncode,
+            f"cargo generate-lockfile shared-dependency fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "workspace packages share a path dependency")
+        return repo, self._git(repo, "rev-parse", "HEAD")
+
+    def _switch_alpha_shared_dependency_to_v2(self, root: Path) -> None:
+        manifest = root / "crates/alpha/Cargo.toml"
+        content = manifest.read_text(encoding="utf-8")
+        self.assertIn('path = "../../shared/dep-1"', content)
+        manifest.write_text(content.replace('path = "../../shared/dep-1"', 'path = "../../shared/dep-2"'), encoding="utf-8")
+        generated = subprocess.run(
+            ["cargo", "generate-lockfile", "--offline", "--manifest-path", str(root / "Cargo.toml")],
+            cwd=root,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            0,
+            generated.returncode,
+            f"cargo generate-lockfile lock-rebinding fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
         )
 
     def test_existing_normal_path_dependency_with_generated_lockfile_is_allowed(self) -> None:
@@ -1031,6 +1142,86 @@ path = "src/lib.rs"
                 handle.write("\n# unrelated lockfile mutation\n")
 
         self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def test_trusted_full_plan_allows_cargo_generated_lock_rebinding(self) -> None:
+        repo, base = self._shared_path_dependency_fixture()
+        head = self._head(
+            repo,
+            self._switch_alpha_shared_dependency_to_v2,
+            "alpha selects a second shared dependency version",
+        )
+        base_lock = self._git(repo, "show", f"{base}:Cargo.lock")
+        head_lock = self._git(repo, "show", f"{head}:Cargo.lock")
+        self.assertIn('dependencies = [\n "shareddep",\n]', base_lock)
+        self.assertIn('"shareddep 1.0.0"', head_lock)
+        self.assertIn('"shareddep 2.0.0"', head_lock)
+        full_environment = self._trusted_full_plan_environment(
+            ("Cargo.lock", "crates/alpha/Cargo.toml")
+        )
+        result = self._run_checker(repo, base, head, "alpha", full_environment)
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"trusted full-plan resolver rebindings should pass; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertEqual("allowed", json.loads(result.stdout).get("status"), result.stdout)
+
+        wrong_primary = self._run_checker(repo, base, head, "beta", full_environment)
+        self.assertNotEqual(0, wrong_primary.returncode, wrong_primary.stdout)
+        self.assertIn("primary_package_mismatch", wrong_primary.stdout + wrong_primary.stderr)
+
+    def test_non_full_plan_rejects_cargo_generated_lock_rebinding(self) -> None:
+        repo, base = self._shared_path_dependency_fixture()
+        head = self._head(
+            repo,
+            self._switch_alpha_shared_dependency_to_v2,
+            "alpha selects a second shared dependency version",
+        )
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "alpha",
+            {"OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN": "false"},
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("unattributable_lock_change", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_rejects_lock_change_without_primary_manifest_change(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn('name = "beta"\nversion = "0.1.0"', content)
+            lock.write_text(
+                content.replace('name = "beta"\nversion = "0.1.0"', 'name = "beta"\nversion = "0.2.0"'),
+                encoding="utf-8",
+            )
+
+        head = self._head(repo, mutate, "unpaired root lock update")
+        full_environment = self._trusted_full_plan_environment(("Cargo.lock",))
+        result = self._run_checker(repo, base, head, "alpha", full_environment)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("unattributable_lock_change", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_still_rejects_unresolvable_lock_reference(self) -> None:
+        repo, base = self._shared_path_dependency_fixture()
+
+        def mutate(root: Path) -> None:
+            self._switch_alpha_shared_dependency_to_v2(root)
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn('"shareddep 2.0.0"', content)
+            lock.write_text(content.replace('"shareddep 2.0.0"', '"missing-dependency 9.9.9"', 1), encoding="utf-8")
+
+        head = self._head(repo, mutate, "full-plan lock with unresolved reference")
+        full_environment = self._trusted_full_plan_environment(
+            ("Cargo.lock", "crates/alpha/Cargo.toml")
+        )
+        result = self._run_checker(repo, base, head, "alpha", full_environment)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("unattributable_lock_change", result.stdout + result.stderr)
 
     def test_cross_package_include_is_rejected(self) -> None:
         repo, base = self._fixture()
@@ -1863,6 +2054,103 @@ path = "src/lib.rs"
             )
 
         self._assert_rejected(repo, base, "alpha", mutate, "policy_self_modification")
+
+    def test_trusted_full_plan_allows_exact_policy_maintenance_range(self) -> None:
+        repo, base = self._auxiliary_base([])
+        def mutate(root: Path) -> None:
+            registry_path = root / ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["auxiliary_files"].append(
+                {"path": "doc/world-runtime/wasm/wasm-executor.design.md", "package": "alpha"}
+            )
+            registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+            for path in POLICY_MAINTENANCE_PATHS:
+                if path != ".pm/cargo-package-auxiliary-files.json":
+                    self._write(root, path, "bounded full-CI policy maintenance fixture\n")
+
+        head = self._head(repo, mutate, "full-CI policy maintenance fixture")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "auto",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"trusted full-plan maintenance range should pass; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual("allowed", payload.get("status"), payload)
+        self.assertEqual("trusted_full_policy_maintenance", payload.get("scope"), payload)
+
+    def test_trusted_full_plan_does_not_allow_policy_range_with_business_change(self) -> None:
+        repo, base = self._auxiliary_base([])
+
+        def mutate(root: Path) -> None:
+            registry_path = root / ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["auxiliary_files"].append(
+                {"path": "doc/world-runtime/wasm/wasm-executor.design.md", "package": "alpha"}
+            )
+            registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+            self._write(root, "scripts/ci-tests.sh", "changed CI route\n")
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+
+        head = self._head(repo, mutate, "mixed policy and business change")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "alpha",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("policy_self_modification", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_does_not_allow_policy_range_with_outside_path(self) -> None:
+        repo, base = self._auxiliary_base([])
+
+        def mutate(root: Path) -> None:
+            registry_path = root / ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            registry["auxiliary_files"].append(
+                {"path": "doc/world-runtime/wasm/wasm-executor.design.md", "package": "alpha"}
+            )
+            registry_path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+            self._write(root, "scripts/ci-tests.sh", "changed CI route\n")
+            self._write(root, "README.md", "unlisted path\n")
+
+        head = self._head(repo, mutate, "policy maintenance with unlisted path")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "auto",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("policy_self_modification", result.stdout + result.stderr)
+
+    def test_trusted_full_plan_still_rejects_malformed_candidate_registry(self) -> None:
+        repo, base = self._auxiliary_base([])
+        def mutate(root: Path) -> None:
+            self._write(root, ".pm/cargo-package-auxiliary-files.json", '{"schema": "wrong"}\n')
+            for path in POLICY_MAINTENANCE_PATHS:
+                if path != ".pm/cargo-package-auxiliary-files.json":
+                    self._write(root, path, "bounded full-CI policy maintenance fixture\n")
+
+        head = self._head(repo, mutate, "malformed full-CI registry fixture")
+        result = self._run_checker(
+            repo,
+            base,
+            head,
+            "auto",
+            self._trusted_full_plan_environment(),
+        )
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("trusted_policy_invalid", result.stdout + result.stderr)
 
     def test_malformed_conflicting_unknown_and_reserved_auxiliary_registrations_fail_closed(self) -> None:
         cases = [

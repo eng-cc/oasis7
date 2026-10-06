@@ -313,7 +313,13 @@ elif args[:1] == ["api"]:
     elif endpoint == "repos/fixture/repo/git/ref/heads/main":
         out({"ref":"refs/heads/main","object":{"sha":state["target_oid"]}})
     elif endpoint == "repos/fixture/repo/compare/" + state["merge_oid"] + "..." + state["target_oid"]:
-        out({"status":"identical","base_commit":{"sha":state["merge_oid"]},"head_commit":{"sha":state["target_oid"]}})
+        advanced = state["merge_oid"] != state["target_oid"]
+        out({"url":"https://api.github.com/"+endpoint,
+             "status":"ahead" if advanced else "identical",
+             "base_commit":{"sha":state["merge_oid"]},
+             "merge_base_commit":{"sha":state["merge_oid"]},
+             "ahead_by":1 if advanced else 0,"behind_by":0,"total_commits":1 if advanced else 0,
+             "commits":[{"sha":state["target_oid"]}] if advanced else []})
     elif endpoint == f"repos/fixture/repo/issues/{state['issue']['number']}/comments": out([state.get("readiness_comments", []) + state["comments"]])
     elif endpoint.startswith("repos/fixture/repo/issues/comments/"):
         identifier = int(endpoint.rsplit("/", 1)[1])
@@ -494,11 +500,126 @@ for pid in args[args.index("-p") + 1].split(","):
         live_repo = {
             "repository": {"full_name": REPOSITORY, "default_branch": "main"},
             "ref": {"ref": "refs/heads/main", "object": {"sha": state["target_oid"]}},
-            "merge_compare": {"status": "identical", "base_commit": {"sha": state["merge_oid"]},
-                              "head_commit": {"sha": state["target_oid"]}},
+            "merge_compare": LiveRepositoryCompareTests().compare(state["merge_oid"], state["target_oid"]),
             "observed_target_compare": None,
         }
         return record, state["issue"], state["project_item"], state["pr"], live_repo, state.get("readiness_comments", []) + state["comments"]
+
+
+class LiveRepositoryCompareTests(unittest.TestCase):
+    """Real REST compare shapes, without a fabricated head_commit field."""
+
+    merge = "a" * 40
+    target = "b" * 40
+    observed = "c" * 40
+
+    def compare(self, base, target):
+        advanced = base != target
+        return {
+            "url": f"https://api.github.com/repos/{REPOSITORY}/compare/{base}...{target}",
+            "status": "ahead" if advanced else "identical",
+            "base_commit": {"sha": base}, "merge_base_commit": {"sha": base},
+            "ahead_by": 1 if advanced else 0, "behind_by": 0,
+            "total_commits": 1 if advanced else 0,
+            "commits": [{"sha": target}] if advanced else [],
+        }
+
+    def bundle(self, target, observed=None):
+        return {
+            "repository": {"full_name": REPOSITORY, "default_branch": "main"},
+            "ref": {"ref": "refs/heads/main", "object": {"sha": target}},
+            "merge_compare": self.compare(self.merge, target),
+            "observed_target_compare": self.compare(observed, target) if observed else None,
+        }
+
+    def validate(self, bundle, observed=None):
+        return terminal_proof.validate_live_repository(
+            bundle, REPOSITORY, self.merge, default_branch="main",
+            observed_target_oid=observed or bundle["ref"]["object"]["sha"],
+        )
+
+    def test_identical_real_response_without_head_commit(self):
+        self.assertEqual(self.merge, self.validate(self.bundle(self.merge)))
+
+    def test_ahead_real_response_without_head_commit(self):
+        self.assertEqual(self.target, self.validate(self.bundle(self.target)))
+
+    def test_observed_target_ahead_real_response_without_head_commit(self):
+        self.assertEqual(self.target, self.validate(self.bundle(self.target, self.observed), self.observed))
+
+    def test_observed_target_identical_to_merge_real_response(self):
+        self.assertEqual(self.merge, self.validate(self.bundle(self.merge, self.observed), self.observed))
+
+    def test_both_comparisons_reject_mismatched_or_incomplete_readbacks(self):
+        mutations = [
+            ("url", "https://api.github.com/repos/other/repo/compare/" + self.merge + "..." + self.target),
+            ("url", f"https://api.github.com/repos/{REPOSITORY}/compare/{self.merge}...{'d' * 40}"),
+            ("url", f"https://api.github.com/repos/{REPOSITORY}/compare/{'d' * 40}...{self.target}"),
+            ("url", None), ("url", f"https://api.github.com/repos/{REPOSITORY}/compare/main...main"),
+            ("base_commit", {"sha": "d" * 40}), ("base_commit", []),
+            ("merge_base_commit", {"sha": "d" * 40}), ("merge_base_commit", None),
+            ("status", "behind"), ("status", "diverged"), ("status", "identical"),
+            ("status", None), ("ahead_by", 0), ("ahead_by", True), ("ahead_by", "1"),
+            ("ahead_by", -1), ("behind_by", 1), ("behind_by", None),
+            ("total_commits", 2), ("total_commits", None),
+        ]
+        for branch in ("merge_compare", "observed_target_compare"):
+            for field, value in mutations:
+                bundle = self.bundle(self.target, self.observed)
+                bundle[branch][field] = value
+                with self.subTest(branch=branch, field=field, value=value), self.assertRaises(ValueError):
+                    self.validate(bundle, self.observed)
+            for value in (None, [], {}, "malformed"):
+                bundle = self.bundle(self.target, self.observed)
+                bundle[branch] = value
+                with self.subTest(branch=branch, value=value), self.assertRaises(ValueError):
+                    self.validate(bundle, self.observed)
+
+    def test_identical_rejects_inconsistent_status_and_counts(self):
+        for field, value in (("status", "ahead"), ("ahead_by", 1), ("total_commits", 1), ("behind_by", 1)):
+            bundle = self.bundle(self.merge)
+            bundle["merge_compare"][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.validate(bundle)
+
+    def test_truncated_commits_do_not_supply_target_identity(self):
+        bundle = self.bundle(self.target)
+        bundle["merge_compare"].update(ahead_by=300, total_commits=300, commits=[{"sha": "d" * 40}])
+        self.assertEqual(self.target, self.validate(bundle))
+
+    def test_repository_ref_and_live_target_mismatch_remain_rejected(self):
+        mutations = (
+            ("repository", {"full_name": "other/repo", "default_branch": "main"}),
+            ("repository", {"full_name": REPOSITORY, "default_branch": "other"}),
+            ("ref", {"ref": "refs/heads/other", "object": {"sha": self.target}}),
+            ("ref", {"ref": "refs/heads/main", "object": {"sha": "d" * 40}}),
+            ("ref", {"ref": "refs/heads/main", "object": {"sha": "not-an-oid"}}),
+        )
+        for field, value in mutations:
+            bundle = self.bundle(self.target)
+            bundle[field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                self.validate(bundle)
+
+    def test_uncertain_live_readback_remains_rejected(self):
+        with mock.patch.object(terminal_proof.subprocess, "check_output", side_effect=OSError("unreadable")):
+            with self.assertRaisesRegex(ValueError, "readback failed"):
+                terminal_proof.read_live_repository(REPOSITORY, self.merge)
+
+    def test_live_reader_requests_exact_resolved_repository_base_target(self):
+        responses = [
+            {"full_name": REPOSITORY, "default_branch": "main"},
+            {"ref": "refs/heads/main", "object": {"sha": self.target}},
+            self.compare(self.merge, self.target), self.compare(self.observed, self.target),
+        ]
+        with mock.patch.object(terminal_proof.subprocess, "check_output", side_effect=[json.dumps(x) for x in responses]) as api:
+            bundle = terminal_proof.read_live_repository(REPOSITORY, self.merge, observed_target_oid=self.observed)
+        self.assertEqual(self.target, self.validate(bundle, self.observed))
+        self.assertEqual([
+            f"repos/{REPOSITORY}", f"repos/{REPOSITORY}/git/ref/heads/main",
+            f"repos/{REPOSITORY}/compare/{self.merge}...{self.target}",
+            f"repos/{REPOSITORY}/compare/{self.observed}...{self.target}",
+        ], [call.args[0][2] for call in api.call_args_list])
 
 
 class TerminalDeliveryProtocolTests(unittest.TestCase):
