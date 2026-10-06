@@ -894,10 +894,10 @@ def _projection_digest_from_v2(body: str, expected: Mapping[str, Any], pr: Mappi
                                issue_comments: tuple[Mapping[str, Any], ...],
                                trusted_module_root: Path) -> str:
     """Resolve the live v2 PR projection through the exact-W resolver modules."""
-    marker = "<!-- oasis7-ci-publication/v2 -->"
     binding_marker = "<!-- oasis7-ci-publication-binding/v1 -->"
+    publication_module = _load_from_root(trusted_module_root, "pr_projection_publication")
     publications = [item["body"] for item in issue_comments
-                    if type(item.get("body")) is str and marker in item["body"]]
+                    if publication_module.has_task_publication_marker(item.get("body"), version=2)]
     bindings = [item["body"] for item in issue_comments
                 if type(item.get("body")) is str and binding_marker in item["body"]]
     if len(publications) != 1 or len(bindings) != 1:
@@ -905,7 +905,6 @@ def _projection_digest_from_v2(body: str, expected: Mapping[str, Any], pr: Mappi
     try:
         projection_contract = _load_from_root(trusted_module_root, "projection_publication_contract")
         _load_from_root(trusted_module_root, "pr_projection_journal")
-        publication_module = _load_from_root(trusted_module_root, "pr_projection_publication")
         resolver = _load_from_root(trusted_module_root, "pr_projection_resolver")
         publication = publication_module.parse_publication_comment(publications[0])
         binding = publication_module.parse_publication_binding_comment(bindings[0])

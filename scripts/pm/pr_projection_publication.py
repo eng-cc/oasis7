@@ -76,9 +76,25 @@ def publication_comment(publication: dict[str, Any]) -> str:
     return body
 
 
-def has_task_publication_marker(body: Any) -> bool:
-    """Identify historical v1 and current v2 Task publication comments."""
-    return isinstance(body, str) and any(marker in body for marker in _TASK_PUBLICATION_MARKERS)
+def has_task_publication_marker(body: Any, *, version: int | None = None) -> bool:
+    """Identify framed v1/v2 Task publication comments for strict parsing.
+
+    Marker selection only recognizes a marker at the start of the comment.
+    The parser remains responsible for the exact newline and payload shape, so
+    a malformed marker-framed comment is still selected and fails closed while
+    incidental prose that mentions a marker is ignored.
+    """
+    if not isinstance(body, str):
+        return False
+    if version is None:
+        markers = _TASK_PUBLICATION_MARKERS
+    elif type(version) is int and version == 1:
+        markers = (_TASK_PUBLICATION_V1_MARKER,)
+    elif type(version) is int and version == 2:
+        markers = (_TASK_PUBLICATION_V2_MARKER,)
+    else:
+        return False
+    return any(body.startswith(marker) for marker in markers)
 
 
 def parse_publication_comment(body: str) -> dict[str, Any]:

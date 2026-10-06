@@ -225,6 +225,25 @@ class TaskPublicationV2ContractTests(unittest.TestCase):
         self.assertEqual(historical, publication_module.parse_publication_comment(comment))
         self.assertNotIn("workflow_impact_projection", historical)
 
+    def test_task_publication_marker_selection_uses_comment_framing(self):
+        marker_v1 = "<!-- oasis7-ci-publication/v1 -->"
+        marker_v2 = "<!-- oasis7-ci-publication/v2 -->"
+        self.assertTrue(publication_module.has_task_publication_marker(marker_v1 + "\n{}"))
+        self.assertTrue(publication_module.has_task_publication_marker(marker_v2 + "\n{}"))
+        self.assertFalse(publication_module.has_task_publication_marker(
+            "Operator note mentions " + marker_v2 + " as an example."
+        ))
+
+        malformed = marker_v2 + "not-a-newline-framed-record"
+        self.assertTrue(publication_module.has_task_publication_marker(malformed))
+        with self.assertRaisesRegex(publication_module.ContractError, "marker must occur exactly once"):
+            publication_module.parse_publication_comment(malformed)
+
+        duplicate = marker_v2 + "\n{}\n" + marker_v2 + "\n{}"
+        self.assertTrue(publication_module.has_task_publication_marker(duplicate))
+        with self.assertRaisesRegex(publication_module.ContractError, "marker must occur exactly once"):
+            publication_module.parse_publication_comment(duplicate)
+
 
 class FakeAdapter:
     def __init__(self, publication, projection, *, initial_head=None, initial_pr=None):
@@ -384,6 +403,35 @@ class BoundedRecoveryCLITests(unittest.TestCase):
         self.assertEqual(0, result.returncode,
                          f"REC actual CLI case={case} exit={result.returncode}\n"
                          + result.stdout + result.stderr)
+
+    def test_real_record_pr_ignores_incidental_publication_marker_prose(self):
+        fixture = (ROOT / "github-project-task.test.sh").read_text(encoding="utf-8")
+        anchor = '  export GH_REC_PR_BODY_FILE="$TMPDIR/recovery-pr-body.md"\n'
+        self.assertEqual(1, fixture.count(anchor))
+        incidental = (
+            '  printf \'%s\\n\' \'Operator note mentions '
+            '<!-- oasis7-ci-publication/v2 --> in ordinary prose.\' '
+            '>"$GH_COMMENT_DIR/1003"\n'
+        )
+        fixture = fixture.replace(anchor, incidental + anchor, 1)
+        with tempfile.TemporaryDirectory() as temp:
+            isolated = Path(temp) / "record-pr-prose-marker-fixture.sh"
+            isolated.write_text(fixture, encoding="utf-8")
+            environment = dict(
+                os.environ, OASIS7_REC_RED_ONLY="1",
+                OASIS7_REC_CASE="project_post_issue_pre",
+                PM_ROOT_DIR=str(ROOT.parents[1]),
+            )
+            result = subprocess.run(
+                ["bash", str(isolated)], cwd=ROOT.parents[1], env=environment,
+                capture_output=True, text=True, timeout=60,
+            )
+        self.assertEqual(
+            0, result.returncode,
+            "real record-pr must ignore prose containing the publication marker\n"
+            + result.stdout + result.stderr,
+        )
+        self.assertIn("PASS test_rec_project_post_issue_pre", result.stdout)
 
     def fixture_journal(self, common_dir, publication):
         return journal_module.open_journal(

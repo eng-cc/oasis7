@@ -128,6 +128,7 @@ class TaskProjectionPublicationConsumerTests(unittest.TestCase):
         comments = (
             {"body": task_publication.publication_comment(v2)},
             {"body": task_publication.publication_binding_comment(binding)},
+            {"body": "Operator note mentions <!-- oasis7-ci-publication/v2 --> in ordinary prose."},
         )
         modules = {
             "projection_publication_contract": projection_contract,
@@ -142,6 +143,31 @@ class TaskProjectionPublicationConsumerTests(unittest.TestCase):
                     Path("."), pr, task_uid, 143, head, scope, comments,
                 ),
             )
+
+            duplicate_publication_comments = (
+                {"body": task_publication.publication_comment(v2)},
+                {"body": task_publication.publication_comment(v2)},
+                {"body": task_publication.publication_binding_comment(binding)},
+            )
+            with self.assertRaisesRegex(
+                producer.ProducerError, "one exact full-leaf Task publication v2",
+            ):
+                producer._resolve_projection_digest(
+                    Path("."), pr, task_uid, 143, head, scope,
+                    duplicate_publication_comments,
+                )
+
+            malformed_framed_comments = (
+                {"body": "<!-- oasis7-ci-publication/v2 -->not newline framed"},
+                {"body": task_publication.publication_binding_comment(binding)},
+            )
+            with self.assertRaisesRegex(
+                producer.ProducerError, "could not be resolved",
+            ):
+                producer._resolve_projection_digest(
+                    Path("."), pr, task_uid, 143, head, scope,
+                    malformed_framed_comments,
+                )
 
             v1 = task_publication.build_task_publication(**identity)
             old_binding = task_publication.build_publication_binding(
