@@ -212,75 +212,6 @@ jobs:
               raise SystemExit('PR or current target moved during target freeze')
           with open(output,'a') as stream: stream.write(f'oid={target}\n')
           PY
-
-      - name: Validate trusted loop repository scope and content
-        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          base_ref=""
-          head_ref="${GITHUB_SHA}"
-          case "${GITHUB_EVENT_NAME}" in
-            pull_request|workflow_dispatch)
-              base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
-              head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
-              if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci.py"; then
-                python3 "${RUNNER_TEMP}/oasis7-loop-ci.py" --repository "${{ github.repository }}" \
-                  --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
-                  --base "${base_ref}" --head "${head_ref}"
-              else
-                # Bootstrap compatibility: old base has no loop admission. Only
-                # a reciprocal live legacy task may pass; never run candidate helpers.
-                python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number || inputs.pr_number }}" <<'PY'
-          import json,re,subprocess,sys
-          repo,number=sys.argv[1:]
-          pr=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/pulls/{number}'],text=True))
-          uids=set(re.findall(r'task_[0-9a-f]{32}',pr.get('body') or ''))
-          if len(uids)==1:
-              uid=next(iter(uids))
-              refs=set(re.findall(r'(?:Refs|Fixes|Closes)\s+#(\d+)',pr.get('body') or '',re.I))
-              if len(refs)>20: raise SystemExit('task reference discovery budget exhausted')
-              if refs:
-                  candidates=sorted(refs)
-              else:
-                  hits=json.loads(subprocess.check_output(['gh','issue','list','-R',repo,'--state','all','--search',uid+' in:body','--json','number','--limit','5'],text=True))
-                  if not isinstance(hits,list) or len(hits)>=5: raise SystemExit('task search discovery incomplete')
-                  candidates=[hit['number'] for hit in hits]
-              matches=[]
-              for candidate in candidates:
-                  item=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{candidate}'],text=True))
-                  candidate_body=(item.get('body') or '').replace('\r\n','\n')
-                  candidate_fields=re.findall(r'^task_uid:[^\n]*$',candidate_body,re.M)
-                  candidate_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',candidate_body,re.M)
-                  if uid in candidate_uids:
-                      if candidate_fields!=['task_uid: '+uid] or candidate_uids!=[uid]: raise SystemExit('ambiguous canonical Issue UID')
-                      matches.append(candidate)
-              if len(matches)!=1: raise SystemExit('live task Issue is ambiguous or missing')
-              issue_number=matches[0]
-          else:
-              refs=set(re.findall(r'(?:Refs|Fixes|Closes)\s+#(\d+)',pr.get('body') or '',re.I))
-              if uids or len(refs)!=1: raise SystemExit('missing unique live task Issue identity')
-              issue_number,uid=next(iter(refs)),None
-          issue=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}'],text=True))
-          body=(issue.get('body') or '').replace('\r\n','\n')
-          issue_fields=re.findall(r'^task_uid:[^\n]*$',body,re.M)
-          issue_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',body,re.M)
-          if len(issue_fields)!=1 or len(issue_uids)!=1 or (uid is not None and issue_uids!=[uid]): raise SystemExit('task UID identity mismatch')
-          if re.findall(r'^- pr_number: `([0-9]+)`$',body,re.M)!=[number]: raise SystemExit('task PR identity mismatch')
-          if 'loop_binding_b64:' in body: raise SystemExit('effective base lacks loop admission; activation blocked')
-          pages=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}/comments','--paginate','--slurp'],text=True))
-          if not isinstance(pages,list): raise SystemExit('lineage readback unavailable')
-          comments=[item for page in pages for item in (page if isinstance(page,list) else [page])]
-          if any('oasis7-loop-binding-history' in str(item.get('body','')) for item in comments if isinstance(item,dict)): raise SystemExit('loop binding deleted after history')
-          print('loop admission: live legacy bootstrap')
-          PY
-              fi
-              ;;
-            push)
-              base_ref="${{ github.event.before }}"
-              ;;
-          esac
-
       - id: scope
         name: Plan required gate scope
         env:
@@ -372,6 +303,88 @@ jobs:
           )
           temporary.replace(target)
           PY
+      - id: loop-ci-admission
+        name: Validate trusted loop repository scope and content
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          base_ref=""
+          head_ref="${GITHUB_SHA}"
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request|workflow_dispatch)
+              base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
+              head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
+              planner_args=(
+                --scope-base-oid "${{ steps.scope.outputs.source_scope_base }}"
+                --planner-config-sha256 "${{ steps.scope.outputs.planner_config_sha256 }}"
+                --planner-digest "${{ steps.scope.outputs.planner_digest }}"
+                --projection-digest "${{ steps.scope.outputs.impact_projection_digest }}"
+              )
+              if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci.py"; then
+                if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --help 2>&1 | grep -Fq -- '--phase'; then
+                  python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --phase start --repository "${{ github.repository }}" \
+                    --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
+                    --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+                else
+                  python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --repository "${{ github.repository }}" \
+                    --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
+                    --base "${base_ref}" --head "${head_ref}"
+                fi
+              else
+                # Bootstrap compatibility: old base has no loop admission. Only
+                # a reciprocal live legacy task may pass; never run candidate helpers.
+                python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number || inputs.pr_number }}" <<'PY'
+          import json,re,subprocess,sys
+          repo,number=sys.argv[1:]
+          pr=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/pulls/{number}'],text=True))
+          uids=set(re.findall(r'task_[0-9a-f]{32}',pr.get('body') or ''))
+          if len(uids)==1:
+              uid=next(iter(uids))
+              refs=set(re.findall(r'(?:Refs|Fixes|Closes)\s+#(\d+)',pr.get('body') or '',re.I))
+              if len(refs)>20: raise SystemExit('task reference discovery budget exhausted')
+              if refs:
+                  candidates=sorted(refs)
+              else:
+                  hits=json.loads(subprocess.check_output(['gh','issue','list','-R',repo,'--state','all','--search',uid+' in:body','--json','number','--limit','5'],text=True))
+                  if not isinstance(hits,list) or len(hits)>=5: raise SystemExit('task search discovery incomplete')
+                  candidates=[hit['number'] for hit in hits]
+              matches=[]
+              for candidate in candidates:
+                  item=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{candidate}'],text=True))
+                  candidate_body=(item.get('body') or '').replace('\r\n','\n')
+                  candidate_fields=re.findall(r'^task_uid:[^\n]*$',candidate_body,re.M)
+                  candidate_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',candidate_body,re.M)
+                  if uid in candidate_uids:
+                      if candidate_fields!=['task_uid: '+uid] or candidate_uids!=[uid]: raise SystemExit('ambiguous canonical Issue UID')
+                      matches.append(candidate)
+              if len(matches)!=1: raise SystemExit('live task Issue is ambiguous or missing')
+              issue_number=matches[0]
+          else:
+              refs=set(re.findall(r'(?:Refs|Fixes|Closes)\s+#(\d+)',pr.get('body') or '',re.I))
+              if uids or len(refs)!=1: raise SystemExit('missing unique live task Issue identity')
+              issue_number,uid=next(iter(refs)),None
+          issue=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}'],text=True))
+          body=(issue.get('body') or '').replace('\r\n','\n')
+          issue_fields=re.findall(r'^task_uid:[^\n]*$',body,re.M)
+          issue_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',body,re.M)
+          if len(issue_fields)!=1 or len(issue_uids)!=1 or (uid is not None and issue_uids!=[uid]): raise SystemExit('task UID identity mismatch')
+          if re.findall(r'^- pr_number: `([0-9]+)`$',body,re.M)!=[number]: raise SystemExit('task PR identity mismatch')
+          if 'loop_binding_b64:' in body: raise SystemExit('effective base lacks loop admission; activation blocked')
+          pages=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}/comments','--paginate','--slurp'],text=True))
+          if not isinstance(pages,list): raise SystemExit('lineage readback unavailable')
+          comments=[item for page in pages for item in (page if isinstance(page,list) else [page])]
+          if any('oasis7-loop-binding-history' in str(item.get('body','')) for item in comments if isinstance(item,dict)): raise SystemExit('loop binding deleted after history')
+          print('loop admission: live legacy bootstrap')
+          PY
+              fi
+              ;;
+            push)
+              base_ref="${{ github.event.before }}"
+              ;;
+          esac
+
       - name: Report planned scope
         env:
           SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
@@ -907,6 +920,64 @@ jobs:
             CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
+          fi
+      - name: Verify final task and PR binding before required-gate success
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
+          head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
+          pr_number="${{ github.event.pull_request.number || inputs.pr_number }}"
+          planner_args=(
+            --scope-base-oid "${{ steps.scope.outputs.source_scope_base }}"
+            --planner-config-sha256 "${{ steps.scope.outputs.planner_config_sha256 }}"
+            --planner-digest "${{ steps.scope.outputs.planner_digest }}"
+            --projection-digest "${{ steps.scope.outputs.impact_projection_digest }}"
+          )
+          if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci-final.py"; then
+            if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --help 2>&1 | grep -Fq -- '--phase'; then
+              if [[ "${{ steps.loop-ci-admission.outputs.start_only }}" == "true" ]]; then
+                python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed --start-only \
+                  --repository "${{ github.repository }}" --pr-number "${pr_number}" \
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+              else
+                python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed \
+                  --repository "${{ github.repository }}" --pr-number "${pr_number}" \
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+              fi
+            else
+              python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" \
+                --repository "${{ github.repository }}" --pr-number "${pr_number}" \
+                --base "${base_ref}" --head "${head_ref}"
+            fi
+          else
+            # Bootstrap compatibility remains strict: re-read the live PR and
+            # its one Task Issue after tests. This path never tolerates a gap.
+            python3 -I - "${{ github.repository }}" "${pr_number}" "${head_ref}" <<'PY'
+          import json,re,subprocess,sys
+          repo,number,head=sys.argv[1:]
+          pr=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/pulls/{number}'],text=True))
+          body=pr.get('body') or ''
+          uids=set(re.findall(r'task_[0-9a-f]{32}',body))
+          refs=set(re.findall(r'^Refs #([1-9][0-9]*)$',body,re.M))
+          if (pr.get('number')!=int(number) or pr.get('state')!='open' or pr.get('merged_at') is not None
+              or pr.get('draft') is not True or (pr.get('head') or {}).get('sha')!=head
+              or (pr.get('base') or {}).get('repo',{}).get('full_name')!=repo
+              or len(uids)!=1 or len(refs)!=1):
+              raise SystemExit('final live PR binding is missing, ambiguous, or drifted')
+          uid=next(iter(uids)); issue_number=int(next(iter(refs)))
+          issue=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}'],text=True))
+          issue_body=(issue.get('body') or '').replace('\r\n','\n')
+          uid_fields=re.findall(r'^task_uid:[^\n]*$',issue_body,re.M)
+          issue_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',issue_body,re.M)
+          pr_numbers=re.findall(r'^- pr_number: `([1-9][0-9]*)`$',issue_body,re.M)
+          if (issue.get('number')!=issue_number or issue.get('state')!='open'
+              or uid_fields!=['task_uid: '+uid] or issue_uids!=[uid]
+              or pr_numbers!=[number]):
+              raise SystemExit('final canonical Task Issue binding is missing, ambiguous, or drifted')
+          PY
           fi
       - name: Upload Cargo package profile plan
         if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'

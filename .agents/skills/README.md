@@ -81,10 +81,10 @@ surface.
 
 Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`; this README is an index, not the workflow authority.
 
-GitHub Project-backed PM truth lives in `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`: GitHub Issues + GitHub Project are active task truth, GitHub issue comments are the execution/audit sink, and `.pm/github-project-sync/` is the deterministic local mapping/archive surface for scripts.
+GitHub Project-backed PM truth lives in `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`: GitHub Issues + GitHub Project are active write-task truth, GitHub issue comments are the execution/audit sink for those tasks, and `.pm/github-project-sync/` is the deterministic local mapping/archive surface for scripts. Read-only work without external or persistent effects does not create task truth.
 
-- 启动任何用户请求、需要先确认标准 task worktree / GitHub Project-backed task truth / owner role 真值，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
-- 只读/聊天请求也默认进入 task/worktree bootstrap；不要先用“只读/聊天/纯事实”分类决定是否跳过 bootstrap。如果要输出专业结论，进入 task truth 后仍由 TPM 派发对应 bounded 专业角色 slice。纯路径查找、命令输出复述等客观事实读取可由 TPM 在已绑定 task/worktree 内直接处理。
+- 启动有写入副作用的请求、需要绑定标准 worktree / GitHub Project-backed task truth / owner role 时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
+- 只读/聊天请求可直接答复，不创建 task/worktree；专业结论仍由匹配 bounded 专业角色 slice 提供。纯路径查找、命令输出复述等客观事实可由 TPM 直接处理。
 - 启动已具备 task 真值的仓库变更 task、或不确定下一步该走哪条 repo-owned workflow surface 时：`.agents/skills/repo-owned-workflow-router/SKILL.md`
 - 评估或实现跨阶段 production supervisor target 时：`.agents/skills/tpm-production-supervisor/SKILL.md`；当前状态为 blocked，不得宣称自动恢复；target schemas 与 staging design 见 [production-supervisor-runtime.design.md](../../doc/engineering/workflow/production-supervisor-runtime.design.md)。
 - 需求仍偏模糊、需要 scope 拆分、方案对比或判断是否需要 visual companion 时：`.agents/skills/bounded-brainstorming/SKILL.md`
@@ -96,6 +96,7 @@ GitHub Project-backed PM truth lives in `doc/engineering/workflow/source-of-trut
 - 已完成实现、准备 closeout / commit / PR 收口时：`.agents/skills/finishing-a-development-branch/SKILL.md`
 - PR 收到 review comments / requested changes，需要按“仅当前改动相关 P0 必须修复”核实和回证据，并保持行政 thread resolution 与 repair/merge readiness 分离时：`.agents/skills/receiving-code-review/SKILL.md`；不存在的 GitHub Codex review 不是等待条件。
 - 新增或修改本地 repo-owned skill、替换上游 skill 或调整 skill governance 时：`.agents/skills/writing-repo-owned-skills/SKILL.md`
+- workflow simplification 的 normative clauses 与 requirement/test mapping 见 [source](../../doc/engineering/workflow/source-of-truth.md#workflow-simplification) 和 [design companion](../../doc/engineering/workflow/workflow-simplification.design.md)。
 
 Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice. Professional slice contracts record intended model, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, and mandatory context checklist; default context delivery is a minimal task packet bound to the task UID and current/frozen HEAD, while full-thread/full-history delivery requires a recorded escalation reason.
 
