@@ -94,7 +94,22 @@ def has_task_publication_marker(body: Any, *, version: int | None = None) -> boo
         markers = (_TASK_PUBLICATION_V2_MARKER,)
     else:
         return False
-    return any(body.startswith(marker) for marker in markers)
+    return any(has_framed_comment_marker(body, marker) for marker in markers)
+
+
+def has_framed_comment_marker(body: Any, marker: Any) -> bool:
+    """Select a comment only when its record marker begins the comment.
+
+    Selection deliberately includes malformed marker-framed records so the
+    existing strict parser can reject them. A marker mentioned in ordinary
+    prose is not a candidate record.
+    """
+    return isinstance(body, str) and isinstance(marker, str) and bool(marker) and body.startswith(marker)
+
+
+def has_publication_binding_marker(body: Any) -> bool:
+    """Select reciprocal binding records by framing, leaving parsing strict."""
+    return has_framed_comment_marker(body, _BINDING_MARKER)
 
 
 def parse_publication_comment(body: str) -> dict[str, Any]:

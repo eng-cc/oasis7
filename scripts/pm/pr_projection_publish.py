@@ -300,10 +300,7 @@ class GitHubPublicationAdapter:
         bodies = []
         for comment in self._issue_comments():
             body = comment["body"]
-            if not any(marker in body for marker in (
-                "<!-- oasis7-ci-publication/v1 -->",
-                "<!-- oasis7-ci-publication/v2 -->",
-            )):
+            if not publication.has_task_publication_marker(body):
                 continue
             value = publication.parse_publication_comment(body)
             if (value["task_uid"] == target["task_uid"]
@@ -462,7 +459,8 @@ class GitHubPublicationAdapter:
             raise RuntimeError("canonical recovery helper is unavailable")
         marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
         comments = self._issue_comments()
-        if sum(marker in comment["body"] for comment in comments) != 1:
+        if sum(publication.has_framed_comment_marker(comment.get("body"), marker)
+               for comment in comments) != 1:
             raise RuntimeError("one unique current record-pr recovery admission is required")
         # record_pr() re-reads comments and reconstructs the full authority
         # before helper launch, so a changed/removed admission fails closed.
@@ -497,7 +495,8 @@ class GitHubPublicationAdapter:
             # command failure intact before making discovery network requests.
             comments = self._issue_comments() if self.task_helper.is_file() else []
             marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
-            admissions = [c for c in comments if marker in c["body"]]
+            admissions = [c for c in comments
+                          if publication.has_framed_comment_marker(c.get("body"), marker)]
             if self.record_pr_recovery_required and len(admissions) != 1:
                 raise RuntimeError("required record-pr recovery admission changed before helper launch")
             if admissions:
@@ -528,7 +527,7 @@ class GitHubPublicationAdapter:
         self._assert_task_identity()
         matches = []
         for comment in self._issue_comments():
-            if "<!-- oasis7-ci-publication-binding/v1 -->" not in comment["body"]:
+            if not publication.has_publication_binding_marker(comment.get("body")):
                 continue
             binding = publication.parse_publication_binding_comment(comment["body"])
             if binding["publication_id"] == publication_id:

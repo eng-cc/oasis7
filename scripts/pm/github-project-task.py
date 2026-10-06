@@ -3312,7 +3312,8 @@ class PublicationRecoveryAuthority:
         self.root = args.root.resolve()
         project_id, _ = load_sync_module().project_context(args.project_owner, args.project_number)
         self.record["project_id"] = project_id
-        selected = [c for c in comments if self.marker in c["body"]]
+        selected = [c for c in comments
+                    if module.has_framed_comment_marker(c.get("body"), self.marker)]
         if len(selected) != 1:
             raise ValueError("recovery requires one unique current TPM admission")
         body = selected[0]["body"]
@@ -3864,7 +3865,8 @@ class PublicationRecoveryAuthority:
         elif baseline != self.issue_baseline:
             raise ValueError("unrelated Issue content changed during recovery")
         current_comments = github_issue_comments(args.repo, self.record["issue_number"])
-        admitted = [c for c in current_comments if self.marker in c["body"]]
+        admitted = [c for c in current_comments
+                    if self.module.has_framed_comment_marker(c.get("body"), self.marker)]
         if len(admitted) != 1 or admitted[0]["body"] != self.envelope_body:
             raise ValueError("current recovery action admission drift")
         self._comment_identity(admitted[0], actor)
@@ -3872,8 +3874,9 @@ class PublicationRecoveryAuthority:
         self._lineage(current_comments)
         self._helpers()
         if final:
-            bindings = [self.module.parse_publication_binding_comment(c["body"]) for c in current_comments
-                        if "<!-- oasis7-ci-publication-binding/v1 -->" in c["body"]]
+            bindings = [self.module.parse_publication_binding_comment(c["body"])
+                        for c in current_comments
+                        if self.module.has_publication_binding_marker(c.get("body"))]
             matches = [b for b in bindings if b["publication_id"] == self.binding["publication_id"]]
             if matches != [self.binding]:
                 raise ValueError("exact unique final reciprocal binding missing")
@@ -3946,7 +3949,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
                     publication_records.append(publication_module.parse_publication_comment(body))
                 except ValueError as exc:
                     die(f"record-pr: malformed CI publication intent: {exc}")
-            if "<!-- oasis7-ci-publication-binding/v1 -->" in body:
+            if publication_module.has_publication_binding_marker(body):
                 try:
                     binding_records.append(publication_module.parse_publication_binding_comment(body))
                 except ValueError as exc:
@@ -3987,7 +3990,10 @@ def command_record_pr(args: argparse.Namespace) -> int:
     recovery = None
     recovery_admissions = [
         c for c in comments
-        if PublicationRecoveryAuthority.marker in c["body"]
+        if publication_module is not None
+        and publication_module.has_framed_comment_marker(
+            c.get("body"), PublicationRecoveryAuthority.marker,
+        )
     ]
     if recovery_required and len(recovery_admissions) != 1:
         die("record-pr: required publication recovery admission is missing or ambiguous")
@@ -4147,7 +4153,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         matching_comment_urls = [
             str(comment.get("html_url") or comment.get("url") or "")
             for comment in comments
-            if "<!-- oasis7-ci-publication-binding/v1 -->" in str(comment.get("body") or "")
+            if publication_module.has_publication_binding_marker(comment.get("body"))
             and publication_module.parse_publication_binding_comment(str(comment.get("body") or "")) == publication_binding
         ]
         if len(matching_comment_urls) != 1 or not matching_comment_urls[0]:

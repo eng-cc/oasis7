@@ -482,12 +482,11 @@ def _resolve_projection_digest(
     head_oid: str, source_scope_oid: str,
     issue_comments: tuple[Mapping[str, Any], ...],
 ) -> str:
-    binding_marker = "<!-- oasis7-ci-publication-binding/v1 -->"
     publication_module = _load_w_module(root, "pr_projection_publication")
     publications = [item["body"] for item in issue_comments
                     if publication_module.has_task_publication_marker(item.get("body"), version=2)]
     bindings = [item["body"] for item in issue_comments
-                if type(item.get("body")) is str and binding_marker in item["body"]]
+                if publication_module.has_publication_binding_marker(item.get("body"))]
     if len(publications) != 1 or len(bindings) != 1:
         raise ProducerError("Task Issue must have one exact full-leaf Task publication v2 and reciprocal PR binding")
     try:

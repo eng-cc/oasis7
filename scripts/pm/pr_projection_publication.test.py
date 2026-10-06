@@ -244,6 +244,77 @@ class TaskPublicationV2ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(publication_module.ContractError, "marker must occur exactly once"):
             publication_module.parse_publication_comment(duplicate)
 
+    def test_publication_binding_marker_selection_uses_comment_framing(self):
+        marker = "<!-- oasis7-ci-publication-binding/v1 -->"
+        self.assertTrue(publication_module.has_publication_binding_marker(marker + "\n{}"))
+        self.assertFalse(publication_module.has_publication_binding_marker(
+            "Operator note mentions " + marker + " as an example."
+        ))
+
+        malformed = marker + "not-a-newline-framed-record"
+        self.assertTrue(publication_module.has_publication_binding_marker(malformed))
+        with self.assertRaisesRegex(
+            publication_module.ContractError, "binding marker must occur exactly once",
+        ):
+            publication_module.parse_publication_binding_comment(malformed)
+
+        duplicate = marker + "\n{}\n" + marker + "\n{}"
+        self.assertTrue(publication_module.has_publication_binding_marker(duplicate))
+        with self.assertRaisesRegex(
+            publication_module.ContractError, "binding marker must occur exactly once",
+        ):
+            publication_module.parse_publication_binding_comment(duplicate)
+
+    def test_publisher_comment_readers_ignore_prose_marker_mentions(self):
+        publication, _projection = make_publication(8100)
+        binding = publication_module.build_publication_binding(
+            publication, 143, "https://github.com/eng-cc/oasis7/pull/143",
+        )
+        comments = [
+            {"body": publication_module.publication_comment(publication),
+             "user": {"login": "oasis7-test-publisher"}},
+            {"body": publication_module.publication_binding_comment(binding)},
+            {"body": "Operator note mentions <!-- oasis7-ci-publication/v2 --> in prose."},
+            {"body": "Operator note mentions <!-- oasis7-ci-publication-binding/v1 --> in prose."},
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            helper = root / "github-project-task.py"
+            helper.write_text("", encoding="utf-8")
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(helper),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            with patch.object(adapter, "_assert_task_identity"), patch.object(
+                adapter, "_issue_comments", return_value=comments,
+            ):
+                found = adapter.find_task_publications(publication["publication_id"])
+                self.assertEqual([publication], found["publications"])
+                found_bindings = adapter.find_task_publication_bindings(
+                    publication["publication_id"],
+                )
+                self.assertEqual([binding], found_bindings["bindings"])
+
+    def test_recovery_preflight_ignores_prose_marker_mentions(self):
+        marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            helper = root / "github-project-task.py"
+            helper.write_text("", encoding="utf-8")
+            args = type("Args", (), {
+                "repo": "eng-cc/oasis7", "issue_number": 123,
+                "task_uid": UID, "task_helper": str(helper),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, {})
+            with patch.object(adapter, "_issue_comments", return_value=[
+                {"body": "Operator note mentions " + marker + " as an example."},
+            ]):
+                with self.assertRaisesRegex(
+                    RuntimeError, "one unique current record-pr recovery admission",
+                ):
+                    adapter.require_record_pr_recovery_admission()
+
 
 class FakeAdapter:
     def __init__(self, publication, projection, *, initial_head=None, initial_pr=None):

@@ -180,6 +180,7 @@ class TaskProjectionPublicationConsumerTests(unittest.TestCase):
             {"body": task_publication.publication_comment(publication)},
             {"body": task_publication.publication_binding_comment(binding)},
             {"body": "Operator note mentions <!-- oasis7-ci-publication/v2 --> in ordinary prose."},
+            {"body": "Operator note mentions <!-- oasis7-ci-publication-binding/v1 --> in ordinary prose."},
         )
         expected = {
             "task_uid": task_uid, "pr_number": FIXTURE_PR_NUMBER,
@@ -211,6 +212,18 @@ class TaskProjectionPublicationConsumerTests(unittest.TestCase):
                     pr_marker, expected, pr, duplicate_publication_comments, Path("."),
                 )
 
+            duplicate_binding_comments = (
+                {"body": task_publication.publication_comment(publication)},
+                {"body": task_publication.publication_binding_comment(binding)},
+                {"body": task_publication.publication_binding_comment(binding)},
+            )
+            with self.assertRaisesRegex(
+                readback.ReadbackError, "one full-leaf Task publication v2",
+            ):
+                readback._projection_digest_from_v2(
+                    pr_marker, expected, pr, duplicate_binding_comments, Path("."),
+                )
+
             malformed_framed_comments = (
                 {"body": "<!-- oasis7-ci-publication/v2 -->not newline framed"},
                 {"body": task_publication.publication_binding_comment(binding)},
@@ -220,6 +233,17 @@ class TaskProjectionPublicationConsumerTests(unittest.TestCase):
             ):
                 readback._projection_digest_from_v2(
                     pr_marker, expected, pr, malformed_framed_comments, Path("."),
+                )
+
+            malformed_binding_comments = (
+                {"body": task_publication.publication_comment(publication)},
+                {"body": "<!-- oasis7-ci-publication-binding/v1 -->not newline framed"},
+            )
+            with self.assertRaisesRegex(
+                readback.ReadbackError, "could not be verified",
+            ):
+                readback._projection_digest_from_v2(
+                    pr_marker, expected, pr, malformed_binding_comments, Path("."),
                 )
 
             v1 = task_publication.build_task_publication(**identity)

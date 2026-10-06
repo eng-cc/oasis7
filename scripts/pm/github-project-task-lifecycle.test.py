@@ -517,7 +517,10 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                 "body": publication_module.publication_comment(publication),
                 "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-2002",
             }
-            existing_comments = [intent_comment]
+            existing_comments = [
+                intent_comment,
+                {"body": "Operator note mentions <!-- oasis7-ci-publication-binding/v1 --> in prose."},
+            ]
             written_comments: list[str] = []
 
             def verified_comment(_repo: str, _issue: int, body: str) -> str:
@@ -549,7 +552,7 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             self.assertEqual(2, update_project.call_count)
             self.assertEqual(2, update_issue.call_count)
             self.assertEqual(2, len(written_comments), "evidence and reciprocal binding are restored")
-            self.assertEqual(3, len(existing_comments), "recovery reuses both comments written before the lost response")
+            self.assertEqual(4, len(existing_comments), "recovery reuses both records and preserves the prose note")
             persisted = json.loads(mapping_path.read_text(encoding="utf-8"))["tasks"][UID]
             self.assertEqual("committed", persisted["status"])
             self.assertEqual("verification", persisted["workflow_phase"])

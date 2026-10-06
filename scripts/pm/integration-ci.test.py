@@ -190,6 +190,7 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
    '${{ github.event.pull_request.head.sha }}':self.source_head,'${{ github.event.pull_request.base.sha }}':self.scope_base,
    '${{ steps.pr_target.outputs.oid }}':self.integration_base,'${{ inputs.integration_base }}':'',
    '${{ inputs.expected_head }}':'','${{ inputs.task_uid }}':'','${{ inputs.run_mode }}':'',
+   '${{ steps.impact.outputs.task_uid }}':self.uid,
    '${{ github.event.before }}':''}
   def execute(script,expect_failure=False):
    for source,target in replacements.items():script=script.replace(source,target)
