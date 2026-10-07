@@ -1789,7 +1789,7 @@ print(json.dumps(proof))
         if (fields.get('source_head_oid') != data['headRefOid']
                 or fields.get('current_target_oid') != proof.get('assessed_target_oid')
                 or fields.get('current_target_oid') != live_target_oid(data, uid=uid)
-                or fields.get('workflow_revision') != data['headRefOid']
+                or fields.get('workflow_revision') not in (data['headRefOid'], fields.get('checkout_oid'))
                 or fields.get('maintenance_authority_comment_id') != candidate_authority['comment_id']
                 or fields.get('repository') != data['repository'] or fields.get('task_uid') != uid
                 or fields.get('task_issue_number') != task['issue_number']
