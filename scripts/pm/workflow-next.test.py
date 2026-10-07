@@ -1419,6 +1419,165 @@ class AdoptedPinTerminalIntegrationTests(unittest.TestCase):
         shutil.copytree = copytree_with_test_api
         self.addCleanup(setattr, shutil, "copytree", original_copytree)
 
+    def policy_behavior_fixture(self, *, base_rejects: bool = False,
+                                adopted_rejects: bool = False):
+        """Use real committed validators and the existing live adoption transport."""
+        adoption_path = ROOT / "scripts/pm/github-project-task-policy-adoption.integration.test.py"
+        spec = importlib.util.spec_from_file_location("workflow_next_behavior_fixture", adoption_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        adoption = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adoption)
+        adoption.REPO, adoption.UID = "fixture/repo", UID
+        adoption.PR_URL = f"https://github.com/{adoption.REPO}/pull/{adoption.PR}"
+        fixture = adoption.PolicyAdoptionCLITests(
+            "test_adopted_pin_survives_unrelated_default_branch_advance"
+        )
+        # Install B before the fixture makes its immutable bootstrap commit.
+        previous_copytree = shutil.copytree
+
+        def install_base(source, destination, *args, **kwargs):
+            result = previous_copytree(source, destination, *args, **kwargs)
+            if Path(source).resolve() == (ROOT / "scripts/pm").resolve() and base_rejects:
+                policy = Path(destination) / "loop_policy.py"
+                policy.write_text(policy.read_text() +
+                                  '\n_original_validate_binding = validate_binding\n'
+                                  'def validate_binding(binding):\n'
+                                  '    checked = _original_validate_binding(binding)\n'
+                                  '    checked["blockers"].append("B validator rejects binding")\n'
+                                  '    checked["status"] = "blocked"\n'
+                                  '    return checked\n')
+            return result
+
+        shutil.copytree = install_base
+        try:
+            fixture.setUp()
+        finally:
+            shutil.copytree = previous_copytree
+        self.addCleanup(fixture.doCleanups)
+        fake_gh = Path(fixture.env["PATH"].split(os.pathsep, 1)[0]) / "gh"
+        fake_gh.write_text(fake_gh.read_text().replace(
+            'return {"default_branch": "main"}',
+            'return {"default_branch": "main", "full_name": state["repository"]}',
+        ))
+        # K starts from the production validator, so B's rejection is not
+        # inherited. A rejecting K accepts the original bootstrap identity
+        # during adoption but rejects the effective adopted binding.
+        policy_source = (ROOT / "scripts/pm/loop_policy.py").read_text()
+        if adopted_rejects:
+            policy_source += (
+                '\n_original_validate_binding = validate_binding\n'
+                'def validate_binding(binding):\n'
+                '    checked = _original_validate_binding(binding)\n'
+                f'    if binding.get("policy_commit") != {fixture.binding_oid!r}:\n'
+                '        checked["blockers"].append("K validator rejects binding")\n'
+                '        checked["status"] = "blocked"\n'
+                '    return checked\n'
+            )
+        fixture.write("scripts/pm/loop_policy.py", policy_source)
+        fixture.write("doc/engineering/unrelated.txt", "adoptable K\n")
+        fixture.git("add", "scripts/pm/loop_policy.py", "doc/engineering/unrelated.txt")
+        fixture.git("commit", "-qm", "K validator behavior")
+        fixture.current_oid = fixture.git("rev-parse", "HEAD")
+        fixture.git("update-ref", "refs/remotes/origin/main", fixture.current_oid)
+        fixture._refresh_state()
+        mapping_path = fixture.root / ".pm/github-project-sync/tasks.json"
+        mapping = json.loads(mapping_path.read_text())
+        mapping["tasks"][UID].update(fixture._task())
+        mapping["tasks"][UID]["bootstrap_epoch"] = 1
+        mapping["tasks"][UID]["bootstrap_base_oid"] = fixture.binding_oid
+        mapping["tasks"][UID]["cache_refreshed_at"] = "2026-10-02T00:00:00Z"
+        mapping_path.write_text(json.dumps(mapping))
+        task_mapping = fixture.task_root / ".pm/github-project-sync/tasks.json"
+        task_mapping.parent.mkdir(parents=True, exist_ok=True)
+        task_mapping.write_bytes(mapping_path.read_bytes())
+        snapshot_path = fixture.task_root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"
+        snapshot_path.unlink()
+        created = subprocess.run(
+            [sys.executable, str(BOOTSTRAP), "create", "--repo-root", str(fixture.task_root),
+             "--task-uid", UID, "--request-identity", "Policy behavior fixture", "--producer", "fixture"],
+            capture_output=True, text=True, env=fixture.env,
+        )
+        self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
+        return fixture
+
+    def behavior_query(self, fixture):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--repo-root", str(fixture.task_root),
+             "--task-uid", UID, "--json"],
+            text=True, capture_output=True, env=fixture.env,
+        )
+        self.assertTrue(result.stdout.strip(), result.stderr)
+        return result.returncode, json.loads(result.stdout)
+
+    def adopt_behavior_policy(self, fixture):
+        adopted = fixture.invoke("adopt-workflow-policy")
+        payload = fixture.output_json(adopted)
+        self.assertEqual(adopted.returncode, 0, adopted.stdout + adopted.stderr)
+        self.assertEqual(payload["status"], "adopted", payload)
+        return payload["policy_commit"]
+
+    def test_no_adoption_uses_bootstrap_validator(self) -> None:
+        for rejects in (False, True):
+            with self.subTest(base_rejects=rejects):
+                fixture = self.policy_behavior_fixture(base_rejects=rejects)
+                code, payload = self.behavior_query(fixture)
+                self.assertEqual(code, int(rejects), payload)
+                self.assertEqual(payload["loop_binding"], fixture.binding)
+                self.assertEqual(payload["effective_policy"]["policy_commit"], fixture.binding_oid)
+                if rejects:
+                    self.assertTrue(any("B validator rejects" in b for b in payload["blockers"]), payload)
+                else:
+                    self.assertEqual(payload["blockers"], [], payload)
+
+    def test_adopted_validator_decides_both_directions(self) -> None:
+        for base_rejects, adopted_rejects in ((False, True), (True, False)):
+            with self.subTest(base_rejects=base_rejects, adopted_rejects=adopted_rejects):
+                fixture = self.policy_behavior_fixture(
+                    base_rejects=base_rejects, adopted_rejects=adopted_rejects,
+                )
+                adopted_oid = self.adopt_behavior_policy(fixture)
+                code, payload = self.behavior_query(fixture)
+                self.assertEqual(code, int(adopted_rejects), payload)
+                self.assertEqual(payload["loop_binding"], fixture.binding)
+                self.assertEqual(payload["effective_policy"]["policy_commit"], adopted_oid)
+                if adopted_rejects:
+                    self.assertTrue(any("K validator rejects" in b for b in payload["blockers"]), payload)
+                else:
+                    self.assertEqual(payload["blockers"], [], payload)
+
+    def test_adopted_validator_survives_unrelated_main_advance_and_resolver_failure(self) -> None:
+        fixture = self.policy_behavior_fixture(adopted_rejects=True)
+        adopted_oid = self.adopt_behavior_policy(fixture)
+        fixture.write("doc/engineering/unrelated.txt", "unrelated M advancement\n")
+        fixture.git("add", "doc/engineering/unrelated.txt")
+        fixture.git("commit", "-qm", "unrelated M advance")
+        current_oid = fixture.git("rev-parse", "HEAD")
+        fixture.git("update-ref", "refs/remotes/origin/main", current_oid)
+        state = fixture.state()
+        state["default_oid"] = current_oid
+        fixture.save_state(state)
+        code, payload = self.behavior_query(fixture)
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(any("K validator rejects" in b for b in payload["blockers"]), payload)
+        self.assertEqual(payload["effective_policy"]["policy_commit"], adopted_oid)
+        self.assertNotEqual(adopted_oid, current_oid)
+        self.assertEqual(payload["loop_binding"], fixture.binding)
+        # Editing the server adoption timestamp invalidates the actual chain;
+        # B would accept, but resolution must block without validating B.
+        state = fixture.state()
+        comment = next(c for c in state["comments"]
+                       if "<!-- oasis7.workflow-policy-adoption/v1 -->" in c["body"])
+        comment["updated_at"] = "2026-10-02T02:00:01Z"
+        fixture.save_state(state)
+        code, payload = self.behavior_query(fixture)
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(any("workflow policy" in b for b in payload["blockers"]), payload)
+        self.assertFalse(any("K validator rejects" in b or "B validator rejects" in b
+                             for b in payload["blockers"]), payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertEqual(payload["loop_binding"], fixture.binding)
+
     def test_real_adoption_chain_survives_merged_terminal_lookup(self) -> None:
         """Compose C's live adoption writer/reader with the real terminal query."""
         adoption_path = ROOT / "scripts/pm/github-project-task-policy-adoption.integration.test.py"

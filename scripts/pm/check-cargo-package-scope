@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
+import hashlib
 import io
 import json
 import os
@@ -383,6 +384,35 @@ def cargo_metadata(root: Path, *, locked: bool = False) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(payload.get("packages"), list):
         raise ScopeError("cargo_metadata_unavailable", "cargo metadata omitted packages")
     return payload
+
+
+def validate_candidate_locked_metadata(repo: Path, revision: str) -> None:
+    """Validate the committed candidate lock in a fresh, disposable snapshot."""
+    with tempfile.TemporaryDirectory(prefix="cargo-scope-locked-head-") as directory:
+        root = Path(directory)
+        try:
+            extract_git_tree(repo, revision, root)
+        except ScopeError as exc:
+            raise ScopeError(exc.reason, f"candidate_locked_export: {exc.detail}") from exc
+        lock = root / "Cargo.lock"
+        try:
+            original = lock.read_bytes()
+        except OSError as exc:
+            raise ScopeError("cargo_metadata_unavailable", f"candidate_locked_lockfile: {exc}") from exc
+        original_digest = hashlib.sha256(original).hexdigest()
+        try:
+            cargo_metadata(root, locked=True)
+        except ScopeError as exc:
+            raise ScopeError(exc.reason, f"candidate_locked_metadata: {exc.detail}") from exc
+        except OSError as exc:
+            raise ScopeError("cargo_metadata_unavailable", f"candidate_locked_metadata: {exc}") from exc
+        try:
+            validated = lock.read_bytes()
+            unchanged = validated == original and hashlib.sha256(validated).hexdigest() == original_digest
+        except OSError as exc:
+            raise ScopeError("cargo_metadata_unavailable", f"candidate_locked_lockfile: {exc}") from exc
+        if not unchanged:
+            raise ScopeError("cargo_metadata_unavailable", "candidate_locked_lockfile: Cargo changed committed lock bytes")
 
 
 def package_roots(root: Path, metadata: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
@@ -1708,6 +1738,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                     "unattributable_lock_change",
                     ", ".join(sorted(lock_names)),
                 )
+            validate_candidate_locked_metadata(repo, args.head)
         expected_dependencies = metadata_dependency_names(head_metadata, primary_package)
         actual_dependencies = lock_dependency_names(repo, args.head, primary_package)
         if expected_dependencies is None or actual_dependencies is None:

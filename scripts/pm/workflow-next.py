@@ -1202,9 +1202,9 @@ def main() -> int:
         if policy_blocker is None and isinstance(resolved_policy, dict):
             try:
                 policy = load_effective_loop_policy(
-                    root, binding, resolved_policy.get("_trusted_current_policy"),
+                    root, effective_binding, resolved_policy.get("_trusted_current_policy"),
                 )
-                result = policy.validate_binding(binding)
+                result = policy.validate_binding(effective_binding)
             except (OSError, ValueError, subprocess.SubprocessError) as exc:
                 result = {"blockers": [f"trusted loop policy unavailable: {exc}"]}
         for reason in result.get("blockers", []):
