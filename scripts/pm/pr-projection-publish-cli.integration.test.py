@@ -54,12 +54,14 @@ packet_api = load_module("publisher_test_packet_api", HERE / "subagent-task-pack
 
 
 FAKE_GH = r'''#!/usr/bin/env python3
-import json, os, pathlib, signal, sys
+import json, os, pathlib, signal, sys, time
 
 state_path = pathlib.Path(os.environ["FAKE_GH_STATE"])
 state = json.loads(state_path.read_text())
 args = sys.argv[1:]
 state.setdefault("calls", []).append(args)
+if args and args[0] == "api" and state.get("read_latency_seconds"):
+    time.sleep(state["read_latency_seconds"])
 
 def save():
     state_path.write_text(json.dumps(state, sort_keys=True))
@@ -195,6 +197,10 @@ if args[:2] == ["project", "item-edit"]:
     if fault == "interrupt-after":
         os.kill(os.getppid(), signal.SIGKILL)
         raise SystemExit("unreachable after interrupted Project write")
+    if fault == "after-hold":
+        state["issue"]["body"] += "\n- merge_hold_active: `true`\n"
+        save()
+        raise SystemExit("injected lost Project write response after hold")
     if fault == "after":
         raise SystemExit("injected lost Project write response")
     emit({"id": "PVTI_fixture"})
@@ -255,7 +261,7 @@ if args[0] == "pr" and args[1] == "create":
             "body": body, "user": {"login": state["login"], "type": "User"},
             "head": {"repo": {"full_name": state["repository"]},
                      "ref": state["source_ref"], "sha": state["source_head"]},
-            "base": {"repo": {"full_name": state["repository"]}, "ref": state["target_ref"]},
+            "base": {"repo": {"full_name": state["repository"]}, "ref": state["target_ref"], "sha": state["target_oid"]},
         }
         state["mutations"][-1]["effect"] = True
     save()
@@ -264,12 +270,25 @@ if args[0] == "pr" and args[1] == "create":
     emit(state["pr_url"])
 
 if args[0] == "api":
-    endpoint = args[1] if len(args) > 1 else ""
+    endpoint = next((value for value in args[1:] if value == "user" or value == "graphql" or value.startswith("repos/")), "")
     if endpoint == "user":
         emit({"login": state["login"], "type": "User"})
     if endpoint == "graphql":
         flags = graphql_flags()
         query = flags.get("query", "")
+        if "fields(first:" in query:
+            if state.get("expire_observation_after_schema"): state["lease_expired"] = True
+            if state.pop("remove_evidence_after_schema", False):
+                state["comments"] = [c for c in state["comments"] if "Evidence Phase: human_publication_reconciliation" not in c["body"]]
+            definitions = []
+            for name, definition in state['project_fields'].items():
+                datatype = 'SINGLE_SELECT' if name in state['single_select_fields'] else 'TEXT'
+                if name == 'Repository': datatype = 'REPOSITORY'
+                definitions.append({'id': definition['id'], 'name': name, 'dataType': datatype,
+                    'options': [{'name': label, 'id': oid} for label, oid in definition.get('options', {}).items()]})
+            emit({'data': {'node': {'id': state['project_id'], 'fields': {'nodes': definitions,
+                'pageInfo': {'hasNextPage': bool(state.get('faults', {}).get('project-fields-incomplete') or state.get('faults', {}).get('project-schema-incomplete')),
+                             'endCursor': None}}}}})
         if "nodes(ids:" in query:
             issue = state["issue"]
             project = {"id": state["project_id"], "number": state["project_number"],
@@ -313,14 +332,42 @@ if args[0] == "api":
         emit({"data": {"node": item}})
     if endpoint == "repos/" + state["repository"]:
         emit({"id": state["repository_id"], "default_branch": state["target_ref"]})
+    if endpoint.startswith("repos/" + state['repository'] + '/commits/'):
+        requested_ref = endpoint.rsplit('/', 1)[-1]
+        if requested_ref != state['target_ref']:
+            raise SystemExit('unknown protected target ref: ' + requested_ref)
+        emit({'sha': state['target_oid']})
     if endpoint.startswith("repos/" + state["repository"] + "/collaborators/") and endpoint.endswith("/permission"):
-        emit({"permission": "write", "permissions": {"push": True}})
+        emit({"permission": state.get("collaborator_permission", "write"),
+              "permissions": {"push": True, "admin": state.get("collaborator_permission") == "admin"},
+              "user": {"login": endpoint.split("/collaborators/", 1)[1].split("/", 1)[0]}})
     if endpoint.startswith("repos/" + state["repository"] + "/issues/comments/"):
         comment_id = int(endpoint.rsplit("/", 1)[-1])
         found = [item for item in state["comments"] if item["id"] == comment_id]
         if len(found) != 1:
             raise SystemExit("Issue comment not found: " + str(comment_id))
-        emit(found[0])
+        payload = json.loads(json.dumps(found[0]))
+        variation = state.get("human_comment_readback_variation")
+        if variation and ("<!-- oasis7-ci-publication-binding/v1 -->" in payload["body"]
+                          or "<!-- oasis7-pm-evidence -->" in payload["body"]):
+            payload["user"].update(id=42, node_id="U_fixture", avatar_url="https://avatars.example/u/42?v=" + ("GET" if variation == "avatar" else "LIST"))
+            if variation == "wrong_actor": payload["user"]["login"] = "other-writer"
+            if variation == "wrong_body": payload["body"] += "\nchanged server body"
+        if (state.get("human_drift_after_evidence") and not state.get("human_drift_applied")
+                and "Evidence Phase: human_publication_reconciliation" in payload["body"]):
+            state["human_drift_applied"] = True
+            case = state["human_drift_after_evidence"]
+            if case == "authority": state["collaborator_permission"] = "write"
+            elif case == "hold": state["issue"]["body"] += "\n- merge_hold_active: `true`\n"
+            elif case == "pr": state["pr"]["head"]["sha"] = state["target_oid"]
+            elif case == "c1":
+                for comment in state["comments"]:
+                    if "<!-- oasis7-ci-publication/v1 -->" in comment["body"]:
+                        comment["updated_at"] = "2026-10-02T04:00:00Z"
+            elif case == "target": state["target_oid"] = state["source_head"]
+            elif case == "schema": state.setdefault("faults", {})["project-schema-incomplete"] = True
+            elif case == "final_evidence": state["remove_evidence_after_schema"] = True
+        emit(payload)
     if endpoint == "repos/" + state["repository"] + f"/issues/{state['issue']['number']}":
         payload = issue_payload()
         payload["state"] = state["issue"]["state"]
@@ -330,6 +377,18 @@ if args[0] == "api":
             save()
             raise SystemExit("403 injected incomplete Issue comment pagination")
         comments = state["comments"]
+        if state.get("human_comment_readback_variation"):
+            comments = json.loads(json.dumps(comments))
+            for comment in comments:
+                if ("<!-- oasis7-ci-publication-binding/v1 -->" in comment["body"]
+                        or "<!-- oasis7-pm-evidence -->" in comment["body"]):
+                    comment["user"].update(id=42, node_id="U_fixture", avatar_url="https://avatars.example/u/42?v=LIST")
+            if state["human_comment_readback_variation"] == "duplicate":
+                matching = [c for c in comments if "<!-- oasis7-ci-publication-binding/v1 -->" in c["body"]]
+                if matching:
+                    duplicate = json.loads(json.dumps(matching[0]))
+                    duplicate["id"] += 10000
+                    comments.append(duplicate)
         if ((state.get("edit_c1_on_locked_comments_read") is True
                 or state.get("edit_c1_on_third_locked_comments_read") is True)
                 and state.get("pr") is not None
@@ -501,7 +560,7 @@ class PublisherProcessTests(unittest.TestCase):
         option_values_by_id = {option_id: value for name, entries in options.items()
                                for value, option_id in entries.items()}
         return {
-            "repository": REPOSITORY, "repository_id": 701,
+            "repository": REPOSITORY, "repository_id": 701, "target_oid": self.target_oid,
             "issue": {"number": ISSUE, "url": f"https://github.com/{REPOSITORY}/issues/{ISSUE}",
                       "title": "[PM] Publisher subprocess fixture", "body": self.issue_body,
                       "state": "open", "updated_at": "2026-10-02T00:00:00Z",
@@ -572,8 +631,11 @@ class PublisherProcessTests(unittest.TestCase):
         return command
 
     def run_publisher(self, *, helper: Path | None = None,
-                      resume_action_id: str | None = None):
-        return subprocess.run(self.publisher_command(helper, resume_action_id), text=True,
+                      resume_action_id: str | None = None, human_reconcile=False):
+        command = self.publisher_command(helper, resume_action_id)
+        if human_reconcile:
+            command.extend(["--human-reconcile", "--maintenance-authority-comment-id", "9002"])
+        return subprocess.run(command, text=True,
                               capture_output=True, env=self.env, timeout=90)
 
     def old_745_helper(self) -> Path:
@@ -1003,6 +1065,344 @@ class PublisherProcessTests(unittest.TestCase):
         self._append_comment(9001, body)
         self._save_state()
         return "task-intent:" + current_publication["publication_id"]
+
+    def test_actual_publisher_transports_full_projection_to_workflow_materializer(self):
+        first = self.run_publisher()
+        self.assertEqual(0, first.returncode, first.stdout + first.stderr)
+        state = self._load_state()
+        workflow = (REPO_ROOT / '.github/workflows/rust.yml').read_text()
+        start = workflow.index('      - id: impact')
+        run = workflow.index('        run: |\n', start) + len('        run: |\n')
+        end = workflow.index('      - id: integration', run)
+        script = '\n'.join(line[10:] if line.startswith('          ') else line
+                           for line in workflow[run:end].splitlines())
+        runner = self.tmp / 'workflow-runner'
+        runner.mkdir()
+        output = runner / 'output'
+        materialized = subprocess.run(['bash', '-euo', 'pipefail', '-c', script],
+            cwd=self.task_root, env={**self.env, 'PR_BODY': state['pr']['body'],
+                'RUNNER_TEMP': str(runner), 'GITHUB_OUTPUT': str(output)},
+            text=True, capture_output=True)
+        self.assertEqual(0, materialized.returncode, materialized.stdout + materialized.stderr)
+        self.assertIn('enabled=true', output.read_text(),
+                      'actual publisher C1 body must transport verified full projection DATA')
+        self.assertEqual(json.loads(self.projection_path.read_text()),
+                         json.loads((runner / 'impact-projection.json').read_text()))
+
+    def seed_human_maintenance_authority(self):
+        maintenance = load_module('fixture_maintenance', HERE / 'workflow_maintenance.py')
+        self.state = self._load_state()
+        self.state['collaborator_permission'] = 'admin'
+        scope = dict(repository=REPOSITORY, task_uid=UID, issue_number=ISSUE, pr_number=PR,
+                     purpose='candidate-tool-verification',
+                     allowed_write_paths=['scripts/pm/pr_projection_publication.py',
+                         'scripts/pm/pr_projection_publish.py', 'scripts/pm/github-project-task.py'] + self.changed_paths,
+                     allowed_tool_paths=list(dict.fromkeys(list(maintenance.TOOL_PATHS) + [
+                         'scripts/pm/github-project-task.py', 'scripts/pm/pr_projection_publish.py',
+                         'scripts/pm/pr_projection_record_pr.py', 'scripts/pm/github-project-sync.py',
+                         'scripts/pm/github_api.py', 'scripts/pm/task_complete_claim.py',
+                         'scripts/pm/workflow-durable-store.py', 'scripts/pm/pr_projection_transition.py'])))
+        self._append_comment(9002, maintenance.MARKER + '\n```json\n' + json.dumps(scope) + '\n```')
+        self._save_state()
+
+    def test_human_completed_vector_replay_needs_no_fabricated_recovery_admission(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        interrupted = self.run_publisher()
+        self.assertNotEqual(0, interrupted.returncode)
+        live = self._load_state()
+        self.assertEqual(PR, self._task_state(live)['pr_number'])
+        self.assertEqual('verification', live['project_values']['Workflow Phase'])
+        self.assertEqual('', live['project_values']['PR'])
+        # Human completed the exact missing owned field; fresh reads still verify it.
+        live['project_values']['PR'] = PR_URL
+        self.state = live
+        self._save_state()
+        self.seed_human_maintenance_authority()
+        mutations = list(live['mutations'])
+        journal_path = next((self.repo / ".git/oasis7/pr-publication").glob("*/*/journal.json"))
+        old_journal = journal_path.read_bytes()
+        retried = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, retried.returncode, retried.stdout + retried.stderr)
+        self.assertEqual(old_journal, journal_path.read_bytes(), "human observation preserves original uncertain journal")
+        final = self._load_state()
+        self.assertEqual(mutations, [event for event in final['mutations']
+                         if event['kind'] not in ('comment:binding', 'comment:evidence')],
+                         'completed remote metadata must not be rewritten')
+        self.assertEqual(1, len(self._effects('comment:binding', final)))
+        self.assertEqual(1, len(self._effects('comment:evidence', final)))
+        self.assertEqual(PR_URL, final['project_values']['PR'])
+        self.assertEqual(PR, self._task_state(final)['pr_number'])
+        again = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, again.returncode, again.stdout + again.stderr)
+        self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_complete_vector_reconciliation_has_finite_read_budget_without_writes(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        cache_path = self.task_root / '.pm/github-project-sync/tasks.json'
+        old_cache = cache_path.read_bytes()
+        self.seed_human_maintenance_authority()
+        self.assertEqual(0, (first := self.run_publisher(human_reconcile=True)).returncode,
+                         first.stdout + first.stderr)
+        # Real first reconciliation supplies exact reciprocal/factual comments.
+        # Restore only the disposable local cache to the pre-observation bytes.
+        cache_path.write_bytes(old_cache)
+        self.state = self._load_state()
+        mutations = list(self.state['mutations'])
+        self.state['calls'] = []
+        self.state['read_latency_seconds'] = 0.001
+        self._save_state()
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal_path.read_bytes()
+        result = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        final = self._load_state()
+        self.assertEqual(mutations, final['mutations'], 'already complete remote vector must not be written')
+        self.assertEqual(old_journal, journal_path.read_bytes())
+        self.assertNotEqual(old_cache, cache_path.read_bytes(), 'cache adopts only the verified final vector')
+        reads = [call for call in final['calls'] if call and call[0] == 'api']
+        print(f'complete-vector human reconciliation API reads: {len(reads)}', flush=True)
+        # At observed ~1.26s/request, eighty reads leave meaningful margin in
+        # the existing 180s child deadline, including Git/process overhead.
+        self.assertLessEqual(len(reads), 80,
+            f'complete-vector no-write human reconciliation made {len(reads)} remote reads; '
+            'redundant full authority bundles exhaust the existing network deadline')
+
+    def seed_complete_human_vector_with_old_cache(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        cache = self.task_root / '.pm/github-project-sync/tasks.json'
+        old_cache = cache.read_bytes()
+        self.seed_human_maintenance_authority()
+        result = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        cache.write_bytes(old_cache)
+        journal = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        return self._load_state(), cache, old_cache, journal, journal.read_bytes()
+
+    def test_human_final_observation_rejects_drift_before_cache_without_writes(self):
+        baseline, cache, old_cache, journal, old_journal = self.seed_complete_human_vector_with_old_cache()
+        for case in ('authority', 'hold', 'pr', 'c1', 'target', 'schema', 'final_evidence'):
+            self.state = json.loads(json.dumps(baseline))
+            self.state['human_drift_after_evidence'] = case
+            self._save_state()
+            cache.write_bytes(old_cache)
+            result = self.run_publisher(human_reconcile=True)
+            with self.subTest(case=case):
+                self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+                self.assertTrue(self._load_state().get('human_drift_applied'))
+                expected = {'authority': 'admin', 'hold': 'hold', 'pr': 'PR',
+                            'c1': 'C1', 'target': 'protected target changed',
+                            'schema': 'schema pagination incomplete',
+                            'final_evidence': 'final exact comment disappeared'}[case]
+                self.assertIn(expected.lower(), result.stderr.lower(), result.stderr)
+                self.assertEqual(baseline['mutations'], self._load_state()['mutations'])
+                self.assertEqual(old_cache, cache.read_bytes())
+                self.assertEqual(old_journal, journal.read_bytes())
+
+    def test_human_observation_lease_expiration_blocks_cache_and_writes(self):
+        baseline, cache, old_cache, journal, old_journal = self.seed_complete_human_vector_with_old_cache()
+        self.state['expire_observation_after_schema'] = True
+        self._save_state()
+        wrapper = self.tmp / 'expired-clock-helper.py'
+        wrapper.write_text("""import builtins, importlib.util, json, os, pathlib, sys, time
+helper = pathlib.Path(sys.argv.pop(1))
+sys.path.insert(0, str(helper.parent))
+real_import = builtins.__import__
+class Clock:
+    def __getattr__(self, key): return getattr(time, key)
+    def monotonic(self):
+        state = json.loads(pathlib.Path(os.environ['FAKE_GH_STATE']).read_text())
+        return time.monotonic() + (91 if state.get('lease_expired') else 0)
+def component_import(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == 'time' and globals and globals.get('__name__') == 'lease_component': return Clock()
+    return real_import(name, globals, locals, fromlist, level)
+builtins.__import__ = component_import
+spec = importlib.util.spec_from_file_location('lease_component', helper)
+module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = module
+spec.loader.exec_module(module)
+raise SystemExit(module.main())
+""")
+        # Use the exact real child argv/binding that the publisher constructs.
+        # The wrapper changes only the component's local monotonic clock;
+        # canonical __file__, immutable tools, authority and reads stay real.
+        subject = next(publication_api.parse_publication_comment(c['body'])
+                       for c in baseline['comments'] if '<!-- oasis7-ci-publication/v1 -->' in c['body'])
+        binding = publication_api.build_publication_binding(subject, PR, PR_URL)
+        binding_path = self.tmp / 'lease-binding.json'
+        binding_path.write_text(json.dumps(binding))
+        command = [sys.executable, str(wrapper), str(self.task_root / 'scripts/pm/github-project-task.py'),
+                   'record-pr', str(self.task_root), '--repo', REPOSITORY, '--task-uid', UID,
+                   '--pr-url', PR_URL, '--role', 'tpm', '--draft-candidate',
+                   '--publication-binding-json', str(binding_path), '--human-reconcile',
+                   '--maintenance-authority-comment-id', '9002', '--json']
+        result = subprocess.run(command, text=True, capture_output=True, env=self.env, timeout=90)
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn('human observation lease expired', result.stderr)
+        self.assertEqual(baseline['mutations'], self._load_state()['mutations'])
+        self.assertEqual(old_cache, cache.read_bytes())
+        self.assertEqual(old_journal, journal.read_bytes())
+
+    def test_human_uncertain_scalar_send_invalidates_observation_before_cache(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        cache = self.task_root / '.pm/github-project-sync/tasks.json'
+        old_cache = cache.read_bytes()
+        journal = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal.read_bytes()
+        self.state = self._load_state()
+        self.state['faults']['project:PR'] = 'after-hold'
+        self._save_state()
+        result = self.run_publisher(human_reconcile=True)
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        final = self._load_state()
+        self.assertEqual(PR_URL, final['project_values']['PR'], 'lost response actually landed')
+        self.assertEqual(1, len(self._effects('project:PR', final)))
+        self.assertEqual(0, len(self._effects('comment:binding', final)))
+        self.assertEqual(0, len(self._effects('comment:evidence', final)))
+        self.assertEqual(old_cache, cache.read_bytes())
+        self.assertEqual(old_journal, journal.read_bytes())
+        retry = self.run_publisher(human_reconcile=True)
+        self.assertNotEqual(0, retry.returncode)
+        self.assertIn('hold', retry.stderr.lower())
+        self.assertEqual(final['mutations'], self._load_state()['mutations'])
+        self.assertEqual(old_cache, cache.read_bytes())
+
+    def test_human_reconcile_accepts_same_actor_with_changed_avatar_readback(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        self.state = self._load_state()
+        self.state['project_values']['PR'] = PR_URL
+        self.state['human_comment_readback_variation'] = 'avatar'
+        self._save_state()
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal_path.read_bytes()
+        result = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        final = self._load_state()
+        self.assertEqual(1, len(self._effects('comment:binding', final)))
+        self.assertEqual(1, len(self._effects('comment:evidence', final)))
+        self.assertEqual(old_journal, journal_path.read_bytes())
+        again = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, again.returncode, again.stdout + again.stderr)
+        self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_reconcile_rejects_wrong_actor_body_and_duplicate_readbacks(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        baseline = self._load_state()
+        baseline['project_values']['PR'] = PR_URL
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal_path.read_bytes()
+        for case in ('wrong_actor', 'wrong_body', 'duplicate'):
+            self.state = json.loads(json.dumps(baseline))
+            self.state['human_comment_readback_variation'] = case
+            self._save_state()
+            result = self.run_publisher(human_reconcile=True)
+            with self.subTest(case=case):
+                self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+                expected = ('human exact comment readback is pending' if case == 'duplicate'
+                            else 'human exact server comment differs')
+                self.assertIn(expected, result.stderr, 'publisher must preserve actual child terminal cause')
+                final = self._load_state()
+                self.assertEqual(1, len(self._effects('comment:binding', final)))
+                self.assertEqual(0, len(self._effects('comment:evidence', final)))
+                self.assertEqual(old_journal, journal_path.read_bytes())
+                retry = self.run_publisher(human_reconcile=True)
+                self.assertNotEqual(0, retry.returncode)
+                self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_reconcile_writes_only_missing_project_pr_once(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        interrupted = self.run_publisher()
+        self.assertNotEqual(0, interrupted.returncode)
+        self.seed_human_maintenance_authority()
+        before = self._load_state()
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal_path.read_bytes()
+        recovered = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, recovered.returncode, recovered.stdout + recovered.stderr)
+        final = self._load_state()
+        self.assertEqual(PR_URL, final['project_values']['PR'])
+        self.assertEqual(len(self._effects('issue:body', before)), len(self._effects('issue:body', final)))
+        self.assertEqual(len(self._effects('project:Workflow Phase', before)),
+                         len(self._effects('project:Workflow Phase', final)))
+        self.assertEqual(1, len(self._effects('project:PR', final)))
+        self.assertEqual(old_journal, journal_path.read_bytes())
+        again = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, again.returncode, again.stdout + again.stderr)
+        self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_reconcile_rejects_permission_hold_and_conflicting_vector_without_writes(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        baseline = self._load_state()
+        mutations = list(baseline['mutations'])
+        # Restore the unchanged server baseline per case; rejected calls may add read logs only.
+        for case in ('permission', 'hold', 'conflicting_pr', 'incomplete_readback'):
+            self.state = json.loads(json.dumps(baseline))
+            if case == 'permission': self.state['collaborator_permission'] = 'write'
+            elif case == 'hold':
+                self.state['issue']['body'] += '\n- merge_hold_active: `true`\n'
+            elif case == 'conflicting_pr': self.state['project_values']['PR'] = PR_URL + '0'
+            else: self.state['faults']['project-fields-incomplete'] = True
+            self._save_state()
+            result = self.run_publisher(human_reconcile=True)
+            with self.subTest(case=case):
+                self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+                self.assertEqual(mutations, self._load_state()['mutations'])
+
+    def test_human_reconcile_accepts_live_target_advance_preserving_historical_c1_authority(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        before = self._load_state()
+        c1_before = [c['body'] for c in before['comments']
+                     if '<!-- oasis7-ci-publication/v1 -->' in c['body']]
+        self.assertEqual(1, len(c1_before))
+        subject = publication_api.parse_publication_comment(c1_before[0])
+        self.assertEqual(self.target_oid, subject['planner_authority_oid'])
+        self.assertEqual(self.source_head, subject['source_head_oid'])
+        historical_config = git(self.repo, 'show',
+            self.target_oid + ':scripts/ci-required-scope.v2.json')
+        # Actual protected main advances independently of the exact source subject.
+        (self.repo / 'doc/main-advance.md').write_text('independent protected target change\n')
+        git(self.repo, 'add', 'doc/main-advance.md')
+        git(self.repo, 'commit', '-m', 'advance protected target independently')
+        advanced_target = git(self.repo, 'rev-parse', 'HEAD')
+        self.assertNotEqual(self.target_oid, advanced_target)
+        self.assertEqual(historical_config, git(self.repo, 'show',
+            advanced_target + ':scripts/ci-required-scope.v2.json'))
+        before['target_oid'] = advanced_target
+        before['pr']['base']['sha'] = advanced_target
+        self.state = before
+        self._save_state()
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        journal_before = journal_path.read_bytes()
+        result = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        final = self._load_state()
+        self.assertEqual(c1_before, [c['body'] for c in final['comments']
+                                   if '<!-- oasis7-ci-publication/v1 -->' in c['body']])
+        self.assertEqual(self.source_head, final['pr']['head']['sha'])
+        self.assertEqual(advanced_target, final['pr']['base']['sha'])
+        self.assertEqual(PR_URL, final['project_values']['PR'])
+        self.assertEqual(journal_before, journal_path.read_bytes())
+        self.assertEqual(1, len(self._effects('project:PR', final)))
 
     def test_real_publisher_and_record_pr_complete_then_noop_retry(self):
         first = self.run_publisher()

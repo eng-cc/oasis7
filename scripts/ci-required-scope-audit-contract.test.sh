@@ -513,7 +513,7 @@ required_gate_body = required_gate_match.group("body")
 if '--github-output "${GITHUB_OUTPUT}"' not in required_gate_body:
     raise SystemExit("required-gate planner output is not written to GITHUB_OUTPUT")
 for trusted_planner_fragment in (
-    'git show "${base_ref}:scripts/plan-rust-required-scope.py"',
+    'git show "${tool_ref}:scripts/plan-rust-required-scope.py"',
     'git show "${base_ref}:scripts/ci-required-scope.v2.json"',
     'planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")',
 ):
@@ -522,6 +522,26 @@ for trusted_planner_fragment in (
             "required-gate scope must come from trusted base planner/config: "
             f"{trusted_planner_fragment}"
         )
+# Ordinary PRs retain Q tooling. The explicit maintenance route may select
+# immutable H tooling only after live authority validation; Q config/driver stay.
+pr_scope_start = required_gate_body.index('if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then')
+pr_scope_end = required_gate_body.index('elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then', pr_scope_start)
+pr_scope = required_gate_body[pr_scope_start:pr_scope_end]
+for fragment in (
+    'tool_ref="${base_ref}"',
+    'module.read_maintenance_authority(',
+    'if [[ -n "${maintenance_id}" ]]; then tool_ref="${head_ref}"; fi',
+    'git show "${tool_ref}:scripts/plan-rust-required-scope.py"',
+    'git show "${base_ref}:scripts/ci-required-scope.v2.json"',
+    'git show "${base_ref}:scripts/ci-tests.sh"',
+):
+    if fragment not in pr_scope:
+        raise SystemExit(f"PR planner authority boundary is missing: {fragment}")
+if not (pr_scope.index('tool_ref="${base_ref}"')
+        < pr_scope.index('module.read_maintenance_authority(')
+        < pr_scope.index('tool_ref="${head_ref}"')
+        < pr_scope.index('git show "${tool_ref}:scripts/plan-rust-required-scope.py"')):
+    raise SystemExit("candidate planner must follow live maintenance authority validation")
 run_tier_match = re.search(
     r"(?ms)^      - name: Run required test tier\n(?P<body>.*?)(?=^      - |\Z)",
     required_gate_body,

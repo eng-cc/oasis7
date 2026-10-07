@@ -4501,6 +4501,276 @@ class PublicationRecoveryAuthority:
         return live, values
 
 
+def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path,
+                            record: dict[str, Any], binding: dict[str, Any],
+                            subject: dict[str, Any], publication: Any) -> int:
+    """Adopt an authentic current vector without rewriting publication history."""
+    import time
+    import workflow_maintenance as maintenance
+    vector = load_pr_projection_record_pr_module()
+    root = args.root.resolve()
+    tool_root = pathlib.Path(__file__).resolve().parents[2]
+    number = binding["pr_number"]
+    issue_number = int(record["issue_number"])
+    locator = getattr(args, "maintenance_authority_comment_id", None)
+    if type(locator) is not int or locator < 1:
+        die("record-pr: human reconciliation requires one maintenance authority locator")
+    execution_head = run_text(["git", "-C", str(tool_root), "rev-parse", "HEAD"])
+    required_tools = tuple("scripts/pm/" + name for name in (
+        "github-project-task.py", "pr_projection_record_pr.py", "pr_projection_publish.py",
+        "workflow_maintenance.py", "github-project-sync.py", "github_api.py",
+        "task_complete_claim.py", "loop_leaf_result.py", "workflow-durable-store.py",
+        "pr_projection_publication.py", "projection_publication_contract.py",
+        "pr_projection_journal.py", "portable_file_lock.py", "pr_projection_transition.py"))
+    expected_scope: dict[str, Any] | None = None
+    subject_body: str | None = None
+    observed_target: str | None = None
+
+    observation: dict[str, Any] | None = None
+    observation_vector: dict[str, Any] | None = None
+    observation_deadline = 0.0
+    observation_lease_seconds = 90.0
+
+    def check(*, fresh: bool = False) -> dict[str, Any]:
+        nonlocal expected_scope, subject_body, observed_target
+        nonlocal observation, observation_vector, observation_deadline
+        if observation is not None and not fresh:
+            if time.monotonic() >= observation_deadline:
+                raise vector.RecordPRPending("human observation lease expired")
+            return observation
+        started = time.monotonic()
+        caller = require_record_pr_write_authority(args.repo)
+        authority = maintenance.read_maintenance_authority(
+            args.repo, locator, args.task_uid, number, subject["source_head_oid"],
+            required_tool_paths=required_tools)
+        if authority["issue_number"] != issue_number:
+            raise vector.RecordPRConflict("human authority selects another Issue")
+        if expected_scope is None:
+            expected_scope = authority
+        elif authority != expected_scope:
+            raise vector.RecordPRConflict("human scope authority changed")
+        identity = authoritative_repository_identity(root, args.repo, str(root))
+        for key in ("canonical_worktree", "task_branch", "default_branch", "repository"):
+            if identity.get(key) != record.get(key):
+                raise vector.RecordPRConflict("human canonical worktree/branch identity changed")
+        if (subject["repository"] != args.repo or subject["task_uid"] != args.task_uid
+                or subject["source_ref"] != identity["task_branch"]
+                or subject["target_ref"] != identity["default_branch"]):
+            raise vector.RecordPRConflict("human subject differs from canonical identity")
+        if run_text(["git", "-C", str(tool_root), "rev-parse", "HEAD"]) != execution_head:
+            raise vector.RecordPRConflict("human execution revision changed")
+        if record_pr_common_dir(tool_root) != record_pr_common_dir(root):
+            raise vector.RecordPRConflict("human tool checkout is foreign")
+        repository_info = json.loads(run_text(["gh", "api", f"repos/{args.repo}"]))
+        target = json.loads(run_text(["gh", "api", f"repos/{args.repo}/commits/{identity['default_branch']}"]))
+        current_target = target.get("sha")
+        if not isinstance(current_target, str) or not re.fullmatch(r"[0-9a-f]{40,64}", current_target):
+            raise vector.RecordPRPending("human current protected target is unavailable")
+        if observed_target is None:
+            observed_target = current_target
+        elif observed_target != current_target:
+            raise vector.RecordPRPending("human protected target changed during reconciliation")
+        # This comparison accounts for source changes; scope permission still comes from live authority.
+        comparison = run_text(["git", "-C", str(tool_root), "merge-base", execution_head, current_target])
+        changed = run_text(["git", "-C", str(tool_root), "diff", "--name-only", comparison, execution_head]).splitlines()
+        if not set(changed).issubset(authority["allowed_write_paths"]):
+            raise vector.RecordPRConflict("human candidate changes exceed approved scope")
+        for relative in required_tools:
+            path = tool_root / relative
+            if path.is_symlink() or not path.resolve().is_relative_to(tool_root):
+                raise vector.RecordPRConflict("human tool import path is unsafe")
+            if path.read_bytes() != subprocess.check_output(["git", "-C", str(tool_root), "show", f"{execution_head}:{relative}"]):
+                raise vector.RecordPRConflict("human tool bytes are not immutable")
+            if relative in changed and relative not in authority["allowed_tool_paths"]:
+                raise vector.RecordPRConflict("human changed import is outside approved tools")
+        if run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm", ":(exclude)**/__pycache__/**"]):
+            raise vector.RecordPRConflict("human tool import shadow")
+        config = subprocess.check_output(["git", "-C", str(tool_root), "show",
+                                          f"{subject['planner_authority_oid']}:scripts/ci-required-scope.v2.json"])
+        if "sha256:" + hashlib.sha256(config).hexdigest() != subject["planner_config_sha256"]:
+            raise vector.RecordPRConflict("human trusted planner configuration differs")
+        current_config = subprocess.check_output(["git", "-C", str(tool_root), "show",
+                                                 f"{current_target}:scripts/ci-required-scope.v2.json"])
+        if subprocess.check_output(["git", "-C", str(tool_root), "show",
+                                    f"{execution_head}:scripts/ci-required-scope.v2.json"]) != current_config:
+            raise vector.RecordPRConflict("human candidate cannot replace current protected configuration")
+        live_pr = github_pull_request(args.repo, number)
+        if (live_pr.get("draft") is not True or live_pr.get("head", {}).get("sha") != subject["source_head_oid"]
+                or live_pr.get("head", {}).get("ref") != identity["task_branch"]):
+            raise vector.RecordPRConflict("human live PR differs from exact subject")
+        raw_issue = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{issue_number}"]))
+        exact = []
+        for comment in github_issue_comments(args.repo, issue_number):
+            body = str(comment.get("body") or "")
+            if "<!-- oasis7-ci-publication/v1 -->" in body:
+                parsed = publication.parse_publication_comment(body)
+                if parsed.get("publication_id") == subject["publication_id"]:
+                    exact.append((comment, parsed))
+        if len(exact) != 1 or exact[0][1] != subject:
+            raise vector.RecordPRConflict("human authentic C1 subject is missing or ambiguous")
+        comment = exact[0][0]
+        publisher = comment.get("user") or {}
+        if (publisher.get("login") != caller.get("login") or publisher.get("type") != "User"
+                or publisher.get("login") != (raw_issue.get("user") or {}).get("login")
+                or publisher.get("login") != (live_pr.get("user") or {}).get("login")
+                or not publication.comment_timestamps_are_unchanged(comment)
+                or subject["repository_id"] != repository_info.get("id")
+                or subject["source_repository_id"] != repository_info.get("id")):
+            raise vector.RecordPRConflict("human C1 publisher/repository authority differs")
+        if subject_body is None:
+            subject_body = comment["body"]
+        elif subject_body != comment["body"]:
+            raise vector.RecordPRConflict("human subject C1 changed")
+        live_issue = github_issue_record(args.repo, args.task_uid)
+        if (live_issue.get("issue_number") != issue_number or live_issue.get("worktree_hint") != str(root)
+                or any(live_issue.get(k) != record.get(k) for k in ("owner_role", "module", "priority"))):
+            raise vector.RecordPRConflict("human unrelated Task identity changed")
+        record_pr_project_read(args, record)
+        project = load_mapping(mapping_path).get("project") or {}
+        query = """query($project: ID!, $after: String) { node(id:$project) { ... on ProjectV2 {
+          id fields(first:100, after:$after) { nodes {
+            ... on ProjectV2Field { id name dataType }
+            ... on ProjectV2SingleSelectField { id name dataType options { id name } }
+          } pageInfo { hasNextPage endCursor } }
+        } } }"""
+        definitions, cursor, seen = {}, None, set()
+        for _ in range(100):
+            command = ["gh", "api", "graphql", "-f", "query=" + query, "-F", "project=" + str(project.get("id"))]
+            if cursor is not None:
+                command += ["-f", "after=" + cursor]
+            schema = json.loads(run_text(command))
+            node = (schema.get("data") or {}).get("node") or {}
+            fields = node.get("fields") or {}
+            if node.get("id") != project.get("id") or not isinstance(fields.get("nodes"), list):
+                raise vector.RecordPRPending("human complete Project schema unavailable")
+            for definition in fields["nodes"]:
+                name = definition.get("name")
+                if name:
+                    if name in definitions:
+                        raise vector.RecordPRConflict("human duplicate Project schema field")
+                    definitions[name] = definition
+            page = fields.get("pageInfo") or {}
+            if page.get("hasNextPage") is False:
+                break
+            cursor = page.get("endCursor")
+            if page.get("hasNextPage") is not True or not isinstance(cursor, str) or not cursor or cursor in seen:
+                raise vector.RecordPRPending("human Project schema pagination incomplete")
+            seen.add(cursor)
+        else:
+            raise vector.RecordPRPending("human Project schema pagination exhausted")
+        for field, expected_type in (("PR", "TEXT"), ("Workflow Phase", "SINGLE_SELECT")):
+            definition = definitions.get(field)
+            if not isinstance(definition, dict) or definition.get("dataType") != expected_type:
+                raise vector.RecordPRConflict("human Project required field type unavailable: " + field)
+            if field == "Workflow Phase" and "verification" not in {option.get("name") for option in definition.get("options", [])}:
+                raise vector.RecordPRConflict("human Project phase option unavailable")
+        if time.monotonic() >= started + observation_lease_seconds:
+            raise vector.RecordPRPending("human observation lease expired")
+        observation = live_issue
+        observation_vector = None
+        observation_deadline = started + observation_lease_seconds
+        return live_issue
+
+    def read_live() -> dict[str, Any]:
+        nonlocal observation_vector
+        check()
+        if observation_vector is None:
+            observation_vector = _record_pr_vector_from_live(args, record, args.task_uid, binding["pr_url"])
+        check()  # Never return a vector whose observation lease expired during reads.
+        return observation_vector
+
+    def write_issue(target: dict[str, Any]) -> None:
+        nonlocal observation, observation_vector
+        live = check(fresh=True)
+        try:
+            _record_pr_write_issue_vector(args, record, target, live)
+        finally:
+            observation = observation_vector = None
+
+    def write_project(field: str, value: str) -> None:
+        nonlocal observation, observation_vector
+        check(fresh=True)
+        try:
+            _record_pr_write_project_field(args, record, field, value,
+                                           scope_check=lambda: check(fresh=True))
+        finally:
+            observation = observation_vector = None
+
+    def exact_comment(body: str, *, allow_write: bool = True) -> str:
+        check()
+        matches = [c for c in github_issue_comments(args.repo, issue_number) if c.get("body") == body]
+        if len(matches) > 1:
+            raise vector.RecordPRConflict("duplicate human reconciliation comment")
+        if not matches:
+            if not allow_write:
+                raise vector.RecordPRPending("human final exact comment disappeared")
+            check(fresh=True)
+            try:
+                issue_comment(args.repo, issue_number, body)
+            except (OSError, RuntimeError, subprocess.SubprocessError):
+                # A lost response may still have landed. Only exact complete readback resolves it.
+                pass
+            matches = [c for c in github_issue_comments(args.repo, issue_number) if c.get("body") == body]
+        if (len(matches) != 1 or (matches[0].get("user") or {}).get("login") != read_live_repository_writer(args.repo)["login"]
+                or type(matches[0].get("id")) is not int):
+            raise vector.RecordPRPending("human exact comment readback is pending")
+        readback = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/comments/{matches[0]['id']}"]))
+        listed = matches[0]
+        listed_actor = listed.get("user") or {}
+        server_actor = readback.get("user") or {}
+        # GitHub profile presentation fields can differ between list and exact GET.
+        actor_fields = ("login", "id", "node_id", "type")
+        comment_fields = ("id", "html_url", "created_at", "updated_at")
+        if (readback.get("body") != body
+                or any(server_actor.get(key) != listed_actor.get(key) for key in actor_fields)
+                or server_actor.get("type") != "User"
+                or any(readback.get(key) != listed.get(key) for key in comment_fields)
+                or not publication.comment_timestamps_are_unchanged(readback)):
+            raise vector.RecordPRPending("human exact server comment differs")
+        return str(readback["html_url"])
+
+    result = vector.reconcile_human_record_pr_vector(
+        task_uid=args.task_uid, pr_number=number, pr_url=binding["pr_url"],
+        read_live=read_live, write_issue=write_issue, write_project_field=write_project,
+        before_write=lambda: check(fresh=True))
+    binding_body = publication.publication_binding_comment(binding)
+    for comment in github_issue_comments(args.repo, issue_number):
+        if "<!-- oasis7-ci-publication-binding/v1 -->" in str(comment.get("body") or ""):
+            parsed = publication.parse_publication_binding_comment(comment["body"])
+            if parsed.get("publication_id") == subject["publication_id"] and parsed != binding:
+                raise vector.RecordPRConflict("human reciprocal publication binding conflicts")
+    binding_url = exact_comment(binding_body)
+    evidence = "\n".join(("<!-- oasis7-pm-evidence -->", f"Task UID: {args.task_uid}",
+                          "Evidence Phase: human_publication_reconciliation", "Role: tpm",
+                          f"Subject Head: {subject['source_head_oid']}", f"Tool Head: {execution_head}",
+                          f"Historical Planner: {subject['planner_authority_oid']}",
+                          f"Observed Target: {observed_target}",
+                          f"Authority Comment: {locator}", f"Publication ID: {subject['publication_id']}",
+                          "Actual Result: complete live Task/Project/PR/C1 binding; historical journal unchanged."))
+    evidence_url = exact_comment(evidence)
+    check(fresh=True)
+    # The final stage never adopts a pre-effect vector or authority observation.
+    final_vector = read_live()
+    if final_vector != result["final"]:
+        raise vector.RecordPRConflict("human final vector changed before cache refresh")
+    if (exact_comment(binding_body, allow_write=False) != binding_url
+            or exact_comment(evidence, allow_write=False) != evidence_url):
+        raise vector.RecordPRConflict("human final evidence identity changed")
+    final_issue = check()
+    next_record = {**record, **final_issue, "updated_at": now()}
+    next_record["evidence_comments"] = list(dict.fromkeys([*(record.get("evidence_comments") or []), binding_url, evidence_url]))
+    merge_task_mapping(mapping_path, args.task_uid, next_record,
+                       project=load_mapping(mapping_path).get("project"))
+    payload = {"status": "human_reconciled", "task_uid": args.task_uid,
+               "publication_binding": binding, "subject_head_oid": subject["source_head_oid"],
+               "tool_head_oid": execution_head, "metadata_writes": result["writes"],
+               "historical_planner_oid": subject["planner_authority_oid"],
+               "observed_target_oid": observed_target,
+               "binding_comment_url": binding_url, "evidence_comment_url": evidence_url}
+    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else "record-pr: human reconciled")
+    return 0
+
+
 def command_record_pr(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
@@ -4605,6 +4875,11 @@ def command_record_pr(args: argparse.Namespace) -> int:
             binding_comment_exists = True
     if recovery_required and (publication_binding is None or not is_draft_candidate):
         die("record-pr: required recovery needs an exact draft publication binding")
+    if bool(getattr(args, "human_reconcile", False)):
+        if recovery_required or not is_draft_candidate or publication_binding is None:
+            die("record-pr: human reconciliation needs its exact draft publication, not recovery-required")
+        return command_record_pr_human(args, mapping_path, record, publication_binding,
+                                       publication_intent, publication_module)
     recovery = None
     recovery_admissions = [
         c for c in comments
@@ -6645,6 +6920,8 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--existing-ready-update", action="store_true")
     record_pr.add_argument("--publication-binding-json")
     record_pr.add_argument("--recovery-required", action="store_true")
+    record_pr.add_argument("--human-reconcile", action="store_true")
+    record_pr.add_argument("--maintenance-authority-comment-id", type=int)
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 
