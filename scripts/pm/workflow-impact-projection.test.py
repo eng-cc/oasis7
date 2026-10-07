@@ -199,7 +199,8 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
             ).stdout.strip()
             relatives = (
                 "scripts/plan-rust-required-scope.py", "scripts/ci-required-scope.v2.json",
-                "scripts/ci-tests.sh", "scripts/pm/workflow-impact-projection.py", "Cargo.toml",
+                "scripts/ci-tests.sh", "scripts/pm/workflow-impact-projection.py",
+                "scripts/pm/task_primary_package.py", "Cargo.toml",
             )
             for relative in relatives:
                 target = root / relative
