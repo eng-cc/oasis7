@@ -19,6 +19,24 @@ import sys
 import tempfile
 from typing import Any, Optional
 
+def _run(command, **kwargs):
+    """Preserve ordinary subprocess semantics; bound recovery observations."""
+    observation=sys.modules.get('recovery_observation')
+    if observation is None or observation.active() is None:
+        return subprocess.run(command,**kwargs)
+    try:
+        object_locator=command[2] if len(command)==3 and command[:2]==['git','show'] and ':' in command[2] else None
+        raw=observation.capture(command,cwd=kwargs.get('cwd'),
+            kind='git_object' if object_locator else None,locator=object_locator)
+        result=subprocess.CompletedProcess(command,0,raw,b'')
+    except observation.ObservationError as exc:
+        result=subprocess.CompletedProcess(command,exc.returncode,exc.stdout,exc.stderr)
+    if kwargs.get('text'):
+        result.stdout=result.stdout.decode();result.stderr=result.stderr.decode()
+    if kwargs.get('check') and result.returncode:
+        raise subprocess.CalledProcessError(result.returncode,command,result.stdout,result.stderr)
+    return result
+
 
 SCHEMA = "oasis7-workflow-impact-projection/v2"
 SUPPORTED_SCHEMAS = {SCHEMA}
@@ -233,7 +251,7 @@ def validate_projection_value(
             if not isinstance(relative, str) or Path(relative).is_absolute() or ".." in Path(relative).parts:
                 raise ProjectionError(f"impact projection closure evidence[{index}] path is invalid")
             try:
-                result = subprocess.run(
+                result = _run(
                     ["git", "show", f"{source_head_oid}:{relative}"],
                     cwd=root,
                     capture_output=True,
@@ -414,7 +432,7 @@ def run_scope_planner(
             command.extend(("--config", str(config_path)))
         for path in paths:
             command.extend(("--changed-path", path))
-        result = subprocess.run(command, cwd=root, text=True, capture_output=True)
+        result = _run(command, cwd=root, text=True, capture_output=True)
         if result.returncode:
             detail = result.stderr.strip() or result.stdout.strip() or "scope planner failed"
             raise ProjectionError("required-scope planner failed: " + detail)
@@ -434,7 +452,7 @@ def run_scope_planner(
 
     _require_identity_string(planner_authority_oid, OID_RE, "planner_authority_oid")
     try:
-        resolved_authority = subprocess.run(
+        resolved_authority = _run(
             ["git", "rev-parse", f"{planner_authority_oid}^{{commit}}"],
             cwd=root,
             check=True,
@@ -458,7 +476,7 @@ def run_scope_planner(
             "scripts/ci-tests.sh",
         ):
             try:
-                content = subprocess.run(
+                content = _run(
                     ["git", "show", f"{planner_authority_oid}:{relative}"],
                     cwd=root,
                     check=True,
@@ -499,7 +517,7 @@ def run_role_selector(
         command.extend(("--manual-role", role))
     if verification_affected:
         command.append("--verification-affected")
-    result = subprocess.run(command, cwd=root, text=True, capture_output=True)
+    result = _run(command, cwd=root, text=True, capture_output=True)
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip() or "role selector failed"
         raise ProjectionError("review-role-selector failed: " + detail)

@@ -2336,6 +2336,13 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, original = require_record(args)
     previous = str(original.get("status") or "")
     claim = json.loads(args.claim_json)
+    recovery_profile = getattr(args, "verification_profile", None) == "postmerge_delivery_recovery"
+    recovery_claim = claim.get("claim_type") == "postmerge_delivery_complete"
+    if ((recovery_claim and not recovery_profile)
+            or (recovery_profile and (args.to_status != "done" or claim.get("claim_type") not in ("task_complete", "postmerge_delivery_complete")))):
+        die("closeout-task: recovery requires the exact done profile/claim pair")
+    if recovery_profile and (args.aggregate_receipt or not args.pr_receipt):
+        die("closeout-task: recovery requires a singular reciprocal merge receipt")
     if args.to_status == "done" and original.get("completion_mode") == "ordered_delivery_aggregate" and not args.aggregate_receipt:
         die("closeout-task: ordered aggregate completion requires an aggregate receipt")
     if args.aggregate_receipt and original.get("completion_mode") != "ordered_delivery_aggregate":
@@ -2345,10 +2352,10 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         live_issue = require_live_issue_route_matches_cache(
             getattr(args, "repo", DEFAULT_REPO), args.task_uid, original,
         )
-    if args.to_status != "deferred":
+    if args.to_status != "deferred" and not recovery_profile:
         if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
             die("closeout-task: verified immutable claim evidence is required")
-    if args.to_status == "done" and claim.get("claim_type") != "task_complete":
+    if args.to_status == "done" and not recovery_profile and claim.get("claim_type") != "task_complete":
         die("closeout-task: done requires canonical task_complete claim evidence")
     if args.aggregate_receipt:
         if args.to_status != "done" or args.pr_receipt:
@@ -2368,14 +2375,33 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         ], text=True, capture_output=True)
         if validation.returncode:
             die("closeout-task: aggregate receipt live validation failed: " + (validation.stderr.strip() or validation.stdout.strip()))
+    elif recovery_profile:
+        from terminal_recovery import validate_recovery
+        accepted = validate_recovery(args.root.resolve(), args.task_uid)
+        if claim != accepted["completion"]:
+            die("closeout-task: recovery completion differs from canonical authentic completion")
+        receipt_raw = pathlib.Path(args.pr_receipt).read_bytes()
+        receipt = json.loads(receipt_raw)
+        proof = accepted["proof"]
+        for key, expected in {"receipt_type":"oasis7_pr_merge","issuer":"github_live_query",
+                              "evidence_mode":"production","state":"MERGED",
+                              "repository":proof["repository"],"pr_number":proof["pr_number"],
+                              "pr_url":proof["pr_url"],"head_oid":proof["head_oid"],
+                              "default_branch":proof["default_branch"],"base_ref":proof["default_branch"],
+                              "merged_at":proof["merged_at"]}.items():
+            if receipt.get(key) != expected:
+                die("closeout-task: recovery merge receipt binding mismatch: " + key)
+        if receipt.get("merge_commit_oid") not in (None, proof["merge_commit_oid"]):
+            die("closeout-task: recovery merge commit mismatch")
     elif args.to_status == "done":
         _validate_task_complete_claim_for_closeout(
             getattr(args, "repo", DEFAULT_REPO), args.task_uid, claim, live_issue or {},
         )
     record = json.loads(json.dumps(original))
     closed_at = now()
-    record.setdefault("claim_verifications", []).append(claim)
-    record["last_claim_verification_at"] = claim.get("verified_at")
+    if not recovery_profile:
+        record.setdefault("claim_verifications", []).append(claim)
+        record["last_claim_verification_at"] = claim.get("verified_at")
     record["last_closed_at"] = closed_at
     record["last_evidence_at"] = closed_at
     record["status"] = args.to_status
@@ -2422,6 +2448,10 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             "Aggregate Receipt SHA256": record["aggregate_completion_receipt_sha256"],
             "Aggregate Plan Comment ID": record["aggregate_completion_receipt"].get("plan_comment_id"),
         })
+    if recovery_profile:
+        fresh = validate_recovery(args.root.resolve(), args.task_uid)
+        if fresh["digest"] != accepted["digest"] or fresh["completion_digest"] != accepted["completion_digest"]:
+            die("closeout-task: recovery authority changed before done effects")
     comment_url = issue_comment(
         args.repo,
         int(record["issue_number"]),
@@ -2454,6 +2484,9 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             "evidence_comments": [comment_url],
             "workflow_phase": terminal_phase,
         }
+        if recovery_profile:
+            cache_patch.pop("claim_verifications")
+            cache_patch.pop("last_claim_verification_at")
         if record.get("merge_receipt"):
             cache_patch["merge_receipt"] = record["merge_receipt"]
             cache_patch["merge_receipt_sha256"] = record["merge_receipt_sha256"]
@@ -6859,6 +6892,7 @@ def build_parser() -> argparse.ArgumentParser:
     closeout.add_argument("--role", required=True)
     closeout.add_argument("--to-status", required=True, choices=("ready", "done", "deferred"))
     closeout.add_argument("--claim-json", required=True)
+    closeout.add_argument("--verification-profile")
     closeout.add_argument("--pr-receipt")
     closeout.add_argument("--aggregate-plan")
     closeout.add_argument("--aggregate-candidate")

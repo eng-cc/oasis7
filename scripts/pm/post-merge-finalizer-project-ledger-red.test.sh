@@ -36,11 +36,11 @@ case "$*" in
   issue\ close*) : >"$ISSUE_CLOSED"; printf '%s\n' '{}' ;;
   api\ graphql*)
     if [[ "${WRONG_CONTENT:-0}" == 1 ]]; then
-      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_ffffffffffffffffffffffffffffffff","number":12,"title":"wrong fixture","url":"https://github.com/fixture/repo/issues/12"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]}}'
+      printf '%s\n' '{"data":{"repository":{"issue":{"projectItems":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1,"owner":{"login":"fixture"}},"content":{"body":"task_uid: task_ffffffffffffffffffffffffffffffff","number":12,"title":"wrong fixture","url":"https://github.com/fixture/repo/issues/12"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]}}}}}'
     elif [[ -s "$REMOTE_STATE" && "$(wc -l <"$REMOTE_STATE" | tr -d ' ')" == 3 ]]; then
-      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[{"name":"Done","field":{"name":"Status"}},{"name":"done","field":{"name":"PM Status"}},{"name":"done","field":{"name":"Workflow Phase"}}]}}]}}'
+      printf '%s\n' '{"data":{"repository":{"issue":{"projectItems":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1,"owner":{"login":"fixture"}},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[{"name":"Done","field":{"name":"Status"},"__typename":"ProjectV2ItemFieldSingleSelectValue"},{"name":"done","field":{"name":"PM Status"},"__typename":"ProjectV2ItemFieldSingleSelectValue"},{"name":"done","field":{"name":"Workflow Phase"},"__typename":"ProjectV2ItemFieldSingleSelectValue"}]}}]}}}}}'
     else
-      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]}}'
+      printf '%s\n' '{"data":{"repository":{"issue":{"projectItems":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1,"owner":{"login":"fixture"}},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]}}}}}'
     fi ;;
   api*) python3 - "$LIVE_BODY" <<'PY'
 import json,sys
@@ -85,35 +85,50 @@ import importlib.util,pathlib,sys
 path=pathlib.Path(sys.argv[1])/"post-merge-finalize.py"
 spec=importlib.util.spec_from_file_location("finalizer_identity_test",path)
 module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-base={"id":"ITEM1","_project_id":"P1","_project_number":1,
+import copy,loop_terminal
+base={"id":"ITEM1","project":{"id":"P1","number":1,"owner":{"login":"fixture"}},
       "content":{"body":f"task_uid: {sys.argv[2]}","number":11,
                  "url":"https://github.com/fixture/repo/issues/11"},
-      "_field_values_has_next_page":False,
-      "Status":"Done","PM Status":"done","Workflow Phase":"done"}
+      "fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":[
+          {"__typename":"ProjectV2ItemFieldSingleSelectValue","name":value,"field":{"name":name}}
+          for name,value in (("Status","Done"),("PM Status","done"),("Workflow Phase","done"))]}}
+def readback(item):
+    def transport(*args):
+        if args==("project","view","1","--owner","fixture","--format","json"):
+            return {"id":"P1"}
+        assert args[:2]==("api","graphql"),args
+        assert "owner=fixture" in args and "name=repo" in args and "number=11" in args,args
+        return {"data":{"repository":{"issue":{"projectItems":{
+            "pageInfo":{"hasNextPage":False},"nodes":[item]}}}}}
+    loop_terminal._json=transport
+    return module._project_readback("P1",1,"ITEM1",sys.argv[2],11,"fixture/repo")
+assert readback(base)=={"Status":"Done","PM Status":"done","Workflow Phase":"done"}
 for label,mutation in (
     ("wrong issue",{"content":{**base["content"],"number":12,"url":"https://github.com/fixture/repo/issues/12"}}),
     ("missing task marker",{"content":{**base["content"],"body":"no task identity"}}),
     ("wrong repository",{"content":{**base["content"],"url":"https://github.com/other/repo/issues/11"}}),
 ):
     item={**base,**mutation}
-    module.project_workflow.fetch_project_items_by_ids=lambda ids,item=item:{"ITEM1":item}
     try:
-        module._project_readback("P1",1,"ITEM1",sys.argv[2],11,"fixture/repo")
-    except SystemExit:
+        readback(item)
+    except (SystemExit,ValueError) as error:
+        expected="content does not match task issue identity" if label=="missing task marker" else "content identity mismatch"
+        assert expected in str(error),(label,error)
         continue
     raise SystemExit(f"expected bound Project readback to reject {label}")
-for label, item in (
-    ("missing pageInfo", {key:value for key,value in base.items()
-                           if key != "_field_values_has_next_page"}),
-    ("null pageInfo", {**base, "_field_values_has_next_page": None}),
-    ("invalid pageInfo", {**base, "_field_values_has_next_page": "false"}),
-    ("truncated pageInfo", {**base, "_field_values_has_next_page": True}),
-):
-    module.project_workflow.fetch_project_items_by_ids=lambda ids,item=item:{"ITEM1":item}
+for label,value in (("missing pageInfo","missing"),("null pageInfo",None),
+                    ("invalid pageInfo","false"),("truncated pageInfo",True)):
+    item=copy.deepcopy(base)
+    if value=="missing":
+        del item["fieldValues"]["pageInfo"]
+    else:
+        item["fieldValues"]["pageInfo"]["hasNextPage"]=value
     try:
-        module._project_readback("P1",1,"ITEM1",sys.argv[2],11,"fixture/repo")
-    except SystemExit:
+        readback(item)
+    except (SystemExit,ValueError) as error:
+        assert "field pagination/container incomplete" in str(error),(label,error)
         continue
     raise SystemExit(f"expected bound Project readback to reject {label}")
+
 PY
 echo 'post-merge-finalizer-project-ledger-red.test: OK'

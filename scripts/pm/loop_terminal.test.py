@@ -24,8 +24,10 @@ BODY=(f'<!-- oasis7-pm-task -->\n'
       f'- pr_number: `{PR_NUMBER}`\n- pr_url: `{PR_URL}`\n')
 ISSUE={'number':11,'html_url':URL,'body':BODY,'state':'closed','state_reason':'completed'}
 ITEM={'id':'I','project':{'id':'P','number':1,'owner':{'login':'fixture'}},'content':{'number':11,'url':URL,'body':BODY},
-      'fieldValues':{'pageInfo':{'hasNextPage':False},'nodes':[{'name':value,'field':{'name':key}} for key,value in
-                     [('Status','Done'),('PM Status','done'),('Workflow Phase','done')]]}}
+      'fieldValues':{'pageInfo':{'hasNextPage':False},'nodes':[{'__typename':'ProjectV2ItemFieldSingleSelectValue','name':value,'field':{'name':key}} for key,value in
+                     [('Status','Done'),('PM Status','done'),('Workflow Phase','done')]]+
+                     [{'__typename':'ProjectV2ItemFieldRepositoryValue','field':{'name':'Repository'},
+                       'repository':{'nameWithOwner':'fixture/repo'}}]}}
 PROJECT={'id':'P','owner':'fixture','number':1,'page_complete':True,'items':[ITEM]}
 PR={'number':PR_NUMBER,'html_url':PR_URL,'body':f'Task: {UID}\nRefs #11\n','state':'closed','merged':True,
     'merged_at':'2026-09-10T00:00:00Z','merge_commit_sha':'b'*40,
@@ -71,6 +73,48 @@ COMMENT_BODY=('<!-- oasis7-pm-evidence -->\n'
               'Role: tpm\nCompleted: receipt-bound terminal finalization.\n')
 COMMENT={'html_url':URL+'#issuecomment-7','user':{'login':'fixture'},'body':COMMENT_BODY}
 
+class TypedProjectReadbackRed(unittest.TestCase):
+    def item(self):
+        item=copy.deepcopy(ITEM)
+        return item
+
+    def test_both_real_queries_project_official_repository_union(self):
+        for reader in [loop_terminal.read_project,loop_terminal.read_live_project_item]:
+            calls=[];item=self.item()
+            def api(*args):
+                calls.append(args)
+                if args[0]=='project':return {'id':'P'}
+                return {'data':{'repository':{'issue':{'projectItems':{'pageInfo':{'hasNextPage':False},'nodes':[item]}}}}}
+            with self.subTest(reader=reader.__name__),patch.object(loop_terminal,'_json',side_effect=api):
+                reader('fixture/repo',11)
+                query=next(arg for call in calls for arg in call if arg.startswith('query='))
+                self.assertIn('__typename',query)
+                self.assertIn('... on ProjectV2ItemFieldRepositoryValue',query)
+                self.assertIn('nameWithOwner',query)
+
+    def test_legacy_terminal_accepts_repository_metadata_without_unnamed_field(self):
+        project=copy.deepcopy(PROJECT);project['items']=[self.item()]
+        result=TerminalDelivery().check(project=project)
+        self.assertEqual(result['status'],'passed',result)
+
+    def test_actual_live_collector_rejects_uncertain_union_and_pagination(self):
+        base=self.item();bad=[]
+        for value in [{},None,{'__typename':'Unknown','field':{'name':'Repository'}},
+            {'__typename':'ProjectV2ItemFieldRepositoryValue','field':{'name':'Repository'},'repository':None},
+            {'__typename':'ProjectV2ItemFieldRepositoryValue','field':{'name':'Repository'},'repository':{'nameWithOwner':'other/repo'}},
+            {'__typename':'ProjectV2ItemFieldTextValue','field':{'name':'Status'},'text':True}]:
+            item=copy.deepcopy(base)
+            index=0 if isinstance(value,dict) and (value.get('field') or {}).get('name')=='Status' else -1
+            item['fieldValues']['nodes'][index]=value;bad.append(item)
+        for pagination in [{},{'hasNextPage':True},{'hasNextPage':'false'}]:
+            item=copy.deepcopy(base);item['fieldValues']['pageInfo']=pagination;bad.append(item)
+        for item in bad:
+            def api(*args):
+                if args[0]=='project':return {'id':'P'}
+                return {'data':{'repository':{'issue':{'projectItems':{'pageInfo':{'hasNextPage':False},'nodes':[item]}}}}}
+            with self.subTest(item=item),patch.object(loop_terminal,'_json',side_effect=api),self.assertRaises(ValueError):
+                loop_terminal.read_live_project_item('fixture/repo',11)
+
 class ProjectRepositorySelection(unittest.TestCase):
     def query_sensitive_reader(self, *args):
         if args[0] == 'project':
@@ -92,6 +136,8 @@ class ProjectRepositorySelection(unittest.TestCase):
             if re.search(r'ProjectV2FieldCommon\s*\{\s*id\s+name\s*\}', selection):
                 value['field'] = {'id': 'F_repository', 'name': 'Repository'}
         item = copy.deepcopy(ITEM)
+        item['fieldValues']['nodes'] = [node for node in item['fieldValues']['nodes']
+                                       if node.get('field', {}).get('name') != 'Repository']
         item['fieldValues']['nodes'].insert(0, value)
         return {'data': {'repository': {'issue': {'projectItems': {
             'pageInfo': {'hasNextPage': False}, 'nodes': [item]}}}}}

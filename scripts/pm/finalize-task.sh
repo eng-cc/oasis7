@@ -56,7 +56,7 @@ receipt_root="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" "${receipt_root_
   || fail "cannot resolve canonical receipt root"
 merge_receipt="$receipt_root/merge-receipt.json"
 terminal_receipt="$receipt_root/terminal-cleanup-receipt.json"
-protocol_selector="$(python3 - "$mapping" "$task_uid" <<'PY'
+protocol_selector="$(python3 - "$mapping" "$task_uid" "$receipt_root" <<'PY'
 import hashlib,json,pathlib,re,sys
 record=(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
 types=record.get('phase_receipt_type') or {}; digests=record.get('phase_receipt_sha256') or {}
@@ -65,11 +65,16 @@ digest=digests.get('post_merge_done')
 if v2_type=='oasis7_terminal_delivery':
     print('v2' if isinstance(digest,str) and re.fullmatch(r'[0-9a-f]{64}',digest) else 'conflict')
     raise SystemExit(0)
+if v2_type=='oasis7_terminal_recovery_delivery':
+    print('recovery' if isinstance(digest,str) and re.fullmatch(r'[0-9a-f]{64}',digest) else 'conflict')
+    raise SystemExit(0)
+if v2_type is not None:
+    print('conflict'); raise SystemExit(0)
 legacy=((record.get('phase_receipts') or {}).get('post_merge_done') or {})
 if legacy.get('receipt_type')=='oasis7_terminal_cleanup':
     print('v1' if isinstance(digest,str) and re.fullmatch(r'[0-9a-f]{64}',digest) else 'conflict')
 else:
-    print('new')
+    print('recovery_pending' if (pathlib.Path(sys.argv[3])/'terminal-recovery-proof.json').exists() else 'new')
 PY
 )" || fail "cannot read terminal protocol selector"
 [[ "$protocol_selector" != conflict ]] || fail "terminal protocol selector is malformed"
@@ -233,6 +238,15 @@ task_worktree="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["canoni
 task_branch="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["task_branch"])' <<<"$identity_json")"
 owner_role="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["owner_role"])' <<<"$identity_json")"
 
+validate_recovery() {
+  python3 - "$repo_root" "$task_uid" "$SCRIPT_DIR" <<'PY'
+import pathlib,sys
+sys.path.insert(0,sys.argv[3])
+from terminal_recovery import validate_recovery
+validate_recovery(pathlib.Path(sys.argv[1]),sys.argv[2])
+PY
+}
+
 if [[ "$preflight" == 1 ]]; then
   # Unselected preflight is the original mutation-free premerge identity check.
   # A postmerge proof cannot exist while that reciprocal PR is still OPEN.
@@ -242,6 +256,9 @@ if [[ "$preflight" == 1 ]]; then
       || fail "readiness read-only preflight failed"
   fi
   cleanup_blockers='[]'
+  if [[ "$protocol_selector" == recovery || "$protocol_selector" == recovery_pending ]]; then
+    validate_recovery || fail "recovery read-only preflight failed"
+  fi
   if [[ "$protocol_selector" == v2 ]]; then
     cleanup_preflight_rc=0
     if cleanup_preflight="$($SCRIPT_DIR/post-merge-cleanup.sh --repo-root "$repo_root" --task-uid "$task_uid" --delivery --preflight --json)"; then
@@ -297,17 +314,17 @@ run_cleanup() {
 }
 
 if [[ "$cleanup_only" == 1 ]]; then
-  [[ "$protocol_selector" == v2 ]] || fail "--cleanup-only requires a mapped v2 delivery receipt"
+  [[ "$protocol_selector" == v2 || "$protocol_selector" == recovery ]] || fail "--cleanup-only requires a mapped delivery receipt"
   [[ -z "$supplied_patch" ]] || fail "--cleanup-only does not accept patch-equivalence input"
   python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --delivery --preflight --json >/dev/null \
     || fail "delivery proof must be read back before cleanup-only"
   cleanup_rc=0
   cleanup_json="$(run_cleanup)" || cleanup_rc=$?
   if [[ "$output_json" == 1 ]]; then
-    python3 - "$cleanup_json" "$task_uid" "$pr_number" "$receipt_root" <<'PY'
+    python3 - "$cleanup_json" "$task_uid" "$pr_number" "$receipt_root" "$protocol_selector" <<'PY'
 import json,sys
 c=json.loads(sys.argv[1]); print(json.dumps({"status":c.get("status"),"task_uid":sys.argv[2],
-"pr_number":int(sys.argv[3]),"receipt_root":sys.argv[4],"delivery":{"state":"complete","protocol_version":2},
+"pr_number":int(sys.argv[3]),"receipt_root":sys.argv[4],"delivery":{"state":"complete","protocol_version":3 if sys.argv[5]=='recovery' else 2},
 "cleanup_state":c.get("cleanup_state"),"cleanup":c.get("cleanup"),"cleanup_blockers":c.get("cleanup_blockers",[])},sort_keys=True))
 PY
   else
@@ -327,6 +344,22 @@ if [[ "$protocol_selector" == v1 ]]; then
   cleanup_json='{}'
 else
   [[ -z "$supplied_patch" ]] || fail "patch-equivalence input is not part of v2 delivery finalization"
+  if [[ "$protocol_selector" == recovery || "$protocol_selector" == recovery_pending ]]; then
+    validate_recovery || fail "canonical recovery authority must validate before terminal effects"
+    completion_checkpoint="$(python3 - "$mapping" "$task_uid" <<'PY'
+import json,sys
+r=(json.load(open(sys.argv[1],encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+print('1' if r.get('status')=='done' else '0')
+PY
+)" || fail "cannot read recovery completion checkpoint"
+    if [[ "$completion_checkpoint" == 0 ]]; then
+      [[ -f "$merge_receipt" ]] || fail "recovery requires the existing canonical merge receipt"
+      (cd "$task_worktree" && "$SCRIPT_DIR/task-closeout.sh" --role "$owner_role" --task-uid "$task_uid" \
+        --to-status done --verification-profile postmerge_delivery_recovery --claim-type postmerge_delivery_complete \
+        --pr-receipt "$merge_receipt" >/dev/null)
+      "$SCRIPT_DIR/refresh-task-cache.sh" --task-uid "$task_uid" --json >/dev/null
+    fi
+  else
   # Before merge-receipt creation, task_complete publication or TaskDone,
   # validate the exact delivered human-readiness artifacts read-only.
   python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$repo_root" --task-uid "$task_uid" >/dev/null \
@@ -363,10 +396,11 @@ PY
       --to-status "done" --verification-profile repository_required --pr-receipt "$merge_receipt" >/dev/null)
     "$SCRIPT_DIR/refresh-task-cache.sh" --task-uid "$task_uid" --json >/dev/null
   fi
+  fi
   delivery_json="$(python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --delivery --json)" \
     || fail "terminal delivery could not be finalized and read back"
-  delivery_state="$(python3 -c 'import json,sys; p=json.loads(sys.stdin.read()); d=p.get("delivery") or {}; print("complete" if d.get("state")=="complete" and d.get("protocol_version")==2 else "blocked")' <<<"$delivery_json")"
-  [[ "$delivery_state" == complete ]] || fail "producer did not return a complete v2 delivery proof"
+  delivery_state="$(python3 -c 'import json,sys; p=json.loads(sys.stdin.read()); d=p.get("delivery") or {}; print(("complete_recovery" if d.get("protocol_version")==3 else "complete") if d.get("state")=="complete" and d.get("protocol_version") in (2,3) else "blocked")' <<<"$delivery_json")"
+  [[ "$delivery_state" == complete || "$delivery_state" == complete_recovery ]] || fail "producer did not return a complete delivery proof"
   if [[ "$cleanup_defer" == 1 ]]; then
     status="finalized"
     cleanup_state="cleanup_deferred"
@@ -383,7 +417,7 @@ if [[ "$output_json" == 1 ]]; then
   python3 - "$status" "$task_uid" "$pr_number" "$receipt_root" "$resume" "$delivery_state" "$cleanup_state" "$cleanup_json" <<'PY'
 import json,sys
 cleanup=json.loads(sys.argv[8]) if sys.argv[8] else {}
-delivery={"state":"complete","protocol_version":1 if sys.argv[6]=="complete_v1" else 2}
+delivery={"state":"complete","protocol_version":1 if sys.argv[6]=="complete_v1" else 3 if sys.argv[6]=='complete_recovery' else 2}
 print(json.dumps({"status":sys.argv[1],"task_uid":sys.argv[2],"pr_number":int(sys.argv[3]),
                   "receipt_root":sys.argv[4],"resume":sys.argv[5]=="1","delivery":delivery,
                   "cleanup_state":sys.argv[7],"cleanup":cleanup.get("cleanup",{}),

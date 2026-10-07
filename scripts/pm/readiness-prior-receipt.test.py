@@ -37,6 +37,19 @@ class PriorReceiptRed(unittest.TestCase):
             record["phase_receipt_sha256"] = {
                 "post_merge_done": hashlib.sha256(raw).hexdigest()}
             fixture.mapping_path.write_text(json.dumps(mapping))
+            # This is an already-finalized server scenario. Derive its factual
+            # Project projection from the original producer, independently of
+            # the deliberately malformed selected receipt below.
+            sync_spec = importlib.util.spec_from_file_location(
+                "prior_receipt_terminal_projection", fixture.pm_tools / "github-project-sync.py")
+            sync = importlib.util.module_from_spec(sync_spec)
+            sync_spec.loader.exec_module(sync)
+            projection = sync.project_field_values(record)
+            for node in fixture.state["project_item"]["fieldValues"]["nodes"]:
+                field = node["field"]["name"]
+                if field in {"Status", "PM Status", "Workflow Phase"}:
+                    node["name"] = projection[field]
+            fixture.state_path.write_text(json.dumps(fixture.state))
             before = snapshot(fixture)
             result = fixture.run_finalizer()
             self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
