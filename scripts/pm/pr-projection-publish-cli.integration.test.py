@@ -255,7 +255,7 @@ if args[0] == "pr" and args[1] == "create":
             "body": body, "user": {"login": state["login"], "type": "User"},
             "head": {"repo": {"full_name": state["repository"]},
                      "ref": state["source_ref"], "sha": state["source_head"]},
-            "base": {"repo": {"full_name": state["repository"]}, "ref": state["target_ref"]},
+            "base": {"repo": {"full_name": state["repository"]}, "ref": state["target_ref"], "sha": state["target_oid"]},
         }
         state["mutations"][-1]["effect"] = True
     save()
@@ -264,12 +264,22 @@ if args[0] == "pr" and args[1] == "create":
     emit(state["pr_url"])
 
 if args[0] == "api":
-    endpoint = args[1] if len(args) > 1 else ""
+    endpoint = next((value for value in args[1:] if value == "user" or value == "graphql" or value.startswith("repos/")), "")
     if endpoint == "user":
         emit({"login": state["login"], "type": "User"})
     if endpoint == "graphql":
         flags = graphql_flags()
         query = flags.get("query", "")
+        if "fields(first:" in query:
+            definitions = []
+            for name, definition in state['project_fields'].items():
+                datatype = 'SINGLE_SELECT' if name in state['single_select_fields'] else 'TEXT'
+                if name == 'Repository': datatype = 'REPOSITORY'
+                definitions.append({'id': definition['id'], 'name': name, 'dataType': datatype,
+                    'options': [{'name': label, 'id': oid} for label, oid in definition.get('options', {}).items()]})
+            emit({'data': {'node': {'id': state['project_id'], 'fields': {'nodes': definitions,
+                'pageInfo': {'hasNextPage': bool(state.get('faults', {}).get('project-fields-incomplete')),
+                             'endCursor': None}}}}})
         if "nodes(ids:" in query:
             issue = state["issue"]
             project = {"id": state["project_id"], "number": state["project_number"],
@@ -313,8 +323,15 @@ if args[0] == "api":
         emit({"data": {"node": item}})
     if endpoint == "repos/" + state["repository"]:
         emit({"id": state["repository_id"], "default_branch": state["target_ref"]})
+    if endpoint.startswith("repos/" + state['repository'] + '/commits/'):
+        requested_ref = endpoint.rsplit('/', 1)[-1]
+        if requested_ref != state['target_ref']:
+            raise SystemExit('unknown protected target ref: ' + requested_ref)
+        emit({'sha': state['target_oid']})
     if endpoint.startswith("repos/" + state["repository"] + "/collaborators/") and endpoint.endswith("/permission"):
-        emit({"permission": "write", "permissions": {"push": True}})
+        emit({"permission": state.get("collaborator_permission", "write"),
+              "permissions": {"push": True, "admin": state.get("collaborator_permission") == "admin"},
+              "user": {"login": endpoint.split("/collaborators/", 1)[1].split("/", 1)[0]}})
     if endpoint.startswith("repos/" + state["repository"] + "/issues/comments/"):
         comment_id = int(endpoint.rsplit("/", 1)[-1])
         found = [item for item in state["comments"] if item["id"] == comment_id]
@@ -501,7 +518,7 @@ class PublisherProcessTests(unittest.TestCase):
         option_values_by_id = {option_id: value for name, entries in options.items()
                                for value, option_id in entries.items()}
         return {
-            "repository": REPOSITORY, "repository_id": 701,
+            "repository": REPOSITORY, "repository_id": 701, "target_oid": self.target_oid,
             "issue": {"number": ISSUE, "url": f"https://github.com/{REPOSITORY}/issues/{ISSUE}",
                       "title": "[PM] Publisher subprocess fixture", "body": self.issue_body,
                       "state": "open", "updated_at": "2026-10-02T00:00:00Z",
@@ -572,8 +589,11 @@ class PublisherProcessTests(unittest.TestCase):
         return command
 
     def run_publisher(self, *, helper: Path | None = None,
-                      resume_action_id: str | None = None):
-        return subprocess.run(self.publisher_command(helper, resume_action_id), text=True,
+                      resume_action_id: str | None = None, human_reconcile=False):
+        command = self.publisher_command(helper, resume_action_id)
+        if human_reconcile:
+            command.extend(["--human-reconcile", "--maintenance-authority-comment-id", "9002"])
+        return subprocess.run(command, text=True,
                               capture_output=True, env=self.env, timeout=90)
 
     def old_745_helper(self) -> Path:
@@ -1003,6 +1023,159 @@ class PublisherProcessTests(unittest.TestCase):
         self._append_comment(9001, body)
         self._save_state()
         return "task-intent:" + current_publication["publication_id"]
+
+    def test_actual_publisher_transports_full_projection_to_workflow_materializer(self):
+        first = self.run_publisher()
+        self.assertEqual(0, first.returncode, first.stdout + first.stderr)
+        state = self._load_state()
+        workflow = (REPO_ROOT / '.github/workflows/rust.yml').read_text()
+        start = workflow.index('      - id: impact')
+        run = workflow.index('        run: |\n', start) + len('        run: |\n')
+        end = workflow.index('      - id: integration', run)
+        script = '\n'.join(line[10:] if line.startswith('          ') else line
+                           for line in workflow[run:end].splitlines())
+        runner = self.tmp / 'workflow-runner'
+        runner.mkdir()
+        output = runner / 'output'
+        materialized = subprocess.run(['bash', '-euo', 'pipefail', '-c', script],
+            cwd=self.task_root, env={**self.env, 'PR_BODY': state['pr']['body'],
+                'RUNNER_TEMP': str(runner), 'GITHUB_OUTPUT': str(output)},
+            text=True, capture_output=True)
+        self.assertEqual(0, materialized.returncode, materialized.stdout + materialized.stderr)
+        self.assertIn('enabled=true', output.read_text(),
+                      'actual publisher C1 body must transport verified full projection DATA')
+        self.assertEqual(json.loads(self.projection_path.read_text()),
+                         json.loads((runner / 'impact-projection.json').read_text()))
+
+    def seed_human_maintenance_authority(self):
+        maintenance = load_module('fixture_maintenance', HERE / 'workflow_maintenance.py')
+        self.state = self._load_state()
+        self.state['collaborator_permission'] = 'admin'
+        scope = dict(repository=REPOSITORY, task_uid=UID, issue_number=ISSUE, pr_number=PR,
+                     purpose='candidate-tool-verification',
+                     allowed_write_paths=['scripts/pm/pr_projection_publication.py',
+                         'scripts/pm/pr_projection_publish.py', 'scripts/pm/github-project-task.py'] + self.changed_paths,
+                     allowed_tool_paths=list(dict.fromkeys(list(maintenance.TOOL_PATHS) + [
+                         'scripts/pm/github-project-task.py', 'scripts/pm/pr_projection_publish.py',
+                         'scripts/pm/pr_projection_record_pr.py', 'scripts/pm/github-project-sync.py',
+                         'scripts/pm/github_api.py', 'scripts/pm/task_complete_claim.py',
+                         'scripts/pm/workflow-durable-store.py', 'scripts/pm/pr_projection_transition.py'])))
+        self._append_comment(9002, maintenance.MARKER + '\n```json\n' + json.dumps(scope) + '\n```')
+        self._save_state()
+
+    def test_human_completed_vector_replay_needs_no_fabricated_recovery_admission(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        interrupted = self.run_publisher()
+        self.assertNotEqual(0, interrupted.returncode)
+        live = self._load_state()
+        self.assertEqual(PR, self._task_state(live)['pr_number'])
+        self.assertEqual('verification', live['project_values']['Workflow Phase'])
+        self.assertEqual('', live['project_values']['PR'])
+        # Human completed the exact missing owned field; fresh reads still verify it.
+        live['project_values']['PR'] = PR_URL
+        self.state = live
+        self._save_state()
+        self.seed_human_maintenance_authority()
+        mutations = list(live['mutations'])
+        journal_path = next((self.repo / ".git/oasis7/pr-publication").glob("*/*/journal.json"))
+        old_journal = journal_path.read_bytes()
+        retried = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, retried.returncode, retried.stdout + retried.stderr)
+        self.assertEqual(old_journal, journal_path.read_bytes(), "human observation preserves original uncertain journal")
+        final = self._load_state()
+        self.assertEqual(mutations, [event for event in final['mutations']
+                         if event['kind'] not in ('comment:binding', 'comment:evidence')],
+                         'completed remote metadata must not be rewritten')
+        self.assertEqual(1, len(self._effects('comment:binding', final)))
+        self.assertEqual(1, len(self._effects('comment:evidence', final)))
+        self.assertEqual(PR_URL, final['project_values']['PR'])
+        self.assertEqual(PR, self._task_state(final)['pr_number'])
+        again = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, again.returncode, again.stdout + again.stderr)
+        self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_reconcile_writes_only_missing_project_pr_once(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        interrupted = self.run_publisher()
+        self.assertNotEqual(0, interrupted.returncode)
+        self.seed_human_maintenance_authority()
+        before = self._load_state()
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal_path.read_bytes()
+        recovered = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, recovered.returncode, recovered.stdout + recovered.stderr)
+        final = self._load_state()
+        self.assertEqual(PR_URL, final['project_values']['PR'])
+        self.assertEqual(len(self._effects('issue:body', before)), len(self._effects('issue:body', final)))
+        self.assertEqual(len(self._effects('project:Workflow Phase', before)),
+                         len(self._effects('project:Workflow Phase', final)))
+        self.assertEqual(1, len(self._effects('project:PR', final)))
+        self.assertEqual(old_journal, journal_path.read_bytes())
+        again = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, again.returncode, again.stdout + again.stderr)
+        self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_reconcile_rejects_permission_hold_and_conflicting_vector_without_writes(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        baseline = self._load_state()
+        mutations = list(baseline['mutations'])
+        # Restore the unchanged server baseline per case; rejected calls may add read logs only.
+        for case in ('permission', 'hold', 'conflicting_pr', 'incomplete_readback'):
+            self.state = json.loads(json.dumps(baseline))
+            if case == 'permission': self.state['collaborator_permission'] = 'write'
+            elif case == 'hold':
+                self.state['issue']['body'] += '\n- merge_hold_active: `true`\n'
+            elif case == 'conflicting_pr': self.state['project_values']['PR'] = PR_URL + '0'
+            else: self.state['faults']['project-fields-incomplete'] = True
+            self._save_state()
+            result = self.run_publisher(human_reconcile=True)
+            with self.subTest(case=case):
+                self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+                self.assertEqual(mutations, self._load_state()['mutations'])
+
+    def test_human_reconcile_accepts_live_target_advance_preserving_historical_c1_authority(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        before = self._load_state()
+        c1_before = [c['body'] for c in before['comments']
+                     if '<!-- oasis7-ci-publication/v1 -->' in c['body']]
+        self.assertEqual(1, len(c1_before))
+        subject = publication_api.parse_publication_comment(c1_before[0])
+        self.assertEqual(self.target_oid, subject['planner_authority_oid'])
+        self.assertEqual(self.source_head, subject['source_head_oid'])
+        historical_config = git(self.repo, 'show',
+            self.target_oid + ':scripts/ci-required-scope.v2.json')
+        # Actual protected main advances independently of the exact source subject.
+        (self.repo / 'doc/main-advance.md').write_text('independent protected target change\n')
+        git(self.repo, 'add', 'doc/main-advance.md')
+        git(self.repo, 'commit', '-m', 'advance protected target independently')
+        advanced_target = git(self.repo, 'rev-parse', 'HEAD')
+        self.assertNotEqual(self.target_oid, advanced_target)
+        self.assertEqual(historical_config, git(self.repo, 'show',
+            advanced_target + ':scripts/ci-required-scope.v2.json'))
+        before['target_oid'] = advanced_target
+        before['pr']['base']['sha'] = advanced_target
+        self.state = before
+        self._save_state()
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        journal_before = journal_path.read_bytes()
+        result = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        final = self._load_state()
+        self.assertEqual(c1_before, [c['body'] for c in final['comments']
+                                   if '<!-- oasis7-ci-publication/v1 -->' in c['body']])
+        self.assertEqual(self.source_head, final['pr']['head']['sha'])
+        self.assertEqual(advanced_target, final['pr']['base']['sha'])
+        self.assertEqual(PR_URL, final['project_values']['PR'])
+        self.assertEqual(journal_before, journal_path.read_bytes())
+        self.assertEqual(1, len(self._effects('project:PR', final)))
 
     def test_real_publisher_and_record_pr_complete_then_noop_retry(self):
         first = self.run_publisher()

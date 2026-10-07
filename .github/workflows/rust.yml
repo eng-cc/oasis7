@@ -118,13 +118,34 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           python3 -I - <<'PY'
-          import base64, os, pathlib, re
+          import base64, hashlib, json, os, pathlib, re
           matches=re.findall(r'<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+|missing) -->',os.environ.get('PR_BODY',''))
           if len(matches)>1:
               raise SystemExit('pull request has duplicate workflow impact projection markers')
           enabled=bool(matches and matches[0]!='missing')
           if enabled:
-              pathlib.Path(os.environ['RUNNER_TEMP'],'impact-projection.json').write_bytes(base64.b64decode(matches[0],validate=True))
+              raw=base64.b64decode(matches[0],validate=True)
+              if len(raw)>32768: raise SystemExit('full projection exceeds 32KiB')
+              def unique(pairs):
+                  value={}
+                  for key,item in pairs:
+                      if key in value: raise ValueError('duplicate projection key')
+                      value[key]=item
+                  return value
+              projection=json.loads(raw,object_pairs_hook=unique)
+              body=os.environ.get('PR_BODY','')
+              marker='<!-- oasis7-ci-impact-publication:v2 -->'
+              if marker in body:
+                  if body.count(marker)!=1: raise SystemExit('duplicate C1 marker')
+                  contract=json.loads(body.split(marker,1)[1].strip(),object_pairs_hook=unique)
+                  if set(contract)!={'schema','revision','task_uid','source_head_oid','scope_base_oid','projection_digest','clauses','contract_digest'} or contract.get('schema')!='oasis7-ci-impact-publication/v2': raise SystemExit('unsupported C1 contract')
+                  digest=lambda value:'sha256:'+hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+                  if contract.get('contract_digest')!=digest({k:v for k,v in contract.items() if k!='contract_digest'}): raise SystemExit('C1 digest mismatch')
+                  if projection.get('projection_digest')!=digest({k:v for k,v in projection.items() if k!='projection_digest'}): raise SystemExit('projection digest mismatch')
+                  if any(projection.get(k)!=contract.get(k) for k in ('task_uid','source_head_oid','scope_base_oid','projection_digest')): raise SystemExit('full projection/C1 mismatch')
+              pathlib.Path(os.environ['RUNNER_TEMP'],'impact-projection.json').write_bytes(raw)
+          elif '<!-- oasis7-ci-impact-publication:v2 -->' in os.environ.get('PR_BODY',''):
+              raise SystemExit('C1 projection requires its complete data carrier')
           with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
               output.write(f'enabled={str(enabled).lower()}\n')
           PY
@@ -215,6 +236,7 @@ jobs:
       - id: scope
         name: Plan required gate scope
         env:
+          GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           base_ref=""
@@ -243,10 +265,30 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then
             authority_dir="${RUNNER_TEMP}/required-base-authority"
             mkdir -p "${authority_dir}/pm"
-            git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
+            tool_ref="${base_ref}"
+            git show "${head_ref}:scripts/pm/workflow_maintenance.py" >"${RUNNER_TEMP}/workflow_maintenance.py" 2>/dev/null || true
+            if [[ -s "${RUNNER_TEMP}/workflow_maintenance.py" ]]; then
+              maintenance_id="$(python3 -I - "${RUNNER_TEMP}" "${head_ref}" "${scope_base_oid}" <<'PY'
+          import importlib.util,json,os,pathlib,subprocess,sys
+          spec=importlib.util.spec_from_file_location('workflow_maintenance',pathlib.Path(sys.argv[1])/'workflow_maintenance.py')
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          locator=module.maintenance_comment_id(os.environ.get('PR_BODY',''))
+          if locator is not None:
+              event=json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+              pr=event['pull_request'];uid=__import__('re').findall(r'^Task: (task_[0-9a-f]{32})$',pr['body'],__import__('re').M)
+              if len(uid)!=1: raise SystemExit('maintenance Task line is invalid')
+              changed=subprocess.check_output(['git','diff','--name-only',sys.argv[3],sys.argv[2]],text=True).splitlines()
+              module.read_maintenance_authority(os.environ['GITHUB_REPOSITORY'],locator,uid[0],pr['number'],sys.argv[2],changed,module.TOOL_PATHS)
+              with open(os.environ['GITHUB_OUTPUT'],'a') as output: output.write(f'maintenance_authority_comment_id={locator}\n')
+              print(locator)
+          PY
+              )"
+              if [[ -n "${maintenance_id}" ]]; then tool_ref="${head_ref}"; fi
+            fi
+            git show "${tool_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
             git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
             git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
-            git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
+            git show "${tool_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
             if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
               task_uid="$(python3 - <<'PY'
@@ -322,11 +364,17 @@ jobs:
                 --planner-digest "${{ steps.scope.outputs.planner_digest }}"
                 --projection-digest "${{ steps.scope.outputs.impact_projection_digest }}"
               )
-              if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci.py"; then
+              tool_ref="${base_ref}"
+              maintenance_args=()
+              if [[ -n '${{ steps.scope.outputs.maintenance_authority_comment_id }}' ]]; then
+                tool_ref="${head_ref}"
+                maintenance_args=(--maintenance-authority-comment-id '${{ steps.scope.outputs.maintenance_authority_comment_id }}')
+              fi
+              if git show "${tool_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci.py"; then
                 if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --help 2>&1 | grep -Fq -- '--phase'; then
                   python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --phase start --repository "${{ github.repository }}" \
                     --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
-                    --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+                    --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" "${maintenance_args[@]}"
                 else
                   python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --repository "${{ github.repository }}" \
                     --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
@@ -936,16 +984,22 @@ jobs:
             --planner-digest "${{ steps.scope.outputs.planner_digest }}"
             --projection-digest "${{ steps.scope.outputs.impact_projection_digest }}"
           )
-          if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci-final.py"; then
+          tool_ref="${base_ref}"
+          maintenance_args=()
+          if [[ -n '${{ steps.scope.outputs.maintenance_authority_comment_id }}' ]]; then
+            tool_ref="${head_ref}"
+            maintenance_args=(--maintenance-authority-comment-id '${{ steps.scope.outputs.maintenance_authority_comment_id }}')
+          fi
+          if git show "${tool_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci-final.py"; then
             if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --help 2>&1 | grep -Fq -- '--phase'; then
               if [[ "${{ steps.loop-ci-admission.outputs.start_only }}" == "true" ]]; then
                 python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed --start-only \
                   --repository "${{ github.repository }}" --pr-number "${pr_number}" \
-                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" "${maintenance_args[@]}"
               else
                 python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed \
                   --repository "${{ github.repository }}" --pr-number "${pr_number}" \
-                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" "${maintenance_args[@]}"
               fi
             else
               python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" \

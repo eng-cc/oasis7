@@ -867,6 +867,60 @@ class GitHubPublicationAdapter:
             "required_fields": sorted(required),
         }
 
+    def human_reconcile_requested(self) -> bool:
+        return bool(getattr(self.args, "human_reconcile", False))
+
+    def human_reconcile_pr_number(self, value: dict[str, Any]) -> int:
+        live = self.read_task_pr_binding(value["task_uid"])
+        number = live.get("pr_number")
+        if type(number) is not int or number < 1:
+            raise RuntimeError("human existing Task PR binding is incomplete")
+        pr = self.read_pr(number)
+        if (pr.get("head_oid") != value["source_head_oid"]
+                or pr.get("source_ref") != value["source_ref"]
+                or pr.get("target_ref") != value["target_ref"]
+                or pr.get("repository") != value["repository"]
+                or pr.get("state") != "open" or pr.get("merged") is not False
+                or pr.get("draft") is not True):
+            raise RuntimeError("human existing PR differs from exact subject")
+        return number
+
+    def human_reconcile_record_pr(self, value: dict[str, Any], number: int, *,
+                                  expected_draft: bool = True) -> dict[str, Any]:
+        import workflow_maintenance as maintenance
+        if not self.human_reconcile_requested() or expected_draft is not True:
+            raise RuntimeError("human reconciliation requires explicit draft mode")
+        locator = getattr(self.args, "maintenance_authority_comment_id", None)
+        maintenance.read_maintenance_authority(
+            self.args.repo, locator, value["task_uid"], number, value["source_head_oid"],
+            required_tool_paths=("scripts/pm/pr_projection_publish.py", "scripts/pm/github-project-task.py",
+                                 "scripts/pm/pr_projection_record_pr.py", "scripts/pm/workflow_maintenance.py"))
+        expected_helper = (self.root / "scripts/pm/github-project-task.py").resolve()
+        if self.task_helper != expected_helper or (self.root / "scripts/pm/github-project-task.py").is_symlink():
+            raise RuntimeError("human reconciliation requires exact canonical candidate helper")
+        execution_head = git(self.root, "rev-parse", "HEAD")
+        if self.task_helper.read_bytes() != subprocess.check_output([
+                "git", "-C", str(self.root), "show", f"{execution_head}:scripts/pm/github-project-task.py"]):
+            raise RuntimeError("human child helper bytes are not immutable")
+        url = f"https://github.com/{self.args.repo}/pull/{number}"
+        binding = publication.build_publication_binding(value, number, url)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            json.dump(binding, handle)
+            path = Path(handle.name)
+        try:
+            output = command_output([
+                sys.executable, str(self.task_helper), "record-pr", str(self.root),
+                "--repo", self.args.repo, "--task-uid", value["task_uid"],
+                "--pr-url", url, "--role", "tpm", "--draft-candidate",
+                "--publication-binding-json", str(path), "--human-reconcile",
+                "--maintenance-authority-comment-id", str(locator), "--json"], timeout=180)
+            result = json.loads(output)
+            if result.get("status") != "human_reconciled" or result.get("publication_binding") != binding:
+                raise RuntimeError("human child reconciliation did not confirm exact binding")
+        finally:
+            path.unlink(missing_ok=True)
+        return binding
+
     def require_record_pr_recovery_admission(self) -> None:
         """Require a unique live recovery marker before retrying record-pr."""
         if not self.task_helper.is_file():
@@ -1052,8 +1106,55 @@ def _prior_create_push_lease(journal: pr_projection_journal.PublicationJournal,
         return lease_oid
 
 
+def publish_human_reconciliation(root: Path, args: argparse.Namespace) -> dict[str, Any]:
+    """Reconcile an existing authentic subject; never push or create a PR."""
+    locator = getattr(args, "maintenance_authority_comment_id", None)
+    if type(locator) is not int or locator < 1:
+        raise PublishInputError("human reconciliation requires maintenance authority")
+    record = mapping_identity(root, args.task_uid, args.repo, args.issue_number,
+                              args.source_ref, args.target_ref)
+    number = record.get("pr_number")
+    if type(number) is not int or number < 1:
+        issue = json.loads(command_output(["gh", "api", f"repos/{args.repo}/issues/{args.issue_number}"]))
+        fields = re.findall(r"(?m)^- pr_number: `([1-9][0-9]*)`$", str(issue.get("body") or ""))
+        if len(fields) != 1:
+            raise PublishInputError("human existing PR binding is missing or ambiguous")
+        number = int(fields[0])
+    pr = json.loads(command_output(["gh", "api", f"repos/{args.repo}/pulls/{number}"]))
+    pages = json.loads(command_output(["gh", "api", "--paginate", "--slurp",
+        f"repos/{args.repo}/issues/{args.issue_number}/comments?per_page=100"]))
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise PublishInputError("human Task comment pagination is incomplete")
+    matches = []
+    for comment in (item for page in pages for item in page):
+        body = str(comment.get("body") or "")
+        if "<!-- oasis7-ci-publication/v1 -->" in body:
+            value = publication.parse_publication_comment(body)
+            if (value["task_uid"] == args.task_uid and value["source_head_oid"] == pr.get("head", {}).get("sha")
+                    and value["source_ref"] == args.source_ref and value["target_ref"] == args.target_ref):
+                matches.append(value)
+    if len(matches) != 1:
+        raise PublishInputError("human exact existing C1 subject is missing or ambiguous")
+    subject = matches[0]
+    adapter = GitHubPublicationAdapter(root, args, subject)
+    adapter.pr_number = number
+    binding = adapter.human_reconcile_record_pr(subject, number)
+    completed = publication._completed_record_binding(adapter, subject, number, True)
+    if completed != binding:
+        raise PublishInputError("human complete final publication binding is pending")
+    return {"status": "human_reconciled", "pr_number": number,
+            "pr_url": binding["pr_url"], "publication_id": subject["publication_id"],
+            "subject_head_oid": subject["source_head_oid"],
+            "tool_head_oid": git(root, "rev-parse", "HEAD"),
+            "historical_journal_unchanged": True}
+
+
 def publish(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.worktree).resolve(strict=True)
+    if bool(getattr(args, "human_reconcile", False)):
+        return publish_human_reconciliation(root, args)
+    if any(not getattr(args, key, None) for key in ("source_head", "target_oid", "projection", "body_file")):
+        raise PublishInputError("ordinary publication requires frozen head, target, projection and body")
     candidate, projection_value = task_publication(root, args)
     adapter = GitHubPublicationAdapter(root, args, candidate)
     journal = pr_projection_journal.open_journal(
@@ -1129,14 +1230,16 @@ def main() -> int:
     parser.add_argument("--remote", required=True)
     parser.add_argument("--source-ref", required=True)
     parser.add_argument("--target-ref", required=True)
-    parser.add_argument("--source-head", required=True)
-    parser.add_argument("--target-oid", required=True)
-    parser.add_argument("--projection", required=True)
-    parser.add_argument("--body-file", required=True)
+    parser.add_argument("--source-head")
+    parser.add_argument("--target-oid")
+    parser.add_argument("--projection")
+    parser.add_argument("--body-file")
     parser.add_argument("--task-helper", required=True)
     parser.add_argument("--title", default="")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--existing-ready-update", action="store_true")
+    parser.add_argument("--human-reconcile", action="store_true")
+    parser.add_argument("--maintenance-authority-comment-id", type=int)
     parser.add_argument("--resume-action-id", default=None,
                         help="resume only the exact persisted Task publication action")
     args = parser.parse_args()

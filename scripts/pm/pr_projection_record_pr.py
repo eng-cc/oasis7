@@ -314,3 +314,68 @@ def reconcile_record_pr_vector(
     }, phase="METADATA_CONFIRMED")
     return {"status": "complete", "sequence": final["sequence"],
             "task": issue_target, "project": project_target}
+
+
+def reconcile_human_record_pr_vector(*, task_uid: str, pr_number: int, pr_url: str,
+                                     read_live: Callable[[], dict[str, Any]],
+                                     write_issue: Callable[[dict[str, Any]], None],
+                                     write_project_field: Callable[[str, str], None],
+                                     before_write: Callable[[], None]) -> dict[str, Any]:
+    """Complete only missing approved scalar values without touching old journals."""
+    task_target = {"status": "committed", "workflow_phase": "verification",
+                   "pr_number": pr_number, "pr_url": pr_url}
+    project_target = {"task_uid": task_uid, "status": "In Progress",
+                      "pm_status": "committed", "workflow_phase": "verification", "pr": pr_url}
+    initial = read_live()
+
+    def validate(state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        task, project = _vectors(state)
+        if set(task) != set(task_target) or set(project) != set(project_target):
+            raise RecordPRConflict("human reconciliation vector fields differ")
+        for key, value in task_target.items():
+            permitted = (value, None, "") if key.startswith("pr_") else ((value, "execution") if key == "workflow_phase" else (value,))
+            if task.get(key) not in permitted:
+                raise RecordPRConflict("human reconciliation Task field conflicts: " + key)
+        for key, value in project_target.items():
+            permitted = (value, "", None) if key == "pr" else ((value, "execution") if key == "workflow_phase" else (value,))
+            if project.get(key) not in permitted:
+                raise RecordPRConflict("human reconciliation Project field conflicts: " + key)
+        return task, project
+
+    task, project = validate(initial)
+    writes = []
+    if task != task_target:
+        before_write()
+        validate(read_live())
+        try:
+            write_issue(task_target)
+        except Exception as exc:
+            task, project = validate(read_live())
+            if task != task_target:
+                raise RecordPRPending("human Task write outcome is uncertain") from exc
+        task, project = validate(read_live())
+        if task != task_target:
+            raise RecordPRPending("human Task write exact readback is pending")
+        writes.append("issue")
+    for key, field in (("workflow_phase", "Workflow Phase"), ("pr", "PR")):
+        task, project = validate(read_live())
+        if project[key] != project_target[key]:
+            before_write()
+            task, project = validate(read_live())
+            if project[key] == project_target[key]:
+                continue
+            try:
+                write_project_field(field, project_target[key])
+            except Exception as exc:
+                task, project = validate(read_live())
+                if project[key] != project_target[key]:
+                    raise RecordPRPending("human Project write outcome is uncertain: " + field) from exc
+            task, project = validate(read_live())
+            if project[key] != project_target[key]:
+                raise RecordPRPending("human Project write exact readback is pending: " + field)
+            writes.append(field)
+    final = read_live()
+    task, project = validate(final)
+    if task != task_target or project != project_target:
+        raise RecordPRPending("human final complete vector readback is pending")
+    return {"initial": initial, "final": final, "writes": writes}
