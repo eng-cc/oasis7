@@ -13,9 +13,9 @@ class ReviewRoleSelectorTests(unittest.TestCase):
         self.assertEqual(0 if ok else 2, result.returncode, result.stderr)
         return json.loads(result.stdout) if ok else result.stderr
 
-    def test_mechanical_docs_use_health_only_and_workflow_docs_add_qa(self):
+    def test_mechanical_docs_and_workflow_docs_include_health_and_qa(self):
         self.assertEqual(
-            ["repository_health_engineer"],
+            ["repository_health_engineer", "qa_engineer"],
             self.select("--change-class", "mechanical-doc")["roles"],
         )
         self.assertEqual(

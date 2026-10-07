@@ -1,8 +1,9 @@
-"""Effective ingress regression: candidate wrappers cannot replace base checks."""
+"""Effective ingress regression: ordinary PR wrappers retain trusted base checks."""
 from pathlib import Path
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,34 @@ class IngressTests(unittest.TestCase):
         end = workflow.index(end_marker, run)
         lines = workflow[run:end].splitlines()
         return "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
+
+    def test_current_target_source_ci_executes_protected_q_driver_on_actual_checkout(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / '.github/workflows/rust.yml').read_text()
+        script = self.workflow_run_body(workflow, '      - name: Run required test tier',
+            '      - name: Verify final task and PR binding before required-gate success')
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture=Path(tmp); repo=fixture/'repo'; repo.mkdir()
+            def git(*args): return subprocess.check_output(['git','-C',str(repo),*args],text=True).strip()
+            git('init','-q','-b','main');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid')
+            driver=repo/'scripts/ci-tests.sh';driver.parent.mkdir()
+            driver.write_text('#!/bin/bash\nprintf "protected-Q:%s" "$*" > "$OBSERVED"\n')
+            driver.chmod(0o755)
+            git('add','.');git('commit','-qm','protected Q driver');q=git('rev-parse','HEAD')
+            driver.write_text('#!/bin/bash\nprintf "candidate-H:%s" "$*" > "$OBSERVED"\n')
+            git('add','.');git('commit','-qm','candidate H');h=git('rev-parse','HEAD')
+            runner=fixture/'runner';runner.mkdir();(runner/'impact-projection.json').write_text('{}')
+            observed=fixture/'observed'
+            import re
+            script=re.sub(r'\$\{\{[^}]+\}\}', q, script)
+            env={**os.environ,'GITHUB_EVENT_NAME':'pull_request','INTEGRATION_MODE':'',
+                 'GITHUB_WORKSPACE':str(repo),'RUNNER_TEMP':str(runner),'OBSERVED':str(observed),
+                 'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_PRODUCT_DOC_BASE':q,'OASIS7_PRODUCT_DOC_HEAD':h,
+                 'CURRENT_TARGET_OID':q,'GITHUB_SHA':h}
+            result=subprocess.run(['bash','-euo','pipefail','-c',script],cwd=repo,env=env,text=True,capture_output=True)
+            self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+            self.assertTrue(observed.read_text().startswith('protected-Q:'),observed.read_text())
+            self.assertIn('--repo-root '+str(repo),observed.read_text())
 
     def run_trusted_helper_route(self, phase_helper: bool, *, final: bool = False):
         root = Path(__file__).resolve().parents[2]
@@ -88,6 +117,7 @@ class IngressTests(unittest.TestCase):
                 '${{ github.event.pull_request.number || inputs.pr_number }}': '2',
                 '${{ steps.loop-ci-admission.outputs.start_only }}': 'true',
                 '${{ steps.scope.outputs.source_scope_base }}': base,
+                '${{ steps.scope.outputs.maintenance_authority_comment_id }}': '',
                 '${{ steps.scope.outputs.planner_config_sha256 }}': 'sha256:' + '0' * 64,
                 '${{ steps.scope.outputs.planner_digest }}': 'sha256:' + '1' * 64,
                 '${{ steps.scope.outputs.impact_projection_digest }}': 'sha256:' + '2' * 64,
@@ -105,8 +135,13 @@ class IngressTests(unittest.TestCase):
             })
             (fixture / 'runner').mkdir()
             (fixture / 'github-output').write_text('', encoding='utf-8')
+            # Extracted hosted workflow uses modern Ubuntu Bash; prefer installed
+            # Homebrew Bash over macOS system Bash 3.2 for this shell fixture.
+            workflow_bash = '/opt/homebrew/bin/bash' if (
+                sys.platform == 'darwin' and Path('/opt/homebrew/bin/bash').is_file()
+            ) else (shutil.which('bash') or 'bash')
             completed = subprocess.run(
-                ['bash', '-euo', 'pipefail', '-c', script], cwd=repo,
+                [workflow_bash, '-euo', 'pipefail', '-c', script], cwd=repo,
                 env=environment, text=True, capture_output=True,
             )
             self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
@@ -118,7 +153,8 @@ class IngressTests(unittest.TestCase):
     def test_workflow_selects_base_script_and_candidate_stub_is_ignored(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / '.github/workflows/rust.yml').read_text()
-        self.assertIn('git show "${base_ref}:scripts/pm/loop-ci.py"', workflow)
+        self.assertIn('tool_ref="${base_ref}"', workflow)
+        self.assertIn('git show "${tool_ref}:scripts/pm/loop-ci.py"', workflow)
         self.assertNotIn('python3 scripts/pm/loop-ci.py', workflow)
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
@@ -148,7 +184,8 @@ class IngressTests(unittest.TestCase):
         self.assertLess(tests, final)
         self.assertLess(final, uploads)
         final_step = workflow[final:uploads]
-        self.assertIn('git show "${base_ref}:scripts/pm/loop-ci.py"', final_step)
+        self.assertIn('tool_ref="${base_ref}"', final_step)
+        self.assertIn('git show "${tool_ref}:scripts/pm/loop-ci.py"', final_step)
         self.assertIn('--phase final --tests-passed', final_step)
         self.assertIn("if python3 -I \"${RUNNER_TEMP}/oasis7-loop-ci-final.py\" --help 2>&1 | grep -Fq -- '--phase'; then", final_step)
         self.assertNotIn('continue-on-error', final_step)
@@ -159,7 +196,8 @@ class IngressTests(unittest.TestCase):
         workflow = (root / '.github/workflows/rust.yml').read_text()
         validation = workflow[workflow.index('      - id: loop-ci-admission'):]
         validation = validation[:validation.index('      - name: Report planned scope')]
-        self.assertIn('git show "${base_ref}:scripts/pm/loop-ci.py"', validation)
+        self.assertIn('tool_ref="${base_ref}"', validation)
+        self.assertIn('git show "${tool_ref}:scripts/pm/loop-ci.py"', validation)
         self.assertIn("if python3 -I \"${RUNNER_TEMP}/oasis7-loop-ci.py\" --help 2>&1 | grep -Fq -- '--phase'; then", validation)
         self.assertIn('python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --phase start', validation)
         self.assertNotIn('python3 scripts/pm/loop-ci.py', validation)
@@ -222,5 +260,18 @@ class IngressTests(unittest.TestCase):
             for body in ['old '+uid,'task_uid: task_'+'b'*32+'\nold '+uid,'task_uid: '+uid+'\ntask_uid: '+uid,'task_uid: '+uid]:
                 with self.subTest(body=body),patch.object(sys,'argv',['gate','--root',str(root),'--task-uid',uid,'--base','base','--head','head']),patch.object(module,'run',side_effect=[json.dumps({'body':body}),'[]']),redirect_stdout(io.StringIO()):
                     self.assertEqual(module.main(),0 if body=='task_uid: '+uid else 2)
+
+def load_tests(loader, tests, pattern):
+    """Include maintenance authority checks in the registered ingress test entrypoint."""
+    import importlib.util
+    path = Path(__file__).with_name('workflow_maintenance.test.py')
+    spec = importlib.util.spec_from_file_location('workflow_maintenance_ingress_tests', path)
+    if spec is None or spec.loader is None:
+        raise ImportError('maintenance authority test loader is unavailable')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    tests.addTests(loader.loadTestsFromModule(module))
+    return tests
+
 
 if __name__ == '__main__': unittest.main()

@@ -4,6 +4,7 @@ import copy
 import hashlib
 import unittest
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -113,6 +114,51 @@ class TypedProjectReadbackRed(unittest.TestCase):
                 return {'data':{'repository':{'issue':{'projectItems':{'pageInfo':{'hasNextPage':False},'nodes':[item]}}}}}
             with self.subTest(item=item),patch.object(loop_terminal,'_json',side_effect=api),self.assertRaises(ValueError):
                 loop_terminal.read_live_project_item('fixture/repo',11)
+
+class ProjectRepositorySelection(unittest.TestCase):
+    def query_sensitive_reader(self, *args):
+        if args[0] == 'project':
+            return {'id': 'P'}
+        query = next(value.removeprefix('query=') for value in args
+                     if value.startswith('query='))
+        # GraphQL returns no selected fields for an unmatched union member.
+        # This models the actual Repository node that the old query returned as {}.
+        value = {}
+        if '__typename' in query:
+            value['__typename'] = 'ProjectV2ItemFieldRepositoryValue'
+        fragment = re.search(
+            r'\.\.\. on ProjectV2ItemFieldRepositoryValue\s*\{(.*?)\n\s*\}',
+            query, re.S)
+        if fragment:
+            selection = fragment.group(1)
+            if re.search(r'repository\s*\{\s*id\s+nameWithOwner\s*\}', selection):
+                value['repository'] = {'id': 'R_fixture', 'nameWithOwner': 'fixture/repo'}
+            if re.search(r'ProjectV2FieldCommon\s*\{\s*id\s+name\s*\}', selection):
+                value['field'] = {'id': 'F_repository', 'name': 'Repository'}
+        item = copy.deepcopy(ITEM)
+        item['fieldValues']['nodes'] = [node for node in item['fieldValues']['nodes']
+                                       if node.get('field', {}).get('name') != 'Repository']
+        item['fieldValues']['nodes'].insert(0, value)
+        return {'data': {'repository': {'issue': {'projectItems': {
+            'pageInfo': {'hasNextPage': False}, 'nodes': [item]}}}}}
+
+    def expected_repository(self):
+        return {'__typename': 'ProjectV2ItemFieldRepositoryValue',
+                'repository': {'id': 'R_fixture', 'nameWithOwner': 'fixture/repo'},
+                'field': {'id': 'F_repository', 'name': 'Repository'}}
+
+    def test_read_project_preserves_real_repository_field_identity(self):
+        with patch.object(loop_terminal, '_json', side_effect=self.query_sensitive_reader):
+            project = loop_terminal.read_project('fixture/repo', 11)
+        self.assertTrue(project['page_complete'])
+        self.assertEqual(self.expected_repository(),
+                         project['items'][0]['fieldValues']['nodes'][0])
+
+    def test_read_live_project_item_preserves_real_repository_field_identity(self):
+        with patch.object(loop_terminal, '_json', side_effect=self.query_sensitive_reader):
+            item = loop_terminal.read_live_project_item('fixture/repo', 11)
+        self.assertEqual(self.expected_repository(), item['fieldValues']['nodes'][0])
+
 
 class TerminalDelivery(unittest.TestCase):
     def check(self,issue=None,project=None,comments=None,pr=None,receipts=None):

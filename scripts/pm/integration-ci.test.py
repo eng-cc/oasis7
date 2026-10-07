@@ -31,6 +31,8 @@ def required_test_tier_command(repo, scope_oid='b'*40):
   '${{ steps.scope.outputs.source_scope_base }}':scope_oid,
   '${{ steps.scope.outputs.head_oid }}':scope_oid,
   '${{ steps.scope.outputs.integration_base_oid }}':scope_oid,
+  '${{ steps.scope.outputs.maintenance_authority_comment_id }}':'',
+  '${{ steps.pr_target.outputs.oid }}':scope_oid,
   '${{ github.token }}':'fixture-token',
   '${{ inputs.task_uid }}':'task_'+'1'*32,
   '${{ inputs.pr_number }}':'7',
@@ -350,6 +352,8 @@ class IntegrationTests(unittest.TestCase):
   fixture_pr='1'
   substitutions=(
    ('${{ steps.scope.outputs.integration_base_oid }}',None),
+   ('${{ steps.scope.outputs.maintenance_authority_comment_id }}',''),
+   ('${{ steps.pr_target.outputs.oid }}',None),
    ('${{ github.token }}','fixture-token'),
    ('${{ inputs.task_uid }}',fixture_uid),
    ('${{ inputs.pr_number }}',fixture_pr),
@@ -1114,10 +1118,13 @@ class HistoricalTransportTests(unittest.TestCase):
   self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
   self.fixture_processes={}
 
- def fake(self,body):
+ def fake(self,body,*,shell=False):
   directory=tempfile.TemporaryDirectory();self.addCleanup(directory.cleanup)
   root=Path(directory.name);program=root/'gh.py';pid=root/'pid'
-  program.write_text('import os,sys,time\nfrom pathlib import Path\nPath(os.environ["TEST_HISTORICAL_PID"]).write_text(str(os.getpid()))\n'+body)
+  if shell:
+   program.write_text('printf \'%s\\n\' \"$$\" >\"$TEST_HISTORICAL_PID\"\n'+body)
+  else:
+   program.write_text('import os,sys,time\nfrom pathlib import Path\nPath(os.environ["TEST_HISTORICAL_PID"]).write_text(str(os.getpid()))\n'+body)
   script_bytes=program.read_bytes()
   self.assertFalse(pid.exists())
   real_popen=subprocess.Popen
@@ -1132,7 +1139,8 @@ class HistoricalTransportTests(unittest.TestCase):
     previous=int(pid.read_text());self.assertEqual(previous,records[-1]['pid'])
     with self.assertRaises(ProcessLookupError):os.kill(previous,0)
     pid.unlink()
-   launched=[sys.executable,'-S',str(program),*argv[1:]]
+   launched=(["/bin/sh",str(program),*argv[1:]] if shell else
+    [sys.executable,'-S',str(program),*argv[1:]])
    child=real_popen(launched,*args,**kwargs)
    self.assertNotIn(child.pid,[record['pid'] for record in records])
    record={'requested_argv':list(argv),'launched_argv':launched,'pid':child.pid,'kwargs':kwargs}
@@ -1195,7 +1203,9 @@ class HistoricalTransportTests(unittest.TestCase):
   self.assert_reaped(pid)
 
  def test_real_process_aggregate_deadline_bounds_multiple_reads(self):
-  environment,pid=self.fake('time.sleep(0.08);sys.stdout.write(\'{"ok":true}\')\n')
+  # A shell writes its PID immediately; Python interpreter startup is not
+  # the workload whose cumulative response delay this real-clock test bounds.
+  environment,pid=self.fake('/bin/sleep 0.08;printf \'{"ok":true}\'\n',shell=True)
   with environment,patch.object(self.api,'HISTORICAL_TOTAL_TIMEOUT_SECONDS',0.15,create=True):
    budget=self.api._HistoricalReadBudget()
    self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,budget)
@@ -2195,7 +2205,7 @@ class ProvenanceTests(unittest.TestCase):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
   required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
   mkdir='mkdir -p "${authority_dir}/pm"'
-  helper='git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"'
+  helper='git show "${tool_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"'
   planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
   self.assertIn(mkdir,required)
   self.assertIn(helper,required)
@@ -2212,9 +2222,18 @@ class ProvenanceTests(unittest.TestCase):
   self.assertTrue(pr_branch.startswith('          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then'))
   planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
   projection_guard='if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then'
-  self.assertIn('git show "${base_ref}:scripts/plan-rust-required-scope.py"',pr_branch)
+  default='tool_ref="${base_ref}"'
+  authorize='module.read_maintenance_authority('
+  candidate='if [[ -n "${maintenance_id}" ]]; then tool_ref="${head_ref}"; fi'
+  extraction='git show "${tool_ref}:scripts/plan-rust-required-scope.py"'
+  for assertion in (default,authorize,candidate,extraction):
+   self.assertIn(assertion,pr_branch)
+  self.assertLess(pr_branch.index(default),pr_branch.index(authorize))
+  self.assertLess(pr_branch.index(authorize),pr_branch.index(candidate))
+  self.assertLess(pr_branch.index(candidate),pr_branch.index(extraction))
   self.assertIn('git show "${base_ref}:scripts/ci-required-scope.v2.json"',pr_branch)
-  self.assertIn('git show "${base_ref}:scripts/pm/workflow-impact-projection.py"',pr_branch)
+  self.assertIn('git show "${base_ref}:scripts/ci-tests.sh"',pr_branch)
+  self.assertIn('git show "${tool_ref}:scripts/pm/workflow-impact-projection.py"',pr_branch)
   self.assertIn(planner,pr_branch)
   self.assertIn(projection_guard,pr_branch)
   self.assertLess(pr_branch.index(planner),pr_branch.index(projection_guard))

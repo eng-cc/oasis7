@@ -109,7 +109,10 @@ def read_project(repository, number):
             __typename
             ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
             ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
-            ... on ProjectV2ItemFieldRepositoryValue { repository { nameWithOwner } field { ... on ProjectV2FieldCommon { name } } }
+            ... on ProjectV2ItemFieldRepositoryValue {
+              repository { id nameWithOwner }
+              field { ... on ProjectV2FieldCommon { id name } }
+            }
           } }
         } }
       } }
@@ -177,7 +180,10 @@ def read_live_project_item(repository, issue_number):
             __typename
             ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
             ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
-            ... on ProjectV2ItemFieldRepositoryValue { repository { nameWithOwner } field { ... on ProjectV2FieldCommon { name } } }
+            ... on ProjectV2ItemFieldRepositoryValue {
+              repository { id nameWithOwner }
+              field { ... on ProjectV2FieldCommon { id name } }
+            }
           } }
         } }
       } }

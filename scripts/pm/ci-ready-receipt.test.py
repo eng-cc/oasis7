@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import base64, copy, hashlib, importlib.util, io, json, sys, tempfile, unittest, zipfile
+import base64, copy, hashlib, importlib.util, io, json, os, subprocess, sys, tempfile, unittest, zipfile
 from contextlib import redirect_stdout, ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -7,6 +7,7 @@ import integration_ci
 import integration_executor_contract as request_contract
 import ci_input_scope
 import ci_required_artifact_v2
+import workflow_maintenance
 from ci_reuse_validation_test_support import validation_only_artifacts
 
 P=Path(__file__).with_name("ci-ready-receipt.py")
@@ -206,6 +207,103 @@ class ReceiptTest(unittest.TestCase):
       if '/compare/' in path:return {'merge_base_commit':{'sha':'b'*40}}
       raise AssertionError(path)
     stack=ExitStack();stack.enter_context(patch.object(M,'gh',side_effect=read));stack.enter_context(patch.object(integration_ci,'gh',side_effect=read));return stack
+  def current_target_route_fixture(self, case=None):
+    with tempfile.TemporaryDirectory() as tmp:
+      root=Path(tmp)
+      def git(*args): return subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
+      git('init','-q','-b','main');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid')
+      for path,content in [('scripts/ci-required-scope.v2.json',(P.parents[1]/'ci-required-scope.v2.json').read_text()),
+                           ('scripts/ci-tests.sh','protected driver\n'),('.github/workflows/rust.yml','name: Rust\n')]:
+        file=root/path;file.parent.mkdir(parents=True,exist_ok=True);file.write_text(content)
+      git('add','.');git('commit','-qm','protected Q');q=git('rev-parse','HEAD')
+      (root/'candidate.txt').write_text('candidate workload\n');git('add','.');git('commit','-qm','source H');h=git('rev-parse','HEAD')
+      tree=git('rev-parse','HEAD^{tree}');e=git('commit-tree',tree,'-p',q,'-p',h,'-m','actual PR checkout E')
+      self.assertEqual(tree,git('merge-tree','--write-tree',q,h));self.assertEqual(q+' '+h,git('show','-s','--format=%P',e))
+      proof=dict(schema='oasis7-current-target-pr/v1',repository='eng-cc/oasis7',task_uid=UID,
+        task_issue_number=1,pr_number=7,source_head_oid=h,current_target_oid=q,checkout_oid=e,
+        tested_tree_oid=tree,checkout_parent_oids=[q,h],workflow_revision=e,
+        workflow_run_id=12345,workflow_run_attempt=2,maintenance_authority_comment_id=700,
+        planner_config_sha256=hashlib.sha256((root/'scripts/ci-required-scope.v2.json').read_bytes()).hexdigest(),
+        test_driver_sha256=hashlib.sha256((root/'scripts/ci-tests.sh').read_bytes()).hexdigest())
+      planner=plan();planner.update(scope='full',selected_capabilities=';'.join(sorted(json.loads((root/'scripts/ci-required-scope.v2.json').read_text())['capabilities'])),impact_projection_test_profile='full',planner_config_sha256='sha256:'+proof['planner_config_sha256'])
+      planner.update({k:'true' for k in M.RUN_FIELDS})
+      planner.update(impact_projection_schema='oasis7-workflow-impact-projection/v2',impact_projection_digest='sha256:'+'1'*64,impact_projection_status='verified',test_profile='full',declared_tests='required-gate',planner_digest='sha256:'+'2'*64)
+      payload=envelope(head_oid=h,base_oid=q,planner=planner);payload['current_target_proof']=proof
+      check=null_summary_run();check.update(head_sha=h,pull_requests=[{'number':7,'base':{'sha':q},'head':{'sha':h}}])
+      pull=pr();pull.update(number=7,html_url='https://github.com/eng-cc/oasis7/pull/7',user={'login':'owner','type':'User'})
+      pull['head']={'sha':h,'ref':'task/current-target','repo':{'full_name':'eng-cc/oasis7'}}
+      pull['base']={'sha':q,'ref':'main','repo':{'full_name':'eng-cc/oasis7'}}
+      pull['body']+='\nWorkflow Maintenance Authority: 700\n'
+      scope=dict(repository='eng-cc/oasis7',task_uid=UID,issue_number=1,pr_number=7,purpose='candidate-tool-verification',
+        allowed_write_paths=['candidate.txt','.github/workflows/rust.yml','scripts/pm/ci-ready-receipt.py','scripts/pm/ci_ready_receipt_identity.py'],allowed_tool_paths=['scripts/pm/ci-ready-receipt.py','scripts/pm/ci_ready_receipt_identity.py'])
+      comment=dict(id=700,body='Workflow Maintenance Authority:\n```json\n'+json.dumps(scope)+'\n```',
+        issue_url='https://api.github.com/repos/eng-cc/oasis7/issues/1',html_url='https://github.com/eng-cc/oasis7/issues/1#issuecomment-700',
+        created_at='2026-09-25T09:00:00Z',updated_at='2026-09-25T09:00:00Z',user={'login':'owner','type':'User'})
+      children=[action_job(9101,M.WINDOWS_ROLLOUT_JOB,'windows-2022',head_sha=e),
+                action_job(9102,M.MACOS_PACKAGE_JOB,'ubuntu-24.04',head_sha=e),
+                *(action_job(9110+i,f'{M.FLEET_HEALTH_JOB} ({runner})',runner,head_sha=e)
+                  for i,runner in enumerate(M.FLEET_HEALTH_RUNNERS))]
+      actions=selected_action_context(children,gate_job_id=9)
+      action_run=dict(id=12345,event='pull_request',status='completed',conclusion='success',
+                      run_attempt=2,head_sha=e,workflow_sha=e,path='.github/workflows/rust.yml',
+                      pull_requests=[{'number':7,'head':{'sha':h}}])
+      task={'number':1,'state':'open','html_url':'https://github.com/eng-cc/oasis7/issues/1',
+            'body':f'task_uid: {UID}'}
+      if case=='parents':proof['checkout_parent_oids']=[h,q]
+      elif case=='tree':proof['tested_tree_oid']=git('rev-parse',q+'^{tree}')
+      elif case=='target':proof['current_target_oid']=h
+      elif case=='workflow':action_run['workflow_sha']=q
+      elif case=='attempt':action_run['run_attempt']=1
+      elif case=='config':proof['planner_config_sha256']='0'*64
+      elif case=='driver':proof['test_driver_sha256']='0'*64
+      elif case=='scope':scope['allowed_tool_paths']=[];comment['body']='Workflow Maintenance Authority:\n```json\n'+json.dumps(scope)+'\n```'
+      elif case=='hold':task['body']+='\n- merge_hold_active: `true`\n'
+      elif case=='edited':comment['updated_at']='2026-09-25T09:01:00Z'
+      elif case=='child':children[0]['conclusion']='failure'
+      elif case=='missing':payload.pop('current_target_proof')
+      def api(*args):
+        path=args[-1]
+        if path.endswith('/pulls/7'): return pull
+        if path.endswith('/git/ref/heads/main'): return {'object':{'sha':q}}
+        if '/workflows/rust.yml/runs?' in path:return {'workflow_runs':[]}
+        if path.endswith('/actions/runs/12345'):return action_run
+        if '/check-runs?' in path:return {'check_runs':[check]}
+        if '/artifacts?' in path or '/actions/jobs/' in path or '/attempts/' in path:
+          value=actions(*args)
+          if '/actions/jobs/' in path:value['head_sha']=h
+          if '/attempts/' in path:
+            for job in value['jobs']:job['head_sha']=h
+          return value
+        if '/git/commits/' in path:
+          oid=path.rsplit('/',1)[-1];return {'sha':oid,'tree':{'sha':git('rev-parse',oid+'^{tree}')},'parents':[{'sha':x} for x in git('show','-s','--format=%P',oid).split()]}
+        if '/contents/' in path:
+          relative,oid=path.split('/contents/',1)[1].split('?ref=')
+          return {'type':'file','path':relative,'encoding':'base64','content':base64.b64encode(subprocess.check_output(['git','-C',str(root),'show',oid+':'+relative])).decode()}
+        if path.endswith('/issues/comments/700'):return comment
+        if path.endswith('/issues/1'):return task
+        if path.endswith('/permission'):return {'permission':'admin','user':{'login':'owner'}}
+        if path=='user':return {'login':'owner','type':'User'}
+        if '/compare/' in path:return {'merge_base_commit':{'sha':q}}
+        if path=='repos/eng-cc/oasis7':return {'default_branch':'main','full_name':'eng-cc/oasis7'}
+        raise AssertionError('unhandled exact fixture endpoint: '+path)
+      def actual_tree(repository,current_q,current_h,checkout):
+        self.assertEqual('eng-cc/oasis7',repository)
+        return git('merge-tree','--write-tree',current_q,current_h)
+      with patch.object(M,'gh',side_effect=api),patch.object(integration_ci,'gh',side_effect=api),patch.object(workflow_maintenance,'_gh',side_effect=api),patch.object(M,'artifact_bytes',return_value=artifact_zip(payload)),patch.object(M,'_current_target_tree',side_effect=actual_tree):
+        selected=M.selected_live('eng-cc/oasis7',UID,1,7,'required-gate',42,require_integration=True,require_dispatch=True)
+      self.assertEqual(h,selected[3]);self.assertEqual(q,selected[2])
+      self.assertEqual(proof,selected[1]['_current_target'])
+      return proof
+
+  def test_real_tree_current_target_pr_proof_satisfies_existing_high_risk_request(self):
+    self.current_target_route_fixture()
+
+  def test_current_target_route_rejects_tree_authority_attempt_and_coverage_mismatches(self):
+    for case in ('parents','tree','target','workflow','attempt','config','driver','scope','hold','edited','child','missing'):
+      with self.subTest(case=case):
+        with self.assertRaises((SystemExit,ValueError)):
+          self.current_target_route_fixture(case)
+
   def test_scope_query_uses_gh_api_argv(self):
     with patch.object(M.subprocess,"check_output",return_value=json.dumps({"merge_base_commit":{"sha":"d"*40}})) as call:
       self.assertEqual(M.scope_base_for_run("eng-cc/oasis7","b"*40,"a"*40),"d"*40)

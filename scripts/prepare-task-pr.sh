@@ -46,6 +46,8 @@ Options:
   --remote <name>         Remote name for push / base comparison (default: origin)
   --create                Push branch if needed and run `gh pr create`; legacy task-bound `--create` is rejected
   --draft                 Add `--draft` when creating a PR
+  --human-reconcile       Reconcile the existing Task/PR metadata without push/create
+  --maintenance-authority-comment-id <id> Exact admin Task maintenance scope evidence
   --draft-candidate       Create/resume the frozen-head draft candidate before CI/review
   --existing-ready-update Update the same admitted ready PR without changing its lifecycle state
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
@@ -109,6 +111,8 @@ CREATE_PR=0
 DRAFT_PR=0
 DRAFT_CANDIDATE=0
 EXISTING_READY_UPDATE=0
+HUMAN_RECONCILE=0
+MAINTENANCE_AUTHORITY_COMMENT_ID=""
 PROMOTE_DRAFT_RECEIPT=""
 OUTPUT_JSON=0
 PR_TITLE=""
@@ -141,6 +145,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --draft-candidate) CREATE_PR=1; DRAFT_PR=1; DRAFT_CANDIDATE=1; shift ;;
+    --human-reconcile) HUMAN_RECONCILE=1; shift ;;
+    --maintenance-authority-comment-id) MAINTENANCE_AUTHORITY_COMMENT_ID="${2:-}"; shift 2 ;;
     --existing-ready-update) CREATE_PR=1; DRAFT_CANDIDATE=1; EXISTING_READY_UPDATE=1; shift ;;
     --promote-draft) PROMOTE_DRAFT_RECEIPT="${2:-}"; shift 2 ;;
     --title)
@@ -189,6 +195,29 @@ if [[ -n "$IMPACT_PROJECTION" ]]; then
   [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
   IMPACT_PROJECTION="$(cd "$(dirname "$IMPACT_PROJECTION")" && pwd)/$(basename "$IMPACT_PROJECTION")"
   IMPACT_PROJECTION_B64="$(base64 <"$IMPACT_PROJECTION" | tr -d '\n')"
+fi
+
+# Explicit manual reconciliation has no push/create or pinned-policy execution path.
+if [[ "$HUMAN_RECONCILE" == "1" ]]; then
+  [[ "$MAINTENANCE_AUTHORITY_COMMENT_ID" =~ ^[1-9][0-9]*$ ]] || die "human reconciliation requires maintenance authority comment ID"
+  HUMAN_ROOT="$(git rev-parse --show-toplevel)"
+  read -r HUMAN_UID HUMAN_ISSUE HUMAN_REPO HUMAN_SOURCE HUMAN_TARGET < <(python3 - "$HUMAN_ROOT" <<'PYH'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1]).resolve()
+mapping=json.loads((root/'.pm/github-project-sync/tasks.json').read_text())
+records=[(uid,r) for uid,r in mapping.get('tasks',{}).items()
+         if pathlib.Path(r.get('canonical_worktree','')).resolve()==root]
+if len(records)!=1: raise SystemExit('human reconciliation requires one canonical task mapping')
+uid,r=records[0]
+print(uid,r['issue_number'],r['repository'],r['task_branch'],r['default_branch'])
+PYH
+  )
+  [[ -n "$HUMAN_UID" && -n "$HUMAN_ISSUE" ]] || die "human canonical task mapping is unavailable"
+  exec python3 "$HUMAN_ROOT/scripts/pm/pr_projection_publish.py" \
+    --worktree "$HUMAN_ROOT" --repo "$HUMAN_REPO" --issue-number "$HUMAN_ISSUE" \
+    --task-uid "$HUMAN_UID" --remote "$REMOTE_NAME" --source-ref "$HUMAN_SOURCE" \
+    --target-ref "$HUMAN_TARGET" --task-helper "$HUMAN_ROOT/scripts/pm/github-project-task.py" \
+    --human-reconcile --maintenance-authority-comment-id "$MAINTENANCE_AUTHORITY_COMMENT_ID" --json
 fi
 
 COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
@@ -2179,6 +2208,10 @@ if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW
     --task-helper "$ROOT_DIR/scripts/pm/github-project-task.py"
     --json
   )
+  if [[ "$HUMAN_RECONCILE" == "1" ]]; then
+    [[ "$MAINTENANCE_AUTHORITY_COMMENT_ID" =~ ^[1-9][0-9]*$ ]] || die "human reconciliation requires maintenance authority comment ID"
+    C1_PUBLISH_ARGS+=(--human-reconcile --maintenance-authority-comment-id "$MAINTENANCE_AUTHORITY_COMMENT_ID")
+  fi
   if [[ -n "$PR_TITLE" ]]; then
     C1_PUBLISH_ARGS+=(--title "$PR_TITLE")
   fi
