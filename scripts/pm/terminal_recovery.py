@@ -1,7 +1,9 @@
 """Source-defined current terminal observations, distinct from native readiness."""
 import ast
 import base64
+import csv
 import datetime
+import io
 import json
 import re
 import sys
@@ -358,6 +360,157 @@ def push_observation(repository,uid,head,execution,branch,root,range_base,app):
 def source_observation(repository,uid,head,number,branch,root,app):
     return _execution_observation(repository,uid,head,head,branch,root,None,app,source_number=number)
 
+# Private recognition of the reviewed finite historical producer contract.
+# These fingerprints constrain code identity; live bindings, execution, plan,
+# selected coverage and resources below independently establish acceptance.
+_HISTORICAL_SOURCE_BLOBS={
+    '.github/workflows/rust.yml':'101c2d0d87c04f42315878db2a2b18c0000d6d247c46e90250862ffad35bf16b',
+    'scripts/ci-tests.sh':'584e1ca8ef0ba47b675026e38dadbf0254bd377cda9877d45ec76b7406c95fd0',
+    'scripts/ci-required-capability-test-inventory.tsv':'ef280f9bc645eb9e0bb101a4f23de5c57e50fc874365b1bc108b17255464edc8',
+    'scripts/plan-rust-required-scope.py':'0bec148fdf8c358af0f6fc7cef1f6b6c37bf3b0b8e00ef385f724401f12cc8a5',
+    'scripts/ci-required-scope.v2.json':'b58ac1305cd5ddd8d009daef6e9072b22538c95c5d2707a9c9bfeece973bf7c6',
+    'scripts/pm/workflow-impact-projection.py':'5e1784df832512282391f32a4f0e4d46865aeb5e68d36d17f10beb5ac9bf9079',
+    'scripts/viewer-dependency-preflight.sh':'32dc1ad5ee84cb1be0aca292d5c41e40c7ff96e45acb83d1b34a6fcb25bec177',
+    'scripts/pm/review-role-selector.py':'9ce658d7385f44f533660ed82220464066078d909329ea63393c8eeba4f2cf35',
+}
+
+def _historical_source_bindings(repository,uid,number,head,base,branch,root,app):
+    root=Path(root).resolve(strict=True)
+    context,validated=_canonical_context(root,uid,repository,number,head,app)
+    if context['source_scope_oid']!=base:
+        raise ValueError('historical source B differs from authenticated review scope')
+    pr=obs.api(f'repos/{repository}/pulls/{number}')
+    if (pr.get('base') or {}).get('sha')!=base:
+        raise ValueError('historical source canonical PR base mismatch')
+    merge=_oid(pr.get('merge_commit_sha'),'historical source merge')
+    target=_oid((obs.api(f'repos/{repository}/git/ref/heads/{branch}').get('object') or {}).get('sha'),'historical current target')
+    actual_branch,_=merged_facts(repository,uid,number,head,merge,target,root,validated[3])
+    if actual_branch!=branch:raise ValueError('historical source default branch mismatch')
+    commit=obs.api(f'repos/{repository}/git/commits/{merge}')
+    parents=commit.get('parents') if isinstance(commit,dict) else None
+    if (not isinstance(commit,dict) or commit.get('sha')!=merge or not isinstance(parents,list)
+            or any(not isinstance(parent,dict) for parent in parents)
+            or [parent.get('sha') for parent in parents]!=[base]
+            or not isinstance(commit.get('tree'),dict)
+            or commit['tree'].get('sha')!=obs.git(root,'rev-parse',merge+'^{tree}').decode().strip()
+            or obs.git(root,'show','-s','--format=%P',merge).decode().split()!=[base]):
+        raise ValueError('historical source B is not the exact sole merge parent')
+    if obs.git(root,'diff','--binary',base,head)!=obs.git(root,'diff','--binary',base,merge):
+        raise ValueError('historical source accepted patch equivalence mismatch')
+    # Authenticate the original strict execution with the existing merged
+    # identity seam. This grants no current-T coverage verdict; the full
+    # collector separately retains its original/current integration guards.
+    integration=_module('integration_ci')
+    selected=integration.current_request(repository,uid,number,base,head,branch)
+    if not isinstance(selected,dict):raise ValueError('historical source original integration unavailable')
+    if selected.get('workflow_run_head_sha')!=base:
+        raise ValueError('historical source original integration workflow B mismatch')
+    run_id=obs.positive(selected.get('id'),'historical integration run')
+    attempt=obs.positive(selected.get('run_attempt'),'historical integration attempt')
+    _,proof=integration._verified_run(repository,uid,number,base,head,run_id,app,
+        expected_attempt=attempt,_merged_branch=branch)
+    if (proof.get('scope_base_oid')!=base or proof.get('tested_commit_oid')!=head
+            or proof.get('tested_tree_oid')!=obs.git(root,'rev-parse',head+'^{tree}').decode().strip()):
+        raise ValueError('historical source original integration B/H/tree mismatch')
+
+def _historical_source_producer(repository,uid,number,head,base,branch,root,app,planner,job):
+    _historical_source_bindings(repository,uid,number,head,base,branch,root,app)
+    blobs={}
+    for path,expected in _HISTORICAL_SOURCE_BLOBS.items():
+        delivered=obs.git(root,'show',head+':'+path)
+        authority=obs.git(root,'show',base+':'+path)
+        if delivered!=authority or obs.digest(authority)!=expected:
+            raise ValueError('unsupported historical source producer/dependency: '+path)
+        blobs[path]=authority
+    true_selectors={'run_required_gate_baseline','run_workflow_governance_contracts','run_rust_baseline'}
+    true_resources={'needs_python','needs_markdown','needs_rust_toolchain'}
+    if (planner.get('execution_contract')!='required-domain-split/v1'
+            or planner.get('selected_capabilities')!=['workflow_governance']
+            or planner.get('scope')!='targeted'
+            or {key for key,value in planner.items() if key.startswith('run_') and value is True}!=true_selectors
+            or {key for key,value in planner.items() if key.startswith('needs_') and value is True}!=true_resources):
+        raise ValueError('unsupported historical source selector/resource profile')
+    workflow=blobs['.github/workflows/rust.yml'].decode('utf-8')
+    gate=re.findall(r'^  required-gate:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)',workflow,re.M|re.S)
+    if len(gate)!=1 or '    runs-on: ubuntu-24.04\n' not in gate[0] or 'continue-on-error:' in gate[0]:
+        raise ValueError('historical source checked required job unsupported')
+    required=re.findall(r'^      - name: Run required test tier\n(.*?)(?=^      - |\Z)',gate[0],re.M|re.S)
+    if len(required)!=1:raise ValueError('historical source required dispatcher step ambiguous')
+    step=required[0]
+    config=obs.load(blobs['scripts/ci-required-scope.v2.json'])
+    bindings={row['name']:row['planner_field'] for row in config['selector_ownership'] if row['mode']=='planner-owned'}
+    bindings.update({'OASIS7_CI_EXECUTION_CONTRACT':'execution_contract'})
+    for resource in ('python','markdown','rust_toolchain','node','system_deps','trunk','wasm_target'):
+        bindings['OASIS7_CI_NEEDS_'+resource.upper()]='needs_'+resource
+    for name,field in bindings.items():
+        expected='          '+name+': ${{ steps.scope.outputs.'+field+' }}'
+        if step.splitlines().count(expected)!=1:
+            raise ValueError('historical source selector/resource environment mismatch: '+name)
+    if ('          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then\n'
+            '            CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"\n'
+            '          else\n            CI_VERBOSE=1 ./scripts/ci-tests.sh required\n          fi') not in step:
+        raise ValueError('historical source ordinary PR checked dispatcher invocation mismatch')
+    dispatcher=blobs['scripts/ci-tests.sh'].decode('utf-8')
+    if (not dispatcher.startswith('#!/usr/bin/env bash\nset -euo pipefail\n')
+            or 'run() {\n  echo "+ $*"\n  "$@"\n}' not in dispatcher
+            or 'validate_required_gate_execution_contract || exit 1' not in dispatcher
+            or 'source "$driver_dir/viewer-dependency-preflight.sh"' not in dispatcher):
+        raise ValueError('historical source dispatcher failure propagation unsupported')
+    # Traverse only the recognized straight-line selected governance route.
+    # The complete byte recognition constrains branches outside this route;
+    # this is not a permissive generic shell parser.
+    def function(name):
+        found=re.findall(r'^'+re.escape(name)+r'\(\) \{\n(.*?)^\}',dispatcher,re.M|re.S)
+        if len(found)!=1:raise ValueError('historical selected dispatcher function missing: '+name)
+        return found[0]
+    tier=re.findall(r'^  required\)\n(.*?)^    ;;',dispatcher,re.M|re.S)
+    if len(tier)!=1 or not tier[0].startswith('    run_required_gate_checks\n    if [[ "$required_gate_execution_contract" == required-domain-split/v1 ]]; then\n      run_required_gate_capability_contracts\n    fi\n'):
+        raise ValueError('historical source required-tier selection mismatch')
+    if 'run_required_gate_capability_component "workflow governance contracts" OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS run_workflow_governance_contract_tests' not in function('run_required_gate_capability_contracts'):
+        raise ValueError('historical source selected governance dispatch missing')
+    pending=['run_workflow_governance_contract_tests'];seen=set();paths=set()
+    while pending:
+        name=pending.pop()
+        if name in seen:continue
+        seen.add(name);body=function(name)
+        if '||' in body or 'continue-on-error' in body:
+            raise ValueError('historical selected unchecked dispatcher function')
+        paths.update(re.findall(r'\./(scripts/[A-Za-z0-9_./-]+)',body))
+        pending.extend(re.findall(r'^  (run_[A-Za-z0-9_]+)\s*$',body,re.M))
+    reader=csv.DictReader(io.StringIO(blobs['scripts/ci-required-capability-test-inventory.tsv'].decode('utf-8')),delimiter='\t')
+    expected_header=['historical_required_location','test_paths','new_required_selection','legacy_required_coverage','full_full_core_full_support']
+    if reader.fieldnames!=expected_header:raise ValueError('historical source inventory header unsupported')
+    rows=list(reader)
+    if len(rows)!=16 or len({tuple(row.get(key) for key in expected_header) for row in rows})!=len(rows):
+        raise ValueError('historical source inventory incomplete/duplicate')
+    for row in rows:
+        if set(row)!=set(expected_header) or any(not isinstance(value,str) or not value for value in row.values()):
+            raise ValueError('historical source inventory row malformed')
+        if row['new_required_selection']=='workflow_governance':
+            tests=row['test_paths'].split(',')
+            if any(not path or path not in paths for path in tests):
+                raise ValueError('historical source selected inventory test missing from dispatcher')
+    steps=job.get('steps')
+    if not isinstance(steps,list) or any(not isinstance(item,dict) for item in steps):
+        raise ValueError('historical source resource step metadata malformed')
+    labels=job.get('labels')
+    if not isinstance(labels,list) or 'ubuntu-24.04' not in labels:
+        raise ValueError('historical source required runner/resource contract mismatch')
+    tests=[item for item in steps if item.get('name')=='Run required test tier']
+    if len(tests)!=1:raise ValueError('historical source checked test execution ambiguous')
+    test_number=obs.positive(tests[0].get('number'),'historical checked test step')
+    test_start=obs.instant(tests[0].get('started_at'))
+    for name in ('Install pinned Rust toolchains','Install cargo-deny','Install product-document Markdown parser'):
+        matches=[item for item in steps if item.get('name')==name]
+        if len(matches)!=1 or matches[0].get('status')!='completed' or matches[0].get('conclusion')!='success':
+            raise ValueError('historical source selected resource execution unavailable: '+name)
+        resource=matches[0]
+        if (obs.positive(resource.get('number'),'historical resource step')>=test_number
+                or obs.instant(resource.get('started_at'))>obs.instant(resource.get('completed_at'))
+                or obs.instant(resource.get('completed_at'))>test_start):
+            raise ValueError('historical source resource did not precede checked execution: '+name)
+    return blobs
+
 def _selected_execution_children(workflow,planner,event):
     receipt=_module('ci-ready-receipt');selected=receipt._selected_child_groups(planner)
     prefix="(github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && "
@@ -525,12 +678,15 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
     workflow=obs.git(root,'show',execution+':.github/workflows/rust.yml')
     dispatcher=obs.git(root,'show',execution+':scripts/ci-tests.sh')
     inventory=obs.git(root,'show',execution+':scripts/ci-required-capability-test-inventory.tsv')
-    # Require exact locally supported immutable workflow/dispatcher contract.
-    # Unknown changed execution wrappers need separately proven log/source support.
-    for path,data in [('.github/workflows/rust.yml',workflow),('scripts/ci-tests.sh',dispatcher),
-            ('scripts/ci-required-capability-test-inventory.tsv',inventory)]:
-        if data!=(Path(__file__).resolve().parents[2]/path).read_bytes():
-            raise ValueError('unsupported trusted push dispatcher/workflow source changed')
+    # Current-T trust remains the exact current supported producer. The
+    # historical source has a distinct, bounded immutable contract and cannot
+    # borrow current producer bytes or current-target successful executions.
+    producers=[('.github/workflows/rust.yml',workflow),('scripts/ci-tests.sh',dispatcher),
+        ('scripts/ci-required-capability-test-inventory.tsv',inventory)]
+    changed=any(data!=(Path(__file__).resolve().parents[2]/path).read_bytes() for path,data in producers)
+    if changed:
+        if source is None:raise ValueError('unsupported trusted push dispatcher/workflow source changed')
+        _historical_source_producer(repository,uid,source_number,head,base,branch,root,app,actual,job)
     if b'CI_VERBOSE=1 ./scripts/ci-tests.sh required' not in workflow or b'set -e' not in dispatcher:
         raise ValueError('push execution tier unchecked dispatcher unsupported')
     workflow_revision=execution if source is None else _source_execution(repository,source_number,head,base,run,job,root)

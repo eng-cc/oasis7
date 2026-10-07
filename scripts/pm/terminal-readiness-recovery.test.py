@@ -63,7 +63,21 @@ from pathlib import Path
 def load(path,name):
  spec=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
 
-def build_review(repo):
+def install_historical_snapshot(root, snapshot):
+ import base64
+ expected={'.github/workflows/rust.yml','scripts/ci-tests.sh','scripts/ci-required-capability-test-inventory.tsv','scripts/plan-rust-required-scope.py','scripts/ci-required-scope.v2.json','scripts/pm/workflow-impact-projection.py','scripts/pm/review-role-selector.py','scripts/viewer-dependency-preflight.sh'}
+ assert snapshot['schema']=='oasis7-offline-historical-producer-fixture/v1'
+ assert snapshot['source_oid']=='2caabf1657e104c758b80dc5e2bdd556819eee75'
+ assert {row['path'] for row in snapshot['files']}==expected and len(snapshot['files'])==len(expected)
+ for row in snapshot['files']:
+  raw=base64.b64decode(row['bytes_b64'],validate=True)
+  assert len(raw)==row['size'] and hashlib.sha256(raw).hexdigest()==row['sha256']
+  assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()==row['blob_oid']
+  assert row['mode'] in ('100644','100755')
+  dest=Path(root)/row['path'];dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(raw);dest.chmod(0o755 if row['mode']=='100755' else 0o644)
+
+
+def build_review(repo, producer_snapshot=None, source_producer_change=None):
  repo=Path(repo).resolve();sys.path.insert(0,str(repo/'scripts/pm'))
  m=load(repo/'scripts/pm/review_preflight_handoff.test.py','full_review_fixture_harness')
  c=m.ReviewPreflightHandoffTests();c.setUp()
@@ -78,11 +92,15 @@ def build_review(repo):
 
  for rel in ('scripts/pm/readiness_transport.py','scripts/pm/loop_terminal.py','scripts/pm/terminal_proof.py','scripts/pm/post-merge-finalize.py','scripts/pm/pr-lifecycle-gate.py','scripts/pm/claim-ready.sh','scripts/pm/ci_reuse_policy.py'):
   dest=c.root/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(repo/rel,dest)
+ if producer_snapshot is not None: install_historical_snapshot(c.root,producer_snapshot)
  subprocess.run(['git','-C',str(c.root),'add','closure-evidence.json','scripts','.agents','.github','doc'],check=True)
  subprocess.run(['git','-C',str(c.root),'commit','-qm','immutable common dependency baseline'],check=True)
  m.SCOPE_OID=subprocess.check_output(['git','-C',str(c.root),'rev-parse','HEAD'],text=True).strip()
  source=c.root/'scripts/pm/review_preflight_handoff.test.py'
  source.write_text(source.read_text()+"\ndef offline_recovery_fixture_identity(value):\n    return value\n")
+ if source_producer_change is not None:
+  rel,extra=source_producer_change;dest=c.root/rel;dest.write_bytes(dest.read_bytes()+extra)
+  subprocess.run(['git','-C',str(c.root),'add',rel],check=True)
  subprocess.run(['git','-C',str(c.root),'add',str(source)],check=True)
  subprocess.run(['git','-C',str(c.root),'commit','-qm','bounded accepted PM source behavior'],check=True)
  m.HEAD=subprocess.check_output(['git','-C',str(c.root),'rev-parse','HEAD'],text=True).strip()
@@ -94,6 +112,9 @@ def build_review(repo):
  
  for rel in ('scripts/plan-rust-required-scope.py','scripts/ci-required-scope.v2.json','scripts/ci-tests.sh','scripts/ci-required-capability-test-inventory.tsv','scripts/product_doc_markdown.py','scripts/doc-governance-requirements.txt','.github/workflows/rust.yml','scripts/pm/ci_required_inventory.py','scripts/pm/pr-merge-receipt.py','scripts/pm/task-closeout.sh',*[f'.agents/roles/{r}.md' for r in roles],'doc/engineering/workflow/source-of-truth.md','.agents/skills/requesting-repo-owned-review/SKILL.md'):
   dest=c.root/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(repo/rel,dest)
+ if producer_snapshot is not None: install_historical_snapshot(c.root,producer_snapshot)
+ if source_producer_change is not None:
+  rel,_=source_producer_change;(c.root/rel).write_bytes(subprocess.check_output(['git','-C',str(c.root),'show',m.HEAD+':'+rel]))
  inp['closure_status']['evidence'][0]['path']=evidence.relative_to(c.root).as_posix()
  projection=m.IMPACT_PROJECTION.build_projection(c.root,inp)
  assert projection['closure_status']['status']=='complete'
@@ -199,7 +220,7 @@ class MergedIntegrationComponent(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import copy,os
-        cls.review=build_review(HERE.parents[1])
+        cls.review=build_review(HERE.parents[1],getattr(cls,'producer_snapshot',None),getattr(cls,'source_producer_change',None))
         cls.inputs=build_api_inputs(cls.review)
         cls.original_gh=cls.review['harness'].fake_gh.read_text()
         cls.transport_path=cls.review['root']/'merged-api.json'
@@ -431,10 +452,15 @@ class CurrentTargetComponent(unittest.TestCase):
         cls.pr_execution=subprocess.check_output(['git','-C',str(root),'commit-tree',a['head']+'^{tree}','-p',a['base'],'-p',a['head']],input='offline ordinary PR merge checkout\n',text=True).strip()
         subprocess.run(['git','-C',str(root),'update-ref','refs/pull/1/merge',cls.pr_execution],check=True)
         git=lambda *args:subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
+        if getattr(cls,'producer_snapshot',None) is not None:
+            for row in cls.producer_snapshot['files']:
+                dest=root/row['path'];shutil.copy2(HERE.parents[1]/row['path'],dest)
         # Two advances ensure last-push and cumulative ranges cannot be conflated.
         rel='scripts/pm/readiness_transport.py'
         (root/rel).write_bytes((root/rel).read_bytes()+b'\n# offline related target advance\n')
-        git('add',rel);git('commit','-qm','first related consumer advance')
+        if getattr(cls,'producer_snapshot',None) is not None:git('add','scripts','.github')
+        else:git('add',rel)
+        git('commit','-qm','first related consumer advance')
         cls.push_base=git('rev-parse','HEAD')
         rel='scripts/pm/terminal_proof.py'
         (root/rel).write_bytes((root/rel).read_bytes()+b'\n# offline second related target advance\n')
@@ -442,7 +468,7 @@ class CurrentTargetComponent(unittest.TestCase):
         cls.target=git('rev-parse','HEAD');cls.target_tree=git('rev-parse','HEAD^{tree}')
         cls.cumulative_paths=git('diff','--name-only',a['merge'],cls.target).splitlines()
         cls.push_paths=git('diff','--name-only',cls.push_base,cls.target).splitlines()
-        assert len(cls.cumulative_paths)==2 and len(cls.push_paths)==1
+        assert len(cls.push_paths)==1 and (len(cls.cumulative_paths)>=2 if getattr(cls,'producer_snapshot',None) is not None else len(cls.cumulative_paths)==2)
         planner=cls.review['module'].IMPACT_PROJECTION
         def push_planner(paths):
             args=[sys.executable,str(root/'scripts/plan-rust-required-scope.py'),'--event-name','push']
@@ -1465,6 +1491,166 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
         context={'repository':self.data['repository'],'issue_number':self.data['issue'],'recovery':True,'comments':[posted]}
         with self.assertRaisesRegex(ValueError,'terminal v2 evidence comment author mismatch'):
             reader._delivery_comment_readback(context,body)
+
+class HistoricalProducerCompatibility(unittest.TestCase):
+    """Old immutable producer inputs and independent present helper; no verdict fakes."""
+    producer_snapshot=json.loads((HERE/'fixtures/historical-required-producer-2ca.json').read_text())
+    setUpClass=classmethod(CurrentTargetComponent.setUpClass.__func__)
+    tearDownClass=classmethod(CurrentTargetComponent.tearDownClass.__func__)
+    def setUp(self):
+        CurrentTargetComponent.setUp(self)
+        for index,name in enumerate(('Install pinned Rust toolchains','Install cargo-deny','Install product-document Markdown parser')):
+            self.source_job['steps'].append({'number':len(self.source_job['steps'])+1,'name':name,'status':'completed','conclusion':'success','started_at':f'2026-09-30T10:03:{31+index*2:02d}Z','completed_at':f'2026-09-30T10:03:{32+index*2:02d}Z'})
+        self.source_job['labels']=['ubuntu-24.04']
+        # These immutable-workflow resources are not selected by the real old
+        # profile. Preserve factual skips instead of borrowing their coverage.
+        for index,name in enumerate(('Run actions/setup-node@v6','Install viewer web dependencies','Run Swatinem/rust-cache@v2','Install trunk','Install system deps')):
+            self.source_job['steps'].append({'number':len(self.source_job['steps'])+1,'name':name,'status':'completed','conclusion':'skipped','started_at':f'2026-09-30T10:03:{38+index:02d}Z','completed_at':f'2026-09-30T10:03:{38+index:02d}Z'})
+        self.source_job['steps'].sort(key=lambda step:step['started_at'])
+        for index,step in enumerate(self.source_job['steps'],1):step['number']=index
+        self.publish_transport()
+    publish_transport=MergedIntegrationComponent.publish_transport
+    push_archive=CurrentTargetComponent.push_archive
+    produce_push_plan=CurrentTargetComponent.produce_push_plan
+    produce_source_plan=CurrentTargetComponent.produce_source_plan
+    build_source_ci_holds=CurrentTargetComponent.build_source_ci_holds
+    prepare_full_delivery=CurrentTargetComponent.prepare_full_delivery
+    install_shared_client_fixture=CurrentTargetComponent.install_shared_client_fixture
+    effect_snapshot=CurrentTargetComponent.effect_snapshot
+    call_source_observation=CurrentTargetComponent.call_source_observation
+
+    archive=MergedIntegrationComponent.archive
+    call_target=CurrentTargetComponent.call_target
+
+    def _m2_bindings(self, base=None):
+        import terminal_recovery,recovery_observation
+        a=self.data;self.publish_transport();before=self.effect_snapshot()
+        try:
+            with recovery_observation.observation():
+                terminal_recovery._historical_source_bindings(a['repository'],a['task_uid'],a['pr'],a['head'],base or a['base'],'main',self.review['root'],15368)
+        finally:self.assertEqual(self.effect_snapshot(),before)
+
+    def test_historical_runner_and_selected_resources_refuse_missing_failed_late(self):
+        import copy
+        self.assertEqual(self.call_source_observation()['checks'][0]['workflow_sha'],self.pr_execution)
+        original=copy.deepcopy(self.source_job)
+        cases=('runner','missing','failed','late')
+        for case in cases:
+            with self.subTest(case=case):
+                self.source_job.clear();self.source_job.update(copy.deepcopy(original))
+                if case=='runner':self.source_job['labels']=['ubuntu-latest']
+                elif case=='missing':self.source_job['steps']=[s for s in self.source_job['steps'] if s['name']!='Install cargo-deny']
+                elif case=='failed':next(s for s in self.source_job['steps'] if s['name']=='Install pinned Rust toolchains')['conclusion']='failure'
+                else:next(s for s in self.source_job['steps'] if s['name']=='Install product-document Markdown parser')['completed_at']='2026-09-30T10:04:01Z'
+                diagnostic='runner/resource' if case=='runner' else ('did not precede' if case=='late' else 'selected resource execution unavailable')
+                with self.assertRaisesRegex(ValueError,diagnostic):self.call_source_observation()
+        self.source_job.clear();self.source_job.update(original)
+
+    def test_historical_review_base_merge_parent_and_original_integration_are_not_borrowed(self):
+        import copy
+        self._m2_bindings()
+        a=self.data;root=self.review['root'];repo=a['repository']
+        parent=subprocess.check_output(['git','-C',str(root),'rev-parse',a['base']+'^'],text=True).strip()
+        self.assertNotEqual(parent,a['base'])
+        with self.assertRaisesRegex(ValueError,'review scope'):self._m2_bindings(parent)
+        key=f"repos/{repo}/git/commits/{a['merge']}";original=copy.deepcopy(self.responses[key])
+        self.responses[key]['parents']=[{'sha':parent}]
+        with self.assertRaisesRegex(ValueError,'exact sole merge parent'):self._m2_bindings()
+        self.responses[key]=original
+        proof=copy.deepcopy(a['artifact']);proof['tested_tree_oid']=subprocess.check_output(['git','-C',str(root),'rev-parse',a['base']+'^{tree}'],text=True).strip()
+        self.assertNotEqual(proof['tested_tree_oid'],a['artifact']['tested_tree_oid'])
+        self.archive(payload=proof)
+        with self.assertRaisesRegex((ValueError,SystemExit),'tree|identity'):self._m2_bindings()
+        self.archive(payload=a['artifact'])
+        ref=f'repos/{repo}/git/ref/heads/main';compare=f"repos/{repo}/compare/{a['merge']}...{self.target}"
+        original_ref=copy.deepcopy(self.responses[ref]);self.responses[ref]['object']['sha']=parent
+        self.responses[f"repos/{repo}/compare/{a['merge']}...{parent}"]={'url':f"https://api.github.com/repos/{repo}/compare/{a['merge']}...{parent}",'status':'behind','base_commit':{'sha':a['merge']},'merge_base_commit':{'sha':parent},'ahead_by':0,'behind_by':2,'total_commits':0,'commits':[]}
+        with self.assertRaisesRegex(ValueError,'ancestry|contained|default.*history|compare'):self._m2_bindings()
+        self.responses[ref]=original_ref
+
+    def _m2_variant(self, snapshot, source_change=None):
+        from contextlib import contextmanager
+        @contextmanager
+        def build():
+            variant=type('IsolatedHistoricalVariant',(HistoricalProducerCompatibility,),{'producer_snapshot':snapshot,'source_producer_change':source_change})
+            try:
+                variant.setUpClass();instance=variant('test_supported_old_source_observation_retains_actual_execution_provenance')
+                instance.setUp();yield instance
+            finally:
+                if 'review' in variant.__dict__:variant.tearDownClass()
+        return build()
+
+    def test_historical_H_change_and_equal_unsafe_B_H_are_unsupported_versions(self):
+        import copy,base64
+        self.assertEqual(self.call_source_observation()['checks'][0]['workflow_sha'],self.pr_execution)
+        with self._m2_variant(copy.deepcopy(self.producer_snapshot),('scripts/ci-tests.sh',b'\n# delivered producer changed outside recognized contract\n')) as changed:
+            self.assertNotEqual(subprocess.check_output(['git','-C',str(changed.review['root']),'show',changed.data['base']+':scripts/ci-tests.sh']),subprocess.check_output(['git','-C',str(changed.review['root']),'show',changed.data['head']+':scripts/ci-tests.sh']))
+            with self.assertRaisesRegex(ValueError,'unsupported historical source producer/dependency'):changed.call_source_observation()
+        snapshot=copy.deepcopy(self.producer_snapshot)
+        row=next(r for r in snapshot['files'] if r['path']=='scripts/ci-tests.sh')
+        raw=base64.b64decode(row['bytes_b64']).replace(b'set -euo pipefail',b'set -uo pipefail',1)
+        row.update(bytes_b64=base64.b64encode(raw).decode(),size=len(raw),sha256=hashlib.sha256(raw).hexdigest(),blob_oid=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest())
+        with self._m2_variant(snapshot) as changed:
+            actual=lambda oid:subprocess.check_output(['git','-C',str(changed.review['root']),'show',oid+':scripts/ci-tests.sh'])
+            self.assertEqual(actual(changed.data['base']),actual(changed.data['head']))
+            self.assertNotIn(b'set -euo pipefail',actual(changed.data['head']))
+            with self.assertRaisesRegex(ValueError,'unsupported historical source producer/dependency'):changed.call_source_observation()
+
+    def test_present_target_retains_independent_check_and_selected_coverage_guards(self):
+        import copy
+        with self._m2_variant(None) as current:
+            current.call_target()
+            import recovery_observation
+            root=current.review['root'];a=current.data
+            copied=load(root/'scripts/pm/terminal_recovery.py','m2_actual_disposable_current_reader')
+            def read_actual_copy():
+                current.publish_transport();before=current.effect_snapshot()
+                try:
+                    with recovery_observation.observation():
+                        return copied._execution_observation(a['repository'],a['task_uid'],a['head'],current.target,'main',root,a['merge'],15368)
+                finally:self.assertEqual(current.effect_snapshot(),before)
+            read_actual_copy()
+            path=root/'scripts/ci-tests.sh';before=path.read_bytes()
+            path.write_bytes(before+b'\n# disposable current helper producer-byte drift\n')
+            try:
+                with self.assertRaisesRegex(ValueError,'unsupported trusted push dispatcher/workflow source changed'):read_actual_copy()
+            finally:path.write_bytes(before)
+            plan=copy.deepcopy(current.push_plan)
+            current.push_plan['planner']['run_workflow_governance_contracts']='false'
+            current.push_archive()
+            with self.assertRaisesRegex((ValueError,SystemExit),'selector|capability|reproduction|coverage'):current.call_target()
+            current.push_plan=plan;current.push_archive()
+            current.push_check['conclusion']='failure'
+            with self.assertRaisesRegex(ValueError,'push check app/job identity mismatch'):current.call_target()
+
+    def test_lossless_old_B_H_E_producer_and_current_helper_are_distinct(self):
+        a=self.data;root=self.review['root']
+        git=lambda *args:subprocess.check_output(['git','-C',str(root),*args])
+        self.assertEqual(git('show','-s','--format=%P',self.pr_execution).decode().split(),[a['base'],a['head']])
+        self.assertEqual(git('rev-parse',self.pr_execution+'^{tree}'),git('rev-parse',a['head']+'^{tree}'))
+        self.assertEqual(git('show','-s','--format=%P',a['merge']).decode().split(),[a['base']])
+        self.assertEqual(self.context['source_scope_oid'],a['base'])
+        self.assertEqual(self.review['plan']['source_review_identity']['source_scope_oid'],a['base'])
+        different=[]
+        for row in self.producer_snapshot['files']:
+            actual=git('show',a['base']+':'+row['path'])
+            self.assertEqual(hashlib.sha256(actual).hexdigest(),row['sha256'])
+            self.assertEqual(actual,git('show',a['head']+':'+row['path']))
+            if actual!=git('show',self.target+':'+row['path']):different.append(row['path'])
+        self.assertIn('scripts/ci-tests.sh',different)
+        self.assertNotEqual(git('show',a['head']+':scripts/ci-tests.sh'),(HERE.parents[1]/'scripts/ci-tests.sh').read_bytes())
+        self.receipt.canonical_planner(self.source_plan['planner'])
+        self.assertEqual(self.source_plan['base_oid'],a['base'])
+        self.assertEqual(self.source_plan['head_oid'],a['head'])
+        self.assertEqual(self.source_run['pull_requests'],[])
+        self.assertEqual(self.receipt._workflow_job_details(self.source_check,a['repository']),(3701,3901))
+        print('M2 historical fixture primitives: '+json.dumps({'different_paths':different,'source_selectors':{k:v for k,v in self.source_raw.items() if k.startswith('run_')},'source_resources':{k:v for k,v in self.source_raw.items() if k.startswith('needs_')},'B':a['base'],'H':a['head'],'E':self.pr_execution,'M':a['merge'],'T':self.target},sort_keys=True))
+
+    def test_supported_old_source_observation_retains_actual_execution_provenance(self):
+        result=self.call_source_observation()
+        self.assertEqual(result['checks'][0]['workflow_sha'],self.pr_execution)
+        inventory=next(row for row in self.producer_snapshot['files'] if row['path']=='scripts/ci-required-capability-test-inventory.tsv')
+        self.assertEqual(result['coverage']['inventory_sha256'],inventory['sha256'])
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
