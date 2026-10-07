@@ -54,7 +54,7 @@ done
 # mint a second task/PR terminal identity.
 for marker in \
   '--resume' 'already_finalized' 'terminal protocol selector is malformed' \
-  '--cleanup-only requires a mapped v2 delivery receipt' 'task/PR mismatch' 'fail'; do
+  '--cleanup-only requires a mapped delivery receipt' 'task/PR mismatch' 'fail'; do
   grep -F -- "$marker" <<<"$SOURCE" >/dev/null || {
     echo "RED finalize-task: missing retry/fail-closed marker $marker" >&2
     exit 1
@@ -64,7 +64,7 @@ done
 # A fresh v2 producer readback precedes independent cleanup. Cleanup failure
 # can be reported without revoking completed delivery.
 for marker in \
-  '--delivery --json' '--delivery --preflight --json' 'producer did not return a complete v2 delivery proof' \
+  '--delivery --json' '--delivery --preflight --json' 'producer did not return a complete delivery proof' \
   'cleanup_deferred' 'cleanup_blockers'; do
   grep -F -- "$marker" <<<"$SOURCE" >/dev/null || {
     echo "finalize-task: missing delivery/cleanup boundary marker $marker" >&2

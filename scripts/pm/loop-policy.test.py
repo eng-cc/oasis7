@@ -140,7 +140,7 @@ def record_path(kind, source):
             self.api, "current_effective_policy_identity",
             return_value=self.live_policy_proof(self.base),
         )
-        self.live_identity_patch.start()
+        self.live_identity_mock = self.live_identity_patch.start()
         self.addCleanup(self.live_identity_patch.stop)
 
     def git(self, *args):
@@ -400,6 +400,7 @@ def record_path(kind, source):
         self.base = self.git('rev-parse', 'HEAD')
         self.binding['policy_commit'] = self.base
         self.git('update-ref', 'refs/remotes/origin/main', self.base)
+        self.live_identity_mock.return_value = self.live_policy_proof(self.base)
 
     def test_trusted_regular_executable_imports_are_admitted(self):
         self._pin_regular_import_mode(0o755)
