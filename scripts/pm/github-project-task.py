@@ -4682,7 +4682,17 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
                 or type(matches[0].get("id")) is not int):
             raise vector.RecordPRPending("human exact comment readback is pending")
         readback = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/comments/{matches[0]['id']}"]))
-        if readback.get("body") != body or readback.get("user") != matches[0].get("user"):
+        listed = matches[0]
+        listed_actor = listed.get("user") or {}
+        server_actor = readback.get("user") or {}
+        # GitHub profile presentation fields can differ between list and exact GET.
+        actor_fields = ("login", "id", "node_id", "type")
+        comment_fields = ("id", "html_url", "created_at", "updated_at")
+        if (readback.get("body") != body
+                or any(server_actor.get(key) != listed_actor.get(key) for key in actor_fields)
+                or server_actor.get("type") != "User"
+                or any(readback.get(key) != listed.get(key) for key in comment_fields)
+                or not publication.comment_timestamps_are_unchanged(readback)):
             raise vector.RecordPRPending("human exact server comment differs")
         return str(readback["html_url"])
 

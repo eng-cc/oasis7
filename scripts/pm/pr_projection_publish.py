@@ -80,7 +80,9 @@ def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SE
                                   timeout=timeout, **inherited).stdout.strip()
     except subprocess.CalledProcessError as exc:
         detail = str(exc.stderr or "").strip()
-        suffix = f": {detail[:500]}" if detail else f": {exc}"
+        # The terminal traceback line carries the cause; preserve it on long failures.
+        summary = detail if len(detail) <= 500 else detail[:200] + "\n...\n" + detail[-500:]
+        suffix = f": {summary}" if detail else f": {exc}"
         raise PublishInputError(f"command failed: {args[0]}{suffix}") from exc
     except (OSError, subprocess.SubprocessError) as exc:
         raise PublishInputError(f"command failed: {args[0]}: {exc}") from exc

@@ -337,7 +337,14 @@ if args[0] == "api":
         found = [item for item in state["comments"] if item["id"] == comment_id]
         if len(found) != 1:
             raise SystemExit("Issue comment not found: " + str(comment_id))
-        emit(found[0])
+        payload = json.loads(json.dumps(found[0]))
+        variation = state.get("human_comment_readback_variation")
+        if variation and ("<!-- oasis7-ci-publication-binding/v1 -->" in payload["body"]
+                          or "<!-- oasis7-pm-evidence -->" in payload["body"]):
+            payload["user"].update(id=42, node_id="U_fixture", avatar_url="https://avatars.example/u/42?v=" + ("GET" if variation == "avatar" else "LIST"))
+            if variation == "wrong_actor": payload["user"]["login"] = "other-writer"
+            if variation == "wrong_body": payload["body"] += "\nchanged server body"
+        emit(payload)
     if endpoint == "repos/" + state["repository"] + f"/issues/{state['issue']['number']}":
         payload = issue_payload()
         payload["state"] = state["issue"]["state"]
@@ -347,6 +354,18 @@ if args[0] == "api":
             save()
             raise SystemExit("403 injected incomplete Issue comment pagination")
         comments = state["comments"]
+        if state.get("human_comment_readback_variation"):
+            comments = json.loads(json.dumps(comments))
+            for comment in comments:
+                if ("<!-- oasis7-ci-publication-binding/v1 -->" in comment["body"]
+                        or "<!-- oasis7-pm-evidence -->" in comment["body"]):
+                    comment["user"].update(id=42, node_id="U_fixture", avatar_url="https://avatars.example/u/42?v=LIST")
+            if state["human_comment_readback_variation"] == "duplicate":
+                matching = [c for c in comments if "<!-- oasis7-ci-publication-binding/v1 -->" in c["body"]]
+                if matching:
+                    duplicate = json.loads(json.dumps(matching[0]))
+                    duplicate["id"] += 10000
+                    comments.append(duplicate)
         if ((state.get("edit_c1_on_locked_comments_read") is True
                 or state.get("edit_c1_on_third_locked_comments_read") is True)
                 and state.get("pr") is not None
@@ -1094,6 +1113,54 @@ class PublisherProcessTests(unittest.TestCase):
         again = self.run_publisher(human_reconcile=True)
         self.assertEqual(0, again.returncode, again.stdout + again.stderr)
         self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_reconcile_accepts_same_actor_with_changed_avatar_readback(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        self.state = self._load_state()
+        self.state['project_values']['PR'] = PR_URL
+        self.state['human_comment_readback_variation'] = 'avatar'
+        self._save_state()
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal_path.read_bytes()
+        result = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        final = self._load_state()
+        self.assertEqual(1, len(self._effects('comment:binding', final)))
+        self.assertEqual(1, len(self._effects('comment:evidence', final)))
+        self.assertEqual(old_journal, journal_path.read_bytes())
+        again = self.run_publisher(human_reconcile=True)
+        self.assertEqual(0, again.returncode, again.stdout + again.stderr)
+        self.assertEqual(final['mutations'], self._load_state()['mutations'])
+
+    def test_human_reconcile_rejects_wrong_actor_body_and_duplicate_readbacks(self):
+        self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
+        self._save_state()
+        self.assertNotEqual(0, self.run_publisher().returncode)
+        self.seed_human_maintenance_authority()
+        baseline = self._load_state()
+        baseline['project_values']['PR'] = PR_URL
+        journal_path = next((self.repo / '.git/oasis7/pr-publication').glob('*/*/journal.json'))
+        old_journal = journal_path.read_bytes()
+        for case in ('wrong_actor', 'wrong_body', 'duplicate'):
+            self.state = json.loads(json.dumps(baseline))
+            self.state['human_comment_readback_variation'] = case
+            self._save_state()
+            result = self.run_publisher(human_reconcile=True)
+            with self.subTest(case=case):
+                self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+                expected = ('human exact comment readback is pending' if case == 'duplicate'
+                            else 'human exact server comment differs')
+                self.assertIn(expected, result.stderr, 'publisher must preserve actual child terminal cause')
+                final = self._load_state()
+                self.assertEqual(1, len(self._effects('comment:binding', final)))
+                self.assertEqual(0, len(self._effects('comment:evidence', final)))
+                self.assertEqual(old_journal, journal_path.read_bytes())
+                retry = self.run_publisher(human_reconcile=True)
+                self.assertNotEqual(0, retry.returncode)
+                self.assertEqual(final['mutations'], self._load_state()['mutations'])
 
     def test_human_reconcile_writes_only_missing_project_pr_once(self):
         self.state['faults']['project:Workflow Phase'] = 'interrupt-after'
