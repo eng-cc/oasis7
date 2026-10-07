@@ -112,7 +112,7 @@
   - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_strong_auth.rs`
   - `crates/oasis7/src/bin/oasis7_web_launcher/viewer_auth_bootstrap.rs`
-  - `crates/oasis7_viewer/software_safe.js`
+  - `crates/oasis7_viewer/software_safe_src/viewer_hosted_auth_state_module.js`
   - `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md`

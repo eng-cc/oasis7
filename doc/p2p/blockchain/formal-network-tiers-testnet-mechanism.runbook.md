@@ -260,3 +260,11 @@
   - `do_not_claim_live_public_testnet`
   - `do_not_claim_public_validator_admission`
   - `do_not_claim_mainnet_or_production_oc_settlement`
+
+## 11. 历史 `shared_devnet` 回滚证据边界
+- `shared_devnet -> staging -> canary` 已退役，仅作为 rehearsal provenance；它不是当前 network tier、promotion 路径或 `public_testnet` readiness 输入。历史结论从 `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md` 审计。
+- 历史首条 `shared_devnet` pass 允许使用 `bootstrap_restore_ready`，但同一 candidate/window 必须同时具备 fallback bundle、gate、owner、restore steps 和 restoration scope。2026-05-23 演练的完整字段见 `doc/testing/evidence/shared-network-shared-devnet-rollback-contract-2026-05-23.md`，实际恢复记录见 `doc/testing/evidence/shared-network-shared-devnet-triad-reset-recovery-2026-05-23.md`。
+- 该 fallback 表示已审计地恢复到当前 live-reset candidate truth，不表示回滚到先前 formal shared-devnet pass candidate。后续窗口若要作出后一种回滚结论，必须把 fallback bundle 和 gate 绑定到该历史 pass。
+- 历史窗口遇到 commit/world/governance 真值漂移、track gate 阻断、shared access 或值班 owner 失效、claims 越界，或事故影响未明时，应记录 `incident_id`、`frozen` 状态和 `freeze_reason`，停止新 promotion 与外部升级表述，并记录是否由 `runtime_engineer` 执行 rollback。历史 rollback 收口记录 `rollback_started_at`、`rollback_completed_at`、恢复后 evidence path 和 `rolled_back` / `restored` 结果；这些字段用于解释旧 rehearsal 证据，不构成当前 formal tier 的 live 状态或操作授权。
+- 执行历史 rollback 时 MUST 回退到最近一次 pass 的 candidate bundle；唯一例外仅适用于首条 `shared_devnet` pass 的 `bootstrap_restore_ready` fallback，且必须满足上述五字段同窗合同。该例外表示恢复到当前 live-reset candidate truth，不得声称回滚到先前 formal pass；后续窗口 MUST 绑定最近一次 pass 的 bundle 和 gate。
+- 这些记录不证明当前节点健康，也不授权执行操作。实际节点恢复须依据当前 deployment truth 执行 `public-testnet-governed-bootstrap.runbook.md`；本 checklist 不替代其 host-specific 步骤。

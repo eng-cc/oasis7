@@ -16,7 +16,7 @@ import {
 } from "./pixel_world_host_test_support.jsx";
 describe("pixel world host", () => {
   it("keeps world focus stage resets scoped away from nested command panels", () => {
-    const html = readFileSync("software_safe.html", "utf8");
+    const html = readFileSync("viewer.html", "utf8");
 
     expect(html).toContain("body.pixel-world-focus-active .panel--stage > .panel__body");
     expect(html).toContain(".panel--stage > .panel__body");
