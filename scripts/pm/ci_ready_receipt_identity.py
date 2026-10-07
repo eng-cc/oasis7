@@ -28,6 +28,7 @@ SOURCE_REVIEW_SCHEMA = "oasis7-review-plan/v2"
 REQUIRED_PLAN_V1_SCHEMA = "oasis7-required-plan-v1"
 REQUIRED_PLAN_V2_SCHEMA = "oasis7-required-plan-v2"
 REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT = "required-domain-split/v1"
+SUPPORTED_REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACTS = {REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT, "required-domain-split/v2"}
 VERSIONED_PLANNER_SELECTOR_FIELDS = (
     "run_workflow_governance_contracts", "run_packaging_contracts",
     "run_doc_checker_contracts", "run_cargo_tooling_contracts",
@@ -1248,7 +1249,7 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
         ):
             raise ValueError("versioned planner fields require execution_contract")
     else:
-        if execution_contract != REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT:
+        if execution_contract not in SUPPORTED_REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACTS:
             raise ValueError("CI receipt execution_contract is unsupported")
         planner = receipt.get("planner")
         if not isinstance(planner, dict) or planner.get("execution_contract") != execution_contract:
@@ -1268,6 +1269,8 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("versioned CI receipt planner resource is missing or malformed: " + field)
         if planner["needs_python"] is not True or planner["needs_markdown"] is not True:
             raise ValueError("versioned CI receipt baseline requires Python and Markdown resources")
+        if execution_contract == "required-domain-split/v2" and planner["needs_rust_toolchain"] is not True:
+            raise ValueError("v2 CI receipt baseline requires Rust toolchain")
         planner_digest = hashlib.sha256(
             json.dumps(planner, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()

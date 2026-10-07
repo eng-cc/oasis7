@@ -1053,6 +1053,34 @@ module._current_target_tree=lambda repository,q,h,e:__import__('subprocess').che
     changed_resource=versioned_plan(); changed_resource["needs_node"]="true"
     self.assertNotEqual(digest(versioned),digest(M.canonical_planner(changed_resource)),"needs_node")
 
+  def test_v2_preserves_contract_and_separates_toolchain_from_test_selection(self):
+    root=P.parents[2]
+    produced=subprocess.run([sys.executable,str(root/"scripts/plan-rust-required-scope.py"),"--event-name","push","--changed-path","doc/product/README.md"],cwd=root,text=True,capture_output=True,check=True)
+    actual=dict(line.split("=",1) for line in produced.stdout.splitlines() if "=" in line)
+    actual_plan=M.canonical_planner(actual)
+    self.assertEqual("required-domain-split/v2",actual_plan["execution_contract"])
+    self.assertTrue(actual_plan["needs_rust_toolchain"])
+    self.assertFalse(actual_plan["run_rust_baseline"])
+    raw=versioned_plan()
+    v1=M.canonical_planner(raw)
+    raw["execution_contract"]="required-domain-split/v2"
+    raw["needs_rust_toolchain"]="true"
+    raw["run_rust_baseline"]="false"
+    v2=M.canonical_planner(raw)
+    self.assertEqual("required-domain-split/v2",v2["execution_contract"])
+    self.assertTrue(v2["needs_rust_toolchain"])
+    self.assertFalse(v2["run_rust_baseline"])
+    same=dict(raw); same["execution_contract"]=M.EXECUTION_CONTRACT
+    digest=lambda value: M.hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    self.assertNotEqual(digest(v2),digest(M.canonical_planner(same)))
+    self.assertEqual(M._selected_child_groups(v1),M._selected_child_groups(v2))
+    for key,value in (("needs_rust_toolchain","false"),("needs_rust_toolchain",True),("run_doc_checker_contracts",None)):
+      invalid=dict(raw)
+      if value is None: invalid.pop(key)
+      else: invalid[key]=value
+      with self.subTest(key=key,value=value),self.assertRaises(SystemExit):
+        M.canonical_planner(invalid)
+
   def test_planner_rejects_unknown_partial_and_mixed_execution_contracts(self):
     unknown=versioned_plan(); unknown["execution_contract"]="required-domain-split/v999"
     partial=versioned_plan(); partial.pop("run_doc_checker_contracts")

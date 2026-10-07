@@ -516,6 +516,7 @@ def _selected_execution_children(workflow,planner,event):
     prefix="(github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && "
     operational="needs.required-gate.outputs.run_operational_contracts == 'true'"
     packaging="((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' && needs.required-gate.outputs.run_packaging_contracts == 'true') || (needs.required-gate.outputs.execution_contract != 'required-domain-split/v1' && needs.required-gate.outputs.run_operational_contracts == 'true'))"
+    packaging_v2="(((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' || needs.required-gate.outputs.execution_contract == 'required-domain-split/v2') && needs.required-gate.outputs.run_packaging_contracts == 'true') || (needs.required-gate.outputs.execution_contract == '' && needs.required-gate.outputs.run_operational_contracts == 'true'))"
     expected={receipt.WINDOWS_ROLLOUT_JOB:prefix+operational,
         receipt.MACOS_PACKAGE_JOB:prefix+packaging,receipt.FLEET_HEALTH_JOB:prefix+operational}
     text=workflow.decode('utf-8')
@@ -525,7 +526,8 @@ def _selected_execution_children(workflow,planner,event):
         matches=re.findall(r'^    if: ([^\n]+)(?:\n((?:      [^\n]*\n)*))?',blocks[0],re.M)
         if len(matches)!=1:raise ValueError('unsupported immutable child execution condition')
         line,continuation=matches[0];actual=continuation if line=='>-' else line
-        if ''.join(actual.split())!=''.join(condition.split()):
+        supported=(condition,prefix+packaging_v2) if name==receipt.MACOS_PACKAGE_JOB else (condition,)
+        if ''.join(actual.split()) not in {''.join(item.split()) for item in supported}:
             raise ValueError('unsupported changed event/selector child execution condition')
     if event=='push':return {name:False for name in selected}
     if event=='pull_request':return selected

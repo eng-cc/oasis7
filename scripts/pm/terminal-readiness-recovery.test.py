@@ -1687,5 +1687,19 @@ class HistoricalProducerCompatibility(unittest.TestCase):
         inventory=next(row for row in self.producer_snapshot['files'] if row['path']=='scripts/ci-required-capability-test-inventory.tsv')
         self.assertEqual(result['coverage']['inventory_sha256'],inventory['sha256'])
 
+class KnownChildExecutionContract(unittest.TestCase):
+    def test_actual_v2_child_condition_and_unknown_version_refusal(self):
+        import terminal_recovery
+        workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_bytes()
+        planner={'execution_contract':'required-domain-split/v2','run_packaging_contracts':True,'run_operational_contracts':False}
+        selected=terminal_recovery._selected_execution_children(workflow,planner,'pull_request')
+        self.assertTrue(selected['testnet-packages-macos-arm64-contract'])
+        self.assertFalse(selected['windows-package-rollout-behavior'])
+        self.assertFalse(any(terminal_recovery._selected_execution_children(workflow,planner,'push').values()))
+        changed=workflow.replace(b"execution_contract == 'required-domain-split/v2'",b"execution_contract == 'required-domain-split/v999'")
+        self.assertNotEqual(workflow,changed)
+        with self.assertRaisesRegex(ValueError,'unsupported changed event/selector'):
+            terminal_recovery._selected_execution_children(changed,planner,'pull_request')
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
