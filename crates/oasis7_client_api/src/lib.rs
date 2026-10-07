@@ -8,6 +8,7 @@ pub mod bootstrap;
 pub mod config;
 pub mod provider;
 pub mod signing;
+pub mod world_service;
 
 pub use bootstrap::{
     BootstrapConfig, ChainBootstrapConfig, ClientBootstrapConfig, DEFAULT_CHAIN_NETWORK_TIER,
