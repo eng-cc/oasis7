@@ -13,6 +13,7 @@ path = "src/bin/oasis7_chain_runtime.rs"
 required-features = ["node-libp2p"]
 
 [dependencies]
+oasis7_client_api = { version = "0.1.0", path = "../oasis7_client_api" }
 oasis7_proto = { version = "0.1.0", path = "../oasis7_proto" }
 oasis7_wasm_abi = { version = "0.1.0", path = "../oasis7_wasm_abi" }
 hex = "0.4"

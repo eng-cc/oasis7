@@ -51,6 +51,8 @@ mod provider_bootstrap;
 mod replay;
 mod retention;
 mod simulator_driver;
+mod world_service;
+mod qa_conformance;
 
 const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 

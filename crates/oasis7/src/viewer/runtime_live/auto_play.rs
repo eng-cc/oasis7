@@ -79,6 +79,11 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        if self.config.world_service.is_some() {
+            // Periodic authenticated synchronization owns projection progress.
+            // Playback emits that projection and never runs local actions.
+            return self.emit_background_play_snapshot(session, writer);
+        }
         if self.auto_play_paused || !session.initial_snapshot_sent {
             return Ok(());
         }

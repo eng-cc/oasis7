@@ -5,6 +5,13 @@ use crate::runtime::{
 };
 use crate::simulator::AgentDecision;
 
+#[cfg(test)]
+#[path = "provider_action_service_tests.rs"]
+mod canonical_service_fencing_tests;
+
+#[path = "provider_action_service.rs"]
+mod service_provider;
+
 impl ViewerRuntimeLiveServer {
     #[expect(
         clippy::result_large_err,
@@ -13,6 +20,22 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn enqueue_llm_action_from_sidecar(
         &mut self,
     ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
+        self.configure_service_provider();
+        // A chain-linked World is an observation projection. In particular,
+        // recovery and request preparation below can settle leases and advance
+        // wakes before a decision is returned. Fence the entire pass until the
+        // canonical cognition service adapter owns those transitions.
+        if self.chain_link_enabled() {
+            if self.config.world_service.is_some() {
+                return self.enqueue_service_provider_action();
+            }
+            return Err(wake_handoff_error_trace(
+                "world_service",
+                self.world.state().time,
+                "canonical Agent cognition service is unavailable; provider turn remains pending"
+                    .to_string(),
+            ));
+        }
         self.drain_provider_feedback_outbox();
         // A failed wake retry fences only its own Agent. Keep the error for
         // an actionable no-decision result while allowing a healthy sibling
@@ -785,6 +808,24 @@ impl ViewerRuntimeLiveServer {
         let Some(lease) = lease else {
             return Ok(());
         };
+        if self.chain_link_enabled() {
+            let request = request.ok_or("canonical lease release requires the original request")?;
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "release",
+                )?;
+            self.llm_sidecar.release_provider_lease_at_authority(
+                &mut self.world,
+                request,
+                &lease,
+            )?;
+            self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+            return Ok(());
+        }
         if let Some(runtime_lease) = self
             .world
             .cognition_economy()
@@ -857,6 +898,23 @@ impl ViewerRuntimeLiveServer {
         let Some(lease) = lease else {
             return Ok(());
         };
+        if self.chain_link_enabled() {
+            let request =
+                request.ok_or("canonical lease settlement requires the original request")?;
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "settle",
+                )?;
+            return self.llm_sidecar.settle_provider_lease_at_authority(
+                &mut self.world,
+                request,
+                &lease,
+            );
+        }
         if let Some(request) = request {
             self.llm_sidecar
                 .validate_provider_cognition_lease_for_request(

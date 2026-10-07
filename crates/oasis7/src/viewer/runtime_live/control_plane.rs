@@ -206,7 +206,7 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn enqueue_agent_chat_echo_event_if_enabled(&mut self, agent_id: &str, message: &str) {
-        if !self.config.agent_chat_echo_enabled {
+        if self.chain_link_enabled() || !self.config.agent_chat_echo_enabled {
             return;
         }
         let Some(agent) = self.world.state().agents.get(agent_id) else {
@@ -223,6 +223,9 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn enqueue_agent_chat_reply_event(&mut self, agent_id: &str, message: &str) {
+        if self.chain_link_enabled() {
+            return;
+        }
         let Some(agent) = self.world.state().agents.get(agent_id) else {
             return;
         };
@@ -244,6 +247,9 @@ impl ViewerRuntimeLiveServer {
         intent_id: &str,
         request_digest: &str,
     ) {
+        if self.chain_link_enabled() {
+            return;
+        }
         let effect_intent_id = self
             .world
             .state()
@@ -286,6 +292,13 @@ impl ViewerRuntimeLiveServer {
     }
 
     pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) -> Vec<AgentChatError> {
+        if self.chain_link_enabled() {
+            return vec![AgentChatError {
+                code: "canonical_chat_unsupported".into(),
+                message: "world service has no registered Agent chat capability".into(),
+                agent_id: None,
+            }];
+        }
         let (replies, failures) = self
             .llm_sidecar
             .drain_provider_agent_chat_replies_with_identity(&self.world);

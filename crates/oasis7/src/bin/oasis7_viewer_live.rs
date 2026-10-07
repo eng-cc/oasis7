@@ -12,6 +12,8 @@ use oasis7::viewer::{
     ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, ViewerWebBridge, ViewerWebBridgeConfig,
 };
 use tracing::{error, info, warn};
+#[path = "oasis7_viewer_live/world_service_bootstrap.rs"]
+mod world_service_bootstrap;
 
 const DEFAULT_SCENARIO_LABEL: &str = "formal_release_default";
 const DEFAULT_BIND: &str = "127.0.0.1:5023";
@@ -126,6 +128,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         debug_scenario = ?options.debug_scenario,
         "starting viewer live runtime"
     );
+    let server = initialize_viewer_server(&options)?;
     if let Some(web_bind_addr) = options.web_bind_addr.clone() {
         let upstream_addr = options.bind_addr.clone();
         thread::spawn(move || {
@@ -139,7 +142,6 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         });
     }
 
-    let server = initialize_viewer_server(&options)?;
     server
         .run()
         .map_err(|err| format!("runtime viewer server exited with error: {err:?}"))
@@ -192,7 +194,15 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
     } else {
         config
     };
-    let mut config = config;
+    let mut config = world_service_bootstrap::configure(
+        config,
+        options.allow_debug_scenario && options.chain_status_bind.is_none(),
+        oasis7::world_service::client::WorldServiceClientConfig::from_env()?,
+        oasis7::world_service::client::WorldServiceAgentSignerConfig::from_env()?,
+    )?;
+    if config.world_service.is_some() && options.debug_scenario.is_some() {
+        return Err("seeded debug scenarios require isolated offline mode".into());
+    }
     for path in &options.provider_backed_bootstrap_authority_paths {
         let bytes = std::fs::read(path).map_err(|error| {
             format!(
@@ -504,12 +514,12 @@ Options:\n\
   --no-web-bind             disable websocket bridge\n\
   --llm                     enable llm mode (default; required for gameplay)\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
-  --chain-status-bind <addr> follow committed chain world from oasis7_chain_runtime status bind\n\
-  --chain-submit-bind <addr> broadcast chain-linked gameplay actions to a submit-capable endpoint (defaults to chain-status-bind)\n\
+  --chain-status-bind <addr> legacy operator association; authenticated world service is required (no node-directory fallback)\n\
+  --chain-submit-bind <addr> legacy endpoint setting; formal mutations use the authenticated world service\n\
   --chain-link-policy <mode> chain sync policy: enforcing|shadow (default: enforcing)\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
-  --auto-play               advance gameplay/world on each connected session without pressing Play (default)\n\
-  --no-auto-play            keep gameplay/world paused until explicit Play actions\n\
+  --auto-play               display synchronized service progress automatically (offline debug may advance locally)\n\
+  --no-auto-play            pause automatic playback (does not pause canonical service execution)\n\
   --allow-debug-scenario    allow seeded debug scenarios such as llm_bootstrap, smelter_affordability, governance_vote_quote\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
   --major-world-event-visibility <policy> explicit audience policy: unknown|public|restricted|denied (default: unknown)\n\
@@ -517,6 +527,13 @@ Options:\n\
   --provider-lineage-store <path> explicit durable provider lineage checkpoint (for formal/synthetic restart recovery)\n\
   --provider-bootstrap-authority <path> explicit JSON Runtime authority bundle; repeat per ProviderBacked agent\n\
   -h, --help                show help\n\n\
+World service environment (required for formal/chain-linked mode):\n\
+  OASIS7_WORLD_SERVICE_ENDPOINT, OASIS7_WORLD_SERVICE_PUBLIC_KEY,\n\
+  OASIS7_WORLD_SERVICE_WORLD_ID, OASIS7_WORLD_SERVICE_GENESIS_DIGEST,\n\
+  OASIS7_WORLD_SERVICE_SCOPE, OASIS7_WORLD_SERVICE_READ_PRIVATE_KEY\n\
+Agent writes additionally require both OASIS7_WORLD_SERVICE_AGENT_PRIVATE_KEY\n\
+  and OASIS7_WORLD_SERVICE_AGENT_DELEGATION_GENERATION; read identity never grants Agent write authority.\n\
+Isolated offline diagnostics require --allow-debug-scenario without --chain-status-bind.\n\n\
 Removed:\n\
   --release-config, --runtime-world, all --node-*, --topology, --triad-*, --reward-runtime-*, --no-node, --viewer-no-consensus-gate\n\
   -> use oasis7_chain_runtime (usually managed by oasis7_game_launcher)"

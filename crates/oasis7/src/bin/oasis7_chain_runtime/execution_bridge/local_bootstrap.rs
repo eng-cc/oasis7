@@ -9,6 +9,27 @@ use oasis7::runtime::blake3_hex;
 use oasis7_node::NodeExecutionBootstrap;
 use oasis7_proto::storage_profile::StorageProfileConfig;
 
+/// Restore the consensus boundary from one verified service commit. Commit
+/// height and gameplay tick remain independent; all CAS material is required.
+pub(crate) fn derive_service_execution_bootstrap(
+    world_dir: &std::path::Path,
+    records_dir: &std::path::Path,
+    storage_dir: &std::path::Path,
+    world_id: &str,
+) -> Result<NodeExecutionBootstrap, String> {
+    let identity = super::world_service_read::identity(world_dir, world_id)?;
+    let pinned = super::world_service_read::pin(records_dir, storage_dir, &identity, None)?;
+    Ok(NodeExecutionBootstrap {
+        height: pinned.record.height,
+        consensus_block_hash: pinned
+            .record
+            .node_block_hash
+            .ok_or("service bootstrap node hash unavailable")?,
+        execution_block_hash: pinned.record.execution_block_hash,
+        execution_state_root: pinned.record.execution_state_root,
+    })
+}
+
 /// Derive the explicit local execution boundary from the persisted world.
 /// The boundary carries the real world snapshot root and journal length; it
 /// does not create a per-height consensus record or bypass the committed tick
@@ -134,9 +155,37 @@ impl NodeRuntimeExecutionDriver {
             return Err("local execution bootstrap boundary is incomplete".to_string());
         }
         if self.state.last_applied_committed_height > baseline.height {
+            if self.world_dir.join("world-service-identity.json").exists() {
+                return Err("service bootstrap is behind the persisted execution head".into());
+            }
             return Ok(());
         }
-        if self.execution_world.state().time != baseline.height {
+        let verified_service_boundary = if self.execution_world.state().time != baseline.height
+            && self.world_dir.join("world-service-identity.json").exists()
+        {
+            let binding = self
+                .execution_world
+                .current_cognition_runtime_binding()
+                .map_err(|error| format!("{error:?}"))?;
+            let identity = super::world_service_read::identity(&self.world_dir, &binding.world_id)?;
+            let pinned = super::world_service_read::pin(
+                &self.records_dir,
+                self.execution_store.root(),
+                &identity,
+                None,
+            )?;
+            pinned.record.height == baseline.height
+                && pinned.record.node_block_hash.as_deref()
+                    == Some(baseline.consensus_block_hash.as_str())
+                && pinned.record.execution_block_hash == baseline.execution_block_hash
+                && pinned.record.execution_state_root == baseline.execution_state_root
+                && pinned.record.journal_len == self.execution_world.journal().len()
+                && execution_world_snapshot_root(&self.execution_world)?
+                    == baseline.execution_state_root
+        } else {
+            false
+        };
+        if self.execution_world.state().time != baseline.height && !verified_service_boundary {
             return Err(format!(
                 "local execution bootstrap world time must equal boundary height: world_time={} height={}",
                 self.execution_world.state().time,
@@ -163,6 +212,7 @@ impl NodeRuntimeExecutionDriver {
             }
         }
         if self.state.last_applied_committed_height == 0 {
+            super::service_bootstrap_boundary::persist_initial(self, baseline)?;
             self.state.last_applied_committed_height = baseline.height;
             self.state.last_execution_block_hash = Some(baseline.execution_block_hash.clone());
             self.state.last_execution_state_root = Some(baseline.execution_state_root.clone());

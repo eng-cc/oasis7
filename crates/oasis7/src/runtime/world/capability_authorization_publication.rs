@@ -230,6 +230,22 @@ impl World {
         capability_budget_accounts: &mut BTreeMap<String, CapabilityBudgetAccount>,
     ) -> Result<(), WorldError> {
         match event {
+            CapabilityAuthorizationEvent::WorldServiceIntentRecorded { key, record } => {
+                crate::world_service::correlation::validate_result(key, record)
+                    .map_err(|reason| super::capability_authorization::deny(&reason))?;
+                if let Some(existing) = capability_revocation_state.world_service_results.get(key) {
+                    if existing != record { return Err(super::capability_authorization::deny("canonical intent result conflict")); }
+                }
+                capability_revocation_state.world_service_results.insert(key.clone(), record.clone());
+                Ok(())
+            }
+            CapabilityAuthorizationEvent::AgentSignerDelegationInstalled { signed } => {
+                crate::world_service::agent_authority::validate_delegation(self, signed)
+                    .map_err(|reason| super::capability_authorization::deny(&reason))?;
+                capability_revocation_state.agent_signer_delegations
+                    .insert(signed.request.agent_id.clone(), signed.request.clone());
+                Ok(())
+            }
             CapabilityAuthorizationEvent::AuthorityInstalledWithProof { record, proof } => {
                 super::capability_authorization::validate_authority_record(record)?;
                 self.verify_capability_authority_finality_proof(record, proof)?;

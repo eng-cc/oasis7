@@ -47,6 +47,11 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub hosted_public_join_mode: bool,
     pub chain_status_bind: Option<String>,
     pub chain_submit_bind: Option<String>,
+    /// Logical world endpoint and pinned service trust. Node paths are never
+    /// part of this application connection.
+    pub world_service: Option<crate::world_service::client::WorldServiceClientConfig>,
+    pub world_service_agent_signer:
+        Option<crate::world_service::client::WorldServiceAgentSignerConfig>,
     pub chain_link_policy: ChainLinkPolicy,
     pub agent_chat_echo_enabled: bool,
     /// Explicit operator/session audience decision for Major World Events.

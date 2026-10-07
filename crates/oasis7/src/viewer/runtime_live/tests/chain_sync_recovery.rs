@@ -1,5 +1,117 @@
 use super::*;
 
+#[test]
+fn world_service_submission_does_not_hold_shared_viewer_mutex_and_preserves_unknown_identity() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let service_key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .unwrap();
+    server.config.world_service = Some(crate::world_service::client::WorldServiceClientConfig {
+        endpoint,
+        trusted_service_public_key: hex::encode(service_key.verifying_key().to_bytes()),
+        expected_world: oasis7_client_api::world_service::WorldIdentity {
+            world_id: "test-world".into(),
+            genesis_digest: "genesis".into(),
+        },
+        scope_id: "public".into(),
+        read_private_key_hex: hex::encode([7; 32]),
+        timeout: Duration::from_secs(2),
+        max_response_bytes: 4096,
+    });
+    let signer = ed25519_dalek::SigningKey::from_bytes(&[5; 32]);
+    let request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: crate::viewer::ACTION_CLAIM_FIRST_AGENT.into(),
+            target_agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.into(),
+            actor_agent_id: None,
+            player_id: "player-service".into(),
+            public_key: None,
+            auth: None,
+        },
+        19,
+        &hex::encode(signer.verifying_key().to_bytes()),
+        &hex::encode([5; 32]),
+    );
+    let baseline = serde_json::to_value(server.world.state()).unwrap();
+    server
+        .session_policy
+        .register_session(
+            "player-service",
+            &hex::encode(signer.verifying_key().to_bytes()),
+        )
+        .unwrap();
+    let shared = Arc::new(Mutex::new(server));
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let http = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut bytes = [0; 4096];
+        assert!(stream.read(&mut bytes).unwrap() > 0);
+        started_tx.send(()).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        // Lost response: the accepted signed intent may still commit remotely.
+    });
+    let worker_shared = shared.clone();
+    let worker_request = request.clone();
+    let worker = thread::spawn(move || {
+        ViewerRuntimeLiveServer::prepare_shared_world_service_submission(
+            &worker_shared,
+            &ViewerRequest::GameplayAction {
+                request: worker_request,
+            },
+        )
+        .unwrap()
+        .unwrap()
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(
+        shared.try_lock().is_ok(),
+        "network wait must not hold Viewer mutex"
+    );
+    release_tx.send(()).unwrap();
+    http.join().unwrap();
+    let prepared = worker.join().unwrap();
+    let expected = prepared.correlation.clone();
+    let mut server = shared.lock().unwrap();
+    server.prepared_world_service_submission = Some(prepared);
+    let error = server.submit_world_service_gameplay(&request).unwrap_err();
+    assert_eq!(error.code, "world_service_outcome_unknown");
+    assert_eq!(server.pending_world_service_gameplay.len(), 1);
+    assert_eq!(server.pending_world_service_gameplay[0].0, expected);
+    assert_eq!(
+        serde_json::to_value(server.world.state()).unwrap(),
+        baseline
+    );
+    assert!(server.runtime_action_players.is_empty());
+    server.prepared_world_service_submission = Some(
+        super::super::super::world_service_link::PreparedWorldServiceSubmission {
+            correlation: expected,
+            outcome: Err("must not be consumed as another request".into()),
+            admission_error: None,
+        },
+    );
+    let mut different = request;
+    different.target_agent_id = "different-agent".into();
+    different = signed_gameplay_action_request(
+        different,
+        20,
+        &hex::encode(signer.verifying_key().to_bytes()),
+        &hex::encode([5; 32]),
+    );
+    assert_eq!(
+        server
+            .submit_world_service_gameplay(&different)
+            .unwrap_err()
+            .code,
+        "world_service_invalid_request"
+    );
+}
+
 /// A canonical publication height is not the runtime clock or event position.
 /// Exercise the real status HTTP + persisted-world synchronization path rather
 /// than the watermark helper so projection admission is covered as well.

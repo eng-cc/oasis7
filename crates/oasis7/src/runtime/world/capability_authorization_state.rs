@@ -89,9 +89,15 @@ impl World {
             CapabilityEffectReceiptLink,
         >,
     ) -> Result<String, WorldError> {
+        // Correlation results share the durable snapshot/journal container,
+        // but are not permissions. Their bytes remain committed by the full
+        // execution snapshot and journal; recording an outcome must not revoke
+        // an otherwise unchanged provider capability context.
+        let mut authority = capability_revocation_state.clone();
+        authority.world_service_results.clear();
         canonical_hash(&CapabilityAuthorizationRootBody {
             grants: capability_grants_v2,
-            revocation: capability_revocation_state,
+            revocation: &authority,
             invocation_contexts: capability_invocation_contexts,
             budget_accounts: capability_budget_accounts,
             nonce_records: capability_nonce_records,

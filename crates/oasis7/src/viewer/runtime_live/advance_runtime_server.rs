@@ -10,6 +10,30 @@ impl ViewerRuntimeLiveServer {
         request_id: Option<u64>,
         emit_while_paused: bool,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        if self.config.world_service.is_some() {
+            // Play/Step changes playback orchestration only. Canonical time
+            // advances exclusively at the service execution boundary.
+            // Shared request preparation/periodic polling performs the I/O
+            // outside the Viewer mutex. This path never executes a local tick.
+            if let Some(request_id) = request_id {
+                send_response(
+                    writer,
+                    &ViewerResponse::ControlCompletionAck {
+                        ack: ControlCompletionAck {
+                            request_id,
+                            status: ControlCompletionStatus::TimeoutNoProgress,
+                            delta_logical_time: 0,
+                            delta_event_seq: 0,
+                            error_code: None,
+                            error_message: Some(
+                                "canonical advancement is owned by the world service".into(),
+                            ),
+                        },
+                    },
+                )?;
+            }
+            return Ok(());
+        }
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
         let mut runtime_events_for_feedback = Vec::new();

@@ -1,7 +1,7 @@
 use super::*;
 use crate::consensus_action_payload::{
-    decode_consensus_action_payload, encode_consensus_action_payload, ConsensusActionPayloadBody,
-    ConsensusActionPayloadEnvelope,
+    ConsensusActionPayloadBody, ConsensusActionPayloadEnvelope, decode_consensus_action_payload,
+    encode_consensus_action_payload,
 };
 use oasis7_node::{NodeCommittedActionBatchesHandle, NodeRuntime};
 use std::collections::{HashSet, VecDeque};
@@ -75,6 +75,12 @@ impl LiveConsensusBridge {
                             .push_back(CommittedLiveAction { action, submitter });
                     }
                     Ok(ConsensusActionPayloadBody::RuntimeAction { .. }) => {}
+                    Ok(ConsensusActionPayloadBody::WorldServiceIntent { .. }) => {
+                        return Err(ViewerLiveServerError::Node(
+                            "authenticated world-service intent requires canonical chain execution"
+                                .into(),
+                        ));
+                    }
                     Err(err) => {
                         crate::observability::emit_stderr_or_event(
                             tracing::Level::WARN,

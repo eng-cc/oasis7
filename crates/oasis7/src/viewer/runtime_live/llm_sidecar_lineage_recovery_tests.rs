@@ -1,4 +1,30 @@
 use super::*;
+
+#[test]
+fn settled_service_lease_cleanup_preserves_a_newer_mirror() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let original_context =
+        valid_test_provider_context(&world, "agent-a", "turn-old", "request-old");
+    let original = reserve_test_provider_lease(&mut world, &original_context);
+    let newer_context = valid_test_provider_context(&world, "agent-a", "turn-new", "request-new");
+    let newer = reserve_test_provider_lease(&mut world, &newer_context);
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.bind_provider_cognition_lease("agent-a", newer.clone());
+    assert!(
+        sidecar
+            .clear_settled_service_lease(&original_context.request_context, &original)
+            .is_err()
+    );
+    assert_eq!(sidecar.provider_cognition_lease("agent-a"), Some(newer));
+    sidecar.bind_provider_cognition_lease("agent-a", original.clone());
+    sidecar
+        .clear_settled_service_lease(&original_context.request_context, &original)
+        .unwrap();
+    assert!(sidecar.provider_cognition_lease("agent-a").is_none());
+    sidecar
+        .clear_settled_service_lease(&original_context.request_context, &original)
+        .unwrap();
+}
 use crate::viewer::runtime_live::{
     ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, WorldScenario,
 };

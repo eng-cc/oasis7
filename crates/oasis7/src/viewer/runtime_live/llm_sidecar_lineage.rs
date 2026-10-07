@@ -41,6 +41,9 @@ impl RuntimeLlmSidecar {
             return;
         }
         self.provider_lineage_hydrated = true;
+        if self.provider_service_required {
+            return;
+        }
         let projection = world.cognition();
         let journal_head_seq = projection
             .get("cognition_journal")
@@ -169,6 +172,25 @@ impl RuntimeLlmSidecar {
             let Some(lease) = self.provider_cognition_leases.get(&agent_id).cloned() else {
                 continue;
             };
+            if self.provider_service_required {
+                let context = self
+                    .provider_active_turns
+                    .get(&agent_id)
+                    .or_else(|| self.provider_contexts.get(&agent_id))
+                    .or_else(|| self.provider_retry_contexts.get(&agent_id))
+                    .cloned()
+                    .ok_or("canonical stale lease recovery requires original request")?;
+                self.validate_provider_cognition_lease_for_request(
+                    world,
+                    &agent_id,
+                    &context.request_context,
+                    &lease,
+                    "stale release",
+                )?;
+                self.release_provider_lease_at_authority(world, &context.request_context, &lease)?;
+                leases_to_clear.push(agent_id);
+                continue;
+            }
             lease
                 .validate()
                 .map_err(|error| format!("stale provider cognition lease invalid: {error}"))?;

@@ -137,6 +137,7 @@ pub use rollback::{rollback_affected_census_digest, rollback_journal_commitment}
 mod rules;
 mod scheduling;
 mod snapshot;
+mod world_service;
 mod step;
 mod tick_consensus;
 mod tick_consensus_state_root;

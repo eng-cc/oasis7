@@ -102,7 +102,7 @@ mod lineage;
 #[path = "llm_sidecar_lineage_generation_recovery.rs"]
 mod lineage_generation_recovery;
 #[path = "llm_sidecar_lineage_persistence.rs"]
-mod lineage_persistence;
+pub(in crate::viewer::runtime_live) mod lineage_persistence;
 #[path = "llm_sidecar_lineage_recovery.rs"]
 mod lineage_recovery;
 #[path = "llm_sidecar_lineage_settlement.rs"]
@@ -263,6 +263,8 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_session_ids: BTreeMap<String, String>,
     provider_agent_ids: BTreeSet<String>,
     hosted_local_mock_test_lane: bool,
+    #[cfg(any(test, feature = "test_tier_required"))]
+    service_test_actor_agents: BTreeSet<String>,
     provider_context_seq: BTreeMap<String, u64>,
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
@@ -294,6 +296,19 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     /// wake so retry cannot allocate a duplicate provider turn.
     provider_wake_recovery_pending:
         BTreeMap<String, lineage_persistence::ProviderWakeRecoveryPending>,
+    pub(in crate::viewer::runtime_live) provider_service_pending:
+        BTreeMap<String, lineage_persistence::PendingProviderServiceIntent>,
+    provider_scheduler_pending:
+        BTreeMap<String, lineage_persistence::PendingProviderSchedulerIntent>,
+    pub(in crate::viewer::runtime_live) provider_service_config:
+        Option<crate::world_service::client::WorldServiceClientConfig>,
+    pub(in crate::viewer::runtime_live) provider_service_query_state:
+        crate::world_service::client::WorldServiceQueryState,
+    pub(in crate::viewer::runtime_live) provider_service_required: bool,
+    pub(in crate::viewer::runtime_live) provider_service_projection:
+        Option<crate::world_service::projection::WorldServiceProjection>,
+    pub(in crate::viewer::runtime_live) provider_service_signer:
+        Option<crate::world_service::client::WorldServiceAgentSignerConfig>,
     provider_wait_until: BTreeMap<String, u64>,
     provider_feedback_seq: BTreeMap<String, u64>,
     /// Compatibility feedback sequencing is partitioned by Agent session;
@@ -337,6 +352,83 @@ impl RuntimePlayerBindingPlan {
     }
 }
 impl RuntimeLlmSidecar {
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub(in crate::viewer::runtime_live) fn service_test_summary(&self) -> serde_json::Value {
+        serde_json::json!({
+            "pending_intent_count": self.provider_service_pending.len(),
+            "pending_action_count": self.pending_actions.len(),
+            "terminal_states": self.provider_terminal_states,
+            "memory_store": self.provider_memory_store,
+            "pending_wake_ids": self.pending_runtime_wakes.keys().collect::<Vec<_>>(),
+            "mirrored_lease_count": self.provider_cognition_leases.len(),
+        })
+    }
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub(in crate::viewer::runtime_live) fn queue_service_test_response(
+        &mut self,
+        cognition: RuntimeProviderActionContext,
+        _action: crate::simulator::Action,
+    ) -> Result<(), String> {
+        let agent_id = cognition.request.request_context.agent_subject.clone();
+        let observation = self
+            .shadow_kernel
+            .as_mut()
+            .ok_or("test requires authenticated projection observation")?
+            .observe(&agent_id)
+            .map_err(|error| format!("{error:?}"))?;
+        let lease = cognition
+            .cognition_lease
+            .clone()
+            .ok_or("test requires committed canonical lease")?;
+        let provider = crate::simulator::MockDecisionProvider::with_scripted_responses(
+            "canonical-test-provider",
+            vec![Ok(cognition.response.base_decision_response.clone())],
+        );
+        let behavior = crate::simulator::ProviderBackedAgentBehavior::new(
+            agent_id.clone(),
+            provider,
+            provider_phase1_action_catalog(),
+        )
+        .require_continuous_request_context();
+        let registered = self.service_test_actor_agents.contains(&agent_id);
+        let mut runner = match self.runner.take() {
+            Some(RuntimeDecisionRunner::ProviderBacked(runner)) if registered => runner,
+            _ => crate::simulator::AsyncAgentRunner::with_default_capacity(),
+        };
+        if !registered {
+            runner
+                .register(behavior)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+        runner.sync_logical_tick(cognition.request.request_context.runtime_binding.base_tick);
+        let started = runner
+            .start_turn_with_request_context_and_observation_and_lease(
+                &agent_id,
+                observation,
+                cognition.request.turn_context.clone(),
+                cognition.request.request_context.clone(),
+                lease.clone(),
+            )
+            .map_err(|error| format!("{error:?}"));
+        self.decision_mode = ViewerLiveDecisionMode::Llm;
+        self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+        started?;
+        self.service_test_actor_agents.insert(agent_id.clone());
+        self.provider_agent_ids.insert(agent_id.clone());
+        self.provider_active_turns
+            .insert(agent_id.clone(), cognition.request.clone());
+        self.provider_contexts
+            .insert(agent_id.clone(), cognition.request.clone());
+        self.provider_cognition_leases.insert(
+            agent_id.clone(),
+            cognition
+                .cognition_lease
+                .clone()
+                .expect("test reserved canonical lease"),
+        );
+        self.llm_decision_mailbox = 1;
+        Ok(())
+    }
     #[cfg(test)]
     pub(in crate::viewer::runtime_live) fn pending_actions_empty(&self) -> bool {
         self.pending_actions.is_empty()
@@ -408,6 +500,8 @@ impl RuntimeLlmSidecar {
             provider_session_ids: BTreeMap::new(),
             provider_agent_ids: BTreeSet::new(),
             hosted_local_mock_test_lane: false,
+            #[cfg(any(test, feature = "test_tier_required"))]
+            service_test_actor_agents: BTreeSet::new(),
             provider_context_seq: BTreeMap::new(),
             provider_contexts: BTreeMap::new(),
             provider_retry_contexts: BTreeMap::new(),
@@ -418,6 +512,14 @@ impl RuntimeLlmSidecar {
             provider_continuation_recovery_pending: BTreeMap::new(),
             provider_recovery_pending: BTreeMap::new(),
             provider_wake_recovery_pending: BTreeMap::new(),
+            provider_service_pending: BTreeMap::new(),
+            provider_scheduler_pending: BTreeMap::new(),
+            provider_service_config: None,
+            provider_service_query_state:
+                crate::world_service::client::WorldServiceQueryState::default(),
+            provider_service_required: false,
+            provider_service_projection: None,
+            provider_service_signer: None,
             provider_wait_until: BTreeMap::new(),
             provider_feedback_seq: BTreeMap::new(),
             provider_feedback_seq_by_session: BTreeMap::new(),
@@ -858,6 +960,23 @@ impl RuntimeLlmSidecar {
         &mut self,
         world: &RuntimeWorld,
     ) -> Result<(), String> {
+        if self.provider_service_required {
+            let view = self
+                .provider_service_projection
+                .as_ref()
+                .ok_or("authorized canonical wake view missing")?;
+            for wake in &view.scheduler_wakes {
+                wake.validate()
+                    .map_err(|error| format!("canonical wake invalid: {error:?}"))?;
+            }
+            self.pending_runtime_wakes = view
+                .scheduler_wakes
+                .iter()
+                .cloned()
+                .map(|wake| (wake.wake_id.clone(), wake))
+                .collect();
+            return self.persist_provider_lineage();
+        }
         let wakes = world
             .cognition_in_flight_wakes()
             .map_err(|error| format!("Runtime cognition wake read failed: {error:?}"))?;

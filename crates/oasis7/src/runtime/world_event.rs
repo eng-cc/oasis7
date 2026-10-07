@@ -107,6 +107,13 @@ pub enum CapabilityAuthorizationEvent {
         agent_id: String,
         identity: CapabilityAgentIdentity,
     },
+    AgentSignerDelegationInstalled {
+        signed: crate::world_service::SignedReadRequest<crate::world_service::AgentSignerDelegationChangeV1>,
+    },
+    WorldServiceIntentRecorded {
+        key: String,
+        record: serde_json::Value,
+    },
     SystemIdentityInstalled {
         system_id: String,
         epoch: u64,

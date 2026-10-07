@@ -251,6 +251,10 @@ impl World {
             CapabilityAuthorizationEvent::AgentIdentityInstalled { agent_id, identity } => {
                 apply_agent_identity(self, agent_id, identity)?;
             }
+            event @ (CapabilityAuthorizationEvent::AgentSignerDelegationInstalled { .. }
+            | CapabilityAuthorizationEvent::WorldServiceIntentRecorded { .. }) => {
+                super::world_service::apply_service_authorization_event(self, event)?
+            }
             CapabilityAuthorizationEvent::SystemIdentityInstalled { system_id, epoch } => {
                 apply_system_identity(self, system_id, *epoch)?;
             }
@@ -416,38 +420,9 @@ pub(super) fn validate_authority_record_transition(
     Ok(())
 }
 
-fn apply_agent_identity(
-    world: &mut World,
-    agent_id: &str,
-    identity: &CapabilityAgentIdentity,
-) -> Result<(), WorldError> {
-    super::capability_authorization::validate_agent_identity(agent_id, identity)?;
-    let Some(agent) = world.state.agents.get(agent_id) else {
-        return Err(deny("capability agent identity requires a live agent"));
-    };
-    if agent.state.agent_id != agent_id {
-        return Err(deny("live agent state id does not match its registry key"));
-    }
-    if let Some(existing) = world
-        .capability_revocation_state
-        .agent_identities
-        .get(agent_id)
-    {
-        if identity.generation < existing.generation {
-            return Err(deny("capability agent identity generation regressed"));
-        }
-        if identity.generation == existing.generation && existing != identity {
-            return Err(deny(
-                "capability agent identity changed without a new generation",
-            ));
-        }
-    }
-    world
-        .capability_revocation_state
-        .agent_identities
-        .insert(agent_id.to_string(), identity.clone());
-    Ok(())
-}
+#[path = "capability_agent_identity_events.rs"]
+mod agent_identity;
+use agent_identity::apply_agent_identity;
 
 fn apply_system_identity(world: &mut World, system_id: &str, epoch: u64) -> Result<(), WorldError> {
     if system_id.trim().is_empty() || epoch > world.state.time {

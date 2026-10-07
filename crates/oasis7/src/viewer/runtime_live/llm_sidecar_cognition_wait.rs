@@ -58,6 +58,57 @@ fn compensate_provider_wait_admission(
     reason: impl Into<String>,
 ) -> String {
     let reason = reason.into();
+    if sidecar.provider_service_required {
+        let tick = sidecar
+            .provider_service_projection
+            .as_ref()
+            .map(|view| view.state.time)
+            .unwrap_or(request.runtime_binding.base_tick);
+        let result = sidecar
+            .provider_scheduler_operation(
+                request,
+                "compensate_wait",
+                crate::world_service::wire::SchedulerOperationV1::TransitionContinuation {
+                    continuation_id: admitted.continuation_id.clone(),
+                    to: crate::runtime::ContinuationStatusV1::Rejected,
+                    logical_tick: tick,
+                },
+            )
+            .and_then(|_| {
+                if let Some(lease) = sidecar.provider_cognition_lease(&request.agent_subject) {
+                    sidecar.settle_provider_lease_at_authority(world, request, &lease)?;
+                    sidecar.clear_provider_cognition_lease(&request.agent_subject);
+                }
+                if let Some(runner) = sidecar
+                    .runner
+                    .as_mut()
+                    .and_then(RuntimeDecisionRunner::async_runner_mut)
+                {
+                    runner
+                        .invalidate_continuation_for_agent(
+                            &request.agent_subject,
+                            crate::simulator::ContinuationInvalidationReason::Rejected,
+                        )
+                        .map_err(|error| {
+                            format!("canonical Wait harness compensation failed: {error}")
+                        })?;
+                }
+                sidecar.provider_continuation_proposals.remove(proposal_id);
+                sidecar
+                    .provider_continuation_recovery_pending
+                    .remove(&request.agent_subject);
+                sidecar.provider_active_turns.remove(&request.agent_subject);
+                sidecar.persist_provider_lineage()
+            });
+        if let Err(error) = result {
+            sidecar
+                .provider_continuation_recovery_pending
+                .insert(request.agent_subject.clone(), proposal_id.into());
+            sidecar.persist_provider_lineage_best_effort();
+            return format!("{reason}; canonical Wait compensation remains pending: {error}");
+        }
+        return reason;
+    }
     let fault = provider_wait_fault();
     let mut compensation_errors = Vec::new();
     let mut runtime_already_terminal =
@@ -240,8 +291,7 @@ fn compensate_provider_wait_admission(
             compensation_errors.push(format!(
                 "provider Wait cognition lease settlement validation failed: {error}"
             ));
-        } else if let Err(error) =
-            world.settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
+        } else if let Err(error) = sidecar.settle_provider_lease_at_authority(world, request, lease)
         {
             compensation_errors.push(format!(
                 "provider Wait cognition lease settlement failed: {error:?}"
@@ -437,7 +487,11 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
         .validate_for_agent(request.agent_subject.as_str())
         .map_err(|error| format!("provider Wait current context invalid: {error}"))?;
 
-    let wake_tick = world.state().time.saturating_add(1);
+    let wait_ticks = match &cognition.response.base_decision_response.decision {
+        crate::simulator::ProviderDecision::WaitTicks { ticks } => (*ticks).max(1),
+        _ => 1,
+    };
+    let wake_tick = request.runtime_binding.base_tick.saturating_add(wait_ticks);
     let mut simulator = crate::simulator::ContinuationProposalV1 {
         schema_version: 1,
         continuation_proposal_id: format!(
@@ -500,13 +554,22 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
     else {
         return Err("provider Wait runner is unavailable".to_string());
     };
-    let handle = runner
-        .submit_continuation_proposal_with_current_context(
-            request.agent_subject.as_str(),
-            simulator.clone(),
-            &current,
+    let handle = if sidecar.provider_service_required
+        && runner.active_continuation_proposal_id(&request.agent_subject)
+            == Some(simulator.continuation_proposal_id.as_str())
+    {
+        None
+    } else {
+        Some(
+            runner
+                .submit_continuation_proposal_with_current_context(
+                    request.agent_subject.as_str(),
+                    simulator.clone(),
+                    &current,
+                )
+                .map_err(|error| format!("provider Wait Harness admission failed: {error}"))?,
         )
-        .map_err(|error| format!("provider Wait Harness admission failed: {error}"))?;
+    };
     let proposal_id = simulator.continuation_proposal_id.clone();
     sidecar
         .provider_continuation_proposals
@@ -529,24 +592,34 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
             "provider Wait Harness lineage persistence failed before Runtime admission: {error}"
         ));
     }
-    let admitted = match world.admit_cognition_continuation(runtime) {
-        Ok(admitted) => admitted,
-        Err(error) => {
-            if let Some(runner) = sidecar
-                .runner
-                .as_mut()
-                .and_then(RuntimeDecisionRunner::async_runner_mut)
-            {
-                let _ = runner.invalidate_continuation_for_agent(
-                    request.agent_subject.as_str(),
-                    crate::simulator::ContinuationInvalidationReason::Rejected,
-                );
+    let admitted = if sidecar.provider_service_required {
+        let receipt = sidecar.provider_scheduler_operation(
+            request,
+            "admit_wait",
+            crate::world_service::wire::SchedulerOperationV1::AdmitContinuation(runtime),
+        )?;
+        serde_json::from_value::<crate::runtime::AgentContinuation>(receipt)
+            .map_err(|error| format!("canonical provider Wait receipt invalid: {error}"))?
+    } else {
+        match world.admit_cognition_continuation(runtime) {
+            Ok(admitted) => admitted,
+            Err(error) => {
+                if let Some(runner) = sidecar
+                    .runner
+                    .as_mut()
+                    .and_then(RuntimeDecisionRunner::async_runner_mut)
+                {
+                    let _ = runner.invalidate_continuation_for_agent(
+                        request.agent_subject.as_str(),
+                        crate::simulator::ContinuationInvalidationReason::Rejected,
+                    );
+                }
+                sidecar
+                    .provider_continuation_proposals
+                    .remove(proposal_id.as_str());
+                sidecar.persist_provider_lineage_best_effort();
+                return Err(format!("provider Wait Runtime admission failed: {error:?}"));
             }
-            sidecar
-                .provider_continuation_proposals
-                .remove(proposal_id.as_str());
-            sidecar.persist_provider_lineage_best_effort();
-            return Err(format!("provider Wait Runtime admission failed: {error:?}"));
         }
     };
     let admitted_for_compensation = admitted.clone();
@@ -592,8 +665,8 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
             &current,
         ) {
             Some(format!(
-                "provider Wait Runtime projection failed after admission: {error} (Harness handle {})",
-                handle.chain_id
+                "provider Wait Runtime projection failed after admission: {error} (Harness handle {:?})",
+                handle.as_ref().map(|handle| &handle.chain_id)
             ))
         } else {
             #[cfg(test)]

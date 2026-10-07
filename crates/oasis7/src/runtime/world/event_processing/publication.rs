@@ -264,6 +264,8 @@ impl World {
             WorldEventBody::CapabilityAuthorization(
                 event @ (CapabilityAuthorizationEvent::AuthorityInstalledWithProof { .. }
                 | CapabilityAuthorizationEvent::AgentIdentityInstalled { .. }
+                | CapabilityAuthorizationEvent::AgentSignerDelegationInstalled { .. }
+                | CapabilityAuthorizationEvent::WorldServiceIntentRecorded { .. }
                 | CapabilityAuthorizationEvent::SystemIdentityInstalled { .. }
                 | CapabilityAuthorizationEvent::InvocationContextInstalled { .. }
                 | CapabilityAuthorizationEvent::BudgetAccountInstalled { .. }

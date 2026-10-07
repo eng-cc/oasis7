@@ -11,6 +11,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const LEGACY_PROVIDER_LINEAGE_SCHEMA_VERSION: u16 = 1;
 const PROVIDER_LINEAGE_SCHEMA_VERSION: u16 = 2;
 
+pub(in crate::viewer::runtime_live) use service_checkpoint::{
+    PendingProviderSchedulerIntent, PendingProviderServiceIntent,
+};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct ProviderTerminalState {
     /// The map key is an optimization only; retain the subject in the
@@ -97,6 +101,10 @@ struct PersistedProviderLineageV1 {
     provider_recovery_pending: BTreeMap<String, ProviderRecoveryPending>,
     #[serde(default)]
     provider_wake_recovery_pending: BTreeMap<String, ProviderWakeRecoveryPending>,
+    #[serde(default)]
+    provider_service_pending: BTreeMap<String, PendingProviderServiceIntent>,
+    #[serde(default)]
+    provider_scheduler_pending: BTreeMap<String, PendingProviderSchedulerIntent>,
     provider_wait_until: BTreeMap<String, u64>,
     provider_feedback_seq: BTreeMap<String, u64>,
     #[serde(default)]
@@ -225,34 +233,9 @@ fn validate_persisted_provider_cognition_leases(
     Ok(())
 }
 
-fn decode_provider_lineage_checkpoint(
-    bytes: &[u8],
-) -> Result<(PersistedProviderLineageV1, bool), String> {
-    let mut value: Value = serde_json::from_slice(bytes)
-        .map_err(|error| format!("provider lineage checkpoint decode failed: {error}"))?;
-    let schema_version = value
-        .get("schema_version")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| {
-            "provider lineage checkpoint decode failed: missing schema_version".to_string()
-        })?;
-    let migrated = match u16::try_from(schema_version).unwrap_or(u16::MAX) {
-        PROVIDER_LINEAGE_SCHEMA_VERSION => false,
-        LEGACY_PROVIDER_LINEAGE_SCHEMA_VERSION => {
-            lineage_recovery::migrate_legacy_budget_contracts(&mut value)?;
-            value["schema_version"] = json!(PROVIDER_LINEAGE_SCHEMA_VERSION);
-            true
-        }
-        other => {
-            return Err(format!(
-                "unsupported provider lineage checkpoint schema {other}"
-            ));
-        }
-    };
-    let checkpoint = serde_json::from_value(value)
-        .map_err(|error| format!("provider lineage checkpoint decode failed: {error}"))?;
-    Ok((checkpoint, migrated))
-}
+#[path = "llm_sidecar_service_checkpoint.rs"]
+mod service_checkpoint;
+use service_checkpoint::decode_provider_lineage_checkpoint;
 
 pub(super) fn committed_runtime_record_for_request(
     world: &RuntimeWorld,
@@ -335,7 +318,7 @@ impl RuntimeLlmSidecar {
         context: &cognition_context::ProviderContextState,
         lease: &crate::runtime::CognitionLeaseV1,
     ) -> Result<(), String> {
-        match world.release_cognition_lease(lease.lease_id.as_str()) {
+        match self.release_provider_lease_at_authority(world, &context.request_context, lease) {
             Ok(_) => {
                 self.clear_provider_cognition_lease(agent_id);
                 Ok(())
@@ -349,19 +332,6 @@ impl RuntimeLlmSidecar {
                 Err(message)
             }
         }
-    }
-
-    pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_request(
-        &self,
-        world: &RuntimeWorld,
-        agent_id: &str,
-        request: &crate::simulator::ContinuousAgentRequestContextV1,
-        lease: &crate::runtime::CognitionLeaseV1,
-        operation: &str,
-    ) -> Result<(), String> {
-        lineage_generation_recovery::validate_provider_lease_binding(
-            world, agent_id, request, lease, operation,
-        )
     }
 
     pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_agent(
@@ -489,7 +459,9 @@ impl RuntimeLlmSidecar {
                 return Err(error);
             }
         };
-        validate_persisted_provider_cognition_leases(world, &checkpoint)?;
+        if !self.provider_service_required {
+            validate_persisted_provider_cognition_leases(world, &checkpoint)?;
+        }
         for (proposal_id, proposal) in &checkpoint.provider_continuation_proposals {
             if proposal_id != &proposal.continuation_proposal_id {
                 return Err(format!(
@@ -502,15 +474,21 @@ impl RuntimeLlmSidecar {
                 )
             })?;
         }
-        let current_binding = checkpoint
-            .runtime_binding
-            .as_ref()
-            .map(|_| {
-                world
-                    .current_cognition_runtime_binding()
-                    .map_err(|error| format!("Runtime cognition binding unavailable: {error:?}"))
-            })
-            .transpose()?;
+        let current_binding = if self.provider_service_required {
+            self.provider_service_projection
+                .as_ref()
+                .and_then(|view| view.runtime_binding.clone())
+        } else {
+            checkpoint
+                .runtime_binding
+                .as_ref()
+                .map(|_| {
+                    world.current_cognition_runtime_binding().map_err(|error| {
+                        format!("Runtime cognition binding unavailable: {error:?}")
+                    })
+                })
+                .transpose()?
+        };
         let binding_changed = current_binding
             .as_ref()
             .zip(checkpoint.runtime_binding.as_ref())
@@ -536,6 +514,8 @@ impl RuntimeLlmSidecar {
             checkpoint.provider_continuation_recovery_pending;
         self.provider_recovery_pending = checkpoint.provider_recovery_pending;
         self.provider_wake_recovery_pending = checkpoint.provider_wake_recovery_pending;
+        self.provider_service_pending = checkpoint.provider_service_pending;
+        self.provider_scheduler_pending = checkpoint.provider_scheduler_pending;
         self.provider_wait_until = checkpoint.provider_wait_until;
         self.provider_feedback_seq = checkpoint.provider_feedback_seq;
         self.provider_feedback_seq_by_session = checkpoint.provider_feedback_seq_by_session;
@@ -605,6 +585,14 @@ impl RuntimeLlmSidecar {
             .into_values()
             .map(|wake| (wake.wake_id.clone(), wake))
             .collect();
+        if self.provider_service_required {
+            self.pending_runtime_wakes = pending_runtime_wakes;
+            self.provider_lineage_binding = checkpoint.runtime_binding;
+            self.provider_lineage_restored = true;
+            // Signed pending intents are validated before installation. Only
+            // canonical Lookup/read-view may reconcile them after restart.
+            return Ok(());
+        }
         let runtime_wakes = world.cognition_in_flight_wakes().map_err(|error| {
             format!("Runtime cognition wake read failed during provider lineage restore: {error:?}")
         })?;
@@ -1056,6 +1044,8 @@ impl RuntimeLlmSidecar {
                 .clone(),
             provider_recovery_pending: self.provider_recovery_pending.clone(),
             provider_wake_recovery_pending: self.provider_wake_recovery_pending.clone(),
+            provider_service_pending: self.provider_service_pending.clone(),
+            provider_scheduler_pending: self.provider_scheduler_pending.clone(),
             provider_wait_until: self.provider_wait_until.clone(),
             provider_feedback_seq: self.provider_feedback_seq.clone(),
             provider_feedback_seq_by_session: self.provider_feedback_seq_by_session.clone(),

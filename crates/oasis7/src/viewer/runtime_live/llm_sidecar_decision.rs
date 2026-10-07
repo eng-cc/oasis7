@@ -89,7 +89,7 @@ impl RuntimeLlmSidecar {
                         }
                     }
                     let cognition_lease =
-                        match async_support::reserve_provider_cognition_lease(world, &context) {
+                        match self.reserve_provider_lease_at_authority(world, &context) {
                             Ok(lease) => lease,
                             Err(error) => {
                                 self.shadow_kernel = Some(kernel);
@@ -99,7 +99,7 @@ impl RuntimeLlmSidecar {
                             }
                         };
                     self.bind_provider_cognition_lease(agent_id.clone(), cognition_lease.clone());
-                    if let Err(error) = async_support::runtime_provider_prefix(world, &context) {
+                    if let Err(error) = self.provider_prefix_at_authority(world, &context) {
                         let release_error = self
                             .release_provider_lease_before_io_or_fence(
                                 world,

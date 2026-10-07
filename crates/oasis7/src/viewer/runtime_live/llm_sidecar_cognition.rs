@@ -29,6 +29,11 @@ struct ProviderCapabilityContext {
     session_id: String,
 }
 
+#[path = "llm_sidecar_resume_recovery.rs"]
+mod resume_recovery;
+#[path = "llm_sidecar_cognition_service.rs"]
+mod service_cognition;
+
 /// Viewer-side seam for the Runtime-owned cognition binding. The viewer does
 /// not inspect or synthesize persisted authority fields; Runtime is the sole
 /// source of the canonical world/manifest roots and finality lineage.
@@ -80,9 +85,17 @@ impl RuntimeLlmSidecar {
             tracing::warn!(error, "provider Wait recovery remains pending");
         }
         let provider_settings = provider_settings_from_env()?;
-        let runtime_binding = world.current_runtime_binding(world_id)?;
+        let runtime_binding = if self.provider_service_required {
+            self.provider_service_projection
+                .as_ref()
+                .and_then(|view| view.runtime_binding.clone())
+                .filter(|binding| binding.world_id == world_id)
+                .ok_or("authorized canonical cognition binding missing")?
+        } else {
+            world.current_runtime_binding(world_id)?
+        };
         #[cfg(any(test, feature = "test_tier_required"))]
-        if hosted_local_mock_test_lane_enabled(true) {
+        if !self.provider_service_required && hosted_local_mock_test_lane_enabled(true) {
             install_hosted_local_mock_test_capability_fixtures(world, true)?;
         }
         if self
@@ -100,6 +113,7 @@ impl RuntimeLlmSidecar {
                 .retain(|_, context| context.request_context.runtime_binding == runtime_binding);
         }
         self.provider_lineage_binding = Some(runtime_binding.clone());
+        self.recover_consumed_service_resumes(&runtime_binding)?;
         let recent_event_summary = recent_runtime_event_summaries(world);
         self.release_due_provider_waits(world)?;
         if self.runner.is_none() {
@@ -151,7 +165,7 @@ impl RuntimeLlmSidecar {
                 .min_by_key(|wake| (wake.wake_seq, wake.wake_id.as_str()))
                 .cloned();
             if let Some(wake) = runtime_wake.as_ref() {
-                let continuation = active_runtime_continuation_for_wake(world, wake)?;
+                let continuation = self.authority_continuation_for_wake(world, wake)?;
                 #[cfg(not(target_arch = "wasm32"))]
                 self.ensure_runtime_harness_continuation(
                     agent_id.as_str(),
@@ -164,11 +178,28 @@ impl RuntimeLlmSidecar {
                     // zero-budget resume. Let Runtime consume that last unit
                     // atomically instead of rejecting the wake after it has
                     // been selected (which would leave a ghost continuation).
-                    let runtime_context = runtime_context_digests_for_continuation(
-                        world,
-                        wake.continuation_id.as_str(),
-                    )?;
-                    let consumption = world
+                    let runtime_context =
+                        self.authority_continuation_context(world, wake.continuation_id.as_str())?;
+                    let consumption = if self.provider_service_required {
+                        let original = self
+                            .provider_contexts
+                            .get(agent_id.as_str())
+                            .or_else(|| self.provider_active_turns.get(agent_id.as_str()))
+                            .cloned()
+                            .ok_or(
+                                "canonical final wake budget requires original provider context",
+                            )?;
+                        let receipt = self.provider_scheduler_operation(&original.request_context,&format!("consume:{}",wake.wake_id),crate::world_service::wire::SchedulerOperationV1::ConsumeContinuationBudget {
+                            continuation_id:continuation.continuation_id.clone(),budget_spent:1,current_context:runtime_context.clone(),
+                        })?;
+                        serde_json::from_value::<crate::runtime::CognitionBudgetConsumptionV1>(
+                            receipt,
+                        )
+                        .map_err(|error| {
+                            format!("canonical wake budget receipt invalid: {error}")
+                        })?
+                    } else {
+                        world
                         .consume_cognition_continuation_budget_with_context(
                             continuation.continuation_id.as_str(),
                             1,
@@ -179,7 +210,8 @@ impl RuntimeLlmSidecar {
                                 "Runtime final continuation budget consumption rejected {}: {error:?}",
                                 wake.wake_id
                             )
-                        })?;
+                        })?
+                    };
                     #[cfg(not(target_arch = "wasm32"))]
                     if let Some(runner) = self
                         .runner
@@ -240,6 +272,11 @@ impl RuntimeLlmSidecar {
                     self.provider_continuation_recovery_pending
                         .remove(agent_id.as_str());
                     self.pending_runtime_wakes.remove(&wake.wake_id);
+                    self.provider_scheduler_pending.remove(&format!(
+                        "{}:resume:{}",
+                        request_context.provider_invocation_key(),
+                        wake.wake_id
+                    ));
                     self.provider_contexts.remove(agent_id.as_str());
                     self.provider_active_turns.remove(agent_id.as_str());
                     self.provider_retry_contexts.remove(agent_id.as_str());
@@ -261,6 +298,11 @@ impl RuntimeLlmSidecar {
                     retry.request_context.transport_attempt.saturating_add(1);
                 retry
             } else {
+                // An ambiguous canonical resume retains its exact request
+                // identity. Advancing the local sequence would create another
+                // resume instead of looking up the original signed phase.
+                let pending_resume_sequence =
+                    self.pending_service_resume_sequence(&agent_id, runtime_wake.as_ref());
                 let sequence = self
                     .provider_context_seq
                     .entry(agent_id.clone())
@@ -268,7 +310,9 @@ impl RuntimeLlmSidecar {
                 let current_sequence = runtime_wake
                     .as_ref()
                     .map(|wake| {
-                        let next = (*sequence).max(wake.retry_seq.saturating_add(1)).max(1);
+                        let next = pending_resume_sequence.unwrap_or_else(|| {
+                            (*sequence).max(wake.retry_seq.saturating_add(1)).max(1)
+                        });
                         *sequence = next.saturating_add(1);
                         next
                     })
@@ -276,12 +320,34 @@ impl RuntimeLlmSidecar {
                 if runtime_wake.is_none() {
                     *sequence = current_sequence.saturating_add(1);
                 }
-                let capability_context = provider_capability_context(
-                    world,
-                    &runtime_binding,
-                    agent_id.as_str(),
-                    current_sequence,
-                )?;
+                let capability_context = if self.provider_service_required {
+                    let context = self
+                        .provider_service_projection
+                        .as_ref()
+                        .and_then(|view| view.agent_context.as_ref())
+                        .filter(|context| context.agent_id == agent_id)
+                        .ok_or("authorized canonical Agent capability context missing")?;
+                    let catalog = context.capability_catalog.clone();
+                    let invocation = context.capability_invocation_context.clone();
+                    let session_id = invocation
+                        .presenter
+                        .session_id
+                        .clone()
+                        .filter(|id| !id.trim().is_empty())
+                        .ok_or("canonical provider session missing")?;
+                    ProviderCapabilityContext {
+                        catalog,
+                        invocation,
+                        session_id,
+                    }
+                } else {
+                    provider_capability_context(
+                        world,
+                        &runtime_binding,
+                        agent_id.as_str(),
+                        current_sequence,
+                    )?
+                };
                 let goal_snapshot =
                     trusted_provider_goal_snapshot(self.prompt_profiles.get(agent_id.as_str()))?;
                 let session_id = runtime_wake
@@ -298,11 +364,14 @@ impl RuntimeLlmSidecar {
                             .or_insert_with(|| capability_context.session_id.clone())
                             .clone()
                     });
-                let (runtime_continuation, runtime_resume_proposal) = runtime_wake
+                let (mut runtime_continuation, mut runtime_resume_proposal) = runtime_wake
                     .as_ref()
                     .map(|wake| {
                         runtime_continuation_for_wake_with_identity(
                             world,
+                            self.provider_service_projection
+                                .as_ref()
+                                .filter(|_| self.provider_service_required),
                             wake,
                             session_id.as_str(),
                             current_sequence,
@@ -313,7 +382,7 @@ impl RuntimeLlmSidecar {
                         (Some(simulator), Some(runtime))
                     });
                 let observation_for_context = observation.clone();
-                let (turn_context, request_context) =
+                let (mut turn_context, mut request_context) =
                     build_provider_context(ProviderContextInput {
                         session_id: session_id.as_str(),
                         sequence: current_sequence,
@@ -328,6 +397,21 @@ impl RuntimeLlmSidecar {
                         memory_store: &self.provider_memory_store,
                         goal_snapshot,
                     })?;
+                let pending_resume = self.validated_pending_service_resume(
+                    &agent_id,
+                    runtime_wake.as_ref(),
+                    &request_context,
+                )?;
+                if let Some(pending) = pending_resume.as_ref() {
+                    let original = pending
+                        .resume_context
+                        .as_ref()
+                        .expect("validated resume context");
+                    runtime_continuation = original.turn_context.continuation.clone();
+                    runtime_resume_proposal = Some(Self::pending_service_resume_proposal(pending)?);
+                    turn_context = original.turn_context.clone();
+                    request_context = original.request_context.clone();
+                }
                 if let Some(identity) =
                     lineage_generation_recovery::provider_request_capability_identity(
                         &request_context,
@@ -339,8 +423,9 @@ impl RuntimeLlmSidecar {
                 if let (Some(wake), Some(proposal)) =
                     (runtime_wake.as_ref(), runtime_resume_proposal)
                 {
-                    let predecessor_proposal_id =
-                        active_runtime_continuation_for_wake(world, wake)?.continuation_proposal_id;
+                    let predecessor_proposal_id = self
+                        .authority_continuation_for_wake(world, wake)?
+                        .continuation_proposal_id;
                     let next_proposal = runtime_continuation
                         .as_ref()
                         .expect("Runtime resume always produces a next Harness proposal")
@@ -365,49 +450,109 @@ impl RuntimeLlmSidecar {
                             &request_context,
                         ),
                     };
-                    let current_context =
+                    let mut current_context =
                         crate::simulator::ContinuationCurrentContextV1::from_observation(
                             observation_for_context,
                             &turn_context.goal_snapshot,
                             provider_policy_context_digest(&request_context),
                             provider_wait_precondition_digest(&observation),
                         );
-                    let resumed = match world.resume_cognition_wake_with_context(
-                        &wake.wake_id,
-                        proposal,
-                        1,
-                        resume,
-                        crate::runtime::CognitionContextDigestsV1 {
-                            baseline_observation_digest: current_context
-                                .authority
-                                .baseline_observation_digest
-                                .clone(),
-                            goal_digest: current_context.authority.goal_digest.clone(),
-                            policy_digest: current_context.authority.policy_digest.clone(),
-                            precondition_digest: current_context
-                                .authority
-                                .precondition_digest
-                                .clone(),
-                        },
-                    ) {
-                        Ok(result) => result,
-                        Err(error) => {
-                            // A stale wake must not remain leased just
-                            // because the current-context gate rejected it.
-                            // Runtime's terminal handoff is scoped to this
-                            // exact wake; local mirrors are then removed for
-                            // this Agent only.
-                            return Err(self.handle_provider_wake_resume_failure(
-                                world,
-                                wake,
-                                &current_context,
-                                &turn_context,
-                                &request_context,
-                                predecessor_proposal_id.as_str(),
-                                next_proposal.continuation_proposal_id.as_str(),
-                                agent_id.as_str(),
-                                &error,
-                            ));
+                    if let Some(pending) = pending_resume.as_ref() {
+                        current_context = pending.resume_current_context.clone().ok_or(
+                            "pending canonical ResumeWake current context missing; fenced",
+                        )?;
+                    }
+                    let resumed = if self.provider_service_required {
+                        let operation = pending_resume
+                            .as_ref()
+                            .map(|pending| {
+                                let crate::world_service::wire::WorldServicePayloadV1::Scheduler(
+                                    signed,
+                                ) = &pending.payload
+                                else {
+                                    unreachable!()
+                                };
+                                signed.request.operation.clone()
+                            })
+                            .unwrap_or_else(|| {
+                                crate::world_service::wire::SchedulerOperationV1::ResumeWake {
+                                    wake_id: wake.wake_id.clone(),
+                                    proposal,
+                                    budget_spent: 1,
+                                    resume,
+                                    current_context: crate::runtime::CognitionContextDigestsV1 {
+                                        baseline_observation_digest: current_context
+                                            .authority
+                                            .baseline_observation_digest
+                                            .clone(),
+                                        goal_digest: current_context.authority.goal_digest.clone(),
+                                        policy_digest: current_context
+                                            .authority
+                                            .policy_digest
+                                            .clone(),
+                                        precondition_digest: current_context
+                                            .authority
+                                            .precondition_digest
+                                            .clone(),
+                                    },
+                                }
+                            });
+                        let receipt = self.provider_scheduler_operation_with_resume_context(
+                            &request_context,
+                            &format!("resume:{}", wake.wake_id),
+                            operation,
+                            Some((
+                                ProviderContextState {
+                                    turn_context: turn_context.clone(),
+                                    request_context: request_context.clone(),
+                                },
+                                current_context.clone(),
+                            )),
+                        )?;
+                        serde_json::from_value::<crate::runtime::CognitionWakeHandoffResultV1>(
+                            receipt,
+                        )
+                        .map_err(|error| {
+                            format!("canonical wake resume receipt invalid: {error}")
+                        })?
+                    } else {
+                        match world.resume_cognition_wake_with_context(
+                            &wake.wake_id,
+                            proposal,
+                            1,
+                            resume,
+                            crate::runtime::CognitionContextDigestsV1 {
+                                baseline_observation_digest: current_context
+                                    .authority
+                                    .baseline_observation_digest
+                                    .clone(),
+                                goal_digest: current_context.authority.goal_digest.clone(),
+                                policy_digest: current_context.authority.policy_digest.clone(),
+                                precondition_digest: current_context
+                                    .authority
+                                    .precondition_digest
+                                    .clone(),
+                            },
+                        ) {
+                            Ok(result) => result,
+                            Err(error) => {
+                                // A stale wake must not remain leased just
+                                // because the current-context gate rejected it.
+                                // Runtime's terminal handoff is scoped to this
+                                // exact wake; local mirrors are then removed for
+                                // this Agent only.
+                                return Err(self.handle_provider_wake_resume_failure(
+                                    world,
+                                    wake,
+                                    &current_context,
+                                    &turn_context,
+                                    &request_context,
+                                    predecessor_proposal_id.as_str(),
+                                    next_proposal.continuation_proposal_id.as_str(),
+                                    agent_id.as_str(),
+                                    &error,
+                                ));
+                            }
                         }
                     };
                     #[cfg(not(target_arch = "wasm32"))]
@@ -479,6 +624,14 @@ fn provider_policy_context_digest(
 
 impl RuntimeLlmSidecar {
     fn quarantine_missing_provider_agent(&mut self, world: &mut RuntimeWorld, agent_id: &str) {
+        if self.provider_service_required {
+            self.provider_continuation_recovery_pending.insert(
+                agent_id.into(),
+                "canonical provider actor or observation is unavailable".into(),
+            );
+            self.persist_provider_lineage_best_effort();
+            return;
+        }
         self.provider_agent_ids.remove(agent_id);
         self.provider_session_ids.remove(agent_id);
         self.provider_context_seq.remove(agent_id);
@@ -791,101 +944,7 @@ pub(super) fn runtime_context_digests_for_continuation(
     })
 }
 
-fn runtime_continuation_for_wake_with_identity(
-    world: &RuntimeWorld,
-    wake: &crate::runtime::SchedulerWakeV1,
-    session_id: &str,
-    sequence: u64,
-) -> Result<
-    (
-        SimulatorContinuationProposalV1,
-        crate::runtime::CognitionContinuationProposalV1,
-    ),
-    String,
-> {
-    let continuation = active_runtime_continuation_for_wake(world, wake)?;
-    if continuation.remaining_budget.value <= 1 {
-        return Err(format!(
-            "Runtime continuation {} has no budget for a resumed request",
-            continuation.continuation_id
-        ));
-    }
-    let mut proposal = serde_json::to_value(continuation).map_err(|error| {
-        format!(
-            "Runtime continuation {} cannot cross provider boundary: {error}",
-            wake.continuation_id
-        )
-    })?;
-    if let Some(context) = world
-        .cognition()
-        .get("continuation_contexts")
-        .and_then(Value::as_object)
-        .and_then(|contexts| contexts.get(&wake.continuation_id))
-        .and_then(Value::as_object)
-    {
-        for field in [
-            "baseline_observation_digest",
-            "goal_digest",
-            "policy_digest",
-            "policy_revision",
-            "precondition_summary",
-            "precondition_digest",
-        ] {
-            if let Some(value) = context.get(field) {
-                proposal[field] = value.clone();
-            }
-        }
-    }
-    proposal["action_or_plan_kind"] = serde_json::json!("continuation_resume");
-    // AgentContinuation is the Runtime-owned durable projection and does not
-    // retain the adapter source label. Reintroduce the bounded paired-schema
-    // field before decoding the resume proposal; Runtime still owns and
-    // verifies every identity/digest below.
-    proposal["source"] = serde_json::json!("runtime-resume");
-    let continuation_proposal_id = format!(
-        "{}:resume:{}",
-        proposal["continuation_proposal_id"]
-            .as_str()
-            .unwrap_or("continuation"),
-        sequence
-    );
-    proposal["continuation_proposal_id"] = serde_json::json!(continuation_proposal_id);
-    proposal["agent_session_id"] = serde_json::json!(session_id);
-    proposal["agent_turn_id"] = serde_json::json!(format!("{session_id}-turn-{sequence}"));
-    proposal["decision_request_id"] = serde_json::json!(format!("{session_id}-request-{sequence}"));
-    let remaining = proposal
-        .get("remaining_budget")
-        .and_then(Value::as_object)
-        .and_then(|budget| budget.get("value"))
-        .and_then(Value::as_u64)
-        .ok_or_else(|| "Runtime continuation budget projection is invalid".to_string())?;
-    let remaining = remaining
-        .checked_sub(1)
-        .ok_or_else(|| "Runtime continuation budget is exhausted".to_string())?;
-    proposal["remaining_budget"]["value"] = serde_json::json!(remaining);
-    proposal["schema_version"] = serde_json::json!(1);
-    let mut simulator = serde_json::from_value::<SimulatorContinuationProposalV1>(proposal.clone())
-        .map_err(|error| {
-            format!(
-                "Runtime continuation {} cannot cross provider boundary: {error}",
-                wake.continuation_id
-            )
-        })?;
-    simulator.proposal_digest = simulator
-        .proposal_digest()
-        .map_err(|error| format!("simulator continuation digest failed: {error}"))?
-        .to_string();
-    let mut runtime =
-        serde_json::from_value::<crate::runtime::CognitionContinuationProposalV1>(proposal)
-            .map_err(|error| {
-                format!(
-                    "Runtime continuation {} cannot produce admission proposal: {error}",
-                    wake.continuation_id
-                )
-            })?;
-    runtime.proposal_digest = runtime.proposal_digest();
-    Ok((simulator, runtime))
-}
+use service_cognition::runtime_continuation_for_wake_with_identity;
 
 fn provider_capability_context(
     world: &RuntimeWorld,

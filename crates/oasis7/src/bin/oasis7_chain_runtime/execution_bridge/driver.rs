@@ -579,6 +579,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             decoded_runtime_actions,
             decoded_simulator_actions,
             replicated_provider_backed_bootstrap,
+            service_intents,
         ) = super::driver_replicated_input::decode_committed_actions(&context)?;
         let decode_ms = decode_started_at.elapsed();
         let runtime_action_count = decoded_runtime_actions.len();
@@ -610,6 +611,17 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         if let Some(authorities) = replicated_provider_backed_bootstrap.as_deref() {
             rollback_on_error!(self.apply_provider_backed_bootstrap(authorities));
         }
+        // Newly registered administrative inputs advance commit history without
+        // advancing simulation time. Legacy and gameplay blocks keep their
+        // existing tick behavior; this preserves provider observation fences.
+        let service_admin_only = !service_intents.is_empty() && decoded_runtime_actions.is_empty()
+            && decoded_simulator_actions.is_empty() && service_intents.iter().all(|(_, request)| !matches!(request.signed_payload,
+                oasis7::world_service::WorldServicePayloadV1::GameplayJson(_)));
+        let service_identity = if service_intents.is_empty() { None } else {
+            Some(rollback_on_error!(super::world_service_read::identity(&self.world_dir, &context.world_id)))
+        };
+        let service_results = rollback_on_error!(super::world_service_execution::apply_intents(
+            &mut self.execution_world, &context, service_identity.as_ref(), service_intents));
         let runtime_step_started_at = Instant::now();
         if !resume_after_product_validation_intent {
             for action in decoded_runtime_actions {
@@ -639,7 +651,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                         )
                     })
             );
-        } else {
+        } else if !service_admin_only {
             let intent_world_dir = self.world_dir.clone();
             let intent_records_dir = self.records_dir.clone();
             let intent_world_id = context.world_id.clone();
@@ -698,6 +710,8 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         // uncommitted cache. Product-validation intents use the explicit
         // staged-world callback above.
         let runtime_step_ms = runtime_step_started_at.elapsed();
+        rollback_on_error!(super::world_service_execution::finalize_intents(
+            &mut self.execution_world, service_results));
         let simulator_step_started_at = Instant::now();
         let (simulator_mirror, simulator_observation) = rollback_on_error!(
             self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())

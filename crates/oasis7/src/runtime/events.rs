@@ -141,6 +141,11 @@ impl ModuleProfileChanges {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum Action {
+    /// Transport intent extracted by the canonical execution driver.
+    /// Direct World execution is rejected.
+    WorldServiceIntent {
+        request: serde_json::Value,
+    },
     RegisterAgent {
         agent_id: String,
         pos: GeoPos,
@@ -696,6 +701,7 @@ fn default_governance_validator_admission_stake() -> u64 {
 impl Action {
     pub fn actor_id(&self) -> Option<&str> {
         match self {
+            Action::WorldServiceIntent { .. } => None,
             Action::RegisterAgent { agent_id, .. }
             | Action::MoveAgent { agent_id, .. }
             | Action::QueryObservation { agent_id, .. }

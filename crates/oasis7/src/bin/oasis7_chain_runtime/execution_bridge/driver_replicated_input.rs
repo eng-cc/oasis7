@@ -20,6 +20,12 @@ pub(super) fn decode_committed_actions(
         Vec<RuntimeAction>,
         Vec<(SimulatorAction, ActionSubmitter)>,
         Option<Vec<ProviderBackedBootstrapAuthorityV1>>,
+        Vec<(
+            u64,
+            oasis7::world_service::SubmitIntentRequest<
+                oasis7::world_service::WorldServicePayloadV1,
+            >,
+        )>,
     ),
     String,
 > {
@@ -37,6 +43,7 @@ pub(super) fn decode_committed_actions(
     let mut decoded_runtime_actions = Vec::with_capacity(context.committed_actions.len());
     let mut decoded_simulator_actions = Vec::with_capacity(context.committed_actions.len());
     let mut replicated_provider_backed_bootstrap = None;
+    let mut service_intents = Vec::new();
     for action in &context.committed_actions {
         if let Some(input) = decode_replicated_execution_input_action(action).map_err(|err| {
             format!(
@@ -64,8 +71,18 @@ pub(super) fn decode_committed_actions(
             continue;
         }
         match decode_consensus_action_payload(action.payload_cbor.as_slice()) {
+            Ok(ConsensusActionPayloadBody::WorldServiceIntent { request }) => {
+                service_intents.push((action.action_id, request));
+            }
             Ok(ConsensusActionPayloadBody::RuntimeAction { action: decoded }) => {
-                decoded_runtime_actions.push(decoded);
+                if let RuntimeAction::WorldServiceIntent { request } = decoded {
+                    let request = serde_json::from_value(request).map_err(|error| {
+                        format!("invalid registered world-service intent: {error}")
+                    })?;
+                    service_intents.push((action.action_id, request));
+                } else {
+                    decoded_runtime_actions.push(decoded);
+                }
             }
             Ok(ConsensusActionPayloadBody::SimulatorAction { action, submitter }) => {
                 decoded_simulator_actions.push((action, submitter));
@@ -83,5 +100,6 @@ pub(super) fn decode_committed_actions(
         decoded_runtime_actions,
         decoded_simulator_actions,
         replicated_provider_backed_bootstrap,
+        service_intents,
     ))
 }

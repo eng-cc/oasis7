@@ -80,11 +80,12 @@ impl ViewerRuntimeLiveServer {
         let hint = gameplay_action_rejection_hint(error.code.as_str());
         self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
             format!("gameplay_action:{action_id}"),
-            "rejected",
-            format!(
-                "gameplay action {action_id} was rejected: {}",
-                error.message
-            ),
+            if error.code == "world_service_outcome_unknown" {
+                "unknown"
+            } else {
+                "rejected"
+            },
+            format!("gameplay action {action_id}: {}", error.message),
             Some(format!("submit gameplay action {action_id}")),
             error.target_agent_id.clone(),
             Some(format!("{}: {}", error.code, error.message)),

@@ -9,6 +9,8 @@ mod driver_startup_recovery;
 mod execution_hash;
 mod product_validation_intent;
 mod provider_bootstrap;
+mod world_service_execution;
+pub(crate) mod world_service_read;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ExecutionBridgeState {
@@ -815,6 +817,7 @@ mod driver_replicated_input;
 mod durable_transaction;
 mod external_effect;
 mod local_bootstrap;
+mod service_bootstrap_boundary;
 mod simulator_mirror;
 #[cfg(test)]
 mod tests;
@@ -823,6 +826,7 @@ mod tests;
 pub(super) use self::driver::NodeRuntimeExecutionDriver;
 #[cfg(not(test))]
 pub(super) use self::driver::derive_local_execution_bootstrap;
+pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;
 #[allow(unused_imports)]
 pub(crate) use self::driver::{load_execution_world, load_execution_world_with_policy};
 #[allow(unused_imports)]

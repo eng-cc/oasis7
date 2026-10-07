@@ -3,6 +3,8 @@ use crate::simulator::WorldEventKind;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[path = "chain_sync_recovery.rs"]
 mod chain_sync_recovery;
+#[path = "service_submission_admission.rs"]
+mod service_submission_admission;
 
 struct HostedLocalMockProviderEnvSnapshot {
     previous: Vec<(&'static str, Option<std::ffi::OsString>)>,

@@ -164,6 +164,7 @@ fn run_chain_status_server_loop(
     feedback_submit_signer: FeedbackSubmitSigner,
     runtime_authority_binding: Option<super::runtime_authority::RuntimeAuthorityBinding>,
 ) -> Result<(), String> {
+    let admission = super::status_admission::Admission::default();
     loop {
         match stop_rx.try_recv() {
             Ok(_) | Err(TryRecvError::Disconnected) => return Ok(()),
@@ -171,7 +172,14 @@ fn run_chain_status_server_loop(
         }
 
         match listener.accept() {
-            Ok((stream, _addr)) => {
+            Ok((stream, addr)) => {
+                let permit = match admission.acquire(addr.ip()) {
+                    Ok(permit) => permit,
+                    Err(status) => {
+                        super::status_admission::overload(stream, status);
+                        continue;
+                    }
+                };
                 let runtime = Arc::clone(&runtime);
                 let replication_network = Arc::clone(&replication_network);
                 let options = options.clone();
@@ -188,6 +196,7 @@ fn run_chain_status_server_loop(
                 let feedback_submit_signer = feedback_submit_signer.clone();
                 let runtime_authority_binding = runtime_authority_binding.clone();
                 thread::spawn(move || {
+                    let _permit = permit;
                     if let Err(err) = handle_chain_status_connection(
                         stream,
                         runtime,
@@ -255,7 +264,18 @@ fn handle_chain_status_connection(
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|err| format!("failed to set read timeout: {err}"))?;
 
-    let request_bytes = read_complete_status_http_request(&mut stream)?;
+    let request_bytes = match read_complete_status_http_request(&mut stream) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let status = if error.contains("byte limit") {
+                413
+            } else {
+                408
+            };
+            let _ = write_json_response(&mut stream, status, b"{}", false);
+            return Err(error);
+        }
+    };
     if request_bytes.is_empty() {
         return Ok(());
     }
@@ -272,6 +292,20 @@ fn handle_chain_status_connection(
     let target = parts.next().unwrap_or_default();
     let path = target.split('?').next().unwrap_or(target);
     let head_only = method.eq_ignore_ascii_case("HEAD");
+    if super::world_service_api::maybe_handle(
+        &mut stream,
+        &request_bytes,
+        &runtime,
+        method,
+        path,
+        world_id,
+        execution_world_dir,
+        execution_records_dir,
+        execution_storage_root,
+        feedback_submit_signer,
+    )? {
+        return Ok(());
+    }
 
     if transfer_submit_api::maybe_handle_transfer_submit_request(
         &mut stream,
@@ -523,10 +557,18 @@ fn handle_chain_status_connection(
 }
 
 fn read_complete_status_http_request(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
+    let deadline = std::time::Instant::now() + super::status_admission::IO_DEADLINE;
     let mut request = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 4096];
 
     loop {
+        let remaining = deadline
+            .checked_duration_since(std::time::Instant::now())
+            .filter(|duration| !duration.is_zero())
+            .ok_or("HTTP total request deadline exceeded")?;
+        stream
+            .set_read_timeout(Some(remaining))
+            .map_err(|err| err.to_string())?;
         let bytes = stream
             .read(&mut chunk)
             .map_err(|err| format!("failed to read request: {err}"))?;
@@ -817,6 +859,8 @@ pub(super) fn write_json_response(
         400 => "Bad Request",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        408 => "Request Timeout",
+        413 => "Payload Too Large",
         502 => "Bad Gateway",
         _ => "Internal Server Error",
     };
@@ -824,9 +868,10 @@ pub(super) fn write_json_response(
         "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     );
-    stream.write_all(headers.as_bytes())?;
+    let deadline = std::time::Instant::now() + super::status_admission::IO_DEADLINE;
+    super::status_admission::write_bounded(stream, headers.as_bytes(), deadline)?;
     if !head_only {
-        stream.write_all(body)?;
+        super::status_admission::write_bounded(stream, body, deadline)?;
     }
     stream.flush()?;
     Ok(())

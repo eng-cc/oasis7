@@ -15,6 +15,11 @@ impl RuntimeLlmSidecar {
         &mut self,
         world: &mut RuntimeWorld,
     ) -> Result<(), String> {
+        if self.provider_service_required {
+            // Canonical receipt Lookup owns this recovery path. A projection
+            // marker cannot authorize settlement after service restart.
+            return Ok(());
+        }
         let candidate_agents = self
             .provider_cognition_leases
             .keys()

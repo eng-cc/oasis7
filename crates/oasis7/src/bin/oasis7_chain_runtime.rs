@@ -87,6 +87,8 @@ mod runtime_file_io;
 mod runtime_status_util;
 #[path = "oasis7_chain_runtime/startup_reconcile.rs"]
 mod startup_reconcile;
+#[path = "oasis7_chain_runtime/status_admission.rs"]
+mod status_admission;
 #[path = "oasis7_chain_runtime/status_payload.rs"]
 mod status_payload;
 #[path = "oasis7_chain_runtime/status_server_support.rs"]
@@ -101,6 +103,8 @@ mod traffic_status;
 mod transfer_submit_api;
 #[path = "oasis7_chain_runtime/wasm_status.rs"]
 mod wasm_status;
+#[path = "oasis7_chain_runtime/world_service_api.rs"]
+mod world_service_api;
 #[path = "oasis7_chain_runtime/world_writer_lock.rs"]
 mod world_writer_lock;
 #[cfg(test)]
@@ -148,6 +152,7 @@ use wasm_status::build_chain_wasm_status;
 
 #[cfg(test)]
 mod execution_bridge {
+    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::world_service_read;
     use std::path::Path;
 
     use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
@@ -458,6 +463,13 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     let local_execution_bootstrap = options
         .local_test_provider_authority_path
         .as_ref()
+        .filter(|_| {
+            !(paths
+                .execution_world_dir
+                .join("world-service-identity.json")
+                .exists()
+                && paths.execution_records_dir.join("latest.json").exists())
+        })
         .map(|_| {
             let world = execution_bridge::load_execution_world_with_policy(
                 paths.execution_world_dir.as_path(),
@@ -477,6 +489,22 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             )
         })
         .transpose()?;
+    #[cfg(not(test))]
+    let local_execution_bootstrap = if paths
+        .execution_world_dir
+        .join("world-service-identity.json")
+        .exists()
+        && paths.execution_records_dir.join("latest.json").exists()
+    {
+        Some(execution_bridge::derive_service_execution_bootstrap(
+            &paths.execution_world_dir,
+            &paths.execution_records_dir,
+            &paths.storage_root,
+            &options.world_id,
+        )?)
+    } else {
+        local_execution_bootstrap
+    };
     #[cfg(test)]
     let local_execution_bootstrap: Option<oasis7_node::NodeExecutionBootstrap> = None;
     let effective_validator_signer_bindings =

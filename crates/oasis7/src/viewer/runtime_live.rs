@@ -53,6 +53,7 @@ mod branch_commitment;
 #[path = "runtime_live/chain_link.rs"]
 mod chain_link;
 mod claim_snapshot;
+mod collect_data;
 #[path = "runtime_live/config.rs"]
 mod config;
 mod constants;
@@ -108,6 +109,7 @@ mod wake_dispatch;
 #[path = "runtime_live/war_declaration_quote.rs"]
 mod war_declaration_quote;
 mod world_feed;
+mod world_service_link;
 pub use crate::runtime::ProviderBackedBootstrapAuthorityV1;
 use authoritative::{
     RuntimeAuthoritativeBatchRecord, RuntimeAuthoritativeChallengeRecord,
@@ -151,6 +153,13 @@ pub struct ViewerRuntimeLiveServer {
     auto_play_paused: bool,
     next_auto_play_step_at: Option<Instant>,
     last_chain_committed_height: u64,
+    verified_world_view: Option<crate::world_service::verified_view::VerifiedWorldView>,
+    world_service_query_state: crate::world_service::client::WorldServiceQueryState,
+    prepared_world_service_submission: Option<chain_link::PreparedWorldServiceSubmission>,
+    pending_world_service_gameplay: Vec<(
+        oasis7_client_api::world_service::RequestCorrelation,
+        crate::world_service::wire::WorldServicePayloadV1,
+    )>,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     seed_model: Option<WorldModel>,
@@ -185,8 +194,32 @@ pub struct ViewerRuntimeLiveServer {
 }
 impl ViewerRuntimeLiveServer {
     pub fn new(
-        config: ViewerRuntimeLiveServerConfig,
+        mut config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
+        if config.world_service.is_none() {
+            config.world_service =
+                crate::world_service::client::WorldServiceClientConfig::from_env()
+                    .map_err(ViewerRuntimeLiveServerError::Init)?;
+        }
+        if config.world_service_agent_signer.is_none() {
+            config.world_service_agent_signer =
+                crate::world_service::client::WorldServiceAgentSignerConfig::from_env()
+                    .map_err(ViewerRuntimeLiveServerError::Init)?;
+        }
+        if let Some(service) = &config.world_service {
+            config.world_id = service.expected_world.world_id.clone();
+        } else if config.world_service_agent_signer.is_some() {
+            return Err(ViewerRuntimeLiveServerError::Init(
+                "Agent signer requires a world service connection".into(),
+            ));
+        }
+        #[cfg(not(test))]
+        if config.chain_status_bind.is_some() && config.world_service.is_none() {
+            return Err(ViewerRuntimeLiveServerError::Init(
+                "node-directory chain sync is closed; configure the authenticated world service"
+                    .into(),
+            ));
+        }
         config
             .validate_prompt_result_limits()
             .map_err(ViewerRuntimeLiveServerError::Init)?;
@@ -266,11 +299,12 @@ impl ViewerRuntimeLiveServer {
             }
         }
         wake_dispatch::ensure_viewer_runtime_binding(&mut world, &config)?;
-        let chain_linked = config
-            .chain_status_bind
-            .as_deref()
-            .map(str::trim)
-            .is_some_and(|value| !value.is_empty());
+        let chain_linked = config.world_service.is_some()
+            || config
+                .chain_status_bind
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty());
         if !chain_linked {
             apply_provider_backed_bootstrap_authorities(
                 &mut world,
@@ -293,12 +327,18 @@ impl ViewerRuntimeLiveServer {
             .map_err(ViewerRuntimeLiveServerError::Init)?
         };
         let initial_world_time = world.state().time;
+        let world_service_query_state =
+            crate::world_service::client::WorldServiceQueryState::default();
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
                 RuntimeLlmSidecar::new(config.decision_mode).with_runtime_seed_model(model)
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
+        llm_sidecar.provider_service_required = config.world_service.is_some() || chain_linked;
+        llm_sidecar.provider_service_config = config.world_service.clone();
+        llm_sidecar.provider_service_query_state = world_service_query_state.clone();
+        llm_sidecar.provider_service_signer = config.world_service_agent_signer.clone();
         if hosted_local_mock_test_lane_active {
             llm_sidecar.enable_hosted_local_mock_test_lane();
         }
@@ -323,6 +363,10 @@ impl ViewerRuntimeLiveServer {
             initial_world_time,
             next_auto_play_step_at: None,
             last_chain_committed_height: 0,
+            verified_world_view: None,
+            world_service_query_state,
+            prepared_world_service_submission: None,
+            pending_world_service_gameplay: Vec::new(),
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             seed_model,
@@ -463,11 +507,30 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn chain_link_enabled(&self) -> bool {
+        self.config.world_service.is_some()
+            || self
+                .config
+                .chain_status_bind
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|value| !value.is_empty())
+    }
+
+    pub(super) fn world_service_client(
+        &self,
+    ) -> Result<
+        Option<crate::world_service::client::RemoteWorldServiceClient>,
+        ViewerRuntimeLiveServerError,
+    > {
         self.config
-            .chain_status_bind
-            .as_deref()
-            .map(str::trim)
-            .is_some_and(|value| !value.is_empty())
+            .world_service
+            .clone()
+            .map(|config| {
+                crate::world_service::client::RemoteWorldServiceClient::new(config)
+                    .map(|client| client.with_query_state(self.world_service_query_state.clone()))
+            })
+            .transpose()
+            .map_err(|error| ViewerRuntimeLiveServerError::Init(error.to_string()))
     }
 
     fn supports_agent_chat(&self) -> bool {
@@ -497,13 +560,17 @@ impl ViewerRuntimeLiveServer {
                     {
                         let chain_prime =
                             Self::prime_shared_request_if_needed(&shared, &request, &session)?;
+                        let prepared_submission =
+                            Self::prepare_shared_world_service_submission(&shared, &request)?;
                         let mut server = lock_shared_server(&shared)?;
+                        server.prepared_world_service_submission = prepared_submission;
                         server.handle_request_with_chain_prime(
                             request,
                             &mut session,
                             &mut writer,
                             chain_prime,
                         )?;
+                        server.prepared_world_service_submission = None;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -537,7 +604,9 @@ impl ViewerRuntimeLiveServer {
             }
 
             let mut server = lock_shared_server(&shared)?;
-            if server.authoritative_recovery_write_fence.is_none() {
+            if server.authoritative_recovery_write_fence.is_none()
+                && server.config.world_service.is_none()
+            {
                 server.drive_auto_play(&mut session, &mut writer)?;
             }
         }
@@ -605,6 +674,18 @@ impl ViewerRuntimeLiveServer {
         mut chain_prime: Option<Result<(), ViewerRuntimeLiveServerError>>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         self.resolve_authoritative_recovery_write_fence()?;
+        if self.config.world_service.is_some()
+            && matches!(
+                &request,
+                ViewerRequest::AuthoritativeRecovery { .. }
+                    | ViewerRequest::PlaybackControl { .. }
+                    | ViewerRequest::LiveControl { .. }
+                    | ViewerRequest::Control { .. }
+            )
+            && let Some(Err(error)) = chain_prime.take()
+        {
+            return Err(error);
+        }
         if matches!(&request, ViewerRequest::QuoteRevokeSocialFact { .. })
             && !viewer_protocol_supports_revoke_social_fact_quote(&session.negotiated_protocol)
         {
@@ -771,7 +852,9 @@ impl ViewerRuntimeLiveServer {
                             session.chain_runtime_authoritatively_primed = true;
                         }
                         Err(err) => {
-                            if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
+                            if self.config.world_service.is_some()
+                                || self.config.chain_link_policy == ChainLinkPolicy::Enforcing
+                            {
                                 return Err(err);
                             }
                             emit_stderr_or_event(
@@ -1021,6 +1104,12 @@ impl ViewerRuntimeLiveServer {
                         && !session.initial_snapshot_sent
                         && !session.chain_runtime_authoritatively_primed
                 }
+                ViewerRequest::AuthoritativeRecovery { .. } => {
+                    server.config.world_service.is_some()
+                }
+                ViewerRequest::PlaybackControl { .. }
+                | ViewerRequest::LiveControl { .. }
+                | ViewerRequest::Control { .. } => server.config.world_service.is_some(),
                 _ => false,
             }
         };

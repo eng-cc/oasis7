@@ -36,6 +36,8 @@ impl ViewerRuntimeLiveServerConfig {
             hosted_public_join_mode: false,
             chain_status_bind: None,
             chain_submit_bind: None,
+            world_service: None,
+            world_service_agent_signer: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
@@ -61,6 +63,8 @@ impl ViewerRuntimeLiveServerConfig {
             hosted_public_join_mode: false,
             chain_status_bind: None,
             chain_submit_bind: None,
+            world_service: None,
+            world_service_agent_signer: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
@@ -341,6 +345,14 @@ pub(super) fn bootstrap_runtime_live_world(
     ),
     String,
 > {
+    if config.world_service.is_some() {
+        return Ok((
+            RuntimeWorld::new_production_hardened(),
+            WorldConfig::default(),
+            None,
+            ChunkRuntimeConfig::default(),
+        ));
+    }
     if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
         let (world, snapshot_config, seed_model, chunk_runtime) =
             bootstrap_generated_sidecar_runtime_world_with_chunk_runtime(generated_world_dir)?;
@@ -353,7 +365,7 @@ pub(super) fn bootstrap_runtime_live_world(
                 bootstrap_runtime_world_with_chunk_runtime(scenario)?;
             Ok((world, snapshot_config, None, chunk_runtime))
         }
-        None if config.chain_status_bind.is_some() => Ok((
+        None if config.world_service.is_some() || config.chain_status_bind.is_some() => Ok((
             RuntimeWorld::new_production_hardened(),
             WorldConfig::default(),
             None,
