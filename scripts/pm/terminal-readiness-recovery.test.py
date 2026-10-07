@@ -109,7 +109,7 @@ def build_review(repo, producer_snapshot=None, source_producer_change=None):
  old=f['plan']['impact_projection']
  inp={k:old[k] for k in ('task_uid','source_head_oid','scope_base_oid','changed_paths','test_profile','declared_tests','consumed_contracts','public_semantics','affected_consumers')}
  inp.update(change_class='mixed',manual_roles=roles,domain_role=None,verification_affected=True,closure_status={'status':'complete','reason':'finite offline fixture consumer closure','evidence':[{'path':str(evidence),'sha256':'sha256:'+hashlib.sha256(evidence.read_bytes()).hexdigest()}]})
- 
+
  for rel in ('scripts/plan-rust-required-scope.py','scripts/ci-required-scope.v2.json','scripts/ci-tests.sh','scripts/ci-required-capability-test-inventory.tsv','scripts/product_doc_markdown.py','scripts/doc-governance-requirements.txt','.github/workflows/rust.yml','scripts/pm/ci_required_inventory.py','scripts/pm/pr-merge-receipt.py','scripts/pm/task-closeout.sh',*[f'.agents/roles/{r}.md' for r in roles],'doc/engineering/workflow/source-of-truth.md','.agents/skills/requesting-repo-owned-review/SKILL.md'):
   dest=c.root/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(repo/rel,dest)
  if producer_snapshot is not None: install_historical_snapshot(c.root,producer_snapshot)
