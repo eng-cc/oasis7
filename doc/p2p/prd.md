@@ -102,7 +102,7 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
 - 历史 reward leader/failover closure 曾描述 `reward_runtime_leader_*` 与 `oasis7_viewer_live` 控制面，但当前代码没有该 leader election/failover 合同；现行 reward worker 只按本地 signer 与本地 consensus readiness 提交。旧完成态不得被解释为多节点自动 leader、failover SOP、分区去重或 release readiness，未来若需要该能力必须另立 runtime/consensus 任务与回归。
 
 - DistFS 公开反馈账本、announce/fetch 复制与 NodeRuntime 有界接线的当前专业 authority 是 [`distfs-feedback-ledger-and-replication`](distfs/distfs-feedback-ledger-and-replication.prd.md)。它保留签名、BlobState lane、replication 与非共识边界；不得据此宣称 finality、state-sync/restore 或 release/readiness。
-- 早期 DistFS path-index / observer bootstrap 源码仍存在于 `oasis7_net`，但当前 `lib.rs` 未声明这些模块；它们不是当前 checkpoint、replay、observer recovery 或自动 fallback API。未来重新暴露必须建立 runtime 任务、验证路径并重新审查，不能从历史完成态推导 active capability。
+- 早期 net path-index/Observer 的 `execution_storage.rs`、`head_follow.rs`、`head_validation.rs`、`observer.rs`、`observer_metrics.rs`、`observer_replay.rs` 与 `bootstrap.rs` 均已从 tracked source tree 删除，历史实现仅可从 Git history 追溯；保留的历史合同不是当前 checkpoint、replay、observer recovery 或自动 fallback API。未来重新实现或暴露能力必须建立 runtime 任务、验证路径并重新审查，不能从历史完成态推导 active capability。
 - `oasis7_net` 的 `runtime_bridge` feature 当前是空的兼容 feature；历史 compile-closure 文档不代表 runtime bridge 逻辑仍由该 crate 暴露。当前执行/证明 bridge 以现行 runtime、proof 与 S9A authority 为准。
 - 三个 2026-03 feedback 源三件套已删除；完成态与审计 provenance 仅在 Git 与 `.pm` task evidence 中保留，不是当前首读入口。
 - 移动轻客户端 intent、批次根、challenge、reorg recovery 与 session-key 生命周期的当前专业 authority 是 [`p2p-mobile-light-client-authoritative-state`](network/p2p-mobile-light-client-authoritative-state.prd.md)。它只定义 evidence-gated 技术合同；不得据此宣称公开移动端可用、网络 finality、SLA、release/readiness 或 UI 已完成。2026-03-06 源三件套已退役，完成记录从 Git 与 GitHub task evidence 追溯。
@@ -291,7 +291,7 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
   - AC-25: 同一稳定权威吸收 `TASK-P2P-037`，明确 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding` 与 `ready_pending_address_binding` 都属于 mint-ready blocker。
   - AC-26: `TASK-P2P-038` 是 2026-03-23 的历史公开口径审查，记录当时 `MAINNET-1~3` 仅完成 spec gate、整体 verdict 为 `not_mainnet_grade`；它不再充当当前公开状态权威。当前状态以根 `README.md` 为准，长期公开口径规则由 `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md` 承接，网络与测试文档提供专业证据。
   - AC-27: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` 保留 2026-03-24 专题历史并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、单实现栈等价要求、历史 gap matrix、`fuzz/property` 与 `network rehearsal/release train` 缺口及 claims denylist；当前网络状态与成熟度不由该 benchmark 维护。
-  - AC-28: `formal-network-tiers-testnet-mechanism` 与保留的 legacy release-train runbook 吸收历史任务链 `TASK-P2P-040`，明确旧 rehearsal 轨道、`release_candidate_bundle`、promotion/freeze/rollback 与 provenance 边界；当前不作为目标环境、公开 readiness 或玩家世界模型。
+  - AC-28: `formal-network-tiers-testnet-mechanism` 与 `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md` 承接历史任务链 `TASK-P2P-040` 的有效语义，明确旧 rehearsal 轨道、`release_candidate_bundle`、promotion/freeze/rollback 与 provenance 边界；当前不作为目标环境、公开 readiness 或玩家世界模型。
   - AC-29: hosted player access 的长期合同由本 PRD 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md` 承接，明确 `public player plane / private control plane / identity plane / custody or signer plane`、`guest/player/strong-auth` 会话梯度、player-safe / operator-only action split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界；历史 `TASK-P2P-041` 从模块 project、GitHub task evidence 与 Git history 追溯。
   - AC-30: `mainnet-private-reachability-architecture` 专题文档落盘并映射任务链 `TASK-P2P-043`，明确 `public/hybrid/private/relay_only/validator_hidden` 部署模式、`validator core/sentry/relay/full-storage/observer-light` 角色边界、`peer record + discovery + reachability + traffic lanes` 框架，以及 mixed-topology 下的 anti-eclipse / relay budget / claims gate。
   - AC-30A: `mainnet-private-reachability-architecture` 必须补齐 iroh-inspired follow-up 的 truth chain：`PeerReachabilityContract` 负责 runtime reachability 归一化，path behavior matrix 只负责 evidence/claim taxonomy，triad/status observability 只消费 bounded status projection。
@@ -336,7 +336,6 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
   - `doc/p2p/token/mainchain-token-newapi-quota-bridge.prd.md`
   - `doc/p2p/token/mainchain-token-ideal-transaction.prd.md`
   - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
-  - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `doc/product/world-rules-core-gameplay/prd.md`
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md`

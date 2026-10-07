@@ -22,10 +22,11 @@
 ## 范围
 - 范围内：
   - `crates/oasis7_viewer/viewer.html`
-  - `crates/oasis7_viewer/software_safe.html`
+  - `crates/oasis7_viewer/dist/software_safe.html`（generated compat output）
   - `crates/oasis7_viewer/software_safe_src/**`
   - `crates/oasis7_viewer/viewer.js`
-  - `crates/oasis7_viewer/software_safe.js`
+  - `crates/oasis7_viewer/dist/software_safe.js`（generated compat output）
+  - `crates/oasis7_viewer/viewer_first_agent_claim_evidence.html` / `dist/software_safe_first_agent_claim_evidence.html`
   - `crates/oasis7_viewer/dist/pixel-world-bridge/**`
   - Viewer Web tests, build/finalize scripts, and browser/manual evidence that consume those files
 - 范围外：
@@ -35,7 +36,7 @@
   - 不改变 Viewer runtime protocol、WASM ABI、server line protocol、hosted auth semantics 或 public URL taxonomy。
 
 ## 问题陈述
-- Viewer 前端既包含手写源码，也包含 checked-in generated artifacts 和 compat aliases；若边界不清，维护者容易在 `viewer.js` / `software_safe.js` / `viewer.html` / `software_safe.html` 之间建立第二套真值。
+- Viewer 前端既包含手写源码，也包含 checked-in generated artifacts 和 compat aliases；若边界不清，维护者容易在 `viewer.js` / `software_safe.js` / `viewer.html` / `software_safe.html` 之间建立第二套真值。HTML compat alias 只在 dist 中生成，不作为 checkout source。
 - `main.jsx` 与 `pixel_world_host.jsx` 承担 UI composition、state projection、copy、diagnostics、event handlers 与 fixture/test hooks，缺少“何时抽组件、何时抽 service/state module”的标准。
 - 现有 Rust 侧已有体量与真实职责拆分治理；Viewer JS/HTML/JSX 侧需要较轻但明确的对应规则。
 
@@ -44,10 +45,11 @@
 | 类型 | 示例 | 规则 |
 | --- | --- | --- |
 | Source HTML | `crates/oasis7_viewer/viewer.html` | 手写 canonical HTML shell；只承载 document shell、stable anchors、bundle reference 和 minimal static metadata。 |
-| Compat HTML | `crates/oasis7_viewer/software_safe.html` | 兼容副本；不得成为独立设计或 bundle 真值。 |
+| Compat HTML | `crates/oasis7_viewer/dist/software_safe.html` | 由 canonical `viewer.html` 生成的发布兼容副本；不得成为独立设计或 bundle 真值。 |
 | Source JS/JSX | `crates/oasis7_viewer/software_safe_src/**` | 手写 Viewer Web source truth；组件、state projection、services、fixtures 和 tests 必须在这里形成清晰边界。 |
 | Generated bundle | `crates/oasis7_viewer/viewer.js` | canonical generated bundle；由 build/finalize flow 写入，不手改。 |
-| Compat bundle | `crates/oasis7_viewer/software_safe.js` | compat alias；必须显式指向 canonical bundle，不能承载第二份 bundle logic。 |
+| Compat bundle | `crates/oasis7_viewer/dist/software_safe.js` | generated compat alias；必须显式指向 canonical bundle，不能承载第二份 bundle logic。 |
+| Compat evidence page | `crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html` | 由 canonical claim fixture 生成的 served compatibility route；scenario data stays in the canonical fixture. |
 | Generated runtime | `crates/oasis7_viewer/dist/pixel-world-bridge/**` | finalize flow 管理的 runtime artifact；不是手写 source module。 |
 
 ## 结构分层
@@ -83,7 +85,7 @@ Existing files above the soft threshold are not automatically blockers for unrel
 
 - `legacy_core.js` 仍包含 control、semantic-command、DOM-rendering 与 bootstrap assembly；后续切片应优先抽出一个 coherent boundary，保留 facade、记录前后行数并运行 scoped UI/build/feedback checks。
 - `viewer.html`、`gameplay_attraction_scenario.js`、`main.jsx`、`main.test.jsx`、`pixel_world_host.jsx` 与 `viewer_feedback_module.js` 的现有阈值豁免由 `test:frontend-structure` 的 owner-tagged registry 守护；新增体量或失效豁免必须在 GitHub task evidence 说明 owner、原因和下一触发点。
-- `software_safe.js` 仍是 `viewer.js` 的生成 compat alias，`software_safe.html` 必须保持 `viewer.html` 的 byte-for-byte compat copy；两者不能承接修复或债务绕行。
+- `dist/software_safe.js` 仍是 `viewer.js` 的生成 compat alias；dist 中的 `software_safe.html` 必须保持 `viewer.html` 的 byte-for-byte generated copy；compat evidence page 从 canonical fixture 生成。它们不能承接修复或债务绕行。
 
 ## 可接受拆分模式
 
@@ -97,7 +99,7 @@ Preferred patterns:
 Rejected patterns:
 - Mechanical `part1` / `part2` / `misc` files as a final state.
 - Copying state shapes or fixture payloads into parallel modules to avoid imports.
-- Creating a second source of truth for `viewer.js`, `software_safe.js`, `viewer.html`, or generated runtime files.
+- Creating a second source of truth for canonical `viewer.js`, `viewer.html`, the claim fixture, generated compatibility aliases, or runtime files.
 - Moving JSX into string templates when Solid components would keep structure and test selectors clearer.
 
 ## HTML / JSX / JS 职责

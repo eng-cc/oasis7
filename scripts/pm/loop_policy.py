@@ -722,7 +722,7 @@ def validate_dependencies(binding, bindings):
     return result(errors)
 
 
-def validate_tool_root(tool_root, target_repo_root, binding):
+def validate_tool_root(tool_root, target_repo_root, binding, *, maintenance=None):
     """Validate the pinned helper against live protected-default ancestry.
 
     No candidate checkout may bootstrap its own admission. This local check
@@ -735,7 +735,7 @@ def validate_tool_root(tool_root, target_repo_root, binding):
     if errors:
         return result(errors)
     try:
-        commit = binding["policy_commit"]
+        commit = maintenance["tool_revision"] if maintenance else binding["policy_commit"]
         target = Path(target_repo_root).resolve()
         tool = Path(tool_root).resolve()
         def common(root):
@@ -769,7 +769,7 @@ def validate_tool_root(tool_root, target_repo_root, binding):
                 "live protected-default tip object is unavailable locally; no fetch was attempted",
             ]}
         ancestry = subprocess.run(
-            ["git", "-C", str(target), "merge-base", "--is-ancestor", commit, current_oid],
+            ["git", "-C", str(target), "merge-base", "--is-ancestor", binding["policy_commit"], current_oid],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
         )
         if ancestry.returncode == 1:
@@ -778,6 +778,15 @@ def validate_tool_root(tool_root, target_repo_root, binding):
             return {"status": "pending", "blockers": [
                 "live protected-default ancestry could not be verified locally",
             ]}
+        if maintenance:
+            from workflow_maintenance import read_maintenance_authority, validate_candidate_tool_root
+            fresh = read_maintenance_authority(repository, maintenance['comment_id'],
+                                              binding['task_uid'], maintenance['pr_number'],
+                                              maintenance['tool_revision'],
+                                              required_tool_paths=maintenance['allowed_tool_paths'])
+            if fresh != maintenance:
+                raise ValueError("maintenance scope changed during content validation")
+            validate_candidate_tool_root(tool, target, fresh)
         git(tool, "diff", "--exit-code", commit, "--", "scripts/pm", *TRUSTED_IMPORT_FILES,
             "scripts/prepare-task-pr.sh", "scripts/plan-rust-required-scope.py")
         # Untracked import shadows are executable authority too.
@@ -830,7 +839,7 @@ def _trusted_file_errors(tool_root, commit, relative_paths):
     return errors
 
 
-def load_trusted_corpus_module(tool_root, target_repo_root, binding):
+def load_trusted_corpus_module(tool_root, target_repo_root, binding, *, maintenance=None):
     """Execute only the corpus parser bytes from the pinned effective helper commit.
 
     This intentionally avoids normal import resolution: target ``sys.path``,
@@ -843,7 +852,7 @@ def load_trusted_corpus_module(tool_root, target_repo_root, binding):
     tool = Path(tool_root).resolve()
     target = Path(target_repo_root).resolve()
     commit = binding["policy_commit"]
-    if git(tool, "rev-parse", "HEAD").decode().strip() != commit:
+    if git(tool, "rev-parse", "HEAD").decode().strip() != (maintenance['tool_revision'] if maintenance else commit):
         raise ValueError("tool root is not the pinned effective policy commit")
     if git(tool, "rev-parse", "--path-format=absolute", "--git-common-dir").decode().strip() != git(target, "rev-parse", "--path-format=absolute", "--git-common-dir").decode().strip():
         raise ValueError("tool and target Git common-directory mismatch")
@@ -1114,7 +1123,7 @@ def scope_context(root, integration_base, head):
     return {'scope_base_oid': bases[0], 'integration_base_oid': integration_base, 'source_head_oid': head, 'integration_tree_oid': tree}
 
 
-def validate_scope(tool_root, target_repo_root, binding, base, head):
+def validate_scope(tool_root, target_repo_root, binding, base, head, *, maintenance=None):
     errors = list(validate_binding(binding)["blockers"])
     paths = []
     if errors:
@@ -1140,7 +1149,8 @@ def validate_scope(tool_root, target_repo_root, binding, base, head):
                 if owner != binding["loop"]:
                     errors.append(f"loop ownership mismatch or unknown path: {path}")
                 paths.append({"path": path, "loop": owner})
-            if not any(path_matches(path, p) for p in binding["write_scope"]) or any(path_matches(path, p) for p in binding["out_of_scope"]):
+            allowed_scope = maintenance['allowed_write_paths'] if maintenance else binding['write_scope']
+            if not any(path_matches(path, p) for p in allowed_scope) or (not maintenance and any(path_matches(path, p) for p in binding["out_of_scope"])):
                 errors.append(f"outside declared write scope: {path}")
             if not path.startswith("doc/"):
                 for revision in (base, head):
@@ -1152,9 +1162,13 @@ def validate_scope(tool_root, target_repo_root, binding, base, head):
                     if mode not in allowed:
                         errors.append(f"unsupported asset mode {mode}: {path}@{revision}")
         if any(path.startswith("doc/") for path in changed_paths):
-            core = load_trusted_corpus_module(tool_root, target_repo_root, binding)
+            core = load_trusted_corpus_module(tool_root, target_repo_root, binding, maintenance=maintenance)
+            scope_binding = dict(binding)
+            if maintenance:
+                scope_binding['write_scope'] = list(maintenance['allowed_write_paths'])
+                scope_binding['out_of_scope'] = []
             corpus_errors, corpus_paths = _corpus_scope_errors(
-                core, policy, target_repo_root, binding, base, head, changed_paths,
+                core, policy, target_repo_root, scope_binding, base, head, changed_paths,
             )
             errors.extend(corpus_errors)
             paths.extend(corpus_paths)

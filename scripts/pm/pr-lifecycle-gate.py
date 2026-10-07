@@ -1607,6 +1607,38 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
     return selected_key
 
 
+def _candidate_receipt_authority(data, root, effective, uid, task):
+    """Authenticate explicit scope independently of receipt/artifact selection."""
+    head = data['headRefOid']
+    if subprocess.check_output(['git', '-C', str(effective), 'rev-parse', 'HEAD'], text=True).strip() != head:
+        raise ValueError('candidate consumer checkout is not exact live head')
+    relative = 'scripts/pm/workflow_maintenance.py'
+    path = effective / relative
+    if (path.is_symlink() or path.read_bytes() != subprocess.check_output(
+            ['git', '-C', str(root), 'show', head + ':' + relative])):
+        raise ValueError('candidate maintenance helper bytes differ from exact live head')
+    spec = importlib.util.spec_from_file_location('gate_workflow_maintenance', path)
+    maintenance = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(maintenance)
+    locator = maintenance.maintenance_comment_id(data.get('body') or '')
+    if locator is None:
+        return None
+    repository = data['repository']
+    comment = _run_json(['gh', 'api', f'repos/{repository}/issues/comments/{locator}'])
+    actor = (comment.get('user') or {}).get('login')
+    permission = _run_json(['gh', 'api', f'repos/{repository}/collaborators/{actor}/permission'])
+    issue = _run_json(['gh', 'api', f"repos/{repository}/issues/{task['issue_number']}"])
+    pull = _run_json(['gh', 'api', f"repos/{repository}/pulls/{data['number']}"])
+    closure = ('scripts/pm/ci-ready-receipt.py', 'scripts/pm/ci_ready_receipt_identity.py', relative)
+    authority = maintenance.validate_maintenance_authority(
+        comment, permission, issue, pull, head, required_tool_paths=closure)
+    if (authority['task_uid'] != uid or authority['issue_number'] != task['issue_number']
+            or pull.get('head', {}).get('ref') != task.get('task_branch', pull.get('head', {}).get('ref'))
+            or pull.get('base', {}).get('ref') != data['baseRefName']):
+        raise ValueError('candidate receipt scope differs from canonical Task branch')
+    return authority
+
+
 def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None, assessed_target_oid=None):
     """Read trusted source-bound PR CI or strict integration evidence."""
     policy = data.get('policy_discovery') or {}
@@ -1637,9 +1669,15 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
         'ci_evidence_applicability.py', 'ci_required_inventory.py',
         'ci_reuse_policy.py',
     )
+    candidate_authority = None
+    if (integration_run_id is None and not isinstance(task.get('loop_binding'), dict)
+            and re.search(r'^Workflow Maintenance Authority: [1-9][0-9]*$', data.get('body') or '', re.M)):
+        candidate_authority = _candidate_receipt_authority(data, root, effective, uid, task)
     for name in authority_helpers:
         relative = 'scripts/pm/' + name
-        expected = subprocess.check_output(['git','-C',str(root),'show',commit + ':' + relative])
+        helper_commit = (data['headRefOid'] if candidate_authority is not None
+                         and name in ('ci-ready-receipt.py', 'ci_ready_receipt_identity.py') else commit)
+        expected = subprocess.check_output(['git','-C',str(root),'show',helper_commit + ':' + relative])
         path = effective / relative
         if path.is_symlink() or path.read_bytes() != expected:
             raise ValueError('effective CI authority helper bytes differ: ' + name)
@@ -1683,7 +1721,7 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
                'canonical_root': str(root), 'issue': task['issue_number'], 'pr': data['number'],
                'app': next(iter(pins)), 'request_key': request_key,
                'base_ref': data['baseRefName'], 'integration_run_id': integration_run_id,
-               'require_strict': strict,
+               'require_strict': strict, 'candidate_authority': candidate_authority,
                # ``None`` is the direct compatibility API: it retains the
                # legacy strict check fallback used by existing callers. Every
                # production-selected strict mode carries an explicit policy
@@ -1695,6 +1733,8 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
 from pathlib import Path
 request=json.loads(sys.argv[1]); directory=Path(request['root'])/'scripts/pm'
 loaded={}
+if request.get('candidate_authority'):
+ spec=importlib.util.spec_from_file_location('workflow_maintenance',directory/'workflow_maintenance.py'); item=importlib.util.module_from_spec(spec); sys.modules['workflow_maintenance']=item; spec.loader.exec_module(item)
 for name,filename in [('integration_ci','integration_ci.py'),('integration_executor_contract','integration_executor_contract.py'),('ci_ready_receipt_identity','ci_ready_receipt_identity.py'),('ci_live','ci-ready-receipt.py')]:
  spec=importlib.util.spec_from_file_location(name,directory/filename); item=importlib.util.module_from_spec(spec); sys.modules[name]=item; spec.loader.exec_module(item); loaded[name]=item
 integration=loaded['integration_ci']; module=loaded['ci_live']
@@ -1713,7 +1753,9 @@ if request.get('request_key'):
      or re.findall(r'^Refs #[1-9][0-9]*$',body,re.M)!=['Refs #'+str(request['issue'])]):
   raise ValueError('keyed PR Task/Refs identity is not canonical')
 planner=module.planner_for_run(request['repository'],run,base_oid=base,head_oid=head)
-proof={'integration_base_oid':base,'base_ref':pr.get('base',{}).get('ref'),'head_oid':head,'check_name':run.get('name'),'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'ci_validation_mode':'trusted_integration' if run.get('_integration') else 'ordinary_pr','assessed_target_oid':assessed_target}
+proof={'integration_base_oid':base,'base_ref':pr.get('base',{}).get('ref'),'head_oid':head,'check_name':run.get('name'),'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'ci_validation_mode':'trusted_integration' if run.get('_integration') else 'current_target_pr' if run.get('_current_target') else 'ordinary_pr','assessed_target_oid':assessed_target}
+if run.get('_current_target'):
+ proof.update(current_target_proof=run['_current_target'],workflow_run_id=run['_current_target']['workflow_run_id'],workflow_sha=run['_current_target']['workflow_revision'],tested_tree_oid=run['_current_target']['tested_tree_oid'],tested_commit_oid=run['_current_target']['checkout_oid'])
 if run.get('_integration'):
  proof.update({key:run['_integration'][key] for key in ('workflow_run_id','workflow_sha','tested_tree_oid','tested_commit_oid')})
  for key in ('request_key','request_identity','source_scope_oid','trusted_policy_context','effective_policy_identity','planner_inventory_authority','required_plan_v2_artifact_id','required_plan_v2_artifact_name','required_plan_v2_payload','required_result_v2_artifacts','trusted_planner_inventory','trusted_source_attempt','execution_jobs','run_id','run_attempt','request_id','job_id','job_name'):
@@ -1739,8 +1781,25 @@ print(json.dumps(proof))
                 proof, target_inventory,
                 modules['ci_evidence_applicability'], data,
             )
+    current_target = proof.get('ci_validation_mode') == 'current_target_pr'
+    if current_target:
+        if candidate_authority is None or request_key is not None:
+            raise ValueError('current-target PR proof lacks authenticated candidate consumer scope')
+        fields = proof.get('current_target_proof') or {}
+        if (fields.get('source_head_oid') != data['headRefOid']
+                or fields.get('current_target_oid') != proof.get('assessed_target_oid')
+                or fields.get('current_target_oid') != live_target_oid(data, uid=uid)
+                or fields.get('workflow_revision') not in (data['headRefOid'], fields.get('checkout_oid'))
+                or fields.get('maintenance_authority_comment_id') != candidate_authority['comment_id']
+                or fields.get('repository') != data['repository'] or fields.get('task_uid') != uid
+                or fields.get('task_issue_number') != task['issue_number']
+                or fields.get('pr_number') != int(data['number'])):
+            raise ValueError('current-target proof differs from authenticated live consumer identity')
+        if _candidate_receipt_authority(data, root, effective, uid, task) != candidate_authority:
+            raise ValueError('candidate receipt authority changed during validation')
     _validate_live_integration_proof(
-        proof, data, strict=strict, allow_legacy_strict_fallback=require_strict is None,
+        proof, data, strict=strict and not current_target,
+        allow_legacy_strict_fallback=require_strict is None,
     )
     return proof
 

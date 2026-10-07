@@ -512,6 +512,36 @@ if not required_gate_match:
 required_gate_body = required_gate_match.group("body")
 if '--github-output "${GITHUB_OUTPUT}"' not in required_gate_body:
     raise SystemExit("required-gate planner output is not written to GITHUB_OUTPUT")
+for trusted_planner_fragment in (
+    'git show "${tool_ref}:scripts/plan-rust-required-scope.py"',
+    'git show "${base_ref}:scripts/ci-required-scope.v2.json"',
+    'planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")',
+):
+    if trusted_planner_fragment not in required_gate_body:
+        raise SystemExit(
+            "required-gate scope must come from trusted base planner/config: "
+            f"{trusted_planner_fragment}"
+        )
+# Ordinary PRs retain Q tooling. The explicit maintenance route may select
+# immutable H tooling only after live authority validation; Q config/driver stay.
+pr_scope_start = required_gate_body.index('if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then')
+pr_scope_end = required_gate_body.index('elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then', pr_scope_start)
+pr_scope = required_gate_body[pr_scope_start:pr_scope_end]
+for fragment in (
+    'tool_ref="${base_ref}"',
+    'module.read_maintenance_authority(',
+    'if [[ -n "${maintenance_id}" ]]; then tool_ref="${head_ref}"; fi',
+    'git show "${tool_ref}:scripts/plan-rust-required-scope.py"',
+    'git show "${base_ref}:scripts/ci-required-scope.v2.json"',
+    'git show "${base_ref}:scripts/ci-tests.sh"',
+):
+    if fragment not in pr_scope:
+        raise SystemExit(f"PR planner authority boundary is missing: {fragment}")
+if not (pr_scope.index('tool_ref="${base_ref}"')
+        < pr_scope.index('module.read_maintenance_authority(')
+        < pr_scope.index('tool_ref="${head_ref}"')
+        < pr_scope.index('git show "${tool_ref}:scripts/plan-rust-required-scope.py"')):
+    raise SystemExit("candidate planner must follow live maintenance authority validation")
 run_tier_match = re.search(
     r"(?ms)^      - name: Run required test tier\n(?P<body>.*?)(?=^      - |\Z)",
     required_gate_body,
@@ -519,6 +549,107 @@ run_tier_match = re.search(
 if not run_tier_match:
     raise SystemExit("required-gate test-tier env path is missing")
 run_tier_body = run_tier_match.group("body")
+
+policy_maintenance_paths = (
+    "doc/engineering/workflow/source-of-truth.md",
+    "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+    "scripts/pm/check-cargo-package-scope",
+    "scripts/pm/check-cargo-package-scope.test.py",
+    ".pm/cargo-package-auxiliary-files.json",
+    "scripts/ci-tests.sh",
+    "scripts/ci-required-scope.v2.json",
+    "scripts/ci-required-scope-audit-contract.test.sh",
+    ".github/workflows/rust.yml",
+)
+
+def planner_output(path):
+    command = [
+        str(planner_path),
+        "--event-name",
+        "pull_request",
+        "--config",
+        str(config_path),
+        "--changed-path",
+        path,
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"trusted required-scope planner failed for {path}: {result.stderr.strip()}"
+        )
+    return {
+        key: value
+        for line in result.stdout.splitlines()
+        if "=" in line
+        for key, value in [line.split("=", 1)]
+    }
+
+full_reference_plan = planner_output("scripts/ci-tests.sh")
+if full_reference_plan.get("scope") != "full":
+    raise SystemExit("ci-tests baseline no longer selects the full required plan")
+full_selector_fields = sorted(
+    {
+        item["planner_field"]
+        for item in ownership
+        if item.get("mode") == "planner-owned"
+    }
+)
+full_contract_fields = [
+    "scope",
+    "execution_contract",
+    "planner_config_sha256",
+    "selected_capabilities",
+    "required_test_units",
+    "run_rust_baseline",
+    "needs_python",
+    "needs_markdown",
+    "needs_rust_toolchain",
+    "needs_node",
+    "needs_system_deps",
+    "needs_trunk",
+    "needs_wasm_target",
+    *full_selector_fields,
+]
+for path in policy_maintenance_paths:
+    plan = planner_output(path)
+    if plan.get("scope") != "full":
+        raise SystemExit(f"policy-maintenance path is not full-gated: {path}: {plan}")
+    for field in full_contract_fields:
+        if plan.get(field) != full_reference_plan.get(field):
+            raise SystemExit(
+                f"policy-maintenance plan is not the complete full route for {path}: "
+                f"{field}={plan.get(field)!r}, expected {full_reference_plan.get(field)!r}"
+            )
+    if f"cargo_scope_policy_maintenance:{path}" not in plan.get("reason_summary", ""):
+        raise SystemExit(f"policy-maintenance path lacks its explicit full rule: {path}")
+
+trusted_full_marker = "OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}"
+if trusted_full_marker not in run_tier_body:
+    raise SystemExit("Cargo scope maintenance marker is not bound to the planned workflow scope")
+selection_start = run_tier_body.find('trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"')
+selection_end = run_tier_body.find('mkdir -p "${trusted_profile_authority}/pm"', selection_start)
+if selection_start < 0 or selection_end < 0:
+    raise SystemExit("Cargo scope checker selection block is missing or unbounded")
+checker_selection = run_tier_body[selection_start:selection_end]
+for fragment in (
+    '[[ "${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}" == "true" ]]',
+    "git diff --quiet --no-renames",
+    "git diff --no-renames --name-only",
+    ".pm/cargo-package-auxiliary-files.json",
+    'export OASIS7_CARGO_SCOPE_CHECKER="${candidate_checker}"',
+    'git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope"',
+    'export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"',
+    "*) use_candidate_checker=false; break ;;",
+):
+    if fragment not in checker_selection:
+        raise SystemExit(f"candidate checker selection omits trusted full-plan guard: {fragment}")
+for path in policy_maintenance_paths:
+    if path not in checker_selection:
+        raise SystemExit(f"candidate checker selection omits policy-maintenance path: {path}")
+ci_tests_source = ci_tests_path.read_text(encoding="utf-8")
+if 'local trusted_full_plan="${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}"' not in ci_tests_source or \
+   'run env OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN="$trusted_full_plan" python3 "$checker"' not in ci_tests_source:
+    raise SystemExit("ci-tests does not pass the workflow's trusted full-plan marker to the scope checker")
 
 canonical_workflow_text = (
     repo_root / "doc/engineering/workflow/source-of-truth.md"

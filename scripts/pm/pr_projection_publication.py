@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import inspect
 import json
 import re
@@ -239,15 +240,20 @@ def resolve_task_publication(comments_read: dict[str, Any], expected_identity: d
                 except ValueError:
                     blockers.append("C1 publication or PR timestamps are malformed")
                 else:
-                    unbound_draft = (
-                        pr_binding.get("draft")
-                        and pr_binding.get("task_pr_number") is None
-                        and pr_binding.get("task_pr_url") is None
-                    )
-                    if unbound_draft and not published < created:
-                        blockers.append("C1 publication was not recorded before draft PR creation")
-                    elif not published < updated:
-                        blockers.append("C1 publication does not precede the existing PR candidate update")
+                    if any(value.tzinfo is None for value in (created, updated, published)):
+                        blockers.append("C1 publication or PR timestamps lack timezone")
+                    else:
+                        recorded_draft = (
+                            (pr_binding.get("task_status"), pr_binding.get("task_phase"))
+                            == ("committed", "verification")
+                            and pr_binding.get("task_pr_number") == pr_binding.get("number")
+                            and pr_binding.get("task_pr_url") == pr_binding.get("url")
+                        )
+                        if pr_binding.get("draft") and not recorded_draft:
+                            if not published < created:
+                                blockers.append("C1 publication was not recorded before draft PR creation")
+                        elif not published < updated:
+                            blockers.append("C1 publication does not precede the existing PR candidate update")
             comment_identity = {
                 "comment_id": comment["id"], "created_at": comment["created_at"],
                 "author": {"login": user["login"], "type": user["type"]},
@@ -376,15 +382,68 @@ def replace_projection_marker(body: str, marker: str, *,
         raise PublicationError("EVENT_PROJECTION_INVALID", "PR body has duplicate legacy projection markers")
     if legacy_count == 1:
         match = re.search(r"(?m)^<!-- oasis7-impact-projection-b64:\s*([A-Za-z0-9+/=_-]+)\s*-->[ \t]*$", prefix)
-        if not match or legacy_projection_b64 is None or match.group(1) != legacy_projection_b64:
-            raise PublicationError("EVENT_PROJECTION_INVALID", "legacy projection marker does not match the verified input")
+        if not match:
+            raise PublicationError("EVENT_PROJECTION_INVALID", "full projection carrier is malformed")
+        try:
+            old_projection = json.loads(base64.b64decode(match.group(1), validate=True), object_pairs_hook=_unique_object)
+            old_contract = decode_marker(body) if count else decode_marker(marker)
+            _check_carrier_projection(old_projection, old_contract)
+        except (ValueError, ContractError) as exc:
+            raise PublicationError("EVENT_PROJECTION_INVALID", "existing full carrier differs from its C1") from exc
         start, end = match.span()
         prefix = prefix[:start] + prefix[end:]
+    if legacy_projection_b64 is not None:
+        try:
+            raw = base64.b64decode(legacy_projection_b64, validate=True)
+            if len(raw) > 32 * 1024:
+                raise ValueError("projection exceeds 32KiB")
+            projection = json.loads(raw, object_pairs_hook=_unique_object)
+            _check_carrier_projection(projection, decode_marker(marker))
+        except (ValueError, ContractError) as exc:
+            raise PublicationError("EVENT_PROJECTION_INVALID", "new full carrier differs from its C1") from exc
+        prefix = prefix.rstrip() + "\n\n<!-- oasis7-impact-projection-b64: " + legacy_projection_b64 + " -->"
     prefix = prefix.rstrip()
     result = (prefix + "\n\n" if prefix else "") + marker
     if len(result.encode("utf-8")) > MAX_BODY_BYTES:
         raise PublicationError("EVENT_PROJECTION_INVALID", "PR body exceeds 60KiB")
     return result
+
+
+def _check_carrier_projection(projection, contract):
+    if not isinstance(projection, dict):
+        raise ValueError("full projection must be an object")
+    if projection.get("projection_digest") != digest({k: v for k, v in projection.items() if k != "projection_digest"}):
+        raise ValueError("full projection digest mismatch")
+    for field in ("task_uid", "source_head_oid", "scope_base_oid", "projection_digest"):
+        if projection.get(field) != contract[field]:
+            raise ValueError("full projection/C1 identity mismatch")
+
+
+def _full_carrier(projection, supplied):
+    return supplied if supplied is not None else base64.b64encode(
+        json.dumps(projection, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).decode("ascii")
+
+
+def _human_publication_result(adapter, journal, publication, expected_draft=True, expected_number=None):
+    mode = getattr(adapter, "human_reconcile_requested", None)
+    if not callable(mode) or mode() is not True:
+        return None
+    derive = getattr(adapter, "human_reconcile_pr_number", None)
+    if callable(derive):
+        number = derive(publication)
+    else:
+        live = adapter.read_task_pr_binding(publication["task_uid"])
+        number = live.get("pr_number") if isinstance(live, dict) else None
+    if type(number) is not int or number < 1 or (expected_number is not None and number != expected_number):
+        raise PublicationError("NETWORK_UNCERTAIN", "human recovery lacks the exact live Task PR")
+    pr = adapter.read_pr(publication["repository"], number)
+    _check_pr(pr, publication, number, publication["source_head_oid"], expected_draft)
+    binding = _record_and_bind(adapter, journal, publication, pr, expected_draft=expected_draft)
+    return {"status": "published", "task_uid": publication["task_uid"],
+            "publication_id": publication["publication_id"], "pr_number": number,
+            "head_oid": publication["source_head_oid"], "projection_digest": publication["projection_digest"],
+            "binding": binding}
 
 
 def _candidate(publication: dict[str, Any], projection: dict[str, Any]) -> tuple[dict[str, Any], str]:
@@ -889,6 +948,16 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
                      publication: dict[str, Any], pr: dict[str, Any],
                      expected_draft: bool = True) -> dict[str, Any]:
     number = pr["number"]
+    human_mode = getattr(adapter, "human_reconcile_requested", None)
+    if callable(human_mode) and human_mode() is True:
+        reconcile = getattr(adapter, "human_reconcile_record_pr", None)
+        if not callable(reconcile):
+            raise PublicationError("NETWORK_UNCERTAIN", "human reconciliation helper is unavailable")
+        observed = reconcile(publication, number, expected_draft=expected_draft)
+        completed = _completed_record_binding(adapter, publication, number, expected_draft)
+        if completed is None or observed != completed:
+            raise PublicationError("NETWORK_UNCERTAIN", "human reconciliation lacks fresh complete binding")
+        return completed
     action = "record-pr:" + publication["publication_id"]
     prior = _prior(journal, action)
     if prior is not None:
@@ -1020,6 +1089,10 @@ def publish_create(adapter: Any, journal: PublicationJournal, *, publication: di
                    sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     """Task intent/readback → H push → draft create → record-pr → reciprocal binding."""
     publication, marker = _candidate(publication, projection)
+    reconciled = _human_publication_result(adapter, journal, publication)
+    if reconciled is not None:
+        return reconciled
+    legacy_projection_b64 = _full_carrier(projection, legacy_projection_b64)
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
     try:
         with journal.locked():
@@ -1072,6 +1145,10 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                    resume_action_id: str | None = None) -> dict[str, Any]:
     """Patch and verify P(H1) before pushing H1 under a lease on H0."""
     publication, marker = _candidate(publication, projection)
+    reconciled = _human_publication_result(adapter, journal, publication, expected_draft, pr_number)
+    if reconciled is not None:
+        return reconciled
+    legacy_projection_b64 = _full_carrier(projection, legacy_projection_b64)
     if (type(expected_draft) is not bool or type(existing_ready_update) is not bool
             or expected_draft == existing_ready_update):
         raise PublicationError("TASK_IDENTITY_CONFLICT", "explicit ready update and draft expectation disagree")

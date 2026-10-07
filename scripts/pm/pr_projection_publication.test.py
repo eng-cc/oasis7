@@ -2,7 +2,9 @@
 """Focused fake-adapter coverage for C1 ordering, recovery, and resolution."""
 from __future__ import annotations
 
+import base64
 import copy
+import re
 import hashlib
 import importlib.util
 import io
@@ -37,7 +39,12 @@ def make_publication(index: int, *, head: str | None = None, branch: str | None 
                      repository: str = "eng-cc/oasis7", task_uid: str = UID):
     head = head or f"{index + 1:040x}"
     branch = branch or f"feature/c1-{index}"
-    projection_digest = digest({"target": index})
+    projection = {
+        "task_uid": task_uid, "source_head_oid": head, "scope_base_oid": SCOPE,
+        "planner_config_sha256": CONFIG, "consumed_contracts": [],
+    }
+    projection_digest = digest(projection)
+    projection["projection_digest"] = projection_digest
     publication = publication_module.build_task_publication(
         repository=repository, repository_id=7, task_uid=task_uid,
         bootstrap_epoch=1, source_repository_id=7, source_ref=branch,
@@ -45,11 +52,6 @@ def make_publication(index: int, *, head: str | None = None, branch: str | None 
         planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
         policy_digest=digest({"policy": "test"}), projection_digest=projection_digest,
     )
-    projection = {
-        "task_uid": task_uid, "source_head_oid": head, "scope_base_oid": SCOPE,
-        "planner_config_sha256": CONFIG, "projection_digest": projection_digest,
-        "consumed_contracts": [],
-    }
     return publication, projection
 
 
@@ -231,6 +233,8 @@ class BoundedRecoveryCLITests(unittest.TestCase):
         )
         body = publication_module.replace_projection_marker(
             f"Task: {UID}\nRefs #1", marker,
+            legacy_projection_b64=base64.b64encode(json.dumps(projection,
+                ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).decode(),
         )
         pr = {
             "repository": publication["repository"], "source_ref": publication["source_ref"],
@@ -1051,6 +1055,44 @@ class PublicationMatrixTests(unittest.TestCase):
         self.assertEqual("MEMBER", result["comment"]["author_association"])
         self.assertEqual(991, result["pr_number"])
 
+    def test_bound_draft_c1_update_uses_verified_pair_and_update_timestamp(self):
+        value, comment, read, pr = self.c1_resolution_inputs(9921)
+        # Server-authored publication falls after PR creation, before this head update.
+        pr['created_at'] = '2026-09-30T11:59:00+00:00'
+        pr['updated_at'] = '2026-09-30T12:01:00+00:00'
+        result = publication_module.resolve_task_publication(
+            read, {key: value[key] for key in publication_module._TASK_PUBLICATION_FIELDS},
+            live_task_author={'login': 'task-author', 'type': 'User'}, pr_binding=pr)
+        self.assertEqual('passed', result['status'], result.get('blockers'))
+        self.assertEqual(value, result['publication'])
+        self.assertEqual(991, result['pr_number'])
+        self.assertEqual(comment['id'], result['comment']['comment_id'])
+
+    def test_bound_draft_c1_timestamp_selection_retains_initial_and_identity_guards(self):
+        value, comment, read, pr = self.c1_resolution_inputs(9922)
+        pr['created_at'] = '2026-09-30T11:59:00+00:00'
+        pr['updated_at'] = '2026-09-30T12:01:00+00:00'
+        expected = {key: value[key] for key in publication_module._TASK_PUBLICATION_FIELDS}
+        author = {'login': 'task-author', 'type': 'User'}
+        cases = (
+            ('initial', {**pr, 'task_phase': 'execution', 'task_pr_number': None, 'task_pr_url': None}, comment),
+            ('partial_pair', {**pr, 'task_pr_url': None}, comment),
+            ('other_pr_pair', {**pr, 'task_pr_number': 992}, comment),
+            ('at_update', {**pr, 'updated_at': comment['created_at']}, comment),
+            ('before_publication', {**pr, 'updated_at': '2026-09-30T11:59:30Z'}, comment),
+            ('edited_comment', pr, {**comment, 'updated_at': '2026-09-30T12:00:01Z'}),
+            ('malformed_pr_time', {**pr, 'updated_at': 'not-a-time'}, comment),
+            ('naive_pr_time', {**pr, 'updated_at': '2026-09-30T12:01:00'}, comment),
+            ('naive_comment_time', pr, {**comment, 'created_at': '2026-09-30T12:00:00',
+                                      'updated_at': '2026-09-30T12:00:00'}),
+        )
+        for name, changed_pr, changed_comment in cases:
+            with self.subTest(case=name):
+                result = publication_module.resolve_task_publication(
+                    {**read, 'comments': [changed_comment]}, expected,
+                    live_task_author=author, pr_binding=changed_pr)
+                self.assertEqual('blocked', result['status'], result)
+
     def test_c1_live_resolver_fails_closed_on_incomplete_duplicate_or_wrong_pr(self):
         value, _comment, read, pr = self.c1_resolution_inputs(9911)
         expected = {key: value[key] for key in publication_module._TASK_PUBLICATION_FIELDS}
@@ -1085,40 +1127,22 @@ class PublicationMatrixTests(unittest.TestCase):
         self.assertEqual("passed", result["status"])
         self.assertNotIn("permissions", result)
 
-    def test_c1_live_resolver_accepts_bound_draft_update_before_update_and_rejects_late(self):
+    def test_c1_live_resolver_requires_task_author_and_precreate_time_order(self):
         value, comment, read, pr = self.c1_resolution_inputs(9913)
         expected = {key: value[key] for key in publication_module._TASK_PUBLICATION_FIELDS}
-        author = {"login": "task-author", "type": "User"}
-        initial = publication_module.resolve_task_publication(
-            read, expected, live_task_author=author, pr_binding=pr,
-        )
-        self.assertEqual("passed", initial["status"], initial)
-
         mismatch = publication_module.resolve_task_publication(
             read, expected, live_task_author={"login": "other-user", "type": "User"},
             pr_binding=pr,
         )
         self.assertEqual("blocked", mismatch["status"])
-
-        updated_draft = {**pr, "created_at": "2026-09-30T12:01:00Z",
-                         "updated_at": "2026-09-30T12:03:00Z"}
-        between = publication_module.resolve_task_publication(
-            {**read, "comments": [dict(comment, created_at="2026-09-30T12:02:00Z",
-                                        updated_at="2026-09-30T12:02:00Z")]},
-            expected, live_task_author=author, pr_binding=updated_draft,
+        late = publication_module.resolve_task_publication(
+            {**read, "comments": [dict(comment, created_at="2026-09-30T12:02:00Z")]},
+            expected, live_task_author={"login": "task-author", "type": "User"},
+            pr_binding=pr,
         )
-        self.assertEqual("passed", between["status"], between)
-        for timestamp in ("2026-09-30T12:03:00Z", "2026-09-30T12:04:00Z"):
-            with self.subTest(published_at=timestamp):
-                late = publication_module.resolve_task_publication(
-                    {**read, "comments": [dict(comment, created_at=timestamp,
-                                                updated_at=timestamp)]},
-                    expected, live_task_author=author, pr_binding=updated_draft,
-                )
-                self.assertEqual("blocked", late["status"], late)
-
+        self.assertEqual("blocked", late["status"])
         wrong_phase = publication_module.resolve_task_publication(
-            read, expected, live_task_author=author,
+            read, expected, live_task_author={"login": "task-author", "type": "User"},
             pr_binding={**pr, "task_status": "ready", "task_phase": "pre_pr_ready"},
         )
         self.assertEqual("blocked", wrong_phase["status"])
@@ -1203,9 +1227,12 @@ class PublicationMatrixTests(unittest.TestCase):
         body_file = root / "body.md"
         body_file.write_text(body if body is not None else f"Task: {UID}\nRefs #1\n", encoding="utf-8")
         projection_file = root / "projection.json"
-        projection_file.write_text("{}\n", encoding="utf-8")
+        projection_file.write_text(json.dumps(projection, ensure_ascii=False,
+            sort_keys=True, separators=(",", ":")), encoding="utf-8")
         args_values = {
             "worktree": str(root), "task_uid": UID, "issue_number": 1,
+            "source_head": publication["source_head_oid"],
+            "target_oid": publication["planner_authority_oid"],
             "body_file": str(body_file), "projection": str(projection_file),
             "existing_ready_update": existing_ready_update,
         }
@@ -2838,6 +2865,8 @@ class PublicationMatrixTests(unittest.TestCase):
             )
             body = publication_module.replace_projection_marker(
                 f"Task: {UID}\nRefs #1", marker,
+                legacy_projection_b64=base64.b64encode(json.dumps(projection,
+                    ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).decode(),
             )
             pr = {
                 "repository": publication["repository"], "source_ref": publication["source_ref"],
@@ -3569,6 +3598,39 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertIn("patch-pr", adapter.events)
             self.assertNotIn("push", adapter.events)
             self.assertEqual(head, adapter.prs[0]["head_oid"])
+            self.assert_full_carrier(adapter.prs[0]["body"], projection)
+
+    def assert_full_carrier(self, body, projection):
+        carriers = re.findall(r'<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+) -->', body)
+        self.assertEqual(1, len(carriers), 'one full DATA carrier must accompany C1')
+        self.assertEqual(projection, json.loads(base64.b64decode(carriers[0], validate=True)))
+        self.assertEqual(1, body.count('oasis7-ci-impact-publication:v2'))
+
+    def test_full_carrier_create_retry_and_new_head_update_preserve_manual_prefix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old, old_projection = make_publication(8901, head='7' * 40, branch='feature/carrier')
+            adapter = FakeAdapter(old, old_projection)
+            manual = f'Task: {UID}\nRefs #1\n\nHuman explanation stays.\n'
+            journal = self.journal(temp, old)
+            first = publication_module.publish_create(adapter, journal, publication=old,
+                projection=old_projection, body=manual)
+            self.assertEqual('published', first['status'])
+            self.assert_full_carrier(adapter.prs[0]['body'], old_projection)
+            before = adapter.prs[0]['body']
+            again = publication_module.publish_create(adapter, journal, publication=old,
+                projection=old_projection, body=manual)
+            self.assertEqual('published', again['status'])
+            self.assertEqual(before, adapter.prs[0]['body'])
+            self.assertEqual(1, adapter.events.count('create-pr'))
+            new, new_projection = make_publication(8902, head='8' * 40, branch='feature/carrier')
+            updated = publication_module.publish_update(adapter, self.journal(temp, new),
+                publication=new, projection=new_projection, pr_number=adapter.prs[0]['number'],
+                old_head_oid=old['source_head_oid'], body=before)
+            self.assertEqual('published', updated['status'])
+            self.assert_full_carrier(adapter.prs[0]['body'], new_projection)
+            self.assertIn('Human explanation stays.', adapter.prs[0]['body'])
+            self.assertNotEqual(old_projection, new_projection,
+                                'old DATA must validate against old C1, not the new projection')
 
     def test_100_stable_target_snapshots_resolve_reciprocal_binding(self):
         clock = FakeClock()
@@ -3665,21 +3727,19 @@ class PublicationMatrixTests(unittest.TestCase):
                 planner_config_sha256=CONFIG,
             )
 
-    def test_verified_legacy_b64_projection_is_replaced_by_one_v2_marker(self):
-        _contract, marker = publication_module.prepare(
-            task_uid=UID, source_head_oid="a" * 40, scope_base_oid=SCOPE,
-            projection_digest=digest({"projection": "fixture"}),
-        )
-        old = "Task: " + UID + "\nRefs #1\n\n<!-- oasis7-impact-projection-b64: abc123== -->"
-        updated = publication_module.replace_projection_marker(
-            old, marker, legacy_projection_b64="abc123==",
-        )
-        self.assertNotIn("oasis7-impact-projection-b64", updated)
-        self.assertEqual(1, updated.count("oasis7-ci-impact-publication:v2"))
-        with self.assertRaises(publication_module.PublicationError):
-            publication_module.replace_projection_marker(
-                old, marker, legacy_projection_b64="different",
-            )
+    def test_verified_full_projection_is_retained_alongside_one_c1_marker(self):
+        publication, projection = make_publication(8903)
+        _contract, marker = publication_module.prepare(task_uid=UID,
+            source_head_oid=publication['source_head_oid'], scope_base_oid=SCOPE,
+            projection_digest=projection['projection_digest'])
+        encoded = base64.b64encode(json.dumps(projection).encode()).decode()
+        old = f'Task: {UID}\nRefs #1\n\n<!-- oasis7-impact-projection-b64: {encoded} -->'
+        updated = publication_module.replace_projection_marker(old, marker, legacy_projection_b64=encoded)
+        self.assert_full_carrier(updated, projection)
+        for bad in ('different', encoded + '=invalid',
+                    base64.b64encode(json.dumps({**projection, 'task_uid': 'task_' + 'b' * 32}).encode()).decode()):
+            with self.subTest(carrier=bad), self.assertRaises(publication_module.PublicationError):
+                publication_module.replace_projection_marker(old, marker, legacy_projection_b64=bad)
 
 
 if __name__ == "__main__":
