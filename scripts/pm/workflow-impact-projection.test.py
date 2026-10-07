@@ -323,6 +323,17 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         result = self.run_projection(payload, ok=False, planner_authority_oid="c" * 40)
         self.assertIn("trusted planner authority cannot be resolved", result.stderr)
 
+    def test_trusted_planner_target_must_have_declared_unique_source_merge_base(self) -> None:
+        payload = self.base_input()
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        payload["source_head_oid"] = head
+        result = self.run_projection(
+            payload,
+            ok=False,
+            planner_authority_oid=head,
+        )
+        self.assertIn("trusted planner target must have the declared unique source merge base", result.stderr)
+
     @staticmethod
     def base_input() -> dict[str, object]:
         return {

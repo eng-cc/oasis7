@@ -2,6 +2,12 @@
 """Compile a deterministic, reusable pre-dispatch review plan."""
 
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import argparse
 import hashlib
@@ -583,6 +589,11 @@ def derived_source_review_input(root: Path, *, task_uid: str, head: str,
                                 bootstrap_epoch: int | None) -> tuple[dict[str, Any], dict[str, Any]]:
     mapping = load_json(root / ".pm/github-project-sync/tasks.json")
     task = (mapping.get("tasks") or {}).get(task_uid) or {}
+    task = {**task, "task_uid": task_uid}
+    try:
+        primary_contract.validate_consumed_contracts(impact_projection.get("consumed_contracts"), task, root=root)
+    except ValueError as exc:
+        raise ContractError(str(exc)) from exc
     epoch = bootstrap_epoch or task.get("bootstrap_epoch")
     if epoch is None:
         snapshot_path = root / ".pm" / "scratch" / task_uid / "bootstrap-task-snapshot.json"

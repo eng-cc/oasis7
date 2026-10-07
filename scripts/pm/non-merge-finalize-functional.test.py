@@ -290,6 +290,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         for name in (
             "non-merge-finalize.py",
             "github-project-task.py",
+            "task_primary_package.py",
             "github-project-sync.py",
             "github-project-workflow.py",
             "workflow-durable-store.py",

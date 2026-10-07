@@ -4,6 +4,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; TMP="$(mktemp -d)"; 
 mkdir -p "$TMP/bin" "$TMP/root/.pm/github-project-sync" "$TMP/root/.pm/tasks"
 mkdir -p "$TMP/root/scripts/pm"
 cp "$ROOT/scripts/pm/github-project-task.py" \
+  "$ROOT/scripts/pm/task_primary_package.py" \
   "$ROOT/scripts/pm/task_complete_claim.py" \
   "$ROOT/scripts/pm/loop_leaf_result.py" \
   "$ROOT/scripts/pm/github-project-sync.py" \

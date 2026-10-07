@@ -6,15 +6,16 @@ import argparse
 import base64
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
 import tempfile
-import types
+import tarfile
 from typing import Any
 from urllib.parse import urlencode
 
@@ -92,19 +93,36 @@ def git(root: Path, *args: str) -> str:
     return command_output(["git", "-C", str(root), *args])
 
 
-def load_projection_verifier(root: Path, authority_oid: str) -> Any:
+@contextmanager
+def load_projection_verifier(root: Path, authority_oid: str):
     try:
         source = subprocess.check_output(
-            ["git", "-C", str(root), "show",
-             f"{authority_oid}:scripts/pm/workflow-impact-projection.py"],
+            ["git", "-C", str(root), "archive", authority_oid, "scripts"],
             stderr=subprocess.PIPE,
         )
     except subprocess.CalledProcessError as exc:
         raise PublishInputError("frozen planner authority lacks the trusted projection verifier") from exc
-    module = types.ModuleType("c1_frozen_impact_projection_verifier")
-    module.__file__ = f"{authority_oid}:scripts/pm/workflow-impact-projection.py"
-    exec(compile(source, module.__file__, "exec"), module.__dict__)
-    return module
+    # Sibling imports use the same immutable B closure, with a real filename.
+    # Keep it available throughout verification without candidate fallback.
+    with tempfile.TemporaryDirectory(prefix="c1-frozen-projection-") as directory:
+        with tarfile.open(fileobj=io.BytesIO(source)) as archive:
+            for member in archive.getmembers():
+                path = PurePosixPath(member.name)
+                if path.is_absolute() or ".." in path.parts or not (member.isfile() or member.isdir()):
+                    raise PublishInputError("unsafe trusted projection script archive")
+            archive.extractall(directory)
+        path = Path(directory) / "scripts/pm/workflow-impact-projection.py"
+        spec = importlib.util.spec_from_file_location("c1_frozen_impact_projection_verifier", path)
+        if spec is None or spec.loader is None or not path.is_file():
+            raise PublishInputError("frozen planner authority lacks the trusted projection verifier")
+        module = importlib.util.module_from_spec(spec)
+        previous_bytecode = sys.dont_write_bytecode
+        try:
+            sys.dont_write_bytecode = True
+            spec.loader.exec_module(module)
+            yield module
+        finally:
+            sys.dont_write_bytecode = previous_bytecode
 
 
 def repo_common_dir(root: Path) -> Path:
@@ -184,15 +202,15 @@ def task_publication(root: Path, args: argparse.Namespace) -> tuple[dict[str, An
     if git(root, "status", "--porcelain=v1"):
         raise PublishInputError("source worktree must be clean before publication")
     scope_oid = git(root, "merge-base", args.target_oid, args.source_head)
-    verifier = load_projection_verifier(root, args.target_oid)
-    projection = verifier.load_verified_projection(
-        args.projection,
-        expected={
-            "task_uid": args.task_uid, "source_head_oid": args.source_head,
-            "scope_base_oid": scope_oid,
-        },
-        repo_root=root,
-    )
+    with load_projection_verifier(root, args.target_oid) as verifier:
+        projection = verifier.load_verified_projection(
+            args.projection,
+            expected={
+                "task_uid": args.task_uid, "source_head_oid": args.source_head,
+                "scope_base_oid": scope_oid,
+            },
+            repo_root=root,
+        )
     try:
         authority_config = subprocess.check_output([
             "git", "-C", str(root), "show",

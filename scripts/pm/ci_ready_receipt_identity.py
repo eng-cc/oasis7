@@ -2,6 +2,12 @@
 """Stable review identity for a trusted CI-ready receipt."""
 
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import hashlib
 import json
@@ -766,6 +772,8 @@ def _target_relation_paths(
     projection: dict[str, Any], *, root: pathlib.Path, source_head: str,
 ) -> tuple[list[str], bool]:
     """Collect verified contract/consumer paths for target-only drift checks."""
+    primary_contract.validate_consumed_contracts(projection.get("consumed_contracts") or [],
+        primary_contract.load_task(root, projection.get("task_uid", "")), root=root)
     relations = [
         path for path in (projection.get("changed_paths") or [])
         if isinstance(path, str)
@@ -796,6 +804,13 @@ def _target_relation_paths(
             unmapped = True
 
     for item in projection.get("consumed_contracts") or []:
+        if isinstance(item, dict) and item.get("type") == primary_contract.REFERENCE_TYPE:
+            task = primary_contract.load_task(pathlib.Path(root), projection["task_uid"])
+            primary_contract.validate_completion_reference(item, task or {})
+            primary_contract.validate_current_completion(pathlib.Path(root), task or {})
+            # This server metadata has no repository path. Its current identity
+            # was checked above; an unrelated target advance cannot mutate it.
+            continue
         candidates: list[Any] = []
         if isinstance(item, str):
             candidates.append(item)
@@ -1121,6 +1136,16 @@ def can_reuse_source_review(
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
             return False
+        projection = plan.get("impact_projection")
+        if isinstance(projection, dict):
+            if current_target_root is not None:
+                primary_contract.validate_consumed_contracts(projection.get("consumed_contracts") or [],
+                    primary_contract.load_task(pathlib.Path(current_target_root), source["task_uid"]),
+                    root=pathlib.Path(current_target_root))
+            elif any(isinstance(item, dict) and (item.get("type") == primary_contract.REFERENCE_TYPE
+                    or item.get("schema") in {primary_contract.SCHEMA, primary_contract.SCOPE_SCHEMA})
+                    for item in projection.get("consumed_contracts") or []):
+                return False
         if plan.get("impact_projection_schema") != PROJECTION_SCHEMA:
             return False
         if current_source_identity is not None and _validate_source_identity(current_source_identity) != source:
