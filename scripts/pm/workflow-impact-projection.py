@@ -530,10 +530,6 @@ def build_projection(
     scope_base_oid = _require_identity_string(value["scope_base_oid"], OID_RE, "scope_base_oid")
     if planner_authority_oid is not None:
         _require_identity_string(planner_authority_oid, OID_RE, "planner_authority_oid")
-        if planner_authority_oid != scope_base_oid:
-            raise ProjectionError(
-                "trusted planner authority must equal the immutable scope base OID"
-            )
     paths = normalize_changed_paths(value["changed_paths"])
     change_class = value["change_class"]
     if not isinstance(change_class, str) or change_class not in CHANGE_CLASSES:
@@ -691,7 +687,7 @@ def main() -> int:
     parser.add_argument("--out")
     parser.add_argument(
         "--planner-authority-oid",
-        help="load the required-scope planner and config from this immutable commit; must equal scope_base_oid",
+        help="load the required-scope planner and config from this immutable authority commit; authority may differ from scope_base_oid",
     )
     args = parser.parse_args()
     try:

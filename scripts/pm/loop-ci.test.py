@@ -145,6 +145,111 @@ class CIGateTests(unittest.TestCase):
                 with self.subTest(issue=changed_issue, pr=changed_pr), self.assertRaises(ValueError):
                     module.validate_full_binding(args, changed_pr, changed_issue, 1, UID)
 
+    def uid_binding_fixture(self):
+        args = type('Args', (), {
+            'repository': 'fixture/repo', 'pr_number': 2, 'head': 'b' * 40,
+        })()
+        issue = {
+            'number': 1, 'state': 'open', 'user': {'login': 'fixture-owner'},
+            'body': (f'task_uid: {UID}\n- pr_number: `2`\n'
+                     '- pr_url: `https://github.com/fixture/repo/pull/2`\n'
+                     '- status: `in_progress`\n- workflow_phase: `execution`\n'),
+        }
+        pr = {
+            'number': 2, 'html_url': 'https://github.com/fixture/repo/pull/2',
+            'state': 'open', 'merged_at': None, 'draft': True,
+            'body': f'Task: {UID}\nRefs #1',
+            'head': {'sha': args.head, 'ref': 'task-branch',
+                     'repo': {'id': 1, 'full_name': args.repository}},
+            'base': {'ref': 'main', 'repo': {'id': 1, 'full_name': args.repository}},
+        }
+        c1 = publication_api.build_task_publication(
+            repository=args.repository, repository_id=1, task_uid=UID,
+            bootstrap_epoch=1, source_repository_id=1,
+            source_ref='task-branch', target_ref='main',
+            source_head_oid=args.head, source_scope_oid=args.head,
+            planner_authority_oid=args.head,
+            planner_config_sha256='sha256:' + '4' * 64,
+            policy_digest='sha256:' + '5' * 64,
+            projection_digest='sha256:' + '6' * 64,
+        )
+        return args, pr, issue, publication_api.publication_comment(c1)
+
+    def check_uid_binding_reader(self, reader, pr, issue, args):
+        repository = {'id': 1, 'default_branch': 'main'}
+        with patch.object(module, 'run', return_value=json.dumps(repository)):
+            if reader == 'full':
+                return module.validate_full_binding(args, pr, issue, 1, UID)
+            return module._live_pr_publication_binding(
+                args, pr, issue, 1, UID, None, repository, 'main',
+            )
+
+    def test_uid_binding_accepts_repeated_identity_in_real_c1_evidence(self):
+        args, pr, issue, c1 = self.uid_binding_fixture()
+        for reader in ('full', 'publication'):
+            for evidence in ('', '\n' + c1, '\nEvidence task UID: ' + UID):
+                with self.subTest(reader=reader, evidence=evidence):
+                    self.check_uid_binding_reader(reader, {**pr, 'body': pr['body'] + evidence}, issue, args)
+
+    def test_uid_binding_rejects_malformed_extra_authority_before_and_after(self):
+        args, pr, issue, _ = self.uid_binding_fixture()
+        for reader in ('full', 'publication'):
+            for malformed in ('Task: malformed', 'Task:', ' \tTask \t: malformed'):
+                for body in (malformed + '\n' + pr['body'], pr['body'] + '\n' + malformed):
+                    with self.subTest(reader=reader, body=body), self.assertRaises(ValueError):
+                        self.check_uid_binding_reader(reader, {**pr, 'body': body}, issue, args)
+
+    def test_uid_binding_preserves_identity_and_authority_rejections(self):
+        args, pr, issue, c1 = self.uid_binding_fixture()
+        other = 'task_' + 'c' * 32
+        for reader in ('full', 'publication'):
+            for body in (
+                pr['body'] + '\n' + c1.replace(UID, other),
+                pr['body'] + '\nEvidence UID: ' + other,
+                pr['body'] + '\nTask: ' + UID,
+                pr['body'] + '\nTask: ' + other,
+                'Refs #1\nEvidence UID: ' + UID,
+                'Task: malformed\nRefs #1\nEvidence UID: ' + UID,
+                pr['body'].replace('Refs #1', 'Refs #9'),
+                pr['body'] + '\nRefs #1',
+                pr['body'].replace('Refs #1', 'Closes #1'),
+            ):
+                with self.subTest(reader=reader, body=body), self.assertRaises(ValueError):
+                    self.check_uid_binding_reader(reader, {**pr, 'body': body}, issue, args)
+
+    def test_uid_binding_preserves_live_candidate_and_issue_guards(self):
+        args, pr, issue, _ = self.uid_binding_fixture()
+        for reader in ('full', 'publication'):
+            for changed_pr in (
+                {**pr, 'number': 3}, {**pr, 'html_url': pr['html_url'] + '0'},
+                {**pr, 'draft': False}, {**pr, 'state': 'closed'}, {**pr, 'merged_at': 'now'},
+                {**pr, 'head': {**pr['head'], 'sha': 'c' * 40}},
+                {**pr, 'head': {**pr['head'], 'repo': {'id': 2, 'full_name': 'other/repo'}}},
+                {**pr, 'base': {**pr['base'], 'ref': 'other'}},
+                {**pr, 'base': {**pr['base'], 'repo': {'id': 2, 'full_name': 'other/repo'}}},
+            ):
+                with self.subTest(reader=reader, pr=changed_pr), self.assertRaises(ValueError):
+                    self.check_uid_binding_reader(reader, changed_pr, issue, args)
+            for changed_issue in ({**issue, 'number': 9}, {**issue, 'state': 'closed'}):
+                with self.subTest(reader=reader, issue=changed_issue), self.assertRaises(ValueError):
+                    self.check_uid_binding_reader(reader, pr, changed_issue, args)
+
+    def test_uid_binding_preserves_reader_specific_issue_and_repository_guards(self):
+        args, pr, issue, _ = self.uid_binding_fixture()
+        for body in (issue['body'].replace('/pull/2', '/pull/3'),
+                     issue['body'].replace('pr_number: `2`', 'pr_number: `3`')):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.check_uid_binding_reader('full', pr, {**issue, 'body': body}, args)
+        for body in (issue['body'].replace(UID, 'task_' + 'c' * 32),
+                     issue['body'] + 'task_uid: malformed\n',
+                     issue['body'].replace('- pr_url:', '- absent_pr_url:')):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.check_uid_binding_reader('publication', pr, {**issue, 'body': body}, args)
+        for part in ('head', 'base'):
+            changed = {**pr, part: {**pr[part], 'repo': {**pr[part]['repo'], 'id': 2}}}
+            with self.subTest(part=part), self.assertRaises(ValueError):
+                self.check_uid_binding_reader('publication', changed, issue, args)
+
     def test_binding_can_arrive_on_final_attempt(self):
         result, sleeps, _, _ = self.retry_case(arrival=6)
         self.assertEqual((result, sleeps), (0, [5]*6))

@@ -33,8 +33,13 @@ def read_project(repository, number):
           id project { id number owner { ... on User { login } ... on Organization { login } } }
           content { ... on Issue { number url body } }
           fieldValues(first:100) { pageInfo { hasNextPage } nodes {
+            __typename
             ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
             ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+            ... on ProjectV2ItemFieldRepositoryValue {
+              repository { id nameWithOwner }
+              field { ... on ProjectV2FieldCommon { id name } }
+            }
           } }
         } }
       } }
@@ -88,8 +93,13 @@ def read_live_project_item(repository, issue_number):
           id project { id number owner { ... on User { login } ... on Organization { login } } }
           content { ... on Issue { number url body } }
           fieldValues(first:100) { pageInfo { hasNextPage } nodes {
+            __typename
             ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
             ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+            ... on ProjectV2ItemFieldRepositoryValue {
+              repository { id nameWithOwner }
+              field { ... on ProjectV2FieldCommon { id name } }
+            }
           } }
         } }
       } }
