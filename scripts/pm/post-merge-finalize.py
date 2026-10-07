@@ -3,9 +3,11 @@
 from __future__ import annotations
 import argparse, datetime as dt, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
 from portable_file_lock import ensure_lock_byte, fcntl
-from loop_terminal import read_comments, read_issue, read_project, read_pull_request
+from loop_terminal import (read_comments, read_issue, read_project, read_pull_request,
+                           read_live_project_item, normalize_project_fields)
 from task_complete_claim import select_historical_task_complete_claim
 from terminal_proof import (DELIVERY_RECEIPT_FIELDS, read_live_repository, read_terminal_proof,
+                            RECOVERY_RECEIPT_FIELDS, RECOVERY_TYPE, RECOVERY_MARKER,
                             receipt_chain_digest, terminal_delivery_comment_body,
                             validate_live_repository)
 
@@ -48,13 +50,10 @@ def _reconcile_comment(record: dict, operation_id: str, expected_body: str) -> s
 
 def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
                       issue_number: int, repository: str) -> dict[str,str]:
-    item=project_workflow.fetch_project_items_by_ids([item_id]).get(item_id) or {}
-    # The bound-node query exposes nested fieldValues pageInfo. A terminal
-    # decision must fail closed instead of silently accepting a truncated page.
-    if item.get("_field_values_has_next_page") is not False:
-        fail("bound Project item fieldValues pagination is incomplete")
-    if (str(item.get("id") or "")!=item_id or str(item.get("_project_id") or "")!=project_id
-            or str(item.get("_project_number") or "")!=str(number)):
+    item=read_live_project_item(repository,issue_number)
+    context=item.get('project') or {}
+    if (item.get("id")!=item_id or context.get('id')!=project_id
+            or type(context.get('number')) is not int or context['number']!=number):
         fail("bound Project item node readback identity mismatch")
     content=item.get("content") or {}; body=str(content.get("body") or "")
     url=urllib.parse.urlparse(str(content.get("url") or ""))
@@ -63,7 +62,8 @@ def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
             or url.scheme!="https" or url.netloc!="github.com"
             or url.path.rstrip("/")!=f"/{repository}/issues/{issue_number}"):
         fail("bound Project item content does not match task issue identity")
-    return {name:str(item.get(name) or "") for name in ("Status","PM Status","Workflow Phase")}
+    fields=normalize_project_fields(item,repository)
+    return {name:fields.get(name,"") for name in ("Status","PM Status","Workflow Phase")}
 
 def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
@@ -382,7 +382,10 @@ def _delivery_receipt_root(root: pathlib.Path, task_uid: str) -> pathlib.Path:
     command=[sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
              "--task-uid",task_uid,"--json"]
     try:
-        payload=json.loads(subprocess.check_output(command,text=True,stderr=subprocess.PIPE))
+        observation = sys.modules.get("recovery_observation")
+        raw=(observation.capture(command) if observation is not None and observation.active() is not None
+             else subprocess.check_output(command,text=True,stderr=subprocess.PIPE))
+        payload=json.loads(raw)
         return pathlib.Path(payload["receipt_root"])
     except (OSError,subprocess.SubprocessError,KeyError,TypeError,json.JSONDecodeError) as exc:
         raise ValueError("canonical delivery receipt root unavailable") from exc
@@ -487,6 +490,74 @@ def _delivery_mapping_receipt(record: dict, root: pathlib.Path,
 
 def _delivery_live_context(root: pathlib.Path, task_uid: str, *,
                            prospective_readiness: dict | None = None) -> dict:
+    _, mapping = _load_json_object(pathlib.Path(root)/".pm/github-project-sync/tasks.json", "canonical task mapping")
+    record = (mapping.get("tasks") or {}).get(task_uid) or {}
+    receipt_root = _delivery_receipt_root(pathlib.Path(root), task_uid)
+    if ((record.get("phase_receipt_type") or {}).get("post_merge_done") == RECOVERY_TYPE
+            or (receipt_root/"terminal-recovery-proof.json").exists()):
+        import recovery_observation as observation
+        with observation.observation():
+            return _delivery_live_context_impl(root,task_uid,prospective_readiness=prospective_readiness)
+    return _delivery_live_context_impl(root,task_uid,prospective_readiness=prospective_readiness)
+
+
+def _delivery_live_context_impl(root: pathlib.Path, task_uid: str, *,
+                           prospective_readiness: dict | None = None) -> dict:
+    return _delivery_live_bindings(root, task_uid, prospective_readiness=prospective_readiness)
+
+
+def _stored_delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
+    """Internal existing-publication admission, never current readiness."""
+    from terminal_recovery import _read_stored_recovery
+    stored = _read_stored_recovery(root, task_uid)
+    return _delivery_live_bindings(root, task_uid, stored_recovery=stored)
+
+
+def _validate_delivery_project_entrance(fields: dict, record: dict,
+                                       receipt_root: pathlib.Path, task_uid: str) -> None:
+    terminal = {"Status": "Done", "PM Status": "done", "Workflow Phase": "done"}
+    if any(fields.get(key) != terminal[key] for key in ("PM Status", "Workflow Phase")):
+        raise ValueError("task_done Project projection is incomplete")
+    phase = record.get("workflow_phase")
+    if phase == "post_merge_done":
+        if fields.get("Status") != "Done":
+            raise ValueError("terminal Project projection is incomplete")
+        return
+    if phase not in {"task_done", "main_sync"}:
+        raise ValueError("delivery finalization phase is invalid")
+    if fields.get("Status") == "In Progress":
+        return
+    if fields.get("Status") != "Done":
+        raise ValueError("task_done Project Status is not the producer prestate")
+    # A persisted Project write may precede its response or later mapping
+    # update. Admit that actual poststate only through the original journal.
+    try:
+        _, ledger = _load_json_object(receipt_root/"finalizer-ledger.json", "finalizer Project journal")
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ValueError("task_done Project Done lacks a valid finalizer journal") from exc
+    operations = ledger.get("operations")
+    entry = operations.get("project_update") if isinstance(operations, dict) else None
+    operation_id = hashlib.sha256(f"{task_uid}:post_merge_done:project_update".encode()).hexdigest()
+    if (ledger.get("schema") != "oasis7_finalizer_ledger_v1" or ledger.get("task_uid") != task_uid
+            or type(ledger.get("revision")) is not int or ledger["revision"] <= 0
+            or not isinstance(entry, dict) or entry.get("operation_id") != operation_id
+            or entry.get("effect") != "project_update" or entry.get("intent") is not True
+            or any(key in entry and type(entry[key]) is not bool for key in ("action", "readback", "committed"))):
+        raise ValueError("task_done Project Done finalizer journal identity mismatch")
+    result = entry.get("result")
+    if entry.get("readback") is True:
+        if result != terminal:
+            raise ValueError("task_done Project Done journal readback mismatch")
+    elif entry.get("action") is True and entry.get("committed") is not True:
+        if result != {"fields": ["Status"]}:
+            raise ValueError("task_done Project Done journal action mismatch")
+    else:
+        raise ValueError("task_done Project Done lacks a recorded finalizer action/readback")
+
+
+def _delivery_live_bindings(root: pathlib.Path, task_uid: str, *,
+                            prospective_readiness: dict | None = None,
+                            stored_recovery: dict | None = None) -> dict:
     root=pathlib.Path(root).resolve()
     mapping_path=root/".pm/github-project-sync/tasks.json"
     # Read-only admission must not reconcile a journal before readiness is
@@ -540,20 +611,11 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str, *,
     mapped_v1=(record.get("phase_receipts") or {}).get("post_merge_done",{}).get("receipt_type")=="oasis7_terminal_cleanup"
     _delivery_issue_binding(issue,repository,task_uid,issue_number,pr_number,pr_url,
                             terminal=(record.get("workflow_phase")=="post_merge_done" and mapped_v1),
-                            recovery=(selector=="oasis7_terminal_delivery"))
-    fields={}
-    values=(project_item.get("fieldValues") or {})
-    if (values.get("pageInfo") or {}).get("hasNextPage") is not False:
-        raise ValueError("bound Project item fieldValues pagination is incomplete")
-    for entry in values.get("nodes") or []:
-        name=((entry.get("field") or {}).get("name"))
-        if not isinstance(name,str) or name in fields:
-            raise ValueError("bound Project item fields are missing or duplicated")
-        fields[name]=str(entry.get("name",entry.get("text","")) or "")
-    if any(fields.get(key)!=value for key,value in {"Status":"Done","PM Status":"done","Workflow Phase":"done"}.items()):
-        raise ValueError("task_done Project projection is incomplete")
+                            recovery=(selector in ("oasis7_terminal_delivery", RECOVERY_TYPE)))
+    fields=normalize_project_fields(project_item,repository)
+    _validate_delivery_project_entrance(fields, record, receipt_root, task_uid)
     if record.get("workflow_phase")=="post_merge_done":
-        if (record.get("phase_receipt_type") or {}).get("post_merge_done")=="oasis7_terminal_delivery":
+        if (record.get("phase_receipt_type") or {}).get("post_merge_done") in ("oasis7_terminal_delivery", RECOVERY_TYPE):
             pass
         elif (record.get("phase_receipts") or {}).get("post_merge_done",{}).get("receipt_type")=="oasis7_terminal_cleanup":
             # The caller will validate a complete v1 proof and return it without migration.
@@ -567,7 +629,27 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str, *,
     if legacy_v1:
         claim,claim_digest = None,None
         readiness = None
+        recovery = None
+    elif selector == RECOVERY_TYPE or (receipt_root/"terminal-recovery-proof.json").exists():
+        if selector not in (None, RECOVERY_TYPE):
+            raise ValueError("terminal recovery cannot replace a selected ordinary protocol")
+        from terminal_recovery import validate_recovery
+        recovery = (validate_recovery(root, task_uid) if stored_recovery is None
+                    else stored_recovery)
+        if recovery["receipt_root"] != receipt_root:
+            raise ValueError("terminal recovery canonical receipt root mismatch")
+        for key, value in {"repository":repository,"task_uid":task_uid,"issue_number":issue_number,
+                           "pr_number":pr_number,"pr_url":pr_url,"head_oid":head_oid,
+                           "merge_commit_oid":merge_oid,"default_branch":default_branch,
+                           "observed_target_oid":(target_oid if stored_recovery is None
+                                                   else recovery["proof"]["observed_target_oid"])}.items():
+            if recovery["proof"].get(key) != value:
+                raise ValueError(f"terminal recovery live binding mismatch: {key}")
+        claim = recovery["completion"]
+        claim_digest = "sha256:" + recovery["completion_digest"]
+        readiness = None
     else:
+        recovery = None
         from readiness_transport import validate_readiness_proof
         readiness = validate_readiness_proof(root, task_uid, record,
             live_pr=pr, comments=comments, live_issue=issue,
@@ -583,13 +665,15 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str, *,
             "observed_target_oid":prior_target or target_oid,"target_oid":target_oid,
             "merge_receipt":merge_receipt,"merge_receipt_sha256":merge_digest,
             "claim":claim,"task_complete_claim_sha256":claim_digest,"existing_delivery":existing,
-            "readiness_proof_sha256":readiness["digest"] if readiness else None}
+            "readiness_proof_sha256":readiness["digest"] if readiness else None,
+            "recovery":recovery,"protocol_version":3 if recovery else 2}
 
 
 def _validate_existing_delivery_record(existing: dict, expected: dict) -> None:
-    if set(expected) != DELIVERY_RECEIPT_FIELDS:
+    fields = RECOVERY_RECEIPT_FIELDS if expected.get("receipt_type") == RECOVERY_TYPE else DELIVERY_RECEIPT_FIELDS
+    if set(expected) != fields:
         raise ValueError("terminal delivery writer schema does not match the strict receipt schema")
-    if set(existing) != DELIVERY_RECEIPT_FIELDS:
+    if set(existing) != fields:
         raise ValueError("terminal delivery receipt closed schema mismatch")
     observed_at=existing.get("observed_at")
     try:
@@ -623,6 +707,10 @@ def _delivery_record(context: dict) -> dict:
         "branch":str(context["record"].get("task_branch")),"completion_semantics":"delivery_only",
         "observed_at":dt.datetime.now(dt.timezone.utc).isoformat(),
     }
+    if context.get("recovery") is not None:
+        record.pop("readiness_proof_sha256")
+        record.update(receipt_type=RECOVERY_TYPE, schema_version=1,
+                      recovery_proof_sha256=context["recovery"]["digest"])
     if existing is not None:
         # A receipt written before a lost local/remote response is immutable.
         # Validate its closed schema, original observation time, and every
@@ -636,7 +724,7 @@ def _delivery_partial_legacy_effects(context: dict) -> None:
     """Do not migrate a v1 comment effect whose response may have been lost."""
     record=context["record"]
     if record.get("workflow_phase")=="post_merge_done":
-        if (record.get("phase_receipt_type") or {}).get("post_merge_done")=="oasis7_terminal_delivery":
+        if (record.get("phase_receipt_type") or {}).get("post_merge_done") in ("oasis7_terminal_delivery", RECOVERY_TYPE):
             return
         if (record.get("phase_receipts") or {}).get("post_merge_done",{}).get("receipt_type")=="oasis7_terminal_cleanup":
             return
@@ -688,9 +776,10 @@ def _delivery_partial_legacy_effects(context: dict) -> None:
 
 def _delivery_status(context: dict) -> dict:
     record=context["record"]
+    version=context["protocol_version"]
     if record.get("workflow_phase")=="post_merge_done":
         selector=(record.get("phase_receipt_type") or {}).get("post_merge_done")
-        if selector=="oasis7_terminal_delivery":
+        if selector in ("oasis7_terminal_delivery", RECOVERY_TYPE):
             try:
                 proof=read_terminal_proof(
                     context["root"],context["task_uid"],record,
@@ -698,15 +787,15 @@ def _delivery_status(context: dict) -> dict:
                     live_pr=context["pr"],live_repository=context["live_repository"],
                     comments=context["comments"],
                 )
-                if proof.get("status")!="passed" or proof.get("protocol_version")!=2:
+                if proof.get("status")!="passed" or proof.get("protocol_version")!=version:
                     raise ValueError("selected v2 terminal delivery proof is not complete")
             except ValueError:
                 _validate_resumable_v2(context)
-                return {"status":"ready","protocol_version":2,"task_uid":context["task_uid"],
-                        "resume":True,"delivery":{"state":"pending","protocol_version":2}}
+                return {"status":"ready","protocol_version":version,"task_uid":context["task_uid"],
+                        "resume":True,"delivery":{"state":"pending","protocol_version":version}}
             return {"status":"already_finalized","protocol_version":proof["protocol_version"],
                     "task_uid":context["task_uid"],"proof":proof,
-                    "delivery":{"state":"complete","protocol_version":2}}
+                    "delivery":{"state":"complete","protocol_version":version}}
         proof=read_terminal_proof(
             context["root"],context["task_uid"],record,
             live_issue=context["issue"],live_project_item=context["project_item"],
@@ -716,8 +805,8 @@ def _delivery_status(context: dict) -> dict:
         return {"status":"already_finalized","protocol_version":proof["protocol_version"],
                 "task_uid":context["task_uid"],"proof":proof}
     _delivery_partial_legacy_effects(context)
-    return {"status":"ready","protocol_version":2,"task_uid":context["task_uid"],
-            "delivery":{"state":"pending","protocol_version":2},
+    return {"status":"ready","protocol_version":version,"task_uid":context["task_uid"],
+            "delivery":{"state":"pending","protocol_version":version},
             "head_oid":context["head_oid"],"merge_commit_oid":context["merge_commit_oid"],
             "default_branch":context["default_branch"],
             "observed_target_oid":context["observed_target_oid"],
@@ -734,8 +823,10 @@ def _validate_resumable_v2(context: dict) -> None:
     except (OSError,UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
         raise ValueError(f"selected v2 terminal delivery is not resumable: {exc}") from exc
     digest=hashlib.sha256(raw).hexdigest()
-    if (set(receipt)!=DELIVERY_RECEIPT_FIELDS
-            or (record.get("phase_receipt_type") or {}).get("post_merge_done")!="oasis7_terminal_delivery"
+    expected_type = RECOVERY_TYPE if context.get("recovery") else "oasis7_terminal_delivery"
+    fields = RECOVERY_RECEIPT_FIELDS if context.get("recovery") else DELIVERY_RECEIPT_FIELDS
+    if (set(receipt)!=fields
+            or (record.get("phase_receipt_type") or {}).get("post_merge_done")!=expected_type
             or (record.get("phase_receipt_sha256") or {}).get("post_merge_done")!=digest
             or (record.get("phase_receipts") or {}).get("post_merge_done")!=receipt):
         raise ValueError("selected v2 terminal delivery mapping/receipt is not resumable")
@@ -818,9 +909,72 @@ def validate_prior_delivery_admission(root: pathlib.Path, task_uid: str,
     _delivery_status(context)
 
 
+def _validate_existing_terminal_namespace(root: pathlib.Path, task_uid: str) -> None:
+    """Read-only existing namespace admission, not fresh delivery acceptance."""
+    root = pathlib.Path(root).resolve()
+    _, mapping = _load_json_object(root/".pm/github-project-sync/tasks.json", "canonical task mapping")
+    record = (mapping.get("tasks") or {}).get(task_uid)
+    if not isinstance(record, dict):
+        raise ValueError("terminal namespace canonical task mapping missing")
+    receipt_root = _delivery_receipt_root(root, task_uid)
+    selected = any(isinstance(record.get(key), dict) and "post_merge_done" in record[key]
+                   for key in ("phase_receipt_type", "phase_receipt_sha256", "phase_receipts",
+                               "phase_receipt_comment_id", "phase_receipt_comment_sha256"))
+    filenames = ("terminal-delivery-receipt.json", "terminal-cleanup-receipt.json",
+                 "finalizer-ledger.json", "terminal-tombstone.json")
+    present = [name for name in filenames if (receipt_root/name).exists()]
+    for name in present:
+        _, candidate = _load_json_object(receipt_root/name, "existing terminal namespace "+name)
+        expected = {
+            "terminal-delivery-receipt.json": ("receipt_type", {"oasis7_terminal_delivery", RECOVERY_TYPE}),
+            "terminal-cleanup-receipt.json": ("receipt_type", {"oasis7_terminal_cleanup"}),
+            "finalizer-ledger.json": ("schema", {"oasis7_finalizer_ledger_v1"}),
+            "terminal-tombstone.json": ("schema", {"oasis7_terminal_tombstone_v1"}),
+        }
+        key, types = expected[name]
+        if candidate.get(key) not in types:
+            raise ValueError("existing terminal namespace unknown typed record: "+name)
+    if not selected and not present:
+        return
+    selector = (record.get("phase_receipt_type") or {}).get("post_merge_done")
+    mapped_v1 = (record.get("phase_receipts") or {}).get("post_merge_done", {}).get("receipt_type") == "oasis7_terminal_cleanup"
+    if "terminal-cleanup-receipt.json" in present and not mapped_v1:
+        raise ValueError("existing terminal cleanup requires its unchanged v1 selector")
+    recovery = selector == RECOVERY_TYPE or (receipt_root/"terminal-recovery-proof.json").exists()
+    context = (_stored_delivery_live_context(root, task_uid) if recovery
+               else _delivery_live_context(root, task_uid))
+    if not recovery:
+        _delivery_status(context)
+        return
+    if selector not in (None, RECOVERY_TYPE):
+        raise ValueError("existing terminal namespace mixed protocol")
+    if record.get("workflow_phase") != "post_merge_done":
+        _delivery_partial_legacy_effects(context)
+        if (receipt_root/"terminal-tombstone.json").exists():
+            raise ValueError("existing terminal tombstone without selected terminal protocol")
+        return
+    if selector != RECOVERY_TYPE:
+        raise ValueError("existing terminal namespace missing recovery selector")
+    from terminal_proof import _read_v2_files, _validate_existing_recovery_terminal
+    try:
+        files = _read_v2_files(root, task_uid)
+        receipt = files["delivery"]["record"]
+        digest = files["delivery"]["digest"]
+        if ((record.get("phase_receipt_sha256") or {}).get("post_merge_done") != digest
+                or (record.get("phase_receipts") or {}).get("post_merge_done") != receipt):
+            raise ValueError("existing terminal namespace receipt selector mismatch")
+        _validate_existing_recovery_terminal(receipt, files, task_uid, record,
+            context["issue"], context["project_item"], context["pr"],
+            context["live_repository"], context["comments"])
+    except ValueError:
+        # Same supported selected partial boundary as the effect consumer;
+        # no collector/readiness call and no journal reconciliation writes.
+        _validate_resumable_v2(context)
+
+
 def _delivery_comment_readback(context: dict, body: str) -> dict | None:
     issue_url=f"https://github.com/{context['repository']}/issues/{context['issue_number']}"
-    marker="<!-- oasis7-pm-evidence/v2 -->"
+    marker=RECOVERY_MARKER if context.get("recovery") else "<!-- oasis7-pm-evidence/v2 -->"
     markers=[]; exact=[]
     for comment in context["comments"]:
         comment_body=str(comment.get("body") or "")
@@ -956,7 +1110,7 @@ def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
                         raise ValueError(f"canonical task identity drifted during delivery: {key}")
                 if current.get("workflow_phase")=="post_merge_done":
                     selected=(current.get("phase_receipt_type") or {}).get("post_merge_done")
-                    if selected!="oasis7_terminal_delivery":
+                    if selected!=receipt["receipt_type"]:
                         raise ValueError("canonical task already selected another terminal protocol")
                     if ((current.get("phase_receipt_sha256") or {}).get("post_merge_done")!=digest
                             or (current.get("phase_receipts") or {}).get("post_merge_done")!=receipt):
@@ -965,7 +1119,7 @@ def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
                     raise ValueError("canonical workflow phase drifted before delivery selector commit")
                 current["workflow_phase"]="post_merge_done"
                 current.setdefault("phase_receipts",{})["post_merge_done"]=receipt
-                current.setdefault("phase_receipt_type",{})["post_merge_done"]="oasis7_terminal_delivery"
+                current.setdefault("phase_receipt_type",{})["post_merge_done"]=receipt["receipt_type"]
                 current.setdefault("phase_receipt_sha256",{})["post_merge_done"]=digest
                 current.setdefault("phase_receipt_comment_id",{})["post_merge_done"]=comment["id"]
                 current.setdefault("phase_receipt_comment_sha256",{})["post_merge_done"]=comment_digest
@@ -993,6 +1147,12 @@ def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
             return path
 
         # Resolve all authority while holding the task lock before any write.
+        if context.get("recovery") is not None:
+            from terminal_recovery import validate_recovery
+            fresh=validate_recovery(root,task_uid)
+            if (fresh["digest"]!=context["recovery"]["digest"]
+                    or fresh["completion_digest"]!=context["recovery"]["completion_digest"]):
+                raise ValueError("terminal recovery authority changed before effects")
         receipt=_delivery_record(context)
         receipt_path=context["receipt_root"]/"terminal-delivery-receipt.json"
         if not receipt_path.exists():
@@ -1038,11 +1198,11 @@ def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
         live_repository=read_live_repository(context["repository"],context["merge_commit_oid"],receipt["observed_target_oid"])
         proof=read_terminal_proof(root,task_uid,latest_record,live_issue=issue,
             live_project_item=project_item,live_pr=pr,live_repository=live_repository,comments=comments)
-        if proof.get("protocol_version")!=2 or proof.get("status")!="passed":
+        if proof.get("protocol_version")!=context["protocol_version"] or proof.get("status")!="passed":
             raise ValueError("terminal delivery finalizer readback did not select v2 proof")
-        result={"status":"finalized","protocol_version":2,"task_uid":task_uid,
+        result={"status":"finalized","protocol_version":context["protocol_version"],"task_uid":task_uid,
                 "terminal_receipt_sha256":receipt_digest,"comment_id":comment["id"],
-                "delivery":{"state":"complete","protocol_version":2}}
+                "delivery":{"state":"complete","protocol_version":context["protocol_version"]}}
         print(json.dumps(result,sort_keys=True)); return result
 
 

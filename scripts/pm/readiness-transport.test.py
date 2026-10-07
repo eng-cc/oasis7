@@ -8,6 +8,7 @@ Existing protocol fixtures are imported, never edited or upgraded in place.
 from __future__ import annotations
 
 import base64
+import copy
 import datetime as dt
 import hashlib
 import importlib.util
@@ -19,6 +20,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+import readiness_transport
+import loop_terminal
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
@@ -29,6 +33,54 @@ spec.loader.exec_module(protocol)
 
 def digest(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
+
+
+class TypedProjectReadinessRed(unittest.TestCase):
+    def test_actual_query_projection_reaches_missing_readiness_after_repository_readback(self):
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = protocol.DeliveryFixture(Path(temp))
+            record, issue, item, pr, live_repo, comments = fixture.live_inputs()
+            item = copy.deepcopy(item)
+            item['fieldValues']['nodes'] = [node for node in item['fieldValues']['nodes']
+                if (node.get('field') or {}).get('name') != 'Repository']
+            for node in item['fieldValues']['nodes']:
+                node['__typename'] = ('ProjectV2ItemFieldTextValue' if 'text' in node
+                                      else 'ProjectV2ItemFieldSingleSelectValue')
+            repository_node = {'__typename': 'ProjectV2ItemFieldRepositoryValue',
+                'field': {'name': 'Repository'}, 'repository': {'nameWithOwner': protocol.REPOSITORY}}
+            queries = []
+            def graphql(*args):
+                if args[0] == 'project':
+                    return {'id': item['project']['id']}
+                query = next(arg for arg in args if arg.startswith('query='))
+                queries.append(query)
+                projected = copy.deepcopy(item)
+                # Official union projection: an unsupported branch yields {}.
+                projected['fieldValues']['nodes'].append(repository_node if
+                    'ProjectV2ItemFieldRepositoryValue' in query else {})
+                return {'data': {'repository': {'issue': {'projectItems': {
+                    'pageInfo': {'hasNextPage': False}, 'nodes': [projected]}}}}}
+            def api(repo, endpoint):
+                if endpoint.endswith('/issues/11'): return issue
+                if endpoint.endswith('/pulls/12'): return pr
+                self.fail(endpoint)
+            before = (fixture.mapping_path.read_bytes(), fixture.state_path.read_bytes(),
+                {str(p.relative_to(fixture.receipt_root)): p.read_bytes()
+                 for p in fixture.receipt_root.rglob('*') if p.is_file()})
+            with patch.object(readiness_transport, 'query', side_effect=api), \
+                    patch.object(readiness_transport, 'read_comments', return_value=comments), \
+                    patch.object(loop_terminal, '_json', side_effect=graphql), \
+                    patch('terminal_proof.read_live_repository', return_value=live_repo):
+                with self.assertRaisesRegex(ValueError,
+                        'required readiness proof/native artifacts/unique migration unavailable'):
+                    readiness_transport.create_readiness_proof(fixture.root, protocol.UID, write=True)
+            self.assertTrue(queries)
+            self.assertIn('__typename', queries[0])
+            self.assertIn('repository', queries[0])
+            self.assertIn('nameWithOwner', queries[0])
+            self.assertEqual(before, (fixture.mapping_path.read_bytes(), fixture.state_path.read_bytes(),
+                {str(p.relative_to(fixture.receipt_root)): p.read_bytes()
+                 for p in fixture.receipt_root.rglob('*') if p.is_file()}))
 
 
 class NativeClaimFixture:

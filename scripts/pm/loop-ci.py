@@ -82,8 +82,9 @@ def validate_full_binding(args, pr, issue, number, uid):
             or pr_url_fields != [expected_url]):
         raise ValueError('live Task Issue PR number/URL binding is missing, ambiguous, or drifted')
 
-    pr_body = pr.get('body') if isinstance(pr.get('body'), str) else ''
-    uid_tokens = re.findall(r'task_[0-9a-f]{32}', pr_body)
+    pr_body = (pr.get('body') if isinstance(pr.get('body'), str) else '').replace('\r\n', '\n')
+    uid_tokens = set(re.findall(r'task_[0-9a-f]{32}', pr_body))
+    task_fields = re.findall(r'(?m)^[ \t]*Task[ \t]*:[^\r\n]*$', pr_body)
     task_refs = re.findall(r'(?m)^\s*Task: (task_[0-9a-f]{32})\s*$', pr_body)
     refs = re.findall(r'(?m)^\s*Refs #([1-9][0-9]*)\s*$', pr_body)
     closing_refs = re.findall(r'(?im)^\s*(?:Fixes|Closes) #([1-9][0-9]*)\s*$', pr_body)
@@ -103,7 +104,7 @@ def validate_full_binding(args, pr, issue, number, uid):
             or head.get('sha') != args.head or not head.get('ref')
             or head_repo.get('full_name') != args.repository
             or base.get('ref') != default_branch or base_repo.get('full_name') != args.repository
-            or uid_tokens != [uid] or task_refs != [uid]
+            or uid_tokens != {uid} or len(task_fields) != 1 or task_refs != [uid]
             or refs != [str(number)] or closing_refs):
         raise ValueError('live PR Task/Refs/repository/head/base binding is missing, ambiguous, or drifted')
 
@@ -222,12 +223,14 @@ def _live_pr_publication_binding(args, pr, issue, number, uid, binding,
             or head_repo.get('id') != repository_info['id']
             or base_repo.get('id') != repository_info['id']):
         raise ValueError('live PR is not the exact same-repository open draft/event/default-base candidate')
-    pr_body = pr.get('body') if isinstance(pr.get('body'), str) else ''
-    uid_tokens = re.findall(r'task_[0-9a-f]{32}', pr_body)
+    pr_body = (pr.get('body') if isinstance(pr.get('body'), str) else '').replace('\r\n', '\n')
+    uid_tokens = set(re.findall(r'task_[0-9a-f]{32}', pr_body))
+    task_fields = re.findall(r'(?m)^[ \t]*Task[ \t]*:[^\r\n]*$', pr_body)
     task_refs = re.findall(r'(?m)^\s*Task: (task_[0-9a-f]{32})\s*$', pr_body)
     refs = re.findall(r'(?m)^\s*Refs #([1-9][0-9]*)\s*$', pr_body)
     closing_refs = re.findall(r'(?im)^\s*(?:Fixes|Closes) #([1-9][0-9]*)\s*$', pr_body)
-    if uid_tokens != [uid] or task_refs != [uid] or refs != [str(number)] or closing_refs:
+    if (uid_tokens != {uid} or len(task_fields) != 1 or task_refs != [uid]
+            or refs != [str(number)] or closing_refs):
         raise ValueError('live PR Task/Refs identity is missing, ambiguous, or closing')
     status, phase = _issue_scalar(body, 'status'), _issue_scalar(body, 'workflow_phase')
     task_pr_number, task_pr_url = _task_pr_number(body), _issue_scalar(body, 'pr_url')
@@ -254,7 +257,7 @@ def _resolve_active_binding(args, binding, issue, pr, number, uid, comments_read
                             *, task_pr_binding, hold_values):
     if binding is None:
         return None
-    with _trusted_base_checkout(args.repo_root, args.base) as trusted_root:
+    with _trusted_base_checkout(args.repo_root, getattr(args, 'tool_revision', args.base)) as trusted_root:
         policy = _import_from_trusted_base(trusted_root, 'loop_policy')
         try:
             current = policy.current_effective_policy_identity(Path(args.repo_root), args.repository)
@@ -325,7 +328,7 @@ def validate_c1_publication(args, pr, issue, number, uid, binding,
         task_pr_binding=(normalized['task_pr_number'], normalized['task_pr_url']),
         hold_values=hold_values,
     )
-    with _trusted_base_checkout(args.repo_root, args.base) as trusted_root:
+    with _trusted_base_checkout(args.repo_root, getattr(args, 'tool_revision', args.base)) as trusted_root:
         publication = _import_from_trusted_base(trusted_root, 'pr_projection_publication')
         expected = {
             'repository': args.repository,
@@ -380,6 +383,7 @@ def main():
     parser.add_argument('--planner-config-sha256')
     parser.add_argument('--planner-digest')
     parser.add_argument('--projection-digest')
+    parser.add_argument('--maintenance-authority-comment-id', type=int)
     args = parser.parse_args()
     if args.start_only and args.phase != 'final':
         parser.error('--start-only is only valid with --phase final')
@@ -434,6 +438,19 @@ def main():
             if len(issue_uids) != 1: raise ValueError('Issue UID missing')
             uid = issue_uids[0]
         if issue_uids != [uid]: raise ValueError('Issue UID mismatch')
+        args.maintenance_context = None
+        if args.maintenance_authority_comment_id is not None:
+            with _trusted_base_checkout(args.repo_root, args.head) as candidate_root:
+                maintenance = _import_from_trusted_base(candidate_root, 'workflow_maintenance')
+                scope_base = args.scope_base_oid or subprocess.check_output(
+                    ['git', '-C', str(args.repo_root), 'merge-base', args.base, args.head], text=True).strip()
+                changed = subprocess.check_output(
+                    ['git', '-C', str(args.repo_root), 'diff', '--name-only', scope_base, args.head], text=True).splitlines()
+                args.maintenance_context = maintenance.read_maintenance_authority(
+                    args.repository, args.maintenance_authority_comment_id, uid, args.pr_number,
+                    args.head, changed, maintenance.TOOL_PATHS)
+                maintenance.validate_candidate_tool_root(candidate_root, args.repo_root, args.maintenance_context)
+            args.tool_revision = args.head
         body = await_pr_binding(
             args, pr, issue, number, uid,
             wait_for_initial=args.phase == 'legacy',
@@ -520,7 +537,7 @@ def main():
         if binding is None:
             raise ValueError('loop binding disappeared during live readback')
         effective_binding = active_binding if isinstance(active_binding, dict) else binding
-        commit = effective_binding.get('policy_commit', '')
+        commit = getattr(args, 'tool_revision', effective_binding.get('policy_commit', ''))
         if not re.fullmatch(r'[0-9a-f]{40}', commit): raise ValueError('missing immutable effective policy')
         if default_branch is None:
             try:
@@ -544,7 +561,7 @@ def main():
                 check=True, capture_output=True,
             )
             subprocess.run(
-                ['git', '-C', str(args.repo_root), 'merge-base', '--is-ancestor', commit,
+                ['git', '-C', str(args.repo_root), 'merge-base', '--is-ancestor', effective_binding['policy_commit'],
                  f'refs/remotes/origin/{default_branch}'],
                 check=True, capture_output=True,
             )
@@ -589,19 +606,21 @@ def coordinating_record(root, binding, repository):
     return record
 
 
-t, r, b, base, head, repo = sys.argv[1:]
+t, r, b, base, head, repo, maintenance_raw = sys.argv[1:]
 try:
     binding = json.loads(b)
     record = coordinating_record(Path(r), binding, repo)
     result = validate_ci_content(
         Path(t), Path(r), binding, base, head, repo, record=record,
+        maintenance=json.loads(maintenance_raw),
     )
 except (OSError, ValueError, KeyError, TypeError) as exc:
     result = {"status": "blocked", "blockers": [str(exc)]}
 print(json.dumps(result))
 sys.exit(0 if result["status"] == "passed" else 2)
 '''
-                result = subprocess.run([sys.executable, '-c', code, str(tool_root), str(args.repo_root.resolve()), json.dumps(effective_binding), args.base, args.head, args.repository], cwd=tool_root / 'scripts/pm')
+                result = subprocess.run([sys.executable, '-c', code, str(tool_root), str(args.repo_root.resolve()), json.dumps(effective_binding), args.base, args.head, args.repository,
+                                         json.dumps(args.maintenance_context)], cwd=tool_root / 'scripts/pm')
                 if result.returncode == 0 and args.phase == 'start':
                     write_output('start_only', str(start_only).lower())
                 return result.returncode

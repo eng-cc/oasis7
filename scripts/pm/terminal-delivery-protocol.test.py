@@ -128,10 +128,12 @@ class DeliveryFixture:
                 "owner": {"login": "fixture"}},
             "content": {"number": ISSUE, "url": ISSUE_URL, "body": self.issue_body},
             "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": [
-                {"name": "Done", "field": {"name": "Status"}},
-                {"name": "done", "field": {"name": "PM Status"}},
-                {"name": "done", "field": {"name": "Workflow Phase"}},
-                {"text": UID, "field": {"name": "Task UID"}},
+                {"__typename": "ProjectV2ItemFieldSingleSelectValue", "name": "Done", "field": {"name": "Status"}},
+                {"__typename": "ProjectV2ItemFieldSingleSelectValue", "name": "done", "field": {"name": "PM Status"}},
+                {"__typename": "ProjectV2ItemFieldSingleSelectValue", "name": "done", "field": {"name": "Workflow Phase"}},
+                {"__typename": "ProjectV2ItemFieldTextValue", "text": UID, "field": {"name": "Task UID"}},
+                {"__typename": "ProjectV2ItemFieldRepositoryValue", "field": {"name": "Repository"},
+                 "repository": {"nameWithOwner": REPOSITORY}},
             ]},
         }
         merge_receipt = {
@@ -160,6 +162,17 @@ class DeliveryFixture:
                 "instance_id": self.worktree_instance_id,
             },
         }
+        # Use the original producer's pre-finalization projection, not a
+        # terminal Status supplied before the finalizer has performed its effect.
+        sync_spec = importlib.util.spec_from_file_location(
+            "fixture_initial_project_sync", self.pm_tools / "github-project-sync.py")
+        sync = importlib.util.module_from_spec(sync_spec)
+        sync_spec.loader.exec_module(sync)
+        initial_fields = sync.project_field_values(self.record)
+        for node in self.project_item["fieldValues"]["nodes"]:
+            field = node["field"]["name"]
+            if field in {"Status", "PM Status", "Workflow Phase"}:
+                node["name"] = initial_fields[field]
         mapping = {"version": 1, "project": {"owner": "fixture", "number": 1,
                     "id": "PROJECT_fixture", "repo": REPOSITORY}, "tasks": {UID: self.record}}
         self.mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
@@ -297,7 +310,19 @@ def out(value): print(json.dumps(value))
 if args[:1] == ["project"] and len(args) > 1 and args[1] == "view":
     out({"id":state["project_item"]["project"]["id"]})
 elif args[:1] == ["project"] and len(args) > 1 and args[1] == "field-list":
-    out({"fields":[]})
+    out({"fields":[{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField", "options":[{"id":"STATUS_DONE","name":"Done"},{"id":"STATUS_PROGRESS","name":"In Progress"}]}]})
+elif args[:2] == ["project", "item-edit"]:
+    if (len(args) != 12 or args[2::2] != ["--id","--project-id","--field-id","--single-select-option-id","--format"]
+            or args[3] != state["project_item"]["id"] or args[5] != state["project_item"]["project"]["id"]
+            or args[7] != "FIELD_STATUS" or args[9] not in {"STATUS_DONE","STATUS_PROGRESS"} or args[11] != "json"):
+        raise SystemExit("unsupported fixture Project mutation")
+    for node in state["project_item"]["fieldValues"]["nodes"]:
+        if node["field"]["name"] == "Status": node["name"] = {"STATUS_DONE":"Done","STATUS_PROGRESS":"In Progress"}[args[9]]
+    state_path.write_text(json.dumps(state))
+    if os.environ.get("QA_LOSE_PROJECT_RESPONSE") == "1":
+        marker = state_path.with_name("lost-project-response")
+        if not marker.exists(): marker.touch(); raise SystemExit(74)
+    out(state["project_item"])
 elif args[:1] == ["api"] and len(args) > 1 and args[1] == "graphql":
     query = next((x.split("=",1)[1] for x in args if x.startswith("query=")), "")
     item = state["project_item"]
@@ -737,6 +762,69 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, output)
         self.assertIn("terminal delivery receipt observation time is invalid", output)
         self._assert_no_terminal_effects(snapshot, ledger_path, tombstone_path, output)
+
+    def _f7_set_project_field(self, field, value):
+        state = json.loads(self.fixture.state_path.read_text())
+        for node in state["project_item"]["fieldValues"]["nodes"]:
+            if node["field"]["name"] == field:
+                node["name"] = value
+        self.fixture.state_path.write_text(json.dumps(state))
+
+    def _f7_assert_preflight_no_effects(self, expected_success):
+        state_before = self.fixture.state_path.read_bytes()
+        mapping_before = self.fixture.mapping_path.read_bytes()
+        receipts_before = {p.name: p.read_bytes() for p in self.fixture.receipt_root.iterdir() if p.is_file()}
+        result = self.fixture.run_producer("--preflight")
+        self.assertEqual(self.fixture.state_path.read_bytes(), state_before, result.stderr)
+        self.assertEqual(self.fixture.mapping_path.read_bytes(), mapping_before, result.stderr)
+        self.assertEqual({p.name: p.read_bytes() for p in self.fixture.receipt_root.iterdir() if p.is_file()}, receipts_before)
+        calls = [json.loads(line) for line in self.fixture.log_path.read_text().splitlines()]
+        self.assertFalse(any(call[:2] in (["issue", "comment"], ["issue", "close"], ["project", "item-edit"]) for call in calls))
+        if expected_success:
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(result.stdout)["status"], "ready")
+        else:
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result
+
+    def test_f7_real_prephase_projection_preflight_is_readonly(self):
+        state = json.loads(self.fixture.state_path.read_text())
+        fields = {node["field"]["name"]: node.get("name") for node in state["project_item"]["fieldValues"]["nodes"]}
+        self.assertEqual([fields[k] for k in ("Status", "PM Status", "Workflow Phase")], ["In Progress", "done", "done"])
+        self._f7_assert_preflight_no_effects(True)
+
+    def test_f7_unjournaled_done_is_not_prephase_authority(self):
+        self._f7_set_project_field("Status", "Done")
+        self.assertFalse((self.fixture.receipt_root / "finalizer-ledger.json").exists())
+        self._f7_assert_preflight_no_effects(False)
+
+    def test_f7_real_project_action_lost_response_resumes_exact_operation(self):
+        with mock.patch.dict(os.environ, {"QA_LOSE_PROJECT_RESPONSE": "1"}):
+            lost = self.fixture.run_producer()
+        self.assertNotEqual(lost.returncode, 0, lost.stdout + lost.stderr)
+        self.assertTrue(self.fixture.state_path.with_name("lost-project-response").exists(), lost.stderr)
+        ledger = json.loads((self.fixture.receipt_root / "finalizer-ledger.json").read_text())
+        entry = ledger["operations"]["project_update"]
+        self.assertEqual(ledger["task_uid"], UID)
+        self.assertEqual(entry["operation_id"], sha(f"{UID}:post_merge_done:project_update".encode()))
+        self.assertEqual(entry["effect"], "project_update")
+        self.assertTrue(entry["intent"])
+        self.assertTrue(entry["action"])
+        self.assertFalse(entry.get("readback", False))
+        self.assertEqual(entry["result"]["fields"], ["Status"])
+        retry = self.fixture.run_producer()
+        self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
+        self.assertEqual(self.read_proof()["protocol_version"], 2)
+        calls = [json.loads(line) for line in self.fixture.log_path.read_text().splitlines()]
+        self.assertEqual(sum(call[:2] == ["project", "item-edit"] for call in calls), 1)
+
+    def test_f7_wrong_prephase_pm_status_refuses_before_effects(self):
+        self._f7_set_project_field("PM Status", "committed")
+        self._f7_assert_preflight_no_effects(False)
+
+    def test_f7_wrong_prephase_workflow_phase_refuses_before_effects(self):
+        self._f7_set_project_field("Workflow Phase", "verification")
+        self._f7_assert_preflight_no_effects(False)
 
     def test_preflight_and_lost_comment_response_recover_one_delivery(self):
         preflight = self.fixture.run_producer("--preflight")

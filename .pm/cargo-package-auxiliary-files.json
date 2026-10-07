@@ -2,6 +2,14 @@
   "schema": "oasis7-cargo-package-auxiliary-files/v1",
   "auxiliary_files": [
     {
+      "path": "doc/.governance/document-corpus/objects/23/23251b177eaa9852ca215fad7c0fdd0b8e87c000360824636cf061a4e60fac00.json",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "doc/.governance/document-corpus/objects/7c/7cf2626f607661535bfef04cc11fa56a111b8acb8dcd3cbb073b2d24924db9a7.json",
+      "package": "oasis7_local_signer"
+    },
+    {
       "path": "doc/p2p/blockchain/local-file-signing-backend.design.md",
       "package": "oasis7_local_signer"
     },
@@ -52,6 +60,10 @@
     {
       "path": "doc/.governance/document-corpus/objects/9a/9a812ec52c06d6c0a9633e3ce03eea09b1cc8ae34e94ad1ead1f245d03ea4a3b.json",
       "package": "oasis7_wasm_executor"
+    },
+    {
+      "path": "scripts/local-signer/tests/test_runtime_gate_contract.py",
+      "package": "oasis7_local_signer"
     }
   ]
 }

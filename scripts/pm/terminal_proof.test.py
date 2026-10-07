@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Producer-shape checks for the canonical terminal receipt chain."""
 import hashlib
+import copy
 import json
 import sys
 import unittest
@@ -8,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from terminal_proof import validate_receipt_chain
+import terminal_proof
 
 
 UID = "task_" + "a" * 32
@@ -79,6 +81,45 @@ def receipts(mode="ancestry"):
 PR = {
     "base": {"ref": "main"}, "head": {"sha": "a" * 40},
 }
+
+
+class TypedProjectProofRed(unittest.TestCase):
+    def item(self):
+        nodes = [{'__typename': 'ProjectV2ItemFieldSingleSelectValue',
+            'name': value, 'field': {'name': name}} for name, value in
+            [('Status', 'Done'), ('PM Status', 'done'), ('Workflow Phase', 'done')]]
+        nodes += [{'__typename': 'ProjectV2ItemFieldTextValue', 'text': UID,
+            'field': {'name': 'Task UID'}}, {'__typename': 'ProjectV2ItemFieldRepositoryValue',
+            'field': {'name': 'Repository'}, 'repository': {'nameWithOwner': REPOSITORY}}]
+        return {'id': 'I', 'project': {'id': 'P', 'number': 1, 'owner': {'login': 'fixture'}},
+            'content': {'number': ISSUE_NUMBER,
+                'url': f'https://github.com/{REPOSITORY}/issues/{ISSUE_NUMBER}'},
+            'fieldValues': {'pageInfo': {'hasNextPage': False}, 'nodes': nodes}}
+
+    def test_actual_terminal_parser_retains_typed_repository_metadata(self):
+        values = terminal_proof._project_values(self.item())
+        self.assertEqual(values['fields']['Repository'], REPOSITORY)
+        self.assertEqual(values['fields']['Status'], 'Done')
+        self.assertEqual(values['fields']['Task UID'], UID)
+
+    def test_all_uncertain_union_shapes_and_duplicate_names_fail_closed(self):
+        valid = self.item(); repository = valid['fieldValues']['nodes'][-1]
+        cases = [{}, None, {'field': {'name': 'Repository'}},
+            {**repository, '__typename': 'Unknown'}, {**repository, 'repository': None},
+            {**repository, 'repository': {'nameWithOwner': 'other/repo'}},
+            {**repository, 'field': {'name': 'Status'}},
+            {'__typename': 'ProjectV2ItemFieldTextValue', 'field': {'name': 'Other'}, 'text': True},
+            {'__typename': 'ProjectV2ItemFieldSingleSelectValue', 'field': {'name': 'Other'}, 'name': None}]
+        for candidate in cases:
+            item = copy.deepcopy(valid); item['fieldValues']['nodes'][-1] = candidate
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                terminal_proof._project_values(item)
+        item = copy.deepcopy(valid); item['fieldValues']['nodes'].append(repository)
+        with self.assertRaises(ValueError): terminal_proof._project_values(item)
+        for page in [{}, {'hasNextPage': True}, {'hasNextPage': 'false'}]:
+            item = copy.deepcopy(valid); item['fieldValues']['pageInfo'] = page
+            with self.subTest(page=page), self.assertRaises(ValueError):
+                terminal_proof._project_values(item)
 
 
 class MainSyncProducerProof(unittest.TestCase):
