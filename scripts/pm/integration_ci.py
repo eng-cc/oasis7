@@ -54,6 +54,9 @@ class _HistoricalReadBudget:
 
     def remaining(self):
         remaining=self.deadline-time.monotonic()
+        observation=sys.modules.get('recovery_observation')
+        if observation is not None and observation.active() is not None:
+            remaining=min(remaining,observation.active().remaining())
         if remaining<=0:
             raise ValueError('historical workflow proof aggregate deadline exhausted')
         return remaining
@@ -70,6 +73,13 @@ def _historical_json(path,budget):
     budget.calls+=1
     if budget.calls>HISTORICAL_MAX_CALLS:
         raise ValueError('historical workflow proof call budget exhausted')
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        raw=observation.capture(['gh','api',path],limit=HISTORICAL_RESPONSE_MAX_BYTES,
+            timeout=min(HISTORICAL_CALL_TIMEOUT_SECONDS,budget.remaining()),kind='github_api',locator=path)
+        budget.bytes+=len(raw)
+        if budget.bytes>HISTORICAL_TOTAL_MAX_BYTES:raise ValueError('historical workflow byte budget exhausted')
+        return observation.load(raw)
     deadline=min(budget.deadline,time.monotonic()+HISTORICAL_CALL_TIMEOUT_SECONDS)
     process=None
     output=bytearray()
@@ -276,9 +286,16 @@ def _historical_first_activation_workflow(repository,commit,budget):
         raise ValueError('historical workflow does not declare the exact validation-only producer')
 
 def gh(*args):
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        endpoint=next((part for part in args[1:] if part=='graphql' or part.startswith('repos/')),None)
+        return observation.load(observation.capture(['gh',*args],kind='github_api' if endpoint else None,locator=endpoint))
     return json.loads(subprocess.check_output(['gh',*args],text=True))
 
 def git(root,*args):
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        return observation.git(root,*args).decode().strip()
     return subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
 
 def pages(repository,path,key):
@@ -1654,10 +1671,23 @@ def _verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=No
     artifacts=pages(repository,f'actions/runs/{run_id}/artifacts','artifacts')
     found=[a for a in artifacts if a.get('name')==ARTIFACT and not a.get('expired')]
     if len(found)!=1 or found[0].get('workflow_run',{}).get('id')!=int(run_id): raise ValueError('manual integration artifact missing or ambiguous')
-    raw=subprocess.check_output(['gh','api',f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip"])
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        raw=observation.capture(['gh','api',f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip"],
+            limit=observation.ARTIFACT_LIMIT,kind='repository_artifact',locator=f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip")
+    else:
+        raw=subprocess.check_output(['gh','api',f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip"])
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         if archive.namelist()!=[ARTIFACT+'.json']: raise ValueError('manual integration artifact members mismatch')
-        payload=json.loads(archive.read(ARTIFACT+'.json'))
+        member=archive.getinfo(ARTIFACT+'.json')
+        if observation is not None and observation.active() is not None and (member.file_size>observation.ARTIFACT_LIMIT or member.flag_bits&1):
+            raise ValueError('manual integration artifact expanded size/encryption invalid')
+        payload_raw=archive.read(member)
+        if observation is not None and observation.active() is not None:
+            observation.active().charge(payload_raw)
+            payload=observation.load(payload_raw)
+        else:
+            payload=json.loads(payload_raw)
     execution_sha=run.get('head_sha') if request_key is not None else base
     # Never choose the executor source revision from the downloaded artifact.
     # In keyed workflow_dispatch mode, the API run head is E and W must equal E.
@@ -1717,6 +1747,9 @@ def _verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=No
     return selected[0],payload
 
 def verify_merged_delivery_integration(repository,uid,number,head,base,selected,context):
+    return _merged_delivery_integration(repository,uid,number,head,base,selected,context)
+
+def _merged_delivery_integration(repository,uid,number,head,base,selected,context,*,_observe_current_target=False):
     """Terminal-only legacy observation; locators never grant merged authority."""
     fields={'repository_root','source_review_plan_path','source_review_handoff_path',
         'source_review_resolution_path','source_scope_oid','merge_commit_oid',
@@ -1757,6 +1790,9 @@ def verify_merged_delivery_integration(repository,uid,number,head,base,selected,
         'merge_compare':gh('api',f'repos/{repository}/compare/{merged}...{target}')}
     terminal._validate_live_repository(live,repository,merged,branch,target)
     def object_bytes(*args):
+        observation=sys.modules.get('recovery_observation')
+        if observation is not None and observation.active() is not None:
+            return observation.git(root,*args)
         return subprocess.check_output(['git','-C',str(root),*args])
     parent=object_bytes('rev-parse',merged+'^').decode().strip()
     scope=context['source_scope_oid']
@@ -1766,8 +1802,15 @@ def verify_merged_delivery_integration(repository,uid,number,head,base,selected,
         raise ValueError('merged target ancestry mismatch')
     # This bounded legacy seam admits only an unchanged delivered target.
     # Related/unrelated advancement needs the separately admitted applicability reader.
-    if target!=merged:
+    if target!=merged and not _observe_current_target:
         raise ValueError('merged target applicability drift is unsupported')
+    if target!=merged:
+        # Recollect actual target authority here; a caller cannot supply an
+        # applicability verdict or previously constructed proof dictionary.
+        verify_current_target_ci(repository,uid,number,head,merged,target,
+            {key:value for key,value in context.items() if key in {
+                'repository_root','source_review_plan_path','source_review_handoff_path',
+                'source_review_resolution_path','source_scope_oid','check_app_id'}})
     gate=_adjacent_module('pr-lifecycle-gate')
     class ReadOnlyTransport:
         def rest(self,method,path,**kwargs):
@@ -1788,6 +1831,8 @@ def verify_merged_delivery_integration(repository,uid,number,head,base,selected,
             raise ValueError('keyed request capability is disabled by trusted policy')
         raise ValueError('keyed merged request identity is unsupported')
     current=current_request(repository,uid,number,base,head,branch)
+    if _observe_current_target and selected is None:
+        selected=current
     if not isinstance(selected,dict) or current!=selected:
         raise ValueError('merged integration current request identity mismatch')
     run_id=current.get('id');attempt=current.get('run_attempt')
@@ -1817,6 +1862,10 @@ def verify_merged_delivery_integration(repository,uid,number,head,base,selected,
     return {'base_oid':base,'run_id':run_id,'run_attempt':attempt,'app_id':app,
         'check_run_id':check['id'],'workflow_sha':base,'tested_tree_oid':tree,
         'request_key':None,'proof':proof}
+
+def verify_current_target_ci(repository,uid,number,head,merge,target,context):
+    from terminal_recovery import verify_current_target
+    return verify_current_target(repository,uid,number,head,merge,target,context)
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)

@@ -67,6 +67,7 @@ def build_review(repo):
  repo=Path(repo).resolve();sys.path.insert(0,str(repo/'scripts/pm'))
  m=load(repo/'scripts/pm/review_preflight_handoff.test.py','full_review_fixture_harness')
  c=m.ReviewPreflightHandoffTests();c.setUp()
+ subprocess.run(['git','-C',str(c.root),'switch','-q','--detach',m.SCOPE_OID],check=True)
  roles=['repository_health_engineer','producer_system_designer','qa_engineer','liveops_community']
  shutil.copytree(repo/'scripts/pm',c.root/'scripts/pm',dirs_exist_ok=True,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
  evidence=c.root/'closure-evidence.json'
@@ -78,7 +79,12 @@ def build_review(repo):
  for rel in ('scripts/pm/readiness_transport.py','scripts/pm/loop_terminal.py','scripts/pm/terminal_proof.py','scripts/pm/post-merge-finalize.py','scripts/pm/pr-lifecycle-gate.py','scripts/pm/claim-ready.sh','scripts/pm/ci_reuse_policy.py'):
   dest=c.root/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(repo/rel,dest)
  subprocess.run(['git','-C',str(c.root),'add','closure-evidence.json','scripts','.agents','.github','doc'],check=True)
- subprocess.run(['git','-C',str(c.root),'commit','--amend','--no-edit','-q'],check=True)
+ subprocess.run(['git','-C',str(c.root),'commit','-qm','immutable common dependency baseline'],check=True)
+ m.SCOPE_OID=subprocess.check_output(['git','-C',str(c.root),'rev-parse','HEAD'],text=True).strip()
+ source=c.root/'scripts/pm/review_preflight_handoff.test.py'
+ source.write_text(source.read_text()+"\ndef offline_recovery_fixture_identity(value):\n    return value\n")
+ subprocess.run(['git','-C',str(c.root),'add',str(source)],check=True)
+ subprocess.run(['git','-C',str(c.root),'commit','-qm','bounded accepted PM source behavior'],check=True)
  m.HEAD=subprocess.check_output(['git','-C',str(c.root),'rev-parse','HEAD'],text=True).strip()
  paths=subprocess.check_output(['git','-C',str(c.root),'diff','--name-only',m.SCOPE_OID,m.HEAD],text=True).splitlines()
  f=c.make_fixture(create_handoff=False,publish_dispatch=False,changed_paths=paths)
@@ -408,12 +414,22 @@ class MergedIntegrationComponent(unittest.TestCase):
 
 
 
+def scenario_actor(login):
+    """Select the factual offline account before this scenario is built."""
+    def mark(method):
+        method.scenario_actor = login
+        return method
+    return mark
+
+
 class CurrentTargetComponent(unittest.TestCase):
     """Real descendant Git/planner and authentic PUSH transport; no validator stubs."""
     @classmethod
     def setUpClass(cls):
         MergedIntegrationComponent.setUpClass.__func__(cls)
         root=cls.review['root'];a=cls.inputs
+        cls.pr_execution=subprocess.check_output(['git','-C',str(root),'commit-tree',a['head']+'^{tree}','-p',a['base'],'-p',a['head']],input='offline ordinary PR merge checkout\n',text=True).strip()
+        subprocess.run(['git','-C',str(root),'update-ref','refs/pull/1/merge',cls.pr_execution],check=True)
         git=lambda *args:subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
         # Two advances ensure last-push and cumulative ranges cannot be conflated.
         rel='scripts/pm/readiness_transport.py'
@@ -453,7 +469,10 @@ class CurrentTargetComponent(unittest.TestCase):
         MergedIntegrationComponent.tearDownClass.__func__(cls)
     def setUp(self):
         import copy,base64,io,zipfile
+        self.scenario_actor = getattr(getattr(self, self._testMethodName), 'scenario_actor', 'repo-admin')
         MergedIntegrationComponent.setUp(self)
+        self.publication_fault_path=self.review['root']/'offline-publication-faults.json'
+        self.publication_fault_path.unlink(missing_ok=True)
         self.review['harness'].gh_data.write_bytes(self.initial_gh_data)
         self.review['harness'].fake_gh.write_text(self.initial_gh_script)
         (self.review['root']/'.pm/github-project-sync/tasks.json').write_bytes(self.initial_mapping)
@@ -468,7 +487,7 @@ class CurrentTargetComponent(unittest.TestCase):
         self.push_check={'id':2901,'name':'required-gate','app':{'id':15368},'head_sha':t,'status':'completed','conclusion':'success','details_url':f'https://github.com/{repo}/actions/runs/2701/job/2901','output':{'summary':None,'text':None}}
         self.push_plan=self.produce_push_plan(self.push_raw,2701,self.push_base,t)
         self.push_artifact={'id':3101,'name':'oasis7-required-plan-v1','expired':False,'size_in_bytes':1000,'created_at':'2026-10-02T10:02:10Z','updated_at':'2026-10-02T10:03:20Z','workflow_run':{'id':2701,'repository_id':1,'head_repository_id':1,'head_branch':'main','head_sha':t}}
-        self.responses.update({f'repos/{repo}/actions/workflows/rust.yml/runs?event=push&per_page=100&page=1':{'total_count':1,'workflow_runs':[self.push_run]},f'repos/{repo}/actions/runs/2701':self.push_run,f'repos/{repo}/actions/runs/2701/attempts/1':self.push_run,f'repos/{repo}/actions/runs/2701/attempts/1/jobs?per_page=100&page=1':{'total_count':1,'jobs':[self.push_job]},f'repos/{repo}/check-runs/2901':self.push_check,f'repos/{repo}/check-suites/2801/check-runs?per_page=100&page=1':{'total_count':1,'check_runs':[self.push_check]},f'repos/{repo}/actions/runs/2701/artifacts?per_page=100&page=1':{'total_count':1,'artifacts':[self.push_artifact]}})
+        self.responses.update({f'repos/{repo}/actions/workflows/rust.yml/runs?event=push&per_page=100&page=1':{'total_count':2,'workflow_runs':[self.push_run,dict(self.push_run,id=2601,head_sha=self.data['merge'],created_at='2026-10-01T10:00:00Z')]},f'repos/{repo}/actions/runs/2701':self.push_run,f'repos/{repo}/actions/runs/2701/attempts/1':self.push_run,f'repos/{repo}/actions/runs/2701/attempts/1/jobs?per_page=100&page=1':{'total_count':1,'jobs':[self.push_job]},f'repos/{repo}/check-runs/2901':self.push_check,f'repos/{repo}/check-suites/2801/check-runs?per_page=100&page=1':{'total_count':1,'check_runs':[self.push_check]},f'repos/{repo}/actions/runs/2701/artifacts?per_page=100&page=1':{'total_count':1,'artifacts':[self.push_artifact]}})
         self.responses[f'repos/{repo}/check-suites/2801']={'id':2801,'head_branch':'main','head_sha':t,'before':self.push_base,'after':t,'status':'completed','conclusion':'success','app':{'id':15368},'repository':{'full_name':repo}}
         self.push_check['check_suite']={'id':2801}
         self.push_archive()
@@ -497,14 +516,60 @@ class CurrentTargetComponent(unittest.TestCase):
         value=json.loads((output/'oasis7-required-plan-v1.json').read_text())
         self.receipt.canonical_planner(value['planner'])
         return value
+    def produce_source_plan(self,run_id):
+        import os,textwrap
+        a=self.data;root=self.review['root']
+        paths=subprocess.check_output(['git','-C',str(root),'diff','--name-only','--no-renames',a['base'],a['head']],text=True).splitlines()
+        args=[sys.executable,str(root/'scripts/plan-rust-required-scope.py'),'--event-name','pull_request']
+        for path in paths:args+=['--changed-path',path]
+        proc=subprocess.run(args,cwd=root,text=True,capture_output=True,check=True)
+        raw=dict(line.split('=',1) for line in proc.stdout.splitlines() if '=' in line)
+        self.source_raw=raw;self.source_paths=paths
+        workflow=subprocess.check_output(['git','-C',str(root),'show',self.pr_execution+':.github/workflows/rust.yml'],text=True)
+        step=workflow.split('      - name: Write required planner artifact\n',1)[1]
+        code=textwrap.dedent(step.split("          python3 -I - <<'PY'\n",1)[1].split('          PY\n',1)[0])
+        values=dict(raw,source_scope_base=a['base'],integration_base=a['base'],source_head=a['head'],base_oid=a['base'],integration_base_oid=a['base'],head_oid=a['head'])
+        source=root/'offline-source-scope-outputs.json';source.write_text(json.dumps(values))
+        env=dict(os.environ,SCOPE_OUTPUTS_PATH=str(source),REPOSITORY=a['repository'],WORKFLOW_RUN_ID=str(run_id),INTEGRATION_JSON='')
+        subprocess.run([sys.executable,'-I','-c',code],cwd=root,env=env,check=True,capture_output=True)
+        result=json.loads((root/'output/required-plan/oasis7-required-plan-v1.json').read_text())
+        self.receipt.canonical_planner(result['planner'])
+        return result
+
     def build_source_ci_holds(self):
         import copy
         a=self.data;repo=a['repository'];h=a['head']
-        self.source_run=dict(self.push_run,id=3701,head_sha=h,check_suite_id=3801,created_at='2026-09-30T10:00:00Z',run_started_at='2026-09-30T10:00:00Z')
+        self.source_run=dict(self.push_run,id=3701,event='pull_request',head_branch='source',head_sha=h,pull_requests=[],check_suite_id=3801,created_at='2026-09-30T10:00:00Z',run_started_at='2026-09-30T10:00:00Z')
         self.source_job=dict(self.push_job,id=3901,run_id=3701,head_sha=h,check_run_url=f'https://api.github.com/repos/{repo}/check-runs/3901')
         self.source_check=dict(self.push_check,id=3901,head_sha=h,check_suite={'id':3801},details_url=f'https://github.com/{repo}/actions/runs/3701/job/3901')
         self.source_job['steps']=[dict(step,started_at=step['started_at'].replace('2026-10-02','2026-09-30'),completed_at=step['completed_at'].replace('2026-10-02','2026-09-30')) for step in self.push_steps]
-        self.source_plan=self.produce_push_plan(a['planner_raw'],3701,a['base'],h)
+        self.source_run.update(workflow_id=230018940,referenced_workflows=[])
+        self.source_job['steps'].insert(0,{'number':1,'name':'Run actions/checkout@v6','status':'completed','conclusion':'success','started_at':'2026-09-30T10:00:00Z','completed_at':'2026-09-30T10:00:30Z'})
+        for number,step in enumerate(self.source_job['steps'],1):step['number']=number
+        e=self.pr_execution
+        tree=subprocess.check_output(['git','-C',str(self.review['root']),'rev-parse',h+'^{tree}'],text=True).strip()
+        self.source_checkout_log=(
+            '2026-09-30T10:00:00Z ##[group]Run actions/checkout@v6\n'
+            '2026-09-30T10:00:01Z with:\n'
+            '2026-09-30T10:00:02Z   fetch-depth: 0\n'
+            f'2026-09-30T10:00:03Z   repository: {repo}\n'
+            '2026-09-30T10:00:04Z ##[endgroup]\n'
+            f'2026-09-30T10:00:05Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/* +{e}:refs/remotes/pull/1/merge\n'
+            '2026-09-30T10:00:06Z ##[group]Checking out the ref\n'
+            '2026-09-30T10:00:07Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/1/merge\n'
+            '2026-09-30T10:00:08Z ##[endgroup]\n'
+            '2026-09-30T10:00:09Z [command]/usr/bin/git log -1 --format=%H\n'
+            f'2026-09-30T10:00:10Z {e}\n')
+        import base64
+        self.responses[f'repos/{repo}/actions/jobs/3901/logs']={'binary_b64':base64.b64encode(self.source_checkout_log.encode()).decode()}
+        self.responses[f'repos/{repo}/git/commits/{e}']={'sha':e,'tree':{'sha':tree},'parents':[{'sha':a['base']},{'sha':h}]}
+        hparents=subprocess.check_output(['git','-C',str(self.review['root']),'show','-s','--format=%P',h],text=True).split()
+        self.responses[f'repos/{repo}/git/commits/{h}']={'sha':h,'tree':{'sha':tree},'parents':[{'sha':v} for v in hparents]}
+        merged_tree=subprocess.check_output(['git','-C',str(self.review['root']),'rev-parse',a['merge']+'^{tree}'],text=True).strip()
+        merged_parents=subprocess.check_output(['git','-C',str(self.review['root']),'show','-s','--format=%P',a['merge']],text=True).split()
+        self.responses[f"repos/{repo}/git/commits/{a['merge']}"]={'sha':a['merge'],'tree':{'sha':merged_tree},'parents':[{'sha':v} for v in merged_parents]}
+        self.responses[f'repos/{repo}/actions/workflows/230018940']={'id':230018940,'path':'.github/workflows/rust.yml','state':'active'}
+        self.source_plan=self.produce_source_plan(3701)
         self.project_item={'id':'PVTI_offline','fieldValues':{'pageInfo':{'hasNextPage':False,'endCursor':None},'nodes':[
             {'__typename':'ProjectV2ItemFieldRepositoryValue','field':{'name':'Repository'},'repository':{'nameWithOwner':repo}},
             {'__typename':'ProjectV2ItemFieldTextValue','field':{'name':'Task UID'},'text':a['task_uid']},
@@ -512,24 +577,26 @@ class CurrentTargetComponent(unittest.TestCase):
             {'__typename':'ProjectV2ItemFieldSingleSelectValue','field':{'name':'Status'},'name':'In Progress'},
             {'__typename':'ProjectV2ItemFieldSingleSelectValue','field':{'name':'PM Status'},'name':'committed'},
             {'__typename':'ProjectV2ItemFieldSingleSelectValue','field':{'name':'Workflow Phase'},'name':'verification'}]}}
-        self.holds={'reviews':[],'comments':[],'threads':{'nodes':[],'pageInfo':{'hasNextPage':False,'endCursor':None}},'operator':{'login':'repo-admin'},'permission':{'permission':'admin'}}
+        self.holds={'reviews':[],'comments':[],'threads':{'nodes':[],'pageInfo':{'hasNextPage':False,'endCursor':None}},'operator':{'login':self.scenario_actor},'permission':{'permission':'admin'}}
         import io,zipfile,base64
         source_member=(json.dumps(self.source_plan,sort_keys=True,separators=(',',':'))+'\n').encode()
         archive=io.BytesIO()
         with zipfile.ZipFile(archive,'w') as z:z.writestr('oasis7-required-plan-v1.json',source_member)
         self.responses[f'repos/{repo}/actions/artifacts/4101/zip']={'binary_b64':base64.b64encode(archive.getvalue()).decode()}
-        self.responses[f'repos/{repo}/actions/runs/3701/artifacts?per_page=100&page=1']={'total_count':1,'artifacts':[{'id':4101,'name':'oasis7-required-plan-v1','expired':False,'size_in_bytes':len(archive.getvalue()),'created_at':'2026-09-30T10:02:10Z','updated_at':'2026-09-30T10:03:20Z','workflow_run':{'id':3701,'head_sha':h,'head_branch':'main'}}]}
-        self.responses[f'repos/{repo}/check-suites/3801']={'id':3801,'head_branch':'main','head_sha':h,'before':a['base'],'after':h,'app':{'id':15368},'repository':{'full_name':repo},'status':'completed','conclusion':'success'}
+        self.responses[f'repos/{repo}/actions/runs/3701/artifacts?per_page=100&page=1']={'total_count':1,'artifacts':[{'id':4101,'name':'oasis7-required-plan-v1','expired':False,'size_in_bytes':len(archive.getvalue()),'created_at':'2026-09-30T10:02:10Z','updated_at':'2026-09-30T10:03:20Z','workflow_run':{'id':3701,'head_sha':h,'head_branch':'source'}}]}
+        self.responses[f'repos/{repo}/check-suites/3801']={'id':3801,'head_branch':'source','head_sha':h,'before':'0'*40,'after':h,'pull_requests':[],'app':{'id':15368},'repository':{'full_name':repo},'status':'completed','conclusion':'success'}
         self.responses[f'repos/{repo}/check-suites/3801/check-runs?per_page=100&page=1']={'total_count':1,'check_runs':[self.source_check]}
         self.responses[f'repos/{repo}/actions/runs/3701/attempts/1']=self.source_run
-        discovery=self.responses[f'repos/{repo}/actions/workflows/rust.yml/runs?event=push&per_page=100&page=1']
-        discovery['workflow_runs'].append(self.source_run);discovery['total_count']=2
+        # Retain source row in broad PUSH discovery only when it is actually PUSH.
+        self.responses[f'repos/{repo}/actions/workflows/rust.yml/runs?head_sha={h}&per_page=100&page=1']={'total_count':1,'workflow_runs':[self.source_run]}
+        self.responses[f'repos/{repo}/pulls/1/commits?per_page=100&page=1']=[{'sha':h}]
+        self.responses[f'repos/{repo}/commits/{h}']={'sha':h,'html_url':f'https://github.com/{repo}/commit/{h}'}
         self.responses[f'repos/{repo}/actions/runs/3701']=self.source_run
         self.responses[f'repos/{repo}/actions/runs/3701/attempts/1/jobs?per_page=100&page=1']={'total_count':1,'jobs':[self.source_job]}
         self.responses[f'repos/{repo}/check-runs/3901']=self.source_check
         self.responses[f'repos/{repo}/commits/{h}/check-runs?per_page=100&page=1']={'total_count':1,'check_runs':[self.source_check]}
         self.responses[f'repos/{repo}/pulls/1/reviews?per_page=100&page=1']=[]
-        self.responses[f'repos/{repo}/collaborators/repo-admin/permission']=self.holds['permission']
+        self.responses[f'repos/{repo}/collaborators/{self.scenario_actor}/permission']=self.holds['permission']
         self.responses['user']=self.holds['operator']
         # Transport supplies factual inputs only; no closed verification record.
         self.publish_transport()
@@ -541,12 +608,12 @@ class CurrentTargetComponent(unittest.TestCase):
         issue_url=f"https://github.com/{repo}/issues/{a['issue']}"
         body=json.loads(c.gh_data.read_text())['issue']['body']
         self.project_item.update(project={'id':'PROJECT_offline','number':1,'owner':{'login':repo.split('/')[0]}},content={'number':a['issue'],'url':issue_url,'body':body})
-        self.delivery_state={'repository':repo,'issue':{'number':a['issue'],'html_url':issue_url,'url':f"https://api.github.com/repos/{repo}/issues/{a['issue']}",'body':body,'state':'OPEN'},'pr':a['live_pr'],'project_item':self.project_item,'comments':[]}
+        self.delivery_state={'scenario_actor':self.scenario_actor,'repository':repo,'issue':{'number':a['issue'],'html_url':issue_url,'url':f"https://api.github.com/repos/{repo}/issues/{a['issue']}",'body':body,'state':'OPEN'},'pr':a['live_pr'],'default_branch':'main','default_target':self.target,'project_item':self.project_item,'comments':[]}
         self.delivery_state_path.write_text(json.dumps(self.delivery_state))
         live=json.loads(c.gh_data.read_text());live['issue']=self.delivery_state['issue']
         # Actual review/dispatch/resolution comments remain; no historical
         # readiness/completion entry is removed or invented.
-        auth={'id':9001,'body':'<!-- oasis7-terminal-recovery-authorization/v1 -->\n'+json.dumps(a['authorization'],sort_keys=True,separators=(',',':')),'user':{'login':'repo-admin'},'html_url':issue_url+'#issuecomment-9001','issue_url':f"https://api.github.com/repos/{repo}/issues/{a['issue']}",'created_at':'2026-10-02T10:00:00Z','updated_at':'2026-10-02T10:00:00Z'}
+        auth={'id':9001,'body':'<!-- oasis7-terminal-recovery-authorization/v1 -->\n'+json.dumps(a['authorization'],sort_keys=True,separators=(',',':')),'user':{'login':self.scenario_actor},'html_url':issue_url+'#issuecomment-9001','issue_url':f"https://api.github.com/repos/{repo}/issues/{a['issue']}",'created_at':'2026-10-02T10:00:00Z','updated_at':'2026-10-02T10:00:00Z'}
         live['comment_pages'][-1].append(auth);c.gh_data.write_text(json.dumps(live))
         original=c.fake_gh.read_text()
         prefix=("#!/usr/bin/env python3\nimport json,sys\nstate=json.load(open("+repr(str(self.delivery_state_path))+"))\nargs=sys.argv[1:]\n"
@@ -558,8 +625,19 @@ class CurrentTargetComponent(unittest.TestCase):
         effects=r"""
 import datetime,os
 path=STATE_PATH
+fault_path=FAULT_PATH
+fault=json.load(open(fault_path)) if os.path.exists(fault_path) else {'mode':None,'fired':False,'events':[]}
+def save_fault():
+    if len(fault['events'])>100:raise SystemExit('offline publication trace bound exceeded')
+    with open(fault_path,'w') as out:json.dump(fault,out)
 args=sys.argv[1:]
+if args==['auth','token']:
+    if os.environ.get('OFFLINE_HTTP_PARENT_PID')!=str(os.getppid()):raise SystemExit('offline credential provider requires instrumented parent')
+    if os.path.exists(os.path.join(os.path.dirname(path),'offline-http-mode.json')) and json.load(open(os.path.join(os.path.dirname(path),'offline-http-mode.json'))).get('mode')=='missing-credential':raise SystemExit('offline credential unavailable')
+    print('offline-fixture-nonsecret-sentinel');raise SystemExit(0)
 def save():
+    state['project_item']['content'].update(body=state['issue']['body'],number=state['issue']['number'],url=state['issue']['html_url'])
+    if 'title' in state['issue']:state['project_item']['content']['title']=state['issue']['title']
     with open(path,'w') as out:json.dump(state,out)
 def fields():
     return {args[i+1].split('=',1)[0]:args[i+1].split('=',1)[1] for i,x in enumerate(args[:-1]) if x in ('-f','-F','--field','--raw-field') and '=' in args[i+1]}
@@ -568,59 +646,136 @@ def emit(value):
 endpoint=next((x for x in args if x.startswith('repos/')),None)
 method=next((args[i+1] for i,x in enumerate(args[:-1]) if x=='--method'),'GET')
 repo=state['repository'];issue=state['issue']['number']
+governed={'FIELD_STATUS':('Status',{'STATUS_COMMITTED':'In Progress','STATUS_DONE':'Done'}),
+    'FIELD_PM':('PM Status',{'PM_COMMITTED':'committed','PM_DONE':'done'}),
+    'FIELD_PHASE':('Workflow Phase',{'PHASE_VERIFY':'verification','PHASE_TASK_DONE':'task_done','PHASE_DONE':'done','PHASE_POST_MERGE_DONE':'post_merge_done'})}
+def apply_project_values(updates):
+    validated=[]
+    for field,option in updates:
+        if field not in governed or option not in governed[field][1]:raise SystemExit('unprovided Project mutation field/option identity')
+        name,options=governed[field]
+        matches=[node for node in state['project_item']['fieldValues']['nodes'] if node['field']['name']==name]
+        if len(matches)>1:raise SystemExit('ambiguous Project mutation field')
+        validated.append((name,options[option],matches))
+    for name,value,matches in validated:
+        if matches:matches[0]['name']=value
+        else:state['project_item']['fieldValues']['nodes'].append({'__typename':'ProjectV2ItemFieldSingleSelectValue','field':{'name':name},'name':value})
+    save()
+if args[:2]==['project','field-list']:
+    if args!=['project','field-list','1','--owner',repo.split('/')[0],'--format','json']:raise SystemExit('unprovided Project field-list request')
+    emit({'fields':[{'id':fid,'name':name,'type':'ProjectV2SingleSelectField','options':[{'id':oid,'name':label} for oid,label in options.items()]} for fid,(name,options) in governed.items()],'totalCount':len(governed)})
+if args[:2]==['project','item-edit']:
+    field=args[7] if len(args)==12 else None;option=args[9] if len(args)==12 else None
+    expected=['project','item-edit','--id',state['project_item']['id'],'--project-id',state['project_item']['project']['id'],'--field-id',field,'--single-select-option-id',option,'--format','json']
+    if args!=expected:raise SystemExit('unprovided Project item-edit request')
+    apply_project_values([(field,option)]);emit(state['project_item'])
+if args[:2]==['issue','edit']:
+    body_path=args[6] if len(args)==7 else None
+    if args!=['issue','edit',str(issue),'-R',repo,'--body-file',body_path]:raise SystemExit('unprovided Issue edit request')
+    with open(body_path,encoding='utf-8') as source:body=source.read()
+    state['issue']['body']=body;save();print(state['issue']['html_url']);raise SystemExit(0)
+if args[:2]==['issue','list']:
+    import re
+    expected=['issue','list','-R',repo,'--state','all','--search',args[7] if len(args)>7 else '', '--json','number,url,title,state','--limit','5']
+    if args!=expected or re.fullmatch(r'task_[0-9a-f]{32} in:body',args[7]) is None:
+        raise SystemExit('unprovided canonical Issue discovery request')
+    searched=args[7].split(' ',1)[0]
+    if searched not in state['issue']['body']:emit([])
+    item=state['issue']
+    emit([{'number':item['number'],'url':item['html_url'],'title':item.get('title',''),'state':item['state'].upper()}])
+if args[:2]==['issue','view'] and '--json' in args and args[args.index('--json')+1]=='body,number,title,url,state,stateReason,updatedAt':
+    expected=['issue','view',str(issue),'-R',repo,'--json','body,number,title,url,state,stateReason,updatedAt']
+    if args!=expected:raise SystemExit('unprovided canonical Issue view request')
+    item=state['issue']
+    emit({'body':item['body'],'number':item['number'],'title':item.get('title',''),'url':item['html_url'],'state':item['state'].upper(),'stateReason':item.get('state_reason'),'updatedAt':item.get('updated_at')})
+if args[:2]==['project','view']:
+    expected=['project','view','1','--owner',repo.split('/')[0],'--format','json']
+    if args!=expected:raise SystemExit('unprovided canonical Project view identity')
+    project=state['project_item']['project']
+    emit({'id':project['id'],'number':project['number'],'owner':{'login':project['owner']['login']}})
+if endpoint and endpoint.startswith(f'repos/{repo}/issues/{issue}/comments?') and '--paginate' not in args and '--slurp' not in args:
+    import urllib.parse
+    parsed=urllib.parse.parse_qs(urllib.parse.urlsplit(endpoint).query)
+    if set(parsed)!={'per_page','page'} or parsed['per_page']!=['100'] or len(parsed['page'])!=1 or not parsed['page'][0].isdigit() or int(parsed['page'][0])<1:
+        raise SystemExit('unprovided explicit comment pagination')
+    if fault['mode']=='completion-readback-loss' and fault['fired'] and not fault.get('readback_lost'):
+        fault['readback_lost']=True;save_fault();raise SystemExit('simulated unreadable completion inventory after persisted POST')
+    page=int(parsed['page'][0]);data=json.load(open(os.environ['GH_FIXTURE']))
+    comments=[comment for retained in data['comment_pages'] for comment in retained]
+    emit(comments[(page-1)*100:page*100])
 if args[:2]==['api','user']:
-    if '--jq' in args and args[args.index('--jq')+1]=='.login':print('repo-admin');raise SystemExit(0)
-    emit({'login':'repo-admin'})
+    if '--jq' in args and args[args.index('--jq')+1]=='.login':print(state['scenario_actor']);raise SystemExit(0)
+    emit({'login':state['scenario_actor']})
 if args[:2]==['api','graphql']:
     inputs=fields();query=inputs.get('query','')
+    identity_query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){nameWithOwner defaultBranchRef{name target{... on Commit{oid}}} pullRequest(number:$number){number url state merged mergedAt headRefOid headRefName baseRefName headRepository{nameWithOwner} repository{nameWithOwner} mergeCommit{oid}}}}'
+    if query==identity_query:
+        owner,name=repo.split('/')
+        if inputs.get('owner')!=owner or inputs.get('name')!=name or inputs.get('number')!=str(state['pr']['number']) or not any(x=='-F' and args[i+1]=='number='+str(state['pr']['number']) for i,x in enumerate(args[:-1])):
+            raise SystemExit('unprovided canonical GraphQL variable identity/type')
+        pr=state['pr']
+        emit({'data':{'repository':{'nameWithOwner':repo,'defaultBranchRef':{'name':state['default_branch'],'target':{'oid':state['default_target']}},'pullRequest':{
+            'number':pr['number'],'url':pr['html_url'],'state':'MERGED' if pr['merged'] else pr['state'].upper(),
+            'merged':pr['merged'],'mergedAt':pr['merged_at'],'headRefOid':pr['head']['sha'],'headRefName':pr['head']['ref'],
+            'baseRefName':pr['base']['ref'],'headRepository':{'nameWithOwner':pr['head']['repo']['full_name']},
+            'repository':{'nameWithOwner':repo},'mergeCommit':{'oid':pr['merge_commit_sha']}}}}})
     if 'updateProjectV2ItemFieldValue' in query:
         item=inputs.get('itemId') or inputs.get('item')
         project=inputs.get('projectId') or inputs.get('project')
         if item!=state['project_item']['id'] or project!=state['project_item']['project']['id']:
             raise SystemExit('unprovided Project mutation item/project identity')
-        governed={'FIELD_STATUS':('Status',{'STATUS_COMMITTED':'In Progress','STATUS_DONE':'Done'}),
-            'FIELD_PM':('PM Status',{'PM_COMMITTED':'committed','PM_DONE':'done'}),
-            'FIELD_PHASE':('Workflow Phase',{'PHASE_VERIFY':'verification','PHASE_TASK_DONE':'task_done','PHASE_DONE':'done','PHASE_POST_MERGE_DONE':'post_merge_done'})}
         # Real sync uses aliased fieldN/optionN batch variables. Validate every
         # binding before any simulated server effect; no false acknowledgment.
         indexes=sorted(int(k[5:]) for k in inputs if k.startswith('field') and k[5:].isdigit())
         requests=[('f'+str(i),inputs['field'+str(i)],inputs.get('option'+str(i))) for i in indexes]
         if not requests:requests=[('updateProjectV2ItemFieldValue',inputs.get('fieldId') or inputs.get('field'),inputs.get('optionId') or inputs.get('option'))]
-        updates=[]
-        for alias,field,option in requests:
-            if field not in governed or option not in governed[field][1]:
-                raise SystemExit('unprovided Project mutation field/option identity')
-            name,options=governed[field];updates.append((alias,name,options[option]))
-        for alias,name,value in updates:
-            matches=[node for node in state['project_item']['fieldValues']['nodes'] if node['field']['name']==name]
-            if len(matches)>1:raise SystemExit('ambiguous Project mutation field')
-            if matches:matches[0]['name']=value
-            else:state['project_item']['fieldValues']['nodes'].append({'__typename':'ProjectV2ItemFieldSingleSelectValue','field':{'name':name},'name':value})
-        save();emit({'data':{alias:{'projectV2Item':{'id':state['project_item']['id']}} for alias,name,value in updates}})
+        apply_project_values([(field,option) for alias,field,option in requests])
+        emit({'data':{alias:{'projectV2Item':{'id':state['project_item']['id']}} for alias,field,option in requests}})
     if 'mutation' in query:raise SystemExit('unprovided GraphQL mutation')
     project={'id':'PROJECT_offline','number':1,'fields':{'nodes':[
         {'__typename':'ProjectV2SingleSelectField','id':fid,'name':name,'options':[{'id':oid,'name':label} for oid,label in options]}
-        for fid,name,options in [('FIELD_STATUS','Status',[('STATUS_COMMITTED','In Progress'),('STATUS_DONE','Done')]),('FIELD_PM','PM Status',[('PM_COMMITTED','committed'),('PM_DONE','done')]),('FIELD_PHASE','Workflow Phase',[('PHASE_VERIFY','verification'),('PHASE_TASK_DONE','task_done'),('PHASE_DONE','done'),('PHASE_POST_MERGE_DONE','post_merge_done')])]],'pageInfo':{'hasNextPage':False}}}
+        for fid,(name,options_map) in governed.items() for options in [list(options_map.items())]],'pageInfo':{'hasNextPage':False}}}
     connection={'nodes':[state['project_item']],'pageInfo':{'hasNextPage':False,'endCursor':None}}
-    emit({'data':{'node':state['project_item'],'viewer':{'login':'repo-admin'},'user':{'projectV2':project},'organization':{'projectV2':project},'repository':{'issue':dict(state['issue'],projectItems=connection),'pullRequest':{'reviewThreads':{'nodes':[],'pageInfo':{'hasNextPage':False,'endCursor':None}}}}}})
+    if 'nodes(ids:' in query:
+        if json.loads(inputs.get('ids','null'))!=[state['project_item']['id']]:raise SystemExit('unprovided Project node IDs')
+        emit({'data':{'nodes':[state['project_item']]}})
+    if inputs.get('id')==project['id'] or inputs.get('project')==project['id']:
+        emit({'data':{'node':project}})
+    emit({'data':{'node':state['project_item'],'viewer':{'login':state['scenario_actor']},'user':{'projectV2':project},'organization':{'projectV2':project},'repository':{'issue':dict(state['issue'],projectItems=connection),'pullRequest':{'reviewThreads':{'nodes':[],'pageInfo':{'hasNextPage':False,'endCursor':None}}}}}})
 if endpoint==f'repos/{repo}/issues/{issue}' and method in ('PATCH','POST'):
     state['issue'].update(fields());save();emit(state['issue'])
 if endpoint==f'repos/{repo}/issues/{issue}':emit(state['issue'])
 if (args[:2]==['issue','comment'] or endpoint==f'repos/{repo}/issues/{issue}/comments' and method=='POST'):
+    if args[:2]==['issue','comment']:
+        body_path=args[6] if len(args)==7 else None
+        if args!=['issue','comment',str(issue),'-R',repo,'--body-file',body_path]:raise SystemExit('unprovided Issue comment request')
     data=json.load(open(os.environ['GH_FIXTURE']));inputs=fields()
     body=inputs.get('body')
     if '--body-file' in args:body=open(args[args.index('--body-file')+1]).read()
     if body is None:raise SystemExit('missing actual comment body')
     stamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
     ident=max([c['id'] for page in data['comment_pages'] for c in page]+[9001])+1
-    comment={'id':ident,'body':body,'user':{'login':'repo-admin'},'created_at':stamp,'updated_at':stamp,'issue_url':f'https://api.github.com/repos/{repo}/issues/{issue}','html_url':f'https://github.com/{repo}/issues/{issue}#issuecomment-{ident}'}
+    comment={'id':ident,'body':body,'user':{'login':state['scenario_actor']},'created_at':stamp,'updated_at':stamp,'issue_url':f'https://api.github.com/repos/{repo}/issues/{issue}','html_url':f'https://github.com/{repo}/issues/{issue}#issuecomment-{ident}'}
     data['comment_pages'][-1].append(comment)
     with open(os.environ['GH_FIXTURE'],'w') as out:json.dump(data,out)
+    marker=next((m for m in ('oasis7-postmerge-delivery-proof/v1','oasis7-postmerge-completion/v1') if '<!-- '+m+' -->' in body),None)
+    if marker and fault['mode']:
+        fault['events'].append({'marker':marker,'id':ident,'created_at':stamp});save_fault()
+        if marker=='oasis7-postmerge-delivery-proof/v1' and not fault['fired']:
+            if fault['mode']=='proof-response-loss':
+                fault['fired']=True;save_fault();raise SystemExit('simulated lost response after persisted proof POST')
+            if fault['mode']=='post-proof-check-drift':
+                transport=json.load(open(TRANSPORT_PATH));transport['responses'][f'repos/{repo}/check-runs/2901']['conclusion']='failure'
+                with open(TRANSPORT_PATH,'w') as out:json.dump(transport,out)
+                fault['fired']=True;save_fault()
+        if marker=='oasis7-postmerge-completion/v1' and fault['mode']=='completion-readback-loss':
+            fault['fired']=True;save_fault()
+    if args[:2]==['issue','comment']:print(comment['html_url']);raise SystemExit(0)
     emit(comment)
 if args[:2]==['issue','close']:
     state['issue'].update(state='closed',state_reason='completed');save();emit(state['issue'])
 """
-        prefix=prefix.replace('exec('+repr(original)+')\n',effects.replace('STATE_PATH',repr(str(self.delivery_state_path)))+'\nexec('+repr(original)+')\n')
+        prefix=prefix.replace('exec('+repr(original)+')\n',effects.replace('STATE_PATH',repr(str(self.delivery_state_path))).replace('FAULT_PATH',repr(str(self.publication_fault_path))).replace('TRANSPORT_PATH',repr(str(self.transport_path)))+'\nexec('+repr(original)+')\n')
         c.fake_gh.write_text(prefix);c.fake_gh.chmod(0o755)
         result=subprocess.run([sys.executable,str(root/'scripts/pm/pr-merge-receipt.py'),'1','--json'],text=True,capture_output=True,check=True)
         self.merge_receipt_bytes=result.stdout.encode();self.merge_receipt=json.loads(result.stdout)
@@ -633,6 +788,91 @@ if args[:2]==['issue','close']:
         record.pop('claim_verifications',None)
         mapping['project']={'repo':repo,'owner':repo.split('/')[0],'number':1,'id':'PROJECT_offline'}
         mapping_path.write_text(json.dumps(mapping))
+        self.install_shared_client_fixture()
+
+    def install_shared_client_fixture(self):
+        """Intercept only HTTP effects, retaining real client and audit code."""
+        import os
+        root=self.review['root'];c=self.review['harness']
+        self.http_mode_path=root/'offline-http-mode.json';self.http_log_path=root/'offline-http-requests.jsonl'
+        for path in (self.http_mode_path,self.http_log_path):path.unlink(missing_ok=True)
+        # These values are factual initial Project field nodes, derived from
+        # the existing canonical fixture mapping, never an audit verdict.
+        mapping=json.loads((root/'.pm/github-project-sync/tasks.json').read_text());record=mapping['tasks'][self.data['task_uid']]
+        record.update(module='engineering',worktree_hint=str(root))
+        (root/'.pm/github-project-sync/tasks.json').write_text(json.dumps(mapping))
+        state=json.loads(self.delivery_state_path.read_text());nodes=state['project_item']['fieldValues']['nodes']
+        for name,value in [('Owner Role',record['owner_role']),('Module',record.get('module','')),('Priority',record.get('priority','')),('PR',record['pr_url']),('Test Tier Required','n/a')]:
+            nodes.append({'__typename':'ProjectV2ItemFieldTextValue','field':{'name':name},'text':value})
+        producer=load(root/'scripts/pm/github-project-task.py','offline_recovery_issue_producer')
+        produced=producer.issue_body(record)
+        projection=[next(line for line in produced.splitlines() if line.startswith('- '+name+':'))
+            for name in ('status','workflow_phase','completion_mode')]
+        state['issue']['body']+='\n'+'\n'.join(projection)+'\n'
+        state['project_item']['content']['body']=state['issue']['body']
+        retained=json.loads(c.gh_data.read_text());retained['issue']['body']=state['issue']['body'];c.gh_data.write_text(json.dumps(retained))
+        self.delivery_state_path.write_text(json.dumps(state))
+        bootstrap=root/'offline-http-bootstrap.py'
+        program=r'''
+import io,json,os,pathlib,runpy,socket,subprocess,sys,time,urllib.error,urllib.parse,urllib.request
+root=pathlib.Path(ROOT)
+log=root/'offline-http-requests.jsonl';mode_path=root/'offline-http-mode.json'
+def deny(*args,**kwargs):raise RuntimeError('unexpected real network blocked by offline transport')
+socket.socket.connect=deny;socket.create_connection=deny
+os.environ.pop('GH_TOKEN',None);os.environ.pop('GITHUB_TOKEN',None)
+os.environ['OFFLINE_HTTP_PARENT_PID']=str(os.getpid())
+class Reply:
+    def __init__(self,status,headers,body):self.status=status;self.headers=headers;self.body=body
+    def read(self):return self.body
+    def __enter__(self):return self
+    def __exit__(self,*args):return False
+class Opener:
+    def open(self,request,timeout=None):
+        parsed=urllib.parse.urlsplit(request.full_url);method=request.get_method();body=request.data
+        if parsed.scheme!='https' or parsed.netloc!='api.github.com' or parsed.fragment:raise RuntimeError('unprovided offline HTTP origin')
+        if request.get_header('Authorization')!='Bearer offline-fixture-nonsecret-sentinel':raise RuntimeError('unexpected offline credential binding')
+        if request.get_header('X-github-api-version')!='2022-11-28' or request.get_header('Accept')!='application/vnd.github+json':raise RuntimeError('unprovided HTTP API headers')
+        endpoint=parsed.path.lstrip('/')+('?' + parsed.query if parsed.query else '')
+        state=json.loads((root/'offline-delivery-state.json').read_text());repo=state['repository'];number=state['issue']['number']
+        payload=json.loads(body) if body else None
+        if endpoint=='graphql':
+            if method!='POST' or not isinstance(payload,dict) or set(payload)!={'query','variables'} or not isinstance(payload['query'],str) or not isinstance(payload['variables'],dict):raise RuntimeError('unprovided GraphQL HTTP request shape')
+            query=payload['query'];variables=payload['variables']
+            if not any(part in query for part in ('nodes(ids:','node(id:','projectV2(','updateProjectV2ItemFieldValue','rateLimit','viewer')):raise RuntimeError('unprovided offline GraphQL query')
+            args=['gh','api','graphql','-f','query='+query]
+            for key,value in variables.items():
+                args+=['-F' if isinstance(value,(int,bool)) else '-f',key+'='+(json.dumps(value) if isinstance(value,(dict,list,bool)) else str(value))]
+        elif endpoint=='user' and method=='GET' and body is None:args=['gh','api','user']
+        elif endpoint==f'repos/{repo}/issues/{number}' and method in ('GET','PATCH'):
+            if method=='GET' and body is not None:raise RuntimeError('unexpected GET body')
+            if method=='PATCH' and (not isinstance(payload,dict) or not set(payload)<= {'title','body','state','state_reason'}):raise RuntimeError('unprovided Issue PATCH body')
+            args=['gh','api',endpoint,'--method',method]
+            for key,value in (payload or {}).items():args+=['-f',key+'='+str(value)]
+        else:raise RuntimeError('unprovided offline HTTP endpoint: '+method+' '+endpoint)
+        record={'method':method,'url':request.full_url,'headers':{k:v for k,v in request.header_items() if k.lower()!='authorization'},'authorization_present':True,'body':payload,'timeout':timeout}
+        with log.open('a') as out:out.write(json.dumps(record,sort_keys=True)+'\n')
+        mode=json.loads(mode_path.read_text()).get('mode') if mode_path.exists() else None
+        headers={'Content-Type':'application/json','X-GitHub-Request-Id':'offline-http-leaf','X-RateLimit-Remaining':'4999','X-RateLimit-Limit':'5000','X-RateLimit-Reset':str(int(time.time())+3600)}
+        if mode in ('401','403'):raise urllib.error.HTTPError(request.full_url,int(mode),'offline authorization failure',headers,io.BytesIO(b'{"message":"offline authorization failure"}'))
+        if mode=='malformed':return Reply(200,headers,b'{malformed')
+        if mode=='graphql-error':return Reply(200,headers,b'{"errors":[{"message":"offline query failure"}]}')
+        proc=subprocess.run(args,text=True,capture_output=True,timeout=timeout)
+        if proc.returncode:raise RuntimeError('offline HTTP fixture transport rejected: '+proc.stderr)
+        raw=proc.stdout.encode();decoded=json.loads(raw)
+        if mode=='incomplete-page' and endpoint=='graphql':
+            for node in decoded.get('data',{}).get('nodes',[]):node['fieldValues']['pageInfo']['hasNextPage']=True
+            raw=json.dumps(decoded).encode()
+        return Reply(200,headers,raw)
+urllib.request.build_opener=lambda *handlers:Opener()
+script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(script).resolve().parent));runpy.run_path(script,run_name='__main__')
+'''.replace('ROOT',repr(str(root)))
+        bootstrap.write_text(program)
+        # Only these shell-spawned entrypoints acquire the shared HTTP client.
+        # Credential provider parent-PID binding rejects uninjected descendants.
+        allowed=[str(root/'scripts/pm'/name) for name in ('github-project-workflow.py','github-project-task.py','github-project-sync.py')]
+        launcher=c.fake_gh.parent/'python3'
+        launcher.write_text('#!/bin/sh\ncase "$1" in\n'+ '|'.join(allowed)+') exec '+sys.executable+' -S '+str(bootstrap)+' "$@" ;;\n*) exec '+sys.executable+' "$@" ;;\nesac\n')
+        launcher.chmod(0o755)
     def test_real_merge_producer_accepts_truthful_merged_without_readiness_or_completion(self):
         finalizer=load(HERE/'post-merge-finalize.py','recovery_merge_receipt_primitives')
         mapping=json.loads((self.review['root']/'.pm/github-project-sync/tasks.json').read_text())
@@ -814,6 +1054,7 @@ if args[:2]==['issue','close']:
             'server_state':self.delivery_state_path.read_bytes(),
             'task_files':{str(p.relative_to(root/'.pm')):p.read_bytes() for p in (root/'.pm').rglob('*') if p.is_file()},
             'receipt_files':{str(p.relative_to(self.receipt_root)):p.read_bytes() for p in self.receipt_root.rglob('*') if p.is_file()}}
+    @scenario_actor('eng-cc')
     def test_full_create_completion_done_finalizer_chain_is_current_typed_authority(self):
         import terminal_proof
         root=self.review['root'];uid=self.data['task_uid']
@@ -830,7 +1071,7 @@ if args[:2]==['issue','close']:
         self.assertEqual(repeated.returncode,0,repeated.stdout+repeated.stderr)
         self.assertEqual(json.loads(repeated.stdout),pub)
         self.assertEqual(json.loads(self.review['harness'].gh_data.read_text())['comment_pages'],before_comments)
-        close=subprocess.run(['bash',str(root/'scripts/pm/task-closeout.sh'),'--task-uid',uid,'--to-status','done','--verification-profile','postmerge_delivery_recovery','--claim-type','postmerge_delivery_complete'],cwd=root,text=True,capture_output=True,timeout=330)
+        close=subprocess.run(['bash',str(root/'scripts/pm/task-closeout.sh'),'--task-uid',uid,'--role','repository_health_engineer','--to-status','done','--verification-profile','postmerge_delivery_recovery','--claim-type','postmerge_delivery_complete'],cwd=root,text=True,capture_output=True,timeout=330)
         self.assertEqual(close.returncode,0,close.stdout+close.stderr)
         mapping=json.loads((root/'.pm/github-project-sync/tasks.json').read_text());record=mapping['tasks'][uid]
         self.assertEqual(record['status'],'done');self.assertEqual(record['workflow_phase'],'task_done')
@@ -882,9 +1123,348 @@ if args[:2]==['issue','close']:
     def test_newer_failed_exact_target_does_not_borrow_green(self):
         newer=dict(self.push_run,id=2702,status='completed',conclusion='failure',created_at='2026-10-02T11:00:00Z')
         key=f"repos/{self.data['repository']}/actions/workflows/rust.yml/runs?event=push&per_page=100&page=1"
-        self.responses[key]['workflow_runs'].append(newer);self.responses[key]['total_count']=2
+        self.responses[key]['workflow_runs'].append(newer);self.responses[key]['total_count']=3
         self.responses[f"repos/{self.data['repository']}/actions/runs/2702"]=newer
         with self.assertRaisesRegex(ValueError,'latest|success|failed|conclusion'):self.call_target()
+
+    def test_actual_planner_identity_locators_cannot_be_rewritten(self):
+        import copy
+        original=copy.deepcopy(self.push_plan)
+        for field in ('source_scope_base','integration_base','source_head'):
+            with self.subTest(field=field):
+                self.push_plan=copy.deepcopy(original)
+                self.assertIn(field,self.push_plan['planner'],'actual producer locator required')
+                self.push_plan['planner'][field]=self.data['merge']
+                self.push_archive()
+                with self.assertRaisesRegex(ValueError,'planner|locator|base|source|provenance|identity'):
+                    self.call_target()
+
+    def staged_target_transport(self,endpoint,mutate):
+        import copy
+        from unittest import mock
+        import recovery_observation as observation
+        real=observation.api;calls=[]
+        def response(path):
+            value=real(path)
+            if path==endpoint:
+                calls.append(copy.deepcopy(value))
+                if len(calls)>=2:return mutate(copy.deepcopy(value))
+            return value
+        return mock.patch.object(observation,'api',side_effect=response),calls
+
+    def test_final_latest_discovery_cannot_borrow_initial_green(self):
+        endpoint=f"repos/{self.data['repository']}/actions/workflows/rust.yml/runs?event=push&per_page=100&page=1"
+        def changed(value):
+            newer=dict(self.push_run,id=2702,conclusion='failure',created_at='2026-10-02T11:00:00Z')
+            value['workflow_runs'].append(newer);value['total_count']=len(value['workflow_runs'])
+            self.responses[f"repos/{self.data['repository']}/actions/runs/2702"]=newer
+            self.publish_transport()
+            return value
+        patch,calls=self.staged_target_transport(endpoint,changed)
+        with patch:
+            with self.assertRaisesRegex(ValueError,'latest|success|failed|conclusion|changed|moved'):self.call_target()
+        self.assertGreaterEqual(len(calls),2,'final complete latest discovery must actually reread')
+
+    def test_final_check_cannot_borrow_initial_provenance_or_success(self):
+        endpoint=f"repos/{self.data['repository']}/check-runs/2901"
+        for field,value in (('conclusion','failure'),('head_sha',self.data['head']),('app',{'id':99})):
+            with self.subTest(field=field):
+                patch,calls=self.staged_target_transport(endpoint,lambda row:dict(row,**{field:value}))
+                with patch:
+                    with self.assertRaisesRegex(ValueError,'check|app|identity|success|changed|provenance'):self.call_target()
+                self.assertGreaterEqual(len(calls),2,'final authoritative check must actually reread')
+
+    def test_final_exact_attempt_job_and_applicable_step_must_stay_successful(self):
+        endpoint=f"repos/{self.data['repository']}/actions/runs/2701/attempts/1/jobs?per_page=100&page=1"
+        for change in ('job','step'):
+            with self.subTest(change=change):
+                def changed(value):
+                    job=value['jobs'][0]
+                    if change=='job':job['conclusion']='skipped'
+                    else:job['steps'][-1]['conclusion']='skipped'
+                    return value
+                patch,calls=self.staged_target_transport(endpoint,changed)
+                with patch:
+                    with self.assertRaisesRegex(ValueError,'job|step|execution|success|changed|skipped'):self.call_target()
+                self.assertGreaterEqual(len(calls),2,'final exactattempt job/steps must actually reread')
+
+    def call_source_observation(self):
+        import terminal_recovery,recovery_observation
+        self.publish_transport();before=self.effect_snapshot();a=self.data
+        try:
+            with recovery_observation.observation():
+                return terminal_recovery.source_observation(a['repository'],a['task_uid'],a['head'],a['pr'],'main',self.review['root'],15368)
+        finally:self.assertEqual(self.effect_snapshot(),before,'source reader must preserve every effect sink')
+
+    def test_source_PR_execution_E_is_distinct_H_with_exact_tree_and_inventory(self):
+        a=self.data;root=self.review['root'];e=self.pr_execution
+        self.assertNotEqual(e,a['head'])
+        parents=subprocess.check_output(['git','-C',str(root),'show','-s','--format=%P',e],text=True).split()
+        self.assertEqual(parents,[a['base'],a['head']])
+        tree=lambda oid:subprocess.check_output(['git','-C',str(root),'rev-parse',oid+'^{tree}'],text=True).strip()
+        self.assertEqual(tree(e),tree(a['head']))
+        result=self.call_source_observation()
+        self.assertEqual(result['checks'][0]['workflow_sha'],e,'workflow W is derived E, never callerasserted H')
+        inventory=subprocess.check_output(['git','-C',str(root),'show',e+':scripts/ci-required-capability-test-inventory.tsv'])
+        self.assertEqual(result['coverage']['inventory_sha256'],hashlib.sha256(inventory).hexdigest())
+        self.assertEqual(self.source_run['pull_requests'],[])
+        self.assertFalse(self.receipt.canonical_planner(self.source_plan['planner'])['run_packaging_contracts'])
+
+    def test_source_checkout_and_root_provenance_contradictions_refuse(self):
+        import copy,base64
+        self.call_source_observation() # A missing provenance capability cannot satisfy a negative.
+        original=copy.deepcopy(self.responses);a=self.data;repo=a['repository']
+        endpoint=f'repos/{repo}/actions/jobs/3901/logs'
+        cases=[('log',self.source_checkout_log.replace('  fetch-depth: 0','  ref: '+a['head'])),
+               ('log',self.source_checkout_log.replace('refs/remotes/pull/1/merge','refs/remotes/pull/2/merge')),
+               ('log',self.source_checkout_log.replace('repository: '+repo,'repository: foreign/repo')),
+               ('runpath','foreign.yml'),('event','push'),('reuse',[{'path':'foreign/reusable.yml'}])]
+        for kind,value in cases:
+            with self.subTest(kind=kind,value=str(value)[:60]):
+                self.responses=copy.deepcopy(original)
+                if kind=='log':self.responses[endpoint]={'binary_b64':base64.b64encode(value.encode()).decode()}
+                else:
+                    run=self.responses[f'repos/{repo}/actions/runs/3701']
+                    run[{'runpath':'path','event':'event','reuse':'referenced_workflows'}[kind]]=value
+                with self.assertRaisesRegex(ValueError,'checkout|workflow|source|event|root|repository|provenance|identity'):
+                    self.call_source_observation()
+
+    def test_source_E_parents_or_tree_mismatch_refuse(self):
+        import copy
+        self.call_source_observation()
+        original=copy.deepcopy(self.responses);repo=self.data['repository']
+        endpoint=f'repos/{repo}/git/commits/{self.pr_execution}'
+        for field,value in [('parents',[{'sha':self.data['head']},{'sha':self.data['base']}]),('tree',{'sha':'f'*40})]:
+            with self.subTest(field=field):
+                self.responses=copy.deepcopy(original);self.responses[endpoint][field]=value
+                with self.assertRaisesRegex(ValueError,'checkout|workflow|parent|tree|provenance|identity'):self.call_source_observation()
+
+    def test_source_compound_PR_association_planner_and_selected_work_refuse(self):
+        import copy,io,zipfile,base64
+        self.call_source_observation()
+        original=copy.deepcopy(self.responses);a=self.data;repo=a['repository']
+        for kind in ('PRhead','PRbase','PRrepo','association','planner','selectedstep'):
+            with self.subTest(kind=kind):
+                self.responses=copy.deepcopy(original)
+                if kind.startswith('PR'):
+                    pr=self.responses[f'repos/{repo}/pulls/1']
+                    if kind=='PRhead':pr['head']['sha']=self.target
+                    elif kind=='PRbase':pr['base']['sha']=self.target
+                    else:pr['head']['repo']['full_name']='foreign/repo'
+                elif kind=='association':
+                    self.responses[f'repos/{repo}/check-suites/3801']['pull_requests']=[{'number':2,'head':{'sha':self.target,'ref':'wrong','repo':{'full_name':repo}},'base':{'sha':a['base'],'ref':'main','repo':{'full_name':repo}}}]
+                elif kind=='planner':
+                    plan=copy.deepcopy(self.source_plan);plan['planner']['source_head']=self.target
+                    archive=io.BytesIO()
+                    with zipfile.ZipFile(archive,'w') as z:z.writestr('oasis7-required-plan-v1.json',json.dumps(plan).encode())
+                    self.responses[f'repos/{repo}/actions/artifacts/4101/zip']={'binary_b64':base64.b64encode(archive.getvalue()).decode()}
+                else:self.responses[f'repos/{repo}/actions/runs/3701/attempts/1/jobs?per_page=100&page=1']['jobs'][0]['steps'][-1]['conclusion']='skipped'
+                with self.assertRaisesRegex(ValueError,'source|head|base|PR|association|identity|planner|step|execution|provenance'):
+                    self.call_source_observation()
+
+    def publication_fault(self,mode):
+        self.publication_fault_path.write_text(json.dumps({'mode':mode,'fired':False,'events':[]}))
+    def publication_comments(self,marker):
+        pages=json.loads(self.review['harness'].gh_data.read_text())['comment_pages']
+        return [c for page in pages for c in page if '<!-- '+marker+' -->' in c['body']]
+    def run_publication(self,create=True):
+        root=self.review['root']
+        args=[sys.executable,str(HERE/'readiness_transport.py'),'--repo-root',str(root),'--task-uid',self.data['task_uid'],'--recover-merged-delivery']
+        if create:args.append('--create')
+        return subprocess.run(args,cwd=root,text=True,capture_output=True,timeout=330)
+    def unchanged_lifecycle(self,before):
+        after=self.effect_snapshot()
+        for key in ('mapping','server_state'):self.assertEqual(after[key],before[key])
+        for filename in ('terminal-delivery-receipt.json','finalizer-ledger.json','terminal-tombstone.json'):
+            self.assertFalse((self.receipt_root/filename).exists(),filename)
+
+    def test_partial_proof_response_loss_retries_exact_persisted_binding(self):
+        self.publication_fault('proof-response-loss');before=self.effect_snapshot()
+        failed=self.run_publication();self.assertNotEqual(failed.returncode,0,failed.stdout+failed.stderr)
+        self.assertRegex(failed.stderr,'transport|lost|publication')
+        trace=json.loads(self.publication_fault_path.read_text());self.assertTrue(trace['fired'])
+        proof=self.publication_comments('oasis7-postmerge-delivery-proof/v1');self.assertEqual(len(proof),1)
+        self.assertEqual(self.publication_comments('oasis7-postmerge-completion/v1'),[])
+        self.unchanged_lifecycle(before)
+        retry=self.run_publication();self.assertEqual(retry.returncode,0,retry.stdout+retry.stderr)
+        result=json.loads(retry.stdout);self.assertEqual(result['recovery_proof_comment_id'],proof[0]['id'])
+        self.assertEqual(len(self.publication_comments('oasis7-postmerge-delivery-proof/v1')),1)
+        self.assertEqual(len(self.publication_comments('oasis7-postmerge-completion/v1')),1)
+        self.assertEqual(len(json.loads(self.publication_fault_path.read_text())['events']),2)
+        self.unchanged_lifecycle(before)
+
+    def test_partial_completion_readback_loss_retries_without_duplicate_POST(self):
+        self.publication_fault('completion-readback-loss');before=self.effect_snapshot()
+        failed=self.run_publication();self.assertNotEqual(failed.returncode,0,failed.stdout+failed.stderr)
+        trace=json.loads(self.publication_fault_path.read_text());self.assertTrue(trace['fired']);self.assertTrue(trace['readback_lost'])
+        proof=self.publication_comments('oasis7-postmerge-delivery-proof/v1');claims=self.publication_comments('oasis7-postmerge-completion/v1')
+        self.assertEqual(len(proof),1);self.assertEqual(len(claims),1);self.unchanged_lifecycle(before)
+        retry=self.run_publication();self.assertEqual(retry.returncode,0,retry.stdout+retry.stderr)
+        result=json.loads(retry.stdout);self.assertEqual(result['recovery_proof_comment_id'],proof[0]['id']);self.assertEqual(result['completion_comment_id'],claims[0]['id'])
+        self.assertEqual(len(json.loads(self.publication_fault_path.read_text())['events']),2)
+        self.unchanged_lifecycle(before)
+
+    def test_post_proof_CI_drift_blocks_completion_POST_before_effect(self):
+        self.publication_fault('post-proof-check-drift');before=self.effect_snapshot()
+        result=self.run_publication();self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
+        trace=json.loads(self.publication_fault_path.read_text());self.assertTrue(trace['fired'],'must reach actual persisted proof POST')
+        self.assertEqual(len(self.publication_comments('oasis7-postmerge-delivery-proof/v1')),1)
+        self.assertRegex(result.stderr,'check|execution|success|changed|provenance')
+        self.unchanged_lifecycle(before)
+        self.assertEqual(self.publication_comments('oasis7-postmerge-completion/v1'),[],'stale CI must block completion BEFORE its POST')
+
+    def test_rehashed_fabricated_primary_refuses_independent_recollection_before_POST(self):
+        import base64
+        preflight=self.run_publication(create=False);self.assertEqual(preflight.returncode,0,preflight.stderr)
+        proof=json.loads(preflight.stdout);evidence=proof['verification']['merge_readback']['evidence'][0]
+        raw=json.loads(base64.b64decode(evidence['raw_b64']));raw['data']['repository']['pullRequest']['headRefOid']=self.target
+        replacement=json.dumps(raw,sort_keys=True,separators=(',',':')).encode()
+        evidence['raw_b64']=base64.b64encode(replacement).decode();evidence['raw_sha256']=hashlib.sha256(replacement).hexdigest()
+        (self.receipt_root/'terminal-recovery-proof.json').write_bytes(json.dumps(proof,sort_keys=True,separators=(',',':')).encode())
+        before=self.effect_snapshot();result=self.run_publication()
+        self.assertNotEqual(result.returncode,0,result.stderr);self.assertRegex(result.stderr,'independently recollected.*primary evidence changed')
+        self.assertEqual(self.effect_snapshot(),before)
+        self.assertEqual(self.publication_comments('oasis7-postmerge-delivery-proof/v1'),[])
+
+    def test_duplicate_persisted_proof_refuses_retry_without_effects(self):
+        self.publication_fault('proof-response-loss');failed=self.run_publication();self.assertNotEqual(failed.returncode,0)
+        trace=json.loads(self.publication_fault_path.read_text());self.assertTrue(trace['fired'])
+        proof=self.publication_comments('oasis7-postmerge-delivery-proof/v1');self.assertEqual(len(proof),1)
+        data=json.loads(self.review['harness'].gh_data.read_text());duplicate=dict(proof[0],id=proof[0]['id']+100)
+        duplicate['html_url']=duplicate['html_url'].rsplit('-',1)[0]+'-'+str(duplicate['id']);data['comment_pages'][-1].append(duplicate)
+        self.review['harness'].gh_data.write_text(json.dumps(data));before=self.effect_snapshot()
+        result=self.run_publication();self.assertNotEqual(result.returncode,0,result.stderr);self.assertRegex(result.stderr,'duplicate|ambiguous')
+        self.assertEqual(self.effect_snapshot(),before);self.assertEqual(len(json.loads(self.publication_fault_path.read_text())['events']),1)
+
+    def test_recovery_publication_does_not_satisfy_native_or_wrong_done_pair(self):
+        publication=self.run_publication();self.assertEqual(publication.returncode,0,publication.stderr);before=self.effect_snapshot();root=self.review['root'];uid=self.data['task_uid']
+        native=subprocess.run([sys.executable,str(HERE/'readiness_transport.py'),'--repo-root',str(root),'--task-uid',uid,'--create'],text=True,capture_output=True,timeout=330)
+        self.assertNotEqual(native.returncode,0);self.assertRegex(native.stderr,'readiness|native|migration');self.assertEqual(self.effect_snapshot(),before)
+        wrong=subprocess.run(['bash',str(root/'scripts/pm/task-closeout.sh'),'--task-uid',uid,'--role','repository_health_engineer','--to-status','done','--verification-profile','postmerge_delivery_recovery','--claim-type','task_complete'],cwd=root,text=True,capture_output=True,timeout=330)
+        self.assertNotEqual(wrong.returncode,0);self.assertRegex(wrong.stderr+wrong.stdout,'profile|claim|pair|requires');self.assertEqual(self.effect_snapshot(),before)
+
+    def test_corrupt_existing_delivery_namespace_blocks_before_publication(self):
+        baseline=self.run_publication(create=False);self.assertEqual(baseline.returncode,0,baseline.stderr)
+        self.assertEqual(self.publication_comments('oasis7-postmerge-delivery-proof/v1'),[])
+        self.assertEqual(self.publication_comments('oasis7-postmerge-completion/v1'),[])
+        (self.receipt_root/'terminal-delivery-receipt.json').write_text('{malformed-existing-delivery')
+        before=self.effect_snapshot();result=self.run_publication()
+        self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertRegex(result.stderr,'delivery|terminal|namespace|JSON|json')
+        self.assertEqual(self.effect_snapshot(),before)
+        self.assertEqual(self.publication_comments('oasis7-postmerge-delivery-proof/v1'),[])
+        self.assertEqual(self.publication_comments('oasis7-postmerge-completion/v1'),[])
+
+    def shared_client_audit(self):
+        root=self.review['root']
+        return subprocess.run(['bash',str(root/'scripts/pm/github-project-workflow.sh'),'--json','audit','--task-uid',self.data['task_uid']],cwd=root,text=True,capture_output=True,timeout=45)
+
+    def tearDown(self):
+        if hasattr(self,'http_log_path') and self.http_log_path.exists():
+            print(json.dumps({'offline_shared_client_requests':[json.loads(line) for line in self.http_log_path.read_text().splitlines()]},sort_keys=True))
+        super().tearDown()
+
+    def test_real_shared_HTTP_client_selected_audit_has_typed_task_and_request_log(self):
+        before=self.effect_snapshot();result=self.shared_client_audit()
+        self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        audit=json.loads(result.stdout);self.assertEqual(audit['status'],'ok')
+        self.assertEqual(audit['selected_task']['task_uid'],self.data['task_uid'])
+        requests=[json.loads(line) for line in self.http_log_path.read_text().splitlines()]
+        self.assertTrue(requests);self.assertTrue(all(r['authorization_present'] for r in requests))
+        self.assertTrue(any(r['url']=='https://api.github.com/graphql' and 'nodes(ids:' in r['body']['query'] for r in requests))
+        self.assertTrue(all(r['url'].startswith('https://api.github.com/') for r in requests))
+        self.assertEqual(self.effect_snapshot(),before)
+
+    def test_shared_HTTP_auth_status_and_JSON_failures_are_not_audit_authority(self):
+        baseline=self.shared_client_audit();self.assertEqual(baseline.returncode,0,baseline.stdout+baseline.stderr)
+        for mode in ('missing-credential','401','403','malformed','graphql-error','incomplete-page'):
+            with self.subTest(mode=mode):
+                self.http_mode_path.write_text(json.dumps({'mode':mode}));before=self.effect_snapshot()
+                result=self.shared_client_audit();self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertEqual(self.effect_snapshot(),before)
+        self.http_mode_path.unlink()
+
+    def test_shared_HTTP_Project_identity_contradictions_reach_real_audit(self):
+        baseline=self.shared_client_audit();self.assertEqual(baseline.returncode,0,baseline.stdout+baseline.stderr)
+        original=self.delivery_state_path.read_bytes()
+        for field,value in [('Task UID','task_ffffffffffffffffffffffffffffffff'),('Module','game-strategy'),('Canonical Worktree','/unrelated/offline-root'),('PR','https://github.com/other/repository/pull/999')]:
+            with self.subTest(field=field):
+                state=json.loads(original);matches=[n for n in state['project_item']['fieldValues']['nodes'] if n['field']['name']==field]
+                self.assertEqual(len(matches),1);matches[0]['text']=value
+                self.delivery_state_path.write_text(json.dumps(state));before=self.effect_snapshot()
+                result=self.shared_client_audit();self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
+                self.assertEqual(self.effect_snapshot(),before)
+        self.delivery_state_path.write_bytes(original)
+
+    def test_premerge_record_observation_rejects_selfconsistent_published_proof(self):
+        import datetime
+        root=self.review['root'];uid=self.data['task_uid']
+        publication=self.run_publication();self.assertEqual(publication.returncode,0,publication.stdout+publication.stderr)
+        recovery=load(root/'scripts/pm/terminal_recovery.py','offline_timestamp_actual_recovery')
+        baseline=recovery.validate_recovery(root,uid)
+        proof=baseline['proof'];completion=baseline['completion']
+        self.assertGreaterEqual(recovery.obs.instant(proof['observed_at']),recovery.obs.instant(proof['merged_at']))
+        stamp=recovery.obs.instant(proof['merged_at'])-datetime.timedelta(seconds=1)
+        proof['verification']['merge_readback']['observed_at']=stamp.isoformat()
+        raw=recovery.obs.canonical(proof);proof_digest=recovery.obs.digest(raw)
+        (self.receipt_root/'terminal-recovery-proof.json').write_bytes(raw)
+        completion['recovery_proof_sha256']=proof_digest
+        (self.receipt_root/'terminal-recovery-completion.json').write_bytes(recovery.obs.canonical(completion))
+        retained=json.loads(self.review['harness'].gh_data.read_text())
+        for page in retained['comment_pages']:
+            for comment in page:
+                if comment['id']==baseline['proof_comment']['id']:
+                    comment['body']='<!-- oasis7-postmerge-delivery-proof/v1 -->\n'+raw.decode()
+                if comment['id']==baseline['completion_comment']['id']:
+                    comment['body']='<!-- oasis7-postmerge-completion/v1 -->\n'+recovery.obs.canonical(completion).decode()
+        self.review['harness'].gh_data.write_text(json.dumps(retained))
+        # Exact reciprocal bindings and authenticated comments still validate;
+        # only the current record's observation precedes the real merge time.
+        recovery._validate_completion(completion,proof)
+        comments=[comment for page in retained['comment_pages'] for comment in page]
+        with recovery.obs.observation():
+            recovery._marker_comment(proof['repository'],proof['issue_number'],comments,'<!-- oasis7-postmerge-delivery-proof/v1 -->',proof)
+            recovery._marker_comment(proof['repository'],proof['issue_number'],comments,'<!-- oasis7-postmerge-completion/v1 -->',completion)
+        before=self.effect_snapshot()
+        with self.assertRaisesRegex(ValueError,'premerge|observation|observed'):
+            recovery.validate_recovery(root,uid)
+        self.assertEqual(self.effect_snapshot(),before)
+
+    def _t1ac_identity_comments(self):
+        c=self.review['harness'];repo=self.data['repository'];actor=self.scenario_actor
+        def gh(*args):
+            return subprocess.check_output([str(c.fake_gh),*args],text=True)
+        self.assertEqual(json.loads(gh('api','user'))['login'],actor)
+        self.assertEqual(gh('api','user','--jq','.login').strip(),actor)
+        self.assertEqual(json.loads(gh('api','graphql','-f','query=query{viewer{login}}'))['data']['viewer']['login'],actor)
+        self.assertEqual(json.loads(gh('api',f'repos/{repo}/collaborators/{actor}/permission'))['permission'],'admin')
+        self.assertEqual(self.holds['operator']['login'],actor)
+        retained=[v for page in json.loads(c.gh_data.read_text())['comment_pages'] for v in page]
+        self.assertEqual(next(v for v in retained if v['id']==9001)['user']['login'],actor)
+        body=protocol.terminal_proof.RECOVERY_MARKER+'\nactual offline actor transport control'
+        body_path=self.review['root']/'offline-actor-body.txt';body_path.write_text(body)
+        url=gh('issue','comment',str(self.data['issue']),'-R',repo,'--body-file',str(body_path)).strip()
+        posted=[v for page in json.loads(c.gh_data.read_text())['comment_pages'] for v in page][-1]
+        self.assertEqual(posted['user']['login'],actor);self.assertEqual(posted['html_url'],url)
+        other=json.loads(gh('api',f"repos/{repo}/issues/{self.data['issue']}/comments",'--method','POST','-f','body=REST actor control'))
+        self.assertEqual(other['user']['login'],actor)
+        self.assertEqual(json.loads(gh('api',f"repos/{repo}/issues/comments/{posted['id']}")),posted)
+        return posted,body
+
+    @scenario_actor('eng-cc')
+    def test_t1ac_owner_scenario_identity_and_durable_comments_agree(self):
+        posted,body=self._t1ac_identity_comments()
+        reader=load(HERE/'post-merge-finalize.py','t1ac_owner_reader')
+        context={'repository':self.data['repository'],'issue_number':self.data['issue'],'recovery':True,'comments':[posted]}
+        self.assertEqual(reader._delivery_comment_readback(context,body),posted)
+
+    def test_t1ac_other_admin_is_not_terminal_owner_authority(self):
+        posted,body=self._t1ac_identity_comments()
+        self.assertEqual(self.scenario_actor,'repo-admin')
+        reader=load(HERE/'post-merge-finalize.py','t1ac_other_admin_reader')
+        context={'repository':self.data['repository'],'issue_number':self.data['issue'],'recovery':True,'comments':[posted]}
+        with self.assertRaisesRegex(ValueError,'terminal v2 evidence comment author mismatch'):
+            reader._delivery_comment_readback(context,body)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

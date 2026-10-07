@@ -11,6 +11,37 @@ import sys
 import urllib.parse
 
 
+def validate_existing_terminal_namespace(repo_root: pathlib.Path, task_uid: str) -> None:
+    """Validate existing stored terminal facts without granting fresh readiness."""
+    import importlib.util
+    name = "_terminal_namespace_finalizer"
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(name, pathlib.Path(__file__).with_name("post-merge-finalize.py"))
+        if spec is None or spec.loader is None:
+            raise ValueError("terminal namespace validator unavailable")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    try:
+        module._validate_existing_terminal_namespace(pathlib.Path(repo_root), task_uid)
+    except json.JSONDecodeError as exc:
+        # Diagnose the actual failed bytes only after rejection; these reads
+        # cannot select a protocol or substitute for the original validator.
+        location = "canonical terminal namespace"
+        try:
+            receipt_root = _canonical_root(pathlib.Path(repo_root), task_uid)
+            for filename in ("terminal-delivery-receipt.json", "terminal-cleanup-receipt.json",
+                             "finalizer-ledger.json", "terminal-tombstone.json"):
+                path = receipt_root / filename
+                if path.is_file() and path.read_text(encoding="utf-8") == exc.doc:
+                    location = str(path)
+                    break
+        except (OSError, UnicodeError, ValueError):
+            pass
+        raise ValueError(f"existing terminal namespace JSON invalid at {location}: {exc}") from exc
+
+
 def receipt_chain_digest(
     task_uid: str,
     repository: str,
@@ -223,6 +254,9 @@ DELIVERY_RECEIPT_FIELDS = frozenset({
     "branch", "completion_semantics", "observed_at", "readiness_proof_sha256",
 })
 DELIVERY_MARKER = "<!-- oasis7-pm-evidence/v2 -->"
+RECOVERY_TYPE = "oasis7_terminal_recovery_delivery"
+RECOVERY_MARKER = "<!-- oasis7-terminal-recovery-delivery/v1 -->"
+RECOVERY_RECEIPT_FIELDS = (DELIVERY_RECEIPT_FIELDS - {"readiness_proof_sha256"}) | {"recovery_proof_sha256"}
 OID_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 
 
@@ -252,10 +286,10 @@ def _load_json_bytes(raw: bytes, name: str) -> dict:
 def _canonical_root(repo_root: pathlib.Path, task_uid: str) -> pathlib.Path:
     helper = pathlib.Path(__file__).with_name("canonical-receipt-root.py")
     try:
-        output = subprocess.check_output(
-            [sys.executable, str(helper), "--default-worktree", str(repo_root),
-             "--task-uid", task_uid, "--json"], text=True, stderr=subprocess.PIPE,
-        )
+        command = [sys.executable, str(helper), "--default-worktree", str(repo_root), "--task-uid", task_uid, "--json"]
+        observation = sys.modules.get("recovery_observation")
+        output = (observation.capture(command).decode("utf-8") if observation is not None and observation.active() is not None
+                  else subprocess.check_output(command, text=True, stderr=subprocess.PIPE))
         return pathlib.Path(json.loads(output)["receipt_root"])
     except (OSError, subprocess.SubprocessError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise ValueError("canonical terminal receipt root unavailable") from exc
@@ -343,6 +377,9 @@ def read_live_repository(repository: str, merge_commit_oid: str,
         raise ValueError("terminal delivery repository query identity is invalid")
 
     def query(endpoint: str) -> dict:
+        observation = sys.modules.get("recovery_observation")
+        if observation is not None and observation.active() is not None:
+            return observation.api(endpoint)
         try:
             raw = subprocess.check_output(["gh", "api", endpoint], text=True,
                                           stderr=subprocess.PIPE, timeout=180)
@@ -474,17 +511,61 @@ def _v2_comment_body(receipt: dict, delivery_digest: str) -> str:
 
 def terminal_delivery_comment_body(receipt: dict, delivery_digest: str) -> str:
     """Build the canonical v2 Issue evidence body from the receipt bytes digest."""
+    if receipt.get("receipt_type") == RECOVERY_TYPE:
+        payload = {key: receipt[key] for key in (
+            "task_uid", "repository", "issue_number", "pr_number", "pr_url", "head_oid",
+            "merge_commit_oid", "merge_receipt_sha256", "task_complete_claim_sha256")}
+        payload.update(schema="oasis7.terminal-recovery-comment/v1", receipt_type=RECOVERY_TYPE,
+                       receipt_chain_version=1, evidence_phase="post_merge_done",
+                       terminal_recovery_receipt_sha256=delivery_digest,
+                       recovery_proof_sha256=receipt["recovery_proof_sha256"])
+        payload["receipt_chain_sha256"] = hashlib.sha256(_canonical_json(payload)).hexdigest()
+        return RECOVERY_MARKER + "\n" + _canonical_json(payload).decode("utf-8")
     return _v2_comment_body(receipt, delivery_digest)
 
 
 def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: str,
                               task_record: dict, live_issue: dict, live_project_item: dict,
                               live_pr: dict, live_repository: dict, comments: list[dict]) -> dict:
-    if set(receipt) != DELIVERY_RECEIPT_FIELDS:
+    fields = (RECOVERY_RECEIPT_FIELDS if (task_record.get("phase_receipt_type") or {}).get("post_merge_done") == RECOVERY_TYPE
+              else DELIVERY_RECEIPT_FIELDS)
+    if set(receipt) != fields:
+        raise ValueError("terminal delivery receipt closed schema mismatch")
+    if (task_record.get("phase_receipt_type") or {}).get("post_merge_done") == RECOVERY_TYPE:
+        from terminal_recovery import validate_recovery
+        readiness = validate_recovery(pathlib.Path(files["root"]), task_uid)
+    else:
+        from readiness_transport import validate_readiness_proof
+        readiness = validate_readiness_proof(
+            pathlib.Path(files["root"]), task_uid, task_record,
+            live_pr=live_pr, comments=comments, live_issue=live_issue)
+    return _validate_delivery_bindings(receipt, files, task_uid, task_record,
+        live_issue, live_project_item, live_pr, live_repository, comments, readiness)
+
+
+def _validate_existing_recovery_terminal(receipt, files, task_uid, task_record,
+                                         live_issue, live_project_item, live_pr,
+                                         live_repository, comments):
+    """Validate stored terminal bindings only; never an effect/readiness reader."""
+    if (task_record.get("phase_receipt_type") or {}).get("post_merge_done") != RECOVERY_TYPE:
+        raise ValueError("existing recovery terminal selector mismatch")
+    from terminal_recovery import _read_stored_recovery
+    stored = _read_stored_recovery(pathlib.Path(files["root"]), task_uid)
+    _validate_delivery_bindings(receipt, files, task_uid, task_record,
+        live_issue, live_project_item, live_pr, live_repository, comments, stored)
+
+
+def _validate_delivery_bindings(receipt, files, task_uid, task_record,
+                                live_issue, live_project_item, live_pr,
+                                live_repository, comments, readiness):
+    recovery_selected = (task_record.get("phase_receipt_type") or {}).get("post_merge_done") == RECOVERY_TYPE
+    fields = RECOVERY_RECEIPT_FIELDS if recovery_selected else DELIVERY_RECEIPT_FIELDS
+    if set(receipt) != fields:
         raise ValueError("terminal delivery receipt closed schema mismatch")
     if (receipt.get("receipt_type"), receipt.get("schema_version"), receipt.get("issuer"),
             receipt.get("evidence_mode"), receipt.get("completion_semantics")) != (
-            "oasis7_terminal_delivery", 2, "post-merge-finalize", "production", "delivery_only"):
+            RECOVERY_TYPE if recovery_selected else "oasis7_terminal_delivery",
+            1 if recovery_selected else 2, "post-merge-finalize", "production", "delivery_only") or type(receipt.get("schema_version")) is not int:
         raise ValueError("terminal delivery receipt provenance mismatch")
     repository = receipt.get("repository")
     issue_number = receipt.get("issue_number")
@@ -496,11 +577,12 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
             or pr_url != f"https://github.com/{repository}/pull/{pr_number}"):
         raise ValueError("terminal delivery receipt identity mismatch")
     _validate_mapping_identity(task_uid, task_record, repository, issue_number, pr_number, pr_url)
-    from readiness_transport import validate_readiness_proof
-    readiness = validate_readiness_proof(
-        pathlib.Path(files["root"]), task_uid, task_record,
-        live_pr=live_pr, comments=comments, live_issue=live_issue)
-    if receipt.get("readiness_proof_sha256") != readiness["digest"]:
+    if recovery_selected:
+        for key in ("repository", "task_uid", "issue_number", "pr_number", "pr_url", "head_oid", "merge_commit_oid", "default_branch", "observed_target_oid"):
+            if receipt.get(key) != readiness["proof"].get(key):
+                raise ValueError("terminal recovery proof receipt binding mismatch")
+    proof_key = "recovery_proof_sha256" if recovery_selected else "readiness_proof_sha256"
+    if receipt.get(proof_key) != readiness["digest"]:
         raise ValueError("terminal delivery readiness proof raw digest mismatch")
     for key in ("head_oid", "merge_commit_oid", "observed_target_oid"):
         if not isinstance(receipt.get(key), str) or not OID_RE.fullmatch(receipt[key]):
@@ -543,10 +625,14 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
 
     try:
         from task_complete_claim import select_historical_task_complete_claim
-        claim, claim_digest, _claim_comment = select_historical_task_complete_claim(
-            repository, task_uid, task_record, live_issue, comments,
-            accepted_head=receipt["head_oid"],
-        )
+        if recovery_selected:
+            claim = readiness["completion"]
+            claim_digest = "sha256:" + readiness["completion_digest"]
+        else:
+            claim, claim_digest, _claim_comment = select_historical_task_complete_claim(
+                repository, task_uid, task_record, live_issue, comments,
+                accepted_head=receipt["head_oid"],
+            )
     except (OSError, ValueError, KeyError, TypeError) as exc:
         raise ValueError(f"terminal delivery accepted task_complete claim is missing, ambiguous, or invalid: {exc}") from exc
     if claim_digest != claim_hash:
@@ -573,11 +659,11 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
         raise ValueError("terminal delivery live Project Task UID mismatch")
 
     delivery_digest = files["delivery"]["digest"]
-    expected_body = _v2_comment_body(receipt, delivery_digest)
+    expected_body = terminal_delivery_comment_body(receipt, delivery_digest)
     v2_comments, matches = [], []
     for comment in comments:
         body = str(comment.get("body") or "")
-        if DELIVERY_MARKER in body:
+        if (RECOVERY_MARKER if recovery_selected else DELIVERY_MARKER) in body:
             v2_comments.append(comment)
         if body == expected_body:
             comment_id = comment.get("id")
@@ -637,13 +723,13 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
     if actual_tombstone != expected_tombstone:
         raise ValueError("terminal finalizer ledger or tombstone mismatch: tombstone identity")
     return {
-        "status": "passed", "protocol_version": 2, "task_uid": task_uid,
+        "status": "passed", "protocol_version": 3 if recovery_selected else 2, "task_uid": task_uid,
         "repository": repository, "issue_number": issue_number, "pr_number": pr_number,
         "pr_url": pr_url, "head_oid": receipt["head_oid"],
         "merge_commit_oid": receipt["merge_commit_oid"], "default_branch": receipt["default_branch"],
         "observed_target_oid": receipt["observed_target_oid"], "live_target_oid": target,
         "merge_receipt_sha256": merge_digest, "task_complete_claim_sha256": claim_digest,
-        "readiness_proof_sha256": readiness["digest"],
+        proof_key: readiness["digest"],
         "terminal_receipt_sha256": delivery_digest, "delivery_receipt_sha256": delivery_digest,
         "comment_id": comment["id"], "comment_sha256": comment_digest,
         "finalizer_ledger_sha256": ledger_digest, "tombstone_sha256": tombstone_digest,
@@ -714,7 +800,7 @@ def read_terminal_proof(repo_root: pathlib.Path, task_uid: str, task_record: dic
         isinstance(value, dict) and value.get("post_merge_done") is not None
         for value in (type_map, comment_id_map, comment_digest_map)
     )
-    if version_type == "oasis7_terminal_delivery":
+    if version_type in ("oasis7_terminal_delivery", RECOVERY_TYPE):
         comment_id = comment_id_map.get("post_merge_done")
         comment_digest = comment_digest_map.get("post_merge_done")
         if (not re_fullmatch_sha256(version_digest) or type(comment_id) is not int

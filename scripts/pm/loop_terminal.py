@@ -13,6 +13,9 @@ from terminal_proof import read_receipt_chain, receipt_chain_digest, validate_re
 
 
 def _json(*args):
+    import recovery_observation as observation
+    if observation.active() is not None:
+        return observation.load(observation.capture(['gh',*args],kind='github_api',locator=' '.join(args)))
     return json.loads(subprocess.check_output(['gh',*args],text=True,timeout=180))
 
 
@@ -127,6 +130,9 @@ def read_project(repository, number):
 
 
 def read_comments(repository, number):
+    import recovery_observation as observation
+    if observation.active() is not None:
+        return observation.pages(f'repos/{repository}/issues/{number}/comments')
     pages=_json('api',f'repos/{repository}/issues/{number}/comments','--paginate','--slurp')
     if not isinstance(pages,list): raise ValueError('terminal evidence pagination malformed')
     return [item for page in pages for item in (page if isinstance(page,list) else [page])]
@@ -196,6 +202,16 @@ def read_shared_terminal_proof(repository, task_uid, *, repo_root=None, record=N
     """Resolve live facts and delegate both receipt versions to the shared reader."""
     root = pathlib.Path(repo_root or pathlib.Path.cwd()).resolve()
     record = record if isinstance(record, dict) else task_record(root, task_uid)
+    if (record.get('phase_receipt_type') or {}).get('post_merge_done') == 'oasis7_terminal_recovery_delivery':
+        import recovery_observation as observation
+        if observation.active() is None:
+            with observation.observation():
+                return read_shared_terminal_proof(repository, task_uid, repo_root=root, record=record,
+                    live_issue=live_issue, live_project_item=live_project_item, live_pr=live_pr,
+                    live_repository=live_repository, comments=comments, issue_reader=issue_reader,
+                    project_item_reader=project_item_reader, pr_reader=pr_reader,
+                    repository_reader=repository_reader, comments_reader=comments_reader,
+                    include_readbacks=include_readbacks)
     issue_number = record.get('issue_number')
     if isinstance(issue_number, str) and re.fullmatch(r'[1-9][0-9]*', issue_number):
         issue_number = int(issue_number)
@@ -214,7 +230,7 @@ def read_shared_terminal_proof(repository, task_uid, *, repo_root=None, record=N
         pr_number = int(pr_number_text)
     pr = live_pr if isinstance(live_pr, dict) else (pr_reader or read_pull_request)(repository, pr_number)
     type_map = record.get('phase_receipt_type')
-    v2_selected = isinstance(type_map, dict) and type_map.get('post_merge_done') == 'oasis7_terminal_delivery'
+    v2_selected = isinstance(type_map, dict) and type_map.get('post_merge_done') in ('oasis7_terminal_delivery', 'oasis7_terminal_recovery_delivery')
     if not isinstance(live_repository, dict) and v2_selected:
         import terminal_proof
         resolver = repository_reader or getattr(terminal_proof, 'read_live_repository', None)

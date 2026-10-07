@@ -161,6 +161,10 @@ def resolve_repo_destination(root: Path, raw_path: object, label: str) -> Path:
 
 
 def gh_json(arguments: list[str], label: str) -> object:
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        return observation.load(observation.capture(['gh','api',*arguments],
+            kind='github_api',locator=arguments[0]))
     try:
         result = subprocess.run(
             ["gh", "api", *arguments], text=True, capture_output=True, check=False,
@@ -430,6 +434,16 @@ def validate_plan_impact_projection(
 
 def frozen_changed_paths(root: Path, comparison_oid: str, head: str) -> list[str]:
     """Require the plan's base to precede its frozen head, then derive review paths."""
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        try:
+            observation.git(root,'merge-base','--is-ancestor',comparison_oid,head)
+            raw=observation.git(root,'diff','--name-only','--no-renames',comparison_oid,head)
+        except observation.ObservationError as exc:
+            raise ContractError('cannot validate frozen comparison ancestry/changed paths') from exc
+        paths=[line for line in raw.decode().splitlines() if line]
+        if len(paths)!=len(set(paths)):raise ContractError('frozen base..head changed path set contains duplicates')
+        return sorted(paths)
     try:
         ancestry = subprocess.run(
             ["git", "-C", str(root), "merge-base", "--is-ancestor", comparison_oid, head],

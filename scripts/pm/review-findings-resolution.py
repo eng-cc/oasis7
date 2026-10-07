@@ -593,6 +593,11 @@ def create_manifest(root: Path, task_uid: str, head: str, epoch: str, records_pa
 
 
 def gh_json(command: list[str], label: str) -> object:
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        endpoint=next((part for part in command[1:] if part=='graphql' or part.startswith('repos/')),None)
+        return observation.load(observation.capture(['gh',*command],
+            kind='github_api' if endpoint else None,locator=endpoint))
     try:
         result = subprocess.run(["gh", *command], text=True, capture_output=True, check=False)
     except OSError as exc:

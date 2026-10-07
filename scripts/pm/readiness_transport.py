@@ -96,6 +96,9 @@ def decode(value: object) -> bytes:
 
 
 def git(root: Path, *args: str) -> bytes:
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        return observation.git(root,*args)
     try:
         return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.PIPE)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -173,6 +176,9 @@ def gate_capture(raw: bytes, source: dict, repository: str, pr_number: int,
 
 
 def query(repository: str, endpoint: str):
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        return observation.api(endpoint)
     try:
         raw = subprocess.check_output(["gh", "api", endpoint], stderr=subprocess.PIPE, timeout=180)
         return json.loads(raw, object_pairs_hook=_pairs)
@@ -245,8 +251,13 @@ def validate_comment(repository: str, issue: int, capture: dict, comments: list,
 def receipt_root(root: Path, uid: str) -> Path:
     if not re.fullmatch(r"task_[0-9a-f]{32}", uid):
         raise ValueError("readiness task UID invalid")
-    raw = subprocess.check_output([sys.executable, str(Path(__file__).with_name("canonical-receipt-root.py")),
-            "--default-worktree", str(root), "--task-uid", uid, "--json"], stderr=subprocess.PIPE)
+    command=[sys.executable, str(Path(__file__).with_name("canonical-receipt-root.py")),
+            "--default-worktree", str(root), "--task-uid", uid, "--json"]
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        raw=observation.capture(command)
+    else:
+        raw = subprocess.check_output(command, stderr=subprocess.PIPE)
     return Path(json.loads(raw)["receipt_root"])
 
 
@@ -757,9 +768,17 @@ def main() -> int:
     parser.add_argument("--create", action="store_true")
     parser.add_argument("--publish-native", action="store_true"); parser.add_argument("--tool-root")
     parser.add_argument("--capture-legacy", action="store_true")
+    parser.add_argument("--recover-merged-delivery",action="store_true")
     parser.add_argument("--gate-input"); parser.add_argument("--result-json")
     args = parser.parse_args()
     try:
+        if args.recover_merged_delivery:
+            if args.publish_native or args.capture_legacy or args.tool_root or args.gate_input or args.result_json:
+                raise ValueError('recovery and native readiness publication modes are exclusive')
+            import terminal_recovery
+            result=(terminal_recovery.publish_recovery if args.create else terminal_recovery.collect_recovery)(Path(args.repo_root),args.task_uid)
+            print(terminal_recovery.obs.canonical(result).decode())
+            return 0
         if args.publish_native and args.capture_legacy:
             raise ValueError("readiness publication modes are exclusive")
         if args.capture_legacy:

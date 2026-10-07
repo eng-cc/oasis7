@@ -109,6 +109,8 @@ python3 "$ROOT_DIR/scripts/pm/tpm-workflow-doc-contract.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-transition-order.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-delivery-protocol.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/terminal-readiness-recovery.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/terminal-recovery-guards.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/resource-cleanup-safety.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal_proof.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-adversarial-contract.test.sh" >/dev/null

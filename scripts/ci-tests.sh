@@ -418,6 +418,8 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
   run python3 ./scripts/pm/terminal-delivery-protocol.test.py
+  run python3 ./scripts/pm/terminal-readiness-recovery.test.py
+  run python3 ./scripts/pm/terminal-recovery-guards.test.py
   run python3 ./scripts/pm/resource-cleanup-safety.test.py
   run python3 ./scripts/pm/terminal_proof.test.py
   run bash ./scripts/pm/post-merge-finalize.test.sh
