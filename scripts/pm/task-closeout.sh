@@ -173,7 +173,13 @@ fi
 if [[ -n "$VERIFY_COMMAND" ]]; then
   die "--verify-command is not accepted for lifecycle transitions; select a repository-owned --verification-profile"
 fi
-if [[ "$TARGET_STATUS" == "done" && "$CLAIM_TYPE" != "task_complete" ]]; then
+RECOVERY_COMPLETION=0
+if [[ "$VERIFICATION_PROFILE" == postmerge_delivery_recovery || "$CLAIM_TYPE" == postmerge_delivery_complete ]]; then
+  [[ "$TARGET_STATUS" == done && "$VERIFICATION_PROFILE" == postmerge_delivery_recovery && "$CLAIM_TYPE" == postmerge_delivery_complete ]] \
+    || die "recovery requires exact done profile/claim pair"
+  RECOVERY_COMPLETION=1
+fi
+if [[ "$TARGET_STATUS" == "done" && "$CLAIM_TYPE" != "task_complete" && "$RECOVERY_COMPLETION" != 1 ]]; then
   die "--claim-type must be task_complete when --to-status is done"
 fi
 if [[ "$TARGET_STATUS" == "ready" && "$CLAIM_TYPE" != "ready_for_pr" ]]; then
@@ -669,6 +675,20 @@ r=(json.load(open(sys.argv[1],encoding='utf-8')).get('tasks') or {}).get(sys.arg
 print('' if r.get('completion_mode')=='non_pr_task' and r.get('non_pr_completion_evidence') else (r.get('pr_number') or ''))
 PY
 )"
+  if [[ "$RECOVERY_COMPLETION" == 1 ]]; then
+    CANONICAL_RECOVERY_MERGE="$(python3 - "$ROOT_DIR" "$TASK_UID" "$SCRIPT_DIR" <<'PY'
+import pathlib,sys
+sys.path.insert(0,sys.argv[3])
+from terminal_recovery import validate_recovery
+print(validate_recovery(pathlib.Path(sys.argv[1]),sys.argv[2])["receipt_root"]/'merge-receipt.json')
+PY
+)" || die "canonical recovery merge receipt cannot be resolved"
+    if [[ -n "$PR_MERGE_RECEIPT" ]]; then
+      cmp -s "$PR_MERGE_RECEIPT" "$CANONICAL_RECOVERY_MERGE" || die "recovery merge receipt differs from canonical bytes"
+    else
+      PR_MERGE_RECEIPT="$CANONICAL_RECOVERY_MERGE"
+    fi
+  fi
   [[ -z "$RECORDED_PR_NUMBER" || -f "$PR_MERGE_RECEIPT" ]] \
     || die "PR-backed done requires an existing caller-owned --pr-receipt"
   LIVE_PR_RECEIPT=""
@@ -687,7 +707,16 @@ if v1:
 print('no' if v1 else 'yes')
 PY
 )" || die "readiness or exact valid v1 terminal proof is required before task_complete or TaskDone writes"
-    if [[ "$READINESS_REQUIRED" == yes ]]; then
+    if [[ "$RECOVERY_COMPLETION" == 1 ]]; then
+      READINESS_REQUIRED=no
+      python3 - "$ROOT_DIR" "$TASK_UID" "$SCRIPT_DIR" <<'PY' \
+        || die "canonical recovery must validate before done writes"
+import pathlib,sys
+sys.path.insert(0,sys.argv[3])
+from terminal_recovery import validate_recovery
+validate_recovery(pathlib.Path(sys.argv[1]),sys.argv[2])
+PY
+    elif [[ "$READINESS_REQUIRED" == yes ]]; then
       python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$ROOT_DIR" --task-uid "$TASK_UID" >/dev/null \
         || die "readiness must validate before task_complete or TaskDone writes"
     fi
@@ -838,6 +867,15 @@ if [[ "$TARGET_STATUS" != "deferred" ]]; then
     python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$ROOT_DIR" --task-uid "$TASK_UID" --create >/dev/null \
       || die "readiness proof cannot be created from accepted native artifacts"
   fi
+  if [[ "$RECOVERY_COMPLETION" == 1 ]]; then
+    CLAIM_READY_JSON="$(python3 - "$ROOT_DIR" "$TASK_UID" "$SCRIPT_DIR" <<'PY'
+import json,pathlib,sys
+sys.path.insert(0,sys.argv[3])
+from terminal_recovery import validate_recovery
+print(json.dumps(validate_recovery(pathlib.Path(sys.argv[1]),sys.argv[2])["completion"],ensure_ascii=False,sort_keys=True,separators=(',',':')))
+PY
+)" || die "authentic current completion is unavailable"
+  else
   CLAIM_ARGS=(--claim-type "$CLAIM_TYPE" --verification-profile "$VERIFICATION_PROFILE" --task-uid "$TASK_UID" --json)
   if [[ "$CLAIM_TYPE" == "ready_for_pr" && -n "$CI_READY_RECEIPT" ]]; then
     CLAIM_ARGS+=(--ci-ready-receipt "$CI_READY_RECEIPT")
@@ -846,6 +884,7 @@ if [[ "$TARGET_STATUS" != "deferred" ]]; then
     CLAIM_ARGS+=(--comparison-ref "$COMPARISON_REF")
   fi
   CLAIM_READY_JSON="$("$SCRIPT_DIR/claim-ready.sh" "${CLAIM_ARGS[@]}")"
+  fi
 else
   CLAIM_READY_JSON="$(python3 - <<'PY'
 import json
@@ -891,6 +930,9 @@ TRANSITION_AUDIT_JSON="$TASK_AUDIT_JSON"
 
 CLOSEOUT_ARGS=(closeout-task "$ROOT_DIR" --task-uid "$TASK_UID" --role "$ROLE" \
   --to-status "$TARGET_STATUS" --claim-json "$CLAIM_READY_JSON")
+if [[ "$RECOVERY_COMPLETION" == 1 ]]; then
+  CLOSEOUT_ARGS+=(--verification-profile postmerge_delivery_recovery)
+fi
 [[ -z "$PR_MERGE_RECEIPT" ]] || CLOSEOUT_ARGS+=(--pr-receipt "$PR_MERGE_RECEIPT")
 if [[ -n "$AGGREGATE_RECEIPT" ]]; then
   CLOSEOUT_ARGS+=(--aggregate-plan "$AGGREGATE_PLAN" --aggregate-candidate "$AGGREGATE_CANDIDATE"

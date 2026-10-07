@@ -406,6 +406,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/graphql-budget-red.test.py
   run python3 ./scripts/pm/pr-graphql-call-budget.test.py
   run bash ./scripts/pm/pr-lifecycle-gate.test.sh
+  run python3 ./scripts/pm/github-project-task-lifecycle.test.py
   run bash ./scripts/pm/pr-lifecycle-trust.test.sh
   run bash ./scripts/pm/pr-watch-loop.test.sh
   run bash ./scripts/pr-review-thread-closeout.test.sh
@@ -418,6 +419,8 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
   run python3 ./scripts/pm/terminal-delivery-protocol.test.py
+  run python3 ./scripts/pm/terminal-readiness-recovery.test.py
+  run python3 ./scripts/pm/terminal-recovery-guards.test.py
   run python3 ./scripts/pm/resource-cleanup-safety.test.py
   run python3 ./scripts/pm/terminal_proof.test.py
   run bash ./scripts/pm/post-merge-finalize.test.sh
