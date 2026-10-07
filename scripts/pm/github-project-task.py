@@ -4505,6 +4505,7 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
                             record: dict[str, Any], binding: dict[str, Any],
                             subject: dict[str, Any], publication: Any) -> int:
     """Adopt an authentic current vector without rewriting publication history."""
+    import time
     import workflow_maintenance as maintenance
     vector = load_pr_projection_record_pr_module()
     root = args.root.resolve()
@@ -4525,8 +4526,19 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
     subject_body: str | None = None
     observed_target: str | None = None
 
-    def check() -> dict[str, Any]:
+    observation: dict[str, Any] | None = None
+    observation_vector: dict[str, Any] | None = None
+    observation_deadline = 0.0
+    observation_lease_seconds = 90.0
+
+    def check(*, fresh: bool = False) -> dict[str, Any]:
         nonlocal expected_scope, subject_body, observed_target
+        nonlocal observation, observation_vector, observation_deadline
+        if observation is not None and not fresh:
+            if time.monotonic() >= observation_deadline:
+                raise vector.RecordPRPending("human observation lease expired")
+            return observation
+        started = time.monotonic()
         caller = require_record_pr_write_authority(args.repo)
         authority = maintenance.read_maintenance_authority(
             args.repo, locator, args.task_uid, number, subject["source_head_oid"],
@@ -4652,26 +4664,47 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
                 raise vector.RecordPRConflict("human Project required field type unavailable: " + field)
             if field == "Workflow Phase" and "verification" not in {option.get("name") for option in definition.get("options", [])}:
                 raise vector.RecordPRConflict("human Project phase option unavailable")
+        if time.monotonic() >= started + observation_lease_seconds:
+            raise vector.RecordPRPending("human observation lease expired")
+        observation = live_issue
+        observation_vector = None
+        observation_deadline = started + observation_lease_seconds
         return live_issue
 
     def read_live() -> dict[str, Any]:
+        nonlocal observation_vector
         check()
-        return _record_pr_vector_from_live(args, record, args.task_uid, binding["pr_url"])
+        if observation_vector is None:
+            observation_vector = _record_pr_vector_from_live(args, record, args.task_uid, binding["pr_url"])
+        check()  # Never return a vector whose observation lease expired during reads.
+        return observation_vector
 
     def write_issue(target: dict[str, Any]) -> None:
-        live = check()
-        _record_pr_write_issue_vector(args, record, target, live)
+        nonlocal observation, observation_vector
+        live = check(fresh=True)
+        try:
+            _record_pr_write_issue_vector(args, record, target, live)
+        finally:
+            observation = observation_vector = None
 
     def write_project(field: str, value: str) -> None:
-        check()
-        _record_pr_write_project_field(args, record, field, value, scope_check=check)
+        nonlocal observation, observation_vector
+        check(fresh=True)
+        try:
+            _record_pr_write_project_field(args, record, field, value,
+                                           scope_check=lambda: check(fresh=True))
+        finally:
+            observation = observation_vector = None
 
-    def exact_comment(body: str) -> str:
+    def exact_comment(body: str, *, allow_write: bool = True) -> str:
         check()
         matches = [c for c in github_issue_comments(args.repo, issue_number) if c.get("body") == body]
         if len(matches) > 1:
             raise vector.RecordPRConflict("duplicate human reconciliation comment")
         if not matches:
+            if not allow_write:
+                raise vector.RecordPRPending("human final exact comment disappeared")
+            check(fresh=True)
             try:
                 issue_comment(args.repo, issue_number, body)
             except (OSError, RuntimeError, subprocess.SubprocessError):
@@ -4699,7 +4732,7 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
     result = vector.reconcile_human_record_pr_vector(
         task_uid=args.task_uid, pr_number=number, pr_url=binding["pr_url"],
         read_live=read_live, write_issue=write_issue, write_project_field=write_project,
-        before_write=check)
+        before_write=lambda: check(fresh=True))
     binding_body = publication.publication_binding_comment(binding)
     for comment in github_issue_comments(args.repo, issue_number):
         if "<!-- oasis7-ci-publication-binding/v1 -->" in str(comment.get("body") or ""):
@@ -4715,9 +4748,14 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
                           f"Authority Comment: {locator}", f"Publication ID: {subject['publication_id']}",
                           "Actual Result: complete live Task/Project/PR/C1 binding; historical journal unchanged."))
     evidence_url = exact_comment(evidence)
+    check(fresh=True)
+    # The final stage never adopts a pre-effect vector or authority observation.
     final_vector = read_live()
     if final_vector != result["final"]:
         raise vector.RecordPRConflict("human final vector changed before cache refresh")
+    if (exact_comment(binding_body, allow_write=False) != binding_url
+            or exact_comment(evidence, allow_write=False) != evidence_url):
+        raise vector.RecordPRConflict("human final evidence identity changed")
     final_issue = check()
     next_record = {**record, **final_issue, "updated_at": now()}
     next_record["evidence_comments"] = list(dict.fromkeys([*(record.get("evidence_comments") or []), binding_url, evidence_url]))
