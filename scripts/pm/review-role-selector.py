@@ -117,7 +117,9 @@ def main() -> int:
         print(json.dumps(payload, sort_keys=True) if args.json else ",".join(args.manual_role))
         return 0
     roles = ["repository_health_engineer"]
-    if args.change_class in {"mechanical-doc", "workflow-doc"}:
+    if args.change_class == "mechanical-doc":
+        pass
+    elif args.change_class == "workflow-doc":
         roles.append("qa_engineer")
     elif args.change_class == "domain-semantic-doc":
         if (not args.domain_role or not ROLE_RE.fullmatch(args.domain_role)

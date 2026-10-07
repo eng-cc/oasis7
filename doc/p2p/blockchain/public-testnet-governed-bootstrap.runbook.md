@@ -408,6 +408,7 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 3. 需要升级 Windows observer 时，必须使用包含 Windows artifact 的 CI scope；如果先前 run 只有 Linux/macOS，不得把 Linux artifact 复制到 Windows。
 4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。当前 workflow 中 `all_existing` 仍只生成 `linux-x64`、`macos-x64`、`windows-x64`；完整 managed-fleet packaging 必须对同一 requested ref/commit 协调执行 `all_existing` plus `linux_macos_arm64` runs，并记录两组 run ID、BUILDINFO 与 SHA256SUMS。验收以 runtime hash、commit lineage、status health 和高度对齐为准。
 
+Wasmtime48.0.3 → 49.0.2 不得采用运行中 rolling/restart/单节点 rollback；完整 fleet 的审读授权计划、quiescence、identity/checkpoint/closure admission 和 recovery hold 依 [协调维护分册](wasmtime-49-coordinated-maintenance.runbook.md#wasmtime-49-maintenance) 执行，条件不满足保持 `hold`。
 ### Safe update order
 1. 记录五节点 `CURRENT_VERSION`、runtime hash、service manager、status endpoint。
 2. 先升级两个 validators，并确认 validator pair `ready`、高度推进、互相有 fresh peer head。

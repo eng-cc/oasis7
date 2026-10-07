@@ -82,6 +82,7 @@ fi
 
 "$ROOT_DIR/scripts/pm/new-task-worktree-bootstrap-smoke.sh" --json > "$TASK_WORKTREE_JSON_FILE"
 run_interrupt_isolated "$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/github-project-task-lifecycle.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-sync.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-workflow.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-retire-tasks.test.sh" >/dev/null

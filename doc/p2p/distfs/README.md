@@ -5,13 +5,13 @@
 - 想理解 DistFS production hardening 的当前合同：先读 `distfs-production-hardening.prd.md`，再按需进入同名 design/project。
 - 想查分布式韧性与自愈边界：先读 `distfs-distributed-resilience.prd.md`；其中 NodeRuntime 轮询接线仍作为受限的增量能力，保留“缺依赖跳过、单轮失败不阻断 tick”的边界。
 - 想查公开反馈账本及其 announce/fetch 复制：先读 `distfs-feedback-ledger-and-replication.prd.md`；它收敛历史 open-ledger、P2P bridge 与 NodeRuntime integration 三个专题，并明确 replication、BlobState lane 和非就绪边界。
-- 想查标准 FileStore、本地索引与 blob 回收边界：进入 `distfs-production-hardening.prd.md`；想查 builtin WASM artifact hydrate/hash/loader：进入 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`。早期 path-index/observer bootstrap 只保留 Git 历史，不是当前 active API。
+- 想查标准 FileStore、本地索引与 blob 回收边界：进入 `distfs-production-hardening.prd.md`；想查 builtin WASM artifact hydrate/hash/loader：进入 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`。早期 net path-index/Observer/Bootstrap 的七个 source files 已删除，历史实现仅保留于 Git history；它们都不是当前 active API。
 
 ## 阅读面边界
 - 本页只做 DistFS 子域分流，不复制 `doc/p2p/prd.index.md` 的完整三件套长表。
 - DistFS 专题的 blob closure、复制、恢复或 self-healing green 结果只能作为链上大世界状态底座的存储层证据；模块级闭环以 S9A 的 `module_required / module_full / integration_required / release_full` 分层为准。
 - `distfs-production-hardening` 是 production-hardening 的唯一当前专业权威，收敛历史 Phase 1-9 的本地 CAS/索引完整性与 storage challenge 调度合同。原 phase 文件名仅保留在历史 audit/review 文字和 Git history 中，不作为当前入口或 readiness 依据。
-- `distfs-production-hardening` 同时承接早期标准 FileStore I/O 的当前实现边界；builtin artifact 工件治理由 World Runtime WASM 专业 authority 承接。早期 runtime path-index 与 observer/bootstrap 文档已退役，dormant source 不构成恢复能力。
+- `distfs-production-hardening` 同时承接早期标准 FileStore I/O 的当前实现边界；builtin artifact 工件治理由 World Runtime WASM 专业 authority 承接。早期 runtime path-index 与 observer/bootstrap 文档已退役：七个旧 net source files 仅在 Git history 中，历史合同不构成恢复能力。
 - distributed-resilience 是异构 provider、无单机完整依赖与自愈组的默认主入口；轮询与 NodeRuntime 接线只承载受限增量差异。
 - 完整文件级检索仍回到 `doc/p2p/prd.index.md`。
 

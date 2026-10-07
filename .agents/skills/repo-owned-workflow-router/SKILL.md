@@ -11,11 +11,11 @@ The production supervisor is a target runtime executor and is currently `capabil
 
 ## When to Use
 
-Use after bootstrap has bound canonical task truth and the next workflow phase is not yet selected.
+Use when an authorized write task has canonical task truth and its next phase is not yet selected. Side-effect-free read-only requests bypass task routing; use a matching professional slice only when the answer requires professional judgment.
 
 ## Routing
 
-Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth.
+For read-only/chat-only work, answer without creating task truth or a worktree. Do not treat that answer as formal review, merge-readiness, task-completion, or unattended-attestation evidence.
 
 If a bound audit or task surfaces a proposed workflow-policy change, keep diagnosis within its authorized scope and apply the [canonical prior-approval rule](../../../doc/engineering/workflow/source-of-truth.md#workflow-change-approval) before creating or expanding implementation scope. A failure, review finding, or request to continue/optimize is not that approval.
 
@@ -38,7 +38,8 @@ Do not treat specialist domain skills as mandatory default workflow phases. Sele
 - selected phase/skill and reason
 - skipped optional phases and reason
 - verification tier
-- GitHub issue evidence comment (mandatory)
+- for write tasks: GitHub issue evidence comment containing the selected route and next action
+- for read-only work: direct answer or matching professional conclusion; no task evidence comment
 
 ## Subagent Slice Plan (If Needed)
 
@@ -58,12 +59,12 @@ Do not treat specialist domain skills as mandatory default workflow phases. Sele
   - collaboration boundary:
 - write scope:
 - return contract:
-- formal sink / writeback surface: GitHub issue evidence comment (mandatory)
+- formal sink / writeback surface: GitHub task Issue for authorized write-task dispatch; none for read-only analysis
 - integration owner: TPM
 - integration order:
 - context exemption: none, or reason no professional slice is required
 
-Record the slice contract in the GitHub issue evidence comment sink before dispatch. Unbound read-only professional questions are invalid under the always-bootstrap workflow; read-only professional/domain judgments must already be task-bound.
+Record a write-task slice contract in the GitHub issue evidence comment sink before dispatch. A read-only professional slice may use bounded context without creating GitHub task truth; its result cannot establish formal review or release readiness.
 
 Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current GitHub-backed task truth, and scoped repo context recorded in the mandatory context checklist.
 
@@ -75,4 +76,4 @@ Do not route around canonical task truth or invent a specialist phase.
 
 ## Known Failure Modes
 
-Routing before bootstrap; mandatory brainstorming; speculative fixing before debugging; incomplete slice contracts.
+Bootstrapping side-effect-free requests; mandatory brainstorming; speculative fixing before debugging; incomplete write-task slice contracts.

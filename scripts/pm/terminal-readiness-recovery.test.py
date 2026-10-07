@@ -713,6 +713,14 @@ if args[:2]==['issue','view'] and '--json' in args and args[args.index('--json')
     expected=['issue','view',str(issue),'-R',repo,'--json','body,number,title,url,state,stateReason,updatedAt']
     if args!=expected:raise SystemExit('unprovided canonical Issue view request')
     item=state['issue']
+    if fault['mode']=='closeout-traceability-check-drift':
+        fault['issue_view_reads']=fault.get('issue_view_reads',0)+1
+        fault['events'].append({'stage':'canonical_issue_view','ordinal':fault['issue_view_reads']});save_fault()
+        if fault['issue_view_reads']==2:
+            with open(TRANSPORT_PATH) as source:transport=json.load(source)
+            transport['responses'][f'repos/{repo}/check-runs/2901']['conclusion']='failure'
+            with open(TRANSPORT_PATH,'w') as out:json.dump(transport,out)
+            fault['fired']=True;save_fault()
     emit({'body':item['body'],'number':item['number'],'title':item.get('title',''),'url':item['html_url'],'state':item['state'].upper(),'stateReason':item.get('state_reason'),'updatedAt':item.get('updated_at')})
 if args[:2]==['project','view']:
     expected=['project','view','1','--owner',repo.split('/')[0],'--format','json']
@@ -1421,6 +1429,33 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
                 result=self.shared_client_audit();self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
                 self.assertEqual(self.effect_snapshot(),before)
         self.delivery_state_path.write_bytes(original)
+
+    def test_recovery_closeout_revalidates_after_traceability_before_first_effect(self):
+        root=self.review['root'];uid=self.data['task_uid']
+        publication=self.run_publication();self.assertEqual(publication.returncode,0,publication.stdout+publication.stderr)
+        recovery=load(root/'scripts/pm/terminal_recovery.py','offline_closeout_barrier_recovery')
+        accepted=recovery.validate_recovery(root,uid)
+        self.assertEqual(accepted['completion']['claim_type'],'postmerge_delivery_complete')
+        before=self.effect_snapshot()
+        self.publication_fault('closeout-traceability-check-drift')
+        result=subprocess.run([sys.executable,str(root/'scripts/pm/github-project-task.py'),'closeout-task',
+            str(root),'--repo',self.data['repository'],'--task-uid',uid,
+            '--role','repository_health_engineer','--to-status','done',
+            '--verification-profile','postmerge_delivery_recovery',
+            '--claim-json',json.dumps(accepted['completion']),
+            '--pr-receipt',str(self.receipt_root/'merge-receipt.json'),'--json'],
+            cwd=root,text=True,capture_output=True,timeout=180)
+        trace=json.loads(self.publication_fault_path.read_text())
+        self.assertTrue(trace['fired'],'must reach the second authentic Issue view after initial validation')
+        self.assertEqual(trace['issue_view_reads'],2)
+        self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
+        self.assertRegex(result.stderr,'check.*identity|check.*success|check.*conclusion|check.*mismatch')
+        after=self.effect_snapshot()
+        for sink in ('mapping','server_comments','server_state','receipt_files'):
+            self.assertEqual(after[sink],before[sink],sink+' must remain unchanged before first closeout effect')
+        self.assertEqual(self.publication_comments('oasis7-postmerge-completion/v1'),
+            [c for page in json.loads(before['server_comments'])['comment_pages'] for c in page
+             if '<!-- oasis7-postmerge-completion/v1 -->' in c['body']])
 
     def test_premerge_record_observation_rejects_selfconsistent_published_proof(self):
         import datetime

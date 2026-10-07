@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
+import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -611,6 +614,269 @@ def gh_json(command: list[str], label: str) -> object:
         raise ContractError(f"live GitHub {label} lookup returned invalid JSON") from exc
 
 
+def paginated_issue_comments(issue_number: int) -> list[dict[str, object]]:
+    pages = gh_json(
+        ["api", f"repos/{CANONICAL_REPOSITORY}/issues/{issue_number}/comments?per_page=100",
+         "--paginate", "--slurp"],
+        "paginated task Issue comments",
+    )
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise ContractError("paginated task Issue comments are incomplete or malformed")
+    comments: list[dict[str, object]] = []
+    for page in pages:
+        for comment in page:
+            if not isinstance(comment, dict):
+                raise ContractError("paginated task Issue comment is malformed")
+            comments.append(comment)
+    return comments
+
+
+def resolution_comment_payload(manifest: dict[str, object]) -> dict[str, object]:
+    return {
+        "marker": MARKER, "schema": SCHEMA_V2,
+        "task_uid": manifest["task_uid"], "head": manifest["head"],
+        "epoch": manifest["epoch"], "manifest_digest": manifest["manifest_digest"],
+    }
+
+
+def matching_resolution_comments(comments: list[dict[str, object]], task_uid: str,
+                                 head: str, epoch: str,
+                                 expected_body: bytes) -> list[dict[str, object]]:
+    matches: list[dict[str, object]] = []
+    for comment in comments:
+        body = comment.get("body")
+        if not isinstance(body, str) or MARKER not in body:
+            continue
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            if task_uid in body and head in body and epoch in body:
+                raise ContractError("malformed resolution marker for the exact task/head/epoch")
+            continue
+        if not isinstance(payload, dict) or payload.get("marker") != MARKER:
+            continue
+        if (payload.get("task_uid"), payload.get("head"), payload.get("epoch")) != (task_uid, head, epoch):
+            continue
+        if body.encode("utf-8") != expected_body:
+            raise ContractError("conflicting resolution marker for the exact task/head/epoch")
+        matches.append(comment)
+    return matches
+
+
+def create_empty_v2_manifest(root: Path, task_uid: str, head: str, epoch: str,
+                             ledger_path: Path) -> dict[str, object]:
+    require_string(task_uid, "--task-uid", TASK_RE)
+    require_string(head, "--head", HEAD_RE)
+    require_string(epoch, "--epoch", SHA_RE)
+    root = root.resolve(strict=True)
+    ledger_path = ledger_path.resolve(strict=True)
+    handoff_path = root / ".pm" / "scratch" / task_uid / "review-handoffs" / f"{epoch}.json"
+    validated = validate_v2_handoff(root, handoff_path, task_uid, head, epoch)
+    if Path(str(validated["ledger_path"])).resolve(strict=True) != ledger_path:
+        raise ContractError("all-no-findings ledger does not match the immutable handoff")
+    rows = read_ledger(ledger_path)
+    _, finding_roles = validate_artifacts(
+        root, ledger_path, rows, task_uid, head, handoff_return_digests(validated),
+    )
+    if finding_roles:
+        raise ContractError("--complete can create an empty resolution only when every return has no findings")
+    payload = {
+        "schema": SCHEMA_V2, "task_uid": task_uid, "head": head,
+        "epoch": epoch, "handoff_digest": validated["handoff"]["handoff_digest"],
+        "role_records": [],
+    }
+    manifest = {**payload, "manifest_digest": canonical_digest(payload)}
+    output = root / ".pm" / "scratch" / task_uid / "review-resolutions" / f"{epoch}.json"
+    serialized = json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    if output.exists():
+        existing = load_json_strict(output, "existing v2 resolution manifest")
+        if existing != manifest:
+            raise ContractError("existing resolution manifest conflicts with the exact no-findings result")
+        return {"status": "reused", "manifest": str(output), "manifest_digest": manifest["manifest_digest"],
+                "epoch": epoch}
+    try:
+        write_new(output, manifest)
+    except ContractError:
+        existing = load_json_strict(output, "raced v2 resolution manifest")
+        if existing != manifest:
+            raise ContractError("concurrent resolution manifest conflicts with the exact no-findings result")
+        return {"status": "reused", "manifest": str(output), "manifest_digest": manifest["manifest_digest"],
+                "epoch": epoch}
+    if output.read_text(encoding="utf-8") != serialized:
+        raise ContractError("created v2 resolution manifest failed exact local readback")
+    return {"status": "created", "manifest": str(output), "manifest_digest": manifest["manifest_digest"],
+            "epoch": epoch}
+
+
+def validate_v2_manifest_payload(root: Path, manifest_path: Path, ledger_path: Path,
+                                 task_uid: str, head: str) -> tuple[dict[str, object], int]:
+    root = root.resolve(strict=True)
+    manifest_path = manifest_path.resolve(strict=True)
+    ledger_path = ledger_path.resolve(strict=True)
+    try:
+        manifest_path.relative_to(root)
+        ledger_path.relative_to(root)
+    except ValueError as exc:
+        raise ContractError("resolution manifest and ledger must be repository-owned paths") from exc
+    manifest_value = load_json_strict(manifest_path, "v2 resolution manifest")
+    if not isinstance(manifest_value, dict) or manifest_value.get("schema") != SCHEMA_V2:
+        raise ContractError("--complete requires an immutable v2 resolution manifest")
+    if set(manifest_value) != {
+        "schema", "task_uid", "head", "epoch", "handoff_digest", "role_records", "manifest_digest",
+    }:
+        raise ContractError("v2 resolution manifest fields are invalid")
+    if manifest_value.get("task_uid") != task_uid or manifest_value.get("head") != head:
+        raise ContractError("v2 resolution manifest task/head mismatch")
+    epoch = require_string(manifest_value.get("epoch"), "resolution manifest epoch", SHA_RE)
+    supplied_digest = require_string(manifest_value.get("manifest_digest"), "manifest digest", SHA_RE)
+    payload = {key: value for key, value in manifest_value.items() if key != "manifest_digest"}
+    if canonical_digest(payload) != supplied_digest:
+        raise ContractError("resolution manifest digest mismatch")
+    validated = validate_v2_handoff_binding(
+        root, manifest_path, ledger_path, task_uid, head, epoch, manifest_value.get("handoff_digest"),
+    )
+    rows = read_ledger(ledger_path)
+    _, finding_roles = validate_artifacts(
+        root, ledger_path, rows, task_uid, head, handoff_return_digests(validated),
+    )
+    ledger_epochs = {str(row.get("epoch", row.get("review_epoch", ""))) for row in rows}
+    if ledger_epochs != {epoch}:
+        raise ContractError("resolution manifest epoch does not match every role return")
+    validate_role_records(root, manifest_value.get("role_records"), finding_roles)
+    issue_number = canonical_task_issue_number(root, task_uid)
+    validate_live_task_issue(task_uid, issue_number)
+    return manifest_value, issue_number, validated["plan"]
+
+
+def _publish_v2_resolution_locked(root: Path, manifest_path: Path, ledger_path: Path,
+                                  task_uid: str, head: str) -> dict[str, object]:
+    manifest, issue_number, plan = validate_v2_manifest_payload(root, manifest_path, ledger_path, task_uid, head)
+    expected_payload = resolution_comment_payload(manifest)
+    expected_body = canonical_bytes(expected_payload)
+    closeout_path = Path(__file__).with_name("review_closeout_publication.py")
+    spec = importlib.util.spec_from_file_location("review_closeout_publication_for_resolution", closeout_path)
+    if spec is None or spec.loader is None:
+        raise ContractError("existing C1 publication journal adapter is unavailable")
+    closeout = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = closeout
+    spec.loader.exec_module(closeout)
+    try:
+        context = closeout.resolve_context(root, task_uid, plan)
+    except closeout.CloseoutPublicationError as exc:
+        raise ContractError(f"exact C1 candidate is required before resolution publication: {exc}") from exc
+    if int(context["issue_number"]) != issue_number:
+        raise ContractError("C1 candidate Task Issue differs from v2 resolution binding")
+
+    def find_matches(comments: list[dict[str, object]]) -> list[dict[str, object]]:
+        return matching_resolution_comments(
+            comments, task_uid, head, str(manifest["epoch"]), expected_body,
+        )
+
+    def verify(comment_row: dict[str, object]) -> dict[str, object]:
+        comment_id = comment_row.get("id")
+        if not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id <= 0:
+            raise closeout.CloseoutPublicationError("resolution comment ID is invalid")
+        try:
+            comment = gh_json(
+                ["api", f"repos/{CANONICAL_REPOSITORY}/issues/comments/{comment_id}"],
+                "published resolution comment readback",
+            )
+        except ContractError as exc:
+            raise closeout.CloseoutPublicationError(f"direct resolution readback failed: {exc}") from exc
+        if not isinstance(comment, dict) or comment.get("id") != comment_id:
+            raise closeout.CloseoutPublicationError("resolution comment identity readback failed")
+        if comment.get("issue_url") != f"https://api.github.com/repos/{CANONICAL_REPOSITORY}/issues/{issue_number}":
+            raise closeout.CloseoutPublicationError("resolution comment is not attached to the canonical task Issue")
+        body = comment.get("body")
+        if not isinstance(body, str) or body.encode("utf-8") != expected_body:
+            raise closeout.CloseoutPublicationError("resolution comment body differs from the immutable manifest")
+        user = comment.get("user")
+        author = user.get("login") if isinstance(user, dict) else None
+        try:
+            author = require_string(author, "resolution comment author")
+        except ContractError as exc:
+            raise closeout.CloseoutPublicationError(str(exc)) from exc
+        permission = gh_json(
+            ["api", f"repos/{CANONICAL_REPOSITORY}/collaborators/{author}/permission"],
+            "resolution author repository permission",
+        )
+        if not isinstance(permission, dict) or permission.get("permission") != "admin":
+            raise closeout.CloseoutPublicationError("resolution comment author is not a current repository admin")
+        try:
+            created_at = require_string(comment.get("created_at"), "resolution comment created_at")
+        except ContractError as exc:
+            raise closeout.CloseoutPublicationError(str(exc)) from exc
+        comment_url = comment.get("html_url")
+        if not isinstance(comment_url, str) or not comment_url:
+            comment_url = f"https://github.com/{CANONICAL_REPOSITORY}/issues/{issue_number}#issuecomment-{comment_id}"
+        return {"comment_id": comment_id, "comment_url": comment_url, "author": author,
+                "created_at": created_at, "body_digest": sha256_bytes(expected_body)}
+
+    try:
+        result = closeout.publish_comment(
+            context, action_id=f"review-resolution:{manifest['epoch']}",
+            kind="publish_review_resolution",
+            expected={"task_uid": task_uid, "head": head, "epoch": manifest["epoch"],
+                      "manifest_digest": manifest["manifest_digest"],
+                      "body_digest": sha256_bytes(expected_body)},
+            body=expected_body.decode("utf-8"), find_matches=find_matches, verify=verify,
+        )
+    except closeout.CloseoutPublicationError as exc:
+        raise ContractError(str(exc)) from exc
+    comment_id = result["comment_id"]
+    author = result["author"]
+    created_at = result["created_at"]
+    comment_url = result["comment_url"]
+    readback = {
+        **expected_payload, "repository": CANONICAL_REPOSITORY,
+        "issue_number": issue_number, "comment_id": comment_id,
+        "comment_url": comment_url, "author": author, "created_at": created_at,
+        "observed_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "body_digest": sha256_bytes(expected_body),
+    }
+    readback_path = manifest_path.with_name(f"{manifest_path.stem}.readback.json")
+    if readback_path.exists():
+        old_readback = load_json_strict(readback_path, "existing v2 resolution readback")
+        stable_fields = set(readback) - {"observed_at"}
+        if not isinstance(old_readback, dict) or any(old_readback.get(key) != readback[key] for key in stable_fields):
+            raise ContractError("existing v2 resolution readback conflicts with exact live comment")
+    else:
+        try:
+            write_new(readback_path, readback)
+        except ContractError:
+            old_readback = load_json_strict(readback_path, "raced v2 resolution readback")
+            stable_fields = set(readback) - {"observed_at"}
+            if not isinstance(old_readback, dict) or any(old_readback.get(key) != readback[key] for key in stable_fields):
+                raise ContractError("concurrent v2 resolution readback conflicts with exact live comment")
+    return validate_manifest(root.resolve(strict=True), manifest_path.resolve(strict=True),
+                             ledger_path.resolve(strict=True), task_uid, head, issue_number)
+
+
+def publish_v2_resolution(root: Path, manifest_path: Path, ledger_path: Path,
+                          task_uid: str, head: str) -> dict[str, object]:
+    root = root.resolve(strict=True)
+    manifest = manifest_path.resolve(strict=True)
+    value = load_json_strict(manifest, "v2 resolution manifest")
+    if not isinstance(value, dict) or value.get("schema") != SCHEMA_V2:
+        raise ContractError("resolution publication requires an immutable v2 manifest")
+    epoch = require_string(value.get("epoch"), "resolution manifest epoch", SHA_RE)
+    try:
+        import review_preflight_handoff
+    except ImportError as exc:
+        raise ContractError(f"v2 handoff reservation is unavailable: {exc}") from exc
+    lock_path = review_preflight_handoff.promotion_lock_path(root, task_uid, epoch)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        return _publish_v2_resolution_locked(root, manifest, ledger_path, task_uid, head)
+    finally:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        finally:
+            os.close(lock_fd)
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     sub = result.add_subparsers(dest="command", required=True)
@@ -622,6 +888,13 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--role-records", required=True)
     create.add_argument("--handoff")
     create.add_argument("--out")
+    complete = sub.add_parser("complete-v2")
+    complete.add_argument("--root", required=True)
+    complete.add_argument("--task-uid", required=True)
+    complete.add_argument("--head", required=True)
+    complete.add_argument("--epoch", required=True)
+    complete.add_argument("--ledger", required=True)
+    complete.add_argument("--manifest")
     validate = sub.add_parser("validate")
     validate.add_argument("--root", required=True)
     validate.add_argument("--task-uid", required=True)
@@ -642,6 +915,17 @@ def main() -> int:
                                      Path(args.role_records).resolve(),
                                      Path(args.out).resolve() if args.out else None,
                                      Path(args.handoff).resolve() if args.handoff else None)
+        elif args.command == "complete-v2":
+            root = Path(args.root).resolve(strict=True)
+            manifest_path = Path(args.manifest).resolve(strict=True) if args.manifest else None
+            if manifest_path is None:
+                created = create_empty_v2_manifest(
+                    root, task_uid, head, args.epoch, Path(args.ledger).resolve(strict=True),
+                )
+                manifest_path = Path(str(created["manifest"]))
+            result = publish_v2_resolution(
+                root, manifest_path, Path(args.ledger).resolve(strict=True), task_uid, head,
+            )
         else:
             result = validate_manifest(Path(args.root).resolve(), Path(args.manifest).resolve(), Path(args.ledger).resolve(), task_uid, head, args.issue_number)
     except ContractError as exc:

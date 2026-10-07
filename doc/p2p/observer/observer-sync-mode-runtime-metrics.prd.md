@@ -5,15 +5,15 @@
 
 审计轮次: 5
 ## 专业权威口径
-- 本文件是 Observer metrics dormant source 的历史技术合同及当前状态边界权威，不是 active API 或运行态指标清单。`crates/oasis7_net/src/observer.rs` 与 `observer_metrics.rs` 源文件存在，但当前 crate 根 `crates/oasis7_net/src/lib.rs` 未声明 `observer` 或 `observer_metrics` 模块，crate facade 也未导出这些 API；因此该 source 与其同文件测试不在 `oasis7_net` 当前编译模块图或 crate test targets 中。
+- 本文件是 Observer metrics 历史技术合同及当前状态边界权威，不是 active API 或运行态指标清单。`observer.rs` 与 `observer_metrics.rs` 已从当前 tracked source tree 删除，历史实现和同文件测试仅可从 Git history 追溯；当前 crate 根 `crates/oasis7_net/src/lib.rs` 未声明这些模块或从 facade 导出这些 API，因此它们不在当前编译模块图或 crate test targets 中。
 - 下文的报告、计数、桥接和接口仅定义未来重新激活时的合同，不表示当前可调用能力、已观察指标或已经通过的测试。重新激活须由单独的 runtime 变更接回模块图和 facade，并以对应编译测试及 S9A 分层证据验证；本文件不声称任何当前 S9A tier 已通过。
 - 原统计桥接 `PRD-P2P-MIG-106-001` 与策略可观测性 `PRD-P2P-MIG-107-001` 的有效设计语义与任务追踪已合并到本三件套；这项文档整理不代表 Rust source 接入 crate，也不代表测试已编译或通过。旧文档来源可从 Git history 与 GitHub task evidence 追溯。
 
 ## 1. Executive Summary
-- Problem Statement: 保留 `ObserverClient` 模式化可观测报告与运行态统计的历史设计，同时避免把 dormant source 当成已交付的运行能力。
+- Problem Statement: 保留 `ObserverClient` 模式化可观测报告与运行态统计的历史设计，同时避免把 Git history 中的实现当成已交付的运行能力。
 - Proposed Solution: 记录未来重新激活时非 DHT 与 DHT 组合模式的核心计数合同：`total`、`applied`、`fallback`；当前 `oasis7_net` facade 不提供这些 metrics API。
 - Success Criteria:
-  - SC-1: 当前文档明确区分 dormant source 与 active facade；只有在单独重新激活并满足对应测试要求后，才可把新增结构与接口视为已提供的运行能力。
+  - SC-1: 当前文档明确区分历史设计与 active facade；只有在单独重新实现并满足对应测试要求后，才可把新增结构与接口视为已提供的运行能力。
 
 ## 2. User Experience & Functionality
 - User Personas: 协议维护者、任务执行者、质量复核者。
@@ -28,7 +28,7 @@
   - AC-1: 若未来重新激活，在 `oasis7_net` 接入 observer 运行态统计模块（内存计数）并明确 facade 暴露边界。
   - AC-2: 若未来重新激活，提供针对 `HeadSyncModeReport` 与 `HeadSyncModeWithDhtReport` 的记录接口。
   - AC-3: 若未来重新激活，提供快照读取接口，供上层 runtime/面板周期拉取并展示。
-  - AC-4: 若未来重新激活，补充并通过单元测试，覆盖各模式计数正确性与回退计数；当前 source 内同文件测试尚未由 `oasis7_net` test targets 编译。
+  - AC-4: 若未来重新激活，补充并通过单元测试，覆盖各模式计数正确性与回退计数；历史 source 内同文件测试不属于当前 `oasis7_net` test targets。
   - AC-5: 若未来重新激活，非 DHT 与 DHT 模式都必须提供包含 `mode`、原同步报告和 `fallback_used` 的 observed report，且不破坏既有 `HeadSyncReport`。
   - AC-6: 若未来重新激活，提供单轮与 follow 自动记录桥接；每个成功产生的 observed report 记录一次，follow 保持原 `max_rounds` 与 `HeadFollowReport` 聚合语义。
 - Non-Goals:
@@ -52,7 +52,7 @@
 
 <a id="observer-metrics-dormant-status-requirement"></a>
 ### 当前模块与测试状态
-- `observer.rs` 与 `observer_metrics.rs` 当前未由 `crates/oasis7_net/src/lib.rs` 纳入 crate 模块图。文件存在和同文件测试代码存在，不代表这些模块或测试会被当前 `oasis7_net` crate 编译。
+- `observer.rs` 与 `observer_metrics.rs` 已从当前 tracked source tree 删除，历史实现和同文件测试仅可从 Git history 追溯；它们不在当前 `crates/oasis7_net/src/lib.rs` 模块图中，也不会由当前 crate 编译。
 - 重新激活前须由 runtime 变更明确接回模块图及所需 facade，并运行能实际编译这些模块的定向测试。测试结果必须与要求的 S9A tier 分别记录；`test_tier_required` 只表示未来激活前的验证义务，不表示本文件记录了测试执行或通过。
 - 本文不报告 `module_required`、`module_full`、`integration_required` 或 `release_full` 的当前通过状态。S9A 各 tier 的覆盖和证据边界仍以 [多节点状态同步闭环设计](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md) 为准。
 
