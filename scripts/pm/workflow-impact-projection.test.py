@@ -181,14 +181,147 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         self.assertEqual("verified", trusted_fields["impact_projection_status"])
         self.assertEqual(projection["projection_digest"], trusted_fields["impact_projection_digest"])
 
-    def test_trusted_planner_authority_must_equal_the_projection_scope_base(self) -> None:
+    def test_divergent_scope_base_preserves_trusted_target_planner_authority(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="oasis7-divergent-planner-") as raw:
+            root = Path(raw)
+
+            def git(*args: str) -> str:
+                return subprocess.run(
+                    ["git", *args], cwd=root, text=True, capture_output=True, check=True,
+                ).stdout.strip()
+
+            git("init", "-q")
+            git("config", "user.name", "Projection fixture")
+            git("config", "user.email", "projection-fixture@example.invalid")
+            git_source = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True,
+                capture_output=True, check=True,
+            ).stdout.strip()
+            relatives = (
+                "scripts/plan-rust-required-scope.py", "scripts/ci-required-scope.v2.json",
+                "scripts/ci-tests.sh", "scripts/pm/workflow-impact-projection.py", "Cargo.toml",
+            )
+            for relative in relatives:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(subprocess.run(
+                    ["git", "show", f"{git_source}:{relative}"], cwd=ROOT,
+                    capture_output=True, check=True,
+                ).stdout)
+            config_path = root / "scripts/ci-required-scope.v2.json"
+            base_config = json.loads(config_path.read_bytes())
+            changed_path = "doc/product/divergent-planner-fixture.md"
+
+            def write_config(capability: str) -> bytes:
+                config = json.loads(json.dumps(base_config))
+                config["rules"].insert(0, {
+                    "match": [changed_path], "capabilities": [capability],
+                    "reason": "divergent_planner_fixture_" + capability,
+                })
+                content = json.dumps(config, sort_keys=True).encode("utf-8")
+                config_path.write_bytes(content)
+                return content
+
+            s_config = write_config("compile_metrics")
+            git("add", ".")
+            git("commit", "-qm", "common source scope")
+            scope_base = git("rev-parse", "HEAD")
+            q_config = write_config("doc_checker_contracts")
+            git("add", ".")
+            git("commit", "-qm", "trusted target planner policy")
+            authority = git("rev-parse", "HEAD")
+            git("checkout", "-q", "--detach", scope_base)
+            h_config = write_config("cargo_tooling_contracts")
+            (root / changed_path).parent.mkdir(parents=True, exist_ok=True)
+            (root / changed_path).write_text("source branch change\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "candidate source and untrusted policy")
+            source_head = git("rev-parse", "HEAD")
+            self.assertEqual(3, len({scope_base, authority, source_head}))
+            self.assertEqual(scope_base, git("merge-base", authority, source_head))
+            self.assertEqual(3, len({s_config, q_config, h_config}))
+            paths = git("diff", "--name-only", scope_base, source_head).splitlines()
+            payload = self.base_input()
+            payload.update({
+                "scope_base_oid": scope_base, "source_head_oid": source_head,
+                "changed_paths": paths, "change_class": "mixed",
+                "manual_roles": ["repository_health_engineer", "qa_engineer"],
+                "closure_status": {"status": "complete", "reason": "verified", "evidence": [{
+                    "path": "Cargo.toml", "sha256": "sha256:" + hashlib.sha256(
+                        (root / "Cargo.toml").read_bytes(),
+                    ).hexdigest(),
+                }]},
+            })
+            projection = json.loads(self.run_projection(
+                payload, root=root, planner_authority_oid=authority,
+            ).stdout)
+            self.assertEqual(scope_base, projection["scope_base_oid"])
+            self.assertEqual(source_head, projection["source_head_oid"])
+            self.assertEqual(sorted(paths), projection["changed_paths"])
+            q_digest = "sha256:" + hashlib.sha256(q_config).hexdigest()
+            self.assertEqual(q_digest, projection["planner_config_sha256"])
+            for untrusted_config in (s_config, h_config):
+                self.assertNotEqual("sha256:" + hashlib.sha256(untrusted_config).hexdigest(), q_digest)
+            self.assertEqual(sorted(json.loads(q_config)["capabilities"]), projection["ci_capabilities"])
+            expected_identity = {
+                "schema": "oasis7-required-plan-v1", "planner_config_sha256": q_digest,
+                "scope": "full", "selected_capabilities": sorted(json.loads(q_config)["capabilities"]),
+                "test_profile": "full", "declared_tests": payload["declared_tests"],
+            }
+            self.assertEqual(expected_identity, projection["planner_identity"])
+            self.assertEqual(WORKFLOW_IMPACT.canonical_digest(expected_identity), projection["planner_digest"])
+            focused_payload = dict(payload, changed_paths=[changed_path], change_class="workflow-doc",
+                                   manual_roles=[])
+            focused_projection = json.loads(self.run_projection(
+                focused_payload, root=root, planner_authority_oid=authority,
+            ).stdout)
+            self.assertEqual(["doc_checker_contracts"],
+                             focused_projection["ci_capabilities"])
+            # Extract the actual trusted Q consumer, never the candidate checkout.
+            trusted = root / "trusted-consumer"
+            for relative in relatives[:-1]:
+                target = trusted / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(subprocess.run(
+                    ["git", "show", f"{authority}:{relative}"], cwd=root,
+                    capture_output=True, check=True,
+                ).stdout)
+            projection_path = trusted / "projection.json"
+            projection_path.write_text(json.dumps(projection), encoding="utf-8")
+            command = [
+                sys.executable, "-I", str(trusted / "scripts/plan-rust-required-scope.py"),
+                "--event-name", "pull_request", "--base-ref", authority,
+                "--head-ref", source_head, "--task-uid", str(payload["task_uid"]),
+                "--scope-base-oid", scope_base,
+                "--config", str(trusted / "scripts/ci-required-scope.v2.json"),
+                "--impact-projection", str(projection_path),
+            ]
+            for path in paths:
+                command.extend(("--changed-path", path))
+            accepted = subprocess.run(command, cwd=root, text=True, capture_output=True)
+            self.assertEqual(0, accepted.returncode, accepted.stderr)
+            self.assertIn("impact_projection_status=verified", accepted.stdout)
+            self.assertIn("impact_projection_digest=" + projection["projection_digest"], accepted.stdout)
+            wrong_identity = command.copy()
+            wrong_identity[wrong_identity.index("--scope-base-oid") + 1] = authority
+            rejected = subprocess.run(wrong_identity, cwd=root, text=True, capture_output=True)
+            self.assertNotEqual(0, rejected.returncode)
+            self.assertIn("identity mismatch", rejected.stderr)
+            wrong_config = command.copy()
+            wrong_config[wrong_config.index("--config") + 1] = str(config_path)
+            rejected = subprocess.run(wrong_config, cwd=root, text=True, capture_output=True)
+            self.assertNotEqual(0, rejected.returncode)
+            self.assertIn("planner config identity mismatch", rejected.stderr)
+
+    def test_invalid_trusted_planner_authority_fails_closed(self) -> None:
+        result = self.run_projection(self.base_input(), ok=False, planner_authority_oid="not-an-oid")
+        self.assertIn("planner_authority_oid", result.stderr)
+
+    def test_unresolved_trusted_planner_authority_fails_closed(self) -> None:
         payload = self.base_input()
-        result = self.run_projection(
-            payload,
-            ok=False,
-            planner_authority_oid="c" * 40,
-        )
-        self.assertIn("trusted planner authority must equal the immutable scope base OID", result.stderr)
+        payload["scope_base_oid"] = "c" * 40
+        result = self.run_projection(payload, ok=False, planner_authority_oid="c" * 40)
+        self.assertIn("trusted planner authority cannot be resolved", result.stderr)
 
     @staticmethod
     def base_input() -> dict[str, object]:
