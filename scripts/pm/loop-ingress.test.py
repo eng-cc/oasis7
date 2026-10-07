@@ -19,6 +19,34 @@ class IngressTests(unittest.TestCase):
         lines = workflow[run:end].splitlines()
         return "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
 
+    def test_current_target_source_ci_executes_protected_q_driver_on_actual_checkout(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / '.github/workflows/rust.yml').read_text()
+        script = self.workflow_run_body(workflow, '      - name: Run required test tier',
+            '      - name: Verify final task and PR binding before required-gate success')
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture=Path(tmp); repo=fixture/'repo'; repo.mkdir()
+            def git(*args): return subprocess.check_output(['git','-C',str(repo),*args],text=True).strip()
+            git('init','-q','-b','main');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid')
+            driver=repo/'scripts/ci-tests.sh';driver.parent.mkdir()
+            driver.write_text('#!/bin/bash\nprintf "protected-Q:%s" "$*" > "$OBSERVED"\n')
+            driver.chmod(0o755)
+            git('add','.');git('commit','-qm','protected Q driver');q=git('rev-parse','HEAD')
+            driver.write_text('#!/bin/bash\nprintf "candidate-H:%s" "$*" > "$OBSERVED"\n')
+            git('add','.');git('commit','-qm','candidate H');h=git('rev-parse','HEAD')
+            runner=fixture/'runner';runner.mkdir();(runner/'impact-projection.json').write_text('{}')
+            observed=fixture/'observed'
+            import re
+            script=re.sub(r'\$\{\{[^}]+\}\}', q, script)
+            env={**os.environ,'GITHUB_EVENT_NAME':'pull_request','INTEGRATION_MODE':'',
+                 'GITHUB_WORKSPACE':str(repo),'RUNNER_TEMP':str(runner),'OBSERVED':str(observed),
+                 'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_PRODUCT_DOC_BASE':q,'OASIS7_PRODUCT_DOC_HEAD':h,
+                 'CURRENT_TARGET_OID':q,'GITHUB_SHA':h}
+            result=subprocess.run(['bash','-euo','pipefail','-c',script],cwd=repo,env=env,text=True,capture_output=True)
+            self.assertEqual(0,result.returncode,result.stdout+result.stderr)
+            self.assertTrue(observed.read_text().startswith('protected-Q:'),observed.read_text())
+            self.assertIn('--repo-root '+str(repo),observed.read_text())
+
     def run_trusted_helper_route(self, phase_helper: bool, *, final: bool = False):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / '.github/workflows/rust.yml').read_text()

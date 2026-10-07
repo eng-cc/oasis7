@@ -560,11 +560,13 @@ jobs:
           SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_RUN_ID: ${{ github.run_id }}
+          MAINTENANCE_AUTHORITY_COMMENT_ID: ${{ steps.scope.outputs.maintenance_authority_comment_id }}
+          CURRENT_TARGET_OID: ${{ steps.pr_target.outputs.oid }}
           INTEGRATION_JSON: ${{ steps.integration.outputs.identity }}
         run: |
           mkdir -p output/required-plan
           python3 -I - <<'PY'
-          import json, os, pathlib
+          import hashlib, json, os, pathlib, re, subprocess
           source=json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
           legacy_fields=(
               "scope", "selected_capabilities", "reason_summary", "changed_path_count",
@@ -683,6 +685,35 @@ jobs:
           }
           if os.environ.get("INTEGRATION_JSON"):
               payload.update(json.loads(os.environ["INTEGRATION_JSON"]))
+          if (os.environ.get("GITHUB_EVENT_NAME") == "pull_request" and os.environ.get("MAINTENANCE_AUTHORITY_COMMENT_ID")
+                  and source.get("scope") == "full" and source.get("test_profile") == "full"):
+              def git(*args):
+                  return subprocess.check_output(["git", *args], text=True).strip()
+              event=json.loads(pathlib.Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+              pr=event["pull_request"]
+              uid=re.findall(r"^Task: (task_[0-9a-f]{32})$", pr.get("body", ""), re.M)
+              refs=re.findall(r"^Refs #([1-9][0-9]*)$", pr.get("body", ""), re.M)
+              if len(uid)!=1 or len(refs)!=1: raise SystemExit("current-target proof requires canonical Task/Refs")
+              q=os.environ["CURRENT_TARGET_OID"]
+              h=pr["head"]["sha"]
+              e=git("rev-parse", "HEAD")
+              parents=git("rev-list", "--parents", "-n", "1", e).split()[1:]
+              if parents != [q,h]: raise SystemExit("current-target checkout is not exact Q,H event merge")
+              config_digest=source["planner_config_sha256"]
+              if not isinstance(config_digest,str) or not re.fullmatch(r"sha256:[0-9a-f]{64}",config_digest):
+                  raise SystemExit("current-target planner configuration digest is malformed")
+              payload["current_target_proof"]={
+                  "schema":"oasis7-current-target-pr/v1", "repository":os.environ["REPOSITORY"],
+                  "task_uid":uid[0], "task_issue_number":int(refs[0]),
+                  "pr_number":pr["number"], "source_head_oid":h, "current_target_oid":q,
+                  "checkout_oid":e, "tested_tree_oid":git("rev-parse", "HEAD^{tree}"),
+                  "checkout_parent_oids":parents, "workflow_revision":os.environ["GITHUB_WORKFLOW_SHA"],
+                  "workflow_run_id":int(os.environ["WORKFLOW_RUN_ID"]),
+                  "workflow_run_attempt":int(os.environ["GITHUB_RUN_ATTEMPT"]),
+                  "maintenance_authority_comment_id":int(os.environ["MAINTENANCE_AUTHORITY_COMMENT_ID"]),
+                  "planner_config_sha256":config_digest[7:],
+                  "test_driver_sha256":hashlib.sha256(subprocess.check_output(["git","show",q+":scripts/ci-tests.sh"])).hexdigest(),
+              }
           pathlib.Path("output/required-plan/oasis7-required-plan-v1.json").write_text(
               json.dumps(payload,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8"
           )
@@ -965,7 +996,14 @@ jobs:
             target_root="${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}"
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${target_root}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
-            CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+            if [[ -n '${{ steps.scope.outputs.maintenance_authority_comment_id }}' ]]; then
+              protected_driver="${RUNNER_TEMP}/current-target-protected-driver"
+              mkdir -p "${protected_driver}"
+              git archive '${{ steps.pr_target.outputs.oid }}' scripts | tar -x -C "${protected_driver}"
+              CI_VERBOSE=1 bash "${protected_driver}/scripts/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+            else
+              CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+            fi
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
