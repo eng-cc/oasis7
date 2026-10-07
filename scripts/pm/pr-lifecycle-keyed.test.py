@@ -94,6 +94,7 @@ class KeyedLifecycleTests(unittest.TestCase):
         }
 
         with (
+            mock.patch.object(GATE, 'live_target_oid', return_value=TARGET),
             mock.patch.object(GATE, "local_loop_admission", return_value=admission),
             mock.patch.object(GATE, "live_integration_admission", return_value=keyed_proof),
             mock.patch.object(GATE, "read_pr_identity", return_value={
@@ -239,6 +240,7 @@ class KeyedLifecycleTests(unittest.TestCase):
         }
 
         with (
+            mock.patch.object(GATE, 'live_target_oid', return_value=TARGET),
             mock.patch.object(GATE, "local_loop_admission", return_value=admission),
             mock.patch.object(GATE, "live_integration_admission", return_value=proof),
             mock.patch.object(GATE, "read_pr_identity", return_value=live_pr),

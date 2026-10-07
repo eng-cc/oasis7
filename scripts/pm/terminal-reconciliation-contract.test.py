@@ -86,7 +86,8 @@ class TerminalReconciliationContractTest(unittest.TestCase):
             "terminal tombstone",
             "checkout_recreation_forbidden",
             "terminal-task-audit.py",
-            "`done` is not terminal reconciliation",
+            "`post_merge_done` proves delivery and GitHub terminal-state readback",
+            "it does not prove resource cleanup",
         ):
             self.assertIn(marker, canonical)
 

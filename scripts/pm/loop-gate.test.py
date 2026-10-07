@@ -1,9 +1,10 @@
 import sys
 from pathlib import Path
 import unittest
+from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).parent))
 from loop_gate import admission, live_binding
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import json
 
 
@@ -21,6 +22,20 @@ class GateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'trusted'):
                 admission(Path('.'), {'loop_binding': binding}, 'base', 'head', reader=lambda _: binding)
             load_candidate.assert_not_called()
+
+    def test_configured_trusted_root_is_required_before_facade_load(self):
+        binding = {'loop': 'code'}
+        facade = SimpleNamespace(validate_task=Mock(return_value={'status': 'passed', 'blockers': []}))
+        loader = SimpleNamespace(exec_module=Mock())
+        spec = SimpleNamespace(loader=loader)
+        with patch('loop_gate.importlib.util.spec_from_file_location', return_value=spec) as load_candidate, \
+             patch('loop_gate.importlib.util.module_from_spec', return_value=facade):
+            result = admission(Path('/repo'), {'loop_binding': binding}, 'base', 'head',
+                               tool_root=Path('/trusted'), reader=lambda _: binding)
+        self.assertEqual(result['status'], 'passed')
+        load_candidate.assert_called_once()
+        facade.validate_task.assert_called_once_with(
+            Path('/repo'), {'loop_binding': binding}, Path('/trusted'), 'base', 'head')
 
 
     def test_legacy_live_identity_requires_one_exact_canonical_field(self):

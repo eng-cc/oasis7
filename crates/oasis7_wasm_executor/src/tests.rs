@@ -120,6 +120,42 @@ fn call_ref_fuel_exhaustion_wasm() -> Vec<u8> {
 }
 
 #[cfg(feature = "wasmtime")]
+fn fuel_limited_start_wasm() -> Vec<u8> {
+    wat::parse_str(
+        r#"(module
+             (memory (export "memory") 1)
+             (func $start
+               (loop $forever
+                 br $forever))
+             (start $start)
+             (func (export "alloc") (param i32) (result i32)
+               i32.const 0)
+             (func (export "call") (param i32 i32) (result i32 i32)
+               i32.const 0
+               i32.const 0))"#,
+    )
+    .expect("compile fuel-limited start wat")
+}
+
+#[cfg(feature = "wasmtime")]
+fn fuel_limited_bulk_fill_wasm() -> Vec<u8> {
+    wat::parse_str(
+        r#"(module
+             (memory (export "memory") 64)
+             (func (export "alloc") (param i32) (result i32)
+               i32.const 0)
+             (func (export "call") (param i32 i32) (result i32 i32)
+               i32.const 0
+               i32.const 0
+               i32.const 262144
+               memory.fill
+               i32.const 0
+               i32.const 0))"#,
+    )
+    .expect("compile fuel-limited bulk fill wat")
+}
+
+#[cfg(feature = "wasmtime")]
 fn sha256_hex_for_test(bytes: &[u8]) -> String {
     let digest = <sha2::Sha256 as sha2::Digest>::digest(bytes);
     let mut out = String::with_capacity(digest.len() * 2);
@@ -355,6 +391,128 @@ fn wasm_executor_charges_fuel_for_call_ref_callee() {
         .call(&request)
         .expect_err("call_ref callee work must consume the guest fuel budget");
     assert_eq!(err.code, ModuleCallErrorCode::OutOfFuel, "{err:?}");
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_charges_fuel_for_start_function() {
+    let mut executor = test_executor(WasmExecutorConfig {
+        max_fuel: 100,
+        ..WasmExecutorConfig::default()
+    });
+    let wasm = fuel_limited_start_wasm();
+    let request = ModuleCallRequest {
+        module_id: "m.start-fuel".to_string(),
+        wasm_hash: sha256_hex_for_test(&wasm),
+        trace_id: "trace-start-fuel".to_string(),
+        entrypoint: "call".to_string(),
+        input: Vec::new(),
+        limits: ModuleLimits {
+            max_mem_bytes: executor.config().max_mem_bytes,
+            max_gas: executor.config().max_fuel,
+            max_call_rate: 0,
+            max_output_bytes: executor.config().max_output_bytes,
+            max_effects: 0,
+            max_emits: 0,
+        },
+        wasm_bytes: Arc::<[u8]>::from(wasm),
+    };
+
+    let err = executor
+        .call(&request)
+        .expect_err("start function work must consume the guest fuel budget");
+    assert_eq!(err.code, ModuleCallErrorCode::OutOfFuel, "{err:?}");
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_charges_fuel_for_bulk_memory_fill() {
+    let mut executor = test_executor(WasmExecutorConfig {
+        max_fuel: 100,
+        max_mem_bytes: 4 * 1024 * 1024,
+        ..WasmExecutorConfig::default()
+    });
+    let wasm = fuel_limited_bulk_fill_wasm();
+    let request = ModuleCallRequest {
+        module_id: "m.bulk-fill-fuel".to_string(),
+        wasm_hash: sha256_hex_for_test(&wasm),
+        trace_id: "trace-bulk-fill-fuel".to_string(),
+        entrypoint: "call".to_string(),
+        input: Vec::new(),
+        limits: ModuleLimits {
+            max_mem_bytes: executor.config().max_mem_bytes,
+            max_gas: executor.config().max_fuel,
+            max_call_rate: 0,
+            max_output_bytes: executor.config().max_output_bytes,
+            max_effects: 0,
+            max_emits: 0,
+        },
+        wasm_bytes: Arc::<[u8]>::from(wasm),
+    };
+
+    let err = executor
+        .call(&request)
+        .expect_err("bulk memory work must consume the guest fuel budget");
+    assert_eq!(err.code, ModuleCallErrorCode::OutOfFuel, "{err:?}");
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_only_charges_guest_const_ops_not_module_initializers() {
+    let executor = test_executor(WasmExecutorConfig::default());
+    let wasm = wat::parse_str(
+        r#"(module
+             (global $value i32 (i32.const 7))
+             (func (export "read") (result i32)
+               i32.const 123))"#,
+    )
+    .expect("compile constant-expression fuel wat");
+    let module = wasmtime::Module::new(executor.engine(), &wasm)
+        .expect("compile constant-expression fuel module");
+    let mut store = wasmtime::Store::new(executor.engine(), ());
+    store.set_epoch_deadline(u64::MAX);
+    let initial_fuel = 100;
+    store
+        .set_fuel(initial_fuel)
+        .expect("set constant-expression fuel");
+    let instance = wasmtime::Linker::new(executor.engine())
+        .instantiate(&mut store, &module)
+        .expect("instantiate constant-expression fuel module");
+    assert_eq!(
+        store.get_fuel().expect("read remaining fuel"),
+        initial_fuel,
+        "module constant initializers are not guest execution"
+    );
+    let read = instance
+        .get_typed_func::<(), i32>(&mut store, "read")
+        .expect("read export");
+
+    assert_eq!(read.call(&mut store, ()).expect("read constant"), 123);
+    assert!(
+        store.get_fuel().expect("read remaining fuel") < initial_fuel,
+        "guest const instructions must consume fuel"
+    );
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_disables_wide_arithmetic_proposal() {
+    let executor = test_executor(WasmExecutorConfig::default());
+    let wasm = wat::parse_str(
+        r#"(module
+             (func (result i64 i64)
+               i64.const 1
+               i64.const 0
+               i64.const 2
+               i64.const 0
+               i64.add128))"#,
+    )
+    .expect("parse wide arithmetic proposal wat");
+
+    assert!(
+        wasmtime::Module::new(executor.engine(), &wasm).is_err(),
+        "wide arithmetic must remain disabled for module validation"
+    );
 }
 
 #[cfg(feature = "wasmtime")]
@@ -721,7 +879,7 @@ fn wasm_executor_disk_cache_persists_serialized_compiled_artifact() {
         .expect("cache namespace");
     assert!(
         cache_namespace.starts_with("wasmtime-cf-v3-key"),
-        "compiled cache namespace must invalidate Wasmtime 43 artifacts: {cache_namespace}"
+        "compiled cache namespace must include the engine compatibility key: {cache_namespace}"
     );
     let cached_bytes = fs::read(&cache_file).expect("read serialized cache");
     assert_ne!(cached_bytes, wasm);

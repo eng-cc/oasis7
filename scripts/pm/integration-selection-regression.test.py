@@ -1,6 +1,7 @@
 """Current manual request selection cannot fall back to historical green."""
 import importlib.util
 import base64
+import hashlib
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -18,12 +19,26 @@ class SelectionTests(unittest.TestCase):
   self.runs=[run(20,conclusion='failure'),run(10)]
  def api(self,*args):
   path=args[-1]
+  if path=='repos/owner/repo/git/ref/heads/main':return {'object':{'sha':getattr(self,'target',BASE)}}
   if '/pulls/' in path:return self.pr
   if '/runs?' in path:
    if getattr(self,'read_error',False):raise OSError('authority read unavailable')
    page=int(path.rsplit('page=',1)[1]);size=integration.DISCOVERY_PAGE_SIZE
    return {'workflow_runs':self.runs[(page-1)*size:page*size]}
-  if '/contents/' in path:return {'type':'file','path':integration.WORKFLOW,'encoding':'base64','content':base64.b64encode(getattr(self,'workflow','no integration mode').encode()).decode()}
+  if '/git/commits/' in path:
+   oid=path.rsplit('/',1)[1]
+   return {'sha':oid,'tree':{'sha':'1'*40}}
+  if '/git/trees/' in path:
+   oid=path.rsplit('/',1)[1];tree_ids=['1'*40,'2'*40,'3'*40]
+   self.assertIn(oid,tree_ids);i=tree_ids.index(oid)
+   raw=self.workflow.encode()
+   entry=({'path':['.github','workflows'][i],'mode':'040000','type':'tree','sha':tree_ids[i+1]} if i<2 else
+    {'path':'rust.yml','mode':getattr(self,'leaf_mode','100644'),'type':'blob','sha':hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()})
+   return {'sha':oid,'truncated':False,'tree':[entry]}
+  if '/contents/' in path:
+   raw=getattr(self,'workflow','no integration mode').encode()
+   encoded=base64.b64encode(raw).decode()
+   return {'type':'file','path':integration.WORKFLOW,'encoding':'base64','size':len(raw),'sha':hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest(),'content':'\n'.join(encoded[i:i+60] for i in range(0,len(encoded),60))+'\n'}
   raise AssertionError(path)
  def check(self,locator=None,allow_ready_pr=False,require_integration=False,require_dispatch=False):
   def verify(repo,uid,number,base,head,n,app,*,expected_attempt=None,**kwargs):
@@ -34,10 +49,100 @@ class SelectionTests(unittest.TestCase):
    if getattr(self,'pr_race',None):self.pr=self.pr_race
    if r['conclusion']!='success' or r['status']!='completed':raise ValueError('current request not successful')
    return {'id':n},{'workflow_run_id':n}
-  with patch.object(receipt,'gh',side_effect=self.api),patch.object(integration,'gh',side_effect=self.api),patch.object(receipt,'live',return_value=(self.pr,{'id':1},BASE,HEAD)),patch.object(integration,'verified_run',side_effect=verify):
+  with patch.object(receipt,'gh',side_effect=self.api),patch.object(integration,'gh',side_effect=self.api),patch.object(integration,'_historical_json',side_effect=lambda path,budget:self.api(path),create=True),patch.object(receipt,'live',return_value=(self.pr,{'id':1},BASE,HEAD)),patch.object(integration,'verified_run',side_effect=verify):
    return receipt.selected_live('owner/repo',UID,1,12,'required-gate',42,allow_ready_pr=allow_ready_pr,integration_run_id=locator,require_integration=require_integration,require_dispatch=require_dispatch)
  def test_new_failure_blocks_even_normal_green(self):
   with self.assertRaisesRegex((SystemExit,ValueError),'current request'):self.check()
+
+ def validation(self,n=30,uid=UID):
+  self.workflow="""name: Rust
+run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}
+on:
+  workflow_dispatch:
+    inputs:
+      run_mode:
+        type: choice
+        options:
+          - integration_revalidation
+          - first_activation_validation_only
+"""
+  value=run(n,uid=uid)
+  value.update(head_sha='e'*40,head_branch='candidate-producer',display_title=f'oasis7-ci|workflow_dispatch|first_activation_validation_only|{uid}||{BASE}|{"e"*40}')
+  return value
+
+ def test_authenticated_validation_history_allows_exact_own_strict_receipt(self):
+  self.runs=[self.validation(uid='task_'+'d'*32),run(10)]
+  self.assertEqual(self.check(10,require_integration=True,require_dispatch=True)[1]['id'],10)
+
+ def test_same_uid_validation_never_satisfies_strict_receipt(self):
+  self.runs=[self.validation()]
+  with self.assertRaisesRegex(SystemExit,'strict integration request is absent'):
+   self.check(require_integration=True,require_dispatch=True)
+
+ def test_dereferenced_workflow_symlink_cannot_allow_own_strict_receipt(self):
+  self.runs=[self.validation(),run(10)];self.leaf_mode='120000'
+  with self.assertRaisesRegex(SystemExit,'current request blocked'):
+   self.check(10,require_integration=True,require_dispatch=True)
+
+ def test_validation_explicit_locator_cannot_replace_production(self):
+  self.runs=[self.validation(),run(10)]
+  with self.assertRaisesRegex(SystemExit,'superseded|current'):
+   self.check(30,require_integration=True,require_dispatch=True)
+
+ def test_validation_history_does_not_hide_latest_own_failure_or_attempt(self):
+  for status,conclusion in [('completed','failure'),('queued',None)]:
+   with self.subTest(status=status):
+    latest=run(20,status=status,conclusion=conclusion);latest['run_attempt']=2
+    self.runs=[self.validation(),latest,run(10)]
+    with self.assertRaisesRegex(SystemExit,'current request'):
+     self.check(require_integration=True,require_dispatch=True)
+
+ def test_expired_historical_proof_blocks_strict_receipt_with_explicit_locator(self):
+  for candidate in [False,True]:
+   with self.subTest(candidate=candidate):
+    first=self.validation(30);second={**first,'id':31}
+    self.runs=[first,second]+([run(10)] if candidate else [])
+    now=[0.0];original=self.api
+    def delayed(*args):
+     if '/runs?' in args[-1] and args[-1].endswith('page=2'):now[0]=60
+     return original(*args)
+    with patch.object(self,'api',side_effect=delayed),patch.object(integration.time,'monotonic',side_effect=lambda:now[0]),patch.object(integration,'DISCOVERY_PAGE_SIZE',1):
+     with self.assertRaisesRegex(SystemExit,'current request blocked.*deadline'):
+      self.check(10 if candidate else None,require_integration=True,require_dispatch=True)
+
+ def test_tree_reuse_keeps_distinct_history_ineligible_and_production_attempt_current(self):
+  first=self.validation(30);second={**first,'id':31,'head_sha':'f'*40}
+  second['display_title']=second['display_title'].rsplit('|',1)[0]+'|'+'f'*40
+  latest=run(20,status='queued',conclusion=None);latest['run_attempt']=2
+  self.runs=[first,second,latest,run(10)];reads=[];original=self.api
+  def recorded(*args):reads.append(args[-1]);return original(*args)
+  with patch.object(self,'api',side_effect=recorded):
+   with self.assertRaisesRegex(SystemExit,'current request'):self.check(10,require_integration=True,require_dispatch=True)
+  for commit in ['e'*40,'f'*40]:
+   self.assertIn('repos/owner/repo/git/commits/'+commit,reads)
+   self.assertIn('repos/owner/repo/contents/'+integration.WORKFLOW+'?ref='+commit,reads)
+  self.assertEqual(sum('/git/trees/' in path for path in reads),3)
+
+ def test_current_target_integration_accepts_historical_pr_base(self):
+  self.pr['base']['sha']='e'*40
+  self.runs=[run(20)]
+  selected=self.check(require_integration=True,require_dispatch=True)
+  self.assertEqual(selected[2],BASE)
+  self.assertEqual(selected[0]['base']['sha'],'e'*40)
+
+ def test_current_target_move_during_verified_result_blocks(self):
+  self.runs=[run(20)]
+  original=self.api
+  reads=0
+  def moving(*args):
+   nonlocal reads
+   if '/git/ref/heads/main' in args[-1]:
+    reads+=1
+    return {'object':{'sha':BASE if reads==1 else 'e'*40}}
+   return original(*args)
+  with patch.object(self,'api',side_effect=moving):
+   with self.assertRaisesRegex(SystemExit,'target moved'):
+    self.check(require_integration=True,require_dispatch=True)
  def test_explicit_old_green_does_not_bypass_new_failure(self):
   with self.assertRaisesRegex((SystemExit,ValueError),'current|superseded'):self.check(10)
  def test_verified_other_task_does_not_hide_current_green(self):
@@ -136,11 +241,13 @@ class SelectionTests(unittest.TestCase):
   prior='e'*40
   pr={**self.pr,'base':{'sha':prior,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
-   return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
+   if '/pulls/' in args[-1]:return pr
+   if '/git/ref/' in args[-1]:return {'object':{'sha':BASE}}
+   return {'default_branch':'main'}
   with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':BASE,'GITHUB_WORKFLOW_SHA':BASE}),patch.object(integration,'git',return_value=BASE) as git:
-   with self.assertRaisesRegex(ValueError,'no approved executor contract'):
+   with self.assertRaisesRegex(ValueError,'target moved'):
     integration.prepare(Path('/unused'), 'owner/repo',UID,12,prior,HEAD)
-   self.assertEqual([('rev-parse','HEAD')],[call.args[1:] for call in git.call_args_list])
+   git.assert_not_called()
 
  def test_workflow_base_diverge_accepts_only_approved_executor_and_keeps_b_frozen(self):
   approved='sha256:'+'8'*64
@@ -174,6 +281,7 @@ class SelectionTests(unittest.TestCase):
   workflow_sha='9'*40
   pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
+   if '/git/ref/' in args[-1]:return {'object':{'sha':BASE}}
    return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
   with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':workflow_sha,'GITHUB_WORKFLOW_SHA':workflow_sha}),patch.object(integration,'git',return_value=workflow_sha) as git,patch.object(integration,'compose') as compose:
    with self.assertRaisesRegex(ValueError,'no approved executor contract'):

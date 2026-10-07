@@ -143,7 +143,7 @@ explicit runtime causal identity. Gap/reorg still requires snapshot reload.
 - Host unit test checks `commercial_surface` shape and active agent resolution.
 - Host render test checks HUD visible text and renderer diagnostics collapsed by default.
 - Existing Fragment terrain tests continue proving background/non-interactive terrain order.
-- Build regenerates `viewer.js` and compat `software_safe.js`.
+- Build regenerates `viewer.js` and dist compat `software_safe.js`.
 
 Focused visual evidence after implementation must include: desktop/mobile board
 hierarchy; receipt versus ambient feed separation; unavailable/blocked/no-receipt
