@@ -66,13 +66,26 @@ def admission(root, task, base, head, tool_root=None, reader=None):
     commit = binding.get('policy_commit', '')
     if not re.fullmatch(r'[0-9a-f]{40}', commit):
         raise ValueError('missing immutable effective policy commit')
-    if subprocess.check_output(['git', '-C', str(effective), 'rev-parse', 'HEAD'], text=True).strip() != commit:
+    if subprocess.check_output(
+            ['git', '-C', str(effective), 'rev-parse', 'HEAD'], text=True,
+    ).strip() != commit:
         raise ValueError('effective tool HEAD mismatch')
-    if (subprocess.check_output(['git', '-C', str(effective), 'rev-parse', '--path-format=absolute', '--git-common-dir'], text=True).strip()
-            != subprocess.check_output(['git', '-C', str(root), 'rev-parse', '--path-format=absolute', '--git-common-dir'], text=True).strip()):
+    if (subprocess.check_output(
+            ['git', '-C', str(effective), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+            text=True,
+    ).strip() != subprocess.check_output(
+            ['git', '-C', str(root), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+            text=True,
+    ).strip()):
         raise ValueError('effective tool repository mismatch')
-    subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
-    subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'], check=True, capture_output=True)
+    subprocess.run(
+        ['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ['git', '-C', str(root), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'],
+        check=True, capture_output=True,
+    )
     for name in ('loop_recovery', 'loop_gate'):
         _pinned_module(effective, commit, name)
     module = _pinned_module(effective, commit, 'loop')

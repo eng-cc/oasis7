@@ -5680,9 +5680,9 @@ function createViewerRenderHookRegistry() {
 			subscribers.add(nextHook);
 			return () => subscribers.delete(nextHook);
 		},
-		invoke() {
-			primary();
-			for (const subscriber of [...subscribers]) subscriber();
+		invoke(invalidation) {
+			primary(invalidation);
+			for (const subscriber of [...subscribers]) subscriber(invalidation);
 		}
 	};
 }
@@ -9867,7 +9867,7 @@ function handleViewerMessage(message, sourceSocket = null) {
 			break;
 		case "error": reportFatalError(message.message, "viewer");
 	}
-	render();
+	render({ pixelWorldChanged: message?.type !== "metrics" && message?.type !== "decision_trace" });
 }
 function attachSocket(ws) {
 	ws.addEventListener("open", () => {
@@ -10423,8 +10423,8 @@ function bindEvents() {
 		});
 	});
 }
-function render() {
-	renderHook.invoke();
+function render(invalidation) {
+	renderHook.invoke(invalidation);
 }
 function requestRender() {
 	render();
@@ -14705,6 +14705,7 @@ function PixelWorldHost(props) {
 	const visualFixtureName = installPixelWorldVisualFixtureHook();
 	const rendererRoute = resolvePixelWorldRendererRoute();
 	const [coreRevision, setCoreRevision] = createSignal(0);
+	const [worldRevision, setWorldRevision] = createSignal(0);
 	const selectedEntity = () => {
 		coreRevision();
 		return state.selectedKind && state.selectedId ? {
@@ -14713,7 +14714,7 @@ function PixelWorldHost(props) {
 		} : null;
 	};
 	const renderInput = createMemo(() => {
-		coreRevision();
+		worldRevision();
 		return buildPixelWorldRenderInput(locale());
 	});
 	const [rustRenderState, setRustRenderState] = createSignal(null);
@@ -14902,8 +14903,10 @@ function PixelWorldHost(props) {
 		}
 		window.addEventListener("keydown", handleKeyDown);
 		onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
-		const unsubscribeRenderHook = subscribeRenderHook?.(() => {
+		const unsubscribeRenderHook = subscribeRenderHook?.((invalidation) => {
 			setCoreRevision((revision) => revision + 1);
+			if (invalidation?.pixelWorldChanged === false) return;
+			setWorldRevision((revision) => revision + 1);
 			if (rendererStatus() === "ready") applyRendererUpdate();
 			else rendererUpdatePending = true;
 		});

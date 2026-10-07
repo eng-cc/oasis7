@@ -406,6 +406,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/graphql-budget-red.test.py
   run python3 ./scripts/pm/pr-graphql-call-budget.test.py
   run bash ./scripts/pm/pr-lifecycle-gate.test.sh
+  run python3 ./scripts/pm/github-project-task-lifecycle.test.py
   run bash ./scripts/pm/pr-lifecycle-trust.test.sh
   run bash ./scripts/pm/pr-watch-loop.test.sh
   run bash ./scripts/pr-review-thread-closeout.test.sh
@@ -417,6 +418,28 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/workflow-next.test.py
   run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
+  run python3 ./scripts/pm/terminal-delivery-protocol.test.py
+  run python3 ./scripts/pm/terminal-readiness-recovery.test.py
+  run python3 ./scripts/pm/terminal-recovery-guards.test.py
+  run python3 ./scripts/pm/resource-cleanup-safety.test.py
+  run python3 ./scripts/pm/terminal_proof.test.py
+  run bash ./scripts/pm/post-merge-finalize.test.sh
+  run bash ./scripts/pm/post-merge-finalizer-ledger-red.test.sh
+  run bash ./scripts/pm/post-merge-finalizer-comment-readback-red.test.sh
+  run bash ./scripts/pm/post-merge-finalizer-project-ledger-red.test.sh
+  run bash ./scripts/pm/finalize-task.test.sh
+  run bash ./scripts/pm/finalize-task-red.test.sh
+  run bash ./scripts/pm/finalize-task-remote-branch-mismatch.test.sh
+  run python3 ./scripts/pm/recover-terminal-task-mapping.test.py
+  run python3 ./scripts/pm/readiness-transport.test.py
+  run python3 ./scripts/pm/readiness-repeat.test.py
+  run python3 ./scripts/pm/readiness-prior-receipt.test.py
+  run python3 ./scripts/pm/readiness-legacy-repeat.test.py
+  run bash ./scripts/pm/post-merge-cleanup.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-trust.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-fault-isolation.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-crash.test.sh
+  run bash ./scripts/pm/post-merge-cleanup-resume.test.sh
   run python3 ./scripts/pm/ordered-aggregate-closeout.test.py
   run python3 ./scripts/pm/terminal-task-audit-aggregate.test.py
   run python3 ./scripts/pm/terminal-task-audit-project-semantics.test.py
@@ -434,6 +457,14 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/integration-selection-regression.test.py
   run python3 ./scripts/pm/workflow-bootstrap-fallback.test.py
   run python3 ./scripts/pm/loop-policy.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/github-project-task-policy-adoption.integration.test.py
+  run python3 ./scripts/pm/pr_projection_publication.test.py
+  run python3 ./scripts/pm/pr-projection-record-pr.test.py
+  run python3 ./scripts/pm/pr-projection-transition.test.py
+  run python3 ./scripts/pm/review_closeout_publication.test.py
+  run bash ./scripts/pm/review-closeout-facade.test.sh
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-cli.integration.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-concurrency.integration.test.py
   run python3 ./scripts/pm/loop-contracts.test.py
   run python3 ./scripts/pm/loop-traceability.test.py
   run python3 ./scripts/pm/loop_terminal.test.py
@@ -449,6 +480,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/github-project-admission.test.py
   run python3 ./scripts/pm/loop-bootstrap.test.py
   run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/loop-bootstrap.integration.test.py
+  run python3 ./scripts/pm/workflow-simplification.test.py
 }
 
 run_workflow_governance_contract_tests() {
@@ -745,6 +777,11 @@ run_cargo_package_scope_check() {
   local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
   local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
+  local trusted_full_plan="${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}"
+  if [[ "$trusted_full_plan" != true && "$trusted_full_plan" != false ]]; then
+    echo "error: trusted Cargo scope plan marker must be true or false" >&2
+    return 1
+  fi
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
     return 0
@@ -758,7 +795,7 @@ run_cargo_package_scope_check() {
     return 0
   fi
   local checker_result=0
-  run python3 "$checker" \
+  run env OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN="$trusted_full_plan" python3 "$checker" \
     --repo-root "$repo_root" \
     --base "$base_oid" \
     --head "$head_oid" \

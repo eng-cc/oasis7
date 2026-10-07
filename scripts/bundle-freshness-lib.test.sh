@@ -22,9 +22,7 @@ printf '[workspace]\nmembers = []\n' > "$tmp_repo/Cargo.toml"
 printf '# lock\n' > "$tmp_repo/Cargo.lock"
 printf 'pub const VIEWER_PROTOCOL_VERSION: u32 = 7;\n' > "$tmp_repo/crates/oasis7_proto/src/viewer.rs"
 printf '<!doctype html>viewer\n' > "$tmp_repo/crates/oasis7_viewer/viewer.html"
-cp "$tmp_repo/crates/oasis7_viewer/viewer.html" "$tmp_repo/crates/oasis7_viewer/software_safe.html"
 printf 'console.log("viewer");\n' > "$tmp_repo/crates/oasis7_viewer/viewer.js"
-printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
 printf '<!doctype html>canonical claim evidence\n' > "$tmp_repo/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$tmp_repo/scripts/copy-viewer-web-dist.sh"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$tmp_repo/scripts/viewer-web-dist-contract.sh"
@@ -36,7 +34,6 @@ printf 'console.log("launcher app");\n' > "$tmp_repo/bundle/web-launcher/app.js"
 required_scope_entries=(
   "crates/oasis7_viewer/viewer.html"
   "crates/oasis7_viewer/viewer_first_agent_claim_evidence.html"
-  "crates/oasis7_viewer/software_safe.js"
   "scripts/copy-viewer-web-dist.sh"
   "scripts/viewer-web-dist-contract.sh"
 )
@@ -45,6 +42,16 @@ source_scope="$(bundle_source_metadata_json "$tmp_repo" | python3 -c 'import jso
 for entry in "${required_scope_entries[@]}"; do
   if ! grep -Fxq "$entry" <<<"$source_scope"; then
     echo "expected bundle source scope to include $entry" >&2
+    exit 1
+  fi
+done
+
+for retired_root_alias in \
+  "crates/oasis7_viewer/software_safe.html" \
+  "crates/oasis7_viewer/software_safe.js" \
+  "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html"; do
+  if grep -Fxq "$retired_root_alias" <<<"$source_scope"; then
+    echo "generated compatibility alias must not be a source input: $retired_root_alias" >&2
     exit 1
   fi
 done

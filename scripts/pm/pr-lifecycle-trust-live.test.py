@@ -8,6 +8,8 @@ import importlib.util
 import io
 import json
 import pathlib
+import subprocess
+import types
 import tempfile
 import unittest
 from unittest import mock
@@ -166,6 +168,79 @@ class LiveLifecycleTrustTests(unittest.TestCase):
         finally:
             GATE.sys.argv = old_argv
         return status, json.loads(output.getvalue()), transport
+
+    def current_target_consumer_fixture(self, workflow_source="H"):
+        def git(*args):
+            return subprocess.check_output(['git','-C',str(self.root),*args],text=True).strip()
+        git('init','-q','-b','main');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid')
+        names=('ci-ready-receipt.py','ci_ready_receipt_identity.py','integration_ci.py',
+               'integration_executor_contract.py','workflow_maintenance.py')
+        for name in names:
+            path=self.root/'scripts/pm'/name;path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_bytes(subprocess.check_output(['git','-C',str(ROOT),'show','HEAD:scripts/pm/'+name]))
+        git('add','.');git('commit','-qm','protected Q authority');q=git('rev-parse','HEAD')
+        helper=self.root/'scripts/pm/ci-ready-receipt.py'
+        helper.write_bytes(helper.read_bytes()+b'\n# authenticated candidate receipt fix under test\n')
+        git('add','.');git('commit','-qm','approved immutable candidate H helper');h=git('rev-parse','HEAD')
+        tree=git('rev-parse','HEAD^{tree}')
+        e=git('commit-tree',tree,'-p',q,'-p',h,'-m','actual tested checkout E')
+        workflow_revision={'H':h,'E':e,'unrelated':q}[workflow_source]
+        scope=dict(repository=REPOSITORY,task_uid=UID,issue_number=ISSUE,pr_number=PR,
+                   purpose='candidate-tool-verification',allowed_write_paths=['scripts/pm/ci-ready-receipt.py'],
+                   allowed_tool_paths=['scripts/pm/ci-ready-receipt.py','scripts/pm/ci_ready_receipt_identity.py','scripts/pm/workflow_maintenance.py'])
+        comment=dict(id=700,body='Workflow Maintenance Authority:\n```json\n'+json.dumps(scope)+'\n```',
+            issue_url=f'https://api.github.com/repos/{REPOSITORY}/issues/{ISSUE}',
+            html_url=f'https://github.com/{REPOSITORY}/issues/{ISSUE}#issuecomment-700',
+            created_at='2026-10-01T00:00:00Z',updated_at='2026-10-01T00:00:00Z',
+            user={'login':'owner','type':'User'})
+        body=f'Task: {UID}\nRefs #{ISSUE}\nWorkflow Maintenance Authority: 700'
+        pull=dict(number=PR,html_url=f'https://github.com/{REPOSITORY}/pull/{PR}',body=body,
+            state='open',merged_at=None,draft=False,
+            head={'sha':h,'ref':'main','repo':{'full_name':REPOSITORY}},
+            base={'sha':q,'ref':'main','repo':{'full_name':REPOSITORY}})
+        def read(command):
+            endpoint=command[-1]
+            if endpoint.endswith('/issues/comments/700'):return comment
+            if endpoint.endswith('/permission'):return {'permission':'admin','user':{'login':'owner'}}
+            if endpoint.endswith('/pulls/'+str(PR)):return pull
+            if endpoint.endswith('/issues/'+str(ISSUE)):return {'number':ISSUE,'state':'open','html_url':f'https://github.com/{REPOSITORY}/issues/{ISSUE}','body':f'task_uid: {UID}'}
+            if endpoint.endswith('/git/ref/heads/main'):return {'object':{'sha':q}}
+            if endpoint=='repos/'+REPOSITORY:return {'full_name':REPOSITORY,'default_branch':'main'}
+            raise AssertionError('unhandled exact consumer fixture endpoint: '+endpoint)
+        proof=dict(integration_base_oid=q,base_ref='main',head_oid=h,check_name='required-gate',
+            check_run_id=9,check_app_id=42,planner_digest='sha256:'+'a'*64,
+            ci_validation_mode='current_target_pr',assessed_target_oid=q,
+            workflow_run_id=12345,workflow_sha=workflow_revision,tested_tree_oid=tree,tested_commit_oid=e,
+            current_target_proof={'schema':'oasis7-current-target-pr/v1','repository':REPOSITORY,
+                'task_uid':UID,'task_issue_number':ISSUE,'pr_number':PR,'source_head_oid':h,
+                'current_target_oid':q,'checkout_oid':e,'tested_tree_oid':tree,
+                'checkout_parent_oids':[q,h],'workflow_revision':workflow_revision,'workflow_run_id':12345,
+                'workflow_run_attempt':1,'maintenance_authority_comment_id':700,
+                'planner_config_sha256':'b'*64,'test_driver_sha256':'c'*64})
+        data=dict(repository=REPOSITORY,number=PR,baseRefName='main',baseRefOid=q,headRefOid=h,body=body,
+                  policy_discovery={'status':'resolved','required_status_checks':[{'context':'required-gate','app_id':42}]})
+        admission=dict(status='admitted',tool_root=str(self.root),policy_commit=q,trusted_default_oid=q,
+                       task={**self.record,'repository':REPOSITORY})
+        child=types.SimpleNamespace(returncode=0,stdout=json.dumps(proof),stderr='')
+        real_run=subprocess.run
+        def child_only(command, *args, **kwargs):
+            if len(command)>2 and command[1:3]==['-I','-c']: return child
+            return real_run(command,*args,**kwargs)
+        with mock.patch.object(GATE,'_run_json',side_effect=read),mock.patch.object(GATE.subprocess,'run',side_effect=child_only):
+            result=GATE.live_integration_admission(data,self.root,UID,self.root,admission,require_strict=True,assessed_target_oid=q)
+        self.assertEqual('current_target_pr',result['ci_validation_mode'])
+        self.assertEqual(h,result['head_oid'])
+        self.assertEqual(workflow_revision,result['workflow_sha'])
+
+    def test_authorized_immutable_candidate_current_target_receipt_reaches_live_consumer(self):
+        self.current_target_consumer_fixture('H')
+
+    def test_authenticated_event_checkout_workflow_reaches_current_target_consumer(self):
+        self.current_target_consumer_fixture('E')
+
+    def test_unrelated_workflow_revision_is_rejected_by_current_target_consumer(self):
+        with self.assertRaisesRegex(ValueError,'current-target proof differs'):
+            self.current_target_consumer_fixture('unrelated')
 
     def test_live_task_issue_hold_is_rebuilt_over_injected_shared_transport(self):
         transport = InjectedTransport(issue_comments=[active_hold_comment()])

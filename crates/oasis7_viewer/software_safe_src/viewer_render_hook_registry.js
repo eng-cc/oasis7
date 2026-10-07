@@ -12,9 +12,9 @@ export function createViewerRenderHookRegistry() {
       subscribers.add(nextHook);
       return () => subscribers.delete(nextHook);
     },
-    invoke() {
-      primary();
-      for (const subscriber of [...subscribers]) subscriber();
+    invoke(invalidation) {
+      primary(invalidation);
+      for (const subscriber of [...subscribers]) subscriber(invalidation);
     },
   };
 }

@@ -1015,6 +1015,7 @@ export function PixelWorldHost(props) {
   const visualFixtureName = installPixelWorldVisualFixtureHook();
   const rendererRoute = resolvePixelWorldRendererRoute();
   const [coreRevision, setCoreRevision] = createSignal(0);
+  const [worldRevision, setWorldRevision] = createSignal(0);
   const selectedEntity = () => {
     coreRevision();
     return core.state.selectedKind && core.state.selectedId
@@ -1022,7 +1023,7 @@ export function PixelWorldHost(props) {
       : null;
   };
   const renderInput = createMemo(() => {
-    coreRevision();
+    worldRevision();
     return buildPixelWorldRenderInput(locale());
   });
   const [rustRenderState, setRustRenderState] = createSignal(null);
@@ -1230,8 +1231,11 @@ export function PixelWorldHost(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
-    const unsubscribeRenderHook = core.subscribeRenderHook?.(() => {
+    const unsubscribeRenderHook = core.subscribeRenderHook?.((invalidation) => {
       setCoreRevision((revision) => revision + 1);
+      // An absent hint remains conservatively dirty, including mutable state.
+      if (invalidation?.pixelWorldChanged === false) return;
+      setWorldRevision((revision) => revision + 1);
       if (rendererStatus() === "ready") {
         applyRendererUpdate();
       } else {

@@ -13,7 +13,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 UID = 'task_' + '1' * 32
 FAKE = r'''#!/usr/bin/env python3
-import fcntl, json, os, pathlib, sys
+import base64, fcntl, json, os, pathlib, subprocess, sys
 a=sys.argv[1:]; p=pathlib.Path(os.environ['FAKE_GH_STATE'])
 mutation = (a[:2] in (['issue','create'], ['issue','edit'], ['issue','comment'],
                      ['project','item-add'], ['project','item-edit'])
@@ -30,9 +30,22 @@ def save():
  tmp.write_text(json.dumps(s)); os.replace(tmp,p)
 def emit(v):
  save(); print(json.dumps(v) if not isinstance(v,str) else v)
+def emit_read(v): print(json.dumps(v))
 def val(k): return a[a.index(k)+1]
+repo_git=os.environ.get('FAKE_GH_REPO_GIT_DIR')
+def live_tip():
+ return subprocess.check_output(['git','--git-dir',repo_git,'rev-parse','refs/heads/main'],text=True).strip()
 url='https://github.com/eng-cc/oasis7/issues/1'
-if a[:2]==['issue','list']:
+if a[:2]==['api','repos/eng-cc/oasis7']: emit_read({'default_branch':'main'})
+elif a[:2]==['api','repos/eng-cc/oasis7/branches/main']:
+ tip=live_tip(); emit_read({'name':'main','protected':True,'commit':{'sha':tip}})
+elif a[:1]==['api'] and a[1].startswith('repos/eng-cc/oasis7/contents/'):
+ path,_,query=a[1].split('/contents/',1)[1].partition('?')
+ ref=query.removeprefix('ref='); tip=live_tip()
+ if ref!=tip: raise SystemExit('contents ref is not the live protected tip')
+ raw=subprocess.check_output(['git','--git-dir',repo_git,'show',f'{ref}:{path}'])
+ emit_read({'encoding':'base64','content':base64.b64encode(raw).decode('ascii')})
+elif a[:2]==['issue','list']:
  if s.get('lost') and os.environ.get('FAKE_SEARCH')=='empty': emit([])
  elif s.get('lost') and os.environ.get('FAKE_SEARCH')=='multiple': emit([{'number':1},{'number':2}])
  elif s.get('lost') and os.environ.get('FAKE_SEARCH')=='limit': emit([{'number':n} for n in range(1,6)])
@@ -56,8 +69,13 @@ elif a[:2]==['issue','comment']:
  emit(url+'#issuecomment-'+str(len(comments)))
 elif a[:1]==['api'] and a[1].startswith('repos/eng-cc/oasis7/issues?'):
  emit([{'id':1,'number':1,'body':s['body']}] if s.get('body') else [])
-elif a[:2]==['api','repos/eng-cc/oasis7/issues/1/comments']: emit([s.get('comments',[])])
-elif a[:2]==['api','repos/eng-cc/oasis7/issues/1']: emit({'number':1,'body':s['body'],'url':url,'state':'OPEN'})
+elif a[:1]==['api'] and a[1].partition('?')[0]=='repos/eng-cc/oasis7/issues/1/comments':
+ _,_,query=a[1].partition('?'); flags=a[2:]
+ if query not in ('','per_page=100') or flags not in ([],['--paginate','--slurp']):
+  raise SystemExit('unsupported fake issue comments query/pagination '+repr(a[1:]))
+ page=s.get('comments',[])
+ emit_read([page] if flags else page)
+elif a[:2]==['api','repos/eng-cc/oasis7/issues/1']: emit({'number':1,'body':s['body'],'url':url,'html_url':url,'state':'OPEN'})
 elif a[:1]==['api'] and a[1].startswith('repos/eng-cc/oasis7/issues/comments/'): emit(s['comments'][int(a[1].rsplit('/',1)[1])-1])
 elif a[:2]==['project','view']: emit({'id':'P','number':1})
 elif a[:2]==['project','item-add']: emit({'id':'I'})
@@ -163,6 +181,9 @@ class BootstrapEndToEnd(unittest.TestCase):
                     (root / 'scripts' / name).chmod(0o644)
                 if trusted_import == 'executable':
                     (root / 'scripts/product-doc-content-check.py').chmod(0o755)
+            source_path = root / 'doc/engineering/workflow/source-of-truth.md'
+            source_path.parent.mkdir(parents=True)
+            shutil.copy2(ROOT / 'doc/engineering/workflow/source-of-truth.md', source_path)
             (root / '.gitignore').write_text('.pm/\ntarget\nconfig.toml\n__pycache__/\n')
             (root / 'config.toml').write_text('canonical = true\n')
             cargo = root / 'scripts/cargo-dev.sh'
@@ -184,6 +205,7 @@ class BootstrapEndToEnd(unittest.TestCase):
             gh = binary / 'gh'; gh.write_text(FAKE); gh.chmod(0o755)
             state = temp / 'github.json'
             env = dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'], FAKE_GH_STATE=str(state),
+                       FAKE_GH_REPO_GIT_DIR=str(origin),
                        OASIS7_PM_FAKE_GITHUB='1',
                        TEST_SHARED_TARGET=str(temp/'target'), PYTHONDONTWRITEBYTECODE='1')
             env.pop('GH_TOKEN', None)
@@ -381,16 +403,39 @@ class BootstrapEndToEnd(unittest.TestCase):
             # The inherited flock must exclude recovery without a second action.
             import time
             import signal
-            pidfile = temp/'bind-child.pid'; release = temp/'bind-child.release'
+            diagnostic_dir = Path(os.environ.get('OASIS7_QA_BIND_DIAG_DIR', str(temp/'bind-child-diagnostics')))
+            diagnostic_dir.mkdir(parents=True, exist_ok=True)
+            pidfile = diagnostic_dir/'bind-child.pid'; release = temp/'bind-child.release'
+            child_stdout = (diagnostic_dir/'bind-child.stdout.bin').open('wb')
+            child_stderr = (diagnostic_dir/'bind-child.stderr.bin').open('wb')
             pause_adapter = "import sys,os,time,importlib.util; from pathlib import Path; sys.path.insert(0,str(Path(sys.argv[1]).parent)); spec=importlib.util.spec_from_file_location('pm',sys.argv[1]); pm=importlib.util.module_from_spec(spec); sys.modules['pm']=pm; spec.loader.exec_module(pm); original=pm.update_project_fields\ndef pause(*a,**kw):\n Path(os.environ['BIND_PID']).write_text(str(os.getpid()))\n while not Path(os.environ['BIND_RELEASE']).exists(): time.sleep(.02)\n return original(*a,**kw)\npm.update_project_fields=pause; raise SystemExit(pm.main(sys.argv[2:]))"
-            parent = subprocess.Popen(['python3','-c',preflight_facade,str(trusted/'scripts/pm'),pause_adapter,*facade[1:]],cwd=trusted,env=dict(env,BIND_PID=str(pidfile),BIND_RELEASE=str(release)),text=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            parent = subprocess.Popen(['python3','-c',preflight_facade,str(trusted/'scripts/pm'),pause_adapter,*facade[1:]],cwd=trusted,env=dict(env,BIND_PID=str(pidfile),BIND_RELEASE=str(release)),text=True,stdout=child_stdout,stderr=child_stderr)
             child = None
             try:
                 for _ in range(500):
                     if pidfile.exists(): break
                     if parent.poll() is not None: self.fail('bind adapter exited before pause')
                     time.sleep(.02)
-                self.assertTrue(pidfile.exists())
+                if not pidfile.exists():
+                    table = subprocess.run(['ps','-axo','pid,ppid,etime,stat,command'],text=True,capture_output=True,check=False).stdout
+                    rows = table.splitlines()[1:]
+                    active = {str(parent.pid)}
+                    selected = []
+                    changed = True
+                    while changed:
+                        changed = False
+                        for row in rows:
+                            fields = row.split(None,4)
+                            if len(fields) >= 4 and (fields[0] in active or fields[1] in active) and row not in selected:
+                                selected.append(row)
+                                if fields[0] not in active:
+                                    active.add(fields[0]); changed = True
+                    (diagnostic_dir/'active-state.json').write_text(json.dumps({
+                        'parent_pid':parent.pid,'parent_returncode':parent.poll(),
+                        'pidfile_exists':pidfile.exists(),'process_tree':selected,
+                    },indent=2)+'\n')
+                    child_stdout.flush(); child_stderr.flush()
+                self.assertTrue(pidfile.exists(),f'bind adapter did not reach pause within 10s; diagnostics: {diagnostic_dir}')
                 child = int(pidfile.read_text()); parent.kill(); parent.wait(); os.kill(child,0)
                 recovery_command = ['python3',str(trusted/'scripts/pm/loop.py'),'recover','--repo-root',str(target),'--tool-root',str(trusted),'--task-uid',UID,'--manual-request-ref','message:recover-child','--json']
                 denied = subprocess.run(recovery_command,cwd=trusted,env=env,text=True,capture_output=True)
@@ -409,6 +454,11 @@ class BootstrapEndToEnd(unittest.TestCase):
             finally:
                 release.touch()
                 if parent.poll() is None: parent.kill(); parent.wait()
+                child_stdout.flush(); child_stderr.flush(); child_stdout.close(); child_stderr.close()
+                (diagnostic_dir/'result.json').write_text(json.dumps({
+                    'parent_pid':parent.pid,'parent_returncode':parent.returncode,
+                    'pidfile_exists':pidfile.exists(),'child_pid':child,
+                },indent=2)+'\n')
                 if child:
                     try: os.kill(child,signal.SIGTERM)
                     except ProcessLookupError: pass

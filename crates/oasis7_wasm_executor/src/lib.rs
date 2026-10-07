@@ -309,6 +309,7 @@ impl WasmExecutor {
             engine_config.wasm_multi_value(true);
             engine_config.wasm_reference_types(true);
             engine_config.wasm_threads(false);
+            engine_config.wasm_wide_arithmetic(false);
             engine_config.cranelift_nan_canonicalization(true);
             engine_config.debug_info(false);
             let engine = wasmtime::Engine::new(&engine_config)

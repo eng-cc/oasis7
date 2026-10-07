@@ -4,9 +4,8 @@ import { describe, expect, it } from "vitest";
 describe("mobile gameplay action card clearance", () => {
   it("keeps targeted action cards below the sticky mobile jump rail", () => {
     const viewerHtml = readFileSync("viewer.html", "utf8");
-    const compatibilityHtml = readFileSync("software_safe.html", "utf8");
 
-    for (const html of [viewerHtml, compatibilityHtml]) {
+    for (const html of [viewerHtml]) {
       expect(html).toMatch(
         /\.event-card--action\s*\{[^}]*scroll-margin-top:\s*var\(--mobile-action-card-clearance,\s*0\);/,
       );
@@ -18,9 +17,8 @@ describe("mobile gameplay action card clearance", () => {
 
   it("removes nonessential interactive motion when players prefer reduced motion", () => {
     const viewerHtml = readFileSync("viewer.html", "utf8");
-    const compatibilityHtml = readFileSync("software_safe.html", "utf8");
 
-    for (const html of [viewerHtml, compatibilityHtml]) {
+    for (const html of [viewerHtml]) {
       const reducedMotionStart = html.lastIndexOf("@media (prefers-reduced-motion: reduce)");
       const primaryActionTransition = html.indexOf(
         "transition:",

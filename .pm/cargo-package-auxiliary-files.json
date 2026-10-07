@@ -2,6 +2,14 @@
   "schema": "oasis7-cargo-package-auxiliary-files/v1",
   "auxiliary_files": [
     {
+      "path": "doc/.governance/document-corpus/objects/23/23251b177eaa9852ca215fad7c0fdd0b8e87c000360824636cf061a4e60fac00.json",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "doc/.governance/document-corpus/objects/7c/7cf2626f607661535bfef04cc11fa56a111b8acb8dcd3cbb073b2d24924db9a7.json",
+      "package": "oasis7_local_signer"
+    },
+    {
       "path": "doc/p2p/blockchain/local-file-signing-backend.design.md",
       "package": "oasis7_local_signer"
     },
@@ -27,6 +35,34 @@
     },
     {
       "path": "scripts/local-signer/tests/test_release_installer.py",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+      "package": "oasis7_wasm_executor"
+    },
+    {
+      "path": "doc/p2p/blockchain/wasmtime-49-coordinated-maintenance.runbook.md",
+      "package": "oasis7_wasm_executor"
+    },
+    {
+      "path": "doc/world-runtime/wasm/wasm-executor.design.md",
+      "package": "oasis7_wasm_executor"
+    },
+    {
+      "path": "doc/.governance/document-corpus/objects/16/1620cf642fc3ae7886725ade1ec9282e13b3b5130782911e55ac67c77fdf7e7c.json",
+      "package": "oasis7_wasm_executor"
+    },
+    {
+      "path": "doc/.governance/document-corpus/objects/94/942664886e9920ca269062b66c9a2d4cf918774dd5a522678de1f0687e9c427e.json",
+      "package": "oasis7_wasm_executor"
+    },
+    {
+      "path": "doc/.governance/document-corpus/objects/9a/9a812ec52c06d6c0a9633e3ce03eea09b1cc8ae34e94ad1ead1f245d03ea4a3b.json",
+      "package": "oasis7_wasm_executor"
+    },
+    {
+      "path": "scripts/local-signer/tests/test_runtime_gate_contract.py",
       "package": "oasis7_local_signer"
     }
   ]
