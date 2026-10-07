@@ -469,12 +469,12 @@ PY
   else
     cp "$repo_root/crates/oasis7_viewer/viewer.html" "$rebuilt_dir/index.html"
     cp "$repo_root/crates/oasis7_viewer/viewer.html" "$rebuilt_dir/viewer.html"
-    cp "$repo_root/crates/oasis7_viewer/software_safe.html" "$rebuilt_dir/software_safe.html"
+    cp "$repo_root/crates/oasis7_viewer/dist/software_safe.html" "$rebuilt_dir/software_safe.html"
     cp "$repo_root/crates/oasis7_viewer/viewer.js" "$rebuilt_dir/viewer.js"
-    cp "$repo_root/crates/oasis7_viewer/software_safe.js" "$rebuilt_dir/software_safe.js"
+    cp "$repo_root/crates/oasis7_viewer/dist/software_safe.js" "$rebuilt_dir/software_safe.js"
     cp "$repo_root/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html" \
       "$rebuilt_dir/viewer_first_agent_claim_evidence.html"
-    cp "$repo_root/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
+    cp "$repo_root/crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html" \
       "$rebuilt_dir/software_safe_first_agent_claim_evidence.html"
     cp "$repo_root/crates/oasis7_viewer/favicon.ico" "$rebuilt_dir/favicon.ico"
     if [[ -d "$repo_root/crates/oasis7_viewer/dist/pixel-world-bridge" ]]; then

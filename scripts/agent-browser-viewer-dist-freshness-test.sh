@@ -24,11 +24,15 @@ printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/dist/software
 printf '<!doctype html>canonical claim evidence old\n' > "$tmp_repo/crates/oasis7_viewer/dist/viewer_first_agent_claim_evidence.html"
 printf '<!doctype html>claim evidence old\n' > "$tmp_repo/crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html"
 printf 'console.log("viewer changed");\n' > "$tmp_repo/crates/oasis7_viewer/viewer.js"
-printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
 printf '<!doctype html>viewer\n' > "$tmp_repo/crates/oasis7_viewer/viewer.html"
-cp "$tmp_repo/crates/oasis7_viewer/viewer.html" "$tmp_repo/crates/oasis7_viewer/software_safe.html"
-printf '<!doctype html>canonical claim evidence\n' > "$tmp_repo/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html"
-printf '<!doctype html>claim evidence\n' > "$tmp_repo/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html"
+cat > "$tmp_repo/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html" <<'HTML'
+<!doctype html>
+<html><head><title>viewer first agent claim evidence</title></head><body>
+<iframe id="viewer-frame" src="./viewer.html?test_api=1&connect=0" title="viewer first agent claim evidence"></iframe>
+<script>const snapshot = { eligible_balance_after: 0, upkeep_runway_epochs: 0 };
+document.getElementById("viewer-frame");</script>
+</body></html>
+HTML
 printf '{"name":"oasis7-viewer-ui","scripts":{"build:viewer":"echo ok","build:software-safe":"echo ok"}}\n' > "$tmp_repo/crates/oasis7_viewer/package.json"
 printf '{"lockfileVersion":3}\n' > "$tmp_repo/crates/oasis7_viewer/package-lock.json"
 printf 'export default {};\n' > "$tmp_repo/crates/oasis7_viewer/vite.software-safe.config.mjs"
@@ -65,11 +69,8 @@ touch -d '2026-03-17 00:00:00' \
   "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" \
   "$tmp_repo/crates/oasis7_viewer/dist/favicon.ico" \
   "$tmp_repo/crates/oasis7_viewer/viewer.js" \
-  "$tmp_repo/crates/oasis7_viewer/software_safe.js" \
   "$tmp_repo/crates/oasis7_viewer/viewer.html" \
-  "$tmp_repo/crates/oasis7_viewer/software_safe.html" \
   "$tmp_repo/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html" \
-  "$tmp_repo/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
   "$tmp_repo/crates/oasis7_viewer/favicon.ico"
 
 cat > "$tmp_repo/bin/npm" <<'NPM'
@@ -80,6 +81,17 @@ if [[ "$1" != "--prefix" || "$3" != "run" || "$4" != "build:software-safe" ]]; t
   exit 1
 fi
 printf 'software safe rebuild\n'
+cp crates/oasis7_viewer/viewer.html crates/oasis7_viewer/dist/software_safe.html
+printf '// Generated compat alias; canonical bundle truth lives in ./viewer.js.\nimport "./viewer.js";\n' \
+  > crates/oasis7_viewer/dist/software_safe.js
+sed \
+  -e 's/<title>viewer first agent claim evidence<\/title>/<title>software_safe compatibility first agent claim evidence<\/title>/' \
+  -e 's/id="viewer-frame"/id="software-safe-frame"/' \
+  -e 's#./viewer.html?test_api=1\&connect=0#./software_safe.html?test_api=1\&connect=0#' \
+  -e 's/title="viewer first agent claim evidence"/title="software_safe compatibility first agent claim evidence"/' \
+  -e 's/document.getElementById("viewer-frame")/document.getElementById("software-safe-frame")/' \
+  crates/oasis7_viewer/viewer_first_agent_claim_evidence.html \
+  > crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html
 NPM
 chmod +x "$tmp_repo/bin/npm"
 
@@ -93,6 +105,21 @@ fi
 
 if [[ ! -f "$expected_dir/index.html" ]]; then
   echo "expected rebuilt dist index at $expected_dir/index.html" >&2
+  exit 1
+fi
+if ! cmp -s "$tmp_repo/crates/oasis7_viewer/viewer.html" "$expected_dir/software_safe.html"; then
+  echo "expected rebuilt dist compatibility HTML to come from canonical viewer.html" >&2
+  exit 1
+fi
+if ! grep -Fq 'import "./viewer.js";' "$expected_dir/software_safe.js"; then
+  echo "expected rebuilt dist compatibility JS to import canonical viewer.js" >&2
+  exit 1
+fi
+if ! grep -Fq 'src="./software_safe.html?test_api=1&connect=0"' \
+  "$expected_dir/software_safe_first_agent_claim_evidence.html" \
+  || ! grep -Fq 'eligible_balance_after:' "$expected_dir/software_safe_first_agent_claim_evidence.html" \
+  || ! grep -Fq 'upkeep_runway_epochs:' "$expected_dir/software_safe_first_agent_claim_evidence.html"; then
+  echo "expected rebuilt compatibility evidence page to preserve served route and current claim fields" >&2
   exit 1
 fi
 

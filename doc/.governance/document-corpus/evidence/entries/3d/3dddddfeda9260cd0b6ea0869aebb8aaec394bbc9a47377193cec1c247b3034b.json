@@ -3,7 +3,7 @@
     "authority": "doc/testing/evidence/archive/visual-cleanup-2026-06-14/manifest.md",
     "backlink": "doc/testing/evidence/README.md",
     "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
-    "content_sha256": "14ec29c61d0da0eb7a7682c0925ac1c1336e1e6b150e52f897fef36a129d6bd4",
+    "content_sha256": "6c9a98d2101a7b659b52a019d3e2d5bb24cd9491a09f05a68e68b5e1a280c1a6",
     "disposition": "retain",
     "domain_owner": "viewer_engineer",
     "evidence_window": "dated-historical-or-supporting-evidence",

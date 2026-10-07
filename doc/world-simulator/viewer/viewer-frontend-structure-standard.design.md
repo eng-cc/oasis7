@@ -3,6 +3,15 @@
 - 对应需求文档: `doc/world-simulator/viewer/viewer-frontend-structure-standard.prd.md`
 - 结构债务 task 与验证记录：GitHub task issue evidence。
 
+## 2. 上游约束与相关角色
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Viewer Frontend Structure Standard PRD §范围](viewer-frontend-structure-standard.prd.md#范围) | Keep canonical Viewer sources and generated dist-only compatibility artifacts distinct so checkout cannot form a second source of truth. | [Generated artifact strategy](viewer-frontend-structure-standard.design.md#canonical-and-generated-artifacts) | Viewer build/finalize and dist copy scripts own generated outputs. | Does not alter UI direction, runtime protocol, WASM ABI, or hosted auth semantics. |
+| [Viewer Frontend Structure Standard PRD §范围](viewer-frontend-structure-standard.prd.md#范围) | Delivery helpers consume generated outputs from dist. | [Dist copy contract](viewer-frontend-structure-standard.design.md#dist-copy-contract) | Viewer dist copy and delivery scripts. | Does not alter UI direction, runtime protocol, WASM ABI, or hosted auth semantics. |
+
 审计轮次: 1
 
 ## 设计概览
@@ -10,7 +19,7 @@
 - 采用 Solid component model 作为 JSX 组件拆分基线：组件接收 display inputs 和 callbacks，避免在组件体内混入 transport、storage 和 generated artifact logic。
 - 采用 Google HTML/CSS style-guide 风格作为 raw HTML/CSS 卫生底线：shell 清晰、语义稳定、格式一致。
 - 采用 ESLint/Prettier 作为后续可自动化 gate 候选，但本轮只落文档标准，不新增 tooling。
-- 继续以 `viewer-web-single-source-build-truth` 为 generated artifact 真值：canonical `viewer.*` -> compat `software_safe.*`。
+- 继续以 `viewer-web-single-source-build-truth` 为 generated artifact 真值：canonical Viewer HTML/JS/claim fixture -> dist compat `software_safe.*`。
 
 ## 分层模型
 
@@ -67,11 +76,15 @@ software_safe_src/
 - 从大测试文件抽 fixture/helper 时，行为断言必须留在原测试或迁到同名 test 文件。
 - 测试选择器是合同；更名要同步测试、manual 或 automation helper。
 
+<a id="canonical-and-generated-artifacts"></a>
 ## Generated Artifact 策略
 - 手写 source truth 只在 `software_safe_src/**`、canonical HTML shell、build/finalize scripts 和 docs 中维护。
 - `viewer.js` 由 Vite/finalize 生成后作为 canonical checked-in bundle。
-- `software_safe.js` 是 compat alias，不承载独立实现。
+- `dist/software_safe.js` 是 compat alias，不承载独立实现；compat claim evidence page 由 canonical claim fixture 生成。
 - `dist/pixel-world-bridge/**` 由 finalize flow 生成或同步，不作为普通 JS module 手改。
+
+<a id="dist-copy-contract"></a>
+- Delivery copy helpers consume generated dist aliases; checkout-root compatibility copies are not inputs.
 
 ## 外部规范适配
 - Feature-Sliced Design: 采纳 layer/slice/public API 思想，不照搬完整目录和术语。
@@ -86,3 +99,12 @@ software_safe_src/
 - 不把 checked-in generated bundle 当作普通 source file 审查。
 - 不用机械切片替代真实职责边界。
 - 不让视觉 IA 文档承担代码结构治理职责；本标准只管 source/module/test/artifact 边界。
+
+## 11. 验证与证据
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source or ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Viewer Frontend Structure Standard PRD §范围](viewer-frontend-structure-standard.prd.md#范围) | [Generated artifact strategy](viewer-frontend-structure-standard.design.md#canonical-and-generated-artifacts) | Verify generated aliases derive from canonical inputs and root compat copies are unnecessary. | Run [`viewer-compat-aliases.test.mjs`](../../../crates/oasis7_viewer/scripts/viewer-compat-aliases.test.mjs); the isolated fixture checks deterministic transformations and root-copy absence. | Current task evidence and generated alias fixture output. | Does not prove delivery packaging or production hosting. |
+| [Viewer Frontend Structure Standard PRD §范围](viewer-frontend-structure-standard.prd.md#范围) | [Dist copy contract](viewer-frontend-structure-standard.design.md#dist-copy-contract) | Verify delivery packaging consumes the dist aliases and preserves public compatibility paths. | Run [`copy-viewer-web-dist.test.sh`](../../../scripts/copy-viewer-web-dist.test.sh); the isolated fixture checks copied aliases. | Current task evidence and copied dist fixture output. | Does not prove production hosting/CDN delivery or headed browser rendering. |
