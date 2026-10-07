@@ -1040,6 +1040,14 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
         key=f"repos/{self.data['repository']}/actions/workflows/rust.yml/runs?event=push&per_page=100&page=1"
         self.responses[key]['workflow_runs']=None
         with self.assertRaisesRegex(ValueError,'discovery|malformed|pagination'):self.call_target()
+    def test_unsupported_contract_and_malformed_resource_are_plan_errors(self):
+        import copy
+        original=copy.deepcopy(self.push_plan)
+        for field,value in (('execution_contract','required-domain-split/v999'),('needs_rust_toolchain',False)):
+            with self.subTest(field=field):
+                self.push_plan=copy.deepcopy(original);self.push_plan['planner'][field]=value;self.push_archive()
+                with self.assertRaisesRegex(ValueError,'push plan metadata') as error:self.call_target()
+                self.assertIsInstance(error.exception.__cause__,SystemExit)
     def test_push_check_app_and_job_attempt_provenance_blocks(self):
         self.push_check['app']['id']=99
         with self.assertRaisesRegex(ValueError,'app|identity|check'):self.call_target()
@@ -1688,6 +1696,14 @@ class HistoricalProducerCompatibility(unittest.TestCase):
         self.assertEqual(result['coverage']['inventory_sha256'],inventory['sha256'])
 
 class KnownChildExecutionContract(unittest.TestCase):
+    def test_immutable_planner_cli_rejection_is_chained_plan_error(self):
+        import terminal_recovery
+        from unittest.mock import patch
+        with patch.object(terminal_recovery.obs,'git',return_value=b''),patch.object(terminal_recovery.obs,'capture',return_value=b'execution_contract=required-domain-split/v999\n'):
+            with self.assertRaisesRegex(ValueError,'recovery plan metadata.*unsupported execution_contract') as error:
+                terminal_recovery._planner(HERE.parents[1],'a'*40,[])
+        self.assertIsInstance(error.exception.__cause__,SystemExit)
+
     def test_actual_v2_child_condition_and_unknown_version_refusal(self):
         import terminal_recovery
         workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_bytes()
