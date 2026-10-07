@@ -82,8 +82,9 @@ def validate_full_binding(args, pr, issue, number, uid):
             or pr_url_fields != [expected_url]):
         raise ValueError('live Task Issue PR number/URL binding is missing, ambiguous, or drifted')
 
-    pr_body = pr.get('body') if isinstance(pr.get('body'), str) else ''
-    uid_tokens = re.findall(r'task_[0-9a-f]{32}', pr_body)
+    pr_body = (pr.get('body') if isinstance(pr.get('body'), str) else '').replace('\r\n', '\n')
+    uid_tokens = set(re.findall(r'task_[0-9a-f]{32}', pr_body))
+    task_fields = re.findall(r'(?m)^[ \t]*Task[ \t]*:[^\r\n]*$', pr_body)
     task_refs = re.findall(r'(?m)^\s*Task: (task_[0-9a-f]{32})\s*$', pr_body)
     refs = re.findall(r'(?m)^\s*Refs #([1-9][0-9]*)\s*$', pr_body)
     closing_refs = re.findall(r'(?im)^\s*(?:Fixes|Closes) #([1-9][0-9]*)\s*$', pr_body)
@@ -103,7 +104,7 @@ def validate_full_binding(args, pr, issue, number, uid):
             or head.get('sha') != args.head or not head.get('ref')
             or head_repo.get('full_name') != args.repository
             or base.get('ref') != default_branch or base_repo.get('full_name') != args.repository
-            or uid_tokens != [uid] or task_refs != [uid]
+            or uid_tokens != {uid} or len(task_fields) != 1 or task_refs != [uid]
             or refs != [str(number)] or closing_refs):
         raise ValueError('live PR Task/Refs/repository/head/base binding is missing, ambiguous, or drifted')
 
@@ -222,12 +223,14 @@ def _live_pr_publication_binding(args, pr, issue, number, uid, binding,
             or head_repo.get('id') != repository_info['id']
             or base_repo.get('id') != repository_info['id']):
         raise ValueError('live PR is not the exact same-repository open draft/event/default-base candidate')
-    pr_body = pr.get('body') if isinstance(pr.get('body'), str) else ''
-    uid_tokens = re.findall(r'task_[0-9a-f]{32}', pr_body)
+    pr_body = (pr.get('body') if isinstance(pr.get('body'), str) else '').replace('\r\n', '\n')
+    uid_tokens = set(re.findall(r'task_[0-9a-f]{32}', pr_body))
+    task_fields = re.findall(r'(?m)^[ \t]*Task[ \t]*:[^\r\n]*$', pr_body)
     task_refs = re.findall(r'(?m)^\s*Task: (task_[0-9a-f]{32})\s*$', pr_body)
     refs = re.findall(r'(?m)^\s*Refs #([1-9][0-9]*)\s*$', pr_body)
     closing_refs = re.findall(r'(?im)^\s*(?:Fixes|Closes) #([1-9][0-9]*)\s*$', pr_body)
-    if uid_tokens != [uid] or task_refs != [uid] or refs != [str(number)] or closing_refs:
+    if (uid_tokens != {uid} or len(task_fields) != 1 or task_refs != [uid]
+            or refs != [str(number)] or closing_refs):
         raise ValueError('live PR Task/Refs identity is missing, ambiguous, or closing')
     status, phase = _issue_scalar(body, 'status'), _issue_scalar(body, 'workflow_phase')
     task_pr_number, task_pr_url = _task_pr_number(body), _issue_scalar(body, 'pr_url')

@@ -444,6 +444,7 @@ Deterministic script contract:
   auto-close keyword for the task. The generated linkage is
   `Refs #<task-issue-number>` and is separate from `Task UID`; only the terminal
   finalizer closes the task issue.
+- PR binding requires exactly one authoritative `Task: <TASK-UID>` line and exactly one non-closing `Refs #<task-issue-number>` line. Task UID occurrences elsewhere in the body, including matching publication evidence, reference an identity rather than add authoritative fields: repeated occurrences of the same UID are permitted, but any different UID, missing or malformed Task field, or duplicate Task field fails closed. This compatibility rule changes no publication carrier, recovery, discovery, or authority requirement.
 - `scripts/pm/audit-pr-watch-issues.sh --task-uid <TASK-UID> --close` is the remedial post-merge
   audit for GitHub-backed tasks whose recorded PR is already merged but whose
   PM task issue/body/Project state still says `pr_watch`. The PR body
