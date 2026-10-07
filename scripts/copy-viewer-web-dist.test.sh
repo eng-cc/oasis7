@@ -15,12 +15,11 @@ optional_payload_dir="$TMPDIR/optional-payload"
 mkdir -p "$viewer_root/dist/pixel-world-bridge/webgl2"
 
 printf '<!doctype html><link rel="stylesheet" href="./viewer_terminal_shell.css"><script type="module" src="./viewer.js"></script>\n' > "$viewer_root/viewer.html"
-cp "$viewer_root/viewer.html" "$viewer_root/software_safe.html"
 printf '.shell { grid-template-columns: minmax(0, 1fr); }\n' > "$viewer_root/viewer_terminal_shell.css"
 printf 'console.log("canonical bundle");\n' > "$viewer_root/viewer.js"
-printf '// Generated compat alias; canonical bundle truth lives in ./viewer.js.\nimport "./viewer.js";\n' > "$viewer_root/software_safe.js"
-printf '<!doctype html>canonical claim evidence\n' > "$viewer_root/viewer_first_agent_claim_evidence.html"
-printf '<!doctype html>claim evidence\n' > "$viewer_root/software_safe_first_agent_claim_evidence.html"
+cp "$ROOT_DIR/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html" \
+  "$viewer_root/viewer_first_agent_claim_evidence.html"
+node "$ROOT_DIR/crates/oasis7_viewer/scripts/viewer-compat-aliases.mjs" "$viewer_root" "$viewer_root/dist"
 printf 'icon\n' > "$viewer_root/favicon.ico"
 printf 'export const bridge = true;\n' > "$viewer_root/dist/pixel-world-bridge/pixel_world_bridge.js"
 printf 'export const webgl2Bridge = true;\n' > "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js"
@@ -43,13 +42,18 @@ expect_cmp() {
 }
 
 expect_cmp "$viewer_root/viewer.js" "$dist_dir/viewer.js"
-expect_cmp "$viewer_root/software_safe.js" "$dist_dir/software_safe.js"
+expect_cmp "$viewer_root/dist/software_safe.js" "$dist_dir/software_safe.js"
 expect_cmp "$viewer_root/viewer.html" "$dist_dir/index.html"
 expect_cmp "$viewer_root/viewer.html" "$dist_dir/viewer.html"
-expect_cmp "$viewer_root/software_safe.html" "$dist_dir/software_safe.html"
+expect_cmp "$viewer_root/dist/software_safe.html" "$dist_dir/software_safe.html"
 expect_cmp "$viewer_root/viewer_terminal_shell.css" "$dist_dir/viewer_terminal_shell.css"
 expect_cmp "$viewer_root/viewer_first_agent_claim_evidence.html" "$dist_dir/viewer_first_agent_claim_evidence.html"
-expect_cmp "$viewer_root/software_safe_first_agent_claim_evidence.html" "$dist_dir/software_safe_first_agent_claim_evidence.html"
+expect_cmp "$viewer_root/dist/software_safe_first_agent_claim_evidence.html" "$dist_dir/software_safe_first_agent_claim_evidence.html"
+if [[ -e "$viewer_root/software_safe.html" || -e "$viewer_root/software_safe.js" \
+  || -e "$viewer_root/software_safe_first_agent_claim_evidence.html" ]]; then
+  echo "generated compatibility aliases must not be required in the viewer source root" >&2
+  exit 1
+fi
 expect_cmp "$viewer_root/favicon.ico" "$dist_dir/favicon.ico"
 expect_cmp "$viewer_root/dist/pixel-world-bridge/pixel_world_bridge.js" "$dist_dir/pixel-world-bridge/pixel_world_bridge.js"
 expect_cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js" "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge.js"

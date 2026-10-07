@@ -129,7 +129,7 @@
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`（PRD-GAME-012 stable early-retention contract）
   - `crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs`
   - `crates/oasis7/src/bin/oasis7_pure_api_client.rs`
-  - `crates/oasis7_viewer/software_safe.js`
+  - `crates/oasis7_viewer/viewer.js`
   - `crates/oasis7_viewer/software_safe_src/main.jsx`
   - `crates/oasis7_viewer/software_safe_src/legacy_core.js`
   - `testing-manual.md`

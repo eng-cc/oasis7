@@ -182,21 +182,156 @@ jobs:
           with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
               output.write("worktree="+identity.get("integration_worktree","")+"\n")
           PY
-      - name: Validate trusted loop repository scope and content
+      - id: pr_target
+        name: Freeze current PR target independently of historical PR base
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" "${GITHUB_OUTPUT}" <<'PY'
+          import json,re,subprocess,sys
+          repository,number,head,output=sys.argv[1:]
+          def read(path): return json.loads(subprocess.check_output(['gh','api',path],text=True))
+          pr=read(f'repos/{repository}/pulls/{number}')
+          repo=read(f'repos/{repository}')
+          branch=repo.get('default_branch')
+          if (repo.get('full_name')!=repository or not isinstance(branch,str) or not branch
+              or pr.get('state')!='open' or pr.get('merged')
+              or pr.get('base',{}).get('ref')!=branch
+              or pr.get('base',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('sha')!=head):
+              raise SystemExit('PR repository/ref/head identity changed before target freeze')
+          ref=f'repos/{repository}/git/ref/heads/{branch}'
+          target=read(ref).get('object',{}).get('sha')
+          if not isinstance(target,str) or not re.fullmatch(r'[0-9a-f]{40,64}',target):
+              raise SystemExit('current PR target is unavailable')
+          fresh=read(f'repos/{repository}/pulls/{number}')
+          if fresh!=pr or read(ref).get('object',{}).get('sha')!=target:
+              raise SystemExit('PR or current target moved during target freeze')
+          with open(output,'a') as stream: stream.write(f'oid={target}\n')
+          PY
+      - id: scope
+        name: Plan required gate scope
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          base_ref=""
+          head_ref="${GITHUB_SHA}"
+          case "${GITHUB_EVENT_NAME}" in
+            pull_request)
+              base_ref="${{ steps.pr_target.outputs.oid }}"
+              head_ref="${{ github.event.pull_request.head.sha }}"
+              ;;
+            workflow_dispatch)
+              base_ref="${{ inputs.integration_base }}"
+              head_ref="${{ inputs.expected_head }}"
+              ;;
+            push)
+              base_ref="${{ github.event.before }}"
+              ;;
+          esac
+          planner=(./scripts/plan-rust-required-scope.sh)
+          impact_args=()
+          run_mode_args=()
+          scope_base_oid="$(git merge-base --all "${base_ref}" "${head_ref}")"
+          if [[ ! "${scope_base_oid}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+            echo 'required scope requires one unique merge base' >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then
+            authority_dir="${RUNNER_TEMP}/required-base-authority"
+            mkdir -p "${authority_dir}/pm"
+            git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
+            git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
+            git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
+            git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
+            planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
+            if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
+              task_uid="$(python3 - <<'PY'
+          import os,re
+          matches=re.findall(r'^Task: (task_[0-9a-f]{32})$',os.environ.get('PR_BODY',''),re.M)
+          if len(matches)!=1: raise SystemExit('pull request requires exactly one canonical Task UID')
+          print(matches[0])
+          PY
+              )"
+              impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
+            fi
+          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
+            planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+            task_uid="${{ inputs.task_uid }}"
+            run_mode_args=(--run-mode "${{ inputs.run_mode }}")
+            impact_args=(
+              --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+              --task-uid "${{ inputs.task_uid }}"
+              --scope-base-oid "${scope_base_oid}"
+            )
+          fi
+          "${planner[@]}" \
+            --event-name "${GITHUB_EVENT_NAME}" \
+            "${run_mode_args[@]}" \
+            --base-ref "${base_ref}" \
+            --head-ref "${head_ref}" \
+            "${impact_args[@]}" \
+            --github-output "${GITHUB_OUTPUT}"
+          source_scope_base="${scope_base_oid}"
+          {
+            echo "base_oid=${base_ref}"
+            echo "integration_base_oid=${base_ref}"
+            echo "head_oid=${head_ref}"
+            echo "source_scope_base=${source_scope_base}"
+            echo "integration_base=${base_ref}"
+            echo "source_head=${head_ref}"
+            echo "task_uid=${task_uid}"
+          } >>"${GITHUB_OUTPUT}"
+          python3 - "${GITHUB_OUTPUT}" "${RUNNER_TEMP}/required-scope-outputs.json" <<'PY'
+          import json, pathlib, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          outputs = {}
+          for line in source.read_text(encoding="utf-8").splitlines():
+              key, separator, value = line.partition("=")
+              if not separator or not key:
+                  raise SystemExit("required-scope output file contains an invalid line")
+              if key in outputs and outputs[key] != value:
+                  raise SystemExit(f"required-scope output {key} has conflicting duplicate values")
+              outputs[key] = value
+          temporary = target.with_name(target.name + ".tmp")
+          temporary.write_text(
+              json.dumps(outputs, ensure_ascii=False, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          temporary.replace(target)
+          PY
+      - id: loop-ci-admission
+        name: Validate trusted loop repository scope and content
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           base_ref=""
           head_ref="${GITHUB_SHA}"
           case "${GITHUB_EVENT_NAME}" in
             pull_request|workflow_dispatch)
-              base_ref="${{ github.event.pull_request.base.sha || inputs.integration_base }}"
+              base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
               head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
+              planner_args=(
+                --scope-base-oid "${{ steps.scope.outputs.source_scope_base }}"
+                --planner-config-sha256 "${{ steps.scope.outputs.planner_config_sha256 }}"
+                --planner-digest "${{ steps.scope.outputs.planner_digest }}"
+                --projection-digest "${{ steps.scope.outputs.impact_projection_digest }}"
+              )
               if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci.py"; then
-                python3 "${RUNNER_TEMP}/oasis7-loop-ci.py" --repository "${{ github.repository }}" \
-                  --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
-                  --base "${base_ref}" --head "${head_ref}"
+                if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --help 2>&1 | grep -Fq -- '--phase'; then
+                  python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --phase start --repository "${{ github.repository }}" \
+                    --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
+                    --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+                else
+                  python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --repository "${{ github.repository }}" \
+                    --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
+                    --base "${base_ref}" --head "${head_ref}"
+                fi
               else
                 # Bootstrap compatibility: old base has no loop admission. Only
                 # a reciprocal live legacy task may pass; never run candidate helpers.
@@ -250,93 +385,6 @@ jobs:
               ;;
           esac
 
-      - id: scope
-        name: Plan required gate scope
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          base_ref=""
-          head_ref="${GITHUB_SHA}"
-          case "${GITHUB_EVENT_NAME}" in
-            pull_request)
-              base_ref="${{ github.event.pull_request.base.sha }}"
-              head_ref="${{ github.event.pull_request.head.sha }}"
-              ;;
-            workflow_dispatch)
-              base_ref="${{ inputs.integration_base }}"
-              head_ref="${{ inputs.expected_head }}"
-              ;;
-            push)
-              base_ref="${{ github.event.before }}"
-              ;;
-          esac
-          planner=(./scripts/plan-rust-required-scope.sh)
-          impact_args=()
-          run_mode_args=()
-          scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
-          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then
-            authority_dir="${RUNNER_TEMP}/required-base-authority"
-            mkdir -p "${authority_dir}/pm"
-            git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
-            git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
-            git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
-            git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
-            planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
-            if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
-              task_uid="$(python3 - <<'PY'
-          import os,re
-          matches=re.findall(r'^Task: (task_[0-9a-f]{32})$',os.environ.get('PR_BODY',''),re.M)
-          if len(matches)!=1: raise SystemExit('pull request requires exactly one canonical Task UID')
-          print(matches[0])
-          PY
-              )"
-              impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
-            fi
-          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
-            planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
-            task_uid="${{ inputs.task_uid }}"
-            run_mode_args=(--run-mode "${{ inputs.run_mode }}")
-            impact_args=(
-              --impact-projection "${RUNNER_TEMP}/impact-projection.json"
-              --task-uid "${{ inputs.task_uid }}"
-              --scope-base-oid "${scope_base_oid}"
-            )
-          fi
-          "${planner[@]}" \
-            --event-name "${GITHUB_EVENT_NAME}" \
-            "${run_mode_args[@]}" \
-            --base-ref "${base_ref}" \
-            --head-ref "${head_ref}" \
-            "${impact_args[@]}" \
-            --github-output "${GITHUB_OUTPUT}"
-          source_scope_base="$(git merge-base "${base_ref}" "${head_ref}")"
-          {
-            echo "base_oid=${base_ref}"
-            echo "integration_base_oid=${base_ref}"
-            echo "head_oid=${head_ref}"
-            echo "source_scope_base=${source_scope_base}"
-            echo "integration_base=${base_ref}"
-            echo "source_head=${head_ref}"
-            echo "task_uid=${task_uid}"
-          } >>"${GITHUB_OUTPUT}"
-          python3 - "${GITHUB_OUTPUT}" "${RUNNER_TEMP}/required-scope-outputs.json" <<'PY'
-          import json, pathlib, sys
-          source, target = map(pathlib.Path, sys.argv[1:])
-          outputs = {}
-          for line in source.read_text(encoding="utf-8").splitlines():
-              key, separator, value = line.partition("=")
-              if not separator or not key:
-                  raise SystemExit("required-scope output file contains an invalid line")
-              if key in outputs and outputs[key] != value:
-                  raise SystemExit(f"required-scope output {key} has conflicting duplicate values")
-              outputs[key] = value
-          temporary = target.with_name(target.name + ".tmp")
-          temporary.write_text(
-              json.dumps(outputs, ensure_ascii=False, separators=(",", ":")) + "\n",
-              encoding="utf-8",
-          )
-          temporary.replace(target)
-          PY
       - name: Report planned scope
         env:
           SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
@@ -731,15 +779,44 @@ jobs:
           OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
+          OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
+          candidate_checker="${GITHUB_WORKSPACE}/scripts/pm/check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
           trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"
           trusted_profile_driver="${trusted_profile_authority}/cargo_package_profile_driver.py"
           if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
-            chmod +x "${trusted_checker}"
-            export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
+            use_candidate_checker=false
+            if [[ "${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}" == "true" ]] && \
+               ! git diff --quiet --no-renames "${OASIS7_CARGO_SCOPE_BASE}" "${OASIS7_CARGO_SCOPE_HEAD}" -- .pm/cargo-package-auxiliary-files.json; then
+              mapfile -t scope_changed_paths < <(git diff --no-renames --name-only "${OASIS7_CARGO_SCOPE_BASE}" "${OASIS7_CARGO_SCOPE_HEAD}")
+              if ((${#scope_changed_paths[@]} > 0)); then
+                use_candidate_checker=true
+                for scope_path in "${scope_changed_paths[@]}"; do
+                  case "${scope_path}" in
+                    doc/engineering/workflow/source-of-truth.md|\
+                    doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json|\
+                    scripts/pm/check-cargo-package-scope|\
+                    scripts/pm/check-cargo-package-scope.test.py|\
+                    .pm/cargo-package-auxiliary-files.json|\
+                    scripts/ci-tests.sh|\
+                    scripts/ci-required-scope.v2.json|\
+                    scripts/ci-required-scope-audit-contract.test.sh|\
+                    .github/workflows/rust.yml)
+                      ;;
+                    *) use_candidate_checker=false; break ;;
+                  esac
+                done
+              fi
+            fi
+            if [[ "${use_candidate_checker}" == "true" ]]; then
+              export OASIS7_CARGO_SCOPE_CHECKER="${candidate_checker}"
+            else
+              git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
+              chmod +x "${trusted_checker}"
+              export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
+            fi
             mkdir -p "${trusted_profile_authority}/pm"
             if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/workflow-impact-projection.py" >"${trusted_profile_authority}/pm/workflow-impact-projection.py" 2>/dev/null &&
                git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
@@ -843,6 +920,64 @@ jobs:
             CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
+          fi
+      - name: Verify final task and PR binding before required-gate success
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
+          head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
+          pr_number="${{ github.event.pull_request.number || inputs.pr_number }}"
+          planner_args=(
+            --scope-base-oid "${{ steps.scope.outputs.source_scope_base }}"
+            --planner-config-sha256 "${{ steps.scope.outputs.planner_config_sha256 }}"
+            --planner-digest "${{ steps.scope.outputs.planner_digest }}"
+            --projection-digest "${{ steps.scope.outputs.impact_projection_digest }}"
+          )
+          if git show "${base_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci-final.py"; then
+            if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --help 2>&1 | grep -Fq -- '--phase'; then
+              if [[ "${{ steps.loop-ci-admission.outputs.start_only }}" == "true" ]]; then
+                python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed --start-only \
+                  --repository "${{ github.repository }}" --pr-number "${pr_number}" \
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+              else
+                python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed \
+                  --repository "${{ github.repository }}" --pr-number "${pr_number}" \
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}"
+              fi
+            else
+              python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" \
+                --repository "${{ github.repository }}" --pr-number "${pr_number}" \
+                --base "${base_ref}" --head "${head_ref}"
+            fi
+          else
+            # Bootstrap compatibility remains strict: re-read the live PR and
+            # its one Task Issue after tests. This path never tolerates a gap.
+            python3 -I - "${{ github.repository }}" "${pr_number}" "${head_ref}" <<'PY'
+          import json,re,subprocess,sys
+          repo,number,head=sys.argv[1:]
+          pr=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/pulls/{number}'],text=True))
+          body=pr.get('body') or ''
+          uids=set(re.findall(r'task_[0-9a-f]{32}',body))
+          refs=set(re.findall(r'^Refs #([1-9][0-9]*)$',body,re.M))
+          if (pr.get('number')!=int(number) or pr.get('state')!='open' or pr.get('merged_at') is not None
+              or pr.get('draft') is not True or (pr.get('head') or {}).get('sha')!=head
+              or (pr.get('base') or {}).get('repo',{}).get('full_name')!=repo
+              or len(uids)!=1 or len(refs)!=1):
+              raise SystemExit('final live PR binding is missing, ambiguous, or drifted')
+          uid=next(iter(uids)); issue_number=int(next(iter(refs)))
+          issue=json.loads(subprocess.check_output(['gh','api',f'repos/{repo}/issues/{issue_number}'],text=True))
+          issue_body=(issue.get('body') or '').replace('\r\n','\n')
+          uid_fields=re.findall(r'^task_uid:[^\n]*$',issue_body,re.M)
+          issue_uids=re.findall(r'^task_uid: (task_[0-9a-f]{32})$',issue_body,re.M)
+          pr_numbers=re.findall(r'^- pr_number: `([1-9][0-9]*)`$',issue_body,re.M)
+          if (issue.get('number')!=issue_number or issue.get('state')!='open'
+              or uid_fields!=['task_uid: '+uid] or issue_uids!=[uid]
+              or pr_numbers!=[number]):
+              raise SystemExit('final canonical Task Issue binding is missing, ambiguous, or drifted')
+          PY
           fi
       - name: Upload Cargo package profile plan
         if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'

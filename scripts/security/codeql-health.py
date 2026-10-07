@@ -10,6 +10,13 @@ import json
 import re
 import subprocess
 import sys
+import importlib.util
+from pathlib import Path
+
+_association_spec = importlib.util.spec_from_file_location(
+    "codeql_upload_association", Path(__file__).with_name("codeql_upload_association.py"))
+association = importlib.util.module_from_spec(_association_spec)
+_association_spec.loader.exec_module(association)
 
 UNITS = {"actions-repo": "actions", "python-repo": "python",
          "javascript-repo": "javascript-typescript", "rust-repo": "rust"}
@@ -58,14 +65,18 @@ def report(data, now, max_age_hours=24):
             execution = "unknown"
             if job:
                 state, conclusion = job.get("status"), job.get("conclusion")
-                steps = [s for s in job.get("steps", []) if s.get("name") == "CodeQL extraction and queries"]
+                raw_steps = job.get("steps", [])
+                if not isinstance(raw_steps, list) or not all(isinstance(s, dict) for s in raw_steps):
+                    errors.append("malformed job steps metadata")
+                    raw_steps = []
+                steps = [s for s in raw_steps if s.get("name") == "CodeQL extraction and queries"]
                 execution = (steps[0].get("conclusion") or "unknown") if len(steps) == 1 else (
                     conclusion if conclusion in ("cancelled", "timed_out") else
                     state if state in ("queued", "in_progress", "waiting", "pending") else "unknown")
             upload = "unknown"
             upload_step_status = "unknown"
             if job:
-                upload_steps = [s for s in job.get("steps", []) if s.get("name") == "CodeQL SARIF upload"]
+                upload_steps = [s for s in raw_steps if s.get("name") == "CodeQL SARIF upload"]
                 if len(upload_steps) == 1:
                     upload_step_status = upload_steps[0].get("conclusion") or upload_steps[0].get("status") or "unknown"
                 if upload_step_status in ("failure", "cancelled", "timed_out", "skipped"):
@@ -92,6 +103,7 @@ def report(data, now, max_age_hours=24):
                           "upload_step_status": upload_step_status,
                           "run_id": job.get("run_id") if job else None,
                           "run_attempt": job.get("run_attempt") if job else None,
+                          "observed_job_identity": job.get("observed_job_identity") if job else None,
                           "analysis_association": "sarif_id" if analysis else "unknown",
                           "previous_analysis_id": previous_analysis.get("id") if previous_analysis else None,
                           "previous_analysis_age_hours": previous_age,
@@ -120,7 +132,7 @@ def read_pages(repo, endpoint, limit=10):
             raise RuntimeError(f"{endpoint}: API read failed ({result.returncode})")
         value = json.loads(result.stdout)
         batch = value if isinstance(value, list) else value.get("workflow_runs", value.get("jobs"))
-        if not isinstance(batch, list):
+        if not isinstance(batch, list) or not all(isinstance(row, dict) for row in batch):
             raise RuntimeError(f"{endpoint}: unexpected API schema")
         records.extend(batch)
         if len(batch) < 100:
@@ -140,9 +152,12 @@ def live(repo, ref, sha):
             data[key] = None
             data["errors"].append(str(error))
     jobs = []
+    reader = association.Reader(repo, ref, sha)
     branch = ref.removeprefix("refs/heads/") if ref.startswith("refs/heads/") else None
     relevant_runs = [r for r in (data.get("runs") or []) if branch and r.get("head_sha") == sha
                      and r.get("head_branch") == branch and r.get("path") == ".github/workflows/codeql.yml"]
+    run_ids = [run.get("id") for run in relevant_runs]
+    duplicate_runs = len(run_ids) != len(set(run_ids))
     if len(relevant_runs) > 20:
         data["errors"].append("run budget exceeded")
     else:
@@ -151,7 +166,31 @@ def live(repo, ref, sha):
                 attempt = run.get("run_attempt")
                 if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
                     raise RuntimeError("run attempt identity unavailable")
-                for job in read_pages(repo, f"actions/runs/{run['id']}/attempts/{attempt}/jobs"):
+                attempt_jobs = read_pages(repo, f"actions/runs/{run['id']}/attempts/{attempt}/jobs")
+                for job in attempt_jobs:
+                    # Platform outputs are unavailable in jobs API. Ignore any
+                    # caller-shaped field until trusted artifact validation.
+                    job.pop("upload_sarif_id", None)
+                try:
+                    if duplicate_runs:
+                        raise RuntimeError("duplicate run identity")
+                    errors = reader.associate(run, attempt_jobs)
+                    data["errors"].extend("upload association: " + error for error in errors)
+                except (RuntimeError, subprocess.TimeoutExpired, ValueError, TypeError, KeyError) as error:
+                    for job in attempt_jobs:
+                        job.pop("upload_sarif_id", None)
+                    data["errors"].append("upload association: " + str(error))
+                for job in attempt_jobs:
+                    expected_identity = {"head_sha": run["head_sha"], "run_id": run["id"], "run_attempt": attempt}
+                    if any(type(job.get(key)) is not type(value) or job.get(key) != value
+                           for key, value in expected_identity.items()):
+                        # An exact-attempt endpoint may return reused jobs from a
+                        # previous attempt. Preserve that observation separately;
+                        # the current-attempt diagnostic has no observed steps.
+                        observed_identity = {key: job.get(key) for key in expected_identity}
+                        data["errors"].append("diagnostic job identity missing or differs from current run attempt")
+                        job = {"name": job.get("name"), "status": "unknown", "conclusion": None,
+                               "steps": [], "observed_job_identity": observed_identity}
                     job["head_sha"], job["ref"] = run["head_sha"], ref
                     job["run_id"], job["run_attempt"] = run["id"], attempt
                     job["run_started_at"] = run.get("run_started_at") or run.get("created_at")

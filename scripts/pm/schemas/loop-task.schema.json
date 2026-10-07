@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "oasis7.loop-task/v1",
   "type": "object",
+  "additionalProperties": false,
   "required": ["schema", "task_uid", "change_id", "loop", "owner_role", "bootstrap_epoch", "manual_request_ref", "request_key", "write_scope", "out_of_scope", "input_contracts", "acceptance_refs", "dependencies", "target_delivery", "policy_digest", "policy_commit"],
   "properties": {
     "schema": {"const": "oasis7.loop-task/v1"},

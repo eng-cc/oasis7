@@ -3502,7 +3502,9 @@ function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket &&
     default:
       break;
   }
-  render();
+  // These streams change telemetry only; preserve UI notification without
+  // rebuilding the snapshot/selection/event-based pixel-world input.
+  render({ pixelWorldChanged: message?.type !== "metrics" && message?.type !== "decision_trace" });
 }
 
 function attachSocket(ws) {
@@ -4196,8 +4198,8 @@ function bindEvents() {
   });
 }
 
-function render() {
-  renderHook.invoke();
+function render(invalidation) {
+  renderHook.invoke(invalidation);
 }
 
 function requestRender() {

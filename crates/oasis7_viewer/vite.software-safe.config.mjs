@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 
-const tempOutDir = resolve(__dirname, ".software-safe-build");
+const tempOutDir = resolve(import.meta.dirname, ".software-safe-build");
 
 export default defineConfig({
   plugins: [solid()],
@@ -13,14 +13,14 @@ export default defineConfig({
     sourcemap: false,
     outDir: tempOutDir,
     lib: {
-      entry: resolve(__dirname, "software_safe_src/main.jsx"),
+      entry: resolve(import.meta.dirname, "software_safe_src/main.jsx"),
       formats: ["es"],
       fileName: () => "viewer"
     },
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        entryFileNames: "viewer.js",
-        inlineDynamicImports: true
+        codeSplitting: false,
+        entryFileNames: "viewer.js"
       }
     }
   }

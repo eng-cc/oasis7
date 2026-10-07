@@ -673,6 +673,24 @@ PY
     || die "PR-backed done requires an existing caller-owned --pr-receipt"
   LIVE_PR_RECEIPT=""
   if [[ -n "$RECORDED_PR_NUMBER" ]]; then
+    READINESS_REQUIRED="$(python3 - "$ROOT_DIR" "$TASK_UID" "$SCRIPT_DIR" <<'PY'
+import json,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+r=(json.load(open(root/'.pm/github-project-sync/tasks.json',encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+v1=(r.get('phase_receipts') or {}).get('post_merge_done',{}).get('receipt_type')=='oasis7_terminal_cleanup'
+if v1:
+    sys.path.insert(0,sys.argv[3])
+    from loop_terminal import read_shared_terminal_proof
+    proof=read_shared_terminal_proof(r.get('repository'),sys.argv[2],repo_root=root,record=r)
+    if proof.get('status')!='passed' or proof.get('protocol_version')!=1:
+        raise SystemExit('done legacy exemption requires exact valid v1 terminal proof')
+print('no' if v1 else 'yes')
+PY
+)" || die "readiness or exact valid v1 terminal proof is required before task_complete or TaskDone writes"
+    if [[ "$READINESS_REQUIRED" == yes ]]; then
+      python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$ROOT_DIR" --task-uid "$TASK_UID" >/dev/null \
+        || die "readiness must validate before task_complete or TaskDone writes"
+    fi
     LIVE_PR_RECEIPT="$(mktemp)"
     trap 'rm -f "$LIVE_PR_RECEIPT"' EXIT
     python3 "$SCRIPT_DIR/pr-merge-receipt.py" "$RECORDED_PR_NUMBER" --json >"$LIVE_PR_RECEIPT" \
@@ -816,6 +834,10 @@ AUDIT_INPUT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && sha256_file "$RE
 AUDIT_INPUT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && sha256_file "$PR_MERGE_RECEIPT" || printf none)"
 AUDIT_INPUT_AGGREGATE_SHA="$([[ -n "$AGGREGATE_RECEIPT" ]] && printf '%s\n' "$(sha256_file "$AGGREGATE_PLAN")" "$(sha256_file "$AGGREGATE_CANDIDATE")" "$(sha256_file "$AGGREGATE_EVIDENCE")" "$(sha256_file "$AGGREGATE_RECEIPT")" || printf none)"
 if [[ "$TARGET_STATUS" != "deferred" ]]; then
+  if [[ "$TARGET_STATUS" == "done" && "${READINESS_REQUIRED:-no}" == yes ]]; then
+    python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$ROOT_DIR" --task-uid "$TASK_UID" --create >/dev/null \
+      || die "readiness proof cannot be created from accepted native artifacts"
+  fi
   CLAIM_ARGS=(--claim-type "$CLAIM_TYPE" --verification-profile "$VERIFICATION_PROFILE" --task-uid "$TASK_UID" --json)
   if [[ "$CLAIM_TYPE" == "ready_for_pr" && -n "$CI_READY_RECEIPT" ]]; then
     CLAIM_ARGS+=(--ci-ready-receipt "$CI_READY_RECEIPT")

@@ -91,9 +91,10 @@ require_file() {
 }
 
 viewer_html="$VIEWER_ROOT/viewer.html"
-software_safe_html="$VIEWER_ROOT/software_safe.html"
 viewer_js="$VIEWER_ROOT/viewer.js"
-compat_js="$VIEWER_ROOT/software_safe.js"
+compat_html="$VIEWER_ROOT/dist/software_safe.html"
+compat_js="$VIEWER_ROOT/dist/software_safe.js"
+compat_claim_evidence="$VIEWER_ROOT/dist/software_safe_first_agent_claim_evidence.html"
 pixel_world_bridge_dir="$VIEWER_ROOT/dist/pixel-world-bridge"
 pixel_world_bridge_js="$pixel_world_bridge_dir/pixel_world_bridge.js"
 pixel_world_webgl2_bridge_js="$pixel_world_bridge_dir/webgl2/pixel_world_bridge.js"
@@ -101,9 +102,10 @@ pixel_world_webgl2_bindgen_js="$pixel_world_bridge_dir/webgl2/pixel_world_bridge
 pixel_world_webgl2_wasm="$pixel_world_bridge_dir/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 
 require_file "$viewer_html"
-require_file "$software_safe_html"
 require_file "$viewer_js"
+require_file "$compat_html"
 require_file "$compat_js"
+require_file "$compat_claim_evidence"
 require_file "$pixel_world_bridge_js"
 require_file "$pixel_world_webgl2_bridge_js"
 require_file "$pixel_world_webgl2_bindgen_js"
@@ -118,16 +120,23 @@ if ! grep -Fq 'src="./viewer.js"' "$viewer_html"; then
   echo "error: viewer.html no longer points at canonical viewer.js" >&2
   exit 1
 fi
-if ! cmp -s "$viewer_html" "$software_safe_html"; then
-  echo "error: software_safe.html must remain a compatibility copy of canonical viewer.html" >&2
-  exit 1
-fi
 if ! grep -Fq 'import "./viewer.js";' "$compat_js"; then
   echo "error: software_safe.js is no longer a compat alias to viewer.js" >&2
   exit 1
 fi
 if cmp -s "$viewer_js" "$compat_js"; then
   echo "error: viewer.js and software_safe.js unexpectedly contain identical payloads" >&2
+  exit 1
+fi
+if ! cmp -s "$viewer_html" "$compat_html"; then
+  echo "error: dist/software_safe.html must be generated from canonical viewer.html" >&2
+  exit 1
+fi
+if ! grep -Fq 'src="./software_safe.html?test_api=1&connect=0"' "$compat_claim_evidence" \
+  || ! grep -Fq 'id="software-safe-frame"' "$compat_claim_evidence" \
+  || ! grep -Fq 'eligible_balance_after:' "$compat_claim_evidence" \
+  || ! grep -Fq 'upkeep_runway_epochs:' "$compat_claim_evidence"; then
+  echo "error: dist/software_safe_first_agent_claim_evidence.html is missing its compatibility route or current claim fields" >&2
   exit 1
 fi
 
@@ -139,6 +148,11 @@ while read -r source_rel dist_rel; do
     cp "$source_path" "$dist_path"
   fi
 done < <(viewer_web_dist_contract_pairs)
+
+if ! cmp -s "$DIST_DIR/viewer.html" "$DIST_DIR/software_safe.html"; then
+  echo "error: generated dist/software_safe.html must match canonical dist/viewer.html" >&2
+  exit 1
+fi
 
 if [[ -d "$pixel_world_bridge_dir" ]]; then
   if [[ "$pixel_world_bridge_dir" != "$DIST_DIR/pixel-world-bridge" ]]; then

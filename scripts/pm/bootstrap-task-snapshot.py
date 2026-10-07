@@ -31,6 +31,12 @@ if _ADMISSION_SPEC is None or _ADMISSION_SPEC.loader is None:
     raise RuntimeError(f"cannot load candidate admission guard at {_ADMISSION_PATH}")
 ADMISSION_GUARD = importlib.util.module_from_spec(_ADMISSION_SPEC)
 _ADMISSION_SPEC.loader.exec_module(ADMISSION_GUARD)
+_REGISTRATION_PATH = pathlib.Path(__file__).with_name("worktree_registration.py")
+_REGISTRATION_SPEC = importlib.util.spec_from_file_location("worktree_registration_bootstrap", _REGISTRATION_PATH)
+if _REGISTRATION_SPEC is None or _REGISTRATION_SPEC.loader is None:
+    raise RuntimeError(f"cannot load worktree registration validator at {_REGISTRATION_PATH}")
+WORKTREE_REGISTRATION = importlib.util.module_from_spec(_REGISTRATION_SPEC)
+_REGISTRATION_SPEC.loader.exec_module(WORKTREE_REGISTRATION)
 
 
 class SnapshotError(Exception):
@@ -148,6 +154,11 @@ def live_payload(
             raise SnapshotError("manual loop task requires fixed bootstrap_base_oid")
         base_oid = git(root, "rev-parse", "--verify", pinned + "^{commit}")
 
+    try:
+        worktree_registration = WORKTREE_REGISTRATION.validate_worktree_registration(root, task)
+    except WORKTREE_REGISTRATION.RegistrationError as exc:
+        raise SnapshotError(f"invalid worktree registration: {exc}") from exc
+
     return {
         "schema": SCHEMA,
         "task": {
@@ -172,6 +183,8 @@ def live_payload(
             "branch": branch,
             "base": {"branch": task["default_branch"], "ref": base_ref, "oid": base_oid},
             "head": head,
+            **({"worktree_registration": worktree_registration}
+               if worktree_registration is not None else {}),
         },
         "request": {"identity": request_identity, "acceptance": task["acceptance"]},
     }

@@ -18,7 +18,7 @@
 
 ## 现行与历史边界
 
-- retained `p2p-shared-network-release-train-minimum-2026-03-24.runbook.md` 是旧 `shared_devnet -> staging -> canary` rehearsal 的背景与 rollback provenance；它不能证明 `public_testnet`、`mainnet` 或公开大世界 readiness。当前 network-tier 真值以 `formal-network-tiers-testnet-mechanism.*` 为准。
+- `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md` 是旧 `shared_devnet -> staging -> canary` rehearsal 的 rollback/provenance 入口；它不能证明 `public_testnet`、`mainnet` 或公开大世界 readiness。当前 network-tier 真值和 checklist 以 `formal-network-tiers-testnet-mechanism.*` 为准。
 - 历史 rehearsal 和已完成安全专题仍保留为审计/追溯材料；P2PFS hardening phase2~8 的合同与完成态已迁入 `p2p-blockchain-p2pfs-hardening.*`，原 phase 文件名仅保留在历史审计文字和 Git history 中。
 - production-grade roadmap、Phase B commit-execution 与 Phase C DistFS proof-network 独立三件套也已迁入同一稳定入口；Phase C 的旧“完成”只作历史 provenance，不表示当前存在跨节点 challenge driver、topic/envelope、mainnet 或 production readiness。
 - 根 [`README.md`](../../../README.md) 是当前公开状态权威，[产品层公开口径分册](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md) 定义长期沟通生命周期；network-tier PRD 与 runbook 只提供专业边界和证据，不单独升级公开状态。
