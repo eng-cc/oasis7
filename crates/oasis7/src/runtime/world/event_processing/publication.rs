@@ -88,7 +88,7 @@ impl World {
             ) => {
                 let prepared = self
                     .state
-                    .prepare_module_instance_event(event, self.state.time)?;
+                    .prepare_module_instance_event_with_registry(event, self.state.time, Some(&self.module_registry))?;
                 let schedule = self.prepare_module_instance_schedule(event, self.state.time)?;
                 Some(PreparedEventStateDelta::ModuleInstance { prepared, schedule })
             }
@@ -513,9 +513,11 @@ impl World {
         caused_by: Option<CausedBy>,
         completion: super::super::module_release_publication::ModuleReleaseCompletion,
     ) -> Result<(), WorldError> {
-        let instance = self
-            .state
-            .prepare_module_instance_event(&event, self.state.time)?;
+        let instance = self.state.prepare_module_instance_event_with_registry(
+            &event,
+            self.state.time,
+            Some(&self.module_registry),
+        )?;
         let schedule = self.prepare_module_instance_schedule(&event, self.state.time)?;
         let mut prepared = self.prepare_event_publication(
             WorldEventBody::Domain(event.clone()),

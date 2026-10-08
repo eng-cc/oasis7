@@ -49,6 +49,56 @@ impl World {
             .all(|required| role_approvals.contains_key(required))
     }
 
+    pub(super) fn module_release_profile_commitment(
+        manifest: &oasis7_wasm_abi::ModuleManifest,
+        activate: bool,
+        profile_changes: &ModuleProfileChanges,
+    ) -> Result<Option<String>, String> {
+        if profile_changes.is_empty() {
+            return Ok(None);
+        }
+
+        let mut normalized_profiles = profile_changes.clone();
+        normalized_profiles
+            .product_profiles
+            .sort_by(|left, right| left.product_id.cmp(&right.product_id));
+        normalized_profiles
+            .recipe_profiles
+            .sort_by(|left, right| left.recipe_id.cmp(&right.recipe_id));
+        normalized_profiles
+            .factory_profiles
+            .sort_by(|left, right| left.factory_id.cmp(&right.factory_id));
+        let commitment_payload = serde_json::json!({
+            "module_manifest": manifest,
+            "activate": activate,
+            "profile_changes": normalized_profiles,
+        });
+        super::super::super::util::hash_json(&commitment_payload)
+            .map(Some)
+            .map_err(|err| format!("module release profile commitment failed: {err:?}"))
+    }
+
+    pub(super) fn add_module_release_profile_commitment(
+        manifest: &mut super::super::super::manifest::Manifest,
+        reviewed_module: &oasis7_wasm_abi::ModuleManifest,
+        activate: bool,
+        profile_changes: &ModuleProfileChanges,
+    ) -> Result<(), String> {
+        let Some(commitment) =
+            Self::module_release_profile_commitment(reviewed_module, activate, profile_changes)?
+        else {
+            return Ok(());
+        };
+        let serde_json::Value::Object(content) = &mut manifest.content else {
+            return Err("current manifest content must be object".to_string());
+        };
+        content.insert(
+            "module_profile_commitment".to_string(),
+            serde_json::Value::String(commitment),
+        );
+        Ok(())
+    }
+
     pub(super) fn module_release_attestation_key(signer_node_id: &str, platform: &str) -> String {
         format!(
             "{}|{}",
@@ -133,6 +183,7 @@ impl World {
         &self,
         manifest: &oasis7_wasm_abi::ModuleManifest,
         activate: bool,
+        profile_changes: &ModuleProfileChanges,
     ) -> Result<String, String> {
         let mut changes = ModuleChangeSet::default();
         let record_key = oasis7_wasm_abi::ModuleRegistry::record_key(
@@ -165,7 +216,9 @@ impl World {
             }
         }
 
-        if changes.is_empty() {
+        let profile_commitment =
+            Self::module_release_profile_commitment(manifest, activate, profile_changes)?;
+        if changes.is_empty() && profile_commitment.is_none() {
             return self
                 .current_manifest_hash()
                 .map_err(|err| format!("module release shadow hash failed: {err:?}"));
@@ -187,6 +240,12 @@ impl World {
             );
         };
         content.insert("module_changes".to_string(), module_changes_value);
+        if let Some(profile_commitment) = profile_commitment {
+            content.insert(
+                "module_profile_commitment".to_string(),
+                serde_json::Value::String(profile_commitment),
+            );
+        }
         super::super::super::util::hash_json(&manifest_update)
             .map_err(|err| format!("module release shadow hash failed: {err:?}"))
     }

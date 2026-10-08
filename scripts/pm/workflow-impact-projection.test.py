@@ -135,6 +135,7 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
                 "scripts/ci-required-scope.v2.json",
                 "scripts/ci-tests.sh",
                 "scripts/pm/workflow-impact-projection.py",
+                "scripts/pm/task_primary_package.py",
             ):
                 content = subprocess.run(
                     ["git", "show", f"{base}:{relative}"],

@@ -180,6 +180,9 @@ impl World {
             )?;
             return Ok(true);
         }
+        if self.reject_frozen_module_admission(action_id, &request.manifest)? {
+            return Ok(true);
+        }
         if !Self::module_release_roles_satisfied(
             request.required_roles.as_slice(),
             &request.role_approvals,
@@ -197,6 +200,52 @@ impl World {
                 Some(CausedBy::Action(action_id)),
             )?;
             return Ok(true);
+        }
+        let current_owner = self
+            .state
+            .module_artifact_owners
+            .get(&request.manifest.wasm_hash);
+        if !self.module_artifacts.contains(&request.manifest.wasm_hash)
+            || current_owner != Some(&request.requester_agent_id)
+        {
+            self.append_event(
+                WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    action_id,
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "module release apply rejected: requester {} is no longer current owner of artifact {} (owner {:?})",
+                            request.requester_agent_id, request.manifest.wasm_hash, current_owner
+                        )],
+                    },
+                }),
+                Some(CausedBy::Action(action_id)),
+            )?;
+            return Ok(true);
+        }
+        for required_role in &request.required_roles {
+            let Some(approver_agent_id) = request.role_approvals.get(required_role) else {
+                continue;
+            };
+            let still_bound = self
+                .state
+                .module_release_role_bindings
+                .get(approver_agent_id)
+                .is_some_and(|roles| roles.contains(required_role));
+            if !self.state.agents.contains_key(approver_agent_id) || !still_bound {
+                self.append_event(
+                    WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "module release apply rejected: approver {} no longer has current role binding {}",
+                                approver_agent_id, required_role
+                            )],
+                        },
+                    }),
+                    Some(CausedBy::Action(action_id)),
+                )?;
+                return Ok(true);
+            }
         }
         let epoch_id = self.current_governance_epoch();
         let snapshot = self.governance_finality_epoch_snapshot_for_epoch(epoch_id);
@@ -318,6 +367,62 @@ impl World {
                 Some(CausedBy::Action(action_id)),
             )?;
             return Ok(true);
+        }
+
+        match request.shadow_manifest_hash.as_deref() {
+            Some(shadow_manifest_hash) => {
+                match self.evaluate_module_release_shadow_hash(
+                    &request.manifest,
+                    request.activate,
+                    &request.profile_changes,
+                ) {
+                    Ok(current_hash) if current_hash == shadow_manifest_hash => {}
+                    Ok(_) => {
+                        self.append_event(
+                            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![format!(
+                                        "module release apply rejected: reviewed manifest/profile commitment changed since shadowing request {}",
+                                        request_id
+                                    )],
+                                },
+                            }),
+                            Some(CausedBy::Action(action_id)),
+                        )?;
+                        return Ok(true);
+                    }
+                    Err(reason) => {
+                        self.append_event(
+                            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                                action_id,
+                                reason: RejectReason::RuleDenied {
+                                    notes: vec![reason],
+                                },
+                            }),
+                            Some(CausedBy::Action(action_id)),
+                        )?;
+                        return Ok(true);
+                    }
+                }
+            }
+            None if !request.profile_changes.is_empty() => {
+                self.append_event(
+                    WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "module release apply rejected: profile-bearing request {} has no reviewed commitment; resubmit and shadow again",
+                                request_id
+                            )],
+                        },
+                    }),
+                    Some(CausedBy::Action(action_id)),
+                )?;
+                return Ok(true);
+            }
+            // Pre-commitment empty-profile requests remain compatible.
+            None => {}
         }
 
         let installer_agent_id = request.requester_agent_id.clone();

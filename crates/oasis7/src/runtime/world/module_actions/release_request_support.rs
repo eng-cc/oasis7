@@ -85,6 +85,9 @@ impl World {
             )?;
             return Ok(true);
         }
+        if self.reject_frozen_module_admission(action_id, manifest)? {
+            return Ok(true);
+        }
 
         let request_id = self.peek_next_module_release_request_id();
         let normalized_roles = Self::normalize_module_release_required_roles(required_roles);
@@ -150,6 +153,9 @@ impl World {
             )?;
             return Ok(true);
         }
+        if self.reject_frozen_module_admission(action_id, &request.manifest)? {
+            return Ok(true);
+        }
         if let Err(reason) = self.validate_module_release_profile_changes(&request.profile_changes)
         {
             self.append_event(
@@ -163,22 +169,25 @@ impl World {
             )?;
             return Ok(true);
         }
-        let shadow_manifest_hash =
-            match self.evaluate_module_release_shadow_hash(&request.manifest, request.activate) {
-                Ok(hash) => hash,
-                Err(reason) => {
-                    self.append_event(
-                        WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![reason],
-                            },
-                        }),
-                        Some(CausedBy::Action(action_id)),
-                    )?;
-                    return Ok(true);
-                }
-            };
+        let shadow_manifest_hash = match self.evaluate_module_release_shadow_hash(
+            &request.manifest,
+            request.activate,
+            &request.profile_changes,
+        ) {
+            Ok(hash) => hash,
+            Err(reason) => {
+                self.append_event(
+                    WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![reason],
+                        },
+                    }),
+                    Some(CausedBy::Action(action_id)),
+                )?;
+                return Ok(true);
+            }
+        };
         self.append_event(
             WorldEventBody::Domain(DomainEvent::ModuleReleaseShadowed {
                 request_id,

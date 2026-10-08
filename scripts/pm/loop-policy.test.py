@@ -9,6 +9,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
@@ -139,7 +140,7 @@ def record_path(kind, source):
             self.api, "current_effective_policy_identity",
             return_value=self.live_policy_proof(self.base),
         )
-        self.live_identity_patch.start()
+        self.live_identity_mock = self.live_identity_patch.start()
         self.addCleanup(self.live_identity_patch.stop)
 
     def git(self, *args):
@@ -389,6 +390,95 @@ def record_path(kind, source):
                 self.assertEqual(verdict["status"], "blocked", verdict)
                 trusted.unlink()
                 trusted.write_bytes(original)
+
+    def _pin_regular_import_mode(self, mode):
+        for relative in self.api.TRUSTED_IMPORT_FILES:
+            path = self.root / relative
+            path.chmod(mode)
+            self.git('update-index', '--chmod=+x' if mode == 0o755 else '--chmod=-x', relative)
+        self.git('commit', '--allow-empty', '-qm', 'pin regular imported modes')
+        self.base = self.git('rev-parse', 'HEAD')
+        self.binding['policy_commit'] = self.base
+        self.git('update-ref', 'refs/remotes/origin/main', self.base)
+        self.live_identity_mock.return_value = self.live_policy_proof(self.base)
+
+    def test_trusted_regular_executable_imports_are_admitted(self):
+        self._pin_regular_import_mode(0o755)
+        for relative in self.api.TRUSTED_IMPORT_FILES:
+            self.assertTrue(self.git('ls-tree', self.base, '--', relative).startswith('100755 blob '))
+        verdict = self.api.validate_tool_root(self.root, self.root, self.binding)
+        self.assertEqual(verdict['status'], 'passed', verdict)
+
+    def test_trusted_regular_executable_core_loads_pinned_bytes(self):
+        self._pin_regular_import_mode(0o755)
+        loaded = self.api.load_trusted_corpus_module(self.root, self.root, self.binding)
+        self.assertEqual(loaded.CORE_MARKER, 'pinned-core-bytes')
+        self.assertFalse((self.root / 'scripts/__pycache__').exists())
+
+    def test_regular_nonexecutable_import_and_equal_byte_symlink_control(self):
+        self._pin_regular_import_mode(0o644)
+        self.assertEqual(self.api.validate_tool_root(self.root, self.root, self.binding)['status'], 'passed')
+        loaded = self.api.load_trusted_corpus_module(self.root, self.root, self.binding)
+        self.assertEqual(loaded.CORE_MARKER, 'pinned-core-bytes')
+        trusted = self.root / 'scripts/document_corpus.py'
+        original = trusted.read_bytes()
+        copy = self.root / 'contained-copy.py'
+        copy.write_bytes(original)
+        trusted.unlink()
+        trusted.symlink_to('../contained-copy.py')
+        self.assertEqual(trusted.read_bytes(), original)
+        self.assertTrue(trusted.resolve().is_relative_to(self.root.resolve()))
+        errors = self.api._trusted_file_errors(self.root, self.base, ('scripts/document_corpus.py',))
+        self.assertIn('trusted module path escapes tool_root: scripts/document_corpus.py', errors)
+        with self.assertRaisesRegex(ValueError, 'trusted module path escapes tool_root'):
+            self.api.load_trusted_corpus_module(self.root, self.root, self.binding)
+
+    def test_actual_symlink_and_gitlink_import_modes_are_rejected(self):
+        relative = 'scripts/product-doc-content-check.py'
+        trusted = self.root / relative
+        original = trusted.read_bytes()
+        trusted.unlink()
+        trusted.symlink_to('product_doc_markdown.py')
+        self.git('add', relative)
+        self.git('commit', '-qm', 'unsafe symlink import')
+        symlink_commit = self.git('rev-parse', 'HEAD')
+        self.assertTrue(self.git('ls-tree', symlink_commit, '--', relative).startswith('120000 blob '))
+        self.assertIn('trusted module has unsafe Git mode: ' + relative,
+                      self.api._trusted_file_errors(self.root, symlink_commit, (relative,)))
+        trusted.unlink()
+        trusted.write_bytes(original)
+        self.git('update-index', '--add', '--cacheinfo', '160000,' + self.base + ',' + relative)
+        self.git('commit', '-qm', 'unsafe gitlink import')
+        gitlink_commit = self.git('rev-parse', 'HEAD')
+        self.assertTrue(self.git('ls-tree', gitlink_commit, '--', relative).startswith('160000 commit '))
+        self.assertIn('trusted module has unsafe Git mode: ' + relative,
+                      self.api._trusted_file_errors(self.root, gitlink_commit, (relative,)))
+
+    def test_executable_import_byte_drift_and_missing_file_fail_closed(self):
+        self._pin_regular_import_mode(0o755)
+        trusted = self.root / 'scripts/document_corpus.py'
+        original = trusted.read_bytes()
+        trusted.write_bytes(original + b'\nCORE_MARKER = "candidate-shadow"\n')
+        verdict = self.api.validate_tool_root(self.root, self.root, self.binding)
+        self.assertEqual(verdict['status'], 'blocked', verdict)
+        with self.assertRaises(ValueError):
+            self.api.load_trusted_corpus_module(self.root, self.root, self.binding)
+        trusted.unlink()
+        self.assertTrue(self.api._trusted_file_errors(self.root, self.base, ('scripts/document_corpus.py',)))
+
+    def test_malformed_import_tree_records_fail_closed(self):
+        relative = 'scripts/document_corpus.py'
+        oid = b'a' * 40
+        records = [
+            b'100600 blob ' + oid + b'\t' + relative.encode() + b'\0',
+            b'100644 tree ' + oid + b'\t' + relative.encode() + b'\0',
+            b'100644 blob ' + oid + b'\twrong/path.py\0',
+            (b'100644 blob ' + oid + b'\t' + relative.encode() + b'\0') * 2,
+        ]
+        for record in records:
+            with self.subTest(record=record), mock.patch.object(self.api, 'git', return_value=record):
+                errors = self.api._trusted_file_errors(self.root, self.base, (relative,))
+                self.assertTrue(any('unsafe Git mode' in e or 'missing or ambiguous' in e for e in errors), errors)
 
     def test_candidate_commit_cannot_be_effective_tool(self):
         self.git("update-ref","refs/remotes/origin/main",self.base)

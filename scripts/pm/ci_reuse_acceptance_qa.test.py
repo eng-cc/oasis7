@@ -181,6 +181,17 @@ class ReuseAcceptanceQATests(unittest.TestCase):
                 environment = validation.build_runner_environment(
                     selected_units, inventory.CAPABILITY_RUNNERS, inventory.SELECTOR_ENV,
                 )
+                # This selected-unit fixture has its own exact W/B/H identity.
+                # Outer CI full-plan proof and primary-package selection belong
+                # to a different execution and cannot authorize this runner.
+                environment.update({
+                    "OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN": "false",
+                    "OASIS7_CARGO_SCOPE_FULL_PLAN": "",
+                    "OASIS7_CARGO_PRIMARY_PACKAGE": "auto",
+                    "OASIS7_CARGO_PROFILE_OPT_IN": "false",
+                    "OASIS7_CARGO_PROFILE_PLAN": "",
+                    "OASIS7_CARGO_PROFILE_RESULTS": "",
+                })
                 self.assertEqual("true", environment["OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS"])
                 self.assertEqual("false", environment["OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS"])
                 authority = types.SimpleNamespace(request={

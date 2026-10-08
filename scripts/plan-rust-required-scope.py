@@ -141,12 +141,19 @@ def git_paths(a):
   if not a.base_ref: return None
   try:
     head=a.head_ref or "HEAD"; base=subprocess.check_output(["git","merge-base",a.base_ref,head],text=True).strip() if a.event_name=="pull_request" else a.base_ref
-    out=subprocess.check_output(["git","diff","--name-status","--find-renames",base,head],text=True)
+    out=subprocess.check_output(["git","diff","--name-status","--find-renames","-z",base,head])
   except Exception: return None
   paths=[]
-  for line in out.splitlines():
-    p=line.split("\t")[1:]
-    paths.extend(p if len(p)>1 else p[:1])
+  fields=out.split(b"\0")
+  if fields.pop()!=b"": die("incomplete Git changed-path records")
+  while fields:
+    status=fields.pop(0).decode("ascii")
+    count=2 if status.startswith(("R","C")) else 1
+    if len(fields)<count: die("incomplete Git rename endpoints")
+    for _ in range(count):
+      path=fields.pop(0).decode("utf-8")
+      if any(delimiter in path for delimiter in (";","\n","\r")): die("changed path cannot be represented in planner metadata")
+      paths.append(path)
   return paths
 def precheck_scope(base, head, task_primary=None, plan=None):
   helper_path=Path(__file__).parent / "pm/trusted_cargo_scope.py"
