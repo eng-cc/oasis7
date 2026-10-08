@@ -199,6 +199,10 @@ pub enum DomainEvent {
         from_module_version: String,
         to_module_version: String,
         wasm_hash: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_wasm_hash: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_release_request_id: Option<u64>,
         #[serde(default)]
         install_target: ModuleInstallTarget,
         active: bool,

@@ -7,7 +7,7 @@
 - 配对产品 design：[`first-session-and-continuation.design.md`](first-session-and-continuation.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-10-03
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)
 
 本文是长期产品分册，承载首局微循环、后引导承接与首次持续能力的玩家承诺。它不冻结 UI 字段、tick、数值阈值、任务状态或实现方案。
@@ -262,6 +262,14 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 
 覆盖：REQ-FIRST-INDUSTRIAL-004；对应 FS-3、FS-4、FS-15。
 
+### 2.2.5 首局决策理解迁移
+
+完成一条 starter chain 是成功基线，还需在随后一次决策中观察玩家是否能将因果理解迁移到变化后的约束。适用验收先沿声明的 `starter_completion_profile` 取得匹配 receipt，再在该链路的下一次受支持行动中只改变一个已知约束；保持其余条件可比，记录变化前后 authority 与完成边界。若前一链路未完成、变化不受支持或同时存在无法隔离的其他变化，应记录未覆盖，不能把它当成理解迁移通过。
+
+变化后观察玩家能否依据入口事实说明当前主要 blocker、哪些已得成果或仍占用价值被保留（以及已消费/损失部分），并选择一个当前有效的下一安全动作及其适用条件。可以通过解释、实际选择或行动理由取得证据，不要求复述术语。专业 walkthrough 的[单约束配对样例](../../game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md#single-constraint-decision-transfer)承接具体情境与记录方式。
+
+正常引导与恢复建议仍须可用；本要求是验收观察，不是游戏内强制测验，也不要求人为制造失败、撤销已得成果或阻断继续游玩。分别记录链路是否完成、决策理解是否迁移、是否愿意继续，以及提供了什么提示/代操作、何时介入、介入前后的表现。辅助后的正确选择只证明相应辅助条件下的理解，不能冒充独立判断；链路完成或继续点击不能代签理解，理解也不能代签继续意愿、首次持续能力或真实留存。确定性 fixture 只证明约束与后果；适用入口观察和 playability 证据仍按 `doc/testing` 的独立层级记录，不相互升级。
+
 ### 2.3 早期 quote/preview 的信息仲裁
 
 首局与早期持续游玩中的既有 quote、preview 与推荐，应优先帮助玩家完成一个当前主要决策，并突出一个会改变该决策的主导 blocker 或成本。可以延后与当前选择无关、且可恢复的补充细节，但延后必须保留可回看的路径和时机；它不能把复杂性伪装成没有代价。
@@ -344,6 +352,8 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - FS-14：空、陈旧或冲突状态，以及同时存在多个 blocker 的代表性样例，证明 Viewer 与 pure API 采用相同的状态置信度闸门和主要 blocker 优先级：状态未确认时不提供会改变世界的猜测动作，至少保留真实的复核、恢复、安全停止或重新定目标路径；状态一致时先呈现安全/权利/授权与不可逆后果，再处理可恢复前置和可选信息；同级安全路径可比较且不会被静默合并。状态在展示后变化时，旧动作必须按当前状态重新判断，不得沿用旧资格/成本、静默改道或产生第二次世界效果。
 - FS-15：代表性首局工业 walkthrough 在展示为当前主推荐前，必须先通过 `Starter Industrial Feasibility Gate`，并沿 `工厂就绪 -> 配方比较 -> 原料获取/精炼 -> 物流抵达 -> 多输入齐套 -> 排程 -> 生产 receipt` 逐节点证明玩家动作、完成边界、主 blocker、反馈与恢复；只有 `terminal-admission` profile 才继续证明 delivery receipt，`production_only` profile 在匹配 production receipt 后可完成首产物但仍保持 `produced/undelivered`。闸门只返回 `candidate_available` 或 `no_safe_starter_chain`，后者必须保留 current/target/unknown 证据分类、可行动 blocker、下一动作和复查边界，不得发放免费输入或静默改道。walkthrough 至少区分 accepted-unstarted、active/in-transit、produced-but-not-delivered 与 delivered/terminal-settled，证明 production-only 完成不等于交付用途，terminal-admission 只有交付完成才产生目的地后果，且重连/重复提交/回放不复制任一 receipt。两种 profile 的正向路径、可恢复阻塞、arrival reorder，以及 `terminal-admission` profile 下 production 成功而 delivery 失败/未确认的情形均需有 `test_tier_required` 证据，跨窗口/争用/损耗/终端故障与两入口一致性进入 `test_tier_full`。
 
+- FS-16：首局成功基线后的单约束配对样例按 2.2.5 记录匹配完成 receipt、变化前后权威事实与未变化条件，分别给出主要 blocker、保留/占用/消费/损失价值、下一安全动作及条件的观察证据；链路完成、理解迁移、继续意愿与提示介入分别判定。缺少适用观察时保持未验证，不以 fixture、代操作或重复确认宣称独立理解。
+
 ### 6.1 验收追踪
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
@@ -363,6 +373,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 | FS-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 换向、重连、并发与重试下的预览/已接受或待决/已提交分类、旧请求不自动迁移、已提交结果不追溯取消、单次 receipt、新目标独立形成，以及旧义务/风险与下一步的玩家可读性组合证据 | test_tier_full |
 | FS-14 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 空/陈旧/冲突状态与多 blocker 的状态置信度闸门、稳定优先级、同级路径比较、展示后重新判断，以及无猜测动作/无静默改道/无第二次效果的 Viewer + pure API 组合证据 | test_tier_full |
 | FS-15 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | Gate-before-recommendation 的 `candidate_available`/`no_safe_starter_chain` 两结果、stable starter-chain/candidate identity 与 authority snapshot/version 绑定、`current-evidence-backed`/`target-contract`/`unknown/not_tracked` 切线、`no_safe_starter_chain` 的 blocker/恢复/复查边界，以及 fresh composite runtime + QA evidence 后才可作 current claim；并覆盖首局工业 walkthrough 的逐节点动作/边界/阻塞/恢复、齐套 arrival-order、accepted 与生产/交付分离、生产成功但交付未完成、重复/重连/回放单次 receipt，以及 Viewer/pure API 事实一致性 | test_tier_required + test_tier_full |
+| FS-16 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 2.2.5 单约束配对样例的完成基线、权威变化与保留价值/安全动作合同证据；入口观察分别记录理解、续玩意愿与提示介入，沿 testing 既有层级独立给出结论 | test_tier_required（合同） + test_tier_full（适用入口组合）；playability 独立 |
 
 具体字段矩阵、测试命令与历史 verdict 不复制到本分册。
 
