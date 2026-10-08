@@ -52,14 +52,12 @@
 | [状态与持久化](system-design-writing-standard.design.md#7-状态、事务与持久化) | 明确局部写入、并发、失败恢复及不可逆边界 | [DCI-09](#DCI-09) | repository_health_engineer；Git 工作树 | 不声称文件系统跨文件事务 |
 | [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | 一次切换必须同时提供读写器、数据和消费者 | [DCI-04](#DCI-04) | repository_health_engineer、qa_engineer | 不在 main 保留双读双写 |
 | [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | 旧新身份映射、无损证明、受控适配和有界回滚 | [DCI-12](#DCI-12) | repository_health_engineer、qa_engineer | 不覆盖未声明的仓库外消费者 |
-| [三 loop 边界](../workflow/source-of-truth.md#manual-three-loop-transition) | 文档和附属分片可以在同一合法 loop 中提交；候选策略不能自我准入 | [DCI-10](#DCI-10) | 有效 tool root、冻结 task binding、Project-backed truth | 本文不构成迁移执行授权 |
-| [required gate 分工](../workflow/source-of-truth.md#required-gate-capability-split) | actual check 属 baseline；checker 回归属按需能力；full fallback 不下调 | [DCI-11](#DCI-11) | 现有 planner、runner、receipt 合同 | 不因减少冲突跳过 required checks |
 
 ### 2.2 审读与权限
 
 RH 负责存储、路径和覆盖合同；QA 负责证据规则和负向验收；已有语义记录的 owner 负责该记录内容变化的重新审读。工具只能计算、生成候选、写入明确选中的记录和检查一致性，不能通过 `--owner`、本地 reason、作者自报 digest 或 CLI 成功替代有效 review。
 
-任务身份、批准的修改集合、实际源与测试 OID、迁移报告、CI 结果、例外批准和实际回滚决定仍记录在 GitHub task evidence。本文只维护长期设计，不填造未来 Task UID、PR 编号或批准凭据。
+实际修改、源与测试版本、迁移结果和回滚决定记录在 PR 与真实验证输出中。本文只维护长期技术设计，不增加任务身份或批准凭据。
 
 ## 3. 当前状态、目标状态与差距
 
@@ -68,7 +66,6 @@ RH 负责存储、路径和覆盖合同；QA 负责证据规则和负向验收�
 | Corpus | v2；`generated()` 全量生成，比较整个 `objects` 数组；父级保存 controls/delegate 摘要 | 静态 v3 入口＋每源对象一片 | 修改扫描、加载、写入及控制文件识别 | `scripts/document-corpus-inventory-check.py` |
 | Semantic | v1 `entries` / `bundles` 单体表；绑定内容 SHA | 逐文件 entry＋逐真实集合 bundle | 不得机械重签复核 SHA | 同上 `check_semantic_overlay()` |
 | Evidence | v1 单体 entries；部分字段来自生成器；有固定数量、triad 精确边界和五个窗口组 | 独立 entry / 原子 group；冻结基线与当前集合分开验证 | 不能简单删除数量断言或对新增对象沿用全局定额 | `scripts/doc-evidence-inventory-check.py` |
-| Loop | `doc/.governance/**` 统一归 code；普通 `doc/**` 多归 system；JSON 非一般文档扩展名 | 附属分片按真实 target 继承归属；静态控制保留 code | 须补有效策略、trusted loader、write_scope 和两端检查 | `scripts/pm/loop-policy.v1.json`、`loop_policy.py` |
 | CI | 有 baseline / doc_checker_contracts / workflow_governance；未知路径 full | 接入真实校验和对应回归，不误触无关重型能力 | 搜索到文件引用不等于已确认所有入口执行；实施时做调用链清点 | scope 配置、runner、capability inventory |
 | 已有测试 | 覆盖 duplicate、delegate、registry、内容漂移、语义和产品边界负例 | 保留负例，并增加真实 Git 分支合并、迁移及 loop 测试 | 本次未执行这些仓库测试 | 两个现有 inventory `*.test.py` |
 
@@ -439,12 +436,11 @@ object 内容、组成员或来源集合变化均触发重新核对；普通任�
 | 文件/集合 | 实施动作 | 验收重点 |
 | --- | --- | --- |
 | 本设计、doc-governance README、engineering `prd.index.md` | 新增设计与导航；长期规则只维护本设计 | 十二段、需求与验证映射可解析；无任务台账 |
-| `doc/engineering/workflow/source-of-truth.md` | 增补窄 sidecar 所有权、scope、trusted loader、启用边界和启用后的 corpus baseline obligation | 保留现有 gate、full fallback 和三 loop/Task UID 规则；候选策略不激活 |
+| `doc/engineering/workflow/source-of-truth.md` | 增补窄 sidecar 所有权、scope、trusted loader、启用边界和启用后的 corpus baseline obligation | 保留现有 gate、full fallback 和三 loop/可选 Issue 规则；候选策略不激活 |
 | `documentation-governance.manual.md` | 替换旧整表刷新步骤为 locate/sync/propose/check | 不鼓励 blanket regenerate 或自动续签 |
 | 新公共库、evidence policy、管理 CLI | 提供读取、严格模型、局部写入、转换与三方导入 | 单一算法、无 shell 注入、幂等 |
 | 两个现有 checker 及其测试 | 使用公共模型，保留专用语义检查，退役旧生成输出 | 现有负例语义不丢失 |
 | 两个入口与新分片集合 | 静态化、无损拆分、删除旧 semantic 表 | 无动态父级摘要 |
-| `scripts/pm/loop_policy.py`、loop policy 及相关测试 | 实现 effective sidecar classification、双端 scope、受信导入保护 | 不消费候选工具自证权限 |
 | CI scope、runner、capability inventory、调用链测试 | 接入实际检查与按需回归 | source/merge 检查都执行，未引入 accidental full |
 | `.gitignore`、`.gitattributes` | 精确忽略报告目录；约束新增元数据换行 | 不大范围忽略 doc，不改变历史源 bytes |
 | `scripts/fixtures/document-corpus-v3/legacy/` | 保留旧结构、字段全集、冻结 cohort、golden 等价结果 | fixture 不进入活跃 corpus、不当作批准证据 |
@@ -479,7 +475,7 @@ git diff --check
 
 迁移 PR 自己新增/修改的规范、README、脚本引用等，会使目标源集合不同于旧快照。必须把“旧模型的无损转换”与“PR 已声明的新源修改”分成报告的两个部分：先证明对同一旧快照 round-trip 等价，再对目标树的明确 source delta 正常 sync/review。不能把这部分差异静默加入等价比较的全局忽略名单。
 
-报告至少包含：source OID、工具版本、旧新记录数、完整源路径差异、字段差异、bundle/group 差异、允许的包装差异、PR 声明的 source delta、拟写/删除清单、所有前置摘要、最终退出码。实际执行与 tested tree OID 归入 GitHub task evidence。
+报告至少包含：source OID、工具版本、旧新记录数、完整源路径差异、字段差异、bundle/group 差异、允许的包装差异、PR 声明的 source delta、拟写/删除清单、所有前置摘要、最终退出码。实际执行与 tested tree OID 归入 PR 与实际验证记录。
 
 ### 10.4 旧 PR 的有界三方适配
 
@@ -510,7 +506,7 @@ git diff --check
 
 ### 11.1 验证映射表
 
-下表是待实施验证计划。测试文件中新增的 DCI-T 场景在实现时落入准确入口；表中没有声称这些新增场景当前已运行。证据 target 均为当前 GitHub task evidence＋对应 CI artifact，真实 source/integration/tested tree、环境及退出码在执行时记录，不填写虚构身份。
+下表是待实施验证计划。测试文件中新增的 DCI-T 场景在实现时落入准确入口；表中没有声称这些新增场景当前已运行。证据 target 均为当前 PR 与实际验证记录＋对应 CI artifact，真实 source/integration/tested tree、环境及退出码在执行时记录，不填写虚构身份。
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
@@ -524,8 +520,6 @@ git diff --check
 | [状态与持久化](system-design-writing-standard.design.md#7-状态、事务与持久化) | [DCI-09](#DCI-09) | 写入幂等、限于声明集合并对并发/故障失败关闭 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T23–T25；故障注入和双写者 | task evidence＋before/after 文件集 | advisory lock 不阻止外部编辑 |
 | [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | [DCI-04](#DCI-04) | 读写器、格式数据、消费者和测试一次切换 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T26/T27/T30；完整 fixture 和旧格式拒绝 | task evidence＋migration report | 不覆盖未声明的外部消费者 |
 | [兼容与迁移](system-design-writing-standard.design.md#10-兼容、迁移与回滚) | [DCI-12](#DCI-12) | 三方适配按记录比较且冲突时拒绝 | [corpus 回归](../../../scripts/document-corpus-inventory-check.test.py)：DCI-T28/T29；三快照导入 fixture | task evidence＋proposal and conflict output | 不自动裁决旧 PR 处置 |
-| [三 loop](../workflow/source-of-truth.md#manual-three-loop-transition) | [DCI-10](#DCI-10) | Sidecar scope 使用 base/head 完整集合且候选不自证 | [sidecar workflow regression](../../../scripts/document-corpus-inventory-workflow.test.py)：DCI-T31–T36；trusted/candidate 双树 fixture | task evidence＋fixture result | Fixture 不证明实际 Project 准入 |
-| [required gate 分工](../workflow/source-of-truth.md#required-gate-capability-split) | [DCI-11](#DCI-11) | 启用后的 baseline 真实执行，回归按需且不漏 full fallback | [sidecar workflow regression](../../../scripts/document-corpus-inventory-workflow.test.py)：DCI-T37–T39；planner、dispatcher 和套件选择 fixture | task evidence＋planner/dispatcher/CI artifact | 不承诺无关 main 前进时可跳过必要重型复验 |
 
 ### 11.2 必须实现的场景
 
@@ -636,7 +630,6 @@ git diff --check
 | `scripts/document-corpus-inventory-check.test.py` | 既有漂移、重复、delegate、semantic 等负例 |
 | `scripts/doc-evidence-inventory-check.py` | v1 生成分类、冻结数量、精确 triad、窗口组和专用导航约束 |
 | `doc/.governance/document-semantic-review-overrides.json` | 已有耐久语义复核记录及 testing templates bundle |
-| `scripts/pm/loop-policy.v1.json`、`scripts/pm/loop_policy.py` | 原 code/system/product 路径规则、双端点模式与 trusted tool root |
 | `doc/engineering/workflow/source-of-truth.md` | 显式 same-PR 迁移包装、候选 authority 不启用、required baseline 与能力分工 |
 | `doc/engineering/doc-governance/system-design-writing-standard.design.md` | 十二段结构、需求/验证映射及事实/设计/运行证据分离 |
 | `doc/engineering/doc-governance/doc-structure-standard.design.md` | 文件职责、目录登记、四模块和证据生命周期权限 |

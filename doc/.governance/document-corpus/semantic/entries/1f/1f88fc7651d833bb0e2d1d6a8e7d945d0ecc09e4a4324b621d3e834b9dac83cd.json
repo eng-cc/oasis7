@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "e22b7b0669aa7db6ab6578f8f20aa0c2396b8a9fad5416c5c351c0e605718da0",
+    "content_sha256": "70a10177c441fdb458a296e6b6183218f7cbc7f9affa5326f1dc3cd79df4100b",
     "current_authority": "testing-manual.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current S9 S10 claim boundary; results require same-window evidence",
+    "note": "current S9 S10 claim boundary; results require same-window evidence; developer workflow record projection updated, product authority retained",
     "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

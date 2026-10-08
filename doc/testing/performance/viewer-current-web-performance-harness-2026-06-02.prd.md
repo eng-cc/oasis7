@@ -1,6 +1,6 @@
 # oasis7 Viewer：当前 Web 性能采集与评测 Harness（2026-06-02）
 
-- 可变 task 状态与历史: GitHub task issue evidence comments
+- 可变 task 状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 ## 目标
 - Problem Statement: 当前 `crates/oasis7_viewer` canonical `viewer` Web 入口使用时出现卡顿感，而历史 `viewer-owr4-stress` / `perf_probe` 入口已经不再是活跃实现，缺少可执行的当前 viewer 性能门禁。

@@ -683,8 +683,25 @@ def scenario_partial_or_malformed_range_is_rejected() -> None:
         shutil.rmtree(root)
 
 
+def scenario_tracking_metadata_does_not_hide_design_changes() -> None:
+    module = load_checker()
+    old = "# Legacy design\n\n- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）\n\n## Behavior\nKeep durable state.\n"
+    new = old.replace("- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）", "- 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用")
+    root, base, _ = make_repo(design_text=old)
+    try:
+        (root / DESIGN).write_text(new, encoding="utf-8")
+        head = commit(root, "update optional tracking metadata")
+        assert module.changed_system_design_paths(root, base, head, False) == [], "metadata requires no design migration"
+        (root / DESIGN).write_text(new.replace("Keep durable state.", "Discard durable state."), encoding="utf-8")
+        head = commit(root, "change real persistence behavior")
+        assert (root / DESIGN) in module.changed_system_design_paths(root, base, head, False), "behavior must still be inspected"
+    finally:
+        shutil.rmtree(root)
+
+
 def main() -> None:
     scenarios = (
+        scenario_tracking_metadata_does_not_hide_design_changes,
         scenario_valid_new_design,
         scenario_committed_range_reads_trusted_head_content,
         scenario_committed_target_symlink_does_not_redirect_selected_head,

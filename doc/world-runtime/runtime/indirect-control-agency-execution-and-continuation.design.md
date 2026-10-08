@@ -7,7 +7,7 @@
 - 对应专业需求：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md#1-executive-summary)
 - 上游产品要求：[`REQ-WR-IA-001`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)、[`REQ-WR-IA-002`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)、[`REQ-WR-IA-003`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-003)
 - 补充产品 authority：[`Agent 自治、委托与责任连续性`](../../product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)；本设计只承接其技术边界，不取代该 PRD、资产经济 authority 或玩法/Viewer 专业合同。
-- 审读基线：本文只定义长期系统设计与验证方法；实现现状、候选提交、测试结果和任务状态必须从关联 GitHub Task UID 的 issue evidence 读取。
+- 审读基线：本文只定义长期系统设计与验证方法；实现现状、候选提交、测试结果和任务状态从关联 PR、实际 CI 和评审记录读取。
 - Last reviewed：2026-09-16
 
 本文把玩家意图、Agent 解释、runtime 权威执行、Viewer/API 投影和 QA 证据组织成一条可追踪的间接控制因果链。产品 PRD 拥有玩家承诺与 REQ/AC，`PRD-GAME-014` 拥有玩法 guarantee、字段语义与失败签名，本文拥有跨组件技术边界、状态映射、恢复合同和验证设计；它不复制产品要求、任务台账或当前完成度。
@@ -33,7 +33,7 @@
 - 不改变产品的间接控制方向，不新增第一人称逐帧控制承诺。
 - 不在本文冻结具体 UI 布局、API payload、runtime enum、Agent prompt/model/provider 或记忆算法。
 - 不把 Agent 输出、请求接受、队列入列、界面计数或 world tick 单独当作权威世界效果。
-- 不记录排期、分支、HEAD、CI 结果、当前 verdict 或发布状态；这些属于 GitHub task truth 与 QA evidence。
+- 不记录排期、分支、HEAD、CI 结果、当前 verdict 或发布状态；这些属于 Git、PR 与实际 CI 记录 与 QA evidence。
 - 不以文档建档证明实现完成、跨入口 parity 或 release readiness。
 
 ### 1.3 裁剪说明
@@ -74,7 +74,7 @@
 | Agent 解释与记忆 | 存在专业合同；当前实现覆盖不得从本文推断 | 理由、记忆使用、纠正与 earliest effect 接入统一 receipt | 具体意图类型和持久化能力 pending | agent_engineer / task evidence |
 | Viewer / pure API | gameplay PRD 定义 parity 地板；当前字段覆盖不得从本文推断 | 两入口表达同一四类 invariant | 具体 transport 与入口 coverage pending | viewer_engineer / task evidence |
 | Agent authority 产品追踪 | 产品 PRD 定义授权范围、控制权变化与责任语义；原有 runtime 设计覆盖通用间接控制/receipt | DES-WR-IA-010..012 将产品 authority 条款连到 runtime 校验、待决行动复核和可审计因果结果 | 实现和对应候选测试仍未由本文证明 | `doc/product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md`; runtime / Agent owners |
-| 验证 | PRD 已定义 required/full 方向 | 每个 DES 条款有稳定验证方法，实际结果挂 Task UID | 同候选组合证据 pending | qa_engineer / GitHub task evidence |
+| 验证 | PRD 已定义 required/full 方向 | 每个 DES 条款有稳定验证方法，实际结果挂 可选 Issue | 同候选组合证据 pending | qa_engineer / PR 与实际验证记录 |
 
 “目标状态”是设计合同，不等于当前实现。只有固定候选、环境与实际 evidence 同时存在时，某条能力才可被报告为 proven。
 
@@ -146,7 +146,7 @@ Viewer 与 pure API 可以使用不同布局和 payload，但对同一候选、�
 <a id="des-wr-ia-009"></a>
 ### DES-WR-IA-009：稳定追踪与证据绑定
 
-长期设计只保存 `REQ/AC -> PRD-GAME-014 -> DES-WR-IA-* -> 验证方法`。每次实现由实际 `Task UID` 在 GitHub issue evidence 中绑定 source/integration/tested tree、PR、CI、评审和产物；任务状态、动态 HEAD 和 verdict 不回写本文。`TASK-GAME-071~075` 是玩法工作包标签，不替代 GitHub Task UID。
+长期设计只保存 `REQ/AC -> PRD-GAME-014 -> DES-WR-IA-* -> 验证方法`。每次实现由实际 `可选 Issue` 在 GitHub issue evidence 中绑定 source/integration/tested tree、PR、CI、评审和产物；任务状态、动态 HEAD 和 verdict 不回写本文。`TASK-GAME-071~075` 是玩法工作包标签，不替代 GitHub 可选 Issue。
 
 <a id="des-wr-ia-010"></a>
 ### DES-WR-IA-010：当前授权范围与高后果行动
@@ -251,7 +251,7 @@ runtime 以当前授权来源复核高后果请求及适用累计额度，再独
 产品 REQ/AC
   -> PRD-GAME-014 guarantee / failure signature
   -> DES-WR-IA-*（本文）
-  -> GitHub Task UID + Issue evidence
+  -> GitHub 可选 Issue + Issue evidence
   -> PR / fixed source / integration / tested tree
   -> test、role review、CI、artifact 与交付结论
 ```
@@ -279,7 +279,7 @@ runtime 以当前授权来源复核高后果请求及适用累计额度，再独
 
 ### 11.2 本次交付连接
 
-本文首次系统化重建由 GitHub Task UID `task_8b5664cfc5b345758e0ed17966fd57c5` 与 Issue `#3712` 追踪。该引用只说明设计发布 provenance；任务的当前状态、HEAD、PR、CI 和评审结果必须从 issue evidence 读取，不构成本文的长期状态字段。
+本文首次系统化重建由 GitHub 可选 Issue `task_8b5664cfc5b345758e0ed17966fd57c5` 与 Issue `#3712` 追踪。该引用只说明设计发布 provenance；任务的当前状态、HEAD、PR、CI 和评审结果必须从 issue evidence 读取，不构成本文的长期状态字段。
 
 ## 12. 决策、长期风险与未决问题
 

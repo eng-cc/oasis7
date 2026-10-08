@@ -1,15 +1,14 @@
 # oasis7：自我进化文件化项目管理设计（2026-03-30）
 
-- 历史需求锚点: `PRD-ENGINEERING-021`；本文件仅保留 2026-03 `.pm` object-model 背景，不定义当前 task truth / evidence sink。
-- 当前 workflow 真值: `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`
+- 历史需求锚点: `PRD-ENGINEERING-021`；本文件仅保留 2026-03 `.pm` object-model 背景，不定义当前开发与交付规则。
+- 当前 workflow 真值: `doc/engineering/workflow/source-of-truth.md`
 
 审计轮次: 7
 
-## 1. 设计定位
+## 1. 历史设计定位
 
-这份设计文档保留 2026-03 `.pm/` 运行层的结构设计背景，以及仍有效的 repo-local memory / working_memory / stage-gate 边界；task truth、execution evidence、reflection intake 与 PR-readiness evidence 的当前规则以 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract` 为准。
+本文件保留 2026-03 `.pm` 对象模型的历史背景。其任务身份、状态、memory 自动转换和准入实现已经退出；现有用户资料原地保留为普通可读材料，不承担开发许可或完成证明。当前开发与交付仅由 [开发流程规范](../workflow/source-of-truth.md) 定义。
 
-`doc/**` 继续负责规格与计划。当前 task collaboration envelope 是 GitHub Issue，GitHub Project 承担队列/status 真值，GitHub task issue evidence comments 承担 execution evidence sink；`.pm/github-project-sync/*` 是 generated mirror / archive / cache，不是平行任务队列。repo-local `.pm` 仍可承载 role memory、task-scoped `working_memory`、stage/gate state 与生成视图，除非 workflow source-of-truth 后续另行迁移。
 
 ## 2. Canonical Object Model
 
@@ -66,7 +65,6 @@
 
 ### 2.4 Signal Inbox
 
-- 当前真值: GitHub-backed intake issues；本地镜像为 `.pm/github-project-sync/intake-signals.json`
 - 设计原则:
   - retired `.pm/inbox/signals.jsonl` 不得重建
   - `capture-todo.sh` / `promote-signal.sh` 创建或更新 GitHub-backed reflection intake
@@ -115,7 +113,7 @@
 
 ### 3.1 Signal -> Memory / Task
 
-1. 角色把 execution evidence 写入 GitHub task issue evidence comments。
+1. 角色把 execution evidence 写入 PR、实际 CI 与评审记录（Issue 按需）。
 2. `capture-todo.sh` / `promote-signal.sh` 将高价值条目创建为 GitHub-backed reflection intake。
 3. owner 决定将 signal 提升为:
    - role memory
@@ -139,12 +137,11 @@
 ### 3.4 Workflow Report Hookup
 
 1. `workflow-report.sh --phase start --role <owner> --task-uid <task_uid>`
-   - 先聚合 GitHub-backed task state、memory stale、reflection intake 与 stage/gate 摘要
-   - workflow start evidence 写入 GitHub task issue evidence comments；旧 `last_started_at` task-file 写法只作迁移前背景
+   - 先聚合 工作说明或按需 Issue state、memory stale、reflection intake 与 stage/gate 摘要
+   - workflow start evidence 写入 PR、实际 CI 与评审记录（Issue 按需）；旧 `last_started_at` task-file 写法只作迁移前背景
 2. `workflow-report.sh --phase close --role <owner> --task-uid <task_uid>`
-   - 回写 GitHub task issue evidence comments，并按需更新 memory、GitHub-backed reflection intake 与 generated views
+   - 回写 PR、实际 CI 与评审记录（Issue 按需），并按需更新 memory、GitHub-backed reflection intake 与 generated views
    - working memory 为空时暴露 bootstrap 入口，而不是静默跳过
-3. commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR watch/fix/merge
 4. `workflow-report.sh --phase review --role <owner>`
    - producer 额外聚合全部角色 pending signals
 5. `sync-views.sh` 在需要时重建 registry/backlog 本地视图
@@ -152,7 +149,7 @@
 ## 4. Script Surface
 
 - `scaffold.sh`: 建 `.pm/` 骨架与模板
-- `new-task.sh`: 通过 GitHub-backed task lifecycle 创建或绑定 task truth
+- `new-task.sh`: 通过 工作说明或按需 Issue lifecycle 创建或绑定 task truth
 - `promote-signal.sh`: 将高价值条目送入 GitHub-backed reflection intake
 - `sync-views.sh`: 从 GitHub-backed mapping / archive / intake mirror 重建本地视图
 - `lint.sh`: 校验字段、链路、source refs 与 stage drift

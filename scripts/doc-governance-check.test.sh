@@ -27,18 +27,17 @@ fi
 if [[ -n "${OASIS7_TEST_PYTHON:-}" ]]; then
   REAL_PYTHON="$OASIS7_TEST_PYTHON"
 else
-  REAL_PYTHON="$("$ROOT_DIR/scripts/pm/find-python-with-module.sh" ast)"
+  REAL_PYTHON="$("$ROOT_DIR/scripts/find-python-with-module.sh" ast)"
 fi
 
 FIXTURE="$TMPDIR/repo"
-mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/doc/.governance" "$FIXTURE/doc/testing" "$FIXTURE/doc/many" "$FIXTURE/doc/devlog" "$FIXTURE/.agents/roles/templates" "$FIXTURE/.agents/roles" "$TMPDIR/bin"
+mkdir -p "$FIXTURE/scripts" "$FIXTURE/doc/.governance" "$FIXTURE/doc/testing" "$FIXTURE/doc/many" "$FIXTURE/doc/devlog" "$FIXTURE/.agents/roles/templates" "$FIXTURE/.agents/roles" "$TMPDIR/bin"
 if [[ ! -x "$REAL_PYTHON" ]] || ! "$REAL_PYTHON" -c 'import ast; print("ready")' | grep -Fxq ready; then
   echo "doc-governance-check.test: OASIS7_TEST_PYTHON or PATH discovery must provide a functional Python interpreter" >&2
   exit 1
 fi
 cp "$ROOT_DIR/scripts/doc-governance-check.sh" "$FIXTURE/scripts/doc-governance-check.sh"
-cp "$ROOT_DIR/scripts/pm/find-python-with-module.sh" "$FIXTURE/scripts/pm/find-python-with-module.sh"
-cp "$ROOT_DIR/scripts/workflow-process-identity-check.py" "$FIXTURE/scripts/workflow-process-identity-check.py"
+cp "$ROOT_DIR/scripts/find-python-with-module.sh" "$FIXTURE/scripts/find-python-with-module.sh"
 cat >"$FIXTURE/scripts/document-corpus-inventory-check.py" <<'PY'
 #!/usr/bin/env python3
 import os

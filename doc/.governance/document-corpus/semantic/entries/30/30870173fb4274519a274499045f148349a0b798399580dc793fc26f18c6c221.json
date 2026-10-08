@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "403478648c77dbf734574e3c4c0f9d4dfba5da62aa3902a142e9aa0e02bf3719",
+    "content_sha256": "6d79a9428b3100b3b0ae41bfe22560da96e98111b33b0d7f05e70f830225c51a",
     "current_authority": "doc/testing/prd.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current testing domain design authority",
+    "note": "current testing domain design authority; developer workflow record projection updated, product authority retained",
     "path": "doc/testing/design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

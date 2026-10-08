@@ -7,7 +7,6 @@ allowed-tools:
   - Edit
   - Bash(git diff --check)
   - Bash(./scripts/doc-governance-check.sh)
-  - Bash(./scripts/pm/lint.sh)
   - Bash(python3 skills/epic-story-orchestrator-zh/tests/validate_writeback.py)
   - Bash(bash skills/epic-story-orchestrator-zh/tests/run_smoke.sh)
   - Bash(rg:*)
@@ -223,9 +222,7 @@ If bound to GitHub-backed task truth, append execution note to GitHub task issue
 ## Integration with Existing Local Surfaces
 
 - governance entrypoint: `.agents/skills/README.md`
-- skill authoring: `.agents/skills/writing-repo-owned-skills/SKILL.md`
 - world/system decomposition: `skills/game-architect/SKILL.md`
-- option comparison: `.agents/skills/bounded-brainstorming/SKILL.md`
 - prose polish: `skills/humanizer-zh/SKILL.md`
 
 This skill does **not** replace bootstrap/router/verification/closeout workflow surfaces.

@@ -63,7 +63,7 @@
 - `execution_log`：某轮真实执行记录，仅用于复盘与追溯。
 
 ## 覆盖规则
-- 纳入规则：纳入 `doc/readme/**` 下所有 `*.prd.md` 与同名 GitHub task issue evidence comments。
+- 纳入规则：纳入 `doc/readme/**` 下所有 `*.prd.md` 与相关 PR 和实际验证记录。
 - 活跃补充：仍被当前模块 PRD / 项目态直接引用的 `runbook`、`material`、`execution_log` supporting doc，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
 - 历史压缩：已完成、无下一步、且当前治理入口已由脚本/模块 project/后续复核专题覆盖的专题，保留文件原址和互链，但从默认活跃清单降级到历史压缩清单。
 - 排除规则：不纳入 `doc/devlog/**` 与其他非 PRD 配对文档。
@@ -74,7 +74,7 @@
 | --- | --- | --- |
 | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md` | `doc/readme/governance/readme-remediation-log-template-2026-03-11.md` |
-| `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | GitHub task issue evidence comments |
+| `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | PR、实际 CI 与评审记录（Issue 按需） |
 | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` |
 
 ## 当前活跃 PRD-only 治理专题
@@ -91,7 +91,7 @@
 ## 已退役删除专题
 | 专题 | 当前承接 | 删除理由 |
 | --- | --- | --- |
-| README production P0/P1、LLM P1/P2、LLM/DistFS/consensus 三组 closure triplet | `doc/product/` 四模块产品树；`doc/world-simulator/llm/`、`doc/world-runtime/`、`doc/p2p/`、`doc/world-simulator/viewer/` 专业权威；Git history / GitHub task evidence | 三组文件只包装已完成的实现任务和接口细节，不再拥有产品或专业语义；节点、拓扑与共识门控仍归 P2P/runtime 而非 viewer |
+| README production P0/P1、LLM P1/P2、LLM/DistFS/consensus 三组 closure triplet | `doc/product/` 四模块产品树；`doc/world-simulator/llm/`、`doc/world-runtime/`、`doc/p2p/`、`doc/world-simulator/viewer/` 专业权威；Git history / PR 与实际验证记录 | 三组文件只包装已完成的实现任务和接口细节，不再拥有产品或专业语义；节点、拓扑与共识门控仍归 P2P/runtime 而非 viewer |
 | README consistency checklist dated source set | 根 `README.md`；`scripts/readme-link-check.sh`；`doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md`；`doc/readme/prd.md` | 一次性人工 checklist 已被可执行链接检查、季度复核和模块台账吸收；不再保留重复 dated 三件套与 supporting copy |
 | 2026-03-11 release communication / announcement 四组 dated triplet | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-release-communication-template.md`；`doc/readme/governance/readme-release-announcement-template.md` | 长期产品合同已进入产品树，操作模板去日期稳定化；历史 candidate brief / draft、模板设计过程和任务状态只从 Git history 与 GitHub evidence 追溯 |
 | 2026-03 Moltbook promotion/post/runbook 三组 dated triplet 与 promotion plan | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-moltbook-liveops-runbook.md`；`doc/readme/governance/readme-moltbook-post-pack.md` | 渠道产品边界进入产品树，稳定策略合并到无日期 runbook，素材库去日期；历史平台快照、固定排期和任务包装只从 Git history 与 GitHub evidence 追溯 |
@@ -128,9 +128,9 @@
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：`*.prd.md`、`*.design.md` 与同名 GitHub task issue evidence comments。
+- 文档配对规则：`*.prd.md`、`*.design.md` 与相关 PR 和实际验证记录。
 - ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
 - `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。
-- 已删除的 README 顶层链接检查与根 README 公开状态对齐一次性专题不再保留原址；当前分别由 `scripts/readme-link-check.sh`、根 `README.md`、`doc/readme/prd.md`、一致性 checklist、季度复核专题、release communication surfaces、git history 与 GitHub task issue evidence comments 追溯。
+- 已删除的 README 顶层链接检查与根 README 公开状态对齐一次性专题不再保留原址；当前分别由 `scripts/readme-link-check.sh`、根 `README.md`、`doc/readme/prd.md`、一致性 checklist、季度复核专题、release communication surfaces、git history 与 PR、实际 CI 与评审记录（Issue 按需） 追溯。
 - 旧 `TASK-README-014/015` Moltbook 一次性 role handoff briefs 已退役删除；当前 Moltbook 追溯以 promotion plan、post drafts、liveops runbook 的 canonical PRD/project/runbook 与 `.pm` evidence 为准。

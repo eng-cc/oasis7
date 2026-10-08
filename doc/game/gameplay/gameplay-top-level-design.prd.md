@@ -73,7 +73,7 @@
 ## 0.6 历史 closure 归并后的稳定边界
 
 - 玩家动作必须经过 canonical authority、资源、时间和权限约束；规则可通过受限模块扩展，但不能借扩展绕过这些边界，也不由历史 architecture/closure 文档推导任意 community mode 承诺。
-- Micro-loop 的稳定可读性链是：`supported action -> accepted/rejected -> progress/blocker -> readable consequence -> next/recovery`。视觉证据必须来自真实 player surface，包含 action-to-visible-state、console-clean interaction、截图和专业 visual review；一次性 checklist、template、handoff 或 round evidence 只保留在 Git history / GitHub task evidence，不能晋升为 release/QA pass。
+- Micro-loop 的稳定可读性链是：`supported action -> accepted/rejected -> progress/blocker -> readable consequence -> next/recovery`。视觉证据必须来自真实 player surface，包含 action-to-visible-state、console-clean interaction、截图和专业 visual review；一次性 checklist、template、handoff 或 round evidence 只保留在 Git history / PR 与实际验证记录，不能晋升为 release/QA pass。
 - Runtime/WASM refactor 不扩张玩家能力承诺。Gameplay module 的 manifest、ABI、权限、计量、identity、install/upgrade/disable、执行失败与 replay 由 world-runtime/WASM 专业权威定义；runtime readiness 不是玩法可玩性或后果可读性验收。
 - 发布或恢复期间，受影响玩家动作必须得到可见处置：保留、replay，或带恢复路径的拒绝，禁止静默丢失。当前发布、长稳、rollback 和 incident 规则只能引用 testing/runtime/P2P/ops 的现行权威，不复用历史 `pass` / `Go` 结论。
 - 战争与政治的数值、评分、成本、冷却和反支配风险由专业权威 `doc/game/gameplay/gameplay-war-politics-mvp-baseline.design.md` 承载；产品树只保留玩家结果与跨域承诺。战争仍不是当前 player-facing 主线，任何重启都需要独立平衡与玩家证据。
@@ -401,7 +401,7 @@
 
 ### 2.7.1 PRD-GAME-012 稳定 early-retention 合同
 
-产品承诺统一见 [`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)。本节拥有不随短期任务日期变化的 gameplay 专业合同；当前 verdict、task trace 与复跑边界统一由对应 GitHub task evidence 和 `doc/testing/evidence/` 确认。
+产品承诺统一见 [`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)。本节拥有不随短期任务日期变化的 gameplay 专业合同；当前 verdict、task trace 与复跑边界统一由对应 PR 与实际验证记录 和 `doc/testing/evidence/` 确认。
 
 #### Gate 与 verdict 隔离
 
@@ -534,7 +534,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 - 暂不把 `--no-llm` 调试 lane 重新定义为正式游玩入口。
 - 暂不把 Prompt Ops / operator-only 入口作为默认玩家主路径。
 
-early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，专业玩法合同见本文件 2.7.1，当前 verdict 由同候选 GitHub task evidence 与 `doc/testing/evidence/` 确认。
+early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，专业玩法合同见本文件 2.7.1，当前 verdict 由同候选 PR 与实际验证记录 与 `doc/testing/evidence/` 确认。
 
 ## 2.11 纯 API 客户端等价
 
@@ -823,8 +823,8 @@ early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-ses
 - 玩法与目标基线：`doc/game/gameplay/gameplay-top-level-design.prd.md`；工程实现边界见 `doc/world-runtime/prd.md`。
 - Gameplay 生产落地证据：
   - 玩家侧治理、战争、危机与元进度合同由本文对应章节、`doc/game/gameplay/gameplay-war-politics-mvp-baseline.design.md` 和当前测试矩阵承接；战争仍不是当前玩家-facing 主线。
-  - 生命周期协议、tick 推进、模块 bootstrap/readiness 与 replay/恢复边界由 `doc/world-runtime/prd.md#gameplay-生命周期协议边界` 承接；历史 layer closure 实现过程从 Git history 与 GitHub task evidence 追溯。
-  - 模块驱动生产切片的完成状态由本专题 T3、下方测试矩阵、当前代码与回归测试共同承接；原增量 closure 三件套已退役，历史实现过程从 Git history 与 GitHub task evidence 追溯。
+  - 生命周期协议、tick 推进、模块 bootstrap/readiness 与 replay/恢复边界由 `doc/world-runtime/prd.md#gameplay-生命周期协议边界` 承接；历史 layer closure 实现过程从 Git history 与 PR 与实际验证记录 追溯。
+  - 模块驱动生产切片的完成状态由本专题 T3、下方测试矩阵、当前代码与回归测试共同承接；原增量 closure 三件套已退役，历史实现过程从 Git history 与 PR 与实际验证记录 追溯。
 - 测试入口与执行规范：`testing-manual.md`（S1/S2/S3/S6/S7）。
 
 ---

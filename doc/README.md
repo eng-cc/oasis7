@@ -10,20 +10,20 @@
 5. 若从产品视角阅读，先进入 `doc/product/README.md`，从固定四大产品模块选择唯一入口。
 6. 进入目标工程模块 `doc/<module>/prd.md`，确认问题定义、方案、验收标准与技术边界。
 7. 若目标模块已补齐 `design.md`，继续读模块设计总览，确认模块总体设计、分层和主链路。
-8. 继续读 GitHub task issue evidence comments，确认任务拆解、PRD-ID 映射、依赖与状态。
+8. 继续读 PR、实际 CI 与评审记录（Issue 按需），确认任务拆解、PRD-ID 映射、依赖与状态。
 9. 按需下钻模块子文档（`doc/<module>/**/*.md`）。
 10. 对照系统测试策略：`testing-manual.md` 与 `doc/testing/prd.md`。
-11. 若已知 `task_uid`，读取对应 GitHub task issue evidence comments；未知具体任务时，先看模块 GitHub task issue evidence comments。
+11. 若已知 `task_uid`，读取对应 PR、实际 CI 与评审记录（Issue 按需）；未知具体任务时，先看模块 PR、实际 CI 与评审记录（Issue 按需）。
 
 ## 按目标进入
 | 你的目标 | 第一入口 | 第二入口 | 说明 |
 | --- | --- | --- | --- |
 | 想先知道项目当前公开状态与技术预览边界 | `README.md` | `site/index.html` | 先确认“现在能看什么”，再决定是否深入仓库文档 |
 | 想确认本地 / test / 正式三套环境边界 | `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` | `testing-manual.md` + `doc/p2p/prd.md` | 先看项目三环境总览，再按 hosted-login / network tier / launcher lane 下钻 |
-| 想参与功能开发或治理任务 | `doc/core/prd.md` | `doc/<module>/prd.md` + GitHub task issue evidence comments | 先看全局目标，再进入目标模块 |
+| 想参与功能开发或治理任务 | `doc/core/prd.md` | `doc/<module>/prd.md` + PR、实际 CI 与评审记录（Issue 按需） | 先看全局目标，再进入目标模块 |
 | 想做本地验证、回归或验收 | `testing-manual.md` | `doc/testing/prd.md` | 手册负责 suite 选择，testing 模块负责测试体系建模 |
 | 想调试 Viewer / Web 链路 | `doc/world-simulator/viewer/viewer-manual.manual.md` | `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` | 前者是专项操作手册，后者是 Web 闭环步骤 |
-| 想补过程上下文或追溯具体任务决策 | GitHub task issue evidence comments | GitHub task issue evidence comments | 先靠正式追踪定位任务，再看 task-scoped evidence |
+| 想补过程上下文或追溯具体任务决策 | PR、实际 CI 与评审记录（Issue 按需） | PR、实际 CI 与评审记录（Issue 按需） | 先靠正式追踪定位任务，再看 task-scoped evidence |
 
 ## 产品模块入口
 
@@ -59,8 +59,8 @@
 - `doc/<module>/prd.index.md`：模块文件级 PRD 索引（活跃专题文档可达入口）。
 - `doc/<module>/**/*.md`：专题设计、实现方案、复盘与历史说明。
 - `doc/<module>/README.md`：模块目录索引（按主题子目录导航）。
-- GitHub task issue evidence comments：按任务维护的 canonical 过程日志；`.pm/github-project-sync/tasks.json` 负责 `task_uid` 到 issue/project item 的本地映射。
-- `doc/devlog/README.md`：历史归档摘要入口；原始 `doc/devlog/2026-*.md` daily 文件已删除，日级细节从 GitHub task issue evidence comments、Git history 与相关模块 GitHub task issue evidence comments 追溯，不再作为运行态真值。
+- PR、实际 CI 与评审记录（Issue 按需）：按任务维护的 canonical 过程日志；`.pm/github-project-sync/tasks.json` 负责 `task_uid` 到 issue/project item 的本地映射。
+- `doc/devlog/README.md`：历史归档摘要入口；原始 `doc/devlog/2026-*.md` daily 文件已删除，日级细节从 PR、实际 CI 与评审记录（Issue 按需）、Git history 与相关模块 PR、实际 CI 与评审记录（Issue 按需） 追溯，不再作为运行态真值。
 - `doc/.governance/*-allowlist.txt`：文档组织门禁基线（根目录与模块根目录平铺文件冻结清单）。
 - `doc/**/archive/` 不作为默认文档结构；历史专题仅在模块目录内保留并在索引中标注。少量 manifest-backed evidence asset archive（例如退役视觉证据图片）只作追溯证据，不作为当前 release / viewer / gameplay 首读入口。
 
@@ -69,12 +69,12 @@
 `doc/.governance/top-level-directory-registry.json` 是所有一级物理目录的机器可读登记；本页保留按读者目标维护的人工导航，而不是生成完整目录转储。`product` 只含四个逻辑产品模块，不是工程模块矩阵的第五类。
 
 - 历史摘要例外：`doc/devlog/README.md`；不作为运行态任务或证据真值。
-- 短周期视觉评审例外：`doc/ui_review_result/README.md`；只在存在可评分样本的轮次使用，长期结论回写到 `world-simulator`、`playability_test_result` 或 GitHub task truth。
+- 短周期视觉评审例外：`doc/ui_review_result/README.md`；只在存在可评分样本的轮次使用，长期结论回写到 `world-simulator`、`playability_test_result` 或 Git、PR 与实际 CI 记录。
 - 所有其他一级专业/治理/测试目录及其 owner、入口与存在理由见 registry；新增、删除或重分类目录时必须同步更新 registry、本页和 landing page。
 
 ## 共享规则
-- 新功能或行为变更必须先更新模块 `prd.md`，再更新 GitHub task issue evidence comments，最后实现与测试。
+- 新功能或行为变更必须先更新模块 `prd.md`，再更新 PR、实际 CI 与评审记录（Issue 按需），最后实现与测试。
 - 代码、测试、文档任务必须可追溯到 PRD-ID。
 - 设计内容应优先收敛到对应产品模块或专业模块中可长期维护的模块级 `design.md` / 权威专题；避免为短期小功能新建带日期的设计碎片。既有碎片宜按语义合并、修复引用并在安全时删除；只有承担可独立长期治理职责的专题，才保留窄范围的专题设计文档，而不以临时任务范围建档。
-- `doc/` 根目录只保留当前总入口；历史路径、已删除入口与迁移过程从 Git history 和 GitHub task issue evidence comments 追溯，不在活跃导航重复列举。
+- `doc/` 根目录只保留当前总入口；历史路径、已删除入口与迁移过程从 Git history 和 PR、实际 CI 与评审记录（Issue 按需） 追溯，不在活跃导航重复列举。
 - 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。

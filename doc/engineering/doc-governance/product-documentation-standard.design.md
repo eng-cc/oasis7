@@ -22,7 +22,7 @@
 | 专业玩法、数值、结算和专业验收 | `doc/game/` 等专业权威 | 保留产品含义，链接正式规则 |
 | runtime、共识、WASM、Agent 技术合同 | 对应专业域 PRD/design | 只引用支持或限制产品承诺的边界 |
 | API、schema、组件、算法和详细测试步骤 | 专业 design/manual | 产品层写要证明的结果，不写执行细节 |
-| 任务、排期、review 和执行状态 | GitHub Issue/Project-backed task truth | 只引用，不复制可变台账 |
+| 任务、排期、review 和执行状态 | Git、PR、实际 CI 和评审记录；Issue/Project 按需使用 | 只引用，不复制可变台账 |
 | 当前公开能力和 claim envelope | 根 `README.md` 与发行权威 | 产品目标不得自动升级公开承诺 |
 
 世界不变量、资源路径、结算规则和其他当前事实必须链接现行专业 authority。旧的 `world-rule.md`、附件、历史快照或旧资源表只能作为背景或迁移线索；未经现行 authority 核对，不得把其中的旧名称、路径、数值或规则措辞写成当前事实。迁移时须在语义迁移账目中记录其分类、当前 authority、未迁移部分和删除条件。
@@ -107,7 +107,7 @@
 
 未决问题说明准确问题、受影响 REQ/AC、决策 role、所需信息、解决触发条件、任务引用和临时排除范围。重要取舍记录考虑过的替代方案、选择理由、牺牲和重新评估条件；不要把作者或 Agent 的猜测冒充用户决定。
 
-语义迁移按文件进行：先清点产品、专业、历史和活跃引用，回填到正确产品 authority，再修复导航和回链。源文件仍承担专业真值时保留其 authority，记录剩余语义、接收 owner 和删除条件；只有完整接收且引用修复后才可删除。任务执行状态和 review ledger 只在 GitHub task truth。
+语义迁移按文件进行：先清点产品、专业、历史和活跃引用，回填到正确产品 authority，再修复导航和回链。源文件仍承担专业真值时保留其 authority，记录剩余语义、接收 owner 和删除条件；只有完整接收且引用修复后才可删除。任务执行状态和 review ledger 只在 Git、PR 与实际 CI 记录。
 
 变更审查至少区分编辑澄清、行为/体验变化、数值/平衡变化、公开承诺变化和重命名/迁移。前四类分别复核行为语义、专业正式值、公开证据和适用范围；重命名或迁移必须保留旧到新的语义映射并修复活跃引用。规范正文只保留理解当前设计所需的已采纳决策摘要，不维护开发日志。
 
@@ -140,7 +140,7 @@ git diff --check
 
 这些条件是“可以作为实现输入”的最低内容合同，不等同于实现完成、专业规则通过、玩家体验成立或发行承诺。自动检查只判断可机械判断的字段、引用、锚点和路径；是否有趣、是否足够有策略深度、数值是否合理和玩家是否愿意继续，仍由对应专业 role 与适用证据判断。
 
-跨层 trace relation 继续复用现有协调记录：`trace.upstream_refs` MUST 使用 typed `product_requirement` 或 `professional_acceptance` 引用，`trace.system_design` MUST 使用准确 `path#fragment` 或显式 N/A disposition；`applicability` MUST 为 `required` 或 `not_applicable`，每个新建或实质修改的记录 MUST 同时发出 `applicability` 与兼容别名 `required`，并使 `applicability=required` 与 `required=true`、`applicability=not_applicable` 与 `required=false` 一致。产品价值、玩家承诺、产品范围或产品 AC 变更至少需要一个 product requirement；纯工程、治理或专业合同变更必须使用 professional acceptance；消费技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时 system design 必须 required。任何 N/A MUST 说明非空理由、有界范围、applicability owner role、review/evidence locator 和重新评估触发器；省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 都不能冒充 N/A，声称有交付工作时 product 与 professional 不得同时为 N/A。
+跨层映射说明产品或专业要求、相关系统设计和真实验证入口。产品价值、玩家承诺、范围或验收变化时维护对应产品要求；纯工程变化使用专业合同。说明不适用范围和未覆盖风险，不增加 Task、协调 schema、兼容字段或回执准入。
 
 ### 10.3 新建与实质变更产品文档的机械准入
 

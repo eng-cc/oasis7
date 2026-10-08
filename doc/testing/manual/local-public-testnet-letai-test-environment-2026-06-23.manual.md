@@ -812,7 +812,7 @@ rtk curl -sSI 'http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api
 
 ## 16. 记录模板
 
-每次搭建或复核，在 GitHub task issue evidence comments 或测试报告中至少记录：
+每次搭建或复核，在 PR、实际 CI 与评审记录（Issue 按需） 或测试报告中至少记录：
 
 ```text
 - manifest path:

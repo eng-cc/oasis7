@@ -64,4 +64,4 @@ Do not use this skill when:
 ## Verification
 
 - Run the exact browser command used for the claim and inspect the returned snapshot/screenshot/diff.
-- For skill edits, run `./scripts/lint-skills.sh`, `./scripts/doc-governance-check.sh`, `./scripts/pm/lint.sh`, and `git diff --check`.
+- For skill edits, run `./scripts/lint-skills.sh`, `./scripts/doc-governance-check.sh`, `git diff --check`.

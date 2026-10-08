@@ -1,7 +1,7 @@
 # oasis7: Game World State Sync and Commit Closure Design
 
 - 对应需求文档: `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 审计轮次: 1
 
@@ -72,7 +72,7 @@
 
 ---
 
-以下完整验证视图承接目标执行/恢复合同。以上原始 S9A/S10 基线条款与证据边界保留；新增 schema 是目标验收形状，不是已部署协议、自动 validator、运行通过或发行结论。Owner 是 `qa_engineer`；runtime/WASM/P2P/Agent/Viewer 各自保有执行、协议和消费者语义 authority。审读输入为 canonical repository `eng-cc/oasis7` 的专业合同与产品条款；候选实际 source/integration/tree、运行产物与判定由对应 GitHub task evidence 绑定，本文不维护动态任务台账。
+以下完整验证视图承接目标执行/恢复合同。以上原始 S9A/S10 基线条款与证据边界保留；新增 schema 是目标验收形状，不是已部署协议、自动 validator、运行通过或发行结论。Owner 是 `qa_engineer`；runtime/WASM/P2P/Agent/Viewer 各自保有执行、协议和消费者语义 authority。审读输入为 canonical repository `eng-cc/oasis7` 的专业合同与产品条款；候选实际 source/integration/tree、运行产物与判定由对应 PR 与实际验证记录 绑定，本文不维护动态任务台账。
 
 ## 1. 问题、目标与非目标
 

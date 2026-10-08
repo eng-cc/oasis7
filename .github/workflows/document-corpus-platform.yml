@@ -9,8 +9,7 @@ on:
       - doc/.governance/document-corpus-inventory.json
       - doc/.governance/document-corpus/**
       - doc/testing/evidence/inventory.json
-      - scripts/ci-required-capability-test-inventory.tsv
-      - scripts/ci-required-scope.v2.json
+      - scripts/ci-required-scope.json
       - scripts/document-corpus-inventory*
       - scripts/document_corpus.py
       - scripts/document_evidence_policy.py
@@ -26,8 +25,7 @@ on:
       - doc/.governance/document-corpus-inventory.json
       - doc/.governance/document-corpus/**
       - doc/testing/evidence/inventory.json
-      - scripts/ci-required-capability-test-inventory.tsv
-      - scripts/ci-required-scope.v2.json
+      - scripts/ci-required-scope.json
       - scripts/document-corpus-inventory*
       - scripts/document_corpus.py
       - scripts/document_evidence_policy.py
@@ -52,6 +50,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12.3"
@@ -59,6 +58,3 @@ jobs:
         run: |
           python scripts/document-corpus-inventory-check.test.py
           python scripts/doc-evidence-inventory-check.test.py
-      - name: Run workflow admission regressions
-        if: matrix.os == 'ubuntu-24.04'
-        run: python scripts/document-corpus-inventory-workflow.test.py

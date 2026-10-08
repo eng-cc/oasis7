@@ -2,5 +2,5 @@
 set -euo pipefail
 
 # Compatibility entrypoint for legacy hooks. Ordinary local commits are not a
-# verification gate; CI required and frozen-head Pre-PR Ready own validation.
+# verification gate; use ci-tests.sh for checks and actual CI for PR validation.
 exit 0

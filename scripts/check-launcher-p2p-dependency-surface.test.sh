@@ -26,19 +26,36 @@ require_exact_route() {
 
 baseline_cargo_tooling=$(function_body run_cargo_tooling_baseline_contract_tests)
 cargo_tooling=$(function_body run_cargo_tooling_contract_tests)
-legacy_baseline=$(function_body run_legacy_required_gate_contract_baseline)
-legacy_dispatch=$(function_body run_required_gate_checks)
-versioned_dispatch=$(function_body run_required_gate_capability_contracts)
 full_capabilities=$(function_body run_all_required_gate_capability_contract_tests)
+group_dispatch=$(function_body run_group)
 
 require_exact_route "Cargo-tooling baseline" "$baseline_cargo_tooling" "$required_gate_line" 1
-require_exact_route "Cargo-tooling capability" "$cargo_tooling" "run_cargo_tooling_baseline_contract_tests" 1
-require_exact_route "Cargo-tooling capability" "$cargo_tooling" "$required_gate_line" 0
-require_exact_route "Legacy required baseline" "$legacy_baseline" "run_cargo_tooling_baseline_contract_tests" 1
-require_exact_route "Legacy required baseline" "$legacy_baseline" "$required_gate_line" 0
-require_exact_route "Legacy required dispatch" "$legacy_dispatch" "run_legacy_required_gate_contract_baseline" 1
-require_exact_route "Versioned required dispatch" "$versioned_dispatch" '"Cargo tooling contracts" OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS run_cargo_tooling_contract_tests' 1
-require_exact_route "Full required capability suite" "$full_capabilities" "run_cargo_tooling_contract_tests" 1
+require_exact_route "Cargo-tooling group" "$cargo_tooling" "run_cargo_tooling_baseline_contract_tests" 1
+require_exact_route "Cargo-tooling group" "$cargo_tooling" "$required_gate_line" 0
+require_exact_route "Required group dispatch" "$group_dispatch" 'cargo_tooling_contracts) run_cargo_tooling_contract_tests ;;' 1
+require_exact_route "Full required suite" "$full_capabilities" "run_cargo_tooling_contract_tests" 1
+
+python3 - "$repo_root/.github/workflows/rust.yml" "$repo_root/scripts/ci-required-scope.json" <<'PYTHON'
+import json
+from pathlib import Path
+import re
+import sys
+
+workflow = Path(sys.argv[1]).read_text()
+config = json.loads(Path(sys.argv[2]).read_text())
+jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
+                       workflow.split('\njobs:\n', 1)[1], re.M | re.S))
+job = jobs.get('cargo-tooling-contracts', '')
+for expected in ('needs: select', "if: needs.select.outputs.run_cargo_tooling_contracts == 'true'",
+                 'fromJSON(needs.select.outputs.matrix_cargo_tooling_contracts)', '--group "${{ matrix.group }}"'):
+    if expected not in job:
+        raise SystemExit("Cargo tooling job is missing selected group execution: " + expected)
+needs = re.search(r'    needs: \[(.*)\]', jobs.get('required-gate', ''))
+if not needs or 'cargo-tooling-contracts' not in needs.group(1).split(', '):
+    raise SystemExit("final required-gate omits Cargo tooling results")
+if 'rust_toolchain' not in config['resources']['cargo_tooling_contracts']:
+    raise SystemExit("Cargo dependency checks require a Rust toolchain")
+PYTHON
 
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT

@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-- 本专题是链 PoS 时间、tick 节拍、控制面参数与状态可观测性的唯一 runtime 专业 authority。它吸收同一实现域中已完成的 slot clock、subslot pacing 与 time-anchor 对齐专题的现行合同；历史实现过程由 Git history 与 GitHub task evidence 追溯，不再以已完成专题作为当前入口。
+- 本专题是链 PoS 时间、tick 节拍、控制面参数与状态可观测性的唯一 runtime 专业 authority。它吸收同一实现域中已完成的 slot clock、subslot pacing 与 time-anchor 对齐专题的现行合同；历史实现过程由 Git history 与 PR 与实际验证记录 追溯，不再以已完成专题作为当前入口。
 - 本专题定义 runtime 当前行为，不定义 validator 经济、stake、奖励、主网承诺、节点实际运维拓扑或玩家规则。
 - Success Criteria:
   - SC-1: 相同 `now_ms/genesis/slot_duration_ms/ticks_per_slot` 输入在节点上得到相同 `logical_tick/slot/tick_phase`。

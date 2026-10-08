@@ -37,7 +37,7 @@
 - M3: Viewer / pure API / agent surfaces expose quote, receipt, module evidence and next useful action.
 - M4: QA smoke proves one repair/logistics action becomes cheaper, faster or less risky because of depot, while remaining blocker is visible.
 
-M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段变化或公开 claim。任何当前状态只能由 GitHub Project task truth、同一候选的新鲜专业证据与根 `README.md` 的统一 claim envelope 共同确认；本 topic PRD 及历史或局部样本不能代签。
+M1–M4 是目标验收顺序，不是当前可用性、mainline 合入、阶段变化或公开 claim。任何当前状态只能由 Git、PR 和实际验证记录、同一候选的新鲜专业证据与根 `README.md` 的统一 claim envelope 共同确认；本 topic PRD 及历史或局部样本不能代签。
 
 ## 风险
 
