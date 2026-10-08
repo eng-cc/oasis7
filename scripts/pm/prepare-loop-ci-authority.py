@@ -125,6 +125,9 @@ def raw_task(root, repository, uid, base):
     if raw_proof.get('schema') == primary.LOOP_PROOF_SCHEMA and any(
             not cached.get(key) for key in ('canonical_worktree', 'task_branch')):
         raise ValueError('Project-read setup: canonical raw Task worktree/branch identity unavailable; trusted materialization required, never derive from completion')
+    if raw_record is not None and raw_proof.get('schema') != primary.LOOP_PROOF_SCHEMA and any(
+            not task.get(key) for key in ('canonical_worktree', 'task_branch', 'project_item_id')):
+        raise ValueError('Project-read setup: legacy completion independent canonical Task identity unavailable; trusted materialization required, never derive from completion')
     completion = primary.validate_completion(task)
     proof = (completion or {}).get('payload', {}).get('scope_evidence', {})
     if proof.get('schema') != primary.LOOP_PROOF_SCHEMA:
