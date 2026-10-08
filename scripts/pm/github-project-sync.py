@@ -111,13 +111,15 @@ def die(message: str) -> None:
 
 
 def primary_package_value(task: OrderedDict[str, Any]) -> str | None:
-    value = task.get("primary_package")
-    if value in (None, ""):
-        return None
-    package = str(value).strip()
-    if PRIMARY_PACKAGE_RE.fullmatch(package) is None:
-        die("primary_package is not a valid declared Cargo package name")
-    return package
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("task_primary_package", pathlib.Path(__file__).with_name("task_primary_package.py"))
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        return module.effective_primary_package(task)
+    except ValueError as exc:
+        die(str(exc))
 
 
 def parse_scalar(value: str) -> Any:
@@ -668,6 +670,10 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
     package = primary_package_value(task)
     if package is not None:
         lines.append(f"- primary_package: `{package}`")
+    if task.get("primary_package_completion") is not None:
+        from task_primary_package import canonical_bytes
+        encoded = base64.urlsafe_b64encode(canonical_bytes(task["primary_package_completion"])).decode().rstrip("=")
+        lines.append(f"- primary_package_completion_b64: `{encoded}`")
     source_refs = task.get("source_refs") or []
     if source_refs:
         lines.append("")
@@ -1311,6 +1317,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if task.get("loop_binding") is not None:
                     live_record["loop_binding"] = task["loop_binding"]
+                if task.get("primary_package_completion") is not None:
+                    live_record["primary_package_completion"] = task["primary_package_completion"]
                 if primary_package_value(task) is None:
                     live_record.pop("primary_package", None)
                 if content_id:
@@ -1424,6 +1432,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if task.get("loop_binding") is not None:
             record["loop_binding"] = task["loop_binding"]
+        if task.get("primary_package_completion") is not None:
+            record["primary_package_completion"] = task["primary_package_completion"]
         if primary_package_value(task) is None:
             record.pop("primary_package", None)
         persist_mapping(mapping_path, mapping)

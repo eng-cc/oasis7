@@ -788,7 +788,7 @@ scope_drift_armed ='''
         self.run_case("pending_final_readback")
 
     def test_repeated_actual_publisher_converges_idempotently(self):
-        self.run_case("idempotent_repeat")
+        self.run_case("idempotent_repeat", timeout=60)
 
     def test_final_project_content_drift_retains_current_pending_action(self):
         self.run_case("pending_project_content_drift")

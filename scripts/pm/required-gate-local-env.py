@@ -6,7 +6,8 @@ from __future__ import annotations
 import sys
 
 
-EXECUTION_CONTRACT = "required-domain-split/v1"
+EXECUTION_CONTRACT = "required-domain-split/v2"
+SUPPORTED_EXECUTION_CONTRACTS = {"required-domain-split/v1", EXECUTION_CONTRACT}
 PLANNER_SELECTOR_FIELDS = (
     "run_oasis7_required_tests",
     "run_consensus_tests",
@@ -84,7 +85,7 @@ def render_versioned_environment(text: str) -> str:
         if mixed:
             raise ValueError("unversioned planner output contains versioned fields: " + ", ".join(mixed))
         return ""
-    if contract != EXECUTION_CONTRACT:
+    if contract not in SUPPORTED_EXECUTION_CONTRACTS:
         raise ValueError("unsupported planner execution contract: " + contract)
 
     required_fields = set(PLANNER_SELECTOR_FIELDS) | set(RESOURCE_FIELDS) | {"execution_contract"}
@@ -96,8 +97,12 @@ def render_versioned_environment(text: str) -> str:
         raise ValueError("versioned planner fields must be exact true/false: " + ", ".join(malformed))
     if values["needs_python"] != "true" or values["needs_markdown"] != "true":
         raise ValueError("required-gate baseline document checks require Python and Markdown")
+    if contract == EXECUTION_CONTRACT and values["needs_rust_toolchain"] != "true":
+        raise ValueError("v2 scope metadata precheck requires the pinned Rust toolchain")
+    if values["run_rust_baseline"] == "true" and values["needs_rust_toolchain"] != "true":
+        raise ValueError("Rust baseline requires the planned Rust toolchain")
 
-    assignments = [f"OASIS7_CI_EXECUTION_CONTRACT={EXECUTION_CONTRACT}"]
+    assignments = [f"OASIS7_CI_EXECUTION_CONTRACT={contract}"]
     assignments.extend(f"{environment}={values[field]}" for field, environment in VERSIONED_ENV_FIELDS)
     return " ".join(assignments)
 

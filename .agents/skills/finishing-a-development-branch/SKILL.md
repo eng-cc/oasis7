@@ -23,6 +23,8 @@ For a finite multi-obligation change, before a leaf enters finish, read its coor
 
 ## Freeze-Commit Gates
 
+Resolve any missing business-task primary through the [canonical completion operator entry](../../../doc/engineering/workflow/source-of-truth.md#task-primary-package-completion-operator), then regenerate the current projection and its review/CI consumers before freezing publication. For legacy scope recovery, `--scope-evidence-json <locator-assertions.json>` selects preexisting authorization and original-freeze comments without changing acceptance or granting paths. Governance-only ranges require no primary completion. Recover uncertain completion effects through the same facade action, preserving the bootstrap snapshot.
+
 1. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
 2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>`; the helper records and reads back canonical task/head/base identity on the bound issue before push or PR creation. If `--body-file` is used, include the exact `oasis7-impact-projection-b64` marker bound to that projection.
 3. After the draft's exact-head `required-gate` succeeds, produce the trusted receipt explicitly:
@@ -87,10 +89,8 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 
 10. Merge only with trusted gate evidence and the gate-selected repository path.
    Follow the [native readiness binding](../../../doc/engineering/workflow/source-of-truth.md#native-readiness-binding) for exact claim-input/result/comment capture and server readback; the first-migration transport remains non-promotable before compatible merge/readback. Continue ordinary fresh live gates/preflight after capture; the latest live gate authorizes merge.
-   A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
-   or informational `BEHIND` defaults to admin merge
-   when the gate emits `use_admin_merge: true`; do not request separate task or
-   user authorization. Any hold or substantive gate blocker still fails closed.
+   A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED` or informational `BEHIND` defaults to admin merge
+   when the gate emits `use_admin_merge: true`; do not request separate task or user authorization. Any hold or substantive gate blocker still fails closed.
    Do not land locally unless the user explicitly asks for local landing.
 
 ## Post-Merge Cleanup

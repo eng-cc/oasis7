@@ -16,8 +16,103 @@ import os
 import shutil
 import textwrap
 import time
+import re
 
 HERE=Path(__file__).parent
+
+class FullPlanRunnerBoundaryTests(unittest.TestCase):
+ def test_actual_workflow_selectors_and_runner_authenticate_full_plan(self):
+  spec=importlib.util.spec_from_file_location('runner_scope_fixture',HERE/'trusted-cargo-scope.test.py')
+  fixture_module=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixture_module)
+  fixture=fixture_module.TrustedScopeTest(methodName='runTest');fixture.setUp()
+  self.addCleanup(fixture.tearDown)
+  fixture.write('scripts/pm/trusted_cargo_scope.py',(HERE/'trusted_cargo_scope.py').read_text())
+  base=fixture.full_fixture()
+  fixture.write('scripts/pm/check-cargo-package-scope',fixture_module.CHECKER.replace('"SOURCE"','"CANDIDATE"'))
+  fixture.write('.pm/cargo-package-auxiliary-files.json','{"changed":true}\n')
+  head=fixture.commit('bounded registry maintenance')
+  # Real planning with refs invokes precheck only after complete coverage is
+  # available; changed-path-only oracle calls would miss this ordering boundary.
+  result=subprocess.run([sys.executable,'-I',str(fixture.root/'scripts/plan-rust-required-scope.py'),
+                         '--event-name','pull_request','--base-ref',base,'--head-ref',head],
+                        cwd=fixture.root,text=True,capture_output=True)
+  self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+  plan=dict(line.split('=',1) for line in result.stdout.splitlines() if '=' in line)
+  self.assertEqual(plan['scope'],'full')
+  plan_path=fixture.root/'workflow-outputs.json';plan_path.write_text(json.dumps(plan))
+  workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
+  tier=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
+  environment={name:plan[key] for name,key in re.findall(r'(OASIS7_CI_[A-Z0-9_]+): \$\{\{ steps.scope.outputs.([a-z0-9_]+) \}\}',tier)}
+  environment.update(OASIS7_CARGO_SCOPE_BASE=base,OASIS7_CARGO_SCOPE_INTEGRATION_BASE=base,
+                     OASIS7_CARGO_SCOPE_HEAD=head,OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN='true',
+                     OASIS7_CARGO_SCOPE_FULL_PLAN=str(plan_path))
+  driver=(HERE.parent/'ci-tests.sh').read_text()
+  body='run_cargo_package_scope_check() {'+driver.split('run_cargo_package_scope_check() {',1)[1].split('\n}',1)[0]+'\n}'
+  command='run() { "$@"; }\n'+body+'\nrun_cargo_package_scope_check\n'
+  environment.update(repo_root=str(fixture.root),driver_dir=str(fixture.root/'scripts'))
+  result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=fixture.root,env={**os.environ,**environment},text=True,capture_output=True)
+  self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+  self.assertEqual(json.loads(result.stdout)['authority'],'CANDIDATE')
+  # A complete-looking JSON and true marker cannot compensate for an omitted
+  # resource in the actual workflow-to-runner selector map.
+  environment['OASIS7_CI_NEEDS_NODE']='false'
+  result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=fixture.root,env={**os.environ,**environment},text=True,capture_output=True)
+  self.assertNotEqual(result.returncode,0)
+  self.assertIn('actual runner',result.stderr)
+
+class CopiedIdentityClosureTests(unittest.TestCase):
+ def test_four_workflow_copy_recipes_supply_isolated_identity_closure(self):
+  workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
+  # Execute the actual copy commands preceding each prepare invocation, including
+  # keyed-only copies. The source directory represents the trusted B checkout.
+  regions=workflow.split('python3 -I "${RUNNER_TEMP}/integration_ci.py"')[:-1]
+  recipes=[]
+  for region in regions:
+   lines=[line.strip() for line in region.splitlines() if line.strip().startswith('cp ') and 'scripts/pm/' in line and '${RUNNER_TEMP}/' in line]
+   recipes.append('\n'.join(line for line in lines if 'integration-planner/pm/' not in line))
+  self.assertEqual(len(recipes),4)
+  probe='''import importlib.util, pathlib, sys
+root=pathlib.Path(sys.argv[1])
+def load(name):
+ spec=importlib.util.spec_from_file_location(name,root/(name+'.py'))
+ module=importlib.util.module_from_spec(spec);sys.modules[name]=module;spec.loader.exec_module(module);return module
+identity=load('ci_ready_receipt_identity')
+assert pathlib.Path(identity.primary_contract.__file__).parent==root
+with identity.primary_contract._loop_helpers() as helpers:
+ assert all(pathlib.Path(m.__file__).parent==root for m in helpers.values())
+ try: helpers['loop'].trusted_module(root,root,{},'loop_policy')
+ except ValueError as e: assert 'policy_commit' in str(e)
+ else: raise AssertionError('copied bundle became policy authority')
+ policy=helpers['loop'].trusted_module(pathlib.Path(sys.argv[2]),pathlib.Path(sys.argv[3]),{'policy_commit':sys.argv[4]},'loop_policy')
+ assert pathlib.Path(policy.__file__).resolve().parent==pathlib.Path(sys.argv[2]).resolve()/'scripts/pm'
+bootstrap=load('prepare-loop-ci-authority')
+for name in ('workflow-durable-store','loop_leaf_result','task_complete_claim','task_primary_package'):
+ assert pathlib.Path(bootstrap.sibling(name).__file__).parent.resolve()==root.resolve()
+print('isolated identity, lazy loop and bootstrap closure passed')
+'''
+  for site,recipe in enumerate(recipes,1):
+   with self.subTest(site=site),tempfile.TemporaryDirectory() as tmp:
+    root=Path(tmp);copied=root/'copied';copied.mkdir();candidate=root/'candidate';candidate.mkdir()
+    (candidate/'task_primary_package.py').write_text("raise RuntimeError('candidate fallback executed')\n")
+    repository=root/'repository';repository.mkdir()
+    shutil.copytree(HERE,repository/'scripts/pm',ignore=shutil.ignore_patterns('__pycache__'))
+    for name in ('document_corpus.py','product-doc-content-check.py','product_doc_markdown.py'):
+     shutil.copy2(HERE.parent/name,repository/'scripts'/name)
+    def git(*args):
+     return subprocess.check_output(['git','-C',str(repository),*args],text=True,stderr=subprocess.PIPE).strip()
+    git('init','-q');git('config','user.email','fixture@example.invalid');git('config','user.name','Fixture')
+    git('add','.');git('commit','-qm','immutable policy fixture')
+    commit=git('rev-parse','HEAD');git('update-ref','refs/remotes/origin/main',commit)
+    policy_root=root/'policy';git('worktree','add','-q','--detach',str(policy_root),commit)
+    result=subprocess.run(['bash','-euo','pipefail','-c',recipe],cwd=HERE.parents[1],env={**os.environ,'RUNNER_TEMP':str(copied)},text=True,capture_output=True)
+    self.assertEqual(result.returncode,0,result.stderr)
+    result=subprocess.run([sys.executable,'-I','-c',probe,str(copied),str(policy_root),str(repository),commit],cwd=candidate,text=True,capture_output=True)
+    self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+    for source in HERE.rglob('*'):
+     if source.is_file() and '__pycache__' not in source.parts:
+      destination=copied/source.relative_to(HERE)
+      self.assertTrue(destination.is_file(),str(source.relative_to(HERE)))
+      self.assertEqual(hashlib.sha256(destination.read_bytes()).digest(),hashlib.sha256(source.read_bytes()).digest())
 
 
 def required_test_tier_command(repo, scope_oid='b'*40):
@@ -54,16 +149,19 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   (self.root/'README').write_text('base\n',encoding='utf-8')
   (self.root/'scripts').mkdir()
   shutil.copy2(HERE.parents[1]/'scripts/ci-required-scope.v2.json',self.root/'scripts/ci-required-scope.v2.json')
-  for relative in ['scripts/plan-rust-required-scope.py','scripts/ci-tests.sh','scripts/pm/workflow-impact-projection.py']:
+  for relative in ['scripts/plan-rust-required-scope.py','scripts/ci-tests.sh','scripts/pm/workflow-impact-projection.py','scripts/pm/task_primary_package.py','scripts/pm/trusted_cargo_scope.py','scripts/pm/check-cargo-package-scope','scripts/pm/cargo_package_change_classification.py','scripts/document_corpus.py','.pm/cargo-package-scope-policy.json']:
    destination=self.root/relative
    destination.parent.mkdir(parents=True,exist_ok=True)
    shutil.copy2(HERE.parents[1]/relative,destination)
-  self.git('add','README','scripts');self.git('commit','-qm','base')
+  (self.root/'Cargo.toml').write_text('[package]\nname="fixture"\nversion="0.1.0"\nedition="2021"\n')
+  (self.root/'src').mkdir();(self.root/'src/lib.rs').write_text('pub fn fixture() {}\n')
+  (self.root/'.pm/cargo-package-auxiliary-files.json').write_text('{"schema":"oasis7-cargo-package-auxiliary-files/v1","auxiliary_files":[]}\n')
+  self.git('add','.');self.git('commit','-qm','base')
   self.scope_base=self.git('rev-parse','HEAD')
   self.git('switch','-q','-c','source')
-  self.changed_path='site/index.html'
+  self.changed_path='README.md'
   changed=self.root/self.changed_path
-  changed.parent.mkdir(parents=True)
+  changed.parent.mkdir(parents=True,exist_ok=True)
   changed.write_text('source change\n',encoding='utf-8')
   self.git('add',self.changed_path);self.git('commit','-qm','source')
   self.source_head=self.git('rev-parse','HEAD')
@@ -137,7 +235,7 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.assertEqual(self.projection['closure_status']['status'],'complete')
   self.assertEqual(self.projection['ci_scope'],pr['scope'])
   self.assertEqual(self.projection['ci_capabilities'],pr['selected_capabilities'].split(';'))
-  self.assertEqual(pr['needs_rust_toolchain'],'false')
+  self.assertEqual(pr['needs_rust_toolchain'],'true')
   self.assertEqual(pr['run_rust_baseline'],'false')
 
   # The integration target has advanced with a target-only commit.  The
@@ -151,7 +249,7 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.assertEqual(integration['test_profile'],'required')
   self.assertEqual(integration['selected_capabilities'],'site_quality;workflow_governance')
   self.assertEqual(integration['needs_rust_toolchain'],'true')
-  self.assertEqual(integration['run_rust_baseline'],'true')
+  self.assertEqual(integration['run_rust_baseline'],'false')
   self.assertEqual(integration['changed_path_count'],'2')
 
  def workflow_run_script(self,marker):
@@ -521,10 +619,8 @@ class IntegrationTests(unittest.TestCase):
 
       trusted_authority=temp/'trusted-cargo-profile-authority'
       self.assertEqual((candidate/'.pm/cargo-package-scope-policy.json').read_bytes(),trusted_blobs['.pm/cargo-package-scope-policy.json'])
-      self.assertEqual((trusted_authority/'pm/workflow-impact-projection.py').read_bytes(),trusted_blobs['scripts/pm/workflow-impact-projection.py'])
       self.assertEqual((trusted_authority/'cargo_package_profile_planner.py').read_bytes(),trusted_blobs['scripts/pm/cargo_package_profile_planner.py'])
       self.assertEqual((trusted_authority/'cargo_package_profile_driver.py').read_bytes(),trusted_blobs['scripts/pm/cargo_package_profile_driver.py'])
-      self.assertEqual((temp/'trusted-check-cargo-package-scope').read_bytes(),trusted_blobs['scripts/pm/check-cargo-package-scope'])
      else:
       env.update({'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
                   'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''})
@@ -652,6 +748,17 @@ class IntegrationTests(unittest.TestCase):
     print("impact_projection_digest={projection_digest}")
     print("impact_projection_status=verified")
    '''),encoding='utf-8')
+   shutil.copy2(trusted/'plan-rust-required-scope.py',candidate_scripts/'plan-rust-required-scope.py')
+   shutil.copy2(trusted/'ci-required-scope.v2.json',candidate_scripts/'ci-required-scope.v2.json')
+   def fixture_git(*args):
+    return subprocess.check_output(['git','-C',str(candidate),*args],text=True).strip()
+   fixture_git('init','-q');fixture_git('config','user.name','Test');fixture_git('config','user.email','test@example.invalid')
+   fixture_git('add','.');fixture_git('commit','-qm','trusted B')
+   frozen_base=fixture_git('rev-parse','HEAD')
+   (candidate_scripts/'ci-required-scope.v2.json').write_text('versioned-candidate-config\n')
+   (candidate_scripts/'plan-rust-required-scope.py').write_text('raise SystemExit(91)\n')
+   (candidate_pm/'workflow-impact-projection.py').write_text('raise SystemExit(92)\n')
+   selector_script.write_text('raise SystemExit(93)\n')
    start=driver.index('run_workflow_impact_projection_consumer() {')
    end=driver.index('\n}\n\nproduct_doc_range()',start)+2
    harness=root/'run-consumer.sh'
@@ -667,6 +774,7 @@ class IntegrationTests(unittest.TestCase):
    )
    env=os.environ.copy()
    env.update({
+    'OASIS7_CARGO_SCOPE_INTEGRATION_BASE':frozen_base,
     'CANDIDATE_ROOT':str(candidate),
     'CANDIDATE_PLANNER_MARKER':str(root/'candidate-planner-used'),
     'PROJECTION_PATH':str(projection_path),
@@ -1203,10 +1311,10 @@ class HistoricalTransportTests(unittest.TestCase):
   self.assert_reaped(pid)
 
  def test_real_process_aggregate_deadline_bounds_multiple_reads(self):
-  # A shell writes its PID immediately; Python interpreter startup is not
-  # the workload whose cumulative response delay this real-clock test bounds.
-  environment,pid=self.fake('/bin/sleep 0.08;printf \'{"ok":true}\'\n',shell=True)
-  with environment,patch.object(self.api,'HISTORICAL_TOTAL_TIMEOUT_SECONDS',0.15,create=True):
+  # Retain the target shell PID barrier and the approved aggregate budget.
+  # Two completed 0.6s responses necessarily exceed the 1.0s deadline.
+  environment,pid=self.fake('/bin/sleep 0.6;printf \'{"ok":true}\'\n',shell=True)
+  with environment,patch.object(self.api,'HISTORICAL_TOTAL_TIMEOUT_SECONDS',1.0,create=True):
    budget=self.api._HistoricalReadBudget()
    self.api._historical_json('repos/owner/repo/git/commits/'+'a'*40,budget)
    with self.assertRaises(ValueError):self.api._historical_json('repos/owner/repo/git/commits/'+'b'*40,budget)
@@ -2205,7 +2313,7 @@ class ProvenanceTests(unittest.TestCase):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
   required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
   mkdir='mkdir -p "${authority_dir}/pm"'
-  helper='git show "${tool_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"'
+  helper='git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"'
   planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
   self.assertIn(mkdir,required)
   self.assertIn(helper,required)
@@ -2222,18 +2330,14 @@ class ProvenanceTests(unittest.TestCase):
   self.assertTrue(pr_branch.startswith('          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then'))
   planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
   projection_guard='if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then'
-  default='tool_ref="${base_ref}"'
-  authorize='module.read_maintenance_authority('
-  candidate='if [[ -n "${maintenance_id}" ]]; then tool_ref="${head_ref}"; fi'
-  extraction='git show "${tool_ref}:scripts/plan-rust-required-scope.py"'
-  for assertion in (default,authorize,candidate,extraction):
-   self.assertIn(assertion,pr_branch)
-  self.assertLess(pr_branch.index(default),pr_branch.index(authorize))
-  self.assertLess(pr_branch.index(authorize),pr_branch.index(candidate))
-  self.assertLess(pr_branch.index(candidate),pr_branch.index(extraction))
+  self.assertIn('tool_ref="${base_ref}"',pr_branch)
+  self.assertIn('git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"',pr_branch)
+  self.assertLess(pr_branch.index('tool_ref="${base_ref}"'),pr_branch.index('module.read_maintenance_authority('))
+  self.assertLess(pr_branch.index('module.read_maintenance_authority('),pr_branch.index('tool_ref="${head_ref}"'))
+  self.assertLess(pr_branch.index('tool_ref="${head_ref}"'),pr_branch.index('git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"'))
   self.assertIn('git show "${base_ref}:scripts/ci-required-scope.v2.json"',pr_branch)
   self.assertIn('git show "${base_ref}:scripts/ci-tests.sh"',pr_branch)
-  self.assertIn('git show "${tool_ref}:scripts/pm/workflow-impact-projection.py"',pr_branch)
+  self.assertIn('cp -R "${authority_dir}/scripts/." "${authority_dir}/"',pr_branch)
   self.assertIn(planner,pr_branch)
   self.assertIn(projection_guard,pr_branch)
   self.assertLess(pr_branch.index(planner),pr_branch.index(projection_guard))

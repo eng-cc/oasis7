@@ -216,7 +216,7 @@ class IntegrationAuthorityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         directory = self.root / 'scripts/pm'; directory.mkdir(parents=True)
-        for name in ('ci-ready-receipt.py','ci_ready_receipt_identity.py','integration_ci.py','integration_executor_contract.py'):
+        for name in ('ci-ready-receipt.py','ci_ready_receipt_identity.py','integration_ci.py','integration_executor_contract.py','task_primary_package.py'):
             shutil.copy2(Path(__file__).with_name(name),directory/name)
         def git(*args): return subprocess.check_output(['git','-C',str(self.root),*args],text=True).strip()
         git('init','-q'); git('config','user.email','fixture@example.invalid'); git('config','user.name','Fixture')

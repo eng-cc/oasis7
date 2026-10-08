@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Fail-closed config-driven required-gate planner."""
-import argparse, fnmatch, hashlib, importlib.util, json, re, subprocess, sys
+import argparse, fnmatch, hashlib, importlib.util, json, re, subprocess, sys, tempfile
 from pathlib import Path
 
-EXECUTION_CONTRACT="required-domain-split/v1"
+EXECUTION_CONTRACT="required-domain-split/v2"
+SUPPORTED_EXECUTION_CONTRACTS={"required-domain-split/v1", EXECUTION_CONTRACT}
 LEGACY_CAPABILITIES=("oasis7_required","consensus","distfs","node","net","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web","workspace_support","scenario_regression","operational_contracts","packaging_contracts","workflow_governance","codex_agent_config_validation","compile_metrics","required_gate_baseline","site_quality")
 CAPABILITIES=LEGACY_CAPABILITIES+ ("doc_checker_contracts","cargo_tooling_contracts")
 LEGACY_FIELDS={"oasis7_required":"run_oasis7_required_tests","consensus":"run_consensus_tests","distfs":"run_distfs_tests","node":"run_oasis7_node_tests","net":"run_oasis7_net_tests","viewer_js_required":"run_viewer_contract_tests","viewer_performance_report":"run_viewer_perf_smoke","pixel_world_bridge":"run_pixel_world_bridge_lib_tests","launcher_web":"run_launcher_web_build","workspace_support":"run_oasis7_workspace_support_crate_tests","scenario_regression":"run_scenario_regression","operational_contracts":"run_operational_contracts","packaging_contracts":"run_operational_contracts","workflow_governance":"run_operational_contracts","codex_agent_config_validation":"run_codex_agent_config_validation","compile_metrics":"run_compile_metrics_contract_tests","required_gate_baseline":"run_required_gate_baseline","site_quality":"run_site_contract_tests"}
@@ -67,7 +68,7 @@ def config(path):
     if c.get("capabilities")!=list(LEGACY_CAPABILITIES): die("invalid legacy config schema")
     legacy=True; allowed_capabilities=set(LEGACY_CAPABILITIES); allowed_outputs=LEGACY_PLANNER_OUTPUT_FIELDS
   else:
-    if execution_contract!=EXECUTION_CONTRACT: die("unsupported execution_contract")
+    if execution_contract not in SUPPORTED_EXECUTION_CONTRACTS: die("unsupported execution_contract")
     if c.get("capabilities")!=list(CAPABILITIES): die("invalid versioned config capabilities")
     legacy=False; allowed_capabilities=set(CAPABILITIES); allowed_outputs=PLANNER_OUTPUT_FIELDS
     baseline_resources=c.get("baseline_resources")
@@ -90,6 +91,8 @@ def config(path):
       die("doc checker resource requirements must be Python and Markdown without Rust")
     if "rust_toolchain" not in cargo_resources:
       die("cargo tooling resource requirements must include Rust toolchain")
+    if execution_contract==EXECUTION_CONTRACT and "rust_toolchain" not in baseline_resources:
+      die("v2 scope metadata precheck requires the pinned Rust toolchain")
   ownership=c.get("selector_ownership")
   if not isinstance(ownership,list) or not ownership: die("invalid selector ownership registry")
   declared={}
@@ -138,15 +141,48 @@ def git_paths(a):
   if not a.base_ref: return None
   try:
     head=a.head_ref or "HEAD"; base=subprocess.check_output(["git","merge-base",a.base_ref,head],text=True).strip() if a.event_name=="pull_request" else a.base_ref
-    out=subprocess.check_output(["git","diff","--name-status","--find-renames",base,head],text=True)
+    out=subprocess.check_output(["git","diff","--name-status","--find-renames","-z",base,head])
   except Exception: return None
   paths=[]
-  for line in out.splitlines():
-    p=line.split("\t")[1:]
-    paths.extend(p if len(p)>1 else p[:1])
+  fields=out.split(b"\0")
+  if fields.pop()!=b"": die("incomplete Git changed-path records")
+  while fields:
+    status=fields.pop(0).decode("ascii")
+    count=2 if status.startswith(("R","C")) else 1
+    if len(fields)<count: die("incomplete Git rename endpoints")
+    for _ in range(count):
+      path=fields.pop(0).decode("utf-8")
+      if any(delimiter in path for delimiter in (";","\n","\r")): die("changed path cannot be represented in planner metadata")
+      paths.append(path)
   return paths
+def precheck_scope(base, head, task_primary=None, plan=None):
+  helper_path=Path(__file__).parent / "pm/trusted_cargo_scope.py"
+  spec=importlib.util.spec_from_file_location("oasis7_trusted_cargo_scope",helper_path)
+  if spec is None or spec.loader is None: die("trusted scope precheck is unavailable")
+  helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+  try:
+   if plan is not None and plan.get("scope")=="full" and plan.get("execution_contract") in SUPPORTED_EXECUTION_CONTRACTS:
+    proof=dict(plan)
+    proof["integration_base"]=subprocess.check_output(["git","rev-parse",f"{base}^{{commit}}"],text=True).strip()
+    proof["source_head"]=subprocess.check_output(["git","rev-parse",f"{head}^{{commit}}"],text=True).strip()
+    execution={"OASIS7_CI_"+key.upper():value for key,value in proof.items() if key.startswith(("run_","needs_"))}
+    if "run_oasis7_workspace_support_crate_tests" in proof:
+     execution["OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS"]=execution.pop("OASIS7_CI_RUN_OASIS7_WORKSPACE_SUPPORT_CRATE_TESTS")
+    execution["OASIS7_CI_EXECUTION_CONTRACT"]=proof["execution_contract"]
+    with tempfile.TemporaryDirectory(prefix="complete-scope-plan-") as directory:
+     path=Path(directory)/"plan.json";path.write_text(json.dumps(proof))
+     result=helper.run_scope(Path.cwd(),base,head,json_output=True,trusted_full_plan=path,execution_environment=execution)
+   else:
+    result=helper.run_scope(Path.cwd(),base,head,json_output=True)
+  except Exception as exc: die("trusted scope precheck failed: "+str(exc))
+  if result.returncode: die("trusted scope precheck failed: "+result.stderr.strip()+result.stdout.strip())
+  if task_primary is not None:
+   try: actual=json.loads(result.stdout).get("primary_package")
+   except Exception as exc: die("trusted scope precheck output is malformed: "+str(exc))
+   if actual and not task_primary: die("scope precheck requires canonical task primary_package for "+actual)
+   if actual and actual!=task_primary: die("scope precheck canonical task primary_package mismatch")
 def main():
- p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--run-mode",choices=("legacy","integration_revalidation","full_escalation"),default="legacy");p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--task-uid");p.add_argument("--scope-base-oid");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
+ p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--run-mode",choices=("legacy","integration_revalidation","full_escalation"),default="legacy");p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--task-uid");p.add_argument("--task-primary-package");p.add_argument("--scope-base-oid");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
  c,digest,legacy=config(a.config); active_capabilities=LEGACY_CAPABILITIES if legacy else CAPABILITIES
  fields=LEGACY_FIELDS if legacy else FIELDS
  paths=a.changed_path or git_paths(a); projection=None
@@ -204,9 +240,11 @@ def main():
   if explicit_rust: resources.add("rust_toolchain")
   requires_rust="rust_toolchain" in resources
   resources={name:name in resources for name in RESOURCE_NAMES}
-  vals["execution_contract"]=EXECUTION_CONTRACT
+  vals["execution_contract"]=c["execution_contract"]
   vals["needs_python"]="true" if resources["python"] else "false"
   vals["needs_markdown"]="true" if resources["markdown"] else "false"
+ if not legacy and c["execution_contract"]==EXECUTION_CONTRACT:
+  requires_rust=full or explicit_rust or bool(capabilities & {"oasis7_required","consensus","distfs","node","net","viewer_js_required","pixel_world_bridge","launcher_web","workspace_support","scenario_regression","cargo_tooling_contracts"})
  vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if resources["rust_toolchain"] else "false","needs_node":"true" if resources["node"] else "false","needs_system_deps":"true" if resources["system_deps"] else "false","needs_wasm_target":"true" if resources["wasm_target"] else "false","needs_trunk":"true" if resources["trunk"] else "false","planner_config_sha256":digest,"source_scope_base":source_scope_base,"integration_base":a.base_ref or "","source_head":a.head_ref or "HEAD","selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
  vals["required_test_units"]=";".join(sorted({"required_gate_baseline",*capabilities}))
  if projection is not None:
@@ -250,6 +288,8 @@ def main():
   elif full_only_mode and (actual_scope != "full" or actual_capabilities != sorted(active_capabilities)):
    die("full-only impact projection execution scope is not full")
   vals.update({"impact_projection_schema":projection["schema"],"impact_projection_digest":projection["projection_digest"],"impact_projection_status":"verified","test_profile":projection["test_profile"],"declared_tests":";".join(projection["declared_tests"]),"planner_digest":projection["planner_digest"]})
+ if a.base_ref and a.head_ref and not a.changed_path:
+  precheck_scope(a.base_ref,a.head_ref,a.task_primary_package,vals)
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
  if a.github_output: Path(a.github_output).open("a").write(text)
  else: print(text,end="")
