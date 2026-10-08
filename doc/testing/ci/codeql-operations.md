@@ -1,6 +1,6 @@
 # CodeQL 操作与排障
 
-本手册面向 CI 与仓库运营者，承接 [canonical CodeQL contract](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) 和 [设计及验收映射](codeql-integration.design.md)。实现文件存在、CLI 可运行或 fixture 通过，都不证明 hosted 基线、提取覆盖、平台 provenance 或 observe 已验收。当前交付只包含代码、测试与接线；实际扫描与运行变量激活须在另行授权的 hosted 验收中完成。
+本手册面向 CI 与仓库运营者，承接 [canonical CodeQL contract](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) 和 [设计及验收映射](codeql-integration.design.md)。实现文件存在、CLI 可运行或 fixture 通过，都不证明 hosted 基线、提取覆盖、平台 provenance 或 observe 已验收。代码缺省关闭重型扫描；实际变量、运行与验收状态由既有 task evidence 记录，本手册不声明当前运营模式。
 
 系统 owner 为 `repository_health_engineer`，验收 owner 为 `qa_engineer`；Rust 提取问题交给 `runtime_engineer`，权限与凭据边界交给 `blockchain_ops_engineer`。真实状态与实例定位写入既有 GitHub Project-backed task evidence，不在本手册维护扫描状态总表。
 
@@ -64,9 +64,15 @@ python3 scripts/security/codeql-health.py --fixture "$FIXTURE_PATH" \
 
 API 每个 endpoint 的读取有分页预算，精确身份的相关 runs 也有预算；超限或权限/响应错误保留 unknown，不无限枚举或丢弃错误。finding trend 当前为 unknown，不能用相邻报告的零值作趋势结论。
 
-live reader 使用精确 run attempt 的 jobs API；该 API 不提供 action 的上传输出，因此 `upload_step_status: success` 仍可与 `upload_status: unknown`、`analysis_association: unknown` 同时出现。不要由时间、同 SHA 或 job success 推造 SARIF association。查看 `run_id` / `run_attempt` 判断当前尝试，查看 `analysis_id` / `coverage_age_hours` / `fresh` 判断已关联的结果；缺乏 association 时这些结果不能借用历史记录。
+live reader 使用精确 run attempt 的 jobs API，并通过独立验证的 evidence artifact 读取官方上传输出。该正向关联当前只支持可信默认分支的 schedule/manual 基线。PR、fork、Dependabot 与 native platform provider 的正向关联仍不受支持，保留 unknown；artifact 不是合入凭据，也不赋予 native check 豁免。不要由时间、同 SHA 或 job success 推造 SARIF association。查看 `run_id` / `run_attempt` 判断当前尝试，查看 `analysis_id` / `coverage_age_hours` / `fresh` 判断已关联的结果；缺乏 association 时这些结果不能借用历史记录。
 
-`previous_analysis_id` 与 `previous_analysis_age_hours` 只是精确 ref/SHA/category 下最近可见 analysis 的历史参考，不保证属于当前 attempt，也不能证明 latest upload 成功或覆盖新鲜。新 attempt 排队、取消、超时或上传失败时，保留该 attempt 的真实状态；旧 analysis 即使仍新鲜也不使报告 healthy。当前 live API 路径缺少上传关联证据时，须保留 unknown 并交验收 owner 核查，不能据此宣布 hosted 验收通过。
+分析 job 从官方 pinned upload-sarif action 的 `steps.upload.outputs.sarif-id` 生成闭合 schema `oasis7-codeql-upload-evidence/v1`，记录 repository、workflow path/ref/SHA、run/attempt、job key/name、checkout SHA/ref、unit/profile/category 与真实 execution/upload outcomes。上传未成功时 ID 为空。每个 job/attempt 使用独立 `oasis7-codeql-upload-<run_id>-<run_attempt>-<unit>-<profile>` artifact，唯一文件为 `evidence.json`，由完整 SHA 固定的 upload-artifact action 上传且不覆盖。取消、超时或 runner 丢失可能没有 artifact，不能补写或借用旧输出。
+
+consumer 不信任 JSON 自述或 artifact 名称：先独立验证 live repository/default branch、可信 workflow、精确 run/latest attempt、唯一 job/check/provider/suite，并确认执行时 workflow 字节与当前默认分支 workflow 相同。无关 main 前进且 workflow 字节不变不使结果失效；workflow 改动、候选执行或读取失败保持 unknown。随后完整、有界读取该 run 的 artifact 清单，要求唯一、未过期、元数据匹配，并在下载后复验 run/attempt 与 artifact 身份。
+
+archive 下载上限 1 MiB、超时 30 秒，并校验平台 `sha256` digest；ZIP 不解压到文件系统，只接受一个常规 `evidence.json`，JSON 上限 64 KiB，拒绝路径穿越、额外/重复项、符号链接、加密、错误编码、重复键及未知字段。官方输出 ID、全部 payload 身份与真实 extraction/upload 成功必须一致，才能与唯一精确 SHA/ref/category 的 CodeQL `analysis.sarif_id` 且无 analysis error 关联。分页溢出、大小超限、digest 不匹配、缺失/重复/过期 artifact 或失败的新 attempt 都保持失败或 unknown；该证据不证明零 findings 或 manifest coverage。
+
+`previous_analysis_id` 与 `previous_analysis_age_hours` 只是精确 ref/SHA/category 下最近可见 analysis 的历史参考，不保证属于当前 attempt，也不能证明 latest upload 成功或覆盖新鲜。新 attempt 排队、取消、超时或上传失败时，保留该 attempt 的真实状态；旧 analysis 即使仍新鲜也不使报告 healthy。缺少有效上传关联证据时须保留 unknown 并交验收 owner 核查；artifact fixture 通过或 health 报告生成不能据此宣布 hosted 验收通过。
 
 现有 lifecycle consumers 共用 `scripts/pm/codeql_advisory.py`：只有当前 SHA/ref 的精确 Actions job/run/workflow provenance、完整保护发现、required checks 已满足且其他失败均已解释，才可能把单独的 CodeQL 异常解释为 advisory。fixture 已覆盖 Actions 来源逻辑，但 native platform code-scanning provider 映射仍缺少 hosted association 证明，会 fail closed。名字带 CodeQL、bot 身份或 non-required 都不是豁免依据。required CodeQL、活动 code-scanning 规则、未知来源、其他失败、review/threads/holds 和冲突仍受现有保护。解释 advisory `UNSTABLE` 不把它改写成 CLEAN，不增加 admin bypass；pending advisory scans 不新增等待，也不刷新普通 CI/review/integration receipts。
 

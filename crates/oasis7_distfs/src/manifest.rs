@@ -25,7 +25,7 @@ pub struct FileIndexManifestRef {
 impl LocalCasStore {
     pub fn export_file_index_manifest(&self) -> Result<FileIndexManifestRef, WorldError> {
         let file_index = self.load_file_index()?;
-        let files: Vec<FileMetadata> = file_index.files.values().cloned().collect();
+        let files: Vec<FileMetadata> = file_index.files.into_values().collect();
 
         let manifest = FileIndexManifest {
             version: FILE_INDEX_MANIFEST_VERSION,

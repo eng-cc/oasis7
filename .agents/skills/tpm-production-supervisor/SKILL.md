@@ -51,8 +51,9 @@ for waits.
   `capability_blocked`; it is not a legitimate wait.
 - TPM coordinates typed professional actions; the matching role owns the
   professional conclusion.
-- A created PR is not done. Continue through merge receipt, task done, main sync
-  and safe cleanup.
+- A created PR is not done. Follow the selected terminal protocol: v1 retains
+  its ordered main-sync and safe-cleanup chain; v2 delivery completes
+  independently, with main sync and cleanup remaining separate.
 
 ## Verification
 
@@ -66,4 +67,6 @@ behavior evaluator, skill lint, doc governance, PM lint, and `git diff --check`.
 - Polling a PR linearly after a head-changing fix instead of invalidating the
   old epoch and looping through fresh verification and review.
 - Letting a wait outlive its wake-owner lease or cancelling the owner before
-  merged receipt, task done, main sync and safe cleanup.
+  the selected terminal-delivery proof is complete. Protocol v1 still requires
+  its ordered main-sync and safe-cleanup chain; protocol v2 completes delivery
+  independently, while cleanup and any declared resource wait remain separate.

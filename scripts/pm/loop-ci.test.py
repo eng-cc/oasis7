@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+import pr_projection_publication as publication_api
+
 spec = importlib.util.spec_from_file_location('loop_ci', Path(__file__).with_name('loop-ci.py'))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -19,7 +21,8 @@ UID = 'task_' + 'a' * 32
 
 
 class CIGateTests(unittest.TestCase):
-    def retry_case(self, arrival=1, change=None, field=None, issue_change=None, read_error=False):
+    def retry_case(self, arrival=1, change=None, field=None, issue_change=None,
+                   read_error=False, phase='legacy', start_only=False):
         pr = {'number': 2, 'state': 'open', 'merged_at': None, 'draft': True,
               'body': UID + '\nRefs #1',
               'head': {'sha': 'b'*40, 'ref': 'task-branch', 'repo': {'full_name': 'fixture/repo'}},
@@ -41,7 +44,14 @@ class CIGateTests(unittest.TestCase):
             value = {'number': 1, 'state': 'open', 'body': '<!-- oasis7-pm-task -->\ntask_uid: '+UID+'\n'+binding}
             if issue_change and sleeps: issue_change(value)
             return json.dumps(value)
-        with patch.object(module, 'run', side_effect=live), patch('time.sleep', side_effect=sleeps.append), patch('sys.argv', ['loop-ci.py','--repository','fixture/repo','--pr-number','2','--base','a'*40,'--head','b'*40]), patch('sys.stdout',new_callable=io.StringIO) as output:
+        argv = ['loop-ci.py','--repository','fixture/repo','--pr-number','2','--base','a'*40,'--head','b'*40]
+        if phase != 'legacy':
+            argv.extend(['--phase', phase])
+        if phase == 'final':
+            argv.append('--tests-passed')
+            if start_only:
+                argv.append('--start-only')
+        with patch.object(module, 'run', side_effect=live), patch('time.sleep', side_effect=sleeps.append), patch('sys.argv', argv), patch('sys.stdout',new_callable=io.StringIO) as output:
             result = module.main()
         return result, sleeps, reads, output.getvalue()
 
@@ -92,6 +102,153 @@ class CIGateTests(unittest.TestCase):
     def test_pending_api_failure_is_not_retried(self):
         result, sleeps, _, _ = self.retry_case(read_error=True)
         self.assertEqual((result, sleeps), (2, [5]))
+
+    def test_final_boundary_reports_publication_pending_without_waiting(self):
+        result, sleeps, reads, output = self.retry_case(
+            arrival=99, phase='final', start_only=True,
+        )
+        self.assertEqual(result, 2)
+        self.assertEqual(sleeps, [])
+        self.assertEqual(reads['pr'], 1)
+        self.assertIn('publication_pending', output)
+
+    def test_final_boundary_cannot_be_invoked_before_tests_pass(self):
+        with patch('sys.argv', ['loop-ci.py', '--repository', 'fixture/repo', '--pr-number', '2', '--base', 'a' * 40, '--head', 'b' * 40, '--phase', 'final']), patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.assertEqual(module.main(), 2)
+        self.assertIn('required test tier', output.getvalue())
+
+    def test_full_binding_requires_exact_issue_url_and_task_refs(self):
+        args = type('Args', (), {
+            'repository': 'fixture/repo', 'pr_number': 2, 'head': 'b' * 40,
+        })()
+        issue = {
+            'number': 1, 'state': 'open',
+            'body': f'task_uid: {UID}\n- pr_number: `2`\n- pr_url: `https://github.com/fixture/repo/pull/2`\n',
+        }
+        pr = {
+            'number': 2, 'html_url': 'https://github.com/fixture/repo/pull/2',
+            'state': 'open', 'merged_at': None, 'draft': True,
+            'body': f'Task: {UID}\nRefs #1',
+            'head': {'sha': 'b' * 40, 'ref': 'task-branch', 'repo': {'full_name': 'fixture/repo'}},
+            'base': {'ref': 'main', 'repo': {'full_name': 'fixture/repo'}},
+        }
+        with patch.object(module, 'run', return_value=json.dumps({
+            'default_branch': 'main',
+        })):
+            module.validate_full_binding(args, pr, issue, 1, UID)
+            for changed_issue, changed_pr in (
+                ({**issue, 'body': issue['body'].replace('/pull/2', '/pull/3')}, pr),
+                (issue, {**pr, 'body': f'Task: {UID}\nCloses #1'}),
+                (issue, {**pr, 'draft': False}),
+                (issue, {**pr, 'head': {**pr['head'], 'sha': 'c' * 40}}),
+            ):
+                with self.subTest(issue=changed_issue, pr=changed_pr), self.assertRaises(ValueError):
+                    module.validate_full_binding(args, changed_pr, changed_issue, 1, UID)
+
+    def uid_binding_fixture(self):
+        args = type('Args', (), {
+            'repository': 'fixture/repo', 'pr_number': 2, 'head': 'b' * 40,
+        })()
+        issue = {
+            'number': 1, 'state': 'open', 'user': {'login': 'fixture-owner'},
+            'body': (f'task_uid: {UID}\n- pr_number: `2`\n'
+                     '- pr_url: `https://github.com/fixture/repo/pull/2`\n'
+                     '- status: `in_progress`\n- workflow_phase: `execution`\n'),
+        }
+        pr = {
+            'number': 2, 'html_url': 'https://github.com/fixture/repo/pull/2',
+            'state': 'open', 'merged_at': None, 'draft': True,
+            'body': f'Task: {UID}\nRefs #1',
+            'head': {'sha': args.head, 'ref': 'task-branch',
+                     'repo': {'id': 1, 'full_name': args.repository}},
+            'base': {'ref': 'main', 'repo': {'id': 1, 'full_name': args.repository}},
+        }
+        c1 = publication_api.build_task_publication(
+            repository=args.repository, repository_id=1, task_uid=UID,
+            bootstrap_epoch=1, source_repository_id=1,
+            source_ref='task-branch', target_ref='main',
+            source_head_oid=args.head, source_scope_oid=args.head,
+            planner_authority_oid=args.head,
+            planner_config_sha256='sha256:' + '4' * 64,
+            policy_digest='sha256:' + '5' * 64,
+            projection_digest='sha256:' + '6' * 64,
+        )
+        return args, pr, issue, publication_api.publication_comment(c1)
+
+    def check_uid_binding_reader(self, reader, pr, issue, args):
+        repository = {'id': 1, 'default_branch': 'main'}
+        with patch.object(module, 'run', return_value=json.dumps(repository)):
+            if reader == 'full':
+                return module.validate_full_binding(args, pr, issue, 1, UID)
+            return module._live_pr_publication_binding(
+                args, pr, issue, 1, UID, None, repository, 'main',
+            )
+
+    def test_uid_binding_accepts_repeated_identity_in_real_c1_evidence(self):
+        args, pr, issue, c1 = self.uid_binding_fixture()
+        for reader in ('full', 'publication'):
+            for evidence in ('', '\n' + c1, '\nEvidence task UID: ' + UID):
+                with self.subTest(reader=reader, evidence=evidence):
+                    self.check_uid_binding_reader(reader, {**pr, 'body': pr['body'] + evidence}, issue, args)
+
+    def test_uid_binding_rejects_malformed_extra_authority_before_and_after(self):
+        args, pr, issue, _ = self.uid_binding_fixture()
+        for reader in ('full', 'publication'):
+            for malformed in ('Task: malformed', 'Task:', ' \tTask \t: malformed'):
+                for body in (malformed + '\n' + pr['body'], pr['body'] + '\n' + malformed):
+                    with self.subTest(reader=reader, body=body), self.assertRaises(ValueError):
+                        self.check_uid_binding_reader(reader, {**pr, 'body': body}, issue, args)
+
+    def test_uid_binding_preserves_identity_and_authority_rejections(self):
+        args, pr, issue, c1 = self.uid_binding_fixture()
+        other = 'task_' + 'c' * 32
+        for reader in ('full', 'publication'):
+            for body in (
+                pr['body'] + '\n' + c1.replace(UID, other),
+                pr['body'] + '\nEvidence UID: ' + other,
+                pr['body'] + '\nTask: ' + UID,
+                pr['body'] + '\nTask: ' + other,
+                'Refs #1\nEvidence UID: ' + UID,
+                'Task: malformed\nRefs #1\nEvidence UID: ' + UID,
+                pr['body'].replace('Refs #1', 'Refs #9'),
+                pr['body'] + '\nRefs #1',
+                pr['body'].replace('Refs #1', 'Closes #1'),
+            ):
+                with self.subTest(reader=reader, body=body), self.assertRaises(ValueError):
+                    self.check_uid_binding_reader(reader, {**pr, 'body': body}, issue, args)
+
+    def test_uid_binding_preserves_live_candidate_and_issue_guards(self):
+        args, pr, issue, _ = self.uid_binding_fixture()
+        for reader in ('full', 'publication'):
+            for changed_pr in (
+                {**pr, 'number': 3}, {**pr, 'html_url': pr['html_url'] + '0'},
+                {**pr, 'draft': False}, {**pr, 'state': 'closed'}, {**pr, 'merged_at': 'now'},
+                {**pr, 'head': {**pr['head'], 'sha': 'c' * 40}},
+                {**pr, 'head': {**pr['head'], 'repo': {'id': 2, 'full_name': 'other/repo'}}},
+                {**pr, 'base': {**pr['base'], 'ref': 'other'}},
+                {**pr, 'base': {**pr['base'], 'repo': {'id': 2, 'full_name': 'other/repo'}}},
+            ):
+                with self.subTest(reader=reader, pr=changed_pr), self.assertRaises(ValueError):
+                    self.check_uid_binding_reader(reader, changed_pr, issue, args)
+            for changed_issue in ({**issue, 'number': 9}, {**issue, 'state': 'closed'}):
+                with self.subTest(reader=reader, issue=changed_issue), self.assertRaises(ValueError):
+                    self.check_uid_binding_reader(reader, pr, changed_issue, args)
+
+    def test_uid_binding_preserves_reader_specific_issue_and_repository_guards(self):
+        args, pr, issue, _ = self.uid_binding_fixture()
+        for body in (issue['body'].replace('/pull/2', '/pull/3'),
+                     issue['body'].replace('pr_number: `2`', 'pr_number: `3`')):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.check_uid_binding_reader('full', pr, {**issue, 'body': body}, args)
+        for body in (issue['body'].replace(UID, 'task_' + 'c' * 32),
+                     issue['body'] + 'task_uid: malformed\n',
+                     issue['body'].replace('- pr_url:', '- absent_pr_url:')):
+            with self.subTest(body=body), self.assertRaises(ValueError):
+                self.check_uid_binding_reader('publication', pr, {**issue, 'body': body}, args)
+        for part in ('head', 'base'):
+            changed = {**pr, part: {**pr[part], 'repo': {**pr[part]['repo'], 'id': 2}}}
+            with self.subTest(part=part), self.assertRaises(ValueError):
+                self.check_uid_binding_reader('publication', changed, issue, args)
 
     def test_binding_can_arrive_on_final_attempt(self):
         result, sleeps, _, _ = self.retry_case(arrival=6)
@@ -166,6 +323,9 @@ class CIGateTests(unittest.TestCase):
                 "loop_ci_content.py",
                 "loop_contracts.py",
                 "loop_policy.py",
+                "pr_projection_publication.py",
+                "projection_publication_contract.py",
+                "pr_projection_journal.py",
                 "loop_approval_authority.py",
                 "loop_leaf_result.py",
                 "loop_traceability.py",
@@ -176,6 +336,11 @@ class CIGateTests(unittest.TestCase):
             (root / "doc" / "engineering" / "spec.md").write_text(
                 "<a id=\"acceptance\"></a>\n# Acceptance\n", encoding="utf-8"
             )
+            trusted_source = root / "doc" / "engineering" / "workflow" / "source-of-truth.md"
+            trusted_source.parent.mkdir(parents=True)
+            trusted_source.write_text("trusted workflow source fixture\n", encoding="utf-8")
+            config_path = root / "scripts" / "ci-required-scope.v2.json"
+            config_path.write_text('{"schema":"fixture"}\n', encoding="utf-8")
 
             def git(*args):
                 return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
@@ -302,6 +467,20 @@ class CIGateTests(unittest.TestCase):
             )
             (fixture / "pr.json").write_text(json.dumps(pr), encoding="utf-8")
             (fixture / "publication.json").write_text(json.dumps(publication), encoding="utf-8")
+            (fixture / "repository.json").write_text(json.dumps({
+                "id": 1, "full_name": "eng-cc/oasis7", "default_branch": "main",
+            }), encoding="utf-8")
+            (fixture / "branch.json").write_text(json.dumps({
+                "name": "main", "protected": True, "commit": {"sha": head},
+            }), encoding="utf-8")
+            (fixture / "policy-blob.json").write_text(json.dumps({
+                "encoding": "base64",
+                "content": base64.b64encode((helpers / "loop-policy.v1.json").read_bytes()).decode(),
+            }), encoding="utf-8")
+            (fixture / "source-blob.json").write_text(json.dumps({
+                "encoding": "base64",
+                "content": base64.b64encode(trusted_source.read_bytes()).decode(),
+            }), encoding="utf-8")
             calls = fixture / "authority-calls.log"
             fake_bin = fixture / "bin"
             fake_bin.mkdir()
@@ -324,6 +503,16 @@ class CIGateTests(unittest.TestCase):
                 "    name = 'publication.json'\n"
                 "elif path.endswith('/issues/3671/comments?per_page=100'):\n"
                 "    name = 'coordination-comments.json'\n"
+                "elif path.endswith('/issues/1/comments?per_page=100'):\n"
+                "    name = 'task-comments.json'\n"
+                "elif path == 'repos/eng-cc/oasis7':\n"
+                "    name = 'repository.json'\n"
+                "elif path == 'repos/eng-cc/oasis7/branches/main':\n"
+                "    name = 'branch.json'\n"
+                "elif path.startswith('repos/eng-cc/oasis7/contents/scripts/pm/loop-policy.v1.json?ref='):\n"
+                "    name = 'policy-blob.json'\n"
+                "elif path.startswith('repos/eng-cc/oasis7/contents/doc/engineering/workflow/source-of-truth.md?ref='):\n"
+                "    name = 'source-blob.json'\n"
                 "else:\n"
                 "    raise SystemExit('unexpected gh path: ' + path)\n"
                 "print((fixture / name).read_text())\n",
@@ -332,7 +521,8 @@ class CIGateTests(unittest.TestCase):
             fake_gh.chmod(0o755)
             remote = fixture / "remote.git"
             subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
-            git("remote", "add", "origin", str(remote))
+            git("remote", "add", "origin", "https://github.com/eng-cc/oasis7.git")
+            git("config", f"url.{remote.as_uri()}.insteadOf", "https://github.com/eng-cc/oasis7.git")
             git("push", "-q", "origin", "HEAD:main")
             result = subprocess.run(
                 [
@@ -360,9 +550,14 @@ class CIGateTests(unittest.TestCase):
                 [
                     "repos/eng-cc/oasis7/pulls/2",
                     "repos/eng-cc/oasis7/issues/1",
+                    "repos/eng-cc/oasis7",
                     "repos/eng-cc/oasis7/issues/3671",
                     "repos/eng-cc/oasis7/issues/comments/5636938574",
                     "repos/eng-cc/oasis7/issues/3671/comments?per_page=100",
+                    "repos/eng-cc/oasis7",
+                    "repos/eng-cc/oasis7/branches/main",
+                    f"repos/eng-cc/oasis7/contents/scripts/pm/loop-policy.v1.json?ref={head}",
+                    f"repos/eng-cc/oasis7/contents/doc/engineering/workflow/source-of-truth.md?ref={head}",
                 ],
             )
 
@@ -378,6 +573,83 @@ class CIGateTests(unittest.TestCase):
                 "merge authorization",
             ):
                 self.assertNotIn(prohibited, caller_source)
+
+            # Exercise the legal validation-start window: an immutable Task
+            # binding and C1 comment are already read back, the PR is a same-
+            # repository draft created after that comment, and record-pr has
+            # not yet written the Task Issue PR number/URL pair.
+            start_issue = {
+                "number": 1, "state": "open",
+                "body": "<!-- oasis7-pm-task -->\n"
+                        f"task_uid: {UID}\n"
+                        "- status: `committed`\n"
+                        "- workflow_phase: `execution`\n"
+                        f"- loop_binding_b64: `{encoded_binding}`\n",
+                "user": {"login": "fixture-owner", "type": "User"},
+            }
+            start_pr = {
+                "number": 2, "html_url": "https://github.com/eng-cc/oasis7/pull/2",
+                "state": "open", "merged_at": None, "draft": True,
+                "created_at": "2026-09-12T00:01:00Z", "updated_at": "2026-09-12T00:01:00Z",
+                "user": {"login": "fixture-owner", "type": "User"},
+                "head": {
+                    "ref": "task/fixture", "sha": head,
+                    "repo": {"id": 1, "full_name": "eng-cc/oasis7"},
+                },
+                "base": {
+                    "ref": "main",
+                    "repo": {"id": 1, "full_name": "eng-cc/oasis7"},
+                },
+                "body": f"Task: {UID}\nRefs #1\n",
+            }
+            planner_config_digest = "sha256:" + hashlib.sha256(config_path.read_bytes()).hexdigest()
+            planner_digest = "sha256:" + "4" * 64
+            projection_digest = "sha256:" + "5" * 64
+            c1 = publication_api.build_task_publication(
+                repository="eng-cc/oasis7", repository_id=1, task_uid=UID,
+                bootstrap_epoch=1, source_repository_id=1,
+                source_ref="task/fixture", target_ref="main",
+                source_head_oid=head, source_scope_oid=head,
+                planner_authority_oid=head,
+                planner_config_sha256=planner_config_digest,
+                policy_digest=planner_digest, projection_digest=projection_digest,
+            )
+            c1_comment = {
+                "id": 7001,
+                "body": publication_api.publication_comment(c1),
+                "created_at": "2026-09-12T00:00:00Z",
+                "updated_at": "2026-09-12T00:00:00Z",
+                "user": {"login": "fixture-owner", "type": "User"},
+                "author_association": "MEMBER",
+            }
+            (fixture / "issue.json").write_text(json.dumps(start_issue), encoding="utf-8")
+            (fixture / "pr.json").write_text(json.dumps(start_pr), encoding="utf-8")
+            (fixture / "task-comments.json").write_text(json.dumps([[c1_comment]]), encoding="utf-8")
+            start_output = fixture / "start-output.txt"
+            start_result = subprocess.run(
+                [
+                    sys.executable, str(source_helpers / "loop-ci.py"),
+                    "--repo-root", str(root), "--repository", "eng-cc/oasis7",
+                    "--pr-number", "2", "--base", head, "--head", head,
+                    "--phase", "start", "--scope-base-oid", head,
+                    "--planner-config-sha256", planner_config_digest,
+                    "--planner-digest", planner_digest,
+                    "--projection-digest", projection_digest,
+                ],
+                env={
+                    **os.environ,
+                    "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
+                    "GH_FIXTURE": str(fixture), "GITHUB_OUTPUT": str(start_output),
+                    "PYTHONPYCACHEPREFIX": "/",
+                },
+                text=True, capture_output=True,
+            )
+            self.assertEqual(start_result.returncode, 0, start_result.stdout + start_result.stderr)
+            self.assertIn("start_only=true", start_output.read_text(encoding="utf-8"))
+            self.assertTrue(any(
+                "issues/1/comments?per_page=100" in path
+                for path in calls.read_text(encoding="utf-8").splitlines()
+            ), "start phase must consume the complete live Task Issue comment read")
 
             original_publication = json.loads(
                 (fixture / "publication.json").read_text(encoding="utf-8")
@@ -397,11 +669,17 @@ class CIGateTests(unittest.TestCase):
                         "--pr-number", "2",
                         "--base", head,
                         "--head", head,
+                        "--phase", "start",
+                        "--scope-base-oid", head,
+                        "--planner-config-sha256", planner_config_digest,
+                        "--planner-digest", planner_digest,
+                        "--projection-digest", projection_digest,
                     ],
                     env={
                         **os.environ,
                         "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
                         "GH_FIXTURE": str(fixture),
+                        "GITHUB_OUTPUT": str(fixture / "negative-output.txt"),
                         "PYTHONPYCACHEPREFIX": "/",
                     },
                     text=True,
@@ -460,6 +738,15 @@ class CIGateTests(unittest.TestCase):
                     }),
                 }),
             }
+            expected_blockers = {
+                "missing comment": "live authority comment identity mismatch",
+                "foreign Issue URL": "live authority comment identity mismatch",
+                "wrong comment ID": "live authority comment identity mismatch",
+                "task UID mismatch": "canonical task_uid mismatch",
+                "changed record body": "body_digest mismatch",
+                "malformed record": "coordinating authority body is not valid JSON",
+                "no usable projection": "coordinating authority comment has no usable record projection",
+            }
             for label, mutate in cases.items():
                 with self.subTest(case=label):
                     (fixture / "coordination-issue.json").write_text(
@@ -471,15 +758,21 @@ class CIGateTests(unittest.TestCase):
                     output = negative.stdout + negative.stderr
                     self.assertEqual(negative.returncode, 2, output)
                     self.assertTrue(output.strip(), output)
+                    self.assertIn(expected_blockers[label], output)
                     observed = calls.read_text(encoding="utf-8").splitlines()
                     self.assertTrue(observed, output)
                     self.assertTrue(
                         set(observed).issubset({
-                            "repos/eng-cc/oasis7/pulls/2",
-                            "repos/eng-cc/oasis7/issues/1",
-                            "repos/eng-cc/oasis7/issues/3671",
+                        "repos/eng-cc/oasis7/pulls/2",
+                        "repos/eng-cc/oasis7/issues/1",
+                        "repos/eng-cc/oasis7/issues/1/comments?per_page=100",
+                        "repos/eng-cc/oasis7",
+                        "repos/eng-cc/oasis7/issues/3671",
                             "repos/eng-cc/oasis7/issues/comments/5636938574",
                             "repos/eng-cc/oasis7/issues/3671/comments?per_page=100",
+                            "repos/eng-cc/oasis7/branches/main",
+                            f"repos/eng-cc/oasis7/contents/scripts/pm/loop-policy.v1.json?ref={head}",
+                            f"repos/eng-cc/oasis7/contents/doc/engineering/workflow/source-of-truth.md?ref={head}",
                         }),
                         observed,
                     )

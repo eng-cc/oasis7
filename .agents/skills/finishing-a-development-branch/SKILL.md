@@ -7,12 +7,11 @@ description: Use when implementation is verified and the branch must proceed thr
 
 Canonical workflow: [capability](../../../doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](../../../doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](../../../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../../../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done), [review packet](../../../doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet), [terminal runbook](../../../doc/engineering/workflow/source-of-truth.md#terminal-runbook).
 
-TPM is the coordinator/integrator for this sequence. Gate meanings, retry/disposition rules, merge authorization, and terminal order come only from the canonical links above.
+TPM is the coordinator/integrator for this sequence. Gate meanings, retry/disposition rules, merge authorization, and terminal order come only from the canonical links above. For an explicitly authorized repair on the same Task/PR, follow the canonical [human maintenance](../../../doc/engineering/workflow/source-of-truth.md#human-workflow-maintenance) and [publication reconciliation](../../../doc/engineering/workflow/source-of-truth.md#workflow-publication-recovery) routes: completely read live state, fill only approved missing metadata or adopt the observed complete vector, preserve prior evidence/journals, and refresh through the canonical helper without a fabricated predecessor or extra admission/adoption chain. Keep the full projection as data alongside C1; select only the approved immutable candidate tool closure under the single Task evidence locator while independently retaining target/configuration and live Task/PR authority. Freeze the head, run actual required tests and independent review concurrently, and join both with fresh promotion/merge gates; review gates promotion/merge, not test execution. For authorized human maintenance, actual full PR CI may prove current-target applicability without a duplicate strict dispatch: verify exact run/attempt/workflow identity, E parents H/Q and deterministic tested tree T, protected Q configuration/test driver/release authority, current admin scope and no hold. Reread Q/H/scope before promotion or merge; independent review remains required. Use only the explicitly scoped immutable receipt/gate/closeout consumer closure, independently authenticating the same locator; retain protected Q and pinned policy data and propagate the verified proof mode. Ordinary, unattended, reuse and keyed C3 routes retain their gates. A new head renews affected evidence. Use implemented bound helper interfaces; guessed commands or manual receipts cannot replace readback.
 
 ## When to Use
 
-Use after verified implementation or a classified non-merge outcome; `not_planned` may enter this route from bootstrap, planning, or execution without implementation
-verification.
+Use after verified implementation or a classified non-merge outcome; `not_planned` may enter this route from bootstrap, planning, or execution without implementation verification.
 
 Read the bound task's compact resume state from the canonical worktree; follow only `next_command`, and stop on unbound identity or any blocker:
 
@@ -87,6 +86,7 @@ Post-PR checks/comments/mergeability remain separate gates. All interpretations,
 ```
 
 10. Merge only with trusted gate evidence and the gate-selected repository path.
+   Follow the [native readiness binding](../../../doc/engineering/workflow/source-of-truth.md#native-readiness-binding) for exact claim-input/result/comment capture and server readback; the first-migration transport remains non-promotable before compatible merge/readback. Continue ordinary fresh live gates/preflight after capture; the latest live gate authorizes merge.
    A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
    or informational `BEHIND` defaults to admin merge
    when the gate emits `use_admin_merge: true`; do not request separate task or
@@ -117,7 +117,8 @@ python3 ./scripts/pm/non-merge-finalize.py \
 - frozen comparison range and fresh verification
 - canonical review and gate evidence links
 - PR URL and merged receipt; for ordered deliveries, report the milestone without terminal closeout until the canonical multi-PR adapter is active, using linked delivery tasks under the source-of-truth compatibility bridge meanwhile; or report a blocker with resume instruction
-- main-sync and cleanup result
+- selected terminal proof and protocol version; protocol v1 includes main-sync and cleanup in its historical closeout chain, while protocol v2 records delivery finalization separately from optional cleanup
+- cleanup result and any task-declared resource wait on a named artifact use
 
 Missing trusted runtime attestation is `capability_blocked` for unattended automation, not human-operated PRs. Never manufacture passed evidence or downgrade a blocker.
 ## Guardrails

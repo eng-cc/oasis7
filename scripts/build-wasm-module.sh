@@ -56,6 +56,7 @@ WASM_BUILD_SUITE_BIN="$(wasm_env_or_default BUILD_SUITE_BIN "")"
 WASM_CANONICALIZER_VERSION="$(wasm_env_or_default CANONICALIZER_VERSION "$DEFAULT_CANONICALIZER_VERSION")"
 
 RUSTFLAGS_EFFECTIVE=""
+SELECTED_BUILDER_IMAGE_ID=""
 
 is_truthy() {
   local value="$1"
@@ -380,6 +381,7 @@ ensure_builder_image() {
   local actual_image_id=""
   if actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}' 2>/dev/null)"; then
     if [[ -z "$WASM_BUILDER_IMAGE_DIGEST" || "$actual_image_id" == "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+      SELECTED_BUILDER_IMAGE_ID="$actual_image_id"
       return 0
     fi
 
@@ -393,6 +395,7 @@ ensure_builder_image() {
 
     if is_truthy "$WASM_BUILDER_ALLOW_IMAGE_ID_MISMATCH"; then
       echo "warning: reusing canonical builder image despite Docker image-id variance" >&2
+      SELECTED_BUILDER_IMAGE_ID="$actual_image_id"
       return 0
     fi
 
@@ -402,7 +405,8 @@ ensure_builder_image() {
       exit 1
     fi
 
-    docker image rm -f "$WASM_BUILDER_IMAGE" >/dev/null 2>&1 || true
+    # Building retags the result without deleting an image another invocation
+    # has already selected. Never create a missing-tag window before publication.
   else
     if [[ "$WASM_BUILDER_IMAGE" != "$DEFAULT_BUILDER_IMAGE" ]]; then
       echo "error: configured builder image is missing: $WASM_BUILDER_IMAGE" >&2
@@ -419,8 +423,9 @@ ensure_builder_image() {
 
   build_local_builder_image
 
+  actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
+  SELECTED_BUILDER_IMAGE_ID="$actual_image_id"
   if [[ -n "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
-    actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
     if [[ "$actual_image_id" != "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
       echo "warning: rebuilt canonical wasm builder image id differs from configured recipe digest" >&2
       echo "warning: configured recipe digest $WASM_BUILDER_IMAGE_DIGEST; rebuilt image id $actual_image_id" >&2
@@ -429,8 +434,9 @@ ensure_builder_image() {
 }
 
 builder_image_digest() {
-  local actual_image_id
-  actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
+  # Receipt provenance retains the recipe digest; execution uses the separately
+  # captured immutable local ID. Do not re-resolve a mutable tag here.
+  local actual_image_id="$1"
   if [[ -n "$WASM_BUILDER_IMAGE_DIGEST" && "$actual_image_id" != "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
     echo "warning: builder image id differs from configured recipe digest for $WASM_BUILDER_IMAGE" >&2
     echo "warning: configured recipe digest $WASM_BUILDER_IMAGE_DIGEST; image id $actual_image_id" >&2
@@ -572,8 +578,12 @@ run_docker_wrapper() {
   mkdir -p "$HOST_OUT_DIR"
   require_docker
   ensure_builder_image
+  if [[ ! "$SELECTED_BUILDER_IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+    echo "error: docker returned an invalid selected builder image id" >&2
+    exit 1
+  fi
   local builder_image_digest_value
-  builder_image_digest_value="$(builder_image_digest)"
+  builder_image_digest_value="$(builder_image_digest "$SELECTED_BUILDER_IMAGE_ID")"
 
   docker run \
     --rm \
@@ -596,7 +606,7 @@ run_docker_wrapper() {
     --env HOME=/tmp/oasis7-home \
     --env CARGO_HOME=/tmp/oasis7-cargo-home \
     --env RUSTUP_HOME=/rustup \
-    "$WASM_BUILDER_IMAGE" \
+    "$SELECTED_BUILDER_IMAGE_ID" \
     "${TRANSLATED_ARGS[@]}"
 }
 

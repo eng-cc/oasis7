@@ -2321,7 +2321,11 @@ class TraceabilityTests(unittest.TestCase):
                 pinned = root / "pinned-tools"
                 pinned.mkdir()
                 marker = root / "downstream-mutated"
-                binding = _binding(task_uid=TASK_UID, policy_commit=SOURCE_OID)
+                binding = _binding(
+                    task_uid=TASK_UID,
+                    policy_commit=SOURCE_OID,
+                    policy_digest="sha256:" + "9" * 64,
+                )
                 binding_path = root / "binding.json"
                 binding_path.write_text(json.dumps(binding, sort_keys=True))
                 task = {
@@ -2335,12 +2339,96 @@ class TraceabilityTests(unittest.TestCase):
                 }
                 gate_calls = []
                 loader_calls = []
+                policy_context = {
+                    "schema": "oasis7.workflow-policy-live-context/v1",
+                    "status": "passed",
+                    "complete": True,
+                    "task_uid": TASK_UID,
+                    "repository": REPOSITORY,
+                    "issue_number": task["issue_number"],
+                    "task_issue_state": "open",
+                    "live_task_identity": {
+                        "task_uid": TASK_UID,
+                        "repository": REPOSITORY,
+                        "issue_number": task["issue_number"],
+                        "bootstrap_epoch": 1,
+                        "binding_identity_digest": "sha256:" + hashlib.sha256(
+                            json.dumps(binding, ensure_ascii=False, sort_keys=True,
+                                       separators=(",", ":")).encode("utf-8")
+                        ).hexdigest(),
+                        "write_scope_digest": "sha256:" + hashlib.sha256(
+                            json.dumps({
+                                "write_scope": binding["write_scope"],
+                                "out_of_scope": binding["out_of_scope"],
+                                "target_delivery": binding["target_delivery"],
+                            }, ensure_ascii=False, sort_keys=True,
+                               separators=(",", ":")).encode("utf-8")
+                        ).hexdigest(),
+                        "owner_role": task["owner_role"],
+                        "task_branch": task["task_branch"],
+                        "default_branch": "main",
+                        "pr_number": None,
+                        "pr_url": None,
+                        "status": "committed",
+                        "workflow_phase": "verification",
+                        "hold_active": False,
+                    },
+                    "binding": deepcopy(binding),
+                    "task_issue_author": {"login": "fixture-owner", "type": "User"},
+                    "live_comment_read": {
+                        "complete": True,
+                        "repository": REPOSITORY,
+                        "issue_number": task["issue_number"],
+                        "comments": [],
+                    },
+                    "trusted_current_policy": {
+                        "default_branch": "main",
+                        "default_branch_oid": SOURCE_OID,
+                        "policy_commit": SOURCE_OID,
+                        "policy_digest": binding["policy_digest"],
+                        "workflow_source_digest": "sha256:" + "8" * 64,
+                    },
+                    "effective_policy": {
+                        "status": "passed",
+                        "blockers": [],
+                        "binding": deepcopy(binding),
+                        "policy_commit": SOURCE_OID,
+                        "policy_digest": binding["policy_digest"],
+                        "pin_source": "immutable_binding",
+                        "adoption_chain_tip": None,
+                        "bootstrap_epoch": 1,
+                    },
+                    "project": None,
+                    "caller": None,
+                    "pr": None,
+                }
+                policy_reader_calls = []
+
+                def read_policy_context(read_root, repository, task_uid):
+                    policy_reader_calls.append((Path(read_root), repository, task_uid))
+                    self.assertEqual(Path(read_root).resolve(), root.resolve())
+                    self.assertEqual(repository, REPOSITORY)
+                    self.assertEqual(task_uid, TASK_UID)
+                    return deepcopy(policy_context)
+
+                def resolve_policy_tool_root(target_root, active_binding, preferred=None):
+                    self.assertEqual(Path(target_root).resolve(), root.resolve())
+                    self.assertEqual(active_binding, binding)
+                    self.assertEqual(Path(preferred), pinned)
+                    return pinned
 
                 def loader(effective_tool_root, source_commit):
                     loader_calls.append((Path(effective_tool_root).resolve(), source_commit))
                     self.assertEqual(Path(effective_tool_root).resolve(), pinned.resolve())
                     self.assertEqual(source_commit, SOURCE_OID)
                     raise TraceabilityPreflight(f"forced {command} dispatch sentinel")
+
+                def traceability_adapter(effective_tool_root, target_root, bound, commit,
+                                         *, trusted_default_oid=None):
+                    self.assertEqual(Path(target_root).resolve(), root.resolve())
+                    self.assertEqual(bound, binding)
+                    self.assertEqual(trusted_default_oid, SOURCE_OID)
+                    return loader(effective_tool_root, commit)
 
                 def gate(*args, **kwargs):
                     observed_command = args[0] if args else kwargs.get("command")
@@ -2381,9 +2469,11 @@ class TraceabilityTests(unittest.TestCase):
                     argv.extend(["--loop-binding", str(binding_path)])
 
                 with patch.object(loop, "pre_mutation_admission", gate, create=True), \
-                        patch.object(loop, "_traceability_adapter", lambda effective_root, target_root, bound, commit: loader(effective_root, commit)), \
+                        patch.object(loop, "_traceability_adapter", side_effect=traceability_adapter), \
                         patch.object(loop, "load_task", return_value=task), \
                         patch.object(loop, "validate_task", side_effect=downstream_validate), \
+                        patch.object(loop, "read_effective_policy_context", side_effect=read_policy_context) as policy_reader, \
+                        patch.object(loop, "existing_policy_tool_root", side_effect=resolve_policy_tool_root), \
                         patch.object(loop, "common_dir", return_value=root), \
                         patch.object(loop, "Reservation", NoopReservation), \
                         patch.object(loop, "recovery_status", return_value={"pending_actions": []}), \
@@ -2399,6 +2489,8 @@ class TraceabilityTests(unittest.TestCase):
                         self.assertIn(f"forced {command} dispatch sentinel", str(exc))
 
                 self.assertEqual(len(gate_calls), 1, gate_calls)
+                policy_reader.assert_called_once_with(root.resolve(), REPOSITORY, TASK_UID)
+                self.assertEqual(policy_reader_calls, [(root.resolve(), REPOSITORY, TASK_UID)])
                 self.assertEqual(loader_calls, [(pinned.resolve(), SOURCE_OID)])
                 self.assertEqual(return_code, 2)
                 self.assertFalse(marker.exists(), f"{command} reached downstream mutation")

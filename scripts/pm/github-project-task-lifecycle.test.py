@@ -251,6 +251,47 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                 update_issue.assert_not_called()
                 update_project.assert_not_called()
 
+    def test_ordinary_verified_closeout_move_done_has_no_recovery_namespace(self) -> None:
+        import subprocess,sys
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory)
+            record=mapping_record(status="committed",phase="execution")
+            verified=subprocess.run([sys.executable,"-c","raise SystemExit(0)"],capture_output=True)
+            self.assertEqual(verified.returncode,0)
+            record.update(last_closed_at="2026-10-07T00:00:00Z",claim_verifications=[{
+                "claim_type":"task_complete","status":"verified","verification_exit_code":verified.returncode,
+                "verification_command":"python -c 'raise SystemExit(0)'"}])
+            mapping_path=self.write_mapping(root,record);before=mapping_path.read_bytes()
+            self.assertTrue(MODULE.has_verified_task_complete(record))
+            task=MODULE.task_from_record(UID,record)
+            durable={"body":MODULE.issue_body(task),"number":record["issue_number"],"title":record["title"],"url":record["issue_url"],"state":"OPEN","stateReason":None,"updatedAt":"2026-10-07T00:00:00Z"}
+            effects=[];reads=[]
+            def transport(command):
+                reads.append(command)
+                if command==["gh","issue","list","-R","eng-cc/oasis7","--state","all","--search",UID+" in:body","--json","number,url,title,state","--limit","5"]:
+                    return json.dumps([{key:durable[key] for key in ("number","url","title","state")}])
+                if command==["gh","issue","view",str(record["issue_number"]),"-R","eng-cc/oasis7","--json","body,number,title,url,state,stateReason,updatedAt"]:
+                    return json.dumps(durable)
+                if len(command)==8 and command[:6]==["gh","issue","edit",str(record["issue_number"]),"-R","eng-cc/oasis7"] and command[6]=="--body-file":
+                    durable["body"]=pathlib.Path(command[7]).read_text();effects.append(command[:]);return durable["url"]
+                raise AssertionError("unprovided ordinary move transport: "+repr(command))
+            with mock.patch.object(MODULE,"run_text",side_effect=transport),mock.patch("builtins.print"):
+                try:result=MODULE.command_move_task(args(root,"done"))
+                except NameError:
+                    self.assertEqual(mapping_path.read_bytes(),before)
+                    self.assertEqual(effects,[])
+                    raise
+            self.assertEqual(result,0)
+            final=json.loads(mapping_path.read_text())["tasks"][UID]
+            self.assertEqual((final["status"],final["workflow_phase"]),("done","task_done"))
+            self.assertEqual(final["claim_verifications"],record["claim_verifications"])
+            self.assertEqual(len(effects),1)
+            self.assertNotIn("oasis7-postmerge-completion",durable["body"])
+            self.assertTrue(all(call[:2]==["gh","issue"] for call in reads))
+            live=None
+            with mock.patch.object(MODULE,"run_text",side_effect=transport):live=MODULE.github_issue_record("eng-cc/oasis7",UID)
+            self.assertEqual((live["status"],live["workflow_phase"]),("done","task_done"))
+
     def test_terminal_idempotent_done_preserves_fine_phase(self) -> None:
         for phase in ("post_merge_done", "closed_without_merge"):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
@@ -430,7 +471,16 @@ class MoveTaskLifecycleContract(unittest.TestCase):
 
     def test_record_pr_reconciles_exact_publication_poststate_after_partial_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
+            import subprocess
             root = pathlib.Path(directory)
+            def git(*args: str) -> str:
+                return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
+            git('init', '-q');git('config', 'user.name', 'Fixture');git('config', 'user.email', 'fixture@example.invalid')
+            git('commit', '-q', '--allow-empty', '-m', 'fixture base')
+            base = git('rev-parse', 'HEAD')
+            git('checkout', '-q', '-b', 'task/lifecycle-move-contract')
+            git('commit', '-q', '--allow-empty', '-m', 'fixture head')
+            head = git('rev-parse', 'HEAD')
             record = mapping_record(status="committed", phase="execution")
             record.update(record_pr_identity(root))
             mapping_path = self.write_mapping(root, record)
@@ -443,8 +493,8 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                 source_repository_id=7,
                 source_ref="task/lifecycle-move-contract",
                 target_ref="main",
-                source_head_oid="a" * 40,
-                source_scope_oid="b" * 40,
+                source_head_oid=head,
+                source_scope_oid=base,
                 planner_authority_oid="c" * 40,
                 planner_config_sha256="sha256:" + "d" * 64,
                 policy_digest=publication_module.digest({"policy": "test"}),
@@ -459,48 +509,145 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             request.draft_candidate = True
             request.publication_binding_json = str(binding_path)
             live_issue = record_pr_live_issue(record)
-            live_issue.update(
-                status="committed",
-                workflow_phase="verification",
-                pr_url="https://github.com/eng-cc/oasis7/pull/2001",
-                pr_number="2001",
-            )
+
             identity = record_pr_identity(root)
+            actor = {"login": "fixture-writer", "type": "User"}
+            live_issue["bootstrap_epoch"] = 1
+            raw_pr = record_pr_live_pr(draft=True)
+            raw_pr["head"]["sha"] = head
+            raw_pr.update(user=actor, created_at="2026-01-03T00:00:00Z", updated_at="2026-01-03T00:00:00Z")
             intent_comment = {
+                "id": 2002, "user": actor, "author_association": "OWNER", "created_at": "2026-01-02T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z",
                 "body": publication_module.publication_comment(publication),
                 "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-2002",
             }
             existing_comments = [intent_comment]
             written_comments: list[str] = []
+            server_effects: list[str] = []
+            loss = {'post': False, 'read': False}
+            sync = MODULE.load_sync_module()
+            project = {'id': 'PROJECT_fixture', 'number': 1, 'owner': {'login': 'eng-cc'}, 'viewerCanUpdate': True}
+            project_values = {'Task UID': UID, 'Status': 'In Progress', 'PM Status': 'committed', 'Workflow Phase': 'execution', 'PR': ''}
+            catalog = [{'id': 'FIELD_PHASE', 'name': 'Workflow Phase', 'type': 'ProjectV2SingleSelectField',
+                        'options': [{'id': 'OPTION_VERIFY', 'name': 'verification'}]},
+                       {'id': 'FIELD_PR', 'name': 'PR', 'type': 'ProjectV2Field'}]
+            mapping = json.loads(mapping_path.read_text())
+            mapping['project'] = {'id': project['id'], 'number': 1, 'owner': 'eng-cc', 'repo': 'eng-cc/oasis7'}
+            MODULE.save_mapping(mapping_path, mapping)
+            raw_issue = {'id': 'ISSUE_fixture', 'number': 2001, 'state': 'OPEN', 'user': actor,
+                         'url': 'https://github.com/eng-cc/oasis7/issues/2001',
+                         'body': MODULE.issue_body(MODULE.task_from_record(UID, record))}
 
-            def verified_comment(_repo: str, _issue: int, body: str) -> str:
-                written_comments.append(body)
-                comment_url = f"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-{2002 + len(written_comments)}"
-                existing_comments.append({"body": body, "html_url": comment_url})
-                if "<!-- oasis7-ci-publication-binding/v1 -->" in body:
-                    raise RuntimeError("simulated lost response after reciprocal comment write")
-                return comment_url
+            def comment_read(*_args: object) -> list[dict[str, object]]:
+                if loss['post'] and not loss['read']:
+                    loss['read'] = True
+                    raise RuntimeError('simulated unavailable immediate readback after persisted comment')
+                return list(existing_comments)
+
+            def graphql_leaf(_token: str, query: str, variables: dict[str, object], **kwargs: object) -> dict[str, object]:
+                page = {'hasNextPage': False, 'endCursor': None}
+                if kwargs.get('operation') == 'project_sync_live_issue_memberships':
+                    self.assertEqual(variables, {'owner': 'eng-cc', 'name': 'oasis7', 'number': 2001, 'after': None})
+                    self.assertIn('projectItems(first: 100', query)
+                    return {'repository': {'issue': {**{k: raw_issue[k] for k in ('id', 'number', 'url', 'state', 'body')},
+                        'projectItems': {'nodes': [{'id': 'ITEM_ID', 'isArchived': False, 'project': project}], 'pageInfo': page}}}}
+                if kwargs.get('operation') == 'project_sync_live_item_fields':
+                    self.assertEqual(variables, {'item': 'ITEM_ID', 'after': None})
+                    self.assertIn('fieldValues(first: 100', query)
+                    return {'node': {'id': 'ITEM_ID', 'isArchived': False, 'project': project,
+                        'fieldValues': {'nodes': [{'field': {'name': name}, 'name' if name in sync.SINGLE_SELECT_FIELDS else 'text': value}
+                            for name, value in project_values.items()], 'pageInfo': page}}}
+                raise AssertionError('unprovided GraphQL transport operation: '+repr(kwargs))
+
+            def writer_transport(command: list[str]) -> str:
+                if command == ['gh', 'api', 'user']:
+                    return json.dumps(actor)
+                if command == ['gh', 'api', 'repos/eng-cc/oasis7/collaborators/fixture-writer/permission']:
+                    return json.dumps({'permission': 'write', 'user': actor, 'permissions': {'push': True}})
+                if command[:2] == ['git', '-C'] and pathlib.Path(command[2]).resolve() == root.resolve() and command[3:] in (['rev-parse', '--verify', 'HEAD^{commit}'], ['rev-parse', '--git-common-dir']):
+                    return subprocess.check_output(command, text=True).strip()
+                if command == ['gh', 'api', 'repos/eng-cc/oasis7/issues/2001']:
+                    return json.dumps(raw_issue)
+                if command[:3] in (['gh', 'issue', 'edit'], ['gh', 'issue', 'comment']):
+                    self.assertEqual(command[:6], ['gh', 'issue', command[2], '2001', '-R', 'eng-cc/oasis7'])
+                    self.assertEqual(command[6], '--body-file');self.assertEqual(len(command), 8)
+                    body = pathlib.Path(command[7]).read_text()
+                    if command[2] == 'edit':
+                        server_effects.append('issue');raw_issue['body'] = body
+                        live_issue.update(MODULE.issue_task_fields(body))
+                        if live_issue.get('pr_number'): live_issue['pr_number'] = int(live_issue['pr_number'])
+                        return raw_issue['url']
+                    ident = 2002 + len(written_comments) + 1
+                    comment = {'id': ident, 'body': body, 'user': actor,
+                        'html_url': raw_issue['url']+'#issuecomment-'+str(ident)}
+                    written_comments.append(body);existing_comments.append(comment);server_effects.append('comment')
+                    if '<!-- oasis7-ci-publication-binding/v1 -->' in body:
+                        loss['post'] = True
+                        raise RuntimeError('simulated lost response after reciprocal comment write')
+                    return comment['html_url']
+                if command[:2] == ['gh', 'api'] and len(command) == 3 and command[2].startswith('repos/eng-cc/oasis7/issues/comments/'):
+                    ident = int(command[2].rsplit('/', 1)[1])
+                    matches = [c for c in existing_comments if c.get('id') == ident]
+                    self.assertEqual(len(matches), 1)
+                    return json.dumps(matches[0])
+                if command == ['gh', 'project', 'view', '1', '--owner', 'eng-cc', '--format', 'json']:
+                    return json.dumps(project)
+                if command == ['gh', 'project', 'field-list', '1', '--owner', 'eng-cc', '--format', 'json']:
+                    return json.dumps({'fields': catalog, 'totalCount': len(catalog)})
+                if command[:3] == ['gh', 'project', 'item-edit']:
+                    self.assertEqual(command[:7], ['gh', 'project', 'item-edit', '--id', 'ITEM_ID', '--project-id', project['id']])
+                    self.assertEqual(command[7], '--field-id');self.assertEqual(command[-2:], ['--format', 'json'])
+                    field, flag, value = command[8:11]
+                    self.assertEqual(len(command), 13)
+                    if (field, flag, value) == ('FIELD_PHASE', '--single-select-option-id', 'OPTION_VERIFY'):
+                        project_values['Workflow Phase'] = 'verification';server_effects.append('project:Workflow Phase')
+                    elif (field, flag, value) == ('FIELD_PR', '--text', raw_pr['html_url']):
+                        project_values['PR'] = value;server_effects.append('project:PR')
+                    else:raise AssertionError('unprovided Project mutation: '+repr(command))
+                    return json.dumps({'id': 'ITEM_ID'})
+                raise AssertionError('unprovided raw C1 writer transport: '+repr(command))
+
+            def sync_transport(command: list[str]) -> subprocess.CompletedProcess:
+                return subprocess.CompletedProcess(command, 0, stdout=writer_transport(command), stderr='')
 
             with (
                 mock.patch.object(MODULE, "github_issue_record", return_value=live_issue),
                 mock.patch.object(MODULE, "authoritative_repository_identity", return_value=identity),
-                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(draft=True)),
-                mock.patch.object(MODULE, "github_issue_comments", side_effect=lambda *_: list(existing_comments)),
-                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "github_pull_request", return_value=raw_pr),
+                mock.patch.object(MODULE, "github_issue_comments", side_effect=comment_read),
+                mock.patch.object(MODULE, "run_text", side_effect=writer_transport),
                 mock.patch.object(MODULE, "synchronize_live_issue_traceability", return_value=[]),
-                mock.patch.object(MODULE, "update_project_fields", return_value=7) as update_project,
-                mock.patch.object(MODULE, "update_issue_body") as update_issue,
-                mock.patch.object(MODULE, "verified_issue_comment", side_effect=verified_comment),
+                mock.patch.object(MODULE, "load_sync_module", return_value=sync),
+                mock.patch.object(sync, "github_token", return_value="offline-noncredential"),
+                mock.patch.object(sync, "graphql_request", side_effect=graphql_leaf),
+                mock.patch.object(sync, "run_subprocess_with_retry", side_effect=sync_transport),
+                mock.patch("urllib.request.urlopen", side_effect=AssertionError("unexpected real network")),
                 mock.patch.object(MODULE, "load_pr_projection_publication_module", return_value=publication_module),
                 mock.patch("builtins.print"),
             ):
-                with self.assertRaisesRegex(RuntimeError, "lost response"):
+                with self.assertRaisesRegex(MODULE._CommandExit, "publication-pending:.*complete readback unavailable"):
                     MODULE.command_record_pr(request)
                 self.assertEqual("execution", json.loads(mapping_path.read_text(encoding="utf-8"))["tasks"][UID]["workflow_phase"])
+                self.assertTrue(loss['post']);self.assertTrue(loss['read'])
+                journal_module = MODULE.load_pr_projection_journal_module()
+                common_dir = (root / git('rev-parse', '--git-common-dir')).resolve()
+                journal = journal_module.open_journal(common_dir, request.repo, identity['task_branch'], publication['publication_id'],
+                    task_uid=UID, source_head_oid=head, scope_base_oid=base, projection_digest=publication['projection_digest'])
+                with journal.locked(): uncertain = journal.read()
+                self.assertEqual(uncertain['disposition'], 'COMMENT_READBACK_UNAVAILABLE')
+                binding_action = [action for action in uncertain['actions'] if action['action_id'].endswith(':publication-binding')]
+                self.assertEqual(len(binding_action), 1);self.assertEqual(binding_action[0]['state'], 'uncertain')
+                effects_before_retry = list(server_effects)
+                comments_before_retry = list(existing_comments)
                 self.assertEqual(0, MODULE.command_record_pr(request))
+                self.assertEqual(server_effects, effects_before_retry)
+                self.assertEqual(existing_comments, comments_before_retry)
+                with journal.locked(): final_journal = journal.read()
+                self.assertEqual([action['state'] for action in final_journal['actions'] if action['action_id'].endswith(':publication-binding')], ['observed'])
 
-            self.assertEqual(2, update_project.call_count)
-            self.assertEqual(2, update_issue.call_count)
+            self.assertEqual(server_effects, ['issue', 'project:Workflow Phase', 'project:PR', 'comment', 'comment'])
+            self.assertEqual(project_values['Workflow Phase'], 'verification')
+            self.assertEqual(project_values['PR'], raw_pr['html_url'])
             self.assertEqual(2, len(written_comments), "evidence and reciprocal binding are restored")
             self.assertEqual(3, len(existing_comments), "recovery reuses both comments written before the lost response")
             persisted = json.loads(mapping_path.read_text(encoding="utf-8"))["tasks"][UID]

@@ -3,14 +3,18 @@ import hashlib
 import copy
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
+from unittest.mock import patch
 
 from loop_ci_content import validate_ci_content
 from loop_contracts import MARKER, contract_digest
+import loop_policy
 
 
 class ContentTests(unittest.TestCase):
@@ -31,7 +35,13 @@ class ContentTests(unittest.TestCase):
         self.git('init', '-q'); self.git('config', 'user.name', 'Fixture'); self.git('config', 'user.email', 'fixture@example.invalid')
         (self.root / '.gitignore').write_text('__pycache__/\n')
         self.spec = self.root / 'doc/engineering/spec.md'; self.spec.parent.mkdir(parents=True); self.spec.write_text('<a id="a"></a>\napproved')
-        self.sync_objects('doc/.governance/top-level-directory-registry.json', 'doc/engineering/spec.md')
+        source = self.root / 'doc/engineering/workflow/source-of-truth.md'; source.parent.mkdir(parents=True); source.write_text('trusted workflow source fixture')
+        self.git('remote', 'add', 'origin', 'https://github.com/eng-cc/oasis7.git')
+        self.sync_objects(
+            'doc/.governance/top-level-directory-registry.json',
+            'doc/engineering/spec.md',
+            'doc/engineering/workflow/source-of-truth.md',
+        )
         self.git('add', '.'); self.git('commit', '-qm', 'effective')
         self.base = self.git('rev-parse', 'HEAD'); self.git('update-ref', 'refs/remotes/origin/main', self.base)
         self.spec_digest = 'sha256:'+hashlib.sha256(self.spec.read_bytes()).hexdigest()
@@ -59,8 +69,23 @@ class ContentTests(unittest.TestCase):
             return {'number':2,'merged':True,'head':{'sha':self.base},'merge_commit_sha':self.base,'base':{'repo':{'full_name':repo}}}
         self.fail('unexpected non-repository read: '+path)
 
-    def check(self):
-        return validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',self.reader)
+    def check(self, tool_root=None, base=None, head=None, reader=None):
+        effective_base = base or self.base
+        policy_bytes = (self.root/'scripts/pm/loop-policy.v1.json').read_bytes()
+        source_bytes = (self.root/'doc/engineering/workflow/source-of-truth.md').read_bytes()
+        proof = {
+            'default_branch': 'main',
+            'default_branch_oid': effective_base,
+            'policy_commit': effective_base,
+            'policy_digest': 'sha256:'+hashlib.sha256(policy_bytes).hexdigest(),
+            'workflow_source_digest': 'sha256:'+hashlib.sha256(source_bytes).hexdigest(),
+        }
+        with patch.object(loop_policy, 'current_effective_policy_identity', return_value=proof):
+            return validate_ci_content(
+                tool_root or self.root, self.root, self.binding,
+                effective_base, head or effective_base, 'eng-cc/oasis7',
+                reader or self.reader,
+            )
 
     def test_content_pass_is_explicitly_not_live_eligibility_admission(self):
         result=self.check()
@@ -87,13 +112,75 @@ class ContentTests(unittest.TestCase):
         key = hashlib.sha256(task_path.encode('utf-8')).hexdigest()
         task_record = f'doc/.governance/document-corpus/objects/{key[:2]}/{key}.json'
         self.binding['write_scope'] = ['doc/engineering/**']
-        result = validate_ci_content(tools,self.root,self.binding,integration,head,'eng-cc/oasis7',self.reader)
+        result=self.check(tool_root=tools, base=integration, head=head)
         self.assertEqual(result['status'],'blocked',result)
         self.binding['write_scope'] = ['doc/engineering/**',task_record]
-        result=validate_ci_content(tools,self.root,self.binding,integration,head,'eng-cc/oasis7',self.reader)
+        result=self.check(tool_root=tools, base=integration, head=head)
         self.assertEqual(result['status'],'passed',result)
         self.assertEqual(result['scope_context']['scope_base_oid'],self.base)
         self.assertEqual(result['scope_context']['integration_base_oid'],integration)
+
+    def test_required_plan_snapshot_reads_the_planner_steps_output_file(self):
+        workflow = (self.repository / '.github/workflows/rust.yml').read_text()
+
+        def step_block(step_id):
+            start = workflow.index(f'      - id: {step_id}\n')
+            end = workflow.find('\n      - ', start + 1)
+            return workflow[start:] if end < 0 else workflow[start:end]
+
+        snapshot = re.compile(
+            r"(?ms)^(?P<indent> +)python3 - \"\$\{GITHUB_OUTPUT\}\" "
+            r"\"\$\{RUNNER_TEMP\}/required-scope-outputs\.json\" <<'PY'\n"
+            r"(?P<body>.*?)^(?P=indent)PY$"
+        )
+        owners = []
+        for step_id in ('scope', 'loop-ci-admission'):
+            match = snapshot.search(step_block(step_id))
+            if match:
+                owners.append((step_id, textwrap.dedent(match.group('body'))))
+        self.assertEqual(len(owners), 1, 'one workflow step must snapshot planner outputs')
+
+        with tempfile.TemporaryDirectory(prefix='oasis7-scope-step-output-') as directory:
+            root = Path(directory)
+            scope_output = root / 'scope-GITHUB_OUTPUT'
+            admission_output = root / 'admission-GITHUB_OUTPUT'
+            snapshot_json = root / 'required-scope-outputs.json'
+            scope_output.write_text('', encoding='utf-8')
+            admission_output.write_text('admission_only=true\n', encoding='utf-8')
+
+            planner = subprocess.run(
+                [sys.executable, str(self.repository / 'scripts/plan-rust-required-scope.py'),
+                 '--event-name', 'pull_request', '--changed-path',
+                 'doc/engineering/workflow/source-of-truth.md', '--github-output', str(scope_output)],
+                cwd=self.repository, capture_output=True, text=True,
+            )
+            self.assertEqual(planner.returncode, 0, planner.stdout + planner.stderr)
+            planner_outputs = dict(
+                line.split('=', 1) for line in scope_output.read_text(encoding='utf-8').splitlines()
+            )
+            self.assertIn('scope', planner_outputs)
+            self.assertIn('planner_config_sha256', planner_outputs)
+            scope_additions = {
+                'source_scope_base': planner_outputs.get('source_scope_base', 'fixture-base'),
+                'source_head': planner_outputs.get('source_head', 'fixture-head'),
+            }
+            with scope_output.open('a', encoding='utf-8') as output:
+                for key, value in scope_additions.items():
+                    output.write(f'{key}={value}\n')
+                    planner_outputs[key] = value
+
+            owner, source_code = owners[0]
+            step_outputs = {'scope': scope_output, 'loop-ci-admission': admission_output}
+            copied = subprocess.run(
+                [sys.executable, '-I', '-c', source_code,
+                 str(step_outputs[owner]), str(snapshot_json)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(copied.returncode, 0, copied.stdout + copied.stderr)
+            snapshot_outputs = json.loads(snapshot_json.read_text(encoding='utf-8'))
+            self.assertEqual(snapshot_outputs.get('scope'), planner_outputs['scope'])
+            self.assertEqual(snapshot_outputs, planner_outputs)
+            self.assertEqual(owner, 'scope')
 
     def test_changed_publication_content_blocks(self):
         self.contract['content_refs'][0]['sha256']='sha256:'+'0'*64
@@ -116,7 +203,7 @@ class ContentTests(unittest.TestCase):
                 return {'id':int(path.rsplit('/',1)[1]),'issue_url':'https://api.github.com/repos/eng-cc/oasis7/issues/1',
                         'body':json.dumps({'marker':MARKER,'contract_digest':contract_digest(contract),'contract':contract})}
             return self.reader(repo,path)
-        result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
+        result = self.check(reader=reader)
         self.assertEqual(result['status'],'blocked',result)
 
     def test_malformed_upstream_publication_ref_blocks_without_traceback(self):
@@ -132,7 +219,7 @@ class ContentTests(unittest.TestCase):
             if path=='issues/comments/4':
                 return dict(self.reader(repo,'issues/comments/3'),id=4)
             return self.reader(repo,path)
-        result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
+        result = self.check(reader=reader)
         self.assertEqual(result['status'],'passed',result)
 
     def test_equivalent_revision_rechecks_second_publication_target(self):
@@ -141,7 +228,7 @@ class ContentTests(unittest.TestCase):
             if path=='issues/comments/4':
                 return dict(self.reader(repo,'issues/comments/3'),id=4,issue_url='https://api.github.com/repos/eng-cc/oasis7/issues/99')
             return self.reader(repo,path)
-        result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
+        result = self.check(reader=reader)
         self.assertEqual(result['status'],'blocked',result)
 
     def qualified_reference(self, **overrides):

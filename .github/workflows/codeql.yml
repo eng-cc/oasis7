@@ -209,6 +209,50 @@ jobs:
               out.write('```json\n' + json.dumps(value, indent=2) + '\n```\n')
           PY
 
+      - name: Record upload association evidence
+        if: always()
+        env:
+          UNIT: ${{ matrix.unit }}
+          PROFILE: ${{ needs.plan.outputs.profile }}
+          CATEGORY: ${{ matrix.category }}
+          CHECKOUT: ${{ needs.plan.outputs.checkout }}
+          EXECUTION: ${{ steps.analyze.outcome }}
+          UPLOAD: ${{ steps.upload.outcome }}
+          SARIF_ID: ${{ steps.upload.outputs.sarif-id }}
+        run: |
+          python3 -I - <<'PY'
+          import json, os, pathlib
+          env = os.environ
+          value = {
+              'schema': 'oasis7-codeql-upload-evidence/v1',
+              'repository': env['GITHUB_REPOSITORY'],
+              'workflow_path': '.github/workflows/codeql.yml',
+              'workflow_ref': env['GITHUB_WORKFLOW_REF'],
+              'workflow_sha': env['GITHUB_WORKFLOW_SHA'],
+              'run_id': int(env['GITHUB_RUN_ID']),
+              'run_attempt': int(env['GITHUB_RUN_ATTEMPT']),
+              'job_key': env['GITHUB_JOB'],
+              'job_name': 'CodeQL / ' + env['UNIT'] + ' / ' + env['PROFILE'],
+              'checkout_sha': env['CHECKOUT'],
+              'ref': env['GITHUB_REF'],
+              'unit': env['UNIT'], 'profile': env['PROFILE'], 'category': env['CATEGORY'],
+              'execution_status': env['EXECUTION'], 'upload_status': env['UPLOAD'],
+              'upload_sarif_id': env['SARIF_ID'] if env['UPLOAD'] == 'success' else '',
+          }
+          folder = pathlib.Path(env['RUNNER_TEMP']) / 'codeql-upload-evidence'
+          folder.mkdir(exist_ok=True)
+          (folder / 'evidence.json').write_text(json.dumps(value, sort_keys=True, separators=(',', ':')) + '\n')
+          PY
+      - name: Persist upload association evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, official tag resolved 2026-10-01
+        with:
+          name: oasis7-codeql-upload-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.unit }}-${{ needs.plan.outputs.profile }}
+          path: ${{ runner.temp }}/codeql-upload-evidence/evidence.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+
   summary:
     name: CodeQL / summary
     needs: [plan, analyze]

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Issue/verify a live GitHub CI receipt for a frozen draft-candidate head."""
-import argparse, base64, datetime as dt, hashlib, io, json, re, subprocess, sys, zipfile
+import argparse, base64, datetime as dt, hashlib, io, json, re, subprocess, sys, tempfile, zipfile
 from pathlib import Path
-from ci_ready_receipt_identity import review_evidence_digest, review_evidence_identity
+from ci_ready_receipt_identity import review_evidence_digest, review_evidence_identity, current_target_proof_identity
 
 FAIL_STATES = ("stale", "wrong_head", "wrong_app", "superseded", "cancelled", "uncertain")
 PLAN_MARKER="oasis7-required-plan-v1"
@@ -331,7 +331,107 @@ def planner_for_run(repository, check_run, *, base_oid, head_oid):
     if not isinstance(envelope.get("planner"),dict):
         raise SystemExit("ci-ready-receipt: uncertain incomplete planner artifact envelope")
     planner=canonical_planner(envelope["planner"])
-    return _selected_child_job_outcomes(repository,check_run,workflow_run_id,planner,artifact)
+    result = _selected_child_job_outcomes(repository,check_run,workflow_run_id,planner,artifact)
+    if "current_target_proof" in envelope:
+        try:
+            result["current_target_proof"] = current_target_proof_identity(envelope["current_target_proof"])
+        except ValueError as exc:
+            raise SystemExit("ci-ready-receipt: invalid current-target artifact: " + str(exc)) from exc
+    return result
+
+
+def _current_target_tree(repository, q, h, e):
+    """Recompute the merge in an isolated object store, never the caller index."""
+    with tempfile.TemporaryDirectory(prefix="oasis7-current-target-") as directory:
+        def git(*args):
+            return subprocess.check_output(["git", "-C", directory, *args], text=True, stderr=subprocess.PIPE).strip()
+        git("init", "--bare", "--quiet")
+        # Reuse immutable local objects when available. New merge objects go
+        # only to this disposable store, leaving the canonical checkout alone.
+        try:
+            objects = subprocess.check_output(["git", "rev-parse", "--path-format=absolute", "--git-path", "objects"], text=True).strip()
+            Path(directory, "objects/info/alternates").write_text(objects + "\n")
+            for oid in (q, h, e):
+                git("cat-file", "-e", oid + "^{commit}")
+        except subprocess.CalledProcessError:
+            git("fetch", "--quiet", "--no-tags", "https://github.com/" + repository + ".git", q, h, e)
+        parents = git("rev-list", "--parents", "-n", "1", e).split()
+        if parents != [e, q, h]:
+            raise ValueError("current-target immutable checkout parents differ")
+        ancestor = subprocess.run(["git", "-C", directory, "merge-base", "--is-ancestor", q, h], capture_output=True)
+        if ancestor.returncode not in (0, 1):
+            raise ValueError("current-target ancestry is unreadable")
+        return git("rev-parse", h + "^{tree}") if ancestor.returncode == 0 else git("merge-tree", "--write-tree", q, h).splitlines()[0]
+
+
+def _protected_file(repository, revision, path):
+    response = gh("api", f"repos/{repository}/contents/{path}?ref={revision}")
+    if response.get("path") != path or response.get("encoding") != "base64":
+        raise ValueError("current-target immutable file readback differs: " + path)
+    return base64.b64decode("".join(str(response.get("content", "")).split()), validate=True)
+
+
+def validate_current_target_pr_proof(repository, pr, check, planner, *, current_target_oid):
+    """Authenticate the existing PR run's exact current-target execution proof."""
+    from workflow_maintenance import maintenance_comment_id, read_maintenance_authority
+    proof = current_target_proof_identity(planner.get("current_target_proof"))
+    h, q, e = proof["source_head_oid"], proof["current_target_oid"], proof["checkout_oid"]
+    if (proof["repository"] != repository or proof["pr_number"] != pr.get("number")
+            or h != pr.get("head", {}).get("sha") or q != current_target_oid
+            or proof["maintenance_authority_comment_id"] != maintenance_comment_id(pr.get("body", ""))):
+        raise ValueError("current-target proof differs from live PR/target/authority")
+    run_id, _ = _workflow_job_details(check, repository)
+    if run_id != proof["workflow_run_id"]:
+        raise ValueError("current-target check belongs to another run")
+    run = gh("api", f"repos/{repository}/actions/runs/{run_id}")
+    if (run.get("id") != run_id or run.get("event") != "pull_request"
+            or run.get("status") != "completed" or run.get("conclusion") != "success"
+            or run.get("run_attempt") != proof["workflow_run_attempt"]
+            or run.get("head_sha") not in (h, e)
+            or str(run.get("path", "")).split("@", 1)[0] != ".github/workflows/rust.yml"
+            or not any(item.get("number") == pr["number"] and item.get("head", {}).get("sha") == h
+                       for item in run.get("pull_requests", []) if isinstance(item, dict))):
+        raise ValueError("current-target Actions run provenance differs")
+    if run.get("workflow_sha") is not None and run["workflow_sha"] != proof["workflow_revision"]:
+        raise ValueError("current-target actual workflow revision differs")
+    outcomes = planner.get("selected_child_job_outcomes") or {}
+    if (outcomes.get("workflow_run_id") != run_id or outcomes.get("run_attempt") != proof["workflow_run_attempt"]
+            or planner.get("scope") != "full" or planner.get("impact_projection_test_profile") != "full"
+            or planner.get("planner_config_sha256") != "sha256:" + proof["planner_config_sha256"]):
+        raise ValueError("current-target run attempt/full required coverage is incomplete")
+    authority = read_maintenance_authority(repository, proof["maintenance_authority_comment_id"], proof["task_uid"],
+        pr["number"], h, (".github/workflows/rust.yml", "scripts/pm/ci-ready-receipt.py", "scripts/pm/ci_ready_receipt_identity.py"),
+        ("scripts/pm/ci-ready-receipt.py", "scripts/pm/ci_ready_receipt_identity.py"))
+    if authority["issue_number"] != proof["task_issue_number"]:
+        raise ValueError("current-target Task Issue differs from authenticated authority")
+    commits = {}
+    for oid in (q, h, e):
+        value = gh("api", f"repos/{repository}/git/commits/{oid}")
+        if value.get("sha") != oid:
+            raise ValueError("current-target Git commit identity differs")
+        commits[oid] = value
+    if ([item.get("sha") for item in commits[e].get("parents", [])] != [q, h]
+            or commits[e].get("tree", {}).get("sha") != proof["tested_tree_oid"]
+            or _current_target_tree(repository, q, h, e) != proof["tested_tree_oid"]):
+        raise ValueError("current-target deterministic tested tree differs")
+    workflow = _protected_file(repository, proof["workflow_revision"], ".github/workflows/rust.yml")
+    if workflow != _protected_file(repository, h, ".github/workflows/rust.yml"):
+        raise ValueError("actual workflow bytes differ from approved source head")
+    for path, field in (("scripts/ci-required-scope.v2.json", "planner_config_sha256"), ("scripts/ci-tests.sh", "test_driver_sha256")):
+        contents = _protected_file(repository, q, path)
+        if hashlib.sha256(contents).hexdigest() != proof[field]:
+            raise ValueError("current-target protected authority digest differs: " + field)
+        if field == "planner_config_sha256":
+            config = json.loads(contents)
+            if sorted(config["capabilities"]) != planner.get("selected_capabilities"):
+                raise ValueError("current-target full protected capability coverage differs")
+    import integration_ci
+    if integration_ci.default_branch_head(repository, pr["base"]["ref"]) != q:
+        raise ValueError("current-target protected ref moved during verification")
+    fresh = gh("api", f"repos/{repository}/pulls/{pr['number']}")
+    if any(fresh.get(key) != pr.get(key) for key in ("state", "merged", "draft", "body", "head", "base")):
+        raise ValueError("current-target PR identity changed during verification")
+    return proof
 
 
 def _verified_v2_required_evidence(repository, check_run, proof, *, request_key,
@@ -914,7 +1014,10 @@ def main():
     if old is None or "base_ref" in old:
         payload["base_ref"] = pr.get("base", {}).get("ref")
     if old is None or "ci_validation_mode" in old:
-        payload["ci_validation_mode"] = "trusted_integration" if run.get("_integration") else "ordinary_pr"
+        payload["ci_validation_mode"] = ("trusted_integration" if run.get("_integration")
+                                         else "current_target_pr" if run.get("_current_target") else "ordinary_pr")
+    if run.get("_current_target"):
+        payload["current_target_proof"] = run["_current_target"]
     if old is None or "live_validation" in old:
         payload["live_validation"] = "ci-ready-receipt-live"
     if planner.get("impact_projection_status") == "verified":
@@ -1027,7 +1130,10 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
     if pr.get('state')!='open' or pr.get('merged'):
         raise SystemExit('ci-ready-receipt: integration PR not open')
     if base_ref and pr['base']['ref']!=base_ref: raise SystemExit('ci-ready-receipt: manual integration base ref mismatch')
-    current_target_oid,head=pr['base']['sha'],pr['head']['sha']
+    # PR-associated base.sha can remain historical after an additive source
+    # sync. Strict legacy requests bind the independently resolved live ref.
+    current_target_oid=integration_ci.default_branch_head(repository,pr['base']['ref'])
+    head=pr['head']['sha']
     base=current_target_oid
     try:
         request_record=None
@@ -1038,7 +1144,6 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             request_record,request_identity=_trusted_validation_request(
               request_key,repository,uid,number,head)
             base=request_record["integration_base_oid"]
-            current_target_oid=integration_ci.default_branch_head(repository,pr['base']['ref'])
             _require_historical_base_ancestor_of_target(repository,base,current_target_oid)
         selected=current_request(repository,uid,number,base,head,pr['base']['ref'],
           request_key=request_key)
@@ -1100,10 +1205,12 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
                 or (not allow_ready_pr and not fresh.get('draft'))
                 or f'Refs #{issue}' not in (fresh.get('body') or '')
                 or f'Task: {uid}' not in (fresh.get('body') or '')
-                or (request_key is None and fresh.get('base',{}).get('sha')!=current_target_oid)
+                or (request_key is None and fresh.get('base',{}).get('sha')!=pr.get('base',{}).get('sha'))
                 or fresh.get('base',{}).get('ref')!=pr['base']['ref']
                 or fresh.get('head',{}).get('sha')!=head):
                 raise ValueError('PR identity or admission changed during integration verification')
+            if request_key is None and integration_ci.default_branch_head(repository,fresh['base']['ref'])!=current_target_oid:
+                raise ValueError('default-branch target moved during integration verification')
             if request_key is not None:
                 current_target_oid=integration_ci.default_branch_head(repository,fresh['base']['ref'])
                 if (not isinstance(current_target_oid,str)
@@ -1119,6 +1226,22 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             raise ValueError('explicit integration locator absent from verified current request range')
     except (ValueError,KeyError,OSError,ImportError,TypeError,subprocess.SubprocessError) as exc:
         raise SystemExit('ci-ready-receipt: current request blocked: '+str(exc)) from exc
+    if (request_key is None and integration_run_id is None
+            and re.search(r"^Workflow Maintenance Authority: [1-9][0-9]*$", pr.get("body", ""), re.M)):
+        ordinary = live(repository,uid,issue,number,check_name,app,allow_ready_pr,base_ref,ordinary_pr=True)
+        candidate_pr, candidate_check, candidate_base, candidate_head = ordinary
+        planner = planner_for_run(repository,candidate_check,base_oid=candidate_base,head_oid=candidate_head)
+        if "current_target_proof" in planner:
+            try:
+                proof = validate_current_target_pr_proof(repository,candidate_pr,candidate_check,planner,
+                                                        current_target_oid=current_target_oid)
+                if proof["task_uid"] != uid or proof["task_issue_number"] != issue:
+                    raise ValueError("current-target proof differs from caller Task identity")
+                if current_request(repository,uid,number,base,head,pr["base"]["ref"]) is not None:
+                    raise ValueError("current integration request changed during PR proof verification")
+            except (ValueError,KeyError,TypeError,OSError,subprocess.SubprocessError) as exc:
+                raise SystemExit("ci-ready-receipt: current-target PR proof blocked: " + str(exc)) from exc
+            return candidate_pr,{**candidate_check,"_current_target":proof},candidate_base,candidate_head
     if require_integration:
         if require_dispatch:
             raise SystemExit('ci-ready-receipt: strict integration request is absent')

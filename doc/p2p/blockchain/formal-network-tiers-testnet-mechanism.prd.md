@@ -69,7 +69,7 @@
 - Architecture Overview: 正式网络分层收束为 operator/runtime 目标三层：本地 `local_devnet`、测试 `public_testnet`、正式 `mainnet`。这些 tier 是统一持久大世界的运行/验证载体，不是多个玩家世界。历史 `shared_devnet/staging/canary` 继续可作为内部 legacy/rehearsal evidence 追溯，但不再作为目标 test 环境；`public_testnet` 是可公开访问、可 reset、带 faucet 的 rehearsal 网络；`mainnet` 是 frozen genesis、no-reset、no-faucet、受治理准入约束的正式价值网络。各层通过同一 `network_tier_manifest` schema 固定 tier 语义。
 - Integration Points:
   - `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（仅 legacy rehearsal provenance）
+  - `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`（仅 legacy rehearsal provenance）
 - `doc/p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`
   - `README.md`
   - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
