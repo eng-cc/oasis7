@@ -53,6 +53,37 @@ class ConsumerTests(unittest.TestCase):
             self.addCleanup(p.stop)
         return fixture.contract.completion_reference(self.current())
 
+    def test_completed_record_keeps_independent_identity_through_Project_projection(self):
+        self.completed()
+        record = self.current()
+        before = json.dumps(record, sort_keys=True)
+        task = fixture.facade.task_from_record(fixture.UID, record)
+        self.assertEqual(fixture.contract.immutable_identity(task),
+                         fixture.contract.immutable_identity(record))
+        sync = fixture.facade.load_sync_module()
+        values = sync.project_field_values(task)
+        self.assertEqual(values["Primary Package"], "alpha")
+        self.assertEqual(values["Canonical Worktree"], str(self.root))
+        self.assertEqual(json.dumps(record, sort_keys=True), before)
+        body = fixture.facade.issue_body(task)
+        self.assertNotIn("- project_item_id:", body)
+        self.assertNotIn("- repository:", body)
+
+    def test_completed_identity_rejects_every_independent_field_mismatch(self):
+        self.completed()
+        record = self.current()
+        for field in fixture.contract.IDENTITY_FIELDS:
+            with self.subTest(field=field):
+                altered = dict(record)
+                altered[field] = ["different acceptance"] if field == "acceptance" else (
+                    2 if field in {"issue_number", "bootstrap_epoch"} else "different")
+                with self.assertRaisesRegex(ValueError, "immutable Task identity differs"):
+                    fixture.contract.validate_completion(altered)
+        lifecycle = {**record, "status": "verification", "pr_url": "https://github.com/eng-cc/oasis7/pull/99"}
+        self.assertIsNotNone(fixture.contract.validate_completion(lifecycle))
+        legacy = dict(record); legacy.pop("bootstrap_epoch")
+        self.assertIsNotNone(fixture.contract.validate_completion(legacy))
+
     def input(self, refs):
         return {"task_uid": fixture.UID, "source_head_oid": self.git("rev-parse", "HEAD"),
                 "scope_base_oid": self.base, "changed_paths": ["crates/alpha/src/lib.rs"],

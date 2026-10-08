@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Hosted isolated bootstrap tests; only external GitHub service is simulated."""
+import contextlib
+import io
 import hashlib
 import importlib.util
 import json
@@ -182,6 +184,44 @@ class BootstrapTests(unittest.TestCase):
                                 env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('actual-current-loop-completion-consumed', result.stdout)
+
+    def legacy_no_cache(self):
+        # Use the real completion writer and independently authenticated Issue;
+        # the receipt is never a source of missing Project identity.
+        f = self.fixture
+        f.record.pop(fixture_module.contract.FIELD)
+        f.record.pop('primary_package')
+        f.record.pop('loop_binding')
+        f.save()
+        f.body = fixture_module.facade.issue_body(fixture_module.facade.task_from_record(fixture_module.UID, f.record))
+        with contextlib.redirect_stdout(io.StringIO()):
+            f.complete()
+        f.record = f.current()
+        self.save()
+        self.assertIsNotNone(fixture_module.contract.validate_completion(f.record))
+        f.mapping.unlink()
+        return f.body, json.dumps(f.comments, sort_keys=True)
+
+    def test_no_cache_legacy_completion_reports_missing_independent_Project_authority(self):
+        body, comments = self.legacy_no_cache()
+        result = self.run_bootstrap({'GITHUB_EVENT_NAME': 'pull_request',
+            'GITHUB_REF': 'refs/pull/7/merge', 'OASIS7_PROJECT_READ_TOKEN': ''})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Project-read setup:', result.stderr)
+        self.assertNotIn('completion immutable Task identity differs', result.stderr)
+        self.assertEqual(self.fixture.body, body)
+        self.assertEqual(json.dumps(self.fixture.comments, sort_keys=True), comments)
+        self.assertFalse(self.fixture.mapping.exists())
+        self.assertFalse((self.fixture.root / '.pm/policy').exists())
+
+    def test_no_cache_candidate_cannot_use_broader_Project_token(self):
+        self.legacy_no_cache()
+        result = self.run_bootstrap({'GITHUB_EVENT_NAME': 'pull_request',
+            'GITHUB_REF': 'refs/pull/7/merge', 'OASIS7_PROJECT_READ_TOKEN': 'candidate-must-not-use'})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Project-read setup:', result.stderr)
+        self.assertNotIn('completion immutable Task identity differs', result.stderr)
+        self.assertFalse(self.fixture.mapping.exists())
 
     def test_missing_policy_object_rejects_without_candidate_fallback(self):
         self.binding['policy_commit'] = 'f' * 40

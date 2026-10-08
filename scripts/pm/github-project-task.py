@@ -946,6 +946,13 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("updated_at", record.get("updated_at") or now()),
         ]
     )
+    # Project consumers validate completion against the independently bound
+    # Task record. Keep that identity context even though Issue and Project
+    # serializers emit only their explicit canonical fields.
+    for key in ("repository", "issue_number", "issue_url", "project_item_id",
+                "canonical_worktree", "task_branch", "bootstrap_epoch"):
+        if key in record:
+            task[key] = record[key]
     if "primary_package" in record:
         try:
             package = primary_contract.effective_primary_package({**record, "task_uid": uid})
