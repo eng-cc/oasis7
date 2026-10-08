@@ -28,7 +28,6 @@ git diff --check
 ./scripts/doc-governance-check.sh
 
 if [[ "${RUN_PM_LINT:-0}" == "1" ]]; then
-  ./scripts/pm/lint.sh
 else
   echo "skip pm lint (set RUN_PM_LINT=1 to enable)"
 fi

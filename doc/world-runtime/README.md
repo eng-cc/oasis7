@@ -23,7 +23,7 @@
 - 文件级索引: `doc/world-runtime/prd.index.md`
 
 ## 入口分工
-- `README.md` 只承担 landing page 职责：帮助读者决定先去 PRD、GitHub task truth、长表索引还是具体高频专题。
+- `README.md` 只承担 landing page 职责：帮助读者决定先去 PRD、Git、PR 与实际 CI 记录、长表索引还是具体高频专题。
 - `prd.md` 是模块权威规格入口，适合先理解 runtime 的确定性、WASM、治理、存储与发布边界。
 - GitHub task issue / Project 是执行台账，适合确认当前仍在推进的 runtime / wasm 发布 / binary-only / traceability 任务；Git history 保留历史变更过程。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名后按文件名直达，不适合作为第一次进入模块时的首读入口。
@@ -33,7 +33,7 @@
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接平铺 runtime 高频专题长名单。
 - 高频 active 入口保留在 `prd.md`、`prd.index.md` 与少量仍承担当前跨阶段判断职责的正式专题。
-- `evidence/`、`templates/` 与 `checklists/` 继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径按需进入；旧 2026-03 runtime handoff root 文档已退役删除，当前追溯改从正式 evidence、GitHub task evidence 与 Git history 进入。
+- `evidence/`、`templates/` 与 `checklists/` 继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径按需进入；旧 2026-03 runtime handoff root 文档已退役删除，当前追溯改从正式 evidence、PR 与实际验证记录 与 Git history 进入。
 
 ## 模块职责
 - 维护运行时主链路、存储治理、WASM 执行与模块发布口径。
@@ -59,7 +59,7 @@
 
 ## 历史根入口
 - root world-runtime legacy redirect shells 已删除。
-- 旧 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档已退役删除；当前 runtime candidate、storage cadence、GC fail-safe 与 profile consistency 证据以 `evidence/`、GitHub task issue evidence comments 与 Git history 为准。
+- 旧 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档已退役删除；当前 runtime candidate、storage cadence、GC fail-safe 与 profile consistency 证据以 `evidence/`、PR、实际 CI 与评审记录（Issue 按需） 与 Git history 为准。
 - 当前技术入口以本目录 `prd.md` 与 `prd.index.md` 为准；当前任务状态以 GitHub 为准。
 
 ## 共享约定

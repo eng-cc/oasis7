@@ -24,14 +24,14 @@
 ## 模板
 | PRD-ID | 任务ID | 测试层级 | 命令 | 证据路径 | 结论 |
 | --- | --- | --- | --- | --- | --- |
-| PRD-XXX | TASK-XXX | test_tier_required | `./scripts/doc-governance-check.sh` | GitHub task issue evidence comments | blocked |
+| PRD-XXX | TASK-XXX | test_tier_required | `./scripts/doc-governance-check.sh` | PR、实际 CI 与评审记录（Issue 按需） | blocked |
 | PRD-XXX | TASK-XXX | required | `env -u RUSTC_WRAPPER cargo test -p <crate> --features test_tier_required` | `output/<module>/required-*.log` | blocked |
 | PRD-XXX | TASK-XXX | full | `env -u RUSTC_WRAPPER cargo test -p <crate> --features test_tier_full` | `output/<module>/full-*.log` | blocked |
 
 ## 填写约束
 - `命令` 需与 `测试层级` 一致，不可出现“层级写 required，命令却是 lint”的情况。
 - `证据路径` 不可留空；如证据在 CI，需落盘到仓库路径后再引用。
-- `结论 = fail/blocked` 时，必须在对应 GitHub task issue evidence comments 记录整改项（负责人 + 截止时间）或延期备注。
+- `结论 = fail/blocked` 时，必须在对应 PR、实际 CI 与评审记录（Issue 按需） 记录整改项（负责人 + 截止时间）或延期备注。
 
 ## 最小审查清单
 - 是否覆盖所有相关 `PRD-ID`。

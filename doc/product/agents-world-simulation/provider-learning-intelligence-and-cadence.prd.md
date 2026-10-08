@@ -14,9 +14,9 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 设计判定 task issue：#3680。
+- 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义准入、节奏、暂停、训练和能力范围的产品边界；具体学习交互由专业 authority 决定，独立 design 会复制产品或实现 authority。
-- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 玩家可以在获认证且适用的 provider profile 间作出可读选择，但 provider 质量或商业条件不能改写权威世界的节奏、规则或行动容量。Agent 通过可审计的经验、训练、认证和受治理模块形成有来源的能力历史；需要重训时承担真实成本并保留历史。情报在合理私有、必要安全披露和最终公共基线之间平衡，且始终说明新鲜度和不确定性。

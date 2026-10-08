@@ -52,13 +52,13 @@
 ## WASM 相邻历史入口
 | 文档路径 | 当前状态 | 当前阅读入口 |
 | --- | --- | --- |
-| deterministic pipeline absorbed historical nightly build-std 记录 | 历史实现证据；不再作为发布级 canonical build 入口 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`、Git history 与 GitHub task evidence |
-| 早期 WASM build determinism QA guard（已退役） | 历史脚本护栏和编译期拦截只从 Git/GitHub task evidence 追溯，不替代当前 release evidence / Docker canonical 口径 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` 与 `doc/testing/prd.md` |
+| deterministic pipeline absorbed historical nightly build-std 记录 | 历史实现证据；不再作为发布级 canonical build 入口 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`、Git history 与 PR 与实际验证记录 |
+| 早期 WASM build determinism QA guard（已退役） | 历史脚本护栏和编译期拦截只从 Git/PR 与实际验证记录 追溯，不替代当前 release evidence / Docker canonical 口径 | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` 与 `doc/testing/prd.md` |
 | `doc/testing/evidence/viewer-wasm-only-runtime-proof-2026-05-13.md` | dated evidence；只证明当轮 viewer wasm-only runtime proof，不替代 required/full gate | `doc/world-simulator/viewer/README.md` 与当前 viewer/testing task truth |
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 runtime / wasm / module 专题表。
-- `evidence/`、模板与 checklist 文档继续保留可检索性，但默认不和活跃专题 PRD/design 同屏平铺；旧 2026-03 runtime handoff root 文档已退役删除，追溯从正式 evidence、GitHub task issue evidence comments 与 Git history 进入。
+- `evidence/`、模板与 checklist 文档继续保留可检索性，但默认不和活跃专题 PRD/design 同屏平铺；旧 2026-03 runtime handoff root 文档已退役删除，追溯从正式 evidence、PR、实际 CI 与评审记录（Issue 按需） 与 Git history 进入。
 - 完整活跃专题清单继续保留在下方，用于精确文件名检索和互链可达性。
 - WASM 相关的跨目录历史文档只保留在“相邻历史入口”或对应模块索引中；除非 owner 明确恢复为当前任务入口，不再作为 world-runtime 默认首读面。
 
@@ -96,7 +96,7 @@
 | `doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md` | `checklist` | runtime 核心边界验收清单 |
 | [`integration/node-contribution-points-runtime-closure.md`](integration/node-contribution-points-runtime-closure.md) | `retained technical draft` | 节点积分 MVP 的 runtime closure 草案与溯源材料；当前专业规则见 [`doc/p2p/node/node-contribution-points.prd.md`](../p2p/node/node-contribution-points.prd.md)。草案尚未完整吸收到当前合同，不证明当前实现或 readiness。 |
 
-已退役删除的 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档不再作为补充入口；对应结论从上方 evidence、GitHub task issue evidence comments 与 Git history 追溯。
+已退役删除的 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档不再作为补充入口；对应结论从上方 evidence、PR、实际 CI 与评审记录（Issue 按需） 与 Git history 追溯。
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

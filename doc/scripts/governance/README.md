@@ -8,15 +8,14 @@
 | --- | --- |
 | 模块能力、稳定入口、fallback、worktree 与收口承诺 | `../prd.md` |
 | 参数权威边界、harness 隔离和 readiness/smoke 语义 | `../design.md` |
-| 已完成任务与历史验证证据 | `GitHub task issue evidence comments` |
+| 已完成任务与历史验证证据 | `PR、实际 CI 与评审记录（Issue 按需）` |
 | 工程任务生命周期、PR 门禁和终态清理 | `../../engineering/workflow/source-of-truth.md` |
 | 当前 CLI 参数与机器可读输出 | 脚本 `--help` 与对应测试 |
 
-历史 dated triplet 的持续语义已回填到上述稳定权威，源文件已删除；需要追溯时使用 Git history、GitHub task issue evidence 和 `GitHub task issue evidence comments` 的 TASK-SCRIPTS 记录。
+历史 dated triplet 的持续语义已回填到上述稳定权威，源文件已删除；需要追溯时使用 Git history、GitHub task issue evidence 和 `PR、实际 CI 与评审记录（Issue 按需）` 的 TASK-SCRIPTS 记录。
 
 ## 兼容边界
 
-`scripts/land-task-worktree.sh` 仅是 local-only / fallback 兼容工具，永远不是默认最终合流入口。默认路径使用 `scripts/prepare-task-pr.sh` 并服从工程 workflow 真值；完成 worktree 只能通过 canonical post-merge cleanup 回收。
 
 ## 已删除的碎片
 

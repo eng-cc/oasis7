@@ -1,7 +1,7 @@
 # README 分布式计算与存储生产级收口（Gap 1/2/3/4/5）设计文档
 
 - 对应设计文档: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md`
-- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
+- 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用
 
 审计轮次: 4
 

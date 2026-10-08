@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "7b5f473d3009ac607b85f25e06ade2dbe14d760c6a440050cb0d3a12e360ba62",
+    "content_sha256": "fc46cd5fad0f8dab9c24019884cd75c964fe221949b59bbe710172ea349d0c3c",
     "current_authority": "README.md",
     "decision_owner": "liveops_community",
     "disposition": "retain_current_procedure",
-    "note": "current channel SOP; no launch or dated promise authority",
+    "note": "current channel SOP; no launch or dated promise authority; developer workflow record projection updated, product authority retained",
     "path": "doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

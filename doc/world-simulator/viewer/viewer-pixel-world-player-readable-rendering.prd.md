@@ -167,12 +167,12 @@ PixelWorld participates in slices 3 (console/receipt), 5 (separate World Feed), 
 - AC-2: PixelWorldHost 首屏展示 objective、next action、player leverage，renderer diagnostics 默认折叠。
 - AC-3: rendered DOM 绘制 agent-location route，Fragment terrain 仍在背景层且非交互。
 - AC-4: UI tests 覆盖 commercial surface DTO、HUD 可见性和诊断折叠。
-- AC-5: `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host`、`npm --prefix crates/oasis7_viewer run build:software-safe`、`./scripts/doc-governance-check.sh`、`./scripts/pm/lint.sh` 与 `git diff --check` 通过。
+- AC-5: `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host`、`npm --prefix crates/oasis7_viewer run build:software-safe`、`./scripts/doc-governance-check.sh` 与 `git diff --check` 通过。
 
 ## 7. Validation & Decision Record
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-WORLD_SIMULATOR-046 | `task_b399bf37eff94c44a300c55f5db739d3` | `test_tier_required` | `npm --prefix crates/oasis7_viewer run test:ui -- pixel_world_host` + `npm --prefix crates/oasis7_viewer run build:software-safe` + `./scripts/doc-governance-check.sh` + `./scripts/pm/lint.sh` + `git diff --check` | Pixel-world Rust DTO、商业化 HUD、rendered route、diagnostics 信息架构、checked-in Viewer Web bundle |
+
 
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

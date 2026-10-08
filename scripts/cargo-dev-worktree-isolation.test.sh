@@ -10,7 +10,7 @@ WORKTREE_A="$TMPDIR/worktree-a"
 WORKTREE_B="$TMPDIR/worktree-b"
 FAKE_BIN="$TMPDIR/fake-bin"
 REAL_CARGO="$(command -v cargo)"
-PYTHON_BIN="$("$ROOT_DIR/scripts/pm/find-python-with-module.sh" ast)"
+PYTHON_BIN="$("$ROOT_DIR/scripts/find-python-with-module.sh" ast)"
 
 cleanup() {
   set +e
@@ -20,10 +20,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$REPO/scripts/pm" "$FAKE_BIN"
+mkdir -p "$REPO/scripts" "$FAKE_BIN"
 cp "$ROOT_DIR/scripts/cargo-dev.sh" "$REPO/scripts/cargo-dev.sh"
-cp "$ROOT_DIR/scripts/pm/find-python-with-module.sh" "$REPO/scripts/pm/find-python-with-module.sh"
-chmod +x "$REPO/scripts/cargo-dev.sh" "$REPO/scripts/pm/find-python-with-module.sh"
+cp "$ROOT_DIR/scripts/find-python-with-module.sh" "$REPO/scripts/find-python-with-module.sh"
+chmod +x "$REPO/scripts/cargo-dev.sh" "$REPO/scripts/find-python-with-module.sh"
 mkdir -p "$REPO/proto/src" "$REPO/consumer/src"
 cat >"$REPO/Cargo.toml" <<'EOF'
 [workspace]

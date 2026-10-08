@@ -160,4 +160,4 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | 验证首个 claim 的非零成本、受限资金用途与回收边界保持同一规则链。 | [`agent claim runtime tests`](../../../crates/oasis7/src/runtime/tests/agent_claims.rs) | GitHub task evidence / QA result | 不证明生产部署、公开资格或最终价格平衡。 |
+| [`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | 验证首个 claim 的非零成本、受限资金用途与回收边界保持同一规则链。 | [`agent claim runtime tests`](../../../crates/oasis7/src/runtime/tests/agent_claims.rs) | PR 与实际验证记录 / QA result | 不证明生产部署、公开资格或最终价格平衡。 |

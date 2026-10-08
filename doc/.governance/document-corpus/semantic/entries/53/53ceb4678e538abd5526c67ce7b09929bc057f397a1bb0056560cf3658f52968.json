@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "caf948e8cf20342be45e933d8ed14a2e4eb028e491e392ea2dbc1e69fdbbeff1",
+    "content_sha256": "ab99ef5de351806d07ff22ec43e725f4322938ca3b3c8fcb7646ffc608856a19",
     "current_authority": "doc/readme/prd.md",
     "decision_owner": "repository_health_engineer",
     "disposition": "retain_current_authority",
-    "note": "current quarterly claim-review control",
+    "note": "current quarterly claim-review control; developer workflow record projection updated, product authority retained",
     "path": "doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

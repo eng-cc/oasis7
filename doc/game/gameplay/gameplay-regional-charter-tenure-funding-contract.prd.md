@@ -5,7 +5,7 @@
 - 主题 authority：本文件是 `game` 专业域中区域成立/调整、双资格约束、退化/恢复、tenure 长期规划与服务费/公共 levy 玩家语义的详细 authority；不把 `PRD-GAME-015` 的成熟世界成长路线扩展为 charter、tenure 或 levy 的完整合同。
 - 专业边界：`world-runtime` 拥有空间、资格、bond、tenure、费用、receipt、状态与确定性恢复；`p2p` 拥有身份、治理授权/签名和分布式状态；`doc/testing/prd.md` 与 QA 拥有组合验证证据。产品专题仍拥有 `GR-004` 至 `GR-008` 的稳定产品要求。
 - 设计适用性：`simple-topic-exemption`（`PRD-only-sufficient`）。本文件只承载 Why / What / Done、玩家循环、机会成本、失败恢复和验收，不新增 API、schema、状态机、回滚算法、数值或 UI 布局；配对例外在 [`doc/game/prd.index.md`](../prd.index.md) 登记。
-- 当前执行：可变 task 状态与当前实现证据由 GitHub Project task truth 和 issue evidence comments 拥有；本文件不宣称当前已实现、已平衡、已发布或已获得 release readiness。
+- 当前执行：可变 task 状态与当前实现证据由 Git、PR、实际 CI 和评审记录 拥有；本文件不宣称当前已实现、已平衡、已发布或已获得 release readiness。
 - 产品锚点状态：本合同的 `GR-004` 至 `GR-008` 语义均直达 active 产品专题的 `REQ/AC` 精确锚点；本文件只消费这些产品边界，不把链接存在写成当前实现、可玩性或 release 证据。
 
 ## 1. 目标与范围

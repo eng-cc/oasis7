@@ -230,6 +230,6 @@
 ## 6. Validation & Decision Record
 
 - 本文记录可复核的策略/协议约束和验证方法；历史执行任务、状态与
-  原始运行记录由对应 GitHub task evidence 与 Git history 追溯。
+  原始运行记录由对应 PR 与实际验证记录 与 Git history 追溯。
 - 离线 mock 回归和单次在线抽样分别证明其明确覆盖的行为，不能彼此
   替代，也不能单独证明跨 provider 稳定性、成本边界或默认启用资格。

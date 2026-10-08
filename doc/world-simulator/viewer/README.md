@@ -121,8 +121,8 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
-- 旧 2026-03-11 模块状态 closure / viewer-to-producer handoff 文档已退役删除；当前 Viewer 合同以本目录 PRD/design/manual 为准，活跃任务状态与历史专题从 `../prd.index.md`、GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl` 进入。
-- 如果某个主题已经出现“主文档物理合并”，应优先进入主文档，而不是从旧阶段文档开始；release immersion phase2~10 的历史追溯从主文档、`../prd.index.md` 历史说明、core review logs、git history 与 GitHub task issue evidence comments 进入。
+- 旧 2026-03-11 模块状态 closure / viewer-to-producer handoff 文档已退役删除；当前 Viewer 合同以本目录 PRD/design/manual 为准，活跃任务状态与历史专题从 `../prd.index.md`、PR、实际 CI 与评审记录（Issue 按需） 与 `.pm/github-project-sync/task-archive.jsonl` 进入。
+- 如果某个主题已经出现“主文档物理合并”，应优先进入主文档，而不是从旧阶段文档开始；release immersion phase2~10 的历史追溯从主文档、`../prd.index.md` 历史说明、core review logs、git history 与 PR、实际 CI 与评审记录（Issue 按需） 进入。
 
 ## 维护约定
 - 新增 Viewer 专题后，若改变了默认首读路径，应同步更新本页。

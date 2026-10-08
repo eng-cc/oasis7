@@ -8,7 +8,7 @@
 - 想确认仍在推进的 runtime 工作与验收记录：读对应 GitHub task issue / Project。
 - 想定位治理事件体、Shadow report 和模块失败事件的历史设计分册：读 [`governance-events.md`](governance-events.md)，并在改动事件枚举前对照当前实现与 `crates/oasis7/src/runtime/tests/`。
 - 想按需了解审计导出的筛选与 JSON 文件输出：读 [`audit-export.md`](audit-export.md)；它不是默认运行时或发布入口。
-- 想追溯已完成的多节点治理、收据签名与最终性绑定专题：从 [`zero-trust-governance-receipt-hardening-2026-02-26.prd.md`](zero-trust-governance-receipt-hardening-2026-02-26.prd.md) 进入同名 PRD / design，并按 GitHub task evidence / Git history 追溯实施过程。
+- 想追溯已完成的多节点治理、收据签名与最终性绑定专题：从 [`zero-trust-governance-receipt-hardening-2026-02-26.prd.md`](zero-trust-governance-receipt-hardening-2026-02-26.prd.md) 进入同名 PRD / design，并按 PR 与实际验证记录 / Git history 追溯实施过程。
 
 ## 阅读面与保留边界
 

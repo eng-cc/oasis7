@@ -5,12 +5,12 @@
 
 审计轮次: 4
 
-- 当前执行入口: GitHub Issue（`Task UID` + evidence comments）与关联 GitHub Project item
+- 当前执行入口: GitHub Issue（`可选 Issue` + evidence comments）与关联 GitHub Project item
 - 对应规范正文: `doc/engineering/doc-governance/doc-structure-standard.design.md`
 
 ## 目标
 - 为仓库后续新增文档建立统一、可判定、可扩展的组织规范，解决“详细设计写在哪里、同类文档如何命名、专题目录如何收口”的问题。
-- 冻结“目录按对象（模块/专题/分册）、文件按职责（PRD/Design/Runbook/Manual）”的顶层规则，并将可变任务记录统一到 GitHub Issue/GitHub task truth。
+- 冻结“目录按对象（模块/专题/分册）、文件按职责（PRD/Design/Runbook/Manual）”的顶层规则，并将可变任务记录统一到 GitHub Issue/Git、PR 与实际 CI 记录。
 - 将详细设计文档从“命名随意、分散在 architecture/interface/manual 中”收敛为可发现、可引用、可复用的正式角色。
 
 ## 范围
@@ -40,13 +40,13 @@
 - 若未保留合理例外，极简说明文档与运行手册会被过度模板化。
 
 ## 1. Executive Summary
-- Problem Statement: 当前仓库已形成稳定的 PRD / GitHub task truth / Devlog 主流程，但“详细设计”的正式载体与专题目录建档规则尚未统一，导致新文档落点与命名需要人工判断。
+- Problem Statement: 当前仓库已形成稳定的 PRD / Git、PR 与实际 CI 记录 / Devlog 主流程，但“详细设计”的正式载体与专题目录建档规则尚未统一，导致新文档落点与命名需要人工判断。
 - Proposed Solution: 建立一套面向 `doc/` 的顶层组织规范，明确目录表达对象、文件后缀表达职责，并要求模块级入口与专题级 PRD/Design 文档保持一致。
 - Success Criteria:
   - SC-1: 后续新增专题可在不口头沟通的前提下，按规范判断应创建的目录与文档类型。
   - SC-2: 详细设计有明确载体 `*.design.md`，且不再需要在 `architecture/interface/manual` 等命名之间临时选择。
-  - SC-3: 模块入口文档能为评审者提供稳定阅读顺序：`PRD -> Design -> Topic Docs -> GitHub task truth`。
-  - SC-4: 同一专题在目录内可通过同名 PRD / Design 文档并通过 GitHub task truth 形成可发现的配套关系。
+  - SC-3: 模块入口文档能为评审者提供稳定阅读顺序：`PRD -> Design -> Topic Docs -> Git、PR 与实际 CI 记录`。
+  - SC-4: 同一专题在目录内可通过同名 PRD / Design 文档并通过 Git、PR 与实际 CI 记录 形成可发现的配套关系。
   - SC-5: 规范正文本身可被直接引用为后续文档治理评审的裁定依据。
   - SC-6: 模块 `README.md` 仅保留模块特有的阅读路径、高频专题与例外入口，不再在各模块重复散写共享治理规则。
   - SC-7: root-level legacy redirect 文档仅保留兼容跳转所需的最小信息，不再扩展为重复的 `目标/范围/状态` 壳文档。
@@ -63,7 +63,7 @@
 - User Stories:
   - PRD-ENGINEERING-015-001: As a 文档作者, I want one directory-and-suffix rule, so that I can create new docs without guessing where detailed design belongs.
   - PRD-ENGINEERING-015-002: As a 模块负责人, I want fixed module-level entry files, so that readers always know where to start.
-  - PRD-ENGINEERING-015-003: As a 评审者, I want topic docs to use the same basename across PRD/Design 与 GitHub task truth, so that related documents are discoverable at a glance.
+  - PRD-ENGINEERING-015-003: As a 评审者, I want topic docs to use the same basename across PRD/Design 与 Git、PR 与实际 CI 记录, so that related documents are discoverable at a glance.
   - PRD-ENGINEERING-015-004: As a 运维/测试人员, I want runbook/manual to be separated from design, so that operational steps do not overwrite technical rationale.
   - PRD-ENGINEERING-015-005: As a 读者, I want README and legacy redirect pages to stay thin, so that I can reach canonical docs without rereading shared governance boilerplate.
 - Critical User Flows:
@@ -74,7 +74,7 @@
   3. Flow-DOC-003（评审阅读）:
      `先读模块 prd.md -> 再读模块 design.md -> 下钻 topic 文档；任务态查 GitHub Issue`
   4. Flow-DOC-004（角色裁定）:
-     `作者准备写内容 -> 先判断是 Why/What/Done 还是 How/Structure/Contract 还是 How/When/Who -> 分别落到 PRD/Design 与 GitHub task truth`
+     `作者准备写内容 -> 先判断是 Why/What/Done 还是 How/Structure/Contract 还是 How/When/Who -> 分别落到 PRD/Design 与 Git、PR 与实际 CI 记录`
   5. Flow-DOC-005（操作文档建档）:
      `若内容是操作步骤 -> 判断是常规使用还是发布/故障处置 -> 分别落到 *.manual.md / *.runbook.md`
   6. Flow-DOC-006（入口减重）:
@@ -92,7 +92,7 @@
 - Acceptance Criteria:
   - AC-1: 规范明确给出模块级固定入口文件集合。
   - AC-2: 规范明确给出专题级推荐目录结构与同名配套规则。
-  - AC-3: 规范明确区分 PRD、Design、GitHub task truth、Manual、Runbook 的职责边界。
+  - AC-3: 规范明确区分 PRD、Design、Git、PR 与实际 CI 记录、Manual、Runbook 的职责边界。
   - AC-4: 规范明确说明“目录按对象、文件按职责”的原则。
   - AC-5: 规范明确给出阅读顺序与文档间引用关系。
   - AC-6: 规范明确给出允许的例外场景与约束，避免过度模板化。
@@ -127,7 +127,7 @@
   - 模块总设计缺失：不阻断本规范成立，但后续新模块应优先补 `doc/<module>/design.md`。
   - 历史自由命名文档：本规范不要求立刻迁移，但新增文档不再复制旧命名分叉。
   - 高体量模块入口：允许保留模块特有的“从这里开始”和高频专题，但不再把 repo-wide 结构规则重复写进每个模块 README。
-  - legacy redirect：若文件仅承担兼容跳转，就不再补齐完整 PRD/Design 与 GitHub task truth 壳；最小可读声明优先于形式完整。
+  - legacy redirect：若文件仅承担兼容跳转，就不再补齐完整 PRD/Design 与 Git、PR 与实际 CI 记录 壳；最小可读声明优先于形式完整。
 - Non-Functional Requirements:
   - NFR-1: 新增文档的职责应能在 5 分钟内被评审者判定。
   - NFR-2: 模块级固定入口数量保持稳定，不因专题膨胀而改变阅读起点。

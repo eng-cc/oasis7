@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "1c1b4ee3555575064f70bca4bc9b7590c74867c796285e3671e961e5e2d3e460",
+    "content_sha256": "c66ccc389775d913a8ee79ec368598c3aa4bcdccbd4f9163fb9bf096cede8e6a",
     "current_authority": "doc/world-simulator/viewer/viewer-manual.manual.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "canonical to public mirror mapping",
+    "note": "canonical to public mirror mapping; developer workflow record projection updated, product authority retained",
     "path": "doc/site/manual/README.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
