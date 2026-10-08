@@ -75,6 +75,20 @@ class Workflow(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('validated agent configurations:', result.stdout)
 
+    def test_native_tool_suite_does_not_inherit_nightly_build_std(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+        script = """set -euo pipefail
+run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
+""" + function + "\nrun_oasis7_workspace_support_crate_tests\nprintf 'after|%s\\n' \"$OASIS7_WASM_BUILD_STD\"\n"
+        result = subprocess.run(['bash', '-c', script], text=True, capture_output=True,
+                                env=dict(os.environ, OASIS7_WASM_BUILD_STD='1'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = result.stdout.splitlines()
+        self.assertEqual(calls[-2], '0|test -p wasm_build_suite -p wasm_module_observe')
+        self.assertTrue(all(call.startswith('1|') for call in calls[:-2]))
+        self.assertEqual(calls[-1], 'after|1')
+
     def test_invalid_selected_group_cannot_silently_skip_command(self):
         driver = (ROOT / 'scripts/ci-tests.sh').read_text()
         self.assertIn('Unknown CI group:', driver)
