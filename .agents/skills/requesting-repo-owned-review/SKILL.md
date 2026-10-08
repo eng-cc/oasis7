@@ -23,7 +23,7 @@ packet.
 1. Freeze the candidate head and comparison identity. Run the smallest real
    boundary check that applies; this is early feedback, not final verification.
 2. Classify the changed scope with `./scripts/pm/review-role-selector.py`:
-   - mechanical documentation: repository health;
+   - mechanical documentation: repository health and QA;
    - workflow, authorization, CI, or publication semantics: repository health
      and QA;
    - one domain's semantics: repository health and the matching domain role,

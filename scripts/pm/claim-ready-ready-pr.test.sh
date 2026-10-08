@@ -49,6 +49,7 @@ match=re.search(r'python3 "\$SCRIPT_DIR/ci-ready-receipt\.py"(.*?)>/dev/null',cl
 assert match,'missing claim-ready CI receipt live-revalidation call'
 call=match.group(1)
 required={
+    '--root': '$ROOT_DIR',
     '--repository': '$RECEIPT_REPOSITORY',
     '--task-uid': '$RECEIPT_TASK_UID',
     '--task-issue-number': '$RECEIPT_ISSUE',
@@ -57,10 +58,13 @@ required={
     '--check-app-id': '$RECEIPT_APP',
     '--planner-digest': '$RECEIPT_PLANNER',
     '--receipt': '$CI_READY_RECEIPT',
+    '--review-plan': '$REVIEW_PLAN_PATH',
 }
 for flag,value in required.items():
     assert re.search(re.escape(flag)+r'\s+"?'+re.escape(value)+r'"?',call),(flag,call)
 assert '--allow-ready-pr' in call,call
+assert claim_source.index('REVIEW_PLAN_PATH="$REVIEW_PLAN"') < match.start()
+assert 'LIVE_GATE_ARGS+=(--review-plan "${REVIEW_PLAN_PATH:-$REVIEW_PLAN}")' in claim_source
 
 ci_source=ci_path.read_text(encoding='utf-8')
 assert 'for key,val in live_identity.items()' in ci_source
@@ -88,7 +92,7 @@ grep -q 'PR observation is derived-only' "$TEST_ROOT/observation-claim.err"
 FIXTURE="$TEST_ROOT/fixture"
 UID_VALUE="task_11111111111111111111111111111111"
 mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/.pm/scratch/$UID_VALUE/review-plans" "$FIXTURE/.pm/github-project-sync" "$TEST_ROOT/bin"
-cp "$SCRIPT_DIR/claim-ready.sh" "$SCRIPT_DIR/ci_ready_receipt_identity.py" "$SCRIPT_DIR/repo-state-fingerprint.py" "$FIXTURE/scripts/pm/"
+cp "$SCRIPT_DIR/claim-ready.sh" "$SCRIPT_DIR/ci_ready_receipt_identity.py" "$SCRIPT_DIR/task_primary_package.py" "$SCRIPT_DIR/repo-state-fingerprint.py" "$FIXTURE/scripts/pm/"
 python3 - "$FIXTURE/scripts/pm/ci-ready-receipt.py" "$FIXTURE/scripts/pm/bootstrap-task-snapshot.py" <<'PY'
 from pathlib import Path
 import sys

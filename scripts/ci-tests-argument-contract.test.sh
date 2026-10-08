@@ -154,7 +154,7 @@ done
 
 system_deps_step="$(sed -n '/name: Install system deps/,/name: Install product-document Markdown parser/p' "$workflow")"
 if ! grep -Fq "outputs.needs_system_deps == 'true'" <<<"$system_deps_step" || \
-   ! grep -Fq "outputs.execution_contract != 'required-domain-split/v1'" <<<"$system_deps_step" || \
+   ! grep -Fq "outputs.execution_contract == ''" <<<"$system_deps_step" || \
    ! grep -Fq "outputs.run_oasis7_workspace_support_crate_tests == 'true'" <<<"$system_deps_step"; then
   echo "versioned system-dependency installation must follow planned resources while legacy keeps its selector fallback" >&2
   exit 1
@@ -328,6 +328,21 @@ with tempfile.TemporaryDirectory(prefix="oasis7-workflow-preflight-") as temp:
         )
 
     versioned = invoke(planner)
+    metadata_v2 = dict(planner)
+    metadata_v2.update({key: "false" for key in metadata_v2 if key.startswith("run_") or key.startswith("needs_")})
+    metadata_v2.update(execution_contract="required-domain-split/v2", scope="minimal",
+                       selected_capabilities="required_gate_baseline", run_required_gate_baseline="true",
+                       needs_python="true", needs_markdown="true", needs_rust_toolchain="true")
+    v2_result = invoke(metadata_v2)
+    if v2_result.returncode:
+        raise SystemExit(f"workflow artifact rejected metadata-only v2 resources: {v2_result.stderr}")
+    missing_metadata = dict(metadata_v2, needs_rust_toolchain="false")
+    missing_result = invoke(missing_metadata)
+    if missing_result.returncode == 0 or "metadata precheck" not in missing_result.stderr:
+        raise SystemExit("workflow artifact accepted v2 without metadata toolchain")
+    v1_metadata = invoke(dict(metadata_v2, execution_contract="required-domain-split/v1"))
+    if v1_metadata.returncode == 0 or "run_rust_baseline must match" not in v1_metadata.stderr:
+        raise SystemExit("workflow artifact changed historical v1 baseline/resource equality")
     if versioned.returncode:
         raise SystemExit(f"valid versioned planner failed artifact preflight: {versioned.stderr}")
 
@@ -414,7 +429,8 @@ PY
 macos_package_job="$(sed -n '/^  testnet-packages-macos-arm64-contract:/,/^  public-testnet-fleet-health-contract:/p' "$workflow")"
 if ! grep -Fq "outputs.run_packaging_contracts == 'true'" <<<"$macos_package_job" || \
    ! grep -Fq "outputs.run_operational_contracts == 'true'" <<<"$macos_package_job" || \
-   ! grep -Fq "outputs.execution_contract == 'required-domain-split/v1'" <<<"$macos_package_job"; then
+   ! grep -Fq "outputs.execution_contract == 'required-domain-split/v1'" <<<"$macos_package_job" || \
+   ! grep -Fq "outputs.execution_contract == 'required-domain-split/v2'" <<<"$macos_package_job"; then
   echo "macOS package child job must use packaging selection in versioned mode and preserve legacy routing" >&2
   exit 1
 fi
@@ -474,6 +490,7 @@ with tempfile.TemporaryDirectory(prefix="oasis7-ci-cargo-scope-wrapper-") as tem
     harness = "\n".join((
         "set -euo pipefail",
         f"repo_root={shlex.quote(str(root))}",
+        f"driver_dir={shlex.quote(str(root / 'scripts'))}",
         run_function,
         scope_function,
         "run_cargo_package_scope_check",
@@ -484,6 +501,8 @@ with tempfile.TemporaryDirectory(prefix="oasis7-ci-cargo-scope-wrapper-") as tem
         "PATH": str(shim_bin) + os.pathsep + env.get("PATH", ""),
         "OASIS7_CARGO_SCOPE_BASE": revision,
         "OASIS7_CARGO_SCOPE_HEAD": revision,
+        "OASIS7_CARGO_SCOPE_INTEGRATION_BASE": revision,
+        "OASIS7_CARGO_PRIMARY_PACKAGE": "auto",
         "OASIS7_CARGO_SCOPE_CHECKER": str(checker),
         "OASIS7_TEST_ARGV": str(argv_path),
     })
@@ -505,10 +524,11 @@ with tempfile.TemporaryDirectory(prefix="oasis7-ci-cargo-scope-wrapper-") as tem
         "--base": revision,
         "--head": revision,
         "--primary-package": "auto",
-        "--policy": str(root / ".pm/cargo-package-scope-policy.json"),
     }
     if success.returncode or success.stderr or "allowed: auto" not in success.stdout:
         raise SystemExit(f"successful Cargo scope checker did not pass through the compact status: {success.stderr}")
+    if success_argv[:2] != ["-I", str(root / "scripts/pm/trusted_cargo_scope.py")]:
+        raise SystemExit(f"Cargo scope caller must use isolated trusted-source loader: {success_argv}")
     if len(success.stdout.encode("utf-8")) > 1024:
         raise SystemExit(f"successful Cargo scope output is unexpectedly unbounded: {len(success.stdout.encode('utf-8'))} bytes")
     for flag, value in expected_flags.items():

@@ -52,6 +52,7 @@ class TaskCloseoutV2LiveValidationTest(unittest.TestCase):
         (self.root / "scripts/pm").mkdir(parents=True)
         (self.root / ".pm/github-project-sync").mkdir(parents=True)
         shutil.copy2(PM / "task-closeout.sh", self.root / "scripts/pm/task-closeout.sh")
+        shutil.copy2(PM / "task_primary_package.py", self.root / "scripts/pm/task_primary_package.py")
         shutil.copy2(PM / "ci_ready_receipt_identity.py", self.root / "scripts/pm/ci_ready_receipt_identity.py")
         shutil.copy2(PM / "workflow-impact-projection.py", self.root / "scripts/pm/workflow-impact-projection.py")
         shutil.copy2(PM / "bootstrap-task-snapshot.py", self.root / "scripts/pm/bootstrap-task-snapshot.py")
@@ -160,6 +161,15 @@ from pathlib import Path
 
 args = sys.argv[1:]
 Path(os.environ['CI_CALL_LOG']).write_text(Path(os.environ['CI_CALL_LOG']).read_text() + 'called\\n')
+if '--root' not in args or '--review-plan' not in args or '--allow-ready-pr' not in args:
+    raise SystemExit('v2 closeout lacks canonical root/review plan/ready transport')
+if Path(args[args.index('--root') + 1]).resolve() != Path(__file__).resolve().parents[2]:
+    raise SystemExit('v2 closeout supplied a noncanonical root')
+plan_path = Path(args[args.index('--review-plan') + 1])
+if not plan_path.is_absolute():
+    plan_path = Path(args[args.index('--root') + 1]) / plan_path
+if not plan_path.is_file():
+    raise SystemExit('v2 closeout review plan locator is missing')
 if '--integration-run-id' not in args:
     raise SystemExit('v2 closeout did not bind the current integration request/run')
 receipt = json.loads(Path(args[args.index('--receipt') + 1]).read_text())

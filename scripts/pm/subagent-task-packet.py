@@ -2,6 +2,12 @@
 """Create or validate a bounded, immutable subagent task packet."""
 
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import argparse
 import hashlib
@@ -590,13 +596,21 @@ def validate_packet(root: Path, packet: dict[str, object],
         fail(f"stale or mismatched packet base_binding: expected {facts['base_binding']}, got {base_binding}")
     if identity.get("issue_url") != task.get("issue_url"):
         fail("packet issue URL does not match task mapping")
-    task_package = task.get("primary_package")
+    try:
+        task = {**task, "task_uid": task_uid}
+        task_package = primary_contract.effective_primary_package(task)
+        primary_contract.validate_current_completion(root, task)
+        expected_completion = primary_contract.completion_reference(task)
+        if identity.get("primary_package_completion") != expected_completion:
+            fail("packet primary completion does not match current effective record")
+    except ValueError as exc:
+        fail(str(exc))
     packet_package = identity.get("primary_package")
-    if task_package not in (None, ""):
+    if task_package is not None:
         validate_primary_package(task_package, "task primary_package")
         if packet_package != task_package:
             fail("packet primary_package does not match task mapping")
-    elif packet_package not in (None, ""):
+    elif packet_package is not None:
         fail("legacy task cannot carry packet primary_package")
     for field in ("repository", "project_item_id", "task_status"):
         mapping_field = "status" if field == "task_status" else field
@@ -914,6 +928,11 @@ def main() -> int:
         return 0
 
     task = load_task(root, args.task_uid)
+    task = {**task, "task_uid": args.task_uid}
+    try:
+        primary_contract.validate_current_completion(root, task)
+    except ValueError as exc:
+        fail(str(exc))
     facts = current_facts(root, task, args.base, args.frozen_base_oid)
     from loop_gate import admission
     loop_admission = admission(root, task, facts['base_sha'], facts['head'])
@@ -965,6 +984,14 @@ def main() -> int:
     }
     if args.primary_package is not None:
         packet["identity"]["primary_package"] = validate_primary_package(args.primary_package)
+    package = primary_contract.effective_primary_package(task)
+    if package is not None:
+        if args.primary_package is not None and args.primary_package != package:
+            fail("requested primary does not match canonical task")
+        packet["identity"]["primary_package"] = package
+    reference = primary_contract.completion_reference(task)
+    if reference is not None:
+        packet["identity"]["primary_package_completion"] = reference
     if review_context is not None:
         packet["review_context"] = review_context
     packet["slice"]["full_history_escalation_reason"] = bounded(

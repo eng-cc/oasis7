@@ -255,7 +255,8 @@ def _planner(root,revision,paths,event='push'):
         for path in paths:command+=['--changed-path',path]
         raw=obs.capture(command,cwd=root)
     outputs=dict(line.split('=',1) for line in raw.decode().splitlines() if '=' in line)
-    normalized=_module('ci-ready-receipt').canonical_planner(outputs)
+    try:normalized=_module('ci-ready-receipt').canonical_planner(outputs)
+    except SystemExit as exc:raise ValueError('recovery plan metadata: '+str(exc)) from exc
     return normalized,entry,config
 
 def _paths(root,base,head):
@@ -516,6 +517,7 @@ def _selected_execution_children(workflow,planner,event):
     prefix="(github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && "
     operational="needs.required-gate.outputs.run_operational_contracts == 'true'"
     packaging="((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' && needs.required-gate.outputs.run_packaging_contracts == 'true') || (needs.required-gate.outputs.execution_contract != 'required-domain-split/v1' && needs.required-gate.outputs.run_operational_contracts == 'true'))"
+    packaging_v2="(((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' || needs.required-gate.outputs.execution_contract == 'required-domain-split/v2') && needs.required-gate.outputs.run_packaging_contracts == 'true') || (needs.required-gate.outputs.execution_contract == '' && needs.required-gate.outputs.run_operational_contracts == 'true'))"
     expected={receipt.WINDOWS_ROLLOUT_JOB:prefix+operational,
         receipt.MACOS_PACKAGE_JOB:prefix+packaging,receipt.FLEET_HEALTH_JOB:prefix+operational}
     text=workflow.decode('utf-8')
@@ -525,7 +527,8 @@ def _selected_execution_children(workflow,planner,event):
         matches=re.findall(r'^    if: ([^\n]+)(?:\n((?:      [^\n]*\n)*))?',blocks[0],re.M)
         if len(matches)!=1:raise ValueError('unsupported immutable child execution condition')
         line,continuation=matches[0];actual=continuation if line=='>-' else line
-        if ''.join(actual.split())!=''.join(condition.split()):
+        supported=(condition,prefix+packaging_v2) if name==receipt.MACOS_PACKAGE_JOB else (condition,)
+        if ''.join(actual.split()) not in {''.join(item.split()) for item in supported}:
             raise ValueError('unsupported changed event/selector child execution condition')
     if event=='push':return {name:False for name in selected}
     if event=='pull_request':return selected
@@ -662,7 +665,8 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
     locators={'source_scope_base':derived_scope,'integration_base':base,'source_head':execution}
     if not isinstance(planner_input,dict) or any(planner_input.get(key)!=value for key,value in locators.items()):
         raise ValueError('push planner source/base identity locator mismatch')
-    actual=receipt.canonical_planner(payload['planner'])
+    try:actual=receipt.canonical_planner(payload['planner'])
+    except SystemExit as exc:raise ValueError('push plan metadata: '+str(exc)) from exc
     planner_revision=base if source is not None else execution
     push_expected,entry,config=_planner(root,planner_revision,_paths(root,base,execution),event)
     # Producer attaches these range locators in addition to planner outputs.

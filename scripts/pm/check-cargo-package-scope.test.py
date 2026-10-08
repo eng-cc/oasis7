@@ -21,12 +21,15 @@ from __future__ import annotations
 
 import json
 import os
+import runpy
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Callable
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -140,6 +143,8 @@ path = "src/lib.rs"
             self._write(repo, f"crates/{package}/src/lib.rs", f"pub fn {package}() {{}}\n")
         self._write(repo, "crates/beta/src/shared.rs", "pub fn shared() {}\n")
         self._write(repo, "shared/common.rs", "pub const SHARED: u8 = 1;\n")
+        for relative in ("scripts/plan-rust-required-scope.py", "scripts/ci-required-scope.v2.json", "scripts/ci-tests.sh"):
+            self._write(repo, relative, (ROOT / relative).read_text())
 
         self._git(repo, "init", "-q", "-b", "main")
         self._git(repo, "config", "user.email", "qa@example.invalid")
@@ -178,6 +183,12 @@ path = "src/lib.rs"
         self._git(repo, "commit", "-qm", "register trusted auxiliary file paths")
         return repo, self._git(repo, "rev-parse", "HEAD")
 
+    def _append_auxiliary_entry(self, repo: Path, entry: dict[str, str]) -> None:
+        registry_path = ".pm/cargo-package-auxiliary-files.json"
+        registry = json.loads((repo / registry_path).read_text(encoding="utf-8"))
+        registry["auxiliary_files"].append(entry)
+        self._write(repo, registry_path, json.dumps(registry, indent=2) + "\n")
+
     def _assert_invalid_auxiliary_base(
         self,
         entries: object,
@@ -215,6 +226,33 @@ path = "src/lib.rs"
             )
         env = os.environ.copy()
         env.update(env_overrides or {})
+        extra = []
+        if (env_overrides or {}).get("OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN") == "true":
+            paths = self._git(repo, "diff", "--name-only", base, head).splitlines()
+            with tempfile.TemporaryDirectory(prefix="cargo-scope-plan-") as directory:
+                authority = Path(directory)
+                planner = authority / "scripts/plan-rust-required-scope.py"
+                planner.parent.mkdir()
+                planner.write_text(self._git(repo, "show", base + ":scripts/plan-rust-required-scope.py") + "\n")
+                (authority / "scripts/ci-required-scope.v2.json").write_text(self._git(repo, "show", base + ":scripts/ci-required-scope.v2.json") + "\n")
+                (authority / "scripts/ci-tests.sh").write_text(self._git(repo, "show", base + ":scripts/ci-tests.sh") + "\n")
+                command = [sys.executable, "-I", str(planner), "--event-name", "pull_request", "--run-mode", "full_escalation"]
+                for path in paths:
+                    command.extend(("--changed-path", path))
+                result = subprocess.run(command, cwd=repo, capture_output=True, text=True, check=True)
+            plan = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+            plan.update(integration_base=base, source_head=head, source_scope_base=base)
+            for key, value in plan.items():
+                if key.startswith(("run_", "needs_")) or key == "execution_contract":
+                    environment_key = ("OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS"
+                                       if key == "run_oasis7_workspace_support_crate_tests"
+                                       else "OASIS7_CI_" + key.upper())
+                    env[environment_key] = value
+            plan_temp = tempfile.TemporaryDirectory(prefix="cargo-scope-plan-file-")
+            self._temps.append(plan_temp)
+            plan_path = Path(plan_temp.name) / "plan.json"
+            plan_path.write_text(json.dumps(plan))
+            extra = ["--trusted-full-plan", str(plan_path), "--trusted-planner-base", base]
         return subprocess.run(
             [
                 sys.executable,
@@ -230,6 +268,7 @@ path = "src/lib.rs"
                 "--policy",
                 str(repo / ".pm/cargo-package-scope-policy.json"),
                 "--json",
+                *extra,
             ],
             cwd=repo,
             env=env,
@@ -316,7 +355,7 @@ path = "src/lib.rs"
             ),
         )
 
-    def test_one_package_source_change_with_unowned_root_readme_is_rejected(self) -> None:
+    def test_one_package_source_change_with_ordinary_root_readme_is_allowed(self) -> None:
         repo, base = self._fixture()
 
         def mutate(root: Path) -> None:
@@ -325,9 +364,7 @@ path = "src/lib.rs"
             )
             (root / "README.md").write_text("Unowned root-level change.\n", encoding="utf-8")
 
-        self._assert_rejected(
-            repo, base, "alpha", mutate, "ambiguous_package_attribution"
-        )
+        self._assert_allowed(repo, base, "alpha", mutate)
 
     def test_existing_normal_path_dependency_to_unchanged_target_is_allowed(self) -> None:
         repo, base = self._fixture()
@@ -2020,6 +2057,122 @@ path = "src/lib.rs"
 
                 self._assert_allowed(repo, base, "alpha", mutate)
 
+    def test_registry_only_maintenance_accepts_valid_exact_path_update(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._append_auxiliary_entry(
+                root,
+                {"path": "scripts/local-signer/new.py", "package": "beta"},
+            )
+
+        head = self._head(repo, mutate, "valid registry-only maintenance")
+        changed_paths = self._git(repo, "diff", "--name-only", base, head).splitlines()
+        self.assertEqual([".pm/cargo-package-auxiliary-files.json"], changed_paths)
+        result = self._run_checker(repo, base, head, "auto")
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"expected a valid exact-path registry maintenance range; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual("allowed", payload.get("status"), payload)
+
+    def test_registry_only_maintenance_rejects_any_additional_changed_path(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._append_auxiliary_entry(
+                root,
+                {"path": "scripts/local-signer/new.py", "package": "alpha"},
+            )
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+
+        self._assert_rejected(repo, base, "auto", mutate, "policy_self_modification")
+
+    def test_registry_only_maintenance_validates_candidate_entries(self) -> None:
+        cases = [
+            (
+                "unknown package",
+                {"path": "scripts/local-signer/new.py", "package": "missing"},
+            ),
+            (
+                "Cargo-owned path",
+                {"path": "crates/alpha/extra.md", "package": "alpha"},
+            ),
+            (
+                "protected path",
+                {"path": ".github/workflows/rust.yml", "package": "alpha"},
+            ),
+        ]
+        for label, entry in cases:
+            with self.subTest(case=label):
+                repo, base = self._auxiliary_base([])
+
+                def mutate(root: Path, entry: dict[str, str] = entry) -> None:
+                    self._append_auxiliary_entry(root, entry)
+
+                self._assert_rejected(repo, base, "auto", mutate, "trusted_policy_invalid")
+
+        repo, base = self._auxiliary_base([])
+
+        def mutate_schema(root: Path) -> None:
+            registry_path = ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads((root / registry_path).read_text(encoding="utf-8"))
+            registry["schema"] = "oasis7-cargo-package-auxiliary-files/v2"
+            self._write(root, registry_path, json.dumps(registry, indent=2) + "\n")
+
+        self._assert_rejected(repo, base, "auto", mutate_schema, "trusted_policy_invalid")
+
+    def test_registry_maintenance_rejects_an_additional_unowned_document(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._append_auxiliary_entry(
+                root,
+                {"path": "scripts/local-signer/new.py", "package": "alpha"},
+            )
+            self._write(root, "docs/auxiliary-registry-note.md", "This is an unowned change.\n")
+
+        self._assert_rejected(repo, base, "auto", mutate, "policy_self_modification")
+
+    def test_registry_only_maintenance_can_create_registry_from_absence(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._write(
+                root,
+                ".pm/cargo-package-auxiliary-files.json",
+                json.dumps(
+                    {
+                        "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                        "auxiliary_files": [
+                            {"path": "scripts/local-signer/new.py", "package": "alpha"}
+                        ],
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+
+        self._assert_allowed(repo, base, "auto", mutate)
+
+    def test_registry_only_maintenance_can_delete_registry_to_absence(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            (root / ".pm/cargo-package-auxiliary-files.json").unlink()
+
+        self._assert_allowed(repo, base, "auto", mutate)
+
     def test_unregistered_auxiliary_sibling_is_not_covered_by_an_exact_entry(self) -> None:
         repo, base = self._auxiliary_base(
             [{"path": "scripts/local-signer/package-release.py", "package": "alpha"}]
@@ -2161,7 +2314,6 @@ path = "src/lib.rs"
             ("absolute path", [{"path": "/outside.py", "package": "alpha"}]),
             ("non-normalized path", [{"path": "scripts/./setup.py", "package": "alpha"}]),
             ("glob path", [{"path": "scripts/*.py", "package": "alpha"}]),
-            ("unknown package", [{"path": "scripts/setup.py", "package": "missing"}]),
             (
                 "duplicate path",
                 [
@@ -2351,6 +2503,289 @@ path = "src/lib.rs"
             )
 
         self._assert_allowed(repo, base, "alpha", mutate)
+
+
+    def _corpus(self):
+        import importlib.util
+        name = "scope_test_document_corpus"
+        spec = importlib.util.spec_from_file_location(name, ROOT / "scripts/document_corpus.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def _document_base(self, corrupt=False, missing=False):
+        corpus = self._corpus()
+        repo, _ = self._fixture()
+        self._write(repo, corpus.REGISTRY_PATH, json.dumps({"directories": [{"name": "engineering", "type": "professional_domain", "owner": "repository_health_engineer", "entry": "doc/engineering/README.md"}]}) + "\n")
+        self._write(repo, "doc/engineering/guide.md", "before\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "document source")
+        record = corpus.expected_object(corpus.GitCorpusView(repo, self._git(repo, "rev-parse", "HEAD")), "doc/engineering/guide.md")
+        if corrupt:
+            record["routing_note"] = "forged old authority"
+        if not missing:
+            self._write(repo, corpus.record_path("object", record["path"]), corpus._wrapped("object", record).decode())
+            self._git(repo, "add", "-A")
+            self._git(repo, "commit", "-qm", "document object")
+        return repo, self._git(repo, "rev-parse", "HEAD"), corpus
+
+    def _change_document(self, repo, corpus):
+        self._write(repo, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+        self._write(repo, "doc/engineering/guide.md", "after\n")
+        record = corpus.expected_object(corpus.WorktreeCorpusView(repo), "doc/engineering/guide.md")
+        self._write(repo, corpus.record_path("object", record["path"]), corpus._wrapped("object", record).decode())
+
+    def test_business_with_complete_document_object_without_registration(self):
+        repo, base, corpus = self._document_base()
+        self._assert_allowed(repo, base, "alpha", lambda root: self._change_document(root, corpus))
+
+    def test_head_cannot_backfill_missing_or_corrupt_historical_object(self):
+        for options in ({"missing": True}, {"corrupt": True}):
+            with self.subTest(options=options):
+                repo, base, corpus = self._document_base(**options)
+                self._assert_rejected(repo, base, "alpha", lambda root: self._change_document(root, corpus), "invalid_document_object")
+
+    def test_document_object_rejects_forged_derived_fields(self):
+        repo, base, corpus = self._document_base()
+        def mutate(root):
+            self._change_document(root, corpus)
+            path = corpus.record_path("object", "doc/engineering/guide.md")
+            data = json.loads((root / path).read_text())
+            data["record"]["structural_owner"] = "tpm"
+            self._write(root, path, corpus.canonical_json(data).decode())
+        self._assert_rejected(repo, base, "alpha", mutate, "invalid_document_object")
+
+    def test_compilation_markdown_consumer_keeps_its_package(self):
+        repo, _ = self._fixture()
+        self._write(repo, "README.md", "before\n")
+        self._write(repo, "crates/beta/src/lib.rs", 'pub const DOC: &str = include_str!("../../../README.md");\n')
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "compile document consumer")
+        base = self._git(repo, "rev-parse", "HEAD")
+        def mutate(root):
+            self._write(root, "README.md", "after\n")
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+        self._assert_rejected(repo, base, "alpha", mutate, "multiple_business_packages")
+
+    def test_package_agents_remains_governance(self):
+        repo, base = self._fixture()
+        self._assert_rejected(repo, base, "alpha", lambda root: self._write(root, "crates/alpha/AGENTS.md", "Rules\n"), "governance_business_mix")
+
+    def test_unrelated_orphan_registry_does_not_block_business(self):
+        repo, base = self._auxiliary_base([{"path": "scripts/old.py", "package": "removed-package"}])
+        self._assert_allowed(repo, base, "alpha", lambda root: self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n"))
+
+    def test_consumed_orphan_registry_still_rejects(self):
+        repo, base = self._auxiliary_base([{"path": "scripts/old.py", "package": "removed-package"}])
+        self._assert_rejected(repo, base, "alpha", lambda root: self._write(root, "scripts/old.py", "print('changed')\n"), "trusted_policy_invalid")
+
+    def test_registry_maintenance_can_remove_orphan(self):
+        repo, base = self._auxiliary_base([{"path": "scripts/old.py", "package": "removed-package"}])
+        def mutate(root):
+            self._write(root, ".pm/cargo-package-auxiliary-files.json", json.dumps({"schema": "oasis7-cargo-package-auxiliary-files/v1", "auxiliary_files": []}) + "\n")
+        self._assert_allowed(repo, base, "auto", mutate)
+
+    def test_unknown_asset_auto_fails_closed(self):
+        repo, base = self._fixture()
+        self._assert_rejected(repo, base, "auto", lambda root: self._write(root, "assets/unknown.bin", "unknown"), "ambiguous_package_attribution")
+
+    def test_markdown_suffix_outside_document_model_does_not_exempt_asset(self):
+        repo, base = self._fixture()
+        self._assert_rejected(repo, base, "alpha", lambda root: self._write(root, "assets/unknown.md", "unknown"), "ambiguous_package_attribution")
+
+    def test_document_object_add_delete_and_rename_endpoints(self):
+        for action in ("add", "delete", "rename"):
+            with self.subTest(action=action):
+                repo, base, corpus = self._document_base()
+                def mutate(root, action=action):
+                    self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+                    old = "doc/engineering/guide.md"
+                    new = "doc/engineering/new.md"
+                    if action == "rename":
+                        (root / old).rename(root / new)
+                    elif action == "add":
+                        self._write(root, new, "new source\n")
+                    if action in ("delete", "rename"):
+                        (root / old).unlink(missing_ok=True)
+                        (root / corpus.record_path("object", old)).unlink()
+                    if action in ("add", "rename"):
+                        record = corpus.expected_object(corpus.WorktreeCorpusView(root), new)
+                        self._write(root, corpus.record_path("object", new), corpus._wrapped("object", record).decode())
+                self._assert_allowed(repo, base, "alpha", mutate)
+
+    def test_unchanged_auxiliary_entry_revalidated_when_include_relation_changes(self):
+        repo, base = self._auxiliary_base([{"path": "inputs/guide.md", "package": "beta"}], {"inputs/guide.md": "compile input\n"})
+        self._assert_rejected(repo, base, "alpha", lambda root: self._write(root, "crates/alpha/src/lib.rs", 'pub const DOC: &str = include_str!("../../../inputs/guide.md");\n'), "trusted_policy_invalid")
+
+    def test_unrelated_document_registration_does_not_add_owner(self):
+        repo, base = self._auxiliary_base([{"path": "README.md", "package": "beta"}], {"README.md": "before\n"})
+        def mutate(root):
+            self._write(root, "README.md", "after\n")
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+        self._assert_allowed(repo, base, "alpha", mutate)
+
+
+class FullPlanLockedContract(unittest.TestCase):
+    """Real Git/Cargo witnesses for the candidate-only full-plan lock gate."""
+
+    setUp = CargoPackageScopeContract.setUp
+    tearDown = CargoPackageScopeContract.tearDown
+    _git = CargoPackageScopeContract._git
+    _write = CargoPackageScopeContract._write
+    _fixture = CargoPackageScopeContract._fixture
+    _head = CargoPackageScopeContract._head
+    _run_checker = CargoPackageScopeContract._run_checker
+    _trusted_full_plan_environment = CargoPackageScopeContract._trusted_full_plan_environment
+
+    def _cargo(self, repo: Path, *args: str) -> None:
+        result = subprocess.run(["cargo", *args], cwd=repo, text=True, capture_output=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def _unchanged_run(self, repo: Path, base: str, head: str, env: dict[str, str]):
+        before = {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+        result = self._run_checker(repo, base, head, "alpha", env)
+        after = {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+        self.assertEqual(before, after, "scope validation changed original checkout bytes")
+        return result
+
+    def _valid_switch(self) -> tuple[Path, str, str]:
+        repo, _ = self._fixture()
+        # Pre-existing excluded local packages need no registry or network.
+        self._write(repo, "Cargo.toml", '[workspace]\nmembers = ["crates/alpha", "crates/beta"]\nexclude = ["vendor/v1", "vendor/v2"]\nresolver = "2"\n')
+        for version in (1, 2):
+            self._write(repo, f"vendor/v{version}/Cargo.toml", f'[package]\nname = "local-dep"\nversion = "{version}.0.0"\nedition = "2021"\n')
+            self._write(repo, f"vendor/v{version}/src/lib.rs", "pub fn local() {}\n")
+        manifest = repo / "crates/alpha/Cargo.toml"
+        manifest.write_text(manifest.read_text() + '\n[dependencies]\nlocal-dep = { path = "../../vendor/v1" }\n')
+        self._cargo(repo, "generate-lockfile", "--offline")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "local dependency base")
+        base = self._git(repo, "rev-parse", "HEAD")
+        manifest.write_text(manifest.read_text().replace("vendor/v1", "vendor/v2"))
+        self._cargo(repo, "generate-lockfile", "--offline")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "switch local dependency")
+        return repo, base, self._git(repo, "rev-parse", "HEAD")
+
+    def test_c1_full_plan_rejects_other_workspace_version_drift(self):
+        repo, base = self._fixture()
+        def mutate(root):
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(manifest.read_text().replace('edition = "2021"', 'edition = "2021"\ndescription = "changed"'))
+            lock = root / "Cargo.lock"
+            lock.write_text(lock.read_text().replace('name = "beta"\nversion = "0.1.0"', 'name = "beta"\nversion = "0.2.0"'))
+        head = self._head(repo, mutate, "stale beta lock")
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("candidate_locked_metadata", result.stdout)
+        self.assertIn("--locked", result.stdout)
+
+    def test_c2_real_local_switch_requires_full_plan_and_locked_gate(self):
+        repo, base, head = self._valid_switch()
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        # The same valid lock must still fail the original fallback entrance.
+        result = self._unchanged_run(repo, base, head, {"OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN": "false"})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unattributable_lock_change", result.stdout)
+
+    def test_c3_locked_success_does_not_bypass_other_package_owner(self):
+        repo, base, _ = self._valid_switch()
+        head = self._head(repo, lambda root: self._write(root, "crates/beta/src/lib.rs", "pub fn changed() {}\n"), "also beta")
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("multiple_business_packages", result.stdout)
+
+    def test_c3_missing_primary_manifest_change_still_rejects(self):
+        repo, base = self._fixture()
+        def mutate(root):
+            lock = root / "Cargo.lock"
+            lock.write_text(lock.read_text().replace('name = "beta"\nversion = "0.1.0"', 'name = "beta"\nversion = "0.2.0"'))
+        head = self._head(repo, mutate, "lock without primary manifest")
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unattributable_lock_change", result.stdout)
+        self.assertNotIn("candidate_locked_metadata", result.stdout)
+
+    def test_c4_successful_metadata_cannot_rewrite_snapshot_lock(self):
+        repo, _, head = self._valid_switch()
+        module = runpy.run_path(str(CHECKER))
+        validate = module["validate_candidate_locked_metadata"]
+        def rewriting_metadata(root, *, locked=False):
+            self.assertTrue(locked)
+            (root / "Cargo.lock").write_bytes(b"rewritten lock\n")
+            return {"packages": []}
+        with mock.patch.dict(validate.__globals__, {"cargo_metadata": rewriting_metadata}):
+            with self.assertRaises(module["ScopeError"]) as failure:
+                validate(repo, head)
+        self.assertIn("Cargo changed committed lock bytes", failure.exception.detail)
+        self.assertEqual(self._git(repo, "show", f"{head}:Cargo.lock"), (repo / "Cargo.lock").read_text().strip())
+
+    def test_c4_fresh_candidate_snapshot_missing_lock_and_unavailable_cargo(self):
+        repo, base, head = self._valid_switch()
+        module = runpy.run_path(str(CHECKER))
+        validate = module["validate_candidate_locked_metadata"]
+        error = module["ScopeError"]
+        # Cargo really resolves the committed candidate, despite dirty checkout.
+        (repo / "Cargo.lock").write_text("dirty checkout lock\n")
+        validate(repo, head)
+        self.assertEqual(b"dirty checkout lock\n", (repo / "Cargo.lock").read_bytes())
+        original_run = subprocess.run
+        calls = []
+        def unavailable(command, **kwargs):
+            if command[:2] == ["cargo", "metadata"]:
+                calls.append(command)
+                raise FileNotFoundError("Cargo unavailable witness")
+            return original_run(command, **kwargs)
+        with mock.patch.object(subprocess, "run", side_effect=unavailable):
+            with self.assertRaises(error) as failure:
+                validate(repo, head)
+        self.assertIn("candidate_locked_metadata", failure.exception.detail)
+        self.assertIn("Cargo unavailable witness", failure.exception.detail)
+        self.assertEqual(1, len(calls))
+        self.assertIn("--locked", calls[0])
+        self.assertNotIn("--no-deps", calls[0])
+        (repo / "Cargo.lock").unlink()
+        missing = self._head(repo, lambda root: None, "candidate missing lock")
+        with self.assertRaises(error) as failure:
+            validate(repo, missing)
+        self.assertIn("candidate_locked_lockfile", failure.exception.detail)
+        self.assertFalse((repo / "Cargo.lock").exists())
+
+    def test_c4_real_cargo_invocation_and_unchanged_successful_snapshot(self):
+        repo, base, head = self._valid_switch()
+        # A recording shim executes real Cargo; inspect exact locked invocation
+        # and bytes before/after every Cargo call, including disposable snapshots.
+        temp = tempfile.TemporaryDirectory(prefix="cargo-scope-recording-")
+        self._temps.append(temp)
+        directory = Path(temp.name)
+        record = directory / "calls.jsonl"
+        cargo = shutil.which("cargo")
+        self.assertIsNotNone(cargo)
+        shim = directory / "cargo"
+        shim.write_text(f'''#!{sys.executable}
+import hashlib, json, pathlib, subprocess, sys
+lock = pathlib.Path.cwd() / "Cargo.lock"
+before = lock.read_bytes() if lock.exists() else None
+result = subprocess.run([{cargo!r}, *sys.argv[1:]])
+after = lock.read_bytes() if lock.exists() else None
+with open({str(record)!r}, "a") as stream:
+    stream.write(json.dumps({{"args": sys.argv[1:], "cwd": str(pathlib.Path.cwd()), "unchanged": before == after, "exists": before is not None}}) + "\\n")
+sys.exit(result.returncode)
+''')
+        shim.chmod(0o755)
+        env = self._trusted_full_plan_environment()
+        env["PATH"] = str(directory) + os.pathsep + os.environ["PATH"]
+        result = self._unchanged_run(repo, base, head, env)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in record.read_text().splitlines()]
+        locked = [call for call in calls if "--locked" in call["args"]]
+        self.assertEqual(1, len(locked), calls)
+        self.assertNotIn("--no-deps", locked[0]["args"])
+        self.assertTrue(locked[0]["exists"])
+        self.assertTrue(locked[0]["unchanged"])
+        self.assertNotEqual(str(repo), locked[0]["cwd"])
 
 
 if __name__ == "__main__":

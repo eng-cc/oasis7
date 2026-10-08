@@ -723,6 +723,27 @@ def expected_object(view: CorpusView, source_path: str) -> dict[str, Any]:
     }
 
 
+def direct_object_source(view: CorpusView, object_path: str) -> str:
+    """Validate one derived shard completely in one immutable endpoint.
+
+    This read-only query deliberately does not repair a historical endpoint
+    using another snapshot and does not admit semantic/evidence records.
+    """
+    if view.file_mode(object_path) != "100644":
+        raise CorpusError(Diagnostic("unsafe-path", record_path=object_path, detail="object must be a non-executable regular file"))
+    record = _load_wrapped(view, object_path, "object", OBJECT_FIELDS, set())
+    source = record.get("path")
+    validate_repo_path(source)
+    if not source.startswith("doc/") or source.startswith("doc/.governance/") or _is_evidence_source(source):
+        raise CorpusError(Diagnostic("object-source", record_path=object_path, detail="not a direct ordinary source"))
+    if record_path("object", source) != object_path:
+        raise CorpusError(Diagnostic("object-path", source_path=source, record_path=object_path, detail="source key does not match record path"))
+    ensure_hash_input(view, source)
+    if record != expected_object(view, source):
+        raise CorpusError(Diagnostic("object-drift", source_path=source, record_path=object_path, detail="complete derived object differs from source recomputation"))
+    return source
+
+
 def _semantic_digest(view: CorpusView, paths: Sequence[str]) -> str:
     material = b"".join(path.encode("utf-8") + b"\0" + sha256(view.read_bytes(path)).encode("ascii") + b"\n" for path in sorted(paths))
     return sha256(material)

@@ -1,8 +1,8 @@
 {
   "schema": "oasis7-ci-required-scope/v2",
-  "execution_contract": "required-domain-split/v1",
+  "execution_contract": "required-domain-split/v2",
   "capabilities": ["oasis7_required", "consensus", "distfs", "node", "net", "viewer_js_required", "viewer_performance_report", "pixel_world_bridge", "launcher_web", "workspace_support", "scenario_regression", "operational_contracts", "packaging_contracts", "workflow_governance", "codex_agent_config_validation", "compile_metrics", "required_gate_baseline", "site_quality", "doc_checker_contracts", "cargo_tooling_contracts"],
-  "baseline_resources": ["python", "markdown"],
+  "baseline_resources": ["python", "markdown", "rust_toolchain"],
   "resource_requirements": {
     "oasis7_required": ["rust_toolchain", "system_deps"],
     "consensus": ["rust_toolchain"],
@@ -53,6 +53,8 @@
     {"name": "OASIS7_CI_RUN_PROVIDER_LIVE_GATE", "mode": "manual-only", "owner": "release_operator", "reason": "Explicit provider-live execution remains operator-controlled and is never enabled by changed-path planning."}
   ],
   "rules": [
+    {"match": ["scripts/pm/check-cargo-package-scope", "scripts/pm/cargo_package_change_classification.py", "scripts/document_corpus.py", "scripts/pm/trusted_cargo_scope.py"], "full": true, "reason": "cargo_scope_authority_closure"},
+    {"match": ["scripts/prepare-task-pr.sh", "scripts/prepare-task-pr.test.sh", "scripts/pm/trusted-cargo-scope.test.py"], "capabilities": ["workflow_governance"], "reason": "trusted_prepare_contract"},
     {"match": ["doc/engineering/workflow/source-of-truth.md", "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json", "scripts/pm/check-cargo-package-scope", "scripts/pm/check-cargo-package-scope.test.py", ".pm/cargo-package-auxiliary-files.json", "scripts/ci-tests.sh", "scripts/ci-required-scope.v2.json", "scripts/ci-required-scope-audit-contract.test.sh", ".github/workflows/rust.yml"], "full": true, "reason": "cargo_scope_policy_maintenance"},
     {"match": [".github/workflows/codeql.yml", "scripts/security/codeql-policy.json", "scripts/security/codeql-plan.py", "scripts/security/codeql-plan.test.py", "scripts/security/codeql-health.py", "scripts/security/codeql-health.test.py", "scripts/security/codeql-workflow.test.py", "scripts/security/codeql-acceptance.test.py", "scripts/security/codeql_upload_association.py", "scripts/security/codeql-upload-association.test.py"], "capabilities": ["workflow_governance"], "reason": "codeql_advisory_contracts"},
     {"match": ["doc/**", ".agents/**", ".pm/**", "AGENTS.md", "*.md"], "minimal": true, "reason": "governance_doc"},

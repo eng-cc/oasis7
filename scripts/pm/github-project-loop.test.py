@@ -54,7 +54,7 @@ class LoopTransport(unittest.TestCase):
             root = pathlib.Path(directory)
             helpers = root / 'scripts/pm'
             helpers.mkdir(parents=True)
-            for filename in ('github-project-task.py', 'loop-policy.v1.json', 'loop_policy.py', 'loop_contracts.py'):
+            for filename in ('github-project-task.py', 'task_primary_package.py', 'loop-policy.v1.json', 'loop_policy.py', 'loop_contracts.py'):
                 shutil.copy2(ROOT / filename, helpers / filename)
             source = root / 'doc/engineering/workflow/source-of-truth.md'
             source.parent.mkdir(parents=True)
