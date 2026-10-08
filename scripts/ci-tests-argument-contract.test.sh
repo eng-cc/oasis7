@@ -3,22 +3,76 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCRIPT="$ROOT_DIR/scripts/ci-tests.sh"
-header="$(sed -n '1,45p' "$SCRIPT")"
+# Execute the dispatcher with command spies; additions and case-arm formatting
+# must not hide lost public tiers or permit invalid argv to execute commands.
+# Its existing empty-array expansion under nounset needs modern Bash; select it
+# explicitly for subprocesses rather than claiming macOS Bash 3.2 compatibility.
+argument_test_bash=""
+for candidate_bash in "$BASH" /opt/homebrew/bin/bash /usr/local/bin/bash; do
+  [[ -x "$candidate_bash" ]] || continue
+  if "$candidate_bash" -c '(( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 4) ))'; then
+    argument_test_bash="$candidate_bash"
+    break
+  fi
+done
+[[ -n "$argument_test_bash" ]] || { echo 'argument-contract probes require Bash >= 4.4 (dispatcher Bash 3.2 empty-array limitation)' >&2; exit 1; }
+export OASIS7_ARGUMENT_TEST_BASH="$argument_test_bash"
+source "$ROOT_DIR/scripts/ci-required-dispatch-fixture.lib.sh"
+ci_fixture_init
+trap ci_fixture_cleanup EXIT
+CI_ARGUMENT_ROOT="$ROOT_DIR" CI_ARGUMENT_REPO="$ci_fixture_repo" CI_ARGUMENT_BIN="$ci_fixture_bin" \
+CI_ARGUMENT_LOG="$ci_fixture_log" python3 - <<'PY'
+import os
+from pathlib import Path
+import subprocess
 
-if ! grep -Fq 'if [[ $# -eq 0 ]]; then' <<<"$header"; then
-  echo "ci-tests must reject an omitted tier before any test command can run" >&2
-  exit 1
-fi
+root = Path(os.environ["CI_ARGUMENT_ROOT"])
+repo = os.environ["CI_ARGUMENT_REPO"]
+log = Path(os.environ["CI_ARGUMENT_LOG"])
+env = {"PATH": os.environ["CI_ARGUMENT_BIN"] + os.pathsep + os.environ["PATH"], "CAPTURE_LOG": str(log),
+       "OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE": "false", "OASIS7_CI_RUN_PROVIDER_LIVE_GATE": "false"}
 
-if ! grep -Fq 'Default: none (explicit tier required)' <<<"$header"; then
-  echo "ci-tests usage must state that an explicit tier is required" >&2
-  exit 1
-fi
+def invoke(argv):
+    log.write_text("")
+    result = subprocess.run([os.environ["OASIS7_ARGUMENT_TEST_BASH"], str(root / "scripts/ci-tests.sh"), *argv],
+                            env=env, text=True, capture_output=True)
+    return result, log.read_text()
 
-if ! grep -Fq 'commit|required|full|full-core|full-support) ;;' <<<"$header"; then
-  echo "ci-tests must retain every explicit tier" >&2
-  exit 1
-fi
+accepted = {
+    "commit": ([], "cargo:fmt --all -- --check"),
+    "required": ([], "cargo:test -p oasis7 --tests --features test_tier_required"),
+    "full": ([], 'test_tier_full,wasmtime,viewer_live_integration'),
+    "full-core": ([], 'test_tier_full,wasmtime,viewer_live_integration'),
+    "full-support": ([], 'cargo:test -p oasis7 --features wasmtime --lib --bins'),
+    "required-plan-baseline": ([], 'lint-skills.sh'),
+    "required-gate-completion": ([], 'package_profile_plan_not_activated'),
+    "required-component": (["--component", "run_consensus_tests"], 'cargo:test -p oasis7_consensus'),
+}
+for tier, (extra, witness) in accepted.items():
+    result, commands = invoke([tier, "--repo-root", repo, *extra])
+    if result.returncode or f"+ ci test tier: {tier}" not in result.stdout or witness not in commands + result.stdout:
+        raise SystemExit(f"explicit tier dispatch failed: {tier}: {result.returncode}: {result.stderr}: {result.stdout}")
+
+# Valid optional inputs reach the intended component dispatch.
+result, commands = invoke(["required-component", "--repo-root", repo, "--impact-projection", str(root / "README.md"),
+                           "--component", "run_consensus_tests"])
+if result.returncode or 'cargo:test -p oasis7_consensus' not in commands:
+    raise SystemExit(f"valid dispatcher options failed: {result.stderr}")
+
+invalid = [[], ["unknown-tier"], ["required-component", "--repo-root", repo],
+           ["required-component", "--repo-root", repo, "--component", "unknown-component"]]
+for option in ("--component", "--repo-root", "--impact-projection"):
+    invalid.extend((["required", option], ["required", option, ""]))
+invalid.append(["required", "--unknown-option"])
+for argv in invalid:
+    result, commands = invoke(argv)
+    if result.returncode == 0 or commands:
+        raise SystemExit(f"invalid argv executed commands or succeeded: {argv}: {result.returncode}: {commands}")
+result, _ = invoke([])
+if result.returncode != 2 or "Default: none (explicit tier required)" not in result.stdout:
+    raise SystemExit("omitted tier must return usage/exit 2 before dispatch")
+print(f"argument-dispatch-probes: OK ({len(accepted)} tiers, valid optional argv, {len(invalid)} rejected argv/no-command cases)")
+PY
 
 validator_source="$(sed -n '/^validate_required_gate_execution_contract() {/,/^}/p' "$SCRIPT")"
 for required_contract in \
@@ -180,7 +234,7 @@ if "PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}" in workflow_text or 'os.envir
 if workflow_text.count('pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8")') != 3:
     raise SystemExit("all required-planner consumers must read the complete scope output file")
 report_step = workflow_text.split("      - name: Report planned scope\n", 1)[1].split(
-    "\n      - name: Install pinned Markdown runtime", 1
+    "\n      - name: Write required planner artifact", 1
 )[0]
 if "${{ steps.scope.outputs." in report_step:
     raise SystemExit("planned-scope report must print file-backed values without shell interpolation")
@@ -510,7 +564,7 @@ with tempfile.TemporaryDirectory(prefix="oasis7-ci-cargo-scope-wrapper-") as tem
     def invoke(exit_code):
         env["OASIS7_TEST_CHECKER_EXIT"] = str(exit_code)
         return subprocess.run(
-            ["bash", "-euo", "pipefail", "-c", harness],
+            [os.environ["OASIS7_ARGUMENT_TEST_BASH"], "-euo", "pipefail", "-c", harness],
             cwd=root,
             env=env,
             text=True,
