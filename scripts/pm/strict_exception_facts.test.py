@@ -7,6 +7,7 @@ import importlib.util
 import json
 import subprocess
 import tempfile
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -329,6 +330,86 @@ class ProducerTests(unittest.TestCase):
                     facts.ensure_verified(Path(directory), verified, projection_path,
                         integration=integration, receipt=None, store=store, github=github)
                 self.assertEqual(1, len(writes))
+
+    def test_initial_receipt_main_dispatches_once_and_validation_stays_read_only(self):
+        receipt = facts._adjacent('strict_exception_acquisition_receipt', 'ci-ready-receipt.py')
+        import ci_ready_receipt_identity as identity
+        import integration_ci as integration
+        store = facts._adjacent('strict_exception_acquisition_store', 'workflow-durable-store.py')
+        f = fixture()
+        verified = facts.verify(**f)
+        h, q = f['pr']['head']['sha'], f['target_oid']
+        raw = json.dumps(projection(f)).encode()
+        pr = {'number': 7, 'state': 'open', 'merged': False, 'draft': True,
+            'body': 'Task: ' + f['task_uid'] + '\nRefs #12\nStrict Integration Exception: 1\n'
+                + '<!-- oasis7-impact-projection-b64: ' + base64.b64encode(raw).decode() + ' -->',
+            'head': {'sha': h, 'repo': {'full_name': f['repository']}},
+            'base': {'sha': q, 'ref': 'main', 'repo': {'full_name': f['repository']}}}
+        def github(*args):
+            endpoint = args[-1]
+            if endpoint == 'repos/eng-cc/oasis7': return {'default_branch': 'main'}
+            if endpoint.endswith('/pulls/7'): return pr
+            if endpoint.endswith('/git/ref/heads/main'): return {'object': {'sha': q}}
+            if '/contents/' in endpoint: return {'content': base64.b64encode(f['target_workflow']).decode()}
+            raise AssertionError(endpoint)
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.run(['git', '-C', directory, 'init', '-q'], check=True)
+            argv = ['ci-ready-receipt.py', '--repository', f['repository'], '--task-uid', f['task_uid'],
+                '--task-issue-number', '12', '--pr-number', '7', '--check-app-id', '42',
+                '--planner-digest', 'unused-until-proof', '--root', directory]
+            writes = []
+            actual_run = subprocess.run
+            def outbound(command, **kwargs):
+                if command[:3] == ['gh', 'workflow', 'run']:
+                    writes.append(command)
+                    return subprocess.CompletedProcess(command, 0)
+                return actual_run(command, **kwargs)
+            def ensure(repo, uid, issue, number, target, root, path):
+                self.assertEqual((repo, uid, issue, number, target), (f['repository'], f['task_uid'], 12, 7, q))
+                self.assertEqual(Path(path).read_bytes(), raw)
+                return facts.ensure_verified(root, verified, path, integration=integration,
+                    receipt=receipt, store=store, github=github)
+            with patch.object(receipt, 'gh', side_effect=github), patch.object(integration, 'gh', side_effect=github), \
+                    patch.object(integration, 'current_request', return_value=None), \
+                    patch.object(identity, 'select_strict_exception_locator', return_value=1), \
+                    patch.object(identity, '_strict_exception_module', return_value=facts), \
+                    patch.object(facts, 'read_protected', return_value=verified), \
+                    patch.object(facts, 'ensure_protected', side_effect=ensure) as producer, \
+                    patch.object(subprocess, 'run', side_effect=outbound), patch.object(sys, 'argv', argv):
+                with self.assertRaisesRegex(SystemExit, 'requested'): receipt.main()
+                self.assertEqual(1, len(writes))
+                self.assertIn('expected_head=' + h, writes[0])
+                self.assertIn('integration_base=' + q, writes[0])
+                with self.assertRaisesRegex(ValueError, 'never resend'): receipt.main()
+                self.assertEqual(1, len(writes))
+                producer.reset_mock()
+                existing = Path(directory) / 'receipt.json'
+                existing.write_text('{}')
+                with patch.object(sys, 'argv', argv + ['--receipt', str(existing)]):
+                    with self.assertRaisesRegex(SystemExit, 'request is absent'): receipt.main()
+                with self.assertRaisesRegex(SystemExit, 'request is absent'):
+                    receipt.selected_live(f['repository'], f['task_uid'], 12, 7, 'required-gate', 42, canonical_root=directory)
+                producer.assert_not_called()
+                self.assertEqual(1, len(writes))
+                selected = {'id': 44, 'run_attempt': 2, 'requested_at': 1780000001.0}
+                with patch.object(integration, 'current_request', return_value=selected):
+                    for reason in ('pending', 'latest failed', 'unreadable'):
+                        with patch.object(integration, 'verified_run', side_effect=ValueError(reason)):
+                            with self.assertRaisesRegex(SystemExit, reason): receipt.main()
+                    with patch.object(integration, 'verified_run', return_value=({'id': 9}, {'scope': 'full', 'impact_projection_test_profile': 'full'})), \
+                            patch.object(receipt, 'planner_for_run', return_value={'scope': 'full', 'impact_projection_test_profile': 'full'}):
+                        result = receipt.acquire_selected_live(f['repository'], f['task_uid'], 12, 7,
+                            'required-gate', 42, canonical_root=directory)
+                        self.assertEqual(44, result[1]['_integration']['request_id'])
+                producer.assert_not_called()
+                self.assertEqual(1, len(writes))
+                ordinary = {**pr, 'body': 'Task: ' + f['task_uid'] + '\nRefs #12'}
+                with patch.object(receipt, 'gh', return_value=ordinary), \
+                        patch.object(receipt, '_pr_workflow_changed', return_value=False), \
+                        patch.object(receipt, 'live', return_value=(ordinary, {'id': 9}, q, h)):
+                    self.assertEqual(ordinary, receipt.acquire_selected_live(f['repository'], f['task_uid'], 12, 7,
+                        'required-gate', 42, canonical_root=directory)[0])
+                producer.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

@@ -5,6 +5,34 @@ from pathlib import Path
 from ci_ready_receipt_identity import review_evidence_digest, review_evidence_identity, current_target_proof_identity
 
 FAIL_STATES = ("stale", "wrong_head", "wrong_app", "superseded", "cancelled", "uncertain")
+class StrictExceptionRequestAbsent(SystemExit):
+    """Authenticated exception absence; only initial acquisition may act."""
+    def __init__(self, pr, target_oid):
+        super().__init__('ci-ready-receipt: strict integration request is absent')
+        self.pr, self.target_oid = pr, target_oid
+
+def acquire_selected_live(*args, existing_receipt=False, **kwargs):
+    try:
+        return selected_live(*args, **kwargs)
+    except StrictExceptionRequestAbsent as absent:
+        if existing_receipt:
+            raise
+        repository, uid, issue, number = args[:4]
+        import ci_ready_receipt_identity as identity
+        from integration_ci import _projection_from_pr_body
+        raw, _ = _projection_from_pr_body(absent.pr.get('body'))
+        root = Path(kwargs.get('canonical_root') or Path(__file__).resolve().parents[2])
+        with tempfile.NamedTemporaryFile(suffix='.json') as projection:
+            projection.write(raw)
+            projection.flush()
+            result = identity._strict_exception_module().ensure_protected(
+                repository, uid, issue, number, absent.target_oid, root, Path(projection.name))
+        if result.get('status') != 'reused':
+            raise SystemExit('ci-ready-receipt: strict exception ' + str(result.get('status'))
+                             + ': ' + str(result.get('reason')))
+        # An effect result cannot issue a receipt. Independently read real proof.
+        return selected_live(*args, **kwargs)
+
 PLAN_MARKER="oasis7-required-plan-v1"
 PLAN_ARTIFACT=PLAN_MARKER
 PLAN_MEMBER=f"{PLAN_MARKER}.json"
@@ -1053,7 +1081,7 @@ def main():
     plan_locator = None
     if a.review_plan:
         plan_locator = json.loads(Path(a.review_plan).read_text()).get('strict_exception_comment_id')
-    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),request_key=a.request_key,ready_continuation=continuation,strict_exception_plan_locator=plan_locator,canonical_root=a.root)
+    pr,run,base_oid,head_oid=acquire_selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),existing_receipt=a.receipt is not None or a.refresh_same_identity,request_key=a.request_key,ready_continuation=continuation,strict_exception_plan_locator=plan_locator,canonical_root=a.root)
     keyed_v2_evidence = None
     if a.request_key is not None:
         proof=run.get('_integration') or {}
@@ -1381,6 +1409,8 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             return candidate_pr,{**candidate_check,"_current_target":proof},candidate_base,candidate_head
     if require_integration:
         if require_dispatch:
+            if selected_exception is not None:
+                raise StrictExceptionRequestAbsent(pr, current_target_oid)
             raise SystemExit('ci-ready-receipt: strict integration request is absent')
         # Compatibility callers may request the strict base/check contract
         # before manual dispatch is available.  This path never relaxes to
