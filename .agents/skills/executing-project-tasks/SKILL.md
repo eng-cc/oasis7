@@ -5,7 +5,9 @@ description: Use when a task has written repo truth and implementation should pr
 
 # Executing Project Tasks
 
-Canonical lifecycle: [state machine](../../../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../../../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done), and [planning and slice contract](../../../doc/engineering/workflow/source-of-truth.md#52-tpm-planning-and-subagent-dispatch).
+Canonical lifecycle: [state machine](../../../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../../../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done), [planning and slice contract](../../../doc/engineering/workflow/source-of-truth.md#52-tpm-planning-and-subagent-dispatch), and [PR title and commit language](../../../doc/engineering/workflow/source-of-truth.md#pr-and-commit-language).
+
+Write PR titles and complete commit messages in English, including subjects and any bodies; preserve identifiers, paths, and standard Git trailers verbatim.
 
 ## When to Use
 
