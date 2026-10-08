@@ -1936,6 +1936,45 @@ class HistoricalMaintenanceInspection(unittest.TestCase):
         with patch.object(terminal_recovery.obs,'api',side_effect=changed):
             with self.assertRaisesRegex(ValueError,'final authority'):self.call_source_observation()
 
+    def test_final_binding_log_read_drift_rejects_locator_phase_and_bytes(self):
+        import terminal_recovery
+        from unittest.mock import patch
+        original=terminal_recovery.obs.capture
+        endpoint=f"repos/{self.data['repository']}/actions/jobs/3901/logs"
+        mutations=(lambda raw:raw.replace(b"'9301'",b"'9302'"),
+                   lambda raw:raw.replace(b'--phase final --tests-passed',b'--phase initial --tests-passed'),
+                   lambda raw:raw+b'2026-09-30T10:09:07Z extra binding observation\n',
+                   lambda raw:raw.replace(b'2026-09-30T10:09:',b'2026-09-30T10:11:'))
+        for index,mutation in enumerate(mutations):
+            reads=0
+            def changed(command,*args,**kwargs):
+                nonlocal reads
+                raw=original(command,*args,**kwargs)
+                if command[-1]==endpoint:
+                    reads+=1
+                    if reads==4:raw=mutation(raw)
+                return raw
+            with self.subTest(mutation=index),patch.object(terminal_recovery.obs,'capture',side_effect=changed):
+                with self.assertRaisesRegex(ValueError,'final authority/binding'):self.call_source_observation()
+            self.assertEqual(reads,4)
+
+    def test_only_third_binding_log_read_drift_cannot_be_erased_by_resampling(self):
+        import terminal_recovery
+        from unittest.mock import patch
+        original=terminal_recovery.obs.capture;reads=0
+        endpoint=f"repos/{self.data['repository']}/actions/jobs/3901/logs"
+        def changed(command,*args,**kwargs):
+            nonlocal reads
+            raw=original(command,*args,**kwargs)
+            if command[-1]==endpoint:
+                reads+=1
+                if reads==3:raw=raw.replace(b"'9301'",b"'9302'")
+            return raw
+        with patch.object(terminal_recovery.obs,'capture',side_effect=changed):
+            with self.assertRaisesRegex(ValueError,'final authority/binding witness log changed'):
+                self.call_source_observation()
+        self.assertEqual(reads,3)
+
 class UnsupportedHistoricalMaintenanceClosure(unittest.TestCase):
     baseline_planner_suffix=HistoricalMaintenanceInspection.baseline_planner_suffix
     source_producer_change=('scripts/pm/loop-ci.py',b'\n# offline unknown immutable helper closure\n')

@@ -828,7 +828,7 @@ def _split_execution(repository,uid,source_number,run,execution,workflow_revisio
     if maintenance:coverage.append((gate['id'],maintenance['binding_step']))
     return coverage,checks,reads
 
-def _source_execution(repository,number,head,base,run,job,root):
+def _source_execution(repository,number,head,base,run,job,root,*,binding_log_digest=None):
     """Derive W from the proven ordinary PR event merge, never head_sha alone."""
     if run.get('event')!='pull_request' or run.get('path')!='.github/workflows/rust.yml' or run.get('referenced_workflows')!=[]:
         raise ValueError('unsupported source root workflow/event indirection')
@@ -844,6 +844,8 @@ def _source_execution(repository,number,head,base,run,job,root):
     end=obs.instant(checkout[0].get('completed_at'))+datetime.timedelta(seconds=1)
     endpoint=f'repos/{repository}/actions/jobs/{obs.positive(job.get("id"),"source job")}/logs'
     raw=obs.capture(['gh','api',endpoint],kind='github_api',locator=endpoint)
+    if binding_log_digest is not None and obs.digest(raw)!=binding_log_digest:
+        raise ValueError('historical maintenance final authority/binding witness log changed')
     lines=[]
     for line in raw.decode('utf-8').splitlines():
         stamp,separator,message=line.partition(' ')
@@ -1059,11 +1061,13 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
         raise ValueError('source final canonical PR/commits/latest/check identity changed')
     if obs.api(f'repos/{repository}/check-runs/{identity["check_run_id"]}')!=check:
         raise ValueError('push final check identity/provenance/success changed')
-    if obs.pages(f'repos/{repository}/actions/runs/{run_id}/attempts/1/jobs','jobs')!=jobs:
+    final_jobs=obs.pages(f'repos/{repository}/actions/runs/{run_id}/attempts/1/jobs','jobs')
+    if final_jobs!=jobs:
         raise ValueError('push final exact-attempt job/step execution changed')
     if obs.api(f'repos/{repository}/check-suites/{run["check_suite_id"]}')!=suite:
         raise ValueError('push final check suite provenance changed')
-    if source is not None and _source_execution(repository,source_number,head,base,run,job,root)!=workflow_revision:
+    if source is not None and _source_execution(repository,source_number,head,base,run,job,root,
+            binding_log_digest=maintenance['binding_step']['_log_raw_sha256'] if maintenance else None)!=workflow_revision:
         raise ValueError('source final workflow execution provenance changed')
     if projection is not None and _source_projection(repository,uid,source_number,head,base,root,app,pr)!=projection:
         raise ValueError('source final accepted projection changed')
@@ -1075,6 +1079,15 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
                 or obs.api(f'repos/{repository}')!=maintenance['repository']
                 or _canonical_context(root,uid,repository,source_number,head,app)[0]!=maintenance['context']):
             raise ValueError('historical maintenance final authority readback changed')
+        final_pr=obs.api(f'repos/{repository}/pulls/{source_number}')
+        final_job=next(item for item in final_jobs if item['id']==job['id'])
+        try:
+            final_maintenance=_historical_maintenance_inspection(repository,uid,source_number,
+                head,base,root,app,final_pr,run,final_job)
+        except ValueError as exc:
+            raise ValueError('historical maintenance final authority/binding witness changed') from exc
+        if final_maintenance!=maintenance:
+            raise ValueError('historical maintenance final authority/binding witness changed')
     return _record('current_target_ci',repository,uid,head,_evidence=_primary(f'repos/{repository}/actions/artifacts/{artifact["id"]}/zip','repository_artifact'),target_oid=execution,
         target_tree_oid=obs.git(root,'rev-parse',execution+'^{tree}').decode().strip(),default_branch=branch,
         workflow_path='.github/workflows/rust.yml',workflow_sha=workflow_revision,event=event,plan=payload,
