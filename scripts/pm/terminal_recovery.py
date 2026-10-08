@@ -8,6 +8,7 @@ import json
 import re
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 import recovery_observation as obs
@@ -41,6 +42,13 @@ def _oid(value,label):
     if not isinstance(value,str) or not re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})',value):
         raise ValueError(label+' immutable identity unavailable')
     return value
+
+def _source_blob(root,revision,path):
+    entries=obs.git(root,'ls-tree','-z',revision,'--',path).split(b'\0')
+    if len(entries)!=2 or entries[1] or not re.fullmatch(
+            rb'100(?:644|755) blob [0-9a-f]{40,64}\t'+re.escape(path.encode()),entries[0]):
+        raise ValueError('unsupported immutable helper file mode/path: '+path)
+    return obs.git(root,'show',revision+':'+path)
 
 def _record(key,repository,uid,head,**fields):
     evidence=fields.pop('_evidence')
@@ -88,6 +96,7 @@ def _merge_primary(repository,number,head,merge,target,branch,pr):
 
 def _canonical_context(root,uid,repository,number,head,app):
     """Resolve canonical immutable review inputs, never caller verdicts."""
+    root=Path(root).resolve(strict=True)
     task=root/'.pm'/'scratch'/uid
     matches=[]
     for path in sorted((task/'review-handoffs').glob('*.json')):
@@ -259,9 +268,9 @@ def _policy(repository,branch,app):
         raise ValueError('required policy/app coverage unsupported')
     return value
 
-def _planner(root,revision,paths,event='push'):
+def _planner(root,revision,paths,event='push',*,config_revision=None,projection=None,uid=None,head=None,scope=None,raw_output=False):
     entry=obs.git(root,'show',revision+':scripts/plan-rust-required-scope.py')
-    config=obs.git(root,'show',revision+':scripts/ci-required-scope.v2.json')
+    config=obs.git(root,'show',(config_revision or revision)+':scripts/ci-required-scope.v2.json')
     # Execute immutable planner/config only; do not update the canonical checkout.
     with tempfile.TemporaryDirectory() as temp:
         script=Path(temp)/'plan.py';cfg=Path(temp)/'config.json'
@@ -269,11 +278,17 @@ def _planner(root,revision,paths,event='push'):
         (Path(temp)/'ci-tests.sh').write_bytes(obs.git(root,'show',revision+':scripts/ci-tests.sh'))
         command=[sys.executable,'-I',str(script),'--config',str(cfg),'--event-name',event]
         for path in paths:command+=['--changed-path',path]
+        if projection is not None:
+            for name in ('workflow-impact-projection.py','task_primary_package.py'):
+                destination=Path(temp)/'pm'/name;destination.parent.mkdir(exist_ok=True)
+                destination.write_bytes(obs.git(root,'show',revision+':scripts/pm/'+name))
+            carrier=Path(temp)/'projection.json';carrier.write_bytes(projection)
+            command+=['--impact-projection',str(carrier),'--task-uid',uid,'--head-ref',head,'--scope-base-oid',scope]
         raw=obs.capture(command,cwd=root)
     outputs=dict(line.split('=',1) for line in raw.decode().splitlines() if '=' in line)
     try:normalized=_module('ci-ready-receipt').canonical_planner(outputs)
     except SystemExit as exc:raise ValueError('recovery plan metadata: '+str(exc)) from exc
-    return normalized,entry,config
+    return (normalized,entry,config,outputs) if raw_output else (normalized,entry,config)
 
 def _paths(root,base,head):
     # No rename collapsing: both deleted and added names are retained.
@@ -376,6 +391,90 @@ def push_observation(repository,uid,head,execution,branch,root,range_base,app):
 
 def source_observation(repository,uid,head,number,branch,root,app):
     return _execution_observation(repository,uid,head,head,branch,root,None,app,source_number=number)
+
+def _source_projection(repository,uid,number,head,base,root,app,pr):
+    """Body carrier is an independently read assertion joined to accepted review."""
+    body=pr.get('body','');marker='<!-- oasis7-ci-impact-publication:v2 -->'
+    carriers=re.findall(r'<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+|missing) -->',body)
+    if not carriers and marker not in body:return None
+    if len(carriers)!=1 or carriers[0]=='missing':raise ValueError('source projection carrier missing/ambiguous')
+    try:raw=base64.b64decode(carriers[0],validate=True)
+    except ValueError as exc:raise ValueError('source projection carrier malformed') from exc
+    if len(raw)>32768:raise ValueError('source projection carrier exceeds bound')
+    publication=_module('projection_publication_contract').decode_marker(body)
+    scope=obs.git(root,'merge-base',base,head).decode().strip()
+    projection=_module('workflow-impact-projection').validate_projection_value(obs.load(raw),expected={
+        'task_uid':uid,'source_head_oid':head,'scope_base_oid':scope,'changed_paths':_paths(root,scope,head)},repo_root=root)
+    if projection['planner_config_sha256']!='sha256:'+obs.digest(obs.git(root,'show',base+':scripts/ci-required-scope.v2.json')):
+        raise ValueError('source projection protected configuration differs')
+    if any(publication[k]!=projection[k] for k in ('task_uid','source_head_oid','scope_base_oid','projection_digest')):
+        raise ValueError('source projection C1 identity differs')
+    if (re.findall(r'^Task: (task_[0-9a-f]{32})$',body,re.M)!=[uid]
+            or len(re.findall(r'^Task:[^\n]*$',body,re.M))!=1):
+        raise ValueError('source projection Task locator differs')
+    _,validated=_canonical_context(root,uid,repository,number,head,app)
+    if validated[2]['plan']['impact_projection']!=projection:
+        raise ValueError('source projection differs from authenticated accepted review')
+    return raw
+
+def _historical_maintenance_inspection(repository,uid,number,head,base,root,app,pr,run,gate):
+    """Inspect prior merged execution; this object cannot authorize tool selection."""
+    maintenance=_module('workflow_maintenance');locator=maintenance.maintenance_comment_id(pr.get('body',''))
+    if locator is None:return None
+    repository_info=obs.api(f'repos/{repository}')
+    if (pr.get('number')!=number or pr.get('state')!='closed' or pr.get('merged') is not True
+            or pr.get('html_url')!=f'https://github.com/{repository}/pull/{number}'
+            or (pr.get('head') or {}).get('sha')!=head or (pr.get('base') or {}).get('sha')!=base
+            or (pr.get('base') or {}).get('ref')!=repository_info.get('default_branch')):
+        raise ValueError('historical maintenance merged/default-target identity differs')
+    context,validated=_canonical_context(root,uid,repository,number,head,app)
+    issue=validated[3]
+    comment=obs.api(f'repos/{repository}/issues/comments/{locator}')
+    authority=maintenance.parse_maintenance_authority(comment.get('body'))
+    actor=comment.get('user') or {};permission=obs.api(f'repos/{repository}/collaborators/{actor.get("login","")}/permission')
+    task=obs.api(f'repos/{repository}/issues/{issue}')
+    expected={'repository':repository,'task_uid':uid,'issue_number':issue,'pr_number':number}
+    if any(type(authority[k]) is not type(v) or authority[k]!=v for k,v in expected.items()):
+        raise ValueError('historical maintenance exact scope differs')
+    if (comment.get('id')!=locator or actor.get('type')!='User' or not actor.get('login')
+            or comment.get('issue_url')!=f'https://api.github.com/repos/{repository}/issues/{issue}'
+            or comment.get('html_url')!=f'https://github.com/{repository}/issues/{issue}#issuecomment-{locator}'
+            or comment.get('created_at')!=comment.get('updated_at')
+            or obs.instant(comment.get('created_at'))>=obs.instant(run['run_started_at'])
+            or (permission.get('user') or {}).get('login')!=actor['login']
+            or not (permission.get('permission')=='admin' or (permission.get('permissions') or {}).get('admin') is True)):
+        raise ValueError('historical maintenance comment author/edit/timing/permission invalid')
+    body=task.get('body','')
+    if (task.get('number')!=issue or task.get('html_url')!=f'https://github.com/{repository}/issues/{issue}'
+            or re.findall(r'^task_uid: ([^\n]+)$',body,re.M)!=[uid]
+            or re.findall(r'^- pr_number: `([^`]+)`$',body,re.M)!=[str(number)]
+            or re.findall(r'^- pr_url: `([^`]+)`$',body,re.M)!=[pr['html_url']]
+            or re.findall(r'^- merge_hold_active: `([^`]+)`$',body,re.M) not in ([],['false'])
+            or len(re.findall(r'^- merge_hold_active:[^\n]*$',body,re.M))!=len(re.findall(r'^- merge_hold_active: `([^`]+)`$',body,re.M))
+            or re.findall(r'^Refs #([1-9][0-9]*)$',pr.get('body',''),re.M)!=[str(issue)]):
+        raise ValueError('historical maintenance current Task binding/hold invalid')
+    required=set(maintenance.TOOL_PATHS)
+    changed=set(_paths(root,obs.git(root,'merge-base',base,head).decode().strip(),head))
+    if not required<=set(authority['allowed_tool_paths']) or not changed<=set(authority['allowed_write_paths']):
+        raise ValueError('historical maintenance approved closure/write scope incomplete')
+    local=Path(__file__).resolve().parents[2]
+    for path in required:
+        if _source_blob(root,head,path)!=(local/path).read_bytes():
+            raise ValueError('historical maintenance loaded helper closure unsupported')
+    steps=_execution_steps(gate,('Verify final task and PR binding before required-gate success',))
+    step=next(iter(steps.values()));endpoint=f'repos/{repository}/actions/jobs/{gate["id"]}/logs'
+    raw=obs.capture(['gh','api',endpoint],kind='github_api',locator=endpoint)
+    lines=[]
+    for line in raw.decode().splitlines():
+        stamp,separator,text=line.partition(' ')
+        if separator and obs.instant(step['started_at'])<=obs.instant(stamp)<obs.instant(step['completed_at'])+datetime.timedelta(seconds=1):lines.append(text)
+    for exact in (f'base_ref="{base}"',f'head_ref="{head}"',f'pr_number="{number}"',
+                  f"if [[ -n '{locator}' ]]; then",f"  maintenance_args=(--maintenance-authority-comment-id '{locator}')"):
+        if lines.count(exact)!=1:raise ValueError('historical maintenance actual final-binding command/locator missing')
+    if not any('--phase final --tests-passed' in line for line in lines):
+        raise ValueError('historical maintenance final-binding phase witness missing')
+    return {'planner_oid':head,'locator':locator,'comment':comment,'permission':permission,'task':task,'context':context,
+        'repository':repository_info,'binding_step':dict(step,_log_raw_sha256=obs.digest(raw))}
 
 # Private recognition of the reviewed finite historical producer contract.
 # These fingerprints constrain code identity; live bindings, execution, plan,
@@ -528,7 +627,9 @@ def _historical_source_producer(repository,uid,number,head,base,branch,root,app,
             raise ValueError('historical source resource did not precede checked execution: '+name)
     return blobs
 
-def _selected_execution_children(workflow,planner,event):
+def _selected_execution_children(workflow,planner,event,producer_parent='required-gate'):
+    if producer_parent not in ('required-gate','required-plan'):
+        raise ValueError('unsupported selected-child producer parent')
     receipt=_module('ci-ready-receipt');selected=receipt._selected_child_groups(planner)
     prefix="(github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && "
     operational="needs.required-gate.outputs.run_operational_contracts == 'true'"
@@ -536,6 +637,9 @@ def _selected_execution_children(workflow,planner,event):
     packaging_v2="(((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' || needs.required-gate.outputs.execution_contract == 'required-domain-split/v2') && needs.required-gate.outputs.run_packaging_contracts == 'true') || (needs.required-gate.outputs.execution_contract == '' && needs.required-gate.outputs.run_operational_contracts == 'true'))"
     expected={receipt.WINDOWS_ROLLOUT_JOB:prefix+operational,
         receipt.MACOS_PACKAGE_JOB:prefix+packaging,receipt.FLEET_HEALTH_JOB:prefix+operational}
+    if producer_parent=='required-plan':
+        expected={name:value.replace('needs.required-gate.', 'needs.required-plan.') for name,value in expected.items()}
+        packaging_v2=packaging_v2.replace('needs.required-gate.', 'needs.required-plan.')
     text=workflow.decode('utf-8')
     for name,condition in expected.items():
         blocks=re.findall(r'^  '+re.escape(name)+r':\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)',text,re.M|re.S)
@@ -549,6 +653,180 @@ def _selected_execution_children(workflow,planner,event):
     if event=='push':return {name:False for name in selected}
     if event=='pull_request':return selected
     raise ValueError('unsupported selected-child execution event')
+
+def _successful_execution_job(repository,run_id,execution,app,job,receipt):
+    try:identity=receipt._job_identity(job,repository,run_id,1,field='split execution')
+    except SystemExit as exc:raise ValueError('split job identity: '+str(exc)) from exc
+    if identity['head_sha']!=execution or job.get('status')!='completed' or job.get('conclusion')!='success':
+        raise ValueError('split job execution failed/skipped or different attempt/head')
+    check=obs.api(f'repos/{repository}/check-runs/{identity["check_run_id"]}')
+    if (check.get('id')!=identity['check_run_id'] or check.get('name')!=job['name']
+            or (check.get('app') or {}).get('id')!=app or check.get('head_sha')!=execution
+            or check.get('status')!='completed' or check.get('conclusion')!='success'
+            or receipt._workflow_job_details(check,repository)!=(run_id,job['id'])):
+        raise ValueError('split check app/job identity or execution mismatch')
+    return identity,check
+
+def _execution_steps(job,names):
+    steps={}
+    for step in job.get('steps',[]):
+        if not isinstance(step,dict):raise ValueError('push execution step malformed')
+        if step.get('name') in names:
+            if step['name'] in steps:raise ValueError('push execution step ambiguous')
+            if step.get('status')!='completed' or step.get('conclusion')!='success':
+                raise ValueError('push required execution step failed/skipped')
+            obs.positive(step.get('number'),'step');steps[step['name']]=step
+    if set(steps)!=set(names):raise ValueError('push executing tier steps unavailable')
+    return steps
+
+def _split_artifact(repository,run_id,execution,run_branch,artifacts,name,steps,write_name,upload_name):
+    named=[a for a in artifacts if a.get('name')==name]
+    if len(named)!=1 or named[0].get('expired') is not False:
+        raise ValueError('split artifact missing/ambiguous/expired')
+    artifact=named[0];arun=artifact.get('workflow_run') or {}
+    if arun.get('id')!=run_id or arun.get('head_sha')!=execution or arun.get('head_branch')!=run_branch:
+        raise ValueError('split artifact run/head identity mismatch')
+    if obs.api(f'repos/{repository}/actions/artifacts/{artifact["id"]}')!=artifact:
+        raise ValueError('split artifact ID readback differs')
+    start=obs.instant(steps[write_name]['started_at']);end=obs.instant(steps[upload_name]['completed_at'])
+    if not all(start<=obs.instant(artifact.get(k))<=end for k in ('created_at','updated_at')):
+        raise ValueError('split artifact timing outside trusted write/upload window')
+    endpoint=f'repos/{repository}/actions/artifacts/{artifact["id"]}/zip'
+    raw=obs.capture(['gh','api',endpoint],limit=obs.ARTIFACT_LIMIT,kind='repository_artifact',locator=endpoint)
+    files={}
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            for info in archive.infolist():
+                if (info.is_dir() or info.filename in files or info.filename.startswith('/')
+                        or '..' in info.filename.split('/') or info.flag_bits&1 or info.file_size>obs.ARTIFACT_LIMIT):
+                    raise ValueError('split artifact archive members unsupported')
+                value=archive.read(info);obs.active().charge(value);files[info.filename]=value
+    except (zipfile.BadZipFile,RuntimeError) as exc:raise ValueError('split artifact archive invalid') from exc
+    return artifact,raw,files
+
+def _split_execution(repository,uid,source_number,run,execution,workflow_revision,base,root,jobs,gate,plan_job,artifacts,actual,app,event,*,projection=None,maintenance=None,reproduced=None):
+    """Read exact split producer evidence; artifact declarations never admit code."""
+    import integration_executor_contract as contracts
+    import ci_required_execution as executor
+    run_id=run['id'];receipt=_module('ci-ready-receipt');checks=[];reads=[];coverage=[]
+    config=obs.git(root,'show',execution+':scripts/ci-required-scope.v2.json')
+    paths=contracts.executor_contract_paths(config)
+    if paths!=contracts.PARALLEL_EXECUTOR_CONTRACT_PATHS:
+        raise ValueError('split producer contract closure unsupported')
+    contents={path:_source_blob(root,execution,path) for path in paths}
+    local=Path(__file__).resolve().parents[2]
+    if any(contents[path]!=(local/path).read_bytes() for path in paths):
+        raise ValueError('unsupported trusted split producer closure changed')
+    contracts.validate_executor_contract(contracts.executor_contract_from_contents(contents))
+    identity,check=_successful_execution_job(repository,run_id,execution,app,plan_job,receipt);checks.append((identity['check_run_id'],check))
+    names=('Plan required gate scope','Write required planner artifact','Upload required planner artifact',
+           'Freeze internal same-attempt dispatch and exact Git objects','Upload exact attempt internal scheduling transport')
+    plan_steps=_execution_steps(plan_job,names)
+    artifact,raw,files=_split_artifact(repository,run_id,execution,run['head_branch'],artifacts,
+        f'required-transport-{run_id}-1',plan_steps,names[3],names[4]);reads.append((artifact,raw))
+    if 'transport.json' not in files:raise ValueError('split transport manifest missing')
+    manifest=obs.load(files['transport.json'])
+    obs.closed(manifest,{'schema','identity','authority_oid','planner_authority_oid','prerequisite_oids','execution_layout','members'},'split transport')
+    if manifest['schema']!='oasis7-required-transport/v1':raise ValueError('split transport schema unsupported')
+    members=manifest['members']
+    required={'scope.json','identity.json','selection.json','schedule.json'}
+    allowed=required|{'source.bundle','impact-projection.json'}
+    if (not isinstance(members,dict) or not required<=set(members)<=allowed
+            or set(files)!={'transport.json',*members}
+            or any(value!='sha256:'+obs.digest(files[name]) for name,value in members.items())):
+        raise ValueError('split transport members/digests incomplete or mismatched')
+    authority=execution if event=='push' else base
+    planner_authority=maintenance['planner_oid'] if maintenance else authority
+    if manifest['authority_oid']!=authority or manifest['planner_authority_oid']!=planner_authority:
+        raise ValueError('split independently trusted authority differs')
+    if (projection is None and 'impact-projection.json' in files) or (projection is not None and files.get('impact-projection.json')!=projection):
+        raise ValueError('split projection differs from independent carrier')
+    authority_config=obs.git(root,'show',authority+':scripts/ci-required-scope.v2.json')
+    authority_contents={path:_source_blob(root,authority,path) for path in contracts.executor_contract_paths(authority_config)}
+    contract=contracts.executor_contract_from_contents(authority_contents)
+    layout=contracts.execution_layout_context(contract)
+    expected_authority=dict(contents)
+    if maintenance:expected_authority['scripts/plan-rust-required-scope.py']=authority_contents['scripts/plan-rust-required-scope.py']
+    if layout['execution_layout']=='required-parallel/v1' and authority_contents!=expected_authority:
+        raise ValueError('split executor closure differs from supported producer')
+    if contract['schema']==contracts.EXECUTOR_CONTRACT_SCHEMA and contract['digest'] not in contracts.KNOWN_LEGACY_EXECUTOR_DIGESTS:
+        raise ValueError('split historical executor is not independently approved')
+    if layout['execution_layout']!=manifest['execution_layout']:raise ValueError('split executor layout differs')
+    scope=obs.load(files['scope.json']);frozen=obs.load(files['identity.json'])
+    if frozen!=manifest['identity']:raise ValueError('split identity member differs')
+    executor.validate_identity(frozen)
+    tree=obs.git(root,'rev-parse',execution+'^{tree}').decode().strip()
+    expected={'repository':repository,'run_id':run_id,'run_attempt':1,'event_name':event,'run_mode':'ci',
+        'base_sha':base,'source_head_sha':execution,'tested_sha':workflow_revision,'tested_tree':tree,
+        'workflow_sha':workflow_revision,'run_head_sha':execution,'source_scope':obs.git(root,'merge-base',base,execution).decode().strip(),
+        'request_key':'','task_uid':'' if event=='push' else uid,'pr_number':0 if event=='push' else source_number,
+        'planner_digest':actual.get('impact_projection_planner_digest','').removeprefix('sha256:') or obs.digest(obs.git(root,'show',planner_authority+':scripts/plan-rust-required-scope.py')),
+        'config_digest':obs.digest(authority_config),'executor_digest':contract['digest'].removeprefix('sha256:'),
+        'impact_projection_digest':actual.get('impact_projection_digest','').removeprefix('sha256:') or obs.digest(b'')}
+    if any(type(frozen[k]) is not type(v) or frozen[k]!=v for k,v in expected.items()):
+        raise ValueError('split frozen exact run/base/head/tree/digest identity differs')
+    if manifest['prerequisite_oids']!=sorted(set((authority,base,execution,frozen['source_scope']))):
+        raise ValueError('split prerequisite identity differs')
+    if ('source.bundle' in files)!=(workflow_revision not in manifest['prerequisite_oids']):
+        raise ValueError('split exact execution bundle obligation differs')
+    try:canonical=receipt.canonical_planner(scope)
+    except SystemExit as exc:raise ValueError('split planner metadata: '+str(exc)) from exc
+    if canonical!=actual:raise ValueError('split planner scope differs from independently reproduced plan')
+    for key,value in {'base_oid':base,'integration_base_oid':base,'head_oid':execution,'source_scope_base':frozen['source_scope'],
+                      'integration_base':base,'source_head':execution}.items():
+        if scope.get(key)!=value:raise ValueError('split scope range identity differs')
+    expected_scope=dict(reproduced,base_oid=base,integration_base_oid=base,head_oid=execution,
+        source_scope_base=frozen['source_scope'],integration_base=base,source_head=execution,
+        task_uid=frozen['task_uid'],planner_authority_oid=planner_authority)
+    if maintenance:expected_scope['maintenance_authority_comment_id']=str(maintenance['locator'])
+    if scope!=expected_scope:raise ValueError('split complete frozen planner fields differ')
+    selection=executor.selection_from_planner(scope,event,'ci')
+    if obs.load(files['selection.json'])!=selection:raise ValueError('split selection differs from trusted planner')
+    schedule=obs.load(files['schedule.json']);results=[];projections=[]
+    if layout['execution_layout']=='required-parallel/v1':
+        expected_schedule=executor.make_plan(selection,frozen,layout['execution_layout'])
+        if schedule!=expected_schedule:raise ValueError('split schedule differs from trusted recomputation')
+        gate_steps=_execution_steps(gate,('Verify all exact-attempt workers and complete gate obligations',))
+        expected_workers={f'required-work ({worker})' for worker in schedule['workers']}
+        namespace=[j for j in jobs if isinstance(j.get('name'),str) and j['name'].startswith('required-work')]
+        aggregate=[j for j in namespace if j['name']=='required-work']
+        if aggregate:
+            if expected_workers or len(aggregate)!=1 or aggregate[0].get('status')!='completed' or aggregate[0].get('conclusion')!='skipped':
+                raise ValueError('split unexpected/skipped worker aggregate')
+            skipped=aggregate[0]
+            if (type(skipped.get('id')) is not int or skipped['id']<=0 or skipped.get('run_id')!=run_id
+                    or skipped.get('run_attempt')!=1 or skipped.get('head_sha')!=execution):
+                raise ValueError('split skipped aggregate execution identity differs')
+            namespace=[j for j in namespace if j['name']!='required-work']
+        if len(namespace)!=len(expected_workers) or {j['name'] for j in namespace}!=expected_workers:
+            raise ValueError('split unknown, duplicate or missing worker namespace')
+        for worker,commands in schedule['workers'].items():
+            job=next(j for j in namespace if j['name']==f'required-work ({worker})')
+            row,check=_successful_execution_job(repository,run_id,execution,app,job,receipt);checks.append((row['check_run_id'],check))
+            worker_steps=_execution_steps(job,('Execute only the frozen selected worker','Upload exact same-attempt completed worker record'))
+            if obs.instant(worker_steps['Execute only the frozen selected worker']['started_at'])<obs.instant(plan_steps[names[4]]['completed_at']):
+                raise ValueError('split worker starts before frozen plan transport completed')
+            artifact,raw,worker_files=_split_artifact(repository,run_id,execution,run['head_branch'],artifacts,
+                f'required-worker-{run_id}-1-{worker}',worker_steps,'Execute only the frozen selected worker','Upload exact same-attempt completed worker record')
+            if set(worker_files)!={'worker.json'}:raise ValueError('split worker result archive unsupported')
+            reads.append((artifact,raw));results.append(obs.load(worker_files['worker.json']))
+            projections.append({**job,'run_id':run_id,'run_attempt':1})
+            coverage.extend((job['id'],s) for s in worker_steps.values())
+        executor.verify(schedule,selection,frozen,results,projections)
+    else:
+        namespace=[j for j in jobs if isinstance(j.get('name'),str) and j['name'].startswith('required-work')]
+        if schedule!={'execution_layout':'required-serial/v1','workers':[]} or len(namespace)>1 or any(j['name']!='required-work' for j in namespace):
+            raise ValueError('split serial schedule/worker obligations differ')
+        for skipped in namespace:
+            if (type(skipped.get('id')) is not int or skipped['id']<=0 or skipped.get('run_id')!=run_id
+                    or skipped.get('run_attempt')!=1 or skipped.get('head_sha')!=execution
+                    or skipped.get('status')!='completed' or skipped.get('conclusion')!='skipped'):
+                raise ValueError('split serial skipped aggregate identity differs')
+        gate_steps=_execution_steps(gate,('Run required test tier',))
+    coverage.extend((plan_job['id'],s) for s in plan_steps.values())
+    coverage.extend((gate['id'],s) for s in gate_steps.values())
+    if maintenance:coverage.append((gate['id'],maintenance['binding_step']))
+    return coverage,checks,reads
 
 def _source_execution(repository,number,head,base,run,job,root):
     """Derive W from the proven ordinary PR event merge, never head_sha alone."""
@@ -616,7 +894,13 @@ def _source_execution(repository,number,head,base,run,job,root):
     gates=re.findall(r'^  required-gate:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)',workflow,re.M|re.S)
     if len(gates)!=1 or '    steps:\n' not in gates[0]:raise ValueError('source required checkout contract unavailable')
     first=gates[0].split('    steps:\n',1)[1].split('\n      - ',1)[0]
-    if first.rstrip()!='      - uses: actions/checkout@v6\n        with:\n          fetch-depth: 0':
+    if '\n  required-plan:\n' in workflow:
+        # Admission of the complete split producer closure happens below.
+        # Its gate first asserts planning, then performs this exact checkout.
+        checkout_config=re.findall(r'^      - uses: actions/checkout@v6\n(.*?)(?=^      - |\Z)',gates[0],re.M|re.S)
+        valid=len(checkout_config)==1 and checkout_config[0].rstrip()=='        with:\n          fetch-depth: 0'
+    else:valid=first.rstrip()=='      - uses: actions/checkout@v6\n        with:\n          fetch-depth: 0'
+    if not valid:
         raise ValueError('unsupported source checkout override/configuration')
     return execution
 
@@ -653,15 +937,17 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
     check_rows=obs.pages(f'repos/{repository}/check-suites/{run["check_suite_id"]}/check-runs','check_runs')
     if [c['id'] for c in check_rows if c.get('name')=='required-gate']!=[check['id']]:
         raise ValueError('push required check coverage ambiguous')
-    required_names=('Plan required gate scope','Write required planner artifact','Upload required planner artifact','Run required test tier')
-    steps={}
-    for step in job.get('steps',[]):
-        if not isinstance(step,dict):raise ValueError('push execution step malformed')
-        if step.get('name') in required_names:
-            if step['name'] in steps:raise ValueError('push execution step ambiguous')
-            if step.get('status')!='completed' or step.get('conclusion')!='success':raise ValueError('push required execution step failed/skipped')
-            obs.positive(step.get('number'),'step');steps[step['name']]=step
-    if set(steps)!=set(required_names):raise ValueError('push executing tier steps unavailable')
+    workflow=obs.git(root,'show',execution+':.github/workflows/rust.yml')
+    split=b'\n  required-plan:\n' in workflow
+    plan_job=job
+    required_names=('Plan required gate scope','Write required planner artifact','Upload required planner artifact')
+    if split:
+        plans=[j for j in jobs if j.get('name')=='required-plan']
+        if len(plans)!=1:raise ValueError('split required-plan job missing/ambiguous')
+        plan_job=plans[0]
+        _successful_execution_job(repository,run_id,execution,app,plan_job,receipt)
+    else:required_names+=('Run required test tier',)
+    steps=_execution_steps(plan_job,required_names)
     artifacts=obs.pages(f'repos/{repository}/actions/runs/{run_id}/artifacts','artifacts')
     named=[a for a in artifacts if a.get('name')=='oasis7-required-plan-v1']
     if len(named)!=1 or named[0].get('expired') is not False:raise ValueError('push artifact missing/ambiguous/expired')
@@ -683,19 +969,25 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
         raise ValueError('push planner source/base identity locator mismatch')
     try:actual=receipt.canonical_planner(payload['planner'])
     except SystemExit as exc:raise ValueError('push plan metadata: '+str(exc)) from exc
-    planner_revision=base if source is not None else execution
-    push_expected,entry,config=_planner(root,planner_revision,_paths(root,base,execution),event)
+    projection=None;maintenance=None
+    workflow_revision=execution if source is None else _source_execution(repository,source_number,head,base,run,job,root)
+    if source is not None and split:
+        projection=_source_projection(repository,uid,source_number,head,base,root,app,pr)
+        maintenance=_historical_maintenance_inspection(repository,uid,source_number,head,base,root,app,pr,run,job)
+    planner_revision=maintenance['planner_oid'] if maintenance else (base if source is not None else execution)
+    planner_args={'config_revision':base if source is not None else execution,'projection':projection,
+        'uid':uid,'head':execution,'scope':derived_scope}
+    push_expected,entry,config,reproduced=_planner(root,planner_revision,_paths(root,base,execution),event,raw_output=True,**planner_args)
     # Producer attaches these range locators in addition to planner outputs.
     comparable={k:v for k,v in actual.items() if k not in ('source_scope_base','integration_base','source_head')}
     if comparable!=push_expected:raise ValueError('push plan selector/resource reproduction mismatch')
-    cumulative,_,_=_planner(root,planner_revision,_paths(root,range_base,execution),event)
+    cumulative,_,_=_planner(root,planner_revision,_paths(root,range_base,execution),event,**planner_args)
     selectors={k:v for k,v in actual.items() if k.startswith('run_')}
     resources={k:v for k,v in actual.items() if k.startswith('needs_')}
     expected_selectors={k:v for k,v in cumulative.items() if k.startswith('run_')}
     expected_resources={k:v for k,v in cumulative.items() if k.startswith('needs_')}
     if not selectors.get('run_required_gate_baseline') or any(v and not selectors.get(k) for k,v in expected_selectors.items()) or any(v and not resources.get(k) for k,v in expected_resources.items()):
         raise ValueError('push complete applicable selector/resource coverage missing')
-    workflow=obs.git(root,'show',execution+':.github/workflows/rust.yml')
     dispatcher=obs.git(root,'show',execution+':scripts/ci-tests.sh')
     inventory=obs.git(root,'show',execution+':scripts/ci-required-capability-test-inventory.tsv')
     # Current-T trust remains the exact current supported producer. The
@@ -707,14 +999,19 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
     if changed:
         if source is None:raise ValueError('unsupported trusted push dispatcher/workflow source changed')
         _historical_source_producer(repository,uid,source_number,head,base,branch,root,app,actual,job)
-    if b'CI_VERBOSE=1 ./scripts/ci-tests.sh required' not in workflow or b'set -e' not in dispatcher:
+    if (not split and b'CI_VERBOSE=1 ./scripts/ci-tests.sh required' not in workflow) or b'set -e' not in dispatcher:
         raise ValueError('push execution tier unchecked dispatcher unsupported')
-    workflow_revision=execution if source is None else _source_execution(repository,source_number,head,base,run,job,root)
-    selected=_selected_execution_children(workflow,actual,event)
+    split_coverage=[];split_checks=[];split_reads=[]
+    if split:
+        split_coverage,split_checks,split_reads=_split_execution(repository,uid,source_number,run,execution,workflow_revision,
+            base,root,jobs,job,plan_job,artifacts,actual,app,event,projection=projection,maintenance=maintenance,reproduced=reproduced)
+    selected=_selected_execution_children(workflow,actual,event,'required-plan' if split else 'required-gate')
     # Reuse pure child identity/outcome guards on the already bounded exact-attempt
     # collection; the ordinary receipt collector owns a separate transport.
     identities=[]
     for child in jobs:
+        if split and child.get('name')=='required-work' and child.get('status')=='completed' and child.get('conclusion')=='skipped':
+            continue  # The exact empty namespace was checked by split proof.
         try:child_identity=receipt._job_identity(child,repository,run_id,1,field='push child')
         except SystemExit as exc:raise ValueError('push child identity: '+str(exc)) from exc
         if child_identity['head_sha']!=execution:raise ValueError('push child head mismatch')
@@ -740,12 +1037,22 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
         'expected_selectors':expected_selectors,'actual_selectors':selectors,
         'expected_resources':expected_resources,'actual_resources':resources,
         'planner_entry_sha256':obs.digest(entry),'dispatcher_sha256':obs.digest(dispatcher),
-        'inventory_sha256':obs.digest(inventory),'steps':[{'job_id':job['id'],'number':s['number'],
-            'name':s['name'],'status':s['status'],'conclusion':s['conclusion'],'log_raw_sha256':None} for s in steps.values()]}
+        'inventory_sha256':obs.digest(inventory),'steps':[{'job_id':ident,'number':s['number'],
+            'name':s['name'],'status':s['status'],'conclusion':s['conclusion'],'log_raw_sha256':s.get('_log_raw_sha256')}
+            for ident,s in (split_coverage if split else [(job['id'],s) for s in steps.values()])]}
     if obs.api(f'repos/{repository}/actions/runs/{run_id}')!=run:raise ValueError('push final run identity moved')
     if obs.pages(f'repos/{repository}/actions/runs/{run_id}/artifacts','artifacts')!=artifacts:raise ValueError('push final artifact identity changed')
     final_payload,final_raw=obs.artifact(repository,artifact['id'],'oasis7-required-plan-v1.json')
     if final_raw!=raw:raise ValueError('push final artifact bytes changed')
+    for check_id,initial in split_checks:
+        if obs.api(f'repos/{repository}/check-runs/{check_id}')!=initial:
+            raise ValueError('split final plan/worker check changed')
+    for split_artifact,initial_raw in split_reads:
+        if obs.api(f'repos/{repository}/actions/artifacts/{split_artifact["id"]}')!=split_artifact:
+            raise ValueError('split final artifact ID changed')
+        endpoint=f'repos/{repository}/actions/artifacts/{split_artifact["id"]}/zip'
+        final=obs.capture(['gh','api',endpoint],limit=obs.ARTIFACT_LIMIT,kind='repository_artifact',locator=endpoint)
+        if final!=initial_raw:raise ValueError('split final artifact bytes changed')
     if source is None:
         if _latest_push(repository,branch,execution)!=run:raise ValueError('push final latest request identity changed')
     elif _source_run(repository,source_number,head,branch,app)!=source:
@@ -758,6 +1065,16 @@ def _execution_observation(repository,uid,head,execution,branch,root,range_base,
         raise ValueError('push final check suite provenance changed')
     if source is not None and _source_execution(repository,source_number,head,base,run,job,root)!=workflow_revision:
         raise ValueError('source final workflow execution provenance changed')
+    if projection is not None and _source_projection(repository,uid,source_number,head,base,root,app,pr)!=projection:
+        raise ValueError('source final accepted projection changed')
+    if maintenance:
+        actor=maintenance['comment']['user']['login'];issue=maintenance['task']['number']
+        if (obs.api(f'repos/{repository}/issues/comments/{maintenance["locator"]}')!=maintenance['comment']
+                or obs.api(f'repos/{repository}/collaborators/{actor}/permission')!=maintenance['permission']
+                or obs.api(f'repos/{repository}/issues/{issue}')!=maintenance['task']
+                or obs.api(f'repos/{repository}')!=maintenance['repository']
+                or _canonical_context(root,uid,repository,source_number,head,app)[0]!=maintenance['context']):
+            raise ValueError('historical maintenance final authority readback changed')
     return _record('current_target_ci',repository,uid,head,_evidence=_primary(f'repos/{repository}/actions/artifacts/{artifact["id"]}/zip','repository_artifact'),target_oid=execution,
         target_tree_oid=obs.git(root,'rev-parse',execution+'^{tree}').decode().strip(),default_branch=branch,
         workflow_path='.github/workflows/rust.yml',workflow_sha=workflow_revision,event=event,plan=payload,

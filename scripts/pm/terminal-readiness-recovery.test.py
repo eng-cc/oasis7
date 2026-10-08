@@ -113,7 +113,7 @@ def install_historical_snapshot(root, snapshot):
   dest=Path(root)/row['path'];dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(raw);dest.chmod(0o755 if row['mode']=='100755' else 0o644)
 
 
-def build_review(repo, producer_snapshot=None, source_producer_change=None):
+def build_review(repo, producer_snapshot=None, source_producer_change=None, baseline_planner_suffix=None):
  repo=Path(repo).resolve();sys.path.insert(0,str(repo/'scripts/pm'))
  m=load(repo/'scripts/pm/review_preflight_handoff.test.py','full_review_fixture_harness')
  c=m.ReviewPreflightHandoffTests();c.setUp()
@@ -123,17 +123,24 @@ def build_review(repo, producer_snapshot=None, source_producer_change=None):
  evidence=c.root/'closure-evidence.json'
  evidence.write_text(json.dumps({'scope':'offline workflow fixture','consumers':['review','ci','terminal'],'classification':'mixed','reason':'all fixture consumers explicitly enumerated'}))
 
- for rel in ('scripts/plan-rust-required-scope.py','scripts/ci-required-scope.v2.json','scripts/ci-tests.sh','scripts/ci-required-capability-test-inventory.tsv','scripts/product_doc_markdown.py','scripts/doc-governance-requirements.txt','.github/workflows/rust.yml','scripts/pm/ci_required_inventory.py','scripts/pm/pr-merge-receipt.py','scripts/pm/task-closeout.sh',*[f'.agents/roles/{r}.md' for r in roles],'doc/engineering/workflow/source-of-truth.md','.agents/skills/requesting-repo-owned-review/SKILL.md'):
+ for rel in ('scripts/viewer-dependency-preflight.sh','scripts/plan-rust-required-scope.py','scripts/ci-required-scope.v2.json','scripts/ci-tests.sh','scripts/ci-required-capability-test-inventory.tsv','scripts/product_doc_markdown.py','scripts/doc-governance-requirements.txt','.github/workflows/rust.yml','scripts/pm/ci_required_inventory.py','scripts/pm/pr-merge-receipt.py','scripts/pm/task-closeout.sh',*[f'.agents/roles/{r}.md' for r in roles],'doc/engineering/workflow/source-of-truth.md','.agents/skills/requesting-repo-owned-review/SKILL.md'):
   dest=c.root/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(repo/rel,dest)
 
  for rel in ('scripts/pm/readiness_transport.py','scripts/pm/loop_terminal.py','scripts/pm/terminal_proof.py','scripts/pm/post-merge-finalize.py','scripts/pm/pr-lifecycle-gate.py','scripts/pm/claim-ready.sh','scripts/pm/ci_reuse_policy.py'):
   dest=c.root/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(repo/rel,dest)
  if producer_snapshot is not None: install_historical_snapshot(c.root,producer_snapshot)
+ for rel in ('scripts/product-doc-content-check.py','scripts/document_corpus.py'):
+  shutil.copy2(repo/rel,c.root/rel)
+ if baseline_planner_suffix is not None:
+  p=c.root/'scripts/plan-rust-required-scope.py';p.write_bytes(p.read_bytes()+baseline_planner_suffix)
  subprocess.run(['git','-C',str(c.root),'add','closure-evidence.json','scripts','.agents','.github','doc'],check=True)
  subprocess.run(['git','-C',str(c.root),'commit','-qm','immutable common dependency baseline'],check=True)
  m.SCOPE_OID=subprocess.check_output(['git','-C',str(c.root),'rev-parse','HEAD'],text=True).strip()
  source=c.root/'scripts/pm/review_preflight_handoff.test.py'
  source.write_text(source.read_text()+"\ndef offline_recovery_fixture_identity(value):\n    return value\n")
+ if baseline_planner_suffix is not None:
+  shutil.copy2(repo/'scripts/plan-rust-required-scope.py',c.root/'scripts/plan-rust-required-scope.py')
+  subprocess.run(['git','-C',str(c.root),'add','scripts/plan-rust-required-scope.py'],check=True)
  if source_producer_change is not None:
   rel,extra=source_producer_change;dest=c.root/rel;dest.write_bytes(dest.read_bytes()+extra)
   subprocess.run(['git','-C',str(c.root),'add',rel],check=True)
@@ -146,7 +153,7 @@ def build_review(repo, producer_snapshot=None, source_producer_change=None):
  inp={k:old[k] for k in ('task_uid','source_head_oid','scope_base_oid','changed_paths','test_profile','declared_tests','consumed_contracts','public_semantics','affected_consumers')}
  inp.update(change_class='mixed',manual_roles=roles,domain_role=None,verification_affected=True,closure_status={'status':'complete','reason':'finite offline fixture consumer closure','evidence':[{'path':str(evidence),'sha256':'sha256:'+hashlib.sha256(evidence.read_bytes()).hexdigest()}]})
 
- for rel in ('scripts/plan-rust-required-scope.py','scripts/ci-required-scope.v2.json','scripts/ci-tests.sh','scripts/ci-required-capability-test-inventory.tsv','scripts/product_doc_markdown.py','scripts/doc-governance-requirements.txt','.github/workflows/rust.yml','scripts/pm/ci_required_inventory.py','scripts/pm/pr-merge-receipt.py','scripts/pm/task-closeout.sh',*[f'.agents/roles/{r}.md' for r in roles],'doc/engineering/workflow/source-of-truth.md','.agents/skills/requesting-repo-owned-review/SKILL.md'):
+ for rel in ('scripts/viewer-dependency-preflight.sh','scripts/plan-rust-required-scope.py','scripts/ci-required-scope.v2.json','scripts/ci-tests.sh','scripts/ci-required-capability-test-inventory.tsv','scripts/product_doc_markdown.py','scripts/doc-governance-requirements.txt','.github/workflows/rust.yml','scripts/pm/ci_required_inventory.py','scripts/pm/pr-merge-receipt.py','scripts/pm/task-closeout.sh',*[f'.agents/roles/{r}.md' for r in roles],'doc/engineering/workflow/source-of-truth.md','.agents/skills/requesting-repo-owned-review/SKILL.md'):
   dest=c.root/rel;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(repo/rel,dest)
  if producer_snapshot is not None: install_historical_snapshot(c.root,producer_snapshot)
  if source_producer_change is not None:
@@ -256,7 +263,7 @@ class MergedIntegrationComponent(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         import copy,os
-        cls.review=build_review(HERE.parents[1],getattr(cls,'producer_snapshot',None),getattr(cls,'source_producer_change',None))
+        cls.review=build_review(HERE.parents[1],getattr(cls,'producer_snapshot',None),getattr(cls,'source_producer_change',None),getattr(cls,'baseline_planner_suffix',None))
         cls.inputs=build_api_inputs(cls.review)
         cls.original_gh=cls.review['harness'].fake_gh.read_text()
         cls.transport_path=cls.review['root']/'merged-api.json'
@@ -492,14 +499,16 @@ class CurrentTargetComponent(unittest.TestCase):
             for row in cls.producer_snapshot['files']:
                 dest=root/row['path'];shutil.copy2(HERE.parents[1]/row['path'],dest)
         # Two advances ensure last-push and cumulative ranges cannot be conflated.
-        rel='scripts/pm/readiness_transport.py'
-        (root/rel).write_bytes((root/rel).read_bytes()+b'\n# offline related target advance\n')
+        rel=getattr(cls,'target_paths',('scripts/pm/readiness_transport.py','scripts/pm/terminal_proof.py'))[0]
+        destination=root/rel;destination.parent.mkdir(parents=True,exist_ok=True)
+        destination.write_bytes((destination.read_bytes() if destination.exists() else b'')+b'\n# offline related target advance\n')
         if getattr(cls,'producer_snapshot',None) is not None:git('add','scripts','.github')
         else:git('add',rel)
         git('commit','-qm','first related consumer advance')
         cls.push_base=git('rev-parse','HEAD')
-        rel='scripts/pm/terminal_proof.py'
-        (root/rel).write_bytes((root/rel).read_bytes()+b'\n# offline second related target advance\n')
+        rel=getattr(cls,'target_paths',('scripts/pm/readiness_transport.py','scripts/pm/terminal_proof.py'))[1]
+        destination=root/rel;destination.parent.mkdir(parents=True,exist_ok=True)
+        destination.write_bytes((destination.read_bytes() if destination.exists() else b'')+b'\n# offline second related target advance\n')
         git('add',rel);git('commit','-qm','second related consumer advance')
         cls.target=git('rev-parse','HEAD');cls.target_tree=git('rev-parse','HEAD^{tree}')
         cls.cumulative_paths=git('diff','--name-only',a['merge'],cls.target).splitlines()
@@ -554,8 +563,93 @@ class CurrentTargetComponent(unittest.TestCase):
         self.push_check['check_suite']={'id':2801}
         self.push_archive()
         self.build_source_ci_holds()
+        self.install_split_execution(self.push_run,self.push_job,self.push_check,self.push_raw,self.push_base,self.target,self.target,3101)
+        self.install_split_execution(self.source_run,self.source_job,self.source_check,self.source_raw,self.data['base'],self.data['head'],self.pr_execution,4101)
+        self.publish_transport()
         self.prepare_full_delivery()
     publish_transport=MergedIntegrationComponent.publish_transport
+    def enable_source_projection(self):
+        import base64,io,zipfile
+        self.source_projection=self.review['plan']['impact_projection']
+        encoded=(json.dumps(self.source_projection,sort_keys=True,separators=(',',':'))+'\n').encode()
+        contract=load(HERE/'projection_publication_contract.py','source_projection_fixture_contract')
+        value=contract.build_contract(task_uid=self.data['task_uid'],source_head_oid=self.data['head'],scope_base_oid=self.data['base'],projection_digest=self.source_projection['projection_digest'],clauses=[],revision=1)
+        body=self.data['live_pr']['body']+'\n<!-- oasis7-impact-projection-b64: '+base64.b64encode(encoded).decode()+' -->\n'+contract.encode_marker(value)
+        self.data['live_pr']['body']=body;self.delivery_state['pr']['body']=body;self.delivery_state_path.write_text(json.dumps(self.delivery_state))
+        self.responses[f"repos/{self.data['repository']}/pulls/1"]['body']=body
+        self.source_plan=self.produce_source_plan(3701)
+        stream=io.BytesIO()
+        with zipfile.ZipFile(stream,'w') as z:z.writestr('oasis7-required-plan-v1.json',json.dumps(self.source_plan,sort_keys=True,separators=(',',':'))+'\n')
+        self.responses[f"repos/{self.data['repository']}/actions/artifacts/4101/zip"]={'binary_b64':base64.b64encode(stream.getvalue()).decode()}
+        self.install_split_execution(self.source_run,self.source_job,self.source_check,self.source_raw,self.data['base'],self.data['head'],self.pr_execution,4101)
+        self.publish_transport()
+    def install_split_execution(self,run,gate,check,raw,base,head,tested,plan_artifact_id):
+        """Actual closed planner/executor APIs produce the split evidence, never a verifier stub."""
+        import io,zipfile,base64,hashlib,copy
+        root=self.review['root'];repo=self.data['repository'];rid=run['id'];date=run['created_at'][:10]
+        git=lambda *args:subprocess.check_output(['git','-C',str(root),*args])
+        if b'\n  required-plan:\n' not in git('show',head+':.github/workflows/rust.yml'):return
+        contracts=load(HERE/'integration_executor_contract.py','split_fixture_contract')
+        executor=load(HERE/'ci_required_execution.py','split_fixture_executor')
+        authority=head if run['event']=='push' else base
+        planner_authority=head if run['event']=='pull_request' and getattr(self,'source_maintenance_locator',None) else authority
+        config=git('show',authority+':scripts/ci-required-scope.v2.json')
+        contract=contracts.executor_contract_from_contents({p:git('show',authority+':'+p) for p in contracts.executor_contract_paths(config)})
+        layout=contracts.execution_layout_context(contract)['execution_layout']
+        digest=lambda value:hashlib.sha256(value).hexdigest()
+        scope_base=git('merge-base',base,head).decode().strip()
+        scope=dict(raw,base_oid=base,integration_base_oid=base,head_oid=head,source_scope_base=scope_base,integration_base=base,source_head=head,task_uid='' if run['event']=='push' else self.data['task_uid'],planner_authority_oid=planner_authority)
+        if planner_authority!=authority:scope['maintenance_authority_comment_id']=str(self.source_maintenance_locator)
+        identity={'repository':repo,'run_id':rid,'run_attempt':1,'event_name':run['event'],'run_mode':'ci','base_sha':base,'source_head_sha':head,'tested_sha':tested,'tested_tree':git('rev-parse',head+'^{tree}').decode().strip(),'workflow_sha':tested,'run_head_sha':head,'task_uid':'' if run['event']=='push' else self.data['task_uid'],'pr_number':0 if run['event']=='push' else 1,'request_key':'','planner_digest':raw.get('planner_digest','').removeprefix('sha256:') or digest(git('show',planner_authority+':scripts/plan-rust-required-scope.py')),'config_digest':digest(config),'executor_digest':contract['digest'].removeprefix('sha256:'),'source_scope':scope_base,'impact_projection_digest':raw.get('impact_projection_digest','').removeprefix('sha256:') or digest(b'')}
+        selection=executor.selection_from_planner(scope,run['event'],'ci')
+        schedule=executor.make_plan(selection,identity,layout) if layout=='required-parallel/v1' else {'execution_layout':layout,'workers':[]}
+        encode=lambda v:(json.dumps(v,sort_keys=True,separators=(',',':'))+'\n').encode()
+        files={k+'.json':encode(v) for k,v in [('scope',scope),('identity',identity),('selection',selection),('schedule',schedule)]}
+        if tested not in (authority,base,head,scope_base):
+            with tempfile.TemporaryDirectory() as directory:
+                bundle=Path(directory)/'source.bundle';ref=f'refs/oasis7-required-transport/{rid}/1/0'
+                git('update-ref',ref,tested)
+                try:git('bundle','create',str(bundle),ref,'^'+base,'^'+head);files['source.bundle']=bundle.read_bytes()
+                finally:git('update-ref','-d',ref)
+        if run['event']=='pull_request' and getattr(self,'source_projection',None):files['impact-projection.json']=encode(self.source_projection)
+        manifest={'schema':'oasis7-required-transport/v1','identity':identity,'authority_oid':authority,'planner_authority_oid':planner_authority,'prerequisite_oids':sorted(set((authority,base,head,scope_base))),'execution_layout':layout,'members':{k:'sha256:'+digest(v) for k,v in files.items()}}
+        files['transport.json']=encode(manifest)
+        def step(name,minute,number):return {'number':number,'name':name,'status':'completed','conclusion':'success','started_at':f'{date}T10:{minute:02d}:00Z','completed_at':f'{date}T10:{minute:02d}:30Z'}
+        names=['Plan required gate scope','Write required planner artifact','Upload required planner artifact','Freeze internal same-attempt dispatch and exact Git objects','Upload exact attempt internal scheduling transport']
+        plan=copy.deepcopy(gate);plan.update(id=rid+100,name='required-plan',check_run_url=f'https://api.github.com/repos/{repo}/check-runs/{rid+100}',steps=[step(n,i,i) for i,n in enumerate(names,1)])
+        jobs=[gate,plan];checks=[check]
+        def job_check(job):
+            value=dict(check,id=job['id'],name=job['name'],details_url=f'https://github.com/{repo}/actions/runs/{rid}/job/{job["id"]}')
+            self.responses[f'repos/{repo}/check-runs/{job["id"]}']=value;checks.append(value)
+        job_check(plan)
+        checkout=[s for s in gate['steps'] if s['name']=='Run actions/checkout@v6']
+        gate['steps']=checkout+[step('Verify all exact-attempt workers and complete gate obligations' if layout=='required-parallel/v1' else 'Run required test tier',8,len(checkout)+1)]
+        artifacts=self.responses[f'repos/{repo}/actions/runs/{rid}/artifacts?per_page=100&page=1']['artifacts']
+        artifacts[:]=[a for a in artifacts if a['name']=='oasis7-required-plan-v1']
+        def artifact(aid,name,members,write,upload):
+            stream=io.BytesIO()
+            with zipfile.ZipFile(stream,'w') as archive:
+                for key,value in members.items():archive.writestr(key,value)
+            value={'id':aid,'name':name,'expired':False,'size_in_bytes':len(stream.getvalue()),'created_at':f'{date}T10:{write:02d}:10Z','updated_at':f'{date}T10:{upload:02d}:20Z','workflow_run':{'id':rid,'head_sha':head,'head_branch':run['head_branch']}}
+            artifacts.append(value);self.responses[f'repos/{repo}/actions/artifacts/{aid}']=value
+            self.responses[f'repos/{repo}/actions/artifacts/{aid}/zip']={'binary_b64':base64.b64encode(stream.getvalue()).decode()}
+        artifact(plan_artifact_id+100,f'required-transport-{rid}-1',files,4,5)
+        for i,(worker,commands) in enumerate(schedule['workers'].items() if isinstance(schedule['workers'],dict) else [],1):
+            job=copy.deepcopy(plan);job.update(id=rid+200+i,name=f'required-work ({worker})',check_run_url=f'https://api.github.com/repos/{repo}/check-runs/{rid+200+i}',steps=[step('Execute only the frozen selected worker',6,1),step('Upload exact same-attempt completed worker record',7,2)])
+            jobs.append(job);job_check(job)
+            result={'schema':'oasis7-required-worker-result/v1','worker':worker,'identity':identity,'plan_digest':schedule['plan_digest'],'command_definition_digest':schedule['command_definition_digest'],'completed':commands}
+            artifact(plan_artifact_id+200+i,f'required-worker-{rid}-1-{worker}',{'worker.json':encode(result)},6,7)
+        if run['event']=='pull_request':
+            selected=self.receipt._selected_child_groups(self.receipt.canonical_planner(raw));children=[]
+            if selected[self.receipt.WINDOWS_ROLLOUT_JOB]:children.append((self.receipt.WINDOWS_ROLLOUT_JOB,'windows-2022'))
+            if selected[self.receipt.MACOS_PACKAGE_JOB]:children.append((self.receipt.MACOS_PACKAGE_JOB,'ubuntu-24.04'))
+            if selected[self.receipt.FLEET_HEALTH_JOB]:children.extend((f'{self.receipt.FLEET_HEALTH_JOB} ({runner})',runner) for runner in self.receipt.FLEET_HEALTH_RUNNERS)
+            for i,(name,runner) in enumerate(children,1):
+                child=copy.deepcopy(plan);child.update(id=rid+300+i,name=name,labels=[runner],steps=[],check_run_url=f'https://api.github.com/repos/{repo}/check-runs/{rid+300+i}')
+                jobs.append(child);job_check(child)
+        self.responses[f'repos/{repo}/actions/runs/{rid}/attempts/1/jobs?per_page=100&page=1']={'total_count':len(jobs),'jobs':jobs}
+        self.responses[f'repos/{repo}/check-suites/{run["check_suite_id"]}/check-runs?per_page=100&page=1']={'total_count':len(checks),'check_runs':checks}
+        self.responses[f'repos/{repo}/actions/runs/{rid}/artifacts?per_page=100&page=1']['total_count']=len(artifacts)
     def push_archive(self):
         import io,zipfile,base64
         raw=io.BytesIO();self.plan_bytes=(json.dumps(self.push_plan,sort_keys=True,separators=(',',':'))+'\n').encode()
@@ -584,6 +678,9 @@ class CurrentTargetComponent(unittest.TestCase):
         paths=subprocess.check_output(['git','-C',str(root),'diff','--name-only','--no-renames',a['base'],a['head']],text=True).splitlines()
         args=[sys.executable,str(root/'scripts/plan-rust-required-scope.py'),'--event-name','pull_request']
         for path in paths:args+=['--changed-path',path]
+        if getattr(self,'source_projection',None):
+            carrier=root/'offline-verified-projection.json';carrier.write_text(json.dumps(self.source_projection,sort_keys=True,separators=(',',':'))+'\n')
+            args+=['--impact-projection',str(carrier),'--task-uid',a['task_uid'],'--head-ref',a['head'],'--scope-base-oid',a['base']]
         proc=subprocess.run(args,cwd=root,text=True,capture_output=True,check=True)
         raw=dict(line.split('=',1) for line in proc.stdout.splitlines() if '=' in line)
         self.source_raw=raw;self.source_paths=paths
@@ -1096,6 +1193,100 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
         key=f"repos/{self.data['repository']}/actions/workflows/rust.yml/runs?event=push&per_page=100&page=1"
         self.responses[key]['workflow_runs']=None
         with self.assertRaisesRegex(ValueError,'discovery|malformed|pagination'):self.call_target()
+    def test_split_plan_and_whole_worker_namespace_are_required(self):
+        import copy
+        key=f"repos/{self.data['repository']}/actions/runs/2701/attempts/1/jobs?per_page=100&page=1"
+        original=copy.deepcopy(self.responses[key])
+        cases=('missing-plan','missing-worker','unknown-worker','failed-worker','wrong-attempt')
+        for case in cases:
+            with self.subTest(case=case):
+                row=copy.deepcopy(original);jobs=row['jobs']
+                if case=='missing-plan':jobs[:]=[j for j in jobs if j['name']!='required-plan']
+                elif case=='missing-worker':jobs.pop(2)
+                elif case=='unknown-worker':jobs[2]['name']='required-work (unknown)'
+                elif case=='failed-worker':jobs[2]['conclusion']='failure'
+                else:jobs[2]['run_attempt']=2
+                row['total_count']=len(jobs);self.responses[key]=row;self.publish_transport()
+                with self.assertRaises((ValueError,SystemExit)):self.call_target()
+        self.responses[key]=original
+    def test_split_producer_retains_exact_known_legacy_full_serial_executor(self):
+        import terminal_recovery,recovery_observation,copy
+        contracts=load(HERE/'integration_executor_contract.py','legacy_split_fixture_contract')
+        source=HERE.parents[1];legacy='89ef370f66a83cba50bafa9930c74e31360e5ba0'
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);git=lambda *args:subprocess.check_output(['git','-C',str(root),*args])
+            git('init','-q');git('config','user.email','offline@example.invalid');git('config','user.name','Offline Fixture')
+            for path in contracts.PARALLEL_EXECUTOR_CONTRACT_PATHS:
+                dest=root/path;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes((source/path).read_bytes())
+            for path in contracts.EXECUTOR_CONTRACT_PATHS:
+                (root/path).write_bytes(subprocess.check_output(['git','-C',str(source),'show',legacy+':'+path]))
+            git('add','.');git('commit','-qm','offline independently approved legacy executor');base=git('rev-parse','HEAD').decode().strip()
+            contents={path:git('show',base+':'+path) for path in contracts.EXECUTOR_CONTRACT_PATHS}
+            self.assertIn(contracts.executor_contract_from_contents(contents)['digest'],contracts.KNOWN_LEGACY_EXECUTOR_DIGESTS)
+            for path in contracts.PARALLEL_EXECUTOR_CONTRACT_PATHS:(root/path).write_bytes((source/path).read_bytes())
+            git('add','.');git('commit','-qm','offline exact supported split producer');head=git('rev-parse','HEAD').decode().strip()
+            tested=subprocess.check_output(['git','-C',str(root),'commit-tree',head+'^{tree}','-p',base,'-p',head],input=b'offline synthetic event merge\n').decode().strip()
+            with tempfile.TemporaryDirectory() as planner_dir:
+                planner=Path(planner_dir)
+                for name in ('plan-rust-required-scope.py','ci-required-scope.v2.json','ci-tests.sh'):(planner/name).write_bytes(git('show',base+':scripts/'+name))
+                raw=subprocess.check_output([sys.executable,str(planner/'plan-rust-required-scope.py'),'--event-name','pull_request','--changed-path','.github/workflows/rust.yml'],cwd=root,text=True)
+            raw=dict(line.split('=',1) for line in raw.splitlines() if '=' in line)
+            self.assertEqual(raw['scope'],'full');self.assertTrue(all(v=='true' for k,v in raw.items() if k.startswith('run_')))
+            old_root=self.review['root'];old_run=copy.deepcopy(self.source_run);old_job=copy.deepcopy(self.source_job);old_check=copy.deepcopy(self.source_check)
+            self.review['root']=root;self.source_run['head_sha']=head;self.source_job['head_sha']=head;self.source_check['head_sha']=head
+            try:
+                self.install_split_execution(self.source_run,self.source_job,self.source_check,raw,base,head,tested,4101);self.publish_transport()
+                repo=self.data['repository'];jobs=self.responses[f'repos/{repo}/actions/runs/3701/attempts/1/jobs?per_page=100&page=1']['jobs']
+                artifacts=self.responses[f'repos/{repo}/actions/runs/3701/artifacts?per_page=100&page=1']['artifacts']
+                plan=next(j for j in jobs if j['name']=='required-plan')
+                with recovery_observation.observation():
+                    coverage,_,_=terminal_recovery._split_execution(repo,self.data['task_uid'],1,self.source_run,head,tested,base,root,jobs,self.source_job,plan,artifacts,self.receipt.canonical_planner(raw),15368,'pull_request',reproduced=raw)
+                self.assertIn('Run required test tier',[step['name'] for _,step in coverage])
+                self.assertFalse(any(j['name'].startswith('required-work') for j in jobs))
+            finally:
+                self.review['root']=old_root;self.source_run=old_run;self.source_job=old_job;self.source_check=old_check
+    def test_split_transport_coherent_identity_and_result_union_cannot_self_authorize(self):
+        import io,zipfile,base64,copy
+        repo=self.data['repository'];key=f'repos/{repo}/actions/artifacts/3201/zip'
+        original=copy.deepcopy(self.responses[key])
+        def rewrite(changer):
+            with zipfile.ZipFile(io.BytesIO(base64.b64decode(original['binary_b64']))) as z:files={n:z.read(n) for n in z.namelist()}
+            values={n:json.loads(v) for n,v in files.items()};changer(values)
+            for name in ('identity.json','scope.json','selection.json','schedule.json'):
+                files[name]=(json.dumps(values[name],sort_keys=True,separators=(',',':'))+'\n').encode()
+            values['transport.json']['members']={n:'sha256:'+hashlib.sha256(v).hexdigest() for n,v in files.items() if n!='transport.json'}
+            files['transport.json']=(json.dumps(values['transport.json'],sort_keys=True,separators=(',',':'))+'\n').encode()
+            stream=io.BytesIO()
+            with zipfile.ZipFile(stream,'w') as z:
+                for n,v in files.items():z.writestr(n,v)
+            self.responses[key]={'binary_b64':base64.b64encode(stream.getvalue()).decode()};self.publish_transport()
+        def wrong_identity(values):
+            executor=load(HERE/'ci_required_execution.py','coherent_transport_fixture_executor')
+            base=self.data['base'];root=self.review['root']
+            paths=subprocess.check_output(['git','-C',str(root),'diff','--name-only',base,self.target],text=True).splitlines()
+            arguments=[sys.executable,str(root/'scripts/plan-rust-required-scope.py'),'--event-name','push']
+            for path in paths:arguments+=['--changed-path',path]
+            output=subprocess.check_output(arguments,cwd=root,text=True)
+            scope=dict(line.split('=',1) for line in output.splitlines() if '=' in line)
+            scope.update(base_oid=base,integration_base_oid=base,head_oid=self.target,source_scope_base=base,
+                integration_base=base,source_head=self.target,task_uid='',planner_authority_oid=self.target)
+            values['identity.json'].update(base_sha=base,source_scope=base)
+            values['transport.json']['identity']=values['identity.json']
+            values['transport.json']['prerequisite_oids']=sorted({base,self.target})
+            values['scope.json']=scope
+            values['selection.json']=executor.selection_from_planner(scope,'push','ci')
+            values['schedule.json']=executor.make_plan(values['selection.json'],values['identity.json'],'required-parallel/v1')
+        rewrite(wrong_identity)
+        with self.assertRaisesRegex(ValueError,'identity|authority'):self.call_target()
+        self.responses[key]=original
+        workers=self.responses[f'repos/{repo}/actions/runs/2701/artifacts?per_page=100&page=1']['artifacts']
+        result=next(a for a in workers if a['name'].startswith('required-worker-'))
+        result_key=f'repos/{repo}/actions/artifacts/{result["id"]}/zip'
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(self.responses[result_key]['binary_b64']))) as z:value=json.loads(z.read('worker.json'))
+        value['completed']=[];stream=io.BytesIO()
+        with zipfile.ZipFile(stream,'w') as z:z.writestr('worker.json',json.dumps(value))
+        self.responses[result_key]={'binary_b64':base64.b64encode(stream.getvalue()).decode()};self.publish_transport()
+        with self.assertRaises((ValueError,SystemExit)):self.call_target()
     def test_unsupported_contract_and_malformed_resource_are_plan_errors(self):
         import copy
         original=copy.deepcopy(self.push_plan)
@@ -1210,7 +1401,7 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
         self.push_artifact['created_at']='2026-10-02T09:59:59Z'
         with self.assertRaisesRegex(ValueError,'artifact|timing|timestamp|window'):self.call_target()
     def test_skipped_applicable_execution_blocks(self):
-        self.push_steps[-1].update(conclusion='skipped',status='completed')
+        self.push_job['steps'][-1].update(conclusion='skipped',status='completed')
         with self.assertRaisesRegex(ValueError,'step|execution|tier|success'):self.call_target()
     def test_context_caller_coverage_is_not_authority(self):
         self.context['coverage']={'verified':True}
@@ -1307,6 +1498,32 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
         self.assertEqual(result['coverage']['inventory_sha256'],hashlib.sha256(inventory).hexdigest())
         self.assertEqual(self.source_run['pull_requests'],[])
         self.assertFalse(self.receipt.canonical_planner(self.source_plan['planner'])['run_packaging_contracts'])
+
+    def test_verified_source_projection_replays_independent_B_and_transport(self):
+        self.enable_source_projection()
+        result=self.call_source_observation()
+        self.assertEqual(result['plan']['planner']['impact_projection_digest'],self.source_projection['projection_digest'])
+        self.assertEqual(result['coverage']['actual_selectors'],result['coverage']['expected_selectors'])
+
+    def test_source_projection_body_C1_and_transport_tampering_refuse(self):
+        import copy
+        self.enable_source_projection();repo=self.data['repository'];original=self.data['live_pr']['body']
+        self.data['live_pr']['body']=original.replace(self.source_projection['projection_digest'],'sha256:'+'0'*64)
+        self.delivery_state['pr']['body']=self.data['live_pr']['body'];self.delivery_state_path.write_text(json.dumps(self.delivery_state));self.publish_transport()
+        with self.assertRaises(ValueError):self.call_source_observation()
+
+    def test_source_projection_transport_cannot_replace_independent_carrier(self):
+        import io,zipfile,base64
+        self.enable_source_projection();repo=self.data['repository'];key=f'repos/{repo}/actions/artifacts/4201/zip'
+        with zipfile.ZipFile(io.BytesIO(base64.b64decode(self.responses[key]['binary_b64']))) as archive:
+            files={name:archive.read(name) for name in archive.namelist()}
+        files['impact-projection.json']=b'{}\n';manifest=json.loads(files['transport.json'])
+        manifest['members']['impact-projection.json']='sha256:'+hashlib.sha256(files['impact-projection.json']).hexdigest()
+        files['transport.json']=(json.dumps(manifest,sort_keys=True,separators=(',',':'))+'\n').encode();stream=io.BytesIO()
+        with zipfile.ZipFile(stream,'w') as archive:
+            for name,value in files.items():archive.writestr(name,value)
+        self.responses[key]={'binary_b64':base64.b64encode(stream.getvalue()).decode()};self.publish_transport()
+        with self.assertRaisesRegex(ValueError,'independent carrier'):self.call_source_observation()
 
     def test_source_checkout_and_root_provenance_contradictions_refuse(self):
         import copy,base64
@@ -1591,6 +1808,154 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
         with self.assertRaisesRegex(ValueError,'terminal v2 evidence comment author mismatch'):
             reader._delivery_comment_readback(context,body)
 
+class EmptySplitExecution(unittest.TestCase):
+    target_paths=('doc/testing/offline-one.txt','doc/testing/offline-two.txt')
+    setUpClass=classmethod(CurrentTargetComponent.setUpClass.__func__)
+    tearDownClass=classmethod(CurrentTargetComponent.tearDownClass.__func__)
+    setUp=CurrentTargetComponent.setUp
+    publish_transport=MergedIntegrationComponent.publish_transport
+    push_archive=CurrentTargetComponent.push_archive
+    produce_push_plan=CurrentTargetComponent.produce_push_plan
+    produce_source_plan=CurrentTargetComponent.produce_source_plan
+    build_source_ci_holds=CurrentTargetComponent.build_source_ci_holds
+    prepare_full_delivery=CurrentTargetComponent.prepare_full_delivery
+    install_shared_client_fixture=CurrentTargetComponent.install_shared_client_fixture
+    effect_snapshot=CurrentTargetComponent.effect_snapshot
+    call_target=CurrentTargetComponent.call_target
+    install_split_execution=CurrentTargetComponent.install_split_execution
+    def test_real_minimal_plan_accepts_only_skipped_bare_empty_aggregate(self):
+        import copy
+        key=f"repos/{self.data['repository']}/actions/runs/2701/attempts/1/jobs?per_page=100&page=1"
+        row=self.responses[key]
+        self.assertEqual([j['name'] for j in row['jobs']],['required-gate','required-plan'])
+        aggregate=copy.deepcopy(self.push_job);aggregate.update(id=2999,name='required-work',conclusion='skipped',check_run_url=None,steps=[])
+        row['jobs'].append(aggregate);row['total_count']+=1
+        value=self.call_target()
+        self.assertTrue(value['coverage']['actual_selectors']['run_required_gate_baseline'])
+    def test_empty_matrix_cannot_hide_unknown_shard_or_wrong_attempt_aggregate(self):
+        import copy
+        key=f"repos/{self.data['repository']}/actions/runs/2701/attempts/1/jobs?per_page=100&page=1";original=copy.deepcopy(self.responses[key])
+        for name,attempt in [('required-work (unknown)',1),('required-work',2)]:
+            with self.subTest(name=name,attempt=attempt):
+                row=copy.deepcopy(original);aggregate=copy.deepcopy(self.push_job)
+                aggregate.update(id=2999,name=name,run_attempt=attempt,conclusion='skipped',check_run_url=None,steps=[])
+                row['jobs'].append(aggregate);row['total_count']+=1;self.responses[key]=row
+                with self.assertRaises(ValueError):self.call_target()
+
+class HistoricalMaintenanceInspection(unittest.TestCase):
+    """Merged proof inspection uses real H/B distinction, never an OPEN selector."""
+    baseline_planner_suffix=b'\n# offline prior protected planner revision\n'
+    setUpClass=classmethod(CurrentTargetComponent.setUpClass.__func__)
+    tearDownClass=classmethod(CurrentTargetComponent.tearDownClass.__func__)
+    publish_transport=MergedIntegrationComponent.publish_transport
+    push_archive=CurrentTargetComponent.push_archive
+    produce_push_plan=CurrentTargetComponent.produce_push_plan
+    produce_source_plan=CurrentTargetComponent.produce_source_plan
+    build_source_ci_holds=CurrentTargetComponent.build_source_ci_holds
+    prepare_full_delivery=CurrentTargetComponent.prepare_full_delivery
+    install_shared_client_fixture=CurrentTargetComponent.install_shared_client_fixture
+    effect_snapshot=CurrentTargetComponent.effect_snapshot
+    call_source_observation=CurrentTargetComponent.call_source_observation
+    install_split_execution=CurrentTargetComponent.install_split_execution
+    enable_source_projection=CurrentTargetComponent.enable_source_projection
+    def setUp(self):
+        import base64
+        CurrentTargetComponent.setUp(self)
+        self.source_maintenance_locator=9301;a=self.data;repo=a['repository'];root=self.review['root']
+        self.data['live_pr']['body']+='\nWorkflow Maintenance Authority: 9301'
+        module=load(HERE/'workflow_maintenance.py','historical_inspection_fixture')
+        changed=subprocess.check_output(['git','-C',str(root),'diff','--name-only',a['base'],a['head']],text=True).splitlines()
+        value={'repository':repo,'task_uid':a['task_uid'],'issue_number':a['issue'],'pr_number':1,'purpose':'candidate-tool-verification','allowed_write_paths':changed,'allowed_tool_paths':list(module.TOOL_PATHS)}
+        self.maintenance_comment={'id':9301,'body':'Workflow Maintenance Authority:\n'+json.dumps(value,sort_keys=True),'user':{'type':'User','login':'maintenance-admin'},'issue_url':f'repos/{repo}/issues/{a["issue"]}','html_url':f'https://github.com/{repo}/issues/{a["issue"]}#issuecomment-9301','created_at':'2026-09-29T10:00:00Z','updated_at':'2026-09-29T10:00:00Z'}
+        self.maintenance_comment['issue_url']='https://api.github.com/'+self.maintenance_comment['issue_url']
+        self.maintenance_permission={'permission':'admin','user':{'login':'maintenance-admin'}}
+        self.responses[f'repos/{repo}/issues/comments/9301']=self.maintenance_comment
+        self.responses[f'repos/{repo}/collaborators/maintenance-admin/permission']=self.maintenance_permission
+        self.enable_source_projection()
+        self.source_job['steps'].append({'number':len(self.source_job['steps'])+1,'name':'Verify final task and PR binding before required-gate success','status':'completed','conclusion':'success','started_at':'2026-09-30T10:09:00Z','completed_at':'2026-09-30T10:09:30Z'})
+        rendered=[f'base_ref="{a["base"]}"',f'head_ref="{a["head"]}"','pr_number="1"',"if [[ -n '9301' ]]; then","  maintenance_args=(--maintenance-authority-comment-id '9301')",'python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed \\']
+        self.source_checkout_log+=''.join(f'2026-09-30T10:09:{i+1:02d}Z {line}\n' for i,line in enumerate(rendered))
+        self.responses[f'repos/{repo}/actions/jobs/3901/logs']={'binary_b64':base64.b64encode(self.source_checkout_log.encode()).decode()}
+        self.publish_transport()
+    def inspect(self):
+        import terminal_recovery,recovery_observation
+        self.publish_transport();a=self.data
+        with recovery_observation.observation():
+            return terminal_recovery._historical_maintenance_inspection(a['repository'],a['task_uid'],1,a['head'],a['base'],self.review['root'],15368,a['live_pr'],self.source_run,self.source_job)
+    def test_real_merged_H_planner_and_protected_B_config_are_inspected(self):
+        a=self.data;root=self.review['root']
+        blob=lambda oid:subprocess.check_output(['git','-C',str(root),'show',oid+':scripts/plan-rust-required-scope.py'])
+        self.assertNotEqual(blob(a['base']),blob(a['head']))
+        result=self.call_source_observation()
+        self.assertEqual(result['checks'][0]['workflow_sha'],self.pr_execution)
+        self.assertEqual(result['coverage']['planner_entry_sha256'],hashlib.sha256(blob(a['head'])).hexdigest())
+        self.assertIn('Verify final task and PR binding before required-gate success',[s['name'] for s in result['coverage']['steps']])
+    def test_edited_late_nonadmin_or_incomplete_scope_cannot_authorize_inspection(self):
+        import copy
+        comment=copy.deepcopy(self.maintenance_comment);permission=copy.deepcopy(self.maintenance_permission)
+        for case in ('edited','late','nonadmin','closure','write-scope'):
+            with self.subTest(case=case):
+                self.maintenance_comment.clear();self.maintenance_comment.update(copy.deepcopy(comment))
+                self.maintenance_permission.clear();self.maintenance_permission.update(copy.deepcopy(permission))
+                if case=='edited':self.maintenance_comment['updated_at']='2026-09-29T10:00:01Z'
+                elif case=='late':self.maintenance_comment.update(created_at=self.source_run['run_started_at'],updated_at=self.source_run['run_started_at'])
+                elif case=='nonadmin':self.maintenance_permission['permission']='write'
+                else:
+                    value=json.loads(comment['body'].split('\n',1)[1]);value['allowed_tool_paths' if case=='closure' else 'allowed_write_paths'].pop();self.maintenance_comment['body']='Workflow Maintenance Authority:\n'+json.dumps(value)
+                with self.assertRaises(ValueError):self.inspect()
+    def test_current_hold_or_wrong_PR_locator_refuses_without_historical_claim(self):
+        original=self.delivery_state['issue']['body']
+        self.delivery_state['issue']['body']=original+'\n- merge_hold_active: `true`\n'
+        self.delivery_state_path.write_text(json.dumps(self.delivery_state))
+        with self.assertRaisesRegex(ValueError,'hold'):self.inspect()
+        self.delivery_state['issue']['body']=original;self.delivery_state_path.write_text(json.dumps(self.delivery_state))
+        self.data['live_pr']['body']+='\nWorkflow Maintenance Authority: 9302'
+        with self.assertRaisesRegex(ValueError,'duplicate maintenance'):self.inspect()
+    def test_missing_skipped_or_wrong_rendered_binding_witness_refuses(self):
+        import copy,base64
+        steps=copy.deepcopy(self.source_job['steps']);logs=copy.deepcopy(self.responses[f"repos/{self.data['repository']}/actions/jobs/3901/logs"])
+        for case in ('missing','skipped','wrong-locator'):
+            with self.subTest(case=case):
+                self.source_job['steps']=copy.deepcopy(steps)
+                self.responses[f"repos/{self.data['repository']}/actions/jobs/3901/logs"]=copy.deepcopy(logs)
+                if case=='missing':self.source_job['steps'].pop()
+                elif case=='skipped':self.source_job['steps'][-1]['conclusion']='skipped'
+                else:self.responses[f"repos/{self.data['repository']}/actions/jobs/3901/logs"]={'binary_b64':base64.b64encode(self.source_checkout_log.replace("'9301'","'9302'").encode()).decode()}
+                with self.assertRaises(ValueError):self.inspect()
+    def test_final_comment_read_drift_refuses_full_source_proof(self):
+        import copy,terminal_recovery
+        from unittest.mock import patch
+        original=terminal_recovery.obs.api;count=0;endpoint=f"repos/{self.data['repository']}/issues/comments/9301"
+        def changed(path):
+            nonlocal count
+            value=original(path)
+            if path==endpoint:
+                count+=1
+                if count>1:value=copy.deepcopy(value);value['updated_at']='2026-09-29T10:00:01Z'
+            return value
+        with patch.object(terminal_recovery.obs,'api',side_effect=changed):
+            with self.assertRaisesRegex(ValueError,'final authority'):self.call_source_observation()
+
+class UnsupportedHistoricalMaintenanceClosure(unittest.TestCase):
+    baseline_planner_suffix=HistoricalMaintenanceInspection.baseline_planner_suffix
+    source_producer_change=('scripts/pm/loop-ci.py',b'\n# offline unknown immutable helper closure\n')
+    setUpClass=classmethod(CurrentTargetComponent.setUpClass.__func__)
+    tearDownClass=classmethod(CurrentTargetComponent.tearDownClass.__func__)
+    setUp=HistoricalMaintenanceInspection.setUp
+    publish_transport=MergedIntegrationComponent.publish_transport
+    push_archive=CurrentTargetComponent.push_archive
+    produce_push_plan=CurrentTargetComponent.produce_push_plan
+    produce_source_plan=CurrentTargetComponent.produce_source_plan
+    build_source_ci_holds=CurrentTargetComponent.build_source_ci_holds
+    prepare_full_delivery=CurrentTargetComponent.prepare_full_delivery
+    install_shared_client_fixture=CurrentTargetComponent.install_shared_client_fixture
+    effect_snapshot=CurrentTargetComponent.effect_snapshot
+    install_split_execution=CurrentTargetComponent.install_split_execution
+    enable_source_projection=CurrentTargetComponent.enable_source_projection
+    inspect=HistoricalMaintenanceInspection.inspect
+    def test_approved_path_name_cannot_admit_unknown_actual_H_helper_bytes(self):
+        with self.assertRaisesRegex(ValueError,'loaded helper closure unsupported'):self.inspect()
+
 class HistoricalProducerCompatibility(unittest.TestCase):
     """Old immutable producer inputs and independent present helper; no verdict fakes."""
     producer_snapshot=json.loads((HERE/'fixtures/historical-required-producer-2ca.json').read_text())
@@ -1613,6 +1978,7 @@ class HistoricalProducerCompatibility(unittest.TestCase):
     produce_push_plan=CurrentTargetComponent.produce_push_plan
     produce_source_plan=CurrentTargetComponent.produce_source_plan
     build_source_ci_holds=CurrentTargetComponent.build_source_ci_holds
+    install_split_execution=CurrentTargetComponent.install_split_execution
     prepare_full_delivery=CurrentTargetComponent.prepare_full_delivery
     install_shared_client_fixture=CurrentTargetComponent.install_shared_client_fixture
     effect_snapshot=CurrentTargetComponent.effect_snapshot
@@ -1764,14 +2130,16 @@ class KnownChildExecutionContract(unittest.TestCase):
         import terminal_recovery
         workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_bytes()
         planner={'execution_contract':'required-domain-split/v2','run_packaging_contracts':True,'run_operational_contracts':False}
-        selected=terminal_recovery._selected_execution_children(workflow,planner,'pull_request')
+        selected=terminal_recovery._selected_execution_children(workflow,planner,'pull_request','required-plan')
         self.assertTrue(selected['testnet-packages-macos-arm64-contract'])
         self.assertFalse(selected['windows-package-rollout-behavior'])
-        self.assertFalse(any(terminal_recovery._selected_execution_children(workflow,planner,'push').values()))
+        self.assertFalse(any(terminal_recovery._selected_execution_children(workflow,planner,'push','required-plan').values()))
+        with self.assertRaisesRegex(ValueError,'unsupported changed event/selector'):
+            terminal_recovery._selected_execution_children(workflow,planner,'pull_request','required-gate')
         changed=workflow.replace(b"execution_contract == 'required-domain-split/v2'",b"execution_contract == 'required-domain-split/v999'")
         self.assertNotEqual(workflow,changed)
         with self.assertRaisesRegex(ValueError,'unsupported changed event/selector'):
-            terminal_recovery._selected_execution_children(changed,planner,'pull_request')
+            terminal_recovery._selected_execution_children(changed,planner,'pull_request','required-plan')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
