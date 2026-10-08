@@ -48,7 +48,7 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 - 涉及 durable write 的路径必须验证失败前未写入或写入事务整体回滚。
 - 涉及 replay/recovery 的路径必须验证拒绝结果可观测，且不会生成新的 committed history。
 - rollover 必须验证边界分配、snapshot roundtrip 与缺失 era 字段的 legacy load；它只消除溢出失效，纯 `u64` ID 在不同 era 极端远期仍可能复用，不能表述为全链路复合 ID 唯一性。
-- 文档或实现若改变受检失败、rollover、clamp 三者之一，必须同步更新本文、对应 design、相关测试与 GitHub task evidence。
+- 文档或实现若改变受检失败、rollover、clamp 三者之一，必须同步更新本文、对应 design、相关测试与 PR 与实际验证记录。
 
 ## 5. 里程碑
 

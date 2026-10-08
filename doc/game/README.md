@@ -11,10 +11,10 @@
 - 想先进入 gameplay 热点子域，而不是顺扫近期长名单：先读 `doc/game/gameplay/README.md`。
 - 想快速理解核心玩法骨架：先在 `doc/game/prd.md` 确认活跃基线与路由，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的 bounded 专业合同。
 - 想确认工业流水线服务窗口、lease/expiry、hard/soft 迟到与电力连续性：读 `doc/game/gameplay/gameplay-industrial-pipeline-service-window-contract.prd.md`。
-- 想确认首局、前 10/30 分钟吸引力与持续游玩合同：先读产品承诺 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 与复跑边界由对应 GitHub task evidence 和 `doc/testing/evidence/` 的同候选样本确认。
+- 想确认首局、前 10/30 分钟吸引力与持续游玩合同：先读产品承诺 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 与复跑边界由对应 PR 与实际验证记录 和 `doc/testing/evidence/` 的同候选样本确认。
 - 想确认“间接控制为什么仍然应该感觉像我在控制，而不是旁观 AI”：先读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`。
 - 想确认“成熟世界里小玩家/新玩家靠什么继续有独立价值，而不是只能投靠大组织”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再下钻 `doc/game/gameplay/gameplay-mature-world-progression-contract.prd.md`。
-- 想确认当前试玩放行与发行口径：先读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态由 GitHub task truth 与同候选 evidence 确认，公开状态只看根 `README.md`。
+- 想确认当前试玩放行与发行口径：先读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态由 Git、PR 与实际 CI 记录 与同候选 evidence 确认，公开状态只看根 `README.md`。
 - 想跟进最近最活跃的经济/运营规则变化：先读 `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`，再按需进入对应 design / project / runbook。
 
 ## 入口
@@ -28,7 +28,7 @@
 - GitHub Project task status 与 issue evidence comments 是执行状态、阻断与历史 trace 的唯一可变真值；文档只保留稳定规则、验收和可复跑证据。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名或需要完整文件清单时使用，不适合作为第一次进入模块时的首读入口。
 - `gameplay/README.md` 是 `gameplay/` 热点子域 landing page，负责把玩法骨架、留存、agency、preview/beta gate 与 economy/claim 按问题分流。
-- 高频专题文档继续承担声明范围内的专业合同：`gameplay-top-level-design` 管核心玩法骨架与 `PRD-GAME-012` early-retention 合同，`gameplay-indirect-control-agency-contract` 管间接控制下的 agency 合同，`gameplay-agent-claim-economy-contract` 管近期高频经济规则。首局与持续游玩的产品承诺统一由产品分册承载，当前执行由 GitHub task truth 与对应 evidence 承载。
+- 高频专题文档继续承担声明范围内的专业合同：`gameplay-top-level-design` 管核心玩法骨架与 `PRD-GAME-012` early-retention 合同，`gameplay-indirect-control-agency-contract` 管间接控制下的 agency 合同，`gameplay-agent-claim-economy-contract` 管近期高频经济规则。首局与持续游玩的产品承诺统一由产品分册承载，当前执行由 Git、PR 与实际 CI 记录 与对应 evidence 承载。
 - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md` 管 mature-world 小玩家的产品承诺；`gameplay-mature-world-progression-contract.prd.md` 管对应专业玩法合同。
 
 ## 活跃阅读面边界
@@ -40,7 +40,7 @@
 - 维护玩法目标态、核心循环与发布前可玩性口径。
 - 汇总 gameplay 主题下的规则、经济、治理、协作与生产闭环专题。
 - 承接体验优化、长期在线硬化与发布阻断相关设计追踪。
-- 维护稳定的玩法验收、经济/agency/depot 合同和可玩性边界；当前阶段、准入、执行和对外口径由 GitHub task truth、产品 PRD、QA evidence 与根 `README.md` 的 claim envelope 共同约束。
+- 维护稳定的玩法验收、经济/agency/depot 合同和可玩性边界；当前阶段、准入、执行和对外口径由 Git、PR 与实际 CI 记录、产品 PRD、QA evidence 与根 `README.md` 的 claim envelope 共同约束。
 
 ## 热点子域导航
 - `gameplay/`：先看 `gameplay/README.md`，再按簇进入玩法骨架、留存修复、preview/beta gate、claim economy、长稳治理、agency 合同、mature-world 小玩家承接与可编程区域设施。

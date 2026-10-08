@@ -3,9 +3,9 @@
 更新时间: 2026-07-24
 
 ## 从这里开始
-- 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md`、`../../site/prd.md` 与 `../../site/GitHub task issue evidence comments` 确认 Pages、Release 资产、专业实现和 blocker
+- 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md`、`../../site/prd.md` 与 `../../site/PR、实际 CI 与评审记录（Issue 按需）` 确认 Pages、Release 资产、专业实现和 blocker
 - 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md`、本页专题和对应操作手册；活跃任务状态读 GitHub task issue evidence
-- 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读本页相关 PRD/design/manual，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
+- 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读本页相关 PRD/design/manual，再按 PR、实际 CI 与评审记录（Issue 按需） 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
 - 想确认反馈入口、native Ready 后远端失败的本地回落与 Web 代理边界：先读 `game-client-launcher-feedback.prd.md`
 - 想确认 native/Web 配置、设置、反馈与转账的共享语义、平台差异、结果和恢复边界：先读 `game-client-launcher-cross-surface-action-parity.prd.md`；control plane、GUI-agent 机器接口仍读 `game-client-launcher-control-plane-and-machine-interface.prd.md`
 - 想确认 blockchain explorer 的当前只读查询、七视图与状态呈现边界：先读 `game-client-launcher-blockchain-explorer.prd.md`；它不构成 mainnet、readiness、公开服务、结算或 validator 承诺
@@ -30,7 +30,7 @@
 ## 首读主题簇
 
 ### 1. 发布、分发与整体可用性
-- 首读入口: `../../product/player-entry-distribution/prd.md`（玩家体验）；`../prd.md`、`../../site/prd.md` 与 `../../site/GitHub task issue evidence comments`（Pages、Release 资产和专业实现）
+- 首读入口: `../../product/player-entry-distribution/prd.md`（玩家体验）；`../prd.md`、`../../site/prd.md` 与 `../../site/PR、实际 CI 与评审记录（Issue 按需）`（Pages、Release 资产和专业实现）
 - 适合问题:
   - launcher 是否已经能给更广泛用户使用
   - release/distribution 的当前阻断和验收边界是什么
@@ -74,7 +74,7 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`。
-- 如果问题涉及当前本地 launcher/playtest 操作口径，先读本页相关 PRD/design/manual 与 GitHub task issue evidence comments，再决定是否进入某个历史专题。
+- 如果问题涉及当前本地 launcher/playtest 操作口径，先读本页相关 PRD/design/manual 与 PR、实际 CI 与评审记录（Issue 按需），再决定是否进入某个历史专题。
 - 如果问题需要判断 runtime 正确性、hosted auth、chain behavior 或 release readiness，本页只提供文档入口，结论必须回到对应专业角色和当前任务证据。
 - 四组 2026-03 跨表面动作源三件套已由 `game-client-launcher-cross-surface-action-parity.prd.md` 收敛并删除；追溯仅使用 Git 与 GitHub task issue evidence。其余历史完成专题除非仍是当前 operator 入口，不再提升为默认首读路径。
 

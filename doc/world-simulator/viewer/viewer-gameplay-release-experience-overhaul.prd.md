@@ -8,7 +8,7 @@
 ## ROUND-002 物理合并
 - 本文件为主文档（当前权威入口）。
 - `immersion-phase8~10` 内容已物理合并入本文件，对应阶段文档已合并并从仓库移除（不再保留 archive 目录）。
-- `immersion-phase2~7` 旧阶段三件套已在后续文档治理中退役删除；其完成态只作为历史阶段证据保留在 core review logs、git history 与 GitHub task issue evidence comments，当前 release / 体验收口入口统一读本文件与GitHub task issue evidence。
+- `immersion-phase2~7` 旧阶段三件套已在后续文档治理中退役删除；其完成态只作为历史阶段证据保留在 core review logs、git history 与 PR、实际 CI 与评审记录（Issue 按需），当前 release / 体验收口入口统一读本文件与GitHub task issue evidence。
 
 ## 1. Executive Summary
 - 将 `oasis7_viewer` 默认体验从“调试工具”切换为“可发行游戏前端”。
@@ -453,7 +453,7 @@ async GPU failure, or tablet widths `641–1240`, and is not a release-readiness
 This backlog is the durable Viewer-domain handoff derived from the current implementation
 review. Priority labels describe player trust/readability risk; they are not release severity,
 task status, or evidence that an implementation has shipped. The paired design document owns
-the visual treatment. GitHub task evidence owns mutable execution status.
+the visual treatment. PR 与实际验证记录 owns mutable execution status.
 
 #### Current cleanup before further shell refinement
 

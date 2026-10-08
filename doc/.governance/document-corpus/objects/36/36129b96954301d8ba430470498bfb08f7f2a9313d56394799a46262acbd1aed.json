@@ -2,7 +2,7 @@
   "record": {
     "authority_entry": "doc/headless-runtime/README.md",
     "authority_layer": "professional_domain",
-    "content_sha256": "04b33d9d83c627f0789dacdb9cbc08ca7b7d1cac5062aefe805ab5e07bde5346",
+    "content_sha256": "cb3ca40463db677edbc82b26d5b7dec3061e2c846f9e59db08bf594ff744507a",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "historical_candidate",
     "object_kind": "markdown_record",

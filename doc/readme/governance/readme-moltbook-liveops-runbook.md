@@ -72,7 +72,7 @@
 1. 看 `/home` 是否有新的帖子活动或未读通知。
 2. 看最新 1-3 条自家帖子是否出现迟到评论。
 3. 检查是否有值得补一句 follow-up comment 的高质量讨论。
-4. 把需要跨角色处理的内容记录到对应 GitHub task issue evidence comments。
+4. 把需要跨角色处理的内容记录到对应 PR、实际 CI 与评审记录（Issue 按需）。
 
 如果当天有新帖或外部讨论升温，可加到 2-3 次。
 
@@ -166,7 +166,7 @@
 | 创作者放大、联动意向 | `liveops_community` -> `producer_system_designer` | 先判定是否越界，再决定 follow-up |
 
 ## 9. 当日证据回写要求
-当天做过 Moltbook 动作后，必须回写对应 GitHub task issue evidence comments。
+当天做过 Moltbook 动作后，必须回写对应 PR、实际 CI 与评审记录（Issue 按需）。
 
 最少记录：
 - 时间

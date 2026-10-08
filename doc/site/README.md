@@ -6,15 +6,15 @@
 - 想先看公开 docs hub 入口与对外阅读路径：`site/doc/cn/index.html` / `site/doc/en/index.html`
 - 想直接拿公开 `oasis7` skill 链接：`site/skills/oasis7.md`
 - 想先理解站点模块边界、同步原则与验收口径：`doc/site/prd.md`
-- 想先看当前站点合同与状态口径：`doc/site/prd.md`；想看可变任务、同步状态与最近完成项：读取 GitHub task issue evidence comments
+- 想先看当前站点合同与状态口径：`doc/site/prd.md`；想看可变任务、同步状态与最近完成项：读取 PR、实际 CI 与评审记录（Issue 按需）
 - 想直接按文件名定位某个 github-pages / manual 专题：`doc/site/prd.index.md`
 - 想先确认静态手册镜像如何挂到仓库权威文档：`doc/site/manual/README.md`
-- 想先确认下载链路、公开公告准备态与真实状态口径：`doc/site/prd.md`；执行状态仍以 GitHub task issue evidence comments 为准
+- 想先确认下载链路、公开公告准备态与真实状态口径：`doc/site/prd.md`；执行状态仍以 PR、实际 CI 与评审记录（Issue 按需） 为准
 
 ## 入口
 - PRD: `doc/site/prd.md`
 - 设计总览: `doc/site/design.md`
-- 可变执行状态: GitHub task issue evidence comments
+- 可变执行状态: PR、实际 CI 与评审记录（Issue 按需）
 - 文件级索引: `doc/site/prd.index.md`
 
 ## 入口分工
@@ -33,15 +33,15 @@
 ## 模块职责
 - 维护公开首页、docs hub、下载入口与公开叙事边界。
 - 维护可直接抓取的 raw Markdown skill 分发入口。
-- 维护 github-pages 子域下的站点结构、内容同步、CTA、发布流水线与质量门禁；已完成的页面微专题回填到模块 root authority 后只从索引、GitHub task issue evidence comments 与 git history 追溯。
+- 维护 github-pages 子域下的站点结构、内容同步、CTA、发布流水线与质量门禁；已完成的页面微专题回填到模块 root authority 后只从索引、PR、实际 CI 与评审记录（Issue 按需） 与 git history 追溯。
 - 维护 manual 子域下的静态文档站与 Viewer 手册镜像策略。
 - 承接公开“技术预览 / not playable yet / diagnostics only”口径与仓库 canonical 文档之间的一致性。
 
 ## 热点子域导航
 - `github-pages/` 当前补充设计：公开首页的页面级层级、首屏内容与后果链节奏；当前合同仍以模块 root authority 为准。
-- `github-pages/` 已退役删除旧专题：完成态公告占位与 CTA 微专题只从当前入口、GitHub task issue evidence comments 与 git history 追溯。
+- `github-pages/` 已退役删除旧专题：完成态公告占位与 CTA 微专题只从当前入口、PR、实际 CI 与评审记录（Issue 按需） 与 git history 追溯。
 - `manual/` 路由入口与正式专题三件套：静态文档站与 Viewer 手册镜像策略。
-- 模块根入口：`README.md`、`prd.md`、GitHub task issue evidence comments、`design.md`、`prd.index.md`。
+- 模块根入口：`README.md`、`prd.md`、PR、实际 CI 与评审记录（Issue 按需）、`design.md`、`prd.index.md`。
 - 公开 HTML 入口（仓库外显层）：`site/index.html`、`site/en/index.html`、`site/doc/{cn,en}/index.html`、`site/doc/{cn,en}/viewer-manual.html`。
 - 公开 raw skill 入口（可直接抓取）：`site/skills/oasis7.md`。
 

@@ -14,9 +14,9 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 设计判定 task issue：#3680。
+- 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 已完整表达组织解散、不活跃保护、交接和 reclaim 的产品阶段边界；具体 lifecycle surface 由专业 authority 决定。
-- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
 组织可以围绕共同目标持续协作、重组或退出，但不能把成员、独立资产、Agent 或历史变成可任意抹除、秘密没收或失去因果记录的对象。解散和不活跃是同一持续世界中的可理解状态变化：玩家能知道触发原因、当前范围、保留价值、义务、异议或申诉，以及下一次可执行决策。

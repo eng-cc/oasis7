@@ -185,7 +185,7 @@ site/social/xiaohongshu/<post-slug>/
   - 回流到 `liveops_community`，调整后续帖子的边界表达
 
 ## 9. 当日证据回写要求
-当天做过小红书动作后，必须回写对应 GitHub task issue evidence comments。
+当天做过小红书动作后，必须回写对应 PR、实际 CI 与评审记录（Issue 按需）。
 
 最少记录：
 - 时间

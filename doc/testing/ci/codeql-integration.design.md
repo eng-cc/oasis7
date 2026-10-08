@@ -1,6 +1,8 @@
+> 本专题保留 CodeQL 技术方案；普通交付使用实际 GitHub 检查与评审，旧 PM advisory、Task 和 receipt 准入已退出。
+
 # oasis7 CodeQL 全面接入：系统设计与实施方案
 
-- 文档状态：规范设计候选；扫描实现、运行及激活尚未完成。规范 authority 仅来自 [canonical clause](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis)，本文件不自启用。
+- 文档状态：规范设计候选；扫描实现、运行及激活尚未完成。规范 authority 仅来自 [canonical clause](../../engineering/workflow/source-of-truth.md)，本文件不自启用。
 - 审查日期：2026-09-30。
 - 审查基线：`d868cbd76594f843c19d797253dc73eb67a684dc`。这是本次分析的快照，不是生产扫描、合入或复用时必须追赶的固定基线。
 - 仓库落点：`doc/testing/ci/codeql-integration.design.md`。
@@ -52,21 +54,18 @@ Code scanning 的规则保护与 required status checks 是不同机制。即使
 
 ## 3. 需求、约束与验收映射
 
-本设计承接已写入 canonical source 的 CQ-R01–CQ-R09；未合入前仍是候选 authority。按需路由同时承接 [required contract](../../engineering/workflow/source-of-truth.md#required-gate-capability-split)，任务边界同时承接 [manual transition](../../engineering/workflow/source-of-truth.md#manual-three-loop-transition)。
+本设计承接已写入 canonical source 的 CQ-R01–CQ-R09；未合入前仍是候选 authority。按需路由同时承接 [required contract](../../engineering/workflow/source-of-truth.md)，任务边界同时承接 [manual transition](../../engineering/workflow/source-of-truth.md)。
 
 ### 2.1 需求承接与分配表
 
 | 上游 requirement（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [CQ-R01](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 全面接入四语言；第 4、7 节 | [CQ-R01 分配](codeql-integration.design.md#cq-r01) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不证明所有缺陷均可检出 |
-| [CQ-R02](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 不拖慢普通开发主链；第 5、6、8 节 | [CQ-R02 分配](codeql-integration.design.md#cq-r02) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不保证共享 hosted runner 绝无排队影响 |
-| [CQ-R03](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | package 影响与分析上下文完整；第 4、5 节 | [CQ-R03 分配](codeql-integration.design.md#cq-r03) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不证明不受支持 nightly 路径 |
-| [CQ-R04](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 并行而不抢占无限资源；第 6 节 | [CQ-R04 分配](codeql-integration.design.md#cq-r04) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不保证 GitHub 提供跨 workflow 优先级 |
-| [CQ-R05](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 失败真实可见，不构造绿灯；第 8、9 节 | [CQ-R05 分配](codeql-integration.design.md#cq-r05) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 观察态不等于安全合入担保 |
-| [CQ-R06](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 严格信任边界；第 5、8、10 节 | [CQ-R06 分配](codeql-integration.design.md#cq-r06) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不扩大任何既有 admin 权限 |
-| [CQ-R07](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 不因 main 无关前进重跑业务 CI；第 5、8 节 | [CQ-R07 分配](codeql-integration.design.md#cq-r07) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不取消既有高风险 exact integration |
-| [CQ-R08](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 尽量少 PR 且可并行实施；第 12、13 节 | [CQ-R08 分配](codeql-integration.design.md#cq-r08) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不授权候选实现自启用 |
-| [CQ-R09](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | 能运营、排障、回退；第 9、11、14 节 | [CQ-R09 分配](codeql-integration.design.md#cq-r09) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不承诺当前已有健康运行数据 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | 全面接入四语言；第 4、7 节 | [CQ-R01 分配](codeql-integration.design.md#cq-r01) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不证明所有缺陷均可检出 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | 不拖慢普通开发主链；第 5、6、8 节 | [CQ-R02 分配](codeql-integration.design.md#cq-r02) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不保证共享 hosted runner 绝无排队影响 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | package 影响与分析上下文完整；第 4、5 节 | [CQ-R03 分配](codeql-integration.design.md#cq-r03) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不证明不受支持 nightly 路径 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | 并行而不抢占无限资源；第 6 节 | [CQ-R04 分配](codeql-integration.design.md#cq-r04) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不保证 GitHub 提供跨 workflow 优先级 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | 失败真实可见，不构造绿灯；第 8、9 节 | [CQ-R05 分配](codeql-integration.design.md#cq-r05) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 观察态不等于安全合入担保 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | 能运营、排障、回退；第 9、11、14 节 | [CQ-R09 分配](codeql-integration.design.md#cq-r09) | repository_health_engineer；qa_engineer 验收；领域边界由匹配角色复核 | 不承诺当前已有健康运行数据 |
 
 <a id="cq-r01"></a>**CQ-R01 — 全面接入四语言：** 由第 4、7 节中的完整契约与第 15–17 节验收负责，不缩减其范围。
 
@@ -86,7 +85,6 @@ Code scanning 的规则保护与 required status checks 是不同机制。即使
 
 <a id="cq-r09"></a>**CQ-R09 — 能运营、排障、回退：** 由第 9、11、14 节中的完整契约与第 15–17 节验收负责，不缩减其范围。
 
-运行、Task UID、Issue、PR、check-run 等具体交付身份只进入现有 GitHub Project-backed task evidence，不写进长期规范、固定 allowlist 或示例生产记录。这里的 PR-S/PR-C、C1 等是文档工作包名，不是新建的生产身份系统。
 
 ## 4. 分包与分析单元
 
@@ -425,15 +423,12 @@ build.rs/宏可能执行不可信代码，最小权限仍不等于无风险。�
 
 | 上游 requirement（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 验证方法、test/manual source、scenario/layer | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [CQ-R01](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R01](codeql-integration.design.md#cq-r01) | 全面接入四语言 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R01 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不证明所有缺陷均可检出；本次不证明扫描已运行 |
-| [CQ-R02](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R02](codeql-integration.design.md#cq-r02) | 不拖慢普通开发主链 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R02 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不保证共享 hosted runner 绝无排队影响；本次不证明扫描已运行 |
-| [CQ-R03](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R03](codeql-integration.design.md#cq-r03) | package 影响与分析上下文完整 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R03 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不证明不受支持 nightly 路径；本次不证明扫描已运行 |
-| [CQ-R04](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R04](codeql-integration.design.md#cq-r04) | 并行而不抢占无限资源 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R04 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不保证 GitHub 提供跨 workflow 优先级；本次不证明扫描已运行 |
-| [CQ-R05](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R05](codeql-integration.design.md#cq-r05) | 失败真实可见，不构造绿灯 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R05 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 观察态不等于安全合入担保；本次不证明扫描已运行 |
-| [CQ-R06](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R06](codeql-integration.design.md#cq-r06) | 严格信任边界 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R06 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不扩大任何既有 admin 权限；本次不证明扫描已运行 |
-| [CQ-R07](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R07](codeql-integration.design.md#cq-r07) | 不因 main 无关前进重跑业务 CI | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R07 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不取消既有高风险 exact integration；本次不证明扫描已运行 |
-| [CQ-R08](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R08](codeql-integration.design.md#cq-r08) | 尽量少 PR 且可并行实施 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R08 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不授权候选实现自启用；本次不证明扫描已运行 |
-| [CQ-R09](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) | [CQ-R09](codeql-integration.design.md#cq-r09) | 能运营、排障、回退 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R09 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 GitHub task evidence：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不承诺当前已有健康运行数据；本次不证明扫描已运行 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R01](codeql-integration.design.md#cq-r01) | 全面接入四语言 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R01 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不证明所有缺陷均可检出；本次不证明扫描已运行 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R02](codeql-integration.design.md#cq-r02) | 不拖慢普通开发主链 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R02 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不保证共享 hosted runner 绝无排队影响；本次不证明扫描已运行 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R03](codeql-integration.design.md#cq-r03) | package 影响与分析上下文完整 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R03 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不证明不受支持 nightly 路径；本次不证明扫描已运行 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R04](codeql-integration.design.md#cq-r04) | 并行而不抢占无限资源 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R04 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不保证 GitHub 提供跨 workflow 优先级；本次不证明扫描已运行 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R05](codeql-integration.design.md#cq-r05) | 失败真实可见，不构造绿灯 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R05 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 观察态不等于安全合入担保；本次不证明扫描已运行 |
+| [验证与评审](../../engineering/workflow/source-of-truth.md#3-验证与评审) | [CQ-R09](codeql-integration.design.md#cq-r09) | 能运营、排障、回退 | N/A: reason=PR-S 仅冻结规范且测试实现尚未交付; scope=CQ-R09 的 CodeQL implementation 与 hosted acceptance; owner_role=qa_engineer; evidence_ref=codeql-integration.design.md#codeql-test-matrix; re-evaluate=PR-C 实施时逐项绑定第 15 节真实 test source 并在 baseline/observe 前复验 | 现有 PR 与实际验证记录：fixture 与 hosted、tested tree、运行环境及原始输出分列；本次仅 docs 检查 | 不承诺当前已有健康运行数据；本次不证明扫描已运行 |
 
 ## 12. 最少 PR 的交付划分
 
@@ -470,7 +465,6 @@ PR-S 独立审查并合入后，PR-C 绑定该不可变规范提交。PR-S 不�
 | --- | --- | --- | --- |
 | C1 范围与分包 | policy、planner、路径/manifest/改名测试 | `scripts/security/codeql-policy.json`、`codeql-plan.py`、对应测试 | PR-S 规范和冻结接口 |
 | C2 扫描执行与结果 | CodeQL workflow、双槽位、profile、读回健康工具及测试 | `.github/workflows/codeql.yml`、`codeql-health.py`、workflow/health 测试 | 可按 C1 固定输出 fixture 并行开发 |
-| C3 门禁兼容 | 精确 advisory 分类、惰性来源读取、UNSTABLE 解释及负例 | `scripts/pm/pr-lifecycle-gate.py` 与相关专用测试；必要的小 helper | 与 C1/C2 可并行，仅依赖稳定 check/category 合约 |
 | C4 CI 接线 | scope 精确路由、测试清单、dispatcher 接线 | `scripts/ci-required-scope.v2.json`、`scripts/ci-tests.sh`、capability inventory | 先准备；单一集成者最后落热点文件 |
 | C5 QA 与验收 | 独立负例、联合树测试、真实 hosted 覆盖/队列演练 | 测试数据与现有任务 evidence；不重复编辑 C1–C4 源文件 | 可先写用例，联合验收在集成后 |
 
@@ -636,7 +630,6 @@ gh variable set OASIS7_CODEQL_MODE --repo "$REPO" --body observe
 
 - R1：main 分支与可见 required status。`https://api.github.com/repos/eng-cc/oasis7/branches/main`
 - R2：本次读取的仓库有效 ruleset 详情。具体实例定位保留在本次审查记录，长期规范通过 rulesets API 动态发现。`https://api.github.com/repos/eng-cc/oasis7/rulesets`
-- R3：`scripts/pm/pr-lifecycle-gate.py`，审查基线，尤其 `decision` 与 policy discovery。
 - R4：`scripts/ci-required-scope.v2.json`，审查基线。
 - R5：根 `Cargo.toml` 与 `crates/oasis7/Cargo.toml`，审查基线。
 - R6：`.github/workflows/rust.yml` 与现有 capabilities，审查基线。

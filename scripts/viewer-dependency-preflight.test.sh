@@ -144,8 +144,7 @@ for wrapper in \
   scripts/build-viewer-software-safe.sh \
   scripts/viewer-performance-probe.sh \
   scripts/viewer-pixel-world-fragment-visual-smoke.sh \
-  scripts/verify-gameplay-attraction-automation.sh \
-  scripts/pm/verify-gameplay-high-risk-hardening.sh; do
+  scripts/verify-gameplay-attraction-automation.sh; do
   if ! grep -Fq 'viewer_dependency_preflight' "$ROOT_DIR/$wrapper"; then
     echo "expected $wrapper to reuse shared Viewer dependency preflight" >&2
     exit 1

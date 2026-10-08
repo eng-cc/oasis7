@@ -2,7 +2,7 @@
 
 - 对应需求文档: `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - 历史执行记录: `doc/engineering/doc-governance/doc-structure-standard.prd.md`（只读历史）
-- 当前任务追踪: GitHub Issue（`Task UID` + evidence comments）与关联 GitHub Project item
+- 执行记录: Git、PR、实际 CI 与评审记录；Issue 和 Project 按需使用
 
 ## 1. 规范定位
 本规范是仓库 `doc/` 文档树的顶层组织约定，用于回答两个问题：
@@ -30,21 +30,21 @@
 - `*.prd.md`：Why / What / Done
 - `*.design.md`：How / Structure / Contract
 - `system-design-writing-standard.design.md`：专业技术设计的十二段内容、需求承接与验证映射
-- `project-management-record-standard.design.md`：GitHub-backed 任务记录、证据与组合验收内容
-- GitHub Issue / GitHub Project-backed task truth：任务、状态与过程证据的唯一可变载体；仓库不再创建本地 project ledger
+- `project-management-record-standard.design.md`：按需任务说明与组合验收内容
+- Git、PR、实际 CI 与评审记录承载交付事实；Issue/Project 按需追踪工作，不是唯一任务载体或开发准入
 - `*.manual.md`：How to use / verify
 - `*.runbook.md`：How to operate / release / recover
 - `README.md`：目录导航
 - `prd.index.md`：专题 PRD 索引
 
 ### 2.3 同对象优先同目录
-同一个对象的 PRD、Design、Runbook、Manual 优先放在同一目录中，避免读者跨仓库跳转；可变任务记录直接留在 GitHub Issue/GitHub task truth。
+同一个对象的 PRD、Design、Runbook、Manual 优先放在同一目录中，避免读者跨仓库跳转；可变任务记录直接留在 Git、PR 与实际验证记录。
 
 ### 2.4 同专题优先同名
 同一专题的核心文档优先采用同一个 basename：
 - `foo.prd.md`
 - `foo.design.md`
-- GitHub Issue（任务与证据）
+- 可选 Issue（跟踪）
 
 这样可以保证“一眼知道这些文档是同一个专题的不同视角”。
 
@@ -63,14 +63,14 @@ doc/<module>/
 - `README.md`：模块目录导航。
 - `prd.md`：模块目标、范围、验收与边界。
 - `design.md`：模块总体技术设计与阅读入口。
-- GitHub Issue（任务与证据）：模块级任务拆解、依赖、状态。
-- `prd.index.md`：模块内专题 PRD 与 GitHub task truth 可达索引。
+- 可选 Issue（跟踪）：模块级任务拆解、依赖、状态。
+- `prd.index.md`：模块内专题 PRD 与 Git、PR 与实际 CI 记录 可达索引。
 
 ### 3.1 模块级阅读顺序
 固定阅读顺序为：
 1. `prd.md`
 2. `design.md`
-3. GitHub Issue（任务与证据）
+3. 可选 Issue（跟踪）
 4. `prd.index.md`
 5. 下钻专题目录
 
@@ -86,7 +86,7 @@ doc/<module>/
 模块级 `README.md` 是 landing page，不是第二份规范正文。
 
 应保留的内容：
-- 按读者目标分流到 `prd.md`、GitHub Issue（任务与证据）、`prd.index.md` 或高频专题；
+- 按读者目标分流到 `prd.md`、可选 Issue（跟踪）、`prd.index.md` 或高频专题；
 - 模块特有的入口分工、公开镜像、命名迁移或例外说明；
 - 当前最值得优先阅读的少量高频专题。
 
@@ -101,7 +101,7 @@ doc/<module>/
 
 `doc/product/` 是按玩家价值组织的产品组合层，不是与 `game`、`world-runtime`、
 `world-simulator`、`p2p` 并列的工程专业域。因此它采用薄产品覆盖层，不适用本章的
-四入口要求，也不为形式对称创建空的 `design.md`、GitHub Issue（任务与证据） 或 `prd.index.md`。
+四入口要求，也不为形式对称创建空的 `design.md`、可选 Issue（跟踪） 或 `prd.index.md`。
 
 固定根入口为：
 
@@ -134,7 +134,7 @@ doc/product/<module>/
 - 专题只能说明一个产品子主题的承诺、范围、跨域组合和验收边界；它不拥有模块级
   产品承诺、默认入口、专业规则或技术合同的裁决权。
 - 同名 `*.design.md` 是可选配对文件；存在时必须显式回链同名 PRD。
-  它们不能替代 GitHub-backed task truth，也不能把实现计划、测试步骤、运行处置或
+  它们不能替代 工作说明或按需 Issue truth，也不能把实现计划、测试步骤、运行处置或
   任务状态复制进产品层。
 - 专题必须回链模块 `prd.md`，并将规则、实现、测试、发布/运维和任务证据链接到
   对应专业域权威。产品专题只保留产品组合所需的引用和验收摘要。
@@ -144,11 +144,11 @@ doc/product/<module>/
 - `doc/product/README.md` 是唯一产品总入口，只枚举且必须枚举上述四个产品模块。
 - 产品模块 PRD 拥有产品承诺、范围、跨域组合、非目标和端到端成功标准。
 - 专业域 `prd.md` 拥有该域规则、实现合同、专业 PRD-ID 和测试机制；`design.md` 拥有技术 How。
-- 任务、状态和证据仍由各域 GitHub Issue（任务与证据） 与 GitHub-backed task truth 承载，产品 PRD 不维护实现任务表。
+- 实际实现与验证由 Git、PR、CI 和评审记录承载，Issue/Project 按需跟踪，产品 PRD 不维护实现任务表。
 - 根 `README.md` 拥有公开的当前状态与 claim envelope；“玩家接入与发行”PRD 只组合发现、访问、安装和验证体验。
 
 冲突时，产品 PRD 对用户价值、产品范围和端到端结果拥有裁决权；专业域 PRD 对其拥有的规则与
-技术合同拥有裁决权。若产品承诺与可实现性冲突，必须建立显式跨域决策或 GitHub-backed task，不得在任一文档中
+技术合同拥有裁决权。若产品承诺与可实现性冲突，必须建立显式跨域决策或 工作说明或按需 Issue，不得在任一文档中
 静默覆盖另一层权威。
 
 每份活跃产品模块 PRD 必须使用稳定 Product PRD-ID，声明模块 slug/名称、生命周期、owner、复核日期、后继文档、
@@ -177,7 +177,7 @@ root-level legacy redirect 只承担兼容跳转职责。
 推荐最小结构：
 - 一个明确的标题；
 - 当前主入口；
-- 必要时补一个相关入口（如配套的 GitHub Issue（任务与证据） / `design.md`）；
+- 必要时补一个相关入口（如配套的 可选 Issue（跟踪） / `design.md`）；
 - “仅保留兼容跳转，不承载正文”的声明。
 
 不再推荐的做法：
@@ -208,7 +208,7 @@ doc/<module>/<topic>/
 - `<topic>.design.md`
   - 说明系统怎么设计、如何分层、接口契约、状态机、错误处理。
   - 不写任务排期，不写单日开发日志。
-- GitHub Issue（任务与证据）
+- 可选 Issue（跟踪）
   - 说明怎么拆任务、先后顺序、依赖、owner、状态。
   - 不重写目标态需求。
 - `<topic>.manual.md`
@@ -250,7 +250,7 @@ doc/<module>/<topic>/
 - PRD 已经开始承载“怎么实现”的细节。
 
 ### 4.3 什么时候可以暂不写 `*.design.md`
-只有当专题同时满足以下条件时，可以短暂只保留 PRD + GitHub task truth：
+只有当专题同时满足以下条件时，可以短暂只保留 PRD + Git、PR 与实际 CI 记录：
 - 范围很小；
 - 没有新增结构设计；
 - 没有独立接口或状态机；
@@ -280,8 +280,8 @@ doc/<module>/<topic>/
 ## 6. 命名规则
 
 ### 6.1 推荐命名
-- 模块根入口：固定名 `prd.md` / `design.md` / GitHub Issue（任务与证据）。
-- 专题文档：`<topic>.prd.md` / `<topic>.design.md` / GitHub Issue（任务与证据）。
+- 模块根入口：固定名 `prd.md` / `design.md` / 可选 Issue（跟踪）。
+- 专题文档：`<topic>.prd.md` / `<topic>.design.md` / 可选 Issue（跟踪）。
 - 分册文档：`<topic>-<aspect>.design.md` / `manual.md` / `runbook.md`。
 
 ### 6.2 不推荐命名
@@ -300,25 +300,25 @@ doc/<module>/<topic>/
 doc/README.md
   -> doc/<module>/prd.md
   -> doc/<module>/design.md
-  -> GitHub Issue（任务与证据）
+  -> 可选 Issue（跟踪）
 
  doc/<module>/prd.md
   -> doc/<module>/design.md
-  -> GitHub Issue（任务与证据）
+  -> 可选 Issue（跟踪）
   -> doc/<module>/prd.index.md
 
  doc/<module>/<topic>/<topic>.prd.md
   -> <topic>.design.md
-  -> GitHub Issue（任务与证据）
+  -> 可选 Issue（跟踪）
 ```
 
 专题级文档最少应满足：
-- PRD 指向 GitHub task truth；
+- PRD 指向 Git、PR 与实际 CI 记录；
 - PRD 推荐指向 Design；
-- GitHub task truth 指向 PRD；
-- Design 指向 PRD 与 GitHub task truth。
+- Git、PR 与实际 CI 记录 指向 PRD；
+- Design 指向 PRD 与 Git、PR 与实际 CI 记录。
 
-注：任务、状态与证据的目标载体是 GitHub Issue/Project；仓库不再创建项目台账文件。
+注：交付事实使用 Git、PR、实际 CI 和评审记录，Issue/Project 按需使用，不要求额外台账。
 
 ## 8. 例外规则
 以下情况允许偏离PRD/Design 最小文档集，但必须说明原因：

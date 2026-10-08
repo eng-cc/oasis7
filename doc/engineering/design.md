@@ -3,7 +3,7 @@
 审计轮次: 6
 
 - 对应需求文档: `doc/engineering/prd.md`
-- 当前任务追踪: GitHub Issue（`Task UID` + evidence comments）与关联 GitHub Project item
+- 执行记录: Git、PR、实际 CI 与评审记录；Issue 和 Project 按需使用
 - 对应文件级索引: `doc/engineering/prd.index.md`
 
 ## 1. 设计定位
@@ -21,24 +21,21 @@
 ### 3.1 规则载体分层
 - `prd.md`：定义工程规则 Why / What / Done。
 - `design.md`：定义规则如何组织、如何落地、由哪些脚本与文档承接。
-- GitHub Issue/Project：定义治理任务、批次、owner、状态与验证口径。
+- Git、PR、实际 CI 和评审记录：承载交付事实；Issue/Project 按需要跟踪复杂工作的依赖和进度。
 - `doc-governance/*`：定义 `doc/` 文档树的组织规范、默认阅读面减重规则与早期文档治理收口。
 - `rust-governance/*`：定义 Rust 文件体量、长期零扫描与语义化结构拆分契约；不维护冻结基线或一次性 burn-down 台账。
 - 历史 PRD 审读/治理台账：保留在 Git history logs；当前新增/变更文档追踪由模块入口与 doc governance 规则承接。
-- `self-evolution/*`：保留 repo-local memory / working_memory / stage-gate 对象背景、自我进化 memory 补强、legacy/local task-file consolidation 边界，以及外部 agent workflow 借鉴的 adopted / rejected / deferred 治理结论；当前 task truth / evidence sink 以 `doc/engineering/workflow/source-of-truth.md` 的 GitHub Project-backed PM contract 为准。
 
 ### 3.2 工程治理执行链路
 - 规范定义：`doc/engineering/doc-governance/*`、`doc/engineering/rust-governance/*`、`doc/engineering/governance/*`
-- 项目追踪：GitHub Project 与 GitHub task issue evidence comments
-- 过程记录：GitHub task issue evidence comments；历史 `.pm/tasks/*` 记录已归档到 `.pm/github-project-sync/task-archive.jsonl`
-- 聚合归档：历史 `.pm/tasks/*` 已由 GitHub Project migration Step 3 归档；新任务不得再创建 repo-local task yaml/execution log。
+- 项目追踪：按需使用 Issue/Project；结果查看 PR、实际 CI 与评审记录（Issue 按需）
+- 过程记录：PR、实际 CI 与评审记录（Issue 按需）；历史 `.pm/tasks/*` 记录已归档到 `.pm/github-project-sync/task-archive.jsonl`
 - 静态校验：`scripts/doc-governance-check.sh`
 - ROUND 台账：Git history
 
 ### 3.3 文档结构治理链路
 - 权威规则：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
-- 执行挂靠：GitHub task issue evidence comments
 - 项目级执行台账：Git history
 - 逐文档执行面：Git history（compact snapshot entrypoint；pre-compaction 逐行证据见 git snapshot）
 
@@ -54,7 +51,6 @@
 
 ## 5. ROUND-006 入口职责
 - `engineering` 负责提供 ROUND-006 的规则定义与裁定标准。
-- 模块/专题是否需要 `design.md`、是否存在职责混写，均以本模块规范专题为准；新 repo-local `.pm/tasks` 文件已退役，任务追踪继续以 GitHub task Issue evidence comments 为 canonical 记录。
 - 若 ROUND-006 执行中发现规范空白，应先回写本模块规范文档，再继续治理。
 
 ## 设计目标

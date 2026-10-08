@@ -93,7 +93,7 @@ You MUST explicitly cover:
 
 When the PRD work targets `doc/game` or gameplay topics and the goal is to
 express all game details, use
-`doc/engineering/workflow/source-of-truth.md#1221-detailed-game-design-documentation-method`.
+`doc/engineering/workflow/source-of-truth.md`.
 
 Do not turn the root PRD into a catch-all manual. Keep root `doc/game/prd.md`
 as the active gameplay baseline and route details into topic triplets.

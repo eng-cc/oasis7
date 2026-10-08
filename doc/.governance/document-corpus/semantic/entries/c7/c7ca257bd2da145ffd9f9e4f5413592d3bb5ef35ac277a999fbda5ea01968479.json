@@ -4,7 +4,7 @@
     "current_authority": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
     "decision_owner": "game_visual_interaction_designer",
     "disposition": "retain_current_companion_authority",
-    "note": "active tokens icons status assets and screenshot-matrix companion",
+    "note": "active tokens icons status assets and screenshot-matrix companion; developer workflow record projection updated, product authority retained",
     "path": "doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

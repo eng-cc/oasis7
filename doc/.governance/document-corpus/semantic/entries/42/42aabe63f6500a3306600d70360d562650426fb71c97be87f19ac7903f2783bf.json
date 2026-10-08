@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "70f335ed40c8d0bfdd9a82c6f593e627f9bc6706f8aedf98a6be6e059a2d43d3",
+    "content_sha256": "32dbdae33a87ff9bda2a0da5c3b1f9421a0934fc18c4202d34d0d173779cd238",
     "current_authority": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
     "decision_owner": "game_visual_interaction_designer",
     "disposition": "retain_current_procedure",
-    "note": "current reusable visual review SOP; not release evidence",
+    "note": "current reusable visual review SOP; not release evidence; developer workflow record projection updated, product authority retained",
     "path": "doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

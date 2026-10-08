@@ -17,9 +17,7 @@ def load(name, path):
 
 
 planner_tests = load('acceptance_planner_fixture', HERE / 'codeql-plan.test.py')
-advisory_tests = load('acceptance_advisory_fixture', ROOT / 'scripts/pm/codeql-advisory.test.py')
 workflow_tests = load('acceptance_workflow_fixture', HERE / 'codeql-workflow.test.py')
-advisory = advisory_tests.module
 
 
 class AcceptanceTests(unittest.TestCase):
@@ -27,11 +25,6 @@ class AcceptanceTests(unittest.TestCase):
         fixture = planner_tests.PlannerTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
-        return fixture
-
-    def provider(self):
-        fixture = advisory_tests.AdvisoryTests()
-        fixture.setUp()
         return fixture
 
     def test_CQ_T08_removed_embedding_still_routes_old_consumer(self):
@@ -83,47 +76,6 @@ class AcceptanceTests(unittest.TestCase):
         outputs, _ = workflow_tests.WorkflowTests().plan(profile='extended')
         self.assertEqual(outputs['profile'], 'default')
         self.assertTrue(all(not r['queries'] for r in __import__('json').loads(outputs['matrix'])['include']))
-
-    def test_CQ_T26_provider_owner_and_run_repository_are_authorities(self):
-        for endpoint, field, value in (
-                ('apps/github-actions', 'owner', {'login': 'attacker', 'type': 'Organization'}),
-                ('apps/github-actions', 'slug', 'same-name-app')):
-            f = self.provider(); f.responses[endpoint][field] = value
-            self.assertFalse(advisory.explain_unstable(f.data, f.read)['explained'])
-        for field, value in [('repository', {'full_name': 'other/repo'}), ('pull_requests', [{'number': 8}]),
-                             ('event', 'push'), ('path', '.github/workflows/other.yml')]:
-            f = self.provider()
-            endpoint = next(k for k in f.responses if '/runs?head_sha=' in k)
-            f.responses[endpoint]['workflow_runs'][0][field] = value
-            with self.subTest(field=field):
-                self.assertFalse(advisory.explain_unstable(f.data, f.read)['explained'])
-
-    def test_CQ_T30_duplicate_suite_and_job_do_not_authorize(self):
-        for collection in ('workflow_runs', 'jobs'):
-            f = self.provider()
-            payload = next(v for v in f.responses.values() if collection in v)
-            payload[collection].append(copy.deepcopy(payload[collection][0]))
-            payload['total_count'] = 2
-            self.assertFalse(advisory.explain_unstable(f.data, f.read)['explained'])
-
-    def test_CQ_T30_anomaly_budget_is_bounded_without_API_reads(self):
-        f = self.provider()
-        f.data['statusCheckRollup'] = [dict(databaseId=i, name=f'CodeQL / fake-{i}', conclusion='FAILURE') for i in range(13)]
-        self.assertFalse(advisory.explain_unstable(f.data, f.read)['explained'])
-        self.assertEqual(f.calls, [])
-
-    def test_CQ_T28_required_same_name_wrong_app_stays_required(self):
-        f = self.provider()
-        f.data['policy_discovery']['required_status_checks'] = [{'context': 'CodeQL / plan', 'app_id': 99}]
-        self.assertFalse(advisory.explain_unstable(f.data, f.read)['explained'])
-        self.assertEqual(f.calls, [])
-
-    def test_CQ_T24_platform_native_unknown_is_explicit(self):
-        f = self.provider()
-        f.data['statusCheckRollup'][0].update(name='Code scanning results / CodeQL', checkSuite={'app': {'databaseId': 42}})
-        result = advisory.explain_unstable(f.data, f.read)
-        self.assertFalse(result['explained'])
-        self.assertIn('hosted association required', result['reason'])
 
     def test_CQ_T37_maintenance_candidate_ref_cannot_activate(self):
         f = self.planner()

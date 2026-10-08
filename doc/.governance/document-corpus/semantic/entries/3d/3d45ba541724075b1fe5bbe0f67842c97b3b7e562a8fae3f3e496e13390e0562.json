@@ -4,7 +4,7 @@
     "current_authority": "doc/product/agents-world-simulation/player-readable-world-stage.prd.md",
     "decision_owner": "game_visual_interaction_designer",
     "disposition": "retain_current_authority",
-    "note": "canonical current Viewer visual authority; not runtime compatibility or release evidence",
+    "note": "canonical current Viewer visual authority; not runtime compatibility or release evidence; developer workflow record projection updated, product authority retained",
     "path": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
