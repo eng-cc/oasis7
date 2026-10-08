@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "219e8fd8208e198c13c8f5735b7d3415b58f4152e17c42bea2d632cd0d19c30e",
+    "content_sha256": "54082d3106fb30211ac4c0c1a57b6184ad98477ead99ed2fdbd8557f5a562d10",
     "current_authority": "testing-manual.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_procedure",
-    "note": "current headed manual acceptance procedure",
+    "note": "current headed manual acceptance procedure; developer workflow record projection updated, product authority retained",
     "path": "doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

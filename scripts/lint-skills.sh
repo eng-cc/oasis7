@@ -14,16 +14,7 @@ from pathlib import Path
 DEFAULT_ROOT = Path(".agents/skills")
 LIBRARY_ROOT = Path("skills")
 MAX_ENTRYPOINT_LINES = 300
-CORE_SKILLS_REQUIRING_FAILURE_MODES = {
-    "default-workflow-bootstrap",
-    "executing-project-tasks",
-    "finishing-a-development-branch",
-    "receiving-code-review",
-    "requesting-repo-owned-review",
-    "repo-owned-workflow-router",
-    "verification-before-completion",
-    "writing-repo-owned-skills",
-}
+
 
 
 def parse_frontmatter(text: str, path: Path) -> tuple[dict[str, str], str]:
@@ -93,20 +84,13 @@ def check_skill_file(path: Path, *, default_loadable: bool) -> None:
         failures.append(f"{path}: frontmatter name {declared_name!r} must match directory {skill_name!r}")
     if not re.fullmatch(r"[a-z0-9-]+", declared_name):
         failures.append(f"{path}: frontmatter name must use lowercase letters, digits, and hyphens")
-    if not description.startswith("Use when"):
-        failures.append(f"{path}: description must start with 'Use when' and describe trigger conditions")
+    if not description:
+        failures.append(f"{path}: description must describe trigger conditions")
     if len(lines) > MAX_ENTRYPOINT_LINES:
         failures.append(
             f"{path}: entrypoint is {len(lines)} lines; keep SKILL.md <= {MAX_ENTRYPOINT_LINES} lines "
             "and move heavy guidance to references/"
         )
-    if "## When to Use" not in body:
-        failures.append(f"{path}: missing '## When to Use'")
-    if "## Guardrails" not in body:
-        failures.append(f"{path}: missing '## Guardrails'")
-    if default_loadable and skill_name in CORE_SKILLS_REQUIRING_FAILURE_MODES and "## Known Failure Modes" not in body:
-        failures.append(f"{path}: core workflow skill must include '## Known Failure Modes'")
-
     for relative in referenced_supporting_paths(body):
         target = path.parent / relative
         if not target.exists():

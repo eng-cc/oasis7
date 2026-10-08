@@ -69,6 +69,6 @@
 ## 6. Validation & Decision Record
 
 - 本文保留 prompt-budget、协议兼容和稳定性约束；历史任务状态、运行
-  产物与执行证据由 GitHub task evidence 和 Git history 管理。
+  产物与执行证据由 PR 与实际验证记录 和 Git history 管理。
 - 扩大上下文预算只是一项受测的稳定性调整，不证明模型/provider 切换、
   长时成本、无漂移行为或 release readiness。

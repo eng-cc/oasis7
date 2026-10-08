@@ -10,7 +10,7 @@ world-simulator 仍保留 `AgentRunner::tick` 的同步 simulator 基线；但�
 
 本专题冻结一个 provider-neutral 的 Continuous Agent Harness 合同。Harness 负责一次 Agent session 内的感知组装、记忆检索、目标/continuation 投影、provider 调用、候选决策规范化、反馈路由和 memory write intent policy；Runtime 仍是世界事实、动作语义、授权、前置条件、提交、receipt、replay 与最终副作用的唯一权威。Harness 的任何成功都不等于世界状态已经改变。
 
-本文是 durable authority，不是任务板。实现状态、任务分工和验证历史仍属于 GitHub task truth；本文的 `current/partial/target/proven` 只描述能力证明边界，不描述任务进度。
+本文是 durable authority，不是任务板。实现状态、任务分工和验证历史仍属于 Git、PR 与实际 CI 记录；本文的 `current/partial/target/proven` 只描述能力证明边界，不描述任务进度。
 
 ## 2. 能力状态矩阵
 

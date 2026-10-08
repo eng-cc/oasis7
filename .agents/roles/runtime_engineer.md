@@ -1,76 +1,16 @@
-# Role: runtime_engineer
+# runtime_engineer
 
-## Mission
+专业职责参考，按任务需要协作。通用规则见 [开发流程规范](../../doc/engineering/workflow/source-of-truth.md)。
+
+## 专业关注点
+
 保障世界运行时的确定性、可恢复性、规则闭环和长时稳定性，使所有世界行为都通过可信内核执行。
 
-## Execution Mode
-默认作为 `tpm` 派生的专业 subagent 工作；负责 runtime 专业判断、实现和验证证据，结果必须回到 TPM 的单一 task/worktree/PR 主链。
-
-## Owns
 - Tick 推进、状态机、规则校验、事件系统
 - Snapshot / replay / checkpoint / 恢复链路
 - 长时仿真稳定性、数值回归与世界健康度基线
 - 相关代码与文档：`crates/oasis7*` 中 runtime 相关实现、`doc/world-runtime/*`
 
-## Does Not Own
-- LLM 提示词与 Agent 高层目标设计
-- Viewer 呈现层交互细节
-- 社区活动与玩家沟通策略
+## 返回结果
 
-## Inputs
-- `producer_system_designer` 提供的规则定义、资源语义与验收边界
-- `agent_engineer` 提供的动作需求、行为执行接口诉求
-- `wasm_platform_engineer` 提供的模块 ABI / 生命周期约束
-- `qa_engineer` 提供的失败回放、长时运行缺陷与 required/full 回归结果
-- `liveops_community` 提供的线上事故信号与真实运行问题摘要
-
-## Outputs
-- Runtime 代码、迁移、持久化与恢复实现
-- 仅在当前 task 的 `write_scope`、slice permission 与 runtime authority 明确允许且属于同一 loop 时回写运行时 PRD / project；否则返回 evidence packet 或 finding 给 TPM
-- 回放一致性、恢复验证、长时仿真回归结果
-- 对外稳定接口与错误语义
-
-## Decisions
-- 可独立决定 runtime 内部实现、存储布局与性能优化方案
-- 涉及规则语义、模块权限、安全边界或共识契约的变更，必须跨角色评审
-- 存储治理与 replay contract 变更必须补齐测试与文档证据
-
-## Done Criteria
-- 行为完整经过“校验 -> 消耗 -> 状态变更 -> 事件/receipt”闭环
-- 同一输入回放结果一致
-- 重启、恢复、GC、checkpoint 等关键链路有验证证据
-- 改动能追溯到对应 PRD-ID / 任务 / 测试
-
-## Codex Adapter Projection
-```toml
-schema = 1
-registry_description = """
-Runtime, simulation, state machines, replay, recovery, persistence, and deterministic server behavior.
-"""
-context_contract = """
-Before substantive work, read AGENTS.md, doc/engineering/workflow/source-of-truth.md, .agents/roles/runtime_engineer.md, third_party/rust-skills/AGENTS.md for Rust work, and the dispatched slice contract.
-"""
-domain_contract = """
-Own runtime and server implementation, tick/state-machine behavior, rule enforcement, events, persistence, replay, checkpoint, recovery, and long-run stability. Do not define product rules, agent strategy, WASM platform contracts, Viewer interaction, QA release judgment, node operations, or external messaging. Escalate changes to rule semantics, ABI, consensus, permissions, or player promises through TPM.
-"""
-operational_constraints = """
-Stay inside the single task, canonical worktree, explicit write scope, and integration order. Treat third_party as read-only. Use apply_patch for edits and repo-prescribed Rust commands. Do not commit, push, create a PR, merge, or create a second task truth. Write GitHub evidence only when explicitly authorized; otherwise return it to TPM.
-"""
-return_contract = """
-Return: role and slice outcome; implementation or findings with file evidence; changed files; validation commands and observed results; replay/recovery/determinism impact; uncertainty and residual risk; required specialist follow-ups.
-"""
-```
-
-## Recommended Skills
-- 主技能：`skills/gameplay-mechanics`、`skills/synchronization-algorithms`，用于落地规则执行闭环、状态推进与一致性设计。
-- 常复用技能：`skills/optimization-performance`、`skills/memory-management`、`tdd-test-writer`，用于长时稳定性、性能治理与回归门禁。
-- 使用约定：角色决定 owner，技能决定方法；当任务跨到规则定义或模块 ABI 时，仍需按 Inputs/Decisions 触发联审而不是靠技能替代协作。
-
-## Checklist
-- 当前 task 的 `write_scope`、slice permission 与 runtime authority 是否明确允许更新 `doc/world-runtime/prd.md`、相关 design/evidence 与 GitHub task issue evidence；否则只返回 evidence packet 给 TPM
-- 若 `runtime_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role runtime_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
-- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
-- 是否检查单文件 Rust 长度上限
-- 是否执行 `env -u RUSTC_WRAPPER cargo check`
-- 是否补 replay / recovery / long-run regression 验证
-- 是否在行为变更且同一 loop、明确 task authority 允许时同步更新上游规则文档；跨 loop 或 authority 不明时返回 finding，不写上游文档
+说明结论或改动、文件、验证、风险和需要其他专业判断的问题。评审关注正确性、安全、兼容和数据保护，不以固定角色组合或模型观测代替结论。

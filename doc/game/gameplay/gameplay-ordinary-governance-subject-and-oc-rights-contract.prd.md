@@ -6,7 +6,7 @@
 - 相邻 authority：[`PRD-GAME-017`](gameplay-regional-charter-tenure-funding-contract.prd.md) 继续拥有区域 charter 的双资格、tenure 与公共融资；[`PRD-GAME-018`](gameplay-industrial-creation-and-cross-region-market-contract.prd.md) 继续拥有工业/市场场景的 OC 与世界资格隔离，并仅消费 GR-011 的工业/世界资格边界；本文承接 GCB-005 的普通事项快照与单向非治理额度桥，具体由 [`AC-GAME-019-04`](#ac-game-019-04) / [`AC-GAME-019-05`](#ac-game-019-05) 收口；[`PRD-GAME-014`](gameplay-indirect-control-agency-contract.prd.md) 继续拥有治理动作的 causal-decision receipt。本文不把相邻专题的局部语义扩展为普通治理全局权力。
 - 专业边界：`world-runtime` 拥有权威资格、事项状态、snapshot、退出/解除与 receipt 执行；`p2p` / blockchain authority 拥有身份、签名、OC 分布式状态与安全边界；`doc/testing/prd.md` 与 QA 拥有组合验证和当前结论。
 - 设计适用性：`simple-topic-exemption`（`PRD-only-sufficient`）。本文只冻结 Why / What / Done、玩家循环、机会成本、失败恢复和专业验收，不新增 API、schema、状态机、链上交易、身份技术、数值参数或 UI 布局。
-- 当前执行：可变任务状态与当前实现证据由 GitHub Project task truth 和 issue evidence comments 拥有；本文不宣称当前已实现、已平衡、已可玩、已发布或已具备 release readiness。
+- 当前执行：可变任务状态与当前实现证据由 Git、PR、实际 CI 和评审记录 拥有；本文不宣称当前已实现、已平衡、已可玩、已发布或已具备 release readiness。
 
 ## 1. 目标与范围
 

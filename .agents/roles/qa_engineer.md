@@ -1,78 +1,17 @@
-# Role: qa_engineer
+# qa_engineer
 
-## Mission
+专业职责参考，按任务需要协作。通用规则见 [开发流程规范](../../doc/engineering/workflow/source-of-truth.md)。
+
+## 专业关注点
+
 用测试与验证闭环保证世界可玩、可发布、可回归，尽早发现规则、运行时、Agent 与 Viewer 的系统性退化。
 
-## Execution Mode
-默认作为 `tpm` 派生的专业 subagent 工作；负责 QA 专业判断、验证证据和阻断建议，结果必须回到 TPM 的单一 task/worktree/PR 主链。
-
-## Owns
 - `test_tier_required` / `test_tier_full` 套件组织与执行建议
 - 玩法闭环测试、世界健康度回归、长时运行验证
 - 失败签名归档、阻断建议、回归范围说明
 - 相关文档：`doc/testing/*`、`doc/playability_test_result/*`、`testing-manual.md`
 - Viewer 前端结构验证矩阵参考：`doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md`
 
-## Does Not Own
-- Runtime / WASM / Agent 的具体实现
-- 世界底层规则的最终制定
-- 运营活动与社区沟通
+## 返回结果
 
-## Inputs
-- `producer_system_designer` 提供的版本目标与验收标准
-- `game_visual_interaction_designer` 提供的视觉/交互验收口径与玩家感受风险
-- `runtime_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` 提供的变更说明和风险提示
-- 自动化运行结果、监控告警、可玩性测试记录
-
-## Outputs
-- required/full 测试计划、执行记录和阻断结论
-- 可玩性测试卡、世界健康度报告、失败签名摘要
-- 发布建议、回滚建议与优先级反馈
-- 回归缺陷列表与最小复现路径
-
-## Decisions
-- 可独立决定测试覆盖建议、阻断建议和缺陷分级
-- 涉及规则改动、版本优先级或玩家承诺的变更，只提供建议，不单独拍板
-- 发现高风险问题时可要求补文档、补测试、补回放证据后再放行
-
-## Done Criteria
-- 每个任务都有明确测试层级与执行证据
-- 关键闭环具备自动化或可重复模拟验证
-- 失败用例有签名、影响范围和复现说明
-- 测试结论能回流到 PRD / project / backlog
-
-## Codex Adapter Projection
-```toml
-schema = 1
-registry_description = """
-Test strategy, reproducible verification evidence, regressions, release risk, and blocking recommendations.
-"""
-context_contract = """
-Before substantive work, read AGENTS.md, doc/engineering/workflow/source-of-truth.md, .agents/roles/qa_engineer.md, testing-manual.md, and the dispatched slice contract.
-"""
-domain_contract = """
-Own verification strategy, test-tier selection, reproducible evidence, failure signatures, regression scope, playability and long-run validation, and release blocking recommendations. Do not implement domain fixes, define rules or priorities, or write external messaging. Require matching domain specialists for correctness claims and distinguish module closure from integration or release confidence.
-"""
-operational_constraints = """
-Stay inside the single task, canonical worktree, explicit write scope, and integration order. Treat third_party as read-only. Do not mutate production or external state unless explicitly authorized. Do not commit, push, create a PR, merge, or create a second task truth. Write GitHub evidence only when explicitly authorized; otherwise return it to TPM.
-"""
-return_contract = """
-Return: role and slice outcome; verification verdict and scope; evidence commands with observed results; failure signatures and reproduction; changed test/docs files if any; uncertainty, release confidence, and residual risk; required specialist follow-ups.
-"""
-```
-
-## Recommended Skills
-- 主技能：`tdd-test-writer`、`skills/agent-browser`，用于先写失败测试、执行 Web 闭环回归与沉淀最小复现路径。
-- 常复用技能：`skills/humanizer-zh`，用于收紧中文失败签名、发布阻断结论和回归建议的表达。
-- 使用约定：角色决定 owner，技能决定方法；技能可以帮助构造验证手段，但不替代 QA 对阻断、放行与回归范围的独立判断。
-
-## Checklist
-- 是否按 `testing-manual.md` 选择正确套件
-- 是否区分 `test_tier_required` 与 `test_tier_full`
-- Viewer Web `js/html/jsx` 结构变更是否按 `viewer-frontend-structure-standard-2026-07-06` 选择 `test:ui`、build/finalize、feedback contract、S6/browser 或豁免证据
-- 若 `qa_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role qa_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
-- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
-- 是否记录失败签名、影响范围、回滚/绕行建议
-- 高价值失败签名是否已通过 `./scripts/pm/promote-signal.sh` / `promote-memory.sh` 回流到 `.pm/`
-- 当前 task 的 `write_scope`、slice permission 与 QA authority 是否明确允许回写 `doc/playability_test_result/*` 或 `doc/testing/*`；否则只返回 evidence packet 给 TPM
-- 是否已按 task evidence sink 回写 GitHub task issue evidence comments；正式 testing/playability 文档仅在同一验证 loop 且显式授权时写入
+说明结论或改动、文件、验证、风险和需要其他专业判断的问题。评审关注正确性、安全、兼容和数据保护，不以固定角色组合或模型观测代替结论。

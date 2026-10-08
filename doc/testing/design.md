@@ -3,7 +3,7 @@
 审计轮次: 6
 
 - 对应需求文档: `doc/testing/prd.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 - 对应文件级索引: `doc/testing/prd.index.md`
 
 ## 1. 设计定位
@@ -152,7 +152,7 @@ This matrix is per frozen object, not a whole-file rewrite list. It preserves th
 
 ## 关键接口 / 入口
 - 需求入口：`doc/testing/prd.md`
-- 可变执行状态：GitHub task issue evidence comments
+- 可变执行状态：PR、实际 CI 与评审记录（Issue 按需）
 - 索引入口：`doc/testing/prd.index.md`
 
 ## 设计演进计划

@@ -8,7 +8,7 @@
 
 ## 从这里开始
 - 想看工程治理边界、验收条件与长期规则：`doc/engineering/prd.md`
-- 想看当前治理窗口、活跃 follow-up 与 GitHub task issue / `task_uid` 追溯：`doc/engineering/prd.md`
+- 想看当前治理窗口、活跃 follow-up 与 PR 与实际验证记录：`doc/engineering/prd.md`
 - 想按专题进入具体治理文档：`doc/engineering/prd.index.md`
 
 ## 模块职责
@@ -20,11 +20,8 @@
 - 文档治理、入口减重、存量维护成本、目录职责与 redirect 规则：统一从 `doc/engineering/doc-governance/README.md` 分流
 - 环境分层、云上清单、仓库健康巡检与季度复核：统一从 `doc/engineering/governance/README.md` 分流
 - Rust 体量治理、结构切片约束与 required gate：统一从 `doc/engineering/rust-governance/README.md` 分流
-- `.pm` / self-evolution：当前 task truth 与 evidence sink 先看 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`；repo-local memory / working_memory / stage-gate 对象背景再看 `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`，历史需求锚点保留为 `PRD-ENGINEERING-021`
 - 历史迁移、审读记录与文件级专题检索：从 `doc/engineering/prd.index.md` 下钻；当前运行型工程治理资料从 `doc/engineering/governance/README.md` 下钻
-- production-supervisor workflow 治理：规范以 [workflow source of truth](workflow/source-of-truth.md#capability-and-ownership) 为准，target design 见 [production-supervisor-runtime.design.md](workflow/production-supervisor-runtime.design.md)。
-- human-operated workflow simplification：规范以 [workflow source of truth](workflow/source-of-truth.md#workflow-simplification) 为准，需求和测试映射见 [workflow-simplification.design.md](workflow/workflow-simplification.design.md)。
 
 ## 共享约定
 - 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。
-- 共享规则与专题长表统一回收到 `doc/engineering/prd.index.md` 与各专题 GitHub task issue evidence comments，本页只保留 landing 所需分流。
+- 共享规则与专题长表统一回收到 `doc/engineering/prd.index.md` 与各专题 PR、实际 CI 与评审记录（Issue 按需），本页只保留 landing 所需分流。

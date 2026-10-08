@@ -814,4 +814,4 @@ fixture、canonical bytes/digest/key、provider invocation count 与 feedback pa
 - gameplay/product/Agent authority：GoalGraph、belief memory、偏好、共享/玩家可见 memory 和目标完成语义。
 - viewer/runtime-live owners：trace delivery 与玩家可见诊断；不得把 Viewer transcript 当成 cognition journal。
 
-任何 follow-up 都必须回到同一 task/worktree/PR 主链；本设计不创建第二份 mutable task truth。
+同一目的继续更新原 PR，follow-up 按实际范围处理；本设计不创建第二份 mutable task truth。

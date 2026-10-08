@@ -59,4 +59,4 @@
 
 ## 追溯
 
-本稳定分册吸收了 2026-03 的 Web 必填配置、设置/反馈、转账闭环与 transfer parity 四组历史专题；逐任务完成证据由 Git history 与 GitHub task issue evidence comments 追溯。
+本稳定分册吸收了 2026-03 的 Web 必填配置、设置/反馈、转账闭环与 transfer parity 四组历史专题；逐任务完成证据由 Git history 与 PR、实际 CI 与评审记录（Issue 按需） 追溯。

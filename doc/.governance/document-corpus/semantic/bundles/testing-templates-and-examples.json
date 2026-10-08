@@ -1,11 +1,11 @@
 {
   "record": {
-    "content_set_sha256": "1be3caf9271ee626ec5d085362297d45a487d52ce82b9843b8830f8799b182d7",
+    "content_set_sha256": "74f7cd5854ddaec5d9e69db210617d2a626c13009bb3e165a7dd935511aa640d",
     "current_authority": "doc/testing/templates/README.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_active_template_or_example",
     "id": "testing-templates-and-examples",
-    "note": "reusable schemas and deliberately non-live examples; never execution evidence or readiness",
+    "note": "reusable schemas and deliberately non-live examples; never execution evidence or readiness; developer workflow record projection updated, product authority retained",
     "paths": [
       "doc/testing/templates/chain-proof-evidence-v1-template.md",
       "doc/testing/templates/external-verifier-light-client-lite-v1-template.md",

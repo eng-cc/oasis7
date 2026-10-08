@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "acf325f9129f86955f87aaa061564796ef0e03e50e0d3b408eeb0a59433cf397",
+    "content_sha256": "a5252ceb3be7e61632f2f29acb9d8765688c007ccde80c552ae2b64f7d7e835d",
     "current_authority": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current closure test design",
+    "note": "current closure test design; developer workflow record projection updated, product authority retained",
     "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

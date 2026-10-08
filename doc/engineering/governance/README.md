@@ -11,7 +11,6 @@
 ## 边界
 
 - 文档树结构、README 职责与 redirect 规则由 `../doc-governance/README.md` 分流；本页不复述这些共享规则。
-- 当前 task truth、证据 sink、角色派工和 PR 主链规则由 `../workflow/source-of-truth.md` 定义；运行型资料不得取代它。
 - 新增本目录的运行治理文档时，同批更新本页；只在需要文件级三件套检索时更新 `../prd.index.md`。
 
 ## 仓库健康巡检
@@ -20,7 +19,7 @@
 
 工程治理 owner 人工触发巡检；仓库不维护 scheduler 或 GitHub Actions 定时任务。巡检是人工分类的 health review，不新增 required gate，也不替代 [canonical workflow](../workflow/source-of-truth.md)。
 
-每次巡检在已绑定的 task worktree 内运行，由 `repository_health_engineer` 给出专业判断。命令摘要、角色归因和后续处置按 [execution evidence](../workflow/source-of-truth.md#53-execution-evidence) 记录；本页不重复 task truth、派工、PR 或 merge 规则。
+巡检按需在独立分支或只读环境进行，记录问题、验证和建议。命令摘要、角色归因和后续处置按 [execution evidence](../workflow/source-of-truth.md) 记录；本页不重复 task truth、派工、PR 或 merge 规则。
 
 ### 基线检查
 
@@ -29,7 +28,7 @@
 ./scripts/doc-governance-check.sh
 ./scripts/lint-skills.sh
 ./scripts/worktree-gc-report.sh --prunable-only
-./scripts/pm/lint.sh
+
 ./scripts/ci-rust-governance-report.sh --out-dir "output/rust-governance/repository-health-$(date +%Y%m%d)"
 ```
 
