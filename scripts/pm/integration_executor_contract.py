@@ -205,7 +205,7 @@ def execution_layout_context(contract: Any) -> dict[str, str]:
 
 KNOWN_LEGACY_EXECUTOR_DIGESTS = (
     # Exact closed-v1 revisions independently inspected for serial compatibility:
-    # dd04c28ab9aa850a6123d11544f1790717fb741c and PR #4332's protected
+    # dd04c28ab9aa850a6123d11544f1790717fb741c and protected revision
     # 89ef370f66a83cba50bafa9930c74e31360e5ba0 (planner NUL-safe path parsing).
     "sha256:43a77953bedd8acbf32e42e324e04108d05f36ede77b9830093106a08ce1dfe8",
     "sha256:90494adffcc2691f9ede5919bc88f9ed4303a4fcec699ae3783961df59e0581d",
