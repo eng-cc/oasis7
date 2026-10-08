@@ -48,6 +48,8 @@ mod explorer_window;
 #[cfg(not(target_arch = "wasm32"))]
 mod feedback_entry;
 #[cfg(not(target_arch = "wasm32"))]
+mod feedback_privacy;
+#[cfg(not(target_arch = "wasm32"))]
 mod feedback_window;
 #[cfg(target_arch = "wasm32")]
 mod feedback_window_web;
