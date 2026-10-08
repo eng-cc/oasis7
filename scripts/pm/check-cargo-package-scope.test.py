@@ -2788,5 +2788,102 @@ sys.exit(result.returncode)
         self.assertNotEqual(str(repo), locked[0]["cwd"])
 
 
+class TrustedFullPlanTransitionContract(unittest.TestCase):
+    setUp = CargoPackageScopeContract.setUp
+    tearDown = CargoPackageScopeContract.tearDown
+    _git = CargoPackageScopeContract._git
+    _write = CargoPackageScopeContract._write
+    _fixture = CargoPackageScopeContract._fixture
+    def _plan(self, repo, revision, base, paths):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            import tarfile,io
+            raw=subprocess.check_output(["git","-C",str(repo),"archive",revision,"scripts"])
+            with tarfile.open(fileobj=io.BytesIO(raw)) as archive: archive.extractall(root)
+            command=[sys.executable,"-I",str(root/"scripts/plan-rust-required-scope.py"),"--event-name","pull_request"]
+            for path in paths: command.extend(("--changed-path",path))
+            result=subprocess.run(command,cwd=repo,text=True,capture_output=True,check=True)
+        plan=dict(line.split("=",1) for line in result.stdout.splitlines() if "=" in line)
+        plan.update(integration_base=base,source_head=revision,source_scope_base=base)
+        return plan
+
+    def _verify(self, repo, base, head, plan, mutation=None, environment_mutation=None):
+        import copy
+        value=copy.deepcopy(plan)
+        environment={}
+        for key,item in plan.items():
+            if key.startswith(("run_","needs_")) or key=="execution_contract":
+                name="OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS" if key=="run_oasis7_workspace_support_crate_tests" else "OASIS7_CI_"+key.upper()
+                environment[name]=item
+        value.update(mutation or {});environment.update(environment_mutation or {})
+        path=repo/".git/test-full-plan.json";path.write_text(json.dumps(value))
+        driver=runpy.run_path(str(ROOT/"scripts/pm/trusted_cargo_scope.py"))
+        return driver["verify_full_plan"](repo,base,head,base,str(path),environment)
+
+    def _transition(self):
+        repo,_=self._fixture();path=repo/"scripts/ci-required-scope.v2.json"
+        config=json.loads(path.read_text());config["execution_contract"]="required-domain-split/v1";path.write_text(json.dumps(config))
+        self._git(repo,"add","-A");self._git(repo,"commit","-qm","trusted v1 planner configuration");base=self._git(repo,"rev-parse","HEAD")
+        config["execution_contract"]="required-domain-split/v2";path.write_text(json.dumps(config))
+        self._git(repo,"add","-A");self._git(repo,"commit","-qm","v2 configuration transition");head=self._git(repo,"rev-parse","HEAD")
+        return repo,base,head,self._plan(repo,head,base,["scripts/ci-required-scope.v2.json"])
+
+    def test_real_v1_v2_configuration_transition_preserves_full_coverage(self):
+        repo,base,head,plan=self._transition()
+        self.assertEqual("required-domain-split/v2",plan["execution_contract"])
+        self.assertTrue(self._verify(repo,base,head,plan))
+
+    def test_transition_rejects_tampered_config_contract_coverage_and_runner(self):
+        repo,base,head,plan=self._transition()
+        base_config=subprocess.check_output(["git","-C",str(repo),"show",base+":scripts/ci-required-scope.v2.json"])
+        import hashlib
+        for mutation in ({"planner_config_sha256":"invalid"},{"planner_config_sha256":"sha256:"+"0"*64},{"planner_config_sha256":"sha256:"+hashlib.sha256(base_config).hexdigest()},{"execution_contract":"required-domain-split/v1"},{"execution_contract":"required-domain-split/v999"},{"selected_capabilities":"required_gate_baseline"},{"required_test_units":"required_gate_baseline"},{"run_cargo_tooling_contracts":"false"},{"needs_rust_toolchain":"false"}):
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):self._verify(repo,base,head,plan,mutation)
+        with self.assertRaises(ValueError):self._verify(repo,base,head,plan,environment_mutation={"OASIS7_CI_NEEDS_RUST_TOOLCHAIN":"false"})
+
+    def test_real_workflow_rename_retains_both_endpoints(self):
+        repo,_=self._fixture();self._write(repo,".github/workflows/rust.yml","name: fixture\non: push\n")
+        self._git(repo,"add","-A");self._git(repo,"commit","-qm","workflow base");base=self._git(repo,"rev-parse","HEAD")
+        self._git(repo,"mv",".github/workflows/rust.yml",".github/workflows/renamed workflow.yml");self._git(repo,"commit","-qm","rename workflow");head=self._git(repo,"rev-parse","HEAD")
+        paths=[".github/workflows/rust.yml",".github/workflows/renamed workflow.yml"]
+        planner=runpy.run_path(str(ROOT/"scripts/plan-rust-required-scope.py"))
+        import argparse
+        previous=Path.cwd()
+        try:
+            os.chdir(repo)
+            self.assertEqual(paths,planner["git_paths"](argparse.Namespace(base_ref=base,head_ref=head,event_name="pull_request")))
+        finally: os.chdir(previous)
+        plan=self._plan(repo,head,base,paths)
+        self.assertTrue(self._verify(repo,base,head,plan))
+        with self.assertRaises(ValueError):self._verify(repo,base,head,plan,{"changed_paths":paths[1]})
+
+    def test_head_full_rules_cannot_grant_base_targeted_exception(self):
+        repo,_=self._fixture();path=repo/"scripts/ci-required-scope.v2.json";config=json.loads(path.read_text())
+        config["rules"]=[{"match":["scripts/ci-required-scope.v2.json"],"reason":"targeted configuration","capabilities":["doc_checker_contracts"]}]
+        path.write_text(json.dumps(config));self._git(repo,"add","-A");self._git(repo,"commit","-qm","targeted base");base=self._git(repo,"rev-parse","HEAD")
+        config["rules"][0]["full"]=True;path.write_text(json.dumps(config));self._git(repo,"add","-A");self._git(repo,"commit","-qm","head full rule");head=self._git(repo,"rev-parse","HEAD")
+        plan=self._plan(repo,head,base,["scripts/ci-required-scope.v2.json"])
+        self.assertEqual("full",plan["scope"])
+        self.assertFalse(self._verify(repo,base,head,plan))
+
+    def test_real_v2_v1_configuration_downgrade_rejects(self):
+        repo,_,base,_=self._transition();path=repo/"scripts/ci-required-scope.v2.json"
+        config=json.loads(path.read_text());config["execution_contract"]="required-domain-split/v1";path.write_text(json.dumps(config))
+        self._git(repo,"add","-A");self._git(repo,"commit","-qm","downgrade configuration");head=self._git(repo,"rev-parse","HEAD")
+        plan=self._plan(repo,head,base,["scripts/ci-required-scope.v2.json"])
+        with self.assertRaisesRegex(ValueError,"execution contract downgrade"):self._verify(repo,base,head,plan)
+
+    def test_equal_config_cannot_claim_changed_head_contract(self):
+        repo,base=self._fixture();path=repo/"scripts/plan-rust-required-scope.py"
+        path.write_text(path.read_text().replace('vals["execution_contract"]=c["execution_contract"]','vals["execution_contract"]="required-domain-split/v1"'))
+        self._git(repo,"add","-A");self._git(repo,"commit","-qm","changed head emitter only");head=self._git(repo,"rev-parse","HEAD")
+        plan=self._plan(repo,head,base,["scripts/plan-rust-required-scope.py"])
+        with self.assertRaisesRegex(ValueError,"emitting metadata mismatch: execution_contract"):self._verify(repo,base,head,plan)
+
+    def test_unrepresentable_path_delimiter_rejects_without_truncation(self):
+        repo,base=self._fixture();self._write(repo,"new;file.md","fixture\n");self._git(repo,"add","-A");self._git(repo,"commit","-qm","delimiter path");head=self._git(repo,"rev-parse","HEAD")
+        driver=runpy.run_path(str(ROOT/"scripts/pm/trusted_cargo_scope.py"))
+        with self.assertRaisesRegex(ValueError,"cannot be represented"):driver["changed_paths"](repo,base,head)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
