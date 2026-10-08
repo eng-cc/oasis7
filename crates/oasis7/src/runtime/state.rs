@@ -57,7 +57,9 @@ pub(crate) mod industry_history_transition;
 mod industry_state;
 pub(crate) mod industry_transition;
 mod logistics_path_authority;
+mod module_admission_freeze;
 pub(crate) mod module_instance_transition;
+pub use module_admission_freeze::ModuleAdmissionFreeze;
 pub(crate) mod module_marketplace_transition;
 pub(crate) mod module_release_transition;
 mod module_visual;
@@ -668,6 +670,8 @@ pub struct WorldState {
     pub module_artifact_bids: BTreeMap<String, Vec<ModuleArtifactBidState>>,
     #[serde(default)]
     pub module_instances: BTreeMap<String, ModuleInstanceState>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub module_admission_freezes: BTreeMap<String, ModuleAdmissionFreeze>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]
     pub module_release_requests: BTreeMap<u64, ModuleReleaseRequestState>,
     #[serde(default, deserialize_with = "deserialize_btreemap_u64_keys")]

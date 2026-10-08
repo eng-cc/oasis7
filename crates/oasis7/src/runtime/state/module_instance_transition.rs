@@ -12,6 +12,7 @@ pub(crate) struct PreparedModuleInstance {
     target: ModuleInstallTarget,
     next_instance_id: u64,
     world_materials: BTreeMap<String, i64>,
+    admission_freeze: Option<(String, ModuleAdmissionFreeze)>,
 }
 
 impl PreparedModuleInstance {
@@ -39,6 +40,9 @@ impl PreparedModuleInstance {
             .module_instances
             .insert(self.instance_key, self.instance);
         state.next_module_instance_id = self.next_instance_id;
+        if let Some((key, marker)) = self.admission_freeze {
+            state.module_admission_freezes.entry(key).or_insert(marker);
+        }
         state.materials = self.world_materials.clone();
         state
             .material_ledgers
@@ -58,7 +62,23 @@ impl PreparedModuleInstance {
                 value: &self.instance,
             },
         )?;
+        if let Some((key, marker)) = &self.admission_freeze {
+            output.serialize_field(
+                "module_admission_freezes",
+                &SingleEntryProjection {
+                    base: &state.module_admission_freezes,
+                    key,
+                    value: marker,
+                },
+            )?;
+        } else if !state.module_admission_freezes.is_empty() {
+            output.serialize_field("module_admission_freezes", &state.module_admission_freezes)?;
+        }
         Ok(())
+    }
+
+    pub(crate) fn has_admission_freeze(&self) -> bool {
+        self.admission_freeze.is_some()
     }
 
     pub(crate) fn serialize_target_fields<S: serde::ser::SerializeStruct>(
@@ -171,6 +191,15 @@ impl WorldState {
         &self,
         event: &DomainEvent,
         now: WorldTime,
+    ) -> Result<PreparedModuleInstance, WorldError> {
+        self.prepare_module_instance_event_with_registry(event, now, None)
+    }
+
+    pub(crate) fn prepare_module_instance_event_with_registry(
+        &self,
+        event: &DomainEvent,
+        now: WorldTime,
+        registry: Option<&oasis7_wasm_abi::ModuleRegistry>,
     ) -> Result<PreparedModuleInstance, WorldError> {
         let (agent_id, fee_kind, fee_amount) = match event {
             DomainEvent::ModuleInstalled {
@@ -305,6 +334,52 @@ impl WorldState {
             | DomainEvent::ModuleRollbackApplied { instance_id, .. } => instance_id.clone(),
             _ => instance.instance_id.clone(),
         };
+        let admission_freeze = match event {
+            DomainEvent::ModuleRollbackApplied {
+                module_id,
+                from_module_version,
+                from_wasm_hash: Some(hash),
+                from_release_request_id,
+                proposal_id,
+                ..
+            } => {
+                let previous = &self.module_instances[&instance_key];
+                let source_hash = if previous.wasm_hash.is_empty() {
+                    registry
+                        .and_then(|registry| {
+                            registry
+                                .records
+                                .get(&oasis7_wasm_abi::ModuleRegistry::record_key(
+                                    &previous.module_id,
+                                    &previous.module_version,
+                                ))
+                        })
+                        .map(|record| record.manifest.wasm_hash.as_str())
+                } else {
+                    Some(previous.wasm_hash.as_str())
+                };
+                if hash.is_empty() || source_hash != Some(hash.as_str()) {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: "rollback FROM artifact identity mismatch".into(),
+                    });
+                }
+                let key = ModuleAdmissionFreeze::key(module_id, from_module_version, hash);
+                let marker = self
+                    .module_admission_freezes
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_else(|| ModuleAdmissionFreeze {
+                        module_id: module_id.clone(),
+                        module_version: from_module_version.clone(),
+                        wasm_hash: hash.clone(),
+                        rollback_proposal_id: *proposal_id,
+                        source_release_request_id: *from_release_request_id,
+                        reason: "rollback_stop_new_admission".into(),
+                    });
+                Some((key, marker))
+            }
+            _ => None,
+        };
         Ok(PreparedModuleInstance {
             event: event.clone(),
             agents: BTreeMap::from([(agent_id.clone(), cell)]),
@@ -314,6 +389,7 @@ impl WorldState {
             target,
             next_instance_id,
             world_materials,
+            admission_freeze,
         })
     }
 }

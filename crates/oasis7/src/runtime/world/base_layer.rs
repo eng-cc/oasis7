@@ -29,6 +29,7 @@ impl World {
         let mut upgrade_ids = BTreeSet::new();
 
         for module in &changes.register {
+            self.ensure_module_admission_allowed(module)?;
             if !register_ids.insert(module.module_id.clone()) {
                 return Err(WorldError::ModuleChangeInvalid {
                     reason: format!("duplicate register module_id {}", module.module_id),
@@ -53,14 +54,31 @@ impl World {
         }
 
         for upgrade in &changes.upgrade {
+            if upgrade.module_id != upgrade.manifest.module_id {
+                return Err(WorldError::ModuleChangeInvalid {
+                    reason: format!("upgrade manifest module_id mismatch {}", upgrade.module_id),
+                });
+            }
+            if upgrade.to_version != upgrade.manifest.version {
+                return Err(WorldError::ModuleChangeInvalid {
+                    reason: format!(
+                        "upgrade target version mismatch for {}: change_set={} manifest={}",
+                        upgrade.module_id, upgrade.to_version, upgrade.manifest.version
+                    ),
+                });
+            }
+            if upgrade.wasm_hash != upgrade.manifest.wasm_hash {
+                return Err(WorldError::ModuleChangeInvalid {
+                    reason: format!(
+                        "upgrade wasm_hash mismatch for {}: change_set={} manifest={}",
+                        upgrade.module_id, upgrade.wasm_hash, upgrade.manifest.wasm_hash
+                    ),
+                });
+            }
+            self.ensure_module_admission_allowed(&upgrade.manifest)?;
             if !upgrade_ids.insert(upgrade.module_id.clone()) {
                 return Err(WorldError::ModuleChangeInvalid {
                     reason: format!("duplicate upgrade module_id {}", upgrade.module_id),
-                });
-            }
-            if upgrade.manifest.module_id != upgrade.module_id {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!("upgrade manifest module_id mismatch {}", upgrade.module_id),
                 });
             }
         }
@@ -111,6 +129,19 @@ impl World {
 
         for activation in &changes.activate {
             let key = ModuleRegistry::record_key(&activation.module_id, &activation.version);
+            if let Some(manifest) = changes
+                .register
+                .iter()
+                .find(|m| m.module_id == activation.module_id && m.version == activation.version)
+                .or_else(|| {
+                    changes.upgrade.iter().map(|u| &u.manifest).find(|m| {
+                        m.module_id == activation.module_id && m.version == activation.version
+                    })
+                })
+                .or_else(|| self.module_registry.records.get(&key).map(|r| &r.manifest))
+            {
+                self.ensure_module_admission_allowed(manifest)?;
+            }
             let exists =
                 self.module_registry.records.contains_key(&key) || planned_records.contains(&key);
             if !exists {
@@ -513,3 +544,7 @@ fn decode_hex_array<const N: usize>(raw: &str, label: &str) -> Result<[u8; N], W
             reason: format!("{label} must be {N}-byte hex"),
         })
 }
+
+#[cfg(test)]
+#[path = "module_upgrade_freeze_identity_regressions.rs"]
+mod module_upgrade_freeze_identity_regressions;

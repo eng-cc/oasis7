@@ -274,7 +274,7 @@ impl World {
         )
     }
 
-    fn build_tick_consensus_record_from_events(
+    pub(super) fn build_tick_consensus_record_from_events(
         &self,
         tick: WorldTime,
         source_node_id: &str,

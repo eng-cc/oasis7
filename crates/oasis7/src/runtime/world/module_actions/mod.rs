@@ -15,6 +15,7 @@ mod release_actions;
 mod release_normalization;
 mod release_request_support;
 mod release_support;
+mod rollback_actions;
 
 const MODULE_DEPLOY_FEE_BYTES_PER_ELECTRICITY: i64 = 2_048;
 const MODULE_COMPILE_FEE_BYTES_PER_ELECTRICITY: i64 = 1_024;
