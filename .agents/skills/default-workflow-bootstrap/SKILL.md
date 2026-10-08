@@ -45,6 +45,8 @@ Do not force this bootstrap onto read-only requests. Do not treat professional/d
 
 Already-bound work continues under the existing task authorization while goal, scope, and dangerous-effect boundary remain stable; do not emit a new bootstrap packet for ordinary commits, tests, diagnosis, repair, or main advancement.
 
+When resuming a business task with an absent/null primary package, use the [canonical completion operator entry](../../../doc/engineering/workflow/source-of-truth.md#task-primary-package-completion-operator) in its existing worktree and Task identity. Legacy scope recovery supplies `--scope-evidence-json <locator-assertions.json>` for independently verified preexisting authorization and original-freeze comments; preserve acceptance unchanged and never supply caller-approved paths. Preserve the immutable bootstrap snapshot and recover the same journaled action after uncertain effects; regenerate current projection/review/CI evidence after authoritative readback. A proven governance-only range needs no primary completion.
+
 ## Guardrails
 
 For an explicitly bound manual loop task, use `scripts/pm/loop.py` with the effective trusted tool root before admission or continuation. Preserve the exact loop binding, immutable contracts, scope and user merge hold. At stable waits return resumable evidence without heartbeat or scheduled continuation; completion never starts another task. See [manual entry authority](../../../doc/engineering/workflow/source-of-truth.md#manual-three-loop-transition). Legacy tasks retain their existing route.

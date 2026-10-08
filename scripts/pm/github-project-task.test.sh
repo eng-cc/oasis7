@@ -16,6 +16,7 @@ trap cleanup EXIT
 
 mkdir -p "$TMPDIR/.pm/github-project-sync" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-task.py" "$TMPDIR/github-project-task.py"
+cp "$ROOT_DIR/scripts/pm/task_primary_package.py" "$TMPDIR/task_primary_package.py"
 cp "$ROOT_DIR/scripts/pm/closed_duplicate_candidate_guard.py" "$TMPDIR/closed_duplicate_candidate_guard.py"
 cp "$ROOT_DIR/scripts/pm/task_complete_claim.py" "$TMPDIR/task_complete_claim.py"
 cp "$ROOT_DIR/scripts/pm/loop_leaf_result.py" "$TMPDIR/loop_leaf_result.py"

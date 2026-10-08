@@ -153,6 +153,7 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
         final = step_script("      - name: Verify final task and PR binding before required-gate success\n")
         replacements = {
             "${{ github.repository }}": "eng-cc/oasis7",
+            "${{ steps.scope.outputs.maintenance_authority_comment_id }}": "",
             "${{ github.event.pull_request.base.sha || inputs.integration_base }}": "a" * 40,
             "${{ github.event.pull_request.head.sha || inputs.expected_head }}": "b" * 40,
             "${{ github.event.pull_request.number || inputs.pr_number }}": "17",
@@ -160,13 +161,13 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
             "${{ steps.scope.outputs.planner_config_sha256 }}": "sha256:" + "1" * 64,
             "${{ steps.scope.outputs.planner_digest }}": "sha256:" + "2" * 64,
             "${{ steps.scope.outputs.impact_projection_digest }}": "sha256:" + "3" * 64,
-            "${{ steps.scope.outputs.maintenance_authority_comment_id }}": "",
         }
 
-        def render(script: str, *, start_only: bool = False, base_oid: str) -> str:
+        def render(script: str, *, start_only: bool = False, base_oid: str, head_oid: str) -> str:
             rendered_replacements = dict(replacements)
             rendered_replacements["${{ github.event.pull_request.base.sha || inputs.integration_base }}"] = base_oid
             rendered_replacements["${{ steps.pr_target.outputs.oid || inputs.integration_base }}"] = base_oid
+            rendered_replacements["${{ github.event.pull_request.head.sha || inputs.expected_head }}"] = head_oid
             for source, target in rendered_replacements.items():
                 script = script.replace(source, target)
             return script.replace(
@@ -212,6 +213,10 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
                 base = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
                 # Candidate content is deliberately different; workflow must load the exact base blob.
                 helper_path.write_text(helper(False, candidate=True), encoding="utf-8")
+                subprocess.run(["git", "-C", str(root), "add", "scripts/pm/loop-ci.py"], check=True)
+                subprocess.run(["git", "-C", str(root), "commit", "-qm", "poison candidate helper"], check=True)
+                head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+                self.assertNotEqual(base, head)
                 runner = root / "runner"
                 runner.mkdir()
                 output = root / "github-output"
@@ -219,11 +224,16 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
                 env = {
                     "RUNNER_TEMP": str(runner), "GITHUB_OUTPUT": str(output),
                     "CALL_LOG": str(log), "GITHUB_EVENT_NAME": "pull_request",
-                    "GITHUB_SHA": "b" * 40,
+                    "GITHUB_SHA": head,
                 }
-                run_script(render(admission, base_oid=base), env, root)
-                run_script(render(final, start_only=start_only, base_oid=base), env, root)
-                return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+                run_script(render(admission, base_oid=base, head_oid=head), env, root)
+                run_script(render(final, start_only=start_only, base_oid=base, head_oid=head), env, root)
+                calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+                for call in calls:
+                    self.assertNotIn("--maintenance-authority-comment-id", call)
+                    self.assertEqual(call[call.index("--base") + 1], base)
+                    self.assertEqual(call[call.index("--head") + 1], head)
+                return calls
 
         old_calls = run_pair(False)
         self.assertEqual(len(old_calls), 2)
@@ -231,7 +241,8 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
         self.assertEqual(old_calls[0][:4], ["--repository", "eng-cc/oasis7", "--pr-number", "17"])
         self.assertEqual(old_calls[0][4], "--base")
         self.assertRegex(old_calls[0][5], r"^[0-9a-f]{40}$")
-        self.assertEqual(old_calls[0][6:], ["--head", "b" * 40])
+        self.assertEqual(old_calls[0][6], "--head")
+        self.assertRegex(old_calls[0][7], r"^[0-9a-f]{40}$")
         self.assertNotIn("--phase", old_calls[0])
         self.assertNotIn("--scope-base-oid", old_calls[0])
         new_calls = run_pair(True)

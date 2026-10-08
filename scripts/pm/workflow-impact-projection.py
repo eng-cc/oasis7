@@ -8,6 +8,12 @@ promotion, or merge.
 """
 
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import argparse
 import hashlib
@@ -222,6 +228,22 @@ def validate_projection_value(
     _require_digest(value.get("planner_config_sha256"), "planner_config_sha256")
     _validate_planner_identity(value)
     _validate_projection_digest(value)
+    try:
+        task = primary_contract.load_task(Path(repo_root), value["task_uid"]) if repo_root is not None else None
+        # Without a repository, typed references still receive strict shape checks;
+        # current authority always requires the repository-backed consumer below.
+        if repo_root is not None:
+            primary_contract.validate_consumed_contracts(value.get("consumed_contracts"), task, root=Path(repo_root))
+        else:
+            references = []
+            for item in value.get("consumed_contracts") or []:
+                if isinstance(item, dict) and (item.get("type") == primary_contract.REFERENCE_TYPE or item.get("schema") in {primary_contract.SCHEMA, primary_contract.SCOPE_SCHEMA}):
+                    primary_contract.validate_reference_shape(item)
+                    references.append(item)
+            if len(references) > 1:
+                raise ValueError("primary completion reference is duplicated")
+    except ValueError as exc:
+        raise ProjectionError(str(exc)) from exc
     closure = value.get("closure_status")
     if not isinstance(closure, dict) or set(closure) != {"status", "reason", "evidence"}:
         raise ProjectionError("impact projection closure status is invalid")
@@ -469,24 +491,20 @@ def run_scope_planner(
     with tempfile.TemporaryDirectory(prefix="oasis7-required-planner-") as raw_directory:
         authority_root = Path(raw_directory)
         scripts = authority_root / "scripts"
-        scripts.mkdir()
-        for relative in (
-            "scripts/plan-rust-required-scope.py",
-            "scripts/ci-required-scope.v2.json",
-            "scripts/ci-tests.sh",
-        ):
-            try:
-                content = _run(
-                    ["git", "show", f"{planner_authority_oid}:{relative}"],
-                    cwd=root,
-                    check=True,
-                    capture_output=True,
-                ).stdout
-                (authority_root / relative).write_bytes(content)
-            except (OSError, subprocess.CalledProcessError) as exc:
-                raise ProjectionError(
-                    f"trusted planner authority is missing {relative}"
-                ) from exc
+        import io
+        import tarfile
+        from pathlib import PurePosixPath
+        try:
+            content = _run(["git", "archive", planner_authority_oid, "scripts"],
+                cwd=root, check=True, capture_output=True).stdout
+            with tarfile.open(fileobj=io.BytesIO(content)) as archive:
+                for member in archive.getmembers():
+                    path = PurePosixPath(member.name)
+                    if path.is_absolute() or ".." in path.parts or member.issym() or member.islnk():
+                        raise ProjectionError("unsafe trusted planner script archive")
+                archive.extractall(authority_root)
+        except (OSError, subprocess.CalledProcessError, tarfile.TarError) as exc:
+            raise ProjectionError("trusted planner authority scripts are unavailable") from exc
         return execute(
             scripts / "plan-rust-required-scope.py",
             scripts / "ci-required-scope.v2.json",
@@ -548,6 +566,14 @@ def build_projection(
     scope_base_oid = _require_identity_string(value["scope_base_oid"], OID_RE, "scope_base_oid")
     if planner_authority_oid is not None:
         _require_identity_string(planner_authority_oid, OID_RE, "planner_authority_oid")
+        resolved = subprocess.run(["git", "rev-parse", f"{planner_authority_oid}^{{commit}}"],
+            cwd=root, capture_output=True, text=True)
+        if resolved.returncode or resolved.stdout.strip() != planner_authority_oid:
+            raise ProjectionError(f"trusted planner authority cannot be resolved: {planner_authority_oid}")
+        result = subprocess.run(["git", "merge-base", "--all", planner_authority_oid, source_head_oid],
+            cwd=root, capture_output=True, text=True)
+        if result.returncode or result.stdout.splitlines() != [scope_base_oid]:
+            raise ProjectionError("trusted planner target must have the declared unique source merge base")
     paths = normalize_changed_paths(value["changed_paths"])
     change_class = value["change_class"]
     if not isinstance(change_class, str) or change_class not in CHANGE_CLASSES:
@@ -563,6 +589,11 @@ def build_projection(
     if change_class not in {"unknown", "mixed"} and manual_roles:
         raise ProjectionError("manual_roles are only valid for unknown or mixed scope")
     consumed_contracts = normalize_items(value["consumed_contracts"], "consumed_contracts")
+    try:
+        primary_contract.validate_consumed_contracts(consumed_contracts,
+            primary_contract.load_task(root, task_uid), root=root)
+    except ValueError as exc:
+        raise ProjectionError(str(exc)) from exc
     public_semantics = normalize_items(value["public_semantics"], "public_semantics")
     affected_consumers = normalize_items(value["affected_consumers"], "affected_consumers")
     closure_status = normalize_closure_status(value["closure_status"], root)
@@ -705,7 +736,7 @@ def main() -> int:
     parser.add_argument("--out")
     parser.add_argument(
         "--planner-authority-oid",
-        help="load the required-scope planner and config from this immutable authority commit; authority may differ from scope_base_oid",
+        help="load the complete required planner authority from immutable target B; scope_base_oid must be its unique merge base with source head",
     )
     args = parser.parse_args()
     try:

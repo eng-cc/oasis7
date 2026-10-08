@@ -444,11 +444,13 @@ def main():
                 maintenance = _import_from_trusted_base(candidate_root, 'workflow_maintenance')
                 scope_base = args.scope_base_oid or subprocess.check_output(
                     ['git', '-C', str(args.repo_root), 'merge-base', args.base, args.head], text=True).strip()
-                changed = subprocess.check_output(
-                    ['git', '-C', str(args.repo_root), 'diff', '--name-only', scope_base, args.head], text=True).splitlines()
+                raw_paths = subprocess.check_output(
+                    ['git', '-C', str(args.repo_root), 'diff', '--name-only', '--no-renames', '-z', scope_base, args.head])
+                changed = [path.decode('utf-8') for path in raw_paths.split(b'\0')[:-1]]
                 args.maintenance_context = maintenance.read_maintenance_authority(
                     args.repository, args.maintenance_authority_comment_id, uid, args.pr_number,
-                    args.head, changed, maintenance.TOOL_PATHS)
+                    args.head, changed, maintenance.TOOL_PATHS, require_draft=True,
+                    binding_phase='validation-start-only' if args.phase == 'start' else 'bound')
                 maintenance.validate_candidate_tool_root(candidate_root, args.repo_root, args.maintenance_context)
             args.tool_revision = args.head
         body = await_pr_binding(

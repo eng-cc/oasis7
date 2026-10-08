@@ -28,6 +28,7 @@ RUN_FIELDS=(
     "run_required_gate_baseline", "run_rust_baseline",
 )
 EXECUTION_CONTRACT="required-domain-split/v1"
+SUPPORTED_EXECUTION_CONTRACTS={EXECUTION_CONTRACT,"required-domain-split/v2"}
 VERSIONED_SELECTOR_FIELDS=(
     "run_workflow_governance_contracts", "run_packaging_contracts",
     "run_doc_checker_contracts", "run_cargo_tooling_contracts",
@@ -54,7 +55,7 @@ def canonical_planner(raw):
         if any(field in raw for field in VERSIONED_SELECTOR_FIELDS+VERSIONED_RESOURCE_FIELDS[:2]):
             raise SystemExit("ci-ready-receipt: uncertain mixed execution-contract planner metadata")
         run_fields=RUN_FIELDS
-    elif execution_contract==EXECUTION_CONTRACT:
+    elif execution_contract in SUPPORTED_EXECUTION_CONTRACTS:
         run_fields=RUN_FIELDS+VERSIONED_SELECTOR_FIELDS
     else:
         raise SystemExit("ci-ready-receipt: uncertain unsupported execution_contract")
@@ -68,6 +69,8 @@ def canonical_planner(raw):
             raise SystemExit("ci-ready-receipt: uncertain non-boolean planner metadata for versioned execution contract")
         if raw["needs_python"]!="true" or raw["needs_markdown"]!="true":
             raise SystemExit("ci-ready-receipt: required-gate baseline document checks require Python and Markdown")
+        if execution_contract=="required-domain-split/v2" and raw["needs_rust_toolchain"]!="true":
+            raise SystemExit("ci-ready-receipt: v2 baseline metadata checks require Rust toolchain")
     elif any(str(raw[k]).lower() not in ("true","false") for k in run_fields):
         raise SystemExit("ci-ready-receipt: uncertain non-boolean planner metadata")
     try: changed=int(raw["changed_path_count"])
@@ -84,7 +87,7 @@ def canonical_planner(raw):
             value=str(raw[field]).lower()=="true"
             if value != (capability in selected):
                 raise SystemExit(f"ci-ready-receipt: uncertain contradictory planner selector: {field}")
-        plan["execution_contract"]=EXECUTION_CONTRACT
+        plan["execution_contract"]=execution_contract
     plan.update({k:str(raw[k]).lower()=="true" for k in run_fields})
     if execution_contract is not None:
         plan.update({field:raw[field]=="true" for field in VERSIONED_RESOURCE_FIELDS})
@@ -138,7 +141,7 @@ def _workflow_job_details(check_run, repository):
 
 def _selected_child_groups(planner):
     operational=planner.get("run_operational_contracts") is True
-    versioned=planner.get("execution_contract")==EXECUTION_CONTRACT
+    versioned=planner.get("execution_contract") in SUPPORTED_EXECUTION_CONTRACTS
     packaging=(planner.get("run_packaging_contracts") is True) if versioned else operational
     return {
         WINDOWS_ROLLOUT_JOB: operational,
@@ -371,9 +374,17 @@ def _protected_file(repository, revision, path):
     return base64.b64decode("".join(str(response.get("content", "")).split()), validate=True)
 
 
-def validate_current_target_pr_proof(repository, pr, check, planner, *, current_target_oid):
+def validate_current_target_pr_proof(repository, pr, check, planner, *, current_target_oid, scope_only=False,
+                                     ready_continuation=None):
     """Authenticate the existing PR run's exact current-target execution proof."""
     from workflow_maintenance import maintenance_comment_id, read_maintenance_authority
+    if scope_only:
+        from workflow_maintenance import read_maintenance_scope
+        scope_reader = read_maintenance_scope
+        scope_options = {}
+    else:
+        scope_reader = read_maintenance_authority
+        scope_options = {'ready_continuation': ready_continuation}
     proof = current_target_proof_identity(planner.get("current_target_proof"))
     h, q, e = proof["source_head_oid"], proof["current_target_oid"], proof["checkout_oid"]
     if (proof["repository"] != repository or proof["pr_number"] != pr.get("number")
@@ -399,9 +410,10 @@ def validate_current_target_pr_proof(repository, pr, check, planner, *, current_
             or planner.get("scope") != "full" or planner.get("impact_projection_test_profile") != "full"
             or planner.get("planner_config_sha256") != "sha256:" + proof["planner_config_sha256"]):
         raise ValueError("current-target run attempt/full required coverage is incomplete")
-    authority = read_maintenance_authority(repository, proof["maintenance_authority_comment_id"], proof["task_uid"],
+    authority = scope_reader(repository, proof["maintenance_authority_comment_id"], proof["task_uid"],
         pr["number"], h, (".github/workflows/rust.yml", "scripts/pm/ci-ready-receipt.py", "scripts/pm/ci_ready_receipt_identity.py"),
-        ("scripts/pm/ci-ready-receipt.py", "scripts/pm/ci_ready_receipt_identity.py"))
+        ("scripts/pm/ci-ready-receipt.py", "scripts/pm/ci_ready_receipt_identity.py", "scripts/pm/workflow_maintenance.py",
+         "scripts/pm/task_primary_package.py"), **scope_options)
     if authority["issue_number"] != proof["task_issue_number"]:
         raise ValueError("current-target Task Issue differs from authenticated authority")
     commits = {}
@@ -414,8 +426,12 @@ def validate_current_target_pr_proof(repository, pr, check, planner, *, current_
             or commits[e].get("tree", {}).get("sha") != proof["tested_tree_oid"]
             or _current_target_tree(repository, q, h, e) != proof["tested_tree_oid"]):
         raise ValueError("current-target deterministic tested tree differs")
+    approved_workflow = _protected_file(repository, h, ".github/workflows/rust.yml")
+    event_workflow = _protected_file(repository, e, ".github/workflows/rust.yml")
+    if event_workflow != approved_workflow:
+        raise ValueError("actual event workflow bytes differ from approved source head")
     workflow = _protected_file(repository, proof["workflow_revision"], ".github/workflows/rust.yml")
-    if workflow != _protected_file(repository, h, ".github/workflows/rust.yml"):
+    if workflow != event_workflow:
         raise ValueError("actual workflow bytes differ from approved source head")
     for path, field in (("scripts/ci-required-scope.v2.json", "planner_config_sha256"), ("scripts/ci-tests.sh", "test_driver_sha256")):
         contents = _protected_file(repository, q, path)
@@ -431,6 +447,23 @@ def validate_current_target_pr_proof(repository, pr, check, planner, *, current_
     fresh = gh("api", f"repos/{repository}/pulls/{pr['number']}")
     if any(fresh.get(key) != pr.get(key) for key in ("state", "merged", "draft", "body", "head", "base")):
         raise ValueError("current-target PR identity changed during verification")
+    return proof
+
+
+def read_current_target_proof_without_selection(repository, uid, issue, number,
+                                               check_name, app, *, current_target_oid, base_ref):
+    """Read authenticated execution facts; this never admits candidate tools.
+
+    The maintenance continuation factory invokes this internal reader from its
+    independently materialized immutable H closure. No receipt CLI exposes it.
+    """
+    pr, check, base, head = live(repository, uid, issue, number, check_name, app,
+                               True, base_ref, ordinary_pr=True)
+    planner = planner_for_run(repository, check, base_oid=base, head_oid=head)
+    proof = validate_current_target_pr_proof(repository, pr, check, planner,
+                                            current_target_oid=current_target_oid, scope_only=True)
+    if proof["task_uid"] != uid or proof["task_issue_number"] != issue:
+        raise ValueError("current-target raw proof differs from canonical Task identity")
     return proof
 
 
@@ -817,7 +850,7 @@ def cargo_package_profile_for_run(repository, check_run, proof, planner, *, task
         workflow_source=_trusted_workflow_source(repository,proof.get("workflow_sha"))
         if b"cargo-package-profile-envelope" in workflow_source:
             raise SystemExit("ci-ready-receipt: package profile artifact missing from envelope-capable trusted workflow")
-        planner_run_fields=RUN_FIELDS+VERSIONED_SELECTOR_FIELDS if planner.get("execution_contract")==EXECUTION_CONTRACT else RUN_FIELDS
+        planner_run_fields=RUN_FIELDS+VERSIONED_SELECTOR_FIELDS if planner.get("execution_contract") in SUPPORTED_EXECUTION_CONTRACTS else RUN_FIELDS
         if planner.get("scope")!="full" or not all(planner.get(field) is True for field in planner_run_fields):
             raise SystemExit("ci-ready-receipt: pre-envelope trusted workflow requires complete conservative full coverage")
         return {
@@ -949,6 +982,51 @@ def live(repository, task_uid, task_issue_number, pr_number, check_name, check_a
         pr=fresh
     return pr,run,base_oid,head_oid
 
+def _standalone_ready_continuation(repository, uid, issue, number, check_name, app,
+                                   root, review_plan_path):
+    """A plan is a locator; the live factory establishes ready authority itself."""
+    pull = gh('api', f'repos/{repository}/pulls/{number}')
+    from workflow_maintenance import maintenance_comment_id, read_maintenance_scope, read_ready_maintenance_continuation
+    locator = maintenance_comment_id(pull.get('body') or '')
+    if locator is None or pull.get('draft') is not False:
+        return None
+    if not review_plan_path:
+        raise ValueError('ready maintenance receipt requires the existing review-plan locator')
+    root = Path(root).resolve(strict=True)
+    tool_directory = Path(__file__).absolute().parent
+    if tool_directory.is_symlink() or tool_directory.parent.is_symlink():
+        raise ValueError('standalone receipt tool directory is symlinked')
+    head = (pull.get('head') or {}).get('sha')
+    if subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip() != head:
+        raise ValueError('standalone receipt root is not exact live H')
+    closure = tuple('scripts/pm/' + name for name in (
+        'ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'workflow_maintenance.py', 'task_primary_package.py'))
+    scope = read_maintenance_scope(repository, locator, uid, number, head, required_tool_paths=closure)
+    if scope['issue_number'] != issue:
+        raise ValueError('standalone receipt Task Issue differs')
+    for relative in closure:
+        entry = subprocess.check_output(['git', '-C', str(root), 'ls-tree', head, '--', relative], text=True).split()
+        path = tool_directory / Path(relative).name
+        expected = subprocess.check_output(['git', '-C', str(root), 'show', head + ':' + relative])
+        if (not entry or entry[0] not in ('100644', '100755') or path.is_symlink()
+                or not path.is_file() or path.read_bytes() != expected):
+            raise ValueError('standalone receipt approved closure differs: ' + relative)
+    repository_info = gh('api', f'repos/{repository}')
+    branch = repository_info.get('default_branch')
+    q = gh('api', f'repos/{repository}/commits/{branch}').get('sha')
+    if not re.fullmatch(r'[0-9a-f]{40,64}', str(q)):
+        raise ValueError('standalone receipt protected Q is unresolved')
+    # Direct entry must not execute a changed H carrier as release authority.
+    for name in ('integration_ci.py', 'integration_executor_contract.py', 'ci_input_scope.py',
+                 'ci_required_artifact_v2.py', 'ci_reuse_policy.py'):
+        path = tool_directory / name
+        expected = subprocess.check_output(['git', '-C', str(root), 'show', q + ':scripts/pm/' + name])
+        if path.is_symlink() or not path.is_file() or path.read_bytes() != expected:
+            raise ValueError('standalone receipt carrier differs from protected Q: ' + name)
+    return read_ready_maintenance_continuation(root, repository, locator, uid, number, head,
+        check_name=check_name, app=int(app), review_plan_path=review_plan_path)
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--repository",required=True); p.add_argument("--task-uid",required=True)
@@ -961,12 +1039,18 @@ def main():
                    help="refresh only observed_at after complete live identity/planner validation")
     p.add_argument('--integration-run-id',type=int,help='new trusted manual integration workflow run')
     p.add_argument('--request-key',help='explicit authorized keyed integration request from the canonical local journal')
+    p.add_argument('--root', default=str(Path(__file__).resolve().parents[2]), help='canonical Task worktree')
+    p.add_argument('--review-plan', help='existing exact-head review-plan locator for independently authenticated ready continuation')
     a=p.parse_args()
     existing=json.loads(Path(a.receipt).read_text()) if a.receipt else {}
     if existing.get('request_key') and a.request_key!=existing['request_key']:
         raise SystemExit('ci-ready-receipt: explicit --request-key is required and must match the existing keyed receipt')
     bound_base_ref = a.base_ref or existing.get("base_ref")
-    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),request_key=a.request_key)
+    continuation = None
+    if a.allow_ready_pr and a.request_key is None and not (a.integration_run_id or existing.get('integration_run_id')):
+        continuation = _standalone_ready_continuation(a.repository,a.task_uid,a.task_issue_number,
+            a.pr_number,a.check_name,a.check_app_id,a.root,a.review_plan)
+    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),request_key=a.request_key,ready_continuation=continuation)
     keyed_v2_evidence = None
     if a.request_key is not None:
         proof=run.get('_integration') or {}
@@ -1009,8 +1093,8 @@ def main():
       "task_uid":a.task_uid,"task_issue_number":a.task_issue_number,"pr_number":a.pr_number,"base_oid":base_oid,"head_oid":head_oid,
       "check_name":a.check_name,"check_app_id":(run.get("app") or {}).get("id"),"check_run_id":run.get("id"),
       "planner_digest":trusted_planner_digest,"planner":planner,"planner_config_sha256":planner["planner_config_sha256"],"run_rust_baseline":planner["run_rust_baseline"],"conclusion":"success","observed_at":now()}
-    if planner.get("execution_contract")==EXECUTION_CONTRACT:
-        payload["execution_contract"]=EXECUTION_CONTRACT
+    if planner.get("execution_contract") in SUPPORTED_EXECUTION_CONTRACTS:
+        payload["execution_contract"]=planner["execution_contract"]
     if old is None or "base_ref" in old:
         payload["base_ref"] = pr.get("base", {}).get("ref")
     if old is None or "ci_validation_mode" in old:
@@ -1121,7 +1205,7 @@ def _require_historical_base_ancestor_of_target(repository,historical_base_oid,c
 
 def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=False,base_ref=None,
                   integration_run_id=None, require_integration=False, require_dispatch=False,
-                  request_key=None):
+                  request_key=None, ready_continuation=None):
     from integration_ci import current_request, verified_run
     import integration_ci
     pr=gh('api',f'repos/{repository}/pulls/{number}')
@@ -1234,7 +1318,8 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
         if "current_target_proof" in planner:
             try:
                 proof = validate_current_target_pr_proof(repository,candidate_pr,candidate_check,planner,
-                                                        current_target_oid=current_target_oid)
+                                                        current_target_oid=current_target_oid,
+                                                        ready_continuation=ready_continuation)
                 if proof["task_uid"] != uid or proof["task_issue_number"] != issue:
                     raise ValueError("current-target proof differs from caller Task identity")
                 if current_request(repository,uid,number,base,head,pr["base"]["ref"]) is not None:

@@ -12,6 +12,7 @@ trap cleanup EXIT
 
 mkdir -p "$TMPDIR/.pm/tasks" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
+cp "$ROOT_DIR/scripts/pm/task_primary_package.py" "$TMPDIR/task_primary_package.py"
 cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 
 cat > "$TMPDIR/.pm/tasks/task_11111111111111111111111111111111.yaml" <<'YAML'

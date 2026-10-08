@@ -784,7 +784,7 @@ PY
     CI_VALIDATION_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[7])' "$CI_IDENTITY_JSON")"
     CI_BASE_REF="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[8])' "$CI_IDENTITY_JSON")"
     if [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
-      CI_REFRESH_ARGS=()
+      CI_REFRESH_ARGS=(--root "$ROOT_DIR" --review-plan "$REVIEW_PLAN" --allow-ready-pr)
       [[ -n "$CI_BASE_REF" ]] && CI_REFRESH_ARGS+=(--base-ref "$CI_BASE_REF")
       if [[ "$CI_VALIDATION_MODE" == "trusted_integration" || -n "$CI_INTEGRATION_RUN_ID" ]]; then
         [[ "$CI_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] || die "strict v2 ci-ready receipt lacks the current integration request/run identity"

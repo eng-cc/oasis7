@@ -17,7 +17,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tarfile
 import unittest
+from unittest import mock
+import io
 
 
 HERE = Path(__file__).resolve().parent
@@ -427,6 +430,53 @@ def git(root: Path, *args: str, check: bool = True) -> str:
     if result.returncode and not check:
         return str(result.returncode)
     return result.stdout.strip()
+
+
+class FrozenVerifierClosureTests(unittest.TestCase):
+    def test_real_immutable_sibling_closure_lifetime_and_isolated_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            git(root, "init", "-q")
+            scripts = root / "scripts/pm"
+            scripts.mkdir(parents=True)
+            (scripts / "sibling.py").write_text("VALUE = 'trusted'\n")
+            (scripts / "workflow-impact-projection.py").write_text(
+                "from pathlib import Path\nimport importlib.util\n"
+                "def read():\n"
+                " p=Path(__file__).with_name('sibling.py')\n"
+                " s=importlib.util.spec_from_file_location('frozen_sibling',p)\n"
+                " m=importlib.util.module_from_spec(s); s.loader.exec_module(m)\n"
+                " return m.VALUE\n")
+            git(root, "add", ".")
+            git(root, "-c", "user.name=fixture", "-c", "user.email=fixture@example.test",
+                "commit", "-qm", "trusted")
+            oid = git(root, "rev-parse", "HEAD")
+            (scripts / "sibling.py").write_text("raise RuntimeError('candidate shadow')\n")
+            script = ("import importlib.util\nfrom pathlib import Path\n"
+                f"s=importlib.util.spec_from_file_location('publisher',{str(HERE / 'pr_projection_publish.py')!r})\n"
+                "m=importlib.util.module_from_spec(s); s.loader.exec_module(m)\n"
+                f"with m.load_projection_verifier(Path({str(root)!r}),{oid!r}) as v:\n"
+                " p=Path(v.__file__); assert p.is_file(); assert v.read()=='trusted'\n"
+                "assert not p.exists()\n")
+            result = subprocess.run([sys.executable, "-I", "-c", script],
+                cwd=scripts, text=True, capture_output=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_rejects_link_and_parent_escape_archives(self):
+        publisher = load_module('archive_publisher', HERE / 'pr_projection_publish.py')
+        for name, link in [('scripts/../escape.py', False), ('scripts/link.py', True)]:
+            with self.subTest(name=name):
+                buffer = io.BytesIO()
+                with tarfile.open(fileobj=buffer, mode='w') as archive:
+                    entry = tarfile.TarInfo(name)
+                    if link:
+                        entry.type = tarfile.SYMTYPE
+                        entry.linkname = '/tmp/escape.py'
+                    archive.addfile(entry)
+                with mock.patch.object(publisher.subprocess, 'check_output', return_value=buffer.getvalue()):
+                    with self.assertRaisesRegex(publisher.PublishInputError, 'unsafe'):
+                        with publisher.load_projection_verifier(Path('.'), 'a' * 40):
+                            self.fail('unsafe archive accepted')
 
 
 class PublisherProcessTests(unittest.TestCase):
@@ -1097,11 +1147,8 @@ class PublisherProcessTests(unittest.TestCase):
                      purpose='candidate-tool-verification',
                      allowed_write_paths=['scripts/pm/pr_projection_publication.py',
                          'scripts/pm/pr_projection_publish.py', 'scripts/pm/github-project-task.py'] + self.changed_paths,
-                     allowed_tool_paths=list(dict.fromkeys(list(maintenance.TOOL_PATHS) + [
-                         'scripts/pm/github-project-task.py', 'scripts/pm/pr_projection_publish.py',
-                         'scripts/pm/pr_projection_record_pr.py', 'scripts/pm/github-project-sync.py',
-                         'scripts/pm/github_api.py', 'scripts/pm/task_complete_claim.py',
-                         'scripts/pm/workflow-durable-store.py', 'scripts/pm/pr_projection_transition.py'])))
+                     allowed_tool_paths=list(dict.fromkeys(list(maintenance.TOOL_PATHS)
+                         + list(maintenance.HUMAN_RECONCILIATION_TOOL_PATHS))))
         self._append_comment(9002, maintenance.MARKER + '\n```json\n' + json.dumps(scope) + '\n```')
         self._save_state()
 

@@ -82,6 +82,25 @@ ci_fixture_assert_has 'pm/ci-ready-receipt.test.py'
 ci_fixture_assert_has 'native-packaging-contract.test.sh'
 ci_fixture_assert_has 'p2p-public-testnet-identity-v2-signing-tool.test.py'
 
+# V2 prepares metadata resources without enabling Rust baseline/business tests.
+ci_fixture_run required strict \
+  OASIS7_CI_EXECUTION_CONTRACT=required-domain-split/v2 \
+  OASIS7_CI_NEEDS_RUST_TOOLCHAIN=true
+ci_fixture_assert_lacks 'TOOL:cargo:'
+ci_fixture_assert_lacks 'TOOL:rustup:'
+ci_fixture_assert_lacks 'cargo-dev-lib.test.sh'
+ci_fixture_assert_lacks 'pm/check-cargo-package-scope.test.py'
+ci_fixture_assert_lacks 'product-doc-governance-check.test.py'
+
+ci_fixture_run required strict \
+  OASIS7_CI_EXECUTION_CONTRACT=required-domain-split/v2 \
+  OASIS7_CI_NEEDS_RUST_TOOLCHAIN=true \
+  OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS=true
+ci_fixture_assert_has 'pm/trusted-cargo-scope.test.py'
+ci_fixture_assert_has 'pm/required-scope-routing.test.py'
+ci_fixture_assert_has 'pm/check-cargo-package-scope.test.py'
+ci_fixture_assert_inventory_selection_dispatched workflow_governance
+
 for tier in full full-core full-support; do
   ci_fixture_run "$tier" full
   ci_fixture_assert_has 'product-doc-governance-check.test.py'

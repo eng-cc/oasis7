@@ -18,6 +18,7 @@ MAPPING="$TMPDIR/tasks.json"
 LOG="$TMPDIR/gh.log"
 mkdir -p "$TMPDIR/bin"
 mkdir -p "$TMPDIR/scripts/pm"
+cp "$SCRIPT_DIR/task_primary_package.py" "$TMPDIR/scripts/pm/task_primary_package.py"
 cp "$SCRIPT_DIR/audit-pr-watch-issues.py" "$SCRIPT_DIR/audit-pr-watch-issues.sh" \
   "$SCRIPT_DIR/github-project-sync.py" "$SCRIPT_DIR/github-project-task.py" \
   "$SCRIPT_DIR/task_complete_claim.py" \

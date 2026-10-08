@@ -461,8 +461,9 @@ class CorpusScopeTests(unittest.TestCase):
 
         code = plan("scripts/document_corpus.py", "scripts/document-corpus-inventory-workflow.test.py",
                     "doc/.governance/document-corpus-inventory.json")
-        self.assertEqual(code["scope"], "targeted")
-        self.assertEqual(code["selected_capabilities"], "doc_checker_contracts;workflow_governance")
+        self.assertEqual(code["scope"], "full")
+        self.assertEqual(code["run_doc_checker_contracts"], "true")
+        self.assertEqual(code["run_workflow_governance_contracts"], "true")
         self.assertEqual(code["run_rust_baseline"], "true")
         self.assertEqual(code["needs_rust_toolchain"], "true")
 

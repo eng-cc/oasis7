@@ -118,7 +118,7 @@ class LoopTests(unittest.TestCase):
                     '- workflow_phase: `task_done`\n'
                     f'- pr_number: `{pr_number}`\n- pr_url: `{pr_url}`\n')
             issue = {'number': number, 'html_url': url, 'body': body, 'state': 'closed', 'state_reason': 'completed'}
-            item = {'id': 'I', 'project': {'id': 'P', 'number': 1, 'owner': {'login': 'fixture'}}, 'content': {'number': number, 'url': url, 'body': body}, 'fieldValues': {'pageInfo': {'hasNextPage': False}, 'nodes': [{'name': v, 'field': {'name': k}} for k, v in [('Status', 'Done' if terminal_pass else 'In Progress'), ('PM Status', 'done'), ('Workflow Phase', 'done')]]}}
+            item = {'id': 'I', 'project': {'id': 'P', 'number': 1, 'owner': {'login': 'fixture'}}, 'content': {'number': number, 'url': url, 'body': body}, 'fieldValues': {'pageInfo': {'hasNextPage': False}, 'nodes': [{'__typename': 'ProjectV2ItemFieldSingleSelectValue', 'name': v, 'field': {'name': k}} for k, v in [('Status', 'Done' if terminal_pass else 'In Progress'), ('PM Status', 'done'), ('Workflow Phase', 'done')]]}}
             project = {'id': 'P', 'owner': 'fixture', 'number': 1, 'page_complete': True, 'items': [item]}
             operation = hashlib.sha256(f'{selected_uid}:post_merge_done:evidence_comment'.encode()).hexdigest()
             receipts = receipt_fixture(selected_uid, repository, number, pr_number, pr_url)
