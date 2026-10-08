@@ -284,8 +284,10 @@ class WorkflowWiringTests(unittest.TestCase):
             r"^      ([a-z0-9_]+): \$\{\{ steps\.scope\.outputs\.([a-z0-9_]+) \}\}", plan, re.M))
         consumed = set(re.findall(r"needs\.required-plan\.outputs\.((?:run_|needs_)[a-z0-9_]+)", source))
         gate = source.split("      - name: Run required test tier", 1)[1].split("        run: |", 1)[0]
-        environment = dict(re.findall(
-            r"^          (OASIS7_CI_(?:RUN_|NEEDS_)[A-Z0-9_]+): \$\{\{ needs\.required-plan\.outputs\.([a-z0-9_]+) \}\}", gate, re.M))
+        env_pattern = r"^          (OASIS7_CI_(?:RUN_|NEEDS_)[A-Z0-9_]+): \$\{\{ needs\.required-plan\.outputs\.([a-z0-9_]+) \}\}"
+        environment = dict(re.findall(env_pattern, gate, re.M))
+        deleted_gate = "\n".join(line for line in gate.splitlines() if "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:" not in line)
+        deleted_environment = dict(re.findall(env_pattern, deleted_gate, re.M))
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             planners = [ROOT / "scripts/plan-rust-required-scope.py"]
@@ -309,8 +311,14 @@ class WorkflowWiringTests(unittest.TestCase):
                             self.assertEqual(published[key], key)
                             self.assertIn(job_outputs[key], ("true", "false"))
                             self.assertEqual(job_outputs[key], actual[key])
-                        expected_env = workflow.selectors({"planner_output": {**actual, "source_scope_base": "base", "head_oid": "head",
-                                                                            "integration_base_oid": "base"}})
+                        with patch.dict(os.environ, {}, clear=True):
+                            expected_env = workflow.selectors({"planner_output": {**actual, "source_scope_base": "base", "head_oid": "head",
+                                                                                "integration_base_oid": "base"}})
+                        event_owned = {"OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE", "OASIS7_CI_RUN_PROVIDER_LIVE_GATE"}
+                        expected_keys = {key for key in expected_env if key.startswith(("OASIS7_CI_RUN_", "OASIS7_CI_NEEDS_"))} - event_owned
+                        self.assertEqual(set(environment), expected_keys)
+                        with self.assertRaises(AssertionError):
+                            self.assertEqual(set(deleted_environment), expected_keys)
                         for name, key in environment.items():
                             self.assertEqual(job_outputs[key], expected_env[name], name)
                         self.assertEqual(job_outputs["run_oasis7_required_tests"], "true" if changed_path.startswith(".github") else "false")
