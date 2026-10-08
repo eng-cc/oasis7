@@ -27,9 +27,5 @@ python3 "$skill_root/tests/validate_writeback.py"
 git diff --check
 ./scripts/doc-governance-check.sh
 
-if [[ "${RUN_PM_LINT:-0}" == "1" ]]; then
-else
-  echo "skip pm lint (set RUN_PM_LINT=1 to enable)"
-fi
 
 echo "epic-story-orchestrator-zh smoke: OK"
