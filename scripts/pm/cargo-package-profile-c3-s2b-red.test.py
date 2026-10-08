@@ -227,7 +227,7 @@ class C3S2bExecutionEvidenceRED(unittest.TestCase):
         required = workflow.split("  required-gate:", 1)[1].split(
             "  windows-package-rollout-behavior:", 1
         )[0]
-        authority_marker = 'git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py"'
+        authority_marker = 'git show "${OASIS7_CARGO_SCOPE_INTEGRATION_BASE}:scripts/pm/cargo_package_profile_planner.py"'
         self.assertIn(authority_marker, required)
         activation_marker = "OASIS7_CARGO_PROFILE_OPT_IN=true"
         self.assertIn(activation_marker, required)

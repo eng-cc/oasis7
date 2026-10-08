@@ -41,7 +41,7 @@ if ! grep -Fq 'run_site_contract_tests: ${{ steps.scope.outputs.run_site_contrac
   echo "required-gate does not expose the site quality planner selector" >&2
   exit 1
 fi
-if ! grep -Fq 'OASIS7_CI_RUN_SITE_CONTRACT_TESTS: ${{ steps.scope.outputs.run_site_contract_tests }}' "$required_workflow"; then
+if ! grep -Fq 'OASIS7_CI_RUN_SITE_CONTRACT_TESTS: ${{ needs.required-plan.outputs.run_site_contract_tests }}' "$required_workflow"; then
   echo "required-gate does not pass the site quality planner selector to ci-tests" >&2
   exit 1
 fi

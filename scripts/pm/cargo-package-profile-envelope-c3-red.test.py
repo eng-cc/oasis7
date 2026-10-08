@@ -111,6 +111,12 @@ class CargoPackageProfileEnvelopeRED(unittest.TestCase):
             profile_step,
             "the envelope lookup must receive the repository-scoped token process-locally",
         )
+        self.assertIn("unset GH_TOKEN GITHUB_TOKEN", profile_step)
+        for step_name in ("Freeze internal same-attempt dispatch and exact Git objects", "Execute only the frozen selected worker"):
+            step = workflow.split(f"        name: {step_name}\n", 1)[1] if step_name.startswith("Freeze") else workflow.split(f"      - name: {step_name}\n", 1)[1]
+            step = step.split("\n      - ", 1)[0]
+            self.assertNotIn("GH_TOKEN:", step)
+            self.assertNotIn("GITHUB_TOKEN:", step)
 
     def test_ci_ready_rejects_detached_cross_run_or_digest_mismatch_profile_receipt(self) -> None:
         case = self.receipt_tests.ReceiptTest("test_success")

@@ -2,6 +2,9 @@
 """Regression checks for the generic Cargo checker verification route."""
 
 from pathlib import Path
+import os
+import subprocess
+import tempfile
 import unittest
 
 
@@ -22,7 +25,28 @@ class CargoCheckerRouteRetirementContract(unittest.TestCase):
 
         self.assertIn("cargo_package_profile_driver.py", required)
         self.assertIn("CI_VERBOSE=1 bash", required)
-        self.assertIn("ci-tests.sh required", required)
+        # Execute the integration branch's actual generic dispatch with a spy
+        # trusted driver; quoted paths must not obscure the required argv/M root.
+        serial = required.split('            target_root="${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}"', 1)[1].split(
+            '          elif [[ "${GITHUB_EVENT_NAME}"', 1)[0]
+        preamble = required.split("      - name: Run required test tier\n", 1)[1].split("        run: |\n", 1)[1].split(
+            '          trusted_profile_authority=', 1)[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            driver = directory / "integration-planner/ci-tests.sh"
+            driver.parent.mkdir()
+            driver.write_text('#!/bin/sh\n[ -z "${GH_TOKEN+x}${GITHUB_TOKEN+x}" ] || exit 41\nprintf "%s\\n" "$@" > "$CAPTURE_ARGV"\n')
+            target = directory / "exact-M"
+            target.mkdir()
+            capture = directory / "argv"
+            environment = dict(os.environ, RUNNER_TEMP=str(directory), target_root=str(target), CAPTURE_ARGV=str(capture),
+                               GH_TOKEN="fixture-gh", GITHUB_TOKEN="fixture-github")
+            subprocess.run(["bash", "-euc", preamble + serial], env=environment, check=True)
+            self.assertEqual(capture.read_text().splitlines(), ["required", "--repo-root", str(target),
+                                                              "--impact-projection", str(directory / "impact-projection.json")])
+        worker = job_block(workflow, "required-work", "required-gate")
+        self.assertIn("Execute only the frozen selected worker", worker)
+        self.assertIn("Verify all exact-attempt workers and complete gate obligations", required)
         self.assertNotIn("OASIS7_CARGO_STAGE_", required)
         self.assertNotIn("checker-stage", required)
         self.assertNotIn("steps.checker-stage", workflow)

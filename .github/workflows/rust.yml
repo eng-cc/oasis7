@@ -713,7 +713,6 @@ jobs:
       - id: dispatch
         name: Freeze internal same-attempt dispatch and exact Git objects
         env:
-          GH_TOKEN: ${{ github.token }}
           INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
           AUTHORITY_OID: ${{ steps.pr_target.outputs.oid || github.workflow_sha }}
         run: |
@@ -881,8 +880,6 @@ jobs:
         if: steps.resources.outputs.needs_markdown == 'true'
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Execute only the frozen selected worker
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           python3 -I "${RUNNER_TEMP}/required-authority/scripts/pm/ci_required_workflow.py" worker \
             --transport "${RUNNER_TEMP}/required-transport" --root "${GITHUB_WORKSPACE}" \
@@ -1063,7 +1060,6 @@ jobs:
         if: steps.restore.outputs.execution_layout == 'required-serial/v1'
         id: required-gate-tests
         env:
-          GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
           INTEGRATION_WORKTREE: ${{ github.workspace }}
           OASIS7_CI_EXECUTION_CONTRACT: ${{ needs.required-plan.outputs.execution_contract }}
@@ -1107,6 +1103,7 @@ jobs:
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ needs.required-plan.outputs.integration_base_oid }}
           OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ needs.required-plan.outputs.scope == 'full' }}
         run: |
+          unset GH_TOKEN GITHUB_TOKEN
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
           export OASIS7_CARGO_SCOPE_FULL_PLAN="${RUNNER_TEMP}/required-scope-outputs.json"
           trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"

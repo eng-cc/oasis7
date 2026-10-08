@@ -90,10 +90,17 @@ def authority_context(root, policy_path=None):
     return contracts.resolve_execution_layout(root, approved_digests=approved)
 
 
+def candidate_environment():
+    env = dict(os.environ)
+    for key in ("GH_TOKEN", "GITHUB_TOKEN"):
+        env.pop(key, None)
+    return env
+
+
 def selectors(selection):
     special = {"run_required_gate_baseline": "OASIS7_CI_RUN_REQUIRED_GATE_BASELINE",
                "run_oasis7_workspace_support_crate_tests": "OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS"}
-    env = dict(os.environ)
+    env = candidate_environment()
     for key, value in selection["planner_output"].items():
         if key.startswith(("run_", "needs_")):
             env[special.get(key, "OASIS7_CI_" + key.upper())] = str(value)
@@ -244,7 +251,7 @@ def profile_plan(root, authority, transport, output):
     subprocess.run([sys.executable, str(planner), "--repo-root", str(root),
                     "--integration-base", identity["base_sha"], "--source-head", identity["source_head_sha"],
                     "--policy", ".pm/cargo-package-scope-policy.json", "--checker", "scripts/pm/check-cargo-package-scope",
-                    "--profile", "native", "--output", str(output / "cargo-package-profile-plan.json")], cwd=root, check=True)
+                    "--profile", "native", "--output", str(output / "cargo-package-profile-plan.json")], cwd=root, env=candidate_environment(), check=True)
     return read(output / "cargo-package-profile-plan.json")
 
 
@@ -255,7 +262,7 @@ def execute_profile(root, authority, transport, output):
         argv = item.get("command")
         if not isinstance(argv, list) or not argv or argv[0] != "cargo" or any(not isinstance(x, str) for x in argv):
             raise ValueError("trusted Cargo profile emitted invalid argv")
-        env = dict(os.environ)
+        env = candidate_environment()
         env.pop("RUSTC_WRAPPER", None)
         if item["target"] == "native":
             env["OASIS7_WASM_BUILD_STD"] = "0"

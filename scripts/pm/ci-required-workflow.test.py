@@ -8,6 +8,7 @@ import os
 import re
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -277,6 +278,58 @@ class TransportTests(unittest.TestCase):
 
 
 class WorkflowWiringTests(unittest.TestCase):
+    def test_real_candidate_children_strip_tokens_while_control_plane_retains_them(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            root, authority, transport = (directory / name for name in ("exact-M", "authority", "transport"))
+            for path in (root, authority / "scripts/pm", transport, directory / "bin"):
+                path.mkdir(parents=True)
+            capture = directory / "capture.jsonl"
+            spy_source = ('import json,os,pathlib\n'
+                          'with open(os.environ["SPY_CAPTURE"],"a") as stream:\n'
+                          ' stream.write(json.dumps({"phase":os.environ["SPY_PHASE"],"cwd":os.getcwd(),'
+                          '"tokens":[key for key in ("GH_TOKEN","GITHUB_TOKEN") if key in os.environ]})+"\\n")\n'
+                          'print("{}")\n')
+            spy = directory / "spy.py"
+            spy.write_text(spy_source)
+            (authority / "scripts/ci-tests.sh").write_text(f'#!/bin/sh\nexec "{sys.executable}" "{spy}"\n')
+            (authority / "scripts/pm/ci_required_execution.py").write_text(spy_source)
+            for tool in ("cargo", "gh"):
+                executable = directory / "bin" / tool
+                executable.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{spy}"\n')
+                executable.chmod(0o755)
+            selection = {"planner_output": {"source_scope_base": "B", "head_oid": "H", "integration_base_oid": "B"}}
+            workflow.write(transport / "selection.json", selection)
+            workflow.write(transport / "identity.json", {"run_mode": "ci", "source_scope": "B", "source_head_sha": "H"})
+            workflow.write(transport / "transport.json", {"execution_layout": "required-parallel/v1"})
+            plan = {"items": [{"id": "native", "command": ["cargo", "test"], "command_digest": "d", "package": "p",
+                               "profile": "native", "target": "native", "features": []}], "plan_id": "p",
+                    "trusted_authority": {"toolchain": "1.96.0"}, "integration_base": "B", "source_head": "H", "tested_tree": "M"}
+            env = {"GH_TOKEN": "fixture-gh", "GITHUB_TOKEN": "fixture-github", "SPY_CAPTURE": str(capture),
+                   "PATH": str(directory / "bin") + os.pathsep + os.environ["PATH"]}
+            with patch.dict(os.environ, env):
+                for phase in ("required-plan-baseline", "required-gate-completion"):
+                    os.environ["SPY_PHASE"] = phase
+                    workflow.driver(root, authority, selection, phase, transport)
+                os.environ["SPY_PHASE"] = "profile"
+                with patch.object(workflow, "profile_plan", return_value=plan):
+                    workflow.execute_profile(root, authority, transport, directory)
+                os.environ["SPY_PHASE"] = "worker"
+                with patch.object(workflow, "runtime_identity"):
+                    workflow.worker(SimpleNamespace(transport=transport, root=root, authority_root=authority,
+                                                    output=directory / "worker-result", worker="contracts"))
+                os.environ["SPY_PHASE"] = "control-plane"
+                self.assertEqual(workflow.command([str(directory / "bin/gh"), "api", "fixture"]), "{}")
+                self.assertEqual(os.environ["GH_TOKEN"], "fixture-gh")
+                self.assertEqual(os.environ["GITHUB_TOKEN"], "fixture-github")
+            records = [json.loads(line) for line in capture.read_text().splitlines()]
+            self.assertEqual([record["phase"] for record in records],
+                             ["required-plan-baseline", "required-gate-completion", "profile", "worker", "control-plane"])
+            for record in records[:-1]:
+                self.assertEqual(record["tokens"], [])
+                self.assertEqual(Path(record["cwd"]).resolve(), root.resolve())
+            self.assertEqual(records[-1]["tokens"], ["GH_TOKEN", "GITHUB_TOKEN"])
+
     def test_actual_planner_outputs_survive_job_output_and_gate_env_boundary(self):
         source = (ROOT / ".github/workflows/rust.yml").read_text()
         plan = source.split("  required-plan:", 1)[1].split("    steps:", 1)[0]

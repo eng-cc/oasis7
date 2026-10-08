@@ -23,6 +23,7 @@ from __future__ import annotations
 import importlib.util
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -178,30 +179,36 @@ path = "src/lib.rs"
 
     def test_trusted_base_projection_helper_is_copied_for_relocated_base_planner(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        required_gate = workflow.split("  required-gate:", 1)[1].split(
-            "  windows-package-rollout-behavior:", 1
+        required_plan = workflow.split("  required-plan:", 1)[1].split(
+            "  required-work:", 1
         )[0]
-        self.assertRegex(
-            required_gate,
-            r'git show "\$\{OASIS7_CARGO_SCOPE_BASE\}:scripts/pm/workflow-impact-projection\.py"',
-            "required-gate must materialize the trusted projection helper next to the relocated planner",
-        )
+        self.assertIn('tool_ref="${base_ref}"', required_plan)
+        archive = 'git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"'
+        relocate = 'cp -R "${authority_dir}/scripts/." "${authority_dir}/"'
+        self.assertIn(archive, required_plan)
+        self.assertIn(relocate, required_plan)
+        self.assertLess(required_plan.index(archive), required_plan.index('planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'))
+        with tempfile.TemporaryDirectory() as temporary:
+            environment = dict(os.environ, authority_dir=temporary, tool_ref="HEAD")
+            subprocess.run(["bash", "-ec", archive + "\n" + relocate], cwd=ROOT, env=environment, check=True)
+            expected = subprocess.check_output(["git", "show", "HEAD:scripts/pm/workflow-impact-projection.py"], cwd=ROOT)
+            self.assertEqual((Path(temporary) / "pm/workflow-impact-projection.py").read_bytes(), expected)
 
     def test_new_run_mode_flag_is_only_passed_to_dispatch_planner(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        required_gate = workflow.split("  required-gate:", 1)[1].split(
-            "  windows-package-rollout-behavior:", 1
+        required_plan = workflow.split("  required-plan:", 1)[1].split(
+            "  required-work:", 1
         )[0]
-        dispatch = required_gate.index(
+        dispatch = required_plan.index(
             'elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]'
         )
-        assignment = required_gate.index(
+        assignment = required_plan.index(
             'run_mode_args=(--run-mode "${{ inputs.run_mode }}")'
         )
-        invocation = required_gate.index('"${run_mode_args[@]}"')
+        invocation = required_plan.index('"${run_mode_args[@]}"')
         self.assertLess(dispatch, assignment)
         self.assertLess(assignment, invocation)
-        self.assertNotIn('--run-mode "${{ github.event_name', required_gate)
+        self.assertNotIn('--run-mode "${{ github.event_name', required_plan)
 
     def test_deleted_package_is_not_an_executable_profile_item(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cargo-profile-c3-deleted-") as raw:
