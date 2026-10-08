@@ -123,7 +123,11 @@ jobs:
       run_distfs_tests: ${{ steps.scope.outputs.run_distfs_tests }}
       run_doc_checker_contracts: ${{ steps.scope.outputs.run_doc_checker_contracts }}
       run_launcher_web_build: ${{ steps.scope.outputs.run_launcher_web_build }}
-      run_oasis: ${{ steps.scope.outputs.run_oasis }}
+      run_oasis7_net_libp2p_tests: ${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}
+      run_oasis7_net_tests: ${{ steps.scope.outputs.run_oasis7_net_tests }}
+      run_oasis7_node_tests: ${{ steps.scope.outputs.run_oasis7_node_tests }}
+      run_oasis7_required_tests: ${{ steps.scope.outputs.run_oasis7_required_tests }}
+      run_oasis7_workspace_support_crate_tests: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
       run_operational_contracts: ${{ steps.scope.outputs.run_operational_contracts }}
       run_packaging_contracts: ${{ steps.scope.outputs.run_packaging_contracts }}
       run_pixel_world_bridge_lib_tests: ${{ steps.scope.outputs.run_pixel_world_bridge_lib_tests }}

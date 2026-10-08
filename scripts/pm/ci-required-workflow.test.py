@@ -277,6 +277,44 @@ class TransportTests(unittest.TestCase):
 
 
 class WorkflowWiringTests(unittest.TestCase):
+    def test_actual_planner_outputs_survive_job_output_and_gate_env_boundary(self):
+        source = (ROOT / ".github/workflows/rust.yml").read_text()
+        plan = source.split("  required-plan:", 1)[1].split("    steps:", 1)[0]
+        published = dict(re.findall(
+            r"^      ([a-z0-9_]+): \$\{\{ steps\.scope\.outputs\.([a-z0-9_]+) \}\}", plan, re.M))
+        consumed = set(re.findall(r"needs\.required-plan\.outputs\.((?:run_|needs_)[a-z0-9_]+)", source))
+        gate = source.split("      - name: Run required test tier", 1)[1].split("        run: |", 1)[0]
+        environment = dict(re.findall(
+            r"^          (OASIS7_CI_(?:RUN_|NEEDS_)[A-Z0-9_]+): \$\{\{ needs\.required-plan\.outputs\.([a-z0-9_]+) \}\}", gate, re.M))
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            planners = [ROOT / "scripts/plan-rust-required-scope.py"]
+            for revision in (BASE, "89ef370f66a83cba50bafa9930c74e31360e5ba0"):
+                legacy_root = directory / revision
+                workflow.archive(ROOT, revision, legacy_root)
+                planners.append(legacy_root / "scripts/plan-rust-required-scope.py")
+            for planner in planners:
+                for changed_path in (".github/workflows/rust.yml", "doc/testing/prd.md"):
+                    with self.subTest(planner=planner, changed_path=changed_path):
+                        output = directory / "outputs"
+                        output.unlink(missing_ok=True)
+                        subprocess.run(["python3", str(planner), "--event-name", "pull_request", "--changed-path", changed_path,
+                                        "--github-output", str(output)], cwd=ROOT, check=True, capture_output=True)
+                        actual = dict(line.split("=", 1) for line in output.read_text().splitlines())
+                        selectors = {key for key in actual if key.startswith(("run_", "needs_"))}
+                        self.assertTrue(consumed <= published.keys(), f"unpublished outputs: {sorted(consumed - published.keys())}")
+                        self.assertEqual(selectors, {key for key in published if key.startswith(("run_", "needs_"))})
+                        job_outputs = {key: actual.get(value, "") for key, value in published.items()}
+                        for key in selectors:
+                            self.assertEqual(published[key], key)
+                            self.assertIn(job_outputs[key], ("true", "false"))
+                            self.assertEqual(job_outputs[key], actual[key])
+                        expected_env = workflow.selectors({"planner_output": {**actual, "source_scope_base": "base", "head_oid": "head",
+                                                                            "integration_base_oid": "base"}})
+                        for name, key in environment.items():
+                            self.assertEqual(job_outputs[key], expected_env[name], name)
+                        self.assertEqual(job_outputs["run_oasis7_required_tests"], "true" if changed_path.startswith(".github") else "false")
+
     def test_dag_preserves_stable_gate_and_platform_boundary(self):
         source = (ROOT / ".github/workflows/rust.yml").read_text()
         plan = source[source.index("  required-plan:"):source.index("  required-work:")]
