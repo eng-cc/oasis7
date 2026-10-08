@@ -1479,7 +1479,7 @@ def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_di
     if validation_request is not None: result['validation_request']=validation_request
     return result
 
-def dispatch(repository,uid,number,impact_projection):
+def dispatch(repository,uid,number,impact_projection,*,expected_head=None,expected_target=None):
     if type(number) is not int or number<1:
         raise ValueError('positive integer pull request number required')
     pr=gh('api',f'repos/{repository}/pulls/{number}')
@@ -1487,6 +1487,9 @@ def dispatch(repository,uid,number,impact_projection):
     repo=gh('api',f'repos/{repository}')
     branch=repo['default_branch']
     base=default_branch_head(repository,branch)
+    if ((expected_head is not None and expected_head != head)
+            or (expected_target is not None and expected_target != base)):
+        raise ValueError('integration dispatch differs from frozen exception source/target intent')
     _,branch=identity(repository,uid,number,base,head,allow_base_advance=True)
     source=gh('api',f'repos/{repository}/contents/{WORKFLOW}?ref={base}')
     workflow=base64.b64decode(source['content']).decode()

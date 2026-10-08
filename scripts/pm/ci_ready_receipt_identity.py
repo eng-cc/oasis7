@@ -84,6 +84,7 @@ PROJECTION_BINDING_FIELDS = (
     "impact_projection_planner_digest",
 )
 PROJECTION_SCHEMA = "oasis7-workflow-impact-projection/v2"
+STRICT_INTEGRATION_DECISIONS = frozenset({"not_required", "required", "blocked"})
 REQUIRED_V2_RECEIPT_FIELDS = (
     "request_key", "request_identity", "bootstrap_epoch", "request_id",
     "request_created_at", "live_validation", "trusted_integration_artifact",
@@ -675,72 +676,259 @@ def has_live_pr_ci_attestation(receipt: dict[str, Any]) -> bool:
     )
 
 
-def projection_requires_strict_integration(plan: dict[str, Any]) -> bool:
-    """Fail closed for ordinary receipts when the bound projection is risky.
+def _strict_exception_module():
+    """Optional adjacent producer; ordinary evaluation never imports it."""
+    name = 'oasis7_protected_strict_exception_facts'
+    path = pathlib.Path(__file__).with_name('strict_exception_facts.py')
+    existing = sys.modules.get(name)
+    if existing is not None and pathlib.Path(existing.__file__).resolve() == path.resolve():
+        return existing
+    spec = _primary_import.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('protected strict exception producer is unavailable')
+    module = _primary_import.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules[name] = module
+    return module
 
-    Promotion and closeout receive an immutable v2 plan plus a refreshed CI
-    receipt, but do not have the live PR payload used by the merge gate.  The
-    plan's already verified impact projection therefore remains the authority
-    for rejecting an ordinary receipt on high-risk or unknown source scope.
+
+def select_strict_exception_locator(*, root, repository, task_uid, issue, pr_number,
+                                    source_head_oid, target_oid, pr_body, plan_locator=None,
+                                    changed_paths=None, github=None):
+    """Select current admin Task evidence, independently of mutable PR labels.
+
+    A changed workflow is only an evidence-read hint, never an exception. For
+    the finite supported rule, unchanged ordinary execution guard proves its
+    residual boundary absent. Retained boundaries keep stale selected H/Q
+    blocked until new adjudication; they cannot disappear with a new HEAD.
     """
-    projection = plan.get("impact_projection") if isinstance(plan, dict) else None
+    lines = re.findall(r'(?m)^Strict Integration Exception:[^\n]*$', pr_body or '')
+    pointer = None
+    if lines:
+        if len(lines) != 1 or not re.fullmatch(r'Strict Integration Exception: [1-9][0-9]*', lines[0]):
+            raise ValueError('strict exception PR locator malformed')
+        pointer = int(lines[0].split(': ')[1])
+    if pointer is None and plan_locator is None and changed_paths is not None and '.github/workflows/rust.yml' not in changed_paths:
+        return None
+    def blob(oid):
+        return subprocess.check_output(['git', '-C', str(root), 'show', oid + ':.github/workflows/rust.yml']).decode()
+    q, h = blob(target_oid), blob(source_head_oid)
+    guard = r'(?m)^\s*elif \[\[ "\$\{GITHUB_EVENT_NAME\}" == "pull_request"[^\n]*\]\]; then\s*$'
+    q_guard, h_guard = re.findall(guard, q), re.findall(guard, h)
+    normalize = lambda value: re.sub(r'\s+', ' ', value).strip()
+    boundary_absent = len(q_guard) == len(h_guard) == 1 and normalize(q_guard[0]) == normalize(h_guard[0])
+    if pointer is None and plan_locator is None and boundary_absent:
+        return None
+    def read(*args):
+        if github is not None:
+            return github(*args)
+        return json.loads(subprocess.check_output(['gh', 'api', *args], text=True))
+    task = read(f'repos/{repository}/issues/{issue}')
+    if (task.get('number') != issue or task.get('state') != 'open'
+            or re.findall(r'(?m)^task_uid: ([^\n]+)$', task.get('body') or '') != [task_uid]):
+        raise ValueError('strict exception live Task identity invalid')
+    pages = read('--paginate', '--slurp', f'repos/{repository}/issues/{issue}/comments?per_page=100')
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        raise ValueError('strict exception Task evidence pagination incomplete')
+    selected = []
+    for comment in [item for page in pages for item in page]:
+        body = comment.get('body') or ''
+        if 'Strict Integration Exception:' not in body:
+            continue
+        try:
+            payload = body.split('Strict Integration Exception:', 1)[1].strip()
+            if payload.startswith('```json\n') and payload.endswith('\n```'):
+                payload = payload[8:-4]
+            record = json.loads(payload)
+        except (ValueError, TypeError):
+            if comment.get('id') in (pointer, plan_locator):
+                raise ValueError('selected strict exception Task record malformed')
+            continue
+        if not isinstance(record, dict) or any(record.get(k) != v for k, v in {
+                'repository': repository, 'task_uid': task_uid, 'issue_number': issue, 'pr_number': pr_number}.items()):
+            continue
+        actor = comment.get('user') or {}
+        login = actor.get('login')
+        if actor.get('type') != 'User' or not isinstance(login, str) or not re.fullmatch(r'[A-Za-z0-9-]+', login):
+            continue
+        permission = read(f'repos/{repository}/collaborators/{login}/permission')
+        if ((permission.get('user') or {}).get('login') != login
+                or not (permission.get('permission') == 'admin' or (permission.get('permissions') or {}).get('admin') is True)):
+            continue
+        if (comment.get('created_at') != comment.get('updated_at') or not comment.get('created_at')
+                or type(comment.get('id')) is not int):
+            raise ValueError('current admin strict exception evidence edited or malformed')
+        selected.append((comment['id'], record))
+    if not selected:
+        if pointer is not None or plan_locator is not None:
+            raise ValueError('selected strict exception absent from authenticated Task evidence')
+        return None
+    ident, record = max(selected, key=lambda item: item[0])
+    if boundary_absent and pointer is None and plan_locator is None:
+        return None
+    if record.get('source_head_oid') != source_head_oid or record.get('target_oid') != target_oid:
+        raise ValueError('selected strict boundary retained with stale H/Q; fresh adjudication required')
+    if pointer != ident or (plan_locator is not None and plan_locator != ident):
+        raise ValueError('PR or immutable plan hides or changes selected admin Task exception')
+    return ident
+
+
+def evaluate_strict_integration_requirement(
+    *, trusted_plan: dict[str, Any] | None = None,
+    trusted_projection: dict[str, Any] | None = None,
+    expected_task_uid: str | None = None,
+    exception_rule: str | None = None,
+    ordinary_limitation: str | None = None,
+    constraint_evidence: Any = None,
+    required_check_scope: Any = None,
+    strict_capability: Any = None,
+    verified_exception: Any = None,
+    exception_root: Any = None,
+) -> dict[str, Any]:
+    """Return the shared strict-route decision without trusting projection claims.
+
+    Ordinary PR CI is the default. Only installed protected producer facts can
+    establish a supported exception; caller-supplied exception fields cannot
+    establish ``required``. Candidate producer code cannot activate itself.
+    Keep the three-state contract explicit: no exception claim means
+    ``not_required``; an attempted but unsupported/incomplete claim is
+    ``blocked``.  Existing explicitly bound strict requests are enforced by
+    their live request/attempt verifier and remain a separate obligation; they
+    do not become a newly justified §3.2 exception here.
+    """
+    if (trusted_plan is None) == (trusted_projection is None):
+        return {"status": "blocked", "reason": "trusted_ordinary_routing_context_missing_or_ambiguous"}
+    projection = trusted_projection
+    declared_projection_digest = None
+    if trusted_plan is not None:
+        if not isinstance(trusted_plan, dict) or trusted_plan.get("schema") != SOURCE_REVIEW_SCHEMA:
+            return {"status": "blocked", "reason": "trusted_source_review_plan_is_malformed"}
+        source = trusted_plan.get("source_review_identity")
+        try:
+            normalized_source = _validate_source_identity(source)
+        except (TypeError, ValueError, KeyError):
+            return {"status": "blocked", "reason": "trusted_source_review_identity_is_malformed"}
+        if trusted_plan.get("source_review_digest") != source_review_digest(normalized_source):
+            return {"status": "blocked", "reason": "trusted_source_review_identity_digest_mismatch"}
+        projection = trusted_plan.get("impact_projection")
+        declared_projection_digest = trusted_plan.get("impact_projection_digest")
+        if (trusted_plan.get("impact_projection_schema") != PROJECTION_SCHEMA
+                or not isinstance(declared_projection_digest, str)
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", declared_projection_digest)
+                or (isinstance(projection, dict)
+                    and declared_projection_digest != projection.get("projection_digest"))):
+            return {"status": "blocked", "reason": "trusted_projection_binding_is_malformed"}
+        source_task_uid = normalized_source["task_uid"]
+        if expected_task_uid is not None and expected_task_uid != source_task_uid:
+            return {"status": "blocked", "reason": "trusted_source_review_task_uid_mismatch"}
+    else:
+        source_task_uid = expected_task_uid
+        if not isinstance(projection, dict):
+            return {"status": "blocked", "reason": "trusted_impact_projection_is_missing_or_malformed"}
+
     if not isinstance(projection, dict):
-        return True
-    source = plan.get("source_review_identity")
-    if not isinstance(source, dict):
-        return True
+        claims = (exception_rule, ordinary_limitation, constraint_evidence,
+                  required_check_scope, strict_capability)
+        if all(value is None for value in claims) and verified_exception is None and not trusted_plan.get('strict_exception_comment_id'):
+            # Some valid source-only plans bind the immutable projection by
+            # digest without embedding its body. Route remains ordinary; each
+            # receipt/planner consumer still validates its own proof envelope.
+            return {"status": "not_required", "reason": "ordinary_pr_ci_is_default",
+                    "projection_digest": declared_projection_digest}
+        return {"status": "blocked", "reason": "trusted_impact_projection_is_missing"}
+    if (projection.get("schema") != PROJECTION_SCHEMA
+            or not isinstance(projection.get("task_uid"), str)
+            or not re.fullmatch(r"task_[0-9a-f]{32}", projection["task_uid"])
+            or not isinstance(source_task_uid, str)
+            or not re.fullmatch(r"task_[0-9a-f]{32}", source_task_uid)
+            or projection.get("task_uid") != source_task_uid):
+        return {"status": "blocked", "reason": "trusted_impact_projection_identity_is_malformed"}
     projection_digest = projection.get("projection_digest")
-    if (not isinstance(projection_digest, str)
-            or not re.fullmatch(r"sha256:[0-9a-f]{64}", projection_digest)):
-        return True
     projection_body = {key: value for key, value in projection.items() if key != "projection_digest"}
     expected_projection_digest = "sha256:" + hashlib.sha256(
         json.dumps(projection_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    if (projection_digest != expected_projection_digest
-            or plan.get("impact_projection_digest") != projection_digest):
-        return True
-    if (projection.get("source_head_oid") != source.get("source_head_oid")
-            or projection.get("scope_base_oid") != source.get("source_scope_oid")):
-        return True
     changed_paths = projection.get("changed_paths")
     changed_paths_digest = projection.get("changed_paths_digest")
-    if (not isinstance(changed_paths, list)
-            or changed_paths != sorted(set(changed_paths))
+    if (not isinstance(projection_digest, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", projection_digest)
+            or projection_digest != expected_projection_digest
+            or not isinstance(projection.get("source_head_oid"), str)
+            or not re.fullmatch(r"[0-9a-f]{40,64}", projection["source_head_oid"])
+            or not isinstance(projection.get("scope_base_oid"), str)
+            or not re.fullmatch(r"[0-9a-f]{40,64}", projection["scope_base_oid"])
+            or not isinstance(changed_paths, list)
             or any(not isinstance(path, str) or not path for path in changed_paths)
+            or changed_paths != sorted(set(changed_paths))
             or not isinstance(changed_paths_digest, str)
             or changed_paths_digest != "sha256:" + hashlib.sha256(
                 json.dumps(changed_paths, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-            ).hexdigest()
-            or source.get("changed_paths_digest") != changed_paths_digest.removeprefix("sha256:")):
-        return True
-    # Explicit public behavior changes are strict by structure; consuming a
-    # stable contract alone does not imply that the target changed it.
-    if projection.get("public_semantics"):
-        return True
-    if projection.get("review_escalated") is True or projection.get("verification_affected") is True:
-        return True
-    if projection.get("change_class") in {"workflow-doc", "unknown", "mixed"}:
-        return True
-    closure = projection.get("closure_status")
-    if not isinstance(closure, dict) or closure.get("status") != "complete":
-        return True
-    risk_text = json.dumps(
-        [reason for reason in projection.get("review_reasons", [])
-         if isinstance(reason, str) and not reason.startswith("input:")],
-        sort_keys=True,
-    ).lower()
-    risk_terms = ("api", "abi", "persistence", "serialization", "state-root", "consensus",
-                  "security", "dependency", "permission", "workflow", "validation", "contract",
-                  "schema", "migration", "wasm", "replay", "recovery", "critical")
-    if any(term in risk_text for term in risk_terms):
-        return True
-    high_risk_paths = (".github/workflows/", ".codex/", "scripts/pm/", "cargo.toml", "cargo.lock")
-    return any(
-        any(path.lower().startswith(prefix) or path.lower() == prefix.rstrip("/")
-            for prefix in high_risk_paths)
-        for path in projection.get("changed_paths", [])
-    )
+            ).hexdigest()):
+        return {"status": "blocked", "reason": "trusted_impact_projection_integrity_check_failed"}
+    if trusted_plan is not None:
+        source = trusted_plan["source_review_identity"]
+        if (projection.get("task_uid") != source.get("task_uid")
+                or projection.get("source_head_oid") != source.get("source_head_oid")
+                or projection.get("scope_base_oid") != source.get("source_scope_oid")
+                or source.get("changed_paths_digest") != changed_paths_digest.removeprefix("sha256:")):
+            return {"status": "blocked", "reason": "trusted_projection_source_binding_mismatch"}
+
+    if verified_exception is None and trusted_plan is not None and 'strict_exception_comment_id' in trusted_plan:
+        try:
+            verified_exception = _strict_exception_module().read_plan(trusted_plan, root=exception_root)
+        except (ValueError, KeyError, OSError, ImportError, subprocess.SubprocessError) as exc:
+            return {'status': 'blocked', 'reason': 'protected_exception_facts_invalid: ' + str(exc)}
+    if verified_exception is not None:
+        if type(verified_exception) is not _strict_exception_module().VerifiedStrictException:
+            return {'status': 'blocked', 'reason': 'strict_exception_facts_not_verified'}
+        facts = verified_exception.as_dict()
+        if projection.get('ci_scope') != 'full' or projection.get('test_profile') != 'full':
+            return {'status': 'blocked', 'reason': 'strict_exception_required_scope_not_in_trusted_plan'}
+        if facts.get('constraint_evidence', {}).get('reviewed_projection_digest') != projection_digest:
+            return {'status': 'blocked', 'reason': 'strict_exception_reviewed_projection_mismatch'}
+        if (facts.get('task_uid') != source_task_uid
+                or facts.get('source_head_oid') != projection.get('source_head_oid')):
+            return {'status': 'blocked', 'reason': 'strict_exception_facts_projection_binding_mismatch'}
+        if trusted_plan is not None:
+            source = trusted_plan['source_review_identity']
+            if any(facts.get(key) != source.get(key) for key in ('repository', 'pr_number')):
+                return {'status': 'blocked', 'reason': 'strict_exception_facts_source_binding_mismatch'}
+        return {'status': 'required', 'reason': 'protected_execution_constraint_verified',
+                'projection_digest': projection_digest, **facts}
+
+    claims = (exception_rule, ordinary_limitation, constraint_evidence,
+              required_check_scope, strict_capability)
+    if all(value is None for value in claims):
+        return {"status": "not_required", "reason": "ordinary_pr_ci_is_default",
+                "projection_digest": projection_digest}
+
+    if (exception_rule not in {"trusted_executor_isolation", "candidate_context_unrepresentable"}
+            or not isinstance(ordinary_limitation, str) or not ordinary_limitation.strip()
+            or constraint_evidence is None or required_check_scope is None or strict_capability is None):
+        return {
+            "status": "blocked",
+            "reason": "strict_exception_claim_incomplete_or_unsupported",
+        }
+    # No immutable protected producer currently attests these facts. A complete
+    # caller payload is still only a claim and must not create a strict route.
+    return {
+        "status": "blocked",
+        "reason": "no_protected_strict_exception_fact_producer",
+        "exception_rule": exception_rule,
+    }
+
+
+def projection_requires_strict_integration(plan: dict[str, Any], *, root=None) -> bool:
+    """Compatibility predicate; review metadata alone never selects strict CI.
+
+    ``plan`` remains validated by its ordinary identity/projection consumers.
+    Its review class, paths, closure completeness, and target drift are not
+    execution-limit evidence and therefore cannot route a new strict request.
+    """
+    decision = evaluate_strict_integration_requirement(trusted_plan=plan, exception_root=root)
+    if decision["status"] == "blocked":
+        raise ValueError("strict integration routing blocked: " + decision["reason"])
+    return decision["status"] == "required"
 
 
 def _related_path(path: str, other: str) -> bool:
@@ -847,29 +1035,57 @@ def _target_relation_paths(
     return relations, unmapped
 
 
-def _target_advance_requires_strict(
+def _ordinary_target_advance_invalidates_receipt(
     plan: dict[str, Any], *, root: pathlib.Path | str | None, current_target_oid: str,
 ) -> bool:
-    """Return whether a live target advance is related or unverifiable.
+    """Return whether known target changes overlap known source relations.
 
-    Ordinary CI is allowed to reuse source review only when the current target
-    advance can be proven unrelated from the verified projection.  A missing
-    target object, non-ancestor scope, or unmapped contract/consumer therefore
-    fails closed.
+    An empty or unmapped relation is not evidence of overlap and does not add
+    a latest-target proof requirement. A proven overlap may require refreshing
+    the ordinary candidate receipt; it never selects strict execution.
+    """
+    source = plan.get("source_review_identity") if isinstance(plan, dict) else None
+    projection = plan.get("impact_projection") if isinstance(plan, dict) else None
+    if not isinstance(source, dict):
+        return False
+    return ordinary_target_advance_requires_refresh(
+        projection, root=root,
+        source_scope_oid=source.get("source_scope_oid"),
+        source_head_oid=source.get("source_head_oid"),
+        current_target_oid=current_target_oid,
+    )
+
+
+def ordinary_target_advance_requires_refresh(
+    projection: dict[str, Any] | None, *, root: pathlib.Path | str | None,
+    source_scope_oid: str, source_head_oid: str, current_target_oid: str,
+) -> bool:
+    """Whether a proven related target advance requires fresh ordinary CI.
+
+    This is a freshness check, not a strict-integration classifier. Empty or
+    unmapped relations and unverifiable path relations do not add a target
+    proof requirement by themselves.
     """
     if root is None:
-        return True
+        return False
     try:
-        source = _validate_source_identity(plan.get("source_review_identity"))
         target = _require_oid(current_target_oid, "current_target_oid")
-        scope = _require_oid(source["source_scope_oid"], "source_scope_oid")
-        source_head = _require_oid(source["source_head_oid"], "source_head_oid")
+        scope = _require_oid(source_scope_oid, "source_scope_oid")
+        source_head = _require_oid(source_head_oid, "source_head_oid")
     except (TypeError, ValueError, KeyError):
-        return True
+        return False
     if target == scope:
         return False
     root_path = pathlib.Path(root).resolve()
     try:
+        # The target may already be incorporated into this source head. In
+        # that case the ordinary source-bound check covers the same history;
+        # do not mistake candidate changes for a target-only advance.
+        if subprocess.run(
+            ["git", "-C", str(root_path), "merge-base", "--is-ancestor", target, source_head],
+            check=False, capture_output=True,
+        ).returncode == 0:
+            return False
         subprocess.run(
             ["git", "-C", str(root_path), "merge-base", "--is-ancestor", scope, target],
             check=True, capture_output=True,
@@ -879,16 +1095,24 @@ def _target_advance_requires_strict(
             text=True,
         ).splitlines()
     except (OSError, subprocess.CalledProcessError):
-        return True
-    projection = plan.get("impact_projection")
+        return False
     if not isinstance(projection, dict):
-        return True
-    relations, unmapped = _target_relation_paths(
+        return False
+    relations, _unmapped = _target_relation_paths(
         projection, root=root_path, source_head=source_head,
     )
-    if unmapped or not relations:
-        return True
-    return any(_related_path(path, relation) for path in changed for relation in relations)
+    return bool(relations) and any(
+        _related_path(path, relation) for path in changed for relation in relations
+    )
+
+
+def _target_advance_requires_strict(
+    plan: dict[str, Any], *, root: pathlib.Path | str | None, current_target_oid: str,
+) -> bool:
+    """Deprecated compatibility alias; result means ordinary receipt refresh only."""
+    return _ordinary_target_advance_invalidates_receipt(
+        plan, root=root, current_target_oid=current_target_oid,
+    )
 
 
 def _require_projection_digest(value: Any, field: str) -> str:
@@ -1134,6 +1358,9 @@ def can_reuse_source_review(
     try:
         if plan.get("schema") != SOURCE_REVIEW_SCHEMA:
             return False
+        route = evaluate_strict_integration_requirement(trusted_plan=plan, exception_root=current_target_root)
+        if route["status"] == "blocked":
+            return False
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
             return False
@@ -1158,12 +1385,15 @@ def can_reuse_source_review(
         if applicability != review_applicability_identity(source):
             return False
         if has_live_pr_ci_attestation(latest_receipt) or has_live_current_target_attestation(latest_receipt):
+            # An ordinary receipt must join the complete immutable projection
+            # body; projection absence may be valid for an integration-only
+            # source plan, but it cannot establish ordinary CI applicability.
+            if not isinstance(projection, dict):
+                return False
             mode = plan.get("effective_mode")
             if not isinstance(mode, dict) or mode.get("effective_policy") == "legacy":
                 return False
             current_target = has_live_current_target_attestation(latest_receipt)
-            if projection_requires_strict_integration(plan) and not current_target:
-                return False
             if current_target and current_target_oid != latest_receipt["current_target_proof"]["current_target_oid"]:
                 return False
             if latest_receipt.get("task_uid") != source["task_uid"]:
@@ -1173,7 +1403,7 @@ def can_reuse_source_review(
             if current_applicability is not None:
                 if _verified_review_applicability(current_applicability) != applicability:
                     return False
-            if not current_target and current_target_oid is not None and _target_advance_requires_strict(
+            if not current_target and current_target_oid is not None and _ordinary_target_advance_invalidates_receipt(
                     plan, root=current_target_root, current_target_oid=current_target_oid):
                 return False
             return True

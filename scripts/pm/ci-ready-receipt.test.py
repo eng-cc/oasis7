@@ -195,6 +195,12 @@ def v2_reader_fixture(*,attempt=2):
   return key,identity,context,plan_payload,result,proof,snapshot
 
 class ReceiptTest(unittest.TestCase):
+  def setUp(self):
+    # Existing fixtures modify source/helpers or test proof consumption; their
+    # authenticated changed-file inventory contains no workflow orchestration.
+    inventory = patch.object(M, '_pr_workflow_changed', return_value=False)
+    inventory.start()
+    self.addCleanup(inventory.stop)
   def standalone_ready_fixture(self, case=None):
     with tempfile.TemporaryDirectory() as directory:
       root=Path(directory)
@@ -392,7 +398,7 @@ sys.modules['workflow_maintenance']._gh=fixture_api
 module.artifact_bytes=lambda *args:__import__('base64').b64decode(%r)
 module._current_target_tree=lambda repository,q,h,e:__import__('subprocess').check_output(['git','-C',%r,'merge-tree','--write-tree',q,h],text=True).strip()
 """%(json.dumps(responses),base64.b64encode(artifact_zip(payload)).decode(),str(root))
-            command[3]=command[3].replace("repository=integration.gh",injected+"\nrepository=integration.gh")
+            command[3]=command[3].replace("repository=module.gh",injected+"\nrepository=module.gh")
             result=real_run(command,*args,**kwargs);children.append(result);return result
           return real_run(command,*args,**kwargs)
         with patch.object(gate,'_run_json',side_effect=lambda command:api(*command)),patch.object(gate.subprocess,'run',side_effect=actual_child):
@@ -535,6 +541,19 @@ module._current_target_tree=lambda repository,q,h,e:__import__('subprocess').che
     with self.api(runs=[older_green, newer_pending]):
       with self.assertRaisesRegex(SystemExit, "check incomplete"):
         M.live("eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True)
+
+  def test_selected_live_ordinary_route_does_not_load_or_scan_strict_history(self):
+    import builtins
+    ordinary=(pr(),run(),"b"*40,"a"*40)
+    real_import=builtins.__import__
+    def guarded_import(name,*args,**kwargs):
+      if name=="integration_ci": raise AssertionError("ordinary route loaded strict integration support")
+      return real_import(name,*args,**kwargs)
+    with patch.object(M,"gh",return_value=pr()),patch.object(M,"live",return_value=ordinary) as live, \
+         patch("builtins.__import__",side_effect=guarded_import):
+      self.assertEqual(ordinary,M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42"))
+    live.assert_called_once_with("eng-cc/oasis7",UID,1,7,"required-gate","42",False,None,ordinary_pr=True)
+
   def test_selected_integration_request_is_verified_at_its_exact_attempt(self):
     request={"id":12345,"run_attempt":1,"requested_at":1780000000.0}
     check={"id":902,"name":"required-gate","app":{"id":42},
@@ -546,7 +565,7 @@ module._current_target_tree=lambda repository,q,h,e:__import__('subprocess').che
          patch.object(integration_ci,"default_branch_head",return_value='b'*40), \
          patch.object(integration_ci,"current_request",side_effect=[request,request]), \
          patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
-      _, observed, _, _=M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+      _, observed, _, _=M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",integration_run_id=12345)
     verified.assert_called_once_with(
       "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",expected_attempt=1
     )
@@ -571,7 +590,7 @@ module._current_target_tree=lambda repository,q,h,e:__import__('subprocess').che
            patch.object(integration_ci,"verified_run",side_effect=verify) as verified, \
            patch.object(M,"live") as ordinary:
         with self.assertRaisesRegex(SystemExit,"current request blocked: "+reason):
-          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",integration_run_id=12345)
         verified.assert_called_once_with(
           "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",expected_attempt=2
         )
@@ -1321,5 +1340,16 @@ module._current_target_tree=lambda repository,q,h,e:__import__('subprocess').che
       with self.assertRaisesRegex(SystemExit,"envelope-capable|artifact missing"):
         M.cargo_package_profile_for_run(
           "eng-cc/oasis7",check,proof,full,task_uid=UID,task_issue_number=1,pr_number=7)
+
+def load_tests(loader, tests, pattern):
+  # Protected pre-migration drivers already execute this entrypoint. Include
+  # the candidate's new boundary suite so registration cannot hide coverage.
+  path = Path(__file__).with_name('strict_exception_facts.test.py')
+  if path.exists():
+    spec = importlib.util.spec_from_file_location('strict_exception_boundary_tests', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    tests.addTests(loader.loadTestsFromModule(module))
+  return tests
 
 if __name__=="__main__": unittest.main()

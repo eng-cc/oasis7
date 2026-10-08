@@ -293,7 +293,7 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
 
     def make_fixture(self, *, create_handoff: bool = True,
                      changed_paths: list[str] | None = None,
-                     publish_dispatch: bool = True) -> dict[str, object]:
+                     publish_dispatch: bool = True, strict_exception_locator=None) -> dict[str, object]:
         expected_slices = [{"role": ROLE, "slice_id": SLICE}]
         impact_projection = IMPACT_PROJECTION.build_projection(
             PROJECT_ROOT,
@@ -415,6 +415,8 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
             }],
             "preflight": {"status": "incomplete", "ledger_path": preflight["ledger_path"]},
         }
+        if strict_exception_locator is not None:
+            plan['strict_exception_comment_id'] = strict_exception_locator
         plan_path.write_text(json.dumps(plan, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
         dispatch = self.dispatch_payload(plan, plan_path, batch_path)
         dispatch_comment_body = self.dispatch_body(dispatch)
@@ -610,6 +612,18 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
             plan["impact_projection_digest"] = projection["projection_digest"]
         plan_path.write_bytes(canonical(plan) + b"\n")
         return plan
+
+    def test_optional_exception_locator_survives_real_handoff_dispatch_digest(self) -> None:
+        fixture = self.make_fixture(strict_exception_locator=431)
+        handoff_path = Path(str(fixture['handoff_path']))
+        result = HANDOFF.validate_handoff(self.root, handoff_path)
+        plan = json.loads(Path(str(fixture['plan_path'])).read_text())
+        self.assertEqual(431, plan['strict_exception_comment_id'])
+        self.assertIsNotNone(result)
+        for value in (True, 0, '431'):
+            plan['strict_exception_comment_id'] = value
+            with self.assertRaisesRegex(HANDOFF.ContractError, 'positive integer'):
+                HANDOFF.validate_plan(plan, canonical(plan))
 
     def test_valid_v2_impact_projection_is_bound_to_source_review_identity(self) -> None:
         fixture = self.make_fixture(create_handoff=False)

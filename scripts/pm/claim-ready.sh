@@ -230,7 +230,7 @@ spec.loader.exec_module(identity)
 
 task_uid = sys.argv[4]
 identity.validate_source_review_epoch(plan, root=root, task_uid=task_uid)
-requires_strict = identity.projection_requires_strict_integration(plan)
+requires_strict = identity.projection_requires_strict_integration(plan, root=root)
 ordinary = identity.is_ordinary_pr_ci_receipt(receipt)
 trusted_integration = identity.has_live_integration_attestation(receipt)
 if not ordinary and not trusted_integration:

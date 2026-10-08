@@ -230,7 +230,7 @@ print(json.dumps(receipt))
             pr_number=7,
             source_head_oid=self.head,
             source_scope_oid="b" * 40,
-            changed_paths_digest="2" * 64,
+            changed_paths_digest=projection["changed_paths_digest"].removeprefix("sha256:"),
             ordered_role_ids=["qa_engineer"],
             role_contract_digest="3" * 64,
             review_policy_digest="4" * 64,

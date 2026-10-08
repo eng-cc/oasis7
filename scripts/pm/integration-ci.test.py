@@ -2355,4 +2355,11 @@ class ProvenanceTests(unittest.TestCase):
    with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12,None)
    run.assert_not_called()
 
+ def test_frozen_exception_dispatch_subject_cannot_change_before_write(self):
+  with patch.object(self.api,'gh',side_effect=self.historical_pr_api),patch.object(self.api.subprocess,'run') as outbound:
+   for head,target in (('9'*40,self.base),(self.head,'9'*40)):
+    with self.assertRaisesRegex(ValueError,'frozen exception source/target'):
+     self.api.dispatch('owner/repo',self.uid,12,'projection',expected_head=head,expected_target=target)
+   outbound.assert_not_called()
+
 if __name__=='__main__':unittest.main()
