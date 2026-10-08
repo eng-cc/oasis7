@@ -16,7 +16,7 @@ run_key = re.compile(r"^(?P<indent>\s*)(?:-\s+)?run:\s*(?P<body>.*)$")
 target = "CI_VERBOSE=1 ./scripts/ci-tests.sh full"
 trunk_install = 'cargo install trunk --locked --version "${TRUNK_VERSION}"'
 trunk_verify = 'trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"'
-expected_jobs = {"full-regression", "full-escalation"}
+expected_jobs = {"full-regression"}
 
 
 def repository_trunk_version():

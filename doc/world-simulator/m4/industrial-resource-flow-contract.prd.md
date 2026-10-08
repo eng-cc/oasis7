@@ -33,7 +33,7 @@ GitHub #2166 中的 `schedule_quote`、`logistics_transfer_quote` / `transfer_im
 
 - 完整物流寻路/拥塞网络、金融市场、科技树或职业系统。
 - 电价、电耗、产率、阈值、损耗、速度、吞吐或维护公式重平衡。
-- LLM/provider 策略、Viewer 图谱/缩放；simulator `PowerStorage` hard-removal 的当前边界已在本文收敛，历史实施仅从 Git history / GitHub task evidence 追溯。
+- LLM/provider 策略、Viewer 图谱/缩放；simulator `PowerStorage` hard-removal 的当前边界已在本文收敛，历史实施仅从 Git history / PR 与实际验证记录 追溯。
 
 ## 3. AI System Requirements (If Applicable)
 
@@ -131,7 +131,7 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - 启用动态报价且提交价为零或未显式指定时，交易使用权威 current quote；显式价格超出 current quote 允许带宽时拒绝，并返回可解释的 quote/band 原因。
 - current quote 由 base price 加 scarcity 调整后钳制在 min/max 范围；相同权威状态必须产生相同报价，event/receipt 记录实际 quoted price 与 settlement amount，replay 不重新报价。
 - limit order 只有在权威 current quote 同时落入买卖双方 limits 时成交；买单按最高限价优先、卖单按最低限价优先，同价按更早 order identity。未匹配订单保持 open 且可取消，不代表 escrow 或保证成交。
-- 本合同保留价格约束与确定性规则，但不声称 `power_sale_quote` / `energy_liquidity_preview` 已实现；玩家可读机会成本仍是对应 GitHub task evidence 记录的未收口债务。
+- 本合同保留价格约束与确定性规则，但不声称 `power_sale_quote` / `energy_liquidity_preview` 已实现；玩家可读机会成本仍是对应 PR 与实际验证记录 记录的未收口债务。
 
 ### 工业方案成本与价值归因合同
 

@@ -32,7 +32,7 @@
 - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
-- `./scripts/pm/lint.sh`
+
 
 ## 备注
 - 本文档证明的是“尺度语义一致”，不证明 embodied / block-editing 已成为当前产品方向。

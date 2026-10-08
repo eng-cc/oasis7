@@ -15,9 +15,9 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 设计判定 task issue：#3680。
+- 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 的 provider 场景边界、切换和在途意图规则已由产品要求与专业 authority 直接表达；独立产品 design 会重复跨 provider 的产品合同。配套专业系统设计承接 provider/lane 调用绑定与候选、在途意图的技术边界，不改变本 PRD 的 `PRD-only-sufficient` 产品设计判定，也不取得产品交互 authority。
-- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
 当玩家在专业域已明确场景范围的 provider 组合间切换时，切换不能带来无法解释的、实质性的体验退化。连续性以玩家可感知的目标结果、等待体验、多轮记忆与意图延续、问题可诊断性及恢复路径为准，而不要求内部实现相同。

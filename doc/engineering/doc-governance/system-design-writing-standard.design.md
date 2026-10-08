@@ -1,3 +1,5 @@
+> 设计内容标准不增加普通开发准入；过程身份和传递回执要求已退出，交付规则见开发流程规范。
+
 # 系统设计写作规范
 
 - 状态：active
@@ -9,7 +11,7 @@
 
 本文是已落位的内容规范。它规定系统设计应表达什么、如何把上游要求交给专业设计、如何把设计条款映射到验证。本文不新增 workflow 状态、任务台账、权限模型、运行服务或产品承诺。
 
-产品 PRD 拥有产品价值、范围、玩家承诺和端到端结果；专业域 PRD 与 design 拥有该域的规则和技术合同；GitHub Issue/Project-backed task truth 拥有任务身份、范围、依赖、状态和过程证据；workflow source of truth 拥有生命周期、权限和门禁。发生冲突时，在当前 GitHub task evidence 中记录冲突和裁决，不在本文静默覆盖其他 authority。
+产品 PRD 拥有产品价值、范围、玩家承诺和端到端结果；专业域 PRD 与 design 拥有该域的规则和技术合同；Git、PR、实际 CI 和评审记录承载交付事实，Issue/Project 按需展示范围、依赖和进度；workflow source of truth 拥有生命周期、权限和门禁。发生冲突时，在当前 PR 与实际验证记录 中记录冲突和裁决，不在本文静默覆盖其他 authority。
 
 本文中的规范关键词具有以下强度：MUST/必须表示适用时的强制要求；MUST NOT/不得表示禁止行为；SHOULD/应表示默认要求，偏离时必须记录理由、影响和残余风险；MAY/可以表示在边界内的可选做法。普通评论、模板省略或作者声明不能豁免 MUST/MUST NOT。记录的例外必须写明受影响条款、理由、范围、批准 owner、失效/复核触发，并且不能覆盖上级产品、专业域或 workflow authority，也不能绕过门禁或权限。
 
@@ -34,7 +36,7 @@
 
 ### 1.3 按风险裁剪
 
-十二段是完整的技术设计视图。新建的长期设计和高风险变更 MUST 覆盖全部适用段落；跨域、协议/ABI、共识、存储、权限、迁移、恢复或状态模型变更 MUST 复核完整适用视图。小型、低风险且兼容的编辑 MAY 只更新受影响的条款、表格、需求承接和验证映射，不要求补写无关段落或填充空的 N/A 标题。任何省略都必须在当前 task evidence 中说明理由、未覆盖边界和 residual risk；裁剪不会豁免上级 authority、权限或 workflow gate。
+十二段是完整的技术设计视图。新建的长期设计和高风险变更 MUST 覆盖全部适用段落；跨域、协议/ABI、共识、存储、权限、迁移、恢复或状态模型变更 MUST 复核完整适用视图。小型、低风险且兼容的编辑 MAY 只更新受影响的条款、表格、需求承接和验证映射，不要求补写无关段落或填充空的 N/A 标题。任何省略都必须在PR 与实际验证记录 中说明理由、未覆盖边界和 residual risk；裁剪不会豁免上级 authority、权限或 workflow gate。
 
 ## 2. 上游约束与相关角色
 
@@ -50,13 +52,13 @@
 
 一条需求可以映射多个设计条款，一个设计条款也可以服务多个需求；每条关系都保留上述五列，不建立一对一文档或任务要求。外部 owner/dependency 不是本设计的隐含责任，排除范围也不能用空白代替。
 
-`path#fragment` 是被消费条款的身份，而不是可由上下文猜测的标签；完整身份还包括继承自冻结合同/发布记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`），并须在每个消费者匹配，不能隐式取当前仓库。实际 authority 需由冻结发布内容、Issue/comment readback 与当前资格共同证明；当前工作树、浮动分支、`latest`、mutable URL、Project/cache 和作者自报 digest 不能替代它。固定合同、Task 或证据若跨文件消费本表关系，必须保留能够在固定内容中唯一解析的路径与 fragment；局部 `REQ-*`/`AC-*` 只有在同一文件内且无歧义时才可使用。文件或 anchor 迁移时记录旧到新的映射或明确处置，不能静默选择同名条款。消费者只读取声明的有限关系闭包，未声明、重复、歧义、越界或不能回读的条款阻断，不扩散为无界 legacy 迁移。
+`path#fragment` 是被消费条款的身份，而不是可由上下文猜测的标签；完整身份还包括继承自合同或版本记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`），并须在每个消费者匹配，不能隐式取当前仓库。技术 authority 由对应领域的有效合同与实际版本确定；当前工作树、浮动分支、`latest`、mutable URL、Project/cache 和作者自报 digest 不能替代它。合同或验证记录若跨文件消费本表关系，必须保留能够在固定内容中唯一解析的路径与 fragment；局部 `REQ-*`/`AC-*` 只有在同一文件内且无歧义时才可使用。文件或 anchor 迁移时记录旧到新的映射或明确处置，不能静默选择同名条款。消费者只读取声明的有限关系闭包，未声明、重复、歧义、越界或不能回读的条款阻断，不扩散为无界 legacy 迁移。
 
 ### 2.2 适用关系与显式 N/A
 
 跨层关系按语义适用：变更产品价值、玩家承诺、产品范围或产品 AC 时，至少一个 typed `product_requirement` upstream ref MUST 为 `required`；纯工程、治理或专业合同变更 MUST 引用 `professional_acceptance`，此时 product requirement MAY 显式标为 `not_applicable`；声称存在交付工作的 obligation MUST NOT 同时把 product 与 professional 上游都标为 `not_applicable`。消费或改变技术合同、跨组件行为、状态、接口、迁移、恢复、安全边界或实现 obligation 时，`trace.system_design.applicability` MUST 为 `required` 并引用准确 `path#fragment`；只有不消费这些技术义务时才可以标为 `not_applicable`。
 
-任何 N/A disposition MUST 包含非空 reason、有界适用范围、applicability owner role、可回读的 review/evidence locator 和重新评估触发器。省略、`null`、空引用、`required=false`、`unknown` 或 `pending` 均不等于 N/A；每个新建或实质修改的记录 MUST 同时写入 `applicability` 与兼容别名 `required`，并使 `applicability=required` 与 `required=true`、`applicability=not_applicable` 与 `required=false` 分别一致。
+不适用条款说明具体理由和范围；重要未覆盖部分明确列出，不用空引用冒充验证。
 
 ## 3. 当前状态、目标状态与差距
 
@@ -137,7 +139,7 @@
 
 说明旧消费者、旧数据/快照、版本切换、启用/禁用、迁移顺序、双读/双写（如有）和回滚限制。回滚必须指出回到哪个已知基线、哪些副作用无法撤销、何时需要人工处置。
 
-输入合同、协议、schema 或权限资格发生实质变化时，必须在当前 task evidence 建立新基线并重新评估下游；新 draft 不自动使旧的有效合同失效。迁移是经授权的逐条旧/新 authority 映射、消费者修复、历史快照保留和回退处置；启用是兼容实现与负向/真实 readback 通过后，按现行升级流程限定新任务资格。规范或 helper 合入、结构检查通过、迁移示范均不自动启用能力，也不把在途任务静默切换到新合同。
+技术合同、协议、schema 或权限边界变化时，检查受影响的消费者、兼容性、验证和回退方式。明确记录实际变化；普通开发无需资格重绑、发布事务或新任务启用协议。
 
 ## 11. 验证设计与可追溯性
 
@@ -147,14 +149,14 @@
 产品成功标准（适用时）
   -> 专业域 PRD-ID / 规则条款
   -> 系统设计条款（路径 + fragment）
-  -> GitHub Task UID
+  -> 实现与实际验证记录
   -> PR + 固定源提交 / 实际测试基线
   -> 测试、评审与交付证据
 ~~~
 
 ### 11.1 验证映射表
 
-该表是持久的设计验证计划，每行 MUST 把 typed `trace.upstream_refs`、`trace.system_design`（准确 `path#fragment` 或完整 N/A disposition）、设计义务和准确的测试/手册入口连起来。表中的 candidate/environment 要求或选择规则表达适用的候选选择规则、环境要求与能力边界；协调记录先冻结批准的必要集合、映射槽位和选择规则，不预先伪造未来 Task/contract/evidence identity；实际 candidate、source/integration/tested tree、通过/失败、退出码和产物必须在组合前写入当前 task evidence，缺失引用保持 pending 并阻断整体完成，不阻止已批准叶子执行，也不要求长期设计随每次代码迭代回写实际提交。完整样例必须可由 C1 canonical fixture 自动校验；标为字段节选的示例只解释关系，不能满足结构或消费检查。只有描述已由证据证明的历史基线时，才保留明确标注的历史 candidate，并链接其对应 evidence。
+该表是设计验证计划，连接上游要求、本设计条款、验证方法与未覆盖范围。实际版本、环境、结果和产物记录在 PR 与真实验证输出中，不为普通代码迭代生成额外合同身份或传递回执。
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
@@ -164,7 +166,7 @@
 
 ## 12. 决策、长期风险与未决问题
 
-记录替代方案、约束、选择理由、正负后果、适用/失效条件、残余风险、决策 owner 和触发器。未决问题必须能定位到条款、owner 和解除触发；活跃合同中不要留下没有责任人和边界的裸 TODO/TBD。日常进度、排期和任务状态留在 GitHub task evidence。
+记录替代方案、约束、选择理由、正负后果、适用/失效条件、残余风险、决策 owner 和触发器。未决问题必须能定位到条款、owner 和解除触发；活跃合同中不要留下没有责任人和边界的裸 TODO/TBD。日常进度、排期和任务状态留在 PR 与实际验证记录。
 
 重要模块边界、协议/ABI、存储/一致性、部署、安全权限、确定性或难以回退的迁移 SHOULD 有 ADR。实质反转用新的 ADR 替代并保留双向追溯，不伪造历史。
 
@@ -172,11 +174,7 @@
 
 本规范当前交付：专业技术设计的十二段骨架、需求承接表、当前/目标/差距表、接口/质量/验证映射、固定输入和证据边界，以及附录模板。
 
-本规范当前不激活：机器可执行的 oasis7.doc/v1 metadata schema、metadata/lifecycle checker、新的 PM 或 loop 状态、新 Project 字段、scheduler/service、自动下游任务和代表性技术 pilot。changed-scope gate 在本次实现完成后适用于新增或实质修改的系统设计和 trace records；未触达的 legacy content 保持在强制迁移范围之外。本文的引用、验证计划和记录边界是内容契约，不等于 checker/schema 已实现或 loop 已启用；它们只有在各自 authority、adapter、检查范围和验证证据具备后才能单独采纳。这里的列举不是待办台账，也不改变当前 workflow。
-
-### 12.2 C1/C2/C3 固定交接
-
-后续代码叶子只能消费已冻结的 S1 文档版本。C1 输入为本规范、跨层追踪规范、PM 记录规范和 workflow traceability contract 的 immutable source identities，以及当前 loop schema 字段；验收为合同 `revision` 与源码 OID 分离、typed upstream/N/A、完整样例与节选边界、legacy 兼容和可定位负例。C2 输入为 C1 已合入的只读引用解析接口；验收为实际 system authority、path/fragment 消费闭包、changed-scope/rename/delete 与 bounded legacy 检查。C3 输入为 C1/C2 的固定接口、task binding、policy、CI identity 和 entrypoint；验收为创建/resume/发布/promotion/closeout/CI 复用同一 binding、单叶不被升级为组合、组合缺证据保持阻断、Issue/Project/cache round-trip 不丢字段。三者都必须分别通过兼容实现、负向测试和 live readback，才能进入另行授权的限定 enablement；本节不授权迁移或启用。
+本规范当前不激活：额外任务准入、审批、状态或完成协议。changed-scope gate 在本次实现完成后适用于新增或实质修改的系统设计和 trace records；未触达的 legacy content 保持在强制迁移范围之外。本文的引用、验证计划和记录边界是内容契约，不等于 checker/schema 已实现；它们只有在各自 authority、adapter、检查范围和验证证据具备后才能单独采纳。这里的列举不是待办台账，也不改变当前 workflow。
 
 ---
 
@@ -214,7 +212,7 @@
 具体 obligation 与适用条件：
 本设计条款（path#anchor）：
 准确 test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则：
-实际 candidate/source/integration/tested tree、环境、结果与 artifact：<当前 task evidence；普通代码迭代不回写本长期设计>
+实际 candidate/source/integration/tested tree、环境、结果与 artifact：<PR 与实际验证记录；普通代码迭代不回写本长期设计>
 外部 owner/dependency：
 明确排除、未覆盖范围与 residual risk：
 ~~~
@@ -238,7 +236,7 @@
 ## 附录 C：设计审读与证据卡
 
 ~~~text
-Task UID：
+PR / 可选 Issue：
 记录类型：system-design-review
 角色与时间：
 固定 source/head、输入合同和环境：

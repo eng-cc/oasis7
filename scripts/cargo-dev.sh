@@ -56,7 +56,7 @@ esac
 COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 CANONICAL_REPO_ROOT="$(cd "$COMMON_GIT_DIR/.." && pwd -P)"
-if ! PYTHON_BIN="$("$REPO_ROOT/scripts/pm/find-python-with-module.sh" ast)"; then
+if ! PYTHON_BIN="$("$REPO_ROOT/scripts/find-python-with-module.sh" ast)"; then
   echo "error: cannot find a functional Python interpreter for cargo target discovery" >&2
   exit 1
 fi

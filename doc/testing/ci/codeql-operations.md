@@ -1,6 +1,6 @@
 # CodeQL 操作与排障
 
-本手册面向 CI 与仓库运营者，承接 [canonical CodeQL contract](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) 和 [设计及验收映射](codeql-integration.design.md)。实现文件存在、CLI 可运行或 fixture 通过，都不证明 hosted 基线、提取覆盖、平台 provenance 或 observe 已验收。代码缺省关闭重型扫描；实际变量、运行与验收状态由既有 task evidence 记录，本手册不声明当前运营模式。
+本手册面向 CI 与仓库运营者，承接 [CodeQL 设计](codeql-integration.design.md) 和 [设计及验收映射](codeql-integration.design.md)。实现文件存在、CLI 可运行或 fixture 通过，都不证明 hosted 基线、提取覆盖、平台 provenance 或 observe 已验收。代码缺省关闭重型扫描；实际变量、运行与验收状态由既有 task evidence 记录，本手册不声明当前运营模式。
 
 系统 owner 为 `repository_health_engineer`，验收 owner 为 `qa_engineer`；Rust 提取问题交给 `runtime_engineer`，权限与凭据边界交给 `blockchain_ops_engineer`。真实状态与实例定位写入既有 GitHub Project-backed task evidence，不在本手册维护扫描状态总表。
 
@@ -74,7 +74,7 @@ archive 下载上限 1 MiB、超时 30 秒，并校验平台 `sha256` digest；Z
 
 `previous_analysis_id` 与 `previous_analysis_age_hours` 只是精确 ref/SHA/category 下最近可见 analysis 的历史参考，不保证属于当前 attempt，也不能证明 latest upload 成功或覆盖新鲜。新 attempt 排队、取消、超时或上传失败时，保留该 attempt 的真实状态；旧 analysis 即使仍新鲜也不使报告 healthy。缺少有效上传关联证据时须保留 unknown 并交验收 owner 核查；artifact fixture 通过或 health 报告生成不能据此宣布 hosted 验收通过。
 
-现有 lifecycle consumers 共用 `scripts/pm/codeql_advisory.py`：只有当前 SHA/ref 的精确 Actions job/run/workflow provenance、完整保护发现、required checks 已满足且其他失败均已解释，才可能把单独的 CodeQL 异常解释为 advisory。fixture 已覆盖 Actions 来源逻辑，但 native platform code-scanning provider 映射仍缺少 hosted association 证明，会 fail closed。名字带 CodeQL、bot 身份或 non-required 都不是豁免依据。required CodeQL、活动 code-scanning 规则、未知来源、其他失败、review/threads/holds 和冲突仍受现有保护。解释 advisory `UNSTABLE` 不把它改写成 CLEAN，不增加 admin bypass；pending advisory scans 不新增等待，也不刷新普通 CI/review/integration receipts。
+CodeQL 扫描保留实际发现和运行来源；required/advisory 由 GitHub CI 声明及生效保护决定。必需安全检查未成功时不得合入，不通过本地解释改写远端结果。
 
 ## Hosted 验收与回退
 

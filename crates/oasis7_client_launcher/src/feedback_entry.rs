@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::{LaunchConfig, feedback_privacy::capture_feedback_diagnostics};
 use crate::http_helpers::{
     bracket_ipv6_authority_host, build_http_request_head, normalize_connect_host, parse_host_port,
     parse_http_status_code,
@@ -130,7 +131,7 @@ pub(crate) fn collect_recent_logs(logs: &VecDeque<String>) -> Vec<String> {
 
 pub(crate) fn submit_feedback_report(
     draft: &FeedbackDraft,
-    launcher_config: Value,
+    config: &LaunchConfig,
     recent_logs: Vec<String>,
 ) -> Result<PathBuf, String> {
     let output_dir = draft.output_dir.trim();
@@ -141,6 +142,9 @@ pub(crate) fn submit_feedback_report(
     let output_path = Path::new(output_dir);
     fs::create_dir_all(output_path)
         .map_err(|err| format!("create feedback directory `{output_dir}` failed: {err}"))?;
+
+    let (launcher_config, recent_logs) =
+        capture_feedback_diagnostics(config, output_dir, &recent_logs)?;
 
     let now = SystemTime::now();
     let report = FeedbackReport {
@@ -171,13 +175,11 @@ pub(crate) fn submit_feedback_report(
 
 pub(crate) fn submit_feedback_with_fallback(
     draft: &FeedbackDraft,
-    launcher_config: Value,
+    config: &LaunchConfig,
     recent_logs: Vec<String>,
-    chain_enabled: bool,
-    chain_status_bind: &str,
 ) -> Result<FeedbackSubmitResult, String> {
-    if chain_enabled {
-        match submit_feedback_remote(draft, chain_status_bind) {
+    if config.chain_enabled {
+        match submit_feedback_remote(draft, config.chain_status_bind.as_str()) {
             Ok((feedback_id, event_id)) => {
                 return Ok(FeedbackSubmitResult::Distributed {
                     feedback_id,
@@ -185,7 +187,7 @@ pub(crate) fn submit_feedback_with_fallback(
                 });
             }
             Err(remote_error) => {
-                let path = submit_feedback_report(draft, launcher_config, recent_logs)?;
+                let path = submit_feedback_report(draft, config, recent_logs)?;
                 return Ok(FeedbackSubmitResult::Local {
                     path,
                     remote_error: Some(remote_error),
@@ -194,7 +196,7 @@ pub(crate) fn submit_feedback_with_fallback(
         }
     }
 
-    let path = submit_feedback_report(draft, launcher_config, recent_logs)?;
+    let path = submit_feedback_report(draft, config, recent_logs)?;
     Ok(FeedbackSubmitResult::Local {
         path,
         remote_error: None,
@@ -339,6 +341,7 @@ mod tests {
         format_filename_timestamp, parse_host_port, parse_http_json_response,
         submit_feedback_report, submit_feedback_with_fallback, validate_feedback_draft,
     };
+    use crate::LaunchConfig;
     use std::collections::VecDeque;
     use std::time::{Duration, UNIX_EPOCH};
 
@@ -385,14 +388,14 @@ mod tests {
 
         let path = submit_feedback_report(
             &draft,
-            serde_json::json!({"scenario": "llm_bootstrap"}),
+            &LaunchConfig::default(),
             vec!["[stdout] launcher started".to_string()],
         )
         .expect("feedback report should be written");
 
         let data = std::fs::read_to_string(&path).expect("feedback report should exist");
         assert!(data.contains("\"kind\": \"suggestion\""));
-        assert!(data.contains("\"scenario\": \"llm_bootstrap\""));
+        assert!(data.contains("\"chain_enabled\": false"));
         assert!(data.contains("launcher started"));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -437,14 +440,14 @@ mod tests {
             output_dir: temp_dir.to_string_lossy().to_string(),
         };
 
-        let outcome = submit_feedback_with_fallback(
-            &draft,
-            serde_json::json!({"scenario": "llm_bootstrap"}),
-            vec!["[stderr] test".to_string()],
-            true,
-            "127.0.0.1:1",
-        )
-        .expect("fallback should save local report");
+        let config = LaunchConfig {
+            chain_enabled: true,
+            chain_status_bind: "127.0.0.1:1".to_string(),
+            ..LaunchConfig::default()
+        };
+        let outcome =
+            submit_feedback_with_fallback(&draft, &config, vec!["[stderr] test".to_string()])
+                .expect("fallback should save local report");
 
         match outcome {
             FeedbackSubmitResult::Distributed { .. } => {

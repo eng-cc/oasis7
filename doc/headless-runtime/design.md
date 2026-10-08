@@ -3,7 +3,7 @@
 审计轮次: 6
 
 - 对应需求文档: `doc/headless-runtime/prd.md`
-- 当前任务追踪: GitHub task issue evidence comments
+- 当前任务追踪: PR、实际 CI 与评审记录（Issue 按需）
 - 对应文件级索引: `doc/headless-runtime/prd.index.md`
 
 ## 1. 设计定位
@@ -53,7 +53,7 @@
 
 ## 关键接口 / 入口
 - 需求入口：`doc/headless-runtime/prd.md`
-- 执行入口：GitHub task issue evidence comments
+- 执行入口：PR、实际 CI 与评审记录（Issue 按需）
 - 索引入口：`doc/headless-runtime/prd.index.md`
 
 ## 设计演进计划

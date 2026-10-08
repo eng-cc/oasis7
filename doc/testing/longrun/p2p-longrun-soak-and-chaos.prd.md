@@ -1,7 +1,7 @@
 # P2P 长跑、Soak 与 Chaos 测试合同
 
 - 对应设计文档: `doc/testing/longrun/p2p-longrun-soak-and-chaos.design.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 ## 目标
 
@@ -11,7 +11,7 @@
 chaos 以及 feedback 流量探针。
 
 本三件套吸收七个 dated longrun 专题中的五组 S9 测试语义。历史实现任务、
-短窗样本和完成状态只保留在 Git 与 GitHub task evidence，不作为当前运行或
+短窗样本和完成状态只保留在 Git 与 PR 与实际验证记录，不作为当前运行或
 发布就绪证明。
 
 ## 范围

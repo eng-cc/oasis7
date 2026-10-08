@@ -1,11 +1,11 @@
 {
   "record": {
-    "content_set_sha256": "01425c21935870ad93711edc83bad78cb92f6d0045d97619ed29ae3b64658a9b",
+    "content_set_sha256": "3fd62955f2561125f7d70aaf2d654b98a30e780ed1e29acbfbad4c0471833948",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_active_template_or_example",
     "id": "world-runtime-checklists-and-templates",
-    "note": "blank acceptance and release/security scaffolds; never execution evidence or current pass",
+    "note": "blank acceptance and release/security scaffolds; never execution evidence or current pass; developer workflow record projection updated, product authority retained",
     "paths": [
       "doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md",
       "doc/world-runtime/templates/runtime-release-gate-metrics-template.md",

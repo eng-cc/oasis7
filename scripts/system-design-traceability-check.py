@@ -39,6 +39,8 @@ DESIGN_STANDARD_EXCLUSIONS = frozenset(
         "doc/engineering/doc-governance/product-documentation-full-corpus-governance.design.md",
         "doc/engineering/doc-governance/product-documentation-standard.design.md",
         "doc/engineering/doc-governance/project-management-record-standard.design.md",
+        "doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md",
+        "doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md",
         "doc/engineering/doc-governance/system-design-writing-standard.design.md",
     }
 )
@@ -160,7 +162,11 @@ def normalized_for_change(text: str | None) -> str:
     if text is None:
         return ""
     text = without_html_comments(text).replace("\r\n", "\n").replace("\r", "\n")
-    return "\n".join(line.rstrip() for line in text.splitlines() if line.strip())
+    # Tracking metadata is not a system-design change. It may be updated as
+    # optional Issue/Project bookkeeping without imposing new design content.
+    metadata = re.compile(r"^\s*- (?:当前任务与执行证据|执行记录):")
+    return "\n".join(line.rstrip() for line in text.splitlines()
+                     if line.strip() and not metadata.match(line))
 
 
 def git_text(root: Path, commit: str, path: str) -> str | None:

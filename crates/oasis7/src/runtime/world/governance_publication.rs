@@ -272,9 +272,11 @@ impl PreparedGovernanceProposalApply {
                     .to_string(),
             });
         }
-        let instance = world
-            .state
-            .prepare_module_instance_event(&event, world.state.time)?;
+        let instance = world.state.prepare_module_instance_event_with_registry(
+            &event,
+            world.state.time,
+            Some(&world.module_registry),
+        )?;
         let schedule = World::prepare_module_instance_schedule_with_registry(
             &self.module_registry,
             &event,

@@ -36,6 +36,13 @@ fn profiles() -> ModuleProfileChanges {
 }
 
 fn ready_request(matching_module: bool) -> (World, u64) {
+    ready_request_with_profiles(matching_module, profiles())
+}
+
+fn ready_request_with_profiles(
+    matching_module: bool,
+    profile_changes: ModuleProfileChanges,
+) -> (World, u64) {
     let mut world = World::new();
     for agent_id in ["publisher", "operator"] {
         world.submit_action(Action::RegisterAgent {
@@ -96,7 +103,7 @@ fn ready_request(matching_module: bool) -> (World, u64) {
             activate: true,
             install_target: ModuleInstallTarget::SelfAgent,
             required_roles: vec!["security".into()],
-            profile_changes: profiles(),
+            profile_changes,
         },
     )
     .unwrap();
@@ -210,13 +217,25 @@ fn prelude_oracle(before: &World, failed: &World) -> World {
 }
 
 #[test]
-fn matching_module_profile_rejection_does_not_publish_install() {
+fn profile_only_release_for_matching_module_uses_governed_proposal() {
     let (mut world, id) = ready_request(true);
-    let before = world.clone();
-    let error =
-        apply(&mut world, id).expect_err("proposal zero profiles reject before installation");
-    assert!(matches!(error, WorldError::ResourceBalanceInvalid { .. }));
-    assert_world_matches(&world, &before);
+    let baseline = world.snapshot();
+    assert!(apply(&mut world, id).expect("profile-only release has a governed proposal"));
+    let applied_proposal_id = world.state.module_release_requests[&id]
+        .applied_proposal_id
+        .expect("profile-only release proposal id");
+    assert!(applied_proposal_id > 0);
+    assert!(world.state.product_profiles.contains_key("release-product"));
+    assert!(world.state.recipe_profiles.contains_key("release-recipe"));
+    assert!(world.state.factory_profiles.contains_key("release-factory"));
+    assert!(matches!(
+        world.journal().events.last().map(|event| &event.body),
+        Some(WorldEventBody::Domain(DomainEvent::ModuleReleaseApplied {
+            proposal_id,
+            ..
+        })) if *proposal_id == applied_proposal_id
+    ));
+    assert_root_and_replay(&world, baseline);
 }
 
 #[test]
@@ -376,13 +395,7 @@ fn release_success_merges_same_or_distinct_actor_fees_mailboxes_and_roots() {
 
 #[test]
 fn proposal_zero_empty_profiles_release_remains_successful() {
-    let (mut world, id) = ready_request(true);
-    world
-        .state
-        .module_release_requests
-        .get_mut(&id)
-        .unwrap()
-        .profile_changes = ModuleProfileChanges::default();
+    let (mut world, id) = ready_request_with_profiles(true, ModuleProfileChanges::default());
     let baseline = world.snapshot();
     let next_proposal = world.next_proposal_id;
     assert!(apply(&mut world, id).unwrap());
@@ -401,13 +414,7 @@ fn proposal_zero_empty_profiles_release_remains_successful() {
 
 #[test]
 fn release_profiles_publish_sorted_with_category_order() {
-    let (mut world, id) = ready_request(false);
-    let changes = &mut world
-        .state
-        .module_release_requests
-        .get_mut(&id)
-        .unwrap()
-        .profile_changes;
+    let mut changes = profiles();
     let mut product = changes.product_profiles[0].clone();
     product.product_id = "aaa-product".into();
     changes.product_profiles.push(product);
@@ -417,6 +424,7 @@ fn release_profiles_publish_sorted_with_category_order() {
     let mut factory = changes.factory_profiles[0].clone();
     factory.factory_id = "aaa-factory".into();
     changes.factory_profiles.push(factory);
+    let (mut world, id) = ready_request_with_profiles(false, changes);
     let baseline = world.snapshot();
     assert!(apply(&mut world, id).unwrap());
     let ordered: Vec<_> = world.journal().events[baseline.journal_len..]

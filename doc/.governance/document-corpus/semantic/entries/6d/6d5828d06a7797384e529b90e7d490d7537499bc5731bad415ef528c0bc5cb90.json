@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "0fdcec0f1a886025a0038150cc52051d6357961d1cb7739de1cb02a94a1b229e",
+    "content_sha256": "570d1212e973730545f22bd836333e5726a9cc3f52f7d19f99169559d4702507",
     "current_authority": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_target_contract",
-    "note": "retained active current/target hardening design companion with bounded implementation and independent validation mapping; historical proposal spelling and migration provenance retained; no aggregate cryptography, full BFT, unified root transaction or executed security proof claim",
+    "note": "retained active current/target hardening design companion with bounded implementation and independent validation mapping; historical proposal spelling and migration provenance retained; no aggregate cryptography, full BFT, unified root transaction or executed security proof claim; developer workflow record projection updated, product authority retained",
     "path": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
