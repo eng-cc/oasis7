@@ -3,6 +3,12 @@
 """Create and validate an immutable bootstrap task snapshot."""
 
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import argparse
 import datetime as dt
@@ -31,6 +37,12 @@ if _ADMISSION_SPEC is None or _ADMISSION_SPEC.loader is None:
     raise RuntimeError(f"cannot load candidate admission guard at {_ADMISSION_PATH}")
 ADMISSION_GUARD = importlib.util.module_from_spec(_ADMISSION_SPEC)
 _ADMISSION_SPEC.loader.exec_module(ADMISSION_GUARD)
+_REGISTRATION_PATH = pathlib.Path(__file__).with_name("worktree_registration.py")
+_REGISTRATION_SPEC = importlib.util.spec_from_file_location("worktree_registration_bootstrap", _REGISTRATION_PATH)
+if _REGISTRATION_SPEC is None or _REGISTRATION_SPEC.loader is None:
+    raise RuntimeError(f"cannot load worktree registration validator at {_REGISTRATION_PATH}")
+WORKTREE_REGISTRATION = importlib.util.module_from_spec(_REGISTRATION_SPEC)
+_REGISTRATION_SPEC.loader.exec_module(WORKTREE_REGISTRATION)
 
 
 class SnapshotError(Exception):
@@ -124,10 +136,11 @@ def live_payload(
         raise SnapshotError(f"tasks mapping is missing required bootstrap truth: {details}")
     if not isinstance(task["acceptance"], list) or not task["acceptance"]:
         raise SnapshotError("tasks mapping acceptance must be a non-empty list")
-    if task.get("primary_package") not in (None, ""):
-        package = str(task["primary_package"]).strip()
-        if PRIMARY_PACKAGE_RE.fullmatch(package) is None:
-            raise SnapshotError("tasks mapping primary_package is invalid")
+    try:
+        package = primary_contract.effective_primary_package({**task, "task_uid": task_uid})
+    except ValueError as exc:
+        raise SnapshotError(str(exc)) from exc
+    if package is not None:
         task["primary_package"] = package
     bootstrap_epoch = task.get("bootstrap_epoch", 1)
     if type(bootstrap_epoch) is not int or bootstrap_epoch < 1:
@@ -147,6 +160,11 @@ def live_payload(
         if not isinstance(pinned, str) or not re.fullmatch(r"[0-9a-f]{40}", pinned):
             raise SnapshotError("manual loop task requires fixed bootstrap_base_oid")
         base_oid = git(root, "rev-parse", "--verify", pinned + "^{commit}")
+
+    try:
+        worktree_registration = WORKTREE_REGISTRATION.validate_worktree_registration(root, task)
+    except WORKTREE_REGISTRATION.RegistrationError as exc:
+        raise SnapshotError(f"invalid worktree registration: {exc}") from exc
 
     return {
         "schema": SCHEMA,
@@ -172,6 +190,8 @@ def live_payload(
             "branch": branch,
             "base": {"branch": task["default_branch"], "ref": base_ref, "oid": base_oid},
             "head": head,
+            **({"worktree_registration": worktree_registration}
+               if worktree_registration is not None else {}),
         },
         "request": {"identity": request_identity, "acceptance": task["acceptance"]},
     }
@@ -242,6 +262,7 @@ def validate(args: argparse.Namespace) -> pathlib.Path:
     if saved.get("digest") != digest(saved):
         raise SnapshotError("snapshot digest mismatch")
     expected = live_payload(root, tasks_json, args.task_uid, args.request_identity)
+    expected = completion_compatible_payload(root, tasks_json, args.task_uid, saved, expected)
     for field in ("schema", "task", "repository", "git", "request"):
         if saved.get(field) != expected[field]:
             raise SnapshotError(
@@ -269,6 +290,7 @@ def validate_epoch_identity(args: argparse.Namespace) -> pathlib.Path:
     if saved.get("digest") != digest(saved):
         raise SnapshotError("snapshot digest mismatch")
     expected = live_payload(root, tasks_json, args.task_uid, args.request_identity)
+    expected = completion_compatible_payload(root, tasks_json, args.task_uid, saved, expected)
 
     def immutable_task_identity(payload: dict[str, Any]) -> dict[str, Any]:
         task = payload.get("task")
@@ -311,6 +333,30 @@ def validate_epoch_identity(args: argparse.Namespace) -> pathlib.Path:
     if not isinstance(saved.get("created_at"), str) or not saved["created_at"]:
         raise SnapshotError("snapshot creation time is missing")
     return snapshot_path
+
+
+def completion_compatible_payload(root: pathlib.Path, tasks_json: pathlib.Path,
+                                  task_uid: str, saved: dict[str, Any],
+                                  expected: dict[str, Any]) -> dict[str, Any]:
+    """Keep the saved bytes; authorize only the historical primary difference."""
+    _, record = load_task(tasks_json, task_uid)
+    record = {**record, "task_uid": task_uid}
+    try:
+        primary_contract.validate_current_completion(root, record)
+        old_task, new_task = saved.get("task"), expected.get("task")
+        if not isinstance(old_task, dict) or not isinstance(new_task, dict):
+            raise ValueError("snapshot task identity is missing")
+        if not primary_contract.snapshot_primary_compatible(old_task, new_task, record):
+            raise ValueError("snapshot primary_package drift has no valid historical completion")
+        if old_task.get("primary_package") != new_task.get("primary_package"):
+            expected = {**expected, "task": dict(new_task)}
+            if "primary_package" in old_task:
+                expected["task"]["primary_package"] = old_task["primary_package"]
+            else:
+                expected["task"].pop("primary_package", None)
+    except ValueError as exc:
+        raise SnapshotError(str(exc)) from exc
+    return expected
 
 
 def validate_or_create(args: argparse.Namespace) -> tuple[pathlib.Path, str]:

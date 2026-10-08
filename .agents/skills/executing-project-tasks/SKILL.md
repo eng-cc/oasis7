@@ -5,7 +5,7 @@ description: Use when a task has written repo truth and implementation should pr
 
 # Executing Project Tasks
 
-Canonical lifecycle: [state machine](../../../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../../../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done).
+Canonical lifecycle: [state machine](../../../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../../../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done), and [planning and slice contract](../../../doc/engineering/workflow/source-of-truth.md#52-tpm-planning-and-subagent-dispatch).
 
 ## When to Use
 
@@ -13,8 +13,8 @@ Use when the task already has written scope in a PRD/design, a handoff, or GitHu
 
 ## Procedure
 
-1. Before editing or execution, create a `Plan-Gap Evidence` entry for every ordered execution step. Each entry must record all of: `step_id`, `acceptance_refs`, `dependencies`, `verification_command`, `verification_evidence`, `write_scope`, `out_of_scope`, and `required_role_slices`. Keep each field non-empty and map acceptance/dependencies/scope to current GitHub-backed task truth; state the verification command and expected evidence target before execution, capture the actual result afterward, and name required roles or an explicit reasoned exemption. A missing field, evidence, or mapping fails closed before editing or execution. Keep mutable task planning only in GitHub-backed task truth; repository PRD/design documents remain durable professional authority, not a second task ledger.
-2. Record ordered steps and required professional slices in GitHub task issue evidence comments.
+1. Confirm the bound task's goal, owner, write scope, exclusions, acceptance, and separately authorized dangerous effects. For a write task, satisfy the canonical per-step Plan-Gap Evidence schema and slice-context checklist in task truth before editing; the GitHub task Issue remains the sole mutable plan truth. Do not create a new Issue comment for each local command or intermediate step.
+2. Work continuously within the same authorized scope: analyze, reproduce, write tests, implement, and run targeted verification. Normal commits, test repairs, diagnosis, and main advancement do not require a new task, epoch, or implementation permit. Stop before an out-of-scope write, new dangerous effect, changed delivery object, or explicit hold/expiry.
 3. At task start and after any context handoff, query the compact resume state
    from the canonical worktree. Treat its `next_command` as the only suggested
    continuation and stop for its blockers when `identity_status` is not bound:
@@ -25,11 +25,11 @@ python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> \
 ```
 
 4. For a finite multi-obligation change, before implementing a leaf, read its coordinating Issue record and confirm the approved required set, mapping slots, candidate-selection rule and blocking feedback under the [traceability record contract](../../../doc/engineering/workflow/source-of-truth.md#traceability-record-contract). Ordinary single-task/single-leaf work follows its own task Issue and does not require a second coordinating Issue. The optional `delivery_obligations` binding may be absent; absence does not prove there are no obligations, but is not itself a blocker when the required record and evidence are complete.
-5. Implement one bounded step in its declared write scope.
-6. Run the step-level verification and inspect the output.
+5. Implement within the declared write scope and acceptance target.
+6. Run the targeted verification and inspect the output.
    Route commands expected to emit broad logs or search results through `./scripts/pm/bounded-command-output.py`; inspect the bounded summary and retain the reported full artifact/digest for debugging.
-7. Append result, evidence, deviation, and next step to the same task issue.
-8. Repeat until scope is implemented and verified, then route to `finishing-a-development-branch`. A leaf may complete truthfully while aggregate obligations remain pending.
+7. Record material results, changed decisions, deviations, and blockers in the same task truth; do not create an Issue comment for each local command.
+8. Continue until scope is implemented and verified, then route to `finishing-a-development-branch`. A leaf may complete truthfully while aggregate obligations remain pending.
 
 If any command, test, or behavior is unexpected, automatically route to `systematic-debugging`. Diagnosis, isolated tests, and repair may continue only within the existing authorized change. Resume the same step only while the canonical state permits that typed action and its task/checkpoint-bound authority remains valid.
 
@@ -57,4 +57,4 @@ Preserve declared write scopes and task truth; do not claim broader readiness th
 
 ## Known Failure Modes
 
-Large unverified batches; parallel planning truth; continuing after unexplained failures; treating module checks as release proof.
+Repeated reauthorization for routine HEAD changes; per-command evidence churn; large unverified batches; parallel planning truth; continuing after unexplained failures; treating module checks as release proof.

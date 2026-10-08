@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Any
 
 
-EXECUTION_CONTRACT = "required-domain-split/v1"
+EXECUTION_CONTRACT = "required-domain-split/v2"
+SUPPORTED_EXECUTION_CONTRACTS = {"required-domain-split/v1", EXECUTION_CONTRACT}
 INVENTORY_AUTHORITY_SCHEMA = "oasis7-planner-inventory-authority/v1"
 INVENTORY_SCHEMA = "oasis7-trusted-planner-inventory/v1"
 
@@ -62,6 +63,8 @@ BASELINE_CHECKER_PATHS = (
     "doc/testing/evidence/inventory.json",
     "scripts/pm/workflow-impact-projection.py",
     "scripts/pm/check-cargo-package-scope",
+    "scripts/pm/cargo_package_change_classification.py",
+    "scripts/pm/trusted_cargo_scope.py",
     "scripts/pm/cargo_package_profile_driver.py",
     "scripts/unified-world-code-terminology-scan.test.sh",
     "scripts/check-rust-file-size.test.sh",
@@ -254,7 +257,7 @@ def selected_test_units(
 ) -> list[str]:
     """Validate the W planner's canonical test-unit projection."""
     values = _plan_mapping(plan)
-    if values.get("execution_contract") != EXECUTION_CONTRACT:
+    if values.get("execution_contract", "") not in {"", *SUPPORTED_EXECUTION_CONTRACTS}:
         raise InventoryError("required-test inventory needs the versioned trusted planner")
     allowed = set(planner_capabilities)
     selected = values.get("selected_capabilities", "").split(";")
@@ -289,10 +292,16 @@ def required_test_unit_registry(
     planner_capabilities: tuple[str, ...] | list[str],
 ) -> dict[str, dict[str, Any]]:
     """Return every unit contract the versioned planner can select."""
-    if set(planner_capabilities) != set(CAPABILITY_RUNNERS):
+    legacy_capabilities = set(CAPABILITY_RUNNERS) - {"doc_checker_contracts", "cargo_tooling_contracts"}
+    if set(planner_capabilities) not in (set(CAPABILITY_RUNNERS), legacy_capabilities):
         raise InventoryError("required-test inventory registry does not cover planner capabilities")
+    legacy = set(planner_capabilities) == legacy_capabilities
     registry: dict[str, dict[str, Any]] = {}
     for capability, runners in CAPABILITY_RUNNERS.items():
+        if capability not in planner_capabilities:
+            continue
+        if legacy and capability in {"operational_contracts", "packaging_contracts", "workflow_governance"}:
+            runners = ("run_legacy_mixed_operational_contract_tests",)
         commands = list(RUST_COMMANDS.get(capability, ()))
         if not commands:
             commands = [f"required runner function: {runner}" for runner in runners]
@@ -305,7 +314,9 @@ def required_test_unit_registry(
             "package_names": list(RUST_PACKAGES.get(capability, ())),
             "input_paths": list(STATIC_INPUT_PATHS.get(capability, ())),
             "member_roots": list(STATIC_MEMBER_ROOTS.get(capability, ())),
-            "selector_env": SELECTOR_ENV.get(capability),
+            "selector_env": ("OASIS7_CI_RUN_OPERATIONAL_CONTRACTS" if legacy and capability in
+                             {"operational_contracts", "packaging_contracts", "workflow_governance"}
+                             else SELECTOR_ENV.get(capability)),
         }
     return registry
 
@@ -882,14 +893,14 @@ def _validate_trusted_plan(
     except (OSError, ValueError) as exc:
         raise InventoryError("trusted W planner config is unreadable") from exc
     config_digest = "sha256:" + hashlib.sha256(config_raw).hexdigest()
-    if not isinstance(config, dict) or config.get("execution_contract") != EXECUTION_CONTRACT:
+    if not isinstance(config, dict) or config.get("execution_contract", "") not in {"", *SUPPORTED_EXECUTION_CONTRACTS}:
         raise InventoryError("trusted W planner config does not use the versioned execution contract")
-    if plan.get("execution_contract") != EXECUTION_CONTRACT:
+    if plan.get("execution_contract") != config.get("execution_contract"):
         raise InventoryError("planner output execution contract is missing or unsupported")
     if plan.get("planner_config_sha256") != config_digest:
         raise InventoryError("planner output is not bound to the trusted W planner config")
     planner = _load_module(planner_path, "trusted_required_scope_planner")
-    capabilities = tuple(getattr(planner, "CAPABILITIES", ()))
+    capabilities = tuple(getattr(planner, "LEGACY_CAPABILITIES" if config.get("execution_contract") is None else "CAPABILITIES", ()))
     if config.get("capabilities") != list(capabilities):
         raise InventoryError("trusted planner source and config capability sets disagree")
     registry = required_test_unit_registry(capabilities)
@@ -927,6 +938,7 @@ def _validate_trusted_plan(
     }
     selection_digest = _canonical_digest(selection)
     return planner, _load_module(c2_path, "trusted_ci_input_scope"), registry, {
+        "execution_contract": config.get("execution_contract") or "",
         "config_digest": config_digest,
         "trusted_sources": _trusted_sources(planner_root),
         "plan_units": plan_units,
@@ -1030,6 +1042,9 @@ def _unit_spec(
 ) -> dict[str, Any]:
     commands = list(spec["commands"])
     test_paths = _inventory_test_paths(planner_root, capability)
+    if spec["runner_functions"] == ["run_legacy_mixed_operational_contract_tests"]:
+        test_paths = sorted({path for domain in ("workflow_governance", "packaging_contracts", "operational_contracts")
+                             for path in _inventory_test_paths(planner_root, domain)})
     for path in test_paths:
         if path not in commands:
             commands.append(path)
@@ -1062,7 +1077,7 @@ def _unit_spec(
     if missing_commands:
         raise InventoryError("required checker or test source is missing from target M: "
                              + ", ".join(missing_commands))
-    planner_fields = getattr(planner, "FIELDS", {})
+    planner_fields = getattr(planner, "FIELDS" if planner_facts.get("execution_contract") else "LEGACY_FIELDS", {})
     policy = {
         "schema": _POLICY_SCHEMA,
         "required_check": "required-gate",

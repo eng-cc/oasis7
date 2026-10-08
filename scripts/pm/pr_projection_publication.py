@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import inspect
 import json
 import re
 import time
+from datetime import datetime
 from typing import Any, Callable
 
 from pr_projection_journal import JournalError, PublicationJournal
@@ -18,7 +20,14 @@ from projection_publication_contract import (
 PUBLICATION_BINDING_SCHEMA = "oasis7-ci-publication-binding/v1"
 _BODY_MARKER = "<!-- oasis7-ci-impact-publication:v2 -->"
 _BINDING_MARKER = "<!-- oasis7-ci-publication-binding/v1 -->"
+_TASK_PUBLICATION_MARKER = "<!-- oasis7-ci-publication/v1 -->"
 _SHA1_OID_RE = re.compile(r"[0-9a-f]{40}\Z")
+_TASK_PUBLICATION_FIELDS = frozenset({
+    "repository", "repository_id", "task_uid", "bootstrap_epoch",
+    "source_repository_id", "source_ref", "target_ref", "source_head_oid",
+    "source_scope_oid", "planner_authority_oid", "planner_config_sha256",
+    "policy_digest", "projection_digest",
+})
 
 
 class PublicationError(RuntimeError):
@@ -63,7 +72,7 @@ def publication_comment(publication: dict[str, Any]) -> str:
 
 
 def parse_publication_comment(body: str) -> dict[str, Any]:
-    marker = "<!-- oasis7-ci-publication/v1 -->"
+    marker = _TASK_PUBLICATION_MARKER
     if not isinstance(body, str) or body.count(marker) != 1 or not body.startswith(marker + "\n"):
         raise ContractError("CI publication marker must occur exactly once")
     payload = body.split(marker, 1)[1].strip()
@@ -75,6 +84,191 @@ def parse_publication_comment(body: str) -> dict[str, Any]:
     if payload[end:].strip():
         raise ContractError("CI publication comment has trailing content")
     return validate_ci_publication(value)
+
+
+def comment_timestamps_are_unchanged(comment: Any) -> bool:
+    """Require an unedited GitHub comment with valid server timestamps."""
+    if not isinstance(comment, dict):
+        return False
+    created_raw = comment.get("created_at")
+    updated_raw = comment.get("updated_at")
+    if (not isinstance(created_raw, str) or not created_raw
+            or not isinstance(updated_raw, str) or not updated_raw
+            or created_raw != updated_raw):
+        return False
+    try:
+        created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+        updated = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return created.tzinfo is not None and updated.tzinfo is not None and created == updated
+
+
+def resolve_task_publication(comments_read: dict[str, Any], expected_identity: dict[str, Any], *,
+                             live_task_author: dict[str, Any],
+                             permissions: dict[str, Any] | None = None,
+                             pr_binding: dict[str, Any]) -> dict[str, Any]:
+    """Resolve C1 only from a complete live Task Issue comment read and PR.
+
+    This is a hosted, read-only verifier.  It deliberately does not infer
+    Project membership or repository write permission: hosted gate tokens are
+    content readers.  `author_association` and the server-authored commenter
+    identity are returned as provenance, not as an authorization grant.
+    The optional `permissions` argument is accepted for local callers with a
+    separately authorized permission read, but is never required or
+    substituted for comment provenance.
+    """
+    blockers: list[str] = []
+    if not isinstance(comments_read, dict) or comments_read.get("complete") is not True:
+        return {"status": "pending", "blockers": ["Task Issue comment read is incomplete"]}
+    if not isinstance(expected_identity, dict) or set(expected_identity) != _TASK_PUBLICATION_FIELDS:
+        return {"status": "blocked", "blockers": ["expected C1 publication identity is not closed"]}
+    try:
+        expected = build_task_publication(**expected_identity)
+    except (ContractError, TypeError) as exc:
+        return {"status": "blocked", "blockers": [f"expected C1 publication identity is invalid: {exc}"]}
+    repository = expected["repository"]
+    issue_number = comments_read.get("issue_number")
+    if comments_read.get("repository") != repository or type(issue_number) is not int or issue_number < 1:
+        blockers.append("Task Issue publication read identity is incomplete or mismatched")
+    comments = comments_read.get("comments")
+    if not isinstance(comments, list):
+        return {"status": "pending", "blockers": ["Task Issue comment read is malformed"]}
+    matches: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    malformed = False
+    for comment in comments:
+        if not isinstance(comment, dict):
+            malformed = True
+            continue
+        body = comment.get("body")
+        if not isinstance(body, str):
+            malformed = True
+            continue
+        if _TASK_PUBLICATION_MARKER not in body:
+            continue
+        try:
+            value = parse_publication_comment(body)
+        except (ContractError, TypeError, ValueError):
+            malformed = True
+            continue
+        if value.get("publication_id") == expected["publication_id"]:
+            matches.append((comment, value))
+    if malformed:
+        blockers.append("Task Issue contains malformed C1 publication evidence")
+    if len(matches) != 1:
+        blockers.append("Task Issue does not contain one unique exact C1 publication record")
+    if not isinstance(live_task_author, dict):
+        blockers.append("live Task Issue author identity is unavailable")
+    elif (not isinstance(live_task_author.get("login"), str)
+          or not live_task_author.get("login")
+          or live_task_author.get("type") != "User"):
+        blockers.append("live Task Issue author is not a canonical human user identity")
+    if not isinstance(pr_binding, dict):
+        blockers.append("live PR binding is unavailable")
+    else:
+        required_pr = {
+            "repository", "number", "url", "state", "merged", "draft",
+            "source_ref", "target_ref", "source_head_oid", "task_uid",
+            "issue_number", "created_at", "updated_at", "task_status",
+            "task_phase", "task_pr_number", "task_pr_url", "pr_author",
+            "pr_author_type",
+        }
+        if set(pr_binding) != required_pr:
+            blockers.append("live PR binding fields are not closed")
+        elif (
+            pr_binding.get("repository") != repository
+            or type(pr_binding.get("number")) is not int or pr_binding["number"] < 1
+            or pr_binding.get("url") != f"https://github.com/{repository}/pull/{pr_binding['number']}"
+            or pr_binding.get("state") != "open" or pr_binding.get("merged") is not False
+            or type(pr_binding.get("draft")) is not bool
+            or pr_binding.get("source_ref") != expected["source_ref"]
+            or pr_binding.get("target_ref") != expected["target_ref"]
+            or pr_binding.get("source_head_oid") != expected["source_head_oid"]
+            or pr_binding.get("task_uid") != expected["task_uid"]
+            or pr_binding.get("issue_number") != issue_number
+            or (pr_binding.get("task_pr_number") is not None and
+                (type(pr_binding["task_pr_number"]) is not int or pr_binding["task_pr_number"] < 1))
+            or ((pr_binding.get("task_pr_number") is None) !=
+                (pr_binding.get("task_pr_url") is None))
+            or (pr_binding.get("task_pr_number") is not None and
+                (pr_binding.get("task_pr_number") != pr_binding.get("number")
+                 or pr_binding.get("task_pr_url") != pr_binding.get("url")))
+            or not isinstance(pr_binding.get("pr_author"), str)
+            or pr_binding.get("pr_author_type") != "User"
+        ):
+            blockers.append("live PR does not match exact C1 Task/ref/head identity")
+        elif pr_binding["draft"]:
+            phase = (pr_binding.get("task_status"), pr_binding.get("task_phase"))
+            pair = (pr_binding.get("task_pr_number"), pr_binding.get("task_pr_url"))
+            if not ((phase == ("committed", "execution") and pair == (None, None))
+                    or (phase == ("committed", "verification")
+                        and pair == (pr_binding.get("number"), pr_binding.get("url")))):
+                blockers.append("draft C1 PR is outside the exact initial or recorded Task state")
+        elif (pr_binding.get("task_status"), pr_binding.get("task_phase")) not in {
+                ("ready", "pre_pr_ready"), ("pr_watch", "pr_watch")} or (
+                pr_binding.get("task_pr_number") != pr_binding.get("number")
+                or pr_binding.get("task_pr_url") != pr_binding.get("url")):
+            blockers.append("nondraft C1 PR is not an already-bound ready Task update")
+    comment_identity = None
+    if len(matches) == 1:
+        comment, actual = matches[0]
+        if actual != expected:
+            blockers.append("C1 Task publication record differs from frozen identity")
+        user = comment.get("user")
+        association = comment.get("author_association")
+        if (type(comment.get("id")) is not int or comment["id"] < 1
+                or not isinstance(comment.get("created_at"), str)
+                or not isinstance(comment.get("updated_at"), str)
+                or not isinstance(user, dict) or not isinstance(user.get("login"), str)
+                or not user.get("login") or user.get("type") != "User"
+                or not isinstance(association, str)
+                or not isinstance(association, str) or not association):
+            blockers.append("C1 publication commenter provenance is malformed")
+        elif not comment_timestamps_are_unchanged(comment):
+            blockers.append("C1 publication server timestamps are missing, malformed, or indicate an edit")
+        elif (not isinstance(live_task_author, dict)
+              or user.get("login") != live_task_author.get("login")
+              or (isinstance(pr_binding, dict)
+                  and user.get("login") != pr_binding.get("pr_author"))):
+            blockers.append("C1 publisher differs from canonical Task and same-repository PR author")
+        else:
+            if isinstance(pr_binding, dict):
+                try:
+                    created = datetime.fromisoformat(str(pr_binding.get("created_at")).replace("Z", "+00:00"))
+                    updated = datetime.fromisoformat(str(pr_binding.get("updated_at")).replace("Z", "+00:00"))
+                    published = datetime.fromisoformat(str(comment.get("created_at")).replace("Z", "+00:00"))
+                except ValueError:
+                    blockers.append("C1 publication or PR timestamps are malformed")
+                else:
+                    if any(value.tzinfo is None for value in (created, updated, published)):
+                        blockers.append("C1 publication or PR timestamps lack timezone")
+                    else:
+                        recorded_draft = (
+                            (pr_binding.get("task_status"), pr_binding.get("task_phase"))
+                            == ("committed", "verification")
+                            and pr_binding.get("task_pr_number") == pr_binding.get("number")
+                            and pr_binding.get("task_pr_url") == pr_binding.get("url")
+                        )
+                        if pr_binding.get("draft") and not recorded_draft:
+                            if not published < created:
+                                blockers.append("C1 publication was not recorded before draft PR creation")
+                        elif not published < updated:
+                            blockers.append("C1 publication does not precede the existing PR candidate update")
+            comment_identity = {
+                "comment_id": comment["id"], "created_at": comment["created_at"],
+                "author": {"login": user["login"], "type": user["type"]},
+                "author_association": association,
+                "body_digest": "sha256:" + hashlib.sha256(
+                    str(comment["body"]).encode("utf-8"),
+                ).hexdigest(),
+            }
+    status = "blocked" if blockers else "passed"
+    return {
+        "status": status, "blockers": blockers,
+        "publication": expected if not blockers else None,
+        "comment": comment_identity if not blockers else None,
+        "pr_number": pr_binding.get("number") if isinstance(pr_binding, dict) else None,
+    }
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -188,15 +382,68 @@ def replace_projection_marker(body: str, marker: str, *,
         raise PublicationError("EVENT_PROJECTION_INVALID", "PR body has duplicate legacy projection markers")
     if legacy_count == 1:
         match = re.search(r"(?m)^<!-- oasis7-impact-projection-b64:\s*([A-Za-z0-9+/=_-]+)\s*-->[ \t]*$", prefix)
-        if not match or legacy_projection_b64 is None or match.group(1) != legacy_projection_b64:
-            raise PublicationError("EVENT_PROJECTION_INVALID", "legacy projection marker does not match the verified input")
+        if not match:
+            raise PublicationError("EVENT_PROJECTION_INVALID", "full projection carrier is malformed")
+        try:
+            old_projection = json.loads(base64.b64decode(match.group(1), validate=True), object_pairs_hook=_unique_object)
+            old_contract = decode_marker(body) if count else decode_marker(marker)
+            _check_carrier_projection(old_projection, old_contract)
+        except (ValueError, ContractError) as exc:
+            raise PublicationError("EVENT_PROJECTION_INVALID", "existing full carrier differs from its C1") from exc
         start, end = match.span()
         prefix = prefix[:start] + prefix[end:]
+    if legacy_projection_b64 is not None:
+        try:
+            raw = base64.b64decode(legacy_projection_b64, validate=True)
+            if len(raw) > 32 * 1024:
+                raise ValueError("projection exceeds 32KiB")
+            projection = json.loads(raw, object_pairs_hook=_unique_object)
+            _check_carrier_projection(projection, decode_marker(marker))
+        except (ValueError, ContractError) as exc:
+            raise PublicationError("EVENT_PROJECTION_INVALID", "new full carrier differs from its C1") from exc
+        prefix = prefix.rstrip() + "\n\n<!-- oasis7-impact-projection-b64: " + legacy_projection_b64 + " -->"
     prefix = prefix.rstrip()
     result = (prefix + "\n\n" if prefix else "") + marker
     if len(result.encode("utf-8")) > MAX_BODY_BYTES:
         raise PublicationError("EVENT_PROJECTION_INVALID", "PR body exceeds 60KiB")
     return result
+
+
+def _check_carrier_projection(projection, contract):
+    if not isinstance(projection, dict):
+        raise ValueError("full projection must be an object")
+    if projection.get("projection_digest") != digest({k: v for k, v in projection.items() if k != "projection_digest"}):
+        raise ValueError("full projection digest mismatch")
+    for field in ("task_uid", "source_head_oid", "scope_base_oid", "projection_digest"):
+        if projection.get(field) != contract[field]:
+            raise ValueError("full projection/C1 identity mismatch")
+
+
+def _full_carrier(projection, supplied):
+    return supplied if supplied is not None else base64.b64encode(
+        json.dumps(projection, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).decode("ascii")
+
+
+def _human_publication_result(adapter, journal, publication, expected_draft=True, expected_number=None):
+    mode = getattr(adapter, "human_reconcile_requested", None)
+    if not callable(mode) or mode() is not True:
+        return None
+    derive = getattr(adapter, "human_reconcile_pr_number", None)
+    if callable(derive):
+        number = derive(publication)
+    else:
+        live = adapter.read_task_pr_binding(publication["task_uid"])
+        number = live.get("pr_number") if isinstance(live, dict) else None
+    if type(number) is not int or number < 1 or (expected_number is not None and number != expected_number):
+        raise PublicationError("NETWORK_UNCERTAIN", "human recovery lacks the exact live Task PR")
+    pr = adapter.read_pr(publication["repository"], number)
+    _check_pr(pr, publication, number, publication["source_head_oid"], expected_draft)
+    binding = _record_and_bind(adapter, journal, publication, pr, expected_draft=expected_draft)
+    return {"status": "published", "task_uid": publication["task_uid"],
+            "publication_id": publication["publication_id"], "pr_number": number,
+            "head_oid": publication["source_head_oid"], "projection_digest": publication["projection_digest"],
+            "binding": binding}
 
 
 def _candidate(publication: dict[str, Any], projection: dict[str, Any]) -> tuple[dict[str, Any], str]:
@@ -318,6 +565,57 @@ def _publication_body(result: dict[str, Any], publication_id: str) -> str | None
         return None
     body = matches[0].get("body")
     return body if isinstance(body, str) else None
+
+
+def _completed_record_binding(adapter: Any, publication: dict[str, Any],
+                              pr_number: int, expected_draft: bool) -> dict[str, Any] | None:
+    """Return the reciprocal binding only for an exact fresh completed replay."""
+    read_state = getattr(adapter, "read_completed_task_publication_state", None)
+    if not callable(read_state):
+        return None
+    try:
+        state = read_state(publication, pr_number, expected_draft)
+    except PublicationError:
+        raise
+    except Exception:
+        return None
+    if not isinstance(state, dict):
+        return None
+    project = state.get("project")
+    if not isinstance(project, dict) or project.get("status") != "passed":
+        return None
+    comments_read = state.get("comments_read")
+    task_author = state.get("live_task_author")
+    pr_binding = state.get("pr_binding")
+    resolved = resolve_task_publication(
+        comments_read, {key: publication[key] for key in _TASK_PUBLICATION_FIELDS},
+        live_task_author=task_author, pr_binding=pr_binding,
+    )
+    if resolved.get("status") != "passed" or resolved.get("pr_number") != pr_number:
+        return None
+    current = state.get("bindings_read")
+    if not isinstance(current, dict) or current.get("complete") is not True:
+        return None
+    bindings = current.get("bindings")
+    if not isinstance(bindings, list) or len(bindings) != 1:
+        return None
+    try:
+        observed = validate_publication_binding(bindings[0], publication)
+    except ContractError as exc:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "reciprocal binding is invalid") from exc
+    expected = build_publication_binding(
+        publication, pr_number, f"https://github.com/{publication['repository']}/pull/{pr_number}",
+    )
+    if observed != expected:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "Task is reciprocally bound to another PR")
+    pr = state.get("pr")
+    if not isinstance(pr, dict):
+        return None
+    _check_pr(pr, publication, pr_number, publication["source_head_oid"], expected_draft)
+    expected_body = state.get("expected_pr_body")
+    if isinstance(expected_body, str) and pr.get("body") != expected_body:
+        raise PublicationError("PUBLICATION_WRITE_CONFLICT", "PR body changed during completed replay")
+    return observed
 
 
 def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, Any], *,
@@ -650,9 +948,22 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
                      publication: dict[str, Any], pr: dict[str, Any],
                      expected_draft: bool = True) -> dict[str, Any]:
     number = pr["number"]
+    human_mode = getattr(adapter, "human_reconcile_requested", None)
+    if callable(human_mode) and human_mode() is True:
+        reconcile = getattr(adapter, "human_reconcile_record_pr", None)
+        if not callable(reconcile):
+            raise PublicationError("NETWORK_UNCERTAIN", "human reconciliation helper is unavailable")
+        observed = reconcile(publication, number, expected_draft=expected_draft)
+        completed = _completed_record_binding(adapter, publication, number, expected_draft)
+        if completed is None or observed != completed:
+            raise PublicationError("NETWORK_UNCERTAIN", "human reconciliation lacks fresh complete binding")
+        return completed
     action = "record-pr:" + publication["publication_id"]
     prior = _prior(journal, action)
     if prior is not None:
+        completed = _completed_record_binding(adapter, publication, number, expected_draft)
+        if completed is not None:
+            return completed
         # A persisted record-pr action means a prior attempt may have changed
         # only some of the Task projections. Do not let the ordinary helper
         # path infer recovery authority from an Issue poststate or cache.
@@ -690,7 +1001,18 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
     # live transition on every publication retry: an observed local journal
     # action cannot prove that Issue, Project, or mapping state has not drifted.
     try:
-        adapter.record_pr(publication["task_uid"], number, publication["publication_id"])
+        # `record-pr` owns the same branch journal while reconciling its
+        # Issue/Project vector. Relinquish only for that child invocation;
+        # it re-derives this exact C1 journal identity and holds the branch
+        # lock across every remote transition step.
+        with journal.release_for_child_writer():
+            adapter.record_pr(publication["task_uid"], number, publication["publication_id"])
+    except PublicationError as exc:
+        if exc.code in {"TASK_IDENTITY_CONFLICT", "PUBLICATION_WRITE_CONFLICT"}:
+            journal.disposition("CONFLICT")
+        else:
+            journal.uncertain(action, "NETWORK_UNCERTAIN")
+        raise
     except Exception as exc:
         journal.uncertain(action, "NETWORK_UNCERTAIN")
         raise PublicationError("NETWORK_UNCERTAIN", f"record-pr transition did not confirm: {exc}") from exc
@@ -767,6 +1089,10 @@ def publish_create(adapter: Any, journal: PublicationJournal, *, publication: di
                    sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     """Task intent/readback → H push → draft create → record-pr → reciprocal binding."""
     publication, marker = _candidate(publication, projection)
+    reconciled = _human_publication_result(adapter, journal, publication)
+    if reconciled is not None:
+        return reconciled
+    legacy_projection_b64 = _full_carrier(projection, legacy_projection_b64)
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
     try:
         with journal.locked():
@@ -819,6 +1145,10 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                    resume_action_id: str | None = None) -> dict[str, Any]:
     """Patch and verify P(H1) before pushing H1 under a lease on H0."""
     publication, marker = _candidate(publication, projection)
+    reconciled = _human_publication_result(adapter, journal, publication, expected_draft, pr_number)
+    if reconciled is not None:
+        return reconciled
+    legacy_projection_b64 = _full_carrier(projection, legacy_projection_b64)
     if (type(expected_draft) is not bool or type(existing_ready_update) is not bool
             or expected_draft == existing_ready_update):
         raise PublicationError("TASK_IDENTITY_CONFLICT", "explicit ready update and draft expectation disagree")

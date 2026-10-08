@@ -90,13 +90,13 @@ def repository_json(repository, path):
 
 def validate_ci_content(tool_root, root, binding, base, head, repository, reader=None,
                         *, record=None, candidate=None, evidence=None,
-                        source_commit=None):
+                        source_commit=None, maintenance=None):
     blockers = []
     read = reader or repository_json
     context = {}
     try:
         context = scope_context(root, base, head)
-        for result in (validate_binding(binding), validate_tool_root(tool_root, root, binding), validate_scope(tool_root, root, binding, context['scope_base_oid'], head)):
+        for result in (validate_binding(binding), validate_tool_root(tool_root, root, binding, maintenance=maintenance), validate_scope(tool_root, root, binding, context['scope_base_oid'], head, maintenance=maintenance)):
             blockers.extend(result['blockers'])
         blockers.extend(_validate_hosted_traceability(
             root,

@@ -8,6 +8,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 
 REPO="$TMPDIR/repo"
 mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync" "$TMPDIR/bin"
+cp "$ROOT_DIR/scripts/pm/task_primary_package.py" "$REPO/scripts/pm/task_primary_package.py"
 for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py workflow-impact-projection.py; do
   cp "$ROOT_DIR/scripts/pm/$helper" "$REPO/scripts/pm/$helper"
 done

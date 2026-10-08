@@ -14,7 +14,7 @@
 
 ## 适用范围
 - live server：`crates/oasis7 --bin oasis7_viewer_live`
-- Web 静态入口：源码与发布 canonical 页面使用 `crates/oasis7_viewer/viewer.html`；`software_safe.html` 作为 compat HTML 副本继续同步产出
+- Web 静态入口：源码只保留 canonical `crates/oasis7_viewer/viewer.html`；build 将其复制到 dist 并生成 compat `software_safe.html`、`software_safe.js` 与 claim evidence route
 - Web 启动脚本：`scripts/run-viewer-web.sh`
 - Web 回归脚本：
   - `scripts/viewer-primary-web-entry-regression.sh`

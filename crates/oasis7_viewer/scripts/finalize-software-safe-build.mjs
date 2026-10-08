@@ -3,6 +3,8 @@ import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writeViewerCompatAliases } from "./viewer-compat-aliases.mjs";
+
 const scriptsDir = fileURLToPath(new URL(".", import.meta.url));
 const viewerRoot = resolve(scriptsDir, "..");
 const workspaceRoot = resolve(viewerRoot, "..", "..");
@@ -10,11 +12,12 @@ const tempOutDir = resolve(viewerRoot, ".software-safe-build");
 const softwareSafeSrcDir = resolve(viewerRoot, "software_safe_src");
 const viewerDistDir = resolve(viewerRoot, "dist");
 const canonicalHtmlPath = resolve(viewerRoot, "viewer.html");
-const compatHtmlPath = resolve(viewerRoot, "software_safe.html");
 const builtBundlePath = resolve(tempOutDir, "viewer.js");
 const finalCanonicalBundlePath = resolve(viewerRoot, "viewer.js");
 const finalDistBundlePath = resolve(viewerDistDir, "viewer.js");
-const finalCompatBundlePath = resolve(viewerRoot, "software_safe.js");
+const staleRootCompatHtmlPath = resolve(viewerRoot, "software_safe.html");
+const staleRootCompatBundlePath = resolve(viewerRoot, "software_safe.js");
+const staleRootCompatClaimEvidencePath = resolve(viewerRoot, "software_safe_first_agent_claim_evidence.html");
 const pixelWorldRuntimeDir = resolve(viewerDistDir, "pixel-world-bridge");
 const pixelWorldRuntimeSelectorSourcePath = resolve(softwareSafeSrcDir, "pixel_world_runtime_module_selector.js");
 const pixelWorldRuntimeModulePath = resolve(pixelWorldRuntimeDir, "pixel_world_bridge.js");
@@ -127,14 +130,6 @@ async function listFilesRecursively(dirPath) {
   return files;
 }
 
-function compatBundleContents() {
-  return [
-    "// Generated compat alias; canonical bundle truth lives in ./viewer.js.",
-    "import \"./viewer.js\";",
-    "",
-  ].join("\n");
-}
-
 async function canonicalBundleContents() {
   const bundle = await readFile(builtBundlePath, "utf8");
   return bundle.startsWith(canonicalBundleBanner)
@@ -184,10 +179,15 @@ if (emittedFiles.length !== 1 || emittedFiles[0] !== "viewer.js") {
 }
 const canonicalBundle = await canonicalBundleContents();
 await writeFile(finalCanonicalBundlePath, canonicalBundle, "utf8");
-await copyFile(canonicalHtmlPath, compatHtmlPath);
 await mkdir(viewerDistDir, { recursive: true });
+await copyFile(canonicalHtmlPath, resolve(viewerDistDir, "viewer.html"));
 await writeFile(finalDistBundlePath, canonicalBundle, "utf8");
-await writeFile(finalCompatBundlePath, compatBundleContents(), "utf8");
+await writeViewerCompatAliases(viewerRoot, viewerDistDir);
+await Promise.all([
+  rm(staleRootCompatHtmlPath, { force: true }),
+  rm(staleRootCompatBundlePath, { force: true }),
+  rm(staleRootCompatClaimEvidencePath, { force: true }),
+]);
 await rm(pixelWorldRuntimeDir, { recursive: true, force: true });
 await mkdir(pixelWorldRuntimeDir, { recursive: true });
 await copyFile(pixelWorldRuntimeSelectorSourcePath, pixelWorldRuntimeModulePath);

@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
+inventory="$repo_root/scripts/ci-required-capability-test-inventory.tsv"
 versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
 legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
 active_config="$repo_root/scripts/ci-required-scope.v2.json"
@@ -47,6 +48,28 @@ require_ci_tests_line() {
     exit 1
   fi
 }
+
+workflow_governance_runner="$(sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+missing_closeout_facade_route=0
+if ! grep -Fqx '  run bash ./scripts/pm/review-closeout-facade.test.sh' <<<"$workflow_governance_runner"; then
+  echo "workflow-governance operational runner omits scripts/pm/review-closeout-facade.test.sh" >&2
+  missing_closeout_facade_route=1
+fi
+if ! awk -F '\t' -v suite='scripts/pm/review-closeout-facade.test.sh' '
+  $1 == "run_operational_contract_tests" {
+    count = split($2, paths, ",")
+    for (i = 1; i <= count; i++) {
+      if (paths[i] == suite) found = 1
+    }
+  }
+  END { exit found ? 0 : 1 }
+' "$inventory"; then
+  echo "workflow-governance operational inventory omits scripts/pm/review-closeout-facade.test.sh" >&2
+  missing_closeout_facade_route=1
+fi
+if [[ "$missing_closeout_facade_route" -ne 0 ]]; then
+  exit 1
+fi
 
 required_component_impl="$(
   sed -n '/^should_run_ci_required_component() {/,/^}/p' "$ci_tests"
@@ -100,7 +123,7 @@ if [[ -z "$effective_execution_contract" && "$effective_config_sha256" == "$lega
     echo "legacy effective required-scope config differs from its pinned compatibility fixture" >&2
     exit 1
   }
-elif [[ "$effective_execution_contract" == required-domain-split/v1 && "$effective_config_sha256" == "$active_config_sha256" ]]; then
+elif [[ "$effective_execution_contract" == required-domain-split/v* && "$effective_config_sha256" == "$active_config_sha256" ]]; then
   effective_policy_mode=versioned
   require_key "$minimal_plan" run_packaging_contracts false
   require_key "$minimal_plan" run_workflow_governance_contracts false
@@ -124,7 +147,7 @@ require_key "$packaging_plan" selected_capabilities packaging_contracts
 if [[ "$effective_policy_mode" == legacy ]]; then
   require_key "$packaging_plan" run_operational_contracts true
 else
-  require_key "$packaging_plan" execution_contract required-domain-split/v1
+  require_key "$packaging_plan" execution_contract "$effective_execution_contract"
   require_key "$packaging_plan" planner_config_sha256 "$active_config_sha256"
   require_key "$packaging_plan" run_packaging_contracts true
   require_key "$packaging_plan" run_operational_contracts false
@@ -132,7 +155,7 @@ else
   require_key "$packaging_plan" needs_markdown true
 fi
 require_key "$packaging_plan" run_rust_baseline false
-require_key "$packaging_plan" needs_rust_toolchain false
+require_key "$packaging_plan" needs_rust_toolchain "$([[ "$effective_execution_contract" == required-domain-split/v2 ]] && echo true || echo false)"
 require_key "$packaging_plan" needs_node false
 require_key "$packaging_plan" needs_system_deps false
 for packaging_path in \
@@ -190,12 +213,12 @@ operational_plan="$("$planner" --event-name pull_request --changed-path scripts/
 require_key "$operational_plan" run_required_gate_baseline true
 require_key "$operational_plan" run_operational_contracts true
 if [[ "$effective_policy_mode" == versioned ]]; then
-  require_key "$operational_plan" execution_contract required-domain-split/v1
+  require_key "$operational_plan" execution_contract "$effective_execution_contract"
   require_key "$operational_plan" planner_config_sha256 "$active_config_sha256"
   require_key "$operational_plan" run_packaging_contracts false
 fi
 require_key "$operational_plan" run_rust_baseline false
-require_key "$operational_plan" needs_rust_toolchain false
+require_key "$operational_plan" needs_rust_toolchain "$([[ "$effective_execution_contract" == required-domain-split/v2 ]] && echo true || echo false)"
 require_key "$operational_plan" selected_capabilities operational_contracts
 require_reason_contains "$operational_plan" operational_contracts:scripts/p2p-public-testnet-package-rollout.test.sh
 
@@ -203,7 +226,7 @@ site_plan="$("$planner" --event-name pull_request --changed-path site/index.html
 require_key "$site_plan" run_required_gate_baseline true
 require_key "$site_plan" run_site_contract_tests true
 require_key "$site_plan" run_rust_baseline false
-require_key "$site_plan" needs_rust_toolchain false
+require_key "$site_plan" needs_rust_toolchain "$([[ "$effective_execution_contract" == required-domain-split/v2 ]] && echo true || echo false)"
 require_key "$site_plan" selected_capabilities site_quality
 require_reason_contains "$site_plan" site_quality:site/index.html
 
@@ -218,6 +241,14 @@ if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$workfl
 fi
 if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$workflow_governance_operational_source"; then
   echo "required scope audit contract is not wired into run_workflow_governance_operational_contract_tests" >&2
+  exit 1
+fi
+if ! grep -Fqx '  run python3 ./scripts/pm/workflow-simplification.test.py' <<<"$workflow_governance_operational_source"; then
+  echo "workflow simplification acceptance aggregate is not wired into run_workflow_governance_operational_contract_tests" >&2
+  exit 1
+fi
+if ! awk -F '\t' '$1 == "run_operational_contract_tests" && $2 ~ /(^|,)scripts\/pm\/workflow-simplification\.test\.py(,|$)/ { found = 1 } END { exit !found }' "$repo_root/scripts/ci-required-capability-test-inventory.tsv"; then
+  echo "workflow simplification acceptance aggregate is missing from required capability inventory" >&2
   exit 1
 fi
 
@@ -312,7 +343,7 @@ versioned_selector_names = {
 active_inventory = inventory
 if execution_contract == "":
     active_inventory = inventory - versioned_selector_names
-elif execution_contract != "required-domain-split/v1":
+elif execution_contract not in {"required-domain-split/v1", "required-domain-split/v2"}:
     raise SystemExit(f"unsupported effective required-gate execution contract: {execution_contract}")
 if active_inventory != set(declared):
     raise SystemExit(
@@ -450,7 +481,7 @@ for source_path, fixture_paths in operational_source_fixtures.items():
         "selected_capabilities": "operational_contracts",
         "run_operational_contracts": "true",
         "run_rust_baseline": "false",
-        "needs_rust_toolchain": "false",
+        "needs_rust_toolchain": "true" if execution_contract == "required-domain-split/v2" else "false",
     }.items():
         if source_outputs.get(key) != expected:
             raise SystemExit(
@@ -481,6 +512,40 @@ if not required_gate_match:
 required_gate_body = required_gate_match.group("body")
 if '--github-output "${GITHUB_OUTPUT}"' not in required_gate_body:
     raise SystemExit("required-gate planner output is not written to GITHUB_OUTPUT")
+for trusted_planner_fragment in (
+    'git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"',
+    'cp -R "${authority_dir}/scripts/." "${authority_dir}/"',
+    'git show "${base_ref}:scripts/ci-required-scope.v2.json"',
+    'planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")',
+):
+    if trusted_planner_fragment not in required_gate_body:
+        raise SystemExit(
+            "required-gate scope must come from trusted base planner/config: "
+            f"{trusted_planner_fragment}"
+        )
+# Ordinary PRs retain Q tooling. The explicit maintenance route may select
+# immutable H tooling only after live authority validation; Q config/driver stay.
+pr_scope_start = required_gate_body.index('if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then')
+pr_scope_end = required_gate_body.index('elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then', pr_scope_start)
+pr_scope = required_gate_body[pr_scope_start:pr_scope_end]
+for fragment in (
+    'tool_ref="${base_ref}"',
+    'module.read_maintenance_authority(',
+    "changed,module.TOOL_PATHS,require_draft=True,binding_phase='validation-start-only')",
+    "'--no-renames','-z'",
+    'if [[ -n "${maintenance_id}" ]]; then tool_ref="${head_ref}"; fi',
+    'git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"',
+    'git show "${base_ref}:scripts/ci-required-scope.v2.json"',
+    'git show "${base_ref}:scripts/ci-tests.sh"',
+    'cp -R "${authority_dir}/scripts/." "${authority_dir}/"',
+):
+    if fragment not in pr_scope:
+        raise SystemExit(f"PR planner authority boundary is missing: {fragment}")
+if not (pr_scope.index('tool_ref="${base_ref}"')
+        < pr_scope.index('module.read_maintenance_authority(')
+        < pr_scope.index('tool_ref="${head_ref}"')
+        < pr_scope.index('git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"')):
+    raise SystemExit("candidate planner must follow live maintenance authority validation")
 run_tier_match = re.search(
     r"(?ms)^      - name: Run required test tier\n(?P<body>.*?)(?=^      - |\Z)",
     required_gate_body,
@@ -488,6 +553,97 @@ run_tier_match = re.search(
 if not run_tier_match:
     raise SystemExit("required-gate test-tier env path is missing")
 run_tier_body = run_tier_match.group("body")
+
+policy_maintenance_paths = (
+    "doc/engineering/workflow/source-of-truth.md",
+    "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+    "scripts/pm/check-cargo-package-scope",
+    "scripts/pm/check-cargo-package-scope.test.py",
+    ".pm/cargo-package-auxiliary-files.json",
+    "scripts/ci-tests.sh",
+    "scripts/ci-required-scope.v2.json",
+    "scripts/ci-required-scope-audit-contract.test.sh",
+    ".github/workflows/rust.yml",
+)
+
+def planner_output(path):
+    command = [
+        str(planner_path),
+        "--event-name",
+        "pull_request",
+        "--config",
+        str(config_path),
+        "--changed-path",
+        path,
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"trusted required-scope planner failed for {path}: {result.stderr.strip()}"
+        )
+    return {
+        key: value
+        for line in result.stdout.splitlines()
+        if "=" in line
+        for key, value in [line.split("=", 1)]
+    }
+
+full_reference_plan = planner_output("scripts/ci-tests.sh")
+if full_reference_plan.get("scope") != "full":
+    raise SystemExit("ci-tests baseline no longer selects the full required plan")
+full_selector_fields = sorted(
+    {
+        item["planner_field"]
+        for item in ownership
+        if item.get("mode") == "planner-owned"
+    }
+)
+full_contract_fields = [
+    "scope",
+    "execution_contract",
+    "planner_config_sha256",
+    "selected_capabilities",
+    "required_test_units",
+    "run_rust_baseline",
+    "needs_python",
+    "needs_markdown",
+    "needs_rust_toolchain",
+    "needs_node",
+    "needs_system_deps",
+    "needs_trunk",
+    "needs_wasm_target",
+    *full_selector_fields,
+]
+for path in policy_maintenance_paths:
+    plan = planner_output(path)
+    if plan.get("scope") != "full":
+        raise SystemExit(f"policy-maintenance path is not full-gated: {path}: {plan}")
+    for field in full_contract_fields:
+        if plan.get(field) != full_reference_plan.get(field):
+            raise SystemExit(
+                f"policy-maintenance plan is not the complete full route for {path}: "
+                f"{field}={plan.get(field)!r}, expected {full_reference_plan.get(field)!r}"
+            )
+    if f"cargo_scope_policy_maintenance:{path}" not in plan.get("reason_summary", ""):
+        raise SystemExit(f"policy-maintenance path lacks its explicit full rule: {path}")
+
+trusted_full_marker = "OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}"
+if trusted_full_marker not in run_tier_body:
+    raise SystemExit("Cargo scope maintenance marker is not bound to the planned workflow scope")
+if 'export OASIS7_CARGO_SCOPE_FULL_PLAN="${RUNNER_TEMP}/required-scope-outputs.json"' not in run_tier_body:
+    raise SystemExit("Cargo scope full-plan proof is not bound to actual planner outputs")
+if 'export OASIS7_CARGO_SCOPE_CHECKER="${candidate_checker}"' in run_tier_body:
+    raise SystemExit("workflow bypasses the isolated authenticated checker driver")
+ci_tests_source = ci_tests_path.read_text(encoding="utf-8")
+for fragment in ('run python3 -I "$driver_dir/pm/trusted_cargo_scope.py"',
+                 'full_plan_args=(--trusted-full-plan "${OASIS7_CARGO_SCOPE_FULL_PLAN:-}")',
+                 '"${full_plan_args[@]}"'):
+    if fragment not in ci_tests_source:
+        raise SystemExit("runner omits authenticated full-plan driver interface: " + fragment)
+active_rules = json.loads(config_path.read_text())["rules"]
+for reason in ('cargo_scope_authority_closure', 'trusted_prepare_contract', 'cargo_scope_policy_maintenance'):
+    if not any(rule.get('reason') == reason for rule in active_rules):
+        raise SystemExit("missing merged scope rule: " + reason)
 
 canonical_workflow_text = (
     repo_root / "doc/engineering/workflow/source-of-truth.md"

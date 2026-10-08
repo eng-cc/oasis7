@@ -111,13 +111,15 @@ def die(message: str) -> None:
 
 
 def primary_package_value(task: OrderedDict[str, Any]) -> str | None:
-    value = task.get("primary_package")
-    if value in (None, ""):
-        return None
-    package = str(value).strip()
-    if PRIMARY_PACKAGE_RE.fullmatch(package) is None:
-        die("primary_package is not a valid declared Cargo package name")
-    return package
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("task_primary_package", pathlib.Path(__file__).with_name("task_primary_package.py"))
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        return module.effective_primary_package(task)
+    except ValueError as exc:
+        die(str(exc))
 
 
 def parse_scalar(value: str) -> Any:
@@ -289,6 +291,11 @@ def run_subprocess_with_retry(cmd: list[str], *, retries: int = 4) -> subprocess
     # ambiguous response, so every CLI request crosses this boundary once.
     del retries
     return subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+
+
+def github_token() -> Any:
+    """Compatibility accessor returning one reusable shared GitHub API client."""
+    return github_api_client()
 
 
 def graphql_request(
@@ -663,6 +670,10 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
     package = primary_package_value(task)
     if package is not None:
         lines.append(f"- primary_package: `{package}`")
+    if task.get("primary_package_completion") is not None:
+        from task_primary_package import canonical_bytes
+        encoded = base64.urlsafe_b64encode(canonical_bytes(task["primary_package_completion"])).decode().rstrip("=")
+        lines.append(f"- primary_package_completion_b64: `{encoded}`")
     source_refs = task.get("source_refs") or []
     if source_refs:
         lines.append("")
@@ -851,6 +862,199 @@ def read_project_item_field_values(project_id: str, item_id: str, client: Any = 
         if field_name:
             values[field_name] = str(value.get("name") or value.get("text") or "")
     return values
+
+
+def read_live_issue_project_item(repo: str, issue_number: int, project_id: str,
+                                 project_number: int, *,
+                                 require_open: bool = True) -> dict[str, Any]:
+    """Read one Issue's complete membership and field projection in a Project.
+
+    The Issue is selected by repository/number, then every Project item link
+    and every field-value page is read from GraphQL. This proves the returned
+    item belongs to that exact live Issue and Project, and reports only the
+    authenticated viewer's server-computed update permission.
+    """
+    if (not isinstance(repo, str) or re.fullmatch(r"[^/\s]+/[^/\s]+", repo) is None
+            or type(issue_number) is not int or issue_number < 1
+            or not isinstance(project_id, str) or not project_id
+            or type(project_number) is not int or project_number < 1):
+        raise ValueError("live Issue/Project identity is malformed")
+    owner, name = repo.split("/", 1)
+    token = github_token()
+    membership_query = """
+    query($owner: String!, $name: String!, $number: Int!, $after: String) {
+      repository(owner: $owner, name: $name) {
+        issue(number: $number) {
+          id number url state body
+          projectItems(first: 100, after: $after) {
+            nodes { id isArchived project {
+              id number viewerCanUpdate
+              owner { ... on Organization { login } ... on User { login } }
+            } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }
+    }
+    """
+    issue = None
+    memberships = []
+    after = None
+    seen_cursors = set()
+    for _ in range(100):
+        variables = {"owner": owner, "name": name, "number": issue_number, "after": after}
+        payload = graphql_request(
+            token,
+            membership_query,
+            variables,
+            operation="project_sync_live_issue_memberships",
+            context={"script": "github-project-sync.py", "issue_number": issue_number},
+        )
+        repository = payload.get("repository") if isinstance(payload, dict) else None
+        page_issue = repository.get("issue") if isinstance(repository, dict) else None
+        if not isinstance(page_issue, dict):
+            raise RuntimeError("live Task Issue was not readable from its repository")
+        identity = {key: page_issue.get(key) for key in ("id", "number", "url", "state", "body")}
+        if issue is None:
+            issue = identity
+        elif identity != issue:
+            raise RuntimeError("live Task Issue changed during Project membership pagination")
+        connection = page_issue.get("projectItems")
+        nodes = connection.get("nodes") if isinstance(connection, dict) else None
+        page_info = connection.get("pageInfo") if isinstance(connection, dict) else None
+        if (not isinstance(nodes, list) or not isinstance(page_info, dict)
+                or type(page_info.get("hasNextPage")) is not bool):
+            raise RuntimeError("live Project membership pagination is incomplete")
+        if any(not isinstance(item, dict) or not isinstance(item.get("id"), str)
+               or not item.get("id") or not isinstance(item.get("project"), dict)
+               for item in nodes):
+            raise RuntimeError("live Project membership entry is malformed")
+        memberships.extend(nodes)
+        if not page_info["hasNextPage"]:
+            break
+        cursor = page_info.get("endCursor")
+        if not isinstance(cursor, str) or not cursor or cursor in seen_cursors:
+            raise RuntimeError("live Project membership cursor is missing or repeated")
+        seen_cursors.add(cursor)
+        after = cursor
+    else:
+        raise RuntimeError("live Project membership pagination limit exhausted")
+    if type(require_open) is not bool:
+        raise ValueError("live Issue state requirement is malformed")
+    if (not isinstance(issue, dict) or not isinstance(issue.get("id"), str)
+            or not issue["id"]
+            or issue.get("number") != issue_number
+            or not isinstance(issue.get("body"), str)
+            or str(issue.get("state") or "").upper() not in {"OPEN", "CLOSED"}
+            or (require_open and str(issue.get("state") or "").upper() != "OPEN")):
+        raise RuntimeError("live Task Issue identity/state is invalid")
+    matches = [item for item in memberships
+               if item["project"].get("id") == project_id]
+    if len(matches) != 1:
+        raise RuntimeError("live Task Issue does not have one unique item in the canonical Project")
+    selected = matches[0]
+    selected_project = selected["project"]
+    selected_owner = selected_project.get("owner")
+    owner_login = selected_owner.get("login") if isinstance(selected_owner, dict) else None
+    if (selected_project.get("number") != project_number
+            or selected_project.get("viewerCanUpdate") is not True
+            or not isinstance(owner_login, str) or not owner_login
+            or selected.get("isArchived") is not False):
+        raise RuntimeError("live Project identity, active membership, or viewer update permission is invalid")
+
+    fields_query = """
+    query($item: ID!, $after: String) {
+      node(id: $item) {
+        ... on ProjectV2Item {
+          id isArchived project {
+            id number viewerCanUpdate
+            owner { ... on Organization { login } ... on User { login } }
+          }
+          fieldValues(first: 100, after: $after) {
+            nodes {
+              ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
+              ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+              ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }
+    }
+    """
+    item_id = selected["id"]
+    field_values: dict[str, str] = {}
+    after = None
+    seen_cursors = set()
+    item_identity = None
+    for _ in range(100):
+        payload = graphql_request(
+            token,
+            fields_query,
+            {"item": item_id, "after": after},
+            operation="project_sync_live_item_fields",
+            context={"script": "github-project-sync.py", "issue_number": issue_number},
+        )
+        item = payload.get("node") if isinstance(payload, dict) else None
+        if not isinstance(item, dict):
+            raise RuntimeError("live Project item field readback is unavailable")
+        current_identity = {
+            "id": item.get("id"), "isArchived": item.get("isArchived"),
+            "project": item.get("project"),
+        }
+        if item_identity is None:
+            item_identity = current_identity
+        elif current_identity != item_identity:
+            raise RuntimeError("live Project item changed during field pagination")
+        connection = item.get("fieldValues")
+        nodes = connection.get("nodes") if isinstance(connection, dict) else None
+        page_info = connection.get("pageInfo") if isinstance(connection, dict) else None
+        if (not isinstance(nodes, list) or not isinstance(page_info, dict)
+                or type(page_info.get("hasNextPage")) is not bool):
+            raise RuntimeError("live Project field pagination is incomplete")
+        for value in nodes:
+            if not isinstance(value, dict):
+                raise RuntimeError("live Project field value is malformed")
+            field = value.get("field")
+            field_name = field.get("name") if isinstance(field, dict) else None
+            if not isinstance(field_name, str) or not field_name:
+                continue
+            if field_name in field_values:
+                raise RuntimeError("live Project contains duplicate field values")
+            raw = value.get("name")
+            if raw is None:
+                raw = value.get("text")
+            if raw is None:
+                raw = value.get("date")
+            if raw is not None and not isinstance(raw, str):
+                raise RuntimeError("live Project field value is malformed")
+            field_values[field_name] = raw or ""
+        if not page_info["hasNextPage"]:
+            break
+        cursor = page_info.get("endCursor")
+        if not isinstance(cursor, str) or not cursor or cursor in seen_cursors:
+            raise RuntimeError("live Project field cursor is missing or repeated")
+        seen_cursors.add(cursor)
+        after = cursor
+    else:
+        raise RuntimeError("live Project field pagination limit exhausted")
+    project_identity = item_identity.get("project") if isinstance(item_identity, dict) else None
+    item_owner = project_identity.get("owner") if isinstance(project_identity, dict) else None
+    if (not isinstance(item_identity, dict) or item_identity.get("id") != item_id
+            or item_identity.get("isArchived") is not False
+            or not isinstance(project_identity, dict)
+            or project_identity.get("id") != project_id
+            or project_identity.get("number") != project_number
+            or project_identity.get("viewerCanUpdate") is not True
+            or not isinstance(item_owner, dict)
+            or item_owner.get("login") != owner_login):
+        raise RuntimeError("live Project item identity or permission changed during field readback")
+    return {
+        "complete": True, "issue": issue,
+        "project": {"id": project_id, "number": project_number,
+                    "owner": owner_login, "viewer_can_update": True},
+        "item": {"id": item_id, "is_archived": False, "field_values": field_values},
+    }
 
 
 def confirmed_project_field_values(
@@ -1113,6 +1317,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if task.get("loop_binding") is not None:
                     live_record["loop_binding"] = task["loop_binding"]
+                if task.get("primary_package_completion") is not None:
+                    live_record["primary_package_completion"] = task["primary_package_completion"]
                 if primary_package_value(task) is None:
                     live_record.pop("primary_package", None)
                 if content_id:
@@ -1226,6 +1432,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if task.get("loop_binding") is not None:
             record["loop_binding"] = task["loop_binding"]
+        if task.get("primary_package_completion") is not None:
+            record["primary_package_completion"] = task["primary_package_completion"]
         if primary_package_value(task) is None:
             record.pop("primary_package", None)
         persist_mapping(mapping_path, mapping)

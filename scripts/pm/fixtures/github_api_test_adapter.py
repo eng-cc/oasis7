@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from typing import Any
 
@@ -67,21 +68,32 @@ class GitHubAPIClient:
         return cls(token or "isolated-test-credential", **kwargs)
 
     @staticmethod
-    def _gh(args: list[str]) -> dict[str, Any]:
+    def _gh(args: list[str]) -> Any:
         try:
             result = subprocess.run(
                 ["gh", *args], check=True, text=True, stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE, timeout=30,
             )
-        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        except subprocess.CalledProcessError as exc:
+            match = re.search(r"\(HTTP (\d{3})\)", str(exc.stderr or ""))
+            if match is not None:
+                status_code = int(match.group(1))
+                kind = "permission_denied" if status_code in {401, 403} else "http_error"
+                raise APIError(
+                    f"fixture GitHub returned HTTP {status_code}",
+                    kind=kind,
+                    status_code=status_code,
+                ) from exc
+            raise APIError("fixture GitHub command failed", kind="transport_error") from exc
+        except (OSError, subprocess.TimeoutExpired) as exc:
             raise APIError("fixture GitHub command failed", kind="transport_error") from exc
         stdout = result.stdout.strip()
         try:
             value = json.loads(stdout) if stdout else {}
         except json.JSONDecodeError as exc:
             raise APIError("fixture GitHub response is malformed", kind="malformed_response") from exc
-        if not isinstance(value, dict):
-            raise APIError("fixture GitHub response is not an object", kind="malformed_response")
+        if not isinstance(value, (dict, list)):
+            raise APIError("fixture GitHub response is not an object or array", kind="malformed_response")
         return value
 
     @staticmethod
@@ -103,6 +115,8 @@ class GitHubAPIClient:
                            retry_after_seconds=120)
         payload = self._gh(["api", "graphql", "-f", "query=" + query,
                             *self._variable_args(variables or {})])
+        if not isinstance(payload, dict):
+            raise APIError("fixture GitHub GraphQL response is not an object", kind="malformed_response")
         errors = payload.get("errors")
         data = payload.get("data")
         if errors:

@@ -17,7 +17,7 @@ ORCHESTRATOR="$ROOT_DIR/scripts/pm/finalize-task.sh"
 HELP="$($ORCHESTRATOR --help)"
 for marker in \
   '--task-uid' '--pr' '--resume' '--repo-root' \
-  '--patch-equivalence-receipt' '--json'; do
+  '--preflight' '--cleanup=defer' '--cleanup-only' '--json'; do
   grep -F -- "$marker" <<<"$HELP" >/dev/null || {
     echo "RED finalize-task: help is missing $marker" >&2
     exit 1
@@ -25,45 +25,68 @@ for marker in \
 done
 
 SOURCE="$(<"$ORCHESTRATOR")"
-# The facade owns task/PR identity and delegates each existing terminal step.
+# The facade owns task/PR identity and delegates task completion plus the
+# versioned producer and independent cleanup boundary.
 for marker in \
   'task_uid' 'pr_number' 'pr-merge-receipt.py' 'task-closeout.sh' \
-  'refresh-task-cache.sh' 'post-merge-main-sync.sh' \
+  'refresh-task-cache.sh' \
   'post-merge-cleanup.sh' 'post-merge-finalize.py'; do
   grep -F -- "$marker" <<<"$SOURCE" >/dev/null || {
     echo "RED finalize-task: missing lifecycle delegation marker $marker" >&2
     exit 1
   }
 done
+if grep -F -- 'post-merge-main-sync.sh' <<<"$SOURCE" >/dev/null; then
+  echo "finalize-task: v2 delivery must not require main-sync" >&2
+  exit 1
+fi
 
-# Ordinary merges use ancestry; squash/rebase merges require an explicit,
-# repository-generated patch-equivalence receipt before retrying sync/cleanup.
-for marker in \
-  'patch-equivalence-receipt.sh' '--patch-equivalence-receipt' \
-  'merge-base' 'ancestry' 'patch_equivalence'; do
+# Preserve the immutable v1 terminal-reader adapter without routing new v2
+# delivery through the historical main-sync/cleanup receipt chain.
+for marker in 'protocol_selector' '== v1' '--terminal-receipt' 'legacy_v1_unchanged'; do
   grep -F -- "$marker" <<<"$SOURCE" >/dev/null || {
-    echo "RED finalize-task: missing ordinary/squash marker $marker" >&2
+    echo "finalize-task: missing v1 compatibility marker $marker" >&2
     exit 1
   }
 done
 
-# A retry must resume the durable journal and fail closed on identity drift;
-# it may not mint a second task/PR terminal identity.
+# Selector conflicts and cleanup-only requests fail closed; a retry may not
+# mint a second task/PR terminal identity.
 for marker in \
-  '--resume' 'already_finalized' 'task-uid' 'pr' 'mismatch' 'fail'; do
+  '--resume' 'already_finalized' 'terminal protocol selector is malformed' \
+  '[[ "$protocol_selector" == v2 || "$protocol_selector" == recovery ]] || fail' \
+  'task/PR mismatch' 'fail'; do
   grep -F -- "$marker" <<<"$SOURCE" >/dev/null || {
     echo "RED finalize-task: missing retry/fail-closed marker $marker" >&2
     exit 1
   }
 done
+grep -E -- '--cleanup-only requires a mapped (v2 )?delivery receipt' <<<"$SOURCE" >/dev/null || {
+  echo "RED finalize-task: missing cleanup-only mapped delivery receipt guard" >&2
+  exit 1
+}
 
-# RED: callers need a pre-merge, mutation-free readiness result with one exact
-# continuation command and identity blockers before terminal effects begin.
-for marker in '--preflight' 'blockers' 'canonical_worktree' 'task_branch' 'next_command'; do
+# A fresh v2 producer readback precedes independent cleanup. Cleanup failure
+# can be reported without revoking completed delivery.
+for marker in \
+  '--delivery --json' '--delivery --preflight --json' \
+  '[[ "$delivery_state" == complete || "$delivery_state" == complete_recovery ]] || fail' \
+  'cleanup_deferred' 'cleanup_blockers'; do
   grep -F -- "$marker" <<<"$SOURCE" >/dev/null || {
-    echo "RED finalize-task: missing preflight marker $marker" >&2
+    echo "finalize-task: missing delivery/cleanup boundary marker $marker" >&2
     exit 1
   }
 done
+grep -E -- 'producer did not return a complete (v2 )?delivery proof' <<<"$SOURCE" >/dev/null || {
+  echo "finalize-task: missing complete delivery proof guard" >&2
+  exit 1
+}
+
+producer_line="$(grep -nF 'delivery_json="$(python3 "$SCRIPT_DIR/post-merge-finalize.py"' <<<"$SOURCE" | cut -d: -f1)"
+cleanup_line="$(grep -nF 'cleanup_json="$(run_cleanup)' <<<"$SOURCE" | tail -n 1 | cut -d: -f1)"
+[[ -n "$producer_line" && -n "$cleanup_line" && "$producer_line" -lt "$cleanup_line" ]] || {
+  echo "finalize-task: delivery readback must precede normal cleanup" >&2
+  exit 1
+}
 
 echo "finalize-task-red.test: OK"

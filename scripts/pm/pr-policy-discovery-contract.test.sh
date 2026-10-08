@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 mkdir -p "$TMPDIR/bin" "$TMPDIR/root/.pm/github-project-sync"
+mkdir -p "$TMPDIR/root/scripts"
+cp -R "$SCRIPT_DIR" "$TMPDIR/root/scripts/pm"
+cp "$SCRIPT_DIR/fixtures/github_api_test_adapter.py" "$TMPDIR/root/scripts/pm/github_api.py"
 TASK_UID=task_11111111111111111111111111111111
 cat >"$TMPDIR/root/.pm/github-project-sync/tasks.json" <<JSON
 {"tasks":{"$TASK_UID":{"task_uid":"$TASK_UID","repository":"eng-cc/oasis7","issue_number":1,"issue_url":"https://github.com/eng-cc/oasis7/issues/1","pr_number":9,"pr_url":"https://github.com/eng-cc/oasis7/pull/9","merge_hold":{"kind":"normal_pr_ci_watch","requester":"workflow","reason":"normal","resume_authority":"workflow","active":false,"evidence_receipt":{"source":"github_task_issue_comment","runtime_verified":true,"task_uid":"$TASK_UID","repository":"eng-cc/oasis7","issue_number":1,"pr_number":9,"head_oid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","github_node_id":"IC_hold","url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-hold","author":"workflow","observed_at":"2026-07-11T00:00:00Z","digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}}}}
@@ -17,12 +20,10 @@ case "$1 $2" in
   "pr view") printf '{"number":9,"url":"https://example.invalid/pull/9","state":"OPEN","isDraft":false,"body":"","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","headRefName":"task/x","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","baseRefName":"main","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n' ;;
   "repo view") printf '{"nameWithOwner":"eng-cc/oasis7"}\n' ;;
   "api graphql")
-    if [[ "$*" == *comments* || "$*" == *reviews* || "$*" == *reviewThreads* ]]; then
-      surface=comments; [[ "$*" == *reviews* ]] && surface=reviews; [[ "$*" == *reviewThreads* ]] && surface=reviewThreads
-      printf '{"data":{"repository":{"pullRequest":{"%s":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}\n' "$surface"
-    else
-      printf '{"data":{"repository":{"pullRequest":{"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}]}}}}}\n'
-    fi ;;
+    cat <<'JSON'
+{"data":{"viewer":{"id":"fixture-viewer","login":"fixture"},"rateLimit":{"cost":1,"remaining":5000,"used":0,"resetAt":"2026-10-02T00:00:00Z","limit":5000},"repository":{"nameWithOwner":"eng-cc/oasis7","pullRequest":{"number":9,"url":"https://github.com/eng-cc/oasis7/pull/9","state":"OPEN","isDraft":false,"body":"","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","headRefName":"task/x","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","baseRefName":"main","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","comments":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]},"reviews":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]},"reviewThreads":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]},"commits":{"nodes":[{"commit":{"oid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}]}}}}}
+JSON
+    ;;
   "api repos/eng-cc/oasis7/branches/main/protection")
     case "${POLICY_CASE:?}" in
       denied|transport) echo 'gh: Resource not accessible (HTTP 403)' >&2 ;;
@@ -30,7 +31,7 @@ case "$1 $2" in
     esac
     exit 1 ;;
   "api repos/eng-cc/oasis7/issues/1") printf '{"number":1,"url":"https://github.com/eng-cc/oasis7/issues/1","state":"OPEN","body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n"}\n' "$TASK_UID" ;;
-  "api repos/eng-cc/oasis7/rulesets")
+  "api repos/eng-cc/oasis7/rulesets"*)
     case "${POLICY_CASE:?}" in
       ruleset) printf '[{"id":7,"enforcement":"active","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"]}},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"required-gate","integration_id":42}]}}]}]\n' ;;
       none|transport) printf '[]\n' ;;
@@ -38,13 +39,20 @@ case "$1 $2" in
         if [[ "$*" == *'page=2'* || "$*" == *'--paginate'* ]]; then
           printf '[{"id":8,"target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/main"]}},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"page-two-gate","integration_id":42}]}}]}]\n'
         else
-          printf '[{"id":6,"target":"tag","enforcement":"active","conditions":{"ref_name":{"include":["~ALL"]}},"rules":[]}]\n'
+          printf '['
+          for ((index = 1; index <= 100; index++)); do
+            if ((index > 1)); then printf ','; fi
+            printf '{"id":%s,"target":"tag","enforcement":"active","conditions":{"ref_name":{"include":["~ALL"]}},"rules":[]}' "$index"
+          done
+          printf ']\n'
         fi ;;
       filtered) printf '[{"id":10,"target":"tag","enforcement":"active","conditions":{"ref_name":{"include":["~ALL"]}},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"tag-only","integration_id":42}]}}]},{"id":11,"target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/develop"]}},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"develop-only","integration_id":42}]}}]}]\n' ;;
       denied) exit 1 ;;
     esac ;;
+  "api repos/eng-cc/oasis7") printf '{"default_branch":"main"}\n' ;;
+  "api repos/eng-cc/oasis7/git/ref/heads/main") printf '{"ref":"refs/heads/main","object":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}\n' ;;
   "api repos/eng-cc/oasis7/issues/comments/IC_hold") printf '{"body":"","user":{"login":"workflow"},"html_url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-hold"}\n' ;;
-  "api repos/eng-cc/oasis7/issues/1/comments") printf '[[{"id":101,"body":"<!-- oasis7-merge-hold -->\\n- task_uid: `task_11111111111111111111111111111111`\\n- repository: `eng-cc/oasis7`\\n- issue_number: `1`\\n- pr_number: `9`\\n- head_oid: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\\n- node_id: `merge_hold`\\n- kind: `merge_hold`\\n- disposition: `cleared`\\n- hold_kind: `normal_pr_ci_watch`\\n- active: `false`\\n- requester: `workflow`\\n- reason: `normal`\\n- resume_authority: `workflow`\\n","user":{"login":"workflow"},"created_at":"2026-07-11T00:00:00Z","html_url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-101"}]]\n' ;;
+  "api repos/eng-cc/oasis7/issues/1/comments"*) printf '[{"id":101,"body":"<!-- oasis7-merge-hold -->\\n- task_uid: `task_11111111111111111111111111111111`\\n- repository: `eng-cc/oasis7`\\n- issue_number: `1`\\n- pr_number: `9`\\n- head_oid: `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`\\n- node_id: `merge_hold`\\n- kind: `merge_hold`\\n- disposition: `cleared`\\n- hold_kind: `normal_pr_ci_watch`\\n- active: `false`\\n- requester: `workflow`\\n- reason: `normal`\\n- resume_authority: `workflow`\\n","user":{"login":"workflow"},"created_at":"2026-07-11T00:00:00Z","html_url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-101"}]\n' ;;
   *) echo "unexpected gh: $*" >&2; exit 9 ;;
 esac
 SH
@@ -55,7 +63,7 @@ run_case() {
   : >"$TMPDIR/$name.log"
   set +e
   GH_LOG="$TMPDIR/$name.log" POLICY_CASE="$name" TASK_UID="$TASK_UID" PATH="$TMPDIR/bin:$PATH" \
-    python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" 9 --root "$TMPDIR/root" \
+    python3 "$TMPDIR/root/scripts/pm/pr-lifecycle-gate.py" 9 --root "$TMPDIR/root" \
     --task-uid "$TASK_UID" --json >"$TMPDIR/$name.out" 2>"$TMPDIR/$name.err"
   local status=$?
   set -e

@@ -2,6 +2,7 @@
 """Legacy-safe loop metadata transport and bootstrap identity regressions."""
 import hashlib
 import importlib.util
+import os
 import pathlib
 import shutil
 import tempfile
@@ -53,12 +54,16 @@ class LoopTransport(unittest.TestCase):
             root = pathlib.Path(directory)
             helpers = root / 'scripts/pm'
             helpers.mkdir(parents=True)
-            for filename in ('github-project-task.py', 'loop-policy.v1.json', 'loop_policy.py', 'loop_contracts.py'):
+            for filename in ('github-project-task.py', 'task_primary_package.py', 'loop-policy.v1.json', 'loop_policy.py', 'loop_contracts.py'):
                 shutil.copy2(ROOT / filename, helpers / filename)
+            source = root / 'doc/engineering/workflow/source-of-truth.md'
+            source.parent.mkdir(parents=True)
+            source.write_text('synthetic protected-default source for local fixture\n')
             git = lambda *args: subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
             git('init', '-q')
             git('config', 'user.name', 'Fixture')
             git('config', 'user.email', 'fixture@example.invalid')
+            git('remote', 'add', 'origin', 'https://github.com/eng-cc/oasis7.git')
             git('add', '.')
             git('commit', '-qm', 'pinned helper fixture')
             policy_commit = git('rev-parse', 'HEAD')
@@ -66,11 +71,49 @@ class LoopTransport(unittest.TestCase):
             policy_digest = 'sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest()
             binding = dict(BINDING, policy_commit=policy_commit, policy_digest=policy_digest, delivery_obligations=[])
 
+            # The trusted validator reads live authority through gh. Keep that
+            # boundary real while serving its exact committed fixture bytes locally.
+            fake_state = root / 'fake-gh.json'
+            fake_state.write_text(json.dumps({
+                'root': str(root), 'repository': 'eng-cc/oasis7',
+                'branch': 'main', 'commit': policy_commit,
+            }))
+            binary = root / 'fixture-bin'
+            binary.mkdir()
+            gh = binary / 'gh'
+            gh.write_text('''#!/usr/bin/env python3
+import base64, json, os, subprocess, sys
+from pathlib import Path
+a = sys.argv[1:]
+s = json.loads(Path(os.environ['FAKE_GH_STATE']).read_text())
+repo, branch, commit = s['repository'], s['branch'], s['commit']
+if a == ['api', 'repos/' + repo]:
+    value = {'default_branch': branch}
+elif a == ['api', 'repos/' + repo + '/branches/' + branch]:
+    value = {'name': branch, 'protected': True, 'commit': {'sha': commit}}
+elif len(a) == 2 and a[0] == 'api' and a[1].startswith('repos/' + repo + '/contents/'):
+    path_ref = a[1].split('/contents/', 1)[1]
+    path, marker, ref = path_ref.partition('?ref=')
+    if marker != '?ref=' or ref != commit:
+        raise SystemExit('unexpected fixture content ref')
+    raw = subprocess.check_output(['git', '-C', s['root'], 'show', commit + ':' + path])
+    value = {'encoding': 'base64', 'content': base64.b64encode(raw).decode('ascii')}
+else:
+    raise SystemExit('unsupported fake gh request: ' + repr(a))
+print(json.dumps(value))
+''')
+            gh.chmod(0o755)
+            fake_env = {
+                'PATH': str(binary) + os.pathsep + os.environ['PATH'],
+                'FAKE_GH_STATE': str(fake_state),
+            }
+
             # Deliberately preseed candidate modules; admission must replace them
             # with the exact helper bytes from the pinned Git commit.
             policy = mock.Mock()
             contracts = mock.Mock()
-            with mock.patch.object(TASK, '__file__', str(helpers / 'github-project-task.py')), \
+            with mock.patch.dict(os.environ, fake_env), \
+                 mock.patch.object(TASK, '__file__', str(helpers / 'github-project-task.py')), \
                  mock.patch.dict('sys.modules', {'loop_policy': policy, 'loop_contracts': contracts}):
                 with self.assertRaisesRegex(SystemExit, 'new code tasks require at least one technical input contract'):
                     TASK.validate_loop_inputs(root, binding, 'eng-cc/oasis7', 'new_tasks')

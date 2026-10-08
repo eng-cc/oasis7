@@ -91,7 +91,7 @@ trusted_policy_sha256="sha256:$(sha256sum "$ROOT_DIR/scripts/ci-required-scope.v
 trusted_policy_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name pull_request --changed-path doc/product/example.prd.md)"
 assert_key_equals "$trusted_policy_output" planner_config_sha256 "$trusted_policy_sha256"
-assert_key_equals "$trusted_policy_output" execution_contract required-domain-split/v1
+assert_key_equals "$trusted_policy_output" execution_contract required-domain-split/v2
 assert_key_equals "$trusted_policy_output" run_required_gate_baseline true
 assert_key_equals "$trusted_policy_output" run_rust_baseline false
 assert_key_equals "$trusted_policy_output" needs_python true
@@ -127,7 +127,7 @@ trusted_doc_checker_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name pull_request --changed-path scripts/product-doc-governance-check.test.py)"
 assert_key_equals "$trusted_doc_checker_output" run_doc_checker_contracts true
 assert_key_equals "$trusted_doc_checker_output" run_cargo_tooling_contracts false
-assert_key_equals "$trusted_doc_checker_output" needs_rust_toolchain false
+assert_key_equals "$trusted_doc_checker_output" needs_rust_toolchain true
 
 trusted_pm_identity_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name pull_request --changed-path .pm/example.json)"
@@ -161,7 +161,7 @@ assert_key_equals "$trusted_exact_m_output" scope targeted
 assert_key_equals "$trusted_exact_m_output" selected_capabilities workflow_governance
 assert_key_equals "$trusted_exact_m_output" required_test_units 'required_gate_baseline;workflow_governance'
 assert_key_equals "$trusted_exact_m_output" needs_rust_toolchain true
-assert_key_equals "$trusted_exact_m_output" run_rust_baseline true
+assert_key_equals "$trusted_exact_m_output" run_rust_baseline false
 assert_key_equals "$trusted_exact_m_output" needs_python true
 assert_key_equals "$trusted_exact_m_output" needs_markdown true
 for resource in needs_node needs_system_deps needs_wasm_target needs_trunk; do
@@ -541,9 +541,7 @@ document_corpus_code_output="$(plan_for_repo_config_paths \
   scripts/doc-evidence-inventory-check.test.py \
   doc/.governance/document-corpus-inventory.json \
   doc/testing/evidence/inventory.json)"
-assert_key_equals "$document_corpus_code_output" scope targeted
-assert_key_equals "$document_corpus_code_output" selected_capabilities \
-  'doc_checker_contracts;workflow_governance'
+assert_key_equals "$document_corpus_code_output" scope full
 assert_key_equals "$document_corpus_code_output" run_doc_checker_contracts true
 assert_key_equals "$document_corpus_code_output" run_workflow_governance_contracts true
 assert_key_equals "$document_corpus_code_output" run_rust_baseline true

@@ -40,7 +40,7 @@
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`：formal `public_testnet` 从规格骨架进入候选状态前的 companion checklist/runbook。
 - `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`：formal `public_testnet` governed bootstrap operator path，定义四节点重建输入、deployment truth、hard rules 与 evidence 闭包；不表示 `public_testnet` 已 live 或 ready。
 - `testing-manual.md#s9a链上大世界状态底座自闭环`：P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 与 API/viewer projection 的模块自闭环测试入口；用于区分 `module_required/module_full/integration_required/release_full` claim boundary。
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的 legacy 执行 companion runbook；`shared_devnet` pass 仅作 rehearsal evidence，不等于 formal `public_testnet` / `mainnet` readiness。
+- `doc/testing/evidence/legacy-shared-devnet-provenance-2026-07-26.md`：已退役 `shared_devnet` rehearsal 的历史 rollback/provenance 入口；不等于 formal `public_testnet` / `mainnet` readiness。
 - `doc/testing/evidence/README.md`：QA evidence landing page，负责 public-testnet readiness evidence / claims-boundary / mixed-topology / legacy shared-network 证据的当前入口与归档边界。
 - `doc/p2p/token/README.md`：Token 专题簇 landing page，按创世冻结、分配机制、授权、目标态与 quota bridge 分流；再按需进入理想交易设计或 quota bridge runbook。
 
@@ -110,7 +110,6 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md` 与同名 `*.design.md`；可变任务历史和状态由 GitHub Issue / GitHub Project 承担。
 - `*.release.md` 为发布补充材料，不参与 PRD/design 配对规则。
-- `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24` 另有执行 companion：`doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`。
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有执行 companion：`doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`。
 - `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism` 另有 governed bootstrap operator path：`doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`。
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge` 另有执行 companion：`doc/p2p/token/mainchain-token-newapi-quota-bridge.runbook.md`。

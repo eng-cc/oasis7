@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Execute the actual receipt argv block for draft-to-ready retries.
+python3 - "$(dirname "$0")/prepare-task-pr.sh" <<'PYARGV'
+import os,subprocess,sys
+from pathlib import Path
+source=Path(sys.argv[1]).read_text();start=source.index('  RECEIPT_VERIFY_CMD=(python3 ');end=source.index('  "${RECEIPT_VERIFY_CMD[@]}"',start);block=source[start:end]
+values=dict(CI_READY_RECEIPT_HELPER='receipt.py',SOURCE_WORKTREE='/canonical/task',RR='repo',RT='uid',RI='1',RP='2',RC='required',RA='1',RD='digest',PROMOTE_DRAFT_RECEIPT='receipt.json',CANONICAL_DEFAULT_BRANCH='main',PROMOTE_CI_VALIDATION_MODE='current_target_pr',PROMOTE_INTEGRATION_RUN_ID='',PR_IS_DRAFT='false')
+for schema,plan,success in [('oasis7-review-plan/v2','/canonical/task/plan.json',True),('oasis7-review-plan/v2','',False),('oasis7-review-plan/v1','',True)]:
+ env=dict(os.environ,**values,LOCAL_ROLE_REVIEW_PLAN_SCHEMA=schema,LOCAL_ROLE_REVIEW_PLAN=plan)
+ result=subprocess.run(['bash','-c','set -euo pipefail; die(){ exit 17; }; '+block+'printf "%s\n" "${RECEIPT_VERIFY_CMD[@]}"'],env=env,text=True,capture_output=True)
+ assert (result.returncode==0)==success,result.stderr
+ if success:
+  args=result.stdout.splitlines();assert args[args.index('--root')+1]=='/canonical/task';assert '--allow-ready-pr' in args
+  if schema.endswith('/v2'):assert args[args.index('--review-plan')+1]==plan
+  else:assert '--review-plan' not in args
+PYARGV
 export OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS=1
 
 WRAPPER_BOUNDARY_DIAG_DIR="${TEST_WRAPPER_BOUNDARY_DIAG_DIR:-}"
@@ -24,12 +39,170 @@ SOURCE_ROOT="$ROOT_DIR"
 REAL_GIT="$(command -v git)"
 REAL_PYTHON="$(command -v python3)"
 
+if [[ "${TEST_ONLY_PREPARE_TRUSTED_FULL_SCOPE:-0}" == "1" ]]; then
+  "$REAL_PYTHON" - "$ROOT_DIR" <<'PY'
+import json,os,pathlib,shutil,subprocess,sys,tempfile,unittest
+root=pathlib.Path(sys.argv[1])
+source=(root/'scripts/prepare-task-pr.sh').read_text()
+marker='cat >"$CARGO_PACKAGE_SCOPE_PLAN_RUNNER" <<\'PY\'\n'
+runner=source.split(marker,1)[1].split('\nPY\n',1)[0]
+assert source.count('python3 -I "$CARGO_PACKAGE_SCOPE_PLAN_RUNNER"')==3
+baseline=os.environ.get('TEST_PREPARE_SCOPE_DIRECT_BASELINE')=='1'
+if baseline:
+    frozen=subprocess.check_output(['git','-C',str(root),'show','HEAD:scripts/prepare-task-pr.sh'],text=True)
+    assert 'python3 -I "$CARGO_PACKAGE_SCOPE_CHECKER"' in frozen
+    runner="""import subprocess,sys
+root,driver,base,head=sys.argv[1:]
+result=subprocess.run([sys.executable,'-I',driver,'--repo-root',root,'--base',base,
+                       '--head',head,'--primary-package','auto','--json'],cwd=root)
+raise SystemExit(result.returncode)
+"""
+
+class PreparationScopeBoundary(unittest.TestCase):
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory(prefix='prepare-full-scope-boundary-')
+        self.repo=pathlib.Path(self.temp.name)/'repo'
+        self.repo.mkdir()
+        shutil.copytree(root/'scripts',self.repo/'scripts')
+        self.write('Cargo.toml','[package]\nname="fixture"\nversion="0.1.0"\nedition="2021"\n')
+        self.write('src/lib.rs','pub fn fixture() {}\n')
+        self.write('.pm/cargo-package-scope-policy.json',(root/'.pm/cargo-package-scope-policy.json').read_text())
+        self.write('.pm/cargo-package-auxiliary-files.json','{"schema":"oasis7-cargo-package-auxiliary-files/v1","auxiliary_files":[]}\n')
+        self.write('scripts/fixture-support.sh','echo fixture\n')
+        self.git('init','-q');self.git('config','user.name','Fixture');self.git('config','user.email','fixture@example.invalid')
+        self.base=self.commit('trusted base')
+        self.runner=pathlib.Path(self.temp.name)/'runner.py'
+        self.runner.write_text(runner)
+    def tearDown(self): self.temp.cleanup()
+    def write(self,path,text):
+        target=self.repo/path;target.parent.mkdir(parents=True,exist_ok=True);target.write_text(text)
+    def git(self,*args): return subprocess.check_output(['git','-C',str(self.repo),*args],text=True).strip()
+    def commit(self,label):
+        self.git('add','.');self.git('commit','-qm',label);return self.git('rev-parse','HEAD')
+    def maintenance(self):
+        self.write('.pm/cargo-package-auxiliary-files.json','{"schema":"oasis7-cargo-package-auxiliary-files/v1","auxiliary_files":[{"path":"scripts/fixture-support.sh","package":"fixture"}]}\n')
+        path=self.repo/'scripts/pm/check-cargo-package-scope'
+        path.write_text(path.read_text()+'\n# bounded maintenance fixture\n')
+        return self.commit('exact maintenance')
+    def run_scope(self,head,script=None):
+        if script is not None:self.runner.write_text(script)
+        return subprocess.run([sys.executable,'-I',str(self.runner),str(self.repo),
+                               str(root/'scripts/pm/trusted_cargo_scope.py'),self.base,head],
+                              cwd=self.repo,capture_output=True,text=True)
+    def test_real_exact_maintenance_initial_and_frozen_recheck(self):
+        head=self.maintenance()
+        first=self.run_scope(head);second=self.run_scope(head)
+        self.assertEqual(first.returncode,0,first.stderr)
+        self.assertEqual(second.returncode,0,second.stderr)
+        self.assertEqual(first.stdout,second.stdout)
+        self.assertEqual(json.loads(first.stdout)['scope'],'trusted_full_policy_maintenance')
+    def test_business_crossing_rejected_at_frozen_recheck(self):
+        head=self.maintenance();self.assertEqual(self.run_scope(head).returncode,0)
+        self.write('src/lib.rs','pub fn changed() {}\n')
+        changed=self.commit('outside maintenance boundary')
+        result=self.run_scope(changed)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('policy_self_modification',result.stdout+result.stderr)
+    def test_missing_actual_resource_rejected(self):
+        head=self.maintenance()
+        tampered=runner.replace('environment[name]=value',"environment[name]='false' if name=='OASIS7_CI_NEEDS_NODE' else value")
+        self.assertNotEqual(tampered,runner)
+        result=self.run_scope(head,tampered)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('actual runner full-plan selector mismatch',result.stderr)
+    def test_nonfull_ordinary_document_keeps_isolated_source_authority(self):
+        self.write('README.md','# Fixture\n')
+        head=self.commit('ordinary document')
+        result=self.run_scope(head)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(json.loads(result.stdout)['status'],'allowed')
+        self.assertNotEqual(json.loads(result.stdout).get('scope'),'trusted_full_policy_maintenance')
+    def test_caller_marker_cannot_authorize_mixed_registry_range(self):
+        self.maintenance();self.write('README.md','# ordinary document\n')
+        head=self.commit('outside exact nine paths')
+        old=os.environ.get('OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN')
+        os.environ['OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN']='true'
+        try:result=self.run_scope(head)
+        finally:
+            if old is None:os.environ.pop('OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN',None)
+            else:os.environ['OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN']=old
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('policy_self_modification',result.stdout+result.stderr)
+    def test_exact_empty_range_runs_one_ordinary_source_checker_without_planner(self):
+        self.write('scripts/plan-rust-required-scope.py',"raise SystemExit('empty range planner must not run')\n")
+        checker=self.repo/'scripts/pm/check-cargo-package-scope'
+        code=checker.read_text()
+        instrumentation="""with open(os.environ['OASIS7_TEST_EMPTY_SCOPE_CALLS'],'a') as log:
+    log.write(json.dumps(sys.argv)+'\\n')
+if os.environ.get('OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN'):
+    raise SystemExit('caller full marker reached ordinary source checker')
+
+"""
+        checker.write_text(code.replace('def main() -> int:',instrumentation+'def main() -> int:',1))
+        self.base=self.commit('empty-range instrumentation and forbidden planner')
+        self.git('commit','--allow-empty','-qm','distinct head with identical source tree')
+        head=self.git('rev-parse','HEAD')
+        calls=pathlib.Path(self.temp.name)/'checker-calls.jsonl'
+        old_marker=os.environ.get('OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN')
+        old_calls=os.environ.get('OASIS7_TEST_EMPTY_SCOPE_CALLS')
+        os.environ['OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN']='true'
+        os.environ['OASIS7_TEST_EMPTY_SCOPE_CALLS']=str(calls)
+        try:
+            for expected_calls in (1,2):
+                result=self.run_scope(head)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                rows=[json.loads(line) for line in calls.read_text().splitlines()]
+                self.assertEqual(len(rows),expected_calls)
+                self.assertNotIn('--trusted-full-plan',rows[-1])
+                self.assertEqual(rows[-1][rows[-1].index('--base')+1],self.base)
+                self.assertEqual(rows[-1][rows[-1].index('--head')+1],head)
+        finally:
+            for key,value in (('OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN',old_marker),
+                              ('OASIS7_TEST_EMPTY_SCOPE_CALLS',old_calls)):
+                if value is None:os.environ.pop(key,None)
+                else:os.environ[key]=value
+    def test_whitespace_path_cannot_be_proven_empty(self):
+        self.write('scripts/plan-rust-required-scope.py',"raise SystemExit('nonempty whitespace range reached trusted planner')\n")
+        self.base=self.commit('forbidden planner for whitespace proof')
+        self.write(' ','nonempty change with whitespace-only file name\n')
+        head=self.commit('whitespace path')
+        result=self.run_scope(head)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('nonempty whitespace range reached trusted planner',result.stderr)
+
+suite=unittest.defaultTestLoader.loadTestsFromTestCase(PreparationScopeBoundary)
+if baseline:
+    suite=unittest.TestSuite([PreparationScopeBoundary('test_real_exact_maintenance_initial_and_frozen_recheck')])
+result=unittest.TextTestRunner(verbosity=2).run(suite)
+raise SystemExit(not result.wasSuccessful())
+PY
+  exit 0
+fi
+
 TMPDIR="$(mktemp -d)"
 FIXTURE_ROOT="$TMPDIR/repo"
 mkdir -p "$FIXTURE_ROOT"
 (cd "$SOURCE_ROOT" && git ls-files -co --exclude-standard -z \
   | perl -0ne 'chomp; print "$_\0" if -e $_ || -l $_' \
   | tar --null -T - -cf -) | tar -xf - -C "$FIXTURE_ROOT"
+if [[ "${TEST_ONLY_REAL_MINIMAL_CARGO_PREPARE:-0}" == "1" || "${TEST_ONLY_REAL_MINIMAL_CARGO_MIGRATED_PREPARE:-0}" == "1" ]]; then
+  # Keep the actual governance/entrypoint implementations, with a real small
+  # Cargo workspace instead of the unrelated production package sources.
+  rm -rf "$FIXTURE_ROOT/crates"
+  mkdir -p "$FIXTURE_ROOT/crates/oasis7/src"
+  cat >"$FIXTURE_ROOT/Cargo.toml" <<'EOF'
+[workspace]
+members = ["crates/oasis7"]
+resolver = "2"
+EOF
+  cat >"$FIXTURE_ROOT/crates/oasis7/Cargo.toml" <<'EOF'
+[package]
+name = "oasis7"
+version = "0.1.0"
+edition = "2021"
+EOF
+  printf 'pub fn fixture() -> u32 { 7 }\n' >"$FIXTURE_ROOT/crates/oasis7/src/lib.rs"
+fi
 "$REAL_GIT" -C "$FIXTURE_ROOT" init -q -b main
 "$REAL_GIT" -C "$FIXTURE_ROOT" config user.email test@example.com
 "$REAL_GIT" -C "$FIXTURE_ROOT" config user.name Test
@@ -1297,18 +1470,6 @@ run_cargo_package_required_fixture() {
   if [[ "$primary_package" == "oasis7_node" ]]; then
     local observer_test_path="crates/oasis7_node/src/tests_observer_consensus_subscription.rs"
     local observer_test_source="$SMOKE_WORKTREE/$observer_test_path"
-    if ! "$REAL_PYTHON" - "$observer_test_source" <<'PY'
-from pathlib import Path
-import sys
-
-source = Path(sys.argv[1]).read_text(encoding="utf-8")
-expected = '"/../oasis7/src/bin/oasis7_chain_runtime.rs"'
-raise SystemExit(0 if expected in source else 1)
-PY
-    then
-      echo "node package command fixture no longer contains its known cross-package source edge" >&2
-      return 1
-    fi
     # This helper exercises prepare-task-pr command selection. The real
     # cross-package edge remains covered by check-cargo-package-scope tests;
     # replace only this source in the temporary fixture baseline so command
@@ -1988,6 +2149,10 @@ fi
 
 # A migrated task retains historical compatibility hints, but its canonical
 # worktree/branch binding must drive draft-candidate task inference.
+if [[ "${TEST_ONLY_REAL_MINIMAL_CARGO_PREPARE:-0}" == "1" ]]; then
+  printf '%s\n' "prepare-task-pr real minimal Cargo publication boundary: OK"
+  exit 0
+fi
 rm -rf "$SMOKE_WORKTREE/.pm/tasks"
 cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
 {"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"migrated draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","branch":"task/historical"}},"version":1}
@@ -2038,6 +2203,7 @@ if ! TEST_GH_CURRENT_REPO="eng-cc/oasis7" TEST_GH_PR_JSON="$migrated_draft_pr" T
 fi
 current_draft_pr="$migrated_draft_pr"
 reset_project_mapping_after_record_pr
+
 
 assert_draft_candidate_issue_rejection_has_no_side_effects() {
   local gh_log="$1"
@@ -2116,6 +2282,35 @@ fi
 assert_draft_candidate_issue_rejection_has_no_side_effects \
   "$comparison_ref_log" "$comparison_ref_git_log" "$comparison_ref_err" \
   "written frozen identity was not observed on bound issue readback"
+
+if [[ "${TEST_ONLY_REAL_MINIMAL_CARGO_MIGRATED_PREPARE:-0}" == "1" ]]; then
+  preserve_integrated_artifact "$migrated_draft_log" migrated-gh.log
+  preserve_integrated_artifact "$migrated_draft_git_log" migrated-git.log
+  preserve_integrated_artifact "$stale_source_err" migrated-stale-source.stderr
+  preserve_integrated_artifact "$comparison_ref_err" migrated-wrong-comparison.stderr
+  python3 - "$migrated_draft_log" "$SMOKE_BRANCH" <<'PY'
+import sys
+from pathlib import Path
+lines = Path(sys.argv[1]).read_text().splitlines()
+branch = sys.argv[2]
+gh = "\n".join(lines)
+create = f"pr create --base main --head {branch} --fill"
+freeze = "issue comment 123 -R eng-cc/oasis7 --body-file "
+if not (create in gh and "--draft" in gh):
+    raise SystemExit(f"migrated canonical task did not publish a draft: {lines}")
+if freeze not in gh or gh.index(freeze) > gh.index(create):
+    raise SystemExit("migrated canonical draft omitted pre-publication freeze evidence")
+if "api repos/eng-cc/oasis7/issues/123" not in lines:
+    raise SystemExit("migrated task publication omitted live Issue proof")
+writes = [line for line in lines if line.startswith("project item-edit ") and "--field-id FIELD_PR " in line]
+if len(writes) != 1 or "--text https://github.com/eng-cc/oasis7/pull/999" not in writes[0]:
+    raise SystemExit("migrated publication omitted exact Project PR field write")
+PY
+  preserve_integrated_artifact "$migrated_draft_log" migrated-gh.log
+  preserve_integrated_artifact "$migrated_draft_git_log" migrated-git.log
+  printf '%s\n' "prepare-task-pr real minimal Cargo migrated publication boundary: OK"
+  exit 0
+fi
 
 GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"
 GITHUB_FALLBACK_WORKTREE="$(

@@ -1,8 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-const VIEWER_HTML_FILES = ["viewer.html", "software_safe.html"];
-
 function cssRules(source, selectorPattern) {
   const rules = [];
   const rulePattern = /([^{}]+)\{([^{}]*)\}/g;
@@ -31,19 +29,18 @@ function findRule(source, selectorPattern) {
 }
 
 async function readViewerHtml() {
-  const [viewerHtml, compatHtml, terminalShellCss] = await Promise.all([
-    ...VIEWER_HTML_FILES.map((path) => readFile(path, "utf8")),
+  const [viewerHtml, terminalShellCss] = await Promise.all([
+    readFile("viewer.html", "utf8"),
     readFile("viewer_terminal_shell.css", "utf8"),
   ]);
-  return { viewerHtml, compatHtml, terminalShellCss };
+  return { viewerHtml, terminalShellCss };
 }
 
 describe("fullscreen map shell contract", () => {
   it("makes the default and visual-fixture shell a viewport-sized map base", async () => {
-    const { viewerHtml, compatHtml, terminalShellCss } = await readViewerHtml();
-    expect(compatHtml).toBe(viewerHtml);
+    const { viewerHtml, terminalShellCss } = await readViewerHtml();
 
-    for (const html of [viewerHtml, compatHtml].map((documentHtml) => `${documentHtml}\n${terminalShellCss}`)) {
+    for (const html of [`${viewerHtml}\n${terminalShellCss}`]) {
       expect(html.includes('id="app" class="viewer-shell" data-viewer-shell="player-fullscreen"')).toBe(true);
       expect(html.includes('#viewer-stage-panel[data-viewer-map-layer="base"]')).toBe(true);
 
@@ -65,8 +62,8 @@ describe("fullscreen map shell contract", () => {
   });
 
   it("does not reintroduce a visual-fixture three-column shell exception", async () => {
-    const { viewerHtml, compatHtml, terminalShellCss } = await readViewerHtml();
-    for (const html of [viewerHtml, compatHtml].map((documentHtml) => `${documentHtml}\n${terminalShellCss}`)) {
+    const { viewerHtml, terminalShellCss } = await readViewerHtml();
+    for (const html of [`${viewerHtml}\n${terminalShellCss}`]) {
       const fixtureShellGridRules = cssRules(
         html,
         /#app\[data-viewer-visual-fixture(?:=[^\]]+)?\][^{}]*\.(?:shell|viewer-shell)/,
@@ -79,8 +76,8 @@ describe("fullscreen map shell contract", () => {
   });
 
   it("does not let visual fixtures override the responsive command-band layout", async () => {
-    const { viewerHtml, compatHtml } = await readViewerHtml();
-    for (const html of [viewerHtml, compatHtml]) {
+    const { viewerHtml } = await readViewerHtml();
+    for (const html of [viewerHtml]) {
       const fixtureCommandRules = cssRules(
         html,
         /#app\[data-viewer-visual-fixture(?:=[^\]]+)?\][^{}]*\.pixel-world-command-strip/,
@@ -90,8 +87,8 @@ describe("fullscreen map shell contract", () => {
   });
 
   it("keeps map HUD, next move, receipt, feed, and navigation in overlay layers", async () => {
-    const { viewerHtml, compatHtml, terminalShellCss } = await readViewerHtml();
-    for (const html of [viewerHtml, compatHtml].map((documentHtml) => `${documentHtml}\n${terminalShellCss}`)) {
+    const { viewerHtml, terminalShellCss } = await readViewerHtml();
+    for (const html of [`${viewerHtml}\n${terminalShellCss}`]) {
       for (const overlayName of ["world-hud", "next-move", "receipt", "feed", "navigation"]) {
         const rule = findRule(html, new RegExp(`\\[data-viewer-overlay=["']${overlayName}["']\\]`));
         expect(rule, `missing overlay rule for ${overlayName}`).not.toBeNull();
@@ -112,8 +109,8 @@ describe("fullscreen map shell contract", () => {
   });
 
   it("keeps Targets and Command as fixed drawers with stable route anchors", async () => {
-    const { viewerHtml, compatHtml, terminalShellCss } = await readViewerHtml();
-    for (const html of [viewerHtml, compatHtml].map((documentHtml) => `${documentHtml}\n${terminalShellCss}`)) {
+    const { viewerHtml, terminalShellCss } = await readViewerHtml();
+    for (const html of [`${viewerHtml}\n${terminalShellCss}`]) {
       expect(html.includes('data-viewer-route-panel="targets"')).toBe(true);
       expect(html.includes('data-viewer-route-panel="command"')).toBe(true);
       for (const routePanel of ["targets", "command"]) {
@@ -126,8 +123,8 @@ describe("fullscreen map shell contract", () => {
   });
 
   it("uses viewport map geometry and on-demand bottom sheets on mobile without horizontal overflow", async () => {
-    const { viewerHtml, compatHtml, terminalShellCss } = await readViewerHtml();
-    for (const html of [viewerHtml, compatHtml].map((documentHtml) => `${documentHtml}\n${terminalShellCss}`)) {
+    const { viewerHtml, terminalShellCss } = await readViewerHtml();
+    for (const html of [`${viewerHtml}\n${terminalShellCss}`]) {
       const mobileBlock = `${terminalShellCss}\n${html}`.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media|<\/style>|$)/i)?.[0] || "";
       expect(/\.viewer-shell[^{]*\{[^}]*min-height\s*:\s*(?:100dvh|100vh)/i.test(mobileBlock)).toBe(true);
       expect(/\.pixel-world-canvas[^{]*\{[^}]*position\s*:\s*(?:absolute|fixed)/i.test(mobileBlock)).toBe(true);
@@ -205,8 +202,8 @@ describe("fullscreen map shell contract", () => {
   });
 
   it("keeps hotspots above selected entity markers for pointer inspection", async () => {
-    const { viewerHtml, compatHtml } = await readViewerHtml();
-    for (const html of [viewerHtml, compatHtml]) {
+    const { viewerHtml } = await readViewerHtml();
+    for (const html of [viewerHtml]) {
       const hotspot = findRule(html, /\.pixel-world-hotspot(?:\s|$)/);
       expect(numericDeclaration(hotspot, "border-radius")).toBe(0);
       const close = findRule(html, /\.pixel-world-canvas__hotspot-tooltip-close(?:\s|$)/);

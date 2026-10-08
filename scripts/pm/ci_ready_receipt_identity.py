@@ -2,6 +2,12 @@
 """Stable review identity for a trusted CI-ready receipt."""
 
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import hashlib
 import json
@@ -22,6 +28,7 @@ SOURCE_REVIEW_SCHEMA = "oasis7-review-plan/v2"
 REQUIRED_PLAN_V1_SCHEMA = "oasis7-required-plan-v1"
 REQUIRED_PLAN_V2_SCHEMA = "oasis7-required-plan-v2"
 REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT = "required-domain-split/v1"
+SUPPORTED_REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACTS = {REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT, "required-domain-split/v2"}
 VERSIONED_PLANNER_SELECTOR_FIELDS = (
     "run_workflow_governance_contracts", "run_packaging_contracts",
     "run_doc_checker_contracts", "run_cargo_tooling_contracts",
@@ -575,6 +582,67 @@ def has_live_integration_attestation(receipt: dict[str, Any]) -> bool:
     )
 
 
+CURRENT_TARGET_PROOF_FIELDS = (
+    "schema", "repository", "task_uid", "task_issue_number", "pr_number",
+    "source_head_oid", "current_target_oid", "checkout_oid", "tested_tree_oid",
+    "checkout_parent_oids", "workflow_revision", "workflow_run_id",
+    "workflow_run_attempt", "maintenance_authority_comment_id",
+    "planner_config_sha256", "test_driver_sha256",
+)
+
+
+def current_target_proof_identity(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != set(CURRENT_TARGET_PROOF_FIELDS):
+        raise ValueError("current-target proof fields are incomplete or unknown")
+    if value["schema"] != "oasis7-current-target-pr/v1":
+        raise ValueError("current-target proof schema is unsupported")
+    if not isinstance(value["repository"], str) or not re.fullmatch(r"[^/\s]+/[^/\s]+", value["repository"]):
+        raise ValueError("current-target repository is invalid")
+    if not re.fullmatch(r"task_[0-9a-f]{32}", str(value["task_uid"])):
+        raise ValueError("current-target task UID is invalid")
+    for field in ("task_issue_number", "pr_number", "workflow_run_id", "workflow_run_attempt", "maintenance_authority_comment_id"):
+        if type(value[field]) is not int or value[field] <= 0:
+            raise ValueError("current-target positive integer is invalid: " + field)
+    for field in ("source_head_oid", "current_target_oid", "checkout_oid", "tested_tree_oid", "workflow_revision"):
+        _require_oid(value[field], field)
+    for field in ("planner_config_sha256", "test_driver_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(value[field])):
+            raise ValueError("current-target digest is invalid: " + field)
+    if value["checkout_parent_oids"] != [value["current_target_oid"], value["source_head_oid"]]:
+        raise ValueError("current-target checkout parents differ from Q,H")
+    if value["workflow_revision"] not in (value["source_head_oid"], value["checkout_oid"]):
+        raise ValueError("current-target workflow revision is outside the tested event")
+    return dict(value)
+
+
+def has_live_current_target_attestation(receipt: dict[str, Any]) -> bool:
+    try:
+        proof = current_target_proof_identity(receipt.get("current_target_proof"))
+        planner = receipt.get("planner")
+        if not isinstance(planner, dict):
+            return False
+        outcomes = planner.get("selected_child_job_outcomes") or {}
+        planner_digest = hashlib.sha256(json.dumps(planner, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return (receipt.get("ci_validation_mode") == "current_target_pr"
+                and receipt.get("issuer") == "github_live_query"
+                and receipt.get("live_validation") == "ci-ready-receipt-live"
+                and receipt.get("conclusion") == "success"
+                and all(receipt.get(field) == proof[other] for field, other in (
+                    ("repository", "repository"), ("task_uid", "task_uid"),
+                    ("task_issue_number", "task_issue_number"), ("pr_number", "pr_number"),
+                    ("head_oid", "source_head_oid")))
+                and planner.get("current_target_proof") == proof
+                and planner_digest == receipt.get("planner_digest")
+                and planner.get("scope") == "full"
+                and planner.get("impact_projection_test_profile") == "full"
+                and planner.get("planner_config_sha256") == "sha256:" + proof["planner_config_sha256"]
+                and outcomes.get("workflow_run_id") == proof["workflow_run_id"]
+                and outcomes.get("run_attempt") == proof["workflow_run_attempt"]
+                and outcomes.get("required_gate_check_run_id") == receipt.get("check_run_id"))
+    except (ValueError, TypeError):
+        return False
+
+
 def is_ordinary_pr_ci_receipt(receipt: dict[str, Any]) -> bool:
     """Recognize source-bound PR CI without treating it as target integration.
 
@@ -705,6 +773,8 @@ def _target_relation_paths(
     projection: dict[str, Any], *, root: pathlib.Path, source_head: str,
 ) -> tuple[list[str], bool]:
     """Collect verified contract/consumer paths for target-only drift checks."""
+    primary_contract.validate_consumed_contracts(projection.get("consumed_contracts") or [],
+        primary_contract.load_task(root, projection.get("task_uid", "")), root=root)
     relations = [
         path for path in (projection.get("changed_paths") or [])
         if isinstance(path, str)
@@ -735,6 +805,13 @@ def _target_relation_paths(
             unmapped = True
 
     for item in projection.get("consumed_contracts") or []:
+        if isinstance(item, dict) and item.get("type") == primary_contract.REFERENCE_TYPE:
+            task = primary_contract.load_task(pathlib.Path(root), projection["task_uid"])
+            primary_contract.validate_completion_reference(item, task or {})
+            primary_contract.validate_current_completion(pathlib.Path(root), task or {})
+            # This server metadata has no repository path. Its current identity
+            # was checked above; an unrelated target advance cannot mutate it.
+            continue
         candidates: list[Any] = []
         if isinstance(item, str):
             candidates.append(item)
@@ -1060,6 +1137,16 @@ def can_reuse_source_review(
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
             return False
+        projection = plan.get("impact_projection")
+        if isinstance(projection, dict):
+            if current_target_root is not None:
+                primary_contract.validate_consumed_contracts(projection.get("consumed_contracts") or [],
+                    primary_contract.load_task(pathlib.Path(current_target_root), source["task_uid"]),
+                    root=pathlib.Path(current_target_root))
+            elif any(isinstance(item, dict) and (item.get("type") == primary_contract.REFERENCE_TYPE
+                    or item.get("schema") in {primary_contract.SCHEMA, primary_contract.SCOPE_SCHEMA})
+                    for item in projection.get("consumed_contracts") or []):
+                return False
         if plan.get("impact_projection_schema") != PROJECTION_SCHEMA:
             return False
         if current_source_identity is not None and _validate_source_identity(current_source_identity) != source:
@@ -1070,11 +1157,14 @@ def can_reuse_source_review(
         )
         if applicability != review_applicability_identity(source):
             return False
-        if has_live_pr_ci_attestation(latest_receipt):
+        if has_live_pr_ci_attestation(latest_receipt) or has_live_current_target_attestation(latest_receipt):
             mode = plan.get("effective_mode")
             if not isinstance(mode, dict) or mode.get("effective_policy") == "legacy":
                 return False
-            if projection_requires_strict_integration(plan):
+            current_target = has_live_current_target_attestation(latest_receipt)
+            if projection_requires_strict_integration(plan) and not current_target:
+                return False
+            if current_target and current_target_oid != latest_receipt["current_target_proof"]["current_target_oid"]:
                 return False
             if latest_receipt.get("task_uid") != source["task_uid"]:
                 return False
@@ -1083,7 +1173,7 @@ def can_reuse_source_review(
             if current_applicability is not None:
                 if _verified_review_applicability(current_applicability) != applicability:
                     return False
-            if current_target_oid is not None and _target_advance_requires_strict(
+            if not current_target and current_target_oid is not None and _target_advance_requires_strict(
                     plan, root=current_target_root, current_target_oid=current_target_oid):
                 return False
             return True
@@ -1159,7 +1249,7 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
         ):
             raise ValueError("versioned planner fields require execution_contract")
     else:
-        if execution_contract != REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT:
+        if execution_contract not in SUPPORTED_REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACTS:
             raise ValueError("CI receipt execution_contract is unsupported")
         planner = receipt.get("planner")
         if not isinstance(planner, dict) or planner.get("execution_contract") != execution_contract:
@@ -1179,6 +1269,8 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("versioned CI receipt planner resource is missing or malformed: " + field)
         if planner["needs_python"] is not True or planner["needs_markdown"] is not True:
             raise ValueError("versioned CI receipt baseline requires Python and Markdown resources")
+        if execution_contract == "required-domain-split/v2" and planner["needs_rust_toolchain"] is not True:
+            raise ValueError("v2 CI receipt baseline requires Rust toolchain")
         planner_digest = hashlib.sha256(
             json.dumps(planner, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
@@ -1187,9 +1279,13 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
         result["execution_contract"] = execution_contract
         result.update({field: planner[field] for field in VERSIONED_PLANNER_SELECTOR_FIELDS})
     if receipt.get("ci_validation_mode") is not None:
-        if receipt.get("ci_validation_mode") not in {"ordinary_pr", "trusted_integration"}:
+        if receipt.get("ci_validation_mode") not in {"ordinary_pr", "trusted_integration", "current_target_pr"}:
             raise ValueError("CI receipt validation mode is invalid")
         result["ci_validation_mode"] = receipt["ci_validation_mode"]
+        if receipt["ci_validation_mode"] == "current_target_pr":
+            if not has_live_current_target_attestation(receipt):
+                raise ValueError("current-target live receipt identity is invalid")
+            result["current_target_proof"] = current_target_proof_identity(receipt["current_target_proof"])
     if receipt.get("base_ref") is not None:
         if not isinstance(receipt.get("base_ref"), str) or not receipt["base_ref"].strip():
             raise ValueError("CI receipt target ref is invalid")

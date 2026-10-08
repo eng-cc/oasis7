@@ -194,7 +194,7 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 - 最低完成定义：脚本实际跑过、agent 实际游玩过、`evidence/l4b-agent-*/l4b-agent-summary.json` 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，并在 `l4-summary.md` 明确写出 `L4B` verdict；只有启动脚本，没有 agent 主动操作或 summary，不算完整 `L4B`。
 - 结论边界：这一层可以回答“agent 在真实操作链路里是否表现出继续玩的倾向”，并应尽量逼近真人评审效果，但仍不能自动等价于 `L5` 真实人类或外部市场验证。
 - 可选内部真人佐证：制作人试玩 / QA headed rerun 仍可沿用 `./scripts/run-producer-playtest.sh`；如执行，必须把结果写入 `optional-internal-human-corroboration.md` 或等价正式卡片，并在 `l4-summary.md` 里明确它是 `L4B` corroboration / contradiction，而不是新层级。只有人类试玩而没有对 `L4B` 的对照说明，不算合格佐证。
-- source-tree Viewer Web 开发态统一通过 `run-launcher-stack.sh`（通常由 `worktree-harness.sh` 或 `run-producer-playtest.sh` 调用）并走 freshness gate；当 `crates/oasis7_viewer/viewer.html`、`software_safe.html`、`viewer.js`、`software_safe.js`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist，而不是继续拿 stale `dist` 给 Web 闭环下结论。
+- source-tree Viewer Web 开发态统一通过 `run-launcher-stack.sh`（通常由 `worktree-harness.sh` 或 `run-producer-playtest.sh` 调用）并走 freshness gate；当 `crates/oasis7_viewer/viewer.html`、`viewer.js`、`viewer_first_agent_claim_evidence.html`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist。重建时由 canonical `viewer.html` 与 claim fixture 生成 `dist/software_safe.html`、`software_safe.js` 和 `software_safe_first_agent_claim_evidence.html`；freshness / dist copy contract 会验证这些 outputs。
 
 ### L5 真实人类 / 受控线上验证层
 - 目标：验证真实人类或受控外部玩家在真实时间、注意力和机会成本约束下，是否仍愿意继续玩；这是 `L4B` 之上的正式验证层。
@@ -1018,11 +1018,11 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 ### Network Tiers / Shared-Network Evidence
 - 当前网络层真值统一以 `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` 与对应 project/runbook 为准：
   - operator/runtime network-tier 是 `local_devnet -> public_testnet -> mainnet`，不作为玩家世界模型。
-  - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不能替代 formal `public_testnet` 的 six-lane readiness，也不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
+  - `public_testnet_rehearsal` 只作 legacy/rehearsal evidence，不能替代 formal `public_testnet` 的 11-lane readiness，也不代表 live `public_testnet`、`mainnet`、public launch、赛季上线或公开大世界已建立。
 - Canonical docs:
   - Current network-tier source of truth: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`
   - `public_testnet` live-candidate checklist: `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`
-  - Legacy network-rehearsal evidence: `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`
+  - Historical network-rehearsal records and archive boundary: `doc/testing/evidence/README.md`
   - Benchmark background: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md`
 - Canonical commands:
 ```bash

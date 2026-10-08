@@ -139,27 +139,6 @@ PY
 )" || die "invalid ci_ready_receipt"
   read -r RECEIPT_REPOSITORY RECEIPT_TASK_UID RECEIPT_ISSUE RECEIPT_PR RECEIPT_CHECK RECEIPT_APP RECEIPT_PLANNER <<<"$RECEIPT_ARGS"
   [[ -z "$TASK_UID" || "$TASK_UID" == "$RECEIPT_TASK_UID" ]] || die "ci_ready_receipt task_uid mismatch"
-  python3 "$SCRIPT_DIR/ci-ready-receipt.py" --repository "$RECEIPT_REPOSITORY" \
-    --task-uid "$RECEIPT_TASK_UID" --task-issue-number "$RECEIPT_ISSUE" --pr-number "$RECEIPT_PR" --check-name "$RECEIPT_CHECK" \
-    --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" --allow-ready-pr >/dev/null \
-    || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
-
-  command -v gh >/dev/null 2>&1 || die "ready_for_pr requires live GitHub target read access"
-  CI_CURRENT_TARGET_OID="$(gh pr view "$RECEIPT_PR" -R "$RECEIPT_REPOSITORY" --json baseRefOid --jq '.baseRefOid')" \
-    || die "could not read the live PR target OID for source review reuse"
-  [[ "$CI_CURRENT_TARGET_OID" =~ ^[0-9a-f]{40,64}$ ]] \
-    || die "live PR target OID is missing or invalid for source review reuse"
-  if ! git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1; then
-    git -C "$ROOT_DIR" fetch --no-tags --no-write-fetch-head origin "$CI_CURRENT_TARGET_OID" >/dev/null 2>&1 \
-      || die "could not fetch the live PR target OID for source review reuse"
-  fi
-  git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1 \
-    || die "live PR target OID is unavailable locally for source review reuse"
-
-  # A direct ready_for_pr claim must consume the same v2 source-review and
-  # trusted projection decision used by promotion/closeout.  The live receipt
-  # proves the source-bound CI check; it cannot by itself prove that ordinary
-  # CI is sufficient for a high-risk projection.
   REVIEW_PLAN_PATH="$REVIEW_PLAN"
   if [[ -z "$REVIEW_PLAN_PATH" ]]; then
     REVIEW_PLAN_PATH="$ROOT_DIR/.pm/scratch/$RECEIPT_TASK_UID/review-plan.json"
@@ -194,6 +173,27 @@ PY
       )" || die "ready_for_pr requires one canonical v2 review plan for the receipt source head"
     fi
   fi
+  python3 "$SCRIPT_DIR/ci-ready-receipt.py" --root "$ROOT_DIR" --repository "$RECEIPT_REPOSITORY" \
+    --task-uid "$RECEIPT_TASK_UID" --task-issue-number "$RECEIPT_ISSUE" --pr-number "$RECEIPT_PR" --check-name "$RECEIPT_CHECK" \
+    --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" --allow-ready-pr --review-plan "$REVIEW_PLAN_PATH" >/dev/null \
+    || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
+
+  command -v gh >/dev/null 2>&1 || die "ready_for_pr requires live GitHub target read access"
+  CI_CURRENT_TARGET_OID="$(gh pr view "$RECEIPT_PR" -R "$RECEIPT_REPOSITORY" --json baseRefOid --jq '.baseRefOid')" \
+    || die "could not read the live PR target OID for source review reuse"
+  [[ "$CI_CURRENT_TARGET_OID" =~ ^[0-9a-f]{40,64}$ ]] \
+    || die "live PR target OID is missing or invalid for source review reuse"
+  if ! git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1; then
+    git -C "$ROOT_DIR" fetch --no-tags --no-write-fetch-head origin "$CI_CURRENT_TARGET_OID" >/dev/null 2>&1 \
+      || die "could not fetch the live PR target OID for source review reuse"
+  fi
+  git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1 \
+    || die "live PR target OID is unavailable locally for source review reuse"
+
+  # A direct ready_for_pr claim must consume the same v2 source-review and
+  # trusted projection decision used by promotion/closeout.  The live receipt
+  # proves the source-bound CI check; it cannot by itself prove that ordinary
+  # CI is sufficient for a high-risk projection.
   python3 - "$ROOT_DIR" "$REVIEW_PLAN_PATH" "$CI_READY_RECEIPT" "$RECEIPT_TASK_UID" "$CI_CURRENT_TARGET_OID" "$SCRIPT_DIR" <<'PY' \
     || die "ready_for_pr requires a trusted v2 review plan and applicable CI authority"
 import importlib.util
@@ -275,6 +275,14 @@ esac
 if [[ "$CLAIM_LABEL" == "ready_for_merge" ]]; then
   [[ -n "$PR_GATE_JSON" && -f "$PR_GATE_JSON" ]] || die "ready_for_merge requires --pr-gate-json from pr-lifecycle-gate.py"
   [[ -n "$TASK_UID" ]] || die "ready_for_merge requires --task-uid for live gate revalidation"
+  # Consume the supplied input once. All later parsing/publication uses these
+  # retained bytes, including a caller replacing its original path mid-run.
+  READINESS_GATE_CAPTURE="$(mktemp)"
+  python3 - "$PR_GATE_JSON" "$READINESS_GATE_CAPTURE" <<'PY'
+import pathlib,sys
+pathlib.Path(sys.argv[2]).write_bytes(pathlib.Path(sys.argv[1]).read_bytes())
+PY
+  PR_GATE_JSON="$READINESS_GATE_CAPTURE"
   python3 - "$PR_GATE_JSON" <<'PY'
 import datetime as dt, json, re, sys
 p = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -301,6 +309,9 @@ PY
   PR_NUMBER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["readiness_receipt"]["pr_number"])' "$PR_GATE_JSON")"
   LIVE_GATE_JSON="$(mktemp)"
   LIVE_GATE_ARGS=("$PR_NUMBER" --root "$ROOT_DIR" --task-uid "$TASK_UID" --json)
+  if [[ -n "${REVIEW_PLAN_PATH:-$REVIEW_PLAN}" ]]; then
+    LIVE_GATE_ARGS+=(--review-plan "${REVIEW_PLAN_PATH:-$REVIEW_PLAN}")
+  fi
   if ! python3 "$SCRIPT_DIR/pr-lifecycle-gate.py" "${LIVE_GATE_ARGS[@]}" >"$LIVE_GATE_JSON"; then
     rm -f "$LIVE_GATE_JSON"
     die "live PR lifecycle gate is not ready; rerun watch/fix before claiming merge readiness"
@@ -421,6 +432,28 @@ trap cleanup EXIT
 FROZEN_HEAD=""
 FROZEN_TREE=""
 VERIFICATION_MODE="live_nonfinal"
+if [[ "$CLAIM_LABEL" == "task_complete" && -n "$TASK_UID" && -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
+  READINESS_REQUIRED="$(python3 - "$ROOT_DIR" "$TASK_UID" "$SCRIPT_DIR" <<'PY'
+import json,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+r=(json.load(open(root/'.pm/github-project-sync/tasks.json',encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+v1=(r.get('phase_receipts') or {}).get('post_merge_done',{}).get('receipt_type')=='oasis7_terminal_cleanup'
+non_pr=r.get('completion_mode')=='non_pr_task' and bool(r.get('non_pr_completion_evidence'))
+if r.get('pr_number') and v1 and not non_pr:
+    sys.path.insert(0,sys.argv[3])
+    from loop_terminal import read_shared_terminal_proof
+    proof=read_shared_terminal_proof(r.get('repository'),sys.argv[2],repo_root=root,record=r)
+    if proof.get('status')!='passed' or proof.get('protocol_version')!=1:
+        raise SystemExit('task_complete legacy exemption requires exact valid v1 terminal proof')
+print('yes' if r.get('pr_number') and not v1 and not non_pr else 'no')
+PY
+)" || die "readiness or exact valid v1 terminal proof is required before task_complete claim publication"
+  if [[ "$READINESS_REQUIRED" == yes ]]; then
+    python3 "$SCRIPT_DIR/readiness_transport.py" --repo-root "$ROOT_DIR" --task-uid "$TASK_UID" >/dev/null \
+      || die "readiness must validate before task_complete claim publication"
+  fi
+fi
+
 if [[ "$CLAIM_LABEL" == "task_complete" || "$CLAIM_LABEL" == "ready_for_pr" ]]; then
   git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
     || die "$CLAIM_LABEL requires a Git worktree with an immutable committed source"
@@ -528,7 +561,14 @@ print(json.dumps(payload, ensure_ascii=False))
 PY
 )"
 
-if [[ -n "$TASK_UID" ]]; then
+if [[ "$CLAIM_LABEL" == "ready_for_merge" && "$VERIFY_EXIT_CODE" == "0" ]]; then
+  # Native producer generation: oasis7-native-readiness/v2.
+  RESULT_JSON="$(python3 "$SCRIPT_DIR/readiness_transport.py" --publish-native \
+    --repo-root "$ROOT_DIR" --tool-root "$(cd "$SCRIPT_DIR/../.." && pwd)" \
+    --task-uid "$TASK_UID" --gate-input "$PR_GATE_JSON" --result-json "$RESULT_JSON")" \
+    || die "native readiness exact server readback failed"
+  rm -f "$READINESS_GATE_CAPTURE"
+elif [[ -n "$TASK_UID" ]]; then
   if [[ -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
     python3 - "$ROOT_DIR" "$TASK_UID" "$RESULT_JSON" <<'PY'
 from __future__ import annotations

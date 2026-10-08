@@ -1,13 +1,16 @@
-import assert from "node:assert/strict";
 import { access, readFile, readdir } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
+
+import {
+  createSoftwareSafeBundleAlias,
+  createSoftwareSafeClaimEvidenceAlias,
+} from "./viewer-compat-aliases.mjs";
 
 const viewerRoot = resolve(new URL("..", import.meta.url).pathname);
 const repoRoot = resolve(viewerRoot, "..", "..");
 const sourceDir = resolve(viewerRoot, "software_safe_src");
 const canonicalHtmlPath = resolve(viewerRoot, "viewer.html");
-const compatHtmlPath = resolve(viewerRoot, "software_safe.html");
-const compatBundlePath = resolve(viewerRoot, "software_safe.js");
+const canonicalClaimEvidencePath = resolve(viewerRoot, "viewer_first_agent_claim_evidence.html");
 const viewerDistDir = resolve(viewerRoot, "dist");
 const distViewerBundlePath = resolve(viewerDistDir, "viewer.js");
 const pixelWorldRuntimeDir = resolve(viewerDistDir, "pixel-world-bridge");
@@ -132,16 +135,12 @@ async function validateLineThresholds() {
 
 async function validateCanonicalCompatContracts() {
   const failures = [];
-  const [canonicalHtml, compatHtml, canonicalBundle, compatBundle] = await Promise.all([
+  const [canonicalHtml, canonicalBundle, canonicalClaimEvidence] = await Promise.all([
     readFile(canonicalHtmlPath, "utf8"),
-    readFile(compatHtmlPath, "utf8"),
     readFile(canonicalBundlePath, "utf8"),
-    readFile(compatBundlePath, "utf8"),
+    readFile(canonicalClaimEvidencePath, "utf8"),
   ]);
 
-  if (compatHtml !== canonicalHtml) {
-    failures.push("software_safe.html must remain a byte-for-byte compat copy of viewer.html");
-  }
   if (!canonicalHtml.includes('<script type="module" src="./viewer.js"></script>')) {
     failures.push("viewer.html must reference canonical viewer.js bundle");
   }
@@ -152,11 +151,19 @@ async function validateCanonicalCompatContracts() {
   if (!canonicalBundle.startsWith(canonicalBundleBanner)) {
     failures.push("viewer.js must carry the generated canonical bundle banner");
   }
-  assert.equal(
-    compatBundle,
-    "// Generated compat alias; canonical bundle truth lives in ./viewer.js.\nimport \"./viewer.js\";\n",
-    "software_safe.js must stay a generated compat alias",
-  );
+  for (const retiredRootAlias of [
+    resolve(viewerRoot, "software_safe.html"),
+    resolve(viewerRoot, "software_safe.js"),
+    resolve(viewerRoot, "software_safe_first_agent_claim_evidence.html"),
+  ]) {
+    if (await fileExists(retiredRootAlias)) {
+      failures.push(`${repoRelative(retiredRootAlias)} is a generated compatibility alias and must live in dist only`);
+    }
+  }
+  if (!canonicalClaimEvidence.includes("eligible_balance_after:")
+    || !canonicalClaimEvidence.includes("upkeep_runway_epochs:")) {
+    failures.push("canonical first-agent claim evidence must include the current eligible balance and upkeep runway fields");
+  }
   return failures;
 }
 
@@ -175,14 +182,46 @@ async function validateGeneratedRuntimeContracts() {
     return failures;
   }
 
-  const [canonicalBundle, distBundle] = await Promise.all([
+  const [canonicalBundle, canonicalHtml, canonicalClaimEvidence, distBundle] = await Promise.all([
     readFile(canonicalBundlePath, "utf8"),
+    readFile(canonicalHtmlPath, "utf8"),
+    readFile(canonicalClaimEvidencePath, "utf8"),
     readFile(distViewerBundlePath, "utf8").catch(() => null),
   ]);
   if (distBundle == null) {
     failures.push("dist/viewer.js must exist when crates/oasis7_viewer/dist exists");
   } else if (distBundle !== canonicalBundle) {
     failures.push("dist/viewer.js must remain a finalize-managed copy of canonical viewer.js");
+  }
+
+  const [distCanonicalHtml, distCompatHtml] = await Promise.all([
+    readFile(resolve(viewerDistDir, "viewer.html"), "utf8").catch(() => null),
+    readFile(resolve(viewerDistDir, "software_safe.html"), "utf8").catch(() => null),
+  ]);
+  if (distCanonicalHtml == null) {
+    failures.push("dist/viewer.html must exist when crates/oasis7_viewer/dist exists");
+  } else if (distCanonicalHtml !== canonicalHtml) {
+    failures.push("dist/viewer.html must remain a finalize-managed copy of canonical viewer.html");
+  }
+  if (distCompatHtml == null) {
+    failures.push("dist/software_safe.html must exist when crates/oasis7_viewer/dist exists");
+  } else if (distCompatHtml !== canonicalHtml) {
+    failures.push("dist/software_safe.html must remain a generated copy of canonical viewer.html");
+  }
+
+  const [distCompatBundle, distCompatClaimEvidence] = await Promise.all([
+    readFile(resolve(viewerDistDir, "software_safe.js"), "utf8").catch(() => null),
+    readFile(resolve(viewerDistDir, "software_safe_first_agent_claim_evidence.html"), "utf8").catch(() => null),
+  ]);
+  if (distCompatBundle == null) {
+    failures.push("dist/software_safe.js must exist when crates/oasis7_viewer/dist exists");
+  } else if (distCompatBundle !== createSoftwareSafeBundleAlias()) {
+    failures.push("dist/software_safe.js must remain a generated alias to canonical viewer.js");
+  }
+  if (distCompatClaimEvidence == null) {
+    failures.push("dist/software_safe_first_agent_claim_evidence.html must exist when crates/oasis7_viewer/dist exists");
+  } else if (distCompatClaimEvidence !== createSoftwareSafeClaimEvidenceAlias(canonicalClaimEvidence)) {
+    failures.push("dist/software_safe_first_agent_claim_evidence.html must remain a generated compatibility view of the canonical claim fixture");
   }
 
   if (!await fileExists(pixelWorldRuntimeDir)) {

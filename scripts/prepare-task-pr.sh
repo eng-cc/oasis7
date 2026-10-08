@@ -46,6 +46,8 @@ Options:
   --remote <name>         Remote name for push / base comparison (default: origin)
   --create                Push branch if needed and run `gh pr create`; legacy task-bound `--create` is rejected
   --draft                 Add `--draft` when creating a PR
+  --human-reconcile       Reconcile the existing Task/PR metadata without push/create
+  --maintenance-authority-comment-id <id> Exact admin Task maintenance scope evidence
   --draft-candidate       Create/resume the frozen-head draft candidate before CI/review
   --existing-ready-update Update the same admitted ready PR without changing its lifecycle state
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
@@ -109,6 +111,8 @@ CREATE_PR=0
 DRAFT_PR=0
 DRAFT_CANDIDATE=0
 EXISTING_READY_UPDATE=0
+HUMAN_RECONCILE=0
+MAINTENANCE_AUTHORITY_COMMENT_ID=""
 PROMOTE_DRAFT_RECEIPT=""
 OUTPUT_JSON=0
 PR_TITLE=""
@@ -141,6 +145,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --draft-candidate) CREATE_PR=1; DRAFT_PR=1; DRAFT_CANDIDATE=1; shift ;;
+    --human-reconcile) HUMAN_RECONCILE=1; shift ;;
+    --maintenance-authority-comment-id) MAINTENANCE_AUTHORITY_COMMENT_ID="${2:-}"; shift 2 ;;
     --existing-ready-update) CREATE_PR=1; DRAFT_CANDIDATE=1; EXISTING_READY_UPDATE=1; shift ;;
     --promote-draft) PROMOTE_DRAFT_RECEIPT="${2:-}"; shift 2 ;;
     --title)
@@ -189,6 +195,29 @@ if [[ -n "$IMPACT_PROJECTION" ]]; then
   [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
   IMPACT_PROJECTION="$(cd "$(dirname "$IMPACT_PROJECTION")" && pwd)/$(basename "$IMPACT_PROJECTION")"
   IMPACT_PROJECTION_B64="$(base64 <"$IMPACT_PROJECTION" | tr -d '\n')"
+fi
+
+# Explicit manual reconciliation has no push/create or pinned-policy execution path.
+if [[ "$HUMAN_RECONCILE" == "1" ]]; then
+  [[ "$MAINTENANCE_AUTHORITY_COMMENT_ID" =~ ^[1-9][0-9]*$ ]] || die "human reconciliation requires maintenance authority comment ID"
+  HUMAN_ROOT="$(git rev-parse --show-toplevel)"
+  read -r HUMAN_UID HUMAN_ISSUE HUMAN_REPO HUMAN_SOURCE HUMAN_TARGET < <(python3 - "$HUMAN_ROOT" <<'PYH'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1]).resolve()
+mapping=json.loads((root/'.pm/github-project-sync/tasks.json').read_text())
+records=[(uid,r) for uid,r in mapping.get('tasks',{}).items()
+         if pathlib.Path(r.get('canonical_worktree','')).resolve()==root]
+if len(records)!=1: raise SystemExit('human reconciliation requires one canonical task mapping')
+uid,r=records[0]
+print(uid,r['issue_number'],r['repository'],r['task_branch'],r['default_branch'])
+PYH
+  )
+  [[ -n "$HUMAN_UID" && -n "$HUMAN_ISSUE" ]] || die "human canonical task mapping is unavailable"
+  exec python3 "$HUMAN_ROOT/scripts/pm/pr_projection_publish.py" \
+    --worktree "$HUMAN_ROOT" --repo "$HUMAN_REPO" --issue-number "$HUMAN_ISSUE" \
+    --task-uid "$HUMAN_UID" --remote "$REMOTE_NAME" --source-ref "$HUMAN_SOURCE" \
+    --target-ref "$HUMAN_TARGET" --task-helper "$HUMAN_ROOT/scripts/pm/github-project-task.py" \
+    --human-reconcile --maintenance-authority-comment-id "$MAINTENANCE_AUTHORITY_COMMENT_ID" --json
 fi
 
 COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
@@ -1148,7 +1177,7 @@ validate_draft_candidate_binding() {
   local source_head="$3"
   local comparison_ref="$4"
   local comparison_head="$5"
-  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$comparison_head" "$BASE_BRANCH" <<'PY'
+  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$comparison_head" "$BASE_BRANCH" "$ROOT_DIR/scripts" <<'PY'
 from __future__ import annotations
 
 import json
@@ -1161,6 +1190,14 @@ import sys
 source_worktree = Path(sys.argv[1]).resolve()
 source_branch, source_head = sys.argv[2:4]
 comparison_ref, comparison_head, base_branch = sys.argv[4:7]
+import importlib.util
+primary_path = Path(sys.argv[7]) / "pm/task_primary_package.py"
+primary_spec = importlib.util.spec_from_file_location("oasis7_primary_package", primary_path)
+if primary_spec is None or primary_spec.loader is None:
+    raise SystemExit("primary-package resolver is unavailable")
+primary_helper = importlib.util.module_from_spec(primary_spec)
+sys.modules[primary_spec.name] = primary_helper
+primary_spec.loader.exec_module(primary_helper)
 mapping_path = source_worktree / ".pm" / "github-project-sync" / "tasks.json"
 task_uid_re = re.compile(r"task_[0-9a-f]{32}")
 oid_re = re.compile(r"[0-9a-f]{40}")
@@ -1372,7 +1409,9 @@ try:
     live_primary_package = package_matches[0].strip() if package_matches else ''
     if live_primary_package and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', live_primary_package) is None:
         fail(f'live primary_package is invalid: {live_primary_package}')
-    mapped_primary_package = str(record.get('primary_package') or '').strip()
+    mapped_primary_package = primary_helper.effective_primary_package(record) or ''
+    if record.get('primary_package_completion') is not None:
+        primary_helper.validate_current_completion(source_worktree, dict(record, task_uid=task_uid))
     if mapped_primary_package != live_primary_package:
         fail(
             'primary_package cache differs from live Issue: '
@@ -1404,7 +1443,7 @@ except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
 print(task_uid)
 print(issue_url)
 print(issue_number)
-primary_package = str(record.get("primary_package") or "").strip()
+primary_package = primary_helper.effective_primary_package(record) or ""
 if primary_package and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", primary_package) is None:
     fail(f"mapped primary_package is invalid: {primary_package}")
 print(primary_package)
@@ -1553,25 +1592,128 @@ if ! SYSTEM_DESIGN_TRACEABILITY_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PRODUCT_DOC
 fi
 LOCAL_REQUIRED_EXTRA_COMMANDS+=("$SYSTEM_DESIGN_TRACEABILITY_COMMAND")
 
+# The package-scope result is an additive audit.  It never selects or removes
+# required tests.  The policy must already exist at the trusted comparison OID;
+# a policy introduced by this candidate cannot authorize its own enforcement.
+CARGO_PACKAGE_SCOPE_AUTHORITY_DIR="$(mktemp -d)"
+CARGO_PACKAGE_SCOPE_CHECKER="$SOURCE_WORKTREE/scripts/pm/trusted_cargo_scope.py"
+CARGO_PACKAGE_SCOPE_POLICY="$SOURCE_WORKTREE/.pm/cargo-package-scope-policy.json"
+CARGO_PACKAGE_SCOPE_PLAN_RUNNER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/scope-with-plan.py"
+cat >"$CARGO_PACKAGE_SCOPE_PLAN_RUNNER" <<'PY'
+import io,json,os,pathlib,subprocess,sys,tarfile,tempfile
+
+root,driver,base,head=sys.argv[1:]
+def git(*args):
+    return subprocess.check_output(['git','-C',root,*args],text=True).strip()
+base=git('rev-parse',base+'^{commit}')
+head=git('rev-parse',head+'^{commit}')
+ancestors=git('merge-base','--all',base,head).splitlines()
+if len(ancestors)!=1:
+    raise SystemExit('prepare scope requires one unique source merge base')
+source=ancestors[0]
+raw_paths=subprocess.check_output(['git','-C',root,'diff','--name-only','--no-renames','-z',source,head])
+paths=[path.decode('utf-8') for path in raw_paths.split(b'\0')[:-1]]
+if not paths:
+    # Independently proven empty ranges cannot enter either full-plan exception.
+    # Keep the ordinary isolated S check, avoiding the planner's redundant
+    # implicit metadata precheck when its path-list CLI has no empty-list form.
+    environment=dict(os.environ)
+    environment.pop('OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN',None)
+    result=subprocess.run([sys.executable,'-I',driver,'--repo-root',root,'--base',base,
+                           '--head',head,'--primary-package','auto','--json'],
+                          cwd=root,env=environment,capture_output=True,text=True)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    raise SystemExit(result.returncode)
+with tempfile.TemporaryDirectory(prefix='prepare-trusted-scope-plan-') as directory:
+    authority=pathlib.Path(directory)
+    archive=subprocess.check_output(['git','-C',root,'archive',base,'scripts'])
+    with tarfile.open(fileobj=io.BytesIO(archive)) as contents:
+        for member in contents.getmembers():
+            path=pathlib.PurePosixPath(member.name)
+            if path.is_absolute() or '..' in path.parts or member.issym() or member.islnk():
+                raise SystemExit('unsafe trusted planner closure')
+        contents.extractall(authority)
+    command=[sys.executable,'-I',str(authority/'scripts/plan-rust-required-scope.py'),
+             '--event-name','pull_request','--base-ref',base,'--head-ref',head]
+    for path in paths:
+        command.extend(('--changed-path',path))
+    result=subprocess.run(command,cwd=root,capture_output=True,text=True)
+    if result.returncode:
+        sys.stderr.write(result.stderr)
+        raise SystemExit('trusted B preparation scope plan failed')
+    plan={}
+    for line in result.stdout.splitlines():
+        if '=' not in line:
+            raise SystemExit('malformed trusted preparation plan')
+        key,value=line.split('=',1)
+        if key in plan:
+            raise SystemExit('duplicate trusted preparation plan field')
+        plan[key]=value
+    if (plan.get('integration_base')!=base or plan.get('source_head')!=head
+            or plan.get('source_scope_base')!=source
+            or plan.get('changed_paths','').split(';')!=(paths or [''])):
+        raise SystemExit('trusted preparation plan range identity mismatch')
+    environment=dict(os.environ)
+    environment.pop('OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN',None)
+    scope_command=[sys.executable,'-I',driver,'--repo-root',root,'--base',base,
+                   '--head',head,'--primary-package','auto','--json']
+    if plan.get('scope')=='full':
+        plan_path=authority/'required-scope-outputs.json'
+        plan_path.write_text(json.dumps(plan),encoding='utf-8')
+        for key,value in plan.items():
+            if key.startswith(('run_','needs_')) or key=='execution_contract':
+                if key!='execution_contract' and value not in ('true','false'):
+                    raise SystemExit('invalid planned preparation selector: '+key)
+                name=('OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS'
+                      if key=='run_oasis7_workspace_support_crate_tests'
+                      else 'OASIS7_CI_'+key.upper())
+                environment[name]=value
+        scope_command.extend(('--trusted-full-plan',str(plan_path)))
+    result=subprocess.run(scope_command,cwd=root,env=environment,capture_output=True,text=True)
+    sys.stdout.write(result.stdout)
+    sys.stderr.write(result.stderr)
+    raise SystemExit(result.returncode)
+PY
+CARGO_PACKAGE_SCOPE_COMMAND="$(render_cmd python3 -I "$CARGO_PACKAGE_SCOPE_PLAN_RUNNER" \
+  "$SOURCE_WORKTREE" "$CARGO_PACKAGE_SCOPE_CHECKER" "$COMPARISON_HEAD" "$SOURCE_HEAD")"
+if ! CARGO_PACKAGE_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 -I "$CARGO_PACKAGE_SCOPE_PLAN_RUNNER" \
+  "$SOURCE_WORKTREE" "$CARGO_PACKAGE_SCOPE_CHECKER" "$COMPARISON_HEAD" "$SOURCE_HEAD" 2>&1)"; then
+  printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
+  die "Cargo package scope check failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
+else
+  CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("primary_package") or "")' <<<"$CARGO_PACKAGE_SCOPE_OUTPUT")" \
+    || die "Cargo package scope output is malformed"
+  # A canonical task binding is available only for the draft-candidate path.
+  # Ordinary local required-validation reads may inspect a Cargo diff without
+  # selecting a task; keep those reads usable while making task-bound PR
+  # preparation fail closed on missing or mismatched package intent.
+  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" && -n "$BOUND_TASK_UID" ]]; then
+    [[ -n "$BOUND_TASK_PRIMARY_PACKAGE" ]] \
+      || die "Cargo diff changes one business package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE) but canonical task primary_package is missing"
+    [[ "$BOUND_TASK_PRIMARY_PACKAGE" == "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" ]] \
+      || die "canonical task primary_package ($BOUND_TASK_PRIMARY_PACKAGE) differs from actual Cargo package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE)"
+  fi
+  CARGO_PACKAGE_SCOPE_STATUS="validated"
+  LOCAL_REQUIRED_EXTRA_COMMANDS+=("$CARGO_PACKAGE_SCOPE_COMMAND")
+fi
+
 PLANNER_SCRIPT="$SOURCE_WORKTREE/scripts/plan-rust-required-scope.sh"
-if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then
-  PLANNER_ARGS=(--event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_HEAD")
-  PLANNER_RUNNER=("$PLANNER_SCRIPT")
+if [[ -n "$COMPARISON_HEAD" && -n "$SOURCE_HEAD" ]]; then
+  PLANNER_ARGS=(--event-name pull_request --base-ref "$COMPARISON_HEAD" --head-ref "$SOURCE_HEAD")
+  # The complete source range was just checked above. Supply both rename
+  # endpoints to the path planner, avoiding a third identical scope check.
+  while IFS= read -r changed_path; do
+    [[ -n "$changed_path" ]] || continue
+    PLANNER_ARGS+=(--changed-path "$changed_path")
+  done < <(git -C "$SOURCE_WORKTREE" diff --name-only --no-renames "$SOURCE_SCOPE_BASE" "$SOURCE_HEAD")
+  TRUSTED_REQUIRED_SCOPE_DIR="$(mktemp -d)"
+  # All transitive planner/projection modules come from frozen target B.
+  git -C "$SOURCE_WORKTREE" archive "$COMPARISON_HEAD" scripts | tar -x -C "$TRUSTED_REQUIRED_SCOPE_DIR" \
+    || die "trusted base required planner closure is unavailable"
+  PLANNER_RUNNER=(python3 -I "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py")
+  PLANNER_ARGS+=(--config "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json")
   if [[ -n "$IMPACT_PROJECTION" ]]; then
-    TRUSTED_REQUIRED_SCOPE_DIR="$(mktemp -d)"
-    mkdir -p "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/pm"
-    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/plan-rust-required-scope.py" \
-      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py" \
-      || die "trusted base required-scope planner is unavailable"
-    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/ci-required-scope.v2.json" \
-      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json" \
-      || die "trusted base required-scope config is unavailable"
-    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/ci-tests.sh" \
-      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-tests.sh" \
-      || die "trusted base required-gate selector source is unavailable"
-    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/pm/workflow-impact-projection.py" \
-      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/pm/workflow-impact-projection.py" \
-      || die "trusted base impact-projection verifier is unavailable"
     PLANNER_RUNNER=(python3 -I "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py")
     PLANNER_ARGS+=(--config "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json")
     PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$SOURCE_SCOPE_BASE")
@@ -1583,21 +1725,22 @@ if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then
     fi
   else
     RUST_SCOPE_OUTPUT=""
-    if ! RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "${PLANNER_RUNNER[@]}" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
-      RUST_SCOPE_OUTPUT=""
+    if ! RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "${PLANNER_RUNNER[@]}" "${PLANNER_ARGS[@]}" 2>&1)"; then
+      printf '%s\n' "$RUST_SCOPE_OUTPUT" >&2
+      die "trusted base required-scope planner rejected the comparison"
     fi
   fi
   if [[ -n "$RUST_SCOPE_OUTPUT" ]]; then
     PLANNER_EXECUTION_CONTRACT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "execution_contract")"
     case "$PLANNER_EXECUTION_CONTRACT" in
-      ""|required-domain-split/v1) ;;
+      ""|required-domain-split/v1|required-domain-split/v2) ;;
       *) die "required-scope planner returned unsupported execution contract: $PLANNER_EXECUTION_CONTRACT" ;;
     esac
     LOCAL_REQUIRED_VERSIONED_ENV=""
-    if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" ]]; then
-      LOCAL_REQUIRED_RENDERER="$SOURCE_WORKTREE/scripts/pm/required-gate-local-env.py"
+    if [[ "$PLANNER_EXECUTION_CONTRACT" == required-domain-split/v* ]]; then
+      LOCAL_REQUIRED_RENDERER="$TRUSTED_REQUIRED_SCOPE_DIR/scripts/pm/required-gate-local-env.py"
       [[ -f "$LOCAL_REQUIRED_RENDERER" ]] || die "versioned required-gate local renderer is unavailable"
-      if ! LOCAL_REQUIRED_VERSIONED_ENV="$(printf '%s\n' "$RUST_SCOPE_OUTPUT" | python3 "$LOCAL_REQUIRED_RENDERER")"; then
+      if ! LOCAL_REQUIRED_VERSIONED_ENV="$(printf '%s\n' "$RUST_SCOPE_OUTPUT" | python3 -I "$LOCAL_REQUIRED_RENDERER")"; then
         die "required-scope planner output failed versioned local environment validation"
       fi
     fi
@@ -1635,7 +1778,7 @@ if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then
       LOCAL_REQUIRED_EXTRA_COMMANDS+=("$PRODUCT_DOC_FULL_CORPUS_COMMAND")
     fi
 
-    if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" || \
+    if [[ "$PLANNER_EXECUTION_CONTRACT" == required-domain-split/v* || \
           "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
       RUN_OASIS7_REQUIRED_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_required_tests" "false")"
       RUN_SCENARIO_REGRESSION="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_scenario_regression" "false")"
@@ -1656,7 +1799,7 @@ if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then
       RUN_CODEX_AGENT_CONFIG_VALIDATION="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_codex_agent_config_validation" "false")"
       RUN_COMPILE_METRICS_CONTRACT_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_compile_metrics_contract_tests" "false")"
       RUN_RUST_BASELINE="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_rust_baseline" "false")"
-      if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" ]]; then
+      if [[ "$PLANNER_EXECUTION_CONTRACT" == required-domain-split/v* ]]; then
         [[ -n "$LOCAL_REQUIRED_VERSIONED_ENV" ]] || die "versioned required-gate environment was not rendered"
       fi
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=$RUN_OASIS7_REQUIRED_TESTS \
@@ -1698,85 +1841,14 @@ OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
   [[ -z "${TRUSTED_REQUIRED_SCOPE_DIR:-}" ]] || rm -rf "$TRUSTED_REQUIRED_SCOPE_DIR"
 fi
 
-# The package-scope result is an additive audit.  It never selects or removes
-# required tests.  The policy must already exist at the trusted comparison OID;
-# a policy introduced by this candidate cannot authorize its own enforcement.
-CARGO_PACKAGE_SCOPE_AUTHORITY_DIR="$(mktemp -d)"
-CARGO_PACKAGE_SCOPE_CHECKER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/check-cargo-package-scope"
-CARGO_PACKAGE_SCOPE_POLICY="$SOURCE_WORKTREE/.pm/cargo-package-scope-policy.json"
-CARGO_PACKAGE_SCOPE_RELEVANT="$(python3 - "$SOURCE_WORKTREE" "$COMPARISON_HEAD" "$SOURCE_HEAD" <<'PY'
-from __future__ import annotations
-
-import json
-import subprocess
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-base, head = sys.argv[2:]
-changed = subprocess.run(
-    ["git", "-C", str(root), "diff", "--name-only", base, head],
-    check=False,
-    text=True,
-    capture_output=True,
-).stdout.splitlines()
-if any(path in {"Cargo.toml", "Cargo.lock"} for path in changed):
-    print("1")
-    raise SystemExit(0)
-try:
-    metadata = json.loads(
-        subprocess.check_output(
-            ["cargo", "metadata", "--no-deps", "--format-version", "1", "--manifest-path", str(root / "Cargo.toml")],
-            cwd=root,
-            text=True,
-        )
-    )
-    package_roots = {
-        str(Path(str(package["manifest_path"])).resolve().parent.relative_to(root.resolve())).replace("\\", "/")
-        for package in metadata["packages"]
-    }
-except (OSError, subprocess.CalledProcessError, KeyError, json.JSONDecodeError, ValueError):
-    print("1")
-    raise SystemExit(0)
-print("1" if any(any(path == item or path.startswith(item + "/") for item in package_roots) for path in changed) else "0")
-PY
-)"
-if [[ "$CARGO_PACKAGE_SCOPE_RELEVANT" != "1" ]]; then
-  CARGO_PACKAGE_SCOPE_STATUS="skipped"
-  CARGO_PACKAGE_SCOPE_REASON="no_cargo_package_path_changed"
-elif [[ ! -f "$CARGO_PACKAGE_SCOPE_POLICY" ]]; then
-  CARGO_PACKAGE_SCOPE_STATUS="unavailable"
-  CARGO_PACKAGE_SCOPE_REASON="checker_or_policy_unavailable"
-elif ! git -C "$SOURCE_WORKTREE" cat-file -e "${SOURCE_SCOPE_BASE}:.pm/cargo-package-scope-policy.json" 2>/dev/null || \
-     ! git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"$CARGO_PACKAGE_SCOPE_CHECKER" 2>/dev/null; then
-  CARGO_PACKAGE_SCOPE_STATUS="skipped"
-  CARGO_PACKAGE_SCOPE_REASON="trusted_base_policy_unavailable"
-else
-  chmod +x "$CARGO_PACKAGE_SCOPE_CHECKER"
-  CARGO_PACKAGE_SCOPE_COMMAND="$(render_cmd python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
-    --repo-root "$SOURCE_WORKTREE" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
-    --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json)"
-  if ! CARGO_PACKAGE_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
-    --repo-root "$SOURCE_WORKTREE" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
-    --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json 2>&1)"; then
-    printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
-    die "Cargo package scope check failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
-  fi
-  CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("primary_package") or "")' <<<"$CARGO_PACKAGE_SCOPE_OUTPUT")" \
-    || die "Cargo package scope output is malformed"
-  # A canonical task binding is available only for the draft-candidate path.
-  # Ordinary local required-validation reads may inspect a Cargo diff without
-  # selecting a task; keep those reads usable while making task-bound PR
-  # preparation fail closed on missing or mismatched package intent.
-  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" && -n "$BOUND_TASK_UID" ]]; then
-    [[ -n "$BOUND_TASK_PRIMARY_PACKAGE" ]] \
-      || die "Cargo diff changes one business package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE) but canonical task primary_package is missing"
-    [[ "$BOUND_TASK_PRIMARY_PACKAGE" == "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" ]] \
-      || die "canonical task primary_package ($BOUND_TASK_PRIMARY_PACKAGE) differs from actual Cargo package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE)"
-  fi
-  CARGO_PACKAGE_SCOPE_STATUS="validated"
-  LOCAL_REQUIRED_EXTRA_COMMANDS+=("$CARGO_PACKAGE_SCOPE_COMMAND")
+# Recheck the frozen comparison after planning, before publication.
+if ! CARGO_PACKAGE_SCOPE_FROZEN_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 -I "$CARGO_PACKAGE_SCOPE_PLAN_RUNNER" \
+  "$SOURCE_WORKTREE" "$CARGO_PACKAGE_SCOPE_CHECKER" "$COMPARISON_HEAD" "$SOURCE_HEAD" 2>&1)"; then
+  printf '%s\n' "$CARGO_PACKAGE_SCOPE_FROZEN_OUTPUT" >&2
+  die "frozen Cargo package scope check failed"
 fi
+[[ "$CARGO_PACKAGE_SCOPE_FROZEN_OUTPUT" == "$CARGO_PACKAGE_SCOPE_OUTPUT" ]] \
+  || die "Cargo package scope precheck changed after planning"
 if [[ "${OASIS7_CARGO_PROFILE_OPT_IN:-false}" == "true" ]]; then
   CARGO_PROFILE_PLANNER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/cargo_package_profile_planner.py"
   CARGO_PROFILE_DRIVER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/cargo_package_profile_driver.py"
@@ -1784,9 +1856,9 @@ if [[ "${OASIS7_CARGO_PROFILE_OPT_IN:-false}" == "true" ]]; then
   CARGO_PROFILE_RESULTS="${OASIS7_CARGO_PROFILE_RESULTS:-}"
   [[ -n "$CARGO_PROFILE_RESULTS" && -f "$CARGO_PROFILE_RESULTS" ]] \
     || die "Cargo package profile opt-in requires OASIS7_CARGO_PROFILE_RESULTS"
-  git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"$CARGO_PROFILE_PLANNER" 2>/dev/null \
+  git -C "$SOURCE_WORKTREE" show "${COMPARISON_HEAD}:scripts/pm/cargo_package_profile_planner.py" >"$CARGO_PROFILE_PLANNER" 2>/dev/null \
     || die "trusted base Cargo package profile planner is unavailable"
-  git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"$CARGO_PROFILE_DRIVER" 2>/dev/null \
+  git -C "$SOURCE_WORKTREE" show "${COMPARISON_HEAD}:scripts/pm/cargo_package_profile_driver.py" >"$CARGO_PROFILE_DRIVER" 2>/dev/null \
     || die "trusted base Cargo package profile driver is unavailable"
   python3 "$CARGO_PROFILE_PLANNER" \
     --repo-root "$SOURCE_WORKTREE" \
@@ -1942,9 +2014,12 @@ PY
   CI_READY_RECEIPT_HELPER="${PREPARE_TASK_PR_CI_READY_RECEIPT_PATH:-$ROOT_DIR/scripts/pm/ci-ready-receipt.py}"
   PROMOTE_CI_VALIDATION_MODE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("ci_validation_mode", ""))' "$PROMOTE_DRAFT_RECEIPT")"
   PROMOTE_INTEGRATION_RUN_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("integration_run_id", ""))' "$PROMOTE_DRAFT_RECEIPT")"
-  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" --refresh-same-identity)
+  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --root "$SOURCE_WORKTREE" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" --refresh-same-identity)
   RECEIPT_VERIFY_CMD+=(--base-ref "$CANONICAL_DEFAULT_BRANCH")
   if [[ "$LOCAL_ROLE_REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
+    [[ -n "$LOCAL_ROLE_REVIEW_PLAN" && "$LOCAL_ROLE_REVIEW_PLAN" != n/a* ]] \
+      || die "promote_draft v2 review requires its immutable review plan path"
+    RECEIPT_VERIFY_CMD+=(--review-plan "$LOCAL_ROLE_REVIEW_PLAN")
     if [[ "$PROMOTE_CI_VALIDATION_MODE" == "trusted_integration" || -n "$PROMOTE_INTEGRATION_RUN_ID" ]]; then
       [[ "$PROMOTE_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] \
         || die "promote_draft strict v2 ci_ready_receipt lacks the current integration request/run identity"
@@ -2179,6 +2254,10 @@ if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW
     --task-helper "$ROOT_DIR/scripts/pm/github-project-task.py"
     --json
   )
+  if [[ "$HUMAN_RECONCILE" == "1" ]]; then
+    [[ "$MAINTENANCE_AUTHORITY_COMMENT_ID" =~ ^[1-9][0-9]*$ ]] || die "human reconciliation requires maintenance authority comment ID"
+    C1_PUBLISH_ARGS+=(--human-reconcile --maintenance-authority-comment-id "$MAINTENANCE_AUTHORITY_COMMENT_ID")
+  fi
   if [[ -n "$PR_TITLE" ]]; then
     C1_PUBLISH_ARGS+=(--title "$PR_TITLE")
   fi

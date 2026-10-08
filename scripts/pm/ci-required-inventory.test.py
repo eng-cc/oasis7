@@ -473,6 +473,18 @@ class RequiredInventoryTests(unittest.TestCase):
                 "document-corpus-v3-check" in item for item in baseline_spec["obligation_set"]
             ))
 
+    def test_legacy_inventory_keeps_operational_aliases(self):
+        capabilities = self.planner.LEGACY_CAPABILITIES
+        registry = self.inventory.required_test_unit_registry(capabilities)
+        self.assertEqual(set(registry), set(capabilities))
+        for capability in ("operational_contracts", "packaging_contracts", "workflow_governance"):
+            self.assertEqual(registry[capability]["selector_env"], "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS")
+            self.assertEqual(registry[capability]["runner_functions"], ["run_legacy_mixed_operational_contract_tests"])
+        self.assertEqual(self.inventory.selected_test_units({
+            "selected_capabilities": "packaging_contracts",
+            "required_test_units": "packaging_contracts;required_gate_baseline",
+        }, capabilities), ["packaging_contracts", "required_gate_baseline"])
+
     def test_planner_unit_list_always_includes_baseline_and_matches_selected_capabilities(self):
         plan = {
             "execution_contract": self.planner.EXECUTION_CONTRACT,

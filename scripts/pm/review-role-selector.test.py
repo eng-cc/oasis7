@@ -13,13 +13,15 @@ class ReviewRoleSelectorTests(unittest.TestCase):
         self.assertEqual(0 if ok else 2, result.returncode, result.stderr)
         return json.loads(result.stdout) if ok else result.stderr
 
-    def test_mechanical_and_workflow_docs_use_health_and_qa(self):
-        for kind in ("mechanical-doc", "workflow-doc"):
-            with self.subTest(kind=kind):
-                self.assertEqual(
-                    ["repository_health_engineer", "qa_engineer"],
-                    self.select("--change-class", kind)["roles"],
-                )
+    def test_mechanical_docs_and_workflow_docs_include_health_and_qa(self):
+        self.assertEqual(
+            ["repository_health_engineer", "qa_engineer"],
+            self.select("--change-class", "mechanical-doc")["roles"],
+        )
+        self.assertEqual(
+            ["repository_health_engineer", "qa_engineer"],
+            self.select("--change-class", "workflow-doc")["roles"],
+        )
 
     def test_domain_semantic_docs_add_domain_and_conditionally_qa(self):
         base = ["repository_health_engineer", "runtime_engineer"]

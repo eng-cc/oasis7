@@ -8,11 +8,13 @@
 ## Capture Method
 
 1. 使用本地静态服务暴露 `crates/oasis7_viewer/`。
-2. 复用 `crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html` 同源加载真实 `software_safe.html`。
+2. 这张 2026-04-28 历史截图使用当时的 `crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html` 版本同源加载 `software_safe.html`。该源码路径已退役；Git history 中可核验的当时最近 checked-in 版本为 `b68b4ae653`（blob SHA-256 `a37582a1b4c98dc22df8790fd7b0c283e2a16f66360c82122901603527611988`）。当前 canonical fixture 是 `crates/oasis7_viewer/viewer_first_agent_claim_evidence.html`，构建生成的兼容页为 `crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html`。归档截图不表示它由当前 fixture 或当前生成页产出。
 3. 等待证据页注入一条带 `slot_1_auto_restricted_starter_claim_amount` 且无可选实体的 snapshot。
 4. 用 Chrome headless 截图保存到仓库可追踪路径。
 
-## Commands
+## Historical Commands
+
+The commands below record the historical capture route against the then-present source page. They are provenance, not a current reproduction command.
 
 ```bash
 python3 -m http.server 4275 --bind 127.0.0.1 --directory crates/oasis7_viewer
@@ -26,7 +28,9 @@ google-chrome --headless=new --disable-gpu --hide-scrollbars \
 ## Artifacts
 
 - 截图: `doc/testing/evidence/assets/software-safe-primary-entry-diagnostics-declutter-2026-04-28.png`
-- 证据页: `crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html`
+- 历史证据页路径: `crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html`（版本锚点见上方 Git-history provenance）
+- 当前 canonical fixture successor: `crates/oasis7_viewer/viewer_first_agent_claim_evidence.html`
+- 当前生成的兼容证据 route: `crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html`
 
 ## Notes
 

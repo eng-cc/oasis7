@@ -177,6 +177,56 @@ def receipt():
 
 
 class RequiredArtifactIdentityTests(unittest.TestCase):
+    def test_v1_v2_receipt_versions_and_v2_baseline_are_bound(self):
+        import json
+        value=receipt()
+        planner={"selected_capabilities":[]}
+        planner.update({key:False for key in identity.VERSIONED_PLANNER_SELECTOR_FIELDS})
+        planner.update({key:True for key in identity.VERSIONED_PLANNER_RESOURCE_FIELDS})
+        results=[]
+        for version in ("required-domain-split/v1","required-domain-split/v2"):
+            planner["execution_contract"]=version
+            value.update(execution_contract=version,planner=copy.deepcopy(planner))
+            value["planner_digest"]=hashlib.sha256(json.dumps(value["planner"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
+            results.append(identity.review_evidence_identity(value))
+        self.assertNotEqual(results[0],results[1])
+        for version,rust in (("required-domain-split/v999",True),("required-domain-split/v2",False)):
+            invalid=copy.deepcopy(value)
+            invalid["execution_contract"]=invalid["planner"]["execution_contract"]=version
+            invalid["planner"]["needs_rust_toolchain"]=rust
+            with self.subTest(version=version,rust=rust),self.assertRaises(ValueError):
+                identity.review_evidence_identity(invalid)
+
+    def test_current_target_attestation_binds_proof_coverage_and_exact_attempt(self):
+        proof=dict(schema='oasis7-current-target-pr/v1',repository='eng-cc/oasis7',
+            task_uid='task_'+'1'*32,task_issue_number=1,pr_number=7,source_head_oid='a'*40,
+            current_target_oid='b'*40,checkout_oid='c'*40,tested_tree_oid='d'*40,
+            checkout_parent_oids=['b'*40,'a'*40],workflow_revision='c'*40,
+            workflow_run_id=12345,workflow_run_attempt=2,maintenance_authority_comment_id=700,
+            planner_config_sha256='e'*64,test_driver_sha256='f'*64)
+        planner=dict(current_target_proof=proof,scope='full',impact_projection_test_profile='full',
+            planner_config_sha256='sha256:'+proof['planner_config_sha256'],
+            selected_child_job_outcomes=dict(workflow_run_id=12345,run_attempt=2,required_gate_check_run_id=9))
+        value=dict(ci_validation_mode='current_target_pr',issuer='github_live_query',
+            live_validation='ci-ready-receipt-live',conclusion='success',repository=proof['repository'],
+            task_uid=proof['task_uid'],task_issue_number=1,pr_number=7,head_oid=proof['source_head_oid'],
+            check_run_id=9,current_target_proof=proof,planner=planner)
+        import hashlib,json
+        value['planner_digest']=hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        self.assertTrue(identity.has_live_current_target_attestation(value))
+        for case in ('proof_missing','parent','extra','attempt','profile','digest','check','issuer'):
+            changed=copy.deepcopy(value)
+            if case=='proof_missing':changed.pop('current_target_proof')
+            elif case=='parent':changed['current_target_proof']['checkout_parent_oids'].reverse()
+            elif case=='extra':changed['current_target_proof']['artifact_selected_authority']='forbidden'
+            elif case=='attempt':changed['planner']['selected_child_job_outcomes']['run_attempt']=1
+            elif case=='profile':changed['planner']['impact_projection_test_profile']='required'
+            elif case=='digest':changed['planner_digest']='0'*64
+            elif case=='check':changed['check_run_id']=10
+            else:changed['issuer']='self_signed'
+            with self.subTest(case=case):
+                self.assertFalse(identity.has_live_current_target_attestation(changed))
+
     def test_v2_plan_result_locators_and_payloads_are_in_digest_authority(self):
         original = receipt()
         original_identity = identity.review_evidence_identity(original)

@@ -10,9 +10,11 @@ import json
 import os
 from pathlib import Path
 import re
+import selectors
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import contextmanager
 from urllib.parse import urlparse
 import zipfile
@@ -27,11 +29,273 @@ DISCOVERY_MAX_PAGES=10
 KEYED_RUN_NAME='oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != \'\' && format(\'|{0}\', inputs.request_key) || \'\' }}'
 LOCAL_TARGET_INVENTORY_SCHEMA='oasis7-ci-local-target-inventory/v1'
 IMPACT_PROJECTION_MARKER='<!-- oasis7-impact-projection-b64:'
+HISTORICAL_SOURCE_MAX_BYTES=1024*1024
+HISTORICAL_RESPONSE_MAX_BYTES=2*1024*1024
+HISTORICAL_TOTAL_MAX_BYTES=16*1024*1024
+HISTORICAL_MAX_COMMITS=32
+HISTORICAL_MAX_CALLS=160
+HISTORICAL_CALL_TIMEOUT_SECONDS=15
+HISTORICAL_TOTAL_TIMEOUT_SECONDS=60
+HISTORICAL_TREE_MAX_OBJECTS=96
+HISTORICAL_TREE_MAX_ENTRIES=8192
+HISTORICAL_TREE_OBJECT_MAX_BYTES=2*1024*1024
+HISTORICAL_TREE_TOTAL_MAX_BYTES=16*1024*1024
+
+class _HistoricalReadBudget:
+    """Invocation-local limits; an uncertain read never becomes proven absence."""
+    def __init__(self):
+        self.deadline=time.monotonic()+HISTORICAL_TOTAL_TIMEOUT_SECONDS
+        self.calls=0
+        self.bytes=0
+        self.commits=set()
+        self._tree_objects={}
+        self._tree_entries=0
+        self._tree_bytes=0
+
+    def remaining(self):
+        remaining=self.deadline-time.monotonic()
+        observation=sys.modules.get('recovery_observation')
+        if observation is not None and observation.active() is not None:
+            remaining=min(remaining,observation.active().remaining())
+        if remaining<=0:
+            raise ValueError('historical workflow proof aggregate deadline exhausted')
+        return remaining
+
+    def commit(self,oid):
+        self.remaining()
+        self.commits.add(oid)
+        if len(self.commits)>HISTORICAL_MAX_COMMITS:
+            raise ValueError('historical workflow proof commit budget exhausted')
+
+def _historical_json(path,budget):
+    """Bound the new proof reader's live process and both captured streams."""
+    budget.remaining()
+    budget.calls+=1
+    if budget.calls>HISTORICAL_MAX_CALLS:
+        raise ValueError('historical workflow proof call budget exhausted')
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        raw=observation.capture(['gh','api',path],limit=HISTORICAL_RESPONSE_MAX_BYTES,
+            timeout=min(HISTORICAL_CALL_TIMEOUT_SECONDS,budget.remaining()),kind='github_api',locator=path)
+        budget.bytes+=len(raw)
+        if budget.bytes>HISTORICAL_TOTAL_MAX_BYTES:raise ValueError('historical workflow byte budget exhausted')
+        return observation.load(raw)
+    deadline=min(budget.deadline,time.monotonic()+HISTORICAL_CALL_TIMEOUT_SECONDS)
+    process=None
+    output=bytearray()
+    response_bytes=0
+    try:
+        process=subprocess.Popen(['gh','api',path],stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        with selectors.DefaultSelector() as reader:
+            reader.register(process.stdout,selectors.EVENT_READ,True)
+            reader.register(process.stderr,selectors.EVENT_READ,False)
+            while reader.get_map():
+                remaining=min(deadline-time.monotonic(),budget.remaining())
+                if remaining<=0:
+                    raise ValueError('historical workflow proof process timed out')
+                ready=reader.select(remaining)
+                if not ready:
+                    raise ValueError('historical workflow proof process timed out')
+                for key,_ in ready:
+                    chunk=os.read(key.fd,64*1024)
+                    if not chunk:
+                        reader.unregister(key.fileobj)
+                        continue
+                    response_bytes+=len(chunk)
+                    budget.bytes+=len(chunk)
+                    if (response_bytes>HISTORICAL_RESPONSE_MAX_BYTES
+                            or budget.bytes>HISTORICAL_TOTAL_MAX_BYTES):
+                        raise ValueError('historical workflow proof response byte budget exhausted')
+                    if key.data: output.extend(chunk)
+            remaining=min(deadline-time.monotonic(),budget.remaining())
+            if remaining<=0:
+                raise ValueError('historical workflow proof process timed out')
+            if process.wait(timeout=remaining)!=0:
+                raise ValueError('historical workflow proof authenticated read failed')
+        return json.loads(output.decode('utf-8'))
+    except (OSError,UnicodeDecodeError,ValueError,RecursionError,subprocess.SubprocessError) as exc:
+        raise ValueError('historical workflow proof read unavailable: '+str(exc)) from exc
+    finally:
+        if process is not None:
+            if process.poll() is None: process.kill()
+            process.wait(timeout=1)
+            process.stdout.close()
+            process.stderr.close()
+
+def _historical_tree(repository,oid,budget):
+    """Reuse only verified immutable tree data within this read invocation.
+
+    Canonical bytes isolate the retained object from both the server response
+    and each consumer. Commit, edge and Contents proof remain independent.
+    """
+    budget.remaining()
+    if not isinstance(oid,str) or not OID.fullmatch(oid):
+        raise ValueError('historical workflow tree object identity malformed')
+    key=(repository,'tree',oid)
+    def validate(response):
+        if (not isinstance(response,dict) or response.get('sha')!=oid
+                or response.get('type','tree')!='tree'
+                or response.get('truncated') is not False
+                or not isinstance(response.get('tree'),list)):
+            raise ValueError('historical workflow tree readback malformed or incomplete')
+        names=set()
+        modes={'040000':'tree','100644':'blob','100755':'blob',
+               '120000':'blob','160000':'commit'}
+        for entry in response['tree']:
+            if not isinstance(entry,dict):
+                raise ValueError('historical workflow tree entry malformed')
+            name=entry.get('path')
+            if (not isinstance(name,str) or not name or name in ('.','..')
+                    or '/' in name or '\0' in name or name in names
+                    or not isinstance(entry.get('sha'),str)
+                    or not OID.fullmatch(entry['sha'])
+                    or not isinstance(entry.get('mode'),str)
+                    or entry['mode'] not in modes
+                    or modes[entry['mode']]!=entry.get('type')):
+                raise ValueError('historical workflow tree entry malformed or overlapping')
+            names.add(name)
+        return response
+    if key in budget._tree_objects:
+        response=validate(json.loads(budget._tree_objects[key].decode('utf-8')))
+        budget.remaining()
+        return response
+    try:
+        response=validate(_historical_json(f'repos/{repository}/git/trees/{oid}',budget))
+    except (OSError,subprocess.SubprocessError) as exc:
+        raise ValueError('historical workflow proof read unavailable') from exc
+    try:
+        retained=json.dumps(response,ensure_ascii=False,sort_keys=True,
+                            separators=(',',':'),allow_nan=False).encode('utf-8')
+    except (ValueError,TypeError,UnicodeError,RecursionError) as exc:
+        raise ValueError('historical workflow tree canonical data malformed') from exc
+    entries=len(response['tree'])
+    budget.remaining()
+    if (len(budget._tree_objects)+1>HISTORICAL_TREE_MAX_OBJECTS
+            or budget._tree_entries+entries>HISTORICAL_TREE_MAX_ENTRIES
+            or len(retained)>HISTORICAL_TREE_OBJECT_MAX_BYTES
+            or budget._tree_bytes+len(retained)>HISTORICAL_TREE_TOTAL_MAX_BYTES):
+        raise ValueError('historical workflow tree retained data budget exhausted')
+    # Nothing is retained or charged until all metadata, bytes and bounds pass.
+    budget._tree_objects[key]=retained
+    budget._tree_entries+=entries
+    budget._tree_bytes+=len(retained)
+    return json.loads(retained.decode('utf-8'))
+
+def _first_activation_producer(workflow):
+    """Accept only the direct, structurally declared historical producer shape.
+
+    Like the existing readiness scanner, unsupported YAML formatting fails
+    closed. Comments, aliases and script/body substrings cannot supply keys.
+    """
+    entries=_yaml_mapping_entries(workflow)
+    def children(parent):
+        descendants=[]
+        for entry in entries:
+            if entry['line']<=parent['line']: continue
+            if entry['indent']<=parent['indent']: break
+            descendants.append(entry)
+        if not descendants: return []
+        indent=min(entry['indent'] for entry in descendants)
+        return [entry for entry in descendants if entry['indent']==indent]
+    def one(items,key,value=''):
+        found=[entry for entry in items if entry['key']==key]
+        return found[0] if len(found)==1 and found[0]['value']==value else None
+    roots=[entry for entry in entries if entry['indent']==0]
+    if one(roots,'run-name',KEYED_RUN_NAME) is None: return False
+    trigger=one(roots,'on')
+    if trigger is None: return False
+    dispatch=one(children(trigger),'workflow_dispatch')
+    if dispatch is None: return False
+    inputs=one(children(dispatch),'inputs')
+    if inputs is None: return False
+    mode=one(children(inputs),'run_mode')
+    if mode is None or one(children(mode),'type','choice') is None: return False
+    options=one(children(mode),'options')
+    if options is None: return False
+    end=next((entry['line'] for entry in entries
+              if entry['line']>options['line'] and entry['indent']<=options['indent']),len(workflow.splitlines()))
+    values=[]
+    option_indent=None
+    for line in workflow.splitlines()[options['line']+1:end]:
+        if not line.strip() or line.lstrip().startswith('#'): continue
+        match=re.fullmatch(r'( +)- ([A-Za-z0-9_]+)\s*(?:#.*)?',line)
+        if match is None or len(match.group(1))<=options['indent']: return False
+        if option_indent is None: option_indent=len(match.group(1))
+        if len(match.group(1))!=option_indent: return False
+        values.append(match.group(2))
+    return len(values)==len(set(values)) and 'first_activation_validation_only' in values
+
+def _historical_first_activation_workflow(repository,commit,budget):
+    """Bind regular path, blob bytes and producer declaration to one run commit."""
+    budget.commit(commit)
+    prefix=f'repos/{repository}/'
+    def read(path):
+        try: return _historical_json(path,budget)
+        except (OSError,subprocess.SubprocessError) as exc:
+            raise ValueError('historical workflow proof read unavailable') from exc
+    metadata=read(prefix+'git/commits/'+commit)
+    if not isinstance(metadata,dict) or metadata.get('sha')!=commit:
+        raise ValueError('historical workflow commit identity mismatch')
+    tree=metadata.get('tree')
+    oid=tree.get('sha') if isinstance(tree,dict) else None
+    if not isinstance(oid,str) or not OID.fullmatch(oid):
+        raise ValueError('historical workflow root tree identity malformed')
+    for index,component in enumerate(WORKFLOW.split('/')):
+        response=_historical_tree(repository,oid,budget)
+        if (not isinstance(response,dict) or response.get('sha')!=oid
+                or response.get('truncated') is not False
+                or not isinstance(response.get('tree'),list)):
+            raise ValueError('historical workflow tree readback malformed or incomplete')
+        entries=response['tree']
+        if any(not isinstance(entry,dict) or not isinstance(entry.get('path'),str)
+               for entry in entries):
+            raise ValueError('historical workflow tree entry malformed')
+        matches=[entry for entry in entries if entry['path']==component]
+        if len(matches)!=1:
+            raise ValueError('historical workflow path missing or overlapping')
+        entry=matches[0]
+        leaf=index==len(WORKFLOW.split('/'))-1
+        if (entry.get('type')!=('blob' if leaf else 'tree')
+                or entry.get('mode') not in (('100644','100755') if leaf else ('040000',))):
+            raise ValueError('historical workflow path is not a regular Git file')
+        oid=entry.get('sha')
+        if not isinstance(oid,str) or not OID.fullmatch(oid):
+            raise ValueError('historical workflow path object identity malformed')
+    source=read(prefix+f'contents/{WORKFLOW}?ref={commit}')
+    if (not isinstance(source,dict) or source.get('type')!='file'
+            or source.get('path')!=WORKFLOW or source.get('encoding')!='base64'
+            or source.get('sha')!=oid or not isinstance(source.get('content'),str)
+            or type(source.get('size')) is not int
+            or not 0<=source['size']<=HISTORICAL_SOURCE_MAX_BYTES):
+        raise ValueError('historical workflow content metadata mismatch or source too large')
+    # GitHub wraps base64 with CR/LF; discard only those permitted separators.
+    encoded=source['content'].replace('\r','').replace('\n','')
+    if len(encoded)>4*((HISTORICAL_SOURCE_MAX_BYTES+2)//3):
+        raise ValueError('historical workflow encoded source too large')
+    try:
+        raw=base64.b64decode(encoded,validate=True)
+        if len(raw)!=source['size'] or len(raw)>HISTORICAL_SOURCE_MAX_BYTES:
+            raise ValueError('historical workflow decoded size mismatch')
+        digest=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+        if digest!=oid: raise ValueError('historical workflow Git blob identity mismatch')
+        workflow=raw.decode('utf-8')
+    except (ValueError,UnicodeDecodeError) as exc:
+        raise ValueError('historical workflow content malformed: '+str(exc)) from exc
+    if not _first_activation_producer(workflow):
+        raise ValueError('historical workflow does not declare the exact validation-only producer')
 
 def gh(*args):
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        endpoint=next((part for part in args[1:] if part=='graphql' or part.startswith('repos/')),None)
+        return observation.load(observation.capture(['gh',*args],kind='github_api' if endpoint else None,locator=endpoint))
     return json.loads(subprocess.check_output(['gh',*args],text=True))
 
 def git(root,*args):
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        return observation.git(root,*args).decode().strip()
     return subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
 
 def pages(repository,path,key):
@@ -48,15 +312,20 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
     matches=[]
     seen=set()
     legacy_cannot_integrate={}
+    historical_proofs=set()
+    historical_budget=_HistoricalReadBudget()
     for page in range(1,DISCOVERY_MAX_PAGES+1):
         response=gh('api',f'repos/{repository}/actions/workflows/rust.yml/runs?event=workflow_dispatch&per_page={DISCOVERY_PAGE_SIZE}&page={page}')
-        batch=response.get('workflow_runs')
+        batch=response.get('workflow_runs') if isinstance(response,dict) else None
         if not isinstance(batch,list): raise ValueError('integration discovery readback malformed')
         for run in batch:
+            if not isinstance(run,dict): raise ValueError('integration discovery run metadata malformed')
             run_id=run.get('id')
             if type(run_id) is not int or run_id in seen: raise ValueError('integration discovery overlapping or invalid run identity')
             seen.add(run_id)
-            if run.get('event')!='workflow_dispatch' or run.get('path')!=WORKFLOW or run.get('repository',{}).get('full_name')!=repository:
+            run_repository=run.get('repository')
+            if (run.get('event')!='workflow_dispatch' or run.get('path')!=WORKFLOW
+                    or not isinstance(run_repository,dict) or run_repository.get('full_name')!=repository):
                 raise ValueError('integration discovery workflow provenance uncertain')
             if not OID.fullmatch(str(run.get('head_sha',''))) or not isinstance(run.get('head_branch'),str):
                 raise ValueError('integration discovery ref identity uncertain')
@@ -70,6 +339,20 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                 if legacy_cannot_integrate[run['head_sha']]: continue
                 raise ValueError('integration current request identity unavailable before outcome')
             _,_,mode,request_uid,request_pr,request_base,request_head,*request_keys=parts
+            if mode=='first_activation_validation_only':
+                if (len(parts)!=7 or not re.fullmatch(r'task_[0-9a-f]{32}',request_uid)
+                        or request_pr!='' or not OID.fullmatch(request_base)
+                        or not OID.fullmatch(request_head)):
+                    raise ValueError('integration current request identity malformed')
+                if run['head_sha']!=request_head:
+                    raise ValueError('integration validation execution head differs from source')
+                historical_budget.remaining()
+                if run['head_sha'] not in historical_proofs:
+                    _historical_first_activation_workflow(repository,run['head_sha'],historical_budget)
+                    historical_proofs.add(run['head_sha'])
+                # Proven history is permanently ineligible, even for this UID.
+                # It cannot order production requests or satisfy a receipt.
+                continue
             if mode in ('full_escalation','newapi_bridge_package'): continue
             if mode=='v1_reuse_validation_only':
                 if (not re.fullmatch(r'task_[0-9a-f]{32}',request_uid) or not re.fullmatch(r'[1-9][0-9]*',request_pr)
@@ -117,6 +400,7 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                                 '_requested_at_sort':sort_time,
                                 'execution_sha':run['head_sha'],'execution_branch':run['head_branch']})
         if len(batch)<DISCOVERY_PAGE_SIZE:
+            if historical_proofs: historical_budget.remaining()
             if not matches: return None
             selected=max(matches,key=lambda item:(item['_requested_at_sort'],item['id'],item['run_attempt']))
             selected.pop('_requested_at_sort')
@@ -1305,6 +1589,11 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
             'run_id':record.get('run_id'),'run_attempt':record.get('run_attempt')}
 
 def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None,approved_executor_contract_digests=None):
+    return _verified_run(repository,uid,number,base,head,run_id,app_id,
+        request_key=request_key,expected_attempt=expected_attempt,request_identity=request_identity,
+        effective_policy=effective_policy,approved_executor_contract_digests=approved_executor_contract_digests)
+
+def _verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None,approved_executor_contract_digests=None,_merged_branch=None):
     """Verify live CI provenance; keyed callers must supply trusted policy and request identity."""
     if type(number) is not int or number<1:
         raise ValueError('positive integer pull request number required')
@@ -1351,7 +1640,10 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
         })
     elif request_identity is not None or effective_policy is not None:
         raise ValueError('manual integration keyed request identity is incomplete')
-    _,branch=identity(repository,uid,number,base,head,allow_base_advance=request_key is not None)
+    if _merged_branch is None:
+        _,branch=identity(repository,uid,number,base,head,allow_base_advance=request_key is not None)
+    else:
+        branch=_merged_branch
     run=gh('api',f'repos/{repository}/actions/runs/{run_id}')
     expected={'event':'workflow_dispatch','head_branch':branch,'path':WORKFLOW,'status':'completed','conclusion':'success'}
     if request_key is None: expected['head_sha']=base
@@ -1379,10 +1671,23 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
     artifacts=pages(repository,f'actions/runs/{run_id}/artifacts','artifacts')
     found=[a for a in artifacts if a.get('name')==ARTIFACT and not a.get('expired')]
     if len(found)!=1 or found[0].get('workflow_run',{}).get('id')!=int(run_id): raise ValueError('manual integration artifact missing or ambiguous')
-    raw=subprocess.check_output(['gh','api',f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip"])
+    observation=sys.modules.get('recovery_observation')
+    if observation is not None and observation.active() is not None:
+        raw=observation.capture(['gh','api',f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip"],
+            limit=observation.ARTIFACT_LIMIT,kind='repository_artifact',locator=f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip")
+    else:
+        raw=subprocess.check_output(['gh','api',f"repos/{repository}/actions/artifacts/{found[0]['id']}/zip"])
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         if archive.namelist()!=[ARTIFACT+'.json']: raise ValueError('manual integration artifact members mismatch')
-        payload=json.loads(archive.read(ARTIFACT+'.json'))
+        member=archive.getinfo(ARTIFACT+'.json')
+        if observation is not None and observation.active() is not None and (member.file_size>observation.ARTIFACT_LIMIT or member.flag_bits&1):
+            raise ValueError('manual integration artifact expanded size/encryption invalid')
+        payload_raw=archive.read(member)
+        if observation is not None and observation.active() is not None:
+            observation.active().charge(payload_raw)
+            payload=observation.load(payload_raw)
+        else:
+            payload=json.loads(payload_raw)
     execution_sha=run.get('head_sha') if request_key is not None else base
     # Never choose the executor source revision from the downloaded artifact.
     # In keyed workflow_dispatch mode, the API run head is E and W must equal E.
@@ -1440,6 +1745,127 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
             execution_jobs=execution_jobs,
         ))
     return selected[0],payload
+
+def verify_merged_delivery_integration(repository,uid,number,head,base,selected,context):
+    return _merged_delivery_integration(repository,uid,number,head,base,selected,context)
+
+def _merged_delivery_integration(repository,uid,number,head,base,selected,context,*,_observe_current_target=False):
+    """Terminal-only legacy observation; locators never grant merged authority."""
+    fields={'repository_root','source_review_plan_path','source_review_handoff_path',
+        'source_review_resolution_path','source_scope_oid','merge_commit_oid',
+        'observed_target_oid','check_app_id','request_key'}
+    if not isinstance(context,dict) or set(context)!=fields:
+        raise ValueError('merged integration context closed schema mismatch')
+    if type(number) is not int or number<1 or any(not isinstance(x,str) or not OID.fullmatch(x)
+            for x in (head,base,context['source_scope_oid'],context['merge_commit_oid'],context['observed_target_oid'])):
+        raise ValueError('merged integration source identity invalid')
+    app=context['check_app_id']
+    if type(app) is not int or app<1:
+        raise ValueError('merged integration policy app identity invalid')
+    root=Path(context['repository_root']).resolve(strict=True)
+    review=_adjacent_module('review_preflight_handoff')
+    handoff=review.validate_handoff(root,Path(context['source_review_handoff_path']),
+        expected_plan_path=Path(context['source_review_plan_path']))
+    plan_value,plan_raw=review.read_json(Path(context['source_review_plan_path']),'review plan')
+    plan,_,_=review.validate_plan(plan_value,plan_raw)
+    if (plan.get('frozen_head')!=head or plan.get('task_uid')!=uid
+            or plan.get('source_scope_oid')!=context['source_scope_oid']
+            or handoff['handoff'].get('repository')!=repository
+            or handoff['handoff'].get('pr_number')!=number):
+        raise ValueError('merged integration review head identity mismatch')
+    resolution=_adjacent_module('review-findings-resolution')
+    resolution.validate_manifest(root,Path(context['source_review_resolution_path']),
+        Path(plan['preflight']['ledger_path']),uid,head)
+    pr=gh('api',f'repos/{repository}/pulls/{number}')
+    branch=(pr.get('base') or {}).get('ref')
+    issue=review.canonical_task_issue_number(root,uid)
+    terminal=_adjacent_module('terminal_proof')
+    merged=context['merge_commit_oid'];target=context['observed_target_oid']
+    terminal._validate_live_pr(pr,repository,uid,issue,number,
+        f'https://github.com/{repository}/pull/{number}',head,merged,branch)
+    ref=gh('api',f'repos/{repository}/git/ref/heads/{branch}')
+    if (ref.get('object') or {}).get('sha')!=target:
+        raise ValueError('merged target identity mismatch')
+    live={'repository':gh('api',f'repos/{repository}'),'ref':ref,
+        'merge_compare':gh('api',f'repos/{repository}/compare/{merged}...{target}')}
+    terminal._validate_live_repository(live,repository,merged,branch,target)
+    def object_bytes(*args):
+        observation=sys.modules.get('recovery_observation')
+        if observation is not None and observation.active() is not None:
+            return observation.git(root,*args)
+        return subprocess.check_output(['git','-C',str(root),*args])
+    parent=object_bytes('rev-parse',merged+'^').decode().strip()
+    scope=context['source_scope_oid']
+    if object_bytes('diff','--binary',scope,head)!=object_bytes('diff','--binary',parent,merged):
+        raise ValueError('merged source patch equivalence mismatch')
+    if object_bytes('merge-base',merged,target).decode().strip()!=merged:
+        raise ValueError('merged target ancestry mismatch')
+    # This bounded legacy seam admits only an unchanged delivered target.
+    # Related/unrelated advancement needs the separately admitted applicability reader.
+    if target!=merged and not _observe_current_target:
+        raise ValueError('merged target applicability drift is unsupported')
+    if target!=merged:
+        # Recollect actual target authority here; a caller cannot supply an
+        # applicability verdict or previously constructed proof dictionary.
+        verify_current_target_ci(repository,uid,number,head,merged,target,
+            {key:value for key,value in context.items() if key in {
+                'repository_root','source_review_plan_path','source_review_handoff_path',
+                'source_review_resolution_path','source_scope_oid','check_app_id'}})
+    gate=_adjacent_module('pr-lifecycle-gate')
+    class ReadOnlyTransport:
+        def rest(self,method,path,**kwargs):
+            if method!='GET':
+                raise ValueError('merged policy transport is read-only')
+            return gh('api',path)
+    policy=gate.discover_required_policy(repository,branch,client=ReadOnlyTransport())
+    if policy.get('status')!='resolved' or not any(x.get('context')=='required-gate'
+            and type(x.get('app_id')) is int and x['app_id']==app
+            for x in policy.get('required_status_checks',[])):
+        raise ValueError('merged integration required policy app identity mismatch')
+    key=context['request_key']
+    if key is not None:
+        trusted=trusted_policy_context(repository,branch,target,target)
+        effective=trusted['effective_policy']
+        identity_helper=_adjacent_module('ci_ready_receipt_identity')
+        if identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in effective['enabled_capabilities']:
+            raise ValueError('keyed request capability is disabled by trusted policy')
+        raise ValueError('keyed merged request identity is unsupported')
+    current=current_request(repository,uid,number,base,head,branch)
+    if _observe_current_target and selected is None:
+        selected=current
+    if not isinstance(selected,dict) or current!=selected:
+        raise ValueError('merged integration current request identity mismatch')
+    run_id=current.get('id');attempt=current.get('run_attempt')
+    if type(run_id) is not int or run_id<1 or type(attempt) is not int or attempt<1:
+        raise ValueError('merged integration run attempt identity invalid')
+    check,proof=_verified_run(repository,uid,number,base,head,run_id,app,
+        expected_attempt=attempt,_merged_branch=branch)
+    try:
+        jobs=attempt_execution_jobs(repository,run_id,attempt,base,app,require_completed=True)
+    except subprocess.CalledProcessError as exc:
+        raise ValueError('merged integration exact attempt job readback unavailable') from exc
+    gates=[j for j in jobs if j['job_name']=='required-gate']
+    if len(gates)!=1 or gates[0]['check_run_id']!=check.get('id') or gates[0]['conclusion']!='success':
+        raise ValueError('merged required check exact attempt job identity mismatch')
+    receipt=_adjacent_module('ci-ready-receipt')
+    actual_planner=receipt.planner_from_run(check)
+    projection=_adjacent_module('workflow-impact-projection')
+    raw_planner=projection.run_scope_planner(root,plan['impact_projection']['changed_paths'],
+        plan['impact_projection']['ci_scope']=='full')
+    if actual_planner!=receipt.canonical_planner(raw_planner):
+        raise ValueError('merged integration planner identity mismatch')
+    tree=object_bytes('rev-parse',head+'^{tree}').decode().strip()
+    if proof['tested_tree_oid']!=tree or proof['tested_commit_oid']!=head or proof['scope_base_oid']!=scope:
+        raise ValueError('merged artifact source tree authority mismatch')
+    if type(check.get('id')) is not int or check['id']<1:
+        raise ValueError('merged check identity invalid')
+    return {'base_oid':base,'run_id':run_id,'run_attempt':attempt,'app_id':app,
+        'check_run_id':check['id'],'workflow_sha':base,'tested_tree_oid':tree,
+        'request_key':None,'proof':proof}
+
+def verify_current_target_ci(repository,uid,number,head,merge,target,context):
+    from terminal_recovery import verify_current_target
+    return verify_current_target(repository,uid,number,head,merge,target,context)
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)

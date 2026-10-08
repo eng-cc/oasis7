@@ -1,6 +1,6 @@
 ---
 name: default-workflow-bootstrap
-description: Use when any oasis7 user request starts and must bind the canonical worktree, GitHub-backed task truth, and owner before routing.
+description: Use when an oasis7 request has write effects and needs canonical task truth, a worktree, and an owner before routing.
 ---
 
 # Default Workflow Bootstrap
@@ -9,17 +9,14 @@ Canonical lifecycle and authority: [capability](../../../doc/engineering/workflo
 
 ## When to Use
 
-Use for every request, including read-only/chat-only work. Do not repeat bootstrap for a micro-loop already bound to the same task; record the minimal `Learning Intake / Loop Closeout` entry defined by the canonical source.
+Use for requests that will change repository files, task truth, remote state, or another persistent system. Read-only questions, fact lookup, professional analysis, and side-effect-free checks may proceed directly without creating task truth, a branch, worktree, or review artifact. A professional conclusion still belongs to its matching role; a read-only result is not formal review or release evidence.
 
-Before bootstrapping a task to change developer workflow, CI routing/gates, review/merge policy, or workflow helpers—or before capturing a reflection, creating/promoting task truth, or expanding an existing task to do so—apply the [canonical prior-approval rule](../../../doc/engineering/workflow/source-of-truth.md#workflow-change-approval). This stop precedes task binding and workspace creation. A direct scoped user request counts. Read-only audits/diagnosis use ordinary bootstrap but do not authorize policy changes; CI failures and review findings do not count as approval. Alternate intake or reflection paths do not bypass the stop.
+Before bootstrapping a task to change developer workflow, CI routing/gates, review/merge policy, or workflow helpers—or before capturing a reflection, creating/promoting task truth, or expanding an existing task to do so—apply the [canonical prior-approval rule](../../../doc/engineering/workflow/source-of-truth.md#workflow-change-approval). This stop precedes task binding and workspace creation. A direct scoped user request counts. Read-only audits and diagnosis may use the direct read-only path without task truth or a worktree; they do not authorize policy changes. CI failures and review findings do not count as approval. Alternate intake or reflection paths do not bypass the stop.
 
 ## Procedure
 
-1. Classify only enough to select isolation:
-   - repository-changing: requires standard worktree + GitHub Project-backed task truth before edits
-   - read-only/chat-only pure fact lookup: requires standard worktree + GitHub Project-backed task truth before direct answer
-   - read-only/chat-only professional judgment: requires the same binding, then a matching professional slice
-2. Reuse a valid canonical task worktree only when identity matches; otherwise create one. For a new PM-backed task, capture the machine-readable result:
+1. Classify whether the requested action has an external or persistent side effect. If none, answer directly or use the matching professional role for judgment, and stop before task creation. If the request mixes a read-only answer with a proposed change, answer the read-only part and wait for actual write authorization before bootstrapping the change.
+2. For authorized write work, bind a single Project-backed task, owner, allowed scope, exclusions, acceptance target, and any separately authorized dangerous effects before editing. Reuse a valid canonical task only when identity and scope still match. For a new task, capture the machine-readable result:
 
 ```bash
 ./scripts/new-task-worktree.sh <module> <task> \
@@ -31,12 +28,12 @@ owner. Determine and bind the matching professional role as `owner_role`;
 reuse an existing owner only when task truth still validates it. Create a
 dedicated worktree unless the user explicitly authorized reuse. Professional
 work still requires matching bounded subagent slices.
-3. Treat a successful helper JSON result with `pm_task.bootstrap_complete=true`, `status=committed`, `workflow_started=true`, and non-empty `bootstrap_snapshot_path`/`bootstrap_snapshot_digest` as the complete bootstrap confirmation. It already binds task UID, issue/Project item, owner, repository, branch, worktree, request identity, acceptance target, workflow start, and immutable snapshot; do not call `workflow-report --phase start` or replay snapshot validation again. For a reused existing task, or any result marked partial/incomplete, confirm the same fields with `./scripts/pm/workflow-report.sh --phase start --role tpm --task-uid <task_uid>` and `./scripts/pm/bootstrap-task-snapshot.py validate-or-create --repo-root <canonical-worktree> --task-uid <task_uid> --producer tpm`. Start and close reports require the explicit selected task UID; only the repository-wide `--phase review` report may omit it.
-4. If the helper exits after creating a remote object, or its JSON is missing/incomplete, preserve the worktree and follow its printed `resume-bootstrap` command. Recovery repeats only the missing journaled step, then validates the same task UID/request/epoch; it must not create a second task, replay a complete start, or overwrite an immutable snapshot.
-5. Record the bootstrap result in a GitHub issue evidence comment (mandatory). Fallback evidence cannot replace the GitHub-backed task evidence sink for task truth.
+3. Treat a successful helper JSON result with `pm_task.bootstrap_complete=true`, `status=committed`, `workflow_started=true`, and non-empty `bootstrap_snapshot_path`/`bootstrap_snapshot_digest` as complete bootstrap confirmation. For a reused task or partial result, verify its live identity with `workflow-report --phase start` and `bootstrap-task-snapshot.py validate-or-create`. A new HEAD inside the same goal and scope does not itself renew authorization or create a new epoch.
+4. If the helper reports a partial remote creation, preserve the worktree and follow its printed `resume-bootstrap` command. Recovery repeats only the missing journaled step and preserves the same task/request/epoch.
+5. Record task authorization and material lifecycle changes in the canonical GitHub task Issue. Do not require an Issue comment for each local command or intermediate step.
 6. Once task truth exists, hand off to `repo-owned-workflow-router` via `./.agents/skills/repo-owned-workflow-router/SKILL.md`.
 
-## Required Output
+## Required Output for Write-Task Bootstrap
 
 - `## Repository State Impact`
 - `## Isolation Decision`
@@ -44,16 +41,18 @@ work still requires matching bounded subagent slices.
 - `## Bootstrap Snapshot` (path + digest)
 - `## Routed Next Phase`
 
-Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state. Do not treat read-only professional/domain questions as TPM-owned conclusions; read-only/chat-only professional judgment routes to the matching role after binding.
+Do not force this bootstrap onto read-only requests. Do not treat professional/domain judgments as TPM-owned conclusions; route them to the matching role when needed without creating task truth solely for that analysis.
 
-Already-bound micro-loop caveat: use the canonical `Learning Intake / Loop Closeout` minimum record: question or observation, evidence path or command, answer or decision, and follow-up disposition. Do not emit another full bootstrap packet.
+Already-bound work continues under the existing task authorization while goal, scope, and dangerous-effect boundary remain stable; do not emit a new bootstrap packet for ordinary commits, tests, diagnosis, repair, or main advancement.
+
+When resuming a business task with an absent/null primary package, use the [canonical completion operator entry](../../../doc/engineering/workflow/source-of-truth.md#task-primary-package-completion-operator) in its existing worktree and Task identity. Legacy scope recovery supplies `--scope-evidence-json <locator-assertions.json>` for independently verified preexisting authorization and original-freeze comments; preserve acceptance unchanged and never supply caller-approved paths. Preserve the immutable bootstrap snapshot and recover the same journaled action after uncertain effects; regenerate current projection/review/CI evidence after authoritative readback. A proven governance-only range needs no primary completion.
 
 ## Guardrails
 
 For an explicitly bound manual loop task, use `scripts/pm/loop.py` with the effective trusted tool root before admission or continuation. Preserve the exact loop binding, immutable contracts, scope and user merge hold. At stable waits return resumable evidence without heartbeat or scheduled continuation; completion never starts another task. See [manual entry authority](../../../doc/engineering/workflow/source-of-truth.md#manual-three-loop-transition). Legacy tasks retain their existing route.
 
-Do not edit, answer substantively, or dispatch before binding task truth.
+Do not perform a write before task truth is bound. A read-only answer does not require binding.
 
 ## Known Failure Modes
 
-Reusing the main worktree; treating read-only as an exemption; leaving evidence outside the task issue.
+Reusing an incompatible task/worktree; treating read-only analysis as write authorization; creating task truth for a side-effect-free answer.

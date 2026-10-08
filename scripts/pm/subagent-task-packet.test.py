@@ -33,6 +33,7 @@ class PacketTest(unittest.TestCase):
             (self.repo / path).mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE, self.repo / "scripts/pm/subagent-task-packet.py")
         shutil.copy2(SOURCE.with_name("ci_ready_receipt_identity.py"), self.repo / "scripts/pm/ci_ready_receipt_identity.py")
+        shutil.copy2(SOURCE.with_name("task_primary_package.py"), self.repo / "scripts/pm/task_primary_package.py")
         shutil.copy2(SOURCE.with_name("workflow-durable-store.py"), self.repo / "scripts/pm/workflow-durable-store.py")
         shutil.copy2(SOURCE.with_name("github-project-workflow.py"), self.repo / "scripts/pm/github-project-workflow.py")
         shutil.copy2(SOURCE.with_name("github-project-sync.py"), self.repo / "scripts/pm/github-project-sync.py")
@@ -70,6 +71,7 @@ class PacketTest(unittest.TestCase):
         environment.start()
         self.addCleanup(environment.stop)
         shutil.copy2(SNAPSHOT_HELPER, self.repo / "scripts/pm/bootstrap-task-snapshot.py")
+        shutil.copy2(SNAPSHOT_HELPER.with_name("worktree_registration.py"), self.repo / "scripts/pm/worktree_registration.py")
         for path in ("AGENTS.md", "doc/engineering/workflow/source-of-truth.md", ".agents/roles/qa_engineer.md", "scope.txt"):
             (self.repo / path).write_text(path + "\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(self.repo), "add", "."], check=True)

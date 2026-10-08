@@ -13,7 +13,9 @@ from __future__ import annotations
 import argparse
 import ast
 from collections import Counter
+import hashlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -28,6 +30,19 @@ from typing import Any, Iterable
 POLICY_SCHEMA = "oasis7-cargo-package-scope-policy/v1"
 AUXILIARY_REGISTRY_PATH = ".pm/cargo-package-auxiliary-files.json"
 AUXILIARY_REGISTRY_SCHEMA = "oasis7-cargo-package-auxiliary-files/v1"
+POLICY_MAINTENANCE_PATHS = frozenset(
+    {
+        "doc/engineering/workflow/source-of-truth.md",
+        "doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json",
+        "scripts/pm/check-cargo-package-scope",
+        "scripts/pm/check-cargo-package-scope.test.py",
+        AUXILIARY_REGISTRY_PATH,
+        "scripts/ci-tests.sh",
+        "scripts/ci-required-scope.v2.json",
+        "scripts/ci-required-scope-audit-contract.test.sh",
+        ".github/workflows/rust.yml",
+    }
+)
 
 AUXILIARY_FORBIDDEN_PREFIXES = (
     ".agents/",
@@ -41,6 +56,8 @@ AUXILIARY_FORBIDDEN_PREFIXES = (
     "scripts/pm/",
 )
 AUXILIARY_FORBIDDEN_PATHS = {
+    "scripts/document_corpus.py",
+    "scripts/document-corpus-inventory.py",
     "Jenkinsfile",
     "azure-pipelines.yml",
     "doc/engineering/workflow/source-of-truth.md",
@@ -179,27 +196,69 @@ def parse_auxiliary_registry(
 
 
 def trusted_auxiliary_registry(
-    repo: Path, base: str, head: str, policy_path: str, protected_paths: list[str]
-) -> dict[str, str]:
+    repo: Path,
+    base: str,
+    head: str,
+    policy_path: str,
+    protected_paths: list[str],
+    *,
+    registry_maintenance: bool = False,
+) -> tuple[dict[str, str], tuple[dict[str, str], dict[str, str]] | None]:
     base_bytes = git_blob(repo, base, AUXILIARY_REGISTRY_PATH)
     head_bytes = git_blob(repo, head, AUXILIARY_REGISTRY_PATH)
+
+    def parse_snapshot(raw: bytes | None, label: str) -> dict[str, str]:
+        if raw is None:
+            return {}
+        try:
+            payload = json.loads(
+                raw.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
+            )
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise ScopeError(
+                "trusted_policy_invalid",
+                f"{label} auxiliary registry is not valid JSON: {AUXILIARY_REGISTRY_PATH}",
+            ) from exc
+        return parse_auxiliary_registry(payload, policy_path, protected_paths)
+
+    if registry_maintenance:
+        base_registry = parse_snapshot(base_bytes, "trusted")
+        candidate_registry = parse_snapshot(head_bytes, "candidate")
+        # A maintenance diff has no business-path changes to attribute.  Keep
+        # candidate registrations out of ordinary path ownership regardless.
+        return {}, (base_registry, candidate_registry)
+
     if base_bytes != head_bytes:
         raise ScopeError(
             "policy_self_modification",
             f"auxiliary registry differs from trusted base: {AUXILIARY_REGISTRY_PATH}",
         )
-    if base_bytes is None:
-        return {}
+    return parse_snapshot(base_bytes, "trusted"), None
+
+
+def trusted_full_policy_maintenance_range(
+    repo: Path,
+    base: str,
+    head: str,
+    paths: list[str],
+    renames: list[str],
+    verified_full: bool,
+) -> bool:
+    if not verified_full or renames:
+        return False
     try:
-        trusted = json.loads(
-            base_bytes.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
-        )
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise ScopeError(
-            "trusted_policy_invalid",
-            f"trusted auxiliary registry is not valid JSON: {AUXILIARY_REGISTRY_PATH}",
-        ) from exc
-    return parse_auxiliary_registry(trusted, policy_path, protected_paths)
+        normalized = {safe_relative(path) for path in paths}
+    except ScopeError:
+        return False
+    if (
+        not normalized
+        or AUXILIARY_REGISTRY_PATH not in normalized
+        or not normalized.issubset(POLICY_MAINTENANCE_PATHS)
+    ):
+        return False
+    base_registry = git_blob(repo, base, AUXILIARY_REGISTRY_PATH)
+    head_registry = git_blob(repo, head, AUXILIARY_REGISTRY_PATH)
+    return base_registry is not None and head_registry is not None and base_registry != head_registry
 
 
 def resolve_relative(source: str, target: str) -> str | None:
@@ -245,8 +304,18 @@ def resolve_manifest_relative(
 
 
 def parse_policy(
-    repo: Path, base: str, head: str, policy_arg: str
-) -> tuple[str, dict[str, Any], dict[str, str]]:
+    repo: Path,
+    base: str,
+    head: str,
+    policy_arg: str,
+    *,
+    registry_maintenance: bool = False,
+) -> tuple[
+    str,
+    dict[str, Any],
+    dict[str, str],
+    tuple[dict[str, str], dict[str, str]] | None,
+]:
     policy_path = Path(policy_arg)
     if not policy_path.is_absolute():
         policy_path = repo / policy_path
@@ -275,8 +344,15 @@ def parse_policy(
     protected = trusted.get("protected_paths")
     if not isinstance(protected, list) or not all(isinstance(item, str) for item in protected):
         raise ScopeError("trusted_policy_invalid", "protected_paths must be a string list")
-    auxiliary_registry = trusted_auxiliary_registry(repo, base, head, relative, protected)
-    return relative, trusted, auxiliary_registry
+    auxiliary_registry, maintenance_registries = trusted_auxiliary_registry(
+        repo,
+        base,
+        head,
+        relative,
+        protected,
+        registry_maintenance=registry_maintenance,
+    )
+    return relative, trusted, auxiliary_registry, maintenance_registries
 
 
 def extract_git_tree(repo: Path, revision: str, target: Path) -> None:
@@ -321,6 +397,35 @@ def cargo_metadata(root: Path, *, locked: bool = False) -> dict[str, Any]:
     if not isinstance(payload, dict) or not isinstance(payload.get("packages"), list):
         raise ScopeError("cargo_metadata_unavailable", "cargo metadata omitted packages")
     return payload
+
+
+def validate_candidate_locked_metadata(repo: Path, revision: str) -> None:
+    """Validate the committed candidate lock in a fresh, disposable snapshot."""
+    with tempfile.TemporaryDirectory(prefix="cargo-scope-locked-head-") as directory:
+        root = Path(directory)
+        try:
+            extract_git_tree(repo, revision, root)
+        except ScopeError as exc:
+            raise ScopeError(exc.reason, f"candidate_locked_export: {exc.detail}") from exc
+        lock = root / "Cargo.lock"
+        try:
+            original = lock.read_bytes()
+        except OSError as exc:
+            raise ScopeError("cargo_metadata_unavailable", f"candidate_locked_lockfile: {exc}") from exc
+        original_digest = hashlib.sha256(original).hexdigest()
+        try:
+            cargo_metadata(root, locked=True)
+        except ScopeError as exc:
+            raise ScopeError(exc.reason, f"candidate_locked_metadata: {exc.detail}") from exc
+        except OSError as exc:
+            raise ScopeError("cargo_metadata_unavailable", f"candidate_locked_metadata: {exc}") from exc
+        try:
+            validated = lock.read_bytes()
+            unchanged = validated == original and hashlib.sha256(validated).hexdigest() == original_digest
+        except OSError as exc:
+            raise ScopeError("cargo_metadata_unavailable", f"candidate_locked_lockfile: {exc}") from exc
+        if not unchanged:
+            raise ScopeError("cargo_metadata_unavailable", "candidate_locked_lockfile: Cargo changed committed lock bytes")
 
 
 def package_roots(root: Path, metadata: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
@@ -969,6 +1074,30 @@ def lock_reference_index(
     return references
 
 
+def root_lockfile_validated_format(repo: Path, revision: str) -> str | None:
+    blob = git_blob(repo, revision, "Cargo.lock")
+    if blob is None:
+        return None
+    try:
+        text = blob.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    header, separator, _ = text.partition("[[package]]")
+    versions = re.findall(r"(?m)^\s*version\s*=\s*(\d+)\s*$", header)
+    if not separator or len(versions) != 1:
+        return None
+    records = lock_records(text)
+    indexed = lock_record_index(records)
+    references = lock_reference_index(records)
+    if indexed is None or references is None or not indexed:
+        return None
+    for record in indexed.values():
+        dependencies = record.get("dependencies", [])
+        if not isinstance(dependencies, list) or any(item not in references for item in dependencies):
+            return None
+    return versions[0]
+
+
 def lock_closure_matches_metadata(
     records: dict[tuple[str, str, str | None], dict[str, Any]],
     references: dict[str, tuple[str, str, str | None]],
@@ -1402,11 +1531,49 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if not repo.is_dir() or not (repo / ".git").exists():
         raise ScopeError("invalid_repository", f"not a git checkout: {repo}")
     paths, renames = changed_files(repo, args.base, args.head)
-    policy_path, policy, auxiliary_owners = parse_policy(
-        repo, args.base, args.head, args.policy
+    verified_full = False
+    if args.trusted_full_plan:
+        if not args.trusted_planner_base:
+            raise ScopeError("trusted_full_plan_invalid", "missing trusted planner base")
+        driver_path = Path(__file__).resolve().parent / "trusted_cargo_scope.py"
+        try:
+            spec = importlib.util.spec_from_file_location("cargo_scope_trusted_plan", driver_path)
+            driver = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(driver)
+            verified_full = driver.verify_full_plan(repo, args.trusted_planner_base, args.head, args.base, args.trusted_full_plan)
+        except (OSError, ValueError, subprocess.CalledProcessError, ImportError) as exc:
+            raise ScopeError("trusted_full_plan_invalid", str(exc)) from exc
+    sys.dont_write_bytecode = True
+    module_path = Path(__file__).resolve().parent / "cargo_package_change_classification.py"
+    try:
+        spec = importlib.util.spec_from_file_location("cargo_scope_classification", module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(str(module_path))
+        classification = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = classification
+        spec.loader.exec_module(classification)
+    except (ImportError, OSError) as exc:
+        raise ScopeError("trusted_dependency_unavailable", str(exc)) from exc
+    normalized_paths = [safe_relative(path) for path in paths]
+    registry_maintenance = (
+        len(normalized_paths) == 1
+        and normalized_paths[0] == AUXILIARY_REGISTRY_PATH
+        and not renames
+    )
+    policy_maintenance = trusted_full_policy_maintenance_range(
+        repo, args.base, args.head, paths, renames, verified_full
+    )
+    if policy_maintenance:
+        execution_paths = json.loads(Path(args.trusted_full_plan).read_text())["changed_paths"].split(";")
+        policy_maintenance = set(execution_paths).issubset(POLICY_MAINTENANCE_PATHS)
+    policy_path, policy, auxiliary_owners, maintenance_registries = parse_policy(
+        repo,
+        args.base,
+        args.head,
+        args.policy,
+        registry_maintenance=registry_maintenance or policy_maintenance,
     )
     protected = {safe_relative(path) for path in policy["protected_paths"]}
-    normalized_paths = [safe_relative(path) for path in paths]
     standalone_lock_paths = sorted(
         path for path in normalized_paths if path.endswith("/Cargo.lock")
     )
@@ -1426,13 +1593,74 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
-        validate_auxiliary_owners(
-            auxiliary_owners,
-            base_metadata,
-            head_metadata,
-            base_packages,
-            head_packages,
-        )
+        if policy_maintenance:
+            validate_auxiliary_owners(maintenance_registries[1], base_metadata, head_metadata,
+                                      base_packages, head_packages)
+            return {
+                "status": "allowed", "scope": "trusted_full_policy_maintenance",
+                "changed_paths": sorted(set(normalized_paths)), "policy": policy_path,
+                "policy_version": policy["policy_version"],
+            }
+        base_view = classification.corpus.GitCorpusView(repo, args.base)
+        head_view = classification.corpus.GitCorpusView(repo, args.head)
+        endpoint_facts = {}
+        endpoint_consumers = []
+        for revision, view, packages in ((args.base, base_view, base_packages), (args.head, head_view, head_packages)):
+            endpoint_root = base_root if revision == args.base else head_root
+            endpoint_metadata = base_metadata if revision == args.base else head_metadata
+            consumers = classification.compile_consumers(
+                repo, revision, tracked_paths(repo, revision), packages, owner_for,
+                source_text, without_rust_comments, resolve_relative, resolve_manifest_relative,
+                build_script_paths(endpoint_root, endpoint_metadata))
+            endpoint_consumers.append(consumers)
+            for path in normalized_paths:
+                try:
+                    endpoint_facts.setdefault(path, []).append(
+                        classification.endpoint_facts(view, path, packages, consumers, owner_for, protected))
+                except classification.corpus.CorpusError as exc:
+                    raise ScopeError("invalid_document_object", str(exc)) from exc
+            # Preserve precise static cross-package diagnostics before unioning
+            # input consumers, while checking both historical endpoints.
+            check_cross_package_edges(repo, revision, tracked_paths(repo, revision),
+                                      packages, set(normalized_paths), {}, set())
+        for path, facts in endpoint_facts.items():
+            if not facts[0]["present"] and facts[1]["source"]:
+                source = facts[1]["source"]
+                if base_view.file_mode(source) != "000000":
+                    raise ScopeError("invalid_document_object", f"historical object missing for existing source: {source}")
+            if path.startswith("doc/") and not path.startswith("doc/.governance/"):
+                object_path = classification.corpus.record_path("object", path)
+                if any(view.file_mode(object_path) != "000000" for view in (base_view, head_view)):
+                    for view in (base_view, head_view):
+                        if view.file_mode(path) != "000000":
+                            try:
+                                classification.corpus.direct_object_source(view, object_path)
+                            except classification.corpus.CorpusError as exc:
+                                raise ScopeError("invalid_document_object", str(exc)) from exc
+        # Structure is always checked. Semantics are checked only for entries
+        # consumed now or whose ownership/input relationship changed.
+        affected_registry = {}
+        for path, package in auxiliary_owners.items():
+            facts = endpoint_facts.get(path, [])
+            consumed = bool(facts) and not all(not f["present"] or f["document"] for f in facts) and not any(f["owners"] for f in facts)
+            affected = (base_packages.get(package) != head_packages.get(package)
+                        or json.dumps(metadata_package(base_metadata, package), sort_keys=True).replace(str(base_root), "<snapshot>") != json.dumps(metadata_package(head_metadata, package), sort_keys=True).replace(str(head_root), "<snapshot>")
+                        or owner_for(path, base_packages) != owner_for(path, head_packages)
+                        or endpoint_consumers[0].get(path, set()) != endpoint_consumers[1].get(path, set()))
+            if consumed or affected:
+                affected_registry[path] = package
+                input_owners = endpoint_consumers[0].get(path, set()) | endpoint_consumers[1].get(path, set())
+                if input_owners and input_owners != {package}:
+                    raise ScopeError("trusted_policy_invalid", f"auxiliary association conflicts with compilation input consumers: {path}")
+        registries_to_validate = ((maintenance_registries[1],) if maintenance_registries is not None else (affected_registry,))
+        for registry in registries_to_validate:
+            validate_auxiliary_owners(
+                registry,
+                base_metadata,
+                head_metadata,
+                base_packages,
+                head_packages,
+            )
         head_build_scripts = build_script_paths(head_root, head_metadata)
         changed = set(normalized_paths)
         package_changed = any(
@@ -1492,11 +1720,17 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     for path in normalized_paths:
         if path in ("Cargo.toml", "Cargo.lock") or path == policy_path:
             continue
-        owner = owner_for(path, head_packages) or owner_for(path, base_packages)
-        if owner is None:
-            owner = auxiliary_owners.get(path)
-        if owner is not None:
-            package_owners.add(owner)
+        facts = endpoint_facts[path]
+        owners = set().union(*(f["owners"] for f in facts))
+        document = all(not f["present"] or f["document"] for f in facts)
+        if not owners and not document:
+            auxiliary = auxiliary_owners.get(path)
+            if auxiliary:
+                owners.add(auxiliary)
+        if owners:
+            package_owners.update(owners)
+        elif document:
+            continue
         else:
             unowned_paths.append(path)
             if path.endswith(".rs") or Path(path).name == "Cargo.toml":
@@ -1505,17 +1739,22 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_rust))
 
     for old_path, new_path in zip(renames[::2], renames[1::2]):
-        old_owner = owner_for(old_path, base_packages) or auxiliary_owners.get(old_path)
-        new_owner = owner_for(new_path, head_packages) or auxiliary_owners.get(new_path)
-        if old_owner and new_owner and old_owner != new_owner:
+        old_facts = endpoint_facts[old_path][0]
+        new_facts = endpoint_facts[new_path][1]
+        old_owners = set(old_facts["owners"])
+        new_owners = set(new_facts["owners"])
+        if not old_owners and not old_facts["document"] and old_path in auxiliary_owners:
+            old_owners.add(auxiliary_owners[old_path])
+        if not new_owners and not new_facts["document"] and new_path in auxiliary_owners:
+            new_owners.add(auxiliary_owners[new_path])
+        if old_owners and new_owners and old_owners != new_owners:
             raise ScopeError("cross_package_rename", f"{old_path} -> {new_path}")
-        if old_owner:
-            package_owners.add(old_owner)
-        if new_owner:
-            package_owners.add(new_owner)
+        package_owners.update(old_owners | new_owners)
 
     if len(package_owners) > 1:
         raise ScopeError("multiple_business_packages", ", ".join(sorted(package_owners)))
+    if package_owners and any(f["control"] for facts in endpoint_facts.values() for f in facts):
+        raise ScopeError("governance_business_mix", "governance controls changed with a business package")
     primary_package = requested_primary
     if primary_package is None and package_owners:
         primary_package = next(iter(package_owners))
@@ -1550,7 +1789,11 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             raise ScopeError("cross_package_dependency", detail)
 
     other_unowned_paths = [path for path in unowned_paths if path not in standalone_lock_paths]
-    if other_unowned_paths and primary_package is not None:
+    unknown_paths = [path for path in other_unowned_paths
+                     if not any(f["control"] for f in endpoint_facts[path])
+                     and path not in AUXILIARY_FORBIDDEN_PATHS
+                     and not (path.startswith("scripts/") and Path(path).suffix in {".py", ".sh", ".json", ".tsv"})]
+    if other_unowned_paths and primary_package is not None or unknown_paths:
         raise ScopeError("ambiguous_package_attribution", ", ".join(other_unowned_paths))
     for path in standalone_lock_paths:
         if primary_package is None or not standalone_lock_is_mechanical(
@@ -1586,8 +1829,32 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         if lock_diff_has_unattributable_lines(repo, args.base, args.head):
             raise ScopeError("unattributable_lock_change", "Cargo.lock contains non-package or non-mechanical changes")
         lock_names = lock_change_names(repo, args.base, args.head)
-        if not lock_names or primary_package is None or not lock_names.issubset({primary_package}):
+        if not lock_names or primary_package is None:
             raise ScopeError("unattributable_lock_change", ", ".join(sorted(lock_names)) or "unknown lock change")
+        if not lock_names.issubset({primary_package}):
+            base_manifest_path = package_manifest_paths(base_packages).get(primary_package)
+            head_manifest_path = package_manifest_paths(head_packages).get(primary_package)
+            primary_manifest_changed = (
+                base_manifest_path is not None
+                and base_manifest_path == head_manifest_path
+                and base_manifest_path in normalized_paths
+                and git_blob(repo, args.base, base_manifest_path)
+                != git_blob(repo, args.head, head_manifest_path)
+            )
+            base_lock_format = root_lockfile_validated_format(repo, args.base)
+            head_lock_format = root_lockfile_validated_format(repo, args.head)
+            if (
+                not verified_full
+                or not primary_manifest_changed
+                or base_lock_format is None
+                or head_lock_format is None
+                or base_lock_format != head_lock_format
+            ):
+                raise ScopeError(
+                    "unattributable_lock_change",
+                    ", ".join(sorted(lock_names)),
+                )
+            validate_candidate_locked_metadata(repo, args.head)
         expected_dependencies = metadata_dependency_names(head_metadata, primary_package)
         actual_dependencies = lock_dependency_names(repo, args.head, primary_package)
         if expected_dependencies is None or actual_dependencies is None:
@@ -1651,6 +1918,8 @@ def main() -> int:
     parser.add_argument("--primary-package", required=True)
     parser.add_argument("--policy", required=True)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--trusted-full-plan")
+    parser.add_argument("--trusted-planner-base")
     args = parser.parse_args()
     try:
         payload = evaluate(args)
