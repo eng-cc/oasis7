@@ -21,12 +21,15 @@ from __future__ import annotations
 
 import json
 import os
+import runpy
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from typing import Callable
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -2351,6 +2354,168 @@ path = "src/lib.rs"
             )
 
         self._assert_allowed(repo, base, "alpha", mutate)
+
+
+class FullPlanLockedContract(unittest.TestCase):
+    """Real Git/Cargo witnesses for the candidate-only full-plan lock gate."""
+
+    setUp = CargoPackageScopeContract.setUp
+    tearDown = CargoPackageScopeContract.tearDown
+    _git = CargoPackageScopeContract._git
+    _write = CargoPackageScopeContract._write
+    _fixture = CargoPackageScopeContract._fixture
+    _head = CargoPackageScopeContract._head
+    _run_checker = CargoPackageScopeContract._run_checker
+    _trusted_full_plan_environment = CargoPackageScopeContract._trusted_full_plan_environment
+
+    def _cargo(self, repo: Path, *args: str) -> None:
+        result = subprocess.run(["cargo", *args], cwd=repo, text=True, capture_output=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def _unchanged_run(self, repo: Path, base: str, head: str, env: dict[str, str]):
+        before = {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+        result = self._run_checker(repo, base, head, "alpha", env)
+        after = {p: p.read_bytes() for p in repo.rglob("*") if p.is_file()}
+        self.assertEqual(before, after, "scope validation changed original checkout bytes")
+        return result
+
+    def _valid_switch(self) -> tuple[Path, str, str]:
+        repo, _ = self._fixture()
+        # Pre-existing excluded local packages need no registry or network.
+        self._write(repo, "Cargo.toml", '[workspace]\nmembers = ["crates/alpha", "crates/beta"]\nexclude = ["vendor/v1", "vendor/v2"]\nresolver = "2"\n')
+        for version in (1, 2):
+            self._write(repo, f"vendor/v{version}/Cargo.toml", f'[package]\nname = "local-dep"\nversion = "{version}.0.0"\nedition = "2021"\n')
+            self._write(repo, f"vendor/v{version}/src/lib.rs", "pub fn local() {}\n")
+        manifest = repo / "crates/alpha/Cargo.toml"
+        manifest.write_text(manifest.read_text() + '\n[dependencies]\nlocal-dep = { path = "../../vendor/v1" }\n')
+        self._cargo(repo, "generate-lockfile", "--offline")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "local dependency base")
+        base = self._git(repo, "rev-parse", "HEAD")
+        manifest.write_text(manifest.read_text().replace("vendor/v1", "vendor/v2"))
+        self._cargo(repo, "generate-lockfile", "--offline")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "switch local dependency")
+        return repo, base, self._git(repo, "rev-parse", "HEAD")
+
+    def test_c1_full_plan_rejects_other_workspace_version_drift(self):
+        repo, base = self._fixture()
+        def mutate(root):
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(manifest.read_text().replace('edition = "2021"', 'edition = "2021"\ndescription = "changed"'))
+            lock = root / "Cargo.lock"
+            lock.write_text(lock.read_text().replace('name = "beta"\nversion = "0.1.0"', 'name = "beta"\nversion = "0.2.0"'))
+        head = self._head(repo, mutate, "stale beta lock")
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn("candidate_locked_metadata", result.stdout)
+        self.assertIn("--locked", result.stdout)
+
+    def test_c2_real_local_switch_requires_full_plan_and_locked_gate(self):
+        repo, base, head = self._valid_switch()
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        # The same valid lock must still fail the original fallback entrance.
+        result = self._unchanged_run(repo, base, head, {"OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN": "false"})
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unattributable_lock_change", result.stdout)
+
+    def test_c3_locked_success_does_not_bypass_other_package_owner(self):
+        repo, base, _ = self._valid_switch()
+        head = self._head(repo, lambda root: self._write(root, "crates/beta/src/lib.rs", "pub fn changed() {}\n"), "also beta")
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("multiple_business_packages", result.stdout)
+
+    def test_c3_missing_primary_manifest_change_still_rejects(self):
+        repo, base = self._fixture()
+        def mutate(root):
+            lock = root / "Cargo.lock"
+            lock.write_text(lock.read_text().replace('name = "beta"\nversion = "0.1.0"', 'name = "beta"\nversion = "0.2.0"'))
+        head = self._head(repo, mutate, "lock without primary manifest")
+        result = self._unchanged_run(repo, base, head, self._trusted_full_plan_environment())
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("unattributable_lock_change", result.stdout)
+        self.assertNotIn("candidate_locked_metadata", result.stdout)
+
+    def test_c4_successful_metadata_cannot_rewrite_snapshot_lock(self):
+        repo, _, head = self._valid_switch()
+        module = runpy.run_path(str(CHECKER))
+        validate = module["validate_candidate_locked_metadata"]
+        def rewriting_metadata(root, *, locked=False):
+            self.assertTrue(locked)
+            (root / "Cargo.lock").write_bytes(b"rewritten lock\n")
+            return {"packages": []}
+        with mock.patch.dict(validate.__globals__, {"cargo_metadata": rewriting_metadata}):
+            with self.assertRaises(module["ScopeError"]) as failure:
+                validate(repo, head)
+        self.assertIn("Cargo changed committed lock bytes", failure.exception.detail)
+        self.assertEqual(self._git(repo, "show", f"{head}:Cargo.lock"), (repo / "Cargo.lock").read_text().strip())
+
+    def test_c4_fresh_candidate_snapshot_missing_lock_and_unavailable_cargo(self):
+        repo, base, head = self._valid_switch()
+        module = runpy.run_path(str(CHECKER))
+        validate = module["validate_candidate_locked_metadata"]
+        error = module["ScopeError"]
+        # Cargo really resolves the committed candidate, despite dirty checkout.
+        (repo / "Cargo.lock").write_text("dirty checkout lock\n")
+        validate(repo, head)
+        self.assertEqual(b"dirty checkout lock\n", (repo / "Cargo.lock").read_bytes())
+        original_run = subprocess.run
+        calls = []
+        def unavailable(command, **kwargs):
+            if command[:2] == ["cargo", "metadata"]:
+                calls.append(command)
+                raise FileNotFoundError("Cargo unavailable witness")
+            return original_run(command, **kwargs)
+        with mock.patch.object(subprocess, "run", side_effect=unavailable):
+            with self.assertRaises(error) as failure:
+                validate(repo, head)
+        self.assertIn("candidate_locked_metadata", failure.exception.detail)
+        self.assertIn("Cargo unavailable witness", failure.exception.detail)
+        self.assertEqual(1, len(calls))
+        self.assertIn("--locked", calls[0])
+        self.assertNotIn("--no-deps", calls[0])
+        (repo / "Cargo.lock").unlink()
+        missing = self._head(repo, lambda root: None, "candidate missing lock")
+        with self.assertRaises(error) as failure:
+            validate(repo, missing)
+        self.assertIn("candidate_locked_lockfile", failure.exception.detail)
+        self.assertFalse((repo / "Cargo.lock").exists())
+
+    def test_c4_real_cargo_invocation_and_unchanged_successful_snapshot(self):
+        repo, base, head = self._valid_switch()
+        # A recording shim executes real Cargo; inspect exact locked invocation
+        # and bytes before/after every Cargo call, including disposable snapshots.
+        temp = tempfile.TemporaryDirectory(prefix="cargo-scope-recording-")
+        self._temps.append(temp)
+        directory = Path(temp.name)
+        record = directory / "calls.jsonl"
+        cargo = shutil.which("cargo")
+        self.assertIsNotNone(cargo)
+        shim = directory / "cargo"
+        shim.write_text(f'''#!{sys.executable}
+import hashlib, json, pathlib, subprocess, sys
+lock = pathlib.Path.cwd() / "Cargo.lock"
+before = lock.read_bytes() if lock.exists() else None
+result = subprocess.run([{cargo!r}, *sys.argv[1:]])
+after = lock.read_bytes() if lock.exists() else None
+with open({str(record)!r}, "a") as stream:
+    stream.write(json.dumps({{"args": sys.argv[1:], "cwd": str(pathlib.Path.cwd()), "unchanged": before == after, "exists": before is not None}}) + "\\n")
+sys.exit(result.returncode)
+''')
+        shim.chmod(0o755)
+        env = self._trusted_full_plan_environment()
+        env["PATH"] = str(directory) + os.pathsep + os.environ["PATH"]
+        result = self._unchanged_run(repo, base, head, env)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        calls = [json.loads(line) for line in record.read_text().splitlines()]
+        locked = [call for call in calls if "--locked" in call["args"]]
+        self.assertEqual(1, len(locked), calls)
+        self.assertNotIn("--no-deps", locked[0]["args"])
+        self.assertTrue(locked[0]["exists"])
+        self.assertTrue(locked[0]["unchanged"])
+        self.assertNotEqual(str(repo), locked[0]["cwd"])
 
 
 if __name__ == "__main__":
