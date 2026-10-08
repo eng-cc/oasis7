@@ -2,7 +2,9 @@
 
 # Oasis7 Agent Entry Point
 
-Canonical workflow: [capability](doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](doc/engineering/workflow/source-of-truth.md#ready-and-done), [prior approval for workflow changes](doc/engineering/workflow/source-of-truth.md#workflow-change-approval), [ordered multi-PR contract](doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract), [pre-PR review packet](doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet).
+Canonical workflow: [capability](doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](doc/engineering/workflow/source-of-truth.md#ready-and-done), [prior approval for workflow changes](doc/engineering/workflow/source-of-truth.md#workflow-change-approval), [ordered multi-PR contract](doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract), [pre-PR review packet](doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet), [PR title and commit language](doc/engineering/workflow/source-of-truth.md#pr-and-commit-language).
+
+Write PR titles and complete commit messages in English, including subjects and any bodies; preserve identifiers, paths, and standard Git trailers verbatim. See the canonical [PR and commit language rule](doc/engineering/workflow/source-of-truth.md#pr-and-commit-language).
 
 ## Non-Negotiable Entry Rules
 
