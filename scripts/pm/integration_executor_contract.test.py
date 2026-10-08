@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -128,6 +129,48 @@ class ExecutorContractTests(unittest.TestCase):
                        {"execution_layout": "required-parallel/v99"}):
             with self.subTest(config=config), self.assertRaises(ValueError):
                 contract.executor_contract_paths(json.dumps(config).encode())
+
+    def test_known_protected_legacy_revision_resolves_without_policy_self_approval(self):
+        revision = "89ef370f66a83cba50bafa9930c74e31360e5ba0"
+        expected = "sha256:90494adffcc2691f9ede5919bc88f9ed4303a4fcec699ae3783961df59e0581d"
+        original = "sha256:43a77953bedd8acbf32e42e324e04108d05f36ede77b9830093106a08ce1dfe8"
+        repo = Path(__file__).resolve().parents[2]
+        # These exact Git blobs are the inspected protected authority, not
+        # artifact-declared hashes. Missing historical objects must fail.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in contract.EXECUTOR_CONTRACT_PATHS:
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(subprocess.check_output(
+                    ["git", "-C", str(repo), "show", revision + ":" + relative]))
+            self.assertEqual(expected, contract.build_executor_contract(root)["digest"])
+            context = contract.resolve_execution_layout(root)
+            self.assertEqual("required-serial/v1", context["execution_layout"])
+            self.assertEqual(expected, context["executor_contract_digest"])
+            # Runtime known-layout admission never overrides keyed policy.
+            for approved in ([original], []):
+                with self.subTest(approved=approved), self.assertRaises(ValueError):
+                    contract.resolve_execution_layout(root, approved_digests=approved)
+            self.assertEqual(context, contract.resolve_execution_layout(
+                root, approved_digests=[expected]))
+            planner = root / "scripts/plan-rust-required-scope.py"
+            source = planner.read_bytes()
+            planner.write_bytes(source + b"\n# unapproved changed closure\n")
+            with self.assertRaisesRegex(ValueError, "EXECUTOR_CONTRACT_CHANGED"):
+                contract.resolve_execution_layout(root)
+            planner.write_bytes(source)
+            config = root / "scripts/ci-required-scope.v2.json"
+            source = config.read_bytes()
+            unknown = json.loads(source)
+            unknown["execution_contract"] = "required-domain-split/v99"
+            config.write_text(json.dumps(unknown))
+            with self.assertRaisesRegex(ValueError, "unknown legacy execution contract"):
+                contract.resolve_execution_layout(root)
+            config.write_bytes(source)
+            planner.unlink()
+            with self.assertRaisesRegex(ValueError, "executor contract file is missing"):
+                contract.resolve_execution_layout(root)
 
 
 class ValidationRequestTests(unittest.TestCase):

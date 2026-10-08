@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -485,8 +486,23 @@ class CorpusScopeTests(unittest.TestCase):
         )
         self.assertIn("run python3 ./scripts/document-corpus-inventory-check.test.py",
                       ci_tests[ci_tests.index("run_doc_checker_contract_tests() {"):])
-        self.assertIn("run python3 ./scripts/document-corpus-inventory-workflow.test.py",
-                      ci_tests[ci_tests.index("run_workflow_governance_operational_contract_tests() {"):])
+        execution = module_from_path(
+            "ci_required_execution_for_document_corpus_workflow_test",
+            ROOT / "scripts/pm/ci_required_execution.py",
+        )
+        group = "run_workflow_governance_operational_contract_tests"
+        body = re.search(r"(?m)^" + group + r"\(\) \{\n(.*?)^\}", ci_tests, re.S)
+        self.assertIsNotNone(body)
+        self.assertEqual(
+            body.group(1).strip(),
+            'run python3 "$driver_dir/pm/ci_required_execution.py" run-group --group '
+            + group + ' --root "$repo_root"',
+        )
+        self.assertEqual(len([
+            command for command in execution.COMMANDS
+            if command["group"] == group
+            and command["argv"] == ["python3", "./scripts/document-corpus-inventory-workflow.test.py"]
+        ]), 1)
         self.assertIn("scripts/document-corpus-inventory-check.test.py", capability_inventory)
         self.assertIn("scripts/document-corpus-inventory-workflow.test.py", capability_inventory)
         self.assertIn("document-corpus-v3-check", baseline_inventory.BASELINE_OBLIGATIONS)
