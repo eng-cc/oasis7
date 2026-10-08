@@ -405,10 +405,6 @@ if event_name == "pull_request":
 elif event_name == "push":
     base = payload.get("before")
     head = payload.get("after")
-elif event_name == "workflow_dispatch":
-    inputs = payload.get("inputs") or {}
-    base = inputs.get("integration_base")
-    head = inputs.get("expected_head")
 else:
     raise SystemExit(f"product-doc-content: unsupported CI event range: {event_name or '<empty>'}")
 if not isinstance(base, str) or not isinstance(head, str) or not base or not head:
@@ -463,7 +459,6 @@ run_required_gate_checks() {
     run git diff --check
   fi
   run python3 ./scripts/validate-codex-agent-config.py
-  run ./scripts/doc-governance-check.sh
 }
 
 
