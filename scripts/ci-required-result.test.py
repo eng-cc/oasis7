@@ -44,6 +44,18 @@ class Results(unittest.TestCase):
             with self.assertRaises(ValueError):
                 result.validate(self.plan, self.needs, self.jobs)
 
+    def test_added_workflow_dependency_must_explicitly_succeed(self):
+        # Adding another gate dependency must never hide its failed or absent result.
+        invalid = [{'result': value} for value in ('failure', 'cancelled', 'skipped', 'unknown', None)]
+        invalid.extend([{}, {'result': 1}, None, [], 'success', True])
+        for entry in invalid:
+            with self.subTest(entry=entry), self.assertRaises(ValueError):
+                self.needs['new-required-dependency'] = entry
+                result.validate(self.plan, self.needs, self.jobs)
+        self.needs['new-required-dependency'] = {'result': 'success'}
+        self.assertTrue(result.validate(self.plan, self.needs, self.jobs))
+        self.assertEqual(self.needs['rust']['result'], 'skipped')
+
     def test_illegal_empty_duplicate_unknown_matrices(self):
         changes = [lambda p: p['groups'].append('unknown'), lambda p: p['groups'].append('baseline'),
                    lambda p: p['groups'].remove('baseline'), lambda p: p['matrices']['windows'].update(include=[]),

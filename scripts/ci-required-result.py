@@ -24,6 +24,11 @@ def validate(plan, needs, group_jobs):
         allowed = {'success'} if group in chosen else {'skipped', 'success'}
         if result not in allowed:
             raise ValueError(f'{group}: unexpected result {result!r}')
+    expected_jobs = {'select', *group_jobs.values()}
+    for job, entry in needs.items():
+        if job not in expected_jobs:
+            if not isinstance(entry, dict) or entry.get('result') != 'success':
+                raise ValueError(f'{job}: extra dependency did not explicitly succeed')
     return True
 
 
