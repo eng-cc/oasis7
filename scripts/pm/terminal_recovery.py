@@ -232,14 +232,30 @@ def merged_facts(repository,uid,number,head,merge,target,root,issue):
         raise ValueError('current target Git ancestry mismatch')
     return branch,pr
 
+def _required_gate_app(value):
+    """Resolve one pinned application without discarding wildcard obligations."""
+    required=value.get('required_status_checks')
+    if value.get('status')!='resolved' or not isinstance(required,list) or len(required) not in (1,2):
+        raise ValueError('recovery current required policy unsupported/incomplete')
+    pinned=[];wildcards=0
+    for check in required:
+        if not isinstance(check,dict) or check.get('context')!='required-gate' or 'app_id' not in check:
+            raise ValueError('recovery current required policy unsupported/incomplete')
+        app=check['app_id']
+        if app is None:wildcards+=1
+        elif type(app) is int and app>0:pinned.append(app)
+        else:raise ValueError('recovery current required policy app unsupported/incomplete')
+    if len(pinned)!=1 or wildcards>1:
+        raise ValueError('recovery current required policy app unsupported/incomplete')
+    return pinned[0]
+
 def _policy(repository,branch,app):
     class ReadOnlyClient:
         def rest(self,method,path,**kwargs):
             if method!='GET':raise ValueError('required policy observation is read-only')
             return obs.api(path)
     value=_module('pr-lifecycle-gate').discover_required_policy(repository,branch,client=ReadOnlyClient())
-    if (value.get('status')!='resolved' or value.get('required_status_checks')!=
-            [{'context':'required-gate','app_id':app}]):
+    if _required_gate_app(value)!=app or type(app) is not int:
         raise ValueError('required policy/app coverage unsupported')
     return value
 
@@ -790,10 +806,7 @@ def collect_recovery(root,uid):
                 if method!='GET':raise ValueError('recovery policy observation is read only')
                 return obs.api(path)
         actual_policy=policy.discover_required_policy(repository,branch,client=Client())
-        required=actual_policy.get('required_status_checks')
-        if actual_policy.get('status')!='resolved' or not isinstance(required,list) or len(required)!=1 or required[0].get('context')!='required-gate':
-            raise ValueError('recovery current required policy unsupported/incomplete')
-        app=obs.positive(required[0].get('app_id'),'required app')
+        app=_required_gate_app(actual_policy)
         context,validated=_canonical_context(root,uid,repository,number,head,app)
         _,_,review,_=validated;plan=review['plan'];handoff=review['handoff'];scope=context['source_scope_oid']
         branch,pr=merged_facts(repository,uid,number,head,merge,target,root,issue)
