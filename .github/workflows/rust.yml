@@ -81,13 +81,14 @@ env:
   CARGO_PROFILE_TEST_DEBUG: 0
   RUST_TOOLCHAIN: 1.96.0
   TRUNK_VERSION: 0.21.14
+  OASIS7_RUN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   OASIS7_WASM_TOOLCHAIN: nightly-2025-12-11
   OASIS7_WASM_TARGET: wasm32-unknown-unknown
   OASIS7_WASM_BUILD_STD: "1"
   OASIS7_WASM_BUILD_STD_COMPONENTS: std,panic_abort
 
 jobs:
-  required-gate:
+  required-plan:
     if: github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
     runs-on: ubuntu-24.04
     permissions:
@@ -97,16 +98,59 @@ jobs:
       issues: read
       pull-requests: read
     outputs:
+      base_oid: ${{ steps.scope.outputs.base_oid }}
       execution_contract: ${{ steps.scope.outputs.execution_contract }}
-      required_plan_v2_artifact_id: ${{ steps.upload-plan-v2.outputs.artifact-id }}
-      required_plan_v2_artifact_name: ${{ steps.keyed-plan.outputs.plan_artifact_name }}
-      required_unit_matrix: ${{ steps.keyed-plan.outputs.unit_matrix }}
-      run_operational_contracts: ${{ steps.scope.outputs.run_operational_contracts }}
-      run_workflow_governance_contracts: ${{ steps.scope.outputs.run_workflow_governance_contracts }}
-      run_packaging_contracts: ${{ steps.scope.outputs.run_packaging_contracts }}
-      run_doc_checker_contracts: ${{ steps.scope.outputs.run_doc_checker_contracts }}
+      head_oid: ${{ steps.scope.outputs.head_oid }}
+      impact_projection_digest: ${{ steps.scope.outputs.impact_projection_digest }}
+      integration_base: ${{ steps.scope.outputs.integration_base }}
+      integration_base_oid: ${{ steps.scope.outputs.integration_base_oid }}
+      maintenance_authority_comment_id: ${{ steps.scope.outputs.maintenance_authority_comment_id }}
+      needs_markdown: ${{ steps.scope.outputs.needs_markdown }}
+      needs_node: ${{ steps.scope.outputs.needs_node }}
+      needs_python: ${{ steps.scope.outputs.needs_python }}
+      needs_rust_toolchain: ${{ steps.scope.outputs.needs_rust_toolchain }}
+      needs_system_deps: ${{ steps.scope.outputs.needs_system_deps }}
+      needs_trunk: ${{ steps.scope.outputs.needs_trunk }}
+      needs_wasm_target: ${{ steps.scope.outputs.needs_wasm_target }}
+      planner_authority_oid: ${{ steps.scope.outputs.planner_authority_oid }}
+      planner_config_sha: ${{ steps.scope.outputs.planner_config_sha }}
+      planner_config_sha256: ${{ steps.scope.outputs.planner_config_sha256 }}
+      planner_digest: ${{ steps.scope.outputs.planner_digest }}
       run_cargo_tooling_contracts: ${{ steps.scope.outputs.run_cargo_tooling_contracts }}
+      run_codex_agent_config_validation: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
+      run_compile_metrics_contract_tests: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
+      run_consensus_tests: ${{ steps.scope.outputs.run_consensus_tests }}
+      run_distfs_tests: ${{ steps.scope.outputs.run_distfs_tests }}
+      run_doc_checker_contracts: ${{ steps.scope.outputs.run_doc_checker_contracts }}
+      run_launcher_web_build: ${{ steps.scope.outputs.run_launcher_web_build }}
+      run_oasis: ${{ steps.scope.outputs.run_oasis }}
+      run_operational_contracts: ${{ steps.scope.outputs.run_operational_contracts }}
+      run_packaging_contracts: ${{ steps.scope.outputs.run_packaging_contracts }}
+      run_pixel_world_bridge_lib_tests: ${{ steps.scope.outputs.run_pixel_world_bridge_lib_tests }}
+      run_pixel_world_bridge_wasm_check: ${{ steps.scope.outputs.run_pixel_world_bridge_wasm_check }}
+      run_required_gate_baseline: ${{ steps.scope.outputs.run_required_gate_baseline }}
+      run_rust_baseline: ${{ steps.scope.outputs.run_rust_baseline }}
+      run_scenario_regression: ${{ steps.scope.outputs.run_scenario_regression }}
       run_site_contract_tests: ${{ steps.scope.outputs.run_site_contract_tests }}
+      run_viewer_contract_tests: ${{ steps.scope.outputs.run_viewer_contract_tests }}
+      run_viewer_perf_smoke: ${{ steps.scope.outputs.run_viewer_perf_smoke }}
+      run_viewer_wasm_check: ${{ steps.scope.outputs.run_viewer_wasm_check }}
+      run_workflow_governance_contracts: ${{ steps.scope.outputs.run_workflow_governance_contracts }}
+      scope: ${{ steps.scope.outputs.scope }}
+      source_head: ${{ steps.scope.outputs.source_head }}
+      source_scope_base: ${{ steps.scope.outputs.source_scope_base }}
+      task_uid: ${{ steps.scope.outputs.task_uid }}
+      worker_matrix: ${{ steps.dispatch.outputs.worker_matrix }}
+      has_workers: ${{ steps.dispatch.outputs.has_workers }}
+      execution_layout: ${{ steps.dispatch.outputs.execution_layout }}
+      tested_sha: ${{ steps.dispatch.outputs.tested_sha }}
+      tested_tree: ${{ steps.dispatch.outputs.tested_tree }}
+      authority_oid: ${{ steps.dispatch.outputs.authority_oid }}
+      transport_name: ${{ steps.dispatch.outputs.transport_name }}
+      transport_id: ${{ steps.upload-transport.outputs.artifact-id }}
+      transport_digest: ${{ steps.dispatch.outputs.transport_digest }}
+      current_target_oid: ${{ steps.pr_target.outputs.oid }}
+      start_only: ${{ steps.loop-ci-admission.outputs.start_only }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -354,7 +398,8 @@ jobs:
             echo "source_scope_base=${source_scope_base}"
             echo "integration_base=${base_ref}"
             echo "source_head=${head_ref}"
-            echo "task_uid=${task_uid}"
+            echo "planner_authority_oid=${tool_ref:-${GITHUB_WORKFLOW_SHA}}"
+            echo "task_uid=${task_uid:-}"
           } >>"${GITHUB_OUTPUT}"
           python3 - "${GITHUB_OUTPUT}" "${RUNNER_TEMP}/required-scope-outputs.json" <<'PY'
           import json, pathlib, sys
@@ -403,7 +448,7 @@ jobs:
                 if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --help 2>&1 | grep -Fq -- '--phase'; then
                   python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --phase start --repository "${{ github.repository }}" \
                     --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
-                    --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" "${maintenance_args[@]}"
+                    --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" ${maintenance_args[@]+"${maintenance_args[@]}"}
                 else
                   python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --repository "${{ github.repository }}" \
                     --pr-number "${{ github.event.pull_request.number || inputs.pr_number }}" \
@@ -483,106 +528,6 @@ jobs:
           )
           for field in fields:
               print(f"{field}={source.get(field, '')}")
-          PY
-      - name: Install pinned Markdown runtime for keyed inventory observation
-        if: ${{ inputs.request_key != '' }}
-        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
-      - id: keyed-plan
-        name: Build attempt-scoped required-plan v2 from trusted W and M
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
-          INTEGRATION_JSON: ${{ steps.integration.outputs.identity }}
-          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
-          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
-          INTEGRATION_BASE: ${{ inputs.integration_base }}
-          INTEGRATION_HEAD: ${{ inputs.expected_head }}
-          INTEGRATION_UID: ${{ inputs.task_uid }}
-          INTEGRATION_PR: ${{ inputs.pr_number }}
-          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
-          TRUSTED_POLICY_JSON: ${{ runner.temp }}/trusted-ci-policy.json
-          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -z "${INTEGRATION_REQUEST_KEY}" ]]; then
-            echo 'unit_matrix=[]' >>"${GITHUB_OUTPUT}"
-            exit 0
-          fi
-          [[ -n "${INTEGRATION_WORKTREE:-}" ]] || {
-            echo "keyed required-plan needs the exact W/M integration worktree" >&2
-            exit 1
-          }
-          [[ -s "${TRUSTED_POLICY_JSON}" ]] || {
-            echo "keyed required-plan needs trusted workflow policy context" >&2
-            exit 1
-          }
-          python3 -I - <<'PY'
-          import base64, importlib.util, json, os, pathlib, sys
-          workspace=pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
-          scripts=workspace/"scripts"
-          sys.path.insert(0,str(scripts/"pm"))
-          sys.path.insert(0,str(scripts))
-          import ci_required_inventory as inventory_module
-          import ci_required_artifact_v2 as artifact_module
-          import integration_ci as integration_module
-          import integration_executor_contract as request_contract
-
-          plan_output=json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
-          integration=json.loads(os.environ["INTEGRATION_JSON"])
-          if not isinstance(integration,dict) or not integration.get("integration_worktree"):
-              raise SystemExit("exact keyed M worktree identity is unavailable")
-          policy=json.loads(pathlib.Path(os.environ["TRUSTED_POLICY_JSON"]).read_text(encoding="utf-8"))
-          try:
-              request_raw=base64.b64decode(os.environ["INTEGRATION_REQUEST_B64"],validate=True)
-              request_envelope=json.loads(request_raw.decode("utf-8"))
-          except (ValueError,UnicodeDecodeError,json.JSONDecodeError) as exc:
-              raise SystemExit("canonical validation request cannot be decoded") from exc
-          request=request_contract.validation_request_envelope(request_envelope)
-          if request_raw!=request_contract.canonical_bytes(request):
-              raise SystemExit("validation request envelope is noncanonical")
-          if request["request_key"]!=os.environ["INTEGRATION_REQUEST_KEY"]:
-              raise SystemExit("validation request key differs from workflow input")
-          run_id=int(os.environ["GITHUB_RUN_ID"])
-          attempt=int(os.environ["GITHUB_RUN_ATTEMPT"])
-          app_id=policy["effective_policy"]["check_app_id"]
-          gate_jobs=integration_module.attempt_execution_jobs(
-              os.environ["GITHUB_REPOSITORY"],run_id,attempt,
-              os.environ["GITHUB_WORKFLOW_SHA"],app_id,job_names={"required-gate"},
-          )
-          if len(gate_jobs)!=1:
-              raise SystemExit("exact in-progress required-gate check is unavailable")
-          changed_raw=plan_output.get("changed_paths","")
-          changed_paths=changed_raw.split(";") if changed_raw else []
-          inventory=inventory_module.build_required_inventory(
-              workspace,pathlib.Path(integration["integration_worktree"]),
-              integration["tested_commit_oid"],plan_output,
-              repository=os.environ["GITHUB_REPOSITORY"],
-              workflow_ref=os.environ["GITHUB_WORKFLOW_REF"],
-              planner_authority_oid=os.environ["GITHUB_WORKFLOW_SHA"],
-              event_name="workflow_dispatch",run_mode="integration_revalidation",
-              changed_paths=changed_paths,base_ref=os.environ["INTEGRATION_BASE"],
-              head_ref=os.environ["INTEGRATION_HEAD"],task_uid=os.environ["INTEGRATION_UID"],
-              scope_base_oid=plan_output["source_scope_base"],
-              impact_projection=str(pathlib.Path(os.environ["RUNNER_TEMP"])/"impact-projection.json"),
-              run_id=run_id,run_attempt=attempt,check_app_id=app_id,
-              check_run_id=gate_jobs[0]["check_run_id"],
-          )
-          payload=artifact_module.assemble_plan_payload(
-              inventory,request_identity=request["identity"],request_key=request["request_key"],
-              trusted_policy_context=policy,gate_job=gate_jobs[0],
-              workflow_ref=os.environ["GITHUB_WORKFLOW_REF"],
-              workflow_sha=os.environ["GITHUB_WORKFLOW_SHA"],
-              workflow_run_id=run_id,run_attempt=attempt,
-          )
-          output=pathlib.Path(os.environ["RUNNER_TEMP"])/artifact_module.PLAN_V2_MEMBER
-          output.write_bytes(artifact_module.canonical_bytes(payload)+b"\n")
-          artifact_name=artifact_module.plan_artifact_name(run_id,attempt)
-          unit_matrix=[{"unit_id":unit,"artifact_name":artifact_module.result_artifact_name(run_id,attempt,unit)}
-                       for unit in payload["required_test_units"]]
-          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a",encoding="utf-8") as stream:
-              stream.write("plan_artifact_name="+artifact_name+"\n")
-              stream.write("unit_matrix="+json.dumps(unit_matrix,sort_keys=True,separators=(",",":"))+"\n")
           PY
       - name: Write required planner artifact
         env:
@@ -751,16 +696,6 @@ jobs:
               json.dumps(payload,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8"
           )
           PY
-      - id: upload-plan-v2
-        name: Upload exact-attempt required plan v2
-        if: ${{ inputs.request_key != '' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.keyed-plan.outputs.plan_artifact_name }}
-          path: ${{ runner.temp }}/oasis7-required-plan-v2.json
-          if-no-files-found: error
-          retention-days: 7
-          overwrite: false
       - name: Upload required planner artifact
         uses: actions/upload-artifact@v7
         with:
@@ -769,45 +704,318 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           overwrite: true
+      - name: Install product-document Markdown parser for plan baseline
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
+      - id: dispatch
+        name: Freeze internal same-attempt dispatch and exact Git objects
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+          AUTHORITY_OID: ${{ steps.pr_target.outputs.oid || github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          python3 -I scripts/pm/ci_required_workflow.py prepare \
+            --root "${GITHUB_WORKSPACE}" --target "${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}" \
+            --transport "${RUNNER_TEMP}/required-transport" --scope "${RUNNER_TEMP}/required-scope-outputs.json" \
+            --authority "${AUTHORITY_OID}" --planner-authority '${{ steps.scope.outputs.planner_authority_oid }}' \
+            --policy "${RUNNER_TEMP}/trusted-ci-policy.json" --projection "${RUNNER_TEMP}/impact-projection.json" \
+            --integration "${RUNNER_TEMP}/integration.json" --run-mode '${{ inputs.run_mode }}' \
+            --pr-number '${{ github.event.pull_request.number || inputs.pr_number || 0 }}' --request-key '${{ inputs.request_key }}'
+      - id: upload-transport
+        name: Upload exact attempt internal scheduling transport
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.dispatch.outputs.transport_name }}
+          path: ${{ runner.temp }}/required-transport/*
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+
+  required-work:
+    name: ${{ matrix.worker && format('required-work ({0})', matrix.worker) || 'required-work' }}
+    needs: required-plan
+    if: ${{ needs.required-plan.result == 'success' && needs.required-plan.outputs.has_workers == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      issues: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include: ${{ fromJSON(needs.required-plan.outputs.worker_matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Preserve workflow orchestration before exact M checkout
+        run: |
+          mkdir -p "${RUNNER_TEMP}/required-workflow-tools"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/required-workflow-tools/"
+      - name: Download exact attempt scheduling artifact by ID
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.required-plan.outputs.transport_id }}
+          path: ${{ runner.temp }}/required-transport
+      - id: restore
+        name: Materialize exact frozen M and trusted executor objects
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I "${RUNNER_TEMP}/required-workflow-tools/ci_required_workflow.py" materialize \
+            --root "${GITHUB_WORKSPACE}" --transport "${RUNNER_TEMP}/required-transport" \
+            --authority-root "${RUNNER_TEMP}/required-authority" \
+            --artifact-id '${{ needs.required-plan.outputs.transport_id }}' \
+            --tested-sha '${{ needs.required-plan.outputs.tested_sha }}' \
+            --tested-tree '${{ needs.required-plan.outputs.tested_tree }}' \
+            --authority-oid '${{ needs.required-plan.outputs.authority_oid }}' \
+            --transport-digest '${{ needs.required-plan.outputs.transport_digest }}'
+      - id: resources
+        name: Resolve resources from trusted selected worker
+        run: |
+          python3 -I "${RUNNER_TEMP}/required-authority/scripts/pm/ci_required_workflow.py" resources \
+            --transport "${RUNNER_TEMP}/required-transport" --worker '${{ matrix.worker }}'
       - name: Install pinned Rust toolchains
-        if: ${{ steps.scope.outputs.run_rust_baseline == 'true' || steps.scope.outputs.run_workflow_governance_contracts == 'true' || steps.scope.outputs.run_cargo_tooling_contracts == 'true' }}
+        if: steps.resources.outputs.needs_rust_toolchain == 'true'
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rustfmt --component clippy
           rustup default "${RUST_TOOLCHAIN}"
-          if [[ "${{ steps.scope.outputs.needs_wasm_target }}" == "true" ]]; then
-            rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          if [[ '${{ steps.resources.outputs.needs_wasm_target }}' == true ]]; then
+            rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${RUST_TOOLCHAIN}"
+            rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
+            rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
           fi
       - name: Install cargo-deny
-        if: ${{ steps.scope.outputs.run_rust_baseline == 'true' || steps.scope.outputs.run_workflow_governance_contracts == 'true' || steps.scope.outputs.run_cargo_tooling_contracts == 'true' }}
+        if: steps.resources.outputs.needs_rust_toolchain == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny@0.19.9
       - uses: actions/setup-node@v6
-        if: ${{ steps.scope.outputs.needs_node == 'true' }}
+        if: steps.resources.outputs.needs_node == 'true'
         with:
           node-version: '22'
       - name: Install viewer web dependencies
-        if: ${{ steps.scope.outputs.needs_node == 'true' }}
+        if: steps.resources.outputs.needs_node == 'true'
+        run: npm ci --prefix crates/oasis7_viewer
+      - uses: Swatinem/rust-cache@v2
+        if: steps.resources.outputs.needs_rust_toolchain == 'true'
+        with:
+          workspaces: . -> target
+          shared-key: ci-required-parallel-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ matrix.worker }}
+          save-if: ${{ steps.resources.outputs.cache_write == 'true' }}
+      - name: Restore exact Trunk binary cache
+        if: steps.resources.outputs.needs_trunk == 'true'
+        id: trunk-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.local/share/oasis7/trunk/${{ env.TRUNK_VERSION }}
+          key: trunk-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.TRUNK_VERSION }}
+      - name: Install exact precompiled Trunk binary
+        if: steps.resources.outputs.needs_trunk == 'true'
+        run: |
+          set -euo pipefail
+          trunk_root="${HOME}/.local/share/oasis7/trunk/${TRUNK_VERSION}"
+          if [[ ! -x "${trunk_root}/trunk" ]]; then
+            mkdir -p "${trunk_root}"
+            release="https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}"
+            archive=trunk-x86_64-unknown-linux-gnu.tar.gz
+            curl --fail --location --retry 3 "${release}/${archive}" --output "${RUNNER_TEMP}/${archive}"
+            printf '%s  %s\n' 'f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b' "${RUNNER_TEMP}/${archive}" | sha256sum --check -
+            tar -xzf "${RUNNER_TEMP}/${archive}" -C "${trunk_root}" trunk
+          fi
+          "${trunk_root}/trunk" --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+          echo "${trunk_root}" >>"${GITHUB_PATH}"
+      - name: Save verified Trunk binary cache from web owner
+        if: ${{ steps.resources.outputs.needs_trunk == 'true' && matrix.worker == 'web' && steps.trunk-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.local/share/oasis7/trunk/${{ env.TRUNK_VERSION }}
+          key: trunk-binary-${{ runner.os }}-${{ runner.arch }}-${{ env.TRUNK_VERSION }}
+      - name: Install system deps
+        if: steps.resources.outputs.needs_system_deps == 'true'
+        run: |
+          apt_options=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+          )
+          max_attempts=3
+          run_apt() {
+            local operation="$1"
+            shift
+            local attempt
+            for ((attempt=1; attempt<=max_attempts; attempt++)); do
+              echo "apt ${operation} attempt ${attempt}/${max_attempts}"
+              if sudo timeout --foreground 120s apt-get "${apt_options[@]}" "$@"; then
+                return 0
+              fi
+              if (( attempt < max_attempts )); then
+                echo "warning: apt ${operation} failed; retrying" >&2
+                sleep 5
+              fi
+            done
+            echo "error: apt ${operation} failed after ${max_attempts} attempts" >&2
+            return 1
+          }
+          run_apt update update
+          run_apt install install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - name: Install pinned Markdown runtime
+        if: steps.resources.outputs.needs_markdown == 'true'
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
+      - name: Execute only the frozen selected worker
         env:
-          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I "${RUNNER_TEMP}/required-authority/scripts/pm/ci_required_workflow.py" worker \
+            --transport "${RUNNER_TEMP}/required-transport" --root "${GITHUB_WORKSPACE}" \
+            --authority-root "${RUNNER_TEMP}/required-authority" --worker '${{ matrix.worker }}' \
+            --output "${RUNNER_TEMP}/worker-result"
+      - name: Upload exact same-attempt completed worker record
+        uses: actions/upload-artifact@v7
+        with:
+          name: required-worker-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.worker }}
+          path: ${{ runner.temp }}/worker-result/**
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 7
+      - name: Upload selected Viewer performance evidence
+        if: ${{ always() && matrix.worker == 'web' && needs.required-plan.outputs.run_viewer_perf_smoke == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: viewer-performance-required-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/ci/viewer-performance/**
+          if-no-files-found: error
+          retention-days: 7
+
+  required-gate:
+    needs: [required-plan, required-work]
+    if: always() && (github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'))
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      execution_contract: ${{ needs.required-plan.outputs.execution_contract }}
+      required_plan_v2_artifact_id: ${{ steps.upload-plan-v2.outputs.artifact-id }}
+      required_plan_v2_artifact_name: ${{ steps.keyed-plan.outputs.plan_artifact_name }}
+      required_unit_matrix: ${{ steps.keyed-plan.outputs.unit_matrix }}
+      run_operational_contracts: ${{ needs.required-plan.outputs.run_operational_contracts }}
+      run_workflow_governance_contracts: ${{ needs.required-plan.outputs.run_workflow_governance_contracts }}
+      run_packaging_contracts: ${{ needs.required-plan.outputs.run_packaging_contracts }}
+      run_doc_checker_contracts: ${{ needs.required-plan.outputs.run_doc_checker_contracts }}
+      run_cargo_tooling_contracts: ${{ needs.required-plan.outputs.run_cargo_tooling_contracts }}
+      run_site_contract_tests: ${{ needs.required-plan.outputs.run_site_contract_tests }}
+    steps:
+      - name: Require successful explicit planning
+        run: |
+          [[ '${{ needs.required-plan.result }}' == success ]] || { echo 'required planning failed or missing' >&2; exit 1; }
+          [[ '${{ needs.required-plan.outputs.execution_layout }}' == required-serial/v1 || '${{ needs.required-plan.outputs.execution_layout }}' == required-parallel/v1 ]] || exit 1
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Preserve workflow orchestration before exact M checkout
+        run: |
+          mkdir -p "${RUNNER_TEMP}/required-workflow-tools"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/required-workflow-tools/"
+      - name: Download exact attempt scheduling artifact by ID
+        uses: actions/download-artifact@v7
+        with:
+          artifact-ids: ${{ needs.required-plan.outputs.transport_id }}
+          path: ${{ runner.temp }}/required-transport
+      - id: restore
+        name: Materialize exact frozen M and trusted executor objects
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I "${RUNNER_TEMP}/required-workflow-tools/ci_required_workflow.py" materialize \
+            --root "${GITHUB_WORKSPACE}" --transport "${RUNNER_TEMP}/required-transport" \
+            --authority-root "${RUNNER_TEMP}/required-authority" \
+            --artifact-id '${{ needs.required-plan.outputs.transport_id }}' \
+            --tested-sha '${{ needs.required-plan.outputs.tested_sha }}' \
+            --tested-tree '${{ needs.required-plan.outputs.tested_tree }}' \
+            --authority-oid '${{ needs.required-plan.outputs.authority_oid }}' \
+            --transport-digest '${{ needs.required-plan.outputs.transport_digest }}'
+      - name: Restore frozen planner inputs and protected serial driver
+        run: |
+          cp "${RUNNER_TEMP}/required-transport/scope.json" "${RUNNER_TEMP}/required-scope-outputs.json"
+          if [[ -f "${RUNNER_TEMP}/required-transport/impact-projection.json" ]]; then
+            cp "${RUNNER_TEMP}/required-transport/impact-projection.json" "${RUNNER_TEMP}/impact-projection.json"
+          fi
+          if [[ -f "${RUNNER_TEMP}/required-transport/trusted-ci-policy.json" ]]; then
+            cp "${RUNNER_TEMP}/required-transport/trusted-ci-policy.json" "${RUNNER_TEMP}/trusted-ci-policy.json"
+          fi
+          mkdir -p "${RUNNER_TEMP}/integration-planner"
+          cp -R "${RUNNER_TEMP}/required-authority/scripts/." "${RUNNER_TEMP}/integration-planner/"
+      - name: Prepare pinned Cargo metadata toolchain for final issuer
+        if: ${{ inputs.request_key != '' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation') }}
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal
+          rustup default "${RUST_TOOLCHAIN}"
+      - name: Install pinned Rust toolchains
+        if: ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && (needs.required-plan.outputs.run_rust_baseline == 'true' || needs.required-plan.outputs.run_workflow_governance_contracts == 'true' || needs.required-plan.outputs.run_cargo_tooling_contracts == 'true') }}
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rustfmt --component clippy
+          rustup default "${RUST_TOOLCHAIN}"
+          if [[ "${{ needs.required-plan.outputs.needs_wasm_target }}" == "true" ]]; then
+            rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          fi
+      - name: Install cargo-deny
+        if: ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && (needs.required-plan.outputs.run_rust_baseline == 'true' || needs.required-plan.outputs.run_workflow_governance_contracts == 'true' || needs.required-plan.outputs.run_cargo_tooling_contracts == 'true') }}
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.9
+      - uses: actions/setup-node@v6
+        if: ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && (needs.required-plan.outputs.needs_node == 'true') }}
+        with:
+          node-version: '22'
+      - name: Install viewer web dependencies
+        if: ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && (needs.required-plan.outputs.needs_node == 'true') }}
+        env:
+          INTEGRATION_WORKTREE: ${{ github.workspace }}
         run: npm ci --prefix "${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}/crates/oasis7_viewer"
       - uses: Swatinem/rust-cache@v2
-        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' || steps.scope.outputs.run_cargo_tooling_contracts == 'true' }}
+        if: ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && (needs.required-plan.outputs.run_oasis7_required_tests == 'true' || needs.required-plan.outputs.run_consensus_tests == 'true' || needs.required-plan.outputs.run_distfs_tests == 'true' || needs.required-plan.outputs.run_oasis7_node_tests == 'true' || needs.required-plan.outputs.run_oasis7_net_tests == 'true' || needs.required-plan.outputs.run_oasis7_net_libp2p_tests == 'true' || needs.required-plan.outputs.run_viewer_wasm_check == 'true' || needs.required-plan.outputs.run_viewer_contract_tests == 'true' || needs.required-plan.outputs.run_launcher_web_build == 'true' || needs.required-plan.outputs.run_oasis7_workspace_support_crate_tests == 'true' || needs.required-plan.outputs.run_cargo_tooling_contracts == 'true') }}
         with:
           shared-key: ci-required-gate-v1
       - name: Install trunk
-        if: ${{ steps.scope.outputs.needs_trunk == 'true' }}
-        run: cargo install trunk --locked
+        if: ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && (needs.required-plan.outputs.needs_trunk == 'true') }}
+        run: |
+          set -euo pipefail
+          archive=trunk-x86_64-unknown-linux-gnu.tar.gz
+          release="https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}"
+          curl --fail --location --retry 3 "${release}/${archive}" --output "${RUNNER_TEMP}/${archive}"
+          printf '%s  %s\n' 'f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b' "${RUNNER_TEMP}/${archive}" | sha256sum --check -
+          mkdir -p "${HOME}/.local/bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${HOME}/.local/bin" trunk
+          "${HOME}/.local/bin/trunk" --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+          echo "${HOME}/.local/bin" >>"${GITHUB_PATH}"
       - name: Install system deps
         if: >-
-          ${{ steps.scope.outputs.needs_system_deps == 'true' ||
-              (steps.scope.outputs.execution_contract == '' &&
-               (steps.scope.outputs.run_oasis7_required_tests == 'true' ||
-                steps.scope.outputs.run_viewer_contract_tests == 'true' ||
-                steps.scope.outputs.run_viewer_wasm_check == 'true' ||
-                steps.scope.outputs.run_viewer_perf_smoke == 'true' ||
-                steps.scope.outputs.run_launcher_web_build == 'true' ||
-                steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true')) }}
+          ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && (needs.required-plan.outputs.needs_system_deps == 'true' ||
+              (needs.required-plan.outputs.execution_contract == '' &&
+               (needs.required-plan.outputs.run_oasis7_required_tests == 'true' ||
+                needs.required-plan.outputs.run_viewer_contract_tests == 'true' ||
+                needs.required-plan.outputs.run_viewer_wasm_check == 'true' ||
+                needs.required-plan.outputs.run_viewer_perf_smoke == 'true' ||
+                needs.required-plan.outputs.run_launcher_web_build == 'true' ||
+                needs.required-plan.outputs.run_oasis7_workspace_support_crate_tests == 'true'))) }}
         run: |
           apt_options=(
             -o Acquire::Retries=3
@@ -848,51 +1056,52 @@ jobs:
       - name: Install product-document Markdown parser
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run required test tier
+        if: steps.restore.outputs.execution_layout == 'required-serial/v1'
         id: required-gate-tests
         env:
           GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
-          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
-          OASIS7_CI_EXECUTION_CONTRACT: ${{ steps.scope.outputs.execution_contract }}
-          OASIS7_CI_RUN_REQUIRED_GATE_BASELINE: ${{ steps.scope.outputs.run_required_gate_baseline }}
-          OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
-          OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
-          OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
-          OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ steps.scope.outputs.run_consensus_tests }}
-          OASIS7_CI_RUN_DISTFS_TESTS: ${{ steps.scope.outputs.run_distfs_tests }}
-          OASIS7_CI_RUN_OASIS7_NODE_TESTS: ${{ steps.scope.outputs.run_oasis7_node_tests }}
-          OASIS7_CI_RUN_OASIS7_NET_TESTS: ${{ steps.scope.outputs.run_oasis7_net_tests }}
-          OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS: ${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}
-          OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS: ${{ steps.scope.outputs.run_viewer_contract_tests }}
-          OASIS7_CI_RUN_VIEWER_WASM_CHECK: ${{ steps.scope.outputs.run_viewer_wasm_check }}
-          OASIS7_CI_RUN_VIEWER_PERF_SMOKE: ${{ steps.scope.outputs.run_viewer_perf_smoke }}
-          OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS: ${{ steps.scope.outputs.run_pixel_world_bridge_lib_tests }}
-          OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK: ${{ steps.scope.outputs.run_pixel_world_bridge_wasm_check }}
-          OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}
-          OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
-          OASIS7_CI_RUN_SCENARIO_REGRESSION: ${{ steps.scope.outputs.run_scenario_regression }}
-          OASIS7_CI_RUN_OPERATIONAL_CONTRACTS: ${{ steps.scope.outputs.run_operational_contracts }}
-          OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS: ${{ steps.scope.outputs.run_workflow_governance_contracts }}
-          OASIS7_CI_RUN_PACKAGING_CONTRACTS: ${{ steps.scope.outputs.run_packaging_contracts }}
-          OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS: ${{ steps.scope.outputs.run_doc_checker_contracts }}
-          OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS: ${{ steps.scope.outputs.run_cargo_tooling_contracts }}
-          OASIS7_CI_RUN_SITE_CONTRACT_TESTS: ${{ steps.scope.outputs.run_site_contract_tests }}
-          OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
-          OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
-          OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
-          OASIS7_CI_NEEDS_PYTHON: ${{ steps.scope.outputs.needs_python }}
-          OASIS7_CI_NEEDS_MARKDOWN: ${{ steps.scope.outputs.needs_markdown }}
-          OASIS7_CI_NEEDS_RUST_TOOLCHAIN: ${{ steps.scope.outputs.needs_rust_toolchain }}
-          OASIS7_CI_NEEDS_NODE: ${{ steps.scope.outputs.needs_node }}
-          OASIS7_CI_NEEDS_SYSTEM_DEPS: ${{ steps.scope.outputs.needs_system_deps }}
-          OASIS7_CI_NEEDS_TRUNK: ${{ steps.scope.outputs.needs_trunk }}
-          OASIS7_CI_NEEDS_WASM_TARGET: ${{ steps.scope.outputs.needs_wasm_target }}
+          INTEGRATION_WORKTREE: ${{ github.workspace }}
+          OASIS7_CI_EXECUTION_CONTRACT: ${{ needs.required-plan.outputs.execution_contract }}
+          OASIS7_CI_RUN_REQUIRED_GATE_BASELINE: ${{ needs.required-plan.outputs.run_required_gate_baseline }}
+          OASIS7_PRODUCT_DOC_BASE: ${{ needs.required-plan.outputs.source_scope_base }}
+          OASIS7_PRODUCT_DOC_HEAD: ${{ needs.required-plan.outputs.head_oid }}
+          OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ needs.required-plan.outputs.run_oasis7_required_tests }}
+          OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ needs.required-plan.outputs.run_consensus_tests }}
+          OASIS7_CI_RUN_DISTFS_TESTS: ${{ needs.required-plan.outputs.run_distfs_tests }}
+          OASIS7_CI_RUN_OASIS7_NODE_TESTS: ${{ needs.required-plan.outputs.run_oasis7_node_tests }}
+          OASIS7_CI_RUN_OASIS7_NET_TESTS: ${{ needs.required-plan.outputs.run_oasis7_net_tests }}
+          OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS: ${{ needs.required-plan.outputs.run_oasis7_net_libp2p_tests }}
+          OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS: ${{ needs.required-plan.outputs.run_viewer_contract_tests }}
+          OASIS7_CI_RUN_VIEWER_WASM_CHECK: ${{ needs.required-plan.outputs.run_viewer_wasm_check }}
+          OASIS7_CI_RUN_VIEWER_PERF_SMOKE: ${{ needs.required-plan.outputs.run_viewer_perf_smoke }}
+          OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS: ${{ needs.required-plan.outputs.run_pixel_world_bridge_lib_tests }}
+          OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK: ${{ needs.required-plan.outputs.run_pixel_world_bridge_wasm_check }}
+          OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ needs.required-plan.outputs.run_launcher_web_build }}
+          OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ needs.required-plan.outputs.run_oasis7_workspace_support_crate_tests }}
+          OASIS7_CI_RUN_SCENARIO_REGRESSION: ${{ needs.required-plan.outputs.run_scenario_regression }}
+          OASIS7_CI_RUN_OPERATIONAL_CONTRACTS: ${{ needs.required-plan.outputs.run_operational_contracts }}
+          OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS: ${{ needs.required-plan.outputs.run_workflow_governance_contracts }}
+          OASIS7_CI_RUN_PACKAGING_CONTRACTS: ${{ needs.required-plan.outputs.run_packaging_contracts }}
+          OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS: ${{ needs.required-plan.outputs.run_doc_checker_contracts }}
+          OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS: ${{ needs.required-plan.outputs.run_cargo_tooling_contracts }}
+          OASIS7_CI_RUN_SITE_CONTRACT_TESTS: ${{ needs.required-plan.outputs.run_site_contract_tests }}
+          OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ needs.required-plan.outputs.run_codex_agent_config_validation }}
+          OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ needs.required-plan.outputs.run_compile_metrics_contract_tests }}
+          OASIS7_CI_RUN_RUST_BASELINE: ${{ needs.required-plan.outputs.run_rust_baseline }}
+          OASIS7_CI_NEEDS_PYTHON: ${{ needs.required-plan.outputs.needs_python }}
+          OASIS7_CI_NEEDS_MARKDOWN: ${{ needs.required-plan.outputs.needs_markdown }}
+          OASIS7_CI_NEEDS_RUST_TOOLCHAIN: ${{ needs.required-plan.outputs.needs_rust_toolchain }}
+          OASIS7_CI_NEEDS_NODE: ${{ needs.required-plan.outputs.needs_node }}
+          OASIS7_CI_NEEDS_SYSTEM_DEPS: ${{ needs.required-plan.outputs.needs_system_deps }}
+          OASIS7_CI_NEEDS_TRUNK: ${{ needs.required-plan.outputs.needs_trunk }}
+          OASIS7_CI_NEEDS_WASM_TARGET: ${{ needs.required-plan.outputs.needs_wasm_target }}
           OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE: "false"
           OASIS7_CI_RUN_PROVIDER_LIVE_GATE: "false"
-          OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
-          OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
-          OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
-          OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}
+          OASIS7_CARGO_SCOPE_BASE: ${{ needs.required-plan.outputs.source_scope_base }}
+          OASIS7_CARGO_SCOPE_HEAD: ${{ needs.required-plan.outputs.head_oid }}
+          OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ needs.required-plan.outputs.integration_base_oid }}
+          OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ needs.required-plan.outputs.scope == 'full' }}
         run: |
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
           export OASIS7_CARGO_SCOPE_FULL_PLAN="${RUNNER_TEMP}/required-scope-outputs.json"
@@ -904,7 +1113,7 @@ jobs:
                git show "${OASIS7_CARGO_SCOPE_INTEGRATION_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
               export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
-              export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ steps.scope.outputs.integration_base_oid }}"
+              export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ needs.required-plan.outputs.integration_base_oid }}"
               export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${OASIS7_CARGO_SCOPE_HEAD}"
             fi
           fi
@@ -943,7 +1152,7 @@ jobs:
               # The planner's target selector is "native" for every host-native profile item.
               if item["target"] == "native":
                   environment["OASIS7_WASM_BUILD_STD"] = "0"
-              completed = subprocess.run(command, env=environment, check=False)
+              completed = subprocess.run(command, cwd=os.environ.get("INTEGRATION_WORKTREE") or os.environ["GITHUB_WORKSPACE"], env=environment, check=False)
               results.append({
                   "item_id": item["id"], "status": "passed" if completed.returncode == 0 else "failed",
                   "exit_code": completed.returncode, "plan_id": plan["plan_id"],
@@ -969,13 +1178,12 @@ jobs:
           import hashlib, json, os, pathlib, subprocess, sys
           plan_path, results_path, receipt_path, envelope_path = map(pathlib.Path, sys.argv[1:])
           plan = json.loads(plan_path.read_text(encoding="utf-8"))
-          checks = json.loads(subprocess.check_output([
-              "gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/commits/{os.environ['GITHUB_SHA']}/check-runs?per_page=100"
-          ], text=True)).get("check_runs", [])
-          matches = [check for check in checks
-                     if check.get("name") == "required-gate"
-                     and f"/actions/runs/{os.environ['GITHUB_RUN_ID']}" in str(check.get("details_url") or "")]
-          if len(matches) != 1:
+          sys.path.insert(0,str(pathlib.Path(os.environ["RUNNER_TEMP"])/"required-authority/scripts/pm"))
+          import integration_ci
+          matches=integration_ci.attempt_execution_jobs(
+              os.environ["GITHUB_REPOSITORY"],int(os.environ["GITHUB_RUN_ID"]),int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              os.environ["GITHUB_WORKFLOW_SHA"],15368,job_names={"required-gate"})
+          if len(matches) != 1 or matches[0]["status"] != "in_progress":
               raise SystemExit("exact required-gate check run identity is unavailable")
           check = matches[0]
           digest = lambda path: "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
@@ -987,8 +1195,8 @@ jobs:
               "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
               "run_id": int(os.environ["GITHUB_RUN_ID"]),
               "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
-              "check_name": "required-gate", "check_app_id": int(check["app"]["id"]),
-              "check_run_id": int(check["id"]),
+              "check_name": "required-gate", "check_app_id": check["check_app_id"],
+              "check_run_id": check["check_run_id"],
               "integration_base": plan["integration_base"], "source_head": plan["source_head"],
               "tested_tree": plan["tested_tree"], "plan_digest": digest(plan_path),
               "results_digest": digest(results_path), "receipt_digest": digest(receipt_path),
@@ -998,48 +1206,56 @@ jobs:
             target_root="${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}"
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${target_root}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
-            if [[ -n '${{ steps.scope.outputs.maintenance_authority_comment_id }}' ]]; then
+            if [[ -n '${{ needs.required-plan.outputs.maintenance_authority_comment_id }}' ]]; then
               protected_driver="${RUNNER_TEMP}/current-target-protected-driver"
               mkdir -p "${protected_driver}"
-              git archive '${{ steps.pr_target.outputs.oid }}' scripts | tar -x -C "${protected_driver}"
+              git archive '${{ needs.required-plan.outputs.current_target_oid }}' scripts | tar -x -C "${protected_driver}"
               CI_VERBOSE=1 bash "${protected_driver}/scripts/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
             else
-              CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+              CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
             fi
           else
-            CI_VERBOSE=1 ./scripts/ci-tests.sh required
+            CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}"
           fi
+      - name: Verify all exact-attempt workers and complete gate obligations
+        if: steps.restore.outputs.execution_layout == 'required-parallel/v1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I "${RUNNER_TEMP}/required-authority/scripts/pm/ci_required_workflow.py" finalize \
+            --transport "${RUNNER_TEMP}/required-transport" --root "${GITHUB_WORKSPACE}" \
+            --authority-root "${RUNNER_TEMP}/required-authority" --results "${RUNNER_TEMP}/required-worker-results"
       - name: Verify final task and PR binding before required-gate success
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
+          base_ref="${{ needs.required-plan.outputs.current_target_oid || inputs.integration_base }}"
           head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
           pr_number="${{ github.event.pull_request.number || inputs.pr_number }}"
           planner_args=(
-            --scope-base-oid "${{ steps.scope.outputs.source_scope_base }}"
-            --planner-config-sha256 "${{ steps.scope.outputs.planner_config_sha256 }}"
-            --planner-digest "${{ steps.scope.outputs.planner_digest }}"
-            --projection-digest "${{ steps.scope.outputs.impact_projection_digest }}"
+            --scope-base-oid "${{ needs.required-plan.outputs.source_scope_base }}"
+            --planner-config-sha256 "${{ needs.required-plan.outputs.planner_config_sha256 }}"
+            --planner-digest "${{ needs.required-plan.outputs.planner_digest }}"
+            --projection-digest "${{ needs.required-plan.outputs.impact_projection_digest }}"
           )
           tool_ref="${base_ref}"
           maintenance_args=()
-          if [[ -n '${{ steps.scope.outputs.maintenance_authority_comment_id }}' ]]; then
+          if [[ -n '${{ needs.required-plan.outputs.maintenance_authority_comment_id }}' ]]; then
             tool_ref="${head_ref}"
-            maintenance_args=(--maintenance-authority-comment-id '${{ steps.scope.outputs.maintenance_authority_comment_id }}')
+            maintenance_args=(--maintenance-authority-comment-id '${{ needs.required-plan.outputs.maintenance_authority_comment_id }}')
           fi
           if git show "${tool_ref}:scripts/pm/loop-ci.py" >"${RUNNER_TEMP}/oasis7-loop-ci-final.py"; then
             if python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --help 2>&1 | grep -Fq -- '--phase'; then
-              if [[ "${{ steps.loop-ci-admission.outputs.start_only }}" == "true" ]]; then
+              if [[ "${{ needs.required-plan.outputs.start_only }}" == "true" ]]; then
                 python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed --start-only \
                   --repository "${{ github.repository }}" --pr-number "${pr_number}" \
-                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" "${maintenance_args[@]}"
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" ${maintenance_args[@]+"${maintenance_args[@]}"}
               else
                 python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" --phase final --tests-passed \
                   --repository "${{ github.repository }}" --pr-number "${pr_number}" \
-                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" "${maintenance_args[@]}"
+                  --base "${base_ref}" --head "${head_ref}" "${planner_args[@]}" ${maintenance_args[@]+"${maintenance_args[@]}"}
               fi
             else
               python3 -I "${RUNNER_TEMP}/oasis7-loop-ci-final.py" \
@@ -1102,7 +1318,7 @@ jobs:
           path: output/cargo-package-profile/cargo-package-profile-envelope.json
           if-no-files-found: error
       - name: Upload selected Viewer performance evidence
-        if: ${{ always() && steps.scope.outputs.run_viewer_perf_smoke == 'true' }}
+        if: ${{ always() && steps.restore.outputs.execution_layout == 'required-serial/v1' && needs.required-plan.outputs.run_viewer_perf_smoke == 'true' }}
         uses: actions/upload-artifact@v7
         with:
           name: viewer-performance-required-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1110,15 +1326,137 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Run execution bridge binary unit suite
-        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' }}
+        if: ${{ steps.restore.outputs.execution_layout == 'required-serial/v1' && needs.required-plan.outputs.run_oasis7_required_tests == 'true' }}
         env:
-          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+          INTEGRATION_WORKTREE: ${{ github.workspace }}
         run: |
           set -euo pipefail
           if [[ -n "${INTEGRATION_WORKTREE}" ]]; then cd "${INTEGRATION_WORKTREE}"; fi
           env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime \
             --features test_tier_required \
             execution_bridge_real_tests::real_execution_bridge::tests
+      - name: Install pinned Markdown runtime for keyed inventory observation
+        if: ${{ inputs.request_key != '' }}
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
+      - id: keyed-plan
+        name: Build attempt-scoped required-plan v2 from trusted W and M
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
+          INTEGRATION_JSON_PATH: ${{ runner.temp }}/required-transport/integration.json
+          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
+          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
+          INTEGRATION_BASE: ${{ inputs.integration_base }}
+          INTEGRATION_HEAD: ${{ inputs.expected_head }}
+          INTEGRATION_UID: ${{ inputs.task_uid }}
+          INTEGRATION_PR: ${{ inputs.pr_number }}
+          INTEGRATION_WORKTREE: ${{ github.workspace }}
+          TRUSTED_POLICY_JSON: ${{ runner.temp }}/trusted-ci-policy.json
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${INTEGRATION_REQUEST_KEY}" ]]; then
+            echo 'unit_matrix=[]' >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          [[ -n "${INTEGRATION_WORKTREE:-}" ]] || {
+            echo "keyed required-plan needs the exact W/M integration worktree" >&2
+            exit 1
+          }
+          [[ -s "${TRUSTED_POLICY_JSON}" ]] || {
+            echo "keyed required-plan needs trusted workflow policy context" >&2
+            exit 1
+          }
+          python3 -I - <<'PY'
+          import base64, importlib.util, json, os, pathlib, sys
+          workspace=pathlib.Path(os.environ["RUNNER_TEMP"])/"required-authority"
+          scripts=workspace/"scripts"
+          sys.path.insert(0,str(scripts/"pm"))
+          sys.path.insert(0,str(scripts))
+          import ci_required_inventory as inventory_module
+          import ci_required_artifact_v2 as artifact_module
+          import integration_ci as integration_module
+          import integration_executor_contract as request_contract
+
+          plan_output=json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
+          envelope_identity={
+              "base_oid":os.environ["INTEGRATION_BASE"], "integration_base_oid":os.environ["INTEGRATION_BASE"],
+              "head_oid":os.environ["INTEGRATION_HEAD"], "task_uid":os.environ["INTEGRATION_UID"],
+              "planner_authority_oid":os.environ["GITHUB_WORKFLOW_SHA"],
+          }
+          for field,expected in envelope_identity.items():
+              if plan_output.pop(field,None)!=expected:
+                  raise SystemExit("frozen keyed planner envelope identity differs: "+field)
+          if "maintenance_authority_comment_id" in plan_output:
+              raise SystemExit("keyed trusted W inventory cannot inherit PR-only maintenance authority")
+          integration=json.loads(pathlib.Path(os.environ["INTEGRATION_JSON_PATH"]).read_text())
+          integration["integration_worktree"]=os.environ["GITHUB_WORKSPACE"]
+          if not isinstance(integration,dict) or not integration.get("integration_worktree"):
+              raise SystemExit("exact keyed M worktree identity is unavailable")
+          policy=json.loads(pathlib.Path(os.environ["TRUSTED_POLICY_JSON"]).read_text(encoding="utf-8"))
+          try:
+              request_raw=base64.b64decode(os.environ["INTEGRATION_REQUEST_B64"],validate=True)
+              request_envelope=json.loads(request_raw.decode("utf-8"))
+          except (ValueError,UnicodeDecodeError,json.JSONDecodeError) as exc:
+              raise SystemExit("canonical validation request cannot be decoded") from exc
+          request=request_contract.validation_request_envelope(request_envelope)
+          if request_raw!=request_contract.canonical_bytes(request):
+              raise SystemExit("validation request envelope is noncanonical")
+          if request["request_key"]!=os.environ["INTEGRATION_REQUEST_KEY"]:
+              raise SystemExit("validation request key differs from workflow input")
+          run_id=int(os.environ["GITHUB_RUN_ID"])
+          attempt=int(os.environ["GITHUB_RUN_ATTEMPT"])
+          app_id=policy["effective_policy"]["check_app_id"]
+          gate_jobs=integration_module.attempt_execution_jobs(
+              os.environ["GITHUB_REPOSITORY"],run_id,attempt,
+              os.environ["GITHUB_WORKFLOW_SHA"],app_id,job_names={"required-gate"},
+          )
+          if len(gate_jobs)!=1:
+              raise SystemExit("exact in-progress required-gate check is unavailable")
+          changed_raw=plan_output.get("changed_paths","")
+          changed_paths=changed_raw.split(";") if changed_raw else []
+          inventory=inventory_module.build_required_inventory(
+              workspace,pathlib.Path(integration["integration_worktree"]),
+              integration["tested_commit_oid"],plan_output,
+              repository=os.environ["GITHUB_REPOSITORY"],
+              workflow_ref=os.environ["GITHUB_WORKFLOW_REF"],
+              planner_authority_oid=os.environ["GITHUB_WORKFLOW_SHA"],
+              event_name="workflow_dispatch",run_mode="integration_revalidation",
+              changed_paths=changed_paths,base_ref=os.environ["INTEGRATION_BASE"],
+              head_ref=os.environ["INTEGRATION_HEAD"],task_uid=os.environ["INTEGRATION_UID"],
+              scope_base_oid=plan_output["source_scope_base"],
+              impact_projection=str(pathlib.Path(os.environ["RUNNER_TEMP"])/"impact-projection.json"),
+              run_id=run_id,run_attempt=attempt,check_app_id=app_id,
+              check_run_id=gate_jobs[0]["check_run_id"],
+          )
+          payload=artifact_module.assemble_plan_payload(
+              inventory,request_identity=request["identity"],request_key=request["request_key"],
+              trusted_policy_context=policy,gate_job=gate_jobs[0],
+              workflow_ref=os.environ["GITHUB_WORKFLOW_REF"],
+              workflow_sha=os.environ["GITHUB_WORKFLOW_SHA"],
+              workflow_run_id=run_id,run_attempt=attempt,
+              trusted_executor_context=request_contract.resolve_execution_layout(workspace, approved_digests=policy["effective_policy"]["approved_executor_contract_digests"]),
+          )
+          output=pathlib.Path(os.environ["RUNNER_TEMP"])/integration_module.PLAN_V2_MEMBER
+          output.write_bytes(artifact_module.canonical_bytes(payload)+b"\n")
+          artifact_name=artifact_module.plan_artifact_name(run_id,attempt)
+          unit_matrix=[{"unit_id":unit,"artifact_name":artifact_module.result_artifact_name(run_id,attempt,unit)}
+                       for unit in payload["required_test_units"]]
+          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a",encoding="utf-8") as stream:
+              stream.write("plan_artifact_name="+artifact_name+"\n")
+              stream.write("unit_matrix="+json.dumps(unit_matrix,sort_keys=True,separators=(",",":"))+"\n")
+          PY
+      - id: upload-plan-v2
+        name: Upload exact-attempt required plan v2
+        if: ${{ inputs.request_key != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.keyed-plan.outputs.plan_artifact_name }}
+          path: ${{ runner.temp }}/oasis7-required-plan-v2.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
 
   v1-reuse-validation-only:
     name: v1-reuse-validation-only
@@ -1202,8 +1540,8 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    needs: required-gate
-    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
+    needs: required-plan
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-plan.outputs.run_operational_contracts == 'true'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v6
@@ -1266,11 +1604,11 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    needs: required-gate
+    needs: required-plan
     if: >-
       (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) &&
-      (((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' || needs.required-gate.outputs.execution_contract == 'required-domain-split/v2') && needs.required-gate.outputs.run_packaging_contracts == 'true') ||
-       (needs.required-gate.outputs.execution_contract == '' && needs.required-gate.outputs.run_operational_contracts == 'true'))
+      (((needs.required-plan.outputs.execution_contract == 'required-domain-split/v1' || needs.required-plan.outputs.execution_contract == 'required-domain-split/v2') && needs.required-plan.outputs.run_packaging_contracts == 'true') ||
+       (needs.required-plan.outputs.execution_contract == '' && needs.required-plan.outputs.run_operational_contracts == 'true'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -1332,8 +1670,8 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    needs: required-gate
-    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
+    needs: required-plan
+    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-plan.outputs.run_operational_contracts == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -1430,6 +1768,9 @@ jobs:
         with:
           name: ${{ needs.required-gate.outputs.required_plan_v2_artifact_name }}
           path: ${{ runner.temp }}/required-plan-v2
+      - name: Resolve exact trusted execution layout for result reader
+        run: |
+          python3 -I scripts/pm/integration_executor_contract.py layout --root "${GITHUB_WORKSPACE}" >"${RUNNER_TEMP}/required-executor-context.json"
       - name: Resolve completed exact-attempt jobs and create unit result
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1462,6 +1803,7 @@ jobs:
             --plan "${RUNNER_TEMP}/required-plan-v2/oasis7-required-plan-v2.json" \
             --plan-artifact-id "${RESULT_PLAN_ARTIFACT_ID}" \
             --execution-jobs "${RUNNER_TEMP}/execution-jobs.json" \
+            --trusted-executor-context "${RUNNER_TEMP}/required-executor-context.json" \
             --unit-id "${RESULT_UNIT_ID}" \
             --output "${RUNNER_TEMP}/oasis7-required-result-v2.json"
       - name: Upload exact-attempt per-unit required result v2

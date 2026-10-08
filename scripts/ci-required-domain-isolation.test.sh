@@ -5,6 +5,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/ci-required-dispatch-fixture.lib.sh"
 trap ci_fixture_cleanup EXIT
 ci_fixture_init
 
+# The trusted shared command table and TSV must cover one another exactly.
+python3 "$ci_fixture_root/scripts/pm/ci-required-execution.test.py"
+
 inventory="$ci_fixture_root/scripts/ci-required-capability-test-inventory.tsv"
 [[ -s "$inventory" ]] || { echo "moved-call inventory is missing" >&2; exit 1; }
 awk -F '\t' 'NR == 1 { if (NF != 5) exit 1; next } NF != 5 { exit 1 }' "$inventory"

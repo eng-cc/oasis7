@@ -5,6 +5,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/ci-required-dispatch-fixture.lib.sh"
 trap ci_fixture_cleanup EXIT
 ci_fixture_init
 
+# Parallel baseline phases preserve actual checks without repeating Rust work.
+ci_fixture_run required-plan-baseline strict
+ci_fixture_assert_has 'doc-governance-check.sh'
+ci_fixture_assert_has 'check-rust-file-size.sh'
+ci_fixture_assert_lacks 'TOOL:cargo:'
+ci_fixture_assert_lacks 'pm/ci-ready-receipt.test.py'
+
+ci_fixture_run required-gate-completion strict
+ci_fixture_assert_lacks 'doc-governance-check.sh'
+ci_fixture_assert_lacks 'TOOL:cargo:'
+
 ci_fixture_run required strict
 ci_fixture_assert_has 'doc-governance-check.sh'
 ci_fixture_assert_lacks 'product-doc-governance-check.test.py'

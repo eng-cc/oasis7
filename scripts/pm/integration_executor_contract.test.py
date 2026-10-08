@@ -92,6 +92,43 @@ class ExecutorContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "policy is missing"):
             contract.require_approved_executor_contract(self.executor, [])
 
+    def test_versioned_layout_binds_complete_helper_closure(self):
+        contents = {path: ("trusted " + path).encode()
+                    for path in contract.PARALLEL_EXECUTOR_CONTRACT_PATHS}
+        contents["scripts/ci-required-scope.v2.json"] = json.dumps({
+            "execution_contract": "required-domain-split/v2",
+            "execution_layout": "required-parallel/v1"}).encode()
+        current = contract.executor_contract_from_contents(contents)
+        self.assertEqual("required-parallel/v1", contract.execution_layout_context(current)["execution_layout"])
+        self.assertEqual(current["digest"], contract.validate_executor_contract(current))
+        changed = dict(contents)
+        changed["scripts/pm/ci_required_execution.py"] += b"changed"
+        self.assertNotEqual(current["digest"], contract.executor_contract_from_contents(changed)["digest"])
+        del changed["scripts/pm/ci_required_workflow.py"]
+        with self.assertRaisesRegex(ValueError, "closure is incomplete"):
+            contract.executor_contract_from_contents(changed)
+        forged_legacy = {path: contents[path] for path in contract.EXECUTOR_CONTRACT_PATHS}
+        with self.assertRaisesRegex(ValueError, "layout and file closure disagree"):
+            contract.executor_contract_from_contents(forged_legacy)
+        unknown = copy.deepcopy(current)
+        unknown["execution_layout"] = "required-parallel/v99"
+        with self.assertRaisesRegex(ValueError, "unknown execution layout"):
+            contract.validate_executor_contract(unknown)
+
+    def test_legacy_bytes_have_original_digest_and_no_claimed_layout(self):
+        body = {"schema": contract.EXECUTOR_CONTRACT_SCHEMA, "files": self.executor["files"]}
+        self.assertEqual({**body, "digest": contract.canonical_digest(body)}, self.executor)
+        self.assertEqual("required-serial/v1", contract.execution_layout_context(self.executor)["execution_layout"])
+        forged = {**self.executor, "execution_layout": "required-serial/v1"}
+        with self.assertRaisesRegex(ValueError, "envelope is invalid"):
+            contract.validate_executor_contract(forged)
+
+    def test_unknown_legacy_configuration_is_not_absent_helper_fallback(self):
+        for config in ({}, {"execution_contract": "required-domain-split/v99"},
+                       {"execution_layout": "required-parallel/v99"}):
+            with self.subTest(config=config), self.assertRaises(ValueError):
+                contract.executor_contract_paths(json.dumps(config).encode())
+
 
 class ValidationRequestTests(unittest.TestCase):
     def test_request_key_binds_inputs_but_not_first_frozen_base(self):

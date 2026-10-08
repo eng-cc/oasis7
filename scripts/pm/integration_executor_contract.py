@@ -17,6 +17,9 @@ import tempfile
 from typing import Any
 
 EXECUTOR_CONTRACT_SCHEMA = "oasis7-ci-executor-contract/v1"
+EXECUTOR_CONTRACT_SCHEMA_V2 = "oasis7-ci-executor-contract/v2"
+EXECUTION_LAYOUT_CONTEXT_SCHEMA = "oasis7-trusted-execution-layout/v1"
+SUPPORTED_EXECUTION_LAYOUTS = ("required-serial/v1", "required-parallel/v1")
 VALIDATION_REQUEST_SCHEMA = "oasis7-ci-validation-request/v2"
 EFFECTIVE_POLICY_IDENTITY_SCHEMA = "oasis7-ci-effective-policy-identity/v1"
 VALIDATION_INTENT_ORDER_SCHEMA = "oasis7-ci-validation-intent-order/v1"
@@ -31,6 +34,31 @@ EXECUTOR_CONTRACT_PATHS = (
     "scripts/pm/workflow-impact-projection.py",
     "scripts/viewer-dependency-preflight.sh",
 )
+PARALLEL_EXECUTOR_CONTRACT_PATHS = (*EXECUTOR_CONTRACT_PATHS,
+    "scripts/pm/ci_required_execution.py",
+    "scripts/pm/ci_required_workflow.py",
+    "scripts/pm/ci_required_inventory.py",
+    "scripts/pm/ci_required_artifact_v2.py",
+    "scripts/ci-required-capability-test-inventory.tsv",
+)
+
+
+def executor_contract_paths(config_source: bytes) -> tuple[str, ...]:
+    """Select a closed file contract from trusted W configuration bytes."""
+    try:
+        config = json.loads(config_source)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("trusted execution configuration is malformed") from exc
+    if not isinstance(config, dict):
+        raise ValueError("trusted execution configuration is malformed")
+    layout = config.get("execution_layout")
+    if layout is None:
+        if config.get("execution_contract") != "required-domain-split/v2":
+            raise ValueError("unknown legacy execution contract")
+        return EXECUTOR_CONTRACT_PATHS
+    if layout not in SUPPORTED_EXECUTION_LAYOUTS:
+        raise ValueError("unknown execution layout")
+    return PARALLEL_EXECUTOR_CONTRACT_PATHS
 # A missing workflow run after a dispatch can be delayed API visibility, not
 # proof that GitHub did not accept the request. Never issue a second send for
 # that same key.
@@ -75,10 +103,27 @@ def _valid_digest(value: Any, label: str) -> str:
 
 def executor_contract_from_contents(contents: dict[str, bytes]) -> dict[str, Any]:
     """Build the content contract for the fixed executor dependency closure."""
-    if not isinstance(contents, dict) or set(contents) != set(EXECUTOR_CONTRACT_PATHS):
+    if not isinstance(contents, dict):
         raise ValueError("executor contract file closure is incomplete")
+    # Keep v1 construction byte-identical for historical approved contracts.
+    # Closure selection is explicit; an absent new helper never authorizes v1.
+    paths = PARALLEL_EXECUTOR_CONTRACT_PATHS if set(contents) == set(PARALLEL_EXECUTOR_CONTRACT_PATHS) else EXECUTOR_CONTRACT_PATHS
+    if set(contents) != set(paths):
+        raise ValueError("executor contract file closure is incomplete")
+    layout = None
+    if paths == EXECUTOR_CONTRACT_PATHS:
+        try:
+            declared = json.loads(contents["scripts/ci-required-scope.v2.json"])
+        except (ValueError, TypeError):
+            declared = None
+        if isinstance(declared, dict) and declared.get("execution_layout") is not None:
+            raise ValueError("executor layout and file closure disagree")
+    if paths == PARALLEL_EXECUTOR_CONTRACT_PATHS:
+        if executor_contract_paths(contents["scripts/ci-required-scope.v2.json"]) != paths:
+            raise ValueError("executor layout and file closure disagree")
+        layout = json.loads(contents["scripts/ci-required-scope.v2.json"])["execution_layout"]
     files = []
-    for path in EXECUTOR_CONTRACT_PATHS:
+    for path in paths:
         value = contents[path]
         if not isinstance(value, bytes):
             raise ValueError(f"executor contract content is invalid: {path}")
@@ -87,6 +132,8 @@ def executor_contract_from_contents(contents: dict[str, bytes]) -> dict[str, Any
             "sha256": "sha256:" + hashlib.sha256(value).hexdigest(),
         })
     body = {"schema": EXECUTOR_CONTRACT_SCHEMA, "files": files}
+    if layout is not None:
+        body.update(schema=EXECUTOR_CONTRACT_SCHEMA_V2, execution_layout=layout)
     return {**body, "digest": canonical_digest(body)}
 
 
@@ -94,7 +141,10 @@ def build_executor_contract(root: str | Path) -> dict[str, Any]:
     """Hash the trusted executor files from a checked out workflow revision."""
     root_path = Path(root).resolve(strict=True)
     contents: dict[str, bytes] = {}
-    for relative in EXECUTOR_CONTRACT_PATHS:
+    config_path = root_path / "scripts/ci-required-scope.v2.json"
+    if config_path.is_symlink():
+        raise ValueError("executor configuration contains a symlink")
+    for relative in executor_contract_paths(config_path.read_bytes()):
         path = root_path / relative
         # Refuse symlinks in the contract closure; their targets can otherwise
         # escape the revision that is being identified.
@@ -111,26 +161,59 @@ def build_executor_contract(root: str | Path) -> dict[str, Any]:
 
 def validate_executor_contract(value: Any) -> str:
     """Validate a contract envelope and return its recomputed digest."""
-    if not isinstance(value, dict) or set(value) != {"schema", "files", "digest"}:
+    if not isinstance(value, dict):
         raise ValueError("executor contract envelope is invalid")
-    if value.get("schema") != EXECUTOR_CONTRACT_SCHEMA:
+    schema = value.get("schema")
+    paths = EXECUTOR_CONTRACT_PATHS
+    fields = {"schema", "files", "digest"}
+    if schema == EXECUTOR_CONTRACT_SCHEMA_V2:
+        paths = PARALLEL_EXECUTOR_CONTRACT_PATHS
+        fields.add("execution_layout")
+        if value.get("execution_layout") not in SUPPORTED_EXECUTION_LAYOUTS:
+            raise ValueError("unknown execution layout")
+    elif schema != EXECUTOR_CONTRACT_SCHEMA:
         raise ValueError("executor contract schema is unsupported")
+    if set(value) != fields:
+        raise ValueError("executor contract envelope is invalid")
     files = value.get("files")
-    if not isinstance(files, list) or len(files) != len(EXECUTOR_CONTRACT_PATHS):
+    if not isinstance(files, list) or len(files) != len(paths):
         raise ValueError("executor contract file closure is incomplete")
     if any(not isinstance(item, dict) or set(item) != {"path", "sha256"}
            for item in files):
         raise ValueError("executor contract file record is invalid")
     paths = [item["path"] for item in files]
-    if paths != list(EXECUTOR_CONTRACT_PATHS):
+    if paths != list(PARALLEL_EXECUTOR_CONTRACT_PATHS if schema == EXECUTOR_CONTRACT_SCHEMA_V2 else EXECUTOR_CONTRACT_PATHS):
         raise ValueError("executor contract file ordering or closure is invalid")
     for item in files:
         _valid_digest(item["sha256"], f"executor contract digest for {item['path']}")
-    body = {"schema": EXECUTOR_CONTRACT_SCHEMA, "files": files}
+    body = {"schema": schema, "files": files}
+    if schema == EXECUTOR_CONTRACT_SCHEMA_V2:
+        body["execution_layout"] = value["execution_layout"]
     digest = canonical_digest(body)
     if value.get("digest") != digest:
         raise ValueError("executor contract digest mismatch")
     return digest
+
+
+def execution_layout_context(contract: Any) -> dict[str, str]:
+    """Interpret a verified exact-W contract, never artifact-declared layout."""
+    digest = validate_executor_contract(contract)
+    return {"schema": EXECUTION_LAYOUT_CONTEXT_SCHEMA,
+            "execution_layout": contract.get("execution_layout", "required-serial/v1"),
+            "executor_contract_digest": digest}
+
+
+KNOWN_LEGACY_EXECUTOR_DIGESTS = (
+    "sha256:43a77953bedd8acbf32e42e324e04108d05f36ede77b9830093106a08ce1dfe8",
+)
+
+
+def resolve_execution_layout(root: str | Path, *, approved_digests=None) -> dict[str, str]:
+    contract = build_executor_contract(root)
+    if contract["schema"] == EXECUTOR_CONTRACT_SCHEMA:
+        require_approved_executor_contract(contract, list(
+            KNOWN_LEGACY_EXECUTOR_DIGESTS if approved_digests is None else approved_digests))
+    return execution_layout_context(contract)
 
 
 def require_approved_executor_contract(
@@ -609,3 +692,15 @@ def ensure_validation_request(
         if observed is not None:
             return observed, "observed"
         return record, "pending"
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("command", choices=("layout",))
+    parser.add_argument("--root", required=True)
+    args = parser.parse_args()
+    try:
+        print(canonical_bytes(resolve_execution_layout(args.root)).decode())
+    except (OSError, ValueError) as exc:
+        parser.exit(2, str(exc) + "\n")

@@ -49,7 +49,20 @@ require_ci_tests_line() {
   fi
 }
 
-workflow_governance_runner="$(sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+workflow_governance_source() {
+  sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests"
+  python3 - "$repo_root" <<'PY'
+import pathlib,sys
+root=pathlib.Path(sys.argv[1]);sys.path.insert(0,str(root/'scripts/pm'))
+import ci_required_execution as execution
+runner=(root/'scripts/ci-tests.sh').read_text()
+assert 'run-group --group run_workflow_governance_operational_contract_tests --root "$repo_root"' in runner
+for item in execution.COMMANDS:
+    if item['group']=='run_workflow_governance_operational_contract_tests':
+        print('  run '+' '.join(item['argv']))
+PY
+}
+workflow_governance_runner="$(workflow_governance_source)"
 missing_closeout_facade_route=0
 if ! grep -Fqx '  run bash ./scripts/pm/review-closeout-facade.test.sh' <<<"$workflow_governance_runner"; then
   echo "workflow-governance operational runner omits scripts/pm/review-closeout-facade.test.sh" >&2
@@ -230,7 +243,7 @@ require_key "$site_plan" needs_rust_toolchain "$([[ "$effective_execution_contra
 require_key "$site_plan" selected_capabilities site_quality
 require_reason_contains "$site_plan" site_quality:site/index.html
 
-workflow_governance_operational_source="$(sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+workflow_governance_operational_source="$(workflow_governance_source)"
 if ! grep -Fqx '  run python3 ./scripts/pm/workflow-next.test.py' <<<"$workflow_governance_operational_source"; then
   echo "workflow-next behavior regression is not wired into workflow-governance operational tests" >&2
   exit 1
@@ -510,6 +523,12 @@ required_gate_match = re.search(
 if not required_gate_match:
     raise SystemExit("required-gate workflow job is missing")
 required_gate_body = required_gate_match.group("body")
+required_plan_match = re.search(r"(?ms)^  required-plan:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", workflow_text)
+if not required_plan_match:
+    raise SystemExit("required-plan admission workflow job is missing")
+if 'needs: [required-plan, required-work]' not in required_gate_body:
+    raise SystemExit("stable gate must wait on planning and selected workers")
+required_gate_body = required_plan_match.group('body') + required_gate_body
 if '--github-output "${GITHUB_OUTPUT}"' not in required_gate_body:
     raise SystemExit("required-gate planner output is not written to GITHUB_OUTPUT")
 for trusted_planner_fragment in (
@@ -627,7 +646,7 @@ for path in policy_maintenance_paths:
     if f"cargo_scope_policy_maintenance:{path}" not in plan.get("reason_summary", ""):
         raise SystemExit(f"policy-maintenance path lacks its explicit full rule: {path}")
 
-trusted_full_marker = "OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}"
+trusted_full_marker = "OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ needs.required-plan.outputs.scope == 'full' }}"
 if trusted_full_marker not in run_tier_body:
     raise SystemExit("Cargo scope maintenance marker is not bound to the planned workflow scope")
 if 'export OASIS7_CARGO_SCOPE_FULL_PLAN="${RUNNER_TEMP}/required-scope-outputs.json"' not in run_tier_body:
@@ -739,15 +758,18 @@ with tempfile.TemporaryDirectory() as temporary_directory:
     prior_argv = sys.argv
     prior_run = subprocess.run
     prior_build_std = os.environ.get("OASIS7_WASM_BUILD_STD")
+    prior_workspace = os.environ.get("GITHUB_WORKSPACE")
     observed_profile_envs = []
     observed_global_build_std = []
 
-    def record_profile_run(command, *, env, check):
+    def record_profile_run(command, *, env, check, cwd):
+        assert cwd == str(temporary_path), "profile commands must execute in exact M"
         observed_profile_envs.append((command, dict(env), check))
         observed_global_build_std.append(os.environ.get("OASIS7_WASM_BUILD_STD"))
         return SimpleNamespace(returncode=0)
 
     os.environ["OASIS7_WASM_BUILD_STD"] = "1"
+    os.environ["GITHUB_WORKSPACE"] = str(temporary_path)
     subprocess.run = record_profile_run
     sys.argv = ["required-gate-profile-runner", str(plan_path), str(results_path)]
     try:
@@ -755,6 +777,10 @@ with tempfile.TemporaryDirectory() as temporary_directory:
     finally:
         sys.argv = prior_argv
         subprocess.run = prior_run
+        if prior_workspace is None:
+            os.environ.pop("GITHUB_WORKSPACE", None)
+        else:
+            os.environ["GITHUB_WORKSPACE"] = prior_workspace
         if prior_build_std is None:
             os.environ.pop("OASIS7_WASM_BUILD_STD", None)
         else:
@@ -804,7 +830,7 @@ for name, item in declared.items():
             raise SystemExit(
                 f"planner-owned selector is missing planner output: {name} -> {field}"
             )
-        expected_env = f"          {name}: ${{{{ steps.scope.outputs.{field} }}}}"
+        expected_env = f"          {name}: ${{{{ needs.required-plan.outputs.{field} }}}}"
         if expected_env not in run_tier_body:
             raise SystemExit(
                 "planner-owned selector is not passed through required-gate env: "
@@ -816,7 +842,7 @@ for name, item in declared.items():
             (line for line in run_tier_body.splitlines() if line.startswith(env_prefix)),
             "",
         )
-        if "steps.scope.outputs." in env_assignment:
+        if "steps.scope.outputs." in env_assignment or "needs.required-plan.outputs." in env_assignment:
             raise SystemExit(
                 f"manual-only selector is unexpectedly planner-wired in workflow: {name}"
             )
@@ -849,7 +875,7 @@ for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contrac
     active { body=body $0 "\n" }
     END {
       event_scoped=(body ~ /github.event_name == .pull_request./ && body ~ /workflow_dispatch/)
-      planner_scoped=(body ~ /needs.required-gate.outputs.run_operational_contracts == .true./ || body ~ /needs.required-gate.outputs.run_packaging_contracts == .true./)
+      planner_scoped=(body ~ /needs.required-plan.outputs.run_operational_contracts == .true./ || body ~ /needs.required-plan.outputs.run_packaging_contracts == .true./)
       exit(event_scoped && planner_scoped ? 0 : 1)
     }
   ' "$workflow"; then
@@ -878,4 +904,5 @@ for step in \
   fi
 done
 
+python3 "$repo_root/scripts/pm/ci-required-workflow.test.py"
 echo "ci required scope audit contract: passed"

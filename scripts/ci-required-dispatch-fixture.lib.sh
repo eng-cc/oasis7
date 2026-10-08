@@ -80,6 +80,41 @@ STUB
     chmod +x "$ci_fixture_bin/$command_name"
   done
 
+  # Execute the trusted dispatcher itself; continue capturing its child commands.
+  local real_python
+  real_python=$(command -v python3)
+  cat >"$ci_fixture_bin/python3" <<STUB
+#!/bin/sh
+if [ "\${1##*/}" = ci_required_execution.py ]; then
+  exec "$real_python" "\$@"
+fi
+printf 'TOOL:python3:%s\\n' "\$*" >>"\${CAPTURE_LOG:?}"
+if [ "\${CI_FIXTURE_FAIL_SCRIPT:-}" = "\${1##*/}" ]; then
+  printf 'INJECTED_FAILURE:%s\\n' "\${1##*/}" >>"\${CAPTURE_LOG:?}"
+  exit 37
+fi
+STUB
+  chmod +x "$ci_fixture_bin/python3"
+
+  # Shared definitions contain executable shell tests no longer embedded in Bash.
+  while IFS= read -r script; do
+    local target="$ci_fixture_repo/$script"
+    mkdir -p "$(dirname "$target")"
+    [[ -f "$target" ]] && continue
+    cat >"$target" <<'STUB'
+#!/usr/bin/env bash
+printf 'SCRIPT:%s\n' "$0" >>"${CAPTURE_LOG:?}"
+if [[ "${CI_FIXTURE_FAIL_SCRIPT:-}" == "${0##*/}" ]]; then exit 37; fi
+STUB
+    chmod +x "$target"
+  done < <("$real_python" - "$ci_fixture_root" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + '/scripts/pm')
+from ci_required_execution import COMMANDS
+print('\n'.join(sorted({x.removeprefix('./') for c in COMMANDS for x in c['argv'] if x.startswith('./scripts/') and x.endswith('.sh')})))
+PY
+  )
+
   mkdir -p "$ci_fixture_repo/crates/oasis7_client_launcher"
   local viewer="$ci_fixture_repo/crates/oasis7_viewer"
   mkdir -p "$viewer/node_modules/.bin"

@@ -26,7 +26,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$tier" in
-  commit|required|full|full-core|full-support) ;;
+  commit|required|full|full-core|full-support|required-component|required-plan-baseline|required-gate-completion) ;;
   *)
     usage
     exit 1
@@ -35,8 +35,14 @@ esac
 
 shift
 impact_projection=""
+required_component=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --component)
+      [[ $# -ge 2 && -n "$2" ]] || { usage; exit 1; }
+      required_component="$2"
+      shift 2
+      ;;
     --repo-root)
       [[ $# -ge 2 && -n "$2" ]] || { usage; exit 1; }
       repo_root=$(cd "$2" && pwd)
@@ -56,7 +62,7 @@ done
 
 required_gate_execution_contract="legacy"
 validate_required_gate_execution_contract() {
-  [[ "$tier" == "required" ]] || return 0
+  [[ "$tier" == "required" || "$tier" == required-component || "$tier" == required-plan-baseline || "$tier" == required-gate-completion ]] || return 0
 
   local contract="${OASIS7_CI_EXECUTION_CONTRACT:-}"
   local new_selectors=(
@@ -375,121 +381,11 @@ run_cargo_tooling_contract_tests() {
 }
 
 run_workflow_governance_baseline_contract_tests() {
-  run bash ./scripts/testing-manual-active-contract.test.sh
-  run bash ./scripts/ci-tests-argument-contract.test.sh
-  run bash ./scripts/ci-tests-full-superset-contract.test.sh
-  run bash ./scripts/rust-required-gate-apt-contract.test.sh
-  run ./scripts/plan-rust-required-scope.test.sh
-  run_workflow_impact_projection_contract_tests
-  run python3 ./scripts/pm/check-cargo-package-scope.test.py
-  run python3 ./scripts/pm/trusted-cargo-scope.test.py
-  run python3 ./scripts/pm/prepare-loop-ci-authority.test.py
-  run python3 ./scripts/pm/required-scope-routing.test.py
-  run python3 ./scripts/pm/task-primary-package.test.py
-  run python3 ./scripts/pm/task-primary-package-consumers.test.py
-  run python3 ./scripts/pm/cargo-checker-route-retirement.test.py
-  run python3 ./scripts/pm/cargo-package-profile-planner.test.py
-  run python3 ./scripts/pm/cargo-package-profile-driver.test.py
-  run python3 ./scripts/workflow-process-identity-check.test.py
-  run ./scripts/rust-required-gate-compile-command-contract.test.sh
-  run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
-  run bash ./scripts/ci-required-baseline-routing.test.sh
-  run bash ./scripts/ci-required-domain-isolation.test.sh
-  run python3 ./scripts/pm/ci-required-inventory.test.py
+  run python3 "$driver_dir/pm/ci_required_execution.py" run-group --group run_workflow_governance_baseline_contract_tests --root "$repo_root"
 }
 
 run_workflow_governance_operational_contract_tests() {
-  run python3 ./scripts/document-corpus-inventory-workflow.test.py
-  run python3 ./scripts/security/codeql-plan.test.py
-  run python3 ./scripts/security/codeql-workflow.test.py
-  run python3 ./scripts/security/codeql-health.test.py
-  run python3 ./scripts/security/codeql-upload-association.test.py
-  run python3 ./scripts/security/codeql-acceptance.test.py
-  run python3 ./scripts/pm/codeql-advisory.test.py
-  run python3 ./scripts/pm/github-api.test.py
-  run python3 ./scripts/pm/github-api-concurrency.test.py
-  run python3 ./scripts/pm/github-project-api-budget.test.py
-  run python3 ./scripts/pm/github-observation.test.py
-  run python3 ./scripts/pm/github_pr_snapshot.test.py
-  run python3 ./scripts/pm/portable-file-lock.test.py
-  run python3 ./scripts/pm/graphql-budget-red.test.py
-  run python3 ./scripts/pm/pr-graphql-call-budget.test.py
-  run bash ./scripts/pm/pr-lifecycle-gate.test.sh
-  run python3 ./scripts/pm/github-project-task-lifecycle.test.py
-  run bash ./scripts/pm/pr-lifecycle-trust.test.sh
-  run bash ./scripts/pm/pr-watch-loop.test.sh
-  run bash ./scripts/pr-review-thread-closeout.test.sh
-  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr_projection_publication.test.py
-  run bash ./scripts/pm/lint.test.sh
-  run bash ./scripts/pm/github-project-workflow.test.sh
-  run ./scripts/ci-required-scope-audit-contract.test.sh
-  run python3 ./scripts/pm/workflow-process-exception.test.py
-  run python3 ./scripts/pm/workflow-next.test.py
-  run python3 ./scripts/pm/workflow-delivery-readiness.test.py
-  run python3 ./scripts/pm/aggregate-task-completion.test.py
-  run python3 ./scripts/pm/terminal-delivery-protocol.test.py
-  run python3 ./scripts/pm/terminal-readiness-recovery.test.py
-  run python3 ./scripts/pm/terminal-recovery-guards.test.py
-  run python3 ./scripts/pm/resource-cleanup-safety.test.py
-  run python3 ./scripts/pm/terminal_proof.test.py
-  run bash ./scripts/pm/post-merge-finalize.test.sh
-  run bash ./scripts/pm/post-merge-finalizer-ledger-red.test.sh
-  run bash ./scripts/pm/post-merge-finalizer-comment-readback-red.test.sh
-  run bash ./scripts/pm/post-merge-finalizer-project-ledger-red.test.sh
-  run bash ./scripts/pm/finalize-task.test.sh
-  run bash ./scripts/pm/finalize-task-red.test.sh
-  run bash ./scripts/pm/finalize-task-remote-branch-mismatch.test.sh
-  run python3 ./scripts/pm/recover-terminal-task-mapping.test.py
-  run python3 ./scripts/pm/readiness-transport.test.py
-  run python3 ./scripts/pm/readiness-repeat.test.py
-  run python3 ./scripts/pm/readiness-prior-receipt.test.py
-  run python3 ./scripts/pm/readiness-legacy-repeat.test.py
-  run bash ./scripts/pm/post-merge-cleanup.test.sh
-  run bash ./scripts/pm/post-merge-cleanup-trust.test.sh
-  run bash ./scripts/pm/post-merge-cleanup-fault-isolation.test.sh
-  run bash ./scripts/pm/post-merge-cleanup-crash.test.sh
-  run bash ./scripts/pm/post-merge-cleanup-resume.test.sh
-  run python3 ./scripts/pm/ordered-aggregate-closeout.test.py
-  run python3 ./scripts/pm/terminal-task-audit-aggregate.test.py
-  run python3 ./scripts/pm/terminal-task-audit-project-semantics.test.py
-  run python3 ./scripts/pm/ci-ready-receipt.test.py
-  run python3 ./scripts/pm/ci_reuse_validation_readback.test.py
-  run python3 ./scripts/pm/ci_reuse_validation_readback_pagination_adversarial.test.py
-  run python3 ./scripts/pm/ci-reuse-validation.test.py
-  run python3 ./scripts/pm/ci_reuse_validation_contract.test.py
-  run python3 ./scripts/pm/ci_reuse_validation_unicode_history_adversarial.test.py
-  run python3 ./scripts/pm/ci_reuse_acceptance_qa.test.py
-  run python3 ./scripts/pm/review-plan.test.py
-  run python3 ./scripts/pm/subagent-task-packet.test.py
-  run python3 ./scripts/pm/bootstrap-task-snapshot.test.py
-  run python3 ./scripts/pm/integration-ci.test.py
-  run python3 ./scripts/pm/integration-selection-regression.test.py
-  run python3 ./scripts/pm/workflow-bootstrap-fallback.test.py
-  run python3 ./scripts/pm/loop-policy.test.py
-  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/github-project-task-policy-adoption.integration.test.py
-  run python3 ./scripts/pm/pr_projection_publication.test.py
-  run python3 ./scripts/pm/pr-projection-record-pr.test.py
-  run python3 ./scripts/pm/pr-projection-transition.test.py
-  run python3 ./scripts/pm/review_closeout_publication.test.py
-  run bash ./scripts/pm/review-closeout-facade.test.sh
-  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-cli.integration.test.py
-  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-concurrency.integration.test.py
-  run python3 ./scripts/pm/loop-contracts.test.py
-  run python3 ./scripts/pm/loop-traceability.test.py
-  run python3 ./scripts/pm/loop_terminal.test.py
-  run python3 ./scripts/pm/loop.test.py
-  run python3 ./scripts/pm/loop-gate.test.py
-  run python3 ./scripts/pm/loop-ci.test.py
-  run python3 ./scripts/pm/loop-ci-content.test.py
-  run python3 ./scripts/pm/pr-lifecycle-loop.test.py
-  run python3 ./scripts/pm/loop-ingress.test.py
-  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/loop-publication.integration.test.py
-  run python3 ./scripts/pm/loop-recovery.test.py
-  run python3 ./scripts/pm/github-project-loop.test.py
-  run python3 ./scripts/pm/github-project-admission.test.py
-  run python3 ./scripts/pm/loop-bootstrap.test.py
-  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/loop-bootstrap.integration.test.py
-  run python3 ./scripts/pm/workflow-simplification.test.py
+  run python3 "$driver_dir/pm/ci_required_execution.py" run-group --group run_workflow_governance_operational_contract_tests --root "$repo_root"
 }
 
 run_workflow_governance_contract_tests() {
@@ -511,33 +407,11 @@ run_packaging_contract_tests() {
 }
 
 run_operational_identity_contract_tests() {
-  run python3 ./scripts/p2p-public-testnet-full-network-clean-room.test.py
-  run python3 ./scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py
-  run python3 ./scripts/p2p-public-testnet-identity-v2-signing-tool.test.py
-  run python3 ./scripts/p2p-public-testnet-identity-v2-cli-bridge.test.py
-  run python3 ./scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py
-  run python3 ./scripts/p2p-public-testnet-peer-registry.test.py
+  run python3 "$driver_dir/pm/ci_required_execution.py" run-group --group run_operational_identity_contract_tests --root "$repo_root"
 }
 
 run_operational_node_contract_tests() {
-  run ./scripts/game-world-state-sync-commit-module-required.test.sh
-  run ./scripts/state-sync-closure-evidence-template.test.sh
-  run ./scripts/s10-five-node-game-soak-summary.test.sh
-  run ./scripts/release-gate-bash-preflight.test.sh
-  run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
-  run bash ./scripts/build-game-launcher-bundle-ops-default.test.sh
-  run bash ./scripts/build-game-launcher-bundle-macos-bash3.test.sh
-  run bash ./scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh
-  run bash ./scripts/testnet-packages-windows-governed-closure.test.sh
-  run_provider_remote_https_smoke
-  run bash ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh
-  run bash ./scripts/p2p-public-testnet-service-readback.test.sh
-  run bash ./scripts/p2p-public-testnet-package-node-upgrade.test.sh
-  run bash ./scripts/p2p-public-testnet-package-node-upgrade-health.test.sh
-  run bash ./scripts/p2p-public-testnet-package-node-upgrade-order.test.sh
-  run bash ./scripts/p2p-public-testnet-package-node-upgrade-rollback-contract.test.sh
-  run bash ./scripts/p2p-observer-checkpoint-closure-probe.test.sh
-  run python3 ./scripts/p2p-observer-checkpoint-closure-probe-safety.test.py
+  run python3 "$driver_dir/pm/ci_required_execution.py" run-group --group run_operational_node_contract_tests --root "$repo_root"
 }
 
 run_operational_contract_tests() {
@@ -975,6 +849,50 @@ run_full_required_superset() {
 
 echo "+ ci test tier: $tier"
 case "$tier" in
+  required-plan-baseline)
+    run_product_doc_governance_check
+    run ./scripts/lint-skills.sh
+    run ./scripts/check-windows-paths.sh
+    run bash ./scripts/check-script-executable-bits.sh
+    run_workflow_impact_projection_consumer
+    run_cargo_package_scope_check
+    run ./scripts/unified-world-code-terminology-scan.test.sh
+    run ./scripts/check-rust-file-size.test.sh
+    run ./scripts/check-rust-file-size.sh
+    ;;
+  required-gate-completion)
+    run_cargo_package_profile_completion_check
+    ;;
+  required-component)
+    case "$required_component" in
+      run_rust_baseline)
+        run_newapi_bridge_service_accounting_tests
+        run env -u RUSTC_WRAPPER cargo fmt --all -- --check
+        run_rustsec_advisory_check
+        ;;
+      run_oasis7_required_tests) run_oasis7_required_tier_tests; run_oasis7_required_tier_clippy ;;
+      run_consensus_tests) run_oasis7_consensus_tests; run_oasis7_consensus_clippy ;;
+      run_distfs_tests) run_oasis7_distfs_tests; run_oasis7_distfs_clippy ;;
+      run_oasis7_node_tests) run_oasis7_node_tests; run_oasis7_node_clippy ;;
+      run_oasis7_net_tests) run_oasis7_net_tests; run_oasis7_net_clippy ;;
+      run_oasis7_net_libp2p_tests) run_oasis7_net_libp2p_tests; run_oasis7_net_libp2p_clippy ;;
+      run_oasis7_workspace_support_crate_tests) run_oasis7_workspace_support_crate_tests ;;
+      run_scenario_regression) run_scenario_regression_tests ;;
+      run_pixel_world_bridge_lib_tests) run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh; run_pixel_world_bridge_lib_tests ;;
+      run_pixel_world_bridge_wasm_check) run_pixel_world_bridge_wasm_check ;;
+      run_viewer_contract_tests) run_oasis7_viewer_software_safe_feedback_contract_tests ;;
+      run_viewer_wasm_check) run_oasis7_viewer_software_safe_build ;;
+      run_viewer_perf_smoke) run bash ./scripts/viewer-performance-report-only-contract.test.sh; run_oasis7_viewer_performance_smoke_report_only ;;
+      run_launcher_web_build) run_oasis7_client_launcher_web_build ;;
+      run_doc_checker_contracts) run_doc_checker_contract_tests ;;
+      run_cargo_tooling_contracts) run_cargo_tooling_contract_tests ;;
+      run_packaging_contracts) run_packaging_contract_tests ;;
+      run_site_contract_tests) run_site_contract_tests ;;
+      run_codex_agent_config_validation) run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh; run_codex_agent_config_validation ;;
+      run_compile_metrics_contract_tests) run_compile_metrics_contract_tests ;;
+      *) echo "error: unknown trusted required component: $required_component" >&2; exit 1 ;;
+    esac
+    ;;
   commit)
     run_commit_gate_checks
     ;;

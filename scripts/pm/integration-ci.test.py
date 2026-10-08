@@ -42,7 +42,7 @@ class FullPlanRunnerBoundaryTests(unittest.TestCase):
   plan_path=fixture.root/'workflow-outputs.json';plan_path.write_text(json.dumps(plan))
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
   tier=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
-  environment={name:plan[key] for name,key in re.findall(r'(OASIS7_CI_[A-Z0-9_]+): \$\{\{ steps.scope.outputs.([a-z0-9_]+) \}\}',tier)}
+  environment={name:plan[key] for name,key in re.findall(r'(OASIS7_CI_[A-Z0-9_]+): \$\{\{ needs.required-plan.outputs.([a-z0-9_]+) \}\}',tier)}
   environment.update(OASIS7_CARGO_SCOPE_BASE=base,OASIS7_CARGO_SCOPE_INTEGRATION_BASE=base,
                      OASIS7_CARGO_SCOPE_HEAD=head,OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN='true',
                      OASIS7_CARGO_SCOPE_FULL_PLAN=str(plan_path))
@@ -123,11 +123,11 @@ def required_test_tier_command(repo, scope_oid='b'*40):
  # GitHub substitutes these trusted workflow expressions before Bash runs.
  # Keep the extracted script executable in this local shell fixture.
  substitutions={
-  '${{ steps.scope.outputs.source_scope_base }}':scope_oid,
-  '${{ steps.scope.outputs.head_oid }}':scope_oid,
-  '${{ steps.scope.outputs.integration_base_oid }}':scope_oid,
-  '${{ steps.scope.outputs.maintenance_authority_comment_id }}':'',
-  '${{ steps.pr_target.outputs.oid }}':scope_oid,
+  '${{ needs.required-plan.outputs.source_scope_base }}':scope_oid,
+  '${{ needs.required-plan.outputs.head_oid }}':scope_oid,
+  '${{ needs.required-plan.outputs.integration_base_oid }}':scope_oid,
+  '${{ needs.required-plan.outputs.maintenance_authority_comment_id }}':'',
+  '${{ needs.required-plan.outputs.current_target_oid }}':scope_oid,
   '${{ github.token }}':'fixture-token',
   '${{ inputs.task_uid }}':'task_'+'1'*32,
   '${{ inputs.pr_number }}':'7',
@@ -449,9 +449,9 @@ class IntegrationTests(unittest.TestCase):
   fixture_uid='task_'+'1'*32
   fixture_pr='1'
   substitutions=(
-   ('${{ steps.scope.outputs.integration_base_oid }}',None),
-   ('${{ steps.scope.outputs.maintenance_authority_comment_id }}',''),
-   ('${{ steps.pr_target.outputs.oid }}',None),
+   ('${{ needs.required-plan.outputs.integration_base_oid }}',None),
+   ('${{ needs.required-plan.outputs.maintenance_authority_comment_id }}',''),
+   ('${{ needs.required-plan.outputs.current_target_oid }}',None),
    ('${{ github.token }}','fixture-token'),
    ('${{ inputs.task_uid }}',fixture_uid),
    ('${{ inputs.pr_number }}',fixture_pr),
@@ -525,17 +525,26 @@ class IntegrationTests(unittest.TestCase):
      gh_api_log=temp/'gh-api-calls'
      gh=(gh_bin/'gh')
      gh.write_text(textwrap.dedent('''\
-      #!/usr/bin/env bash
-      set -euo pipefail
-      expected="api repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100"
-      if [[ "$#" -ne 2 || "$1 $2" != "$expected" ]]; then
-        printf 'unexpected gh API request: %s\\n' "$*" >&2
-        exit 2
-      fi
-      printf '%s\\n' "$*" >>"$GH_API_CALL_LOG"
-      printf '{"check_runs":[{"name":"required-gate","details_url":"https://github.com/%s/actions/runs/%s","app":{"id":1},"id":1}]}\\n' "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+      #!/usr/bin/env python3
+      import json,os,sys
+      repository=os.environ['GITHUB_REPOSITORY']; run=int(os.environ['GITHUB_RUN_ID'])
+      head=os.environ['GITHUB_WORKFLOW_SHA']; attempt=int(os.environ['GITHUB_RUN_ATTEMPT'])
+      if len(sys.argv)!=3 or sys.argv[1]!='api': raise SystemExit('unexpected gh invocation')
+      path=sys.argv[2]; prefix='repos/'+repository
+      with open(os.environ['GH_API_CALL_LOG'],'a') as stream: stream.write(' '.join(sys.argv[1:])+'\\n')
+      if path==prefix+'/actions/runs/'+str(run):
+       value={'id':run,'run_attempt':attempt,'path':'.github/workflows/rust.yml','event':'workflow_dispatch','repository':{'full_name':repository},'head_sha':head}
+      elif path==prefix+'/actions/runs/'+str(run)+'/attempts/'+str(attempt)+'/jobs?per_page=100&page=1':
+       value={'jobs':[{'id':101,'run_id':run,'run_attempt':attempt,'name':'required-gate','status':'in_progress','conclusion':None,'head_sha':head,'labels':['ubuntu-24.04'],'check_run_url':'https://api.github.com/'+prefix+'/check-runs/201'}]}
+      elif path==prefix+'/check-runs/201':
+       value={'id':201,'name':'required-gate','app':{'id':15368},'head_sha':head,'status':'in_progress','conclusion':None}
+      else: raise SystemExit('unexpected gh API request: '+path)
+      print(json.dumps(value))
      '''),encoding='utf-8')
      gh.chmod(0o755)
+     envelope_authority=temp/'required-authority/scripts/pm'
+     envelope_authority.mkdir(parents=True)
+     shutil.copy2(HERE/'integration_ci.py',envelope_authority/'integration_ci.py')
      env=os.environ.copy()
      for name in (
       'OASIS7_PRODUCT_DOC_BASE','OASIS7_PRODUCT_DOC_HEAD','OASIS7_CARGO_SCOPE_CHECKER',
@@ -582,7 +591,9 @@ class IntegrationTests(unittest.TestCase):
       self.assertEqual(result.returncode,37,result.stdout+result.stderr)
       self.assertEqual(marker.read_text(encoding='utf-8').strip(),str(candidate))
       self.assertEqual(gh_api_log.read_text(encoding='utf-8').splitlines(),[
-       f'api repos/{positive_env["GITHUB_REPOSITORY"]}/commits/{source_head}/check-runs?per_page=100',
+       'api repos/fixture/oasis7/actions/runs/1701',
+       'api repos/fixture/oasis7/actions/runs/1701/attempts/1/jobs?per_page=100&page=1',
+       'api repos/fixture/oasis7/check-runs/201',
       ])
       plan_path=profile_output/'cargo-package-profile-plan.json'
       results_path=profile_output/'cargo-package-profile-results.json'
@@ -623,10 +634,11 @@ class IntegrationTests(unittest.TestCase):
       self.assertEqual((trusted_authority/'cargo_package_profile_driver.py').read_bytes(),trusted_blobs['scripts/pm/cargo_package_profile_driver.py'])
      else:
       env.update({'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
-                  'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''})
+                  'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':'',
+                  'OASIS7_PRODUCT_DOC_BASE':scope_base,'OASIS7_PRODUCT_DOC_HEAD':source_head})
       result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
-      self.assertEqual(result.returncode,0,result.stdout+result.stderr)
-      self.assertEqual(marker.read_text(encoding='utf-8'),'candidate')
+      self.assertEqual(result.returncode,37,result.stdout+result.stderr)
+      self.assertEqual(marker.read_text(encoding='utf-8').strip(),str(candidate))
       self.assertFalse(profile_output.exists())
 
  def test_integration_dispatch_fails_closed_without_trusted_profile_authority(self):
@@ -791,7 +803,10 @@ class IntegrationTests(unittest.TestCase):
   def function_body(name):
    return driver.split(name+'() {',1)[1].split('\n}',1)[0]
   workflow_operational=function_body('run_workflow_governance_operational_contract_tests')
-  self.assertIn('run python3 ./scripts/pm/review-plan.test.py',workflow_operational)
+  self.assertIn('ci_required_execution.py',workflow_operational)
+  import ci_required_execution as execution
+  commands=execution.COMMANDS
+  self.assertTrue(any('scripts/pm/review-plan.test.py' in str(command) for command in commands))
   required=function_body('run_required_gate_capability_contracts')
   self.assertIn('OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS run_workflow_governance_contract_tests',required)
   legacy=function_body('run_legacy_mixed_operational_contract_tests')
@@ -1765,6 +1780,7 @@ class ProvenanceTests(unittest.TestCase):
   self.payload=dict(schema=self.api.ARTIFACT,repository='owner/repo',workflow_run_id=9,base_oid=self.base,head_oid=self.head,task_uid=self.uid,pr_number=12,workflow_sha=self.base,workflow_ref='owner/repo/.github/workflows/rust.yml@refs/heads/main',integration_mode='integration_revalidation',check_name='required-gate',scope_base_oid='d'*40,tested_tree_oid='e'*40,tested_commit_oid='f'*40)
   from integration_executor_contract import EXECUTOR_CONTRACT_PATHS
   self.executor_contents={path:('trusted fixture '+path).encode() for path in EXECUTOR_CONTRACT_PATHS}
+  self.executor_contents['scripts/ci-required-scope.v2.json']=b'{"execution_contract":"required-domain-split/v2"}'
 
  def historical_pr_api(self,*args):
   path=args[1]
@@ -1959,6 +1975,31 @@ class ProvenanceTests(unittest.TestCase):
   with patch.object(self.api,'gh',side_effect=reader):
    with self.assertRaisesRegex(ValueError,'attempt provenance mismatch'):
     self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42)
+ def test_attempt_execution_jobs_exact_pr_push_event_and_default_compatibility(self):
+  job={'id':101,'run_id':9,'run_attempt':1,'name':'required-work (native)',
+       'status':'completed','conclusion':'success','head_sha':self.base,'labels':['ubuntu-24.04'],
+       'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/201'}
+  for event in ('pull_request','push','workflow_dispatch'):
+   def reader(*args):
+    path=args[-1]
+    if path=='repos/owner/repo/actions/runs/9': return {**self.run,'id':9,'event':event}
+    if path.endswith('/attempts/1/jobs?per_page=100&page=1'): return {'jobs':[job]}
+    if path=='repos/owner/repo/check-runs/201': return {
+     'id':201,'name':job['name'],'app':{'id':42},'head_sha':self.base,
+     'status':'completed','conclusion':'success'}
+    self.fail(path)
+   with self.subTest(event=event), patch.object(self.api,'gh',side_effect=reader):
+    proof=self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42,expected_event=event,require_completed=True)
+    self.assertEqual(job['name'],proof[0]['job_name'])
+    if event!='workflow_dispatch':
+     with self.assertRaisesRegex(ValueError,'attempt provenance mismatch'):
+      self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42)
+    else:
+     self.assertEqual(proof,self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42))
+    with self.assertRaisesRegex(ValueError,'attempt provenance mismatch'):
+     self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42,expected_event='push' if event!='push' else 'pull_request')
+  with self.assertRaisesRegex(ValueError,'expected event is unsupported'):
+   self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42,expected_event='schedule')
  def test_attempt_execution_jobs_can_ignore_its_own_in_progress_result_job(self):
   gate={
    'id':101,'run_id':9,'run_attempt':2,'name':'required-gate','status':'completed',
@@ -2303,15 +2344,20 @@ class ProvenanceTests(unittest.TestCase):
    read.assert_not_called()
  def test_workflow_upload_precedes_candidate_execution(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
-  required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  required=workflow[workflow.index('  required-plan:'):workflow.index('  required-work:')]
   self.assertIn('python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py"',required)
   self.assertIn("python3 -I - <<'PY'",required)
-  self.assertLess(required.index('Upload required planner artifact'),required.index('Install pinned Rust toolchains'))
+  self.assertLess(required.index('Upload required planner artifact'),required.index('Install product-document Markdown parser for plan baseline'))
+  worker=workflow[workflow.index('  required-work:'):workflow.index('  required-gate:')]
+  gate=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  self.assertIn('needs: required-plan',worker)
+  self.assertIn('needs: [required-plan, required-work]',gate)
+  self.assertIn('Install pinned Rust toolchains',worker)
   self.assertLess(required.index('cp scripts/plan-rust-required-scope.py'),required.index('python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"'))
 
  def test_pull_request_base_planner_bundle_includes_impact_helper(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
-  required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  required=workflow[workflow.index('  required-plan:'):workflow.index('  required-work:')]
   mkdir='mkdir -p "${authority_dir}/pm"'
   helper='git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"'
   planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
@@ -2322,7 +2368,7 @@ class ProvenanceTests(unittest.TestCase):
 
  def test_markerless_pull_request_still_selects_immutable_base_planner(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
-  required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  required=workflow[workflow.index('  required-plan:'):workflow.index('  required-work:')]
   scope=required[required.index('      - id: scope\n'):required.index('      - name: Report planned scope')]
   pr_start=scope.index('          if [[ "${GITHUB_EVENT_NAME}" == pull_request')
   dispatch_start=scope.index('          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then',pr_start)

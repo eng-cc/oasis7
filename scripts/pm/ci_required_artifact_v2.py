@@ -120,8 +120,28 @@ def result_artifact_name(run_id: Any, attempt: Any, unit_id: Any) -> str:
     return f"oasis7-required-result-v2-{run_id}-a{attempt}-{unit_id_sha256(unit_id)}"
 
 
-def execution_job_requirements(unit_ids: Any) -> dict[str, list[str]]:
+def execution_job_requirements(unit_ids: Any, *, execution_layout="required-serial/v1",
+                               planner_output=None, planner_invocation=None) -> dict[str, list[str]]:
     units = _sorted_strings(unit_ids, "unit_ids", nonempty=True)
+    if execution_layout not in {"required-serial/v1", "required-parallel/v1"}:
+        raise RequiredArtifactError("unknown execution layout")
+    if execution_layout == "required-parallel/v1":
+        import importlib.util
+        path = Path(__file__).with_name("ci_required_execution.py")
+        spec = importlib.util.spec_from_file_location("required_execution_jobs", path)
+        if spec is None or spec.loader is None:
+            raise RequiredArtifactError("trusted execution definition is unavailable")
+        helper = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = helper
+        spec.loader.exec_module(helper)
+        invocation = planner_invocation or {}
+        requirements = helper.execution_job_requirements({
+            "unit_ids": [unit for unit in units if not unit.startswith("product-")], "planner_output": planner_output,
+            "event_name": invocation.get("event_name"),
+            "run_mode": invocation.get("run_mode"),
+        }, execution_layout)
+        return {unit: [job for job in requirements.get(unit, []) if job != REQUIRED_CHECK]
+                for unit in units}
     result: dict[str, list[str]] = {}
     for unit_id in units:
         required: list[str] = []
@@ -292,7 +312,8 @@ def _validate_planner_invocation(value: Any, *, plan: dict[str, Any]) -> dict[st
 
 
 def _validate_plan(value: Any, *, require_complete: bool) -> dict[str, Any]:
-    plan = _require_fields(value, PLAN_FIELDS, "required-plan v2")
+    fields = PLAN_FIELDS | {"execution_layout"} if isinstance(value, dict) and "execution_layout" in value else PLAN_FIELDS
+    plan = _require_fields(value, fields, "required-plan v2")
     if plan["schema"] != PLAN_SCHEMA or plan["required_capabilities"] != [CAPABILITY]:
         raise RequiredArtifactError("required-plan v2 schema or capability is unsupported")
     request_identity = validate_request_identity(plan["request_identity"])
@@ -414,7 +435,10 @@ def _validate_plan(value: Any, *, require_complete: bool) -> dict[str, Any]:
             or invocation["changed_paths"] != sorted(invocation["changed_paths"])):
         raise RequiredArtifactError("planner invocation does not canonically bind its W output")
 
-    requirements = execution_job_requirements(unit_ids)
+    requirements = execution_job_requirements(
+        unit_ids, execution_layout=plan.get("execution_layout", "required-serial/v1"),
+        planner_output=planner_output, planner_invocation=invocation,
+    )
     if plan["execution_job_requirements"] != requirements:
         raise RequiredArtifactError("execution job requirements differ from the trusted unit contract")
     return plan
@@ -425,14 +449,29 @@ def build_plan_payload(value: Any) -> dict[str, Any]:
     return _validate_plan(value, require_complete=False)
 
 
-def validate_plan_payload(value: Any, *, require_complete: bool = False) -> dict[str, Any]:
-    return _validate_plan(value, require_complete=require_complete)
+def validate_plan_payload(value: Any, *, require_complete: bool = False,
+                          trusted_executor_context=None) -> dict[str, Any]:
+    plan = _validate_plan(value, require_complete=require_complete)
+    if trusted_executor_context is not None:
+        _validate_executor_context(trusted_executor_context, plan)
+    return plan
+
+
+def _validate_executor_context(context, plan):
+    if (not isinstance(context, dict) or set(context) != {
+            "schema", "execution_layout", "executor_contract_digest"}
+            or context.get("schema") != "oasis7-trusted-execution-layout/v1"
+            or context.get("execution_layout") not in {"required-serial/v1", "required-parallel/v1"}
+            or context.get("executor_contract_digest") != plan["executor_contract_digest"]
+            or context.get("execution_layout") != plan.get("execution_layout", "required-serial/v1")):
+        raise RequiredArtifactError("required-plan layout differs from verified exact-W executor")
 
 
 def assemble_plan_payload(
     inventory: Any, *, request_identity: Any, request_key: Any,
     trusted_policy_context: Any, gate_job: Any, workflow_ref: str,
     workflow_sha: str, workflow_run_id: int, run_attempt: int,
+    trusted_executor_context=None,
 ) -> dict[str, Any]:
     """Assemble a v2 plan from independently obtained W, policy, and job inputs."""
     if not isinstance(inventory, dict) or inventory.get("schema") != "oasis7-required-test-inventory/v1":
@@ -561,9 +600,14 @@ def assemble_plan_payload(
         "product_corpus": corpus,
         "input_scope": scope,
         "planner_output": planner_output,
-        "execution_job_requirements": execution_job_requirements(unit_ids),
+        "execution_job_requirements": execution_job_requirements(
+            unit_ids, execution_layout=(trusted_executor_context or {}).get("execution_layout", "required-serial/v1"),
+            planner_output=planner_output, planner_invocation=invocation),
         "closure_status": scope.get("closure_status", {}).get("status"),
     }
+    if trusted_executor_context is not None:
+        plan["execution_layout"] = trusted_executor_context["execution_layout"]
+        _validate_executor_context(trusted_executor_context, plan)
     return build_plan_payload(plan)
 
 
@@ -736,12 +780,14 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument("--run-attempt", required=True, type=int)
     plan_parser.add_argument("--output", required=True)
     plan_parser.add_argument("--github-output", required=True)
+    plan_parser.add_argument("--trusted-executor-context")
     result_parser = subparsers.add_parser("build-result")
     result_parser.add_argument("--plan", required=True)
     result_parser.add_argument("--plan-artifact-id", required=True, type=int)
     result_parser.add_argument("--execution-jobs", required=True)
     result_parser.add_argument("--unit-id", required=True)
     result_parser.add_argument("--output", required=True)
+    result_parser.add_argument("--trusted-executor-context")
     args = parser.parse_args(argv)
     try:
         if args.command == "build-plan":
@@ -775,6 +821,8 @@ def main(argv: list[str] | None = None) -> int:
                 gate_job=gates[0], workflow_ref=args.workflow_ref,
                 workflow_sha=args.workflow_sha, workflow_run_id=args.workflow_run_id,
                 run_attempt=args.run_attempt,
+                trusted_executor_context=(json.loads(Path(args.trusted_executor_context).read_text())
+                                          if args.trusted_executor_context else None),
             )
             _write_json(args.output, plan)
             units = [
@@ -788,6 +836,9 @@ def main(argv: list[str] | None = None) -> int:
                 stream.write("unit_matrix=" + json.dumps(units, sort_keys=True, separators=(",", ":")) + "\n")
         else:
             plan = parse_payload(Path(args.plan).read_bytes(), label="required-plan v2")
+            if args.trusted_executor_context:
+                validate_plan_payload(plan, trusted_executor_context=json.loads(
+                    Path(args.trusted_executor_context).read_text()))
             jobs = json.loads(Path(args.execution_jobs).read_text(encoding="utf-8"))
             if not isinstance(jobs, dict) or not isinstance(jobs.get("execution_jobs"), list):
                 raise RequiredArtifactError("completed attempt job proof is malformed")

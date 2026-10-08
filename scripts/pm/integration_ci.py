@@ -456,7 +456,8 @@ def github_executor_contract(repository,revision):
     except ImportError as exc:
         raise ValueError('EXECUTOR_CONTRACT_CHANGED: trusted contract helper unavailable') from exc
     contents={}
-    for path in helper.EXECUTOR_CONTRACT_PATHS:
+    config=_github_file_bytes(repository,'scripts/ci-required-scope.v2.json',revision)
+    for path in helper.executor_contract_paths(config):
         source=gh('api',f'repos/{repository}/contents/{path}?ref={revision}')
         if source.get('type')!='file' or source.get('path')!=path or source.get('encoding')!='base64':
             raise ValueError('trusted executor contract source is unavailable')
@@ -479,14 +480,16 @@ def _github_file_bytes(repository,path,revision):
         raise ValueError(f'trusted workflow content is noncanonical: {path}')
     return raw
 
-def attempt_execution_jobs(repository,run_id,attempt,workflow_sha,app_id,*,require_completed=False,job_names=None):
+def attempt_execution_jobs(repository,run_id,attempt,workflow_sha,app_id,*,require_completed=False,job_names=None,expected_event='workflow_dispatch'):
     """Return exact check-backed job records from one live Actions attempt."""
     for value,label in ((run_id,'workflow run ID'),(attempt,'workflow attempt'),(app_id,'check app ID')):
         if type(value) is not int or value<1: raise ValueError(f'{label} must be a positive integer')
     if not OID.fullmatch(str(workflow_sha or '')): raise ValueError('workflow head SHA is invalid')
+    if expected_event not in ('workflow_dispatch','pull_request','push'):
+        raise ValueError('workflow job expected event is unsupported')
     run=gh('api',f'repos/{repository}/actions/runs/{run_id}')
     if (run.get('id')!=run_id or run.get('run_attempt')!=attempt
-            or run.get('path')!=WORKFLOW or run.get('event')!='workflow_dispatch'
+            or run.get('path')!=WORKFLOW or run.get('event')!=expected_event
             or run.get('repository',{}).get('full_name')!=repository
             or run.get('head_sha')!=workflow_sha):
         raise ValueError('workflow job attempt provenance mismatch')
@@ -698,17 +701,38 @@ def read_keyed_v2_evidence(repository,run,run_id,attempt,app_id,check,*,
     except ImportError as exc:
         raise ValueError('trusted required-artifact v2 helper is unavailable') from exc
     workflow_sha=run['head_sha']
-    for relative in ('scripts/pm/ci_required_artifact_v2.py',
-                     'scripts/pm/ci_required_inventory.py',
-                     'scripts/pm/ci_input_scope.py'):
+    for relative in ('scripts/pm/ci_input_scope.py',):
         _adjacent_source_matches_w(repository,workflow_sha,relative)
+    executor_helper=_adjacent_module('integration_executor_contract')
+    executor_contract=github_executor_contract(repository,workflow_sha)
+    executor_helper.require_approved_executor_contract(executor_contract,approved_executor_contract_digests)
+    executor_context=executor_helper.execution_layout_context(executor_contract)
+    # Interpret historical bytes with the exact authenticated W reader and its
+    # adjacent dependency closure. A new local reader is never silently treated
+    # as the old producer implementation.
+    reader_directory=tempfile.TemporaryDirectory(prefix='oasis7-required-w-reader-')
+    reader_checkout=Path(reader_directory.name)
+    reader_root=reader_checkout/'scripts/pm'
+    reader_root.mkdir(parents=True)
+    (reader_checkout/'scripts/ci-required-scope.v2.json').write_bytes(
+        _github_file_bytes(repository,'scripts/ci-required-scope.v2.json',workflow_sha))
+    reader_paths=('ci_required_artifact_v2.py','ci_input_scope.py','integration_executor_contract.py')
+    if executor_context['execution_layout']=='required-parallel/v1':
+        reader_paths+=('ci_required_execution.py',)
+    for filename in reader_paths:
+        (reader_root/filename).write_bytes(_github_file_bytes(repository,'scripts/pm/'+filename,workflow_sha))
+    artifact_helper=_load_checkout_module(reader_root/'ci_required_artifact_v2.py','historical_required_artifact_v2')
     plan_name=artifact_helper.plan_artifact_name(run_id,attempt)
     plans=[item for item in artifacts if item.get('name')==plan_name]
     if len(plans)!=1: raise ValueError('keyed required-plan v2 artifact missing or ambiguous')
     plan_artifact=plans[0]
     plan_raw=_read_artifact_member(repository,plan_artifact,run_id,plan_name,PLAN_V2_MEMBER)
     plan=artifact_helper.parse_payload(plan_raw,label='required-plan v2')
-    try: artifact_helper.validate_plan_payload(plan,require_complete=True)
+    try:
+        artifact_helper.validate_plan_payload(plan,require_complete=True)
+        if (plan.get('execution_layout','required-serial/v1')!=executor_context['execution_layout']
+                or plan.get('executor_contract_digest')!=executor_context['executor_contract_digest']):
+            raise ValueError('required-plan layout differs from verified exact-W executor')
     except ValueError as exc: raise ValueError('keyed required-plan v2 payload is invalid: '+str(exc)) from exc
     expected_plan={
         'request_key':request_key,'request_identity':request_identity,
@@ -787,6 +811,7 @@ def read_keyed_v2_evidence(repository,run,run_id,attempt,app_id,check,*,
     trusted_source_attempt=_trusted_source_attempt(
         plan,plan_artifact,result_artifacts,gate,request_key,run_id,attempt,int(app_id),int(check['id']),
     )
+    reader_directory.cleanup()
     return {
         'required_plan_v2_artifact_id':plan_artifact['id'],
         'required_plan_v2_artifact_name':plan_name,
@@ -799,6 +824,7 @@ def read_keyed_v2_evidence(repository,run,run_id,attempt,app_id,check,*,
         'execution_jobs':execution_jobs,
         'trusted_planner_inventory':trusted_inventory,
         'trusted_source_attempt':trusted_source_attempt,
+        'trusted_executor_context':executor_context,
     }
 
 def trusted_policy_context(repository,branch,workflow_sha,default_branch_sha):
@@ -1705,14 +1731,7 @@ def _verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=No
         actual=gh('api',f'repos/{repository}/compare/{base}...{execution_sha}')
         if actual.get('merge_base_commit',{}).get('sha')!=base:
             raise ValueError('frozen integration base is not an ancestor of workflow run target')
-        contents={}
-        for path in helper.EXECUTOR_CONTRACT_PATHS:
-            source=gh('api',f'repos/{repository}/contents/{path}?ref={workflow_sha}')
-            if source.get('type')!='file' or source.get('path')!=path or source.get('encoding')!='base64':
-                raise ValueError('trusted executor contract source is unavailable')
-            try: contents[path]=base64.b64decode(''.join(str(source['content']).split()),validate=True)
-            except (KeyError,ValueError) as exc: raise ValueError('trusted executor contract source is malformed') from exc
-        executor_contract=helper.executor_contract_from_contents(contents)
+        executor_contract=github_executor_contract(repository,workflow_sha)
         executor_digest=helper.require_approved_executor_contract(executor_contract,approved_executor_contract_digests)
         expected['executor_contract_digest']=executor_digest
     if any(payload.get(k)!=v for k,v in expected.items()) or not all(OID.fullmatch(str(payload.get(k,''))) for k in ('scope_base_oid','tested_tree_oid','tested_commit_oid')):

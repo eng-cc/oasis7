@@ -397,8 +397,16 @@ def _require_clean_checkout(repo_root: Path, label: str) -> None:
 
 def _trusted_sources(planner_root: Path) -> dict[str, str]:
     values: dict[str, str] = {}
+    config = json.loads((planner_root / "scripts/ci-required-scope.v2.json").read_bytes())
+    execution_paths = ()
+    if config.get("execution_layout") is not None:
+        if config["execution_layout"] not in {"required-parallel/v1", "required-serial/v1"}:
+            raise InventoryError("unknown trusted execution layout")
+        execution_paths = ("scripts/pm/ci_required_execution.py", "scripts/pm/ci_required_workflow.py",
+                           "scripts/pm/integration_executor_contract.py")
     for relative in (
         *PLANNER_SOURCE_PATHS,
+        *execution_paths,
         "scripts/ci-tests.sh",
         "scripts/pm/ci_input_scope.py",
         "scripts/pm/ci_required_inventory.py",
@@ -855,6 +863,12 @@ def _replay_trusted_planner(
     return actual, projection_digest_after
 
 
+def producer_independent_selection(plan: dict[str, str], capabilities, *, event_name: str, run_mode: str) -> dict[str, Any]:
+    """Scheduling input only; this carries no inventory issuer or authority."""
+    return {"unit_ids": selected_test_units(plan, capabilities),
+            "planner_output": dict(plan), "event_name": event_name, "run_mode": run_mode}
+
+
 def _validate_trusted_plan(
     planner_root: Path, plan: dict[str, str], repository: str, workflow_ref: str,
     planner_authority_oid: str, *, event_name: str, run_mode: str,
@@ -1056,6 +1070,12 @@ def _unit_spec(
         *(BASELINE_CHECKER_PATHS if capability == "required_gate_baseline" else ()),
         *test_paths,
     }
+    # New shared execution definitions are consumed by every capability, not
+    # merely the governance tests they happen to dispatch.
+    command_paths.update(path for path in (
+        "scripts/pm/ci_required_execution.py", "scripts/pm/ci_required_workflow.py",
+        "scripts/pm/integration_executor_contract.py",
+    ) if (planner_root / path).is_file())
     if capability in {"product", "required_gate_baseline", "doc_checker_contracts"}:
         command_paths.update({
             "scripts/doc-governance-check.sh",

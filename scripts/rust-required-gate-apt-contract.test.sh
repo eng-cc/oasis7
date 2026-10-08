@@ -18,8 +18,8 @@ match = re.search(
 assert match, "required-gate Install system deps step is missing"
 body = match.group("body")
 
-assert "steps.scope.outputs.needs_system_deps" in body, (
-    "contract must inspect the required-gate system-deps step, not a full-tier job"
+assert "steps.resources.outputs.needs_system_deps" in body, (
+    "contract must inspect the selected worker system-deps step, not a full-tier job"
 )
 assert "max_attempts=3" in body, "apt operations must use exactly three bounded attempts"
 assert "timeout --foreground" in body, "each apt attempt must have a foreground timeout"

@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import textwrap
 import unittest
+import ci_required_execution as execution
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -59,6 +60,9 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
         start = cls.ci_tests.index(marker)
         end = cls.ci_tests.index("\n}", start) + 2
         cls.operational_runner = cls.ci_tests[start:end]
+        if 'ci_required_execution.py' in cls.operational_runner:
+            cls.operational_runner += '\n' + '\n'.join('  run ' + ' '.join(item['argv'])
+                for item in execution.COMMANDS if item['group'] == 'run_workflow_governance_operational_contract_tests')
 
     def test_every_design_acceptance_id_has_an_explicit_evidence_class(self) -> None:
         expected = {f"T{number:02}" for number in range(1, 43)}
@@ -167,9 +171,12 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
             rendered_replacements = dict(replacements)
             rendered_replacements["${{ github.event.pull_request.base.sha || inputs.integration_base }}"] = base_oid
             rendered_replacements["${{ steps.pr_target.outputs.oid || inputs.integration_base }}"] = base_oid
+            rendered_replacements["${{ needs.required-plan.outputs.current_target_oid || inputs.integration_base }}"] = base_oid
             rendered_replacements["${{ github.event.pull_request.head.sha || inputs.expected_head }}"] = head_oid
             for source, target in rendered_replacements.items():
                 script = script.replace(source, target)
+                script = script.replace(source.replace('steps.scope.outputs.', 'needs.required-plan.outputs.'), target)
+            script = script.replace('${{ needs.required-plan.outputs.start_only }}', 'true' if start_only else 'false')
             return script.replace(
                 "${{ steps.loop-ci-admission.outputs.start_only }}",
                 "true" if start_only else "false",

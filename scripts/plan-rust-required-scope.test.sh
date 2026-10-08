@@ -4,6 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSIONED_TEST_CONFIG="$ROOT_DIR/scripts/fixtures/ci-required-scope.versioned-test.json"
 
+shared_group_executes() {
+  python3 - "$ROOT_DIR" "$1" "$2" <<'PY'
+from pathlib import Path
+import re
+import sys
+root, group, path = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+sys.path.insert(0, str(root / 'scripts/pm'))
+from ci_required_execution import COMMANDS
+source = (root / 'scripts/ci-tests.sh').read_text()
+body = re.search(r'(?m)^' + re.escape(group) + r'\(\) \{\n(.*?)^\}', source, re.S)
+forward = 'run python3 "$driver_dir/pm/ci_required_execution.py" run-group --group ' + group + ' --root "$repo_root"'
+if body is None or body.group(1).strip() != forward:
+    raise SystemExit('shared trusted group forwarder missing or changed')
+matches = [c for c in COMMANDS if c['group'] == group and c['argv'] == ['python3', './' + path]]
+if len(matches) != 1:
+    raise SystemExit('shared trusted command must execute exactly once')
+PY
+}
+
 plan_for_path() {
   "$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
     --event-name pull_request \
@@ -724,10 +743,7 @@ for registry_path in \
     peer_registry_contract_failures=$((peer_registry_contract_failures + 1))
   fi
 done
-if ! sed -n '/^run_operational_identity_contract_tests() {$/,/^}$/p' \
-  "$ROOT_DIR/scripts/ci-tests.sh" \
-  | grep -Fxq \
-    '  run python3 ./scripts/p2p-public-testnet-peer-registry.test.py'; then
+if ! shared_group_executes run_operational_identity_contract_tests scripts/p2p-public-testnet-peer-registry.test.py; then
   echo "expected required gate to execute the managed peer registry admission suite" >&2
   peer_registry_contract_failures=$((peer_registry_contract_failures + 1))
 fi
@@ -758,10 +774,7 @@ assert_reason_contains "$clean_room_scope_output" \
   "operational_contracts:scripts/fixtures/oasis7-governance-root.v1.json"
 assert_reason_absent "$clean_room_scope_output" "unclassified_or_unresolvable:"
 
-if ! sed -n '/^run_operational_identity_contract_tests() {$/,/^}$/p' \
-  "$ROOT_DIR/scripts/ci-tests.sh" \
-  | grep -Fq \
-    'run python3 ./scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py'; then
+if ! shared_group_executes run_operational_identity_contract_tests scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py; then
   echo "expected required gate to execute the aggregate evidence contract suite" >&2
   exit 1
 fi

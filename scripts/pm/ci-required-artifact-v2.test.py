@@ -213,6 +213,40 @@ class RequiredArtifactV2Tests(unittest.TestCase):
             ["operational_contracts", "packaging_contracts", "unit-x"],
         ))
 
+    def test_layout_requires_exact_verified_executor_digest(self):
+        context = {"schema": "oasis7-trusted-execution-layout/v1",
+                   "execution_layout": "required-serial/v1",
+                   "executor_contract_digest": self.plan["executor_contract_digest"]}
+        self.assertEqual(self.plan, ARTIFACT.validate_plan_payload(
+            self.plan, trusted_executor_context=context))
+        for mutation in ({"execution_layout": "required-parallel/v1"},
+                         {"executor_contract_digest": "sha256:" + "f" * 64},
+                         {"execution_layout": "required-serial/v99"}):
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(ValueError, "verified exact-W"):
+                ARTIFACT.validate_plan_payload(self.plan, trusted_executor_context={**context, **mutation})
+        forged = dict(self.plan)
+        forged["execution_layout"] = "required-parallel/v99"
+        with self.assertRaisesRegex(ValueError, "unknown execution layout"):
+            ARTIFACT.validate_plan_payload(forged)
+
+    def test_parallel_job_requirements_preserve_platform_names_and_product_units(self):
+        import ci_required_execution as execution
+        config = execution.config()
+        output = {item['planner_field']: 'true' for item in config['selector_ownership']
+                  if item['mode'] == 'planner-owned'}
+        output.update({'needs_' + name: 'true' for name in
+                       ('python', 'markdown', 'rust_toolchain', 'node', 'system_deps', 'trunk', 'wasm_target')})
+        selected = execution.selection_from_planner(output, 'workflow_dispatch', 'integration_revalidation')
+        requirements = ARTIFACT.execution_job_requirements(
+            sorted([*selected['unit_ids'], 'product-example']), execution_layout='required-parallel/v1',
+            planner_output=output, planner_invocation={'event_name': 'workflow_dispatch', 'run_mode': 'integration_revalidation'})
+        self.assertEqual([], requirements['product-example'])
+        self.assertNotIn('required-gate', requirements['workflow_governance'])
+        self.assertEqual(['required-plan', *(f'required-work (governance-{i})' for i in range(1, 5))],
+                         requirements['workflow_governance'])
+        self.assertTrue(set(f'public-testnet-fleet-health-contract ({runner})' for runner in ARTIFACT.FLEET_RUNNERS)
+                        <= set(requirements['operational_contracts']))
+
     def test_fleet_health_workflow_keeps_windows_and_exact_integration_context(self):
         workflow_path = HERE.parents[1] / ".github/workflows/rust.yml"
         workflow = workflow_path.read_text(encoding="utf-8")

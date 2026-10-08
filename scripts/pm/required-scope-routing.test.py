@@ -2,11 +2,14 @@
 """Single-path routing proof for scope authority, metadata and consumers."""
 from pathlib import Path
 import json
+import re
 import subprocess
 import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'scripts/pm'))
+from ci_required_execution import COMMANDS
 
 
 def plan(path, config=None):
@@ -43,7 +46,11 @@ class RoutingTest(unittest.TestCase):
         for name in ("trusted-cargo-scope.test.py", "required-scope-routing.test.py",
                      "prepare-loop-ci-authority.test.py", "task-primary-package.test.py", "task-primary-package-consumers.test.py"):
             self.assertEqual(plan("scripts/pm/" + name)["run_workflow_governance_contracts"], "true")
-            self.assertIn("run python3 ./scripts/pm/" + name, runner)
+            group = 'run_workflow_governance_baseline_contract_tests'
+            body = re.search(r'(?m)^' + group + r'\(\) \{\n(.*?)^\}', runner, re.S)
+            self.assertIsNotNone(body)
+            self.assertEqual(body.group(1).strip(), 'run python3 "$driver_dir/pm/ci_required_execution.py" run-group --group ' + group + ' --root "$repo_root"')
+            self.assertEqual(len([c for c in COMMANDS if c['group'] == group and c['argv'] == ['python3', './scripts/pm/' + name]]), 1)
             self.assertIn("scripts/pm/" + name, inventory)
 
     def test_metadata_v2_does_not_select_rust_baseline_or_business(self):
