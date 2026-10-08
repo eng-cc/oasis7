@@ -47,6 +47,7 @@ PLAN_KEYS = {
     "effective_mode", "batch_path", "collection_path", "packet_refs", "reused", "preflight",
     "loop_binding", "ci_validation_mode", "ci_ready_receipt_digest",
     "incremental_review_context",
+    "strict_exception_comment_id",
 }
 HANDOFF_FIELDS_V1 = {
     "schema", "repository", "task_uid", "pr_number", "comparison_ref", "comparison_oid",
@@ -367,6 +368,8 @@ def validate_plan(plan_value: object, raw: bytes) -> tuple[dict[str, object], di
         raise ContractError(f"review plan contains unknown fields: {sorted(unknown)}")
     if plan.get("schema") != "oasis7-review-plan/v2":
         raise ContractError("review plan schema must be v2")
+    if 'strict_exception_comment_id' in plan and (type(plan['strict_exception_comment_id']) is not int or plan['strict_exception_comment_id'] < 1):
+        raise ContractError('plan strict exception locator must be a positive integer')
     task_uid = require_string(plan.get("task_uid"), "plan task UID", TASK_RE)
     head = require_string(plan.get("frozen_head"), "plan frozen head", HEAD_RE)
     epoch = require_string(plan.get("epoch"), "plan epoch", SHA_RE)

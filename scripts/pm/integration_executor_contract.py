@@ -209,6 +209,9 @@ KNOWN_LEGACY_EXECUTOR_DIGESTS = (
     # 89ef370f66a83cba50bafa9930c74e31360e5ba0 (planner NUL-safe path parsing).
     "sha256:43a77953bedd8acbf32e42e324e04108d05f36ede77b9830093106a08ce1dfe8",
     "sha256:90494adffcc2691f9ede5919bc88f9ed4303a4fcec699ae3783961df59e0581d",
+    # Protected a8e433d03dc47bbac4e39c5c65d3d37f66b22de9: ordinary CI
+    # routing and its strict-exception receipt consumer, exact nine-file v1.
+    "sha256:c1165836ed6cd3dd7a41da5bb5332fc86ba658e10b2ce0a5c1761fa5a3ea6c6d",
 )
 
 

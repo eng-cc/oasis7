@@ -999,6 +999,8 @@ def main() -> int:
     parser.add_argument("--review-policy-digest")
     parser.add_argument("--input-contract-digest")
     parser.add_argument("--prior-review-plan", help="canonical prior plan used only as incremental review context")
+    parser.add_argument("--strict-exception-comment-id", type=int,
+                        help="optional live Task exception locator; protected producer independently verifies it")
     parser.add_argument("--impacted-role", action="append", default=[],
                         help="canonical required role affected by the prior-plan delta; repeatable")
     args = parser.parse_args()
@@ -1193,6 +1195,10 @@ def main() -> int:
                  if integration_identity is not None else None),
                 applicability, impact_projection,
             )
+            if args.strict_exception_comment_id is not None:
+                identity['strict_exception_comment_id'] = args.strict_exception_comment_id
+                if args.strict_exception_comment_id < 1:
+                    raise ContractError('strict exception locator must be positive')
             if receipt_value is not None and identity_module.has_live_pr_ci_attestation(receipt_value):
                 identity["ci_validation_mode"] = "ordinary_pr"
                 identity["ci_ready_receipt_digest"] = identity_module.review_evidence_digest(receipt_value)
@@ -1226,6 +1232,8 @@ def main() -> int:
                             "impact_projection_planner_digest"):
                     if plan.get(key) != identity.get(key):
                         raise ContractError(f"existing review plan does not match immutable source inputs: {plan_path}")
+                if plan.get('strict_exception_comment_id') != identity.get('strict_exception_comment_id'):
+                    raise ContractError('existing review plan strict exception locator changed')
             elif plan.get("schema") != SCHEMA or {key: plan.get(key) for key in identity} != identity or plan.get("epoch") != epoch:
                 raise ContractError(f"existing review plan does not match immutable inputs: {plan_path}")
             if preflight_result is not None:

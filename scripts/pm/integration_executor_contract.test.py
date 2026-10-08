@@ -172,6 +172,24 @@ class ExecutorContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "executor contract file is missing"):
                 contract.resolve_execution_layout(root)
 
+    def test_exact_protected_a8_legacy_closure_preserves_strict_policy_admission(self):
+        repo=Path(__file__).resolve().parents[2]
+        revision='a8e433d03dc47bbac4e39c5c65d3d37f66b22de9'
+        expected='sha256:c1165836ed6cd3dd7a41da5bb5332fc86ba658e10b2ce0a5c1761fa5a3ea6c6d'
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for relative in contract.EXECUTOR_CONTRACT_PATHS:
+                path=root/relative;path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_bytes(subprocess.check_output(['git','-C',str(repo),'show',revision+':'+relative]))
+            self.assertEqual(contract.build_executor_contract(root)['digest'],expected)
+            self.assertEqual(contract.resolve_execution_layout(root)['execution_layout'],'required-serial/v1')
+            for approved in ([],list(contract.KNOWN_LEGACY_EXECUTOR_DIGESTS[:-1])):
+                with self.assertRaises(ValueError):contract.resolve_execution_layout(root,approved_digests=approved)
+            for relative in contract.EXECUTOR_CONTRACT_PATHS:
+                path=root/relative;original=path.read_bytes();path.write_bytes(original+b'\n')
+                with self.subTest(path=relative),self.assertRaises(ValueError):contract.resolve_execution_layout(root)
+                path.write_bytes(original)
+
 
 class ValidationRequestTests(unittest.TestCase):
     def test_request_key_binds_inputs_but_not_first_frozen_base(self):

@@ -891,6 +891,14 @@ COMMANDS = [
     ]
   },
   {
+    "id": "governance:pm-strict-exception-facts-test-py",
+    "group": "run_workflow_governance_operational_contract_tests",
+    "argv": [
+      "python3",
+      "./scripts/pm/strict_exception_facts.test.py"
+    ]
+  },
+  {
     "id": "governance:pm-ci-reuse-validation-readback-test-py",
     "group": "run_workflow_governance_operational_contract_tests",
     "argv": [

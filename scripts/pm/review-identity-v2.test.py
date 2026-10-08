@@ -257,7 +257,7 @@ class ReviewIdentityV2Test(unittest.TestCase):
         )
         return temp, root, plan, receipt, target_head
 
-    def test_ordinary_receipt_reuses_only_low_risk_bound_projection(self):
+    def test_ordinary_receipt_reuse_does_not_infer_strictness_from_projection_labels(self):
         source = MODULE.source_review_identity(**source_fields())
         low_risk = ordinary_plan(source)
         low_receipt = ordinary_receipt(
@@ -286,7 +286,7 @@ class ReviewIdentityV2Test(unittest.TestCase):
             impact_projection_digest=high_risk["impact_projection_digest"],
             impact_projection_planner_digest=high_risk["impact_projection_planner_digest"],
         )
-        self.assertFalse(MODULE.can_reuse_source_review(
+        self.assertTrue(MODULE.can_reuse_source_review(
             high_risk, high_receipt
         ))
         semantic = ordinary_plan(source)
@@ -301,7 +301,7 @@ class ReviewIdentityV2Test(unittest.TestCase):
             impact_projection_digest=semantic["impact_projection_digest"],
             impact_projection_planner_digest=semantic["impact_projection_planner_digest"],
         )
-        self.assertFalse(MODULE.can_reuse_source_review(semantic, semantic_receipt))
+        self.assertTrue(MODULE.can_reuse_source_review(semantic, semantic_receipt))
         legacy = ordinary_plan(source)
         legacy["effective_mode"] = {**legacy["effective_mode"], "effective_policy": "legacy"}
         self.assertFalse(MODULE.can_reuse_source_review(legacy, low_receipt))

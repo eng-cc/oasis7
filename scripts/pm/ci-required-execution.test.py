@@ -49,7 +49,7 @@ class ExecutionTests(unittest.TestCase):
         governance = [x for worker, commands in selected.items() if worker.startswith('governance-') for x in commands]
         expected = [c['id'] for c in execution.COMMANDS if c['id'].startswith('governance:')]
         self.assertEqual(Counter(governance), Counter(expected))
-        self.assertEqual(len(expected), 114)  # 113 preserved calls plus this new regression.
+        self.assertEqual(len(expected), 115)  # 113 original calls, shared regression, main strict-exception obligation.
         publication = [c for c in execution.COMMANDS if c['id'].startswith('governance:pm-pr-projection-publication-test-py')]
         self.assertEqual(len(publication), 2)
         self.assertNotEqual(publication[0]['argv'], publication[1]['argv'])
@@ -67,7 +67,11 @@ class ExecutionTests(unittest.TestCase):
                 elif line: self.fail('unexpected historical command: ' + line)
             return commands
         for group in {c['group'] for c in execution.COMMANDS}:
-            self.assertEqual([c['argv'] for c in execution.COMMANDS if c['group'] == group and c['id'] != 'governance:ci-required-execution'], expand(group))
+            preserved=expand(group)
+            if group=='run_workflow_governance_operational_contract_tests':
+                index=preserved.index(['python3','./scripts/pm/ci-ready-receipt.test.py'])+1
+                preserved.insert(index,['python3','./scripts/pm/strict_exception_facts.test.py'])
+            self.assertEqual([c['argv'] for c in execution.COMMANDS if c['group'] == group and c['id'] != 'governance:ci-required-execution'], preserved)
 
     def test_missing_selector_resource_event_rejected(self):
         for location, field in [('planner_output', 'run_rust_baseline'), ('planner_output', 'needs_node'), (None, 'event_name')]:
@@ -141,6 +145,14 @@ class ExecutionTests(unittest.TestCase):
             declared = {path for row in rows if row[2] == capability for path in row[1].split(',')}
             actual = {arg.removeprefix('./') for c in execution.COMMANDS if c['id'].startswith(prefix) for arg in c['argv'] if arg.startswith('./scripts/')}
             self.assertEqual(actual, declared)
+
+    def test_main_strict_exception_obligation_is_in_shared_governance_group(self):
+        commands=[c for c in execution.COMMANDS if c['group']=='run_workflow_governance_operational_contract_tests']
+        ids=[c['id'] for c in commands]
+        ident='governance:pm-strict-exception-facts-test-py'
+        self.assertEqual(ids.count(ident),1)
+        self.assertEqual(ids.index(ident),ids.index('governance:pm-ci-ready-receipt-test-py')+1)
+        self.assertEqual(commands[ids.index(ident)]['argv'],['python3','./scripts/pm/strict_exception_facts.test.py'])
 
 
 if __name__ == '__main__':

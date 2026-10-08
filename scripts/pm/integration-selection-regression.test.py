@@ -20,6 +20,7 @@ class SelectionTests(unittest.TestCase):
  def api(self,*args):
   path=args[-1]
   if path=='repos/owner/repo/git/ref/heads/main':return {'object':{'sha':getattr(self,'target',BASE)}}
+  if path=='repos/owner/repo/pulls/12/files?per_page=100':return [[{'filename':'src/lib.rs'}]]
   if '/pulls/' in path:return self.pr
   if '/runs?' in path:
    if getattr(self,'read_error',False):raise OSError('authority read unavailable')
@@ -40,7 +41,7 @@ class SelectionTests(unittest.TestCase):
    encoded=base64.b64encode(raw).decode()
    return {'type':'file','path':integration.WORKFLOW,'encoding':'base64','size':len(raw),'sha':hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest(),'content':'\n'.join(encoded[i:i+60] for i in range(0,len(encoded),60))+'\n'}
   raise AssertionError(path)
- def check(self,locator=None,allow_ready_pr=False,require_integration=False,require_dispatch=False):
+ def check(self,locator=None,allow_ready_pr=False,require_integration=True,require_dispatch=False):
   def verify(repo,uid,number,base,head,n,app,*,expected_attempt=None,**kwargs):
    r=next(r for r in self.runs if r['id']==n)
    self.assertEqual(r['run_attempt'],expected_attempt)
@@ -51,8 +52,14 @@ class SelectionTests(unittest.TestCase):
    return {'id':n},{'workflow_run_id':n}
   with patch.object(receipt,'gh',side_effect=self.api),patch.object(integration,'gh',side_effect=self.api),patch.object(integration,'_historical_json',side_effect=lambda path,budget:self.api(path),create=True),patch.object(receipt,'live',return_value=(self.pr,{'id':1},BASE,HEAD)),patch.object(integration,'verified_run',side_effect=verify):
    return receipt.selected_live('owner/repo',UID,1,12,'required-gate',42,allow_ready_pr=allow_ready_pr,integration_run_id=locator,require_integration=require_integration,require_dispatch=require_dispatch)
- def test_new_failure_blocks_even_normal_green(self):
-  with self.assertRaisesRegex((SystemExit,ValueError),'current request'):self.check()
+ def test_ordinary_path_does_not_scan_historical_dispatches(self):
+  reads=[];original=self.api
+  def recorded(*args):
+   reads.append(args[-1]);return original(*args)
+  with patch.object(self,'api',side_effect=recorded):
+   self.assertEqual(self.check(require_integration=False)[1]['id'],1)
+  self.assertTrue(any('/pulls/12' in path for path in reads))
+  self.assertFalse(any('/actions/runs' in path for path in reads))
 
  def validation(self,n=30,uid=UID):
   self.workflow="""name: Rust
