@@ -653,13 +653,9 @@ def local_loop_admission(root, uid, base, head, tool_root):
 
 
 def requires_strict_integration(data: dict[str, Any]) -> bool:
-    """Fail closed when no trusted projection context is available.
-
-    Production callers use ``trusted_requires_strict_integration`` after
-    byte-loading and validating the published projection.  This compatibility
-    wrapper deliberately never relaxes from ad-hoc PR data.
-    """
-    return True
+    """Compatibility API for untrusted PR payloads; no route facts means blocked."""
+    del data
+    raise ValueError('strict integration routing blocked: trusted projection context is required')
 
 
 def _load_trusted_projection(data: dict[str, Any], root: Path, effective: Path, uid: str, policy_commit: str) -> dict[str, Any]:
@@ -828,59 +824,58 @@ def _mapped_relation_paths(
     return relations, unmapped
 
 
-def trusted_requires_strict_integration(data: dict[str, Any], root: Path, effective: Path, uid: str, policy_commit: str, *, assessed_target_oid=None) -> bool:
-    """Derive strict escalation only from the verified published projection."""
-    projection = _load_trusted_projection(data, root, effective, uid, policy_commit)
-    if projection.get("review_escalated") is True or projection.get("verification_affected") is True:
-        return True
-    if projection.get("change_class") in {"workflow-doc", "unknown", "mixed"}:
-        return True
-    closure = projection.get("closure_status") or {}
-    if not isinstance(closure, dict) or closure.get("status") != "complete":
-        return True
-    # Search only the projection values.  Including field names here would
-    # make every well-formed ``consumed_contracts`` field appear risky merely
-    # because the schema contains the word ``contract``.
-    risk_text = json.dumps(
-        [reason for reason in projection.get("review_reasons", [])
-         if isinstance(reason, str) and not reason.startswith("input:")],
-        sort_keys=True,
-    ).lower()
-    risk_terms = ("api", "abi", "persistence", "serialization", "state-root", "consensus",
-                  "security", "dependency", "permission", "workflow", "validation", "contract",
-                  "schema", "migration", "wasm", "replay", "recovery", "critical")
-    if any(term in risk_text for term in risk_terms):
-        return True
-    high_risk_paths = (".github/workflows/", ".codex/", "scripts/pm/", "cargo.toml", "cargo.lock")
-    if any(any(path.lower().startswith(prefix) or path.lower() == prefix.rstrip("/")
-               for prefix in high_risk_paths) for path in projection.get("changed_paths", [])):
-        return True
-    if projection.get("public_semantics"):
-        return True
-    scope_base = projection.get("scope_base_oid")
-    current_base = assessed_target_oid if assessed_target_oid is not None else data.get("baseRefOid")
-    if not isinstance(current_base, str) or not re.fullmatch(r'[0-9a-f]{40}', current_base):
-        raise ValueError('assessed integration target OID unavailable')
-    if scope_base != current_base:
-        try:
-            subprocess.run(
-                ["git", "-C", str(root), "merge-base", "--is-ancestor", str(scope_base), str(current_base)],
-                check=True, capture_output=True,
-            )
-            changed = subprocess.check_output(
-                ["git", "-C", str(root), "diff", "--name-only", f"{scope_base}..{current_base}"],
-                text=True,
-            ).splitlines()
-        except (OSError, subprocess.CalledProcessError) as exc:
-            raise ValueError("cannot verify target-only changes for ordinary integration policy") from exc
-        relations, unmapped = _mapped_relation_paths(
-            projection, root=root, source_head=str(data.get("headRefOid")),
-        )
-        if unmapped or not relations or any(
-            _related_path(path, related) for path in changed for related in relations
-        ):
-            return True
-    return False
+def _strict_route_identity_helper():
+    identity_path = Path(__file__).with_name('ci_ready_receipt_identity.py')
+    spec = importlib.util.spec_from_file_location('trusted_strict_route_identity', identity_path)
+    if spec is None or spec.loader is None:
+        raise ValueError('effective strict-route decision helper cannot be loaded')
+    identity = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(identity)
+    return identity
+
+
+def trusted_strict_integration_decision(data: dict[str, Any], root: Path, effective: Path, uid: str,
+                                        policy_commit: str, *, assessed_target_oid=None,
+                                        projection: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Route from protected ordinary facts; projection risk labels are not exceptions."""
+    if projection is None:
+        projection = _load_trusted_projection(data, root, effective, uid, policy_commit)
+    # The route evaluator is part of this candidate's tested gate code. The
+    # projection facts it receives are independently loaded against protected
+    # W above; caller-owned projection labels still cannot produce `required`.
+    identity = _strict_route_identity_helper()
+    facts = None
+    plan_locator = data.get('_strict_exception_plan_locator')
+    potential = '.github/workflows/rust.yml' in projection.get('changed_paths', ())
+    if potential or plan_locator is not None or re.search(r'(?m)^Strict Integration Exception:', str(data.get('body') or '')):
+        task = identity.primary_contract.load_task(root, uid)
+        if not task:
+            raise ValueError('strict exception Task binding unavailable')
+        target = assessed_target_oid or live_target_oid(data, uid=uid)
+        locator = identity.select_strict_exception_locator(root=root, repository=data['repository'],
+            task_uid=uid, issue=task['issue_number'], pr_number=data['number'],
+            source_head_oid=projection['source_head_oid'], target_oid=target,
+            pr_body=data.get('body'), plan_locator=plan_locator, changed_paths=projection.get('changed_paths'),
+            github=lambda *args: _run_json(['gh', 'api', *args]))
+        if locator is not None:
+            producer = identity._strict_exception_module()
+            pull = _run_json(['gh', 'api', f"repos/{data['repository']}/pulls/{data['number']}"])
+            facts = producer.read_protected(data['repository'], uid, task['issue_number'], pull, target, root)
+    decision = identity.evaluate_strict_integration_requirement(
+        trusted_projection=projection, expected_task_uid=uid,
+        verified_exception=facts,
+    )
+    if decision.get('status') == 'blocked':
+        raise ValueError('strict integration routing blocked: ' + str(decision.get('reason')))
+    return decision
+
+
+def trusted_requires_strict_integration(data: dict[str, Any], root: Path, effective: Path,
+                                       uid: str, policy_commit: str, *, assessed_target_oid=None) -> bool:
+    """Legacy boolean adapter over the shared three-state route decision."""
+    decision = trusted_strict_integration_decision(
+        data, root, effective, uid, policy_commit, assessed_target_oid=assessed_target_oid)
+    return decision['status'] == 'required'
 
 
 def _validate_live_integration_proof(
@@ -1710,10 +1705,7 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
     if trusted_default_oid is not None and not re.fullmatch(r'[0-9a-f]{40}', str(trusted_default_oid)):
         raise ValueError('live trusted default-branch identity is malformed')
     task = admission['task']
-    authority_helpers = (
-        'ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'integration_ci.py',
-        'integration_executor_contract.py',
-    )
+    authority_helpers = ['ci-ready-receipt.py', 'ci_ready_receipt_identity.py']
     keyed_helpers = (
         'ci_input_scope.py', 'ci_required_artifact_v2.py',
         'ci_evidence_applicability.py', 'ci_required_inventory.py',
@@ -1727,34 +1719,53 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
         if commit != trusted_default_oid or commit != live_target_oid(data, uid=uid):
             raise ValueError('maintenance protected policy is not current Q')
         candidate_authority = _candidate_receipt_authority(data, root, Path(root), uid, task, review_plan_path)
+    if task.get('repository') != data['repository']:
+        raise ValueError('CI task repository identity mismatch')
+    request_key = None
+    route_decision = None
+    projection = None
+    if require_strict == "auto":
+        if review_plan_path is not None:
+            selected_plan = json.loads(Path(review_plan_path).read_text())
+            if 'strict_exception_comment_id' in selected_plan:
+                data = {**data, '_strict_exception_plan_locator': selected_plan['strict_exception_comment_id']}
+        projection = _load_trusted_projection(data, root, effective, uid, commit)
+        route_decision = trusted_strict_integration_decision(
+            data, root, effective, uid, commit, assessed_target_oid=assessed_target_oid,
+            projection=projection)
+    strict = (route_decision['status'] == 'required' if route_decision is not None
+              else True if require_strict is None else bool(require_strict))
+    # A durable locally journaled request is an explicit existing obligation,
+    # independent of the new-exception classifier. Keep its exact-attempt
+    # readback active even when ordinary CI is the default route.
+    if request_key is not None:
+        strict = True
+    if integration_run_id is not None:
+        strict = True
+    strict_loader_needed = bool(strict or integration_run_id is not None or request_key is not None
+                                or isinstance(task.get('loop_binding'), dict)
+                                or candidate_authority is not None)
+    if strict_loader_needed:
+        authority_helpers.extend(('integration_ci.py', 'integration_executor_contract.py'))
     for name in authority_helpers:
         relative = 'scripts/pm/' + name
-        # These files establish the protected policy scaffold, never H policy.
-        helper_commit = commit
-        expected = subprocess.check_output(['git','-C',str(root),'show',helper_commit + ':' + relative])
+        expected = subprocess.check_output(['git', '-C', str(root), 'show', commit + ':' + relative])
         path = effective / relative
         if path.is_symlink() or path.read_bytes() != expected:
             raise ValueError('effective CI authority helper bytes differ: ' + name)
-    if require_strict == "auto":
+    if isinstance(task.get('loop_binding'), dict):
         projection_relative = 'scripts/pm/workflow-impact-projection.py'
-        projection_expected = subprocess.check_output(['git','-C',str(effective),'show',commit + ':' + projection_relative])
+        projection_expected = subprocess.check_output(
+            ['git', '-C', str(effective), 'show', commit + ':' + projection_relative])
         projection_path = effective / projection_relative
         if projection_path.is_symlink() or projection_path.read_bytes() != projection_expected:
             raise ValueError('effective CI authority helper bytes differ: workflow-impact-projection.py')
-    if task.get('repository') != data['repository']:
-        raise ValueError('CI task repository identity mismatch')
-    strict = (trusted_requires_strict_integration(data, root, effective, uid, commit,
-                                                assessed_target_oid=assessed_target_oid)
-              if require_strict == "auto" else True if require_strict is None else bool(require_strict))
-    if integration_run_id is not None:
-        strict = True
-    projection = None
-    request_key = None
     if isinstance(task.get('loop_binding'), dict):
         # The same W-validated projection used by the strictness classifier
         # selects a local journal key; the key is never taken from PR text or
         # an artifact payload.
-        projection = _load_trusted_projection(data, root, effective, uid, commit)
+        if projection is None:
+            projection = _load_trusted_projection(data, root, effective, uid, commit)
         request_key = _latest_local_keyed_request_key(
             Path(root), effective, repository=data['repository'], uid=uid,
             pr_number=int(data['number']), base_oid=data['baseRefOid'],
@@ -1765,17 +1776,30 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
             allow_advanced_target=True,
         )
         if request_key is not None:
+            strict = True
             for name in keyed_helpers:
                 relative = 'scripts/pm/' + name
                 expected = subprocess.check_output(['git', '-C', str(root), 'show', commit + ':' + relative])
                 path = effective / relative
                 if path.is_symlink() or path.read_bytes() != expected:
                     raise ValueError('effective keyed CI authority helper bytes differ: ' + name)
+    ordinary_target_refresh_required = False
+    if route_decision is not None and route_decision['status'] == 'not_required':
+        identity = _strict_route_identity_helper()
+        ordinary_target_refresh_required = identity.ordinary_target_advance_requires_refresh(
+            projection, root=root,
+            source_scope_oid=projection.get('scope_base_oid'),
+            source_head_oid=projection.get('source_head_oid'),
+            current_target_oid=assessed_target_oid or data.get('baseRefOid'),
+        )
     request = {'root': str(effective), 'repository': data['repository'], 'uid': uid,
                'canonical_root': str(root), 'issue': task['issue_number'], 'pr': data['number'],
                'app': next(iter(pins)), 'request_key': request_key,
                'base_ref': data['baseRefName'], 'integration_run_id': integration_run_id,
+               'assessed_target_oid': assessed_target_oid,
+               'ordinary_target_refresh_required': ordinary_target_refresh_required,
                'require_strict': strict, 'candidate_authority': candidate_authority,
+               'strict_exception_plan_locator': data.get('_strict_exception_plan_locator'),
                # ``None`` is the direct compatibility API: it retains the
                # legacy strict check fallback used by existing callers. Every
                # production-selected strict mode carries an explicit policy
@@ -1788,19 +1812,36 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
     program = """import importlib.util,json,sys
 from pathlib import Path
 request=json.loads(sys.argv[1]); directory=Path(request['root'])/'scripts/pm'
+sys.path.insert(0,str(directory))
 loaded={}
 if request.get('candidate_authority'):
  spec=importlib.util.spec_from_file_location('workflow_maintenance',directory/'workflow_maintenance.py'); item=importlib.util.module_from_spec(spec); sys.modules['workflow_maintenance']=item; spec.loader.exec_module(item)
-for name,filename in [('integration_ci','integration_ci.py'),('integration_executor_contract','integration_executor_contract.py'),('ci_ready_receipt_identity','ci_ready_receipt_identity.py'),('ci_live','ci-ready-receipt.py')]:
+for name,filename in [('ci_live','ci-ready-receipt.py')]:
  spec=importlib.util.spec_from_file_location(name,directory/filename); item=importlib.util.module_from_spec(spec); sys.modules[name]=item; spec.loader.exec_module(item); loaded[name]=item
-integration=loaded['integration_ci']; module=loaded['ci_live']
-repository=integration.gh('api',f"repos/{request['repository']}")
+module=loaded['ci_live']
+strict_selected=bool(request['require_strict'] or request.get('integration_run_id') or request.get('request_key'))
+if strict_selected:
+ for name,filename in [('integration_ci','integration_ci.py'),('integration_executor_contract','integration_executor_contract.py')]:
+  spec=importlib.util.spec_from_file_location(name,directory/filename); item=importlib.util.module_from_spec(spec); sys.modules[name]=item; spec.loader.exec_module(item); loaded[name]=item
+integration=loaded.get('integration_ci')
+repository=module.gh('api',f"repos/{request['repository']}")
 if repository.get('full_name')!=request['repository'] or repository.get('default_branch')!=request['base_ref']:
  raise ValueError('PR target ref is not the live repository default branch')
-assessed_target=integration.default_branch_head(request['repository'],request['base_ref'])
-continuation_args={}
+def default_branch_head():
+ if integration is not None:
+  return integration.default_branch_head(request['repository'],request['base_ref'])
+ ref=module.gh('api',f"repos/{request['repository']}/git/ref/heads/{request['base_ref']}")
+ value=(ref.get('object') or {}).get('sha') if isinstance(ref,dict) else None
+ if not isinstance(value,str) or not __import__('re').fullmatch(r'[0-9a-f]{40,64}',value):
+  raise ValueError('live default-branch head identity is invalid')
+ return value
+assessed_target=default_branch_head()
+if request.get('assessed_target_oid') and assessed_target!=request['assessed_target_oid']:
+ raise ValueError('default-branch target changed before ordinary CI readback')
+continuation_args={'canonical_root':request['canonical_root'],
+ 'strict_exception_plan_locator':request.get('strict_exception_plan_locator')}
 if request.get('candidate_authority'):
- live_pr=integration.gh('api',f"repos/{request['repository']}/pulls/{request['pr']}")
+ live_pr=module.gh('api',f"repos/{request['repository']}/pulls/{request['pr']}")
  if live_pr.get('draft') is False:
   maintenance=sys.modules['workflow_maintenance']
   continuation=maintenance.read_ready_maintenance_continuation(request['canonical_root'],request['repository'],request['candidate_authority']['comment_id'],request['uid'],request['pr'],live_pr['head']['sha'],app=request['app'],review_plan_path=request.get('review_plan_path'))
@@ -1823,8 +1864,11 @@ if run.get('_integration'):
  proof.update({key:run['_integration'][key] for key in ('workflow_run_id','workflow_sha','tested_tree_oid','tested_commit_oid')})
  for key in ('request_key','request_identity','source_scope_oid','trusted_policy_context','effective_policy_identity','planner_inventory_authority','required_plan_v2_artifact_id','required_plan_v2_artifact_name','required_plan_v2_payload','required_result_v2_artifacts','trusted_planner_inventory','trusted_source_attempt','execution_jobs','run_id','run_attempt','request_id','job_id','job_name'):
   if key in (run.get('_integration') or {}): proof[key]=run['_integration'][key]
-if integration.default_branch_head(request['repository'],request['base_ref'])!=assessed_target:
+if default_branch_head()!=assessed_target:
  raise ValueError('default-branch target moved during live CI and Task verification')
+if (request.get('ordinary_target_refresh_required')
+    and base!=request.get('assessed_target_oid')):
+ raise ValueError('ordinary PR CI is stale after a proven related target change; refresh ordinary CI')
 print(json.dumps(proof))
 """
     if candidate_authority is not None:

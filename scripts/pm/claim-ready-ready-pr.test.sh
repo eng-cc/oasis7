@@ -72,10 +72,10 @@ assert 'old.get(key)!=val' in ci_source
 assert 'not 0 <= (dt.datetime.now(dt.timezone.utc)-seen).total_seconds() <= 600' in ci_source
 PY
 
-# A high-risk v2 projection must reject an ordinary source-bound receipt at the
-# direct claim-ready entrypoint. This uses a small isolated worktree and stubs
-# only the live receipt/bootstrap readers so the claim path reaches the real
-# v2 identity and projection classifier.
+# A mixed review projection must not require strict integration when ordinary
+# source-bound CI is valid. This uses a small isolated worktree and stubs only
+# the live receipt/bootstrap readers so the claim path reaches the real v2
+# identity and shared route evaluator.
 TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
 OBSERVATION_JSON="$TEST_ROOT/observation-candidate.json"
@@ -247,24 +247,24 @@ receipt = {
 }
 (root / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
 PY
-set +e
 TARGET_OID="$FIXTURE_HEAD" PATH="$TEST_ROOT/bin:$PATH" PM_ROOT_DIR="$FIXTURE" \
   "$FIXTURE/scripts/pm/claim-ready.sh" \
   --claim-type ready_for_pr \
   --verification-profile repository_required \
   --task-uid "$UID_VALUE" \
   --ci-ready-receipt "$FIXTURE/receipt.json" \
-  --json >"$TEST_ROOT/claim.json" 2>"$TEST_ROOT/claim.err"
-CLAIM_STATUS=$?
-set -e
-if [[ "$CLAIM_STATUS" == "0" ]]; then
-  echo "claim-ready accepted ordinary CI for a high-risk v2 projection" >&2
-  exit 1
-fi
-grep -F "high-risk projection requires trusted integration CI" "$TEST_ROOT/claim.err" >/dev/null
+  --json >"$TEST_ROOT/claim.json"
+python3 - "$TEST_ROOT/claim.json" <<'PY'
+import json
+import sys
 
-# The same direct path must reject a mapped related target-only change while
-# allowing an unrelated target advance once the live target object is bound.
+payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+if payload.get("status") != "verified" or payload.get("allowed_to_claim") is not True:
+    raise SystemExit(f"ordinary CI should satisfy the non-strict route: {payload}")
+PY
+
+# A mapped related target-only change invalidates reuse of this stale ordinary
+# receipt; it asks for refreshed ordinary evidence, never strict integration.
 python3 - "$FIXTURE" "$UID_VALUE" <<'PY'
 import hashlib
 import json
@@ -316,6 +316,51 @@ if [[ "$RELATED_STATUS" == "0" ]]; then
   exit 1
 fi
 grep -F "v2 source-review reuse is not proven" "$TEST_ROOT/related.err" >/dev/null
+
+# An unmapped consumer label is not proof that the target change overlaps the
+# source. It must not create a latest-target proof or strict-execution burden.
+python3 - "$FIXTURE" "$UID_VALUE" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+task_uid = sys.argv[2]
+task_root = root / ".pm" / "scratch" / task_uid
+plan_path = task_root / "review-plans" / "1.json"
+plan = json.loads(plan_path.read_text(encoding="utf-8"))
+projection = plan["impact_projection"]
+projection["affected_consumers"] = ["unmapped-consumer-id"]
+projection["projection_digest"] = "sha256:" + hashlib.sha256(
+    json.dumps(
+        {key: value for key, value in projection.items() if key != "projection_digest"},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+).hexdigest()
+plan["impact_projection_digest"] = projection["projection_digest"]
+plan_path.write_text(json.dumps(plan), encoding="utf-8")
+receipt_path = root / "receipt.json"
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+receipt["impact_projection_digest"] = projection["projection_digest"]
+receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+PY
+TARGET_OID="$RELATED_TARGET" PATH="$TEST_ROOT/bin:$PATH" PM_ROOT_DIR="$FIXTURE" \
+  "$FIXTURE/scripts/pm/claim-ready.sh" \
+  --claim-type ready_for_pr \
+  --verification-profile repository_required \
+  --task-uid "$UID_VALUE" \
+  --ci-ready-receipt "$FIXTURE/receipt.json" \
+  --json >"$TEST_ROOT/unmapped.json"
+python3 - "$TEST_ROOT/unmapped.json" <<'PY'
+import json
+import sys
+
+payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+if payload.get("status") != "verified" or payload.get("allowed_to_claim") is not True:
+    raise SystemExit(f"unmapped relation alone must stay ordinary: {payload}")
+PY
 
 TARGET_OID="$UNRELATED_TARGET" PATH="$TEST_ROOT/bin:$PATH" PM_ROOT_DIR="$FIXTURE" \
   "$FIXTURE/scripts/pm/claim-ready.sh" \

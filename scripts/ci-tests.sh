@@ -453,6 +453,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/terminal-task-audit-aggregate.test.py
   run python3 ./scripts/pm/terminal-task-audit-project-semantics.test.py
   run python3 ./scripts/pm/ci-ready-receipt.test.py
+  run python3 ./scripts/pm/strict_exception_facts.test.py
   run python3 ./scripts/pm/ci_reuse_validation_readback.test.py
   run python3 ./scripts/pm/ci_reuse_validation_readback_pagination_adversarial.test.py
   run python3 ./scripts/pm/ci-reuse-validation.test.py

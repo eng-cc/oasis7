@@ -1050,7 +1050,10 @@ def main():
     if a.allow_ready_pr and a.request_key is None and not (a.integration_run_id or existing.get('integration_run_id')):
         continuation = _standalone_ready_continuation(a.repository,a.task_uid,a.task_issue_number,
             a.pr_number,a.check_name,a.check_app_id,a.root,a.review_plan)
-    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),request_key=a.request_key,ready_continuation=continuation)
+    plan_locator = None
+    if a.review_plan:
+        plan_locator = json.loads(Path(a.review_plan).read_text()).get('strict_exception_comment_id')
+    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),request_key=a.request_key,ready_continuation=continuation,strict_exception_plan_locator=plan_locator,canonical_root=a.root)
     keyed_v2_evidence = None
     if a.request_key is not None:
         proof=run.get('_integration') or {}
@@ -1203,17 +1206,62 @@ def _require_historical_base_ancestor_of_target(repository,historical_base_oid,c
         raise ValueError("historical integration base is not an ancestor of current PR target")
 
 
+def _pr_workflow_changed(repository, number, pr, root):
+    try:
+        paths = subprocess.check_output(['git', '-C', str(root), 'diff', '--name-only',
+            pr['base']['sha'] + '...' + pr['head']['sha']], text=True, stderr=subprocess.DEVNULL).splitlines()
+        return '.github/workflows/rust.yml' in paths
+    except subprocess.CalledProcessError:
+        pages = gh('api', '--paginate', '--slurp', f'repos/{repository}/pulls/{number}/files?per_page=100')
+        if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+            raise ValueError('strict exception diff inventory unreadable')
+        return any(item.get('filename') == '.github/workflows/rust.yml' for page in pages for item in page)
+
+
 def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=False,base_ref=None,
                   integration_run_id=None, require_integration=False, require_dispatch=False,
-                  request_key=None, ready_continuation=None):
-    from integration_ci import current_request, verified_run
-    import integration_ci
+                  request_key=None, ready_continuation=None, strict_exception_plan_locator=None, canonical_root=None):
     pr=gh('api',f'repos/{repository}/pulls/{number}')
     if (not allow_ready_pr and not pr.get('draft')) or f'Refs #{issue}' not in (pr.get('body') or '') or f'Task: {uid}' not in (pr.get('body') or ''):
         raise SystemExit('ci-ready-receipt: manual integration task/draft identity mismatch')
     if pr.get('state')!='open' or pr.get('merged'):
         raise SystemExit('ci-ready-receipt: integration PR not open')
     if base_ref and pr['base']['ref']!=base_ref: raise SystemExit('ci-ready-receipt: manual integration base ref mismatch')
+    maintenance_selected = bool(re.search(
+        r"^Workflow Maintenance Authority: [1-9][0-9]*$", pr.get("body", ""), re.M))
+    strict_selector = (request_key is not None or integration_run_id is not None or require_integration)
+    import ci_ready_receipt_identity as identity
+    root = Path(canonical_root) if canonical_root is not None else Path(__file__).resolve().parents[2]
+    # Inspect immutable workflow bytes, not a risk label. Ordinary fixtures and
+    # helper-only changes retain their lazy path; real orchestration changes
+    # independently read current Task evidence even if the PR marker was hidden.
+    pointer = bool(re.search(r'(?m)^Strict Integration Exception:', pr.get('body') or ''))
+    selected_exception = None
+    potential = pointer or strict_exception_plan_locator is not None
+    if not potential and not strict_selector:
+        potential = _pr_workflow_changed(repository, number, pr, root)
+    if potential:
+        from integration_ci import default_branch_head
+        q = default_branch_head(repository, pr['base']['ref'])
+        selected_exception = identity.select_strict_exception_locator(root=root, repository=repository,
+            task_uid=uid, issue=issue, pr_number=number, source_head_oid=pr['head']['sha'], target_oid=q,
+            pr_body=pr.get('body'), plan_locator=strict_exception_plan_locator, github=lambda *args: gh('api', *args))
+    if selected_exception is not None:
+        producer = identity._strict_exception_module()
+        facts = producer.read_protected(repository, uid, issue, pr, q, root)
+        if facts is None:
+            raise SystemExit('ci-ready-receipt: selected strict exception facts are unavailable')
+        require_integration = True
+        require_dispatch = True
+        strict_selector = True
+    if not strict_selector and not maintenance_selected:
+        # Ordinary proof is complete from the live PR check itself. Do not load
+        # integration history merely to establish that no historical dispatch
+        # ever existed; a currently bound request uses the explicit branch below.
+        return live(repository,uid,issue,number,check_name,app,allow_ready_pr,base_ref,ordinary_pr=True)
+
+    from integration_ci import current_request, verified_run
+    import integration_ci
     # PR-associated base.sha can remain historical after an additive source
     # sync. Strict legacy requests bind the independently resolved live ref.
     current_target_oid=integration_ci.default_branch_head(repository,pr['base']['ref'])
@@ -1279,6 +1327,11 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
               "run_attempt": selected["run_attempt"],
               "check_app_id": (check.get("app") or {}).get("id"),
               "check_run_id": check.get("id")}
+            if selected_exception is not None:
+                required_scope = planner_for_run(repository, check, base_oid=base, head_oid=head)
+                if (required_scope.get('scope') != 'full'
+                        or required_scope.get('impact_projection_test_profile') != 'full'):
+                    raise ValueError('selected strict exception run does not execute required full scope/profile')
             if request_key is not None:
                 proof.update(request_key=request_key,request_identity=request_identity)
             if current_request(repository,uid,number,base,head,pr['base']['ref'],
@@ -1310,8 +1363,7 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             raise ValueError('explicit integration locator absent from verified current request range')
     except (ValueError,KeyError,OSError,ImportError,TypeError,subprocess.SubprocessError) as exc:
         raise SystemExit('ci-ready-receipt: current request blocked: '+str(exc)) from exc
-    if (request_key is None and integration_run_id is None
-            and re.search(r"^Workflow Maintenance Authority: [1-9][0-9]*$", pr.get("body", ""), re.M)):
+    if (request_key is None and integration_run_id is None and maintenance_selected and selected_exception is None):
         ordinary = live(repository,uid,issue,number,check_name,app,allow_ready_pr,base_ref,ordinary_pr=True)
         candidate_pr, candidate_check, candidate_base, candidate_head = ordinary
         planner = planner_for_run(repository,candidate_check,base_oid=candidate_base,head_oid=candidate_head)
