@@ -161,7 +161,6 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
             "${{ steps.scope.outputs.planner_config_sha256 }}": "sha256:" + "1" * 64,
             "${{ steps.scope.outputs.planner_digest }}": "sha256:" + "2" * 64,
             "${{ steps.scope.outputs.impact_projection_digest }}": "sha256:" + "3" * 64,
-            "${{ steps.scope.outputs.maintenance_authority_comment_id }}": "",
         }
 
         def render(script: str, *, start_only: bool = False, base_oid: str, head_oid: str) -> str:
