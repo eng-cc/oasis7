@@ -400,8 +400,15 @@ class MergedIntegrationComponent(unittest.TestCase):
         context=integration_ci.trusted_policy_context(repo,'main',w,w)
         self.assertEqual(context['effective_policy']['enabled_capabilities'],[])
         self.assertEqual(context['effective_policy']['approved_executor_contract_digests'],[])
-        actual={relative:(HERE.parents[1]/relative).read_bytes() for relative in executor.EXECUTOR_CONTRACT_PATHS}
-        digest=executor.executor_contract_from_contents(actual)['digest']
+        config=subprocess.check_output(['git','-C',str(self.review['root']),'show',w+':scripts/ci-required-scope.v2.json'])
+        paths=executor.executor_contract_paths(config)
+        actual={relative:subprocess.check_output(['git','-C',str(self.review['root']),'show',w+':'+relative]) for relative in paths}
+        closed=executor.executor_contract_from_contents(actual)
+        self.assertEqual(closed['schema'],executor.EXECUTOR_CONTRACT_SCHEMA_V2)
+        self.assertEqual(paths,executor.PARALLEL_EXECUTOR_CONTRACT_PATHS)
+        self.assertEqual([item['path'] for item in closed['files']],list(paths))
+        self.assertEqual(actual['scripts/ci-required-scope.v2.json'],config)
+        digest=executor.validate_executor_contract(closed)
         identity={'repository':repo,'task_uid':a['task_uid'],'pr_number':a['pr'],'bootstrap_epoch':1,'source_head_oid':a['head'],'publication_id':'offline-keyed-capability-probe','source_projection_digest':self.review['plan']['impact_projection']['projection_digest'],'unit_ids':['required-gate'],'input_fingerprints':{'required-gate':'sha256:'+hashlib.sha256(json.dumps(a['planner'],sort_keys=True).encode()).hexdigest()},'executor_contract_digest':digest,'effective_policy_digest':executor.effective_policy_digest(context['effective_policy']),'purpose':'integration_revalidation','applicability_mode':'input_scoped','snapshot_target_oid':None}
         executor.validation_request_identity(identity)
         return context,identity,executor.validation_request_key(identity)
