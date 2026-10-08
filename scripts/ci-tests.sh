@@ -119,7 +119,7 @@ validate_required_gate_execution_contract() {
       fi
       required_gate_execution_contract="legacy"
       ;;
-    required-domain-split/v1)
+    required-domain-split/v1|required-domain-split/v2)
       for variable in "${planner_selectors[@]}" "${planner_resources[@]}"; do
         value="${!variable:-}"
         if [[ "$value" != true && "$value" != false ]]; then
@@ -129,6 +129,10 @@ validate_required_gate_execution_contract() {
       done
       if [[ "${OASIS7_CI_NEEDS_PYTHON}" != true || "${OASIS7_CI_NEEDS_MARKDOWN}" != true ]]; then
         echo "error: required-gate baseline document checks require planned Python and Markdown resources" >&2
+        return 1
+      fi
+      if [[ "$contract" == required-domain-split/v2 && "${OASIS7_CI_NEEDS_RUST_TOOLCHAIN}" != true ]]; then
+        echo "error: v2 scope metadata precheck requires the pinned Rust toolchain resource" >&2
         return 1
       fi
       if [[ "${OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS}" == true && "${OASIS7_CI_NEEDS_RUST_TOOLCHAIN}" != true ]]; then
@@ -176,11 +180,11 @@ validate_required_gate_execution_contract() {
         echo "error: pixel-world WASM selector must match its planner-derived library selector for ${contract}" >&2
         return 1
       fi
-      if [[ "${OASIS7_CI_RUN_RUST_BASELINE}" != "${OASIS7_CI_NEEDS_RUST_TOOLCHAIN}" ]]; then
+      if [[ "$contract" == required-domain-split/v1 && "${OASIS7_CI_RUN_RUST_BASELINE}" != "${OASIS7_CI_NEEDS_RUST_TOOLCHAIN}" ]]; then
         echo "error: Rust baseline selector must match the planned Rust toolchain resource for ${contract}" >&2
         return 1
       fi
-      required_gate_execution_contract="required-domain-split/v1"
+      required_gate_execution_contract="$contract"
       ;;
     *)
       echo "error: unsupported required-gate execution contract: ${contract}" >&2
@@ -378,6 +382,11 @@ run_workflow_governance_baseline_contract_tests() {
   run ./scripts/plan-rust-required-scope.test.sh
   run_workflow_impact_projection_contract_tests
   run python3 ./scripts/pm/check-cargo-package-scope.test.py
+  run python3 ./scripts/pm/trusted-cargo-scope.test.py
+  run python3 ./scripts/pm/prepare-loop-ci-authority.test.py
+  run python3 ./scripts/pm/required-scope-routing.test.py
+  run python3 ./scripts/pm/task-primary-package.test.py
+  run python3 ./scripts/pm/task-primary-package-consumers.test.py
   run python3 ./scripts/pm/cargo-checker-route-retirement.test.py
   run python3 ./scripts/pm/cargo-package-profile-planner.test.py
   run python3 ./scripts/pm/cargo-package-profile-driver.test.py
@@ -639,18 +648,35 @@ run_workflow_impact_projection_contract_tests() {
 
 run_workflow_impact_projection_consumer() {
   [[ -n "$impact_projection" ]] || return 0
-  run python3 - "$impact_projection" "$repo_root" "$driver_dir" <<'PY'
+  run python3 -I - "$impact_projection" "$repo_root" "$driver_dir" <<'PY'
 import importlib.util
+import io
 import json
+import os
 import subprocess
 import sys
-from pathlib import Path
+import tarfile
+import tempfile
+from pathlib import Path, PurePosixPath
 
 projection_path = Path(sys.argv[1]).resolve()
 root = Path(sys.argv[2]).resolve()
 trusted_planner_root = Path(sys.argv[3]).resolve()
+base = os.environ.get("OASIS7_CARGO_SCOPE_INTEGRATION_BASE", "")
+if not base:
+    raise SystemExit("impact projection consumer requires frozen trusted target B")
+base_oid = subprocess.check_output(["git", "-C", str(root), "rev-parse", f"{base}^{{commit}}"], text=True).strip()
+authority = tempfile.TemporaryDirectory(prefix="required-target-authority-")
+archive = subprocess.check_output(["git", "-C", str(root), "archive", base_oid, "scripts"])
+with tarfile.open(fileobj=io.BytesIO(archive)) as contents:
+    for member in contents.getmembers():
+        path = PurePosixPath(member.name)
+        if path.is_absolute() or ".." in path.parts or member.issym() or member.islnk():
+            raise SystemExit("unsafe trusted target scripts archive")
+    contents.extractall(authority.name)
+trusted_planner_root = Path(authority.name) / "scripts"
 spec = importlib.util.spec_from_file_location(
-    "oasis7_workflow_impact_projection", root / "scripts/pm" / "workflow-impact-projection.py"
+    "oasis7_workflow_impact_projection", trusted_planner_root / "pm/workflow-impact-projection.py"
 )
 if spec is None or spec.loader is None:
     raise SystemExit("impact projection adapter is unavailable")
@@ -668,7 +694,7 @@ planner_result = subprocess.run(planner, cwd=root, text=True, capture_output=Tru
 if planner_result.returncode:
     raise SystemExit(planner_result.stderr.strip() or "impact projection planner consumer failed")
 planner_fields = dict(line.split("=", 1) for line in planner_result.stdout.splitlines() if "=" in line)
-selector = [str(root / "scripts" / "pm" / "review-role-selector.py"),
+selector = [sys.executable, "-I", str(trusted_planner_root / "pm/review-role-selector.py"),
             "--change-class", projection["change_class"],
             "--changed-path-list", ";".join(paths), "--impact-projection", str(projection_path), "--json"]
 selector.extend(("--task-uid", projection["task_uid"],
@@ -774,8 +800,6 @@ run_standalone_tool_lockfiles_checks() {
 run_cargo_package_scope_check() {
   local base_oid="${OASIS7_CARGO_SCOPE_BASE:-}"
   local head_oid="${OASIS7_CARGO_SCOPE_HEAD:-}"
-  local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
-  local policy="./.pm/cargo-package-scope-policy.json"
   local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
   local trusted_full_plan="${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}"
   if [[ "$trusted_full_plan" != true && "$trusted_full_plan" != false ]]; then
@@ -786,21 +810,17 @@ run_cargo_package_scope_check() {
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
     return 0
   fi
-  if [[ ! -x "$checker" || ! -f "$policy" ]]; then
-    echo "skip: Cargo package scope audit reason=checker_or_policy_unavailable claim_boundary=contract_suite_only"
-    return 0
-  fi
-  if ! git cat-file -e "${base_oid}:.pm/cargo-package-scope-policy.json" 2>/dev/null; then
-    echo "skip: Cargo package scope audit reason=trusted_base_policy_unavailable claim_boundary=contract_suite_only"
-    return 0
-  fi
   local checker_result=0
-  run env OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN="$trusted_full_plan" python3 "$checker" \
+  local full_plan_args=()
+  if [[ "$trusted_full_plan" == true ]]; then
+    full_plan_args=(--trusted-full-plan "${OASIS7_CARGO_SCOPE_FULL_PLAN:-}")
+  fi
+  run python3 -I "$driver_dir/pm/trusted_cargo_scope.py" \
+    "${full_plan_args[@]}" \
     --repo-root "$repo_root" \
-    --base "$base_oid" \
+    --base "${OASIS7_CARGO_SCOPE_INTEGRATION_BASE:-$base_oid}" \
     --head "$head_oid" \
-    --primary-package "$primary_package" \
-    --policy "$repo_root/$policy" || checker_result=$?
+    --primary-package "$primary_package" || checker_result=$?
   if (( checker_result != 0 )); then
     return "$checker_result"
   fi
@@ -960,7 +980,7 @@ case "$tier" in
     ;;
   required)
     run_required_gate_checks
-    if [[ "$required_gate_execution_contract" == required-domain-split/v1 ]]; then
+    if [[ "$required_gate_execution_contract" == required-domain-split/v* ]]; then
       run_required_gate_capability_contracts
     fi
     run_required_component "oasis7 required tests" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" "disabled_by_scope_planner" run_oasis7_required_tier_tests

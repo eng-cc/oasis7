@@ -37,6 +37,16 @@ def planner_for_path(path: str) -> tuple[dict[str, str], str]:
 
 
 class RequiredGateLocalEnvironmentTest(unittest.TestCase):
+    def test_v2_metadata_resource_renders_actual_version(self) -> None:
+        output = subprocess.check_output([sys.executable, "-I", str(ROOT / "scripts/plan-rust-required-scope.py"),
+                                          "--event-name", "pull_request", "--changed-path", "doc/engineering/example.md"],
+                                         cwd=ROOT, text=True)
+        environment = dict(item.split("=", 1) for item in MODULE.render_versioned_environment(output).split())
+        self.assertEqual(environment["OASIS7_CI_EXECUTION_CONTRACT"], "required-domain-split/v2")
+        self.assertEqual(environment["OASIS7_CI_NEEDS_RUST_TOOLCHAIN"], "true")
+        with self.assertRaisesRegex(ValueError, "metadata precheck"):
+            MODULE.render_versioned_environment(output.replace("needs_rust_toolchain=true", "needs_rust_toolchain=false"))
+
     def test_minimal_document_scope_still_renders_baseline_resources(self) -> None:
         values, planner_output = planner_for_path("doc/engineering/project.md")
         self.assertEqual("minimal", values["scope"])

@@ -2,6 +2,12 @@
 """Stable review identity for a trusted CI-ready receipt."""
 
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import hashlib
 import json
@@ -22,6 +28,7 @@ SOURCE_REVIEW_SCHEMA = "oasis7-review-plan/v2"
 REQUIRED_PLAN_V1_SCHEMA = "oasis7-required-plan-v1"
 REQUIRED_PLAN_V2_SCHEMA = "oasis7-required-plan-v2"
 REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT = "required-domain-split/v1"
+SUPPORTED_REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACTS = {REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT, "required-domain-split/v2"}
 VERSIONED_PLANNER_SELECTOR_FIELDS = (
     "run_workflow_governance_contracts", "run_packaging_contracts",
     "run_doc_checker_contracts", "run_cargo_tooling_contracts",
@@ -766,6 +773,8 @@ def _target_relation_paths(
     projection: dict[str, Any], *, root: pathlib.Path, source_head: str,
 ) -> tuple[list[str], bool]:
     """Collect verified contract/consumer paths for target-only drift checks."""
+    primary_contract.validate_consumed_contracts(projection.get("consumed_contracts") or [],
+        primary_contract.load_task(root, projection.get("task_uid", "")), root=root)
     relations = [
         path for path in (projection.get("changed_paths") or [])
         if isinstance(path, str)
@@ -796,6 +805,13 @@ def _target_relation_paths(
             unmapped = True
 
     for item in projection.get("consumed_contracts") or []:
+        if isinstance(item, dict) and item.get("type") == primary_contract.REFERENCE_TYPE:
+            task = primary_contract.load_task(pathlib.Path(root), projection["task_uid"])
+            primary_contract.validate_completion_reference(item, task or {})
+            primary_contract.validate_current_completion(pathlib.Path(root), task or {})
+            # This server metadata has no repository path. Its current identity
+            # was checked above; an unrelated target advance cannot mutate it.
+            continue
         candidates: list[Any] = []
         if isinstance(item, str):
             candidates.append(item)
@@ -1121,6 +1137,16 @@ def can_reuse_source_review(
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
             return False
+        projection = plan.get("impact_projection")
+        if isinstance(projection, dict):
+            if current_target_root is not None:
+                primary_contract.validate_consumed_contracts(projection.get("consumed_contracts") or [],
+                    primary_contract.load_task(pathlib.Path(current_target_root), source["task_uid"]),
+                    root=pathlib.Path(current_target_root))
+            elif any(isinstance(item, dict) and (item.get("type") == primary_contract.REFERENCE_TYPE
+                    or item.get("schema") in {primary_contract.SCHEMA, primary_contract.SCOPE_SCHEMA})
+                    for item in projection.get("consumed_contracts") or []):
+                return False
         if plan.get("impact_projection_schema") != PROJECTION_SCHEMA:
             return False
         if current_source_identity is not None and _validate_source_identity(current_source_identity) != source:
@@ -1223,7 +1249,7 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
         ):
             raise ValueError("versioned planner fields require execution_contract")
     else:
-        if execution_contract != REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT:
+        if execution_contract not in SUPPORTED_REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACTS:
             raise ValueError("CI receipt execution_contract is unsupported")
         planner = receipt.get("planner")
         if not isinstance(planner, dict) or planner.get("execution_contract") != execution_contract:
@@ -1243,6 +1269,8 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("versioned CI receipt planner resource is missing or malformed: " + field)
         if planner["needs_python"] is not True or planner["needs_markdown"] is not True:
             raise ValueError("versioned CI receipt baseline requires Python and Markdown resources")
+        if execution_contract == "required-domain-split/v2" and planner["needs_rust_toolchain"] is not True:
+            raise ValueError("v2 CI receipt baseline requires Rust toolchain")
         planner_digest = hashlib.sha256(
             json.dumps(planner, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()

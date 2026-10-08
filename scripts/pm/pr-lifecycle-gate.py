@@ -15,6 +15,8 @@ import sys
 import re
 import fnmatch
 import tempfile
+import io
+import tarfile
 from pathlib import Path
 from typing import Any
 
@@ -1607,14 +1609,54 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
     return selected_key
 
 
-def _candidate_receipt_authority(data, root, effective, uid, task):
+def _ready_maintenance_continuation(maintenance, root, data, locator, uid, review_plan_path):
+    checks = (data.get('policy_discovery') or {}).get('required_status_checks') or []
+    pins = {item.get('app_id') for item in checks if item.get('context') == 'required-gate'}
+    if len(pins) != 1 or type(next(iter(pins))) is not int:
+        raise ValueError('ready continuation lacks a unique protected required check application')
+    return maintenance.read_ready_maintenance_continuation(
+        root, data['repository'], locator, uid, data['number'], data['headRefOid'],
+        app=next(iter(pins)), review_plan_path=review_plan_path)
+
+
+MAINTENANCE_CONSUMER_CLOSURE = tuple('scripts/pm/' + name for name in (
+    'ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'workflow_maintenance.py',
+    'pr-lifecycle-gate.py', 'task_primary_package.py'))
+
+
+@contextmanager
+def _maintenance_consumer_scaffold(root, protected_revision, source_head):
+    """Keep policy dependencies at Q; overlay the separately authenticated H closure."""
+    raw = subprocess.check_output(['git', '-C', str(root), 'archive', protected_revision, 'scripts/pm'])
+    with tempfile.TemporaryDirectory(prefix='oasis7-maintenance-consumer-') as directory:
+        scaffold = Path(directory)
+        with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+            for entry in archive.getmembers():
+                path = Path(entry.name)
+                if path.is_absolute() or '..' in path.parts or not (entry.isfile() or entry.isdir()):
+                    raise ValueError('unsafe protected consumer scaffold')
+            archive.extractall(scaffold)
+        for relative in MAINTENANCE_CONSUMER_CLOSURE:
+            entry = subprocess.check_output(['git', '-C', str(root), 'ls-tree', source_head, '--', relative], text=True).split()
+            source = Path(root) / relative
+            contents = subprocess.check_output(['git', '-C', str(root), 'show', source_head + ':' + relative])
+            if (not entry or entry[0] not in ('100644', '100755') or source.is_symlink()
+                    or (Path(root) / 'scripts').is_symlink() or source.parent.is_symlink()
+                    or not source.is_file() or source.read_bytes() != contents):
+                raise ValueError('candidate consumer closure bytes or mode differ: ' + relative)
+            (scaffold / relative).write_bytes(contents)
+        yield scaffold
+
+
+def _candidate_receipt_authority(data, root, effective, uid, task, review_plan_path=None):
     """Authenticate explicit scope independently of receipt/artifact selection."""
     head = data['headRefOid']
     if subprocess.check_output(['git', '-C', str(effective), 'rev-parse', 'HEAD'], text=True).strip() != head:
         raise ValueError('candidate consumer checkout is not exact live head')
     relative = 'scripts/pm/workflow_maintenance.py'
     path = effective / relative
-    if (path.is_symlink() or path.read_bytes() != subprocess.check_output(
+    if (path.is_symlink() or path.parent.is_symlink() or (effective / 'scripts').is_symlink()
+            or path.read_bytes() != subprocess.check_output(
             ['git', '-C', str(root), 'show', head + ':' + relative])):
         raise ValueError('candidate maintenance helper bytes differ from exact live head')
     spec = importlib.util.spec_from_file_location('gate_workflow_maintenance', path)
@@ -1629,9 +1671,17 @@ def _candidate_receipt_authority(data, root, effective, uid, task):
     permission = _run_json(['gh', 'api', f'repos/{repository}/collaborators/{actor}/permission'])
     issue = _run_json(['gh', 'api', f"repos/{repository}/issues/{task['issue_number']}"])
     pull = _run_json(['gh', 'api', f"repos/{repository}/pulls/{data['number']}"])
-    closure = ('scripts/pm/ci-ready-receipt.py', 'scripts/pm/ci_ready_receipt_identity.py', relative)
+    closure = MAINTENANCE_CONSUMER_CLOSURE
+    gate_path = effective / 'scripts/pm/pr-lifecycle-gate.py'
+    if gate_path.is_symlink() or gate_path.read_bytes() != subprocess.check_output(
+            ['git', '-C', str(root), 'show', head + ':scripts/pm/pr-lifecycle-gate.py']):
+        raise ValueError('candidate lifecycle consumer bytes differ from exact live head')
+    continuation = None
+    if pull.get('draft') is False:
+        continuation = _ready_maintenance_continuation(maintenance, root, data, locator, uid, review_plan_path)
     authority = maintenance.validate_maintenance_authority(
-        comment, permission, issue, pull, head, required_tool_paths=closure)
+        comment, permission, issue, pull, head, required_tool_paths=closure,
+        ready_continuation=continuation)
     if (authority['task_uid'] != uid or authority['issue_number'] != task['issue_number']
             or pull.get('head', {}).get('ref') != task.get('task_branch', pull.get('head', {}).get('ref'))
             or pull.get('base', {}).get('ref') != data['baseRefName']):
@@ -1639,7 +1689,7 @@ def _candidate_receipt_authority(data, root, effective, uid, task):
     return authority
 
 
-def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None, assessed_target_oid=None):
+def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None, assessed_target_oid=None, review_plan_path=None):
     """Read trusted source-bound PR CI or strict integration evidence."""
     policy = data.get('policy_discovery') or {}
     required = policy.get('required_status_checks')
@@ -1672,11 +1722,15 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
     candidate_authority = None
     if (integration_run_id is None and not isinstance(task.get('loop_binding'), dict)
             and re.search(r'^Workflow Maintenance Authority: [1-9][0-9]*$', data.get('body') or '', re.M)):
-        candidate_authority = _candidate_receipt_authority(data, root, effective, uid, task)
+        # Admission remains Q. Only this explicit, independently read scope may
+        # select the immutable canonical H consumers as code under test.
+        if commit != trusted_default_oid or commit != live_target_oid(data, uid=uid):
+            raise ValueError('maintenance protected policy is not current Q')
+        candidate_authority = _candidate_receipt_authority(data, root, Path(root), uid, task, review_plan_path)
     for name in authority_helpers:
         relative = 'scripts/pm/' + name
-        helper_commit = (data['headRefOid'] if candidate_authority is not None
-                         and name in ('ci-ready-receipt.py', 'ci_ready_receipt_identity.py') else commit)
+        # These files establish the protected policy scaffold, never H policy.
+        helper_commit = commit
         expected = subprocess.check_output(['git','-C',str(root),'show',helper_commit + ':' + relative])
         path = effective / relative
         if path.is_symlink() or path.read_bytes() != expected:
@@ -1727,6 +1781,8 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
                # production-selected strict mode carries an explicit policy
                # selector and must have a matching manual dispatch.
                'require_dispatch': bool(strict and require_strict is not None)}
+    if candidate_authority is not None:
+        request['review_plan_path'] = str(Path(review_plan_path).resolve()) if review_plan_path else None
     # The isolated loader installs only byte-verified authority helpers. No
     # candidate directory/PYTHONPATH is added to the import search path.
     program = """import importlib.util,json,sys
@@ -1742,10 +1798,17 @@ repository=integration.gh('api',f"repos/{request['repository']}")
 if repository.get('full_name')!=request['repository'] or repository.get('default_branch')!=request['base_ref']:
  raise ValueError('PR target ref is not the live repository default branch')
 assessed_target=integration.default_branch_head(request['repository'],request['base_ref'])
+continuation_args={}
+if request.get('candidate_authority'):
+ live_pr=integration.gh('api',f"repos/{request['repository']}/pulls/{request['pr']}")
+ if live_pr.get('draft') is False:
+  maintenance=sys.modules['workflow_maintenance']
+  continuation=maintenance.read_ready_maintenance_continuation(request['canonical_root'],request['repository'],request['candidate_authority']['comment_id'],request['uid'],request['pr'],live_pr['head']['sha'],app=request['app'],review_plan_path=request.get('review_plan_path'))
+  continuation_args['ready_continuation']=continuation
 if request['require_strict']:
- pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'),require_integration=True,require_dispatch=request.get('require_dispatch',False),request_key=request.get('request_key'))
+ pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'),require_integration=True,require_dispatch=request.get('require_dispatch',False),request_key=request.get('request_key'),**continuation_args)
 else:
- pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],request_key=request.get('request_key'))
+ pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],request_key=request.get('request_key'),**continuation_args)
 if request.get('request_key'):
  body=(pr.get('body') or '').replace('\\r\\n','\\n')
  import re
@@ -1764,7 +1827,12 @@ if integration.default_branch_head(request['repository'],request['base_ref'])!=a
  raise ValueError('default-branch target moved during live CI and Task verification')
 print(json.dumps(proof))
 """
-    completed = subprocess.run([sys.executable,'-I','-c',program,json.dumps(request)],text=True,capture_output=True)
+    if candidate_authority is not None:
+        with _maintenance_consumer_scaffold(root, commit, data['headRefOid']) as consumer:
+            request['root'] = str(consumer)
+            completed = subprocess.run([sys.executable,'-I','-c',program,json.dumps(request)],text=True,capture_output=True)
+    else:
+        completed = subprocess.run([sys.executable,'-I','-c',program,json.dumps(request)],text=True,capture_output=True)
     if completed.returncode:
         raise ValueError((completed.stderr or completed.stdout).strip() or 'fresh integration CI unavailable')
     proof = json.loads(completed.stdout)
@@ -1795,7 +1863,7 @@ print(json.dumps(proof))
                 or fields.get('task_issue_number') != task['issue_number']
                 or fields.get('pr_number') != int(data['number'])):
             raise ValueError('current-target proof differs from authenticated live consumer identity')
-        if _candidate_receipt_authority(data, root, effective, uid, task) != candidate_authority:
+        if _candidate_receipt_authority(data, root, Path(root), uid, task, review_plan_path) != candidate_authority:
             raise ValueError('candidate receipt authority changed during validation')
     _validate_live_integration_proof(
         proof, data, strict=strict and not current_target,
@@ -1831,7 +1899,7 @@ def live_target_oid(data, api_client=None, uid=None):
     return oid
 
 def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None,
-                        *, api_client=None):
+                        *, api_client=None, review_plan_path=None):
     # Endpoint cache lives for one decision only; healthy polls issue no
     # provenance readbacks and advisory scan identity never enters CI digests.
     advisory_cache = {}
@@ -1862,6 +1930,7 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
             data, root, uid, tool_root, admission, integration_run_id,
             require_strict=True if integration_run_id is not None or legacy_admission else "auto",
             assessed_target_oid=base,
+            review_plan_path=review_plan_path,
         )
         if api_client is None:
             fresh = read_pr_identity(data['repository'], data['number'])
@@ -2047,6 +2116,7 @@ def main() -> int:
     parser.add_argument("--task-uid")
     parser.add_argument("--integration-run-id", type=int, help="manual run locator; latest matching request still revalidated live")
     parser.add_argument("--tool-root", help="effective loop helper checkout (default: OASIS7_LOOP_TOOL_ROOT or this script checkout)")
+    parser.add_argument("--review-plan", help="existing exact-head review-plan locator for authenticated ready maintenance continuation")
     parser.add_argument("--merge-hold", choices=["normal_pr_ci_watch", *sorted(HOLDS)])
     parser.add_argument("--observe", action="store_true", help="read a derived PR observation; never authorizes merge")
     parser.add_argument("--watch", action="store_true", help="run bounded observation polls (requires --observe)")
@@ -2151,7 +2221,7 @@ def main() -> int:
         result = (decision(data, args.admin_merge_authorized, evidence_mode=evidence_mode) if args.fixture else
                   production_decision(data, args.admin_merge_authorized, task_root, args.task_uid,
                                       str(effective), args.integration_run_id,
-                                      api_client=data.pop("_api_client", None)))
+                                      api_client=data.pop("_api_client", None), review_plan_path=args.review_plan))
     except Exception as exc:
         # The final identity read is deliberately inside production_decision,
         # after the initial live-read boundary above. Preserve the shared

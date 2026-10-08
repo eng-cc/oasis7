@@ -7,6 +7,12 @@ receipts, tombstones, and the durable supervisor checkpoint are read-only
 evidence inputs used to detect stale or ambiguous state.
 """
 from __future__ import annotations
+import importlib.util as _primary_import
+from pathlib import Path as _PrimaryPath
+_primary_spec = _primary_import.spec_from_file_location("task_primary_package", _PrimaryPath(__file__).with_name("task_primary_package.py"))
+assert _primary_spec and _primary_spec.loader
+primary_contract = _primary_import.module_from_spec(_primary_spec)
+_primary_spec.loader.exec_module(primary_contract)
 
 import argparse
 import hashlib
@@ -1190,6 +1196,21 @@ def main() -> int:
     task = dict(task)
     policy_blocker: tuple[str, str] | None = None
     try:
+        package = primary_contract.effective_primary_package({**task, "task_uid": args.task_uid})
+        primary_contract.validate_current_completion(root, {**task, "task_uid": args.task_uid})
+        payload["effective_primary_package"] = package
+        payload["primary_package_completion"] = primary_contract.completion_reference({**task, "task_uid": args.task_uid})
+        if package is None:
+            payload["primary_package_completion_route"] = {
+                "status": "absent", "required_for": "uniquely proven business scope only",
+                "command": ["python3", "scripts/pm/github-project-task.py", "complete-primary-package", str(root),
+                    "--task-uid", args.task_uid, "--primary-package", "<unique_business_package>",
+                    "--scope-base", "origin/" + str(task.get("default_branch") or "main"), "--scope-head", "HEAD"],
+                "next_action": "Prove the unique package within existing Task scope, then complete once before business publication; governance tasks may remain absent.",
+            }
+    except ValueError as exc:
+        add_blocker(blockers, f"primary completion identity: {exc}")
+    try:
         ADMISSION_GUARD.guard_candidate_issue(mapping, mapping_path, args.task_uid, task)
     except ADMISSION_GUARD.CandidateAdmissionError as exc:
         add_blocker(blockers, f"stale identity: candidate live admission blocked: {exc}")
@@ -1202,9 +1223,9 @@ def main() -> int:
         if policy_blocker is None and isinstance(resolved_policy, dict):
             try:
                 policy = load_effective_loop_policy(
-                    root, binding, resolved_policy.get("_trusted_current_policy"),
+                    root, effective_binding, resolved_policy.get("_trusted_current_policy"),
                 )
-                result = policy.validate_binding(binding)
+                result = policy.validate_binding(effective_binding)
             except (OSError, ValueError, subprocess.SubprocessError) as exc:
                 result = {"blockers": [f"trusted loop policy unavailable: {exc}"]}
         for reason in result.get("blockers", []):

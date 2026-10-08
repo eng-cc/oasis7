@@ -167,8 +167,8 @@ jobs:
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner/pm"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh scripts/viewer-dependency-preflight.sh "${RUNNER_TEMP}/integration-planner/"
-          cp scripts/pm/workflow-impact-projection.py "${RUNNER_TEMP}/integration-planner/pm/"
-          cp scripts/pm/integration_ci.py scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/integration-planner/pm/"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/"
           [[ -n '${{ inputs.impact_projection_b64 }}' ]] || {
             echo "integration_revalidation requires impact_projection_b64" >&2
             exit 1
@@ -233,6 +233,10 @@ jobs:
               raise SystemExit('PR or current target moved during target freeze')
           with open(output,'a') as stream: stream.write(f'oid={target}\n')
           PY
+      - name: Prepare pinned Cargo metadata toolchain
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal
+          rustup default "${RUST_TOOLCHAIN}"
       - id: scope
         name: Plan required gate scope
         env:
@@ -277,18 +281,19 @@ jobs:
               event=json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())
               pr=event['pull_request'];uid=__import__('re').findall(r'^Task: (task_[0-9a-f]{32})$',pr['body'],__import__('re').M)
               if len(uid)!=1: raise SystemExit('maintenance Task line is invalid')
-              changed=subprocess.check_output(['git','diff','--name-only',sys.argv[3],sys.argv[2]],text=True).splitlines()
-              module.read_maintenance_authority(os.environ['GITHUB_REPOSITORY'],locator,uid[0],pr['number'],sys.argv[2],changed,module.TOOL_PATHS)
+              raw=subprocess.check_output(['git','diff','--name-only','--no-renames','-z',sys.argv[3],sys.argv[2]])
+              changed=[path.decode('utf-8') for path in raw.split(b'\0')[:-1]]
+              module.read_maintenance_authority(os.environ['GITHUB_REPOSITORY'],locator,uid[0],pr['number'],sys.argv[2],changed,module.TOOL_PATHS,require_draft=True,binding_phase='validation-start-only')
               with open(os.environ['GITHUB_OUTPUT'],'a') as output: output.write(f'maintenance_authority_comment_id={locator}\n')
               print(locator)
           PY
               )"
               if [[ -n "${maintenance_id}" ]]; then tool_ref="${head_ref}"; fi
             fi
-            git show "${tool_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
+            git archive "${tool_ref}" scripts | tar -x -C "${authority_dir}"
+            cp -R "${authority_dir}/scripts/." "${authority_dir}/"
             git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
             git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
-            git show "${tool_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
             if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
               task_uid="$(python3 - <<'PY'
@@ -310,6 +315,30 @@ jobs:
               --scope-base-oid "${scope_base_oid}"
             )
           fi
+          # Bootstrap current loop authority from frozen B before the planner
+          # can resolve effective primary or validate projection contracts.
+          unset OASIS7_LOOP_TOOL_ROOT
+          if [[ -n "${task_uid:-}" ]]; then
+            loop_authority_dir="${RUNNER_TEMP}/loop-bootstrap-base"
+            mkdir -p "${loop_authority_dir}"
+            git archive "${base_ref}" scripts | tar -x -C "${loop_authority_dir}"
+            loop_bootstrap="${loop_authority_dir}/scripts/pm/prepare-loop-ci-authority.py"
+            if [[ -f "${loop_bootstrap}" ]]; then
+              OASIS7_LOOP_TOOL_ROOT="$(python3 -I "${loop_bootstrap}" \
+                --repo-root "$(pwd)" --repository "${GITHUB_REPOSITORY}" \
+                --task-uid "${task_uid}" --authority-base "${base_ref}" \
+                --destination "${RUNNER_TEMP}/loop-policy-authority")"
+              export OASIS7_LOOP_TOOL_ROOT
+              printf 'OASIS7_LOOP_TOOL_ROOT=%s\n' "${OASIS7_LOOP_TOOL_ROOT}" >>"${GITHUB_ENV}"
+            else
+              loop_primary_source="$(git show "${base_ref}:scripts/pm/task_primary_package.py" 2>/dev/null || true)"
+              if grep -q 'LOOP_PROOF_SCHEMA' <<<"${loop_primary_source}"; then
+                echo 'trusted B loop completion bootstrap dependency is unavailable' >&2
+                exit 1
+              fi
+            fi
+          fi
+          unset OASIS7_PROJECT_READ_TOKEN
           "${planner[@]}" \
             --event-name "${GITHUB_EVENT_NAME}" \
             "${run_mode_args[@]}" \
@@ -580,7 +609,7 @@ jobs:
               "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
           )
           execution_contract=source.get("execution_contract", "")
-          if execution_contract == "required-domain-split/v1":
+          if execution_contract in {"required-domain-split/v1", "required-domain-split/v2"}:
               split_fields=(
                   "execution_contract", "run_workflow_governance_contracts", "run_packaging_contracts",
                   "run_doc_checker_contracts", "run_cargo_tooling_contracts",
@@ -616,13 +645,15 @@ jobs:
           missing=[field for field in fields if field not in source]
           if missing:
               raise SystemExit(f"missing required planner outputs: {', '.join(missing)}")
-          if execution_contract == "required-domain-split/v1":
+          if execution_contract in {"required-domain-split/v1", "required-domain-split/v2"}:
               for field in selector_fields + resource_fields:
                   if source[field] not in ("true", "false"):
                       raise SystemExit(f"{field} must be explicitly true or false for {execution_contract}")
               if source["needs_python"] != "true" or source["needs_markdown"] != "true":
                   raise SystemExit("required-gate baseline document checks require planned Python and Markdown resources")
-          if execution_contract == "required-domain-split/v1":
+          if execution_contract in {"required-domain-split/v1", "required-domain-split/v2"}:
+              if execution_contract == "required-domain-split/v2" and source["needs_rust_toolchain"] != "true":
+                  raise SystemExit("v2 scope metadata precheck requires the pinned Rust toolchain resource")
               if source["run_cargo_tooling_contracts"] == "true" and source["needs_rust_toolchain"] != "true":
                   raise SystemExit("Cargo tooling contracts require the planned Rust toolchain resource")
               selector_resources={
@@ -662,6 +693,8 @@ jobs:
                   ("run_pixel_world_bridge_wasm_check", "run_pixel_world_bridge_lib_tests"),
                   ("run_rust_baseline", "needs_rust_toolchain"),
               ):
+                  if derived == "run_rust_baseline" and execution_contract == "required-domain-split/v2":
+                      continue
                   if source[derived] != source[source_field]:
                       raise SystemExit(f"{derived} must match planner-derived {source_field}")
           planner={field:source[field] for field in fields}
@@ -737,7 +770,7 @@ jobs:
           retention-days: 7
           overwrite: true
       - name: Install pinned Rust toolchains
-        if: ${{ steps.scope.outputs.needs_rust_toolchain == 'true' }}
+        if: ${{ steps.scope.outputs.run_rust_baseline == 'true' || steps.scope.outputs.run_workflow_governance_contracts == 'true' || steps.scope.outputs.run_cargo_tooling_contracts == 'true' }}
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rustfmt --component clippy
           rustup default "${RUST_TOOLCHAIN}"
@@ -745,7 +778,7 @@ jobs:
             rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           fi
       - name: Install cargo-deny
-        if: ${{ steps.scope.outputs.needs_rust_toolchain == 'true' }}
+        if: ${{ steps.scope.outputs.run_rust_baseline == 'true' || steps.scope.outputs.run_workflow_governance_contracts == 'true' || steps.scope.outputs.run_cargo_tooling_contracts == 'true' }}
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny@0.19.9
@@ -768,7 +801,7 @@ jobs:
       - name: Install system deps
         if: >-
           ${{ steps.scope.outputs.needs_system_deps == 'true' ||
-              (steps.scope.outputs.execution_contract != 'required-domain-split/v1' &&
+              (steps.scope.outputs.execution_contract == '' &&
                (steps.scope.outputs.run_oasis7_required_tests == 'true' ||
                 steps.scope.outputs.run_viewer_contract_tests == 'true' ||
                 steps.scope.outputs.run_viewer_wasm_check == 'true' ||
@@ -821,6 +854,7 @@ jobs:
           INTEGRATION_MODE: ${{ inputs.run_mode }}
           INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
           OASIS7_CI_EXECUTION_CONTRACT: ${{ steps.scope.outputs.execution_contract }}
+          OASIS7_CI_RUN_REQUIRED_GATE_BASELINE: ${{ steps.scope.outputs.run_required_gate_baseline }}
           OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
@@ -860,46 +894,14 @@ jobs:
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
           OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN: ${{ steps.scope.outputs.scope == 'full' }}
         run: |
-          trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
-          candidate_checker="${GITHUB_WORKSPACE}/scripts/pm/check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
+          export OASIS7_CARGO_SCOPE_FULL_PLAN="${RUNNER_TEMP}/required-scope-outputs.json"
           trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"
           trusted_profile_driver="${trusted_profile_authority}/cargo_package_profile_driver.py"
           if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            use_candidate_checker=false
-            if [[ "${OASIS7_CARGO_SCOPE_TRUSTED_FULL_PLAN:-false}" == "true" ]] && \
-               ! git diff --quiet --no-renames "${OASIS7_CARGO_SCOPE_BASE}" "${OASIS7_CARGO_SCOPE_HEAD}" -- .pm/cargo-package-auxiliary-files.json; then
-              mapfile -t scope_changed_paths < <(git diff --no-renames --name-only "${OASIS7_CARGO_SCOPE_BASE}" "${OASIS7_CARGO_SCOPE_HEAD}")
-              if ((${#scope_changed_paths[@]} > 0)); then
-                use_candidate_checker=true
-                for scope_path in "${scope_changed_paths[@]}"; do
-                  case "${scope_path}" in
-                    doc/engineering/workflow/source-of-truth.md|\
-                    doc/.governance/document-corpus/objects/48/4840d720cacf3f7d531e8a361fc146277494b75857c9bd904bbc4b0f700c6f41.json|\
-                    scripts/pm/check-cargo-package-scope|\
-                    scripts/pm/check-cargo-package-scope.test.py|\
-                    .pm/cargo-package-auxiliary-files.json|\
-                    scripts/ci-tests.sh|\
-                    scripts/ci-required-scope.v2.json|\
-                    scripts/ci-required-scope-audit-contract.test.sh|\
-                    .github/workflows/rust.yml)
-                      ;;
-                    *) use_candidate_checker=false; break ;;
-                  esac
-                done
-              fi
-            fi
-            if [[ "${use_candidate_checker}" == "true" ]]; then
-              export OASIS7_CARGO_SCOPE_CHECKER="${candidate_checker}"
-            else
-              git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
-              chmod +x "${trusted_checker}"
-              export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
-            fi
-            mkdir -p "${trusted_profile_authority}/pm"
-            if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/workflow-impact-projection.py" >"${trusted_profile_authority}/pm/workflow-impact-projection.py" 2>/dev/null &&
-               git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
-               git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
+            mkdir -p "${trusted_profile_authority}"
+            if git show "${OASIS7_CARGO_SCOPE_INTEGRATION_BASE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
+               git show "${OASIS7_CARGO_SCOPE_INTEGRATION_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
               export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
               export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ steps.scope.outputs.integration_base_oid }}"
@@ -1225,13 +1227,13 @@ jobs:
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
-          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/integration-planner/pm/"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/"
           prepare_args=(prepare --repository "${{ github.repository }}" \
             --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
             --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json")
           if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
             [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || exit 1
-            cp scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
             python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
               --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
               --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \
@@ -1267,8 +1269,8 @@ jobs:
     needs: required-gate
     if: >-
       (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) &&
-      ((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' && needs.required-gate.outputs.run_packaging_contracts == 'true') ||
-       (needs.required-gate.outputs.execution_contract != 'required-domain-split/v1' && needs.required-gate.outputs.run_operational_contracts == 'true'))
+      (((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' || needs.required-gate.outputs.execution_contract == 'required-domain-split/v2') && needs.required-gate.outputs.run_packaging_contracts == 'true') ||
+       (needs.required-gate.outputs.execution_contract == '' && needs.required-gate.outputs.run_operational_contracts == 'true'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -1292,13 +1294,13 @@ jobs:
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
-          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/integration-planner/pm/"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/"
           prepare_args=(prepare --repository "${{ github.repository }}" \
             --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
             --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json")
           if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
             [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || exit 1
-            cp scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
             python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
               --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
               --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \
@@ -1359,13 +1361,13 @@ jobs:
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
-          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/integration-planner/pm/"
+          cp -R scripts/pm/. "${RUNNER_TEMP}/"
           prepare_args=(prepare --repository "${{ github.repository }}" \
             --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
             --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json")
           if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
             [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || exit 1
-            cp scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
             python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
               --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
               --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \

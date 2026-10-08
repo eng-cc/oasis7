@@ -139,27 +139,6 @@ PY
 )" || die "invalid ci_ready_receipt"
   read -r RECEIPT_REPOSITORY RECEIPT_TASK_UID RECEIPT_ISSUE RECEIPT_PR RECEIPT_CHECK RECEIPT_APP RECEIPT_PLANNER <<<"$RECEIPT_ARGS"
   [[ -z "$TASK_UID" || "$TASK_UID" == "$RECEIPT_TASK_UID" ]] || die "ci_ready_receipt task_uid mismatch"
-  python3 "$SCRIPT_DIR/ci-ready-receipt.py" --repository "$RECEIPT_REPOSITORY" \
-    --task-uid "$RECEIPT_TASK_UID" --task-issue-number "$RECEIPT_ISSUE" --pr-number "$RECEIPT_PR" --check-name "$RECEIPT_CHECK" \
-    --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" --allow-ready-pr >/dev/null \
-    || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
-
-  command -v gh >/dev/null 2>&1 || die "ready_for_pr requires live GitHub target read access"
-  CI_CURRENT_TARGET_OID="$(gh pr view "$RECEIPT_PR" -R "$RECEIPT_REPOSITORY" --json baseRefOid --jq '.baseRefOid')" \
-    || die "could not read the live PR target OID for source review reuse"
-  [[ "$CI_CURRENT_TARGET_OID" =~ ^[0-9a-f]{40,64}$ ]] \
-    || die "live PR target OID is missing or invalid for source review reuse"
-  if ! git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1; then
-    git -C "$ROOT_DIR" fetch --no-tags --no-write-fetch-head origin "$CI_CURRENT_TARGET_OID" >/dev/null 2>&1 \
-      || die "could not fetch the live PR target OID for source review reuse"
-  fi
-  git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1 \
-    || die "live PR target OID is unavailable locally for source review reuse"
-
-  # A direct ready_for_pr claim must consume the same v2 source-review and
-  # trusted projection decision used by promotion/closeout.  The live receipt
-  # proves the source-bound CI check; it cannot by itself prove that ordinary
-  # CI is sufficient for a high-risk projection.
   REVIEW_PLAN_PATH="$REVIEW_PLAN"
   if [[ -z "$REVIEW_PLAN_PATH" ]]; then
     REVIEW_PLAN_PATH="$ROOT_DIR/.pm/scratch/$RECEIPT_TASK_UID/review-plan.json"
@@ -194,6 +173,27 @@ PY
       )" || die "ready_for_pr requires one canonical v2 review plan for the receipt source head"
     fi
   fi
+  python3 "$SCRIPT_DIR/ci-ready-receipt.py" --root "$ROOT_DIR" --repository "$RECEIPT_REPOSITORY" \
+    --task-uid "$RECEIPT_TASK_UID" --task-issue-number "$RECEIPT_ISSUE" --pr-number "$RECEIPT_PR" --check-name "$RECEIPT_CHECK" \
+    --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" --allow-ready-pr --review-plan "$REVIEW_PLAN_PATH" >/dev/null \
+    || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
+
+  command -v gh >/dev/null 2>&1 || die "ready_for_pr requires live GitHub target read access"
+  CI_CURRENT_TARGET_OID="$(gh pr view "$RECEIPT_PR" -R "$RECEIPT_REPOSITORY" --json baseRefOid --jq '.baseRefOid')" \
+    || die "could not read the live PR target OID for source review reuse"
+  [[ "$CI_CURRENT_TARGET_OID" =~ ^[0-9a-f]{40,64}$ ]] \
+    || die "live PR target OID is missing or invalid for source review reuse"
+  if ! git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1; then
+    git -C "$ROOT_DIR" fetch --no-tags --no-write-fetch-head origin "$CI_CURRENT_TARGET_OID" >/dev/null 2>&1 \
+      || die "could not fetch the live PR target OID for source review reuse"
+  fi
+  git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1 \
+    || die "live PR target OID is unavailable locally for source review reuse"
+
+  # A direct ready_for_pr claim must consume the same v2 source-review and
+  # trusted projection decision used by promotion/closeout.  The live receipt
+  # proves the source-bound CI check; it cannot by itself prove that ordinary
+  # CI is sufficient for a high-risk projection.
   python3 - "$ROOT_DIR" "$REVIEW_PLAN_PATH" "$CI_READY_RECEIPT" "$RECEIPT_TASK_UID" "$CI_CURRENT_TARGET_OID" "$SCRIPT_DIR" <<'PY' \
     || die "ready_for_pr requires a trusted v2 review plan and applicable CI authority"
 import importlib.util
@@ -309,6 +309,9 @@ PY
   PR_NUMBER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["readiness_receipt"]["pr_number"])' "$PR_GATE_JSON")"
   LIVE_GATE_JSON="$(mktemp)"
   LIVE_GATE_ARGS=("$PR_NUMBER" --root "$ROOT_DIR" --task-uid "$TASK_UID" --json)
+  if [[ -n "${REVIEW_PLAN_PATH:-$REVIEW_PLAN}" ]]; then
+    LIVE_GATE_ARGS+=(--review-plan "${REVIEW_PLAN_PATH:-$REVIEW_PLAN}")
+  fi
   if ! python3 "$SCRIPT_DIR/pr-lifecycle-gate.py" "${LIVE_GATE_ARGS[@]}" >"$LIVE_GATE_JSON"; then
     rm -f "$LIVE_GATE_JSON"
     die "live PR lifecycle gate is not ready; rerun watch/fix before claiming merge readiness"

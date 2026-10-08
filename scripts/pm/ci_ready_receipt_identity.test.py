@@ -177,6 +177,26 @@ def receipt():
 
 
 class RequiredArtifactIdentityTests(unittest.TestCase):
+    def test_v1_v2_receipt_versions_and_v2_baseline_are_bound(self):
+        import json
+        value=receipt()
+        planner={"selected_capabilities":[]}
+        planner.update({key:False for key in identity.VERSIONED_PLANNER_SELECTOR_FIELDS})
+        planner.update({key:True for key in identity.VERSIONED_PLANNER_RESOURCE_FIELDS})
+        results=[]
+        for version in ("required-domain-split/v1","required-domain-split/v2"):
+            planner["execution_contract"]=version
+            value.update(execution_contract=version,planner=copy.deepcopy(planner))
+            value["planner_digest"]=hashlib.sha256(json.dumps(value["planner"],sort_keys=True,separators=(",",":")).encode()).hexdigest()
+            results.append(identity.review_evidence_identity(value))
+        self.assertNotEqual(results[0],results[1])
+        for version,rust in (("required-domain-split/v999",True),("required-domain-split/v2",False)):
+            invalid=copy.deepcopy(value)
+            invalid["execution_contract"]=invalid["planner"]["execution_contract"]=version
+            invalid["planner"]["needs_rust_toolchain"]=rust
+            with self.subTest(version=version,rust=rust),self.assertRaises(ValueError):
+                identity.review_evidence_identity(invalid)
+
     def test_current_target_attestation_binds_proof_coverage_and_exact_attempt(self):
         proof=dict(schema='oasis7-current-target-pr/v1',repository='eng-cc/oasis7',
             task_uid='task_'+'1'*32,task_issue_number=1,pr_number=7,source_head_oid='a'*40,

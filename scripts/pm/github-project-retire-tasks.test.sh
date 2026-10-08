@@ -14,6 +14,7 @@ mkdir -p "$TMPDIR/.pm/tasks" "$TMPDIR/.pm/github-project-sync" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-retire-tasks.py" "$TMPDIR/github-project-retire-tasks.py"
 cp "$ROOT_DIR/scripts/pm/github-project-workflow.py" "$TMPDIR/github-project-workflow.py"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
+cp "$ROOT_DIR/scripts/pm/task_primary_package.py" "$TMPDIR/task_primary_package.py"
 cp "$ROOT_DIR/scripts/pm/workflow-durable-store.py" "$ROOT_DIR/scripts/pm/portable_file_lock.py" "$TMPDIR/"
 cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 

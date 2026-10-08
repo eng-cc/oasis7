@@ -1552,18 +1552,16 @@ class WorkflowDocumentationContract(unittest.TestCase):
 
     def test_impact_projection_preflight_uses_immutable_comparison_authority(self) -> None:
         script = PREPARE_TASK_PR.read_text(encoding="utf-8")
-        planner_setup = script.index('if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then')
+        planner_setup = script.index('if [[ -n "$COMPARISON_HEAD" && -n "$SOURCE_HEAD" ]]; then', script.index('PLANNER_SCRIPT='))
         planner_call = script.index('PLANNER_RUNNER=(python3 -I "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py")', planner_setup)
         planner_args = script.index('PLANNER_ARGS+=(--config "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json")', planner_call)
-        for relative in (
-            "scripts/plan-rust-required-scope.py",
-            "scripts/ci-required-scope.v2.json",
-            "scripts/ci-tests.sh",
-            "scripts/pm/workflow-impact-projection.py",
-        ):
-            with self.subTest(relative=relative):
-                materialize = f'git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:{relative}"'
-            self.assertIn(materialize, script[planner_setup:planner_call])
+        setup = script[planner_setup:planner_call]
+        self.assertIn('PLANNER_ARGS=(--event-name pull_request --base-ref "$COMPARISON_HEAD" --head-ref "$SOURCE_HEAD")', setup)
+        self.assertIn('PLANNER_ARGS+=(--changed-path "$changed_path")', setup)
+        self.assertIn('git -C "$SOURCE_WORKTREE" diff --name-only --no-renames "$SOURCE_SCOPE_BASE" "$SOURCE_HEAD"', setup)
+        self.assertIn('git -C "$SOURCE_WORKTREE" archive "$COMPARISON_HEAD" scripts | tar -x -C "$TRUSTED_REQUIRED_SCOPE_DIR"', setup)
+        self.assertIn('die "trusted base required planner closure is unavailable"', setup)
+        self.assertIn('PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$SOURCE_SCOPE_BASE")', script[planner_call:])
         self.assertGreater(planner_args, planner_call)
         self.assertIn(
             'die "trusted base required-scope planner rejected the impact projection"',

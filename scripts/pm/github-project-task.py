@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any, Callable
 
 from task_complete_claim import validate_task_complete_claim_for_closeout
+import task_primary_package as primary_contract
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
@@ -32,7 +33,7 @@ issue_authoritative_keys = frozenset(
         "task_uid", "title", "issue_number", "issue_url", "owner_role", "module",
         "status", "workflow_phase", "priority", "worktree_hint", "source_signal",
         "source_type", "severity", "pr_url", "pr_number", "merge_hold",
-        "primary_package",
+        "primary_package", "primary_package_completion",
         "loop_binding", "bootstrap_base_oid", "completion_mode",
         "aggregate_plan_comment_id", "aggregate_plan_sha256",
         "aggregate_completion_receipt_sha256",
@@ -115,8 +116,8 @@ def die(message: str) -> None:
 
 
 def validate_primary_package(value: str) -> str:
-    value = str(value or "").strip()
-    if not PRIMARY_PACKAGE_RE.fullmatch(value):
+    value = primary_contract.strict_primary_package(value)
+    if value is None:
         raise ValueError("primary_package must be one valid declared Cargo package name")
     return value
 
@@ -154,6 +155,8 @@ def load_non_merge_finalizer_module() -> Any:
 
 
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
+    if path.exists():
+        primary_contract.strict_json(path.read_text(encoding="utf-8"))
     return durable_store.read_mapping(path, {"version": 1, "tasks": {}})
 
 
@@ -536,6 +539,10 @@ def strict_issue_scalar_fields(body: str, keys: tuple[str, ...]) -> dict[str, st
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
+    try:
+        fields.update(primary_contract.issue_primary_fields(body))
+    except (ValueError, UnicodeError) as exc:
+        die(str(exc))
     binding_matches = re.findall(r"^- loop_binding_b64: `([^`]+)`$", body, re.MULTILINE)
     if "loop_binding_b64:" in body:
         if len(binding_matches) != 1:
@@ -557,6 +564,19 @@ def issue_task_fields(body: str) -> dict[str, Any]:
             fields["primary_package"] = validate_primary_package(package_matches[0])
         except ValueError as exc:
             die(str(exc))
+    completion_lines = re.findall(r"^[ \t]*(?:-[ \t]+)?primary_package_completion_b64\b[^\n]*$", body, re.MULTILINE)
+    if completion_lines:
+        if len(completion_lines) != 1:
+            die("primary completion is duplicated")
+        match = re.fullmatch(r"- primary_package_completion_b64: `([^`]+)`", completion_lines[0])
+        if match is None:
+            die("primary completion is malformed")
+        try:
+            encoded = match.group(1)
+            fields[primary_contract.FIELD] = primary_contract.strict_json(base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True).decode())
+        except (ValueError, UnicodeError) as exc:
+            die(f"primary completion is invalid: {exc}")
     context_matches = re.findall(r"^- traceability_context_b64: `([^`]+)`$", body, re.MULTILINE)
     if "traceability_context_b64:" in body:
         if len(context_matches) != 1:
@@ -926,11 +946,15 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("updated_at", record.get("updated_at") or now()),
         ]
     )
-    if record.get("primary_package") not in (None, ""):
+    if "primary_package" in record:
         try:
-            task["primary_package"] = validate_primary_package(str(record["primary_package"]))
+            package = primary_contract.effective_primary_package({**record, "task_uid": uid})
+            if package is not None:
+                task["primary_package"] = package
         except ValueError as exc:
             die(str(exc))
+    if record.get(primary_contract.FIELD) is not None:
+        task[primary_contract.FIELD] = record[primary_contract.FIELD]
     return task
 
 
@@ -951,6 +975,9 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
     ]
     if task.get("primary_package") not in (None, ""):
         lines.append(f"- primary_package: `{validate_primary_package(str(task['primary_package']))}`")
+    if task.get(primary_contract.FIELD) is not None:
+        encoded = base64.urlsafe_b64encode(primary_contract.canonical_bytes(task[primary_contract.FIELD])).decode().rstrip("=")
+        lines.append(f"- primary_package_completion_b64: `{encoded}`")
     if task.get("source_signal") or task.get("source_type") or task.get("severity"):
         lines.extend(
             [
@@ -4549,12 +4576,7 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
     if type(locator) is not int or locator < 1:
         die("record-pr: human reconciliation requires one maintenance authority locator")
     execution_head = run_text(["git", "-C", str(tool_root), "rev-parse", "HEAD"])
-    required_tools = tuple("scripts/pm/" + name for name in (
-        "github-project-task.py", "pr_projection_record_pr.py", "pr_projection_publish.py",
-        "workflow_maintenance.py", "github-project-sync.py", "github_api.py",
-        "task_complete_claim.py", "loop_leaf_result.py", "workflow-durable-store.py",
-        "pr_projection_publication.py", "projection_publication_contract.py",
-        "pr_projection_journal.py", "portable_file_lock.py", "pr_projection_transition.py"))
+    required_tools = maintenance.HUMAN_RECONCILIATION_TOOL_PATHS
     expected_scope: dict[str, Any] | None = None
     subject_body: str | None = None
     observed_target: str | None = None
@@ -4575,7 +4597,7 @@ def command_record_pr_human(args: argparse.Namespace, mapping_path: pathlib.Path
         caller = require_record_pr_write_authority(args.repo)
         authority = maintenance.read_maintenance_authority(
             args.repo, locator, args.task_uid, number, subject["source_head_oid"],
-            required_tool_paths=required_tools)
+            required_tool_paths=required_tools, binding_phase="metadata-only-reconciliation")
         if authority["issue_number"] != issue_number:
             raise vector.RecordPRConflict("human authority selects another Issue")
         if expected_scope is None:
@@ -6811,9 +6833,216 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mapping", default=".pm/github-project-sync/tasks.json")
 
 
+def primary_completion_permissions(args: argparse.Namespace, mapping: dict[str, Any],
+                                   record: dict[str, Any], live: dict[str, Any]) -> None:
+    validate_authoritative_project_fields(args, mapping, record, live)
+    owner, name = args.repo.split("/", 1)
+    query = """query($owner:String!,$name:String!,$number:Int!,$id:ID!){
+      repository(owner:$owner,name:$name){issue(number:$number){number url state viewerCanUpdate}}
+      node(id:$id){... on ProjectV2Item{project{viewerCanUpdate}}}}
+    """
+    data = project_refresh_graphql(query, {"owner": owner, "name": name,
+        "number": record["issue_number"], "id": record["project_item_id"]},
+        operation="primary_package_completion_permission", task_uid=args.task_uid)
+    issue = ((data.get("data") or {}).get("repository") or {}).get("issue") or {}
+    project = (((data.get("data") or {}).get("node") or {}).get("project") or {})
+    if (data.get("errors") or issue.get("number") != record["issue_number"]
+            or issue.get("url") != record["issue_url"] or issue.get("state") != "OPEN"
+            or issue.get("viewerCanUpdate") is not True or project.get("viewerCanUpdate") is not True):
+        die("complete-primary-package: fresh Issue/Project writer permissions unavailable")
+
+
+def command_complete_primary_package(args: argparse.Namespace) -> int:
+    """One durable, server-read-back completion; every retry keeps its before image."""
+    from pr_projection_journal import PublicationJournal, publication_paths
+    root = args.root.resolve()
+    mapping_path, _, preliminary = require_record(args)
+    identity = authoritative_repository_identity(root, args.repo, preliminary.get("canonical_worktree") or "")
+    if identity["task_branch"] != preliminary.get("task_branch"):
+        die("complete-primary-package: canonical branch identity differs")
+    common = pathlib.Path(run_text(["git", "-C", str(root), "rev-parse", "--git-common-dir"]))
+    common = (root / common).resolve() if not common.is_absolute() else common.resolve()
+    reservation = primary_contract.digest({"operation": "primary-package", "task_uid": args.task_uid})
+    path, lock = publication_paths(common, args.repo, preliminary["task_branch"], reservation)
+    journal = PublicationJournal(path, lock, {"operation": "primary-package", "task_uid": args.task_uid,
+        "repository": args.repo, "branch": preliminary["task_branch"]}, common_dir=common,
+        canonical_worktree=root)
+    with journal.locked():
+        primary_contract.strict_json(path.read_text(encoding="utf-8"))
+        mapping_path, mapping, record = require_record(args)
+        record = {**record, "task_uid": args.task_uid}
+        live = github_issue_record(args.repo, args.task_uid)
+        if (not live or live.get("issue_number") != record.get("issue_number")
+                or live.get("issue_url") != record.get("issue_url")):
+            die("complete-primary-package: live Task Issue differs")
+        for key in ("owner_role", "acceptance", "loop_binding"):
+            if live.get(key) != record.get(key):
+                die(f"complete-primary-package: existing Task {key} identity differs from live Issue")
+        if live.get("worktree_hint") != record.get("canonical_worktree"):
+            die("complete-primary-package: canonical worktree identity differs from live Issue")
+        primary_completion_permissions(args, mapping, record, live)
+        package = validate_primary_package(args.primary_package)
+        actions = journal.read_action_state()["actions"]
+        intents = [a for a in actions if a.get("kind") == "primary-completion"]
+        if len(intents) > 1:
+            die("complete-primary-package: duplicate durable completion intent")
+        if intents:
+            payload = intents[0]["expected"]
+            if payload.get("schema") != primary_contract.SCOPE_SCHEMA:
+                die("complete-primary-package: historical writer action has no current scope proof; reconcile without downgrading")
+            if payload.get("primary_package") != package or payload["before"]["identity"] != primary_contract.immutable_identity(record):
+                die("complete-primary-package: retry target/Task identity differs from durable before image")
+        else:
+            if primary_contract.strict_primary_package(record.get("primary_package"), "primary_package" in record) is not None:
+                die("complete-primary-package: existing primary cannot be replaced")
+            if primary_contract.strict_primary_package(live.get("primary_package"), "primary_package" in live) is not None or live.get(primary_contract.FIELD) is not None:
+                die("complete-primary-package: canonical primary already exists; refresh/reconcile task")
+            for key in ("owner_role", "acceptance", "loop_binding"):
+                if live.get(key) != record.get(key):
+                    die(f"complete-primary-package: existing Task {key} scope differs from live Issue")
+            if live.get("worktree_hint") != record.get("canonical_worktree"):
+                die("complete-primary-package: existing Task canonical worktree differs from live Issue")
+            binding = record.get("loop_binding")
+            selector_path = getattr(args, "scope_evidence_json", None)
+            if not selector_path and binding is None:
+                die("complete-primary-package: preexisting formal scope evidence is required; package words cannot authorize completion")
+            try:
+                if binding is not None:
+                    scope_evidence = primary_contract.loop_scope_proof(root, record, args.scope_base, args.scope_head, package)
+                else:
+                    selector = primary_contract.strict_json(pathlib.Path(selector_path).read_text())
+                    scope_evidence = primary_contract.existing_scope_proof(root, record, selector, args.scope_base, args.scope_head)
+            except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+                die(f"complete-primary-package: existing scope authority rejected: {exc}")
+            # The trusted S checker proves actual unique ownership. Supplied package is an assertion.
+            from trusted_cargo_scope import run_scope
+            proof = run_scope(root, args.scope_base, args.scope_head, primary=package, json_output=True)
+            if proof.returncode:
+                die("complete-primary-package: trusted scope proof rejected: " + (proof.stderr or proof.stdout).strip())
+            try:
+                scope = primary_contract.strict_json(proof.stdout)
+            except ValueError as exc:
+                die(f"complete-primary-package: invalid scope proof: {exc}")
+            if scope.get("primary_package") != package or scope.get("changed_packages") != [package]:
+                die("complete-primary-package: scope must prove exactly one actual business package")
+            before = {"identity": primary_contract.immutable_identity(record),
+                      "primary_present": "primary_package" in record, "primary_package": None}
+            payload = {"schema": primary_contract.SCOPE_SCHEMA, "before": before, "primary_package": package}
+            payload["action_id"] = primary_contract.digest(payload)
+            payload["scope_evidence"] = scope_evidence
+            journal.intent(payload["action_id"], "primary-completion", payload)
+        saved_scope = payload["scope_evidence"]
+        if saved_scope["schema"] == primary_contract.LOOP_PROOF_SCHEMA:
+            current_scope = primary_contract.loop_scope_proof(root, record, args.scope_base, args.scope_head, package)
+        else:
+            current_scope = primary_contract.existing_scope_proof(root, record, saved_scope["selector"], args.scope_base, args.scope_head)
+        if current_scope != saved_scope:
+            die("complete-primary-package: retry scope proof differs from durable intent")
+        from trusted_cargo_scope import run_scope
+        current_cargo = run_scope(root, args.scope_base, args.scope_head, primary=package, json_output=True)
+        if current_cargo.returncode or primary_contract.strict_json(current_cargo.stdout).get("changed_packages") != [package]:
+            die("complete-primary-package: current trusted unique-package scope rejected")
+        action_id = payload["action_id"]
+        body = primary_contract.completion_body(payload)
+        comments = github_issue_comments(args.repo, record["issue_number"])
+        matching = []
+        for comment in comments:
+            if not str(comment.get("body") or "").startswith(primary_contract.MARKER):
+                continue
+            value = primary_contract.parse_completion_body(comment["body"])
+            if value.get("before", {}).get("identity", {}).get("task_uid") != args.task_uid:
+                continue
+            if value != payload:
+                die("complete-primary-package: conflicting server completion history")
+            matching.append(comment)
+        if len(matching) > 1:
+            die("complete-primary-package: duplicate server completion history")
+        events = journal.read_task_events(action_id)
+        if not matching:
+            if any(e["event"] == "POST_ATTEMPTED" for e in events):
+                die("complete-primary-package: previous POST uncertain; reconcile same action without reposting")
+            journal.append_task_event(action_id, "READ_EMPTY", payload)
+            journal.append_task_event(action_id, "WRITE_INTENT", payload)
+            journal.append_task_event(action_id, "POST_ATTEMPTED", payload)
+            try:
+                verified_issue_comment(args.repo, record["issue_number"], body)
+            except BaseException:
+                journal.append_task_event(action_id, "POST_RESPONSE_UNCERTAIN", payload)
+                raise
+            comments = github_issue_comments(args.repo, record["issue_number"])
+            matching = [c for c in comments if c.get("body") == body]
+            if len(matching) != 1:
+                die("complete-primary-package: completion POST server readback uncertain")
+        comment = matching[0]
+        if (type(comment.get("id")) is not int or not isinstance(comment.get("created_at"), str)
+                or not comment["created_at"] or comment.get("created_at") != comment.get("updated_at")
+                or comment.get("html_url") != f"{record['issue_url']}#issuecomment-{comment['id']}"):
+            die("complete-primary-package: immutable server comment identity invalid")
+        completion = {"payload": payload, "server": {"repository": args.repo,
+            "issue_number": record["issue_number"], "comment_id": comment["id"],
+            "comment_url": comment["html_url"],
+            "body_sha256": "sha256:" + hashlib.sha256(body.encode()).hexdigest()}}
+        if not events or events[-1]["event"] != "RESOLVED":
+            journal.append_task_event(action_id, "READ_MATCH", payload, completion["server"])
+            journal.append_task_event(action_id, "RESOLVED", payload, completion["server"])
+        journal.observe(action_id, completion["server"])
+        updated = {**record, "primary_package": package, primary_contract.FIELD: completion}
+        primary_contract.validate_completion(updated)
+        live = github_issue_record(args.repo, args.task_uid)
+        live_primary = primary_contract.strict_primary_package(live.get("primary_package"), "primary_package" in live)
+        if live_primary not in (None, package) or live.get(primary_contract.FIELD) not in (None, completion):
+            die("complete-primary-package: canonical primary/completion conflicts")
+        if live_primary == package and live.get(primary_contract.FIELD) != completion:
+            die("complete-primary-package: canonical primary lacks this action's completion")
+        field_action = "canonical-primary:" + action_id
+        journal.intent(field_action, "canonical-primary", {"primary_package": package, primary_contract.FIELD: completion})
+        if live_primary is None:
+            primary_completion_permissions(args, mapping, record, live)
+            current = json.loads(run_text(["gh", "issue", "view", str(record["issue_number"]), "-R", args.repo, "--json", "body"]))["body"]
+            if issue_task_fields(current).get("primary_package") is not None:
+                die("complete-primary-package: canonical primary changed before write")
+            encoded = base64.urlsafe_b64encode(primary_contract.canonical_bytes(completion)).decode().rstrip("=")
+            replacement = f"- primary_package: `{package}`\n- primary_package_completion_b64: `{encoded}`\n"
+            if current.count("Task metadata:\n") != 1:
+                die("complete-primary-package: canonical metadata section ambiguous")
+            current = current.replace("Task metadata:\n", "Task metadata:\n" + replacement, 1)
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+                handle.write(current)
+                temporary = pathlib.Path(handle.name)
+            try:
+                run_text(["gh", "issue", "edit", str(record["issue_number"]), "-R", args.repo, "--body-file", str(temporary)])
+            finally:
+                temporary.unlink(missing_ok=True)
+        primary_contract.validate_current_completion(root, updated)
+        journal.observe(field_action, {"primary_package": package, primary_contract.FIELD: completion})
+        def activate(latest: dict[str, Any]) -> None:
+            current = (latest.get("tasks") or {}).get(args.task_uid)
+            if not isinstance(current, dict) or primary_contract.immutable_identity({**current, "task_uid": args.task_uid}) != payload["before"]["identity"]:
+                die("complete-primary-package: Task identity changed during remote publication; reconcile same action")
+            current_primary = primary_contract.strict_primary_package(current.get("primary_package"), "primary_package" in current)
+            if current_primary not in (None, package) or current.get(primary_contract.FIELD) not in (None, completion):
+                die("complete-primary-package: mapping primary changed during remote publication")
+            current["primary_package"] = package
+            current[primary_contract.FIELD] = completion
+        durable_store.transact_json(mapping_path, activate)
+        result = {"task_uid": args.task_uid, "primary_package": package,
+                  "completion_reference": primary_contract.completion_reference(updated)}
+        print(json.dumps(result, sort_keys=True) if args.json else f"complete-primary-package: {args.task_uid} = {package}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="GitHub Project-backed active PM task lifecycle.")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    complete = subparsers.add_parser("complete-primary-package")
+    add_common(complete)
+    complete.add_argument("--task-uid", required=True)
+    complete.add_argument("--primary-package", required=True, type=validate_primary_package)
+    complete.add_argument("--scope-base", required=True)
+    complete.add_argument("--scope-head", default="HEAD")
+    complete.add_argument("--scope-evidence-json", help="Locator-only existing Task scope/freeze assertions")
+    complete.add_argument("--json", action="store_true")
+    complete.set_defaults(func=command_complete_primary_package)
 
     new_task = subparsers.add_parser("new-task")
     add_common(new_task)

@@ -210,7 +210,10 @@ def plan_package_profiles(
 ) -> dict[str, Any]:
     """Produce a deterministic package/profile plan from frozen source identities."""
     repo = Path(repo_root).resolve()
-    source_scope_base = _git(repo, "merge-base", integration_base, source_head).strip()
+    source_bases = _git(repo, "merge-base", "--all", integration_base, source_head).splitlines()
+    if len(source_bases) != 1:
+        raise PlanError("package profile planning requires one unique merge base")
+    source_scope_base = source_bases[0]
     tested_tree = _git(repo, "merge-tree", "--write-tree", integration_base, source_head).strip()
 
     changed_names = set(
@@ -221,7 +224,11 @@ def plan_package_profiles(
     protected = set(trusted_policy.get("protected_paths", [])) | {policy_path}
     if protected & changed_names:
         raise PlanError("trusted scope policy self-modification is forbidden")
-    checker_changed = checker_path in changed_names
+    authority_paths = {checker_path, "scripts/pm/cargo_package_change_classification.py",
+                       "scripts/document_corpus.py", "scripts/pm/trusted_cargo_scope.py",
+                       "scripts/pm/cargo_package_profile_planner.py",
+                       "scripts/plan-rust-required-scope.py", "scripts/ci-required-scope.v2.json"}
+    checker_changed = bool(authority_paths & changed_names)
 
     with tempfile.TemporaryDirectory(prefix="cargo-profile-base-") as base_dir, tempfile.TemporaryDirectory(
         prefix="cargo-profile-head-"
@@ -236,11 +243,10 @@ def plan_package_profiles(
         base_packages = _package_map(base_root, base_metadata)
         head_packages = _package_map(head_root, head_metadata)
         tested_packages = _package_map(tested_root, tested_metadata)
-        union_packages = dict(base_packages)
-        union_packages.update(head_packages)
-        union_packages.update(tested_packages)
         changed_packages = sorted(
-            {owner for path in changed_names if (owner := _owner(path, union_packages))}
+            {owner for path in changed_names
+             for packages in (base_packages, head_packages, tested_packages)
+             if (owner := _owner(path, packages))}
         )
         union_edges = _edges(base_root, base_metadata, base_packages) | _edges(
             head_root, head_metadata, head_packages
