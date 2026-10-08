@@ -411,11 +411,10 @@ fn module_release_apply_rejects_tampered_approved_profile_payload_atomically() {
         "tampered apply must leave approval state unchanged"
     );
     assert!(
-        tampered
+        !tampered
             .state()
             .product_profiles
-            .get("product.profile-tamper")
-            .is_none(),
+            .contains_key("product.profile-tamper"),
         "tampered apply must not publish a profile"
     );
 }
@@ -452,11 +451,10 @@ fn module_release_apply_rejects_when_requester_loses_artifact_ownership() {
         "owner drift rejection must leave approval state unchanged"
     );
     assert!(
-        owner_changed
+        !owner_changed
             .state()
             .product_profiles
-            .get("product.owner-recheck")
-            .is_none(),
+            .contains_key("product.owner-recheck"),
         "owner drift rejection must not publish a profile"
     );
 }
@@ -483,11 +481,10 @@ fn module_release_apply_rejects_legacy_profile_request_without_reviewed_commitme
 
     assert_rule_denied_note_for_action(&legacy, apply_action_id, "has no reviewed commitment");
     assert!(
-        legacy
+        !legacy
             .state()
             .product_profiles
-            .get("product.legacy-profile")
-            .is_none(),
+            .contains_key("product.legacy-profile"),
         "legacy pending profile request must not publish without a commitment"
     );
 }
@@ -497,7 +494,7 @@ fn module_release_freeze_blocks_new_submit_and_old_approved_apply() {
     let (world, request_id, wasm_hash) = approved_profile_release_fixture("frozen-release");
     let mut frozen = world.clone();
     let freeze = crate::runtime::state::ModuleAdmissionFreeze {
-        module_id: format!("m.loop.release.frozen-release"),
+        module_id: "m.loop.release.frozen-release".to_string(),
         module_version: "0.1.0".to_string(),
         wasm_hash: wasm_hash.clone(),
         rollback_proposal_id: 77,
@@ -547,18 +544,16 @@ fn module_release_freeze_blocks_new_submit_and_old_approved_apply() {
         "old approval must not clear a rollback freeze"
     );
     assert!(
-        frozen
+        !frozen
             .state()
             .product_profiles
-            .get("product.frozen-release")
-            .is_none()
+            .contains_key("product.frozen-release")
     );
     assert!(
-        frozen
+        !frozen
             .state()
             .product_profiles
-            .get("product.frozen-new")
-            .is_none()
+            .contains_key("product.frozen-new")
     );
 }
 
