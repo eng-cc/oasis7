@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path, PurePosixPath
 import subprocess
 import sys
@@ -32,6 +33,25 @@ def extract_scripts(repo: Path, revision: str, destination: Path) -> None:
         contents.extractall(destination)
 
 
+def changed_paths(repo: Path, base: str, head: str) -> list[str]:
+    raw = subprocess.check_output(["git", "-C", str(repo), "diff", "--name-status", "--find-renames", "-z", base, head])
+    fields = raw.split(b"\0")
+    if fields.pop() != b"":
+        raise ValueError("incomplete Git changed-path records")
+    paths = []
+    while fields:
+        status = fields.pop(0).decode("ascii")
+        count = 2 if status.startswith(("R", "C")) else 1
+        if len(fields) < count:
+            raise ValueError("incomplete Git rename endpoints")
+        for _ in range(count):
+            path = fields.pop(0).decode("utf-8")
+            if any(delimiter in path for delimiter in (";", "\n", "\r")):
+                raise ValueError("changed path cannot be represented in planner metadata")
+            paths.append(path)
+    return paths
+
+
 def verify_full_plan(repo: Path, target: str, candidate: str, source: str, plan_file: str, execution_environment: dict[str, str] | None = None) -> bool:
     """Recompute B's complete coverage; bind the runner's actual selectors."""
     def unique_object(pairs):
@@ -47,8 +67,8 @@ def verify_full_plan(repo: Path, target: str, candidate: str, source: str, plan_
     for key, expected in (("integration_base", target), ("source_head", candidate), ("source_scope_base", source)):
         if plan.get(key) != expected:
             raise ValueError("trusted full-plan identity mismatch: " + key)
-    source_paths = subprocess.check_output(["git", "-C", str(repo), "diff", "--name-only", source, candidate], text=True).splitlines()
-    integration_paths = subprocess.check_output(["git", "-C", str(repo), "diff", "--name-only", target, candidate], text=True).splitlines()
+    source_paths = changed_paths(repo, source, candidate)
+    integration_paths = changed_paths(repo, target, candidate)
     paths = plan.get("changed_paths", "").split(";")
     if paths not in (source_paths, integration_paths):
         raise ValueError("trusted full-plan changed paths mismatch")
@@ -72,19 +92,52 @@ def verify_full_plan(repo: Path, target: str, candidate: str, source: str, plan_
             if result.returncode:
                 raise ValueError("trusted B full coverage planner failed: " + result.stderr.strip())
             oracle = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    # Config identity locates immutable emitting code; it never grants coverage
+    # or full-plan exception authority. Equal config conservatively selects B.
+    emitting = oracle
+    if plan.get("planner_config_sha256") != oracle.get("planner_config_sha256"):
+        config_bytes = subprocess.check_output(["git", "-C", str(repo), "show", candidate + ":scripts/ci-required-scope.v2.json"])
+        if plan.get("planner_config_sha256") != "sha256:" + hashlib.sha256(config_bytes).hexdigest():
+            raise ValueError("trusted full-plan emitting config identity mismatch")
+        if plan.get("execution_contract") not in {"required-domain-split/v1", "required-domain-split/v2"}:
+            raise ValueError("trusted full-plan emitting execution contract unsupported")
+        if oracle.get("execution_contract") == "required-domain-split/v2" and plan.get("execution_contract") != "required-domain-split/v2":
+            raise ValueError("trusted full-plan execution contract downgrade")
+        with tempfile.TemporaryDirectory(prefix="trusted-cargo-emitting-planner-") as directory:
+            authority = Path(directory)
+            extract_scripts(repo, candidate, authority)
+            command = [sys.executable, "-I", str(authority / "scripts/plan-rust-required-scope.py"), "--event-name", "pull_request"]
+            for path in paths:
+                command.extend(("--changed-path", path))
+            result = subprocess.run(command, cwd=repo, text=True, capture_output=True)
+            if result.returncode:
+                raise ValueError("immutable emitting planner failed: " + result.stderr.strip())
+            emitting = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+            if emitting.get("scope") != "full":
+                command.extend(("--run-mode", "full_escalation"))
+                result = subprocess.run(command, cwd=repo, text=True, capture_output=True)
+                if result.returncode:
+                    raise ValueError("immutable emitting full planner failed: " + result.stderr.strip())
+                emitting = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
+    identity_fields = {"planner_config_sha256", "execution_contract"}
     fields = {key for key in oracle if key.startswith(("run_", "needs_"))}
-    fields.update({"scope", "selected_capabilities", "required_test_units", "planner_config_sha256"})
-    if "execution_contract" in oracle:
-        fields.add("execution_contract")
+    fields.update({"scope", "selected_capabilities", "required_test_units"})
+    if set(key for key in emitting if key.startswith(("run_", "needs_"))) != set(key for key in oracle if key.startswith(("run_", "needs_"))):
+        raise ValueError("trusted full-plan selector inventory mismatch")
+    for key in fields | identity_fields:
+        if plan.get(key) != emitting.get(key):
+            raise ValueError("trusted full-plan emitting metadata mismatch: " + key)
     for key in fields:
         if plan.get(key) != oracle[key]:
             raise ValueError("trusted full-plan coverage mismatch: " + key)
-        if key.startswith(("run_", "needs_")) or key == "execution_contract":
+        if key.startswith(("run_", "needs_")):
             environment_key = ("OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS"
                                if key == "run_oasis7_workspace_support_crate_tests"
                                else "OASIS7_CI_" + key.upper())
             if (os.environ if execution_environment is None else execution_environment).get(environment_key) != oracle[key]:
                 raise ValueError("actual runner full-plan selector mismatch: " + key)
+    if (os.environ if execution_environment is None else execution_environment).get("OASIS7_CI_EXECUTION_CONTRACT") != plan.get("execution_contract"):
+        raise ValueError("actual runner full-plan execution contract mismatch")
     return natural_full
 
 
@@ -99,7 +152,7 @@ def run_scope(repo: Path, base: str, head: str, primary: str = "auto", *, json_o
         raise ValueError("Cargo scope requires one unique merge base")
     source = ancestors[0]
     verified_full = bool(trusted_full_plan and verify_full_plan(repo, target, candidate, source, trusted_full_plan, execution_environment))
-    paths = git("diff", "--name-only", source, candidate).splitlines()
+    paths = changed_paths(repo, source, candidate)
     renames = git("diff", "--name-status", "--find-renames", source, candidate).splitlines()
     maintenance = (verified_full and bool(paths) and set(paths).issubset(POLICY_MAINTENANCE_PATHS)
                    and ".pm/cargo-package-auxiliary-files.json" in paths
