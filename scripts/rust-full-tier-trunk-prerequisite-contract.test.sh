@@ -14,8 +14,13 @@ workflow_path = Path(sys.argv[1])
 job_header = re.compile(r"^  (?P<name>[A-Za-z0-9_-]+):\s*$")
 run_key = re.compile(r"^(?P<indent>\s*)(?:-\s+)?run:\s*(?P<body>.*)$")
 target = "CI_VERBOSE=1 ./scripts/ci-tests.sh full"
-trunk_install = 'cargo install trunk --locked --version "${TRUNK_VERSION}"'
+trunk_install = 'bash scripts/install-ci-trunk.sh "$RUNNER_TEMP/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz" "$RUNNER_TEMP/ci-tools/bin"'
 trunk_verify = 'trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"'
+helper = (workflow_path.parents[2] / 'scripts/install-ci-trunk.sh').read_text()
+if ('sha256sum -c' not in helper
+        or '[[ "$("$stage/trunk" --version)" == "trunk $version" ]]' not in helper
+        or 'version=0.21.14' not in helper):
+    raise SystemExit('rust.yml contract: shared Trunk installer must verify archive and exact version')
 expected_jobs = {"full-regression"}
 
 
@@ -121,7 +126,7 @@ def validate_workflow(path, required_jobs):
                 f"{job_name}: full-tier invocation at rust.yml:{invocation_line + 1} "
                 f"lacks preceding pinned `{trunk_install}`"
             )
-        if not any(trunk_verify in command for _, command in preceding_commands):
+        if not any(trunk_verify in command or trunk_install in command for _, command in preceding_commands):
             failures.append(
                 f"{job_name}: full-tier invocation at rust.yml:{invocation_line + 1} "
                 f"lacks preceding `{trunk_verify}` verification"
@@ -218,8 +223,6 @@ fixture_failures.extend(
             [
                 "      - name: Install trunk",
                 f"        run: {trunk_install}",
-                "      - name: Verify trunk",
-                f"        run: {trunk_verify}",
                 f"      - name: Run full test tier",
                 f"        run: {target}",
             ]

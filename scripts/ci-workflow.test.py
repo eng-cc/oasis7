@@ -16,6 +16,33 @@ JOBS = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)'
 
 
 class Workflow(unittest.TestCase):
+    def test_pinned_trunk_helper_failure_and_success_paths(self):
+        # The protected baseline already executes this suite during migration.
+        subprocess.run(['bash',str(ROOT/'scripts/install-ci-trunk.test.sh')],cwd=ROOT,check=True)
+
+    def test_download_caches_follow_actual_worksets(self):
+        node_jobs={name for name,job in JOBS.items() if 'uses: actions/setup-node@v6' in job}
+        self.assertEqual(node_jobs,{'viewer-js-required','viewer-performance-report','launcher-web','full-regression'})
+        for name in node_jobs:
+            self.assertIn('cache: npm',JOBS[name])
+            self.assertIn('cache-dependency-path: crates/oasis7_viewer/package-lock.json',JOBS[name])
+            self.assertIn('npm ci --prefix crates/oasis7_viewer',JOBS[name])
+        for name,job in JOBS.items():
+            if 'shared-key: ordinary-required' in job:
+                self.assertIn('shared-key: ordinary-required-v2-${{ matrix.group }}',job)
+                self.assertIn('add-rust-environment-hash-key: true',job)
+                self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM',job)
+                self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@v2'))
+        for name in ('launcher-web','full-regression'):
+            job=JOBS[name]
+            self.assertIn('uses: actions/cache@v5',job)
+            self.assertIn("hashFiles('scripts/install-ci-trunk.sh')",job)
+            self.assertNotIn('cargo install trunk',job)
+            self.assertNotIn('restore-keys:',job)
+            self.assertLess(job.index('Cache pinned Trunk release archive'),job.index('bash scripts/install-ci-trunk.sh'))
+            invocation='Execute selected cell' if name=='launcher-web' else 'Run full test tier'
+            self.assertLess(job.index('bash scripts/install-ci-trunk.sh'),job.index(invocation))
+
     def test_gate_is_last_and_all_groups_are_dependencies(self):
         gate = JOBS['required-gate']
         dependencies = re.search(r'    needs: \[(.*)\]', gate).group(1).split(', ')
