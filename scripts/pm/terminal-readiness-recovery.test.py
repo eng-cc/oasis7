@@ -17,6 +17,42 @@ protocol = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(protocol)
 
 
+class RequiredGatePolicyCompatibility(unittest.TestCase):
+    def test_single_and_wildcard_pinned_policy_preserve_complete_observation(self):
+        import sys
+        sys.path.insert(0,str(HERE))
+        import terminal_recovery as recovery
+        from unittest.mock import patch
+        for checks in ([{'context':'required-gate','app_id':15368}],
+                       [{'context':'required-gate','app_id':None},{'context':'required-gate','app_id':15368}]):
+            policy={'status':'resolved','required_status_checks':checks,'source':'classic_and_repository_rulesets','extra':'retained'}
+            original=json.dumps(policy,sort_keys=True)
+            self.assertEqual(recovery._required_gate_app(policy),15368)
+            class Gate:
+                def discover_required_policy(self,*args,**kwargs):return policy
+            with patch.object(recovery,'_module',return_value=Gate()):
+                self.assertIs(recovery._policy('owner/repo','main',15368),policy)
+                with self.assertRaisesRegex(ValueError,'policy/app'):
+                    recovery._policy('owner/repo','main',99)
+            self.assertEqual(json.dumps(policy,sort_keys=True),original)
+
+    def test_ambiguous_malformed_and_unresolved_policies_reject(self):
+        import sys
+        sys.path.insert(0,str(HERE))
+        import terminal_recovery as recovery
+        bad=[[],[{'context':'required-gate','app_id':None}],
+             [{'context':'required-gate','app_id':15368},{'context':'required-gate','app_id':99}],
+             [{'context':'other','app_id':15368}],
+             [{'context':'required-gate','app_id':15368},{'context':'other','app_id':None}]]
+        bad += [[{'context':'required-gate','app_id':v}] for v in (True,0,-1,'15368',{},1.5)]
+        bad += [[{'context':'required-gate','app_id':15368}]*2,
+                [{'context':'required-gate','app_id':None}]*2+[{'context':'required-gate','app_id':15368}], [{}],None]
+        for checks in bad:
+            with self.subTest(checks=checks),self.assertRaises(ValueError):
+                recovery._required_gate_app({'status':'resolved','required_status_checks':checks})
+        with self.assertRaises(ValueError):
+            recovery._required_gate_app({'status':'uncertain','required_status_checks':[{'context':'required-gate','app_id':15368}]})
+
 class BothMissingHistoricalControl(unittest.TestCase):
     def test_actual_finalizer_cannot_manufacture_both_missing_historical_claims(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -976,6 +1012,26 @@ script=sys.argv[1];sys.argv=sys.argv[1:];sys.path.insert(0,str(pathlib.Path(scri
             a=self.data
             return reader(a['repository'],a['task_uid'],a['pr'],a['head'],a['merge'],self.target,self.context)
         finally:self.assertEqual(self.effect_snapshot(),before,'current-target reader must preserve every effect sink')
+    def test_actual_discovery_wildcard_and_pinned_policy_survives_revalidation(self):
+        import terminal_recovery as recovery
+        from unittest.mock import patch
+        a=self.data
+        key=f"repos/{a['repository']}/branches/main/protection"
+        self.responses[key]['required_status_checks']['contexts']=['required-gate']
+        with patch.object(recovery.obs,'api',side_effect=lambda path:self.responses[path]):
+            policy=recovery._policy(a['repository'],'main',15368)
+            self.assertEqual(policy['required_status_checks'],[
+                {'context':'required-gate','app_id':None},
+                {'context':'required-gate','app_id':15368}])
+            self.assertEqual(recovery._required_gate_app(policy),15368)
+            import hashlib
+            raw=json.dumps(policy,sort_keys=True)
+            before=hashlib.sha256(raw.encode()).hexdigest()
+            recovery._required_gate_app(policy)
+            self.assertEqual(hashlib.sha256(json.dumps(policy,sort_keys=True).encode()).hexdigest(),before)
+            with self.assertRaisesRegex(ValueError,'policy/app'):
+                recovery._policy(a['repository'],'main',99)
+
     def test_real_descendant_two_range_planner_job_and_policy_primitives(self):
         import integration_ci
         a=self.data;root=self.review['root']

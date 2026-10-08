@@ -4,18 +4,6 @@ use crate::feedback_entry::{
     submit_feedback_with_fallback, validate_feedback_draft,
 };
 
-fn sanitized_launch_config_snapshot(config: &LaunchConfig) -> Result<serde_json::Value, String> {
-    let mut value =
-        serde_json::to_value(config).map_err(|err| format!("config serialization error: {err}"))?;
-    if let Some(object) = value.as_object_mut()
-        && let Some(token) = object.get_mut("agent_provider_auth_token")
-        && !token.as_str().unwrap_or_default().is_empty()
-    {
-        *token = serde_json::Value::String("<redacted>".to_string());
-    }
-    Ok(value)
-}
-
 impl ClientLauncherApp {
     pub(super) fn feedback_kind_label(&self, kind: FeedbackKind) -> &'static str {
         match (kind, self.ui_language) {
@@ -74,27 +62,8 @@ impl ClientLauncherApp {
             return;
         }
 
-        let config_snapshot = match sanitized_launch_config_snapshot(&self.config) {
-            Ok(value) => value,
-            Err(err) => {
-                self.feedback_submit_state = FeedbackSubmitState::Failed(format!(
-                    "{}: {err}",
-                    self.tr(
-                        "反馈提交失败：配置序列化错误",
-                        "Feedback submit failed: config serialization error"
-                    )
-                ));
-                return;
-            }
-        };
         let recent_logs = collect_recent_logs(&self.logs);
-        match submit_feedback_with_fallback(
-            &self.feedback_draft,
-            config_snapshot,
-            recent_logs,
-            self.config.chain_enabled,
-            self.config.chain_status_bind.as_str(),
-        ) {
+        match submit_feedback_with_fallback(&self.feedback_draft, &self.config, recent_logs) {
             Ok(FeedbackSubmitResult::Distributed {
                 feedback_id,
                 event_id,
@@ -293,21 +262,137 @@ impl ClientLauncherApp {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitized_launch_config_snapshot;
-    use crate::LaunchConfig;
+    use crate::feedback_entry::{FeedbackDraft, FeedbackKind, submit_feedback_report};
+    use crate::{ChainRuntimeStatus, ClientLauncherApp, LaunchConfig};
+
+    fn assert_unavailable_feedback_submission_does_not_write_bundle(
+        chain_enabled: bool,
+        status: ChainRuntimeStatus,
+        case: &str,
+    ) {
+        let output_dir = std::env::temp_dir().join(format!(
+            "oasis7-feedback-no-write-{case}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let mut app = ClientLauncherApp::default();
+        app.config.chain_enabled = chain_enabled;
+        app.chain_runtime_status = status;
+        app.feedback_draft.output_dir = output_dir.to_string_lossy().to_string();
+        app.feedback_draft.title = "unavailable feedback".to_string();
+        app.feedback_draft.description = "valid draft must still be gated".to_string();
+
+        app.submit_feedback();
+
+        assert!(
+            !output_dir.exists(),
+            "unavailable feedback submission wrote a local bundle"
+        );
+    }
 
     #[test]
-    fn sanitized_launch_config_snapshot_redacts_provider_auth_token() {
+    fn feedback_disabled_submit_does_not_write_local_bundle() {
+        assert_unavailable_feedback_submission_does_not_write_bundle(
+            false,
+            ChainRuntimeStatus::Ready,
+            "disabled",
+        );
+    }
+
+    #[test]
+    fn feedback_not_ready_submit_does_not_write_local_bundle() {
+        assert_unavailable_feedback_submission_does_not_write_bundle(
+            true,
+            ChainRuntimeStatus::Starting,
+            "starting",
+        );
+    }
+
+    #[test]
+    fn feedback_bundle_excludes_sensitive_config_and_log_values() {
         let config = LaunchConfig {
-            agent_provider_auth_token: "secret-token".to_string(),
+            agent_provider_url:
+                "https://user:password@provider.private.test/v1?api_key=endpoint-secret".to_string(),
+            agent_provider_auth_token: "configured-secret-token".to_string(),
+            chain_status_bind: "chain.private.test:5121".to_string(),
+            viewer_static_dir: "/Users/private-user/private/game-build".to_string(),
+            launcher_bin: "/Users/private-user/private/oasis7-launcher".to_string(),
             ..LaunchConfig::default()
         };
-        let snapshot = sanitized_launch_config_snapshot(&config).expect("snapshot");
-        assert_eq!(
-            snapshot
-                .get("agent_provider_auth_token")
-                .and_then(|value| value.as_str()),
-            Some("<redacted>")
-        );
+        let temp_dir = std::env::temp_dir().join(format!(
+            "oasis7-feedback-privacy-witness-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let draft = FeedbackDraft {
+            kind: FeedbackKind::Bug,
+            title: "Feedback bundle privacy regression".to_string(),
+            description: "User-authored token=literal-user-text remains unchanged".to_string(),
+            output_dir: temp_dir.to_string_lossy().to_string(),
+        };
+        let logs = vec![
+            "[stderr] launcher started successfully".to_string(),
+            format!(
+                "[stderr] provider request failed: {} token={}",
+                config.agent_provider_url, config.agent_provider_auth_token
+            ),
+            "[stderr] Authorization: Bearer log-bearer-secret".to_string(),
+            "[stderr] previous bundle at /Users/another-user/private/feedback/report.json"
+                .to_string(),
+            "[stderr] prior feedback/20261008T173012Z-bug.json saved".to_string(),
+            "[stderr] OPENAI_API_KEY=openai-env-secret GITHUB_TOKEN=github-env-secret".to_string(),
+            "[stderr] AWS_SECRET_ACCESS_KEY=aws-secret-access-value OAUTH_CLIENT_SECRET=oauth-client-secret-value".to_string(),
+            "[stderr] accessToken=camel-case-access-secret".to_string(),
+            r#"[stderr] api_key="prefix-\"escaped-secret\"-suffix" safe-context=retained"#.to_string(),
+            "[stderr] client_secret=\"unterminated-secret".to_string(),
+        ];
+
+        let path = submit_feedback_report(&draft, &config, logs)
+            .expect("feedback bundle should be written");
+        let bundle = std::fs::read_to_string(&path).expect("feedback bundle should be readable");
+
+        for (label, sensitive_value) in [
+            ("provider URL", config.agent_provider_url.as_str()),
+            (
+                "configured credential",
+                config.agent_provider_auth_token.as_str(),
+            ),
+            ("chain endpoint", config.chain_status_bind.as_str()),
+            ("viewer path", config.viewer_static_dir.as_str()),
+            ("launcher path", config.launcher_bin.as_str()),
+            ("URL query credential", "endpoint-secret"),
+            ("generic bearer credential", "log-bearer-secret"),
+            (
+                "previous feedback bundle path",
+                "/Users/another-user/private/feedback/report.json",
+            ),
+            (
+                "relative feedback bundle path",
+                "feedback/20261008T173012Z-bug.json",
+            ),
+            ("OpenAI environment key", "openai-env-secret"),
+            ("GitHub token", "github-env-secret"),
+            ("AWS secret access key", "aws-secret-access-value"),
+            ("OAuth client secret", "oauth-client-secret-value"),
+            ("camelCase token", "camel-case-access-secret"),
+            ("escaped quoted secret", "escaped-secret"),
+            ("unterminated quoted secret", "unterminated-secret"),
+        ] {
+            assert!(
+                !bundle.contains(sensitive_value),
+                "feedback bundle leaked {label}"
+            );
+        }
+        assert!(bundle.contains("launcher started successfully"));
+        assert!(bundle.contains("User-authored token=literal-user-text remains unchanged"));
+        assert!(bundle.contains("<redacted>"));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
