@@ -2,6 +2,12 @@
 
 本文件用于导航各模块设计文档与执行文档。所有新需求与在研需求均以模块 PRD 为唯一入口。
 
+## 当前交付路径
+
+玩家通过有界授权的 Agent，在同一持久世界完成首个铁锭成果、恢复生产并回访继续。发行状态以[根 README](../README.md#项目状态)为准。代表性链的 `production_only` 边界见[首局合同](product/world-rules-core-gameplay/first-session-and-continuation.prd.md)，实际生产结算与候选验收见[工业合同](game/gameplay/gameplay-industrial-starter-completion-contract.prd.md)。
+
+[core 当前目标与里程碑](core/prd.md#当前阶段交付目标与全局-p0)解释交付依赖。持久单权威和工业体验核验可并行；首次开放须两者通过，BFT 验收决定后续写权交接。运行模式与恢复承诺由[基础设施](product/world-infrastructure/prd.md)和 [P2P](p2p/prd.md)拥有。`current` 表示已有实现，`partial` 表示尚未闭合能力，`target` 表示待验收承诺；passed 结果必须对应 PR/Issue 的候选与证据窗口。
+
 ## 快速阅读路径（推荐）
 1. 先读本文件，获取导航。
 2. 读根 `README.md`，先确认当前公开状态、技术预览边界与公开说明准备态。

@@ -1,6 +1,10 @@
 export const TASK_GAME_076_SCENARIO_VERSION = "task-game-076.v1";
 
 export const ATTRACTION_THRESHOLDS = Object.freeze({
+  diagnosticTargetKeys: Object.freeze([
+    "minEffectivePlayMinutes", "minPlayerOperationCount", "minContentUnitCount",
+    "minDistinctActionFamilyCount", "maxPassiveWaitShare", "maxStallOrWaitPeriods",
+  ]),
   requiredCards: 3,
   minAverageHookScore: 4,
   minAverageReplayIntent: 4,

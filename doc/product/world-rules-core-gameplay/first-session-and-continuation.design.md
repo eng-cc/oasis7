@@ -13,6 +13,8 @@
 
 ## 1. 设计命题
 
+当前首轮路线复用 `starter-industrial-smelter-to-assembler-v1` / `production_only`，第一笔匹配的 owner-bound 铁锭生产结算完成首产物，仅打开 Assembler 候选。持续能力和交付保留独立条件。再次进入先读取同一世界与归属下的成果、有效目标、未完成事项和原请求身份；pending 按恢复时授权、资源与 manifest 重新裁决。过期/撤销授权只提供重新授权、缩小范围或安全停止等真实选项，不自动继承旧条件。玩法阻塞恢复、节点灾备与回访接续各自取证，技术故障注入不要求真人强制经历事故。
+
 目标体验是让第一次进入世界的玩家从一个可解释的工业目标走到当前 `starter_completion_profile` 声明的真实完成边界，并在阻塞、重连或完成后仍保有下一次选择。`production_only` 在匹配 production receipt 后完成首产物并进入 `produced/undelivered`；`terminal-admission` 才继续到匹配 delivery/terminal settlement。玩家需要知道目标、当前权威状态、已保留或消耗的价值、主要 blocker、完成边界和下一步。
 
 核心决策是：在 feasibility card 与当前事实支持的范围内，选择等待、补足、改源、改配方、改道、延期或继续推进哪一条路径。选择必须有可读的机会成本；预览和推荐只提供比较信息，不产生世界效果。

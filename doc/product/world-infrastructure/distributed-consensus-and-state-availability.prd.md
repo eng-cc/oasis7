@@ -6,7 +6,7 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-09-14`
+- Last reviewed：`2026-10-09`
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）。
 - 运维 authority：[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)（节点 inventory、topology、health/status 与运维证据边界）、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)（deployment truth、恢复/回滚演练与同窗口事实捕获）。
 - 状态同步 evidence envelope：[`state-sync closure evidence packet`](../../testing/templates/state-sync-closure-evidence-packet-template.md#claim-boundary)（topology/node truth、peer heads、gap sync、observer catch-up 与 blob closure；`module_full` 证据，不单独证明 readiness）。
@@ -27,9 +27,9 @@
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 基础承诺
 
-基础层为一个 `world_id` 提供唯一的可验证提交序列：只有经验证的共识最终性才使输入成为世界历史。它提供节点间复制、状态同步、可验证的数据可用性、故障恢复与证明服务；它不定义游戏规则、Agent 行为、玩家交互或发行体验。
+基础层为一个 `world_id` 提供唯一的可验证提交序列：只有当时合法激活 authority profile 的正式提交证明与持久条件成立才使输入成为世界历史。它提供节点间复制、状态同步、可验证的数据可用性、故障恢复与证明服务；它不定义游戏规则、Agent 行为、玩家交互或发行体验。
 
-确定性 BFT 是目标模型：oasis7 自己拥有协议语义，首个实现采用 Tendermint/CometBFT 风格的 `Propose -> Prevote -> Precommit -> Commit` 轮次。有效 commit certificate 必须证明活动、治理注册的验证者集合中超过三分之二质押权重的签名预提交。slot 只负责提议节奏；round 在超时后推进。三等权验证者是首个可验证的运行基线，不构成 `f=1` Byzantine 容错声明；四等权验证者才是该声明的最小常规拓扑。
+首次开放目标为 `controlled_single_authority`，正确性信任包含运营权威；唯一追加权、跨独立故障域持久确认与同世界恢复必须通过后才开放。当前兼容原型不能据此升级为正式权威。后续确定性 BFT 是目标模型：oasis7 自己拥有协议语义，首个实现采用 Tendermint/CometBFT 风格的 `Propose -> Prevote -> Precommit -> Commit` 轮次。有效 commit certificate 必须证明活动、治理注册的验证者集合中超过三分之二质押权重的签名预提交。slot 只负责提议节奏；round 在超时后推进。三等权验证者是首个可验证的运行基线，不构成 `f=1` Byzantine 容错声明；四等权验证者才是该声明的最小常规拓扑。
 
 ## 2. 边界与不变量
 
@@ -37,7 +37,7 @@
 - chain 保存顺序、commitment、验证者转换和最终性证明；DistFS/CAS 保存 hash-bound 的 snapshot、blob 和历史可用性材料，永不自行取得最终写入权。
 - 验证者为治理注册、可轮换的受保护节点；公开 sentry/relay、full/state-sync/archive、RPC/proof gateway 可无许可运行。服务节点被攻破不能产生共识权威。
 - 验证者保留权威恢复/投票窗口；full/state-sync 节点提供较长热历史和快照；archive 保存完整审计历史；light companion 保留 finalized header、验证者转换和所需证明。任何 pruning 仅在可重建、hash/root 验证和冗余 archive 可用被证明后进行。
-- bootstrap/recovery 必须依序绑定 immutable tier/genesis manifest、finalized checkpoint certificate、hash-bound snapshot、canonical committed-log replay 和 verified state root。任一身份、签名、连续性、hash、replay 或 root 不匹配均 fail closed。
+- bootstrap/recovery 必须依序绑定 固定 world/chain/genesis 身份、各历史高度合法 profile/epoch/manifest 激活链、已确认 checkpoint 证明、hash-bound snapshot、canonical committed-log replay 和 verified state root。任一身份、签名、连续性、hash、replay 或 root 不匹配均 fail closed。
 
 ## 3. 运行与经济边界
 
@@ -74,6 +74,8 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 该选择的代价是明确的：等待或重新规划可能延迟行动，但提交未经证明的状态会造成重复、错误授权或把临时读面误认为权威历史。基础设施产品层只规定这种可观察的选择和风险边界；提交顺序、去重、receipt 字段和具体恢复步骤仍由 P2P、world-runtime、消费者与测试专业权威定义。
 
+提交未知与已知无效果待决分别表达；断连/超时不能证明未提交时，按原请求身份核对，不能判确定失败或重发。世界保留、网络环境、发行阶段与经济价值独立；同世界合法 profile 演进及 H/H+1 不可撤回交接依 [P2P 专业合同](../../p2p/prd.md#p2p-authority-profiles) 验证。恢复可服务还必须满足当前 profile 的持久性与旧写者隔离条件。
+
 ## 5. 当前与目标的分离
 
 当前实现是 stake-weighted proposer/attestation threshold prototype，不是已经具备完整 BFT 最终性的公开承诺。目标仍缺持久且可复验的 quorum certificate、prevote/precommit 锁定、round timeout/view-change、验证者转换证明、复制端证书复验与对抗性恢复证据。本文不因目标描述而宣称 mainnet、去中心化规模、SLA 或发行 readiness。
@@ -85,7 +87,7 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 <a id="req-dcs-001"></a>
 ### REQ-DCS-001：单一 canonical history 与最终性
 
-同一 `world_id` 只能由适用的、可验证的 finality/commit certificate 推进唯一 canonical order；副本、缓存、非权威 peer 或未最终化输入不能成为玩家世界结果。
+同一 `world_id` 只能由适用合法 profile 的可验证正式提交证明及持久条件 推进唯一 canonical order；副本、缓存、非权威 peer 或未最终化输入不能成为玩家世界结果。
 
 - 对应验收：[AC-DCS-001](#ac-dcs-001)。
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
@@ -93,14 +95,14 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 <a id="ac-dcs-001"></a>
 ### AC-DCS-001：非权威材料不能代签
 
-同一候选的服务节点、full node、light companion 和消费者只能依据验证过的最终性证明及 hash-bound 材料得出世界状态；冲突、缺证或非权威写入被拒绝且不进入玩家可见历史。证据必须覆盖适用的 P2P/runtime 组合边界，transport 成功不能代签。
+同一候选的服务节点、full node、light companion 和消费者只能依据验证过的合法 profile 提交证明及 hash-bound 材料得出世界状态；冲突、缺证或非权威写入被拒绝且不进入玩家可见历史。证据必须覆盖适用的 P2P/runtime 组合边界，transport 成功不能代签。
 
 - 对应需求：[REQ-DCS-001](#req-dcs-001)。
 
 <a id="req-dcs-002"></a>
 ### REQ-DCS-002：状态可用性与恢复链连续
 
-恢复只能沿同一 `world_id` 的 genesis/manifest、finalized checkpoint certificate、hash-bound snapshot、canonical replay 和 verified state root 建立连续历史；材料缺失、冲突、回退或指向其他世界时必须保持隔离或只读。
+恢复只能沿同一 `world_id` 的 固定 genesis 身份、合法 manifest/profile/epoch 激活链、已确认 checkpoint 证明、hash-bound snapshot、canonical replay 和 verified state root 建立连续历史；材料缺失、冲突、回退或指向其他世界时必须保持隔离或只读。
 
 - 对应验收：[AC-DCS-002](#ac-dcs-002)。
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#inventory-与采样合同)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)、[`state-sync closure evidence packet`](../../testing/templates/state-sync-closure-evidence-packet-template.md#topology-and-node-truth)。
@@ -172,7 +174,7 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 
 ## 7. 组合验收
 
-- DC-1：任何服务、full node 或 light companion 都只能从已验证的最终性证明和 hash-bound 材料得出世界状态；非权威 peer/缓存/快照不能代签。
+- DC-1：任何服务、full node 或 light companion 都只能从当时合法 profile 的已验证正式提交证明和 hash-bound 材料得出世界状态；非权威 peer/缓存/快照不能代签。
 - DC-2：分区、重启、落后追赶、恢复和 pruning 样例证明相同 `world_id` 的唯一顺序、可重建性与 state-root 一致；不满足证据时停止服务或投票。
 - DC-3：验证者注册/轮换、网络暴露和服务角色不扩大非权威节点的共识权限。
 - DC-4：BFT 实现样例证明超过三分之二活动质押预提交形成可验证 commit certificate，且 equivocation、缺证、错误验证者集合和 round 故障均不得推进权威历史。

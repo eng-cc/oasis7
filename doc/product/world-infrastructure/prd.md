@@ -9,7 +9,7 @@
 - Product PRD-ID：`PRD-PRODUCT-002`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-09-25`
+- Last reviewed：`2026-10-09`
 - 后继文档：`无`
 - 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
@@ -17,19 +17,19 @@
 
 ## 1. 产品承诺
 
-权威世界基础设施是 oasis7 的区块链/分布式系统与确定性世界运行时基础。它提供一个可验证的权威世界历史：共识最终性决定何时提交，网络和存储复制并提供 hash-bound 状态材料，确定性执行把已排序输入转成世界状态，恢复重建同一历史而非第二个世界。
+权威世界基础设施是 oasis7 的区块链/分布式系统与确定性世界运行时基础。它提供一个可验证的权威世界历史：合法激活的提交权威 profile 决定何时提交，网络和存储复制并提供 hash-bound 状态材料，确定性执行把已排序输入转成世界状态，恢复重建同一历史而非第二个世界。
 
 它是下层 provider，而不是设施、市场、区域、frontier、组织治理或玩家循环的产品入口。世界规则与玩法系统、智能体、世界模拟与交互、玩家接入与发行在此基础上组合各自产品语义；它们都不能借由本模块的技术能力直接扩张为权威写入权。
 
 ### 使用者情境与正常路径
 
-玩家希望知道一次行动是否真的改变了目标世界，Agent 需要据此决定下一动作，节点运营者需要知道副本何时可以提供可信状态。正常路径是：消费者先确认目标世界身份与可用性，读取已验证的状态，再按适用协议提交意图；活动验证者重执行同一有序输入，最终性证明确认后产生已提交结果，消费者核对其 receipt 才更新世界结论。提交被入口接受只是请求进入处理路径，不是资源、权限、生产完成或交付的保证。
+玩家希望知道一次行动是否真的改变了目标世界，Agent 需要据此决定下一动作，节点运营者需要知道副本何时可以提供可信状态。正常路径是：消费者先确认目标世界身份与可用性，读取已验证的状态，再按适用协议提交意图；按合法 profile 验证同一有序输入的提交证明，持久提交条件成立后产生已提交结果，消费者核对其 receipt 才更新世界结论。提交被入口接受只是请求进入处理路径，不是资源、权限、生产完成或交付的保证。
 
 当当前条件不能得到证明时，使用者可以查看最后可信状态、等待、重新验证或重新规划；撤回、替代和补偿只能采用专业合同明确支持的路径。等待可能延迟行动，重新规划可能放弃原计划，但重连和重提不会免费解除已经提交的义务、返还已消费投入或取得新的优先级。实际资源成本、损失和可退出条件由相应玩法及专业合同定义，本模块不增加费用或完成时间承诺。
 
 ### 阅读术语
 
-`world_id` 是世界身份；`canonical` 指该世界唯一的权威顺序；`intent` 是请求产生效果的意图，`pending` 是尚无世界效果的待决状态；`committed` 指已进入权威历史，`finality` 是使该提交可验证且不能由本地推测替代的最终性。`receipt` 是关联已提交结果的回执，不是再次执行授权；`manifest` 是版本化执行规则及工件的声明，提交端兼容声明不能选择它。`hash-bound` 表示材料与其哈希承诺绑定，`state root` 是用于核对状态一致性的根；`fail closed` 表示无法证明安全条件时拒绝或保持无效果，而不尝试产生部分结果。
+`world_id` 是世界身份；`canonical` 指该世界唯一的权威顺序；`intent` 是请求产生效果的意图，`pending` 包括已知尚无效果的待决与提交状态未知、待核对的请求；后者不能推断无效果；`committed` 指已进入权威历史，`finality` 是使该提交可验证且不能由本地推测替代的最终性。`receipt` 是关联已提交结果的回执，不是再次执行授权；`manifest` 是版本化执行规则及工件的声明，提交端兼容声明不能选择它。`hash-bound` 表示材料与其哈希承诺绑定，`state root` 是用于核对状态一致性的根；`fail closed` 表示无法证明安全条件时拒绝或保持无效果，而不尝试产生部分结果。
 
 工业 `root` 是一次操作的不可变因果身份，`revision/child` 记录因果变更和子效果，`lineage` 是这些请求或操作的可追溯关联；它们不等于状态根。`hold/reservation` 是有界且排他的容量或投入承诺，`WIP` 是在制状态。下文单独说明 `W`、window 与 lease 的专业语义，不能从英文名称推导资源、进度或授权。共识消息、执行版本字段和上述关联的具体格式仍由专业 authority 定义。
 
@@ -62,16 +62,27 @@
 
 ## 4. 路线图
 
-1. 用持久、可复验的 commit certificate 取代当前 stake-threshold prototype，并补全 round、锁定、验证者转换和分区恢复。
-2. 建立 hash-bound state availability、按角色的存储/serving、bootstrap/recovery 信任链和 restore drills。
-3. 把 deterministic execution 与共识隔离为可版本化语义合同，完成 certificate-gated execution、升级与 replay 证明。
-4. 以同一协议支持 game/Agent/入口的并发消费，逐步扩展 proof-serving 与 light companion，同时保持 finality 缺失 fail closed。
+1. 首次开放先完成受控单权威持久世界的正式提交、独立故障域副本、旧写者隔离与同世界恢复；兼容 threshold prototype 不取得正式权威。
+2. BFT 协议并行研发，完成持久可验证证书、round、锁定、验证者转换和分区恢复后，按同世界 H/H+1 交接激活。
+3. 建立 hash-bound state availability、按角色的存储/serving、bootstrap/recovery 信任链和 restore drills。
+4. 把 deterministic execution 与共识隔离为可版本化语义合同，完成 certificate-gated execution、升级与 replay 证明。
+5. 以同一协议支持 game/Agent/入口的并发消费，逐步扩展 proof-serving 与 light companion，同时保持 finality 缺失 fail closed。
+
+### 当前阶段：持久单权威到同世界多节点
+
+首次开放的目标 profile 为 `controlled_single_authority`：受控权威决定提交，证明历史来源、顺序与连续性，正确性信任包含运营权威。后续 `bft` 以合法验证者集合的完整协议证书提供适用故障模型内的共识保证。两者复用一个世界、动作、确定性执行、receipt 和恢复协议；现有单签/threshold prototype 仍是原型，本次文档收敛不宣称任一正式 profile 已通过。
+
+`world_id`、`chain_id`、`genesis_hash` 固定；既有保留承诺存在时必须沿用既有合法身份与历史。软件、manifest 与 authority 可按创世或已提交升级规则演进，不能要求所有未来 manifest hash 不变，也不能重发资产、清空成果或把新创世称作恢复。世界保留承诺、发行阶段、网络环境和资产价值分别表达：受限 preview 可保留合法身份、设施、材料和资格，生产结算资格仍由经济/发行条件独立决定，网络 tier 不自动改变资产价值。
+
+首次开放前必须保证单主机/单存储故障域失效后已确认效果不丢失；独立故障域未持久确认完整记录及正式提交决定时不能回应 committed。最终存储原子检查 epoch、parent/head 和顺序，旧 signer/写权隔离无法证明时停写。超时或回复丢失而无法证明未提交时显示“提交状态未知、待核对”，按同一请求身份核对，不判确定失败或制造第二效果。已知无效果 pending 与未知提交必须分开表达；下文“无效果 pending”条款只适用于前者。
+
+同世界恢复先验证历史并提供只读，再核对当前追加权、head、版本与持久条件开放写入。正式交接在旧 profile 的 H 提交后不可撤回，H+1 起只允许新 BFT profile，即使新集合尚未产生首个提交也维持停写。协议、提交/准备区分、隔离与演练细节由 [P2P 权威合同](../../p2p/prd.md#p2p-authority-profiles) 和 [runtime 执行合同](../../world-runtime/prd.md#runtime-authority-profile-commit) 拥有，不在产品层复制 schema。
 
 ### 基础不变量
 
 - 单一世界：global canonical order 与 `world_id` 不因区域、环境、节点或缓存而分叉；local development 世界使用独立身份且永不并入。
 - 消费者在提交动作前必须能确认目标 `world_id` 及其属于 global-authoritative 世界还是隔离的 local/development 世界；intent 与 receipt 只对该身份下的历史有效。local/development 结果不能作为 global 世界结果的证明，身份缺失或不匹配时不得产生或宣称 global effect。具体 surface 如何表达 scope 仍由其专业 authority 定义。
-- 最终性先于效果：未获得可验证 finality certificate 的 intent 不产生权威世界结果；基础设施不可用时 progression fail closed。
+- 最终性先于效果：未获得当时合法 profile 的可验证正式提交证明并满足持久条件的 intent 不产生权威世界结果；基础设施不可用时 progression fail closed。
 - 可重建性：恢复仅接受 manifest、certificate、hash-bound snapshot、canonical replay 和 verified state root 组成的信任链。
 - 可替换实现：oasis7 保有协议语义；可选择性采用成熟库，但依赖被版本化合同隔离。
 - 消费者边界：game、Agent 和入口与基础设施并发运行，却不能直接写 canonical state 或把 pending 伪装成 committed。
@@ -138,10 +149,10 @@
 <a id="world-infrastructure-done"></a>
 ## 5. Done：成功标准与验收
 
-- SC-1：一个受治理验证者集合在唯一 `world_id` 上形成可验证的 deterministic BFT commit certificate；错误签名、阈值、验证者集合或 round 状态均不能推进历史。
+- SC-1：唯一世界按合法激活的 profile 验证提交证明。首次开放的 `controlled_single_authority` 必须证明单故障域恢复不丢已确认效果、唯一追加权与幂等；后续 `bft` 必须形成受治理验证者集合的 deterministic BFT certificate 并通过 H/H+1 交接。错误签名、profile、epoch、parent 或适用阈值/集合/round 均不能推进历史。
 - SC-2：验证者、full/state-sync、archive、light companion 与公开服务在各自角色内复制、提供和验证状态；任何非权威服务不取得最终性或写入权。
 - SC-3：bootstrap、snapshot、replay、state sync、pruning 和灾难恢复证明同一历史/状态根可重建；任一证明缺失或不匹配时停止 serving/voting。
-- SC-4：全部活动验证者在 attestation 前重执行相同版本化执行；执行升级、混合版本和 replay 不会为同一输入产生两个权威结果。
+- SC-4：两种 profile 使用同一版本化确定性执行；BFT 下全部活动验证者在 attestation 前重执行相同输入；执行升级、混合版本和 replay 不会为同一输入产生两个权威结果。
 - SC-5：游戏、Agent 与玩家入口经同一版本化协议只处理 committed state；finality 不可用时，待决 intent 不产生下游资格或世界效果，消费者能区分仍待决与须重新规划的结果，并只在恢复后取得的 committed receipt 上更新结论。明确互斥的同 lineage 成员中，首个产生有效世界效果的 receipt 唯一获胜并原子终止其余成员；拒绝/过期只终止自身，独立 intent 保持并发；原请求与撤回/替代请求的关联及各自真实状态可读。
 - SC-6：恢复路径只在同一 `world_id` 的 checkpoint/snapshot、canonical replay 与 state root 验证链成立时恢复世界结论；缺失、冲突或其他 `world_id` 的候选保持原世界不可用和隔离，不接受新权威 intent，也不把本地/测试/替代世界、缓存或部分数据表述为连续恢复。已 committed receipt 保留其原历史，未 final intent 不被静默结算、取消、重放或迁移；任何替代世界或受治理迁移必须作为独立产品决策，而非恢复副作用。
 - SC-7：同一候选的恢复演练至少各覆盖一例“恢复只读”“恢复可服务”和“恢复受阻/隔离”，并覆盖一次闸门在提交或恢复中回退；同一 `world_id` 的历史验证链是必要但不足以重新接受写入，追加/最终性/版本化执行或 head 连续性未重新成立时，所有新 intent 尝试均原子拒绝或保持无效果待决（每个受测新 intent 的 committed receipt 数为 `0`）。进入可服务后，既有 pending 按当前条件和 canonical 顺序重新裁决；停机排队与历史 receipt 不延长期限、不继承优先级；每个被接受的新 intent 最多产生一个 committed receipt，且不产生第二次效果。闸门再次失效时回到只读/隔离且不撤销、重放或改写已确认 receipt。玩家/Agent 能读到当前服务语义、主要 blocker 与下一步。测试层级：`test_tier_full`。
@@ -159,7 +170,7 @@
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
-| SC-1 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-001 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | certificate、验证者转换、分区/Byzantine 与权限负例 | test_tier_full |
+| SC-1 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-001 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 单权威原子追加/独立故障域/未知提交/旧写者拒绝；BFT certificate、转换、分区与 H/H+1 负例 | test_tier_full |
 | SC-2 | blockchain_ops_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/testing/prd.md` | 复制、存储角色、proof-serving 与非权威权限负例 | test_tier_full |
 | SC-3 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-002 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | bootstrap、checkpoint、snapshot、replay、root verification 与 restore drill | test_tier_full |
 | SC-4 | runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | deterministic re-execution、upgrade activation、replay 与 mixed-version 拒绝 | test_tier_full |
@@ -176,10 +187,10 @@
 
 | 根 SC | 必须分别判定的义务与前置条件 | 产品承接与专业分工 |
 | --- | --- | --- |
-| SC-1 | 唯一世界与受治理活动验证者集合；有效最终性证明；错误签名、阈值、集合、round 状态各自不得推进历史 | [REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)、[REQ-DCS-004](distributed-consensus-and-state-availability.prd.md#req-dcs-004)及 DC-1/DC-4；P2P 拥有证书、集合和 round 合同，runtime 拥有执行绑定，运维负责拓扑事实，QA 判定组合证据 |
+| SC-1 | 唯一世界与合法激活 profile；单权威持久性/旧写者隔离，BFT 的集合/阈值/round；错误签名、profile、epoch 或适用证书条件各自不得推进历史 | [REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)、[REQ-DCS-004](distributed-consensus-and-state-availability.prd.md#req-dcs-004)及 DC-1/DC-4；P2P 拥有证书、集合和 round 合同，runtime 拥有执行绑定，运维负责拓扑事实，QA 判定组合证据 |
 | SC-2 | 各角色的复制、存储、证明提供与验证；非权威服务不得获得最终性或写入权；pruning 须先证明可重建、hash/root 校验及冗余 archive 可用 | [REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)、[REQ-DCS-003](distributed-consensus-and-state-availability.prd.md#req-dcs-003)及专题存储边界；P2P 拥有角色与存储合同，运维负责暴露面和隔离，QA 核对权限负例 |
 | SC-3 | bootstrap、snapshot、replay、state sync、pruning、灾备各自重建同一历史与根；任何缺失或不匹配证明都停止 serving/voting | [REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)、DC-2 与 DE-3；P2P/运维负责恢复材料与同窗口事实，runtime 负责 replay/root，QA 核对信任链各环及失败结果 |
-| SC-4 | 全部活动验证者先重执行再 attestation；同版本、顺序、父状态得到同结果；升级、混合版本及历史 replay 不产生第二个权威结果 | [REQ-DWE-001](deterministic-world-execution.prd.md#req-dwe-001)、[REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004)及 DE-1/DE-3/DE-4；runtime 拥有确定性与版本合同，P2P 拥有 attestation/finality，QA 判定同候选组合 |
+| SC-4 | 同一确定性执行；BFT 下全部活动验证者先重执行再 attestation；同版本、顺序、父状态得到同结果；升级、混合版本及历史 replay 不产生第二个权威结果 | [REQ-DWE-001](deterministic-world-execution.prd.md#req-dwe-001)、[REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004)及 DE-1/DE-3/DE-4；runtime 拥有确定性与版本合同，P2P 拥有 attestation/finality，QA 判定同候选组合 |
 | SC-5 | committed-only 消费；待决无资格或效果；恢复按当前条件重审且 receipt 才改变结论；互斥 lineage 首个有效 receipt 唯一胜出并原子终止其余成员；拒绝/过期仅终止自身，独立 intent 可并发；原请求与撤回/替代真实关联可读 | [REQ-DWE-002](deterministic-world-execution.prd.md#req-dwe-002)、[REQ-DWE-003](deterministic-world-execution.prd.md#req-dwe-003)及 DE-2；runtime/P2P 拥有顺序、去重和回执，Agent/Viewer/入口拥有消费与反馈，QA 核对竞态及独立请求负例 |
 | SC-6 | 同一世界 checkpoint/snapshot、replay、root 验证链；缺失、冲突、错误世界隔离且不接受新权威 intent；已提交历史保留，未 final 请求不被静默确认、取消、重放或迁移；替代世界不是恢复副作用 | [REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)、DE-3 与根恢复身份边界；P2P/runtime/运维负责连续性与隔离，Viewer 负责恢复表述，跨世界迁移须独立产品决策，QA 核对身份负例 |
 | SC-7 | 同候选只读、可服务、受阻/隔离与闸门回退；历史验证不足以开放写入，追加/finality/版本/head 同时成立；不成立时 receipt 为 0；成立后 pending 当前条件重审、无期限/优先级继承且至多一次效果；回退不改已确认历史；blocker/下一步可读 | [AC-DCS-002](distributed-consensus-and-state-availability.prd.md#ac-dcs-002)、[AC-DCS-005](distributed-consensus-and-state-availability.prd.md#ac-dcs-005)及 DC-5；P2P/runtime 拥有服务闸门，运维捕获恢复窗口，消费者投影真实等级，QA 核对状态转换及每个 intent 的 receipt |
@@ -193,7 +204,7 @@
 
 | SC | 已有专业设计接收条款 | 实际 QA 接收场景 |
 | --- | --- | --- |
-| SC-1 | [`P2P 设计`](../../p2p/design.md#des-p2p-target-bft)、[`runtime 设计`](../../world-runtime/design.md#runtime-deterministic-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY` |
+| SC-1 | [`profile/持久提交/交接设计`](../../p2p/design.md#des-p2p-authority-profiles)、[`P2P 设计`](../../p2p/design.md#des-p2p-target-bft)、[`runtime 设计`](../../world-runtime/design.md#runtime-deterministic-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY` |
 | SC-2 | [`P2P 设计`](../../p2p/design.md#des-p2p-layer-authority)、[`P2P 设计`](../../p2p/design.md#des-p2p-replication-scope) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY` |
 | SC-3 | [`P2P 设计`](../../p2p/design.md#des-p2p-target-recovery)、[`runtime 设计`](../../world-runtime/design.md#runtime-recovery-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-RECOVERY` |
 | SC-4 | [`runtime 设计`](../../world-runtime/design.md#runtime-deterministic-design)、[`runtime 设计`](../../world-runtime/design.md#runtime-version-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-EXECUTION` |
