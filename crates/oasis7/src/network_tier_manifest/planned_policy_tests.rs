@@ -1,6 +1,9 @@
 use super::*;
 use serde_json::{Value, json};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
 
 fn fixture() -> Value {
     serde_json::from_str(include_str!(
@@ -14,11 +17,18 @@ fn load_modified(source: &Value) -> Result<LoadedNetworkTierManifest, String> {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!(
-        "oasis7-planned-policy-{}-{nonce}",
-        std::process::id()
-    ));
-    fs::create_dir_all(&dir).unwrap();
+    let dir = loop {
+        let sequence = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+        let candidate = std::env::temp_dir().join(format!(
+            "oasis7-planned-policy-{}-{nonce}-{sequence}",
+            std::process::id()
+        ));
+        match fs::create_dir(&candidate) {
+            Ok(()) => break candidate,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("create exclusive planned policy directory: {error}"),
+        }
+    };
     let mut source = source.clone();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for name in ["genesis_ref", "bootstrap_peer_ref"] {
