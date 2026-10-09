@@ -16,6 +16,7 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
+| [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) / [单权威提交](prd.md#p2p-single-authority-durable-commit) / [交接](prd.md#p2p-authority-handoff) | 固定身份与合法 profile 激活、原子追加、跨故障域持久确认、未知提交和 H/H+1 不可撤回 | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | P2P/runtime、ops、消费者与 QA 同候选验证 | target；现有 prototype/单调 guard 不证明正式提交或 readiness |
 | [professional_acceptance: p2p-ordered-execution](prd.md#p2p-ordered-execution) | 下一committed height、有序序列/root/decode及journal绑定；错误不推进 | [des-p2p-ordered-commit](#des-p2p-ordered-commit) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-receipt-finality-boundary](prd.md#p2p-receipt-finality-boundary) | receipt≠QC；同parent/manifest/actions独立重执行，缺artifact/fault/root拒绝vote/commit | [des-p2p-receipt-finality](#des-p2p-receipt-finality) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-target-bft](prd.md#p2p-target-bft) | Propose/Prevote/Precommit仅verified >2/3 active stake cert生效；world/height/round/phase/roots/set和dedup签名绑定 | [des-p2p-target-bft](#des-p2p-target-bft) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
@@ -73,7 +74,7 @@ Propose/Prevote/Precommit仅verified >2/3 active stake cert生效；world/height
 
 ### des-p2p-target-recovery
 
-manifest/genesis→cert/header+set transition→hash snapshot→canonical replay→root→serve/vote；每环缺失/冲突/回退/异world停止。
+固定 world/chain/genesis 身份→合法历史 profile/epoch/manifest 激活链→已确认 checkpoint/header+authority transition→hash snapshot→canonical committed replay→root→serve/vote；BFT 高度另验证 certificate/set transition，每环缺失/冲突/回退/异world停止。
 
 按信任链逐环确认，snapshot blob缺失/hash错或replay/root不一致停止，不能用任意peer/latest backup/otherworld/覆盖替代。pruning必须先证明checkpoint+replay重建、hash/root验证和冗余archive可用。既有历史/offline local recovery事实不抹除；当前governed live部署禁止raw-copy路径，signed-V2只在原runbook限定observer/drill scope，observer高head不等于execution-required full restore。
 
@@ -99,15 +100,23 @@ writer/epoch从seq1及guard不污染；权威恢复错误与qualified storage-ch
 
 net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-root；distfs 拥有CAS/replication/challenge；node/chain-runtime拥有commit后执行/恢复接线；proto仅共享wire；wasm_abi是manifest/runtime ABI单一来源。公开服务只能供应hash/proof材料，不能投票或写canonical。
 
+### des-p2p-authority-profiles
+
+承接 [合法 profiles](prd.md#p2p-authority-profiles)、[单权威持久提交](prd.md#p2p-single-authority-durable-commit) 与 [H/H+1 交接](prd.md#p2p-authority-handoff)。同一世界/执行/receipt 协议按各高度合法 profile 验证，固定 world/chain/genesis 身份与可演进 manifest/profile/epoch 分开；受控单权威不宣称 distributed consensus，threshold prototype 不取得正式权威。
+
+单权威追加先在最终存储原子检查 epoch、预期 parent/head、顺序；signer 在 fenced epoch 下核对完整 prepare 的本机与独立副本持久确认后生成提交决定/证明；最终证明和决定再按同一协议复制持久化。prepare 不发布世界效果；本机与独立故障域完整记录和正式提交决定/证明确认后才回 committed。单调 guard 与本机锁不能替代旧 writer fencing。未知结果保留原 identity 查询，独立副本不可用时暂停确认；人工恢复先隔离旧 signer/追加权，无法证明则停写。
+
+交接停写排空后，新集合同步 H−1；旧 authority 在 H 正式记录新集合/profile/epoch/H+1 边界及结果根。H 提交前可取消，提交后接续权不可撤回，入口/存储/signer/proof verifier 均拒绝 H+1 旧 profile；新集合启动失败保持停写。历史仍按各阶段合法 profile 验证。演练覆盖 H 已提交而 H+1 未提交时宕机/取消、重启拒绝旧 writer，以及无资产重发/断链/失效 pending 自动生效。该设计尚需协议、消费者与故障域实证，不是当前 readiness。
+
 ## 5. 关键运行流程
 
-先校验提交身份/大小/队列→固定有序actions/root→同parent/manifest重执行→匹配receipt commitments→适用finality验证→提交/复制→hash-bound持久记录→消费者committed读取。当前prototype推进与目标QC闸门不是同一实现证明。恢复先证明原world历史链再判只读；当前追加/finality/manifest/head全满足才重新serve/vote，失效回只读/隔离。
+先校验提交身份/大小/队列→固定有序actions/root→同parent/manifest执行并匹配receipt commitments→fenced epoch/parent/head 下原子预备追加及跨故障域持久确认→合法 profile 生成并验证提交决定/证明→最终决定/证明跨故障域持久确认→消费者committed读取。BFT 的独立重执行与投票步骤继续适用其专属合同；单权威不通过等待尚未生成的证明制造循环依赖。当前prototype推进与目标QC闸门不是同一实现证明。恢复先证明原world历史链再判只读；当前追加/finality/manifest/head全满足才重新serve/vote，失效回只读/隔离。
 
 拒绝保留可定位原因；timeout/retry受原策略有界限制。并发冲突遵循原guard/precondition/共识authority，不能因接线或重连获得新权限。取消/替代只有外部专业合同明确支持时成立，本设计不新建取消或补偿schema。
 
 ## 6. 接口与数据合同
 
-consensus→node交付有序payload/root与commit上下文；runtime→validator提供receipt/parent/manifest执行语义；DistFS/服务→恢复者供应hash-bound材料，不能自授authority。身份/版本/顺序不匹配拒绝，不接受latest任意backup。wire/schema仍属原专业authority，不增字段。
+consensus→node交付有序payload/root与commit上下文；runtime→validator提供receipt/parent/manifest执行语义；DistFS/服务→恢复者供应hash-bound材料，不能自授authority。身份/版本/顺序不匹配拒绝，不接受latest任意backup。wire/schema演进仍属原专业authority；本次文档未宣称已有字段或实现支持。
 
 | producer → consumer | 输入身份/版本 | 顺序与幂等 | success / error | 兼容与资源边界 |
 | --- | --- | --- | --- | --- |
@@ -115,7 +124,7 @@ consensus→node交付有序payload/root与commit上下文；runtime→validator
 
 ## 7. 状态、事务与持久化
 
-pending/candidate无世界效果；verified commit才推进权威高度。node block/action/execution roots、journal、snapshot作为同一绑定。目标lock/round/validator-set proof、certificate持久恢复必须一同成立；当前缺这些，不以旧TickCertificate补缺。恢复只读≠恢复可服务；闸门回退不改历史receipt。
+pending/candidate无世界效果；verified commit才推进权威高度。node block/action/execution roots、journal、snapshot作为同一绑定。提交证明与持久恢复按各高度合法 profile 成立；`bft` 另要求目标 lock/round/validator-set proof 和 certificate，当前缺这些，不以旧TickCertificate补缺。恢复只读≠恢复可服务；闸门回退不改历史receipt。
 
 accepted、applied、persisted、published必须分别具备各自证据；workflow done/文档active不属于运行状态。外部receipt/journal/state root生命周期和recovery由runtime authority；本地观察不能提供更强保证。
 

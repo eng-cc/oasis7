@@ -5,6 +5,12 @@
 
 审计轮次: 4
 
+## 当前交付切线
+
+当前唯一代表性链采用 `starter-industrial-smelter-to-assembler-v1` / `production_only`：合法地点建成 `factory.smelter.mk1`，以 `recipe.smelter.iron_ingot` 完成合法 cycle，在该 Smelter 的 owner-bound output ledger 形成首笔匹配正量铁锭结算，再开放 Assembler 候选。排程、资源扣减、入列和普通库存变化不能替代结算；首产物不要求建成 Assembler，不代签稳定窗口、交付或需求满足。实际可用性由同候选运行证据判定。
+
+10 分钟信任窗口、首产物结算、15–45 分钟或 1–3 局持续能力窗口、单次会话长度和长期成长周期分别命名与评价；时间用于观察节奏，不要求玩家凑足时长。
+
 
 ## 文档 authority 与适用范围
 - 本文件是核心玩法骨架及 `PRD-GAME-012` early-retention 专业合同的 topic authority：定义跨循环体验脊柱、早期体验判断和本专题的可玩性验收。
@@ -397,7 +403,7 @@
 - 任何新增玩法提案如果不能直接改善前 4 项之一，默认延后，不进入当前冲刺主路径。
 - 如果某项工作主要扩大世界复杂度、卖点数量或系统展示面，但不能降低 early-retention blocker，则必须记为 deferred，而不是与 trust/capability 修复并行抢优先级。
 - `--no-llm`、operator-only、Prompt Ops 或其他 debug/probe lane 只能用于排障，不得作为“当前 focus order 已完成”的放行依据。
-- 当前 producer 正式口径继续保持双层判定：`10-minute trust gate` 与 `first capability gate` 必须分开记录。2026-04-15 的 `trust gate = hold`、`first capability gate = not_run` 现在只保留为历史 baseline；当前 fresh truth 已更新为 `trust gate = pass`、`first capability gate = pass`，但这仍不等于可以跳过后续更宽的 release / liveops 边界复核。
+- producer 正式口径保持双层判定：`10-minute trust gate` 与 `first capability gate` 分开记录。历史 hold/not_run 或 pass 样本不代表当前候选；当前判断绑定对应任务、候选与证据窗口，不能跳过 release/liveops 边界复核。
 
 ### 2.7.1 PRD-GAME-012 稳定 early-retention 合同
 
@@ -408,8 +414,8 @@
 - `10-minute trust gate` 判断首次控制可信、主目标可读、玩家后果可见、阻塞可恢复，以及玩家是否出现继续游玩的基础意愿。
 - formal headed Web/UI 首次控制地板要求最近样本的首次成功率 `>= 95%`；依赖手动 reopen/reload 才进入可控态、出现 `control ack timed out without progress`，或发生阶段回退伴随冻结的样本均计为失败，并使 trust gate 保持 `hold`，不能由后续恢复后的成功冲淡。
 - `first capability gate` 判断首个持续能力是否在后续 `15~45` 分钟或 `1~3` 次会话内闭环；不得因为它没有在首个 10 分钟完成而把 trust gate 判为失败。
-- `progression_pass`、`attraction_pass`、`motivation_density_pass` 与 `content_volume_pass` 是四个独立结论。目标覆盖、世界推进、first capability pass、动机密度和内容量不得互相代签。
-- formal lane 能推进但缺少新选择、奖励、玩家因果或回访理由时标记 `progression_pass_but_attraction_weak`；动机密度已通过但有效内容量不足时标记 `content_volume_weak`。
+- `progression_pass`、`attraction_pass` 与 `motivation_density_pass` 分别表达推进与体验结构；`content_volume_pass` 只表达内容量诊断参考目标满足。目标覆盖、first capability、动机密度、内容量和真人继续意愿不得互相代签。
+- formal lane 能推进但缺少真实选择、玩家因果或回访理由时标记 `progression_pass_but_attraction_weak`；`content_volume_weak` 只表达诊断目标缺口。`blocked` 且无可执行恢复不能被其他卡片高分抵消。
 - active-LLM / headed live 样本与 deterministic-provider-backed required evidence 必须分开。required tier 证明合同、回归和设计充分性；真实玩家留存、生产 provider 体验或 release/playtest claim 仍需 live/provider evidence。
 
 #### 0~30 分钟 beat 合同
@@ -429,10 +435,10 @@
 
 #### 内容量、动机与 anti-script 判据
 
-- content-volume 最低门槛固定为：`effective_play_minutes >= 30`、`player_operation_count >= 18`、`content_unit_count >= 8`、`distinct_action_family_count >= 6`、`passive_wait_share <= 0.25`。未达标即 `content_volume_weak`。
+- 内容量诊断参考保留为 `effective_play_minutes >= 30`、`player_operation_count >= 18`、`content_unit_count >= 8`、`distinct_action_family_count >= 6` 与 `passive_wait_share <= 0.25`，用于定位负担、无聊与节奏，不是通用最低通关量，也不直接阻断体验充分性。玩家主动离开后的授权执行与被迫盯页等待分别记录，不能机械以等待比例限制自治玩法。
 - motivation/attraction evidence 至少记录 `hook_score`、`replay_intent`、`meaningful_decision_count`、`reward_or_unlock_count`、`stall_or_wait_periods`、`biggest_boredom_point`、`continue_reason` 与 `return_hook`；这些是 evidence DTO，不得写成 runtime 世界真值。
 - `route_tradeoff` 必须影响后续至少 2 个 beat；`accelerate` 与 `stabilize` 至少在中途可见指标、事故后果或回访目标上不同，否则标记 `route_tradeoff_fake_choice`。
-- 微型委托必须产生可见、可命名、可交付的成果，并推进同一 `local_demand_id` 的 before/after 进度；只有 reward ID 或静态成果卡不能通过。
+- 显式交付/委托 profile 必须产生可见、可命名、可交付成果，并推进同一 `local_demand_id` 的 before/after 进度；只有 reward ID 或静态成果卡不能通过。这不构成 `production_only` 首产物的隐藏前置，没有交付时不生成交付结论。
 - 第二局首屏必须能恢复上一局 choice memory，并据路线、成果或修复选择生成不同的 `next_session_goal` 与 `first_action_on_return`。
 - 连续 `step/wait/refresh` 等被动 CTA 即使推进进度，也必须由 boredom negative regression 判为 attraction weak；`quick_patch` 与 `root_cause_fix` 必须展示时间、保留进度、残留风险或稳定收益上的真实差异。
 - required summary 必须标注 `runtime_backed / viewer_fixture_only / visual_only / live_verified` 等 provenance；共享 scenario driver 可用于 deterministic 回归，但 mock/fixture 不得冒充真实 0~30 分钟 live gameplay。
@@ -455,7 +461,7 @@
 
 - required 入口保持 `./scripts/verify-gameplay-attraction-automation.sh --tier required`；live 玩家路径与 pure API 证据使用 `./scripts/verify-gameplay-attraction-automation.sh --tier live`。
 - required tier 必须覆盖 scenario summary writer、weak-sample regression、route branch、second-run hook、anti-script、boredom negative 和 truth/provenance coverage；live tier 才能把真实 browser/player-path 或 pure API gameplay 标为 `live_verified`。
-- 当前 required evidence 为 `attraction_pass`、`motivation_density_pass`、`content_volume_pass`，记录 `34/30` 分钟有效内容与 `22/18` 次玩家操作；它不等于真实玩家留存或生产 provider 放行。
+- 历史 required 样例曾记录 `34/30` 分钟内容与 `22/18` 次操作；它仅为结构与诊断参考。当前 verdict 由对应候选证据决定；汇总分别呈现 fixture 结构、候选 live 操作和真人观察，缺真人来源保持未验证。`meaningful_decision_count` 是动作/分支/打断等字段的结构代理，不能报告为玩家实际决策次数；真人选择按具体决策去重并说明后果，默认样例 hook/replay 分数不能代签真实回访意愿。
 - runtime/viewer/agent canonical truth 或对应 surface 发生变化时，重跑 required；需要真实体验、provider 或 release/playtest 判断时，再跑 live/provider sample 并由 QA/producer 分别给出验证与阶段判断。
 
 ## 2.8 物理世界尺度与玩家交互尺度

@@ -267,6 +267,39 @@ for (const mutation of ["delete", "null", "non_boolean"]) {
   );
 }
 
+// Small sessions retain real choices, consequences and recovery without volume quotas.
+const smallSamples = structuredClone(evidence.raw_snapshots);
+for (const sample of smallSamples) {
+  sample.task_game_076_scenario.content_profile = {
+    effective_play_minutes: 1, player_operation_count: 1, passive_wait_minutes: 4,
+    action_families: ["choose_route"], content_units: ["result"],
+  };
+}
+const smallEvidence = buildTaskGame076AttractionEvidence({ samples: smallSamples });
+assert.equal(smallEvidence.sufficiency.status, "attraction_pass");
+assert.ok(smallEvidence.content_volume_card.missing.includes("player_operation_count"));
+const strandedSamples = structuredClone(evidence.raw_snapshots);
+Object.assign(strandedSamples[0].player_gameplay, {
+  stage_status: "blocked", repair_available: false, rebuild_available: false,
+  pivot_available: false, recovery_path_detail: null,
+});
+strandedSamples[0].player_gameplay.recovery_path_detail = "Ask someone to repair later";
+const strandedEvidence = buildTaskGame076AttractionEvidence({ samples: strandedSamples });
+assert.equal(strandedEvidence.sufficiency.status, "attraction_weak");
+assert.ok(strandedEvidence.sufficiency.missing.includes("blocked_without_recovery"));
+
+const productionSamples = structuredClone(evidence.raw_snapshots);
+for (const sample of productionSamples) {
+  delete sample.player_gameplay.local_demand_progress_after_delivery;
+  delete sample.player_gameplay.micro_commission;
+}
+const productionEvidence = buildTaskGame076AttractionEvidence({ samples: productionSamples, completionProfile: "production_only" });
+assert.equal(productionEvidence.sufficiency.status, "attraction_pass");
+assert.equal(productionEvidence.anti_script_design_card.delivery_requirement, "not_applicable");
+assert.equal(productionEvidence.anti_script_design_card.local_demand_progress_after_delivery, false);
+assert.ok(!productionEvidence.anti_script_design_card.missing.includes("local_demand_progress_after_delivery"));
+assert.ok(buildTaskGame076AttractionEvidence({ samples: productionSamples }).anti_script_design_card.missing.includes("local_demand_progress_after_delivery"));
+
 const weakEvidence = buildTaskGame076AttractionEvidence({
   samples: [
     buildTaskGame076ScenarioSnapshot({ variant: "weak_high_progress" }),
@@ -276,10 +309,21 @@ const weakEvidence = buildTaskGame076AttractionEvidence({
 });
 
 assert.equal(weakEvidence.sufficiency.status, "attraction_weak");
+const repetitiveSamples = structuredClone(weakEvidence.raw_snapshots);
+for (const sample of repetitiveSamples) {
+  sample.task_game_076_scenario.content_profile = {
+    effective_play_minutes: 60, player_operation_count: 100,
+    action_families: ["a", "b", "c", "d", "e", "f"],
+    content_units: ["1", "2", "3", "4", "5", "6", "7", "8"],
+  };
+}
+const repetitiveEvidence = buildTaskGame076AttractionEvidence({ samples: repetitiveSamples });
+assert.equal(repetitiveEvidence.content_volume_card.status, "content_volume_pass");
+assert.equal(repetitiveEvidence.sufficiency.status, "attraction_weak");
 assert.ok(weakEvidence.sufficiency.missing.includes("meaningful_decision_count"));
 assert.ok(weakEvidence.sufficiency.missing.includes("reward_or_unlock_count"));
 assert.ok(weakEvidence.sufficiency.missing.includes("continue_reason"));
-assert.ok(weakEvidence.sufficiency.missing.includes("effective_play_minutes"));
+assert.ok(weakEvidence.content_volume_card.missing.includes("effective_play_minutes"));
 assert.equal(weakEvidence.weak_sample_regression.detected_verdict, "progression_pass_but_attraction_weak");
 
 console.log("TASK-GAME-076 attraction scenario tests passed");

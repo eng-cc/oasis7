@@ -54,7 +54,8 @@
   - 进入游戏后的前 10 分钟为什么会掉线
   - micro-loop、反馈可见性和 post-onboarding 阶段如何衔接
   - 哪些问题应该先作为体验修复，而不是系统重写
-  - 当前 `TASK-GAME-076` 的 required tier 自动化/诊断/content-volume supplement 已补齐到 `content_volume_pass`；真实留存或生产 provider 体验只由对应 PR 与实际验证记录 与 `../../testing/evidence/` 的正式样本判断。
+  - `TASK-GAME-076` 沿用 `scripts/verify-gameplay-attraction-automation.sh` 的 required/live 入口：fixture 卡片只核验体验结构，live 命令日志只证明对应候选的操作链，真人理解、有效决策与自发回访分别由真人记录判断。操作量、动作族、内容量、时长及等待比例保留为诊断目标，不能作为通用最低通关量；blocked 且无恢复仍阻断结构通过。
+  - 汇总中的 `meaningful_decision_count` 标明快照选择机会代理计数；真人决策以 participant/decision（decision_id 跨会话稳定，新的实际决策使用新 ID） 去重并保留选择及后果。没有真人记录时保持未验证。`production_only` 首产物不要求交付，完整交付样例继续单独检查 local demand 变化；首次实际生产结算、稳定能力和交付分别验收。
 
 ### 3. Agency、间接控制与物理尺度
 - 首读入口:
