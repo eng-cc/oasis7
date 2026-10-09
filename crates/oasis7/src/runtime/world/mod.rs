@@ -5,6 +5,7 @@ pub(crate) mod agent_claim_economic_publication;
 pub(crate) mod agent_claim_light_lifecycle_publication;
 pub(crate) mod agent_claim_terminal_publication;
 mod agent_claims;
+pub(crate) mod agent_delegation;
 mod agent_intent;
 #[cfg(test)]
 pub(crate) use agent_intent::derive_agent_chat_request_digest;

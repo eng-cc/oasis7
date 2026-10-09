@@ -1,3 +1,4 @@
+import { installControlProofVisualFixture } from "./control_proof_panel.jsx";
 import * as core from "./legacy_core.js";
 import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "./software_safe_constants.js";
 import { installMarketQuoteDecisionVisualFixture, installPowerSaleQuoteVisualFixture, installPowerSurvivalQuoteVisualFixture, installProductValidationQuoteVisualFixture, installRefineQuotePreflightVisualFixture, installScheduleRecipeQuoteVisualFixture, installTransferMaterialQuoteVisualFixture, installWaitResolutionQuoteVisualFixture, installWarDeclarationQuoteVisualFixture } from "./quote_visual_fixture_installers.js";
@@ -382,7 +383,7 @@ function setFixtureHostedGate() {
 
 function openFixtureDetails(name) {
   queueMicrotask(() => {
-    if (name === "gameplay_diagnostics_expanded" || name === "factory_production_failure_disposition") {
+    if (name === "gameplay_diagnostics_expanded" || name === "factory_production_failure_disposition" || name === "control_proof_applied") {
       document.getElementById("viewer-gameplay-details")?.setAttribute("open", "");
       if (name === "gameplay_diagnostics_expanded") {
         document.getElementById("viewer-diagnostics-panel")?.setAttribute("open", "");
@@ -467,6 +468,7 @@ function installViewerVisualFixture() {
     },
   });
   installAgentContextVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
+  installControlProofVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installAgentIntentV2VisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   installMajorWorldEventCrisisVisualFixture(fixtures, { core, viewerFixtureBaseSnapshot });
   installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installScheduleRecipeQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }); installTransferMaterialQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });

@@ -20,6 +20,25 @@ impl RuntimeLlmSidecar {
         if let Err(message) = self.ensure_runner_initialized() {
             return Some(RuntimeLlmDecision::from_error(world, message));
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(runner) = self
+                .runner
+                .as_mut()
+                .and_then(RuntimeDecisionRunner::async_runner_mut)
+            else {
+                return Some(RuntimeLlmDecision::from_error(
+                    world,
+                    "native provider runner is unavailable for feedback recovery".to_string(),
+                ));
+            };
+            if runner.needs_runtime_feedback_recovery()
+                && let Err(message) = crate::viewer::runtime_live::llm_sidecar_feedback_recovery::
+                    restore_agent_feedback_history(world, runner)
+            {
+                return Some(RuntimeLlmDecision::from_error(world, message));
+            }
+        }
         // Chain-sync can enqueue authoritative completions before this lazy
         // runner is registered.  Flush the durable mailbox immediately after
         // registration so Builtin and ProviderBacked lanes share the same

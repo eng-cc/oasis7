@@ -61,6 +61,14 @@ fn run() -> Result<(), String> {
             print_json(&keygen_output()?)?;
             Ok(())
         }
+        Command::AgencyControl { request_json } => {
+            oasis7_pure_api_client_support::run_agency_control(
+                addr.as_str(),
+                client.as_str(),
+                timeout,
+                request_json.as_str(),
+            )
+        }
         Command::Snapshot {
             player_gameplay_only,
         } => {
@@ -364,6 +372,9 @@ impl CliConfig {
 #[derive(Debug, Clone)]
 enum Command {
     Keygen,
+    AgencyControl {
+        request_json: String,
+    },
     Snapshot {
         player_gameplay_only: bool,
     },
@@ -617,6 +628,23 @@ fn parse_cli(args: &mut ArgCursor) -> Result<CliConfig, String> {
     let subcommand = args.next().ok_or_else(usage)?.to_ascii_lowercase();
     let command = match subcommand.as_str() {
         "keygen" => Command::Keygen,
+        "agency-control" => {
+            let mut request_json = None;
+            while let Some(flag) = args.peek() {
+                match flag {
+                    "--request-json" => {
+                        args.next();
+                        request_json = Some(args.value("--request-json")?);
+                    }
+                    "-h" | "--help" => return Err(usage()),
+                    _ => return Err(format!("unknown agency-control flag `{flag}`")),
+                }
+            }
+            Command::AgencyControl {
+                request_json: request_json
+                    .ok_or_else(|| "agency-control requires --request-json".to_string())?,
+            }
+        }
         "snapshot" => {
             let mut player_gameplay_only = false;
             while let Some(flag) = args.peek() {
@@ -1062,6 +1090,8 @@ Global options:\n\
 Commands:\n\
   keygen\n\
     Generate one Ed25519 player keypair for pure API play.\n\n\
+  agency-control --request-json <tagged-json>\n\
+    Send one signed typed agency_control_request JSON-line and print its response.\n\n\
   snapshot [--player-gameplay-only]\n\
     Request one live snapshot. With --player-gameplay-only, print snapshot.player_gameplay only.\n\n\
   step [--count <n>] [--request-id <n>] [--events] [--metrics]\n\

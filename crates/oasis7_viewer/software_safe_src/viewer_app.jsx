@@ -20,6 +20,7 @@ import {
 import { AgentActivitySurface } from "./agent_activity_surface.jsx"; import { HostedTestLoginOptIn } from "./viewer_hosted_test_login_view.jsx";
 import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
+import { ControlProofPanel } from "./control_proof_panel.jsx";
 import { AgentContextLite } from "./agent_context_lite.jsx";
 import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation } from "./pixel_world_presentation.js";
@@ -2410,35 +2411,7 @@ function WorldSummaryPanel(props = {}) {
                 localeText={tr}
                 onAction={renderGameplayAction}
               />
-              <EventCard
-                title={tr(locale(), "控制证明", "Control Proof")}
-                badge={gameplay().controlProof?.state || gameplay().executionState || "-"}
-                badgeClass={goalExecutionBadgeClass(gameplay().controlProof?.state || gameplay().executionState)}
-                meta={tr(locale(), "把玩家意图、世界后果、恢复动作和下一步串成一条首局可读链。", "Connect player intent, world consequence, recovery, and next move into one first-session-readable chain.")}
-              >
-                <div class="feedback-summary">
-                  {gameplay().controlProof?.summary
-                    || tr(locale(), "等待控制证明链路发布。", "Waiting for the control proof chain.")}
-                </div>
-                <div class="summary-grid">
-                  <MetricCard
-                    label={tr(locale(), "玩家意图", "Player Intent")}
-                    value={gameplay().controlProof?.intent || tr(locale(), "待提交", "not submitted")}
-                  />
-                  <MetricCard
-                    label={tr(locale(), "世界后果", "World Consequence")}
-                    value={gameplay().controlProof?.consequence || tr(locale(), "待回执", "waiting for receipt")}
-                  />
-                  <MetricCard
-                    label={tr(locale(), "恢复动作", "Recovery Move")}
-                    value={gameplay().controlProof?.recovery || tr(locale(), "待发布", "not published")}
-                  />
-                  <MetricCard
-                    label={tr(locale(), "下一步", "Next Move")}
-                    value={gameplay().controlProof?.nextMove || tr(locale(), "等待运行时指引", "waiting for runtime guidance")}
-                  />
-                </div>
-              </EventCard>
+              <ControlProofPanel proof={gameplay().controlProof} locale={locale()} tr={tr} fixture={viewerVisualFixtureNameFromQuery() === "control_proof_applied"} />
               <PanelSection
                 title={tr(locale(), "吸引力证明", "Attraction Proof")}
                 eyebrow={tr(locale(), "TASK-GAME-076: 0-30 分钟", "TASK-GAME-076: 0-30 Minutes")}

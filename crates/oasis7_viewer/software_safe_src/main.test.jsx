@@ -400,7 +400,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Control Proof")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Player Intent")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("World Consequence")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Actual world result")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Recovery Move")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Next Move").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Attraction Proof")).toBeInTheDocument();

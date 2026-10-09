@@ -132,7 +132,7 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
   assert.match(gameplaySummary.controlProof.consequence, /World Constraint/i);
   assert.match(gameplaySummary.controlProof.recovery, /Advance 1 step/i);
   assert.match(gameplaySummary.controlProof.nextMove, /Replenish upstream materials/i);
-  assert.match(gameplaySummary.controlProof.summary, /control is blocked but recoverable/i);
+  assert.match(gameplaySummary.controlProof.summary, /Detailed causal receipt unavailable/i);
   assert.equal(gameplaySummary.agencyMoves.interrupt, "available");
   assert.equal(gameplaySummary.agencyMoves.reprioritize, "available");
   assert.match(gameplaySummary.agencyMoves.correction, /material recovery/i);
@@ -307,7 +307,8 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
   assert.match(gameplaySummary.executionCauseLabel, /Agent Chose Differently/i);
   assert.match(gameplaySummary.executionCauseDetail, /policy\.guard/i);
   assert.match(gameplaySummary.controlProof.consequence, /Agent Chose Differently/i);
-  assert.match(gameplaySummary.controlProof.summary, /Control proved/i);
+  assert.match(gameplaySummary.controlProof.summary, /Detailed causal receipt unavailable/i);
+  assert.doesNotMatch(gameplaySummary.controlProof.summary, /Control proved/i);
 }
 
 {
