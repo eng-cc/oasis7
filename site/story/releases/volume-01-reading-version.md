@@ -1,3 +1,5 @@
+**历史版本提示：** 本页保留 V50 前第一卷阅读版 v1.0-rc 的原说明，所列范围、状态与规则均指当时版本。当前四卷完整阅读入口已改为 [V50 正文目录](v50/README.md)，详见 [V50 版本说明](v50-reading-version.md)。
+
 # 《绿洲 2076》第一卷阅读版 v1.0-rc
 
 本清单定义第一卷对外阅读版的范围、状态和发布边界。它用于网页阅读入口和公开分享口径，不改变第一卷 canon 内容，也不代表最终出版定稿。
@@ -40,3 +42,4 @@
 - `reviews/editorial-notes.md`：第一卷卷级审阅、doc-sync、稳定基线封存和最终验证记录。
 - `draft/chapter-writing-sop.md`：卷级审阅后只处理 P0 / P1 或影响阅读的重复 P2 的最小补丁边界。
 - `chapter-cards/`、`characters/`、`timeline/`：第一卷 canon 和章节卡支撑面。
+
