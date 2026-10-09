@@ -39,6 +39,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_execution_world_dir: None,
             chain_submit_bind: None,
             world_service: None,
             world_service_agent_signer: None,
@@ -70,6 +71,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_execution_world_dir: None,
             chain_submit_bind: None,
             world_service: None,
             world_service_agent_signer: None,
@@ -156,6 +158,11 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_hosted_public_join_mode(mut self, enabled: bool) -> Self {
         self.hosted_public_join_mode = enabled;
+        self
+    }
+
+    pub fn with_chain_execution_world_dir(mut self, path: impl Into<PathBuf>) -> Self {
+        self.chain_execution_world_dir = Some(path.into());
         self
     }
 

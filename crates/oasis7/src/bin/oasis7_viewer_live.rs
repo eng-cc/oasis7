@@ -31,6 +31,7 @@ struct CliOptions {
     llm_mode: bool,
     deployment_mode: String,
     chain_status_bind: Option<String>,
+    chain_execution_world_dir: Option<PathBuf>,
     chain_submit_bind: Option<String>,
     chain_link_policy: ChainLinkPolicy,
     auto_play: bool,
@@ -67,6 +68,7 @@ impl Default for CliOptions {
             llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
             chain_status_bind: None,
+            chain_execution_world_dir: None,
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             auto_play: true,
@@ -184,6 +186,11 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
     } else {
         config
     };
+    let config = if let Some(path) = options.chain_execution_world_dir.as_ref() {
+        config.with_chain_execution_world_dir(path.clone())
+    } else {
+        config
+    };
     let config = if let Some(chain_status_bind) = options.chain_status_bind.as_ref() {
         config.with_chain_status_bind(chain_status_bind.clone())
     } else {
@@ -200,6 +207,7 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
         oasis7::world_service::client::WorldServiceClientConfig::from_env()?,
         oasis7::world_service::client::WorldServiceAgentSignerConfig::from_env()?,
     )?;
+    validate_execution_world_boundary(options, config.world_service.is_some())?;
     if config.world_service.is_some() && options.debug_scenario.is_some() {
         return Err("seeded debug scenarios require isolated offline mode".into());
     }
@@ -235,6 +243,28 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
         None => {}
     }
     Ok(server)
+}
+
+// Service connections never acquire authority from an operator's node directory.
+// The explicit checkpoint requirement belongs only to the legacy local observer lane.
+fn validate_execution_world_boundary(
+    options: &CliOptions,
+    service_connected: bool,
+) -> Result<(), String> {
+    if service_connected && options.chain_execution_world_dir.is_some() {
+        return Err(
+            "world service cannot be combined with a local execution world directory".into(),
+        );
+    }
+    if !service_connected
+        && options.chain_status_bind.is_some()
+        && options.chain_execution_world_dir.is_none()
+    {
+        return Err(
+            "--chain-status-bind requires operator-configured --chain-execution-world-dir".into(),
+        );
+    }
+    Ok(())
 }
 
 fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
@@ -279,6 +309,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--deployment-mode" => {
                 let raw = parse_required_value(&mut iter, "--deployment-mode")?;
                 options.deployment_mode = parse_deployment_mode(raw.as_str())?.to_string();
+            }
+            "--chain-execution-world-dir" => {
+                options.chain_execution_world_dir = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--chain-execution-world-dir",
+                )?));
             }
             "--chain-status-bind" => {
                 options.chain_status_bind =
@@ -514,6 +550,7 @@ Options:\n\
   --no-web-bind             disable websocket bridge\n\
   --llm                     enable llm mode (default; required for gameplay)\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
+  --chain-execution-world-dir <path> operator-owned local observer checkpoint root; unavailable with world service\n\
   --chain-status-bind <addr> legacy operator association; authenticated world service is required (no node-directory fallback)\n\
   --chain-submit-bind <addr> legacy endpoint setting; formal mutations use the authenticated world service\n\
   --chain-link-policy <mode> chain sync policy: enforcing|shadow (default: enforcing)\n\
@@ -586,6 +623,8 @@ mod tests {
                 "--web-bind",
                 "127.0.0.1:6300",
                 "--llm",
+                "--chain-execution-world-dir",
+                "output/test-observer-root",
                 "--chain-status-bind",
                 "127.0.0.1:7123",
                 "--chain-submit-bind",
@@ -772,6 +811,8 @@ mod tests {
     fn parse_options_accepts_resolvable_submit_hostname() {
         let options = parse_options(
             [
+                "--chain-execution-world-dir",
+                "output/test-observer-root",
                 "--chain-status-bind",
                 "127.0.0.1:7123",
                 "--chain-submit-bind",
@@ -784,9 +825,28 @@ mod tests {
     }
 
     #[test]
+    fn service_connection_requires_no_local_execution_directory() {
+        let mut options =
+            parse_options(["--chain-status-bind", "localhost:7123"].into_iter()).unwrap();
+        assert!(validate_execution_world_boundary(&options, true).is_ok());
+        assert!(validate_execution_world_boundary(&options, false).is_err());
+        options.chain_execution_world_dir = Some("output/test-observer-root".into());
+        assert!(validate_execution_world_boundary(&options, false).is_ok());
+        assert!(validate_execution_world_boundary(&options, true).is_err());
+    }
+
+    #[test]
     fn parse_options_accepts_resolvable_status_hostname() {
-        let options = parse_options(["--chain-status-bind", "localhost:7123"].into_iter())
-            .expect("resolvable hostname status bind");
+        let options = parse_options(
+            [
+                "--chain-execution-world-dir",
+                "output/test-observer-root",
+                "--chain-status-bind",
+                "localhost:7123",
+            ]
+            .into_iter(),
+        )
+        .expect("resolvable hostname status bind");
         assert_eq!(options.chain_status_bind.as_deref(), Some("localhost:7123"));
     }
 

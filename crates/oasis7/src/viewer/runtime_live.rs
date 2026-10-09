@@ -31,7 +31,9 @@ use crate::simulator::{
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -174,6 +176,8 @@ pub struct ViewerRuntimeLiveServer {
         oasis7_client_api::world_service::RequestCorrelation,
         crate::world_service::wire::WorldServicePayloadV1,
     )>,
+    chain_observer_loader: Arc<Mutex<chain_link::ObserverLoader>>,
+    last_chain_observer_identity: Option<(u64, u64, u64, String)>,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     seed_model: Option<WorldModel>,
@@ -390,6 +394,8 @@ impl ViewerRuntimeLiveServer {
             periodic_service_executor: None,
             prepared_world_service_submission: None,
             pending_world_service_gameplay: Vec::new(),
+            chain_observer_loader: Arc::new(Mutex::new(chain_link::ObserverLoader::default())),
+            last_chain_observer_identity: None,
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             seed_model,

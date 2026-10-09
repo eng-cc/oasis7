@@ -155,8 +155,7 @@ function attractionVerdict(playerGameplay) {
   const hasRecovery =
     playerGameplay.repair_available === true ||
     playerGameplay.rebuild_available === true ||
-    playerGameplay.pivot_available === true ||
-    truthyText(playerGameplay.recovery_path_detail);
+    playerGameplay.pivot_available === true;
   const isGrindOnly =
     playerGameplay.grind_only_flag === true ||
     Number(playerGameplay.same_loop_repeat_count || 0) >= 4;
@@ -195,7 +194,8 @@ function buildAttractionCardFromSnapshot(snapshot, index) {
     sample_id: `task-game-076.${index + 1}`,
     scenario_version: TASK_GAME_076_SCENARIO_VERSION,
     variant: snapshot.task_game_076_scenario?.variant || "custom",
-    provenance: snapshot.task_game_076_scenario?.provenance || "deterministic_provider_backed",
+    provenance: "viewer_fixture_only",
+    declared_fixture_provenance: snapshot.task_game_076_scenario?.provenance || null,
     hook_score: score.hookScore,
     replay_intent: score.replayIntent,
     action_effect_feedback:
@@ -238,6 +238,10 @@ function buildAttractionCardFromSnapshot(snapshot, index) {
       null,
     leverage_class: playerGameplay.leverage_class || null,
     content_profile: snapshot.task_game_076_scenario?.content_profile || null,
+    blocked_without_recovery: playerGameplay.stage_status === "blocked" &&
+      !(playerGameplay.repair_available === true || playerGameplay.rebuild_available === true ||
+        playerGameplay.pivot_available === true),
+    decision_count_scope: "snapshot_choice_opportunity_proxy",
     verdict,
   };
 }
@@ -583,6 +587,8 @@ function buildContentVolumeCard(cards) {
   if (actionFamilies.size < ATTRACTION_THRESHOLDS.minDistinctActionFamilyCount) missing.push("distinct_action_family_count");
   if (passiveWaitShare > ATTRACTION_THRESHOLDS.maxPassiveWaitShare) missing.push("passive_wait_share");
   return {
+    role: "diagnostic_targets",
+    blocks_sufficiency: false,
     status: missing.length === 0 ? "content_volume_pass" : "content_volume_weak",
     effective_play_minutes: effectivePlayMinutes,
     target_effective_play_minutes: ATTRACTION_THRESHOLDS.minEffectivePlayMinutes,
@@ -590,6 +596,9 @@ function buildContentVolumeCard(cards) {
     content_unit_count: contentUnits.size,
     distinct_action_family_count: actionFamilies.size,
     passive_wait_minutes: passiveWaitMinutes,
+    authorized_away_execution_minutes: profiles.reduce((sum, profile) => sum + Number(profile.authorized_away_execution_minutes || 0), 0),
+    forced_attention_wait_minutes: profiles.reduce((sum, profile) => sum + Number(profile.forced_attention_wait_minutes || 0), 0),
+    wait_classification: "unclassified_passive_wait_is_not_forced_attention",
     passive_wait_share: passiveWaitShare,
     action_families: Array.from(actionFamilies).sort(),
     content_units: Array.from(contentUnits).sort(),
@@ -872,7 +881,7 @@ function buildSecondRunDesignCard(samples) {
   };
 }
 
-function buildAntiScriptDesignCard(samples) {
+function buildAntiScriptDesignCard(samples, completionProfile) {
   const gameplays = samples.map((sample) => sample.player_gameplay || {});
   const visibleMidrunRouteConsequence = gameplays.some((gameplay) =>
     truthyText(gameplay.route_tradeoff?.midrun_feedback?.visible_metric_delta) &&
@@ -901,7 +910,7 @@ function buildAntiScriptDesignCard(samples) {
   const boredomNegativeGuard = buildBoredomNegativeRegression().status === "pass";
   const missing = [];
   if (!visibleMidrunRouteConsequence) missing.push("visible_midrun_route_consequence");
-  if (!localDemandProgressAfterDelivery) missing.push("local_demand_progress_after_delivery");
+  if (completionProfile !== "production_only" && !localDemandProgressAfterDelivery) missing.push("local_demand_progress_after_delivery");
   if (!secondSessionChoiceMemory) missing.push("second_session_choice_memory");
   if (!boredomNegativeGuard) missing.push("boredom_negative_guard");
   if (!repairTradeoffCostVisible) missing.push("repair_tradeoff_cost_visible");
@@ -909,6 +918,7 @@ function buildAntiScriptDesignCard(samples) {
     status: missing.length === 0 ? "anti_script_pass" : "anti_script_weak",
     visible_midrun_route_consequence: visibleMidrunRouteConsequence,
     local_demand_progress_after_delivery: localDemandProgressAfterDelivery,
+    delivery_requirement: completionProfile === "production_only" ? "not_applicable" : "required_for_delivery_profile",
     second_session_choice_memory: secondSessionChoiceMemory,
     boredom_negative_guard: boredomNegativeGuard,
     repair_tradeoff_cost_visible: repairTradeoffCostVisible,
@@ -927,7 +937,6 @@ function buildMotivationDensityCard(cards) {
   const missing = [];
   if (meaningfulDecisionCount < ATTRACTION_THRESHOLDS.minMeaningfulDecisionCount) missing.push("meaningful_decision_count");
   if (rewardOrUnlockCount < ATTRACTION_THRESHOLDS.minRewardOrUnlockCount) missing.push("reward_or_unlock_count");
-  if (stallOrWaitPeriods > ATTRACTION_THRESHOLDS.maxStallOrWaitPeriods) missing.push("stall_or_wait_periods");
   if (branchOfferClarity !== "clear") missing.push("branch_offer_clarity");
   if (!continueReason) missing.push("continue_reason");
   if (!returnHook) missing.push("return_hook");
@@ -935,6 +944,7 @@ function buildMotivationDensityCard(cards) {
   return {
     status: missing.length === 0 ? "motivation_density_pass" : "motivation_density_weak",
     meaningful_decision_count: meaningfulDecisionCount,
+    decision_count_scope: "summed_snapshot_choice_opportunity_proxy",
     reward_or_unlock_count: rewardOrUnlockCount,
     stall_or_wait_periods: stallOrWaitPeriods,
     branch_offer_clarity: branchOfferClarity,
@@ -945,7 +955,7 @@ function buildMotivationDensityCard(cards) {
   };
 }
 
-function buildSufficiency(cards, motivationDensityCard, contentVolumeCard) {
+function buildSufficiency(cards, motivationDensityCard) {
   const averageHookScore = cards.reduce((sum, card) => sum + card.hook_score, 0) / Math.max(1, cards.length);
   const averageReplayIntent = cards.reduce((sum, card) => sum + card.replay_intent, 0) / Math.max(1, cards.length);
   const missing = [];
@@ -955,9 +965,7 @@ function buildSufficiency(cards, motivationDensityCard, contentVolumeCard) {
   for (const key of motivationDensityCard.missing) {
     if (!missing.includes(key)) missing.push(key);
   }
-  for (const key of contentVolumeCard.missing) {
-    if (!missing.includes(key)) missing.push(key);
-  }
+  if (cards.some((card) => card.blocked_without_recovery)) missing.push("blocked_without_recovery");
   if (cards.some((card) => card.verdict === "progression_pass_but_attraction_weak")) {
     missing.push("progression_pass_but_attraction_weak");
   }
@@ -1046,7 +1054,7 @@ function buildBoredomNegativeRegression() {
   const cards = repeatedRecommendationSamples.map((sample, index) => buildAttractionCardFromSnapshot(sample, index + 200));
   const contentVolumeCard = buildContentVolumeCard(cards);
   const motivationDensityCard = buildMotivationDensityCard(cards);
-  const sufficiency = buildSufficiency(cards, motivationDensityCard, contentVolumeCard);
+  const sufficiency = buildSufficiency(cards, motivationDensityCard);
   const repeatedPassiveOnly = repeatedRecommendationSamples.every((sample) => {
     const sequence = sample.player_gameplay?.recommended_action_sequence || [];
     return sequence.length >= 2 && sequence.every((action) => ["step", "wait", "refresh"].includes(action));
@@ -1059,20 +1067,23 @@ function buildBoredomNegativeRegression() {
   };
 }
 
-export function buildTaskGame076AttractionEvidence({ samples = defaultAttractionSamples() } = {}) {
+export function buildTaskGame076AttractionEvidence({ samples = defaultAttractionSamples(), completionProfile = "production_and_delivery" } = {}) {
   const attractionCards = samples.map((sample, index) => buildAttractionCardFromSnapshot(sample, index));
   const motivationDensityCard = buildMotivationDensityCard(attractionCards);
   const contentVolumeCard = buildContentVolumeCard(attractionCards);
   const implementedSegments = implementedContentSegments(attractionCards);
   const gameplayTruthCoverage = buildGameplayTruthCoverage(samples, attractionCards);
   const secondRunDesignCard = buildSecondRunDesignCard(samples);
-  const antiScriptDesignCard = buildAntiScriptDesignCard(samples);
+  const antiScriptDesignCard = buildAntiScriptDesignCard(samples, completionProfile);
   const routeBranchRegression = buildRouteBranchRegression();
   const boredomNegativeRegression = buildBoredomNegativeRegression();
   return {
     task: "TASK-GAME-076",
     scenario_version: TASK_GAME_076_SCENARIO_VERSION,
-    evidence_kind: "deterministic_provider_backed_attraction_model",
+    evidence_kind: "fixture_structure_model",
+    source_scope: "fixture_structure_only",
+    completion_profile: completionProfile,
+    human_observation_status: "unverified",
     thresholds: clone(ATTRACTION_THRESHOLDS),
     attraction_cards: attractionCards,
     motivation_density_card: motivationDensityCard,
@@ -1086,9 +1097,9 @@ export function buildTaskGame076AttractionEvidence({ samples = defaultAttraction
     raw_snapshots: samples.map((sample) => clone(sample)),
     weak_sample_regression: buildWeakSampleRegression(),
     boredom_negative_regression: boredomNegativeRegression,
-    sufficiency: buildSufficiency(attractionCards, motivationDensityCard, contentVolumeCard),
+    sufficiency: buildSufficiency(attractionCards, motivationDensityCard),
     claim_boundary:
-      "deterministic-provider-backed attraction evidence can support a design sufficiency gate, but real player retention still needs live/provider playtest samples.",
+      "Fixture scores and choice proxies only verify structure; live automation verifies its recorded candidate operations; motivation and voluntary return require separate human observations.",
   };
 }
 
@@ -1137,6 +1148,7 @@ export function buildTaskGame076AutomationSummary({
   outDir,
   skipBevy = false,
   skipRuntimeUnit = false,
+  overallStatus,
 } = {}) {
   const beats = TASK_GAME_076_BEATS.map((beat) => {
     const result = statusForCommands(commands, beat.requiredCommands, {
@@ -1163,7 +1175,9 @@ export function buildTaskGame076AutomationSummary({
     task: "TASK-GAME-076",
     scenario_version: TASK_GAME_076_SCENARIO_VERSION,
     tier,
-    overall_status: Object.values(commands).some((command) => command.status === "fail") ? "fail" : "pass",
+    overall_status: overallStatus === "fail" || Object.values(commands).some((command) => command.status === "fail") ? "fail" :
+      Object.keys(commands).length === 0 || Object.values(commands).some((command) => !["pass", "skipped"].includes(command.status)) ||
+      (overallStatus && overallStatus !== "pass") ? "unverified" : "pass",
     out_dir: outDir,
     commands,
     beats,

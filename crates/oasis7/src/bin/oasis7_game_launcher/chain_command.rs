@@ -27,6 +27,14 @@ pub(super) fn chain_config_path(node_id: &str) -> String {
         .into_owned()
 }
 
+pub(super) fn resolved_chain_execution_world_dir(options: &CliOptions) -> String {
+    options
+        .chain_execution_world_dir
+        .as_ref()
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| chain_execution_world_dir(options.chain_node_id.as_str()))
+}
+
 pub(super) fn missing_execution_world_persistence_files(world_dir: &Path) -> Vec<PathBuf> {
     ["snapshot.json", "journal.json"]
         .into_iter()
@@ -36,7 +44,7 @@ pub(super) fn missing_execution_world_persistence_files(world_dir: &Path) -> Vec
 }
 
 pub(super) fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<String> {
-    let execution_world_dir = chain_execution_world_dir(options.chain_node_id.as_str());
+    let execution_world_dir = resolved_chain_execution_world_dir(options);
     let mut args = vec![
         "--node-id".to_string(),
         options.chain_node_id.clone(),

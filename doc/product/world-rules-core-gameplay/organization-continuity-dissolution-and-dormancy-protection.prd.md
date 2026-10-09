@@ -6,7 +6,8 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-10-09
+- 配套专业系统设计：[组织连续性与处置](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-001)（DES-WR-OC-001..004：处置顺序、阶段与请求层、原子授权交接、恢复与非重放）。
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文定义组织持续经营、解散和长期不活跃时的玩家结果与制度边界。它补充成熟世界成长、Agent 所有权与冲突恢复分册；不定义治理权重、身份技术、时长、清算价格、estate schema、链上交易、runtime 状态机、运营处置或当前放行结论。
@@ -15,7 +16,7 @@
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
 - 历史设计判定 Issue：#3680。
-- 设计适用性理由：本 PRD 已完整表达组织解散、不活跃保护、交接和 reclaim 的产品阶段边界；具体 lifecycle surface 由专业 authority 决定。
+- 设计适用性理由：本 PRD 已完整表达组织解散、不活跃保护、交接和 reclaim 的产品阶段边界；具体 lifecycle surface 由专业 authority 决定。此项仅豁免独立产品交互 design；配套专业系统设计承接技术合同，不改变产品 authority，也不声明实现已完成。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
@@ -74,6 +75,7 @@
 - 要求：组织解散或重组按风险冻结、合同/托管/债权与责任处理、Agent/设施/持续业务处置、剩余分配的顺序推进；成员独立资产、已有合同、身份来源和历史 receipt 不得被静默没收、删除或追溯改写。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
 - 验收：[AC-WR-OC-001](#ac-wr-oc-001)
+- 技术承接：[DES-WR-OC-001](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-001)；恢复与读面共同消费 [DES-WR-OC-004](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-004)。验收方法是设计计划，不是执行证据。
 
 <a id="ac-wr-oc-001"></a>
 ### AC-WR-OC-001：解散阶段保留可审计的后果顺序
@@ -89,6 +91,7 @@
 - 要求：长期不活跃必须经过可读通知和保护期；estate 或可撤销 delegation 只能在明确维护/风险隔离需要下以有限、可撤销范围生效，reclaim/申诉待决不能自动取回控制或解除全部义务。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-OC-002](#ac-wr-oc-002)
+- 技术承接：[DES-WR-OC-002](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-002)；恢复与读面共同消费 [DES-WR-OC-004](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-004)。验收方法是设计计划，不是执行证据。
 
 <a id="ac-wr-oc-002"></a>
 ### AC-WR-OC-002：不活跃保护与恢复请求不越级
@@ -104,6 +107,7 @@
 - 要求：同一处置范围最多一个可执行授权和一个权威 receipt 结果；替代授权确认时旧授权在重叠范围原子终止或收缩，旧授权未确认请求不得自动迁移、继承优先级或产生第二次效果。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-OC-003](#ac-wr-oc-003)
+- 技术承接：[DES-WR-OC-003](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-003)；恢复与读面共同消费 [DES-WR-OC-004](../../world-runtime/runtime/organization-continuity-and-disposition.design.md#des-wr-oc-004)。验收方法是设计计划，不是执行证据。
 
 <a id="ac-wr-oc-003"></a>
 ### AC-WR-OC-003：交接竞态保持单一有效授权

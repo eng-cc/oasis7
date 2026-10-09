@@ -31,3 +31,5 @@
 - 新增或调整 operator 手册时，先更新本页的按问题分流；再在 `doc/testing/README.md`、`doc/testing/prd.index.md` 保持子树入口可达。
 - 手册不得把 pure local playtest 与 formal public-testnet attach 证明混为一谈；具体边界以对应 runbook 为准。
 - 历史设计 companion、PRD 和 project 只有在已被现行真值替代且 focused 引用审计确认无活跃调用时才能退役删除。
+
+- 组织解散、不活跃保护、授权交接及恢复验收：[组织连续性系统验收计划](organization-continuity-system-acceptance.manual.md)（未执行）。

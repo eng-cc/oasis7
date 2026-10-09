@@ -421,9 +421,9 @@ if [[ -z "$GAME_URL" ]]; then
     REQUIRE_AGENT_SPOKE=1
   fi
   if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL env OASIS7_RUNTIME_AGENT_CHAT_ECHO=1 ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+    stdbuf -oL -eL env OASIS7_RUNTIME_AGENT_CHAT_ECHO=1 ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
   else
-    env OASIS7_RUNTIME_AGENT_CHAT_ECHO=1 ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+    env OASIS7_RUNTIME_AGENT_CHAT_ECHO=1 ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
   fi
   stack_pid=$!
 

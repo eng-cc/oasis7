@@ -35,6 +35,7 @@ class TestRaceBroadcastChannel {
 
 function createTestCrypto() {
   return {
+    subtle: { importKey: async () => ({}), sign: async () => new Uint8Array(64), verify: async () => true },
     randomUUID: vi.fn(() => `race-token-${Math.random()}`),
     getRandomValues(bytes) {
       bytes.fill(7);
@@ -65,13 +66,13 @@ describe("viewer browser race identity test API", () => {
     try {
       vi.resetModules();
       const core = await import("./legacy_core.js");
-      core.initializeSoftwareSafeCore();
+      await core.initializeSoftwareSafeCore();
       core.state.auth = {
         ...core.state.auth,
         available: true,
         playerId: "hosted-player-race-1",
-        publicKey: "race-public-key",
-        privateKey: "race-private-key",
+        publicKey: "09".repeat(32),
+        privateKey: "07".repeat(32),
         releaseToken: "race-release-token",
         source: "hosted_test_login",
         registrationStatus: "registered",
@@ -79,6 +80,7 @@ describe("viewer browser race identity test API", () => {
         sessionEpoch: 7,
       };
 
+      await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
       const descriptor = window.__AW_TEST__.offerBrowserRaceIdentityForTest();
       core.state.auth = {
         ...core.state.auth,

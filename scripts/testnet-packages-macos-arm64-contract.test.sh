@@ -11,8 +11,9 @@ import re
 import sys
 
 workflow = Path(sys.argv[1]).read_text(encoding="utf-8")
+assert "INPUT_SCOPE: ${{ inputs.package_scope }}" in workflow, "package scope must enter shell through env"
 plan = re.search(
-    r"case \"\$\{\{ inputs\.package_scope \}\}\" in(?P<body>.*?)^          esac",
+    r"case \"\$\{INPUT_SCOPE\}\" in(?P<body>.*?)^          esac",
     workflow,
     re.MULTILINE | re.DOTALL,
 )

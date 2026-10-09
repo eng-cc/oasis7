@@ -51,6 +51,7 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub auto_play_on_connect: bool,
     pub hosted_public_join_mode: bool,
     pub chain_status_bind: Option<String>,
+    pub chain_execution_world_dir: Option<PathBuf>,
     pub chain_submit_bind: Option<String>,
     /// Logical world endpoint and pinned service trust. Node paths are never
     /// part of this application connection.

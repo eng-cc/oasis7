@@ -71,7 +71,7 @@ pub(crate) struct TestChainStatusServer {
 impl TestChainStatusServer {
     pub(crate) fn start(execution_world_dir: std::path::PathBuf) -> Self {
         Self::start_with_release_security_policy(
-            execution_world_dir,
+            execution_world_dir.clone(),
             ReleaseSecurityPolicy::production_hardened(),
         )
     }
@@ -81,7 +81,7 @@ impl TestChainStatusServer {
         release_security_policy: ReleaseSecurityPolicy,
     ) -> Self {
         Self::start_with_release_security_policy_and_delay(
-            execution_world_dir,
+            execution_world_dir.clone(),
             release_security_policy,
             Duration::ZERO,
         )
@@ -92,7 +92,7 @@ impl TestChainStatusServer {
         status_delay: Duration,
     ) -> Self {
         Self::start_with_release_security_policy_and_delay(
-            execution_world_dir,
+            execution_world_dir.clone(),
             ReleaseSecurityPolicy::production_hardened(),
             status_delay,
         )
@@ -329,7 +329,8 @@ fn hosted_local_mock_chain_viewer_defers_fixture_install_until_authoritative_syn
         ViewerRuntimeLiveServerConfig::formal_release_default()
             .with_hosted_public_join_mode(true)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_chain_status_bind(chain_status.addr.clone()),
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
     )
     .expect("empty pre-sync formal world must not abort Hosted local-mock startup");
     assert!(
@@ -474,7 +475,7 @@ fn shared_hosted_prime_does_not_starve_v1_presence_hello() {
         .expect("persist probe chain world");
 
     let chain_status = TestChainStatusServer::start_with_status_delay(
-        execution_world_dir,
+        execution_world_dir.clone(),
         Duration::from_millis(250),
     );
     chain_status.committed_height.store(1, Ordering::SeqCst);
@@ -482,7 +483,8 @@ fn shared_hosted_prime_does_not_starve_v1_presence_hello() {
         ViewerRuntimeLiveServerConfig::formal_release_default()
             .with_hosted_public_join_mode(true)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_chain_status_bind(chain_status.addr.clone()),
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
     )
     .expect("empty Hosted local-mock viewer should start before sync");
     let shared = Arc::new(Mutex::new(viewer));
@@ -581,13 +583,14 @@ fn hosted_local_mock_chain_sync_rejects_empty_authoritative_world() {
         )
         .expect("persist empty authoritative chain world");
 
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
     let mut viewer = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::formal_release_default()
             .with_hosted_public_join_mode(true)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_chain_status_bind(chain_status.addr.clone()),
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
     )
     .expect("empty pre-sync formal world must be allowed to await chain sync");
     let mut session = RuntimeLiveSession::new();
@@ -630,6 +633,7 @@ fn chain_linked_runtime_sync_advances_without_play() {
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -715,6 +719,7 @@ fn chain_linked_provider_authority_is_chain_published_across_tick_and_restart() 
     chain_status.committed_height.store(1, Ordering::SeqCst);
     let config = ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
         .with_chain_status_bind(chain_status.addr.clone())
+        .with_chain_execution_world_dir(execution_world_dir.clone())
         .with_provider_backed_bootstrap_authority(authority.clone());
     let mut viewer = ViewerRuntimeLiveServer::new(config.clone()).expect("start chain viewer");
     let mut session = RuntimeLiveSession::new();
@@ -934,12 +939,13 @@ fn chain_linked_runtime_primes_initial_snapshot() {
         )
         .expect("persist execution world");
 
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -1021,7 +1027,7 @@ fn chain_linked_runtime_enforcing_rejects_initial_snapshot_when_prime_fails() {
 }
 
 #[test]
-fn chain_linked_runtime_sync_accepts_same_watermark_snapshot_rebuild() {
+fn chain_linked_runtime_sync_rejects_same_watermark_snapshot_rebuild() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_same_watermark_rebuild");
     let mut first_world = crate::runtime::World::new_production_hardened();
     first_world.submit_action(RuntimeAction::RegisterAgent {
@@ -1039,6 +1045,7 @@ fn chain_linked_runtime_sync_accepts_same_watermark_snapshot_rebuild() {
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -1071,21 +1078,29 @@ fn chain_linked_runtime_sync_accepts_same_watermark_snapshot_rebuild() {
     rebuilt_world
         .save_to_dir(execution_world_dir.as_path())
         .expect("replace execution world with same-watermark rebuilt world");
+    server
+        .llm_sidecar
+        .agent_player_bindings
+        .insert("starter-agent-0".into(), "local-test-player-old".into());
 
     let (mut writer, peer) = test_writer_pair();
-    let progressed = server
+    let error = server
         .sync_chain_linked_runtime(&mut session, &mut writer)
-        .expect("same-watermark rebuilt chain sync should succeed");
-
+        .expect_err("different authority at the same watermark must fail closed");
     assert!(
-        progressed,
-        "materially different generated-map rebuild should advance despite the same sync watermark"
+        matches!(error, ViewerRuntimeLiveServerError::Init(message) if message.contains("different observer authority"))
     );
-    assert!(!server.world.state().agents.contains_key("first-agent"));
-    assert!(server.world.state().agents.contains_key("rebuilt-agent"));
-    let line = read_response_line(&peer, Duration::from_millis(200))
-        .expect("expected rebuilt execution-world sync response");
-    assert!(!line.trim().is_empty());
+    assert!(server.world.state().agents.contains_key("first-agent"));
+    assert!(!server.world.state().agents.contains_key("rebuilt-agent"));
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get("starter-agent-0"),
+        Some(&"local-test-player-old".to_string()),
+        "rejected checkpoint must not prune sidecar state"
+    );
+    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
 }
 
 #[test]
@@ -1096,12 +1111,13 @@ fn chain_linked_runtime_sync_clears_stale_local_test_sidecar_binding() {
         .save_to_dir(execution_world_dir.as_path())
         .expect("persist empty execution world");
 
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");

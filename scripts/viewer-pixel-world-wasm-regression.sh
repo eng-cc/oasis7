@@ -202,7 +202,7 @@ trap cleanup EXIT
 game_url="$provided_url"
 if [[ -z "$game_url" ]]; then
   run_log="$out_dir/launcher-stack.log"
-  launcher_cmd=(./scripts/run-launcher-stack.sh --skip-llm-provider-preflight)
+  launcher_cmd=(./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist --skip-llm-provider-preflight)
   if [[ ${#run_game_test_args[@]} -gt 0 ]]; then
     launcher_cmd+=("${run_game_test_args[@]}")
   fi

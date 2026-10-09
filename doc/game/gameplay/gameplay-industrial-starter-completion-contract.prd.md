@@ -29,9 +29,9 @@
 
 ## 4. Current/target evidence cutline
 
-当前窄实现的 bounded evidence 只有：`crates/oasis7/src/simulator/kernel/actions_resolution.rs:558-632` 的 `ScheduleRecipe` 资源扣除与 `RecipeScheduled`；`crates/oasis7/src/simulator/kernel/replay.rs:379-423` 仅回放电力/数据变化；`crates/oasis7/src/simulator/llm_agent/behavior_loop.rs:1071-1073` 可能在 `RecipeScheduled` 即标记 recipe coverage。它们只能支撑 accepted/resource result，不能支撑 production、delivery、需求减少、奖励或稳定窗口。
+当前复用基线已不是旧 simulator 的排程扣减链。`crates/oasis7/src/runtime/state/starter_industrial.rs` 定义 canonical profile、revision、completion boundary 和纯读 feasibility；`industry_transition/recipe_lifecycle.rs` 在匹配 Smelter/recipe、owner-bound output ledger、合法正批次与正量 `iron_ingot` 生产结算时写入持久 `StarterIndustrialMilestoneV1`。feasibility 消费该持久事实，只开放 Assembler 候选，避免短期 receipt 列表裁剪成为另一套进度权威。`viewer/runtime_live/gameplay_snapshot.rs` 投影同一 feasibility，`viewer/gameplay_actions.rs` 提供正式 starter 入口。这些是代码复用事实，不是同候选全入口通过结论。
 
-目标 evidence 必须由 fresh composite runtime + QA proof 证明：matching production receipt 能唯一对应 root/profile 并完成 `production_only`，terminal profile 能区分 pending 与 settled，且 receipt、需求、奖励和下一目标具有可追溯 authority。取得该证据前，Starter Industrial Feasibility Gate 一律为 `no_safe_starter_chain`；本合同不把 target 当成 current claim。
+当前选定路线为 `starter-industrial-smelter-to-assembler-v1` / `production_only`。正式推荐与可用性仍由同候选 fresh composite runtime + QA 证据判定：真实入口完成合法建厂、输入/电力、周期与 owner-bound 铁锭结算；核验 Viewer、pure API、Agent 的 profile revision/parity，以及重复提交、回复丢失、重连、receipt 裁剪、恢复和 replay。缺当前 authority 时返回 `no_safe_starter_chain` 并保留 blocker/复查路径。稳定窗口与 terminal delivery 独立验收；文档旧切线修正不意味着全链通过，也不能将已有 runtime milestone 一概降回仅 accepted 的旧结论。
 
 ## 5. Exactly-once、replay 与跨 surface 验收
 

@@ -33,6 +33,21 @@ impl World {
     /// Reconcile a persisted cognition commit without invoking provider,
     /// kernel, effect, or debit code.
     pub fn recover_cognition(&mut self) -> Result<CognitionRecoveryReport, WorldError> {
+        self.recover_cognition_mode(true)
+    }
+
+    /// Validate the durable projection without applying repair or cloning the
+    /// state/journal/artifacts of an observer world.
+    pub(in crate::runtime::world) fn validate_observer_cognition(
+        &mut self,
+    ) -> Result<(), WorldError> {
+        self.recover_cognition_mode(false).map(|_| ())
+    }
+
+    fn recover_cognition_mode(
+        &mut self,
+        allow_recovery: bool,
+    ) -> Result<CognitionRecoveryReport, WorldError> {
         let mut projection = if self.cognition.is_null() {
             default_cognition_persistence_projection()
         } else {
@@ -45,6 +60,9 @@ impl World {
 
         if parsed.schema_version.is_empty() {
             if feedback_projection_changed {
+                if !allow_recovery && self.cognition != projection {
+                    return Err(observer_recovery_required());
+                }
                 self.cognition = projection;
             }
             return Ok(legacy_recovery_report());
@@ -149,25 +167,49 @@ impl World {
         // projection before validating wake references, so a persisted wake
         // cannot consume a lease after its deadline merely because the
         // process was offline.
-        let mut expiry_world = self.clone();
-        // Recovery assembles and validates a candidate projection before
-        // exposing it. Keep the helper's transaction in-memory so a later
-        // validation failure cannot publish a partial expiry side effect.
-        *expiry_world.persistence_dir.borrow_mut() = None;
-        expiry_world.cognition = projection.clone();
-        expiry_world.expire_cognition_continuations_at_tick(self.state.time)?;
-        let expiry_projection_changed = expiry_world.cognition != projection;
-        if expiry_projection_changed {
-            projection = expiry_world.cognition;
-            parsed = serde_json::from_value(projection.clone())
-                .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
-        }
-        if let Some(scheduler_state) = projection
-            .get("scheduler_state")
-            .filter(|state| !state.is_null())
-        {
+        let mut expiry_projection_changed = false;
+        if allow_recovery {
+            let mut expiry_world = self.clone();
+            *expiry_world.persistence_dir.borrow_mut() = None;
             expiry_world.cognition = projection.clone();
-            expiry_world.validate_persisted_cognition_wakes(scheduler_state)?;
+            expiry_world.expire_cognition_continuations_at_tick(self.state.time)?;
+            expiry_projection_changed = expiry_world.cognition != projection;
+            if expiry_projection_changed {
+                projection = expiry_world.cognition.clone();
+                parsed = serde_json::from_value(projection.clone())
+                    .map_err(|error| cognition_error("invalid_cognition_projection", error))?;
+            }
+            if let Some(scheduler_state) = projection
+                .get("scheduler_state")
+                .filter(|state| !state.is_null())
+            {
+                expiry_world.cognition = projection.clone();
+                expiry_world.validate_persisted_cognition_wakes(scheduler_state)?;
+            }
+        } else {
+            if projection != self.cognition {
+                return Err(observer_recovery_required());
+            }
+            if let Some(value) = projection.get("continuations") {
+                let continuations: Vec<AgentContinuation> = serde_json::from_value(value.clone())
+                    .map_err(|error| {
+                    cognition_error("invalid_continuation_projection", error)
+                })?;
+                if continuations.iter().any(|continuation| {
+                    !Self::is_terminal_continuation_status(continuation.status)
+                        && continuation
+                            .valid_until_tick
+                            .is_some_and(|until| self.state.time > until)
+                }) {
+                    return Err(observer_recovery_required());
+                }
+            }
+            if let Some(scheduler_state) = projection
+                .get("scheduler_state")
+                .filter(|state| !state.is_null())
+            {
+                self.validate_persisted_cognition_wakes(scheduler_state)?;
+            }
         }
 
         for marker in &parsed.commit_records {
@@ -192,6 +234,9 @@ impl World {
         }
         let Some(marker) = select_commit_record(&parsed.commit_records).cloned() else {
             if feedback_projection_changed || expiry_projection_changed {
+                if !allow_recovery && self.cognition != projection {
+                    return Err(observer_recovery_required());
+                }
                 self.cognition = projection;
             }
             return Ok(legacy_recovery_report());
@@ -228,6 +273,9 @@ impl World {
         {
             let report = visible_root_conflict_report(&marker, trusted_root);
             persist_recovery_report(&mut projection, &report)?;
+            if !allow_recovery && self.cognition != projection {
+                return Err(observer_recovery_required());
+            }
             self.cognition = projection;
             return Ok(report);
         }
@@ -264,6 +312,9 @@ impl World {
         {
             let report = conflict_report(&marker, root);
             persist_recovery_report(&mut projection, &report)?;
+            if !allow_recovery && self.cognition != projection {
+                return Err(observer_recovery_required());
+            }
             self.cognition = projection;
             return Ok(report);
         }
@@ -271,6 +322,9 @@ impl World {
         if marker.status == "prepared" {
             let report = pending_report(&marker, root);
             persist_recovery_report(&mut projection, &report)?;
+            if !allow_recovery && self.cognition != projection {
+                return Err(observer_recovery_required());
+            }
             self.cognition = projection;
             return Ok(report);
         }
@@ -283,6 +337,9 @@ impl World {
             report.reject_reason = marker.abort_reason.clone();
             report.revalidation_count = 0;
             persist_recovery_report(&mut projection, &report)?;
+            if !allow_recovery && self.cognition != projection {
+                return Err(observer_recovery_required());
+            }
             self.cognition = projection;
             return Ok(report);
         }
@@ -422,11 +479,23 @@ impl World {
                 }
                 recovery.insert("repaired_projection_ids".to_string(), json!(repaired_ids));
             }
+            if !allow_recovery && self.cognition != projection {
+                return Err(observer_recovery_required());
+            }
             self.cognition = projection;
         } else if feedback_projection_changed || replacing_legacy_report {
+            if !allow_recovery && self.cognition != projection {
+                return Err(observer_recovery_required());
+            }
             self.cognition = projection;
         }
 
         Ok(report)
+    }
+}
+
+fn observer_recovery_required() -> WorldError {
+    WorldError::DistributedValidationFailed {
+        reason: "RecoveryRequired: cognition projection needs writer repair".into(),
     }
 }

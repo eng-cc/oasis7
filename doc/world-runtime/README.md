@@ -4,6 +4,8 @@
 
 审计轮次: 11
 
+- 想确认跨区到达、存储接收、所有权与 escrow 单次结算：[跨区物流与 escrow 结算设计](runtime/cross-region-delivery-and-escrow-settlement.design.md)。
+
 ## 从这里开始
 - 想先理解 runtime 的可信边界、目标态与验收范围：`doc/world-runtime/prd.md`
 - 想看当前活跃任务、阻断、测试层级与最新完成项：对应 GitHub task issue / Project。
@@ -15,6 +17,8 @@
 - 想确认链 PoS 的时间锚、slot/tick 相位、控制面参数、missed accounting 与恢复边界：`doc/world-runtime/runtime/chain-pos-control-plane.prd.md`
 - 想先看线上模块发布合法性与 binary-only 边界：`doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想进入治理事件、审计导出或收据安全专题：`doc/world-runtime/governance/README.md`
+
+- 想确认组织解散、不活跃保护、reclaim/申诉与授权交接的技术边界：[组织连续性与处置设计](runtime/organization-continuity-and-disposition.design.md)。
 
 ## 入口
 - PRD: `doc/world-runtime/prd.md`

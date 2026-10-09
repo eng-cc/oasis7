@@ -729,6 +729,10 @@ fn prepare_world_service_update_with_trace_context(
     let world = RuntimeWorld::new_with_state(view.projection().state.clone());
     Ok(PreparedChainLinkedRuntimeUpdate {
         committed_height: view.version().commit.position,
+        // Legacy observer source fencing does not apply to authenticated
+        // service candidates, which retain their captured transport/CAS token.
+        source: (None, None),
+        source_epoch: 0,
         world,
         verified_view: Some(view),
         service_events: Some(events),

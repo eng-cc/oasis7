@@ -13,11 +13,24 @@
 - 覆盖 PRD-ID 到 GitHub task 与测试证据的可追溯映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
+<a id="runtime-authority-profile-commit"></a>
+### 合法 authority profile 的执行、提交与恢复（目标）
+
+runtime 接受 [P2P 合同](../p2p/prd.md#p2p-authority-profiles) 已合法激活的 `controlled_single_authority` 或 `bft` 下的有序输入，复用同一确定性状态机、receipt 与 replay。单权威正确性信任包含运营权威；BFT 继续要求每个活动验证者独立重执行和完整证书。`ExecutionReceipt` 不自行授予提交权，兼容 tick/threshold certificate 不得改名取得正式权威。
+
+执行候选先准备，在合法 profile 提交证明、原子 epoch/parent/head 追加和规定持久条件全成立后发布 committed。实际开放链中输入扣除、产出、事件、结果、持久里程碑、nonce/幂等身份共同提交；预备记录不产生权威效果。正式提交决定/证明、head/epoch、完整输入结果及引用工件必须在本机和独立故障域持久保存后才能确认 committed，以保证单主机/单存储故障域失效不丢已确认效果。现有 prepared publication 只证明局部无中间态，不能代替跨故障域持久提交。
+
+结果未知时保留同一请求身份：断连/超时无法证明未提交，显示“提交状态未知、待核对”，从持久判定查询或完成原提交；不能当确定失败或全新动作重做。已知无效果且已终止才可判失败。已知未生效 pending 在恢复后按有效权限、资源、manifest 重审；未知提交先核对原提交决定。外部行为只沿既有提交后派发/幂等边界执行，replay 不重新调用 LLM 或重发副作用。
+
+恢复沿固定 `world_id`/`chain_id`/`genesis_hash`、各历史高度合法 profile/epoch/manifest 激活链、已确认 checkpoint、hash-bound snapshot、连续日志和 state-root 核对；授权、Agent 归属、资产、目标、pending、里程碑与去重共同核对。固定身份不冻结所有未来 manifest hash；历史按当时合法版本重放。先开放验证只读，当前 authority/head/版本/独立持久确认重新成立才开放写入，不能回退已生效 epoch。
+
+H/H+1 切换由 P2P 决定：H 的旧 profile 正式交接证明绑定交接执行后的结果根，H+1 起只接受新 profile。H 已提交后不可撤回，重启或新 BFT 集合未启动时保持停写；runtime 不以旧 snapshot 恢复旧追加权，也不重发资产或自动执行失效 pending。当前 prototype、局部执行接线与故障域/消费者验收仍分开记录，文档合并不声明首次开放条件已满足。
+
 ### 世界基础设施执行目标与当前差距
 
-- **模块身份（目标）**：`world-runtime` 是区块链/分布式世界基础设施的上层确定性执行层。下层的 validator registry、BFT finality、P2P、DistFS 与状态同步由 `doc/p2p/` 拥有；本层把已排序、已验证的动作确定性地转化为事件、状态根、receipt、checkpoint 与可重放历史。工业设施、市场、gameplay module 与 Agent 行为是本层的消费者或执行负载，不定义本模块身份。
+- **模块身份（目标）**：`world-runtime` 是区块链/分布式世界基础设施的上层确定性执行层。下层的合法 authority profile、validator registry、BFT finality、P2P、DistFS 与状态同步由 `doc/p2p/` 拥有；本层把已排序、已验证的动作确定性地转化为事件、状态根、receipt、checkpoint 与可重放历史。工业设施、市场、gameplay module 与 Agent 行为是本层的消费者或执行负载，不定义本模块身份。
 - **稳定边界（目标）**：共识到执行必须是独立、版本化的协议，而不是对进程内 Rust 类型或私有存储的依赖。每个请求至少绑定 `world_id`、协议/运行时 manifest version、parent committed height/hash、确定排序的 action envelope 与 `action_root`；每个结果至少绑定 execution block/hash、`state_root`、receipt/journal references 和结构化拒绝或 fault。当前可先由 in-process adapter 承载；未来 IPC adapter 必须通过同一份 conformance/replay fixture，进程拆分不是协议生效前提。
-- **复制执行（目标）**：proposer 只提出候选。每个 active validator 从同一已提交 parent state 重新执行同一 action sequence，并且只在自己的 `action_root`、execution hash、`state_root` 与候选一致时投票；任何不一致、缺 artifact、超限或不可解释 fault 都不得被签名、提交或以本地修补越过。最终性证书和 BFT round/vote 语义由 p2p authority 定义，本层负责可复现执行结果及其持久化绑定。
+- **复制执行（BFT 目标）**：proposer 只提出候选。每个 active validator 从同一已提交 parent state 重新执行同一 action sequence，并且只在自己的 `action_root`、execution hash、`state_root` 与候选一致时投票；任何不一致、缺 artifact、超限或不可解释 fault 都不得被签名、提交或以本地修补越过。最终性证书和 BFT round/vote 语义由 p2p authority 定义，本层负责可复现执行结果及其持久化绑定。
 - **升级与发布（目标）**：普通确定性 runtime 升级由治理最终确认的 content-addressed runtime manifest/version 在 committed height 激活；节点 release 仅预置兼容实现，不是激活权威。改变 consensus、该协议或不兼容 host ABI 的升级属于 coordinated foundational protocol upgrade/fork，必须另有迁移证明。发布分类固定为四条 lane：rolling node software、governance-activated runtime manifest、independent client application、coordinated foundational protocol upgrade/fork。
 - **部署与降级（目标）**：game 与基础设施持续通过同一版本化协议协作。ordinary player 为 game + light companion，operator 为 full infrastructure node，dev/local 为 game + embedded/full local node。普通 player/light companion 在 finality 不可用时只能显示最后一个已验证状态，并可保留尚未产生世界效果的 signed pending intent；不得本地推进权威世界。dev/local 必须使用独立 `world_id`，不得把离线历史合并回 global world。
 
@@ -27,7 +40,7 @@
 | 复制执行与 finality | 当前是 stake-weighted proposal/attestation threshold prototype；正常默认不自动替所有 validator 生成 vote。 | 尚未提供每个 validator 重执行后的 signed >2/3-stake commit certificate、prevote/precommit round、lock、timeout/view-change 或可验证 partition recovery。 |
 | runtime 升级 | 模块 registry/manifest/artifact hash、兼容检查、顺序 lifecycle event 与 replay 已有基础合同；governed proposal apply 已改为 borrowed-base typed prepared publication，在 registry/artifact/schedule/cache invalidation、manifest/proposal、event allocator、journal/backpressure 与 consensus 全部预演成功后一次安装，register/upgrade/activate/deactivate 的 authority-drift 与 post-prepare 回归覆盖零中间态发布。 | 其他 lifecycle 入口、registry 与 instance state 的一致迁移、runtime manifest activation height、validator prefetch/readiness、持久化/replay、外部 effect 与 receipt/outbox 仍未收敛为端到端 transaction 合同。 |
 | 消费者与不可用状态 | chain-linked consumers 已要求 committed-only visibility，replay/restore 不一致会阻断。 | 尚未完成 light companion proof verification、pending-intent durable queue、stale/unavailable projection，或 local/global `world_id` 隔离的完整实现与验证。 |
-| 恢复 | checkpoint + canonical log + state-root comparison 是现有 runtime recovery contract。 | 尚未完成 immutable identity manifest -> finalized checkpoint certificate -> hash-bound snapshot -> replay -> root verification 的全链路恢复/灾备证明。 |
+| 恢复 | checkpoint + canonical log + state-root comparison 是现有 runtime recovery contract。 | 尚未完成 fixed world/chain/genesis identity -> legal historical profile/epoch/manifest activation chain -> verified committed checkpoint -> hash-bound snapshot -> replay -> root verification 的全链路恢复/灾备证明。 |
 | 工业 operation identity | 当前 `ActionEnvelope.id` 是单次 action identity；部分异步过程把该 `ActionId` 复用为 `job_id`，`WorldEvent.caused_by` 只提供可选的 action/effect 审计原因。因此当前能追踪单个 action、job 与直接 cause，但不能表达跨 stage/join/bundle/branch/transit/buffer/terminal/window/checkpoint/receipt 的 immutable root、owning revision/segment、直接 parent/child role 或 terminal finality。 | 在 authoritative accepted outcome 边界原子签发一次 immutable root operation identity；atomic reject 且无 accepted intent 时不签发。所有 child effect/receipt 持久化 root、owning revision/segment 与直接 parent/child role，并在 first sink/credit/progress 前对缺失或冲突 identity fail closed；retry、recovery 与 replay 重读同一 identity 和 terminal disposition。 |
 
 Threat heatmap preparation is a pure runtime projection: `prepare_threat_heatmap(&self)` reads the immutable world view into a fresh `BTreeMap`, and `refresh_threat_heatmap()` installs it once. Its nonmutation/reuse behavior is a composability seam only; it does not claim root transaction atomicity or change product rule semantics.
@@ -751,7 +764,7 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 
 <a id="runtime-deterministic-acceptance"></a>
 ### 确定性与原子拒绝的专业接受
-承接 [REQ/AC-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 与产品根 SC-1/4：同 world、governing version、ordered input、parent committed state 的 action root/execution hash/state root/receipt-journal binding 必须一致。活动验证者在 attestation 前各自重执行；缺证、冲突、越权、artifact/版本不一致不能产生部分 receipt、资源或状态效果。runtime 提供执行绑定，P2P 提供最终性、活动集合/epoch、round/threshold 检查；四种证书负例各自阻断。见 [确定性设计](design.md#runtime-deterministic-design)。本地 root 一致性不代签 SC-1/4 的 full 同候选组合证据。
+承接 [REQ/AC-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 与产品根 SC-1/4：同 world、governing version、ordered input、parent committed state 的 action root/execution hash/state root/receipt-journal binding 必须一致。`bft` 下活动验证者在 attestation 前各自重执行；缺证、冲突、越权、artifact/版本不一致不能产生部分 receipt、资源或状态效果。runtime 提供执行绑定，P2P 提供合法 profile/epoch、提交证明与持久条件；`bft` 另有活动集合、round/threshold 检查，适用证书负例各自阻断。见 [确定性设计](design.md#runtime-deterministic-design)。本地 root 一致性不代签 SC-1/4 的 full 同候选组合证据。
 
 <a id="runtime-pending-acceptance"></a>
 ### 无效果待决与当前条件重审

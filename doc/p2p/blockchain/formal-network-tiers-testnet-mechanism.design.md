@@ -24,6 +24,14 @@
 | [NFR-P2P-TIER-2 / NFR-P2P-TIER-3](formal-network-tiers-testnet-mechanism.prd.md#4-technical-specifications) | validate 显式拒绝 tier 语义冲突；mainnet 不得带 resettable、guarded faucet 或 testnet value semantics。 | [关键规则](#关键规则) | `network-tier-manifest.sh` 的语义校验；`qa_engineer` 复核阻断样例。 | 不将 schema validation 等同于运行中网络状态或 mainnet readiness。 |
 | [NFR-P2P-TIER-4](formal-network-tiers-testnet-mechanism.prd.md#4-technical-specifications) | 在 live `public_testnet` 未成立时，不把示例、skeleton 或 `shared_devnet` rehearsal 当作 public availability evidence。 | [与现有专题的关系](#与现有专题的关系) | 当前 public status 由根 `README.md` 管理；证据边界由 formal runbook 和 QA/LiveOps 维护。 | 历史 rehearsal 结论不更新当前公开状态或发布安排。 |
 
+## 当前 schema 与目标解耦边界
+
+当前 `network_tier_manifest.rs` 仍按 `local_devnet=preview+ephemeral`、`public_testnet=testnet+resettable`、`mainnet=production+frozen` 校验；下文 schema、tier 表和组合规则描述该现行实现及发行 skeleton，不代表世界保留承诺的唯一合法组合，也不证明持久单权威已实现。
+
+目标在既有 manifest 中分别表达网络环境/发行阶段、世界生命周期/保留承诺、合法提交 authority profile/激活版本，以及资产价值/faucet/结算资格。受限 preview 的正式世界可承诺持久保留合法身份、设施、材料、资格及来源；生产结算资格由经济规则与发行条件独立决定，修改 tier 不升值测试奖励，也不能因此清空已承诺世界。`frozen + preview` 只是需求组合；`token_policy.reset_policy` 不足以代表全世界保留，字段归属、兼容迁移、示例与 readiness 消费者须随实现共同闭合，不能仅放宽枚举后宣称保证成立。
+
+固定 `world_id`、`chain_id`、`genesis_hash` 与可演进软件/runtime manifest/authority 分开；后者只能按同世界历史合法升级。已有保留承诺时沿既有身份接续，隔离 local/dev 不并入长期世界。正式提交 profile、持久性和交接验收见 [P2P 合同](../prd.md#p2p-authority-profiles)；当前公开状态仍以根 README 和同候选任务证据为准。该目标解耦不是本次文档已开放的配置能力。
+
 ## 分层模型
 Network tier 是统一持久大世界的运行/验证载体分层，不是玩家可见的多个世界模型。
 
