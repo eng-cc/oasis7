@@ -432,6 +432,11 @@ jobs:
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
+      - name: Install WASM C compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+          clang --print-targets | grep -w wasm32
       - name: Execute selected cell
         shell: bash
         env:
@@ -439,11 +444,6 @@ jobs:
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
-      - name: Install WASM C compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang llvm
-          clang --print-targets | grep -w wasm32
       - name: Verify pinned network source and process compatibility
         run: |
           python3 scripts/libp2p-security-source.test.py

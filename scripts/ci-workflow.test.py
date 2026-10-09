@@ -48,6 +48,7 @@ class Workflow(unittest.TestCase):
         viewer = JOBS['viewer-js-required']
         self.assertGreater(viewer.index('Verify browser authentication security'), viewer.index('Execute selected cell'))
         net = JOBS['net']
+        self.assertLess(net.index('Install WASM C compiler'), net.index('Execute selected cell'))
         self.assertGreater(net.index('Verify pinned network source'), net.index('Execute selected cell'))
         for check in ('scripts/libp2p-security-source.test.py', 'scripts/libp2p-compat.test.py',
                       'clang --print-targets | grep -w wasm32', 'CC_wasm32_unknown_unknown: clang',
