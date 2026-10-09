@@ -612,8 +612,18 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         }
         let runtime_step_started_at = Instant::now();
         if !resume_after_product_validation_intent {
-            for action in decoded_runtime_actions {
-                self.execution_world.submit_action(action);
+            for (action, origin) in decoded_runtime_actions {
+                if let Some(origin) = origin {
+                    rollback_on_error!(
+                        self.execution_world
+                            .submit_recipe_action_with_origin(action, origin)
+                            .map_err(|err| format!(
+                                "submit committed recipe origin failed: {err:?}"
+                            ))
+                    );
+                } else {
+                    self.execution_world.submit_action(action);
+                }
             }
         }
         let committed_tick_context = RuntimeCommittedTickContext {

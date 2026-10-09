@@ -1177,3 +1177,6 @@ fn non_owner_schedule_recipe_with_module_rejects_before_module_plan_or_sink() {
         )
     }));
 }
+
+#[path = "economy_module_origin_tests.rs"]
+mod origin_tests;

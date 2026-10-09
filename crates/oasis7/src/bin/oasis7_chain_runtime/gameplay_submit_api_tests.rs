@@ -648,3 +648,76 @@ fn collect_data_submit_rejects_cost_tampering() {
     assert!(authorized_response.ok);
     let _ = std::fs::remove_dir_all(world_dir);
 }
+
+#[test]
+fn committed_recipe_origin_ack_hash_matches_actual_nonce_bound_payload() {
+    let _guard = gameplay_submit_test_guard();
+    reset_gameplay_submit_state_for_tests();
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let config = NodeConfig::new(
+        "node-recipe-origin",
+        "world-recipe-origin",
+        NodeRole::Sequencer,
+    )
+    .unwrap()
+    .with_tick_interval(Duration::from_millis(20))
+    .unwrap();
+    let mut node = NodeRuntime::new(config).with_execution_hook(CapturingExecutionHook {
+        calls: Arc::clone(&calls),
+    });
+    node.start().unwrap();
+    let runtime = Arc::new(Mutex::new(node));
+    let world_dir = gameplay_nonce_world_dir("recipe-origin");
+    let (public_key, private_key) = gameplay_test_signer(19);
+    let mut hashes = Vec::new();
+    for nonce in [21, 22] {
+        let mut request = signed_gameplay_submit_request("browser-player", nonce);
+        request.action_id = "schedule_recipe_smelter_iron_ingot".into();
+        request.auth = Some(
+            sign_gameplay_action_auth_proof(&request, nonce, &public_key, &private_key).unwrap(),
+        );
+        let (status, ack) = submit_json(
+            &runtime,
+            &world_dir,
+            &serde_json::to_string(&request).unwrap(),
+        );
+        assert_eq!(status, 200);
+        hashes.push(
+            ack.consensus_action_payload_hash
+                .clone()
+                .expect("actual payload hash"),
+        );
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let contexts = calls.lock().unwrap();
+            if let Some(action) = contexts
+                .iter()
+                .flat_map(|c| &c.committed_actions)
+                .find(|a| Some(a.action_id) == ack.action_id)
+            {
+                assert_eq!(action.payload_hash, hashes.last().unwrap().as_str());
+                let envelope =
+                    oasis7::consensus_action_payload::decode_consensus_action_payload_envelope(
+                        &action.payload_cbor,
+                    )
+                    .unwrap();
+                let origin = envelope
+                    .gameplay_submission_origin
+                    .expect("verified origin");
+                assert_eq!(origin.auth_nonce, nonce);
+                assert_eq!(origin.verified_player_id, "browser-player");
+                assert_ne!(origin.verified_player_id, action.submitter_player_id);
+                break;
+            }
+            drop(contexts);
+            assert!(Instant::now() < deadline, "commit origin timeout");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    assert_ne!(
+        hashes[0], hashes[1],
+        "same recipe new verified nonce must have distinct payload identity"
+    );
+    runtime.lock().unwrap().stop().unwrap();
+    let _ = std::fs::remove_dir_all(world_dir);
+}

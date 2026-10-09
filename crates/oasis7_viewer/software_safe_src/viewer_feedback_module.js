@@ -1,3 +1,4 @@
+import { normalizeIndustrialStarterProfile } from "./industrial_starter_outcome.js";
 import { normalizeViewerAvailableActions } from "./viewer_feedback_actions.js";
 import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economics.js";
 import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_unlock_preview_display_model.js";
@@ -1161,6 +1162,7 @@ export function createViewerFeedbackModule({
       microDepotFacilities,
       validationUnlockPreview,
       factoryProductionFailureDisposition,
+      industrialStarterProfile: normalizeIndustrialStarterProfile(gameplay.starter_industrial_feasibility),
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,

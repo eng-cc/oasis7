@@ -627,6 +627,7 @@ impl World {
                         Some(CausedBy::Action(envelope.id)),
                     )?;
                     action_envelope = ActionEnvelope {
+                        committed_recipe_origin: None,
                         id: envelope.id,
                         action: override_action,
                     };

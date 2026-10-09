@@ -43,6 +43,22 @@ legacy_bridge_config="$tmp_dir/legacy-bridge-config.txt"
   --print-config \
   >"$legacy_bridge_config"
 
+fake_bridge="$tmp_dir/fake-provider-bridge"
+cat >"$fake_bridge" <<'EOF'
+#!/usr/bin/env bash
+printf 'explicit-provider-binary-executed\n'
+EOF
+chmod +x "$fake_bridge"
+override_output="$tmp_dir/override-output.txt"
+OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="$fake_bridge" \
+  ./scripts/run-local-letai-provider-bridge.sh \
+  --config "$config_path" --model test-model --base-url https://api.example.test/v1 \
+  >"$override_output"
+[[ "$(tail -n 1 "$override_output")" == "explicit-provider-binary-executed" ]] || {
+  echo "error: provider binary override was not executed" >&2
+  exit 1
+}
+
 python3 - "$check_config" "$bridge_config" "$legacy_bridge_config" <<'PY'
 from __future__ import annotations
 

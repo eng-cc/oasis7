@@ -2,7 +2,7 @@ use super::DeploymentMode;
 
 pub(super) fn viewer_runtime_config_json(
     deployment_mode: DeploymentMode,
-    live_bind: &str,
+    web_bind: &str,
     configured: Option<&str>,
 ) -> Result<String, String> {
     let endpoint = match configured {
@@ -25,7 +25,7 @@ pub(super) fn viewer_runtime_config_json(
             url.to_string()
         }
         None => {
-            let bind: std::net::SocketAddr = live_bind
+            let bind: std::net::SocketAddr = web_bind
                 .parse()
                 .map_err(|err| format!("invalid viewer runtime bind: {err}"))?;
             let ip = if bind.ip().is_unspecified() {

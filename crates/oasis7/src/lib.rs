@@ -8,6 +8,7 @@ pub mod collect_data_auth;
 pub mod consensus_action_payload;
 pub mod env_mut;
 pub mod geometry;
+pub mod industry_types;
 pub mod launcher_bootstrap_peers;
 pub mod models;
 pub mod network_tier_manifest;
