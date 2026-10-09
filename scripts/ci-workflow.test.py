@@ -55,6 +55,11 @@ class Workflow(unittest.TestCase):
             self.assertIn(test, governance)
         self.assertNotIn('run: python3 scripts/ci-workflow.test.py', governance) # already in authority cell
 
+    def test_trusted_writer_only_runs_on_protected_main(self):
+        writer = JOBS['full-regression']
+        self.assertIn("if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'))", writer)
+        self.assertIn('cache-mode: write', writer)
+
     def test_readers_share_compatible_trusted_writer_identity(self):
         writer = JOBS['full-regression']
         self.assertIn('cache-mode: write', writer)
