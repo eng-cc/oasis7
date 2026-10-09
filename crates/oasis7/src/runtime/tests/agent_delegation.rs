@@ -6,6 +6,9 @@ use crate::runtime::cognition_recovery::cognition_digest_v1;
 use crate::runtime::gameplay_state::StarterOcClaimState;
 use serde_json::json;
 
+#[path = "agent_delegation/dissent.rs"]
+mod dissent;
+
 fn fixture() -> World {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
@@ -355,15 +358,9 @@ fn agent_delegation_source_scope_dissent_override_and_legacy() {
             ..Default::default()
         },
     };
-    assert!(
-        format!(
-            "{:?}",
-            world
-                .bind_agent_delegation_decision(decision.clone(), &action)
-                .unwrap_err()
-        )
-        .contains("agent_dissent")
-    );
+    world
+        .bind_agent_delegation_decision(decision.clone(), &action)
+        .expect("valid delegation is sufficient despite advisory dissent");
     decision.context.override_actor = Some("other".into());
     assert!(
         format!(
@@ -647,16 +644,12 @@ fn agent_delegation_owner_override_is_authenticated_one_shot_and_interrupt_is_ef
         dissent: Some("prefer wait".into()),
         ..Default::default()
     };
-    let objection_error = world
+    world
         .bind_agent_causal_decision("objection", AGENT_ID, &movement(10), context.clone())
-        .unwrap_err();
-    assert!(
-        format!("{objection_error:?}").contains("agent_dissent"),
-        "{objection_error:?}"
-    );
+        .expect("advisory dissent does not block an authorized intent");
     assert_eq!(
         world.state().agent_intent_ledger[&intent.intent_id].status,
-        "blocked"
+        "accepted"
     );
     let control = override_control(&intent, "owner-override");
     assert!(
@@ -701,11 +694,22 @@ fn agent_delegation_owner_override_is_authenticated_one_shot_and_interrupt_is_ef
         world.bind_agent_owner_control("player", control).unwrap(),
         acknowledged
     );
+    let mut reused_override: AgentDelegationDecisionV1 = serde_json::from_value(
+        world.cognition()["agent_delegation"]["decisions"]["request.after-override"].clone(),
+    )
+    .unwrap();
+    reused_override.decision_request_id = "reused-override".into();
     assert!(
         world
-            .bind_agent_causal_decision("after-consumed", AGENT_ID, &movement(20), context)
+            .bind_agent_delegation_decision(reused_override, &movement(10))
             .is_err()
     );
+    world
+        .bind_agent_causal_decision("after-consumed", AGENT_ID, &movement(20), context)
+        .expect("the grant still permits a new decision without reusing the override");
+    let rebound = &world.cognition()["agent_delegation"]["decisions"]["after-consumed"]["context"];
+    assert!(rebound["override_actor"].is_null());
+    assert_eq!(rebound["owner_control_refs"], json!([]));
     let interrupt = AgentOwnerControlV1 {
         control_id: "owner-interrupt".into(),
         agent_id: AGENT_ID.into(),
