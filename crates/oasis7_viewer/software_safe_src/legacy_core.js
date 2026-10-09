@@ -5,6 +5,7 @@ import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
 import { createViewerHostedTestLoginModule } from "./viewer_hosted_test_login_module.js";
+import { createViewerHostedLoginRegistrationBridge } from "./viewer_hosted_login_registration_bridge.js";
 import { createViewerAgentChatAuthModule } from "./viewer_agent_chat_auth_module.js";
 import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
 import { createViewerHostedSessionReconnectModule } from "./viewer_hosted_session_reconnect_module.js";
@@ -332,7 +333,10 @@ const {
   windowRef: window,
 });
 function resetHostedLoginChallenge() { resetHostedLoginChallengeState(state.hostedLogin); }
-const { start: startHostedTestLogin, waitForStart: waitForHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
+const { start: issueHostedTestLogin, waitForStart: waitForHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
+const hostedLoginRegistrationBridge = createViewerHostedLoginRegistrationBridge({ registerPlayerSession: ensureRegisteredPlayerSession, render, state });
+const startHostedTestLogin = hostedLoginRegistrationBridge.wrapLogin(issueHostedTestLogin, "hosted_test_login");
+const completeHostedAccountLogin = hostedLoginRegistrationBridge.wrapLogin(issueHostedAccountLogin, "hosted_browser_storage");
 async function ensureHostedAuthSigningKey(auth = state.auth) {
   if (auth?.source === "visual_fixture_projection") throw new Error("visual fixture authentication has no signing capability");
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
@@ -1899,7 +1903,7 @@ async function startHostedAccountLogin() {
   }
 }
 
-async function completeHostedAccountLogin() {
+async function issueHostedAccountLogin() {
   if (!canAutoIssueHostedPlayerSession()) {
     return state.auth;
   }
