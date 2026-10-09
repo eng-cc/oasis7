@@ -420,12 +420,27 @@ fn no_mount_application_acceptance() {
             Instant::now() < deadline,
             "Hosted completion deadline elapsed before View"
         );
-        let view = client
-            .read_view(view_request(
-                &client,
-                Some(current.version().commit.clone()),
-            ))
-            .unwrap();
+        let view = match client.read_view(view_request(
+            &client,
+            Some(current.version().commit.clone()),
+        )) {
+            Ok(view) => view,
+            Err(oasis7::world_service::client::WorldServiceClientError::Cooldown {
+                retry_after,
+                ..
+            }) => {
+                let remaining = deadline
+                    .checked_duration_since(Instant::now())
+                    .expect("no-mount Hosted completion budget exhausted during cooldown");
+                assert!(
+                    retry_after < remaining,
+                    "Retry-After cannot fit remaining Hosted budget"
+                );
+                thread::sleep(retry_after);
+                continue;
+            }
+            Err(error) => panic!("authenticated no-mount View failed: {error}"),
+        };
         // Canonical settlement precedes private feedback consumption and ACK.
         // Pause only after the actual durable App terminal has joined that proof.
         let durable_terminal_committed = match fs::read("/app-private/lineage.json") {
@@ -453,7 +468,7 @@ fn no_mount_application_acceptance() {
             Instant::now() < deadline,
             "shipped Hosted provider did not produce canonical action and settled lease"
         );
-        thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(250));
     }
     send(
         &mut stream,
