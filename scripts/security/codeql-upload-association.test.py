@@ -62,7 +62,8 @@ class Platform:
             return self.archive_override
         output = io.BytesIO()
         with zipfile.ZipFile(output, "w") as archive:
-            archive.writestr("evidence.json", json.dumps(self.record))
+            # One API artifact has stable bytes even across ZIP's two-second clock ticks.
+            archive.writestr(zipfile.ZipInfo("evidence.json", NOW.timetuple()[:6]), json.dumps(self.record))
         return output.getvalue()
 
     def api(self, command, **kwargs):
@@ -119,6 +120,12 @@ class Platform:
 
 
 class LiveAssociationTests(unittest.TestCase):
+    def test_fixture_artifact_bytes_do_not_change_with_wall_clock(self):
+        platform = Platform()
+        with patch("zipfile.time.localtime", side_effect=[(2026, 10, 9, 7, 4, 22, 4, 282, 0),
+                                                        (2026, 10, 9, 7, 4, 24, 4, 282, 0)]):
+            self.assertEqual(platform.archive(), platform.archive())
+
     def test_malformed_step_entry_is_unknown_diagnostic(self):
         platform = Platform()
         platform.job["steps"] = [None]
