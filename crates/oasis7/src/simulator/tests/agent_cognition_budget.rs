@@ -30,21 +30,29 @@ fn cognition_budget_fields_are_wire_data_bound_to_request_identity() {
     assert_eq!(encoded["budget_contract"]["max_model_calls"], json!(2));
     assert_eq!(encoded["budget_contract"]["max_tool_calls"], json!(1));
 
-    limited["budget_contract"]["max_model_calls"] = json!(3);
-    let changed_context = request_from_value(limited);
-    assert_ne!(
-        limited_context.request_digest, changed_context.request_digest,
-        "changing the request budget must change request identity"
-    );
+    for field in ["max_model_calls", "max_tool_calls"] {
+        let mut changed = limited.clone();
+        changed["budget_contract"][field] = json!(3);
+        let changed_context = request_from_value(changed);
+        assert_ne!(
+            limited_context.request_digest, changed_context.request_digest,
+            "changing {field} must change request identity"
+        );
+        assert_ne!(
+            limited_context.provider_invocation_key(),
+            changed_context.provider_invocation_key(),
+            "changing {field} must change provider invocation identity"
+        );
 
-    let mut store = AgentCognitionStore::default();
-    store
-        .begin_request(limited_context)
-        .expect("first budget-bound request accepted");
-    let error = store
-        .begin_request(changed_context)
-        .expect_err("changing budget on the same request key must fail closed");
-    assert_eq!(error.code(), "request_identity_collision");
+        let mut store = AgentCognitionStore::default();
+        store
+            .begin_request(limited_context.clone())
+            .expect("first budget-bound request accepted");
+        let error = store
+            .begin_request(changed_context)
+            .expect_err("changing budget on the same request key must fail closed");
+        assert_eq!(error.code(), "request_identity_collision");
+    }
 }
 
 #[test]
@@ -62,6 +70,28 @@ fn cognition_budget_wire_rejects_missing_model_or_tool_limits() {
             error.to_string().contains(field),
             "wire decode error must identify missing field {field}: {error}"
         );
+    }
+}
+
+#[test]
+fn cognition_budget_wire_rejects_unknown_authority_fields() {
+    for (field, value) in [
+        ("unlimited", json!(true)),
+        ("max_calls", json!(100)),
+        ("future_reservation", json!({"credits": 100})),
+    ] {
+        let mut fixture = request_fixture(0, 60_000);
+        fixture["budget_contract"][field] = value;
+        let wire_error =
+            serde_json::from_value::<crate::simulator::ContinuousAgentRequestContextV1>(
+                fixture.clone(),
+            )
+            .expect_err("V1 must not discard an unknown budget authority field");
+        assert!(wire_error.to_string().contains(field));
+        let context_error =
+            crate::simulator::ContinuousAgentRequestContextV1::validate_value(&fixture)
+                .expect_err("outer validation must reject the unknown nested budget field");
+        assert_eq!(context_error.code(), "unknown_context_field");
     }
 }
 
