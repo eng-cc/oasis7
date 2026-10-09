@@ -31,6 +31,7 @@ mod application_sandbox;
 mod application_stream_boundaries;
 mod hosted_wait_clock;
 mod provider_metadata;
+mod scenario_resource;
 use application_harness::run_isolated_application;
 mod application_process_dispatch;
 mod application_provider;
@@ -107,6 +108,8 @@ struct Fixture {
     lookup_digests: Arc<Mutex<Vec<String>>>,
     outage: Arc<http_fixture::Outage>,
     tamper_next_describe: Arc<AtomicBool>,
+    // Last field: release after the fixture worker/node/storage fields drop.
+    scenario_permit: Arc<scenario_resource::ScenarioResourcePermit>,
 }
 impl Fixture {
     fn new() -> Self {
@@ -119,6 +122,7 @@ impl Fixture {
         Self::with_clock_options(controlled, scheduler, false)
     }
     fn with_clock_options(controlled: bool, scheduler: bool, quiet_clock: bool) -> Self {
+        let scenario_permit = scenario_resource::ScenarioResourcePermit::acquire();
         let root = temp_dir("qa-world-service-tcp");
         let writer_lock =
             crate::world_writer_lock::acquire_live_world_writer_lock(&root.join("world")).unwrap();
@@ -400,8 +404,29 @@ impl Fixture {
                 } else {
                     None
                 };
+                // Drain View responses concurrently so the real dispatcher completes
+                // before a client teardown can interrupt the response relay.
+                let capture_view = method == "POST" && path == VIEW_PATH;
+                let mut view_reader = None;
                 let mut capture_peer = None;
-                let mut output_stream = if tamper || capture_ack || gated_ack.is_some() {
+                let mut output_stream = if capture_view {
+                    let capture = TcpListener::bind("127.0.0.1:0").unwrap();
+                    let mut peer = TcpStream::connect(capture.local_addr().unwrap()).unwrap();
+                    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                    view_reader = Some(thread::spawn(move || {
+                        let mut response = Vec::new();
+                        (&mut peer)
+                            .take(16 * 1024 * 1024 + 1)
+                            .read_to_end(&mut response)
+                            .unwrap();
+                        assert!(
+                            response.len() <= 16 * 1024 * 1024,
+                            "View capture exceeds bound"
+                        );
+                        response
+                    }));
+                    capture.accept().unwrap().0
+                } else if tamper || capture_ack || gated_ack.is_some() {
                     let capture = TcpListener::bind("127.0.0.1:0").unwrap();
                     capture_peer = Some(TcpStream::connect(capture.local_addr().unwrap()).unwrap());
                     capture.accept().unwrap().0
@@ -460,6 +485,48 @@ impl Fixture {
                     commit_request(&mut driver, height, Some(request));
                 }
                 drop(output_stream);
+                if let Some(reader) = view_reader {
+                    let response = reader.join().expect("View capture reader failed");
+                    let verified_success = response.starts_with(b"HTTP/1.1 200 ");
+                    if verified_success {
+                        let body =
+                            crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
+                        let request: SignedReadRequest<ReadWorldViewRequest> =
+                            serde_json::from_slice(body).unwrap();
+                        let offset = response
+                            .windows(4)
+                            .position(|window| window == b"\r\n\r\n")
+                            .unwrap()
+                            + 4;
+                        let signed: SignedServiceResponse<
+                            ReadWorldViewResponse<
+                                oasis7::world_service::projection::WorldServiceProjection,
+                            >,
+                        > = serde_json::from_slice(&response[offset..]).unwrap();
+                        oasis7::world_service::authority::verify_service_response(
+                            VIEW_PATH,
+                            &oasis7::world_service::authority::request_digest(VIEW_PATH, &request)
+                                .unwrap(),
+                            &signed,
+                            &signer.public_key_hex,
+                        )
+                        .unwrap();
+                        signed.payload.validate(&request.request).unwrap();
+                    }
+                    if let Err(error) = stream.write_all(&response) {
+                        assert!(
+                            verified_success
+                                && matches!(
+                                    error.raw_os_error(),
+                                    Some(libc::EPIPE) | Some(libc::ECONNRESET)
+                                ),
+                            "View relay failed without a verified successful read: {error}"
+                        );
+                        println!(
+                            "PRE2_VERIFIED_VIEW_RESPONSE_CANCELLED dispatcher_completed=true signed_response_verified=true unchanged_response_relay_attempted=true"
+                        );
+                    }
+                }
                 if let Some(mut peer) = capture_peer {
                     let mut response = Vec::new();
                     peer.read_to_end(&mut response).unwrap();
@@ -582,6 +649,7 @@ impl Fixture {
             lookup_digests,
             outage,
             tamper_next_describe,
+            scenario_permit,
         }
     }
     fn request(

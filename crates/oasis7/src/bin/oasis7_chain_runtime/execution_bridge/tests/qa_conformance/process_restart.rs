@@ -66,6 +66,7 @@ fn full_node_restart(stale_cache: bool) {
     let mut config = fixture.client.config().clone();
     let owner = fixture.owner.clone();
     fixture.preserve_root = true;
+    let _scenario_permit = fixture.scenario_permit.clone();
     drop(fixture);
     let old_cache = root.join("older-distfs-cache-generation");
     if stale_cache {
@@ -358,6 +359,7 @@ fn reject_invalid_setup_boundary(tamper: bool) {
     )
     .unwrap();
     fixture.preserve_root = true;
+    let _scenario_permit = fixture.scenario_permit.clone();
     drop(fixture);
     let path = root.join("records/local-execution-bootstrap.json");
     assert!(

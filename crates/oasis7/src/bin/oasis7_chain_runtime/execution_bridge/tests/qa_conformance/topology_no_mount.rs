@@ -65,6 +65,7 @@ fn no_mount_prepare_service() {
     let source_root = fixture.root.clone();
     // Process ownership is not durable world data. Stop the actual Node and
     // release its guard before copying, so no live PID lock crosses namespaces.
+    let _scenario_permit = fixture.scenario_permit.clone();
     drop(fixture);
     assert!(
         !source_root.join("world.lock").exists(),
