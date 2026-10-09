@@ -260,10 +260,27 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             }
             return Ok(AgentServiceProgress::Advanced);
         }
-        let client = self
+        let mut client = self
             .world_service_client()
             .map_err(|error| format!("{error:?}"))?
             .ok_or("canonical service transport missing")?;
+        if let HostedServicePhase::FeedbackAckView { pending, .. } = &phase {
+            self.llm_sidecar
+                .validate_hosted_restored_original(&self.world, pending)?;
+            let crate::world_service::WorldServicePayloadV1::Cognition(signed) = &pending.payload
+            else {
+                return Err("ACK View original Cognition missing".into());
+            };
+            let agent = &signed.request.request.agent_id;
+            if agent != &pending.cognition.request.request_context.agent_subject {
+                return Err("ACK View original Agent mismatch".into());
+            }
+            let mut config = client.config().clone();
+            config.scope_id = format!("agent:{agent}");
+            client = crate::world_service::client::RemoteWorldServiceClient::new(config)
+                .map_err(|error| error.to_string())?
+                .with_query_state(self.world_service_query_state.clone());
+        }
         let operation = match &phase {
             HostedServicePhase::Act { pending, submit } => {
                 original_intent_io(&pending.correlation, &pending.payload, *submit)
@@ -589,21 +606,61 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 else {
                     return Err("ACK codec mismatch".into());
                 };
-                let record = view
+                let agent = &pending.cognition.request.request_context.agent_subject;
+                if signed.request.agent_id != *agent
+                    || view.version().visibility_scope != format!("agent:{agent}")
+                {
+                    return Err("ACK View Agent scope mismatch".into());
+                }
+                let history = view
                     .projection()
                     .feedback_history
                     .as_ref()
-                    .ok_or("ACK scoped history missing")?
+                    .ok_or("ACK scoped history missing")?;
+                if history.agent_id != *agent {
+                    return Err("ACK history Agent mismatch".into());
+                }
+                history.metadata(agent)?;
+                let record = history
                     .records
                     .iter()
                     .find(|record| record.feedback.feedback_id == signed.request.feedback_id)
                     .ok_or("ACK feedback missing")?;
+                let feedback = &record.feedback;
                 if record.delivery_state != "acked"
                     || record.original_envelope_digest != signed.request.original_envelope_digest
+                    || feedback.agent_subject != signed.request.agent_id
+                    || feedback.agent_session_id != signed.request.agent_session_id
+                    || feedback.agent_turn_id != signed.request.agent_turn_id
+                    || feedback.decision_request_id != signed.request.decision_request_id
+                    || feedback.request_digest.to_string() != signed.request.request_digest
+                    || feedback.feedback_seq != signed.request.feedback_seq
                 {
                     return Err("ACK readback mismatch".into());
                 }
-                self.apply_hosted_verified_view(*view)?;
+                if let Some(current) = self.verified_world_view.as_ref()
+                    && !view
+                        .version()
+                        .commit
+                        .satisfies_minimum(&current.version().commit)
+                        .map_err(|error| error.to_string())?
+                {
+                    return Err("ACK private View precedes current Viewer View".into());
+                }
+                if self
+                    .config
+                    .world_service
+                    .as_ref()
+                    .is_some_and(|config| config.scope_id == view.version().visibility_scope)
+                {
+                    self.apply_hosted_verified_view(*view)?;
+                } else {
+                    // The Agent history is private provider input, not a public
+                    // Viewer cursor or a replacement for its verified snapshot.
+                    self.llm_sidecar.provider_service_projection = Some(view.projection().clone());
+                    self.llm_sidecar
+                        .sync_shadow_kernel(&self.world, &self.snapshot_config)?;
+                }
                 self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::Finalize {
                     pending,
                     receipt,
