@@ -42,4 +42,3 @@
 - `reviews/editorial-notes.md`：第一卷卷级审阅、doc-sync、稳定基线封存和最终验证记录。
 - `draft/chapter-writing-sop.md`：卷级审阅后只处理 P0 / P1 或影响阅读的重复 P2 的最小补丁边界。
 - `chapter-cards/`、`characters/`、`timeline/`：第一卷 canon 和章节卡支撑面。
-
