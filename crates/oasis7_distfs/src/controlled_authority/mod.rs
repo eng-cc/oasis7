@@ -10,6 +10,7 @@
 
 mod journal;
 mod proof;
+pub mod replicated_protocol;
 mod storage;
 
 pub use journal::ControlledAuthorityLocalJournal;
