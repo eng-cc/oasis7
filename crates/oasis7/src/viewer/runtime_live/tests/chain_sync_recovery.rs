@@ -132,13 +132,14 @@ fn chain_linked_runtime_preserves_commit_height_separately_from_tick_and_events(
         .save_to_dir(execution_world_dir.as_path())
         .expect("persist execution world");
     let chain_status = TestChainStatusServer::start_with_release_security_policy(
-        execution_world_dir,
+        execution_world_dir.clone(),
         ReleaseSecurityPolicy::default(),
     );
     chain_status.committed_height.store(1, Ordering::SeqCst);
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_chain_status_bind(chain_status.addr.clone()),
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
     )
     .expect("runtime server");
     let mut session = RuntimeLiveSession::new();
@@ -184,13 +185,14 @@ fn chain_linked_runtime_observes_new_commit_without_advancing_runtime_clock() {
         .save_to_dir(execution_world_dir.as_path())
         .expect("persist execution world");
     let chain_status = TestChainStatusServer::start_with_release_security_policy(
-        execution_world_dir,
+        execution_world_dir.clone(),
         ReleaseSecurityPolicy::default(),
     );
     chain_status.committed_height.store(1, Ordering::SeqCst);
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_chain_status_bind(chain_status.addr.clone()),
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
     )
     .expect("runtime server");
     let mut session = RuntimeLiveSession::new();
@@ -311,7 +313,7 @@ fn chain_linked_runtime_empty_poll_does_not_advance_world() {
 }
 
 #[test]
-fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
+fn chain_linked_runtime_zero_delta_accepts_commit_without_advancing_clock_or_events() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_delta_height");
     let execution_world = crate::runtime::World::new_production_hardened();
     execution_world
@@ -332,7 +334,8 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
     session.playing = false;
     session.subscribed.insert(ViewerStream::Events);
     session.subscribed.insert(ViewerStream::Snapshot);
-    let initial_time = server.world.state().time;
+    let published_time = execution_world.state().time;
+    let published_events = execution_world.journal().events.clone();
     let (mut writer, peer) = test_writer_pair();
 
     let progressed = server
@@ -340,11 +343,21 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
         .expect("chain sync should succeed");
 
     assert!(
-        !progressed,
-        "zero-delta chain poll should not report progress"
+        progressed,
+        "a new verified commit advances publication identity"
     );
-    assert_eq!(server.world.state().time, initial_time);
-    assert_eq!(server.last_chain_committed_height, 0);
+    assert_eq!(server.world.state().time, published_time);
+    assert_eq!(server.world.journal().events, published_events);
+    assert_eq!(server.last_chain_committed_height, 1);
+    let _ = read_raw_chain_sync_responses(&peer, Duration::from_millis(100));
+    assert!(
+        !server
+            .sync_chain_linked_runtime(&mut session, &mut writer)
+            .expect("same publication idle")
+    );
+    assert_eq!(server.world.state().time, published_time);
+    assert_eq!(server.world.journal().events, published_events);
+    assert_eq!(server.last_chain_committed_height, 1);
     assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
 }
 
@@ -401,8 +414,8 @@ fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world
     assert_eq!(server.world.state().time, execution_world.state().time);
     assert_ne!(server.world.state().time, initial_time);
     assert_eq!(
-        server.last_chain_committed_height,
-        execution_world.state().time.max(1)
+        server.last_chain_committed_height, 0,
+        "zero committed height must not be fabricated from gameplay time"
     );
     assert!(server.latest_player_gameplay_feedback.is_none());
     let line = read_response_line(&peer, Duration::from_millis(200))
@@ -645,7 +658,7 @@ fn chain_linked_runtime_revalidates_initial_snapshot_after_previous_session() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_head() {
+fn legacy_operator_observer_blocks_hosted_prompt_and_reconnects_exact_head() {
     let _env_guard = runtime_provider_env_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -848,6 +861,11 @@ fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_h
         player_private_key.as_str(),
     );
     preview_request.strong_auth_grant = Some(strong_auth_grant("prompt_control_preview"));
+    // The directory-backed operator observer is read-only. It has no
+    // authenticated Agent service projection and cannot open a Hosted model lane.
+    let before_prompt_world = serde_json::to_value(first_viewer.world.snapshot()).unwrap();
+    let before_prompt_journal = first_viewer.world.journal().events.clone();
+    let before_prompt_summary = first_viewer.test_canonical_provider_summary();
     let preview = first_viewer
         .handle_prompt_control_for_protocol(
             crate::viewer::PromptControlCommand::Preview {
@@ -855,12 +873,26 @@ fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_h
             },
             &negotiated,
         )
-        .expect("Hosted local-mock Preview must be authoritative");
+        .expect_err("operator observer cannot supply canonical Hosted prompt context");
+    assert_eq!(preview.code, "prompt_control_runtime_context_unavailable");
+    assert!(
+        preview
+            .message
+            .contains("canonical Agent observation unavailable")
+    );
     assert_eq!(
         preview.status,
-        Some(crate::viewer::protocol::PromptControlResultStatus::Accepted)
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
     );
-    assert_eq!(preview.mutation_count, Some(0));
+    assert_eq!(
+        serde_json::to_value(first_viewer.world.snapshot()).unwrap(),
+        before_prompt_world
+    );
+    assert_eq!(first_viewer.world.journal().events, before_prompt_journal);
+    assert_eq!(
+        first_viewer.test_canonical_provider_summary(),
+        before_prompt_summary
+    );
 
     let mut apply_request = signed_prompt_control_apply_request(
         crate::viewer::PromptControlApplyRequest {
@@ -889,12 +921,26 @@ fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_h
             },
             &negotiated,
         )
-        .expect("Hosted local-mock Apply must be authoritative");
+        .expect_err("operator observer must also refuse Hosted prompt mutation");
+    assert_eq!(apply.code, "prompt_control_runtime_context_unavailable");
+    assert!(
+        apply
+            .message
+            .contains("canonical Agent observation unavailable")
+    );
     assert_eq!(
         apply.status,
-        Some(crate::viewer::protocol::PromptControlResultStatus::Applied)
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
     );
-    assert_eq!(apply.mutation_count, Some(1));
+    assert_eq!(
+        serde_json::to_value(first_viewer.world.snapshot()).unwrap(),
+        before_prompt_world
+    );
+    assert_eq!(first_viewer.world.journal().events, before_prompt_journal);
+    assert_eq!(
+        first_viewer.test_canonical_provider_summary(),
+        before_prompt_summary
+    );
 
     let mut cold_viewer =
         ViewerRuntimeLiveServer::new(viewer_config()).expect("cold-start second chain viewer");

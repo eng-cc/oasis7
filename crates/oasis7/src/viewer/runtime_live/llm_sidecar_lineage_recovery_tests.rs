@@ -68,7 +68,7 @@ use crate::viewer::runtime_live::{
 #[path = "llm_sidecar_lineage_generation_recovery_tests.rs"]
 mod generation_recovery_tests;
 
-fn bound_provider_lease_test_world(agent_ids: &[&str]) -> RuntimeWorld {
+pub(super) fn bound_provider_lease_test_world(agent_ids: &[&str]) -> RuntimeWorld {
     bound_provider_lease_test_world_with_binding(agent_ids, "pending", None)
 }
 
@@ -121,7 +121,7 @@ fn reserve_test_provider_lease(
     .expect("reserve Runtime cognition lease")
 }
 
-fn valid_test_provider_context(
+pub(super) fn valid_test_provider_context(
     world: &RuntimeWorld,
     agent_id: &str,
     agent_turn_id: &str,
