@@ -204,7 +204,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - uses: taiki-e/install-action@v2
         with:
@@ -250,7 +252,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Install native libraries
         run: |
@@ -293,7 +297,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Execute selected cell
         shell: bash
@@ -332,7 +338,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Execute selected cell
         shell: bash
@@ -371,7 +379,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Execute selected cell
         shell: bash
@@ -410,7 +420,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Execute selected cell
         shell: bash
@@ -442,6 +454,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: crates/oasis7_viewer/package-lock.json
       - name: Install viewer dependencies
         run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchains
@@ -454,7 +468,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Install native libraries
         run: |
@@ -490,6 +506,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: crates/oasis7_viewer/package-lock.json
       - name: Install viewer dependencies
         run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchains
@@ -502,7 +520,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Install native libraries
         run: |
@@ -553,7 +573,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Install native libraries
         run: |
@@ -589,6 +611,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: crates/oasis7_viewer/package-lock.json
       - name: Install viewer dependencies
         run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchains
@@ -601,14 +625,22 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Install native libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Install pinned Trunk
-        run: cargo install trunk --locked --version "$TRUNK_VERSION"
+      - name: Cache pinned Trunk release archive
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz
+          key: trunk-archive-${{ runner.os }}-${{ runner.arch }}-${{ env.TRUNK_VERSION }}-${{ hashFiles('scripts/install-ci-trunk.sh') }}
+      - name: Install verified pinned Trunk
+        shell: bash
+        run: bash scripts/install-ci-trunk.sh "$RUNNER_TEMP/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz" "$RUNNER_TEMP/ci-tools/bin"
       - name: Execute selected cell
         shell: bash
         env:
@@ -646,7 +678,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Install native libraries
         run: |
@@ -689,7 +723,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Install native libraries
         run: |
@@ -923,7 +959,9 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required
+          shared-key: ordinary-required-v2-${{ matrix.group }}
+          add-rust-environment-hash-key: true
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
       - name: Execute selected cell
         shell: bash
@@ -1042,6 +1080,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: crates/oasis7_viewer/package-lock.json
       - name: Install viewer web dependencies
         run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchains
@@ -1073,13 +1113,14 @@ jobs:
         with:
           shared-key: ci-full-regression-v1
           cache-on-failure: true
-      - name: Install pinned trunk
-        run: cargo install trunk --locked --version "${TRUNK_VERSION}"
-      - name: Verify pinned trunk
+      - name: Cache pinned Trunk release archive
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz
+          key: trunk-archive-${{ runner.os }}-${{ runner.arch }}-${{ env.TRUNK_VERSION }}-${{ hashFiles('scripts/install-ci-trunk.sh') }}
+      - name: Install verified pinned Trunk
         shell: bash
-        run: |
-          set -euo pipefail
-          trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+        run: bash scripts/install-ci-trunk.sh "$RUNNER_TEMP/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz" "$RUNNER_TEMP/ci-tools/bin"
       - name: Install product-document Markdown parser
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run full test tier
