@@ -416,13 +416,32 @@ fn no_mount_application_acceptance() {
     );
     let deadline = Instant::now() + Duration::from_secs(35);
     loop {
+        assert!(
+            Instant::now() < deadline,
+            "Hosted completion deadline elapsed before View"
+        );
         let view = client
             .read_view(view_request(
                 &client,
                 Some(current.version().commit.clone()),
             ))
             .unwrap();
-        if view.projection().state.agents["agent-a"].state.pos == oasis7::GeoPos::new(2, 2, 0)
+        // Canonical settlement precedes private feedback consumption and ACK.
+        // Pause only after the actual durable App terminal has joined that proof.
+        let durable_terminal_committed = match fs::read("/app-private/lineage.json") {
+            Ok(bytes) => {
+                let lineage: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                lineage["provider_terminal_states"]["agent-a"]["status"] == "committed"
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => panic!("cannot read actual App lineage: {error}"),
+        };
+        assert!(
+            Instant::now() < deadline,
+            "Hosted completion deadline elapsed after durable read"
+        );
+        if durable_terminal_committed
+            && view.projection().state.agents["agent-a"].state.pos == oasis7::GeoPos::new(2, 2, 0)
             && view.projection().cognition_leases.iter().any(|lease| {
                 lease.status == oasis7::runtime::CognitionLeaseStatusV1::Settled
                     && lease.settled_amount > 0
