@@ -367,6 +367,14 @@ impl World {
         envelope: &ActionEnvelope,
     ) -> Result<WorldEventBody, WorldError> {
         let action_id = envelope.id;
+        if let Err(error) = self.delegation_action_admission(&envelope.action) {
+            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!("{error:?}")],
+                },
+            }));
+        }
         match &envelope.action {
             Action::RegisterAgent { .. }
             | Action::MoveAgent { .. }

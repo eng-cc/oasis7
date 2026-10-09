@@ -10,6 +10,8 @@ use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
+#[path = "tests/agent_memory_correction_control.rs"]
+mod agent_memory_correction_control;
 mod auth_actions;
 mod auth_actions_collect_data;
 mod auth_actions_feedback;

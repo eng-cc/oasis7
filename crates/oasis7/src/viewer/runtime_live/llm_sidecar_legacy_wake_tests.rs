@@ -144,6 +144,7 @@ fn legacy_sidecar_wake_fixture() -> (
     first.provider_terminal_states.insert(
         agent_id.to_string(),
         lineage_persistence::ProviderTerminalState {
+            feedback: None,
             agent_id: agent_id.to_string(),
             agent_session_id: session_id.to_string(),
             agent_turn_id: turn_id.to_string(),

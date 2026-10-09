@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "oasis7_local_signer_worker"
 path = "src/bin/oasis7_local_signer_worker.rs"
 
+[[bin]]
+name = "oasis7_local_signer_runtime_gate"
+path = "src/bin/oasis7_local_signer_runtime_gate.rs"
+
 [dependencies]
 base64 = "0.22"
 ed25519-dalek = "3"

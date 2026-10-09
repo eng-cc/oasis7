@@ -426,6 +426,7 @@ fn provider_lineage_persists_and_restores_pending_lifecycle_markers() {
     first.provider_terminal_states.insert(
         "agent-0".to_string(),
         super::lineage_persistence::ProviderTerminalState {
+            feedback: None,
             agent_id: "agent-0".to_string(),
             agent_session_id: "session-7".to_string(),
             agent_turn_id: "turn-1".to_string(),

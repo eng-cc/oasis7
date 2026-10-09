@@ -177,6 +177,96 @@ pub struct PlayerGameplayRecentFeedback {
     pub delta_event_seq: u64,
 }
 
+/// Player-safe projection of an authoritative Agent decision receipt. The
+/// domain event references remain pointers to the owning settlement records;
+/// this projection never treats an accepted request as a world effect.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayCausalReceiptSnapshot {
+    pub receipt_id: String,
+    pub commit_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_intent_id: Option<String>,
+    pub action_id: u64,
+    pub action_kind: String,
+    #[serde(default)]
+    pub domain_event_refs: Vec<u64>,
+    pub disposition: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_reason: Option<String>,
+    pub next_step: String,
+    pub expected_consequence: serde_json::Value,
+    pub actual_consequence: serde_json::Value,
+    pub alternative: serde_json::Value,
+    pub stakes: serde_json::Value,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
+    #[serde(default)]
+    pub correction_refs: Vec<String>,
+    #[serde(default)]
+    pub interruption_refs: Vec<String>,
+    #[serde(default)]
+    pub owner_control_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization: Option<PlayerGameplayDelegationUsageSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dissent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub override_actor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hard_boundary: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayDelegationGrantSnapshot {
+    pub grant_id: String,
+    pub source_id: String,
+    pub issuer_id: String,
+    pub owner_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<String>,
+    pub agent_id: String,
+    pub object_id: String,
+    #[serde(default)]
+    pub action_kinds: Vec<String>,
+    pub revision: u64,
+    pub period_id: String,
+    pub valid_from_tick: u64,
+    pub valid_until_tick: u64,
+    pub limit_units: u64,
+    pub resource_kind: String,
+    pub revoked: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayDelegationUsageSnapshot {
+    pub grant: PlayerGameplayDelegationGrantSnapshot,
+    pub cost_units: u64,
+    pub spent_units: u64,
+    pub remaining_units: u64,
+}
+
+/// Causal and agency details are nested beneath a canonical runtime intent so
+/// legacy snapshots with no such detail remain decodable and visibly unknown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PlayerGameplayAgencyReadModel {
+    pub status: String,
+    pub source: String,
+    pub causal_receipt_status: String,
+    pub memory_context_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub causal_receipt: Option<PlayerGameplayCausalReceiptSnapshot>,
+    #[serde(default)]
+    pub delegation_authorizations: Vec<PlayerGameplayDelegationUsageSnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub referenced_memory_context: Option<serde_json::Value>,
+    #[serde(default)]
+    pub memory_corrections: Vec<crate::simulator::MemoryCorrectionV1>,
+}
+
 /// The durable, player-authored intent currently handed to an in-world Agent.
 ///
 /// This deliberately carries only the player-visible instruction and its handoff
@@ -235,6 +325,8 @@ pub struct PlayerGameplayPrimaryIntent {
     pub receipt_ref: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_step: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agency_read_model: Option<PlayerGameplayAgencyReadModel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -719,7 +719,13 @@ impl World {
         commit_id: &str,
     ) -> Result<WorldCommitRecordV1, WorldError> {
         let mut transaction = self.clone();
-        let committed = transaction.finalize_cognition_commit_inner(commit_id)?;
+        let committed = match transaction.finalize_cognition_commit_inner(commit_id) {
+            Ok(committed) => committed,
+            Err(error) => {
+                self.persist_agent_delegation_commit_denial(commit_id, &error)?;
+                return Err(error);
+            }
+        };
         // Receipt durability is committed evidence. Re-evaluate untimed
         // receipt/event/state wakes in the same World transaction so queue
         // service does not depend on a later tick or starvation timeout.
@@ -929,12 +935,14 @@ impl World {
         // workspace becomes visible only after all cognition projections have
         // been updated below.
         let mut staged_world = self.clone();
+        staged_world.prepare_agent_delegation_commit(&marker.decision_request_id, &action)?;
+        let journal_start = staged_world.journal.events.len();
         let action_id = marker
             .action_id
             .strip_prefix("action:")
             .and_then(|id| id.parse::<u64>().ok())
             .ok_or_else(|| cognition_validation("cognition_action_id_invalid"))?;
-        staged_world.submit_action_with_id(action_id, action);
+        staged_world.submit_action_with_id(action_id, action.clone());
         staged_world.step()?;
         let staged_state_root = staged_world.current_state_root_hash()?;
         let mut committed = marker.clone();
@@ -1026,6 +1034,12 @@ impl World {
         }) {
             response["journal_head"] = json!(journal_head);
         }
+        self.finish_agent_causal_commit(
+            &mut next,
+            &committed,
+            &action,
+            &staged_world.journal.events[journal_start..],
+        )?;
         staged_world.cognition = next;
         *self = staged_world;
         Ok(committed)

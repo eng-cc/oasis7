@@ -92,9 +92,14 @@ def plan_installation(request, release, backend):
     store, work = clean_path(request["store_dir"]), clean_path(request["work_dir"])
     if store == work or store in work.parents or work in store.parents:
         raise InstallError("INSTALLATION_DRIFT", "store and jobs overlap")
-    facts = backend.observe(request, release)
+    facts = dict(backend.observe(request, release))
     if facts.get("platform") != "darwin":
         raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "only macOS apply supported")
+    runtime_identity = facts.get("runtime_identity")
+    if (not isinstance(runtime_identity, Mapping) or not runtime_identity
+            or any(not isinstance(key, str) or not isinstance(value, str) for key, value in runtime_identity.items())):
+        raise InstallError("INSTALLATION_DRIFT", "trusted runtime identity is missing")
+    facts["runtime_identity"] = dict(runtime_identity)
     if facts.get("target") != release["manifest"]["target"] or not all(facts.get(key) is True for key in ("safe", "acl_safe", "sudo_safe", "identity_available")):
         raise InstallError("INSTALLATION_DRIFT", "host isolation preflight blocked")
     uid, gid, caller = facts.get("signer_uid"), facts.get("signer_gid"), facts.get("caller_uid")
@@ -112,7 +117,16 @@ def apply_installation(release, plan, expected_plan_sha256, backend):
     if plan.get("schema_version") != PLAN_SCHEMA or plan.get("manifest_sha256") != release["manifest_sha256"] or plan.get("release_id") != release["manifest"]["release_id"] or plan.get("signing_enabled") is not False:
         raise InstallError("INSTALLATION_DRIFT", "invalid plan binding")
     request = dict(installation_id=plan["installation_id"], deployment_id=plan["deployment_id"], store_dir=plan["store_dir"], work_dir=plan["caller"]["work_dir"], caller_user=plan["caller"]["name"], signer_user=plan["signer"]["name"])
-    facts = backend.observe(request, release)
+    facts = dict(backend.observe(request, release))
+    try:
+        planned_runtime = plan["observations"][0]["facts"]["runtime_identity"]
+        current_runtime = facts["runtime_identity"]
+        runtime_unchanged = (isinstance(planned_runtime, Mapping) and isinstance(current_runtime, Mapping)
+                             and canonical_bytes(dict(planned_runtime)) == canonical_bytes(dict(current_runtime)))
+    except (IndexError, KeyError, TypeError, ValueError):
+        runtime_unchanged = False
+    if not runtime_unchanged:
+        raise InstallError("INSTALLATION_DRIFT", "trusted runtime identity changed")
     if facts.get("platform") != "darwin" or facts.get("root") is not True:
         raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "macOS root apply required")
     completed = []

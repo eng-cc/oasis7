@@ -45,12 +45,6 @@ const knownLineDebt = new Map(Object.entries({
     reason: "task_f3ba918435b24b8eadef002fed2b966a verifies failure disposition precedence and the registered visual fixture in the existing shared Viewer harness",
     nextTrigger: "the next factory failure or industrial gameplay UI test must move this behavior into a narrower adjacent test file with shared harness helpers",
   },
-  "crates/oasis7_viewer/software_safe_src/viewer_feedback_module.js": {
-    maxLines: 1215,
-    owner: "viewer_engineer",
-    reason: "task_f3ba918435b24b8eadef002fed2b966a adds one normalized factory production failure disposition field and suppresses contradictory fallback guidance",
-    nextTrigger: "the next viewer_feedback_module industrial feedback change must extract factory failure normalization and precedence into a named composition module",
-  },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
     maxLines: 1680,
     owner: "viewer_engineer",
