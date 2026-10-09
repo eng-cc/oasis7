@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "efcd8364d1dee55fbc676692b0f9736da70727c34ec9d1f85e152f7f72717639",
+    "content_sha256": "0ec1108088d682fc189a1f3f19fb3dd250c5dcebd461629a8cebdcebe3dbde1c",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_authority",
-    "note": "current world-runtime design authority; developer workflow record projection updated, product authority retained",
+    "note": "Reviewed local read-only Observer root, immutable capture, recovery and resource limits; current product authority retained",
     "path": "doc/world-runtime/design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

@@ -1,3 +1,4 @@
+import { authCredentials, installSession } from "./viewer_auth_session_module.js";
 import { createViewerBrowserRaceHandoffModule } from "./viewer_browser_race_handoff_module.js";
 
 export function createViewerBrowserRaceIdentityTestApi({
@@ -26,8 +27,8 @@ export function createViewerBrowserRaceIdentityTestApi({
     browserRaceIdentityOffer?.dispose?.();
     browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
       publicKey: state.auth.publicKey,
-      privateKey: state.auth.privateKey,
-      releaseToken: state.auth.releaseToken,
+      privateKey: authCredentials(state.auth).privateKey,
+      releaseToken: authCredentials(state.auth).releaseToken,
       playerId: state.auth.playerId,
       sessionEpoch: state.auth.sessionEpoch,
       bindingEpoch: state.auth.bindingEpoch,
@@ -48,9 +49,7 @@ export function createViewerBrowserRaceIdentityTestApi({
     if (!claimedPlayerId || !currentPlayerId || claimedPlayerId !== currentPlayerId) {
       throw new Error("browser race identity claim player binding mismatch");
     }
-    state.auth.publicKey = keyMaterial.publicKey;
-    state.auth.privateKey = keyMaterial.privateKey;
-    state.auth.releaseToken = keyMaterial.releaseToken;
+    await installSession(state, { ...state.auth, ...keyMaterial });
     state.auth.sessionEpoch = keyMaterial.sessionEpoch;
     state.auth.bindingEpoch = keyMaterial.bindingEpoch;
     state.auth.boundAgentId = keyMaterial.boundAgentId;

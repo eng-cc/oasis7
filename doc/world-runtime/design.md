@@ -623,6 +623,16 @@ design.
 
 ## 设计目标
 
+### Chain Observer 本地只读加载
+
+launcher 的 `--chain-execution-world-dir` 固定本地 execution root；托管 chain 的 writer 和 Viewer 使用同一解析结果，未指定时保持 `output/chain-runtime/<node_id>/reward-runtime-execution-world`。独立 `oasis7_viewer_live --chain-status-bind` 必须同时指定该本地目录，远端 status 的 `execution_world_dir` 不参与任何文件访问。
+
+Observer 只接收带不可变 generation index 的 checkpoint。capability reader 对中间目录逐组件 no-follow、对末文件只读 no-follow，并检查普通文件、输入、解码、累计、单缓冲分配和元素预算。捕获的 generation 固定 manifest、segments、CAS archive 与恢复元数据哈希；writer 发布新代不会使仍然完整有效的旧捕获失效。缺少可验证 checkpoint 时等待 writer，禁止回退到无绑定的多文件加载。
+
+候选从一开始不附加 persistence，不写审计、缓存、GC 或索引，不执行 journal 尾部恢复或裁剪队列。cognition 必须修改才能恢复时返回 `RecoveryRequired`；经济配置保持 checkpoint 原值。每个 Viewer 最多一个加载 worker 和一个最新待处理目标；source epoch、逐块取消检查与安装前来源/水位检查阻止旧来源结果安装。加载失败保留已有展示，同一水位不同权威内容被拒绝。
+
+部署目录仍由受信 writer 管理；目录能力和 no-follow 不提供对具有本地写权限的恶意进程、hardlink 或原地内容修改的隔离。默认输入单文件为 64 MiB、单 blob/缓冲为 128 MiB、累计读取/解码/组装为 512 MiB；预算不足拒收而不修改世界。
+
 - 提供 `world-runtime` 模块的总体设计入口，并明确其在 world-infrastructure 中的确定性执行责任、版本化协议与可恢复性边界。
 
 ## 设计范围

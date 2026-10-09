@@ -4,12 +4,13 @@ use super::*;
 fn hosted_local_mock_chain_empty_runtime_server() -> (ViewerRuntimeLiveServer, TestChainStatusServer)
 {
     let execution_world_dir = runtime_live_temp_dir("prompt_control_hosted_auth_boundary");
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     let server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::formal_release_default()
             .with_hosted_public_join_mode(true)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_chain_status_bind(chain_status.addr.clone()),
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
     )
     .expect("empty chain-linked Hosted local-mock runtime server");
     assert!(server.world.state().agents.is_empty());

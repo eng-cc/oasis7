@@ -1,18 +1,51 @@
 use super::*;
-use crate::runtime::{MainTokenConfig, ReleaseSecurityPolicy};
+use crate::runtime::ReleaseSecurityPolicy;
 use crate::viewer::runtime_live::chain_link::{
     chain_link_http_response_is_complete, load_chain_execution_world,
 };
 
 #[test]
+fn chain_status_cannot_choose_the_observers_local_root() {
+    let local_root = runtime_live_temp_dir("observer_trusted_local_root");
+    let mut local_world = crate::runtime::World::new();
+    local_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "trusted-local-agent".into(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    local_world.step().unwrap();
+    local_world.save_to_dir(&local_root).unwrap();
+    let remote_path = runtime_live_temp_dir("observer_remote_path_must_not_be_opened");
+    std::fs::remove_dir_all(&remote_path).unwrap();
+    let chain_status = TestChainStatusServer::start(remote_path.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(local_root.clone()),
+    )
+    .unwrap();
+    server.prime_chain_linked_runtime_for_snapshot().unwrap();
+    assert!(
+        server
+            .world
+            .state()
+            .agents
+            .contains_key("trusted-local-agent")
+    );
+    assert!(!remote_path.exists());
+    std::fs::remove_dir_all(local_root).unwrap();
+}
+
+#[test]
 fn chain_linked_runtime_missing_persistence_keeps_world_and_height() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_missing_persistence");
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -28,10 +61,8 @@ fn chain_linked_runtime_missing_persistence_keeps_world_and_height() {
         .expect_err("chain sync should retry when persistence files are missing");
 
     match err {
-        ViewerRuntimeLiveServerError::Serde(message) => {
-            assert!(message.contains("execution world is not ready"));
-            assert!(message.contains("snapshot.json"));
-            assert!(message.contains("journal.json"));
+        ViewerRuntimeLiveServerError::Init(message) => {
+            assert!(message.contains("NotReady"));
         }
         other => panic!("unexpected chain sync error: {other:?}"),
     }
@@ -48,19 +79,20 @@ fn chain_linked_runtime_missing_persistence_keeps_world_and_height() {
         feedback
             .reason
             .as_deref()
-            .is_some_and(|reason| reason.contains("execution world is not ready"))
+            .is_some_and(|reason| reason.contains("NotReady"))
     );
 }
 
 #[test]
 fn chain_linked_runtime_shadow_policy_keeps_chain_failure_diagnostic_only() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_shadow_preserve_feedback");
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_link_policy(ChainLinkPolicy::Shadow)
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
@@ -89,8 +121,8 @@ fn chain_linked_runtime_shadow_policy_keeps_chain_failure_diagnostic_only() {
         .expect_err("shadow chain sync should still report diagnostics to the caller");
 
     match err {
-        ViewerRuntimeLiveServerError::Serde(message) => {
-            assert!(message.contains("execution world is not ready"));
+        ViewerRuntimeLiveServerError::Init(message) => {
+            assert!(message.contains("NotReady"));
         }
         other => panic!("unexpected chain sync error: {other:?}"),
     }
@@ -109,12 +141,13 @@ fn chain_linked_runtime_shadow_policy_keeps_chain_failure_diagnostic_only() {
 #[test]
 fn chain_linked_runtime_missing_persistence_without_subscription_does_not_poison_feedback() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_missing_persistence_unsubscribed");
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -128,8 +161,8 @@ fn chain_linked_runtime_missing_persistence_without_subscription_does_not_poison
         .expect_err("chain sync should still fail when persistence files are missing");
 
     match err {
-        ViewerRuntimeLiveServerError::Serde(message) => {
-            assert!(message.contains("execution world is not ready"));
+        ViewerRuntimeLiveServerError::Init(message) => {
+            assert!(message.contains("NotReady"));
         }
         other => panic!("unexpected chain sync error: {other:?}"),
     }
@@ -141,12 +174,13 @@ fn chain_linked_runtime_missing_persistence_without_subscription_does_not_poison
 #[test]
 fn chain_linked_runtime_shadow_policy_keeps_chain_failures_out_of_gameplay_feedback() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_shadow_missing_persistence");
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_link_policy(ChainLinkPolicy::Shadow)
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
@@ -163,8 +197,8 @@ fn chain_linked_runtime_shadow_policy_keeps_chain_failures_out_of_gameplay_feedb
         .expect_err("shadow chain sync should still report the sync error to the caller");
 
     match err {
-        ViewerRuntimeLiveServerError::Serde(message) => {
-            assert!(message.contains("execution world is not ready"));
+        ViewerRuntimeLiveServerError::Init(message) => {
+            assert!(message.contains("NotReady"));
         }
         other => panic!("unexpected chain sync error: {other:?}"),
     }
@@ -198,8 +232,8 @@ fn chain_link_http_response_without_content_length_waits_for_eof() {
 }
 
 #[test]
-fn chain_linked_runtime_dev_local_policy_normalizes_main_token_config_before_verifying_tick_consensus()
- {
+fn chain_linked_runtime_dev_local_policy_preserves_economic_config_before_verifying_tick_consensus()
+{
     let execution_world_dir = runtime_live_temp_dir("chain_sync_dev_local_main_token_normalize");
     let mut execution_world = crate::runtime::World::new_production_hardened();
     execution_world.submit_action(RuntimeAction::RegisterAgent {
@@ -217,7 +251,10 @@ fn chain_linked_runtime_dev_local_policy_normalizes_main_token_config_before_ver
     )
     .expect("dev-local viewer load should normalize persisted execution world");
 
-    assert_eq!(world.main_token_config(), &MainTokenConfig::default());
+    assert_eq!(
+        world.main_token_config(),
+        execution_world.main_token_config()
+    );
     world
         .verify_tick_consensus_chain()
         .expect("viewer world should retain a valid tick consensus chain");

@@ -1,3 +1,4 @@
+import { installSession } from "./viewer_auth_session_module.js";
 export function createViewerHostedTestLoginModule({
   clone,
   fetchImpl,
@@ -55,7 +56,7 @@ export function createViewerHostedTestLoginModule({
         throw new Error(payload?.error || payload?.error_code || `hosted test login failed with HTTP ${response.status}`);
       }
       state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
-      state.auth = {
+      await installSession(state, {
         available: true,
         hostedAccountId: null,
         playerId: String(grant.player_id).trim(),
@@ -85,7 +86,7 @@ export function createViewerHostedTestLoginModule({
         pendingRequestedAgentId: null,
         pendingForceRebind: false,
         rebindNotice: null,
-      };
+      });
       persistHostedPlayerSession(state.auth);
       resetHostedLoginChallenge();
       state.hostedLogin.channel = "test";

@@ -19,7 +19,7 @@ if [[ "$workflow_toolchain_install" == *"--profile default"* ]]; then
 fi
 
 workflow_checkout_depth=$(awk '
-/^[[:space:]]*- uses: actions\/checkout@v6$/ { in_step=1; next }
+/^[[:space:]]*- uses: actions\/checkout@[0-9a-f]{40} # v6$/ { in_step=1; next }
 in_step && /^[[:space:]]*- name:/ { in_step=0 }
 in_step && /fetch-depth:/ { print $2; exit }
 ' .github/workflows/compile-metrics.yml)
@@ -71,7 +71,7 @@ from pathlib import Path
 
 source = Path(".github/workflows/compile-metrics.yml").read_text(encoding="utf-8")
 enforce = source[source.index("      - name: Enforce compile metrics gate"):source.index("\n  summarize:")]
-launcher_start = enforce.index('          if [[ "${{ inputs.metric_target }}" == "launcher" ]]; then')
+launcher_start = enforce.index('          if [[ "${METRIC_TARGET}" == "launcher" ]]; then')
 launcher_end = enforce.index("\n          fi", launcher_start) + len("\n          fi")
 launcher_block = enforce[launcher_start:launcher_end]
 release_flag = "--max-cargo-build-release-regression-pct"
@@ -2347,6 +2347,8 @@ def invoke(measure_warm_check, threshold, cold_thresholds=None):
     environment.update(
         {
             "MEASURE_WARM_CHECK": measure_warm_check,
+            "MEASURE_WARM": measure_warm_check,
+            "METRIC_TARGET": "oasis7_node_default_features",
             "MAX_PACKAGE_COUNT_REGRESSION_PCT": "100",
             "MAX_CARGO_CHECK_REGRESSION_PCT": "",
             "MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT": "",

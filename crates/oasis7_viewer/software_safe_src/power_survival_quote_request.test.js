@@ -13,17 +13,18 @@ function installMockWebSocket() {
   }
   Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket }); return { sentMessages, sockets };
 }
-function installTestCrypto() { Object.defineProperty(window, "crypto", { configurable: true, value: { subtle: { async importKey() { return {}; }, async sign() { return new Uint8Array(64).fill(7).buffer; } } } }); }
+function installTestCrypto() { Object.defineProperty(window, "crypto", { configurable: true, value: { getRandomValues: (array) => array.fill(1), subtle: { async verify() { return true; }, async importKey() { return {}; }, async sign() { return new Uint8Array(64).fill(7).buffer; } } } }); }
 
 describe("requestPowerSurvivalQuote", () => {
   beforeEach(() => { vi.resetModules(); window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0"); installTestCrypto(); });
   it("binds seller, amount, and requested price in the signed read-only protocol request", async () => {
     const signSpy = vi.spyOn(window.crypto.subtle, "sign"); const { sentMessages, sockets } = installMockWebSocket();
-    const core = await import("./legacy_core.js"); core.initializeSoftwareSafeCore();
+    const core = await import("./legacy_core.js"); await core.initializeSoftwareSafeCore();
     expect(await core.requestPowerSurvivalQuote("", 1, 0)).toEqual(expect.objectContaining({ ok: false }));
     expect(await core.requestPowerSurvivalQuote("agent-1", 0, 0)).toEqual(expect.objectContaining({ ok: false }));
     sockets[0].open();
     core.state.auth = { ...core.state.auth, available: true, playerId: "player-power-quote", publicKey: "09".repeat(32), privateKey: "07".repeat(32), registrationStatus: "registered", runtimeStatus: "registered", boundAgentId: "agent-0" };
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
     core.state.powerSurvivalQuote = { seller_agent_id: "agent-old" };
     expect(await window.__AW_TEST__.requestPowerSurvivalQuote("agent-1", 18, 3)).toEqual(expect.objectContaining({ ok: true, request: expect.objectContaining({ seller_agent_id: "agent-1", amount: 18, requested_price_per_pu: 3 }) }));
     expect(core.state.powerSurvivalQuote).toBeNull();

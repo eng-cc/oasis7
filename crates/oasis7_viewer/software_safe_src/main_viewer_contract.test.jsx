@@ -25,6 +25,7 @@ function createTestCrypto() {
   const privateBytes = new Uint8Array(32).fill(7);
   const publicBytes = new Uint8Array(32).fill(9);
   return {
+    getRandomValues(bytes) { return bytes.fill(42); },
     subtle: {
       async generateKey() {
         return {
@@ -44,6 +45,7 @@ function createTestCrypto() {
         }
         throw new Error(`unsupported test key export: ${format}`);
       },
+      async verify() { return true; },
       async importKey() {
         return { kind: "test-ed25519-imported" };
       },
@@ -122,7 +124,7 @@ async function renderViewerApp({
   appRoot.id = "app";
   document.body.appendChild(appRoot);
 
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   if (snapshot) {
     core.injectSnapshot(snapshot);
@@ -373,7 +375,8 @@ describe("focused viewer UI contracts", () => {
       expect(core.state.auth.available).toBe(true);
       expect(core.state.auth.source).toBe("hosted_test_login");
       expect(core.state.auth.playerId).toBe("hosted-player-test-login");
-      expect(core.state.auth.registrationGrant).toBe("issuer-signed-registration-grant");
+      expect(core.state.auth.registrationGrant).toBeUndefined();
+      expect(window.localStorage.getItem(`oasis7_hosted_player_session:${core.state.wsUrl}`) || "").not.toContain("privateKey");
     });
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 

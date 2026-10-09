@@ -1046,6 +1046,7 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_submit_bind(chain_submit.addr.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )

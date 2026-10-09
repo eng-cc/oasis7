@@ -23,10 +23,15 @@ pub use authoritative_recovery_generation::{
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     CommittedAuthoritativeRecoveryGeneration,
 };
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "observer_load.rs"]
+mod observer_load;
 #[path = "persistence_support.rs"]
 mod persistence_support;
 #[path = "persistence_tail.rs"]
 mod persistence_tail;
+#[cfg(not(target_arch = "wasm32"))]
+pub use observer_load::{ObserverLoadError, ObserverReadLimits};
 #[path = "persistence_tick_consensus.rs"]
 mod persistence_tick_consensus;
 use self::persistence_support::{
@@ -488,16 +493,6 @@ impl World {
         *self.persistence_dir.borrow_mut() = Some(dir.to_path_buf());
     }
 
-    /// Stop automatic persistence for an in-memory observer projection.
-    ///
-    /// A world loaded from disk is normally a writer-owned world and therefore
-    /// keeps its persistence directory. Chain-linked viewers load that same
-    /// snapshot as an observer; detaching here prevents viewer-side recovery
-    /// or provider bookkeeping from writing the chain writer's directory.
-    pub(crate) fn detach_persistence_dir(&mut self) {
-        *self.persistence_dir.borrow_mut() = None;
-    }
-
     pub fn save_to_dir_with_modules(&self, dir: impl AsRef<Path>) -> Result<(), WorldError> {
         self.save_to_dir(dir)
     }
@@ -656,6 +651,19 @@ impl World {
     }
 
     pub fn from_snapshot(snapshot: Snapshot, journal: Journal) -> Result<Self, WorldError> {
+        Self::from_snapshot_mode(snapshot, journal, false)
+    }
+
+    fn from_snapshot_mode(
+        snapshot: Snapshot,
+        journal: Journal,
+        observer: bool,
+    ) -> Result<Self, WorldError> {
+        if observer && snapshot.journal_len != journal.len() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "RecoveryRequired: observer needs a complete checkpoint".to_string(),
+            });
+        }
         if snapshot.journal_len > journal.len() {
             return Err(WorldError::JournalMismatch);
         }
@@ -806,12 +814,25 @@ impl World {
             }
             world.verify_capability_authority_finality_proof(record, proof)?;
         }
-        world.enforce_pending_action_limit();
-        world.enforce_pending_effect_limit();
-        world.enforce_inflight_effect_limit();
-        world.replay_from(snapshot.journal_len)?;
+        if observer {
+            let limits = &world.runtime_memory_limits;
+            if world.pending_actions.len() > limits.max_pending_actions.max(1)
+                || world.pending_effects.len() > limits.max_pending_effects.max(1)
+                || world.inflight_effects.len() > limits.max_inflight_effects.max(1)
+                || world.journal.len() > limits.max_journal_events.max(1)
+            {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: "ResourceLimited: observer cannot trim checkpoint queues".to_string(),
+                });
+            }
+        } else {
+            world.enforce_pending_action_limit();
+            world.enforce_pending_effect_limit();
+            world.enforce_inflight_effect_limit();
+            world.replay_from(snapshot.journal_len)?;
+            world.enforce_journal_event_limit();
+        }
         world.verify_tick_consensus_chain()?;
-        world.enforce_journal_event_limit();
         Ok(world)
     }
 

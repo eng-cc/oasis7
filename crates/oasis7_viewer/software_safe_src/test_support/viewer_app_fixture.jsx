@@ -1,3 +1,4 @@
+import { waitFor } from "@solidjs/testing-library";
 import { buildTaskGame076ScenarioSnapshot } from "../gameplay_attraction_scenario.js";
 
 function sampleSnapshot(overrides = {}) {
@@ -126,7 +127,7 @@ export async function renderViewerApp(
   const main = await import("../main.jsx");
   const appRoot = document.createElement("div");
   document.body.appendChild(appRoot);
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
   core.setViewerLocale(locale);
   core.injectSnapshot(snapshot);
   core.state.connectionStatus = "connected";
@@ -145,5 +146,6 @@ export async function renderViewerApp(
   main.__markStarterOcOnboardingCompleteForTest("agent-0");
   const dispose = main.mountViewerApp(appRoot);
   core.requestRender();
+  await waitFor(() => { if (!window.__OASIS7_VIEWER_FIXTURE_READY__) throw new Error("fixture assembly pending"); });
   return { container: appRoot, core, dispose };
 }
