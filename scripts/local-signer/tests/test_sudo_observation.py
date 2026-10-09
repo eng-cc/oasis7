@@ -21,9 +21,19 @@ class SudoObservation(unittest.TestCase):
             self.assertTrue(host.sudo_policy_safe(observed, 401, 401, "/worker"))
             self.assertFalse(host.sudo_policy_safe(observed, 401, 401, "/worker", require_worker=True))
 
+    def test_macos_success_status_with_exact_denial_is_initially_safe(self):
+        denial = "User oasis7-codex is not allowed to run sudo on Mac.\n"
+        observed = self.observe(0, denial)
+        self.assertTrue(host.sudo_policy_safe(observed, 401, 401, "/worker"))
+        self.assertFalse(host.sudo_policy_safe(observed, 401, 401, "/worker", require_worker=True))
+        for out, err in ((denial, "sudo: policy plugin failed\n"), (denial + "\n", ""),
+                         ("", "sudo: a password is required\n"), (denial.replace("Mac.", "Other."), "")):
+            with self.subTest(out=out, err=err):
+                self.assertFalse(host.sudo_policy_safe(self.observe(0, out, err), 401, 401, "/worker"))
+
     def test_errors_and_ambiguous_denials_are_not_no_grants(self):
         denial = "User oasis7-codex is not allowed to run sudo on Mac.\n"
-        for code, out, err in ((0, denial, ""), (2, "", denial), (1, "", denial.replace("oasis7-codex", "other")),
+        for code, out, err in ((2, denial, ""), (2, "", denial), (1, "", denial.replace("oasis7-codex", "other")),
                                (1, "", denial.replace("Mac.", "Other.")), (1, "", denial + "sudo: policy plugin failed\n"),
                                (1, "unexpected", denial), (1, "", denial + "\n"), (1, denial + "\n", ""),
                                (1, "", "sudo: a password is required\n"), (1, "", "")):
@@ -37,7 +47,7 @@ class SudoObservation(unittest.TestCase):
 
     def test_invalid_hostname_and_inconsistent_observation_fail_closed(self):
         denial = "User oasis7-codex is not allowed to run sudo on Mac.\n"
-        for code, out, err, caller, hostname in ((0, "", denial, "oasis7-codex", "Mac"),
+        for code, out, err, caller, hostname in ((2, "", denial, "oasis7-codex", "Mac"),
                                                 (1, "", denial, "other", "Mac"),
                                                 (1, "", denial, "oasis7-codex", ""),
                                                 (1, "", denial, "oasis7-codex", "Mac\n")):
