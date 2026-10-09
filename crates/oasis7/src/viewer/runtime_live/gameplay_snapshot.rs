@@ -1,6 +1,6 @@
 use crate::runtime::{
     FactoryProductionFailureDispositionV1, FactoryProductionStatus, FactoryState, IndustryStage,
-    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody, WorldState,
+    WorldState,
 };
 use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayCausalityKind, PlayerGameplayExecutionState,
@@ -27,14 +27,14 @@ use super::gameplay_snapshot_helpers::{
 };
 use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
 use super::gameplay_validation_preview::product_validation_unlock_preview;
+use super::player_agency_projection::PlayerGameplayCausalitySignal;
 use super::player_gameplay::{extend_available_actions, player_starter_industrial_feasibility};
 use fallback::{
     fallback_tradeoff_decision_for_gameplay, player_gameplay_fallback_action,
     player_gameplay_fallback_tradeoff_preview, player_gameplay_wait_resolution_quote,
 };
 use fine_grain::{
-    is_rejected_unknown_gameplay_action, player_gameplay_fine_grain_action_translation,
-    player_gameplay_player_facing_feedback,
+    player_gameplay_fine_grain_action_translation, player_gameplay_player_facing_feedback,
 };
 use intent::{player_gameplay_intent_scope, player_gameplay_intent_summary};
 use status::{
@@ -43,45 +43,6 @@ use status::{
     player_gameplay_stalled_reason, player_gameplay_status_reason,
 };
 use sync::first_session_runtime_sync_blocker;
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct PlayerGameplayCausalitySignal {
-    pub kind: PlayerGameplayCausalityKind,
-    pub detail: String,
-}
-pub(super) fn player_gameplay_causality_from_runtime_events(
-    new_events: &[RuntimeWorldEvent],
-) -> Option<PlayerGameplayCausalitySignal> {
-    let mut override_detail = None;
-    let mut override_fallback = None;
-    for runtime_event in new_events {
-        match &runtime_event.body {
-            RuntimeWorldEventBody::RuleDecisionRecorded(record)
-                if record.override_action.is_some() =>
-            {
-                let notes = if record.notes.is_empty() {
-                    "no rule note supplied".to_string()
-                } else {
-                    record.notes.join("; ")
-                };
-                override_detail = Some(format!(
-                    "rule module {} redirected the accepted action before execution: {}",
-                    record.module_id, notes
-                ));
-            }
-            RuntimeWorldEventBody::ActionOverridden(record) => {
-                override_fallback = Some(format!(
-                    "the acting agent followed an overridden plan instead of the original action: {:?} -> {:?}",
-                    record.original_action, record.override_action
-                ));
-            }
-            _ => {}
-        }
-    }
-    override_fallback.map(|fallback| PlayerGameplayCausalitySignal {
-        kind: PlayerGameplayCausalityKind::AgentOverride,
-        detail: override_detail.unwrap_or(fallback),
-    })
-}
 fn derive_player_gameplay_execution_state(
     stage_status: PlayerGameplayStageStatus,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
@@ -199,8 +160,6 @@ fn finalize_player_gameplay_snapshot(
     }
     let player_facing_feedback = player_gameplay_player_facing_feedback(recent_feedback);
     let player_facing_feedback_ref = player_facing_feedback.as_ref();
-    let rejected_unknown_gameplay_action =
-        recent_feedback.is_some_and(is_rejected_unknown_gameplay_action);
     gameplay.execution_state =
         derive_player_gameplay_execution_state(gameplay.stage_status, player_facing_feedback_ref);
     let (causality_kind, causality_detail) =
@@ -208,11 +167,9 @@ fn finalize_player_gameplay_snapshot(
     gameplay.causality_kind = causality_kind;
     gameplay.causality_detail = causality_detail;
     let status_reason = player_gameplay_status_reason(&gameplay, player_facing_feedback_ref);
-    gameplay.accepted_intent_id = (!rejected_unknown_gameplay_action)
-        .then_some(player_facing_feedback_ref)
-        .flatten()
-        .map(|feedback| feedback.action.clone())
-        .filter(|value| !value.is_empty());
+    // Feedback actions are command labels, not canonical accepted AgentIntent
+    // identities. The caller assigns this only from a current runtime intent.
+    gameplay.accepted_intent_id = None;
     gameplay.intent_summary = player_facing_feedback_ref.and_then(player_gameplay_intent_summary);
     gameplay.intent_scope = player_facing_feedback_ref.and_then(|feedback| {
         player_gameplay_intent_scope(feedback.action.as_str()).map(str::to_string)
@@ -274,6 +231,7 @@ fn finalize_player_gameplay_snapshot(
     gameplay.recent_feedback = player_facing_feedback;
     gameplay
 }
+
 fn is_fresh_factory_production_failure_disposition(
     state: &WorldState,
     factory: &FactoryState,
@@ -395,6 +353,14 @@ pub(super) fn build_player_gameplay_snapshot(
             causality_signal,
         );
         gameplay.primary_intent = primary_intent.clone();
+        gameplay.accepted_intent_id = primary_intent.as_ref().and_then(|intent| {
+            super::player_agency_projection::canonical_accepted_runtime_intent_id(
+                intent.status.as_str(),
+                intent.source_class.as_deref(),
+                intent.freshness.as_deref(),
+                intent.intent_id.as_deref(),
+            )
+        });
         gameplay.starter_industrial_feasibility = Some(player_starter_industrial_feasibility(
             &starter_industrial_feasibility,
         ));
