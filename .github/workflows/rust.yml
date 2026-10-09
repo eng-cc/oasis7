@@ -368,6 +368,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang llvm
           clang --print-targets | grep -w wasm32
+          llvm-ar --version
       - name: Execute selected group
         shell: bash
         env:
@@ -1044,6 +1045,7 @@ jobs:
           rustup default "${RUST_TOOLCHAIN}"
           rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
           rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
+          rustup target add wasm32-unknown-unknown
       - name: Install cargo-deny
         uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2
         with:
@@ -1052,6 +1054,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            clang \
+            llvm \
             pkg-config \
             libwayland-dev \
             wayland-protocols \
@@ -1063,6 +1067,8 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
+          clang --print-targets | grep -w wasm32
+          llvm-ar --version
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: ci-full-regression-trusted-v2
@@ -1082,7 +1088,7 @@ jobs:
       - name: Prepare trusted cache sentinel
         if: github.ref == 'refs/heads/main'
         run: |
-          test "$ACTIONS_CACHE_MODE" = write
+          test "$GITHUB_REF" = refs/heads/main
           mkdir -p "$RUNNER_TEMP/cache-permission-sentinel"
           printf 'trusted-v2\n' > "$RUNNER_TEMP/cache-permission-sentinel/sentinel"
       - name: Save trusted cache sentinel
