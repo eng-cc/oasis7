@@ -16,7 +16,7 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) / [单权威提交](prd.md#p2p-single-authority-durable-commit) / [交接](prd.md#p2p-authority-handoff) | 固定身份与合法 profile 激活、原子追加、跨故障域持久确认、未知提交和 H/H+1 不可撤回 | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | P2P/runtime、ops、消费者与 QA 同候选验证 | target；现有 prototype/单调 guard 不证明正式提交或 readiness |
+| [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) / [单权威提交](prd.md#p2p-single-authority-durable-commit) / [交接](prd.md#p2p-authority-handoff) | 固定身份与合法 profile 激活、原子追加、跨故障域持久确认、未知提交和 H/H+1 不可撤回 | [des-p2p-authority-profiles](#des-p2p-authority-profiles)、[本机日志前置](#des-p2p-local-authority-journal-prerequisite) | P2P/runtime、ops、消费者与 QA 同候选验证 | target；现有 prototype/单调 guard 不证明正式提交或 readiness |
 | [professional_acceptance: p2p-ordered-execution](prd.md#p2p-ordered-execution) | 下一committed height、有序序列/root/decode及journal绑定；错误不推进 | [des-p2p-ordered-commit](#des-p2p-ordered-commit) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-receipt-finality-boundary](prd.md#p2p-receipt-finality-boundary) | receipt≠QC；同parent/manifest/actions独立重执行，缺artifact/fault/root拒绝vote/commit | [des-p2p-receipt-finality](#des-p2p-receipt-finality) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-target-bft](prd.md#p2p-target-bft) | Propose/Prevote/Precommit仅verified >2/3 active stake cert生效；world/height/round/phase/roots/set和dedup签名绑定 | [des-p2p-target-bft](#des-p2p-target-bft) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
@@ -106,6 +106,14 @@ net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-roo
 
 单权威追加先在最终存储原子检查 epoch、预期 parent/head、顺序；signer 在 fenced epoch 下核对完整 prepare 的本机与独立副本持久确认后生成提交决定/证明；最终证明和决定再按同一协议复制持久化。prepare 不发布世界效果；本机与独立故障域完整记录和正式提交决定/证明确认后才回 committed。单调 guard 与本机锁不能替代旧 writer fencing。未知结果保留原 identity 查询，独立副本不可用时暂停确认；人工恢复先隔离旧 signer/追加权，无法证明则停写。
 
+#### des-p2p-local-authority-journal-prerequisite
+
+本地持久日志仅承接 [单权威持久提交](prd.md#p2p-single-authority-durable-commit) 中的本机原子记录、请求去重及恢复查询前置。固定 trusted world/chain/genesis、signer 与 epoch；在本地独占进程锁内检查预期 parent/head 与原请求 payload digest，将签名 local decision、完整日志与派生的 head/request index 作为同一持久事务保存。同 identity 同 payload 查询原本地结果，异 payload 冲突；任何不确定写入沿原 identity 返回 unknown。
+
+`oasis7_distfs::controlled_authority` 的 local decision proof 使用独立 schema/domain 与 `local_durable_prerequisite` 范围，offline verifier 只验证该范围的身份、签名和链接。它不构成已激活 profile 的正式 CommitRef，既有 runtime、manifest startup、WorldService 与旧 finality verifier 不消费它作为 committed。独占锁及固定 epoch 只防同一受信存储路径的本地竞争，不具备跨主机 fencing；没有独立故障域完整持久确认时不得发布正式效果。
+
+恢复核对 trusted identity 与外部保留的最低 head anchor，重建日志/head/request index 并拒绝截断、签名或链接冲突；本地 snapshot 单独无法证明未被回滚，丢失外部 anchor 不自动降格为可信恢复。固定 epoch 不支持自行提升、signer 轮换或 H/H+1 激活。首次实现仅在支持文件和目录持久同步的 Unix 本地文件系统开放；Windows 或不支持目录同步的平台明确拒绝该新入口，既有 DistFS 路径不改变。回归入口为 `cargo test -p oasis7_distfs controlled_authority`，覆盖竞争写者、stale epoch/parent、相同请求与 payload 冲突、持久阶段故障与 proof 篡改；其运行结果由 [Issue #4363](https://github.com/eng-cc/oasis7/issues/4363) 对应候选维护。本切片不关闭跨故障域灾备、正式提交及消费者接线义务。
+
 交接停写排空后，新集合同步 H−1；旧 authority 在 H 正式记录新集合/profile/epoch/H+1 边界及结果根。H 提交前可取消，提交后接续权不可撤回，入口/存储/signer/proof verifier 均拒绝 H+1 旧 profile；新集合启动失败保持停写。历史仍按各阶段合法 profile 验证。演练覆盖 H 已提交而 H+1 未提交时宕机/取消、重启拒绝旧 writer，以及无资产重发/断链/失效 pending 自动生效。该设计尚需协议、消费者与故障域实证，不是当前 readiness。
 
 ## 5. 关键运行流程
@@ -155,6 +163,7 @@ target protected validators + public services；governed registry有效epoch/sta
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [professional_acceptance: p2p-single-authority-durable-commit](prd.md#p2p-single-authority-durable-commit) | [本机日志前置](#des-p2p-local-authority-journal-prerequisite) | 仅固定身份/epoch的本机原子记录、去重与恢复查询；不授予正式 committed | `cargo test -p oasis7_distfs controlled_authority`；同候选测试竞争写者、stale epoch/parent、请求碰撞、各持久阶段故障、跨世界/proof篡改、带外最低anchor截断拒绝；Unix持久行为与不支持平台拒绝分别判定 | 当次 GitHub Issue #4363 候选/命令/exit/log；只有实际执行结果可记录通过 | 未提供独立副本确认、跨主机 fencing、完整 runtime prepare/commit 接线或 BFT/激活证明 |
 | [professional_acceptance: p2p-ordered-execution](prd.md#p2p-ordered-execution) | [des-p2p-ordered-commit](#des-p2p-ordered-commit) | 下一committed height、有序序列/root/decode及journal绑定；错误不推进 | [testing-manual.md](../../testing-manual.md)；S9A phase2/3；同candidate重排、tamper、decode/root/journal负例；执行receipt/状态变化oracle。现有手册入口，完整组合未运行。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-receipt-finality-boundary](prd.md#p2p-receipt-finality-boundary) | [des-p2p-receipt-finality](#des-p2p-receipt-finality) | receipt≠QC；同parent/manifest/actions独立重执行，缺artifact/fault/root拒绝vote/commit | [testing-manual.md](../../testing-manual.md)；S9A；全部活动validator+runtime相同输入/父状态/版本，逐一根不匹配及旧threshold1证据负例。target完整矩阵planned。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-target-bft](prd.md#p2p-target-bft) | [des-p2p-target-bft](#des-p2p-target-bft) | Propose/Prevote/Precommit仅verified >2/3 active stake cert生效；world/height/round/phase/roots/set和dedup签名绑定 | [testing-manual.md](../../testing-manual.md)；S9A full target场景：错误签名/阈值/集合/round、缺证/equivocation拒绝；锁定/解锁、timeout/new-round、transition、partition/heal/restart；prototype不能证明。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |

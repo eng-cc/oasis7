@@ -24,6 +24,7 @@ const COMPRESSED_RANGE_CACHE_ENTRY_MAX_BYTES: u64 = compressed_range_cache::ENTR
 mod challenge;
 mod challenge_scheduler;
 mod compressed_range_cache;
+pub mod controlled_authority;
 mod feedback;
 mod feedback_p2p;
 mod manifest;
