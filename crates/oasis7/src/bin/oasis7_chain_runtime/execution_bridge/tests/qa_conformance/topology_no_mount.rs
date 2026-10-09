@@ -301,7 +301,28 @@ fn no_mount_application_acceptance() {
             "command": {"mode": "register_session", "request": registration}
         }),
     );
-    let registration_ack = receive(&mut stream, "authoritative_recovery_ack");
+    let registration_deadline = Instant::now() + Duration::from_secs(15);
+    let registration_ack = loop {
+        assert!(
+            Instant::now() < registration_deadline,
+            "signed session registration acknowledgement missing"
+        );
+        let ack = receive(&mut stream, "authoritative_recovery_ack");
+        assert!(
+            Instant::now() < registration_deadline,
+            "session acknowledgement arrived after registration budget"
+        );
+        if ack["ack"]["status"] == "session_registered" {
+            break ack;
+        }
+        // Snapshot/subscribe metadata can already be queued ahead of the
+        // registration response. It never proves session registration.
+        assert_eq!(ack["ack"]["status"], "catch_up_ready");
+        assert_eq!(ack["ack"]["message"], "snapshot_sync_metadata");
+        assert!(ack["ack"]["player_id"].is_null());
+        assert!(ack["ack"]["agent_id"].is_null());
+        assert!(ack["ack"]["session_pubkey"].is_null());
+    };
     assert_eq!(registration_ack["ack"]["status"], "session_registered");
     assert_eq!(registration_ack["ack"]["player_id"], "owner-a");
     assert_eq!(registration_ack["ack"]["agent_id"], "agent-a");

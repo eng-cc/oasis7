@@ -270,6 +270,32 @@ pub(crate) fn verify_periodic_view_gate(client: &RemoteWorldServiceClient) {
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
         .unwrap_or_default();
     let mut gate_release = PeriodicGateRelease::new(&root);
+    // Session priming may legitimately advance beyond the earlier public View.
+    // Authenticate the exact full commit carried by the real signed periodic
+    // request independently; never replace this with a position-only check.
+    let requested_commit: CommitRef =
+        serde_json::from_value(gate_record["min_commit"].clone()).unwrap();
+    assert!(
+        requested_commit
+            .satisfies_minimum(&baseline.commit)
+            .unwrap(),
+        "periodic minimum cannot precede the independently verified setup View"
+    );
+    let pinned = client
+        .read_view(ReadWorldViewRequest {
+            contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+            world: client.config().expected_world.clone(),
+            scope_id: client.config().scope_id.clone(),
+            min_commit: None,
+            fixed_commit: Some(requested_commit.clone()),
+            deadline_unix_ms: None,
+        })
+        .unwrap();
+    assert_eq!(pinned.version().visibility_scope, "public");
+    assert_eq!(pinned.continuation().scope_id, "public");
+    assert_eq!(pinned.version().commit, requested_commit);
+    assert_eq!(pinned.continuation().commit, requested_commit);
+
     let gate_is_held = gate_started && !root.join("world-periodic-view-release").exists();
 
     let mut slow = Session::start(&shared, true);
@@ -315,12 +341,12 @@ pub(crate) fn verify_periodic_view_gate(client: &RemoteWorldServiceClient) {
     assert_eq!(gate_record["signature_verified"], true);
     assert_eq!(
         gate_record["min_commit"],
-        serde_json::to_value(&baseline.commit).unwrap(),
+        serde_json::to_value(&requested_commit).unwrap(),
         "periodic read must carry the complete fresh commit reference and binding"
     );
     assert_eq!(
         gate_record["min_commit_position"].as_u64(),
-        Some(baseline.commit.position)
+        Some(requested_commit.position)
     );
     assert_eq!(
         baseline.commit, baseline.continuation.commit,
