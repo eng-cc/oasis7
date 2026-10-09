@@ -15,6 +15,34 @@ JOBS = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)'
                        WORKFLOW.split('\njobs:\n', 1)[1], re.M | re.S))
 
 
+def validate_candidate_graph(workflow, config):
+    jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
+                           workflow.split('\njobs:\n', 1)[1], re.M | re.S))
+    gate = jobs['required-gate']
+    dependencies = re.search(r'    needs: \[(.*)\]', gate).group(1).split(', ')
+    expected = {'select', *(g.replace('_', '-') for g in config['groups'])}
+    if set(dependencies) != expected or len(dependencies) != len(expected):
+        raise ValueError('gate dependencies must exactly cover candidate groups')
+    if 'always()' not in gate or 'continue-on-error:' in workflow:
+        raise ValueError('failure propagation must remain intact')
+    fleet = jobs['fleet-health']
+    if ('os: [ubuntu-24.04, windows-2022, macos-15]' not in fleet
+            or 'runs-on: ${{ matrix.os }}' not in fleet
+            or 'fail-fast: false' not in fleet or 'include:' in fleet or 'exclude:' in fleet
+            or "if: runner.os != 'Windows'" not in fleet or '--host-smoke' not in fleet):
+        raise ValueError('fleet must run all three hosts and POSIX cleanup smoke')
+    for group in config['groups']:
+        job = jobs[group.replace('_', '-')]
+        if ("needs.select.result == 'success'" not in job
+                or "fromJSON(needs.select.outputs.plan).scope == 'full'" not in job):
+            raise ValueError('group requires successful select and full migration fallback')
+        if group != 'fleet_health' and 'strategy:' in job:
+            raise ValueError('ordinary groups must not have singleton matrices')
+        if 'ci-authority' in job:
+            raise ValueError('execution must use candidate checkout')
+    return True
+
+
 class Workflow(unittest.TestCase):
     def test_pinned_trunk_helper_failure_and_success_paths(self):
         # The protected baseline already executes this suite during migration.
@@ -29,7 +57,7 @@ class Workflow(unittest.TestCase):
             self.assertIn('npm ci --prefix crates/oasis7_viewer',JOBS[name])
         for name,job in JOBS.items():
             if 'shared-key: ordinary-required' in job:
-                self.assertIn('shared-key: ordinary-required-v2-${{ matrix.group }}',job)
+                self.assertIn(f'shared-key: ordinary-required-v2-{name.replace(chr(45), chr(95))}',job)
                 self.assertIn('add-rust-environment-hash-key: true',job)
                 self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM',job)
                 self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@v2'))
@@ -40,7 +68,7 @@ class Workflow(unittest.TestCase):
             self.assertNotIn('cargo install trunk',job)
             self.assertNotIn('restore-keys:',job)
             self.assertLess(job.index('Cache pinned Trunk release archive'),job.index('bash scripts/install-ci-trunk.sh'))
-            invocation='Execute selected cell' if name=='launcher-web' else 'Run full test tier'
+            invocation='Execute selected group' if name=='launcher-web' else 'Run full test tier'
             self.assertLess(job.index('bash scripts/install-ci-trunk.sh'),job.index(invocation))
 
     def test_gate_is_last_and_all_groups_are_dependencies(self):
@@ -52,9 +80,12 @@ class Workflow(unittest.TestCase):
         for group in CONFIG['groups']:
             job = JOBS[group.replace('_', '-')]
             self.assertIn('    needs: select\n', job)
-            self.assertIn(f"if: needs.select.outputs.run_{group} == 'true'", job)
-            self.assertIn(f'fromJSON(needs.select.outputs.matrix_{group})', job)
-            self.assertIn('fail-fast: false', job)
+            self.assertIn(f"needs.select.outputs.run_{group} == 'true'", job)
+            self.assertIn("needs.select.result == 'success'", job)
+            self.assertIn("fromJSON(needs.select.outputs.plan).scope == 'full'", job)
+            if group != 'fleet_health':
+                self.assertNotIn('strategy:', job)
+            self.assertNotIn('ci-authority', job)
         self.assertNotIn('needs: required-gate', WORKFLOW)
         self.assertNotIn('continue-on-error:', WORKFLOW)
         self.assertNotIn('paths-ignore:', WORKFLOW)
@@ -64,7 +95,8 @@ class Workflow(unittest.TestCase):
         self.assertIn('p2p-public-testnet-package-rollout.test.sh', JOBS['windows-rollout'])
         self.assertIn('testnet-packages-macos-arm64-contract.test.sh', JOBS['macos-package-contract'])
         self.assertIn('p2p-public-testnet-fleet-health.test.py', JOBS['fleet-health'])
-        self.assertIn('runs-on: windows-2022', JOBS['fleet-health'])
+        self.assertIn('os: [ubuntu-24.04, windows-2022, macos-15]', JOBS['fleet-health'])
+        self.assertIn('--host-smoke', JOBS['fleet-health'])
         self.assertEqual(WORKFLOW.count('run: bash ./scripts/testnet-packages-macos-arm64-contract.test.sh'), 1)
         self.assertIn('./scripts/ci-tests.sh full', JOBS['full-regression'])
         self.assertIn('package-newapi-bridge-service.sh', JOBS['newapi-bridge-package'])
@@ -81,7 +113,10 @@ class Workflow(unittest.TestCase):
         select = JOBS['select']
         self.assertIn('git show "${BASE_SHA}:scripts/${file}"', select)
         self.assertIn('--test-ref "$tested_sha"', select)
-        self.assertIn('migration baseline predates pure selector', select)
+        self.assertIn('for file in plan-rust-required-scope.py ci-required-scope.json ci-required-result.py;', select)
+        self.assertNotIn('cp scripts/', select)
+        self.assertEqual(WORKFLOW.count('name: ci-authority'), 2)
+        self.assertNotIn('matrix.group', WORKFLOW)
         self.assertEqual(WORKFLOW.count('uses: actions/checkout@v6'), WORKFLOW.count('persist-credentials: false'))
         self.assertNotIn('secrets.', WORKFLOW)
         self.assertNotIn('GH_TOKEN:', WORKFLOW)
@@ -122,6 +157,58 @@ run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
         self.assertNotIn('disabled_by_scope_planner', driver)
         self.assertNotIn('required_gate_execution_contract', driver)
         self.assertNotIn('scripts/pm/', driver)
+
+    def test_candidate_graph_rejects_missing_dependencies_platforms_and_failure_swallowing(self):
+        self.assertTrue(validate_candidate_graph(WORKFLOW, CONFIG))
+        mutations = [WORKFLOW.replace(', fleet-health]', ']'),
+                     WORKFLOW.replace('windows-2022, macos-15]', 'windows-2022]'),
+                     WORKFLOW.replace('    runs-on: ${{ matrix.os }}', '    runs-on: windows-2022'),
+                     WORKFLOW.replace('      fail-fast: false', '      continue-on-error: true'),
+                     WORKFLOW.replace(' --host-smoke', ''),
+                     WORKFLOW.replace('    if: always()', '    if: success()'),
+                     WORKFLOW.replace("fromJSON(needs.select.outputs.plan).scope == 'full'", 'false', 1)]
+        for workflow in mutations:
+            with self.subTest(workflow=workflow[-100:]), self.assertRaises(ValueError):
+                validate_candidate_graph(workflow, CONFIG)
+        new_config = dict(CONFIG, groups=[*CONFIG['groups'], 'new_group'])
+        with self.assertRaises(ValueError):
+            validate_candidate_graph(WORKFLOW, new_config)
+
+    def test_candidate_driver_executes_atomic_rename_and_new_failure(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scripts = root / 'scripts'
+            scripts.mkdir()
+            for filename in ('ci-tests.sh', 'find-python-with-module.sh', 'viewer-dependency-preflight.sh'):
+                (scripts / filename).write_bytes((ROOT / 'scripts' / filename).read_bytes())
+            driver = scripts / 'ci-tests.sh'
+            driver.write_text(driver.read_text().replace('validate-codex-agent-config.py', 'renamed-validator.py'))
+            command = ['bash', str(driver), 'required', '--group', 'codex_agent_config_validation', '--repo-root', str(root)]
+            entry = scripts / 'renamed-validator.py'
+            entry.write_text('print("candidate entry executed")\n')
+            passed = subprocess.run(command, text=True, capture_output=True)
+            self.assertEqual(passed.returncode, 0, passed.stderr)
+            self.assertIn('candidate entry executed', passed.stdout)
+            entry.write_text('raise SystemExit(42)\n')
+            failed = subprocess.run(command, text=True, capture_output=True)
+            self.assertEqual(failed.returncode, 42, failed.stderr)
+            self.assertFalse((scripts / 'validate-codex-agent-config.py').exists())
+
+    def test_concurrency_is_per_pr_and_per_non_pr_run(self):
+        self.assertIn("format('pr-{0}', github.event.pull_request.number)", WORKFLOW)
+        self.assertIn("format('run-{0}', github.run_id)", WORKFLOW)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", WORKFLOW)
+        concurrency = WORKFLOW.split('concurrency:', 1)[1].split('permissions:', 1)[0]
+        self.assertNotIn('github.sha', concurrency)
+        self.assertIn('github.workflow', concurrency)
+
+    def test_clippy_precedes_heavy_group_tests(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        for group, prefix in [('oasis7_required', 'required_tier'), ('consensus', 'consensus'),
+                              ('distfs', 'distfs'), ('node', 'node'), ('net', 'net')]:
+            case = re.search(r'^    ' + group + r'\).*?;;', driver, re.M).group()
+            self.assertLess(case.index('run_oasis7_' + prefix + '_clippy'),
+                            case.index('run_oasis7_' + prefix + '_tests'))
 
 
 if __name__ == '__main__':

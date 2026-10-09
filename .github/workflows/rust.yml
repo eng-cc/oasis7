@@ -22,6 +22,10 @@ on:
         type: choice
         options: [release, dev]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
@@ -44,53 +48,29 @@ jobs:
     outputs:
       plan: ${{ steps.select.outputs.plan }}
       run_baseline: ${{ steps.select.outputs.run_baseline }}
-      matrix_baseline: ${{ steps.select.outputs.matrix_baseline }}
       run_rust_baseline: ${{ steps.select.outputs.run_rust_baseline }}
-      matrix_rust_baseline: ${{ steps.select.outputs.matrix_rust_baseline }}
       run_oasis7_required: ${{ steps.select.outputs.run_oasis7_required }}
-      matrix_oasis7_required: ${{ steps.select.outputs.matrix_oasis7_required }}
       run_consensus: ${{ steps.select.outputs.run_consensus }}
-      matrix_consensus: ${{ steps.select.outputs.matrix_consensus }}
       run_distfs: ${{ steps.select.outputs.run_distfs }}
-      matrix_distfs: ${{ steps.select.outputs.matrix_distfs }}
       run_node: ${{ steps.select.outputs.run_node }}
-      matrix_node: ${{ steps.select.outputs.matrix_node }}
       run_net: ${{ steps.select.outputs.run_net }}
-      matrix_net: ${{ steps.select.outputs.matrix_net }}
       run_viewer_js_required: ${{ steps.select.outputs.run_viewer_js_required }}
-      matrix_viewer_js_required: ${{ steps.select.outputs.matrix_viewer_js_required }}
       run_viewer_performance_report: ${{ steps.select.outputs.run_viewer_performance_report }}
-      matrix_viewer_performance_report: ${{ steps.select.outputs.matrix_viewer_performance_report }}
       run_pixel_world_bridge: ${{ steps.select.outputs.run_pixel_world_bridge }}
-      matrix_pixel_world_bridge: ${{ steps.select.outputs.matrix_pixel_world_bridge }}
       run_launcher_web: ${{ steps.select.outputs.run_launcher_web }}
-      matrix_launcher_web: ${{ steps.select.outputs.matrix_launcher_web }}
       run_workspace_support: ${{ steps.select.outputs.run_workspace_support }}
-      matrix_workspace_support: ${{ steps.select.outputs.matrix_workspace_support }}
       run_scenario_regression: ${{ steps.select.outputs.run_scenario_regression }}
-      matrix_scenario_regression: ${{ steps.select.outputs.matrix_scenario_regression }}
       run_operational_contracts: ${{ steps.select.outputs.run_operational_contracts }}
-      matrix_operational_contracts: ${{ steps.select.outputs.matrix_operational_contracts }}
       run_packaging_contracts: ${{ steps.select.outputs.run_packaging_contracts }}
-      matrix_packaging_contracts: ${{ steps.select.outputs.matrix_packaging_contracts }}
       run_workflow_governance: ${{ steps.select.outputs.run_workflow_governance }}
-      matrix_workflow_governance: ${{ steps.select.outputs.matrix_workflow_governance }}
       run_codex_agent_config_validation: ${{ steps.select.outputs.run_codex_agent_config_validation }}
-      matrix_codex_agent_config_validation: ${{ steps.select.outputs.matrix_codex_agent_config_validation }}
       run_compile_metrics: ${{ steps.select.outputs.run_compile_metrics }}
-      matrix_compile_metrics: ${{ steps.select.outputs.matrix_compile_metrics }}
       run_site_quality: ${{ steps.select.outputs.run_site_quality }}
-      matrix_site_quality: ${{ steps.select.outputs.matrix_site_quality }}
       run_doc_checker_contracts: ${{ steps.select.outputs.run_doc_checker_contracts }}
-      matrix_doc_checker_contracts: ${{ steps.select.outputs.matrix_doc_checker_contracts }}
       run_cargo_tooling_contracts: ${{ steps.select.outputs.run_cargo_tooling_contracts }}
-      matrix_cargo_tooling_contracts: ${{ steps.select.outputs.matrix_cargo_tooling_contracts }}
       run_windows_rollout: ${{ steps.select.outputs.run_windows_rollout }}
-      matrix_windows_rollout: ${{ steps.select.outputs.matrix_windows_rollout }}
       run_macos_package_contract: ${{ steps.select.outputs.run_macos_package_contract }}
-      matrix_macos_package_contract: ${{ steps.select.outputs.matrix_macos_package_contract }}
       run_fleet_health: ${{ steps.select.outputs.run_fleet_health }}
-      matrix_fleet_health: ${{ steps.select.outputs.matrix_fleet_health }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -112,31 +92,10 @@ jobs:
           tested_sha="$(git rev-parse HEAD)"
           authority="$RUNNER_TEMP/ci-authority"
           mkdir -p "$authority"
-          if git cat-file -e "${BASE_SHA}:scripts/ci-required-scope.json" 2>/dev/null; then
-            for file in plan-rust-required-scope.py ci-required-scope.json ci-tests.sh ci-required-result.py viewer-dependency-preflight.sh find-python-with-module.sh; do
-              git show "${BASE_SHA}:scripts/${file}" >"${authority}/${file}"
-            done
-            python3 "$authority/plan-rust-required-scope.py"               --base-ref "$BASE_SHA" --head-ref "$SOURCE_SHA" --test-ref "$tested_sha"               --github-output "$GITHUB_OUTPUT" --output "$RUNNER_TEMP/selection.json"
-          else
-            # One conservative bootstrap for a baseline predating this interface.
-            # The first migration PR is independently reviewed and runs all ordinary groups.
-            git cat-file -e "${BASE_SHA}:scripts/ci-required-scope.v2.json"
-            cp scripts/ci-tests.sh scripts/ci-required-result.py scripts/viewer-dependency-preflight.sh scripts/find-python-with-module.sh "$authority/"
-            python3 - "$GITHUB_OUTPUT" "$RUNNER_TEMP/selection.json" "$authority/ci-required-scope.json" <<'PYTHON'
-          import json, pathlib, sys
-          groups = ['baseline', 'rust_baseline', 'oasis7_required', 'consensus', 'distfs', 'node', 'net', 'viewer_js_required', 'viewer_performance_report', 'pixel_world_bridge', 'launcher_web', 'workspace_support', 'scenario_regression', 'operational_contracts', 'packaging_contracts', 'workflow_governance', 'codex_agent_config_validation', 'compile_metrics', 'site_quality', 'doc_checker_contracts', 'cargo_tooling_contracts', 'windows_rollout', 'macos_package_contract', 'fleet_health']
-          plan = {"groups": groups, "matrices": {g: {"include": [{"group": g}]} for g in groups},
-                  "resources": ["python", "markdown", "rust_toolchain", "node", "system_deps", "wasm_target", "trunk"], "scope": "full", "reasons": ["migration baseline predates pure selector; all ordinary groups required"]}
-          encoded = json.dumps(plan, separators=(",", ":"))
-          pathlib.Path(sys.argv[2]).write_text(encoded)
-          pathlib.Path(sys.argv[3]).write_text(json.dumps({"groups": groups}))
-          with open(sys.argv[1], "a") as output:
-              output.write("plan=" + encoded + "\n")
-              for group in groups:
-                  output.write("run_" + group + "=true\n")
-                  output.write("matrix_" + group + "=" + json.dumps(plan["matrices"][group], separators=(",", ":")) + "\n")
-          PYTHON
-          fi
+          for file in plan-rust-required-scope.py ci-required-scope.json ci-required-result.py; do
+            git show "${BASE_SHA}:scripts/${file}" >"${authority}/${file}"
+          done
+          python3 "$authority/plan-rust-required-scope.py" --base-ref "$BASE_SHA" --head-ref "$SOURCE_SHA" --test-ref "$tested_sha" --github-output "$GITHUB_OUTPUT" --output "$RUNNER_TEMP/selection.json"
           printf 'Base: %s\nSource HEAD: %s\nTested merge: %s\n' "$BASE_SHA" "$SOURCE_SHA" "$tested_sha" >>"$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/selection.json" >>"$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
@@ -148,49 +107,41 @@ jobs:
 
   baseline:
     needs: select
-    if: needs.select.outputs.run_baseline == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_baseline == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_baseline) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Install Markdown runtime
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "baseline" --repo-root "$GITHUB_WORKSPACE"
 
   rust-baseline:
     needs: select
-    if: needs.select.outputs.run_rust_baseline == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_rust_baseline == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_rust_baseline) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -204,7 +155,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-rust_baseline
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -215,30 +166,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "rust_baseline" --repo-root "$GITHUB_WORKSPACE"
 
   oasis7-required:
     needs: select
-    if: needs.select.outputs.run_oasis7_required == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_oasis7_required == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_oasis7_required) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -252,7 +199,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-oasis7_required
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -260,30 +207,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "oasis7_required" --repo-root "$GITHUB_WORKSPACE"
 
   consensus:
     needs: select
-    if: needs.select.outputs.run_consensus == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_consensus == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_consensus) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -297,34 +240,30 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-consensus
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "consensus" --repo-root "$GITHUB_WORKSPACE"
 
   distfs:
     needs: select
-    if: needs.select.outputs.run_distfs == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_distfs == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_distfs) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -338,34 +277,30 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-distfs
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "distfs" --repo-root "$GITHUB_WORKSPACE"
 
   node:
     needs: select
-    if: needs.select.outputs.run_node == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_node == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_node) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -379,34 +314,30 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-node
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "node" --repo-root "$GITHUB_WORKSPACE"
 
   net:
     needs: select
-    if: needs.select.outputs.run_net == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_net == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_net) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -420,34 +351,30 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-net
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "net" --repo-root "$GITHUB_WORKSPACE"
 
   viewer-js-required:
     needs: select
-    if: needs.select.outputs.run_viewer_js_required == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_viewer_js_required == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_viewer_js_required) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -468,7 +395,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-viewer_js_required
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -476,30 +403,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "viewer_js_required" --repo-root "$GITHUB_WORKSPACE"
 
   viewer-performance-report:
     needs: select
-    if: needs.select.outputs.run_viewer_performance_report == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_viewer_performance_report == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_viewer_performance_report) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -520,7 +443,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-viewer_performance_report
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -528,13 +451,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "viewer_performance_report" --repo-root "$GITHUB_WORKSPACE"
       - name: Upload Viewer performance evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -546,20 +469,16 @@ jobs:
 
   pixel-world-bridge:
     needs: select
-    if: needs.select.outputs.run_pixel_world_bridge == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_pixel_world_bridge == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_pixel_world_bridge) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -573,7 +492,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-pixel_world_bridge
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -581,30 +500,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "pixel_world_bridge" --repo-root "$GITHUB_WORKSPACE"
 
   launcher-web:
     needs: select
-    if: needs.select.outputs.run_launcher_web == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_launcher_web == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_launcher_web) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -625,7 +540,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-launcher_web
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -641,30 +556,26 @@ jobs:
       - name: Install verified pinned Trunk
         shell: bash
         run: bash scripts/install-ci-trunk.sh "$RUNNER_TEMP/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz" "$RUNNER_TEMP/ci-tools/bin"
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "launcher_web" --repo-root "$GITHUB_WORKSPACE"
 
   workspace-support:
     needs: select
-    if: needs.select.outputs.run_workspace_support == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_workspace_support == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_workspace_support) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -678,7 +589,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-workspace_support
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -686,30 +597,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "workspace_support" --repo-root "$GITHUB_WORKSPACE"
 
   scenario-regression:
     needs: select
-    if: needs.select.outputs.run_scenario_regression == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_scenario_regression == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_scenario_regression) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -723,7 +630,7 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-scenario_regression
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
@@ -731,221 +638,189 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "scenario_regression" --repo-root "$GITHUB_WORKSPACE"
 
   operational-contracts:
     needs: select
-    if: needs.select.outputs.run_operational_contracts == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_operational_contracts == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_operational_contracts) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "operational_contracts" --repo-root "$GITHUB_WORKSPACE"
 
   packaging-contracts:
     needs: select
-    if: needs.select.outputs.run_packaging_contracts == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_packaging_contracts == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_packaging_contracts) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "packaging_contracts" --repo-root "$GITHUB_WORKSPACE"
 
   workflow-governance:
     needs: select
-    if: needs.select.outputs.run_workflow_governance == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_workflow_governance == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_workflow_governance) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "workflow_governance" --repo-root "$GITHUB_WORKSPACE"
 
   codex-agent-config-validation:
     needs: select
-    if: needs.select.outputs.run_codex_agent_config_validation == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_codex_agent_config_validation == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_codex_agent_config_validation) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "codex_agent_config_validation" --repo-root "$GITHUB_WORKSPACE"
 
   compile-metrics:
     needs: select
-    if: needs.select.outputs.run_compile_metrics == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_compile_metrics == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_compile_metrics) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "compile_metrics" --repo-root "$GITHUB_WORKSPACE"
 
   site-quality:
     needs: select
-    if: needs.select.outputs.run_site_quality == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_site_quality == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_site_quality) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "site_quality" --repo-root "$GITHUB_WORKSPACE"
 
   doc-checker-contracts:
     needs: select
-    if: needs.select.outputs.run_doc_checker_contracts == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_doc_checker_contracts == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_doc_checker_contracts) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Install Markdown runtime
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "doc_checker_contracts" --repo-root "$GITHUB_WORKSPACE"
 
   cargo-tooling-contracts:
     needs: select
-    if: needs.select.outputs.run_cargo_tooling_contracts == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_cargo_tooling_contracts == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_cargo_tooling_contracts) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -959,38 +834,34 @@ jobs:
           rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ordinary-required-v2-${{ matrix.group }}
+          shared-key: ordinary-required-v2-cargo_tooling_contracts
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+        run: bash ./scripts/ci-tests.sh required --group "cargo_tooling_contracts" --repo-root "$GITHUB_WORKSPACE"
 
   windows-rollout:
     needs: select
-    if: needs.select.outputs.run_windows_rollout == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_windows_rollout == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: windows-2022
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_windows_rollout) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         env:
           OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST: "1"
@@ -998,49 +869,55 @@ jobs:
 
   macos-package-contract:
     needs: select
-    if: needs.select.outputs.run_macos_package_contract == 'true'
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_macos_package_contract == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_macos_package_contract) }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         run: bash ./scripts/testnet-packages-macos-arm64-contract.test.sh
 
   fleet-health:
     needs: select
-    if: needs.select.outputs.run_fleet_health == 'true'
-    runs-on: windows-2022
+    if: >-
+      needs.select.result == 'success' &&
+      (needs.select.outputs.run_fleet_health == 'true' ||
+       fromJSON(needs.select.outputs.plan).scope == 'full')
+    name: fleet-health (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.select.outputs.matrix_fleet_health) }}
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: ci-authority
-          path: ${{ runner.temp }}/ci-authority
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Execute selected cell
+      - name: Execute selected group
         shell: bash
         run: python scripts/p2p-public-testnet-fleet-health.test.py
+
+      - name: Ensure Linux process inspection dependency
+        if: runner.os == 'Linux'
+        shell: bash
+        run: command -v lsof || (sudo apt-get update && sudo apt-get install -y lsof)
+      - name: Verify cleanup on native host
+        if: runner.os != 'Windows'
+        shell: bash
+        run: python3 ./scripts/resource-cleanup-executor.test.py --host-smoke
 
   required-gate:
     name: required-gate
