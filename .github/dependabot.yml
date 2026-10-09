@@ -6,7 +6,8 @@ updates:
   - package-ecosystem: cargo
     directories:
       - "/"
-      - "/crates/oasis7_builtin_wasm_modules/*"
+      - "/crates/oasis7_builtin_wasm_modules/m*"
+      - "/crates/oasis7_builtin_wasm_modules/local_test_provider"
       - "/tools/scenario_test_runner"
     schedule:
       interval: weekly
