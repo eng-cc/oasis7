@@ -13,31 +13,176 @@ pub(in super::super) fn economy(fixture: &Fixture) -> serde_json::Value {
 }
 pub(in super::super) fn assert_initial_economic_requests(fixture: &Fixture, ack_count: usize) {
     let mut counts = [0usize; 5];
+    let mut originals: [Option<SubmitIntentRequest<WorldServicePayloadV1>>; 5] =
+        std::array::from_fn(|_| None);
     for entry in fixture.world_gate.feedback_ack_trace() {
         if entry["operation"] != "submit" {
             continue;
         }
         let request: SubmitIntentRequest<WorldServicePayloadV1> =
             serde_json::from_value(entry["request"].clone()).unwrap();
-        match request.signed_payload {
-            WorldServicePayloadV1::Cognition(_) => counts[2] += 1,
-            WorldServicePayloadV1::FeedbackAck(_) => counts[4] += 1,
-            WorldServicePayloadV1::Scheduler(signed) => match signed.request.operation {
-                SchedulerOperationV1::ReserveLease(_) => counts[0] += 1,
-                SchedulerOperationV1::ProviderPrefix { .. } => counts[1] += 1,
-                SchedulerOperationV1::SettleLease { .. } => counts[3] += 1,
+        let index = match &request.signed_payload {
+            WorldServicePayloadV1::Cognition(_) => 2,
+            WorldServicePayloadV1::FeedbackAck(_) => 4,
+            WorldServicePayloadV1::Scheduler(signed) => match &signed.request.operation {
+                SchedulerOperationV1::ReserveLease(_) => 0,
+                SchedulerOperationV1::ProviderPrefix { .. } => 1,
+                SchedulerOperationV1::SettleLease { .. } => 3,
                 _ => panic!("unexpected fresh economic operation during ACK recovery"),
             },
-            WorldServicePayloadV1::Delegation(_) => {}
+            WorldServicePayloadV1::Delegation(_) => continue,
             _ => panic!("unexpected new gameplay during ACK recovery"),
+        };
+        assert_eq!(
+            derive_correlation(
+                request.correlation.key.world.clone(),
+                &request.signed_payload
+            )
+            .unwrap(),
+            request.correlation
+        );
+        counts[index] += 1;
+        if let Some(original) = &originals[index] {
+            assert_eq!(request.correlation, original.correlation);
+            assert_eq!(
+                request.signed_payload, original.signed_payload,
+                "Unknown retries must preserve the complete original signed payload"
+            );
+        } else {
+            originals[index] = Some(request);
         }
     }
+    println!("actual raw Reserve/Prefix/Act/Settle/ACK Submit counts: {counts:?}");
     assert_eq!(
-        counts,
-        [1, 1, 1, 1, ack_count],
-        "actual typed Submit trace must contain only original Reserve/Prefix/Act/Settle and ACK"
+        originals.map(|request| usize::from(request.is_some())),
+        [1, 1, 1, 1, ack_count]
     );
+    // Count canonical effects independently of transport retries.
+    let world = fixture.driver.lock().unwrap().execution_world.clone();
+    let economy = world.cognition_economy().unwrap();
+    economy.validate().unwrap();
+    let originals: Vec<_> = fixture
+        .world_gate
+        .feedback_ack_trace()
+        .iter()
+        .filter(|entry| entry["operation"] == "submit")
+        .map(|entry| {
+            serde_json::from_value::<SubmitIntentRequest<WorldServicePayloadV1>>(
+                entry["request"].clone(),
+            )
+            .unwrap()
+        })
+        .collect();
+    for request in &originals {
+        let matches: Vec<_> = world
+            .capability_revocation_state()
+            .world_service_results
+            .values()
+            .map(|value| {
+                serde_json::from_value::<wire::CanonicalIntentResultV1>(value.clone()).unwrap()
+            })
+            .filter(|result| result.request.correlation == request.correlation)
+            .collect();
+        assert_eq!(
+            matches.len(),
+            1,
+            "one actual canonical result per original key"
+        );
+        assert_eq!(matches[0].request.signed_payload, request.signed_payload);
+        assert!(matches[0].rejected.is_none());
+        match &request.signed_payload {
+            WorldServicePayloadV1::Scheduler(signed) => match &signed.request.operation {
+                SchedulerOperationV1::ReserveLease(reserve) => {
+                    let expected = serde_json::to_value(reserve).unwrap();
+                    let leases: Vec<_> = economy
+                        .leases
+                        .values()
+                        .filter(|lease| {
+                            let actual = serde_json::to_value(lease).unwrap();
+                            [
+                                "agent_id",
+                                "agent_session_id",
+                                "agent_turn_id",
+                                "decision_request_id",
+                                "request_digest",
+                                "idempotency_key",
+                                "account_id",
+                                "quote",
+                            ]
+                            .iter()
+                            .all(|field| actual[*field] == expected[*field])
+                        })
+                        .collect();
+                    assert_eq!(leases.len(), 1);
+                    for kind in ["reserve", "settle"] {
+                        assert_eq!(
+                            economy
+                                .journal
+                                .iter()
+                                .filter(|event| event.lease_id == leases[0].lease_id
+                                    && event.event_kind == kind)
+                                .count(),
+                            1
+                        );
+                    }
+                }
+                SchedulerOperationV1::ProviderPrefix { request, .. } => {
+                    assert_native_events_once(
+                        &world,
+                        &serde_json::json!({
+                            "agent_id": request.agent_subject,
+                            "agent_session_id": request.agent_session_id,
+                            "agent_turn_id": request.agent_turn_id,
+                            "decision_request_id": request.decision_request_id,
+                            "request_digest": request.request_digest,
+                        }),
+                        &["TurnStarted", "ContextCaptured", "RequestDispatched"],
+                    );
+                }
+                SchedulerOperationV1::SettleLease {
+                    lease_id,
+                    consumed_amount,
+                } => {
+                    assert_eq!(economy.leases[lease_id].settled_amount, *consumed_amount);
+                }
+                _ => {}
+            },
+            WorldServicePayloadV1::Cognition(signed) => {
+                assert_native_events_once(
+                    &world,
+                    &serde_json::to_value(&signed.request.request).unwrap(),
+                    &["WorldReceiptLinked", "CognitionTurnCompleted"],
+                );
+            }
+            _ => {}
+        }
+    }
 }
+fn assert_native_events_once(world: &RuntimeWorld, identity: &serde_json::Value, kinds: &[&str]) {
+    let events = world.cognition()["cognition_journal"]["events"]
+        .as_array()
+        .unwrap();
+    for kind in kinds {
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event["event_kind"] == *kind
+                    && [
+                        "agent_id",
+                        "agent_session_id",
+                        "agent_turn_id",
+                        "decision_request_id",
+                        "request_digest"
+                    ]
+                    .iter()
+                    .all(|field| event[*field] == identity[*field]))
+                .count(),
+            1,
+            "canonical native {kind} effect must occur exactly once for the complete original identity"
+        );
+    }
+}
+
 pub(in super::super) fn assert_recovery_delta(
     fixture: &Fixture,
     baseline: &[serde_json::Value],

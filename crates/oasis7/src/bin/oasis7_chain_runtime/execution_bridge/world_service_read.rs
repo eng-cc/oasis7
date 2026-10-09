@@ -7,7 +7,7 @@ use std::path::Path;
 
 pub(crate) struct PinnedWorld {
     pub world: World,
-    pub record: ExecutionBridgeRecord,
+    pub(super) record: ExecutionBridgeRecord,
     pub commit: CommitRef,
 }
 
@@ -53,10 +53,10 @@ fn load(
     height: Option<u64>,
     fixed: Option<&CommitRef>,
 ) -> Result<PinnedWorld, String> {
-    if let Some(commit) = fixed {
-        if &commit.world != identity {
-            return Err("fixed commit world mismatch".into());
-        }
+    if let Some(commit) = fixed
+        && &commit.world != identity
+    {
+        return Err("fixed commit world mismatch".into());
     }
     let record = if let Some(height) = height {
         checkpoint::load_execution_bridge_record(&checkpoint::execution_bridge_record_path(
@@ -69,7 +69,7 @@ fn load(
     if record.world_id != identity.world_id || record.height == 0 {
         return Err("record world or height invalid".into());
     }
-    let store = LocalCasStore::new(storage.to_path_buf());
+    let store = LocalCasStore::new(storage);
     let snapshot_ref = record
         .snapshot_ref
         .as_deref()

@@ -99,8 +99,44 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
     let deadline = Instant::now() + Duration::from_secs(12);
     let mut summary = serde_json::Value::Null;
     let mut completed = false;
+    let readout_stop = Arc::new(AtomicBool::new(false));
+    let stop = readout_stop.clone();
+    let readout_server = shared.clone();
+    let (readout_tx, readout_rx) = std::sync::mpsc::sync_channel(1);
+    let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+    let readout = thread::spawn(move || {
+        while !stop.load(Ordering::SeqCst) && Instant::now() < deadline {
+            // Queue a real live read instead of racing the serving/pump mutex
+            // once after each socket timeout. No provider or factory is called.
+            let actual = {
+                let guard = readout_server.lock().unwrap();
+                guard.test_canonical_provider_summary()
+            };
+            let captured_at = Instant::now();
+            if captured_at < deadline && !stop.load(Ordering::SeqCst) {
+                let _ = readout_tx.try_send((captured_at, actual));
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        finished_tx.send(()).unwrap();
+    });
+    let mut sample_count = 0;
+    let mut snapshot_frames = 0;
+    let mut next_snapshot = Instant::now();
     while Instant::now() < deadline {
-        session.snapshot(Duration::from_millis(25));
+        if Instant::now() >= next_snapshot {
+            session
+                .send(serde_json::json!({"type":"request_snapshot"}))
+                .unwrap();
+            next_snapshot = Instant::now() + Duration::from_millis(250);
+        }
+        snapshot_frames += usize::from(
+            session.snapshot(
+                deadline
+                    .saturating_duration_since(Instant::now())
+                    .min(Duration::from_millis(25)),
+            ),
+        );
         if crash && root.join("wait-capture-failed").exists() {
             let bytes = fs::read(root.join("wait-capture-checkpoint-backup.json")).unwrap();
             let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -115,8 +151,16 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
             std::io::stdout().flush().unwrap();
             std::process::exit(73);
         }
-        if let Ok(guard) = shared.try_lock() {
-            summary = guard.test_canonical_provider_summary();
+        if let Ok((captured_at, actual)) = readout_rx.recv_timeout(
+            deadline
+                .saturating_duration_since(Instant::now())
+                .min(Duration::from_millis(25)),
+        ) {
+            if captured_at >= deadline || Instant::now() >= deadline {
+                continue;
+            }
+            sample_count += 1;
+            summary = actual;
             if let Ok(bytes) = fs::read(root.join("hosted-resumed-model.json")) {
                 let resumed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
                 completed = summary["terminal_states"]["agent-a"]["status"] == "committed"
@@ -131,6 +175,18 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
             }
         }
     }
+    readout_stop.store(true, Ordering::SeqCst);
+    // Completion is fixed before shutdown. A later cleanup/readback must not
+    // turn a missed pre-deadline predicate into a successful acceptance.
+    fs::write(
+        root.join("wait-capture-live-readout.json"),
+        serde_json::to_vec(
+            &serde_json::json!({"sample_count":sample_count,"snapshot_frames":snapshot_frames,
+            "completed_before_deadline":completed,"last_summary":summary}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
     let stage = fs::read(root.join(STORE))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
@@ -148,8 +204,14 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
     )
     .unwrap();
     let joined = session.close();
+    let readout_finished = finished_rx.recv_timeout(Duration::from_secs(2)).is_ok();
+    assert!(
+        readout_finished,
+        "actual live readout worker must finish within cleanup budget"
+    );
+    readout.join().unwrap();
     println!(
-        "hosted_wait_capture_recreated_process warmed={warmed} ordered={ordered} eligible={} native_runner_present={} retained_stage={stage:?} completed={completed} drained={drained} worker={joined:?} factory_calls=0 direct_poll_calls=0",
+        "hosted_wait_capture_recreated_process warmed={warmed} ordered={ordered} eligible={} native_runner_present={} retained_stage={stage:?} completed={completed} samples={sample_count} snapshot_frames={snapshot_frames} readout_joined={readout_finished} drained={drained} worker={joined:?} factory_calls=0 direct_poll_calls=0",
         eligibility["eligible"], summary["native_runner_present"]
     );
     assert!(
@@ -227,6 +289,7 @@ fn secure_artifact(
         );
     }
     for name in [
+        "wait-capture-live-readout.json",
         "wait-capture-before.json",
         "wait-capture-staged.json",
         "wait-capture-after.json",

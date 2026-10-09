@@ -170,7 +170,8 @@ impl RuntimeLlmSidecar {
                     .get(agent)
                     .cloned()
                     .unwrap();
-                let validation = (|| {
+
+                (|| {
                     if serde_json::to_value(&restored).map_err(|e| e.to_string())?
                         != serde_json::to_value(pending).map_err(|e| e.to_string())?
                     {
@@ -218,8 +219,7 @@ impl RuntimeLlmSidecar {
                     #[cfg(any(test, feature = "test_tier_required"))]
                     self.feedback_ack_persist_probe(&previous_memory, &previous_pending)?;
                     self.persist_provider_lineage()
-                })();
-                validation
+                })()
             }
             Some(runner) => runner
                 .with_committed_feedback_memory_transaction(
@@ -268,11 +268,11 @@ impl RuntimeLlmSidecar {
             None => Err("feedback consumption native runner missing".into()),
         };
         self.runner = Some(decision_runner);
-        if result.is_err() {
+        if let Err(_error) = &result {
             self.provider_memory_store = previous_memory;
             self.provider_service_pending = previous_pending;
             #[cfg(any(test, feature = "test_tier_required"))]
-            self.feedback_ack_rollback_probe(result.as_ref().unwrap_err())?;
+            self.feedback_ack_rollback_probe(_error)?;
         }
         result
     }

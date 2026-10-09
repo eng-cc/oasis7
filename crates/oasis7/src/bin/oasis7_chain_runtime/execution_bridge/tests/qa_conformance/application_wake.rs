@@ -20,13 +20,13 @@ pub(super) struct ParentClock {
 impl Drop for ParentClock {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
-        if let Some(worker) = self.worker.take() {
-            if worker.join().is_err() {
-                if thread::panicking() {
-                    eprintln!("parent genuine clock worker failed during child failure");
-                } else {
-                    panic!("parent genuine clock worker failed");
-                }
+        if let Some(worker) = self.worker.take()
+            && worker.join().is_err()
+        {
+            if thread::panicking() {
+                eprintln!("parent genuine clock worker failed during child failure");
+            } else {
+                panic!("parent genuine clock worker failed");
             }
         }
     }
@@ -315,19 +315,40 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
             signed_payload: payload,
         };
         client.submit(request.clone()).unwrap();
-        assert!(matches!(
-            client
+        let commit_deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            assert!(
+                Instant::now() < commit_deadline,
+                "original resource mutation exhausted its bounded budget"
+            );
+            let outcome = client
                 .lookup(
                     LookupIntentRequest {
                         contract_version: 1,
-                        key: request.correlation.key.clone()
+                        key: request.correlation.key.clone(),
                     },
-                    request.signed_payload
+                    request.signed_payload.clone(),
                 )
                 .unwrap()
-                .outcome,
-            IntentOutcome::Committed { .. }
-        ));
+                .outcome;
+            assert!(
+                Instant::now() < commit_deadline,
+                "original resource mutation response arrived after its bounded budget"
+            );
+            match outcome {
+                IntentOutcome::Committed { .. } => break,
+                IntentOutcome::Unknown
+                | IntentOutcome::Pending
+                | IntentOutcome::Received { .. } => {
+                    assert!(
+                        Instant::now() < commit_deadline,
+                        "original resource mutation did not commit within its bounded budget"
+                    );
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                other => panic!("original authenticated resource mutation failed: {other:?}"),
+            }
+        }
         if !view(&client).projection().scheduler_wakes.is_empty() {
             break;
         }

@@ -534,11 +534,10 @@ impl RuntimeLlmSidecar {
             resume.observation.clone(),
             resume.metadata_identity.clone(),
         )
-        .or_else(|error| {
+        .inspect_err(|_| {
             self.provider_continuation_proposals = proposals_backup.clone();
             self.pending_runtime_wakes = wakes_backup.clone();
             self.hosted_admission = admission_backup.clone();
-            Err(error)
         })?;
         self.hosted_resume = None;
         self.hosted_restored_resume = None;
@@ -690,11 +689,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             ),
         };
         self.llm_sidecar.hosted_service_inflight = Some(token.clone());
-        Ok(AgentServiceProgress::NeedsIo(AgentServiceIoJob {
+        Ok(AgentServiceProgress::NeedsIo(Box::new(AgentServiceIoJob {
             token,
             client: Some(client),
             operation,
-        }))
+        })))
     }
     pub(in crate::viewer::runtime_live) fn apply_hosted_resume_io(
         &mut self,
@@ -746,7 +745,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             {
                 return Err("hosted Resume view precedes receipt".into());
             };
-            self.apply_hosted_verified_view(view)?;
+            self.apply_hosted_verified_view(*view)?;
             resume.stage = "reconcile".into();
             resume.commit = None;
         } else {

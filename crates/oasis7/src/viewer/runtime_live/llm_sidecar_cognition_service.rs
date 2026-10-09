@@ -1,48 +1,5 @@
 use super::*;
 
-#[cfg(test)]
-mod service_wait_checkpoint_tests {
-    use super::*;
-
-    #[test]
-    fn admitted_wait_is_retained_when_cleanup_checkpoint_fails() {
-        let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
-        let decision = async_support::RuntimeLlmDecision {
-            agent_id: "agent-a".into(),
-            decision: AgentDecision::WaitTicks(2),
-            decision_trace: None,
-            cognition: None,
-            memory_write_intents: vec![],
-            continuation_admitted: true,
-        };
-        sidecar
-            .provider_held_decisions
-            .insert("agent-a".into(), decision);
-        let directory = std::env::temp_dir().join(format!(
-            "oasis7-wait-checkpoint-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir(&directory).expect("checkpoint test directory");
-        let blocker = directory.join("file-blocker");
-        std::fs::write(&blocker, b"blocker").expect("checkpoint path blocker");
-        sidecar.provider_lineage_store = Some(blocker.join("checkpoint.json"));
-        assert!(sidecar.finish_admitted_service_wait("agent-a").is_err());
-        assert!(sidecar.pending_admitted_service_wait().is_some());
-        assert!(matches!(
-            sidecar.provider_held_decisions["agent-a"].decision,
-            AgentDecision::WaitTicks(2)
-        ));
-        sidecar.provider_lineage_store = None;
-        sidecar.finish_admitted_service_wait("agent-a").unwrap();
-        assert!(sidecar.pending_admitted_service_wait().is_none());
-        std::fs::remove_dir_all(directory).expect("checkpoint test cleanup");
-    }
-}
-
 pub(super) fn runtime_continuation_for_wake_with_identity(
     world: &RuntimeWorld,
     projection: Option<&crate::world_service::projection::WorldServiceProjection>,
@@ -870,5 +827,48 @@ impl RuntimeLlmSidecar {
         )?;
         self.pending_runtime_wakes.remove(&wake.wake_id);
         self.persist_provider_lineage()
+    }
+}
+
+#[cfg(test)]
+mod service_wait_checkpoint_tests {
+    use super::*;
+
+    #[test]
+    fn admitted_wait_is_retained_when_cleanup_checkpoint_fails() {
+        let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+        let decision = async_support::RuntimeLlmDecision {
+            agent_id: "agent-a".into(),
+            decision: AgentDecision::WaitTicks(2),
+            decision_trace: None,
+            cognition: None,
+            memory_write_intents: vec![],
+            continuation_admitted: true,
+        };
+        sidecar
+            .provider_held_decisions
+            .insert("agent-a".into(), decision);
+        let directory = std::env::temp_dir().join(format!(
+            "oasis7-wait-checkpoint-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).expect("checkpoint test directory");
+        let blocker = directory.join("file-blocker");
+        std::fs::write(&blocker, b"blocker").expect("checkpoint path blocker");
+        sidecar.provider_lineage_store = Some(blocker.join("checkpoint.json"));
+        assert!(sidecar.finish_admitted_service_wait("agent-a").is_err());
+        assert!(sidecar.pending_admitted_service_wait().is_some());
+        assert!(matches!(
+            sidecar.provider_held_decisions["agent-a"].decision,
+            AgentDecision::WaitTicks(2)
+        ));
+        sidecar.provider_lineage_store = None;
+        sidecar.finish_admitted_service_wait("agent-a").unwrap();
+        assert!(sidecar.pending_admitted_service_wait().is_none());
+        std::fs::remove_dir_all(directory).expect("checkpoint test cleanup");
     }
 }

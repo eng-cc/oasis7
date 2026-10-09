@@ -118,6 +118,10 @@ impl ViewerRuntimeLiveServer {
             .as_ref()
             .map(|view| view.projection().clone());
     }
+    #[expect(
+        clippy::result_large_err,
+        reason = "Failure returns the complete decision trace to the existing control-plane recorder without losing action or recovery evidence"
+    )]
     pub(super) fn enqueue_service_provider_action(
         &mut self,
     ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
@@ -207,6 +211,10 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Failure returns the complete decision trace to the existing control-plane recorder without losing action or recovery evidence"
+    )]
     fn close_admitted_service_wait(
         &mut self,
         agent_id: String,

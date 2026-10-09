@@ -670,17 +670,16 @@ impl ViewerRuntimeLiveServer {
                 )
             };
             let mut output = response_outbox::ResponseOutbox::new(limits);
-            if service_mode {
-                if periodic_io
+            if service_mode
+                && periodic_io
                     .poll(&shared, &mut session, &mut output)
                     .is_err()
-                {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        "viewer periodic service read deferred",
-                        "viewer periodic service read deferred",
-                    );
-                }
+            {
+                emit_stderr_or_event(
+                    Level::WARN,
+                    "viewer periodic service read deferred",
+                    "viewer periodic service read deferred",
+                );
             }
             if !write_fenced
                 && !service_mode

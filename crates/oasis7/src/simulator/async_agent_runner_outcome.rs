@@ -38,49 +38,6 @@ fn provider_error_code(trace: &AgentDecisionTrace) -> Option<String> {
         .map(str::to_owned)
 }
 
-#[cfg(test)]
-mod trace_error_tests {
-    use super::*;
-
-    fn trace(error: &str) -> AgentDecisionTrace {
-        AgentDecisionTrace {
-            agent_id: "agent-a".into(),
-            time: 0,
-            decision: AgentDecision::Wait,
-            llm_input: None,
-            llm_output: None,
-            llm_error: Some(error.into()),
-            parse_error: None,
-            llm_diagnostics: None,
-            llm_effect_intents: vec![],
-            llm_effect_receipts: vec![],
-            llm_step_trace: vec![],
-            llm_prompt_section_trace: vec![],
-            llm_chat_messages: vec![],
-        }
-    }
-
-    #[test]
-    fn diagnostic_overflow_is_not_a_provider_failure() {
-        assert_eq!(provider_error_code(&trace("trace_payload_too_large")), None);
-        assert_eq!(
-            provider_error_code(&trace("trace_payload_too_large: provider_timeout")),
-            Some("trace_payload_too_large".into())
-        );
-        assert_eq!(
-            provider_error_code(&trace("provider_timeout: unavailable")),
-            Some("provider_timeout".into())
-        );
-        let mut failure = trace("trace_payload_too_large");
-        failure.llm_output =
-            Some(serde_json::json!({"provider_error": {"code": "provider_timeout"}}).to_string());
-        assert_eq!(
-            provider_error_code(&failure),
-            Some("provider_timeout".into())
-        );
-    }
-}
-
 pub(super) fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgentTurnOutcome {
     if completion.panicked {
         return AsyncAgentTurnOutcome {
@@ -237,4 +194,47 @@ pub(super) fn validate_cognition_lease_for_request(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod trace_error_tests {
+    use super::*;
+
+    fn trace(error: &str) -> AgentDecisionTrace {
+        AgentDecisionTrace {
+            agent_id: "agent-a".into(),
+            time: 0,
+            decision: AgentDecision::Wait,
+            llm_input: None,
+            llm_output: None,
+            llm_error: Some(error.into()),
+            parse_error: None,
+            llm_diagnostics: None,
+            llm_effect_intents: vec![],
+            llm_effect_receipts: vec![],
+            llm_step_trace: vec![],
+            llm_prompt_section_trace: vec![],
+            llm_chat_messages: vec![],
+        }
+    }
+
+    #[test]
+    fn diagnostic_overflow_is_not_a_provider_failure() {
+        assert_eq!(provider_error_code(&trace("trace_payload_too_large")), None);
+        assert_eq!(
+            provider_error_code(&trace("trace_payload_too_large: provider_timeout")),
+            Some("trace_payload_too_large".into())
+        );
+        assert_eq!(
+            provider_error_code(&trace("provider_timeout: unavailable")),
+            Some("provider_timeout".into())
+        );
+        let mut failure = trace("trace_payload_too_large");
+        failure.llm_output =
+            Some(serde_json::json!({"provider_error": {"code": "provider_timeout"}}).to_string());
+        assert_eq!(
+            provider_error_code(&failure),
+            Some("provider_timeout".into())
+        );
+    }
 }

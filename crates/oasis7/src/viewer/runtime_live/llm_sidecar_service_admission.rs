@@ -526,36 +526,34 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 AgentServiceProgress::Idle
             });
         }
-        if let Some(admission) = self.llm_sidecar.hosted_admission.clone() {
-            if matches!(admission.stage.as_str(), "reserve" | "prefix") {
-                let request = &admission.context.request_context;
-                let phase = if admission.stage == "reserve" {
-                    "reserve".into()
-                } else {
-                    format!("prefix:{}", request.transport_attempt)
+        if let Some(admission) = self.llm_sidecar.hosted_admission.clone()
+            && matches!(admission.stage.as_str(), "reserve" | "prefix")
+        {
+            let request = &admission.context.request_context;
+            let phase = if admission.stage == "reserve" {
+                "reserve".into()
+            } else {
+                format!("prefix:{}", request.transport_attempt)
+            };
+            let issued = self
+                .llm_sidecar
+                .provider_scheduler_pending
+                .contains_key(&format!("{}:{phase}", request.provider_invocation_key()));
+            if !issued {
+                self.llm_sidecar.check_scoped_feedback_fresh_admission(
+                    &request.agent_subject,
+                    &request.agent_session_id,
+                )?;
+                if !eligible {
+                    return Ok(AgentServiceProgress::Idle);
+                }
+                let Some(identity) = self.llm_sidecar.fresh_provider_metadata_identity()? else {
+                    return Ok(AgentServiceProgress::Idle);
                 };
-                let issued = self
-                    .llm_sidecar
-                    .provider_scheduler_pending
-                    .contains_key(&format!("{}:{phase}", request.provider_invocation_key()));
-                if !issued {
-                    self.llm_sidecar.check_scoped_feedback_fresh_admission(
-                        &request.agent_subject,
-                        &request.agent_session_id,
-                    )?;
-                    if !eligible {
-                        return Ok(AgentServiceProgress::Idle);
-                    }
-                    let Some(identity) = self.llm_sidecar.fresh_provider_metadata_identity()?
-                    else {
-                        return Ok(AgentServiceProgress::Idle);
-                    };
-                    if identity != admission.metadata_identity {
-                        return Err(
-                            "fresh provider configuration changed; original admission fenced"
-                                .into(),
-                        );
-                    }
+                if identity != admission.metadata_identity {
+                    return Err(
+                        "fresh provider configuration changed; original admission fenced".into(),
+                    );
                 }
             }
         }
@@ -605,11 +603,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         self.llm_sidecar
             .hosted_service_config_binding
             .get_or_insert(config_digest);
-        Ok(AgentServiceProgress::NeedsIo(AgentServiceIoJob {
+        Ok(AgentServiceProgress::NeedsIo(Box::new(AgentServiceIoJob {
             token,
             client: Some(client),
             operation,
-        }))
+        })))
     }
     pub(in crate::viewer::runtime_live) fn apply_fresh_service_io(
         &mut self,
@@ -641,17 +639,15 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 .hosted_admission
                 .as_ref()
                 .and_then(|admission| admission.commit.as_ref())
-            {
-                if !view
+                && !view
                     .version()
                     .commit
                     .satisfies_minimum(commit)
                     .map_err(|error| error.to_string())?
-                {
-                    return Err("fresh admission view precedes original commit".into());
-                }
+            {
+                return Err("fresh admission view precedes original commit".into());
             }
-            self.apply_hosted_verified_view(view)?;
+            self.apply_hosted_verified_view(*view)?;
             if stage == "view" {
                 // Context observation belongs to a later eligible prepare, never an apply callback.
                 self.llm_sidecar.hosted_fresh_view_ready = true;

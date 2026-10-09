@@ -619,11 +619,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             ),
         };
         self.llm_sidecar.hosted_service_inflight = Some(token.clone());
-        Ok(AgentServiceProgress::NeedsIo(AgentServiceIoJob {
+        Ok(AgentServiceProgress::NeedsIo(Box::new(AgentServiceIoJob {
             token,
             client: Some(client),
             operation,
-        }))
+        })))
     }
     pub(super) fn apply_hosted_final_budget_io(
         &mut self,
@@ -643,7 +643,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             {
                 return Err("final budget View precedes receipt".into());
             }
-            self.apply_hosted_verified_view(view)?;
+            self.apply_hosted_verified_view(*view)?;
             let terminal = resume.stage == "budget_committed_view";
             resume.validate_budget_projection(
                 self.llm_sidecar

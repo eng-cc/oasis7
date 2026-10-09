@@ -262,8 +262,8 @@ impl RuntimeLlmSidecar {
         let client = RemoteWorldServiceClient::new(config)
             .map_err(|error| error.to_string())?
             .with_query_state(self.provider_service_query_state.clone());
-        let response = if existed {
-            client
+        let lookup = if existed {
+            let response = client
                 .lookup(
                     LookupIntentRequest {
                         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
@@ -271,9 +271,21 @@ impl RuntimeLlmSidecar {
                     },
                     pending.payload.clone(),
                 )
-                .map_err(|error| error.to_string())?
+                .map_err(|error| error.to_string())?;
+            // The checkpoint is written before its first Submit. A verified
+            // absence may therefore mean that transport never started. Only
+            // that exact absence permits replaying the immutable original;
+            // Pending/Received retain their existing execution without Submit.
+            response
+                .validate(&pending.correlation)
+                .map_err(|error| error.to_string())?;
+            Some(response)
         } else {
-            match client
+            None
+        };
+        let response = match lookup {
+            Some(response) if !matches!(&response.outcome, IntentOutcome::Unknown) => response,
+            _ => match client
                 .submit(SubmitIntentRequest {
                     contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                     correlation: pending.correlation.clone(),
@@ -288,7 +300,7 @@ impl RuntimeLlmSidecar {
                         "canonical scheduler outcome unknown; original request retained".into(),
                     );
                 }
-            }
+            },
         };
         response
             .validate(&pending.correlation)

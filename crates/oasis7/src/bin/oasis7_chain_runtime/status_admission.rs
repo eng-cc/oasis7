@@ -109,19 +109,19 @@ pub(super) fn write_bounded(
             .ok_or_else(|| {
                 io::Error::new(io::ErrorKind::TimedOut, "HTTP write deadline exceeded")
             })?;
-        stream.set_write_timeout(Some(timeout)).map_err(|error| {
-            trace_write_error(
-                "set_write_timeout",
-                stream,
-                deadline,
-                remaining.len(),
-                &error,
-            );
-            error
-        })?;
-        let written = stream.write(remaining).map_err(|error| {
-            trace_write_error("write", stream, deadline, remaining.len(), &error);
-            error
+        stream
+            .set_write_timeout(Some(timeout))
+            .inspect_err(|error| {
+                trace_write_error(
+                    "set_write_timeout",
+                    stream,
+                    deadline,
+                    remaining.len(),
+                    error,
+                );
+            })?;
+        let written = stream.write(remaining).inspect_err(|error| {
+            trace_write_error("write", stream, deadline, remaining.len(), error);
         })?;
         if written == 0 {
             return Err(io::Error::new(

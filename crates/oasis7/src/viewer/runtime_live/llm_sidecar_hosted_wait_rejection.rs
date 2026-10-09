@@ -137,7 +137,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             } else if wait.stage != "rejection_view" {
                 return Err("Wait compensation settlement commit missing".into());
             }
-            self.apply_hosted_verified_view(view)?;
+            self.apply_hosted_verified_view(*view)?;
             let projection = self
                 .llm_sidecar
                 .provider_service_projection

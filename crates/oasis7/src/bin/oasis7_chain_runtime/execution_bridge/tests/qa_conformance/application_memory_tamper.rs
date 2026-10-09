@@ -52,7 +52,8 @@ pub(super) fn verify_processes(
     application_fairness::validate_canonical_identity(fixture);
     for kind in ["context", "response", "intents"] {
         let mut altered = original.clone();
-        for map in ["provider_service_pending"] {
+        {
+            let map = "provider_service_pending";
             let entries = altered[map].as_object_mut().unwrap();
             assert_eq!(entries.len(), 1);
             let cognition = &mut entries.values_mut().next().unwrap()["cognition"];

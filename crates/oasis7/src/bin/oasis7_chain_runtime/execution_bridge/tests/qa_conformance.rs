@@ -201,7 +201,7 @@ impl Fixture {
         let context_hash = super::super::execution_hash::execution_resource_context_hash("w1");
         world
             .save_to_dir_with_chain_resource_context(
-                &root.join("world"),
+                root.join("world"),
                 oasis7::runtime::ChainResourceDerivationContext {
                     world_id: "w1",
                     chain_id: "w1",

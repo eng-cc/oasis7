@@ -236,7 +236,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             } else if resume.stage != "rejection_view" {
                 return Err("Resume compensation commit missing".into());
             }
-            self.apply_hosted_verified_view(view)?;
+            self.apply_hosted_verified_view(*view)?;
             let terminal = resume.stage == "reject_predecessor_view";
             resume.validate_projection(
                 self.llm_sidecar

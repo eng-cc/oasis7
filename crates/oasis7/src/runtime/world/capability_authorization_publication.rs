@@ -233,12 +233,12 @@ impl World {
             CapabilityAuthorizationEvent::WorldServiceIntentRecorded { key, record } => {
                 crate::world_service::correlation::validate_result(key, record)
                     .map_err(|reason| super::capability_authorization::deny(&reason))?;
-                if let Some(existing) = capability_revocation_state.world_service_results.get(key) {
-                    if existing != record {
-                        return Err(super::capability_authorization::deny(
-                            "canonical intent result conflict",
-                        ));
-                    }
+                if let Some(existing) = capability_revocation_state.world_service_results.get(key)
+                    && existing != record
+                {
+                    return Err(super::capability_authorization::deny(
+                        "canonical intent result conflict",
+                    ));
                 }
                 capability_revocation_state
                     .world_service_results

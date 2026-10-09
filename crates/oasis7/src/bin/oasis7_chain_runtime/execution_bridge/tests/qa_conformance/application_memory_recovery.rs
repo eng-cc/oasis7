@@ -5,6 +5,18 @@ use std::io::{BufRead, BufReader, Write};
 
 const MEMORY: &str = "native canonical memory survives application process loss";
 
+fn shutdown_application_socket(socket: &TcpStream) {
+    match socket.shutdown(std::net::Shutdown::Both) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotConnected => {
+            // A completed server may already have closed the connection.
+            // Its worker is still joined and its actual Result checked below.
+            println!("native_memory_teardown_peer_already_closed=true");
+        }
+        Err(error) => panic!("actual application socket shutdown failed: {error}"),
+    }
+}
+
 #[test]
 fn real_tcp_native_memory_process_restart_uses_original_receipt_and_private_store() {
     application_harness::run_isolated_application_mode(
@@ -201,7 +213,7 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
                 .unwrap()
                 .is_empty()
         );
-        socket.shutdown(std::net::Shutdown::Both).unwrap();
+        shutdown_application_socket(&socket);
         assert!(worker.join().unwrap().is_ok());
         println!(
             "PRE2_PRIVATE_MEMORY_ACK_MISSING_RUNNER_REFUSED pending_retained=true actual_native_runner_absent=true private_memory_empty=true"
@@ -270,11 +282,14 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
     let handshake_deadline = Instant::now() + Duration::from_secs(3);
     let mut hello_acks = 0;
     let mut handshake = false;
+    let mut line = String::new();
     while Instant::now() < handshake_deadline {
-        let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) => break,
             Ok(_) => {
+                if !line.ends_with('\n') {
+                    continue;
+                }
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                     if value["type"] == "hello_ack" {
                         hello_acks += 1;
@@ -284,6 +299,7 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
                         break;
                     }
                 }
+                line.clear();
             }
             Err(error)
                 if matches!(
@@ -305,7 +321,7 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
         }
         thread::sleep(Duration::from_millis(10));
     };
-    socket.shutdown(std::net::Shutdown::Both).unwrap();
+    shutdown_application_socket(&socket);
     let result = worker.join().unwrap();
     println!(
         "actual_native_model_call_count={}",

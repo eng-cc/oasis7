@@ -215,12 +215,10 @@ pub(super) fn report(
         .collect::<Vec<_>>();
     let count = |kind: &str| {
         results.iter().filter(|result| result.rejected.is_none() && matches!(&result.request.signed_payload,
-        WorldServicePayloadV1::Scheduler(signed) if match (&signed.request.operation, kind) {
+        WorldServicePayloadV1::Scheduler(signed) if matches!((&signed.request.operation, kind),
             (SchedulerOperationV1::ReserveLease(_), "reserve") | (SchedulerOperationV1::ProviderPrefix {..}, "prefix")
             | (SchedulerOperationV1::SettleLease {..}, "settle") | (SchedulerOperationV1::ResumeWake {..}, "resume")
-            | (SchedulerOperationV1::AdmitContinuation(_), "admit") | (SchedulerOperationV1::ConsumeContinuationBudget {..}, "consume") => true,
-            _ => false,
-        })).count()
+            | (SchedulerOperationV1::AdmitContinuation(_), "admit") | (SchedulerOperationV1::ConsumeContinuationBudget {..}, "consume")))).count()
     };
     println!(
         "hosted_final_budget_actual models={models} reserve={} prefix={} settle={} resume={} admit={} consume={} active={} wakes={}",

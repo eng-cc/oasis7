@@ -429,11 +429,11 @@ fn repeated(shared: Arc<Mutex<ViewerRuntimeLiveServer>>, root: &std::path::Path)
         socket.write_all(&bytes).unwrap();
         let pause_deadline = Instant::now() + Duration::from_millis(500);
         while Instant::now() < pause_deadline {
-            if let Ok(server) = shared.try_lock() {
-                if server.test_agent_service_pump_status()["play_enabled"] == false {
-                    paused_after_two = true;
-                    break;
-                }
+            if let Ok(server) = shared.try_lock()
+                && server.test_agent_service_pump_status()["play_enabled"] == false
+            {
+                paused_after_two = true;
+                break;
             }
             thread::sleep(Duration::from_millis(2));
         }

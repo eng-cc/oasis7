@@ -10,7 +10,7 @@ use serde_json::Value;
 pub(super) enum AgentServiceProgress {
     Idle,
     Advanced,
-    NeedsIo(AgentServiceIoJob),
+    NeedsIo(Box<AgentServiceIoJob>),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -40,7 +40,7 @@ pub(super) struct AgentServiceIoJob {
 pub(super) enum AgentServiceIoResponse {
     Submit(SubmitObservation<Value>),
     Intent(IntentResponse<Value>),
-    View(VerifiedWorldView),
+    View(Box<VerifiedWorldView>),
     Feedback,
     Metadata(
         crate::simulator::ProviderInfo,
@@ -78,9 +78,9 @@ impl AgentServiceIoJob {
                     AgentServiceIoOperation::Lookup { request, original } => client
                         .lookup(request, original)
                         .map(AgentServiceIoResponse::Intent),
-                    AgentServiceIoOperation::View(request) => {
-                        client.read_view(request).map(AgentServiceIoResponse::View)
-                    }
+                    AgentServiceIoOperation::View(request) => client
+                        .read_view(request)
+                        .map(|view| AgentServiceIoResponse::View(Box::new(view))),
                     AgentServiceIoOperation::Metadata(_)
                     | AgentServiceIoOperation::Feedback { .. } => unreachable!(),
                 }

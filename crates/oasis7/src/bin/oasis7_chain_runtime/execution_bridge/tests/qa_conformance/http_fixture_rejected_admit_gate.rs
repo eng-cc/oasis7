@@ -76,17 +76,6 @@ pub(in super::super) struct AdmitRejectedGateState {
 /// listener. `original_request` is intentionally not serializable or logged.
 #[derive(Clone)]
 pub(in super::super) struct AdmitRejectedCandidateEvidence {
-    pub(in super::super) world: WorldIdentity,
-    pub(in super::super) agent_id: String,
-    pub(in super::super) origin_request_digest: String,
-    pub(in super::super) continuation_proposal_id_digest: String,
-    pub(in super::super) proposal_digest: String,
-    pub(in super::super) identity_digest: String,
-    pub(in super::super) correlation_digest: String,
-    pub(in super::super) payload_digest: String,
-    pub(in super::super) request_bytes_digest: String,
-    pub(in super::super) captured_base_binding_digest: String,
-    pub(in super::super) captured_base_binding: oasis7::runtime::RuntimeCognitionBaseBindingV1,
     original_request: SubmitIntentRequest<WorldServicePayloadV1>,
 }
 
@@ -100,6 +89,10 @@ fn opaque_digest(domain: &str, value: &str) -> Result<String, String> {
     oasis7::world_service::authority::request_digest(domain, &value)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The candidate digest explicitly joins the complete authenticated request and captured canonical boundary"
+)]
 fn candidate_identity_digest(
     world: &WorldIdentity,
     agent_id: &str,
@@ -218,17 +211,6 @@ fn parse_candidate(
 
 fn candidate_evidence(candidate: &AdmitRejectedCandidate) -> AdmitRejectedCandidateEvidence {
     AdmitRejectedCandidateEvidence {
-        world: candidate.world.clone(),
-        agent_id: candidate.agent_id.clone(),
-        origin_request_digest: candidate.origin_request_digest.clone(),
-        continuation_proposal_id_digest: candidate.continuation_proposal_id_digest.clone(),
-        proposal_digest: candidate.proposal_digest.clone(),
-        identity_digest: candidate.identity_digest.clone(),
-        correlation_digest: candidate.correlation_digest.clone(),
-        payload_digest: candidate.payload_digest.clone(),
-        request_bytes_digest: candidate.request_bytes_digest.clone(),
-        captured_base_binding_digest: candidate.captured_base_binding_digest.clone(),
-        captured_base_binding: candidate.captured_base_binding.clone(),
         original_request: candidate.original_request.clone(),
     }
 }

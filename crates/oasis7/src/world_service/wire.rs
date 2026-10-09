@@ -43,6 +43,10 @@ pub struct CanonicalIntentResultV1 {
 /// Preserve legacy JSON payload bytes. Wrapping them adds no legacy authority.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "payload", rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Published signed payload variants preserve the existing typed API and canonical serialization boundary"
+)]
 pub enum WorldServicePayloadV1 {
     GameplayJson(Vec<u8>),
     Cognition(SignedReadRequest<CognitionIntentV1>),

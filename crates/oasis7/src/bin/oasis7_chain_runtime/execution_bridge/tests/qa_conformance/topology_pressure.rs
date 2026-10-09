@@ -36,10 +36,11 @@ fn witness(active: usize, peers: usize) -> serde_json::Value {
         let actual = fs::read(coordination().join("admission.json"))
             .ok()
             .and_then(|v| serde_json::from_slice::<serde_json::Value>(&v).ok());
-        if let Some(value) = actual {
-            if value["active"] == active && value["peers"].as_object().unwrap().len() == peers {
-                return value;
-            }
+        if let Some(value) = actual
+            && value["active"] == active
+            && value["peers"].as_object().unwrap().len() == peers
+        {
+            return value;
         }
         assert!(
             Instant::now() < deadline,

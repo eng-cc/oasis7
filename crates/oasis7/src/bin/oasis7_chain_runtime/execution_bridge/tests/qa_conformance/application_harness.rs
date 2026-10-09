@@ -60,7 +60,7 @@ pub(super) fn validate_output(
                 .is_some_and(|reason| reason.contains("cognition_context_mismatch"))
         }));
         assert!(
-            world.cognition_in_flight_wakes().unwrap().len() > 0,
+            !world.cognition_in_flight_wakes().unwrap().is_empty(),
             "rejected Resume consumed canonical wake"
         );
     }
@@ -182,27 +182,14 @@ pub(super) fn run_isolated_application_mode(
             fs::set_permissions(&app_dir, fs::Permissions::from_mode(0o700)).unwrap();
         }
     }
-    if wake {
-        // Controlled Submit persistence runs after its HTTP response. Keep
-        // the real read API available while that durable commit completes,
-        // instead of serializing every read behind fsync on the accept loop.
-        // The existing fixture limits this to four connection workers; CAS
-        // publication and authenticated View coherence remain unchanged.
-        fixture.concurrent_dispatch.store(true, Ordering::SeqCst);
-        *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
-        fs::write(app_dir.join("world-concurrent-ready"), b"ready").unwrap();
-    }
-    if service_probe
-        || admission_mode == "periodic-fairness"
-        || resume_crash
-        || admit_crash
-        || capture_crash
-        || wait_rejected
-        || resume_rejected
-    {
-        fixture.concurrent_dispatch.store(true, Ordering::SeqCst);
-        *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
-    }
+    // Controlled Submit persistence runs after its HTTP response. Prepare the
+    // bounded listener before any child constructor/Reserve/Prefix, rather
+    // than waiting for a child that needs those requests to write readiness.
+    // Fault gates still require their separate arm/release markers. CAS
+    // publication, the driver commit lock and worker teardown are unchanged.
+    fixture.concurrent_dispatch.store(true, Ordering::SeqCst);
+    *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
+    fs::write(app_dir.join("world-concurrent-ready"), b"ready").unwrap();
     if matches!(admission_mode, "memory-ack-before" | "memory-ack-after") {
         *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
         let kind = if admission_mode == "memory-ack-before" {

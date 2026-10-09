@@ -376,11 +376,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             | Some(HostedServicePhase::FeedbackAck { submit, .. }) => *submit = false,
             _ => {}
         }
-        Ok(AgentServiceProgress::NeedsIo(AgentServiceIoJob {
+        Ok(AgentServiceProgress::NeedsIo(Box::new(AgentServiceIoJob {
             token,
             client: Some(client),
             operation,
-        }))
+        })))
     }
     pub(super) fn apply_hosted_service_io(
         &mut self,
@@ -458,7 +458,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 {
                     return Err("hosted service view precedes committed Act".into());
                 }
-                self.apply_hosted_verified_view(view)?;
+                self.apply_hosted_verified_view(*view)?;
                 self.llm_sidecar.hosted_service_phase = Some(if settled {
                     HostedServicePhase::Finalize {
                         pending,
@@ -603,7 +603,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 {
                     return Err("ACK readback mismatch".into());
                 }
-                self.apply_hosted_verified_view(view)?;
+                self.apply_hosted_verified_view(*view)?;
                 self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::Finalize {
                     pending,
                     receipt,
@@ -620,15 +620,14 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         &mut self,
         view: VerifiedWorldView,
     ) -> Result<(), String> {
-        if let Some(current) = self.verified_world_view.as_ref() {
-            if !view
+        if let Some(current) = self.verified_world_view.as_ref()
+            && !view
                 .version()
                 .commit
                 .satisfies_minimum(&current.version().commit)
                 .map_err(|error| error.to_string())?
-            {
-                return Err("hosted service old view cannot replace newer view".into());
-            }
+        {
+            return Err("hosted service old view cannot replace newer view".into());
         }
         self.llm_sidecar.provider_service_projection = Some(view.projection().clone());
         self.verified_world_view = Some(view);

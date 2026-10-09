@@ -212,14 +212,13 @@ pub(super) fn view(
         return Err("view world mismatch".into());
     }
     let pinned = service.pin(request.request.fixed_commit.as_ref())?;
-    if let Some(minimum) = &request.request.min_commit {
-        if !pinned
+    if let Some(minimum) = &request.request.min_commit
+        && !pinned
             .commit
             .satisfies_minimum(minimum)
             .map_err(|e| e.to_string())?
-        {
-            return Err("read not caught up".into());
-        }
+    {
+        return Err("read not caught up".into());
     }
     let agent = service.scope(
         &pinned,

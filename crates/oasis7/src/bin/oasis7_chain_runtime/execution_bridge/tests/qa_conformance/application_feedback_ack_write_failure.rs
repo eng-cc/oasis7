@@ -129,7 +129,12 @@ pub(super) fn finish(
         proof.before["runtime_ledgers"],
         proof.staged["runtime_ledgers"]
     );
-    assert!(proof.staged["memory"]["entries"].as_array().unwrap().len() > 0);
+    assert!(
+        !proof.staged["memory"]["entries"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     let restored: serde_json::Value =
         serde_json::from_slice(&fs::read(root.join("native-memory-lineage.json")).unwrap())
             .unwrap();

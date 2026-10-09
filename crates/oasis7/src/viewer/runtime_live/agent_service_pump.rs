@@ -170,7 +170,7 @@ impl ViewerRuntimeLiveServer {
                     }
                     if let Some(AgentServiceProgress::NeedsIo(job)) = progress {
                         // One owned in-flight job guarantees capacity; never wait under the mutex.
-                        match jobs.try_send(job) {
+                        match jobs.try_send(*job) {
                             Ok(()) => in_flight = true,
                             Err(_) => {
                                 server.agent_pump_worker_failed();

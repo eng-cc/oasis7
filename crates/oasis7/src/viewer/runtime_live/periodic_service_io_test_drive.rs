@@ -218,7 +218,7 @@ impl ViewerRuntimeLiveServer {
             worker,
         } = executor;
         drop(sender);
-        worker.into_inner().unwrap().take().unwrap().join().unwrap();
+        worker.into_inner().unwrap().unwrap().join().unwrap();
         assert_eq!(
             outstanding.load(Ordering::Acquire),
             0,

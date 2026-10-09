@@ -91,7 +91,6 @@ pub(super) struct WorldServiceCoherenceTraceContext {
 }
 
 #[cfg(any(test, feature = "test_tier_required"))]
-#[derive(Debug)]
 struct CursorRelationFlags {
     stream_equal: bool,
     scope_equal: bool,
@@ -112,7 +111,6 @@ impl CursorRelationFlags {
 }
 
 #[cfg(any(test, feature = "test_tier_required"))]
-#[derive(Debug)]
 struct CommitRelationFlags {
     world_id_equal: bool,
     genesis_digest_equal: bool,
@@ -185,6 +183,10 @@ fn coherence_trace_enabled() -> bool {
 }
 
 #[cfg(any(test, feature = "test_tier_required"))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The diagnostic compares four distinct cursor boundaries and the authenticated view without copying their payloads"
+)]
 fn trace_world_service_coherence_failure(
     context: WorldServiceCoherenceTraceContext,
     config: &WorldServiceClientConfig,
@@ -738,4 +740,48 @@ fn prepare_world_service_update_with_trace_context(
         service_events: Some(events),
         intent_results,
     })
+}
+
+#[cfg(any(test, feature = "test_tier_required"))]
+impl std::fmt::Debug for CursorRelationFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CursorRelationFlags")
+            .field("stream_equal", &self.stream_equal)
+            .field("scope_equal", &self.scope_equal)
+            .field("era_equal", &self.era_equal)
+            .field("sequence_order", &self.sequence_order)
+            .finish()
+    }
+}
+
+#[cfg(any(test, feature = "test_tier_required"))]
+impl std::fmt::Debug for CommitRelationFlags {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CommitRelationFlags")
+            .field("world_id_equal", &self.world_id_equal)
+            .field("genesis_digest_equal", &self.genesis_digest_equal)
+            .field("provider_world_id_equal", &self.provider_world_id_equal)
+            .field("branch_id_equal", &self.branch_id_equal)
+            .field("finality_ref_equal", &self.finality_ref_equal)
+            .field("reorg_generation_equal", &self.reorg_generation_equal)
+            .field(
+                "governing_manifest_ref_equal",
+                &self.governing_manifest_ref_equal,
+            )
+            .field(
+                "authority_generation_equal",
+                &self.authority_generation_equal,
+            )
+            .field(
+                "permission_generation_equal",
+                &self.permission_generation_equal,
+            )
+            .field("position_order", &self.position_order)
+            .field(
+                "execution_block_hash_equal",
+                &self.execution_block_hash_equal,
+            )
+            .field("state_root_ref_equal", &self.state_root_ref_equal)
+            .finish()
+    }
 }

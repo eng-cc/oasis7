@@ -201,19 +201,6 @@ fn proposal() -> ContinuationProposalV1 {
     proposal
 }
 
-fn authority_context() -> ContinuationAuthorityContextV1 {
-    ContinuationAuthorityContextV1 {
-        baseline_observation_digest:
-            "blake3:3333333333333333333333333333333333333333333333333333333333333333".to_string(),
-        goal_digest: "blake3:4444444444444444444444444444444444444444444444444444444444444444"
-            .to_string(),
-        policy_digest: "blake3:5555555555555555555555555555555555555555555555555555555555555555"
-            .to_string(),
-        precondition_digest:
-            "blake3:6666666666666666666666666666666666666666666666666666666666666666".to_string(),
-    }
-}
-
 fn current_context() -> ContinuationCurrentContextV1 {
     ContinuationCurrentContextV1::from_observation(
         Observation {

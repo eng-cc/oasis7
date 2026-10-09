@@ -204,7 +204,7 @@ pub(super) fn verify(
         "ACK must use exactly one dispatched original signed Submit across actual process loss"
     );
     assert!(
-        trace.iter().any(|v| *v == key),
+        trace.contains(&key),
         "restart must Lookup original signed ACK before deciding replay"
     );
     let record = fixture

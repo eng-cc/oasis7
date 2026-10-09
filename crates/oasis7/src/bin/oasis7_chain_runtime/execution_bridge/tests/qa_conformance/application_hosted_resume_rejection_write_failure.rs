@@ -15,11 +15,6 @@ fn real_tcp_hosted_rejected_resume_rejection_cleanup_write_failure_restores_runt
     );
 }
 
-pub(super) fn verify(client: &RemoteWorldServiceClient) {
-    // The ordinary listener drives the production pipeline; no direct persistence invocation.
-    application_hosted_resume_rejection::verify(client);
-}
-
 fn private_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
     fs::write(path, bytes).map_err(|error| error.to_string())?;
     #[cfg(unix)]

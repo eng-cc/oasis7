@@ -5,6 +5,10 @@ use crate::simulator::{ContinuationAuthorityContextV1, ContinuationProposalV1};
 
 impl AsyncAgentRunner {
     #[cfg(not(target_arch = "wasm32"))]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Keep the Agent, signed proposal, canonical predecessor/terminal, authority and restore flag explicit at this authenticated transaction boundary"
+    )]
     pub fn with_completed_final_budget_cleanup<F>(
         &mut self,
         agent: &str,
@@ -29,6 +33,10 @@ impl AsyncAgentRunner {
         )
     }
     #[cfg(all(not(target_arch = "wasm32"), any(test, feature = "test_tier_required")))]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Keep the Agent, signed proposal, canonical predecessor/terminal, authority and restore flag explicit at this authenticated transaction boundary"
+    )]
     pub fn with_completed_final_budget_cleanup_observed<F>(
         &mut self,
         agent: &str,
@@ -53,6 +61,10 @@ impl AsyncAgentRunner {
         )
     }
     #[cfg(not(target_arch = "wasm32"))]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Keep the Agent, signed proposal, canonical predecessor/terminal, authority and restore flag explicit at this authenticated transaction boundary"
+    )]
     fn completed_final_budget_cleanup<F>(
         &mut self,
         agent: &str,
@@ -146,7 +158,7 @@ impl AsyncAgentRunner {
         let outcomes = self.awaiting_outcomes.clone();
         let feedback = self.feedback_store.clone();
         let result = (|| {
-            if self.continuations.get(agent).is_none() {
+            if !self.continuations.contains_key(agent) {
                 if !restored {
                     return Err(error("final budget original local continuation missing"));
                 }

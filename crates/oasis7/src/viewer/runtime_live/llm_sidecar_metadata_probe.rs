@@ -124,7 +124,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             return Ok(fresh);
         }
         match self.llm_sidecar.prepare_provider_metadata_probe()? {
-            Some(job) => Ok(AgentServiceProgress::NeedsIo(job)),
+            Some(job) => Ok(AgentServiceProgress::NeedsIo(Box::new(job))),
             None => Ok(AgentServiceProgress::Idle),
         }
     }

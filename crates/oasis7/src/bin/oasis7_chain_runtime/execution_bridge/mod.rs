@@ -838,6 +838,8 @@ pub(crate) use self::driver_observability::{
     ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
     snapshot_execution_bridge_commit_timing, snapshot_execution_bridge_module_tick_routing_metrics,
 };
-pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;
 #[cfg(not(test))]
 pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;
+
+#[cfg(not(test))]
+pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;

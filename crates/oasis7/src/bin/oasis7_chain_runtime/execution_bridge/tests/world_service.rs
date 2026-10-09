@@ -78,7 +78,7 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
     let context_hash = super::super::execution_hash::execution_resource_context_hash("w1");
     world
         .save_to_dir_with_chain_resource_context(
-            &dir.join("world"),
+            dir.join("world"),
             oasis7::runtime::ChainResourceDerivationContext {
                 world_id: "w1",
                 chain_id: "w1",

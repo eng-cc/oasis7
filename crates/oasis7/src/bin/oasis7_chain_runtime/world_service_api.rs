@@ -118,6 +118,71 @@ fn parse<T: DeserializeOwned>(body: &[u8]) -> Result<T, String> {
     Ok(request)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Existing status dispatcher carries explicit authority and storage roots."
+)]
+pub(super) fn maybe_handle(
+    stream: &mut TcpStream,
+    bytes: &[u8],
+    runtime: &Arc<Mutex<NodeRuntime>>,
+    method: &str,
+    path: &str,
+    world_id: &str,
+    world_dir: &Path,
+    records: &Path,
+    storage: &Path,
+    signer: &FeedbackSubmitSigner,
+) -> Result<bool, String> {
+    if ![
+        DESCRIBE_PATH,
+        SUBMIT_PATH,
+        LOOKUP_PATH,
+        VIEW_PATH,
+        CHANGES_PATH,
+    ]
+    .contains(&path)
+    {
+        return Ok(false);
+    }
+    let result = (|| {
+        if method != "POST" {
+            return Err("world service requires POST".into());
+        }
+        let body = super::feedback_submit_api::extract_http_json_body(bytes)?;
+        let identity = world_service_read::identity(world_dir, world_id)?;
+        let service = Service {
+            records,
+            storage,
+            identity,
+            signer,
+            runtime,
+        };
+        match path {
+            DESCRIBE_PATH => operations::describe(&service, parse(body)?),
+            SUBMIT_PATH => operations::submit(&service, parse(body)?),
+            LOOKUP_PATH => operations::lookup(&service, parse(body)?),
+            VIEW_PATH => operations::view(&service, parse(body)?),
+            CHANGES_PATH => operations::changes(&service, parse(body)?),
+            _ => unreachable!(),
+        }
+    })();
+    let (status, value) = match result {
+        Ok(value) => (200, value),
+        Err(reason) if reason == UNSUPPORTED_REQUEST_FIELD => (
+            400,
+            json!({"error": "unsupported_request_field", "reason": reason}),
+        ),
+        Err(_) => (
+            503,
+            json!({"error": "world_service_unavailable", "reason": PUBLIC_SERVICE_UNAVAILABLE}),
+        ),
+    };
+    let encoded = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
+    super::write_json_response(stream, status, &encoded, false).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 #[cfg(test)]
 mod strict_parser_tests {
     use super::*;
@@ -186,69 +251,4 @@ mod strict_parser_tests {
             .is_ok()
         );
     }
-}
-
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Existing status dispatcher carries explicit authority and storage roots."
-)]
-pub(super) fn maybe_handle(
-    stream: &mut TcpStream,
-    bytes: &[u8],
-    runtime: &Arc<Mutex<NodeRuntime>>,
-    method: &str,
-    path: &str,
-    world_id: &str,
-    world_dir: &Path,
-    records: &Path,
-    storage: &Path,
-    signer: &FeedbackSubmitSigner,
-) -> Result<bool, String> {
-    if ![
-        DESCRIBE_PATH,
-        SUBMIT_PATH,
-        LOOKUP_PATH,
-        VIEW_PATH,
-        CHANGES_PATH,
-    ]
-    .contains(&path)
-    {
-        return Ok(false);
-    }
-    let result = (|| {
-        if method != "POST" {
-            return Err("world service requires POST".into());
-        }
-        let body = super::feedback_submit_api::extract_http_json_body(bytes)?;
-        let identity = world_service_read::identity(world_dir, world_id)?;
-        let service = Service {
-            records,
-            storage,
-            identity,
-            signer,
-            runtime,
-        };
-        match path {
-            DESCRIBE_PATH => operations::describe(&service, parse(body)?),
-            SUBMIT_PATH => operations::submit(&service, parse(body)?),
-            LOOKUP_PATH => operations::lookup(&service, parse(body)?),
-            VIEW_PATH => operations::view(&service, parse(body)?),
-            CHANGES_PATH => operations::changes(&service, parse(body)?),
-            _ => unreachable!(),
-        }
-    })();
-    let (status, value) = match result {
-        Ok(value) => (200, value),
-        Err(reason) if reason == UNSUPPORTED_REQUEST_FIELD => (
-            400,
-            json!({"error": "unsupported_request_field", "reason": reason}),
-        ),
-        Err(_) => (
-            503,
-            json!({"error": "world_service_unavailable", "reason": PUBLIC_SERVICE_UNAVAILABLE}),
-        ),
-    };
-    let encoded = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
-    super::write_json_response(stream, status, &encoded, false).map_err(|e| e.to_string())?;
-    Ok(true)
 }

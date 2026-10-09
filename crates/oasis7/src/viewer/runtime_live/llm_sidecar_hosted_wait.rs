@@ -792,11 +792,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             phase_digest: format!("wait:{}:{}", wait.stage, request.provider_invocation_key()),
         };
         self.llm_sidecar.hosted_service_inflight = Some(token.clone());
-        Ok(AgentServiceProgress::NeedsIo(AgentServiceIoJob {
+        Ok(AgentServiceProgress::NeedsIo(Box::new(AgentServiceIoJob {
             token,
             client: Some(client),
             operation,
-        }))
+        })))
     }
     pub(in crate::viewer::runtime_live) fn apply_hosted_wait_io(
         &mut self,
@@ -845,7 +845,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             {
                 return Err("hosted Wait view precedes commit".into());
             };
-            self.apply_hosted_verified_view(view)?;
+            self.apply_hosted_verified_view(*view)?;
             if wait.stage == "admit_view" || wait.stage == "resumed_view" {
                 let admitted = wait.admitted.clone().ok_or("hosted Wait receipt missing")?;
                 admitted

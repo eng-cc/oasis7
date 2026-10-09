@@ -265,7 +265,7 @@ pub(crate) fn verify_periodic_view_gate(client: &RemoteWorldServiceClient) {
         thread::sleep(Duration::from_millis(2));
     }
     let gate_started = root.join("world-periodic-view-started").exists();
-    let gate_record = fs::read(&root.join("world-periodic-view-started"))
+    let gate_record = fs::read(root.join("world-periodic-view-started"))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
         .unwrap_or_default();

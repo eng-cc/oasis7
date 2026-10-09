@@ -269,6 +269,10 @@ pub enum AdmissionDurability {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Keep the public lifecycle API allocation-free; committed values already own their bounded commit metadata"
+)]
 pub enum IntentOutcome<T> {
     Received { durability: AdmissionDurability },
     Pending,
@@ -305,6 +309,10 @@ impl<T> IntentResponse<T> {
 
 /// A local observation, never an authoritative intent lifecycle state.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Keep submit observations allocation-free and preserve the published response API"
+)]
 pub enum SubmitObservation<T> {
     Response(IntentResponse<T>),
     OutcomeUnknown(RequestCorrelation),
@@ -330,10 +338,10 @@ impl ReadWorldViewRequest {
                 return Err(ContractError("read world mismatch"));
             }
         }
-        if let (Some(fixed), Some(minimum)) = (&self.fixed_commit, &self.min_commit) {
-            if !fixed.satisfies_minimum(minimum)? {
-                return Err(ContractError("fixed commit below minimum"));
-            }
+        if let (Some(fixed), Some(minimum)) = (&self.fixed_commit, &self.min_commit)
+            && !fixed.satisfies_minimum(minimum)?
+        {
+            return Err(ContractError("fixed commit below minimum"));
         }
         Ok(())
     }
@@ -361,15 +369,15 @@ impl<T> ReadWorldViewResponse<T> {
         {
             return Err(ContractError("view and continuation mismatch"));
         }
-        if let Some(minimum) = &request.min_commit {
-            if !self.version.commit.satisfies_minimum(minimum)? {
-                return Err(ContractError("read not caught up"));
-            }
+        if let Some(minimum) = &request.min_commit
+            && !self.version.commit.satisfies_minimum(minimum)?
+        {
+            return Err(ContractError("read not caught up"));
         }
-        if let Some(fixed) = &request.fixed_commit {
-            if &self.version.commit != fixed {
-                return Err(ContractError("fixed view mismatch"));
-            }
+        if let Some(fixed) = &request.fixed_commit
+            && &self.version.commit != fixed
+        {
+            return Err(ContractError("fixed view mismatch"));
         }
         Ok(())
     }

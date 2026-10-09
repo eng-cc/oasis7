@@ -11,6 +11,75 @@ pub struct VerifiedWorldView {
     response: ReadWorldViewResponse<WorldServiceProjection>,
 }
 
+impl VerifiedWorldView {
+    pub(crate) fn new(
+        response: ReadWorldViewResponse<WorldServiceProjection>,
+        request: &ReadWorldViewRequest,
+    ) -> Result<Self, String> {
+        response.validate(request).map_err(|e| e.to_string())?;
+        if response.view.state.time != response.logical_tick {
+            return Err("projection tick differs from declared logical tick".into());
+        }
+        if let Some(binding) = &response.view.runtime_binding {
+            binding.validate().map_err(|e| format!("{e:?}"))?;
+            let expected = &response.version.commit.binding;
+            if binding.world_id != expected.provider_world_id
+                || binding.branch_id != expected.branch_id
+                || binding.reorg_epoch != expected.reorg_generation
+                || binding.base_tick != response.logical_tick
+                || binding.runtime_manifest_hash.to_string() != expected.governing_manifest_ref
+                || super::authority::request_digest(
+                    "finality",
+                    &(
+                        binding.finality_epoch,
+                        &binding.finality_status,
+                        &binding.finality_block_hash,
+                    ),
+                )? != expected.finality_ref
+            {
+                return Err("projection runtime binding differs from committed view".into());
+            }
+        }
+        let agent = request.scope_id.strip_prefix("agent:");
+        if response
+            .view
+            .agent_context
+            .as_ref()
+            .is_some_and(|context| Some(context.agent_id.as_str()) != agent)
+            || response
+                .view
+                .scheduler_wakes
+                .iter()
+                .any(|wake| Some(wake.agent_id.as_str()) != agent)
+            || response
+                .view
+                .continuations
+                .iter()
+                .any(|entry| Some(entry.agent_id.as_str()) != agent)
+            || response
+                .view
+                .cognition_leases
+                .iter()
+                .any(|lease| Some(lease.agent_id.as_str()) != agent)
+        {
+            return Err("Agent observation differs from authorized visibility scope".into());
+        }
+        Ok(Self { response })
+    }
+    pub fn version(&self) -> &ProjectionVersion {
+        &self.response.version
+    }
+    pub fn continuation(&self) -> &EventCursor {
+        &self.response.continuation
+    }
+    pub fn logical_tick(&self) -> u64 {
+        self.response.logical_tick
+    }
+    pub fn projection(&self) -> &WorldServiceProjection {
+        &self.response.view
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,74 +159,5 @@ mod tests {
         generation.version.commit.binding.permission_generation += 1;
         generation.continuation.commit = generation.version.commit.clone();
         assert!(VerifiedWorldView::new(generation, &request).is_err());
-    }
-}
-
-impl VerifiedWorldView {
-    pub(crate) fn new(
-        response: ReadWorldViewResponse<WorldServiceProjection>,
-        request: &ReadWorldViewRequest,
-    ) -> Result<Self, String> {
-        response.validate(request).map_err(|e| e.to_string())?;
-        if response.view.state.time != response.logical_tick {
-            return Err("projection tick differs from declared logical tick".into());
-        }
-        if let Some(binding) = &response.view.runtime_binding {
-            binding.validate().map_err(|e| format!("{e:?}"))?;
-            let expected = &response.version.commit.binding;
-            if binding.world_id != expected.provider_world_id
-                || binding.branch_id != expected.branch_id
-                || binding.reorg_epoch != expected.reorg_generation
-                || binding.base_tick != response.logical_tick
-                || binding.runtime_manifest_hash.to_string() != expected.governing_manifest_ref
-                || super::authority::request_digest(
-                    "finality",
-                    &(
-                        binding.finality_epoch,
-                        &binding.finality_status,
-                        &binding.finality_block_hash,
-                    ),
-                )? != expected.finality_ref
-            {
-                return Err("projection runtime binding differs from committed view".into());
-            }
-        }
-        let agent = request.scope_id.strip_prefix("agent:");
-        if response
-            .view
-            .agent_context
-            .as_ref()
-            .is_some_and(|context| Some(context.agent_id.as_str()) != agent)
-            || response
-                .view
-                .scheduler_wakes
-                .iter()
-                .any(|wake| Some(wake.agent_id.as_str()) != agent)
-            || response
-                .view
-                .continuations
-                .iter()
-                .any(|entry| Some(entry.agent_id.as_str()) != agent)
-            || response
-                .view
-                .cognition_leases
-                .iter()
-                .any(|lease| Some(lease.agent_id.as_str()) != agent)
-        {
-            return Err("Agent observation differs from authorized visibility scope".into());
-        }
-        Ok(Self { response })
-    }
-    pub fn version(&self) -> &ProjectionVersion {
-        &self.response.version
-    }
-    pub fn continuation(&self) -> &EventCursor {
-        &self.response.continuation
-    }
-    pub fn logical_tick(&self) -> u64 {
-        self.response.logical_tick
-    }
-    pub fn projection(&self) -> &WorldServiceProjection {
-        &self.response.view
     }
 }
