@@ -10,7 +10,8 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/verify-gameplay-attraction-automation.sh [options] [launcher args...]
 
-Verify the TASK-GAME-076 first-10/30-minute attraction automation matrix.
+Verify the TASK-GAME-076 trust/session structure automation matrix.
+Time, operation, action-family and content targets are diagnostic references.
 
 The required tier runs deterministic local gates:
 - viewer semantic contract (`npm ... test:feedback-contract`)
@@ -18,7 +19,7 @@ The required tier runs deterministic local gates:
 - runtime player_gameplay causality regressions
 - Bevy/pixel-world visual hierarchy probe
 - TASK-GAME-076 attraction cards, motivation-density card, and weak-sample regression
-- TASK-GAME-076 summary writer contract for content-volume supplement reporting
+- TASK-GAME-076 summary writer contract for fixture/live/human evidence scopes
 
 The live tier also runs real stack checks:
 - viewer-software-safe-step-regression.sh for browser/player-path evidence
@@ -26,6 +27,10 @@ The live tier also runs real stack checks:
 - viewer-gameplay-attraction-ui-click-playthrough.sh for actual player-visible UI-click execution
 - viewer-aw-test-completeness-playthrough.sh for __AW_TEST__ control-surface completeness
 - oasis7-pure-api-parity-smoke.sh for live pure API gameplay causality
+
+Fixture scores and choice proxies verify structure only. Live command logs describe
+the recorded candidate; human motivation and return remain unverified without human
+records. Production-only first output does not require delivery or demand progress.
 
 Options:
   --tier <required|live>       Validation tier (default: required)

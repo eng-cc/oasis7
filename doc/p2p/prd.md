@@ -4,6 +4,42 @@
 
 Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 source baseline：f9d5a552d9af04c1b1398262808198a58e560230（2026-09-26）。本文的 current 指冻结源所记专业合同；本次未独立验证实现、部署或测试通过。target 是规范目标，historical 是 MIG/CCG/TASK 与 dated evidence provenance。GitHub Issue/Project 维护实际任务与候选证据。新增稳定条款是原义务的细化入口；原章节/常量/命令/失败边界仍有效。
 
+<a id="p2p-authority-profiles"></a>
+### 版本化提交权威与同世界连续性（目标）
+
+正式世界按创世或已提交升级规则合法激活的 authority profile 验证提交证明，不能把兼容单签、threshold-1 或 stake-threshold prototype 原地改名为正式权威。
+
+| Profile | 提交决定与信任边界 | 激活与验收 |
+| --- | --- | --- |
+| `controlled_single_authority` | 一个受控权威决定提交；证明历史来源、顺序与连续性，正确性信任包含运营权威，不证明独立验证者共识。 | 首批持久世界开放前须闭合唯一追加权、跨故障域持久确认、幂等、证明消费与同世界恢复。 |
+| `bft` | 合法活动验证者按完整协议形成证书；证明适用 Byzantine 故障模型内的共识安全与提交。 | 必须通过 [BFT 证书闸门](#p2p-target-bft) 和同世界交接验收后激活。 |
+
+两种 profile 复用同一动作、确定性执行、状态、receipt 与恢复协议。提交证明至少绑定固定 `world_id`、`chain_id`、`genesis_hash`、高度/顺序、parent、authority epoch、profile 版本、runtime manifest，以及输入、执行结果和状态承诺。固定身份锚点不限制合法软件、manifest 或 authority 演进；变化必须经既有授权规则在同一历史接续，不得重发资产、删除旧结果或以新创世伪装恢复。建立长期世界前先核对既有保留承诺；有既有世界时沿用其合法身份和历史。隔离 local/dev 使用另一身份，不能并入。
+
+<a id="p2p-single-authority-durable-commit"></a>
+### 单权威正式提交与恢复闸门（目标）
+
+- **唯一追加权**：最终日志/存储原子校验合法 writer epoch、预期 parent/head 与追加顺序；signer 仅对合法 epoch 且达到提交条件的记录签发证明；完整 prepare 必须先持久确认，正式决定/证明生成后还须跨故障域持久确认才成为可对外认可的 committed 证明。本机进程锁与 `SingleWriterReplicationGuard` 的单调校验不足以隔离旧写者。恢复/人工切换先隔离旧 signer 与旧存储追加权，再从合法 head 推进授权 epoch；隔离无法证明时保持停写。
+- **持久性先于 committed 回应**：初期故障模型为单主机或单存储故障域失效后已确认提交不丢失。回应前本机及独立故障域持久保存同一完整提交记录、正式提交决定/证明、head/epoch、重放输入与结果、幂等身份和引用版本/工件。独立副本未确认时暂停 committed 确认，异步快照不能替代此条件；多个独立故障域同时毁损不在该保证内。
+- **准备与提交决定分开**：所有副本按同一持久提交判定规则恢复；预备记录不产生权威效果，已生效 epoch 不回退。超时/断连且不能证明未提交时保留“提交状态未知、待核对”，按原请求身份查询或完成原提交；只有证明尚无效果且已终止才判失败，不能作为新动作重试。
+- **实际开放路径共同提交**：输入扣除、产出、事件、执行结果、持久里程碑及去重事实共同提交；回复丢失、恢复与 replay 不产生第二效果。外部 effect 按 runtime 提交后派发与幂等合同执行，replay 不重新调用 LLM 或重复派发。
+- **同世界恢复**：固定身份 → 各历史高度合法 profile/epoch 与 manifest 激活链 → 已确认 checkpoint → hash-bound snapshot → 连续 committed log replay → state-root 核验。核对资产、Agent 归属、有效授权、未完成目标、pending、nonce/幂等和版本；回执列表裁剪不能删除持久里程碑依据。先提供验证只读；当前权威/head/版本/持久性全成立才恢复写入。
+
+首次开放证据必须在副本写入中、正式证明/提交决定写入中、回应 committed 前分别注入故障，并实证单故障域恢复 root/receipt 对账与旧 writer 拒绝。普通单测不能替代实际故障域演练；本段是 target，不宣称现有 prototype 已满足。
+
+<a id="p2p-authority-handoff"></a>
+### 单权威到 BFT 的 H/H+1 交接（目标）
+
+先接入验证固定身份、历史 profile、重执行和 state root 的只读节点；它们尚无写权/投票权。BFT 完成独立验证者重执行、持久证书、round/锁定/超时、重启、分区和集合转换后，通过计划停写窗口交接：
+
+1. 排空在途提交并保留 pending 原请求身份；新集合接受 H−1 的 checkpoint/状态根并持久保存切换材料。
+2. 旧合法 authority 在 H 提交唯一交接记录，绑定交接前 checkpoint/root、新 validator set、profile 版本、epoch 和 H+1 生效边界；H 的正式证明另绑定执行交接记录后的结果根，新集合验证接受记录、证明与结果根。
+3. 存储、入口、signer 与全部 proof verifier 在 H+1 及以后只接受新 profile，隔离旧写入与签名通道；新集合从 H+1 产生首个有效 BFT 提交后恢复写入。
+
+H 正式提交前可以取消计划；H 一旦按旧 profile 正式提交，接续权不可撤回，旧 profile 的合法提交范围截止 H。即使 H+1 尚无 BFT 提交，重启、取消请求、旧写者隔离或新集合启动失败都只能保持停写，不能恢复旧单权威。记录、结果根、集合和边界须满足既定持久条件。旧历史仍按当时 profile 验证，不追认为独立验证者共识。pending 恢复按当前有效权限、资源、manifest 重新裁决。
+
+同候选验收覆盖 H 已提交而 H+1 未提交时宕机/取消，重启仍拒绝旧 profile 在 H+1 追加；并证明无双写、断链、身份重置、资产重发或失效 pending 自动生效。当前运行状态仍由 GitHub task 与候选证据决定。
+
 <a id="p2p-ordered-execution"></a>
 ### 有序动作与执行绑定
 
@@ -14,7 +50,7 @@ admission 身份/认证、非零 identity、payload/queue 上限；同一确定�
 <a id="p2p-receipt-finality-boundary"></a>
 ### 执行 receipt 与最终性
 
-receipt 不是 certificate；活动 validator 在投票前按同一 parent/manifest/动作重执行并核对 action/execution/event/state roots。工件/fault/root 错误拒绝；旧 threshold-1 TickCertificate 仅兼容诊断，不能推进 committed/replication/checkpoint/light-final。
+receipt 不是 authority commit proof；`bft` 下活动 validator 在投票前按同一 parent/manifest/动作重执行并核对 action/execution/event/state roots。工件/fault/root 错误拒绝；旧 threshold-1 TickCertificate 仅兼容诊断，不能推进 committed/replication/checkpoint/light-final。
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
 
@@ -35,7 +71,7 @@ receipt 不是 certificate；活动 validator 在投票前按同一 parent/manif
 <a id="p2p-target-recovery-trust-chain"></a>
 ### 目标同世界恢复链
 
-immutable tier/genesis manifest→verified finalized checkpoint/header+validator transition→hash-bound snapshot→canonical committed replay→verified state root→serve/vote；任何 identity/signature/continuity/hash/replay/root mismatch 阻断；prune 前证明可重建及冗余 archive。
+固定 world/chain/genesis 身份→各高度合法 profile/epoch/manifest 激活链→verified committed checkpoint/header+authority transition→hash-bound snapshot→canonical committed replay→verified state root→serve/vote；任何 identity/signature/continuity/hash/replay/root mismatch 阻断；prune 前证明可重建及冗余 archive。
 
 配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
 
@@ -87,7 +123,7 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
 
 - `ExecutionReceipt` 是 world-runtime 对确定性执行产物的 commitment/receipt，不是 consensus certificate，也不是 distributed finality。receipt 的字段、编码和 replay 语义由 [`doc/world-runtime/prd.md`](../world-runtime/prd.md) 拥有；本 PRD 只约束它如何进入 proposal、vote、commit 与 recovery 链路，不复制 runtime schema。
 - proposer 可以提交候选 receipt，但 active validator 在投票前必须从同一 committed parent state、同一 runtime/manifest 与同一确定排序的 action sequence 重执行，并独立重算和匹配 `action_root`、execution/event commitment 与 next `state_root`。缺少 artifact、执行 fault 或任一 root/commitment 不匹配时必须拒绝投票与提交，并阻断恢复；重启或本地修补不能替代该验证。
-- p2p/consensus 才负责 proposal ordering、validator-set/round 状态、签名投票、quorum/commit certificate 与 finality。只有验证现有 BFT 目标所要求的、绑定 world/height/round/roots/validator-set 的 quorum certificate 后，才能推进 committed height、replication、checkpoint 或向 light client 宣告 final；单个 receipt 或本地签名不足以宣称 finality。
+- p2p/consensus 才负责 proposal ordering、validator-set/round 状态、签名投票、quorum/commit certificate 与 finality。只有验证当时合法激活 profile 的正式提交证明并满足其持久条件后，才能推进 committed height、replication、checkpoint 或向 light client 宣告 committed；`bft` 额外要求绑定 world/height/round/roots/validator-set 的 quorum certificate。单个 receipt 或兼容本地签名均不能替代证明，也不能把单权威提交称为 distributed finality。
 - `tick_consensus_records`、`TickBlock`、`TickCertificate` 等旧记录仅作为 snapshot/replay/diagnostic compatibility surface。尤其是本地 threshold-1 或 process-local record/certificate 不得解释为 distributed finality，不得单独驱动投票、committed height、replication、checkpoint 或 light-client final 状态；迁移期间按兼容读取与 receipt conformance 逐步切换。
 - `WorldTick`、consensus height 与 wall-clock slot 仍是可兼容但不同的时间身份；tick 记录的存在不改变上述 execution-versus-finality 边界，也不改变本 PRD 后文既有的 BFT target/current-prototype 区分。
 
@@ -114,7 +150,7 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
 - **首个确定性 BFT 目标。** oasis7 自主实现首个 Tendermint/CometBFT-style 的高度/round 状态机：slot 只负责 proposer/pacing，独立 round 在 timeout 后推进；流程为 `Propose -> Prevote -> Precommit -> verified >2/3 active stake commit certificate`。每张 certificate 必须绑定 `world_id`、height、round、phase、block/action/execution roots、validator-set snapshot/hash 以及去重的签名投票证明；只有验证证书后才能更新 committed height、执行、复制、checkpoint 或向 light client 宣告 final。锁定/解锁、anti-double-sign、timeout/new-round、validator-set transition、partition/heal 与重启恢复均是该目标的一部分。HotStuff chained QC、Gasper/GRANDPA 的 head/finality 分层和 Solana PoH/Tower pipeline 不属于首个 skeleton。
 - **当前原型与目标的缺口。** 当前实现仍是 stake-weighted proposer/attestation threshold prototype：它没有持久或可验证的 quorum certificate、round/view-change/timeout、fork/partition 恢复证明，也不会在 replication replay 时重新验证 QC。`auto_attest_all_validators` 是显式开启且默认关闭的原型辅助开关，但当前 CLI 没有 test/dev 环境硬限制；因此它在任何环境都不能作为独立验证者 quorum 或 finality 证据，生产路径必须在 BFT readiness 前限制或移除该开关。上述 BFT、治理 registry 的终态 admission、slashing/reward settlement 和 public-chain readiness 全部是 target；本 PRD 不得将其写成 current implementation 或发布结论。
 - **网络与服务节点。** validators 保持 protected/private；public exposure 由 sentry/relay、full/state-sync/archive、RPC/proof gateway 等 permissionless service roles 承担。服务节点可自由运行，proof、hash 和 receipt 而非 operator identity 决定其输出是否可信；其失陷不得获得 consensus authority。libp2p 仍是网络底座，目标只借鉴主流 BFT 架构，不引入第二套 transport 或替换现有网络真值。
-- **链、DistFS 与恢复。** consensus 链承载全局顺序、validator transition、certificate、checkpoint/header 和 execution/state root；DistFS 承载 blob、snapshot、journal/proof 等 hash-addressed bulk data，不能替代 quorum finality。full-node bootstrap/recovery 的目标信任链固定为：immutable tier/genesis manifest -> verified finalized checkpoint/header and validator transition -> hash-bound snapshot -> canonical committed-log replay -> verified state root -> serve/vote。任何 world identity、certificate/signature、continuity、hash、replay 或 root mismatch 都必须阻断，不得以任意 peer/latest backup、重启或覆盖恢复权威状态。
+- **链、DistFS 与恢复。** consensus 链承载全局顺序、validator transition、certificate、checkpoint/header 和 execution/state root；DistFS 承载 blob、snapshot、journal/proof 等 hash-addressed bulk data，不能替代 quorum finality。full-node bootstrap/recovery 的目标信任链固定为：fixed world/chain/genesis identity -> verified historical profile/epoch/manifest activation chain -> verified committed checkpoint/header and authority transition -> hash-bound snapshot -> canonical committed-log replay -> verified state root -> serve/vote。任何 world identity、certificate/signature、continuity、hash、replay 或 root mismatch 都必须阻断，不得以任意 peer/latest backup、重启或覆盖恢复权威状态。
 - **分层存储与激励边界。** validators 保留投票和恢复所需的 authority-critical window；full/state-sync nodes 保留较长热历史并服务 verified snapshots/blobs；archives 保留完整 canonical audit history；light companions 只保留 finalized headers、validator transitions 与按需 proofs。prune 前必须证明 checkpoint/replay 可重建、hash/root 可验证且冗余 archive 可用。终态协议为治理准入 validators 提供 slashable stake 与有界 issuance/fee rewards，并只对客观可证明的共识故障结算；permissionless storage/relay/RPC services 以可验证 usage/availability receipts 获得可选 market fee 或 governed grant，不取得投票权，也不承受 blanket availability slashing。计量、签名证明、stake lock、fault evidence 与 deterministic settlement hook 属基础设施机制；费率、奖励池、补贴/授予预算和资格参数属于经济治理，非本 PRD 的已实施经济政策。
 
 ## 里程碑
