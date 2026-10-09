@@ -189,7 +189,10 @@ fn provider_backed_runner_with_state() -> (
 ) {
     let provider = MockDecisionProvider::with_scripted_responses(
         "live-harness-provider",
-        vec![Ok(wait_response_with_memory_intent())],
+        vec![
+            Ok(wait_response_with_memory_intent()),
+            Ok(wait_response_with_memory_intent()),
+        ],
     );
     let shared_state = provider.shared_state();
     let behavior = ProviderBackedAgentBehavior::new(

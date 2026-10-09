@@ -584,6 +584,20 @@ impl RuntimeLlmSidecar {
         let context = self.provider_recovery_context(agent_id);
         let reject_reason = reject_reason.into();
         let Some(context) = context else {
+            // Successful Wait compensation has already closed its authority
+            // context. The polling adapter can still retain its error result;
+            // release that result without inventing another feedback identity.
+            if self.provider_held_decisions.contains_key(agent_id)
+                && !self.provider_active_turns.contains_key(agent_id)
+                && !self.provider_cognition_leases.contains_key(agent_id)
+                && !self.provider_recovery_pending.contains_key(agent_id)
+                && !self
+                    .provider_continuation_recovery_pending
+                    .contains_key(agent_id)
+                && !self.has_pending_runtime_wake_for_agent(agent_id)
+            {
+                self.release_provider_turn_checked(agent_id)?;
+            }
             return Ok(None);
         };
         let existing = self

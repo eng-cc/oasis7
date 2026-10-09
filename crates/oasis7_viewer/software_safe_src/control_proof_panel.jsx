@@ -73,7 +73,7 @@ export function buildControlProofAgencyDisplayModel(proof = {}) {
 }
 
 function Metric(props) {
-  return <div class="metric"><div class="metric__label">{props.label}</div><div class="metric__value">{props.value}</div></div>;
+  return <div class="metric" style={{ "min-width": "0" }}><div class="metric__label" style={{ "overflow-wrap": "anywhere" }}>{props.label}</div><div class="metric__value" style={{ "white-space": "normal", "overflow-wrap": "anywhere" }}>{props.value}</div></div>;
 }
 
 export function ControlProofPanel(props) {
@@ -99,7 +99,7 @@ export function ControlProofPanel(props) {
     <div class="event-card__meta">{tr("玩家意图、Agent 预测与运行时世界结果分别展示。", "Player intent, Agent predictions and runtime world results are shown separately.")}</div>
     <Show when={props.fixture}><div class="feedback-detail">{tr("展示测试样本：不代表真实运行时执行。", "Display fixture: no runtime execution evidence.")}</div></Show>
     <div class="feedback-summary">{model().status === "unavailable" ? tr("详细因果证明尚不可用；请读取运行时下一步。", "Detailed causal proof is unavailable; read the runtime next step.") : status()}</div>
-    <div class="summary-grid">
+    <div class="summary-grid" style={{ "grid-template-columns": "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }}>
       <Metric label={tr("玩家意图", "Player Intent")} value={value(proof().intent)} />
       <Metric label={tr("意图身份", "Intent identity")} value={value(model().intentId)} />
       <Metric label={tr("世界结果", "Actual world result")} value={model().status === "unavailable" ? unavailable() : joined(model().actual)} />
@@ -108,14 +108,14 @@ export function ControlProofPanel(props) {
       <Metric label={tr("下一步", "Next Move")} value={value(model().nextStep)} />
     </div>
     <Show when={model().status === "unavailable"}><div class="feedback-detail">{model().unavailableReason}</div></Show>
-    <Show when={model().receiptId}><div class="summary-grid" data-testid="control-proof-receipt">
+    <Show when={model().receiptId}><div class="summary-grid" style={{ "grid-template-columns": "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }} data-testid="control-proof-receipt">
       <Metric label={tr("提交回执", "Committed receipt")} value={value(model().receiptId)} />
       <Metric label={tr("提交身份", "Commit identity")} value={value(model().commitId)} />
       <Metric label={tr("实际动作", "Actual action")} value={`${value(model().actionKind)} · ${value(model().actionId)}`} />
       <Metric label={tr("领域事件引用", "Domain event references")} value={joined(model().events)} />
       <Metric label={tr("效果意图引用", "Effect intent reference")} value={value(model().effectIntentId)} />
     </div></Show>
-    <div class="summary-grid" data-testid="control-proof-prediction">
+    <div class="summary-grid" style={{ "grid-template-columns": "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }} data-testid="control-proof-prediction">
       <Metric label={tr("Agent 预测（未经验证）", "Agent prediction (unverified)")} value={value(model().prediction)} />
       <Metric label={tr("Agent 利害说明（未经验证）", "Agent stakes (unverified)")} value={value(model().stakes)} />
       <Metric label={tr("Agent 替代方案（未经验证）", "Agent alternatives (unverified)")} value={joined(model().alternatives)} />
@@ -124,7 +124,7 @@ export function ControlProofPanel(props) {
       <Metric label={tr("中断引用", "Interruption references")} value={joined(model().interruptionRefs)} />
       <Metric label={tr("所有者控制引用", "Owner control references")} value={joined(model().ownerControlRefs)} />
     </div>
-    <For each={model().authorizations}>{(authorization) => <div class="summary-grid" data-testid="control-proof-authorization">
+    <For each={model().authorizations}>{(authorization) => <div class="summary-grid" style={{ "grid-template-columns": "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }} data-testid="control-proof-authorization">
       <Metric label={tr("授权来源 / 签发者", "Grant source / issuer")} value={`${value(authorization.grant.source_id)} · ${value(authorization.grant.issuer_id)}`} />
       <Metric label={tr("授权身份 / 版本", "Grant identity / revision")} value={`${value(authorization.grant.grant_id)} · ${value(authorization.grant.revision)}`} />
       <Metric label={tr("对象 / 动作范围", "Object / action scope")} value={`${value(authorization.grant.object_id)} · ${joined(strings(authorization.grant.action_kinds).map(pretty))}`} />
@@ -134,14 +134,14 @@ export function ControlProofPanel(props) {
     </div>}</For>
     <Show when={!model().authorizations.length}><Metric label={tr("当前授权", "Current authorization")} value={unavailable()} /></Show>
     <Show when={model().receiptAuthorization}><Metric label={tr("本回执授权电力成本", "This receipt's authorized electricity cost")} value={`${value(model().receiptAuthorization.cost_units)} ${budgetUnit(model().receiptAuthorization.grant?.resource_kind)}`} /></Show>
-    <div class="summary-grid">
+    <div class="summary-grid" style={{ "grid-template-columns": "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }}>
       <Metric label={tr("Agent 异议", "Agent dissent")} value={value(model().dissent)} />
       <Metric label={tr("Override 来源", "Override actor")} value={value(model().overrideActor)} />
       <Metric label={tr("不可越过的边界", "Hard boundary")} value={value(model().hardBoundary)} />
     </div>
     <Show when={model().memory} fallback={<Metric label={tr("已引用记忆", "Referenced memory")} value={unavailable()} />}>
       <div data-testid="control-proof-memory">
-        <div class="summary-grid">
+        <div class="summary-grid" style={{ "grid-template-columns": "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }}>
           <Metric label={tr("记忆范围 / 版本", "Memory scope / revision")} value={`${value(model().memory?.scope)} · ${value(model().memory?.revision)}`} />
           <Metric label={tr("记忆来源", "Memory source")} value={value(model().memory?.source)} />
           <Metric label={tr("用于决定", "Decision usage")} value={model().memory?.used ? tr("已用于提交决定", "Used in committed decision") : tr("仅进入准备中的请求", "Included in prepared request only")} />
@@ -152,7 +152,7 @@ export function ControlProofPanel(props) {
         <For each={model().memory?.sources}>{(source) => <Metric label={tr("记忆原始回执", "Memory origin receipt")} value={`${value(source.id)} · ${value(source.receipt)} · ${joined(source.corrections)}`} />}</For>
       </div>
     </Show>
-    <For each={model().corrections}>{(correction) => <div class="summary-grid" data-testid="control-proof-correction" data-correction-status={correction.status}>
+    <For each={model().corrections}>{(correction) => <div class="summary-grid" style={{ "grid-template-columns": "repeat(auto-fit, minmax(min(100%, 180px), 1fr))" }} data-testid="control-proof-correction" data-correction-status={correction.status}>
       <Metric label={tr("记忆纠正", "Memory correction")} value={`${value(correction.id)} · ${correctionStatus(correction.status)}`} />
       <Metric label={tr("纠正原因 / 版本", "Correction reason / revision")} value={`${value(correction.reason)} · ${value(correction.revision)}`} />
       <Metric label={tr("最早准备请求", "Earliest prepared request")} value={value(correction.earliestDecision)} />
