@@ -2,6 +2,7 @@
 from installer import InstallError, canonical_bytes, digest, read_file, write_new, parse_json, ACTIONS, build_installation_config
 from contextlib import contextmanager
 import fcntl
+import ctypes
 import os
 from pathlib import Path
 import platform
@@ -15,6 +16,7 @@ from collections.abc import Mapping
 CONFIG = Path("/private/etc/oasis7/local-signer-installation.json")
 RELEASE_ROOT = Path("/usr/local/libexec/oasis7-local-signer")
 JOURNAL = Path("/private/var/db/oasis7-local-signer-install.json")
+JOBS_ROOT = Path("/private/var/db/oasis7-local-signer-jobs")
 SUDO = Path("/private/etc/sudoers.d/oasis7-local-signer")
 ENV = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C"}
 RUNTIME_PATH = Path("/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9")
@@ -55,6 +57,7 @@ class MacOSHost:
         for path in paths:
             identities.extend(self.inspect_path(path, protected=True))
         work = Path(request["work_dir"])
+        self.validate_jobs(work, caller)
         identities.extend(self.inspect_path(work, protected=False))
         if work.exists():
             info = work.lstat()
@@ -62,16 +65,30 @@ class MacOSHost:
                 return facts
         elif not work.parent.is_dir() or work.parent.lstat().st_uid != caller.pw_uid:
             return facts
-        mounts = self.run(["/sbin/mount"])
-        if not local_mounts_only(mounts):
-            return facts
         policy = self.run(["/usr/bin/sudo", "-n", "-l", "-U", request["caller_user"]], allow_failure=True)
         self.run(["/usr/sbin/visudo", "-c"])
         worker = str(RELEASE_ROOT / release["manifest"]["release_id"] / "oasis7_local_signer_worker")
-        facts.update(safe=True, acl_safe=True, sudo_safe=sudo_policy_safe(policy, uid, gid, worker), identities=identities, sudo_policy_sha256=digest(policy.encode()), mounts_sha256=digest(mounts.encode()))
+        facts.update(safe=True, acl_safe=True, sudo_safe=sudo_policy_safe(policy, uid, gid, worker), identities=identities, sudo_policy_sha256=digest(policy.encode()))
         if not previous and any(path.exists() for path in (Path(request["store_dir"]), CONFIG, RELEASE_ROOT / release["manifest"]["release_id"], SUDO)):
             facts["safe"] = False
         return facts
+
+    def validate_jobs(self, work, caller):
+        if (caller.pw_name in ("", ".", "..") or "/" in caller.pw_name
+                or work != JOBS_ROOT / caller.pw_name / "oasis7-local-signer"):
+            raise InstallError("INSTALLATION_DRIFT", "fixed external caller jobs path required")
+        self.inspect_path(JOBS_ROOT, protected=True)
+        for path, uid, gid, mode in ((JOBS_ROOT, 0, 0, 0o711),
+                                     (work.parent, caller.pw_uid, caller.pw_gid, 0o700)):
+            self.inspect_path(path, protected=False)
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (uid, gid, mode):
+                raise InstallError("INSTALLATION_DRIFT", "jobs parent identity or permissions mismatch")
+        if os.path.lexists(work):
+            self.inspect_path(work, protected=False)
+            info = work.lstat()
+            if not stat.S_ISDIR(info.st_mode) or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (caller.pw_uid, caller.pw_gid, 0o700):
+                raise InstallError("INSTALLATION_DRIFT", "jobs leaf identity or permissions mismatch")
 
     @staticmethod
     def run(argv, *, allow_failure=False):
@@ -104,18 +121,50 @@ class MacOSHost:
     def inspect_path(self, path, *, protected):
         observations = []
         current = Path("/")
-        for part in path.parts[1:]:
-            current /= part
-            if not current.exists() and not current.is_symlink():
-                observations.append(dict(path=str(current), absent=True))
-                break
-            info = current.lstat()
-            if stat.S_ISLNK(info.st_mode) or (protected and (info.st_uid != 0 or info.st_mode & 0o022)):
-                raise InstallError("INSTALLATION_DRIFT", "unsafe path ancestor")
-            acl = self.run(["/bin/ls", "-lde", str(current)])
-            if not acl_safe(acl):
-                raise InstallError("INSTALLATION_DRIFT", "ACL present or unobservable")
-            observations.append(dict(path=str(current), dev=info.st_dev, ino=info.st_ino, uid=info.st_uid, gid=info.st_gid, mode=stat.S_IMODE(info.st_mode), acl_sha256=digest(acl.encode())))
+        path = Path(path)
+        if not path.is_absolute() or ".." in path.parts:
+            raise InstallError("INSTALLATION_DRIFT", "noncanonical installation path")
+        descriptors = []
+        try:
+            fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            descriptors.append(fd)
+            components = [None] + list(path.parts[1:])
+            for part in components:
+                if part is not None:
+                    current /= part
+                    try:
+                        fd = os.open(part, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+                    except FileNotFoundError:
+                        observations.append(dict(path=str(current), absent=True))
+                        break
+                    descriptors.append(fd)
+                info = os.fstat(fd)
+                if (not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode))
+                        or (protected and (info.st_uid != 0 or info.st_mode & 0o022))):
+                    raise InstallError("INSTALLATION_DRIFT", "unsafe path ancestor")
+                filesystem = descriptor_filesystem(fd)
+                validate_filesystem(filesystem)
+                acl = self.run(["/bin/ls", "-lde", str(current)])
+                if not acl_safe(acl):
+                    raise InstallError("INSTALLATION_DRIFT", "ACL present or unobservable")
+                observations.append(dict(path=str(current), dev=info.st_dev, ino=info.st_ino, uid=info.st_uid, gid=info.st_gid, mode=stat.S_IMODE(info.st_mode), acl_sha256=digest(acl.encode()), filesystem=filesystem))
+            # Keep every ancestor open until pathname/descriptor identity and
+            # filesystem checks are complete. Concurrent trusted-root mutation
+            # remains outside the documented installation trust boundary.
+            for descriptor, observation in zip(descriptors, observations):
+                live = Path(observation["path"]).lstat()
+                held = os.fstat(descriptor)
+                if (live.st_dev, live.st_ino, live.st_mode, live.st_uid, live.st_gid) != (held.st_dev, held.st_ino, held.st_mode, held.st_uid, held.st_gid):
+                    raise InstallError("INSTALLATION_DRIFT", "path identity changed")
+                if descriptor_filesystem(descriptor) != observation["filesystem"]:
+                    raise InstallError("INSTALLATION_DRIFT", "filesystem identity changed")
+            if observations[-1].get("absent") and os.path.lexists(observations[-1]["path"]):
+                raise InstallError("INSTALLATION_DRIFT", "absent path appeared")
+        except OSError as error:
+            raise InstallError("INSTALLATION_DRIFT", "path or filesystem unobservable") from error
+        finally:
+            for descriptor in reversed(descriptors):
+                os.close(descriptor)
         return observations
 
     @contextmanager
@@ -241,6 +290,10 @@ class MacOSHost:
 
     def validate_installed(self, plan, release, check_sudo=True):
         try:
+            caller = pwd.getpwnam(plan["caller"]["name"])
+            if caller.pw_uid != plan["caller"]["uid"] or caller.pw_gid != plan["observations"][0]["facts"]["caller_gid"]:
+                return False
+            self.validate_jobs(Path(plan["caller"]["work_dir"]), caller)
             self.verify_identity(plan["signer"])
             self.inspect_path(CONFIG, protected=True)
             config = parse_json(read_file(CONFIG, 65536))
@@ -249,9 +302,11 @@ class MacOSHost:
             if config["installation_id"] != plan["installation_id"] or config["deployment_id"] != plan["deployment_id"] or config["release_id"] != plan["release_id"] or config["signer_uid"] != plan["signer"]["uid"] or config["signer_gid"] != plan["signer"]["gid"]:
                 return False
             for path, uid, gid, mode in layout(plan):
+                self.inspect_path(Path(path), protected=False)
                 info = Path(path).lstat()
                 if not stat.S_ISDIR(info.st_mode) or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (uid, gid, mode) or not acl_safe(self.run(["/bin/ls", "-lde", str(path)])):
                     return False
+            self.inspect_path(Path(plan["caller"]["work_dir"]), protected=False)
             store, work = Path(plan["store_dir"]).lstat(), Path(plan["caller"]["work_dir"]).lstat()
             if (store.st_dev, store.st_ino) != (config["store_device_id"], config["store_inode"]) or config["callers"] != [dict(uid=plan["caller"]["uid"], work_dir=plan["caller"]["work_dir"], work_device_id=work.st_dev, work_inode=work.st_ino)] or work.st_uid != plan["caller"]["uid"] or stat.S_IMODE(work.st_mode) != 0o700:
                 return False
@@ -350,9 +405,37 @@ def acl_safe(output):
     return bool(lines) and len(lines) == 1 and not lines[0].split()[0].endswith("+")
 
 
-def local_mounts_only(output):
-    # Conservative host-wide gate: any network volume requires a separate supported contract.
-    return bool(output.strip()) and all("(apfs," in line or "(hfs," in line or "(devfs," in line for line in output.splitlines())
+def descriptor_filesystem(fd):
+    """Darwin inode64 statfs ABI, from the SDK sys/mount.h; never parse mount text."""
+    if sys.platform != "darwin":
+        raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "Darwin filesystem proof required")
+    class StatFS(ctypes.Structure):
+        _fields_ = [("bsize", ctypes.c_uint32), ("iosize", ctypes.c_int32)] + [
+            (name, ctypes.c_uint64) for name in ("blocks", "bfree", "bavail", "files", "ffree")
+        ] + [("fsid", ctypes.c_int32 * 2), ("owner", ctypes.c_uint32),
+             ("type", ctypes.c_uint32), ("flags", ctypes.c_uint32), ("subtype", ctypes.c_uint32),
+             ("name", ctypes.c_char * 16), ("mount", ctypes.c_char * 1024),
+             ("source", ctypes.c_char * 1024), ("flags_ext", ctypes.c_uint32),
+             ("reserved", ctypes.c_uint32 * 7)]
+    library = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+    native = library.fstatfs64  # Explicit statfs64 ABI on both arm64 and x86_64.
+    native.argtypes = [ctypes.c_int, ctypes.POINTER(StatFS)]
+    native.restype = ctypes.c_int
+    result = StatFS()
+    if native(fd, ctypes.byref(result)) != 0:
+        raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "descriptor filesystem unavailable")
+    try:
+        name = result.name.decode("ascii")
+    except UnicodeDecodeError as error:
+        raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "unknown filesystem name") from error
+    return dict(type=name, flags=result.flags, fsid=list(result.fsid), owner=result.owner)
+
+
+def validate_filesystem(facts):
+    if (facts.get("type") not in ("apfs", "hfs")
+            or not facts.get("flags", 0) & 0x1000  # MNT_LOCAL
+            or facts.get("flags", 0) & 0x200000):  # MNT_IGNORE_OWNERSHIP
+        raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "installation requires local ownership-enforcing APFS/HFS")
 
 
 def sudo_policy_safe(output, uid, gid, worker, require_worker=False):
