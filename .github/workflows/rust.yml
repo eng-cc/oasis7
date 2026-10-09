@@ -432,6 +432,12 @@ jobs:
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
+      - name: Install WASM C compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+          clang --print-targets | grep -w wasm32
+          llvm-ar --version
       - name: Execute selected cell
         shell: bash
         env:
@@ -439,11 +445,6 @@ jobs:
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
-      - name: Install WASM C compiler
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang llvm
-          clang --print-targets | grep -w wasm32
       - name: Verify pinned network source and process compatibility
         run: |
           python3 scripts/libp2p-security-source.test.py
@@ -1167,6 +1168,7 @@ jobs:
           rustup default "${RUST_TOOLCHAIN}"
           rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
           rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
+          rustup target add wasm32-unknown-unknown
       - name: Install cargo-deny
         uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2
         with:
@@ -1175,6 +1177,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            clang \
+            llvm \
             pkg-config \
             libwayland-dev \
             wayland-protocols \
@@ -1186,6 +1190,8 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
+          clang --print-targets | grep -w wasm32
+          llvm-ar --version
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           shared-key: ci-full-regression-trusted-v2

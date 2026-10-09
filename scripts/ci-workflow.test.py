@@ -60,6 +60,17 @@ class Workflow(unittest.TestCase):
             self.assertIn(test, governance)
         self.assertNotIn('run: python3 scripts/ci-workflow.test.py', governance) # already in authority cell
 
+    def test_network_wasm_tools_precede_authority_execution(self):
+        net = JOBS['net']
+        self.assertLess(net.index('Install WASM C compiler'), net.index('Execute selected cell'))
+        self.assertLess(net.index('llvm-ar --version'), net.index('Execute selected cell'))
+        writer = JOBS['full-regression']
+        self.assertIn('            clang \\', writer)
+        self.assertIn('            llvm \\', writer)
+        self.assertIn('rustup target add wasm32-unknown-unknown', writer)
+        for tool in ('clang --print-targets | grep -w wasm32', 'llvm-ar --version'):
+            self.assertLess(writer.index(tool), writer.index('Run full test tier'))
+
     def test_trusted_writer_only_runs_on_protected_main(self):
         writer = JOBS['full-regression']
         self.assertIn("if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'))", writer)
