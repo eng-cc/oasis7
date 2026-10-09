@@ -29,7 +29,7 @@ Options:
   --out-dir <path>            Artifact root (default: output/playwright/playability)
   --startup-timeout <secs>    Wait timeout for stack startup / TCP listener (default: 240)
   --step-a <count>            Steps to settle the first factory build (default: 2)
-  --step-b <count>            Steps to settle the first recipe run (default: 2)
+  --step-b <count>            Steps to settle the first recipe run (default: 12)
   --step-c <count>            Extra full-tier follow-up steps after milestone (default: 8)
   --player-id <id>            Player id for reconnect-sync (default: player-api-smoke)
   -h, --help                  Show this help
@@ -74,7 +74,7 @@ out_root="output/playwright/playability"
 startup_timeout_secs=240
 client_timeout_ms=60000
 step_a=2
-step_b=2
+step_b=12
 step_c=8
 player_id="player-api-smoke"
 stack_args=()
@@ -304,41 +304,7 @@ target_agent_id=$(find_action_target "$initial_snapshot_path" "build_factory_sme
   --private-key-hex "$private_key_hex" \
   --public-key-hex "$public_key_hex" \
   --with-snapshot >"$recipe_action_path"
-followup_already_visible_after_recipe=0
-if [[ "$tier" == "required" ]]; then
-  if python3 - "$step_a_path" "$recipe_action_path" <<'PY'
-import json
-import sys
-
-allowed_goals = {
-    "post_onboarding.establish_first_capability",
-    "post_onboarding.stabilize_first_line_after_output",
-    "post_onboarding.choose_midloop_path",
-}
-for path in sys.argv[1:]:
-    payload = json.load(open(path, encoding="utf-8"))
-    gameplay = payload.get("player_gameplay") or {}
-    if (
-        gameplay.get("stage_id") == "post_onboarding"
-        and gameplay.get("goal_id") in allowed_goals
-    ):
-        raise SystemExit(0)
-raise SystemExit(1)
-PY
-  then
-    followup_already_visible_after_recipe=1
-  fi
-fi
-if [[ "$followup_already_visible_after_recipe" == "1" ]]; then
-  cat >"$step_b_path" <<'JSON'
-{
-  "skipped": true,
-  "reason": "followup_already_visible_after_step_a_or_recipe_action"
-}
-JSON
-else
-  "$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" step --count "$step_b" >"$step_b_path"
-fi
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" step --count "$step_b" >"$step_b_path"
 if [[ "$tier" == "full" ]]; then
   "$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" step --count "$step_c" >"$step_c_path"
 fi
@@ -361,6 +327,11 @@ python3 - "$tier" \
 import json
 import pathlib
 import sys
+import importlib.util
+
+spec = importlib.util.spec_from_file_location("industrial_starter_evidence", "scripts/industrial-starter-evidence.py")
+starter_evidence = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(starter_evidence)
 
 tier = sys.argv[1]
 live_addr = sys.argv[2]
@@ -464,10 +435,10 @@ checks = {
     "initial_actions_include_step": has_protocol_action(initial_snapshot, "live_control.step"),
     "initial_actions_include_play": has_protocol_action(initial_snapshot, "live_control.play"),
     "initial_actions_include_build_smelter": has_action_id(initial_snapshot, "build_factory_smelter_mk1"),
-    "build_action_protocol_response": bool(build_ack or build_error),
+    "build_action_protocol_response": bool(build_ack) and not build_error,
     "build_snapshot_present": bool(build_snapshot),
     "step_a_advanced": (step_a_ack or {}).get("ack", {}).get("status") == "advanced",
-    "recipe_action_protocol_response": bool(recipe_ack or recipe_error),
+    "recipe_action_protocol_response": bool(recipe_ack) and not recipe_error,
     "step_b_advanced": step_b_skipped or (step_b_ack or {}).get("ack", {}).get("status") == "advanced",
     "followup_stage_post_onboarding": followup_stage == "post_onboarding",
     "followup_goal_reaches_capability_lane": followup_goal_ok,
@@ -487,6 +458,8 @@ if tier == "full":
     checks["step_c_advanced"] = (step_c_ack or {}).get("ack", {}).get("status") == "advanced"
     checks["step_c_snapshot_present"] = bool((step_c or {}).get("latest_snapshot"))
 
+canonical_evidence = starter_evidence.validate(build_action, step_a, recipe_action, step_c if step_c else step_b, recovery)
+checks.update(canonical_evidence["checks"])
 failed_checks = [name for name, ok in checks.items() if not ok]
 shared_player_questions = {
     "current_stage": {
@@ -543,6 +516,7 @@ summary = {
     "recovery_status": (recovery_ack or {}).get("ack", {}).get("status"),
     "recovery_snapshot_present": recovery_snapshot is not None,
     "shared_player_questions": shared_player_questions,
+    "canonical_starter_evidence": canonical_evidence,
     "notes": [
         "This smoke validates the pure_api player path via oasis7_pure_api_client and the canonical snapshot.player_gameplay contract, not browser UI rendering.",
         "Formal pure_api parity is only valid with active LLM access; no-LLM runs are observer/debug-only and must not be promoted to parity_verified.",
@@ -586,6 +560,9 @@ if failed_checks:
         *[f"- `{name}`" for name in failed_checks],
     ])
 summary_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+if failed_checks:
+    print("\n".join(lines))
+    raise SystemExit(1)
 PY
 
 cat "$summary_md_path"

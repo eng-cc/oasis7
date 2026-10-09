@@ -35,6 +35,10 @@
 
 ## 5. Exactly-once、replay 与跨 surface 验收
 
+`scripts/oasis7-pure-api-parity-smoke.sh` 的 canonical `production_only` 路径必须同时检查真实 build/recipe ack、生产前无 starter milestone、匹配 profile/revision 与 production receipt、工厂所属 site 的 owner-bound output ledger 正量铁锭 credit，以及 reconnect 后相同 milestone/产出；阶段、进度、action error 或普通库存变化不能代签。该检查读取已有完整 runtime snapshot，不新增玩家投影或完成权威。它证明该运行窗口的生产与重连接续，不单独证明独立故障域持久确认、节点灾备、稳定窗口或 delivery。
+
+已知待验收边界：gameplay-action 重用认证 nonce 会返回 `auth_nonce_replay`，该防重放拒绝不是查询原生产结果的幂等回执。需另行验证回复丢失后沿同一请求身份查询/恢复，以及重启后不重复扣费、生产；不得将换新 nonce 的重提默认解释为原请求恢复。本检查不实现该协议变更。
+
 - 同一 root、profile 与 matching receipt 只能推进一次；重复确认、重连、Agent retry、snapshot restore、乱序事件与 replay 必须返回原处置，不得复制 production、delivery、需求减少、奖励、`W` 或下一目标解锁。
 - Viewer、pure API 与 Agent 必须对 profile、阶段、primary blocker、已占用/已消费价值、`next_action`、`next_recheck` 与 `progression_effect` 给出同义结果；任一 surface 缺少 authority 时都显示 `no_safe_starter_chain`，不得自造默认完成。
 - 验收必须覆盖：accepted 不推进；`production_only` 的单个 matching production receipt 只完成一次首产物且不会提前产生 `production-stable`；稳定标签仅在另行声明的稳定条件全部通过后产生；terminal pending 不发交付收益；terminal settled 只由显式 terminal profile 完成；缺 profile/authority fail closed；报价/权限/容量漂移、重复提交、重连、乱序与 replay 不复制 sink、receipt、奖励或下一目标。
