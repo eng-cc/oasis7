@@ -34,20 +34,30 @@ pub(crate) mod parsed_subscription_filters_types {
     #[serde(deny_unknown_fields)]
     pub(crate) struct MatchRule {
         pub(crate) path: String,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_present")]
         pub(crate) eq: Option<JsonValue>,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_present")]
         pub(crate) ne: Option<JsonValue>,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_present")]
         pub(crate) gt: Option<f64>,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_present")]
         pub(crate) gte: Option<f64>,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_present")]
         pub(crate) lt: Option<f64>,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_present")]
         pub(crate) lte: Option<f64>,
-        #[serde(default)]
+        #[serde(default, deserialize_with = "deserialize_present")]
         pub(crate) re: Option<String>,
+    }
+
+    // A present JSON null is a value for eq/ne, not an absent operator.
+    // Other operator types reject null through their own deserializer.
+    fn deserialize_present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+        T: Deserialize<'de>,
+    {
+        T::deserialize(deserializer).map(Some)
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -172,7 +182,7 @@ pub(super) fn subscription_filters_match(
     let Some(rules) = rules else {
         return true;
     };
-    ruleset_matches(rules, value)
+    validate_ruleset(rules, "routing").is_ok() && ruleset_matches(rules, value)
 }
 
 pub(super) fn prepared_subscription_filters_match(
@@ -329,6 +339,16 @@ pub(super) fn validate_rule_shape(rule: &MatchRule, module_id: &str) -> Result<(
             "module {module_id} subscription filter path must start with '/': {}",
             rule.path
         ));
+    }
+
+    let mut chars = rule.path.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '~' && !matches!(chars.next(), Some('0' | '1')) {
+            return Err(format!(
+                "module {module_id} subscription filter path has invalid JSON Pointer escape: {}",
+                rule.path
+            ));
+        }
     }
 
     let mut operators = 0usize;
