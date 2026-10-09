@@ -8,6 +8,7 @@
 //! cooperative writers on its retained inode; it does not protect against malicious
 //! processes with the same filesystem permissions replacing that inode or directory.
 
+pub mod activation;
 mod journal;
 mod proof;
 pub mod replicated_protocol;

@@ -130,6 +130,14 @@ prepare、primary decision 与 replica decision 分别使用签名域。接收�
 
 交接停写排空后，新集合同步 H−1；旧 authority 在 H 正式记录新集合/profile/epoch/H+1 边界及结果根。H 提交前可取消，提交后接续权不可撤回，入口/存储/signer/proof verifier 均拒绝 H+1 旧 profile；新集合启动失败保持停写。历史仍按各阶段合法 profile 验证。演练覆盖 H 已提交而 H+1 未提交时宕机/取消、重启拒绝旧 writer，以及无资产重发/断链/失效 pending 自动生效。该设计尚需协议、消费者与故障域实证，不是当前 readiness。
 
+#### des-p2p-initial-activation-verifier-prerequisite
+
+`controlled_authority::activation` provides an offline initial-activation prerequisite. It does not change manifest v2 planned status, startup readiness, legacy finality, or CommitRef. The caller independently authenticates an issuer key and fixes world/chain/genesis, initial epoch, writer/P/R, initial state root, execution manifest root, activation height, and the external genesis head. Certificate declarations, self-signatures, and configuration hashes cannot establish this authority. Writer/P/R keys must be pairwise distinct.
+
+A dedicated-domain strict schema v1 signature binds `controlled_single_authority` profile/version 1, position 1, genesis parent, height, before/after state roots, and all eight non-Input artifact roots. Input is the original canonical CBOR signed envelope, whose BLAKE3 must equal the record payload digest and Input root. The signed body excludes Input to avoid circular signature/hash binding. The envelope is bounded to 16 KiB; existing closed-record budgets remain unchanged. Verification requires the complete nine-role record, writer proposal, and both P/R DecisionDurable receipts. Prepare-only evidence, a missing receipt, a wrong external anchor, and later positions fail closed.
+
+Only successful verification constructs opaque `VerifiedInitialActivation`. It is not yet connected to execution-semantic verification, formal CommitRef, durable epoch publication, handoff, or runtime activation. Real FileEndpoint/coordinator fixtures exercise the local synchronous filesystem contract; they do not prove retained-world issuer authorization, independent deployment fault domains, or a formal opening. Upgrades require an explicit old-profile transition action and evidence chain; this initial-only verifier rejects them. Regression: `cargo test -p oasis7_distfs --lib activation`.
+
 ## 5. 关键运行流程
 
 先校验提交身份/大小/队列→固定有序actions/root→同parent/manifest执行并匹配receipt commitments→fenced epoch/parent/head 下原子预备追加及跨故障域持久确认→合法 profile 生成并验证提交决定/证明→最终决定/证明跨故障域持久确认→消费者committed读取。BFT 的独立重执行与投票步骤继续适用其专属合同；单权威不通过等待尚未生成的证明制造循环依赖。当前prototype推进与目标QC闸门不是同一实现证明。恢复先证明原world历史链再判只读；当前追加/finality/manifest/head全满足才重新serve/vote，失效回只读/隔离。
