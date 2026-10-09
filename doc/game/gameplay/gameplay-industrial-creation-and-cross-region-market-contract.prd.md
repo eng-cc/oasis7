@@ -6,6 +6,8 @@
 - 设计适用性：`simple-topic-exemption`（`PRD-only-sufficient`）。本文只承载 Why / What / Done、玩家循环、风险与验收，不新增 API、schema、状态机、结算算法或 UI 布局；配对例外在 [`doc/game/prd.index.md`](../prd.index.md) 登记。
 - 当前执行：可变 task 状态与当前实现证据由 Git、PR、实际 CI 和评审记录 拥有；本文件不宣称当前已实现、已平衡、已可交易、已发布或已满足 release readiness。
 
+- 配套专业系统设计：[跨区物流与 escrow 结算](../../world-runtime/runtime/cross-region-delivery-and-escrow-settlement.design.md#des-wr-cr-001)承接 AC-GAME-018-04..06 的物流、结算与读面；工业创建和许可准入不在该设计范围，产品设计豁免保持原意。
+
 ## 1. 目标与范围
 
 工业创建和跨区交易都应给玩家留下可归因的选择，而不是一个“提交后世界自动变好”的黑箱。玩家要能理解一项新工业能力如何从提案走到受限试点和治理准入，也要能理解一批货物如何从可见报价走到真实路线、目的地接收和分阶段结算。
