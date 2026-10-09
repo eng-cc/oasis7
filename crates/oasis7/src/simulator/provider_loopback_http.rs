@@ -54,13 +54,15 @@ mod compatibility_tests {
             oasis7_client_api::provider_phase1_required_actions()
         );
 
-        let mut info = ProviderInfo::default();
-        info.capabilities = vec!["decision".to_string(), "feedback".to_string()];
-        info.supported_action_sets = vec![PROVIDER_PHASE1_ACTION_SET_ALIAS.to_string()];
-        info.chain_resource_manifest_schema_version =
-            Some("oasis7.world_resource_manifest.v1".to_string());
-        info.chain_resource_delta_schema_version =
-            Some("oasis7.world_resource_delta.v1".to_string());
+        let info = ProviderInfo {
+            capabilities: vec!["decision".to_string(), "feedback".to_string()],
+            supported_action_sets: vec![PROVIDER_PHASE1_ACTION_SET_ALIAS.to_string()],
+            chain_resource_manifest_schema_version: Some(
+                "oasis7.world_resource_manifest.v1".to_string(),
+            ),
+            chain_resource_delta_schema_version: Some("oasis7.world_resource_delta.v1".to_string()),
+            ..ProviderInfo::default()
+        };
         assert_eq!(
             evaluate_provider_compatibility(&info, None),
             oasis7_client_api::evaluate_provider_compatibility(&info, None)

@@ -255,24 +255,24 @@ pub fn sign_main_token_runtime_action_auth(
     signer_private_key_hex: &str,
 ) -> Result<MainTokenActionAuthProof, MainTokenActionAuthError> {
     ensure_main_token_action_supported(action)?;
-    if let Some(transfer) = main_token_transfer_from_runtime_action(action) {
-        if !is_legacy_noncanonical_transfer_signing_account(
+    if let Some(transfer) = main_token_transfer_from_runtime_action(action)
+        && !is_legacy_noncanonical_transfer_signing_account(
             action,
             account_id,
             signer_public_key_hex,
-        ) {
-            return oasis7_client_api::sign_main_token_transfer(
-                &transfer,
-                account_id,
-                signer_public_key_hex,
-                signer_private_key_hex,
-            )
-            .map_err(map_client_signing_error);
-        }
-        // Keep the old signing-only compatibility path for callers that use
-        // player/agent account IDs instead of canonical oc:pk accounts. The
-        // verifier still enforces canonical account binding.
+        )
+    {
+        return oasis7_client_api::sign_main_token_transfer(
+            &transfer,
+            account_id,
+            signer_public_key_hex,
+            signer_private_key_hex,
+        )
+        .map_err(map_client_signing_error);
     }
+    // Keep the old signing-only compatibility path for callers that use
+    // player/agent account IDs instead of canonical oc:pk accounts. The
+    // verifier still enforces canonical account binding.
     let account_id = normalize_required_field(account_id, "main token auth account_id")?;
     let public_key =
         normalize_public_key_field(signer_public_key_hex, "main token auth signer public key")?;
