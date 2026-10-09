@@ -703,6 +703,14 @@ while installation remains unrouted and replay shares the same raw reducer seman
 代表性流水线的 immutable root/revision/parent/child/stage/edge/batch 与目的地身份在每个首个不可逆 sink 前从 fresh authority 校验；错误/缺失不扣 input、不建立非法 hold/child。accepted 是 intent admission，reservation 必须另经 domain capacity/资源条件，在同事务中绑定有界独占 hold；每条中间 edge/destination buffer 满载，只保留未消费 input、接收仍有容量的已结算 output 或原子拒绝/延期新的承诺。runtime 不选择无限缓存、丢弃、瞬移、隐式改道或伪造 terminal。
 同一 release/arrival event+hold 的 release 与 fresh-snapshot recheck 各一次；重复 arrival/retry 读原 disposition；后续不同 event 只重审仍有效的 unmet residual。input join、output branch 和 production-versus-delivery settlement 按 M4/domain contract；因果改变才建立 parent-linked revision/child root，checkpoint/retry 不新建 root。hold/consumption/receipt/remaining 必须持久并进入 replay/root 比较，不能只在 UI/log。§工业矩阵当前尚无通用 root/join/window/bundle identity，具体字段/算法未获批准；现有 path reservations 和 job replay 是 partial 子能力。domain owner 拥有容量、lease/window、W reset；runtime 执行原子处置，消费者显示 earliest blocker、held/consumed/unmet/residual 与 recheck。
 
+#### 首产物提交来源 schema 边界
+
+纯 API 的 chain 提交 ack 中 `runtime_action_id` 是提交侧 consensus action ID，不等于执行世界重新分配的 recipe job ID。新 `ScheduleRecipe` 提交使用 consensus payload envelope v2：来源身份只取已通过既有 gameplay 签名和持久 nonce 校验的玩家、公钥及 nonce；ack 的 `consensus_action_payload_hash` 取实际提交 CBOR 字节的哈希。执行桥从已验证 committed action 取得同一 payload hash、consensus ID、node transport submitter、committed height 与 action root，将其作为 `committed_recipe_origin` 沿 pending action、RecipeStarted、pending recipe、RecipeCompleted、完成 receipt 和首产 milestone 持久保留。browser 玩家和 node transport submitter 是两个事实，来源字段不授予权限。
+
+v1 无来源 envelope 和旧 snapshot 的可选来源默认 `None`，序列化省略该字段，不对历史重放反填来源；v2 必须有严格匹配的来源，缺失、null、畸形或非 ScheduleRecipe 来源拒绝。旧 v1 执行器会明确拒绝 v2，不可混跑后声称相同 state root。启用新提交入口前须将 producer 与执行器升级到同一候选版本；本地验收使用全新独立 world，不向已存在 world 自动启用新 profile。完成事件须与 pending 来源全等；receipt 和 milestone 从 pending 复制来源，receipt history 清理不得抹掉 milestone 的来源。没有原来源的历史结算仍可读取，但不能由严格首产物 gate 认定为新提交的精确关联证据。
+
+该字段证明提交与执行任务的因果关联，不能代签正式网络 finality、完整持久 commit 合同、持续稳定生产、终端交付或真人验证。具体候选、运行、结果与未证明范围由同 source 的执行 evidence 单独记录。
+
 <a id="runtime-industrial-outage-design"></a>
 ### 四边界成对 outage 处置
 每个 cell 固定同 world/root/revision/child/stage/edge/batch，requested/committed/executed/held/consumed/unmet/residual quantities、canonical bucket、window/lease、receipt、W/progression、next action/recheck。以下八格独立判定，不能以一条 outage 测试合并：

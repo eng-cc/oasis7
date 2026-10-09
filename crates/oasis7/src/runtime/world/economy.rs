@@ -414,6 +414,7 @@ impl World {
         bodies.reserve(due_recipes.len());
         for job in due_recipes {
             bodies.push(WorldEventBody::Domain(DomainEvent::RecipeCompleted {
+                committed_recipe_origin: job.committed_recipe_origin,
                 job_id: job.job_id,
                 requester_agent_id: job.requester_agent_id,
                 factory_id: job.factory_id,
@@ -614,6 +615,7 @@ impl World {
                     failure_detail: failure_detail.clone(),
                 };
                 let validation_event = self.action_to_event(&ActionEnvelope {
+                    committed_recipe_origin: None,
                     id: job.job_id,
                     action: Action::ValidateProduct {
                         requester_agent_id: job.requester_agent_id.clone(),
@@ -680,6 +682,7 @@ impl World {
             }
             self.append_event(
                 WorldEventBody::Domain(DomainEvent::RecipeCompleted {
+                    committed_recipe_origin: None,
                     job_id: job.job_id,
                     requester_agent_id: job.requester_agent_id,
                     factory_id: job.factory_id,

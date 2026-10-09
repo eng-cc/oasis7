@@ -8,7 +8,11 @@ use crate::simulator::{ModuleInstallTarget, ResourceKind};
 use oasis7_wasm_abi::*;
 
 fn dispatch(world: &mut World, action: Action) -> Result<bool, WorldError> {
-    world.try_apply_runtime_module_action(&ActionEnvelope { id: 950, action })
+    world.try_apply_runtime_module_action(&ActionEnvelope {
+        committed_recipe_origin: None,
+        id: 950,
+        action,
+    })
 }
 
 fn profiles() -> ModuleProfileChanges {

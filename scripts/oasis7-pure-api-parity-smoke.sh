@@ -365,7 +365,7 @@ python3 - "$tier" \
   "$recovery_path" \
   "$summary_json_path" \
   "$summary_md_path" \
-  "$stack_logs_dir" <<'PY'
+  "$stack_logs_dir" "$registration_path" <<'PY'
 import json
 import pathlib
 import sys
@@ -500,7 +500,7 @@ if tier == "full":
     checks["step_c_advanced"] = (step_c_ack or {}).get("ack", {}).get("status") == "advanced"
     checks["step_c_snapshot_present"] = bool((step_c or {}).get("latest_snapshot"))
 
-canonical_evidence = starter_evidence.validate(build_action, step_a, recipe_action, step_c if step_c else step_b, recovery)
+canonical_evidence = starter_evidence.validate(build_action, step_a, recipe_action, step_c if step_c else step_b, recovery, json.loads(pathlib.Path(sys.argv[15]).read_text()))
 checks.update(canonical_evidence["checks"])
 failed_checks = [name for name, ok in checks.items() if not ok]
 shared_player_questions = {

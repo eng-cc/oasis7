@@ -33,6 +33,9 @@ pub(super) struct RuntimeState {
     pub(super) last_error: Option<String>,
 }
 
+#[path = "node_runtime_gameplay_origin.rs"]
+mod gameplay_origin;
+
 const CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION: u8 = 1;
 const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
 const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
@@ -48,6 +51,9 @@ const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct LocalConsensusActionPayloadEnvelope {
     version: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    gameplay_submission_origin:
+        Option<oasis7_proto::gameplay_submission_origin::GameplaySubmissionOrigin>,
     #[serde(default)]
     auth: Option<LocalConsensusActionAuthEnvelope>,
     body: LocalConsensusActionPayloadBody,
@@ -525,18 +531,18 @@ fn validate_consensus_action_payload_auth(
 fn decode_local_consensus_action_payload_envelope(
     payload_cbor: &[u8],
 ) -> Result<LocalConsensusActionPayloadEnvelope, String> {
+    gameplay_origin::validate_metadata_presence(payload_cbor)?;
     match serde_cbor::from_slice::<LocalConsensusActionPayloadEnvelope>(payload_cbor) {
         Ok(envelope) => {
-            if envelope.version != CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION {
-                return Err(format!(
-                    "unsupported consensus payload envelope version {}",
-                    envelope.version
-                ));
-            }
+            gameplay_origin::validate_envelope(&envelope)?;
             Ok(envelope)
+        }
+        Err(error) if gameplay_origin::recognized_metadata(payload_cbor) => {
+            Err(format!("invalid gameplay origin envelope: {error}"))
         }
         Err(_) => Ok(LocalConsensusActionPayloadEnvelope {
             version: CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION,
+            gameplay_submission_origin: None,
             auth: None,
             body: LocalConsensusActionPayloadBody::RuntimeAction {
                 action: serde_cbor::from_slice::<JsonValue>(payload_cbor)

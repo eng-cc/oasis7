@@ -427,6 +427,7 @@ fn viewer_response_round_trip_gameplay_action_ack() {
         u64,
     >::GameplayActionAck {
         ack: GameplayActionAck {
+            consensus_action_payload_hash: None,
             action_id: "build_factory_smelter_mk1".to_string(),
             target_agent_id: "agent-0".to_string(),
             player_id: "player-1".to_string(),

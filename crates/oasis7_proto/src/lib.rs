@@ -7,6 +7,7 @@ pub mod distributed_net;
 pub mod distributed_pos;
 pub mod distributed_state_receipt;
 pub mod distributed_storage;
+pub mod gameplay_submission_origin;
 pub mod storage_cold_index;
 pub mod storage_profile;
 pub mod viewer;

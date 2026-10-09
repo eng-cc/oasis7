@@ -979,6 +979,7 @@ mod tests {
     #[test]
     fn map_runtime_domain_event_recipe_started_and_completed_emit_structured_runtime_events() {
         let started = RuntimeDomainEvent::RecipeStarted {
+            committed_recipe_origin: None,
             job_id: 21,
             requester_agent_id: "agent.alpha".to_string(),
             factory_id: "factory.alpha".to_string(),
@@ -999,6 +1000,7 @@ mod tests {
             ready_at: 99,
         };
         let completed = RuntimeDomainEvent::RecipeCompleted {
+            committed_recipe_origin: None,
             job_id: 21,
             requester_agent_id: "agent.alpha".to_string(),
             factory_id: "factory.alpha".to_string(),

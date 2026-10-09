@@ -37,7 +37,11 @@ class StarterEvidenceTests(unittest.TestCase):
         self.assertFalse(diagnostic["canonical_production_verified"])
 
     def fixture(self):
-        milestone = dict(profile_id=starter.PROFILE, profile_revision=1, factory_id=starter.FACTORY,
+        origin = dict(consensus_action_id=2, committed_height=8, action_payload_hash="a" * 64,
+                      action_root="b" * 64, consensus_submitter_player_id="node-transport",
+                      submission=dict(verified_player_id="p1", public_key="c" * 64, auth_nonce=1,
+                                      requester_agent_id="a1", factory_id=starter.FACTORY, recipe_id=starter.RECIPE))
+        milestone = dict(committed_recipe_origin=copy.deepcopy(origin), profile_id=starter.PROFILE, profile_revision=1, factory_id=starter.FACTORY,
                          recipe_id=starter.RECIPE, output_ledger="site:s1", settlement_job_id=7, settled_at=9)
         prior = {"factories": {starter.FACTORY: dict(site_id="s1", builder_agent_id="a1", output_ledger="site:s1")},
                  "factory_site_authorities": {"s1": {"owner_agent_id": "a1"}},
@@ -45,7 +49,7 @@ class StarterEvidenceTests(unittest.TestCase):
         current = copy.deepcopy(prior)
         current["industry_progress"]["starter_industrial_milestone"] = milestone
         current["material_ledgers"]["site:s1"]["iron_ingot"] = 2
-        current["recipe_completion_receipts"] = {"7": dict(job_id=7, factory_id=starter.FACTORY,
+        current["recipe_completion_receipts"] = {"7": dict(committed_recipe_origin=copy.deepcopy(origin), job_id=7, factory_id=starter.FACTORY,
             recipe_id=starter.RECIPE, accepted_batches=1, requester_agent_id="a1", output_ledger="site:s1",
             produce=[dict(kind="iron_ingot", amount=2)])}
         feasibility = dict(profile_id=starter.PROFILE, profile_revision=1, evidence_class="durable-milestone-backed")
@@ -54,8 +58,8 @@ class StarterEvidenceTests(unittest.TestCase):
                     "player_gameplay": {"starter_industrial_feasibility": copy.deepcopy(feasibility)}}
         def ack(action):
             return {"responses": [{"type": "gameplay_action_ack", "ack": dict(action_id=action,
-                target_agent_id="a1", player_id="p1", runtime_action_id=7)}]}
-        return [ack("build_factory_smelter_mk1"), payload(prior), ack("schedule_recipe_smelter_iron_ingot"), payload(current), payload(copy.deepcopy(current))]
+                target_agent_id="a1", player_id="p1", runtime_action_id=2, consensus_action_payload_hash="a" * 64)}]}
+        return [ack("build_factory_smelter_mk1"), payload(prior), ack("schedule_recipe_smelter_iron_ingot"), payload(current), payload(copy.deepcopy(current)), {"responses": [{"type": "authoritative_recovery_ack", "ack": {"status": "session_registered", "player_id": "p1", "agent_id": "a1", "session_pubkey": "c" * 64}}]}]
 
     def test_matching_positive_owner_settlement_and_reconnect(self):
         self.assertTrue(all(starter.validate(*self.fixture())["checks"].values()))
@@ -131,6 +135,46 @@ class StarterEvidenceTests(unittest.TestCase):
             else:
                 receipt[field] = invalid
             self.assertFalse(starter.validate(*records)["checks"]["canonical_reconnect_owner_output"])
+
+    def test_exact_submission_origin_rejects_missing_or_tampered_provenance(self):
+        for field, value in [("consensus_action_id", True), ("committed_height", 8.0),
+                             ("action_payload_hash", "d" * 64), ("action_root", "bad")]:
+            records = self.fixture()
+            receipt = starter.state(records[3])["recipe_completion_receipts"]["7"]
+            receipt["committed_recipe_origin"][field] = value
+            self.assertFalse(all(starter.validate(*records)["checks"].values()))
+        records = self.fixture()
+        starter.state(records[3])["recipe_completion_receipts"]["7"].pop("committed_recipe_origin")
+        self.assertFalse(starter.validate(*records)["checks"]["canonical_exact_submission_origin"])
+        records = self.fixture()
+        records[2]["responses"][0]["ack"]["consensus_action_payload_hash"] = "f" * 64
+        self.assertFalse(starter.validate(*records)["checks"]["canonical_exact_submission_origin"])
+
+    def test_provenance_identities_require_nonempty_strings(self):
+        for invalid in [True, 1, "", " "]:
+            records = self.fixture()
+            for index in [0, 2]:
+                records[index]["responses"][0]["ack"].update(player_id=invalid, target_agent_id=invalid)
+            records[5]["responses"][0]["ack"].update(player_id=invalid, agent_id=invalid)
+            for index in [3, 4]:
+                state = starter.state(records[index])
+                state["factories"][starter.FACTORY]["builder_agent_id"] = invalid
+                state["factory_site_authorities"]["s1"]["owner_agent_id"] = invalid
+                receipt = state["recipe_completion_receipts"]["7"]
+                receipt["requester_agent_id"] = invalid
+                for origin in [receipt["committed_recipe_origin"], state["industry_progress"]["starter_industrial_milestone"]["committed_recipe_origin"]]:
+                    origin["consensus_submitter_player_id"] = invalid
+                    origin["submission"].update(verified_player_id=invalid, requester_agent_id=invalid)
+            self.assertFalse(all(starter.validate(*records)["checks"].values()))
+
+    def test_optional_hosted_nonce_matches_typed_runtime_schema(self):
+        for invalid in [True, 123, "", " "]:
+            records = self.fixture()
+            for index in [3, 4]:
+                state = starter.state(records[index])
+                for origin in [state["recipe_completion_receipts"]["7"]["committed_recipe_origin"], state["industry_progress"]["starter_industrial_milestone"]["committed_recipe_origin"]]:
+                    origin["submission"]["hosted_registration_nonce"] = invalid
+            self.assertFalse(starter.validate(*records)["checks"]["canonical_exact_submission_origin"])
 
 
 if __name__ == "__main__":

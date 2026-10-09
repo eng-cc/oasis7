@@ -89,9 +89,41 @@ pub enum MaterialTransitPriority {
     Standard,
 }
 
+pub use oasis7_proto::gameplay_submission_origin::GameplaySubmissionOrigin;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommittedRecipeOrigin {
+    pub submission: GameplaySubmissionOrigin,
+    pub consensus_action_id: u64,
+    pub consensus_submitter_player_id: String,
+    pub action_payload_hash: String,
+    pub committed_height: u64,
+    pub action_root: String,
+}
+
+impl CommittedRecipeOrigin {
+    pub fn matches_recipe(&self, requester: &str, factory: &str, recipe: &str) -> bool {
+        self.submission.matches_recipe(requester, factory, recipe)
+            && self.consensus_action_id > 0
+            && self.committed_height > 0
+            && !self.consensus_submitter_player_id.trim().is_empty()
+            && [self.action_payload_hash.as_str(), self.action_root.as_str()]
+                .iter()
+                .all(|hash| {
+                    hash.len() == 64
+                        && hash
+                            .bytes()
+                            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                })
+    }
+}
+
 /// An envelope wrapping an action with its ID.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionEnvelope {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub committed_recipe_origin: Option<CommittedRecipeOrigin>,
     pub id: ActionId,
     pub action: Action,
 }
@@ -921,3 +953,7 @@ impl Action {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "events/recipe_origin_tests.rs"]
+pub(crate) mod recipe_origin_tests;
