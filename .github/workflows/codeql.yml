@@ -35,7 +35,7 @@ jobs:
       status: ${{ steps.plan.outputs.status }}
       checkout: ${{ steps.plan.outputs.checkout }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v7.0.1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, official tag resolved 2026-10-01
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -163,7 +163,7 @@ jobs:
         if: matrix.language == 'rust'
         run: rustup toolchain install 1.96.0 --profile minimal
       - id: init
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v7.0.1
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4, official tag resolved 2026-10-01
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build_mode }}
