@@ -58,6 +58,7 @@ mod agent_cognition_live_actor;
 mod agent_cognition_live_harness;
 mod agent_cognition_live_pilot_parity;
 mod agent_cognition_memory;
+mod agent_feedback_recovery;
 mod asteroid_fragment;
 mod basics;
 mod boundary_extremes;
