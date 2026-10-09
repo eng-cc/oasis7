@@ -39,3 +39,11 @@ class PlanDiagnostics(unittest.TestCase):
         error = installer.InstallError("INSTALLATION_DRIFT", "host isolation preflight blocked")
         error.preflight_flags = {"safe": False, "sudo_safe": True}
         self.assertEqual(cli.blocked_output(error, installer)["preflight_flags"], error.preflight_flags)
+
+    def test_runtime_guard_is_defined_in_captured_cli_namespace(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        pinned = "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9"
+        with patch.object(cli.sys, "flags", SimpleNamespace(isolated=1, no_site=1, dont_write_bytecode=1)), patch.object(cli.sys, "executable", pinned), patch.object(cli.sys, "version_info", (3, 9, 6)):
+            with self.assertRaisesRegex(ValueError, "invalid immutable captured release"):
+                cli.approved_modules("0" * 64, {})

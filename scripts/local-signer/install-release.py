@@ -11,6 +11,8 @@ import stat
 import sys
 import types
 
+RUNTIME_PATH = "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9"
+
 TRUSTED_BOOTSTRAP = r"""import ctypes
 import ctypes.util
 import errno
