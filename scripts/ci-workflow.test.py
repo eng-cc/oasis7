@@ -70,24 +70,121 @@ class Workflow(unittest.TestCase):
         self.assertIn('"$browser_bin" install --with-deps', performance)
         self.assertIn("printf 'AGENT_BROWSER_BIN=%s\\n'", performance)
         self.assertLess(performance.index('Install pinned performance browser'), performance.index('Execute selected group'))
-        self.assertLess(performance.index('Build performance test artifact'), performance.index('Execute selected group'))
-        self.assertIn('viewer_bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"', performance)
-        self.assertIn('WASM_BINDGEN_BIN="$viewer_bindgen_bin" npm', performance)
-        viewer = JOBS['viewer-js-required']
-        self.assertGreater(viewer.index('Verify browser authentication security'), viewer.index('Execute selected group'))
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        for job, forbidden in [('net', 'Verify pinned network source'),
+                               ('viewer-js-required', 'Verify browser authentication security'),
+                               ('viewer-performance-report', 'Build performance test artifact')]:
+            self.assertNotIn(forbidden, JOBS[job])
         net = JOBS['net']
-        self.assertGreater(net.index('Verify pinned network source'), net.index('Execute selected group'))
         self.assertLess(net.index('Install WASM C compiler'), net.index('Execute selected group'))
         for check in ('scripts/libp2p-security-source.test.py', 'scripts/libp2p-compat.test.py',
-                      'clang --print-targets | grep -w wasm32', 'CC_wasm32_unknown_unknown: clang',
+                      'CC_wasm32_unknown_unknown=clang', 'AR_wasm32_unknown_unknown=llvm-ar',
                       'cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked',
                       'cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked'):
-            self.assertIn(check, net)
+            self.assertIn(check, driver)
         governance = JOBS['workflow-governance']
         self.assertGreater(governance.index('Verify new source archive'), governance.index('Execute selected group'))
         for test in ('package-source-plan.test.py', 'safe-git-archive.test.py', 'cache-permission-probe.test.cjs'):
             self.assertIn(test, governance)
         self.assertNotIn('run: python3 scripts/ci-workflow.test.py', governance) # already in candidate dispatcher
+
+    def test_bindgen_cache_has_exact_identity_and_single_trusted_writer(self):
+        identities = []
+        for name in ('viewer-js-required', 'viewer-performance-report', 'full-regression'):
+            job = JOBS[name]
+            self.assertIn('source scripts/wasm-bindgen-cli-common.sh', job)
+            self.assertIn('uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25', job)
+            self.assertIn('--ensure-cache --print-bin', job)
+            self.assertIn('test -x "$bindgen_bin"', job)
+            self.assertIn('test "$("$bindgen_bin" --version)" = "wasm-bindgen $WASM_BINDGEN_LOCK_VERSION"', job)
+            self.assertLess(job.index('Swatinem/rust-cache@'), job.index('id: bindgen-meta'))
+            prepare = job.split('id: prepare-bindgen', 1)[1].split('      - ', 1)[0]
+            self.assertIn('set -euo pipefail', prepare)
+            hot, cold = prepare.split('          else\n', 1)
+            self.assertNotIn('--ensure-cache', hot)
+            self.assertIn('--ensure-cache', cold)
+            self.assertIn('WASM_BINDGEN_BIN=%s', prepare)
+            identity = re.search(r'          key: (wasm-bindgen-cli-v1-.*)', job).group(1)
+            identities.append(identity)
+            self.assertIn("hashFiles('scripts/ensure-wasm-bindgen-cli.sh', 'scripts/wasm-bindgen-cli-common.sh')", identity)
+            self.assertIn('path: ${{ steps.bindgen-meta.outputs.root }}', job)
+            if name != 'full-regression':
+                self.assertNotIn('actions/cache/save@', job)
+            else:
+                save = job.split('name: Save prepared wasm-bindgen tool cache', 1)[1].split('      - ', 1)[0]
+                for condition in ('success()', "github.ref == 'refs/heads/main'", "steps.bindgen-cache.outputs.cache-hit != 'true'", "steps.prepare-bindgen.outcome == 'success'"):
+                    self.assertIn(condition, save)
+                self.assertIn('key: ' + identity, save)
+                self.assertLess(job.index('Save prepared wasm-bindgen'), job.index('Run full test tier'))
+        self.assertEqual(len(set(identities)), 1)
+        self.assertNotIn('bindgen-meta', JOBS['launcher-web'])
+
+    def test_local_signer_and_new_contracts_are_connected_once(self):
+        fleet = JOBS['fleet-health']
+        self.assertIn("if: runner.os == 'macOS'", fleet)
+        self.assertIn('TMPDIR: /private/tmp', fleet)
+        self.assertIn('python3 scripts/ci-local-signer-tests.py --require-darwin', fleet)
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        packaging = driver.split('run_packaging_contract_tests() {', 1)[1].split('\n}', 1)[0]
+        self.assertEqual(packaging.count('run python3 ./scripts/ci-local-signer-tests.py'), 1)
+        governance = driver.split('run_workflow_governance_baseline_contract_tests() {', 1)[1].split('\n}', 1)[0]
+        for test in ('plan-wasm-determinism-scope.test.sh', 'ensure-wasm-bindgen-cli.test.sh', 'ci-local-signer-tests.test.py'):
+            self.assertEqual(governance.count(test), 1)
+
+    def test_stable_install_is_minimal_with_required_components(self):
+        self.assertNotIn('--profile default', WORKFLOW)
+        for name, job in JOBS.items():
+            if 'rustup toolchain install' in job and name != 'newapi-bridge-package':
+                self.assertRegex(job, r'rustup toolchain install .*RUST_TOOLCHAIN.* --profile minimal --component rustfmt --component clippy')
+
+    def test_wasm_dynamic_matrix_and_job_failure_boundaries(self):
+        workflow = (ROOT / '.github/workflows/wasm-determinism-gate.yml').read_text()
+        jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)', workflow.split('\njobs:\n', 1)[1], re.M | re.S))
+        expression = '${{ fromJSON(needs.plan-wasm-determinism-scope.outputs.selected_module_sets_json) }}'
+        self.assertIn('selected_module_sets_json: ${{ steps.scope.outputs.selected_module_sets_json }}', jobs['plan-wasm-determinism-scope'])
+        for name in ('collect-wasm-summaries', 'verify-wasm-determinism'):
+            job = jobs[name]
+            self.assertIn('module_set: ' + expression, job)
+            guard = job.split('    if: >-', 1)[1].split('    strategy:', 1)[0]
+            self.assertIn("needs.plan-wasm-determinism-scope.result == 'success'", guard)
+            self.assertIn("outputs.scope == 'partial'", guard)
+            self.assertIn("outputs.scope == 'all'", guard)
+            self.assertIn('fail-fast: false', job)
+            self.assertNotIn('Scope note', job)
+            self.assertNotIn('outputs.run_m', job)
+            self.assertNotIn('        if:', job)
+            self.assertIn('if-no-files-found: error', job)
+        self.assertIn("needs.collect-wasm-summaries.result == 'success'", jobs['verify-wasm-determinism'])
+        self.assertNotIn('continue-on-error:', workflow)
+        for filename in ('wasm-determinism-gate.yml', 'document-corpus-platform.yml'):
+            workflow = (ROOT / '.github/workflows' / filename).read_text()
+            self.assertIn("group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}", workflow)
+            self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+
+    def test_group_commands_execute_once_and_propagate_failure(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        network = re.search(r'^run_oasis7_net_libp2p_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+        script = "set -euo pipefail\nrun() { printf '%s\\n' \"$*\"; }\nrun_cargo() { run cargo \"$@\"; }\n" + network + "\nrun_oasis7_net_libp2p_tests\n"
+        result = subprocess.run(['bash', '-c', script], text=True, capture_output=True, env=dict(os.environ, GITHUB_ACTIONS='true', RUNNER_OS='Linux'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for command in ('libp2p-security-source.test.py', 'libp2p-compat.test.py', 'check -p oasis7_net', 'check -p oasis7_node'):
+            self.assertEqual(result.stdout.count(command), 1)
+        failure = subprocess.run(['bash', '-c', script.replace("printf '%s\\n' \"$*\"", 'return 42')], text=True, capture_output=True, env=dict(os.environ, GITHUB_ACTIONS='true', RUNNER_OS='Linux'))
+        self.assertEqual(failure.returncode, 42)
+        for group, command in [('viewer_js_required', 'viewer-auth-browser-security-smoke.mjs'), ('viewer_performance_report', 'build:viewer:visual-test')]:
+            case = re.search(r'^    ' + group + r'\) (.*?) ;;$', driver, re.M).group(1)
+            definitions = "set -euo pipefail\nrun() { printf '%s\\n' \"$*\"; }\n"
+            names = re.findall(r'run_oasis7_[a-z_]+', case)
+            for name in names:
+                if name == 'run_oasis7_viewer_visual_test_build':
+                    definitions += name + "() { run npm run build:viewer:visual-test; }\n"
+                else:
+                    definitions += name + "() { run " + name + "; }\n"
+            result = subprocess.run(['bash', '-c', definitions + case], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.count(command), 1)
+            failed = subprocess.run(['bash', '-c', definitions.replace("printf '%s\\n' \"$*\"", 'return 42') + case], text=True, capture_output=True)
+            self.assertEqual(failed.returncode, 42)
 
     def test_network_wasm_tools_precede_group_execution(self):
         net = JOBS['net']

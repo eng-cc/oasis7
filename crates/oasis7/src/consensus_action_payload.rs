@@ -4,6 +4,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 const CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION: u8 = 1;
+const CONSENSUS_RECIPE_SUBMISSION_ENVELOPE_VERSION: u8 = 2;
 const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
 const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
 const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX: &str = "octransferauth:v2:";
@@ -18,6 +19,8 @@ const MAIN_TOKEN_RESTRICTED_GRANT_ADMIN_REGISTRY_AUTH_SIGNATURE_V1_PREFIX: &str 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusActionPayloadEnvelope {
     pub version: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gameplay_submission_origin: Option<runtime::GameplaySubmissionOrigin>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<ConsensusActionAuthEnvelope>,
     pub body: ConsensusActionPayloadBody,
@@ -189,6 +192,20 @@ impl ConsensusActionPayloadEnvelope {
     pub fn from_runtime_action(action: runtime::Action) -> Self {
         Self {
             version: CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION,
+            gameplay_submission_origin: None,
+            auth: None,
+            body: ConsensusActionPayloadBody::RuntimeAction { action },
+        }
+    }
+
+    /// Version two fails closed on legacy executors and binds the ingress identity.
+    pub fn from_recipe_submission(
+        action: runtime::Action,
+        origin: runtime::GameplaySubmissionOrigin,
+    ) -> Self {
+        Self {
+            version: CONSENSUS_RECIPE_SUBMISSION_ENVELOPE_VERSION,
+            gameplay_submission_origin: Some(origin),
             auth: None,
             body: ConsensusActionPayloadBody::RuntimeAction { action },
         }
@@ -200,6 +217,7 @@ impl ConsensusActionPayloadEnvelope {
     ) -> Self {
         Self {
             version: CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION,
+            gameplay_submission_origin: None,
             auth: Some(auth),
             body: ConsensusActionPayloadBody::RuntimeAction { action },
         }
@@ -208,6 +226,7 @@ impl ConsensusActionPayloadEnvelope {
     pub fn from_simulator_action(action: SimulatorAction, submitter: ActionSubmitter) -> Self {
         Self {
             version: CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION,
+            gameplay_submission_origin: None,
             auth: None,
             body: ConsensusActionPayloadBody::SimulatorAction { action, submitter },
         }
@@ -418,22 +437,80 @@ pub fn encode_consensus_action_payload(
 pub fn decode_consensus_action_payload_envelope(
     payload_cbor: &[u8],
 ) -> Result<ConsensusActionPayloadEnvelope, String> {
+    // A recognized metadata key must contain a typed identity; explicit null
+    // cannot silently downgrade a new submitted envelope to legacy evidence.
+    if serde_cbor::from_slice::<serde_cbor::Value>(payload_cbor)
+        .ok()
+        .is_some_and(|value| match value {
+            serde_cbor::Value::Map(map) => {
+                map.get(&serde_cbor::Value::Text(
+                    "gameplay_submission_origin".to_string(),
+                )) == Some(&serde_cbor::Value::Null)
+            }
+            _ => false,
+        })
+    {
+        return Err("gameplay submission origin must not be null".to_string());
+    }
     match serde_cbor::from_slice::<ConsensusActionPayloadEnvelope>(payload_cbor) {
         Ok(envelope) => {
-            if envelope.version != CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION {
-                return Err(format!(
-                    "unsupported consensus payload envelope version {}",
-                    envelope.version
-                ));
+            match (
+                envelope.version,
+                envelope.gameplay_submission_origin.as_ref(),
+            ) {
+                (CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION, None)
+                | (CONSENSUS_RECIPE_SUBMISSION_ENVELOPE_VERSION, Some(_)) => {}
+                _ => {
+                    return Err(format!(
+                        "unsupported consensus payload envelope version/origin combination {}",
+                        envelope.version
+                    ));
+                }
+            }
+            if let Some(origin) = &envelope.gameplay_submission_origin {
+                match &envelope.body {
+                    ConsensusActionPayloadBody::RuntimeAction {
+                        action:
+                            runtime::Action::ScheduleRecipe {
+                                requester_agent_id,
+                                factory_id,
+                                recipe_id,
+                                ..
+                            },
+                    } if origin.matches_recipe(requester_agent_id, factory_id, recipe_id) => {}
+                    _ => {
+                        return Err(
+                            "gameplay submission origin does not match ScheduleRecipe".to_string()
+                        );
+                    }
+                }
             }
             Ok(envelope)
         }
-        Err(envelope_err) => match serde_cbor::from_slice::<runtime::Action>(payload_cbor) {
-            Ok(action) => Ok(ConsensusActionPayloadEnvelope::from_runtime_action(action)),
-            Err(runtime_err) => Err(format!(
-                "decode consensus payload envelope failed ({envelope_err}); runtime fallback failed ({runtime_err})"
-            )),
-        },
+        Err(envelope_err) => {
+            let recognized_origin = serde_cbor::from_slice::<serde_cbor::Value>(payload_cbor)
+                .ok()
+                .is_some_and(|value| match value {
+                    serde_cbor::Value::Map(map) => {
+                        map.contains_key(&serde_cbor::Value::Text(
+                            "gameplay_submission_origin".to_string(),
+                        )) || map.get(&serde_cbor::Value::Text("version".to_string()))
+                            == Some(&serde_cbor::Value::Integer(2))
+                    }
+                    _ => false,
+                });
+            if recognized_origin {
+                return Err(format!(
+                    "invalid gameplay submission origin envelope: {envelope_err}"
+                ));
+            }
+            match serde_cbor::from_slice::<runtime::Action>(payload_cbor) {
+                Ok(action) => Ok(ConsensusActionPayloadEnvelope::from_runtime_action(action)),
+                Err(runtime_err) => Err(format!(
+                    "decode consensus payload envelope failed ({envelope_err}); runtime fallback failed ({runtime_err})"
+                )),
+            }
+        }
     }
 }
 
@@ -803,3 +880,7 @@ fn decode_hex_array<const N: usize>(
     fixed.copy_from_slice(bytes.as_slice());
     Ok(fixed)
 }
+
+#[cfg(test)]
+#[path = "consensus_action_payload_origin_tests.rs"]
+mod origin_tests;

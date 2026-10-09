@@ -376,6 +376,7 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
     let mut server = match start_static_http_server(
         viewer_deployment_mode_from_options(options),
         options.live_bind.as_str(),
+        options.web_bind.as_str(),
         options.viewer_host.as_str(),
         options.viewer_port,
         viewer_static_dir.as_path(),
@@ -510,12 +511,17 @@ fn spawn_oasis7_chain_runtime(
 fn start_static_http_server(
     deployment_mode: DeploymentMode,
     live_bind: &str,
+    web_bind: &str,
     host: &str,
     port: u16,
     root_dir: &Path,
     default_viewer_player_id: Option<&str>,
 ) -> Result<StaticHttpServer, String> {
-    static_http::viewer_runtime_config_json(deployment_mode, live_bind)?;
+    let runtime_config = Arc::new(static_http::StaticHttpRuntimeConfig::new(
+        deployment_mode,
+        live_bind,
+        web_bind,
+    )?);
     let listener = TcpListener::bind((host, port))
         .map_err(|err| format!("failed to bind static HTTP server at {host}:{port}: {err}"))?;
     let allow_hosted_test_login = static_http::hosted_test_login_allowed_on_host(host);
@@ -571,7 +577,7 @@ fn start_static_http_server(
             listener,
             deployment_mode,
             root_dir,
-            live_bind,
+            runtime_config,
             default_viewer_player_id,
             hosted_session_issuer,
             hosted_account_broker,
@@ -599,7 +605,7 @@ fn run_static_http_loop(
     listener: TcpListener,
     deployment_mode: DeploymentMode,
     root_dir: Arc<PathBuf>,
-    live_bind: Arc<String>,
+    runtime_config: Arc<static_http::StaticHttpRuntimeConfig>,
     default_viewer_player_id: Arc<Option<String>>,
     hosted_session_issuer: Arc<Mutex<HostedPlayerSessionIssuer>>,
     hosted_account_broker: Arc<Mutex<HostedAccountIdentityBroker>>,
@@ -618,7 +624,7 @@ fn run_static_http_loop(
                     .set_nonblocking(false)
                     .map_err(|err| format!("failed to set static HTTP stream blocking: {err}"))?;
                 let root_dir = Arc::clone(&root_dir);
-                let live_bind = Arc::clone(&live_bind);
+                let runtime_config = Arc::clone(&runtime_config);
                 let default_viewer_player_id = Arc::clone(&default_viewer_player_id);
                 let hosted_session_issuer = Arc::clone(&hosted_session_issuer);
                 let hosted_account_broker = Arc::clone(&hosted_account_broker);
@@ -626,7 +632,7 @@ fn run_static_http_loop(
                     if let Err(err) = handle_http_connection(
                         stream,
                         root_dir.as_path(),
-                        live_bind.as_str(),
+                        &runtime_config,
                         allow_hosted_test_login,
                         default_viewer_player_id.as_deref(),
                         deployment_mode,

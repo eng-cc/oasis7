@@ -193,6 +193,53 @@ class BuilderLifecycleTest(unittest.TestCase):
         self.assertEqual(record["env"]["OASIS7_WASM_BUILDER_IMAGE_DIGEST"], digest)
         self.assertEqual(record["env"]["OASIS7_WASM_CANONICAL_CONTAINER_PLATFORM"], "linux-x86_64")
 
+    def test_container_selects_canonical_toolchain_before_first_rustup_query(self):
+        (self.root / "rust-toolchain.toml").write_text('[toolchain]\nchannel = "1.96.0"\n')
+        rustup = self.bin / "rustup"
+        rustup.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+with (pathlib.Path(os.environ["FIXTURE_STATE"]) / "rustup-calls").open("a") as f:
+    f.write(json.dumps({"args": sys.argv[1:], "toolchain": os.environ.get("RUSTUP_TOOLCHAIN")}) + "\\n")
+if os.environ.get("RUSTUP_TOOLCHAIN") != "nightly-2025-12-11":
+    print("workspace override selected before canonical toolchain", file=sys.stderr)
+    raise SystemExit(1)
+if sys.argv[1:3] == ["toolchain", "list"]:
+    print("nightly-2025-12-11-x86_64-unknown-linux-gnu (active, default)")
+elif sys.argv[1:3] == ["target", "list"]:
+    print("wasm32-unknown-unknown")
+else:
+    raise SystemExit(1)
+''')
+        rustup.chmod(0o755)
+        rustc = self.bin / "rustc"
+        rustc.write_text('#!/bin/sh\n[ "$1" = --print ] && [ "$2" = sysroot ] || exit 1\nprintf "%s\\n" /fixture/sysroot\n')
+        rustc.chmod(0o755)
+        suite = self.bin / "suite"
+        suite.write_text('#!/bin/sh\n[ "$1" = build ] || exit 1\nprintf "%s\\n" public-suite-complete\n')
+        suite.chmod(0o755)
+        env = self.env(OASIS7_WASM_BUILD_IN_CONTAINER="1",
+                       OASIS7_WASM_BUILD_SUITE_BIN=str(suite),
+                       RUSTUP_HOME=str(self.root / "rustup"))
+        for key in ("RUSTUP_TOOLCHAIN", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS",
+                    "CARGO_BUILD_RUSTFLAGS", "CARGO_TARGET_DIR", "RUSTC_BOOTSTRAP"):
+            env.pop(key, None)
+        completed = subprocess.run(["bash", str(self.script)], cwd=self.root, env=env,
+                                   capture_output=True, text=True, timeout=15)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        calls = [json.loads(line) for line in (self.state / "rustup-calls").read_text().splitlines()]
+        self.assertEqual(calls[0]["args"], ["toolchain", "list"])
+        self.assertTrue(all(call["toolchain"] == "nightly-2025-12-11" for call in calls))
+        self.assertIn("public-suite-complete", completed.stdout)
+        # A fixture copy without the early selection reproduces the bad query;
+        # no real rustup, Docker, network, or compilation is involved.
+        source = self.script.read_text()
+        self.script.write_text(source.replace('  export RUSTUP_TOOLCHAIN="$WASM_TOOLCHAIN"\n', '', 1))
+        rejected = subprocess.run(["bash", str(self.script)], cwd=self.root, env=env,
+                                  capture_output=True, text=True, timeout=15)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("workspace override selected before canonical toolchain", rejected.stderr)
+        self.assertNotIn("public-suite-complete", rejected.stdout)
+
     def test_concurrent_rebuild_keeps_selected_image_executable(self):
         a = self.start("A")
         self.wait("A-selected", a)

@@ -1,9 +1,5 @@
 use super::*;
 
-#[expect(
-    clippy::large_enum_variant,
-    reason = "Prepared replay deltas retain their existing variant payloads for deterministic state installation."
-)]
 pub(in crate::runtime::world::event_processing) enum PreparedEventStateDelta {
     NoState(WorldEventBody),
     ProductValidationDeliveryCursorUpdated {
@@ -51,7 +47,7 @@ pub(in crate::runtime::world::event_processing) enum PreparedEventStateDelta {
         super::super::super::governance_registry_publication::PreparedGovernanceRegistryEvent,
     ),
     CapabilityAuthorization(
-        super::super::super::capability_authorization_publication::PreparedCapabilityAuthorizationEvent,
+        Box<super::super::super::capability_authorization_publication::PreparedCapabilityAuthorizationEvent>,
     ),
     CapabilityCommandCommit(
         super::super::super::capability_authorization_command_projection::PreparedCapabilityCommandCommit,
@@ -64,7 +60,7 @@ pub(in crate::runtime::world::event_processing) enum PreparedEventStateDelta {
     EconomicContract(super::super::super::economic_contract_publication::PreparedEconomicContractEvent),
     AllianceWar(super::super::super::alliance_war_publication::PreparedAllianceWarEvent),
     GovernanceMeta(super::super::super::governance_meta_publication::PreparedGovernanceMetaEvent),
-    CorePolicy(super::super::super::super::state::core_policy_transition::PreparedCorePolicyEvent),
+    CorePolicy(Box<super::super::super::super::state::core_policy_transition::PreparedCorePolicyEvent>),
     Industry(super::super::super::super::state::industry_transition::PreparedIndustryEvent),
     IndustryHistory(super::super::super::super::state::industry_history_transition::PreparedIndustryHistoryEvent),
     PowerRedemption(super::super::super::power_redemption_publication::PreparedPowerRedemptionEvent),
@@ -513,7 +509,7 @@ impl PreparedEventStateDelta {
             }
             Self::ManifestUpdated { manifest, .. } => world.manifest = manifest,
             Self::GovernanceRegistry(prepared) => prepared.install(world),
-            Self::CapabilityAuthorization(prepared) => prepared.install(world),
+            Self::CapabilityAuthorization(prepared) => (*prepared).install(world),
             Self::CapabilityCommandCommit(prepared) => prepared.install(world),
             Self::CapabilityEffectReceipt(prepared) => prepared.install(world),
             Self::AgentIntent(prepared) => prepared.install_infallible(&mut world.state),
@@ -521,7 +517,7 @@ impl PreparedEventStateDelta {
             Self::EconomicContract(prepared) => prepared.install_infallible(&mut world.state),
             Self::AllianceWar(prepared) => prepared.install_infallible(&mut world.state),
             Self::GovernanceMeta(prepared) => prepared.install_infallible(&mut world.state),
-            Self::CorePolicy(prepared) => prepared.install_infallible(&mut world.state),
+            Self::CorePolicy(prepared) => (*prepared).install_infallible(&mut world.state),
             Self::Industry(prepared) => prepared.install(&mut world.state),
             Self::IndustryHistory(prepared) => prepared.install(&mut world.state),
             Self::PowerRedemption(prepared) => prepared.install_infallible(&mut world.state),

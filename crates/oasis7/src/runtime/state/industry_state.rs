@@ -187,6 +187,8 @@ fn default_receipt_product_validation_decision() -> ProductValidationDecision {
 /// the payload needed to reject same-id tampering.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct RecipeCompletionReceiptV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub committed_recipe_origin: Option<crate::runtime::CommittedRecipeOrigin>,
     #[serde(default)]
     pub job_id: ActionId,
     #[serde(default)]
