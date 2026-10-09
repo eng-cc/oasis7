@@ -34,6 +34,8 @@ The approved release entrypoint accepts `plan` and `apply` as defined in [interf
 
 Plan performs readonly checks and writes only the requested new plan artifact. If readonly host evidence is inaccessible, report BLOCKED; a host administrator can run an approved readonly plan. Review exact actions and canonical plan bytes, then independently approve its SHA256. Apply requires root and both expected digests, checks the live plan again, journals effects and publishes sudo last.
 
+A caller with no existing sudo grants is a valid initial state. The root plan distinguishes native sudo's explicit denial for the exact caller and local host from authentication or policy-query failures, and binds the exit code and both output streams into the observation digest. Post-installation checks still require the exact worker rule. Do not grant the caller administrator access to make preflight pass.
+
 ```sh
 ACTUAL_RUNTIME_GATE_SHA256="$(/usr/bin/shasum -a 256 "$APPROVED_RUNTIME_GATE" | /usr/bin/awk '{print $1}')"
 test "$ACTUAL_RUNTIME_GATE_SHA256" = "$EXPECTED_RUNTIME_GATE_SHA256" || exit 9

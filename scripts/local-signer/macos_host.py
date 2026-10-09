@@ -10,6 +10,8 @@ import pwd
 import re
 import stat
 import subprocess
+import socket
+from dataclasses import dataclass
 import sys
 from collections.abc import Mapping
 
@@ -20,6 +22,30 @@ JOBS_ROOT = Path("/private/var/db/oasis7-local-signer-jobs")
 SUDO = Path("/private/etc/sudoers.d/oasis7-local-signer")
 ENV = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C"}
 RUNTIME_PATH = Path("/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9")
+
+
+@dataclass(frozen=True)
+class SudoPolicyObservation:
+    returncode: int
+    stdout: str
+    stderr: str
+    caller: str
+    hostname: str
+
+    @property
+    def no_grants(self):
+        if (not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*", self.caller) or
+                not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.hostname)):
+            return False
+        denials = {f"User {self.caller} is not allowed to run sudo on {name}." + ending
+                   for name in (self.hostname, self.hostname.split('.')[0]) for ending in ("", "\n")}
+        return (self.returncode == 1 and
+                ((not self.stdout and self.stderr in denials) or
+                 (not self.stderr and self.stdout in denials)))
+
+    def encode(self):
+        return canonical_bytes(dict(returncode=self.returncode, stdout=self.stdout,
+                                    stderr=self.stderr, caller=self.caller, hostname=self.hostname))
 
 
 class MacOSHost:
@@ -65,7 +91,7 @@ class MacOSHost:
                 return facts
         elif not work.parent.is_dir() or work.parent.lstat().st_uid != caller.pw_uid:
             return facts
-        policy = self.run(["/usr/bin/sudo", "-n", "-l", "-U", request["caller_user"]], allow_failure=True)
+        policy = self.read_sudo_policy(request["caller_user"])
         self.run(["/usr/sbin/visudo", "-c"])
         worker = str(RELEASE_ROOT / release["manifest"]["release_id"] / "oasis7_local_signer_worker")
         facts.update(safe=True, acl_safe=True, sudo_safe=sudo_policy_safe(policy, uid, gid, worker), identities=identities, sudo_policy_sha256=digest(policy.encode()))
@@ -89,6 +115,21 @@ class MacOSHost:
             info = work.lstat()
             if not stat.S_ISDIR(info.st_mode) or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (caller.pw_uid, caller.pw_gid, 0o700):
                 raise InstallError("INSTALLATION_DRIFT", "jobs leaf identity or permissions mismatch")
+
+    @staticmethod
+    def read_sudo_policy(caller):
+        try:
+            result = subprocess.run(["/usr/bin/sudo", "-n", "-l", "-U", caller],
+                                    env=ENV, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True, timeout=30, check=False)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise InstallError("INSTALLATION_DRIFT", "sudo policy observation unavailable") from error
+        if len(result.stdout) > 1024 * 1024 or len(result.stderr) > 65536:
+            raise InstallError("INSTALLATION_DRIFT", "sudo policy observation too large")
+        hostname = socket.gethostname()
+        # Native sudo's explicit no-grants result is distinct from authentication,
+        # policy-plugin, and other failures. Preserve both streams in the plan hash.
+        return SudoPolicyObservation(result.returncode, result.stdout, result.stderr, caller, hostname)
 
     @staticmethod
     def run(argv, *, allow_failure=False):
@@ -332,7 +373,7 @@ class MacOSHost:
                 if read_file(SUDO, 65536) != sudo_rule(plan).encode():
                     return False
                 self.run(["/usr/sbin/visudo", "-c"])
-                if not sudo_policy_safe(self.run(["/usr/bin/sudo", "-n", "-l", "-U", plan["caller"]["name"]]), plan["signer"]["uid"], plan["signer"]["gid"], str(path / "oasis7_local_signer_worker"), require_worker=True):
+                if not sudo_policy_safe(self.read_sudo_policy(plan["caller"]["name"]), plan["signer"]["uid"], plan["signer"]["gid"], str(path / "oasis7_local_signer_worker"), require_worker=True):
                     return False
             return True
         except (OSError, KeyError, InstallError):
@@ -448,6 +489,12 @@ def validate_filesystem(facts):
 
 
 def sudo_policy_safe(output, uid, gid, worker, require_worker=False):
+    if isinstance(output, SudoPolicyObservation):
+        if output.no_grants:
+            return not require_worker
+        if output.returncode != 0 or output.stderr:
+            return False
+        output = output.stdout
     if not output.strip() or any(token in output for token in ("UNOBSERVABLE", "!authenticate", "exempt_group", "!env_reset", "env_keep", "setenv")) or "SETENV:" in output.replace("NOSETENV:", ""):
         return False
     observed_worker = False
