@@ -139,7 +139,7 @@ python3 scripts/resource-cleanup-executor.py \
 
 `--base-ref` 仅允许 `refs/remotes/origin/main` 或已交付到 origin/main 的 `refs/heads/main`；缺失基线时保留，不自动 fetch。expected 已在 base 祖先链即可证明合入，不要求已 prune 的远端 topic 存在；仅 pushed 不足。显式 PR 证明需同仓库、正确 head/base、真实 merged 且 merge commit 可达。
 
-unknown ignored 文件、真实 target 目录、改动 config 均保留；只有已识别的外部缓存链接和与仍存在 canonical config 字节一致的副本可重建。Linux/macOS 以有界 ps、原生启动身份和 lsof 观察占用；Windows 不执行删除。检查无法覆盖活进程时保留，不自动 sudo。快照不锁住后续新进程。
+unknown ignored 文件、真实 target 目录、改动 config 均保留；已识别的外部缓存链接、与仍存在 canonical config 字节一致的副本，以及能验证与目标 worktree 已跟踪源码对应的普通 Python 字节码缓存可重建。缓存目录名本身不构成可删除证明，未知内容、符号链接和无法验证的字节码仍保留。Linux/macOS 以有界 ps、原生启动身份和 lsof 观察当前操作用户进程，并补充可见的跨用户目标占用者。无关系统进程的身份读取失败不扩大为目标资源未知；当前用户进程或可见目标占用者的身份、覆盖或查询结果不明确时保留，不自动 sudo。该检查证明有限观察域内未发现占用，不声称覆盖不可见的其他用户进程，也不锁住后续新进程。Windows 不执行删除。
 
 执行前重查 Git、base 与材料，普通 remove 成功后才用事务核验 base 并按 expected 删除 branch；另一 worktree 检出、tip/base 改变或 ref 重建均保留并报告部分完成。JSON 的 `eligible`、`blocked_reasons`、`worktree_removed` 和 `branch_removed` 反映实际结果。
 

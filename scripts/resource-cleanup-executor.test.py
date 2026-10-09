@@ -5,10 +5,12 @@ import os
 import sys
 import time
 import json
+import py_compile
+import marshal
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, ANY
 
 spec = importlib.util.spec_from_file_location('cleanup', pathlib.Path(__file__).with_name('resource-cleanup-executor.py'))
 cleanup = importlib.util.module_from_spec(spec)
@@ -84,9 +86,9 @@ class SafetyTests(unittest.TestCase):
 class ProcessReadbackTests(unittest.TestCase):
     def scan(self, ps, lsof, code=0):
         def run(args, check=True, timeout=10):
-            output = ps if args[0] == 'ps' else lsof
+            output = '\n'.join(f'{line} {os.getuid()}' for line in ps.splitlines()) if args[0] == 'ps' else lsof
             return subprocess.CompletedProcess(args, 0 if args[0] == 'ps' else code, output, '')
-        with patch.object(cleanup, '_run', side_effect=run), patch.object(cleanup, 'process_identity', side_effect=lambda pid: (pid, 1, 'R')):
+        with patch.object(cleanup, 'visible_target_holders', return_value=None), patch.object(cleanup, '_run', side_effect=run), patch.object(cleanup, 'process_identity', side_effect=lambda pid, *args: (pid, 1, 'R')):
             return cleanup._process_mentions_path(pathlib.Path('/tmp/retained-worktree'))
 
     def test_foreign_uid_cwd_use_is_detected_without_argv_path(self):
@@ -108,13 +110,13 @@ class ProcessReadbackTests(unittest.TestCase):
 
     def test_exited_collector_and_reused_pid(self):
         snapshots = [{202: (202, 1, 'R'), 203: (203, 1, 'R')}, {202: (202, 2, 'R')}, {202: (202, 2, 'R')}]
-        with patch.object(cleanup, 'snapshot_processes', side_effect=snapshots), patch.object(cleanup, 'read_open_files', return_value=({202}, set())) as scan:
+        with patch.object(cleanup, 'visible_target_holders', return_value=None), patch.object(cleanup, 'snapshot_processes', side_effect=snapshots), patch.object(cleanup, 'read_open_files', return_value=({202}, set())) as scan:
             self.assertEqual(cleanup.inspect_process_use(pathlib.Path('/tmp'))['state'], 'clear_observed')
             self.assertEqual(scan.call_count, 2)
 
     def test_new_process_after_second_round_is_unknown(self):
         snapshots = [{202: (202, 1, 'R')}, {203: (203, 1, 'R')}, {204: (204, 1, 'R')}]
-        with patch.object(cleanup, 'snapshot_processes', side_effect=snapshots), patch.object(cleanup, 'read_open_files', return_value=({202, 203}, set())):
+        with patch.object(cleanup, 'visible_target_holders', return_value=None), patch.object(cleanup, 'snapshot_processes', side_effect=snapshots), patch.object(cleanup, 'read_open_files', return_value=({202, 203}, set())):
             self.assertEqual(cleanup.inspect_process_use(pathlib.Path('/tmp'))['state'], 'unknown')
 
     def test_permission_error_never_means_gone(self):
@@ -128,7 +130,7 @@ class ProcessReadbackTests(unittest.TestCase):
 
     def test_state_change_preserves_native_start_identity(self):
         snapshots = [{202: (202, 1, 'R')}, {202: (202, 1, 'S')}]
-        with patch.object(cleanup, 'snapshot_processes', side_effect=snapshots), patch.object(cleanup, 'read_open_files', return_value=({202}, set())) as scan:
+        with patch.object(cleanup, 'visible_target_holders', return_value=None), patch.object(cleanup, 'snapshot_processes', side_effect=snapshots), patch.object(cleanup, 'read_open_files', return_value=({202}, set())) as scan:
             self.assertEqual(cleanup.inspect_process_use(pathlib.Path('/tmp'))['state'], 'clear_observed')
             self.assertEqual(scan.call_count, 1)
 
@@ -160,6 +162,55 @@ class ProcessReadbackTests(unittest.TestCase):
         self.assertTrue(self.scan('202\n', 'p202\nfcwd\ntDIR\nn/tmp/unrelated\nf3\ntFIFO\nn/tmp/retained-worktree/user-fifo\n'))
         with self.assertRaises(cleanup.CleanupError):
             self.scan('202\n', 'p202\nfcwd\ntDIR\nn/tmp/unrelated\nf3\ntFIFO\nnunknown\n')
+
+    def test_unrelated_foreign_identity_is_outside_required_census(self):
+        rows = f'1 {os.getuid() + 1}\n202 {os.getuid()}\n'
+        with patch.object(cleanup, '_run', return_value=subprocess.CompletedProcess([], 0, rows, '')), patch.object(cleanup, 'process_identity', side_effect=lambda pid, *args: (pid, 1, 'R') if pid == 202 else (_ for _ in ()).throw(cleanup.CleanupError('permission denied'))) as native:
+            self.assertEqual(cleanup.snapshot_processes(time.monotonic() + 30), {202: (202, 1, 'R')})
+            native.assert_called_once_with(202, ANY)
+
+    def test_current_user_unreadable_identity_remains_unknown(self):
+        rows = f'202 {os.getuid()}\n'
+        with patch.object(cleanup, '_run', return_value=subprocess.CompletedProcess([], 0, rows, '')), patch.object(cleanup, 'process_identity', side_effect=cleanup.CleanupError('PID 202 permission denied')):
+            self.assertEqual(cleanup.inspect_process_use(pathlib.Path('/tmp'))['state'], 'unknown')
+
+    def test_foreign_visible_target_holder_is_busy_or_unknown(self):
+        output = subprocess.CompletedProcess([], 1, 'p202\nfcwd\ntDIR\nn/tmp\n', '')
+        with patch.object(cleanup, '_run', return_value=output), patch.object(cleanup, 'process_identity', return_value=(202, 1, 'S')):
+            self.assertEqual(cleanup.visible_target_holders(pathlib.Path('/tmp'), time.monotonic() + 30), 202)
+        with patch.object(cleanup, 'snapshot_processes', return_value={303: (303, 1, 'S')}), patch.object(cleanup, '_run', return_value=output), patch.object(cleanup, 'process_identity', side_effect=cleanup.CleanupError('PID 202 denied')):
+            observed = cleanup.inspect_process_use(pathlib.Path('/tmp'))
+            self.assertEqual(observed['state'], 'unknown')
+            self.assertEqual(observed['reason'], 'PID 202 denied')
+        with patch.object(cleanup, '_run', return_value=output), patch.object(cleanup, 'process_identity', return_value=None):
+            self.assertIsNone(cleanup.visible_target_holders(pathlib.Path('/tmp'), time.monotonic() + 30))
+
+    def test_native_macos_semaphore_namespace_not_filesystem(self):
+        sample = 'p202\nfcwd\ntDIR\nn/tmp/unrelated\nf15\ntPSXSEM\nn/ToDesk_InputStatsMutex_v1\n'
+        with patch.object(cleanup.sys, 'platform', 'darwin'):
+            self.assertFalse(self.scan('202\n', sample))
+            with self.assertRaises(cleanup.CleanupError):
+                self.scan('202\n', sample.replace('/ToDesk_InputStatsMutex_v1', '/tmp/ambiguous'))
+            self.assertTrue(self.scan('202\n', sample.replace('PSXSEM', 'REG').replace('/ToDesk_InputStatsMutex_v1', '/tmp/retained-worktree/semaphore')))
+        with patch.object(cleanup.sys, 'platform', 'linux'), self.assertRaises(cleanup.CleanupError):
+            self.scan('202\n', sample)
+
+    def test_darwin_signed_uid_is_normalized_without_native_foreign_read(self):
+        rows = f'202 {os.getuid()}\n203 -2\n'
+        with patch.object(cleanup.sys, 'platform', 'darwin'), patch.object(cleanup, '_run', return_value=subprocess.CompletedProcess([], 0, rows, '')), patch.object(cleanup, 'process_identity', return_value=(202, 1, 'S')) as native:
+            self.assertEqual(cleanup.snapshot_processes(time.monotonic() + 30), {202: (202, 1, 'S')})
+            native.assert_called_once_with(202, ANY)
+        for platform, uid in [('linux', -2), ('darwin', -(2 ** 31) - 1), ('darwin', 2 ** 32)]:
+            with patch.object(cleanup.sys, 'platform', platform), patch.object(cleanup, '_run', return_value=subprocess.CompletedProcess([], 0, f'203 {uid}\n', '')), self.assertRaisesRegex(cleanup.CleanupError, 'invalid ps UID'):
+                cleanup.snapshot_processes(time.monotonic() + 30)
+
+    def test_native_identity_exit_window_and_reused_pid_are_reconciled(self):
+        with patch.object(cleanup, '_native_process_identity', side_effect=[ValueError('short'), ValueError('short')]), patch.object(cleanup.os, 'kill', side_effect=[None, ProcessLookupError(3, 'gone')]), patch.object(cleanup.time, 'sleep'):
+            self.assertIsNone(cleanup.process_identity(202))
+        with patch.object(cleanup, '_native_process_identity', side_effect=[ValueError('short'), (202, 99, 'S')]), patch.object(cleanup.os, 'kill', return_value=None), patch.object(cleanup.time, 'sleep'):
+            self.assertEqual(cleanup.process_identity(202), (202, 99, 'S'))
+        with patch.object(cleanup, '_native_process_identity', side_effect=ValueError('short')), patch.object(cleanup.os, 'kill', return_value=None), patch.object(cleanup.time, 'sleep'), self.assertRaisesRegex(cleanup.CleanupError, 'alive but native identity unreadable'):
+            cleanup.process_identity(202)
 
     def test_timeout_is_unknown(self):
         with patch.object(cleanup, 'snapshot_processes', side_effect=cleanup.CleanupError('timeout')):
@@ -316,6 +367,88 @@ class DeliveryTests(SafetyTests):
         self.assertFalse(report['branch_removed'])
         self.assertEqual(self.git('rev-parse', 'feature'), new)
 
+    def make_tracked_cache(self):
+        source = self.path / 'helper.py'
+        source.write_text('def meaning():\n    return 42\n')
+        self.git('config', 'core.excludesFile', str(self.root / 'ignore'))
+        (self.root / 'ignore').write_text('__pycache__/\n')
+        subprocess.check_call(['git', '-C', str(self.path), 'add', 'helper.py'])
+        subprocess.check_call(['git', '-C', str(self.path), 'commit', '-qm', 'source'])
+        head = self.git('rev-parse', 'feature')
+        self.git('update-ref', 'refs/remotes/origin/main', head)
+        self.git('update-ref', 'refs/remotes/origin/feature', head)
+        cached = source.parent / '__pycache__' / ('helper.' + sys.implementation.cache_tag + '.pyc')
+        py_compile.compile(str(source), cfile=str(cached), doraise=True)
+        return source, cached, head
+
+    @patch.object(cleanup, '_process_mentions_path', return_value=False)
+    def test_verified_tracked_source_pycache_is_reconstructable(self, _):
+        source, cached, head = self.make_tracked_cache()
+        self.assertTrue(cleanup.reconstructable_pycache(self.path, cached.relative_to(self.path).as_posix()))
+        cleanup.inspect(self.repo, self.path, 'feature', head)
+
+    def test_pycache_modified_payload_stale_source_and_unknown_abi_retained(self):
+        source, cached, _ = self.make_tracked_cache()
+        relative = cached.relative_to(self.path).as_posix()
+        original = cached.read_bytes()
+        for altered in [original + b'user notes', original[:16] + b'bad marshal', b'bad!' + original[4:], original[:4] + (2).to_bytes(4, 'little') + original[8:]]:
+            cached.write_bytes(altered)
+            self.assertFalse(cleanup.reconstructable_pycache(self.path, relative))
+        cached.write_bytes(original[:16] + marshal.dumps(marshal.loads(original[16:]).replace(co_filename='user private notes')))
+        self.assertFalse(cleanup.reconstructable_pycache(self.path, relative))
+        cached.write_bytes(original)
+        source.write_text('def meaning():\n    return 43\n')
+        py_compile.compile(str(source), cfile=str(cached), doraise=True)
+        source.write_text('def meaning():\n    return 42\n')
+        self.assertFalse(cleanup.reconstructable_pycache(self.path, relative))
+        cached.write_bytes(original)
+        wrong = cached.with_name('helper.cpython-999.pyc')
+        wrong.write_bytes(original)
+        self.assertFalse(cleanup.reconstructable_pycache(self.path, wrong.relative_to(self.path).as_posix()))
+
+    def test_pycache_symlinks_untracked_source_and_unknown_material_retained(self):
+        source, cached, _ = self.make_tracked_cache()
+        relative = cached.relative_to(self.path).as_posix()
+        raw = cached.read_bytes()
+        cached.unlink()
+        outside = self.root / 'cached.pyc'
+        outside.write_bytes(raw)
+        cached.symlink_to(outside)
+        self.assertFalse(cleanup.reconstructable_pycache(self.path, relative))
+        cached.unlink()
+        cached.write_bytes(raw)
+        subprocess.check_call(['git', '-C', str(self.path), 'rm', '--cached', '-q', 'helper.py'])
+        self.assertFalse(cleanup.reconstructable_pycache(self.path, relative))
+        subprocess.check_call(['git', '-C', str(self.path), 'add', 'helper.py'])
+        self.assertFalse(cleanup.git(self.path, 'status', '--porcelain'))
+        (cached.parent / 'user-notes').write_text('user materials')
+        with self.assertRaisesRegex(cleanup.CleanupError, 'unknown ignored user material retained: __pycache__/user-notes'):
+            cleanup.user_material(self.repo, self.path, cleanup.worktrees(self.repo))
+
+    def test_pycache_directory_and_tracked_source_symlinks_retained(self):
+        source, cached, _ = self.make_tracked_cache()
+        relative = cached.relative_to(self.path).as_posix()
+        content = source.read_bytes()
+        outside_source = self.root / 'outside.py'
+        outside_source.write_bytes(content)
+        source.unlink()
+        source.symlink_to(outside_source)
+        self.assertFalse(cleanup.reconstructable_pycache(self.path, relative))
+        source.unlink()
+        source.write_bytes(content)
+        outside_cache = self.root / 'outside-cache'
+        cached.parent.rename(outside_cache)
+        cached.parent.symlink_to(outside_cache, target_is_directory=True)
+        self.assertFalse(cleanup.reconstructable_pycache(self.path, relative))
+
+    def test_pycache_hash_based_and_optimized_compilation(self):
+        source, cached, _ = self.make_tracked_cache()
+        py_compile.compile(str(source), cfile=str(cached), doraise=True, invalidation_mode=py_compile.PycInvalidationMode.CHECKED_HASH)
+        self.assertTrue(cleanup.reconstructable_pycache(self.path, cached.relative_to(self.path).as_posix()))
+        optimized = cached.with_name('helper.' + sys.implementation.cache_tag + '.opt-1.pyc')
+        py_compile.compile(str(source), cfile=str(optimized), doraise=True, optimize=1)
+        self.assertTrue(cleanup.reconstructable_pycache(self.path, optimized.relative_to(self.path).as_posix()))
+
     def test_invalid_base_cli_is_argument_error(self):
         result = subprocess.run([sys.executable, str(pathlib.Path(cleanup.__file__)), '--worktree', str(self.path), '--branch', 'feature', '--expected-head', self.head, '--base-ref', 'refs/heads/feature'], capture_output=True)
         self.assertEqual(result.returncode, 2)
@@ -361,7 +494,7 @@ class HostSmokeTests(unittest.TestCase):
                 self.assertIn(proc.pid, covered)
                 self.assertIn(proc.pid, busy)
                 observed = cleanup.inspect_process_use(target)
-                self.assertIn(observed['state'], ('busy', 'unknown'))
+                self.assertEqual(observed['state'], 'busy')
             finally:
                 proc.terminate()
                 proc.wait(timeout=5)
