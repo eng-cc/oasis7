@@ -144,7 +144,10 @@ fn real_two_endpoint_idempotency_and_offline_evidence() {
     assert_eq!(qualified(c.lookup(&request("1")).unwrap()), e);
     let mut changed = record();
     changed.after_state_root = "d".repeat(64);
-    assert!(c.submit(4, &head, request("1"), changed).is_err());
+    assert!(matches!(
+        c.submit(4, &head, request("1"), changed),
+        Err(ProtocolError::Invalid(_))
+    ));
     for epoch in [0, 3, 5] {
         assert!(c.submit(epoch, &head, request("2"), record()).is_err());
     }
@@ -355,3 +358,6 @@ fn either_endpoint_loss_recovers_from_complete_evidence_and_minimum_anchor() {
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+#[path = "trust_disagreement_tests.rs"]
+mod trust_disagreement_tests;
