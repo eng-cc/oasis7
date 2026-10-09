@@ -143,6 +143,7 @@ fn build_signed_gameplay_action_request_attaches_auth() {
 fn terminal_agent_chat_waits_past_ack_for_reply_or_error() {
     let ack = ViewerResponse::AgentChatAck {
         ack: oasis7::viewer::AgentChatAck {
+            auth_nonce: None,
             agent_id: "agent-0".to_string(),
             accepted_at_tick: 7,
             message_len: 5,

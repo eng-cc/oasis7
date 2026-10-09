@@ -253,17 +253,26 @@ impl ViewerRuntimeLiveServer {
         let Some(config) = config else {
             return Ok(None);
         };
-        let bytes = match request {
-            ViewerRequest::GameplayAction { request } => serde_json::to_vec(request),
+        let payload = match request {
+            ViewerRequest::AgentChat { request } => {
+                crate::world_service::WorldServicePayloadV1::AgentChat(request.clone())
+            }
+            ViewerRequest::GameplayAction { request } => {
+                crate::world_service::WorldServicePayloadV1::GameplayJson(
+                    serde_json::to_vec(request)
+                        .map_err(|e| ViewerRuntimeLiveServerError::Serde(e.to_string()))?,
+                )
+            }
             ViewerRequest::CollectData { command }
                 if matches!(command, CollectDataCommand::Submit { .. }) =>
             {
-                serde_json::to_vec(command)
+                crate::world_service::WorldServicePayloadV1::GameplayJson(
+                    serde_json::to_vec(command)
+                        .map_err(|e| ViewerRuntimeLiveServerError::Serde(e.to_string()))?,
+                )
             }
             _ => return Ok(None),
-        }
-        .map_err(|e| ViewerRuntimeLiveServerError::Serde(e.to_string()))?;
-        let payload = crate::world_service::WorldServicePayloadV1::GameplayJson(bytes);
+        };
         let correlation =
             match crate::world_service::derive_correlation(config.expected_world.clone(), &payload)
             {
@@ -278,6 +287,11 @@ impl ViewerRuntimeLiveServer {
             };
             let server = lock_shared_server(shared)?;
             let verified = match request {
+                ViewerRequest::AgentChat { request } => request
+                    .auth
+                    .as_ref()
+                    .ok_or_else(|| "auth proof required".to_string())
+                    .and_then(|auth| crate::viewer::verify_agent_chat_auth_proof(request, auth)),
                 ViewerRequest::GameplayAction { request } => request
                     .auth
                     .as_ref()

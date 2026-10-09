@@ -138,6 +138,29 @@ describe("viewer agent chat auth", () => {
     expect(signAuthPayload).toHaveBeenCalledWith(buildAuthEnvelope.mock.calls[0][0], expect.anything());
   });
 
+  it("signs canonical owner authority after the replacement and rejects foreign metadata", async () => {
+    const canonical = { agent_id: "agent-0", player_id: "player-1", public_key: "ab".repeat(32),
+      world_id: "runtime-world-7", reorg_epoch: 12, authority_scope: "player_agent_chat",
+      canonical_authority: { branch_id: "branch-1", agent_identity_generation: 2 }, current_intent_id: "intent-1" };
+    const state = { auth: {playerId:"player-1",publicKey:"ab".repeat(32),boundAgentId:"agent-0"}, logicalTime: 12, worldFeed: { status: "ready", worldId: "runtime-world-7", reorgEpoch: 12 },
+      viewerProtocol: { capabilities: ["canonical_agent_chat_v1"] },
+      canonicalAgentOwnerView: canonical, snapshot: { player_gameplay: { canonical_agent_chat: canonical } } };
+    const buildAuthEnvelope = vi.fn((payload) => payload);
+    const signAuthPayload = vi.fn(async () => "signed");
+    const module = createViewerAgentChatAuthModule({ state, buildAuthEnvelope, signAuthPayload, nextAuthNonce: () => 42 });
+    const auth = { playerId: "player-1", publicKey: "ab".repeat(32) };
+    const request = makeRequest();
+    await module.buildAuthProof(request, auth);
+    expect(request.replaces_intent_id).toBe("intent-1");
+    expect(Object.keys(buildAuthEnvelope.mock.calls[0][0]).slice(-2)).toEqual(["replaces_intent_id", "canonical_authority"]);
+    expect(buildAuthEnvelope.mock.calls[0][0].canonical_authority).toEqual(canonical.canonical_authority);
+    canonical.public_key = "cd".repeat(32);
+    await expect(module.buildAuthProof(makeRequest(), auth)).rejects.toThrow(/authenticated canonical owner/);
+    state.canonicalAgentOwnerView = null;
+    await expect(module.buildAuthProof(makeRequest(), auth)).rejects.toThrow(/authenticated canonical owner/);
+    expect(signAuthPayload).toHaveBeenCalledTimes(1);
+  });
+
   it("fails closed until the current runtime authority identity is available", async () => {
     const signAuthPayload = vi.fn();
     const module = createViewerAgentChatAuthModule({
@@ -249,6 +272,44 @@ describe("viewer agent chat auth", () => {
       type: "agent_chat_ack",
       ack: { agent_id: "agent-0", player_id: "player-1", accepted_at_tick: 12 },
     });
+    core.state.viewerProtocol.capabilities.push("canonical_agent_chat_v1");
+    const canonical = {
+      agent_id: "agent-0", player_id: "player-1", public_key: "ab".repeat(32),
+      world_id: "runtime-world-7", reorg_epoch: 12, authority_scope: "player_agent_chat",
+      canonical_authority: { branch_id: "branch-1", agent_identity_generation: 2 },
+      current_intent_id: null, goal: null,
+    };
+    core.state.snapshot.player_gameplay.canonical_agent_chat = canonical; core.state.canonicalAgentOwnerView = canonical;
+    sentMessages.length = 0;
+    expect(core.sendAgentChat("agent-0", "Persist this owner goal.").ok).toBe(true);
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const contextRequest = sentMessages.find((message) => message.type === "request_canonical_agent_owner_read_context");
+      if (contextRequest && !sentMessages.some((message) => message.type === "canonical_agent_owner_read")) {
+        const commit = {world: {world_id: "runtime-world-7", genesis_digest: "fixture-genesis"}, binding: {branch_id: "branch-1", reorg_generation: 12, provider_world_id:"runtime-world-7",finality_ref:"f",governing_manifest_ref:"m",authority_generation:1,permission_generation:1}, position: 1, execution_block_hash:"block",state_root_ref:"root"};
+        const request = {contract_version:1,world:commit.world,scope_id:"agent:agent-0",min_commit:commit,fixed_commit:null,deadline_unix_ms:null};
+        const {cborCanonicalEncode} = await import("./viewer_auth_crypto.js");
+        const bytes=cborCanonicalEncode(["oasis7.world-service.v1","/v1/world/view",request]);
+        sockets[0].receive({type:"canonical_agent_owner_read_context",context:{request,fence:canonical,expected:{...canonical,branch_id:canonical.canonical_authority.branch_id},signing_domain:"/v1/world/view",signing_bytes_hex:Array.from(bytes,x=>x.toString(16).padStart(2,"0")).join("")}});
+      }
+      const read = sentMessages.find((message) => message.type === "canonical_agent_owner_read");
+      if (read) sockets[0].receive({type:"canonical_agent_owner_view",request:read.request,request_digest:"blake3:"+"aa".repeat(32),view:canonical,version:{commit:read.request.request.min_commit}});
+      if (sentMessages.some((message) => message.type === "agent_chat")) break;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    const canonicalMessage = sentMessages.find((message) => message.type === "agent_chat");
+    expect(canonicalMessage.request.canonical_authority).toEqual(canonical.canonical_authority);
+    sockets[0].receive({ type: "agent_chat_ack", ack: { agent_id: "agent-0", player_id: "player-1", auth_nonce: canonicalMessage.request.auth.nonce, intent_seq: canonicalMessage.request.intent_seq, intent_tick: canonicalMessage.request.intent_tick, status: "pending" } });
+    expect(core.state.lastChatFeedback).toMatchObject({ stage: "pending", accepted: false, ok: false });
+    expect(core.state.chatHistory.some((entry) => entry.message === "Persist this owner goal.")).toBe(false);
+    canonical.current_intent_id = "canonical-intent-1";
+    canonical.goal = { intent_id: "canonical-intent-1", message: "Persist this owner goal.", status: "active", event_seq: 1, logical_time: 12 };
+    core.state.canonicalAgentOwnerView = { ...canonical };
+    expect((await import("./viewer_canonical_goal_module.js")).authenticatedCanonicalGoal(core.state, "agent-0")?.message).toBe("Persist this owner goal.");
+    sockets[0].receive({ type: "agent_chat_ack", ack: { agent_id: "agent-0", player_id: "player-1", auth_nonce: canonicalMessage.request.auth.nonce, intent_seq: canonicalMessage.request.intent_seq, intent_tick: canonicalMessage.request.intent_tick, status: "accepted", intent_id: "canonical-intent-1", accepted_at_tick: 12 } });
+    expect(core.state.lastChatFeedback.accepted).toBe(true);
+    core.state.auth = { ...core.state.auth, publicKey: "cd".repeat(32) };
+    core.injectSnapshot(core.state.snapshot);
+    expect((await import("./viewer_canonical_goal_module.js")).authenticatedCanonicalGoal(core.state, "agent-0")).toBeNull();
     sockets[0].close();
   });
 });

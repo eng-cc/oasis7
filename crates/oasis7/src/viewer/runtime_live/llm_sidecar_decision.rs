@@ -20,6 +20,11 @@ impl RuntimeLlmSidecar {
         if let Err(message) = self.ensure_runner_initialized() {
             return Some(RuntimeLlmDecision::from_error(world, message));
         }
+        if self.provider_service_required
+            && let Err(message) = self.sync_canonical_goal_prompt()
+        {
+            return Some(RuntimeLlmDecision::from_error(world, message));
+        }
         #[cfg(not(target_arch = "wasm32"))]
         {
             let Some(runner) = self

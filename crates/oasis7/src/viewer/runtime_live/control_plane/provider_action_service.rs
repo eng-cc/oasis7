@@ -119,6 +119,54 @@ impl ViewerRuntimeLiveServer {
     }
 
     pub(in crate::viewer::runtime_live) fn configure_service_provider(&mut self) {
+        if self.config.world_service.is_some() {
+            let previous = self
+                .llm_sidecar
+                .provider_service_projection
+                .as_ref()
+                .and_then(|view| view.canonical_agent_chat.as_ref())
+                .and_then(|chat| chat.goal.as_ref())
+                .map(|goal| goal.intent_id.clone());
+            if self.llm_sidecar.canonical_owner_goal.as_ref().is_some_and(|chat| {
+                self.session_policy.validate_known_session_key(&chat.player_id, &chat.public_key).is_err()
+                    || self.verified_world_view.as_ref().is_none_or(|view| {
+                        let commit = &view.version().commit;
+                        chat.world_id != commit.world.world_id
+                            || chat.canonical_authority.branch_id != commit.binding.branch_id
+                            || chat.reorg_epoch != commit.binding.reorg_generation
+                            || (view.projection().canonical_agent_owner.as_ref().is_none()
+                                && self.llm_sidecar.canonical_owner_goal_commit.as_ref().is_none_or(|owner_commit| !owner_commit.satisfies_minimum(commit).unwrap_or(false)))
+                            || view.projection().canonical_agent_owner.as_ref().is_some_and(|fence| fence != &oasis7_proto::viewer::CanonicalAgentOwnerFenceV1::from(chat))
+                    })
+            }) {
+                self.llm_sidecar.canonical_owner_goal = None;
+                self.llm_sidecar.canonical_owner_goal_commit = None;
+            }
+            let current = self
+                .verified_world_view
+                .as_ref()
+                .and_then(|view| view.projection().canonical_agent_chat.clone())
+                .or_else(|| self.llm_sidecar.canonical_owner_goal.clone());
+            // A provider-local profile is a disposable projection of the
+            // authenticated goal. Removal/revocation clears it on refresh.
+            for profile in self.llm_sidecar.prompt_profiles.values_mut() {
+                profile.short_term_goal_override = None;
+            }
+            if let Some(chat) = current
+                && let Some(goal) = chat
+                    .goal
+                    .filter(|goal| matches!(goal.status.as_str(), "accepted" | "blocked"))
+            {
+                self.llm_sidecar
+                    .prompt_profiles
+                    .entry(chat.agent_id.clone())
+                    .or_insert_with(|| AgentPromptProfile::for_agent(chat.agent_id))
+                    .short_term_goal_override = Some(goal.message);
+                if previous.as_deref() != Some(goal.intent_id.as_str()) {
+                    self.llm_sidecar.request_decision();
+                }
+            }
+        }
         self.llm_sidecar.provider_service_required = self.chain_link_enabled();
         self.llm_sidecar.provider_service_lineage_store_explicit =
             self.config.world_service.is_some()
@@ -130,6 +178,11 @@ impl ViewerRuntimeLiveServer {
             .verified_world_view
             .as_ref()
             .map(|view| view.projection().clone());
+        if let Some(projection) = self.llm_sidecar.provider_service_projection.as_mut()
+            && projection.canonical_agent_chat.is_none()
+        {
+            projection.canonical_agent_chat = self.llm_sidecar.canonical_owner_goal.clone();
+        }
     }
     #[expect(
         clippy::result_large_err,

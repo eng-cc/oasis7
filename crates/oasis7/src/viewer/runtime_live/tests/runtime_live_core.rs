@@ -385,6 +385,7 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         35,
         public_key.as_str(),

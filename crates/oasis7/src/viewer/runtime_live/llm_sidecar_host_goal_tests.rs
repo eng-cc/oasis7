@@ -60,3 +60,52 @@ fn runtime_live_host_goal_rejects_oversize_text_without_truncation() {
         assert!(error.contains("goal_snapshot_too_large"), "{error}");
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn canonical_goal_prompt_delivery_preserves_provider_capability_refusal() {
+    use oasis7_proto::viewer::*;
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar
+        .replace_provider_backed_runner_for_test("agent-1")
+        .unwrap();
+    let mut projection = crate::world_service::projection::WorldServiceProjection::from_world(
+        &RuntimeWorld::default(),
+        None,
+    )
+    .unwrap();
+    projection.canonical_agent_chat = Some(CanonicalAgentChatViewV1 {
+        agent_id: "agent-1".into(),
+        player_id: "owner".into(),
+        public_key: "fixture".into(),
+        world_id: "world".into(),
+        reorg_epoch: 0,
+        authority_scope: "player_agent_chat".into(),
+        canonical_authority: CanonicalAgentChatAuthorityV1 {
+            branch_id: "main".into(),
+            agent_identity_generation: 1,
+        },
+        current_intent_id: Some("intent".into()),
+        goal: Some(CanonicalAgentGoalV1 {
+            intent_id: "intent".into(),
+            message: "committed owner goal".into(),
+            status: "accepted".into(),
+            event_seq: 1,
+            logical_time: 1,
+        }),
+    });
+    sidecar.provider_service_projection = Some(projection);
+    let mut profile = AgentPromptProfile::for_agent("agent-1");
+    profile.short_term_goal_override = Some("committed owner goal".into());
+    sidecar.prompt_profiles.insert("agent-1".into(), profile);
+    assert!(
+        sidecar
+            .sync_canonical_goal_prompt()
+            .unwrap_err()
+            .contains("unsupported for ProviderBacked")
+    );
+    assert!(sidecar.canonical_goal_prompt_applied.is_none());
+    sidecar.hosted_local_mock_test_lane = true;
+    assert!(sidecar.sync_canonical_goal_prompt().is_err()); // no admitted outer Runtime context
+    assert!(sidecar.canonical_goal_prompt_applied.is_none());
+}

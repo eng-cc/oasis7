@@ -316,3 +316,6 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
     assert!(result.rejected.unwrap().contains("base binding changed"));
     let _ = fs::remove_dir_all(dir);
 }
+
+#[path = "world_service_agent_chat.rs"]
+mod canonical_agent_chat;

@@ -8,6 +8,10 @@ pub use feedback_history::{WorldServiceFeedbackHistory, WorldServiceFeedbackRepl
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldServiceProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_agent_owner: Option<oasis7_proto::viewer::CanonicalAgentOwnerFenceV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_agent_chat: Option<oasis7_proto::viewer::CanonicalAgentChatViewV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback_history: Option<WorldServiceFeedbackHistory>,
     pub state: WorldState,
     pub events: Vec<WorldEvent>,
@@ -42,6 +46,22 @@ pub struct WorldServiceAgentContext {
 }
 
 impl WorldServiceProjection {
+    /// Called after scope authentication. Owner chat metadata has a stricter
+    /// audience than ordinary Agent cognition/delegation observation material.
+    pub fn from_authenticated_world(
+        world: &World,
+        authorized_agent: Option<&str>,
+        caller_public_key: &str,
+    ) -> Result<Self, String> {
+        let mut projection = Self::from_world(world, authorized_agent)?;
+        if let Some(agent) = authorized_agent
+            && super::agent_authority::owner_public_key(world, agent)? == caller_public_key
+        {
+            projection.canonical_agent_chat = super::agent_chat::owner_view(world, agent)?;
+        }
+        Ok(projection)
+    }
+
     /// Called only after the service has authorized the requested audience.
     /// An allowlist prevents newly added persistence fields leaking by default.
     pub fn from_world(world: &World, authorized_agent: Option<&str>) -> Result<Self, String> {
@@ -91,6 +111,13 @@ impl WorldServiceProjection {
         // Generic journals may contain private cognition/prompt artifacts.
         // Authorized committed changes are delivered by the changes route.
         Ok(Self {
+            canonical_agent_owner: authorized_agent
+                .map(|agent| super::agent_chat::owner_view(world, agent))
+                .transpose()?
+                .flatten()
+                .as_ref()
+                .map(Into::into),
+            canonical_agent_chat: None,
             feedback_history: authorized_agent
                 .map(|agent| WorldServiceFeedbackHistory::from_world(world, agent))
                 .transpose()?,

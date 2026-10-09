@@ -92,6 +92,7 @@ mod mapping;
 mod market_quote_decision;
 #[cfg(test)]
 mod module_visual_driver;
+mod owner_read;
 mod player_agency_projection;
 mod player_gameplay;
 #[path = "runtime_live/power_projection.rs"]
@@ -105,11 +106,13 @@ mod recovery_persistence;
 mod recovery_receipt;
 mod recovery_rollback_v2;
 mod recovery_session;
+mod request_prime;
 mod runtime_script;
 mod schedule_recipe_quote;
 mod session_policy;
 #[path = "runtime_live/smelter_affordability_debug.rs"]
 mod smelter_affordability_debug;
+mod snapshot_privacy;
 #[path = "runtime_live/social_quote.rs"]
 mod social_quote;
 mod stream_session;
@@ -171,6 +174,7 @@ pub struct ViewerRuntimeLiveServer {
     verified_world_view: Option<crate::world_service::verified_view::VerifiedWorldView>,
     world_service_query_state: crate::world_service::client::WorldServiceQueryState,
     periodic_service_executor: Option<Arc<periodic_service_io::Executor>>,
+    prepared_owner_read: Option<owner_read::PreparedOwnerRead>,
     prepared_world_service_submission: Option<chain_link::PreparedWorldServiceSubmission>,
     pending_world_service_gameplay: Vec<(
         oasis7_client_api::world_service::RequestCorrelation,
@@ -392,6 +396,7 @@ impl ViewerRuntimeLiveServer {
             verified_world_view: None,
             world_service_query_state,
             periodic_service_executor: None,
+            prepared_owner_read: None,
             prepared_world_service_submission: None,
             pending_world_service_gameplay: Vec::new(),
             chain_observer_loader: Arc::new(Mutex::new(chain_link::ObserverLoader::default())),
@@ -567,7 +572,9 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn supports_agent_chat(&self) -> bool {
-        self.llm_sidecar.supports_agent_chat() || self.config.agent_chat_echo_enabled
+        self.config.world_service.is_some()
+            || self.llm_sidecar.supports_agent_chat()
+            || self.config.agent_chat_echo_enabled
     }
 
     #[cfg(any(test, feature = "test_tier_required"))]
@@ -634,8 +641,12 @@ impl ViewerRuntimeLiveServer {
                                         Self::prepare_shared_world_service_submission(
                                             &shared, &request,
                                         )?;
+                                    let prepared_owner_read = Self::prepare_shared_owner_read(
+                                        &shared, &request, &session,
+                                    )?;
                                     handled = {
                                         let mut server = lock_shared_server(&shared)?;
+                                        server.prepared_owner_read = prepared_owner_read;
                                         server.prepared_world_service_submission =
                                             prepared_submission;
                                         let handled = server.handle_request_with_chain_prime(
@@ -645,6 +656,7 @@ impl ViewerRuntimeLiveServer {
                                             chain_prime,
                                         );
                                         server.prepared_world_service_submission = None;
+                                        server.prepared_owner_read = None;
                                         agent_presence.observe(&mut server, &session);
                                         handled
                                     };
@@ -778,7 +790,14 @@ impl ViewerRuntimeLiveServer {
                     .to_string(),
             ));
         }
+        self.invalidate_owner_read_session(session);
         match request {
+            ViewerRequest::RequestCanonicalAgentOwnerReadContext { agent_id } => {
+                self.handle_owner_read_context(agent_id, session, writer)?;
+            }
+            ViewerRequest::CanonicalAgentOwnerRead { request } => {
+                self.handle_owner_read(request, session, writer)?;
+            }
             ViewerRequest::Hello { version: _, .. } => {
                 session.negotiated_protocol =
                     crate::viewer::protocol::NegotiatedViewerProtocol::v1_without_capabilities();
@@ -843,6 +862,13 @@ impl ViewerRuntimeLiveServer {
                             crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY
                                 .to_string(),
                         );
+                    }
+                    if self.config.world_service.is_some()
+                        && offered
+                            .iter()
+                            .any(|capability| capability == "canonical_agent_chat_v1")
+                    {
+                        selected.push("canonical_agent_chat_v1".into());
                     }
                     if offered
                         .iter()
@@ -1116,6 +1142,9 @@ impl ViewerRuntimeLiveServer {
                                 AuthoritativeRecoveryStatus::SessionRevoked => {
                                     if session.current_player_id.as_deref() == Some(player_id) {
                                         session.current_player_id = None;
+                                        session.owner_read_context = None;
+                                        session.owner_read_view = None;
+                                        session.owner_read_commit = None;
                                     }
                                 }
                                 _ => session.current_player_id = Some(player_id.to_string()),
@@ -1139,47 +1168,5 @@ impl ViewerRuntimeLiveServer {
             }
         }
         Ok(())
-    }
-
-    fn prime_shared_request_if_needed(
-        shared: &Arc<Mutex<Self>>,
-        request: &ViewerRequest,
-        session: &RuntimeLiveSession,
-    ) -> Result<Option<Result<(), ViewerRuntimeLiveServerError>>, ViewerRuntimeLiveServerError>
-    {
-        let should_prime = {
-            let server = lock_shared_server(shared)?;
-            match request {
-                ViewerRequest::HelloV2 { version, .. } => {
-                    *version >= 2
-                        && server.hosted_local_mock_test_lane_active
-                        && server.chain_link_enabled()
-                        && server.world.state().agents.is_empty()
-                        && !session.chain_runtime_authoritatively_primed
-                }
-                ViewerRequest::RequestSnapshot => {
-                    server.chain_link_enabled()
-                        && !session.initial_snapshot_sent
-                        && !session.chain_runtime_authoritatively_primed
-                }
-                ViewerRequest::AuthoritativeRecovery { .. } => {
-                    server.config.world_service.is_some()
-                }
-                ViewerRequest::PlaybackControl { .. }
-                | ViewerRequest::LiveControl { .. }
-                | ViewerRequest::Control { .. } => server.config.world_service.is_some(),
-                _ => false,
-            }
-        };
-        if !should_prime {
-            return Ok(None);
-        }
-        Ok(Some(
-            Self::prime_chain_linked_runtime_for_snapshot_minimized_lock(
-                shared,
-                world_service_link::coherence_trace_request_kind(request),
-            )
-            .map(|_| ()),
-        ))
     }
 }
