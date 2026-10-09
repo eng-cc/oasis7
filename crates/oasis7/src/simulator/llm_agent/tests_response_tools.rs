@@ -1,4 +1,15 @@
 #[test]
+fn responses_tools_preserve_synchronous_wire_contract() {
+    for tool in responses_tools_with_debug_mode(true) {
+        let value = serde_json::to_value(tool).expect("serialize response tool");
+        assert_eq!(value["type"], "function");
+        for field in ["async", "output_schema", "allowed_callers"] {
+            assert!(value.get(field).is_none(), "unexpected optional field {field}");
+        }
+    }
+}
+
+#[test]
 fn responses_tools_register_expected_function_names() {
     let tools = responses_tools();
     assert_eq!(tools.len(), 10);
