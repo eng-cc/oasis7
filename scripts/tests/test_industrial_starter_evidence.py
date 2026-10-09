@@ -9,6 +9,33 @@ spec.loader.exec_module(starter)
 
 
 class StarterEvidenceTests(unittest.TestCase):
+    def test_registration_uses_acknowledged_bound_agent_and_rejects_errors(self):
+        payload = {"responses": [{"type": "authoritative_recovery_ack", "ack": {
+            "status": "session_registered", "player_id": "p", "session_pubkey": "key",
+            "agent_id": "actual-bound-agent",
+        }}]}
+        self.assertEqual(starter.verify_recovery_ack(payload, "p", "key"), "actual-bound-agent")
+        for field, value in [("status", "reconnect_synced"), ("player_id", "other"),
+                             ("session_pubkey", "other"), ("agent_id", None)]:
+            changed = copy.deepcopy(payload)
+            changed["responses"][0]["ack"][field] = value
+            with self.assertRaises(ValueError):
+                starter.verify_recovery_ack(changed, "p", "key")
+        payload["responses"].append({"type": "authoritative_recovery_error", "error": {"code": "denied"}})
+        with self.assertRaises(ValueError):
+            starter.verify_recovery_ack(payload, "p", "key")
+
+    def test_empty_world_bootstrap_diagnostic_preserves_runtime_blocker(self):
+        diagnostic = starter.bootstrap_failure({
+            "blocker_kind": "runtime_snapshot_empty_entities",
+            "blocker_detail": "world has no agents/locations",
+            "available_actions": [{"action_id": "request_snapshot"}],
+        }, "build_factory_smelter_mk1")
+        self.assertEqual(diagnostic["status"], "failed")
+        self.assertEqual(diagnostic["blocker_kind"], "runtime_snapshot_empty_entities")
+        self.assertEqual(diagnostic["available_action_ids"], ["request_snapshot"])
+        self.assertFalse(diagnostic["canonical_production_verified"])
+
     def fixture(self):
         milestone = dict(profile_id=starter.PROFILE, profile_revision=1, factory_id=starter.FACTORY,
                          recipe_id=starter.RECIPE, output_ledger="site:s1", settlement_job_id=7, settled_at=9)

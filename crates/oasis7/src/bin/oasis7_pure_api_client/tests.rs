@@ -11,6 +11,55 @@ fn fixed_private_key_hex(seed: u8) -> String {
 }
 
 #[test]
+fn session_registration_signs_binding_without_force_or_secret_output() {
+    let private = fixed_private_key_hex(77);
+    let request = build_signed_session_register_request(
+        "player-local",
+        &private,
+        None,
+        Some("agent-0".to_string()),
+        None,
+    )
+    .expect("signed registration");
+    assert!(!request.force_rebind);
+    let proof = request.auth.as_ref().expect("proof");
+    oasis7::viewer::verify_session_register_auth_proof(&request, proof).expect("valid binding");
+    let mut changed = request.clone();
+    changed.requested_agent_id = Some("other-agent".to_string());
+    assert!(oasis7::viewer::verify_session_register_auth_proof(&changed, proof).is_err());
+    let serialized = serde_json::to_string(&request).expect("serialize");
+    assert!(!serialized.contains(&private));
+}
+
+#[test]
+fn session_registration_hosted_identity_still_requires_grant() {
+    let request = build_signed_session_register_request(
+        "hosted-player-no-grant",
+        &fixed_private_key_hex(78),
+        None,
+        None,
+        None,
+    )
+    .expect("signed registration");
+    assert!(
+        oasis7::viewer::verify_session_register_auth_proof(
+            &request,
+            request.auth.as_ref().expect("proof"),
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn session_registration_cli_rejects_force_rebind() {
+    let mut args = ArgCursor {
+        args: vec!["register-session".to_string(), "--force-rebind".to_string()],
+        pos: 0,
+    };
+    assert!(parse_cli(&mut args).is_err());
+}
+
+#[test]
 fn agency_control_cli_accepts_one_exact_tagged_json_request() {
     let mut args = ArgCursor {
         args: vec![

@@ -10,12 +10,36 @@ FACTORY = "factory.smelter.mk1"
 RECIPE = "recipe.smelter.iron_ingot"
 
 
+def bootstrap_failure(snapshot, action_id):
+    """Describe an unavailable entry action without inventing runtime progress."""
+    return {
+        "status": "failed",
+        "evidence_scope": "bootstrap_diagnostic_only",
+        "checks": {"canonical_bootstrap_action_available": False},
+        "blocker_kind": snapshot.get("blocker_kind") or "canonical_bootstrap_action_missing",
+        "blocker_detail": snapshot.get("blocker_detail") or "canonical build action has no target agent",
+        "required_action_id": action_id,
+        "available_action_ids": [a.get("action_id") for a in snapshot.get("available_actions", [])],
+        "canonical_production_verified": False,
+    }
+
+
 def state(payload):
     return ((payload.get("latest_snapshot") or {}).get("runtime_snapshot") or {}).get("state") or {}
 
 
 def response(payload, kind):
     return next((item for item in payload.get("responses", []) if item.get("type") == kind), None)
+
+
+def verify_recovery_ack(payload, player_id, public_key):
+    ack = (response(payload, "authoritative_recovery_ack") or {}).get("ack") or {}
+    if (response(payload, "authoritative_recovery_error") or
+        ack.get("status") != "session_registered" or ack.get("player_id") != player_id or
+        ack.get("session_pubkey") != public_key or not isinstance(ack.get("agent_id"), str) or
+        not ack["agent_id"].strip()):
+        raise ValueError("session registration did not acknowledge the authenticated bound Agent")
+    return ack["agent_id"]
 
 
 def positive_int(value):

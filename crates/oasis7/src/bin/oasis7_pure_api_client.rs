@@ -7,11 +7,13 @@ use ed25519_dalek::SigningKey;
 use oasis7::simulator::{WorldEventKind, WorldSnapshot};
 use oasis7::viewer::{
     AgentChatRequest, AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryCommand,
-    AuthoritativeSessionRevokeRequest, AuthoritativeSessionRotateRequest, GameplayActionRequest,
-    LiveControl, PromptControlApplyRequest, PromptControlAuthIntent, PromptControlCommand,
+    AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
+    AuthoritativeSessionRotateRequest, GameplayActionRequest, LiveControl,
+    PromptControlApplyRequest, PromptControlAuthIntent, PromptControlCommand,
     PromptControlRollbackRequest, VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse,
     ViewerStream, sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
     sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
+    sign_session_register_auth_proof,
 };
 use serde_json::{Value, json};
 
@@ -29,11 +31,12 @@ mod tests;
 use self::oasis7_pure_api_client_support::derive_public_key_hex;
 use self::oasis7_pure_api_client_support::{
     build_signed_agent_chat_request, build_signed_gameplay_action_request,
-    build_signed_prompt_apply_request, build_signed_prompt_rollback_request, command_output,
-    is_terminal_error, keygen_output, latest_snapshot, maybe_request_snapshot, next_u64_id,
-    parse_bool_flag, parse_u64_flag, parse_usize_flag, print_json, required_flag,
-    subscribe_for_control, terminal_agent_chat, terminal_control_ack, terminal_gameplay_action,
-    terminal_hello, terminal_prompt_control, terminal_recovery, terminal_snapshot,
+    build_signed_prompt_apply_request, build_signed_prompt_rollback_request,
+    build_signed_session_register_request, command_output, is_terminal_error, keygen_output,
+    latest_snapshot, maybe_request_snapshot, next_u64_id, parse_bool_flag, parse_u64_flag,
+    parse_usize_flag, print_json, required_flag, subscribe_for_control, terminal_agent_chat,
+    terminal_control_ack, terminal_gameplay_action, terminal_hello, terminal_prompt_control,
+    terminal_recovery, terminal_snapshot,
 };
 
 fn main() {
@@ -275,6 +278,41 @@ fn run() -> Result<(), String> {
             print_json(&command_output(&conn.hello_ack, &responses))?;
             Ok(())
         }
+        Command::RegisterSession {
+            player_id,
+            private_key_hex,
+            public_key_hex,
+            requested_agent_id,
+            registration_grant_file,
+            with_snapshot,
+        } => {
+            let registration_grant = registration_grant_file
+                .map(|path| {
+                    std::fs::read_to_string(path)
+                        .map(|value| value.trim().to_string())
+                        .map_err(|_| "failed to read registration grant file".to_string())
+                })
+                .transpose()?;
+            let request = build_signed_session_register_request(
+                &player_id,
+                &private_key_hex,
+                public_key_hex.as_deref(),
+                requested_agent_id,
+                registration_grant,
+            )?;
+            let mut conn = ViewerConnection::connect(&addr, &client, timeout)?;
+            conn.send(&ViewerRequest::AuthoritativeRecovery {
+                command: AuthoritativeRecoveryCommand::RegisterSession { request },
+            })?;
+            let mut responses = conn.collect_until(
+                timeout,
+                terminal_recovery,
+                "waiting for register_session ack/error",
+            )?;
+            maybe_request_snapshot(&mut conn, with_snapshot, &mut responses, timeout)?;
+            print_json(&command_output(&conn.hello_ack, &responses))?;
+            Ok(())
+        }
         Command::ReconnectSync {
             player_id,
             session_pubkey,
@@ -431,6 +469,14 @@ enum Command {
         to_version: u64,
         expected_version: Option<u64>,
         updated_by: Option<String>,
+        with_snapshot: bool,
+    },
+    RegisterSession {
+        player_id: String,
+        private_key_hex: String,
+        public_key_hex: Option<String>,
+        requested_agent_id: Option<String>,
+        registration_grant_file: Option<String>,
         with_snapshot: bool,
     },
     ReconnectSync {
@@ -961,6 +1007,52 @@ fn parse_cli(args: &mut ArgCursor) -> Result<CliConfig, String> {
                 with_snapshot,
             }
         }
+        "register-session" => {
+            let mut player_id = None;
+            let mut private_key_hex = None;
+            let mut public_key_hex = None;
+            let mut requested_agent_id = None;
+            let mut registration_grant_file = None;
+            let mut with_snapshot = false;
+            while let Some(flag) = args.peek() {
+                match flag {
+                    "--player-id" => {
+                        args.next();
+                        player_id = Some(args.value("--player-id")?);
+                    }
+                    "--private-key-hex" => {
+                        args.next();
+                        private_key_hex = Some(args.value("--private-key-hex")?);
+                    }
+                    "--public-key-hex" => {
+                        args.next();
+                        public_key_hex = Some(args.value("--public-key-hex")?);
+                    }
+                    "--requested-agent-id" => {
+                        args.next();
+                        requested_agent_id = Some(args.value("--requested-agent-id")?);
+                    }
+                    "--registration-grant-file" => {
+                        args.next();
+                        registration_grant_file = Some(args.value("--registration-grant-file")?);
+                    }
+                    "--with-snapshot" => {
+                        args.next();
+                        with_snapshot = true;
+                    }
+                    "-h" | "--help" => return Err(usage()),
+                    _ => return Err(format!("unknown register-session flag `{flag}`")),
+                }
+            }
+            Command::RegisterSession {
+                player_id: required_flag(player_id, "--player-id")?,
+                private_key_hex: required_flag(private_key_hex, "--private-key-hex")?,
+                public_key_hex,
+                requested_agent_id,
+                registration_grant_file,
+                with_snapshot,
+            }
+        }
         "reconnect-sync" => {
             let mut player_id = None;
             let mut session_pubkey = None;
@@ -1116,6 +1208,8 @@ Commands:\n\
   prompt-rollback --agent-id <id> --player-id <id> --private-key-hex <hex> --to-version <n>\n\
        [--public-key-hex <hex>] [--expected-version <n>] [--updated-by <name>] [--with-snapshot]\n\
     Send one signed prompt_control rollback request.\n\n\
+  register-session --player-id <id> --private-key-hex <hex> [--requested-agent-id <id>] [--registration-grant-file <path>] [--with-snapshot]\n\
+    Sign an explicit registration request; hosted identities still require a valid grant.\n\n\
   reconnect-sync --player-id <id> [--session-pubkey <hex>] [--last-known-log-cursor <n>]\n\
        [--expected-reorg-epoch <n>] [--with-snapshot]\n\
     Request authoritative reconnect sync / stage recovery data.\n\n\

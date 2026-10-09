@@ -188,6 +188,7 @@ build_action_path="$out_dir/gameplay-build-smelter.json"
 recipe_action_path="$out_dir/gameplay-iron-ingot.json"
 recovery_path="$out_dir/reconnect-sync.json"
 keygen_path="$out_dir/keygen.json"
+registration_path="$out_dir/register-session.json"
 
 stack_pid=""
 stack_logs_dir=""
@@ -283,11 +284,52 @@ PY
 
 public_key_hex=$(json_field "$keygen_path" "public_key_hex")
 private_key_hex=$(json_field "$keygen_path" "private_key_hex")
-target_agent_id=$(find_action_target "$initial_snapshot_path" "build_factory_smelter_mk1")
+target_agent_id=$(find_action_target "$initial_snapshot_path" "build_factory_smelter_mk1" || true)
 [[ -n "$public_key_hex" && -n "$private_key_hex" && -n "$target_agent_id" ]] || {
+  python3 - "$initial_snapshot_path" "$summary_json_path" "$summary_md_path" <<'PY'
+import importlib.util
+import json
+import pathlib
+import sys
+spec = importlib.util.spec_from_file_location("starter", "scripts/industrial-starter-evidence.py")
+starter = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(starter)
+snapshot = json.loads(pathlib.Path(sys.argv[1]).read_text())
+summary = starter.bootstrap_failure(snapshot, "build_factory_smelter_mk1")
+pathlib.Path(sys.argv[2]).write_text(json.dumps(summary, indent=2) + "\n")
+pathlib.Path(sys.argv[3]).write_text("Pure API smoke failed before production: " + summary["blocker_kind"] + "\n\n" + summary["blocker_detail"] + "\n")
+print("Pure API bootstrap blocked: " + summary["blocker_kind"], file=sys.stderr)
+PY
   echo "error: failed to resolve gameplay_action bootstrap inputs" >&2
   exit 1
 }
+
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" register-session \
+  --player-id "$player_id" --private-key-hex "$private_key_hex" \
+  --public-key-hex "$public_key_hex" --requested-agent-id "$target_agent_id" \
+  --with-snapshot >"$registration_path"
+target_agent_id=$(python3 - "$registration_path" "$player_id" "$public_key_hex" "$summary_json_path" "$summary_md_path" <<'PY'
+import importlib.util
+import json
+import pathlib
+import sys
+spec = importlib.util.spec_from_file_location("starter", "scripts/industrial-starter-evidence.py")
+starter = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(starter)
+payload = json.load(open(sys.argv[1]))
+try:
+    print(starter.verify_recovery_ack(payload, sys.argv[2], sys.argv[3]))
+except ValueError as error:
+    detail = (starter.response(payload, "authoritative_recovery_error") or {}).get("error") or {}
+    summary = starter.bootstrap_failure({}, "register_session")
+    summary["blocker_kind"] = detail.get("code") or "session_registration_binding_unverified"
+    summary["blocker_detail"] = detail.get("message") or str(error)
+    pathlib.Path(sys.argv[4]).write_text(json.dumps(summary, indent=2) + "\n")
+    pathlib.Path(sys.argv[5]).write_text("Pure API registration failed: " + summary["blocker_detail"] + "\n")
+    print(summary["blocker_kind"], file=sys.stderr)
+    raise SystemExit(1)
+PY
+)
 
 "$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" gameplay-action \
   --action-id build_factory_smelter_mk1 \
@@ -308,7 +350,7 @@ target_agent_id=$(find_action_target "$initial_snapshot_path" "build_factory_sme
 if [[ "$tier" == "full" ]]; then
   "$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" step --count "$step_c" >"$step_c_path"
 fi
-"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" reconnect-sync --player-id "$player_id" --with-snapshot >"$recovery_path"
+"$client_bin" --addr "$probe_live_addr" --timeout-ms "$client_timeout_ms" reconnect-sync --player-id "$player_id" --session-pubkey "$public_key_hex" --with-snapshot >"$recovery_path"
 
 python3 - "$tier" \
   "$probe_live_addr" \
