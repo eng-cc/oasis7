@@ -516,6 +516,15 @@ impl PreparedRecipeLifecycle {
                 .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0)
         {
             progress.starter_industrial_milestone = Some(StarterIndustrialMilestoneV1 {
+                settlement_summary: pending.committed_recipe_origin.as_ref().map(|_| {
+                    StarterIndustrialSettlementSummaryV1 {
+                        requester_agent_id: pending.requester_agent_id.clone(),
+                        accepted_batches: pending.accepted_batches,
+                        consume: pending.consume.clone(),
+                        power_required: pending.power_required,
+                        produce: pending.produce.clone(),
+                    }
+                }),
                 committed_recipe_origin: pending.committed_recipe_origin.clone(),
                 profile_id: STARTER_INDUSTRIAL_PROFILE_ID.to_string(),
                 profile_revision: STARTER_INDUSTRIAL_PROFILE_REVISION,

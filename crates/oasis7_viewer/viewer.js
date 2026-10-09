@@ -1089,6 +1089,172 @@ function Portal(props) {
 	return marker;
 }
 //#endregion
+//#region software_safe_src/industrial_starter_outcome_card.jsx
+var _tmpl$$32 = /*#__PURE__*/ template(`<section class=panel-section><h3></h3><p> · revision </p><p>`);
+var _tmpl$2$30 = /*#__PURE__*/ template(`<p>`);
+var _tmpl$3$25 = /*#__PURE__*/ template(`<p><strong>: `);
+var _tmpl$4$22 = /*#__PURE__*/ template(`<p>: `);
+var _tmpl$5$21 = /*#__PURE__*/ template(`<p>: <!> · job <!> · tick `);
+function IndustrialStarterOutcomeCard(props) {
+	const tr = (zh, en) => props.locale() === "zh" ? zh : en;
+	const materials = (items) => items.map((item) => `${item.kind} × ${item.amount}`).join(" · ");
+	return createComponent(Show, {
+		get when() {
+			return props.profile;
+		},
+		get children() {
+			var _el$ = _tmpl$$32(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling, _el$4 = _el$3.firstChild, _el$5 = _el$3.nextSibling;
+			insert(_el$2, () => tr("首条工业线成果", "Starter industrial outcome"));
+			insert(_el$3, () => props.profile.profileId, _el$4);
+			insert(_el$3, () => props.profile.profileRevision, null);
+			insert(_el$, createComponent(Show, {
+				get when() {
+					return props.profile.settled;
+				},
+				get fallback() {
+					return (() => {
+						var _el$6 = _tmpl$2$30();
+						insert(_el$6, () => tr("首产物数量与配方用电尚未发布。", "First settled output quantity and recipe power have not been published."));
+						return _el$6;
+					})();
+				},
+				children: (settled) => [
+					(() => {
+						var _el$7 = _tmpl$3$25(), _el$8 = _el$7.firstChild, _el$9 = _el$8.firstChild;
+						insert(_el$8, () => tr("已结算产出", "Settled output"), _el$9);
+						insert(_el$8, () => materials(settled().produce), null);
+						return _el$7;
+					})(),
+					(() => {
+						var _el$0 = _tmpl$4$22(), _el$1 = _el$0.firstChild;
+						insert(_el$0, () => tr("实际投入材料", "Committed input materials"), _el$1);
+						insert(_el$0, () => materials(settled().consume), null);
+						return _el$0;
+					})(),
+					(() => {
+						var _el$10 = _tmpl$4$22(), _el$11 = _el$10.firstChild;
+						insert(_el$10, () => tr("已结算配方用电需求", "Settled recipe power requirement"), _el$11);
+						insert(_el$10, () => settled().powerRequired, null);
+						return _el$10;
+					})(),
+					(() => {
+						var _el$12 = _tmpl$5$21(), _el$13 = _el$12.firstChild, _el$16 = _el$13.nextSibling, _el$17 = _el$16.nextSibling.nextSibling;
+						_el$17.nextSibling;
+						insert(_el$12, () => tr("接受批次", "Accepted batches"), _el$13);
+						insert(_el$12, () => settled().acceptedBatches, _el$16);
+						insert(_el$12, () => settled().jobId, _el$17);
+						insert(_el$12, () => settled().settledAt, null);
+						return _el$12;
+					})(),
+					(() => {
+						var _el$18 = _tmpl$4$22(), _el$19 = _el$18.firstChild;
+						insert(_el$18, () => tr("产出归属 Agent", "Output owner Agent"), _el$19);
+						insert(_el$18, () => settled().owner, null);
+						return _el$18;
+					})(),
+					(() => {
+						var _el$20 = _tmpl$2$30();
+						insert(_el$20, () => tr("首产物里程碑已记录（production_only）。稳定运行与交付仍需分别验证。", "First output milestone recorded (production_only). Stability and delivery require separate verification."));
+						return _el$20;
+					})()
+				]
+			}), _el$5);
+			insert(_el$5, (() => {
+				var _c$ = memo(() => !!props.profile.candidateAvailable);
+				return () => _c$() ? tr("下一候选：Assembler MK1。具备候选资格，建造仍需满足当前材料、用电与授权条件。", "Next candidate: Assembler MK1. Eligibility is available; construction still requires current materials, power and authority.") : tr("Assembler MK1 候选资格尚未满足。", "Assembler MK1 candidate eligibility is not yet available.");
+			})());
+			createRenderEffect(() => setAttribute(_el$, "aria-label", tr("首条工业线成果", "Starter industrial outcome")));
+			return _el$;
+		}
+	});
+}
+//#endregion
+//#region software_safe_src/viewer_hosted_account_login_issuer.js
+function createViewerHostedAccountLoginIssuer({ state, canAutoIssueHostedPlayerSession, generateEphemeralEd25519Keypair, installSession, persistHostedPlayerSession, resetHostedLoginChallenge, render, clone, fetch, completeRoute }) {
+	return async function issueHostedAccountLogin() {
+		if (!canAutoIssueHostedPlayerSession()) return state.auth;
+		if (state.auth.available) return state.auth;
+		const challengeId = String(state.hostedLogin.challengeId || "").trim();
+		const otpCode = String(state.hostedLogin.code || "").trim();
+		if (!challengeId || !otpCode) {
+			state.hostedLogin.error = "verification code is required before hosted login can complete";
+			render();
+			return state.auth;
+		}
+		state.auth.issueInFlight = true;
+		state.hostedLogin.completeInFlight = true;
+		state.hostedLogin.error = null;
+		state.auth.error = null;
+		render();
+		try {
+			const keypair = await generateEphemeralEd25519Keypair();
+			const response = await fetch(completeRoute, {
+				method: "POST",
+				cache: "no-store",
+				headers: {
+					Accept: "application/json",
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify({
+					challenge_id: challengeId,
+					otp_code: otpCode,
+					public_key: keypair.publicKey
+				})
+			});
+			const payload = await response.json();
+			if (!response.ok || !payload?.ok || !payload?.grant?.player_id || !payload?.account?.hosted_account_id) {
+				if (payload?.admission) state.hostedAdmission = clone(payload.admission);
+				throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
+			}
+			state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
+			await installSession(state, {
+				available: true,
+				hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
+				playerId: String(payload.grant.player_id || "").trim(),
+				loginChannel: String(payload.account.login_channel || "").trim() || null,
+				maskedLoginHint: String(payload.account.masked_login_hint || "").trim() || null,
+				deviceSessionId: String(payload.grant.device_session_id || "").trim() || String(payload.grant.release_token || "").trim() || null,
+				publicKey: keypair.publicKey,
+				privateKey: keypair.privateKey,
+				releaseToken: String(payload.grant.release_token || "").trim() || null,
+				registrationGrant: String(payload.grant.registration_grant || "").trim() || null,
+				error: null,
+				revokeReason: null,
+				revokedBy: null,
+				source: "hosted_browser_storage",
+				registrationStatus: "issued",
+				sessionEpoch: null,
+				bindingEpoch: null,
+				authorityEpoch: null,
+				issuedAtUnixMs: payload?.grant?.issued_at_unix_ms == null ? Date.now() : Number(payload.grant.issued_at_unix_ms),
+				recoveryErrorCode: null,
+				recoveryErrorMessage: null,
+				issueInFlight: false,
+				syncInFlight: false,
+				runtimeStatus: "issued",
+				boundAgentId: null,
+				controlLostAgentId: null,
+				pendingRequestedAgentId: null,
+				pendingForceRebind: false,
+				rebindNotice: null
+			});
+			persistHostedPlayerSession(state.auth);
+			resetHostedLoginChallenge();
+			state.hostedLogin.startInFlight = false;
+			state.hostedLogin.error = null;
+			render();
+			return state.auth;
+		} catch (error) {
+			state.auth.issueInFlight = false;
+			state.hostedLogin.completeInFlight = false;
+			state.hostedLogin.error = String(error);
+			state.auth.error = String(error);
+			render();
+			return state.auth;
+		}
+	};
+}
+//#endregion
 //#region node_modules/solid-js/store/dist/store.js
 var $RAW = Symbol("store-raw");
 var $NODE = Symbol("store-node");
@@ -1930,6 +2096,35 @@ function createViewerAuthSurfaceModule({ getSearchParams, localeText, state, win
 		buildSemanticCapability,
 		hostedActionPolicy,
 		resolveHostedAccessHint
+	};
+}
+//#endregion
+//#region software_safe_src/industrial_starter_outcome.js
+var text$2 = (value) => typeof value === "string" && value.trim() ? value : null;
+var integer = (value) => Number.isSafeInteger(value) && value >= 0;
+var stacks = (value) => Array.isArray(value) && value.every((item) => text$2(item?.kind) && integer(item?.amount)) ? value.map((item) => ({
+	kind: item.kind,
+	amount: item.amount
+})) : null;
+function normalizeIndustrialStarterProfile(value) {
+	if (!value || !text$2(value.profile_id) || !integer(value.profile_revision) || value.profile_revision === 0) return null;
+	const outcome = value.settled_outcome, settlement = outcome?.settlement;
+	let settled = null;
+	if (outcome && settlement && text$2(settlement.requester_agent_id) && integer(outcome.settlement_job_id) && integer(outcome.settled_at) && integer(settlement.accepted_batches) && settlement.accepted_batches > 0 && integer(settlement.power_required) && stacks(settlement.consume) && stacks(settlement.produce) && settlement.produce.some((item) => item.kind === "iron_ingot" && item.amount > 0)) settled = {
+		jobId: outcome.settlement_job_id,
+		settledAt: outcome.settled_at,
+		owner: settlement.requester_agent_id,
+		acceptedBatches: settlement.accepted_batches,
+		consume: stacks(settlement.consume),
+		produce: stacks(settlement.produce),
+		powerRequired: settlement.power_required
+	};
+	return {
+		profileId: value.profile_id,
+		profileRevision: value.profile_revision,
+		candidateAvailable: value.status === "candidate_available" && value.next_action === "build_factory_assembler_mk1" && value.progression_effect === "open_assembler_candidate_only" && value.evidence_class === "durable-milestone-backed",
+		progressionEffect: value.progression_effect,
+		settled
 	};
 }
 //#endregion
@@ -3085,6 +3280,7 @@ function createViewerFeedbackModule({ clone, feedbackBadgeClass, hostedActionPol
 			microDepotFacilities,
 			validationUnlockPreview,
 			factoryProductionFailureDisposition,
+			industrialStarterProfile: normalizeIndustrialStarterProfile(gameplay.starter_industrial_feasibility),
 			narrativeBlockerDetail,
 			narrativeNextStep,
 			economicSurface,
@@ -7356,6 +7552,18 @@ var { start: issueHostedTestLogin, waitForStart: waitForHostedTestLogin } = crea
 	route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE,
 	state
 });
+var issueHostedAccountLogin = createViewerHostedAccountLoginIssuer({
+	state,
+	canAutoIssueHostedPlayerSession,
+	generateEphemeralEd25519Keypair,
+	installSession,
+	persistHostedPlayerSession,
+	resetHostedLoginChallenge,
+	render,
+	clone,
+	fetch: (...args) => fetch(...args),
+	completeRoute: HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE
+});
 var hostedLoginRegistrationBridge = createViewerHostedLoginRegistrationBridge({
 	registerPlayerSession: ensureRegisteredPlayerSession,
 	render,
@@ -8734,88 +8942,6 @@ async function startHostedAccountLogin() {
 			ok: false,
 			reason: state.hostedLogin.error
 		};
-	}
-}
-async function issueHostedAccountLogin() {
-	if (!canAutoIssueHostedPlayerSession()) return state.auth;
-	if (state.auth.available) return state.auth;
-	const challengeId = String(state.hostedLogin.challengeId || "").trim();
-	const otpCode = String(state.hostedLogin.code || "").trim();
-	if (!challengeId || !otpCode) {
-		state.hostedLogin.error = "verification code is required before hosted login can complete";
-		render();
-		return state.auth;
-	}
-	state.auth.issueInFlight = true;
-	state.hostedLogin.completeInFlight = true;
-	state.hostedLogin.error = null;
-	state.auth.error = null;
-	render();
-	try {
-		const keypair = await generateEphemeralEd25519Keypair();
-		const response = await fetch(HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, {
-			method: "POST",
-			cache: "no-store",
-			headers: {
-				Accept: "application/json",
-				"Content-Type": "application/json"
-			},
-			body: JSON.stringify({
-				challenge_id: challengeId,
-				otp_code: otpCode,
-				public_key: keypair.publicKey
-			})
-		});
-		const payload = await response.json();
-		if (!response.ok || !payload?.ok || !payload?.grant?.player_id || !payload?.account?.hosted_account_id) {
-			if (payload?.admission) state.hostedAdmission = clone(payload.admission);
-			throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
-		}
-		state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
-		await installSession(state, {
-			available: true,
-			hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
-			playerId: String(payload.grant.player_id || "").trim(),
-			loginChannel: String(payload.account.login_channel || "").trim() || null,
-			maskedLoginHint: String(payload.account.masked_login_hint || "").trim() || null,
-			deviceSessionId: String(payload.grant.device_session_id || "").trim() || String(payload.grant.release_token || "").trim() || null,
-			publicKey: keypair.publicKey,
-			privateKey: keypair.privateKey,
-			releaseToken: String(payload.grant.release_token || "").trim() || null,
-			registrationGrant: String(payload.grant.registration_grant || "").trim() || null,
-			error: null,
-			revokeReason: null,
-			revokedBy: null,
-			source: "hosted_browser_storage",
-			registrationStatus: "issued",
-			sessionEpoch: null,
-			bindingEpoch: null,
-			authorityEpoch: null,
-			issuedAtUnixMs: payload?.grant?.issued_at_unix_ms == null ? Date.now() : Number(payload.grant.issued_at_unix_ms),
-			recoveryErrorCode: null,
-			recoveryErrorMessage: null,
-			issueInFlight: false,
-			syncInFlight: false,
-			runtimeStatus: "issued",
-			boundAgentId: null,
-			controlLostAgentId: null,
-			pendingRequestedAgentId: null,
-			pendingForceRebind: false,
-			rebindNotice: null
-		});
-		persistHostedPlayerSession(state.auth);
-		resetHostedLoginChallenge();
-		state.hostedLogin.startInFlight = false;
-		state.hostedLogin.error = null;
-		render();
-		return state.auth;
-	} catch (error) {
-		state.auth.issueInFlight = false;
-		state.hostedLogin.completeInFlight = false;
-		state.hostedLogin.error = String(error);
-		state.auth.error = String(error);
-		render();
-		return state.auth;
 	}
 }
 async function issueHostedPlayerIdentity() {
@@ -23748,6 +23874,12 @@ function WorldSummaryPanel(props = {}) {
 								}), null);
 								return _el$276;
 							}
+						}),
+						createComponent(IndustrialStarterOutcomeCard, {
+							get profile() {
+								return gameplay().industrialStarterProfile;
+							},
+							locale
 						}),
 						createComponent(MicroDepotFacilitiesPanel, {
 							get facilities() {

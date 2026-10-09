@@ -177,5 +177,37 @@ class StarterEvidenceTests(unittest.TestCase):
             self.assertFalse(starter.validate(*records)["checks"]["canonical_exact_submission_origin"])
 
 
+
+class UiClaimEvidenceTests(unittest.TestCase):
+    fixture = StarterEvidenceTests.fixture
+    def ui_fixture(self):
+        records = self.fixture()
+        records[5]["responses"][0]["ack"]["agent_id"] = None
+        inputs = {"ui_claim_response": {"responses": [{"type": "gameplay_action_ack", "ack": {"action_id": "claim_first_agent", "player_id": "p1", "target_agent_id": "a1", "runtime_action_id": 0}}]}, "binding_before": {"model": {"agent_player_bindings": {}}}, "binding_after": {"model": {"agent_player_bindings": {"a1": "p1"}, "agent_player_public_key_bindings": {"a1": "c" * 64}}}}
+        return records, inputs
+
+    def test_real_two_stage_ui_binding_has_explicit_diagnostic_scope(self):
+        records, inputs = self.ui_fixture()
+        self.assertFalse(starter.validate(*records)["checks"]["canonical_exact_submission_origin"])
+        result = starter.validate(*records, **inputs)
+        self.assertTrue(all(result["checks"].values()))
+        self.assertEqual(result["scope"], "trusted_local_viewer_ui_claim_production_diagnostic")
+
+    def test_ui_claim_missing_foreign_or_failed_binding_rejected(self):
+        for case in ["missing_before", "missing_after", "already_bound", "foreign_player", "foreign_key", "unbound", "failed_claim", "other_target", "bool_id", "malformed_prior_keys"]:
+            records, inputs = self.ui_fixture()
+            ack = inputs["ui_claim_response"]["responses"][0]["ack"]
+            if case == "missing_before": inputs["binding_before"] = None
+            if case == "missing_after": inputs["binding_after"] = None
+            if case == "already_bound": inputs["binding_before"]["model"]["agent_player_bindings"]["a1"] = "p1"
+            if case == "foreign_player": inputs["binding_after"]["model"]["agent_player_bindings"]["a1"] = "foreign"
+            if case == "foreign_key": inputs["binding_after"]["model"]["agent_player_public_key_bindings"]["a1"] = "d" * 64
+            if case == "unbound": inputs["binding_after"]["model"]["agent_player_bindings"] = {}
+            if case == "failed_claim": inputs["ui_claim_response"]["responses"].append({"type": "gameplay_action_error"})
+            if case == "other_target": ack["target_agent_id"] = "other"
+            if case == "bool_id": ack["runtime_action_id"] = True
+            if case == "malformed_prior_keys": inputs["binding_before"]["model"]["agent_player_public_key_bindings"] = False
+            self.assertFalse(starter.validate(*records, **inputs)["checks"]["canonical_exact_submission_origin"], case)
+
 if __name__ == "__main__":
     unittest.main()

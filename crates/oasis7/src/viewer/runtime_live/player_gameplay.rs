@@ -24,11 +24,7 @@ use super::control_plane::{
 };
 use super::*;
 use crate::runtime::{
-    Action as RuntimeAction, IndustryStage, StarterIndustrialFeasibilityResult,
-    StarterIndustrialFeasibilityStatus, WorldState,
-};
-use crate::simulator::persist::{
-    PlayerStarterIndustrialFeasibility, PlayerStarterIndustrialFeasibilityStatus,
+    Action as RuntimeAction, IndustryStage, StarterIndustrialFeasibilityResult, WorldState,
 };
 use crate::simulator::{
     PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind, ResourceOwner, WorldKernel,
@@ -110,29 +106,7 @@ pub(super) fn supports_runtime_gameplay_actions() -> bool {
     true
 }
 
-pub(super) fn player_starter_industrial_feasibility(
-    result: &StarterIndustrialFeasibilityResult,
-) -> PlayerStarterIndustrialFeasibility {
-    PlayerStarterIndustrialFeasibility {
-        profile_id: result.profile_id.clone(),
-        profile_revision: result.profile_revision,
-        authority_snapshot: result.authority_snapshot.clone(),
-        status: match result.status {
-            StarterIndustrialFeasibilityStatus::CandidateAvailable => {
-                PlayerStarterIndustrialFeasibilityStatus::CandidateAvailable
-            }
-            StarterIndustrialFeasibilityStatus::NoSafeStarterChain => {
-                PlayerStarterIndustrialFeasibilityStatus::NoSafeStarterChain
-            }
-        },
-        evidence_class: result.evidence_class.clone(),
-        completion_boundary: result.completion_boundary.clone(),
-        blocker: result.blocker.clone(),
-        next_action: result.next_action.clone(),
-        next_recheck: result.next_recheck,
-        progression_effect: result.progression_effect.clone(),
-    }
-}
+pub(super) use super::starter_industrial_outcome::player_starter_industrial_feasibility;
 
 fn starter_assembler_build_disabled_reason(
     feasibility: &StarterIndustrialFeasibilityResult,

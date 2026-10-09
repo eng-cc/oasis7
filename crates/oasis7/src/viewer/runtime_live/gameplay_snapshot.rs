@@ -363,6 +363,8 @@ pub(super) fn build_player_gameplay_snapshot(
         });
         gameplay.starter_industrial_feasibility = Some(player_starter_industrial_feasibility(
             &starter_industrial_feasibility,
+            state,
+            controlled_agent_id,
         ));
         gameplay
     };
