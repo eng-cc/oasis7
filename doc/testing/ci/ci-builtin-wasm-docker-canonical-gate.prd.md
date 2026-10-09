@@ -16,7 +16,7 @@
     - `Wasm Determinism Gate / verify-wasm-determinism (m1)`
     - `Wasm Determinism Gate / verify-wasm-determinism (m4)`
     - `Wasm Determinism Gate / verify-wasm-determinism (m5)`
-    `scripts/ci-ensure-required-checks.py` 将这些名称作为 required-check policy 的默认上下文并集；该仓库配置不能单独证明 GitHub 当前已启用相同 branch protection。
+    当前保护以 GitHub 原生配置的名称与 App 来源绑定为准；仓库文档不能证明保护已启用。策略变更按开发流程规范授权、操作并回读，不自动创建保护。
   - SC-5: `test_tier_required` / `test_tier_full` 是 `scripts/ci-tests.sh` 的测试层级；它们不执行也不替代独立的 `wasm-determinism-gate` hash / receipt-evidence 检查。额外导入的 macOS summary 只补跨宿主产物证据，不代表 `test_tier_full` 或 `./scripts/ci-tests.sh full` 的结果。
   - SC-6: `source_hash` 仅基于可追踪源码与模块级 lockfile 输入，不再依赖 workspace 根 `Cargo.lock`。
   - SC-7: 本地默认只读校验，manifest/identity 写入路径限定非 CI 的显式授权流程。
@@ -45,13 +45,11 @@
 | sync strict 模式 | `legacy_tokens`, `keyed_tokens`, `current_platform` | 检测 legacy / mixed 时直接失败 | `checking -> rejected/accepted` | 仅 canonical token 允许进入后续流程 | 本地默认只读，写入需显式授权 |
 | identity / receipt 输入收敛 | 源码白名单、模块 lockfile、build receipt、hash manifest token | 计算 `source_hash`、`identity_hash` 与 release evidence | `collecting -> hashing -> emitted` | 输入路径排序稳定，忽略未跟踪文件 | 由构建脚本统一执行 |
 | canonical summary / evidence 对账 | `runner`, `canonical_platform`, `module_hashes`, `receipt_evidence`, `module_set`, `scope` | planner 先产出 scope，runner 仅对命中的 module set 导出摘要；汇总脚本执行差异比较并生成 evidence | `planned -> generated -> uploaded -> reconciled` | 按 `module_id` 全量对齐 canonical 输出；无关改动允许 no-op success | CI workflow 自动执行 |
-| required check 保护 | 三个稳定 verify job context、strict 标记 | 更新 required-check policy 的 context 并集 | `planned -> applied -> verified` | 保留既有上下文并去重；workflow 文件和脚本不证明 live branch-protection 状态 | 需仓库写权限 |
 - Acceptance Criteria:
   - AC-1: `m1/m4/m5_builtin_modules.sha256` 全量迁移到单 canonical token，且不含 legacy / 双平台 token。
   - AC-2: sync 脚本在 check / sync 两种模式均拒绝 legacy 或 mixed 输入。
   - AC-3: 本地执行不带显式写入授权时，sync 脚本拒绝写入并提供修复提示。
   - AC-4: `.github/workflows/wasm-determinism-gate.yml` 与摘要 / 证据脚本可稳定运行，并能基于 changed paths 把无关 PR 收口为 stable required-context no-op。
-  - AC-5: required checks 自动化默认上下文覆盖 `Wasm Determinism Gate` 的 m1/m4/m5 三个 verify job。
   - AC-6: identity `source_hash` 移除 workspace 根 `Cargo.lock` 依赖，并仅使用可追踪稳定输入。
 - Non-Goals:
   - 不变更 runtime 对 builtin wasm manifest 的消费协议。
@@ -73,7 +71,6 @@
   - `scripts/ci-m1-wasm-summary.sh`
   - `scripts/ci-verify-m1-wasm-summaries.py`
   - `scripts/wasm-release-evidence-report.sh`
-  - `scripts/ci-ensure-required-checks.py`
   - `crates/oasis7_distfs/src/bin/sync_builtin_wasm_identity.rs`
   - `.github/workflows/wasm-determinism-gate.yml`
   - `crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules.sha256`
@@ -84,9 +81,7 @@
   - 当前平台不在 canonical 列表：`--check` 直接失败并提示 `OASIS7_WASM_CANONICAL_PLATFORMS`。
   - manifest 含重复平台 token：严格失败并报告 `module_id + platform`。
   - runner 缺摘要或摘要重复：汇总脚本失败并列出缺失 / 重复 runner。
-  - required check 注入时分支未保护：脚本应创建最小保护策略后继续注入。
   - 目标安装边界：命中 WASM scope 的 Rust job 在当前默认 toolchain 下安装 `wasm32-unknown-unknown`；full/determinism job在 pinned WASM toolchain 下安装同一 target。该事实不表示所有 CI job 或所有 toolchain 都预装 target。
-  - required-check 策略：`scripts/ci-ensure-required-checks.py` 的更新必须保留既有上下文并执行去重并集；dry-run 不写远端，未受保护分支不得被本地文档推导成已启用保护。仓库文档和脚本不能单独证明 GitHub live branch protection。
 - Non-Functional Requirements:
   - NFR-WASMHARD-1: canonical manifest 与 identity 计算在同一 commit、同一 builder image digest 下 100% 可复现。
   - NFR-WASMHARD-2: canonical summary / evidence 对账失败信息须包含 `runner/module_id/hash`，单次运行内可定位。
