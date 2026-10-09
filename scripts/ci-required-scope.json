@@ -377,6 +377,32 @@
         "workflow_governance"
       ],
       "reason": "worktree_report"
+    },
+    {
+      "match": [
+        "scripts/local-signer/tests/**",
+        "doc/p2p/blockchain/local-file-signing-backend.runbook.md",
+        "crates/oasis7_local_signer/**"
+      ],
+      "groups": [
+        "packaging_contracts",
+        "fleet_health"
+      ],
+      "reason": "local_signer_contracts"
+    },
+    {
+      "match": [
+        "scripts/local-signer/installer.py",
+        "scripts/local-signer/macos_host.py",
+        "scripts/local-signer/install-release.py",
+        "scripts/local-signer/package-release.py"
+      ],
+      "groups": [
+        "packaging_contracts",
+        "fleet_health",
+        "workspace_support"
+      ],
+      "reason": "local_signer_installation"
     }
   ]
 }
