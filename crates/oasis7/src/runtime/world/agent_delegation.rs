@@ -372,9 +372,10 @@ impl World {
                 return Err(denied("override_owner_mismatch"));
             }
             self.validate_recorded_owner_override(&ledger, grant, &decision.context)?;
-        } else if decision.context.dissent.is_some() {
-            return Err(denied("agent_dissent"));
         }
+        // Dissent is causal evidence, not a new permission gate. A current
+        // scoped grant already authorizes the action; an explicit override,
+        // when supplied, still requires its authenticated one-shot record.
         let spent = *ledger.spent.get(&budget_key(grant)?).unwrap_or(&0);
         let remaining = grant
             .limit_units
