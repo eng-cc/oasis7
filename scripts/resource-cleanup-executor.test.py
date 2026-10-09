@@ -139,6 +139,28 @@ class ProcessReadbackTests(unittest.TestCase):
             with self.assertRaises(cleanup.CleanupError):
                 cleanup.github_repository(remote)
 
+    def test_linux_anonymous_pipe_requires_exact_native_fd(self):
+        sample = 'p202\nfcwd\ntDIR\nn/tmp/unrelated\nf1\ntFIFO\nnpipe\n'
+        original = os.readlink
+        def native_readlink(value):
+            return lambda path, *args, **kwargs: value if str(path) == '/proc/202/fd/1' else original(path, *args, **kwargs)
+        with patch.object(cleanup.sys, 'platform', 'linux'), patch.object(cleanup.os, 'readlink', side_effect=native_readlink('pipe:[1234]')):
+            self.assertFalse(self.scan('202\n', sample))
+        for native in ['/tmp/user-fifo', 'socket:[1234]', 'pipe:[bad]', 'pipe:[1234]extra']:
+            with patch.object(cleanup.sys, 'platform', 'linux'), patch.object(cleanup.os, 'readlink', side_effect=native_readlink(native)), self.assertRaises(cleanup.CleanupError):
+                self.scan('202\n', sample)
+        def denied(path, *args, **kwargs):
+            if str(path) == '/proc/202/fd/1':
+                raise PermissionError(1, 'denied')
+            return original(path, *args, **kwargs)
+        with patch.object(cleanup.sys, 'platform', 'linux'), patch.object(cleanup.os, 'readlink', side_effect=denied), self.assertRaisesRegex(cleanup.CleanupError, 'pipe identity unreadable'):
+            self.scan('202\n', sample)
+
+    def test_named_filesystem_fifo_remains_a_busy_file(self):
+        self.assertTrue(self.scan('202\n', 'p202\nfcwd\ntDIR\nn/tmp/unrelated\nf3\ntFIFO\nn/tmp/retained-worktree/user-fifo\n'))
+        with self.assertRaises(cleanup.CleanupError):
+            self.scan('202\n', 'p202\nfcwd\ntDIR\nn/tmp/unrelated\nf3\ntFIFO\nnunknown\n')
+
     def test_timeout_is_unknown(self):
         with patch.object(cleanup, 'snapshot_processes', side_effect=cleanup.CleanupError('timeout')):
             self.assertEqual(cleanup.inspect_process_use(pathlib.Path('/tmp'))['state'], 'unknown')
@@ -299,11 +321,31 @@ class DeliveryTests(SafetyTests):
         self.assertEqual(result.returncode, 2)
 
 class HostSmokeTests(unittest.TestCase):
+    def test_native_named_fifo_is_target_file_use(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outside = pathlib.Path(directory)
+            target = outside / 'target'
+            target.mkdir()
+            fifo = target / 'user-fifo'
+            os.mkfifo(fifo)
+            code = 'import os, sys, time; fd = os.open(sys.argv[1], os.O_RDWR); print("ready", flush=True); time.sleep(60)'
+            proc = subprocess.Popen([sys.executable, '-c', code, str(fifo)], cwd=outside, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                self.assertEqual(proc.stdout.readline().strip(), 'ready')
+                covered, busy = cleanup.read_open_files({proc.pid}, target, time.monotonic() + 30)
+                self.assertIn(proc.pid, covered)
+                self.assertIn(proc.pid, busy)
+            finally:
+                proc.terminate()
+                proc.wait(timeout=5)
+                proc.stdout.close()
+                proc.stderr.close()
+
     def test_native_identity_collector_busy_then_exit(self):
         self.assertIsNotNone(cleanup.process_identity(os.getpid()))
         with tempfile.TemporaryDirectory() as directory:
             target = pathlib.Path(directory)
-            proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], cwd=target)
+            proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], cwd=target, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 identity = cleanup.process_identity(proc.pid)
                 self.assertIsNotNone(identity)
@@ -323,6 +365,9 @@ class HostSmokeTests(unittest.TestCase):
             finally:
                 proc.terminate()
                 proc.wait(timeout=5)
+                proc.stdin.close()
+                proc.stdout.close()
+                proc.stderr.close()
             self.assertIsNone(cleanup.process_identity(proc.pid))
             after = cleanup.inspect_process_use(target)
             self.assertIn(after['state'], ('clear_observed', 'unknown'))

@@ -92,6 +92,17 @@ def read_open_files(pids, path, deadline):
             return
         if kind not in {'REG', 'DIR', 'CHR', 'BLK', 'FIFO', 'LINK'}:
             raise CleanupError(f'PID {pid}: unknown descriptor type {kind}')
+        # Linux lsof names anonymous pipe descriptors as FIFO/pipe. A
+        # filename whitelist would hide named FIFOs: verify the exact native
+        # fd symlink, which uses pipe:[inode], before treating it as non-file.
+        if sys.platform.startswith('linux') and kind == 'FIFO' and name == 'pipe' and fd.isdecimal():
+            try:
+                native = os.readlink(f'/proc/{pid}/fd/{fd}')
+            except OSError as exc:
+                raise CleanupError(f'PID {pid}: anonymous pipe identity unreadable') from exc
+            if re.fullmatch(r'pipe:\[[0-9]+\]', native):
+                return
+            raise CleanupError(f'PID {pid}: FIFO/pipe native identity mismatch')
         if not name or not name.startswith('/'):
             raise CleanupError(f'PID {pid}: ambiguous file path')
         value = re.sub(r' \((deleted|revoked)\)$', '', name)
