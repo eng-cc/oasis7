@@ -8,6 +8,16 @@ oasis7 是一款正在开发的 AI Agent 文明模拟游戏。玩家从世界之
 
 当前项目处于 **受限可玩技术预览（limited playable technical preview）** 阶段，适合愿意配置环境、探索预览链路的玩家、研究者和开发者。长期自治与文明涌现仍是需要持续验证的目标，当前版本不是面向大众的正式发布。
 
+## 本阶段交付
+
+让受控真实玩家在同一个持久世界中，通过有界授权的 Agent 完成真实首产物，理解可恢复的生产阻塞，保留成果，并在再次进入后继续原有目标。
+
+代表性路径采用 `starter-industrial-smelter-to-assembler-v1`：合法建成 Smelter → 完成铁锭生产 cycle → owner-bound output ledger 实际正量结算 → 开放 Assembler 候选。首产物采用 `production_only` 边界；持续生产、交付和回访分别验收。入口与候选证据见[首局合同](./doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md)和[工业完成合同](./doc/game/gameplay/gameplay-industrial-starter-completion-contract.prd.md)。
+
+运行路线先验收受控单权威的持久提交、独立故障域副本和同世界恢复，再沿既有身份与历史扩展 BFT。当前已有实现与目标承诺分别核验，本文不宣布持久世界已开放。网络环境、发行阶段、世界保留与资产价值各按自己的合同表达；网络 tier 变化不赋予测试奖励生产价值。详见[基础设施合同](./doc/product/world-infrastructure/prd.md)。
+
+[当前里程碑与依赖](./doc/core/prd.md#当前阶段交付目标与全局-p0)路由到专业验证入口；候选版本、实际 CI 与运行证据从 [PR](https://github.com/eng-cc/oasis7/pulls) 和 [Issue](https://github.com/eng-cc/oasis7/issues) 核对。文档收敛、样例结构、真人理解与继续意愿分别判定，公开阶段仍为受限技术预览。
+
 ## 从哪里开始
 
 - **了解项目：**先读下面的核心亮点与玩家模型，再查看[世界规则与玩法](./doc/product/world-rules-core-gameplay/prd.md)。
@@ -136,8 +146,10 @@ WASM 模块：
 - Distributed Storage & Networking：提供对应的数据与节点通信能力。
 
 
-世界状态通过去中心化共识维护。  
-每个玩家可运行节点（推荐 native 进程）。  
+权威提交按合法激活的 authority profile 验证，阶段承诺和激活条件由基础设施与 P2P 合同拥有。
+
+节点扩展先验证同世界历史和重执行，再按交接合同获得投票与写入权（推荐 native 进程）。
+
 Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live --web-bind` 网关桥接接入，不承担完整分布式节点职责。
 
 ---

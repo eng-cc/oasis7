@@ -40,8 +40,8 @@
   - SC-3: 跨模块改动评审可基于 core PRD 完成影响面识别。
   - SC-4: 新增模块级需求可映射到对应模块 PRD 与 core 基线。
   - SC-5: 当前阶段优先级（P0/P1/P2）在 core PRD 中有唯一口径，并能映射到对应模块任务与角色 owner。
-  - SC-6: 发布前必须先完成玩法微循环、runtime 验收、testing 证据、playability 反馈四条 P0 闭环，缺任一项不得给出 go 结论。
-  - SC-7: headless-runtime、自动化稳定性、文档一致性收口具备明确 P1 责任划分与交付标准。
+  - SC-6: 首次开放前，当前路径的持久恢复、工业闭环与消费者控制须有同候选证据；真人观察在开放条件成立后单独进行。
+  - SC-7: 专业工作按是否阻断当前路径排序，专题优先级不自动成为全局 P0。
   - SC-8: core 跨模块评审以[玩家访问模式产品要求](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001)及其[验收](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#ac-entry-mode-001)作为 `viewer / pure_api` primary mode 的规范依据；每项模式相关结论均映射到对应产品/专业 authority 和模式适用证据，core 保留跨模块影响、验收与追踪责任，不复制 alias、provider、execution lane 或公开 claim taxonomy。
   - SC-9: core 活跃专题标题、Viewer 活跃手册与实际窗口/Web 标题对齐 `oasis7` 品牌；内部旧品牌兼容命名仅以实现说明形式保留，不得继续冒充公开标题。
   - SC-10: `engineering`、`scripts`、`world-runtime` 的历史专题标题在不改动内部实现标识的前提下完成 `oasis7` 品牌收口，减少 active/historical 入口里的旧品牌混用。
@@ -93,8 +93,8 @@
   - AC-4: GitHub task issue evidence 中的任务与 PRD-CORE-ID 可映射。
   - AC-5: 文档级 `审计轮次` 仅可对应已落档的正式 ROUND 台账；在 `ROUND-NNN` 正式启动文件落档前，不得保留脱离台账的 `审计轮次 > NNN` 标记。
   - AC-6: core PRD 明确列出当前阶段 `P0/P1/P2` 收口项、对应 owner、输入、输出、验收标准与阻断条件。
-  - AC-7: `P0` 至少覆盖玩法微循环、runtime 验收、testing 证据、playability 反馈四条闭环，并明确它们是发布前必要条件。
-  - AC-8: `P1` 至少覆盖 core 一致性审查、headless-runtime 长稳门禁、自动化稳定性收口，并定义角色交付边界。
+  - AC-7: 全局 P0 按当前路径、连续性和必要验证缺口准入，首次开放按当前里程碑退出条件验收。
+  - AC-8: 工作包明确启动条件、依赖与退出条件，后续扩展不自动阻断受控试玩。
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
   - AC-10: `PRD-CORE-004` 可映射到 GitHub task issue evidence 中的任务与 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
@@ -114,20 +114,27 @@
 ## 4. Technical Specifications
 - Architecture Overview: core 作为“全局设计总览层”，不承载业务实现代码，而承载全局结构、统一约束和跨模块链路描述。
 
-### 当前阶段收口优先级（Stage Closure Backlog）
-| 优先级 | 目标 | 主要 owner | 输入 | 输出 | 完成定义 |
-| --- | --- | --- | --- | --- | --- |
-| P0 | 维持玩法微循环与持续游玩的当前优先级 | `producer_system_designer` / `viewer_engineer` / `qa_engineer` | `doc/game/prd.md` 的活跃玩法基线与验收、Git、PR 与实际 CI 记录 中的当前执行/阻断、适用 runtime/Viewer/QA 证据，以及根 `README.md` 与 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 的统一公开 claim gate | 可路由到当前候选的玩法决策与验证证据包，并回写对应专业 evidence 与 Git、PR 与实际 CI 记录 | 玩法优先级、当前 blocker 与需要的专业验证能从 game baseline 与 Git、PR 与实际 CI 记录 回溯；任何阶段或公开 claim 只在同候选统一 gate、产品决策、QA 与 LiveOps 同步成立后才可评估，不能由单项截图、局部 green 或历史 closure 代签 |
-| P0 | 补齐 runtime 核心边界验收 | `runtime_engineer`（联审：`producer_system_designer`） | 确定性 / WASM / 治理边界、当前 runtime 测试与限制说明 | 验收清单、阻断条件、例外口径 | 每条关键边界都有测试映射，并能直接用于发布评审 |
-| P0 | 建立 testing 触发矩阵与发布证据包 | `qa_engineer`（联审：`producer_system_designer`） | `testing-manual.md`、各模块 `test_tier_required/full`、现有脚本与证据产物 | S0~S10 触发矩阵、证据包模板、放行摘要格式 | 任一任务都能反推必跑测试，PRD-ID / 任务 / 测试结果可串联 |
-| P0 | 补齐 playability 反馈闭环 V1 | `qa_engineer`（联审：`producer_system_designer`） | 现有 playability 输出、截图/视频、玩法目标 | 反馈卡字段、评分口径、高优问题追踪模板 | 每条体验问题都有固定记录格式，且可进入发布讨论 |
-| P1 | 完成 core 一致性审查收口 | `producer_system_designer` | 各模块 PRD / project、已有 ROUND 台账 | 新一轮审查记录、整改项、复审状态 | 关键模块术语、轮次、追踪字段统一 |
-| P1 | 建立 headless-runtime 长稳门禁骨架 | `runtime_engineer` / `qa_engineer` | headless-runtime 协议、生命周期、鉴权链路、长稳产物 | 生命周期与鉴权清单、归档模板、故障追溯模板 | 能覆盖启动/运行/停止/恢复，且故障后可回放关键证据 |
-| P1 | 收口自动化残余不稳定点 | `viewer_engineer` / `qa_engineer` | `agent-browser` 闭环现状、A/B 首连与录屏问题 | 稳定复跑方案、限制说明 | 主闭环可复跑，不再影响版本级证据收集 |
-| P2 | launcher / explorer 体验 polish | `viewer_engineer` | 当前 launcher / explorer 成果、体验问题清单 | 次级体验优化项 | 不新增核心复杂度，不挤占 P0/P1 资源 |
-| P2 | README / site / scripts / engineering 治理补完 | 对应模块 owner | 未完成治理任务、入口与脚本使用痛点 | 一致性检查、链接检查、趋势统计等治理产物 | 提升维护性，但不阻塞当前阶段发布 |
+<a id="当前阶段收口优先级stage-closure-backlog"></a>
 
-`TASK-GAME-018` 及其截图/视频 closure 是已完成的历史任务与证据追溯入口，不再是当前唯一 P0、当前 release 依据或公开 claim 的代签；当前事实按上述 game baseline/project 与统一根 README/product gate 路由。
+### 当前阶段交付目标与全局 P0
+
+`PRD-CORE-004` / `PRD-CORE-005` 当前目标：让受控真实玩家在同一个持久世界中，通过有界授权的 Agent 完成真实首产物，理解可恢复的生产阻塞，保留成果，并在再次进入后继续原有目标。
+
+全局 P0 只接受：阻断所选首局—持续能力—回访路径的真实缺陷；可能破坏身份、已确认历史、合法资产、授权或幂等连续性的缺陷；使这些结果无法实际验证或被玩家正确理解的必要缺口。专题 Phase 0/P0 仅表达专题启动后的顺序，须说明启动条件。完整制度试点、复杂物流、战争、分片和完整节点自治不自动成为首批试玩前置；制度分类与兼容由[世界规则产品根](../product/world-rules-core-gameplay/prd.md)拥有。
+
+分别判断世界可信且可恢复、工业闭环真实成立、玩家能理解并继续。模块任务说明服务哪个结果；宏观治理和测试建设只有直接阻断当前路径时才进入全局 P0。
+
+| 里程碑 / 工作包 | 主责 | 依赖与产出 | 退出条件 |
+| --- | --- | --- | --- |
+| 顶层收敛与指标 | 产品 / 架构 / game / Viewer / QA | 对齐目标、工业链、authority 合同、指标与汇总 | 文档一致、语义回归通过、fixture/live/真人来源明确；不升级公开阶段 |
+| 持久单权威 | P2P / runtime / 运营 | 顶层合同后补 manifest、证明、唯一追加权、独立故障域持久确认和恢复 | 单主机或单存储故障域失效保留已确认效果；旧 writer 被隔离；未知提交按原请求核对 |
+| 代表性体验 | game / Agent / Viewer / runtime | 与持久底座并行；核验 Smelter 铁锭结算、授权纠偏、恢复与回访 | 同候选真实入口、output ledger 与持久 milestone 一致；首产物、持续能力、交付分别判定 |
+| 受控真人验证 | 产品 / QA | 持久底座和体验满足首次开放条件后，两次会话观察 | 原始人数、独立/提示/代操作/未完成/未覆盖、后果选择与接续表现；形成继续、修复或收窄结论 |
+| BFT 与交接 | P2P / runtime / 运营 / 消费者 | 顶层合同后可并行研发；先加入只读验证节点 | 独立验证者协议与 H/H+1 交接通过才转移写权；同身份、历史、资产连续 |
+
+首次开放核验合法身份/profile、原子效果与幂等、独立故障域恢复、工业结算、Agency/回访和服务状态。具体合同由[基础设施](../product/world-infrastructure/prd.md)、[首局合同](../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)和专业模块拥有。文档通过不能替代运行开放，BFT 未验收不阻止已验收的受控单权威阶段。
+
+技术正确性与授权连续性是硬约束；操作量、动作族、内容量、时长与等待是诊断；样例因果、选择、恢复和继续理由只证明结构，真人动机与自发回访依赖真人记录。状态、阻断、候选 OID 与结果由 GitHub PR/Issue/Project 和实际证据承载，core 不建立并行台账。当前多里程碑实施与剩余验收由 [Issue #4363](https://github.com/eng-cc/oasis7/issues/4363) 承接；历史 closure 只供追溯。
 
 ### 项目模块地图（Design Map）
 产品信息架构由 `doc/product/README.md` 统一导航，固定为“世界规则与玩法系统 / 权威世界基础设施 / 智能体、世界模拟与交互 / 玩家接入与发行”四个入口。`core` 仍是项目级设计总览与跨模块治理基线，不是第五个产品模块；下表继续表达工程实现与治理模块地图。
@@ -155,7 +162,7 @@
 3. 模块扩展链路:
 `Rust Source -> WASM Artifact -> Register/Install -> Runtime Sandbox Execution -> Governance/Audit`
 4. 分布式一致性链路:
-`Node/Net -> Consensus Commit -> DistFS/State Replication -> Runtime Apply -> Viewer Observe`
+`合法 authority profile -> 排序执行与持久提交 -> 同世界复制/恢复 -> Runtime 状态 -> Viewer Observe`
 5. 发布验证链路:
 `PRD-ID Task -> core治理(test_tier_required) -> 模块专项(required/full) -> Web闭环/长跑 -> Evidence Bundle -> Release Decision`
 
