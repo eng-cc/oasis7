@@ -370,6 +370,14 @@ impl ViewerRuntimeLiveServer {
             })
         };
         if let Some((config, previous, pending, query_state)) = remote {
+            #[cfg(any(test, feature = "test_tier_required"))]
+            let prime_started = std::time::Instant::now();
+            #[cfg(any(test, feature = "test_tier_required"))]
+            if std::env::var("PRE2_WORLD_COHERENCE_TRACE").is_ok_and(|value| value == "1") {
+                eprintln!(
+                    "PRE2_SNAPSHOT_PRIME request_kind={request_kind} phase=authenticated_read_started"
+                );
+            }
             let prepared = prepare_world_service_update_for_shared_request(
                 config,
                 previous,
@@ -381,11 +389,26 @@ impl ViewerRuntimeLiveServer {
                     session_fence: "not_applicable_sync_prime",
                 },
             )?;
+            #[cfg(any(test, feature = "test_tier_required"))]
+            if std::env::var("PRE2_WORLD_COHERENCE_TRACE").is_ok_and(|value| value == "1") {
+                eprintln!(
+                    "PRE2_SNAPSHOT_PRIME request_kind={request_kind} phase=authenticated_read_complete elapsed_us={}",
+                    prime_started.elapsed().as_micros()
+                );
+            }
             let mut server = lock_shared_server(shared)?;
             let mut silent_session = RuntimeLiveSession::new_with_playing(false);
-            return Ok(server
+            let advanced = server
                 .apply_chain_linked_runtime_update(prepared, &mut silent_session)?
-                .advanced);
+                .advanced;
+            #[cfg(any(test, feature = "test_tier_required"))]
+            if std::env::var("PRE2_WORLD_COHERENCE_TRACE").is_ok_and(|value| value == "1") {
+                eprintln!(
+                    "PRE2_SNAPSHOT_PRIME request_kind={request_kind} phase=projection_applied elapsed_us={}",
+                    prime_started.elapsed().as_micros()
+                );
+            }
+            return Ok(advanced);
         }
         let (loader, config) = {
             let server = lock_shared_server(shared)?;
