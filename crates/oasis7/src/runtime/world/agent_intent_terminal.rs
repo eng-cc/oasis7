@@ -5,19 +5,13 @@ use super::super::{
 use super::World;
 use crate::simulator::canonical_agent_intent_summary;
 
-#[cfg(test)]
 const STATUS_PROPOSED: &str = "proposed";
-#[cfg(test)]
 const STATUS_SUBMITTED: &str = "submitted";
 const STATUS_ACCEPTED: &str = "accepted";
-#[cfg(test)]
 const STATUS_BLOCKED: &str = "blocked";
 const STATUS_COMPLETED: &str = "completed";
-#[cfg(test)]
 const STATUS_REJECTED: &str = "rejected";
-#[cfg(test)]
 const STATUS_EXPIRED: &str = "expired";
-#[cfg(test)]
 const STATUS_CANCELLED: &str = "cancelled";
 #[cfg(test)]
 const SOURCE_PROVIDER_ADVISORY: &str = "provider_advisory";
@@ -165,13 +159,13 @@ impl World {
             .ok_or_else(|| invalid_intent("provider advisory was not persisted"))
     }
 
-    #[cfg(test)]
     fn transition_agent_intent_terminal_exact(
         &mut self,
         agent_id: &str,
         intent_id: &str,
         request_digest: &str,
         status: &str,
+        reason: Option<(&str, &str)>,
     ) -> Result<AgentIntentReplayDisposition, WorldError> {
         let current = validate_exact_identity(self, agent_id, intent_id, request_digest)?;
         let allowed = matches!(
@@ -183,7 +177,7 @@ impl World {
                 )
                 | (
                     STATUS_ACCEPTED,
-                    STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED
+                    STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED | STATUS_BLOCKED
                 )
                 | (
                     STATUS_BLOCKED,
@@ -206,8 +200,8 @@ impl World {
         transitioned.summary = terminal_summary(&transitioned, status)?;
         transitioned.event_seq = event_seq;
         transitioned.updated_at = self.state.time;
-        transitioned.reason_code = None;
-        transitioned.reason_summary = None;
+        transitioned.reason_code = reason.map(|(code, _)| code.to_string());
+        transitioned.reason_summary = reason.map(|(_, summary)| summary.to_string());
         let actual = self.append_event(
             WorldEventBody::Domain(DomainEvent::AgentIntentTransitioned {
                 intent: transitioned,
@@ -240,6 +234,7 @@ impl World {
             intent_id,
             request_digest,
             STATUS_EXPIRED,
+            None,
         )
     }
 
@@ -256,6 +251,32 @@ impl World {
             intent_id,
             request_digest,
             STATUS_CANCELLED,
+            None,
+        )
+    }
+
+    /// Runtime-owned authority/control terminal boundary. Does not publish an
+    /// effect receipt or modify a prior committed result.
+    pub(super) fn terminate_agent_authority_intent_exact(
+        &mut self,
+        agent_id: &str,
+        intent_id: &str,
+        request_digest: &str,
+        status: &str,
+        reason: &str,
+    ) -> Result<AgentIntentReplayDisposition, WorldError> {
+        if !matches!(status, STATUS_CANCELLED | STATUS_REJECTED | STATUS_BLOCKED) {
+            return Err(invalid_intent("authority disposition is invalid"));
+        }
+        self.transition_agent_intent_terminal_exact(
+            agent_id,
+            intent_id,
+            request_digest,
+            status,
+            Some((
+                reason,
+                "Pending instruction requires replanning before execution.",
+            )),
         )
     }
 

@@ -4,6 +4,7 @@
 
 - 所属产品模块：世界规则与玩法系统
 - 上位产品 PRD：[`prd.md`](prd.md)
+- 配套专业系统设计：[跨区物流与 escrow 结算](../../world-runtime/runtime/cross-region-delivery-and-escrow-settlement.design.md#des-wr-cr-001)承接 REQ-SC31-009 / AC-SC31-010..011；不代表实现或发布。
 - 配对产品 design：[`industrial-demand-goals-and-settlement.design.md`](industrial-demand-goals-and-settlement.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`

@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
@@ -12,10 +12,11 @@ import {
 } from "../software_safe_src/performance_metrics.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
+const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed"] : [];
 const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
 const configuredAgentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
-const agentBrowserNpxPackage = process.env.AGENT_BROWSER_NPX_PACKAGE || "agent-browser";
+const agentBrowserNpxPackage = process.env.AGENT_BROWSER_NPX_PACKAGE || "agent-browser@0.37.1";
 const npxBin = process.platform === "win32" ? "npx.cmd" : "npx";
 const session = `viewer-performance-probe-${process.pid}`;
 let staticRoot = viewerRoot;
@@ -53,7 +54,7 @@ function resolveAgentBrowserInvocation() {
 const agentBrowserInvocation = resolveAgentBrowserInvocation();
 const browserLifecycle = createOwnedSessionLifecycle({
   command: agentBrowserInvocation.command,
-  prefixArgs: agentBrowserInvocation.prefixArgs,
+  prefixArgs: [...agentBrowserInvocation.prefixArgs, ...browserLaunchArgs],
   session,
 });
 const closeBrowser = browserLifecycle.close;
@@ -195,21 +196,12 @@ function serveFile(request, response) {
 }
 
 function prepareViewerWebDist(distDir) {
-  const copyScript = resolve(repoRoot, "scripts/copy-viewer-web-dist.sh");
-  mkdirSync(distDir, { recursive: true });
-  const result = spawnSync(copyScript, ["--dist-dir", distDir], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (result.status !== 0) {
-    throw new Error([
-      "failed to prepare viewer web dist for performance probe",
-      `command: ${copyScript} --dist-dir ${distDir}`,
-      result.stdout?.trim() ? `stdout:\n${result.stdout.trim()}` : null,
-      result.stderr?.trim() ? `stderr:\n${result.stderr.trim()}` : null,
-    ].filter(Boolean).join("\n"));
+  const testDist = resolve(viewerRoot, ".viewer-test-dist");
+  if (!statSync(testDist, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new Error("viewer performance probe requires npm run build:viewer:visual-test");
   }
+  mkdirSync(distDir, { recursive: true });
+  cpSync(testDist, distDir, { recursive: true });
   const pixelWorldRuntimePath = resolve(distDir, "pixel-world-bridge/pixel_world_bridge.js");
   try {
     const stats = statSync(pixelWorldRuntimePath);
@@ -218,7 +210,7 @@ function prepareViewerWebDist(distDir) {
     throw new Error([
       "viewer performance probe requires the real pixel world renderer runtime",
       `missing: ${pixelWorldRuntimePath}`,
-      "run ./scripts/build-viewer-software-safe.sh before the performance probe",
+      "run npm run build:viewer:visual-test before the performance probe",
     ].join("\n"));
   }
   return distDir;
@@ -240,7 +232,7 @@ function runAgentBrowser(args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(
       agentBrowserInvocation.command,
-      [...agentBrowserInvocation.prefixArgs, "--session", session, ...args],
+      [...agentBrowserInvocation.prefixArgs, "--session", session, ...browserLaunchArgs, ...args],
       { stdio: ["pipe", "pipe", "pipe"] },
     );
     let stdout = "";
@@ -270,7 +262,7 @@ function runAgentBrowser(args, options = {}) {
         stderr.trim() ? `stderr:\n${stderr.trim()}` : null,
       ].filter(Boolean).join("\n")));
     });
-    child.stdin.end(options.input ?? "");
+    if (options.input !== undefined) child.stdin.end(options.input);
   });
 }
 
@@ -282,7 +274,7 @@ async function runAgentBrowserJson(args, options = {}) {
 }
 
 async function evalJson(source, options = {}) {
-  const data = await runAgentBrowserJson(["eval", "--stdin"], { input: source, ...options });
+  const data = await runAgentBrowserJson(["eval", source], options);
   return typeof data.result === "string" ? JSON.parse(data.result) : data.result;
 }
 
@@ -529,10 +521,11 @@ try {
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&hosted_bootstrap=0&t=${Date.now()}`;
 
-  prepareBrowserSession();
+  prepareBrowserSession(); await new Promise((resolve) => setTimeout(resolve, 500));
   const cpuProcessBaseline = processSnapshot();
   console.log(`opening viewer performance probe: ${url}`);
   await runAgentBrowserJson(["open", url], { timeout: 120_000 });
+  await runAgentBrowserJson(["eval", `new Promise((resolve,reject)=>{let n=0;const t=setInterval(()=>{if(window.__OASIS7_VIEWER_FIXTURE_READY__){clearInterval(t);resolve(true);}else if(++n>1200){clearInterval(t);reject(new Error("test assembly pending"));}},50);})`]);
   await runAgentBrowserJson(["set", "viewport", String(options.viewport[0]), String(options.viewport[1])]);
   const cpuAttribution = establishCpuAttribution(cpuProcessBaseline);
 

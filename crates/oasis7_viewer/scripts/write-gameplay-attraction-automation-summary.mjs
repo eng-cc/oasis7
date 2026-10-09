@@ -19,7 +19,49 @@ if (!inputPath || !summaryJsonPath || !summaryMdPath) {
 
 const input = JSON.parse(readFileSync(inputPath, "utf8"));
 const summary = buildTaskGame076AutomationSummary(input);
-const attractionEvidence = buildTaskGame076AttractionEvidence();
+const attractionEvidence = buildTaskGame076AttractionEvidence(
+  { ...(Array.isArray(input.fixtureSamples) ? { samples: input.fixtureSamples } : {}), completionProfile: input.completionProfile },
+);
+const liveCommands = Object.fromEntries(Object.entries(summary.commands).filter(([key]) => key.startsWith("live_")));
+const suppliedObservations = Array.isArray(input.humanObservations) ? input.humanObservations : [];
+const observations = suppliedObservations.filter((record) => record &&
+  ["participant_id", "session_id"].every((field) => typeof record[field] === "string" && record[field].trim()) &&
+  ["observation", "outcome", "choice"].some((field) => typeof record[field] === "string" && record[field].trim()),
+);
+const decisions = new Map();
+for (const observation of observations) {
+  if (["participant_id", "session_id", "decision_id", "choice", "consequence"].every(
+    (field) => typeof observation[field] === "string" && observation[field].trim(),
+  )) {
+    decisions.set(JSON.stringify([observation.participant_id, observation.decision_id]), observation);
+  }
+}
+summary.evidence_sources = {
+  fixture_structure: {
+    scope: "fixture_structure_only",
+    source: Array.isArray(input.fixtureSamples) ? "input.fixtureSamples" : "default_scenario_fixture",
+    status: attractionEvidence.sufficiency.status,
+    decision_count_scope: "snapshot_choice_opportunity_proxy",
+    scores_are_human_motivation: false,
+  },
+  live_operations: {
+    scope: "candidate_command_evidence_only",
+    status: Object.values(liveCommands).some((item) => item.status === "fail") ? "fail" :
+      Object.values(liveCommands).some((item) => item.status === "pass") ? "partial" : "unverified",
+    candidate: input.candidate || null,
+    commands: liveCommands,
+  },
+  human_observation: {
+    scope: "human_records_only",
+    status: observations.length ? "observed" : "unverified",
+    records: observations,
+    excluded_record_count: suppliedObservations.length - observations.length,
+    meaningful_decision_count: observations.length ? decisions.size : null,
+    decisions: [...decisions.values()],
+    decision_identity: "stable_participant_decision_id_across_sessions",
+    retention_status: "unverified",
+  },
+};
 summary.attraction_evidence = attractionEvidence;
 summary.attraction_sufficiency_status = attractionEvidence.sufficiency.status;
 writeFileSync(summaryJsonPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
@@ -52,11 +94,18 @@ for (const beat of summary.beats) {
   }
 }
 
-lines.push("", "## Attraction Sufficiency", "");
+lines.push("", "## Evidence Sources", "");
+lines.push(`- fixture_structure: \`${summary.evidence_sources.fixture_structure.status}\` / \`${summary.evidence_sources.fixture_structure.source}\` / fixture structure only`);
+lines.push(`- live_operations: \`${summary.evidence_sources.live_operations.status}\` / current candidate command logs only`);
+lines.push(`- human_observation: \`${summary.evidence_sources.human_observation.status}\` / decisions: \`${summary.evidence_sources.human_observation.meaningful_decision_count ?? "unverified"}\``);
+lines.push("- Fixture hook/replay scores and snapshot choice proxies do not measure actual player decisions or voluntary return.");
+lines.push("", "## Fixture Structure Sufficiency", "");
 lines.push(`- status: \`${attractionEvidence.sufficiency.status}\``);
 lines.push(`- average_hook_score: \`${attractionEvidence.sufficiency.average_hook_score}\``);
 lines.push(`- average_replay_intent: \`${attractionEvidence.sufficiency.average_replay_intent}\``);
 lines.push(`- motivation_density: \`${attractionEvidence.motivation_density_card.status}\``);
+lines.push(`- completion_profile: \`${attractionEvidence.completion_profile}\` / delivery_requirement: \`${attractionEvidence.anti_script_design_card.delivery_requirement}\``);
+lines.push(`- content_volume_role: \`diagnostic_targets\` / blocks_sufficiency: \`false\``);
 lines.push(`- content_volume: \`${attractionEvidence.content_volume_card.status}\``);
 lines.push(
   `- effective_play_minutes: \`${attractionEvidence.content_volume_card.effective_play_minutes}/${attractionEvidence.content_volume_card.target_effective_play_minutes}\``,
@@ -111,7 +160,7 @@ lines.push(
   "- Manual attraction cards can explain fun, boredom, and replay intent, but do not replace automation.",
   "- Bevy/pixel-world automation verifies spatial/visual/canvas readability only; gameplay causality must come from pure API or Rust runtime harnesses.",
   "- Viewer and visual fixtures must be derived from the TASK-GAME-076 scenario driver, not hand-written as independent truth.",
-  "- Deterministic-provider-backed attraction evidence can support the design sufficiency gate; real player retention still needs live/provider playtest samples.",
+  "- Fixture structure, candidate live operation logs, and human records have separate claim scopes; live automation does not verify human motivation or retention.",
   "- Run `--tier live` before using this summary as real player-path or pure API gameplay evidence.",
 );
 

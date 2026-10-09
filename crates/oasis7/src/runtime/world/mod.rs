@@ -5,6 +5,7 @@ pub(crate) mod agent_claim_economic_publication;
 pub(crate) mod agent_claim_light_lifecycle_publication;
 pub(crate) mod agent_claim_terminal_publication;
 mod agent_claims;
+pub(crate) mod agent_delegation;
 mod agent_intent;
 #[cfg(test)]
 pub(crate) use agent_intent::derive_agent_chat_request_digest;
@@ -105,6 +106,7 @@ mod logistics;
 pub use logistics::LogisticsTransferQuote;
 mod market_quote_decision_preview;
 pub use market_quote_decision_preview::{MarketQuoteDecisionPreview, MarketQuoteSupplyDelta};
+mod defaults;
 mod local_test_provider_bootstrap;
 mod main_token_economy_audit;
 mod module_actions;
@@ -119,6 +121,7 @@ mod module_runtime_labels;
 mod module_runtime_metering;
 mod module_runtime_publication;
 mod module_tick_runtime;
+mod observer_identity;
 mod operability_release_gate;
 mod persistence;
 mod prepared_base_head;
@@ -127,6 +130,8 @@ pub use persistence::{
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     CommittedAuthoritativeRecoveryGeneration,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use persistence::{ObserverLoadError, ObserverReadLimits};
 mod policy;
 mod product_validation_quote;
 pub use product_validation_quote::ProductValidationQuote;
@@ -1188,11 +1193,5 @@ impl World {
         self.enforce_pending_effect_limit();
         self.enforce_inflight_effect_limit();
         self.enforce_journal_event_limit();
-    }
-}
-
-impl Default for World {
-    fn default() -> Self {
-        Self::new()
     }
 }

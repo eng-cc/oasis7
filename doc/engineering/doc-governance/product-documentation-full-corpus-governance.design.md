@@ -5,7 +5,7 @@
 - Owner role：`producer_system_designer`
 - 治理协作：`repository_health_engineer`
 - 状态：`active`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-10-09
 
 本文定义如何把已经采纳的产品文档内容规范应用到全部存量产品文档，并在不破坏专业 authority 的前提下收口外部产品语义。它补充全量治理机制，不改变四模块产品树、专业职责或 Git、PR 与实际 CI 记录。
 
@@ -29,13 +29,11 @@
 
 每个治理单元必须在同一修改中完成内容、导航、回链、authority、REQ/AC 和必要 design；不得留下只能靠后续读者猜测的半迁移状态。
 
-### 2.1 多义务 traceability 绑定
+### 2.1 范围与内容去向
 
-全量治理是一个有限多义务 change。协调 GitHub Issue 必须在任何治理单元开始前冻结：被消费的产品与专业条款、内容/检查器/验证义务、明确排除项或接受风险、每项义务的 mapping slot 与 owner，以及 aggregate candidate 的选择规则。每个治理单元只消费已声明义务，并返回自己的真实结果，不能以局部完成关闭整体义务。
+治理开始时列出来源文件、待接收产品条款、专业 authority、内容与检查器范围、排除项和验收方式。规模较大时可用协调 Issue 跟踪，但不作为开发准入。
 
-整体完成前，协调记录必须绑定实际 Task、contract 与 evidence identity，以及同一棵可比较的 source、integration 和 tested tree。每个 required obligation 必须恰好映射到一个 owner-role 结果；任何缺失、重复、owner 不匹配或仍有 blocking feedback 的映射都使整体保持未完成。
-
-执行步骤按现行 workflow 在 PR 与实际验证记录 中记录 `Plan-Gap Evidence`，包括 acceptance refs、依赖、验证命令与实际证据、写范围、排除范围和 required role slices。具体任务状态、mapping 与 evidence 不复制到本文或产品目录。当前 workflow 中尚未显式启用的 traceability producer、leaf-result schema、approval map 或 live-readback gate 不因本文获得 activation；实施继续使用当时有效的仓库入口和 Git、PR 与实际 CI 记录。
+每个治理单元在 PR 中说明条款的实际去向、引用修复、验证版本与结果、剩余缺口。整体完成依据全部范围的内容完整性与实际验证判断，局部完成不能替代尚未完成的治理义务。
 
 ## 3. Active 专题内容合同
 
@@ -86,7 +84,7 @@
 
 每个 `doc/product/` 外候选文件按段落分成四类：产品承诺、专业合同、历史过程、未迁移语义。
 
-每个跨文件消费条款必须记录 canonical repository `eng-cc/oasis7`、repository-relative path 和从冻结 contract/publication 继承的 stable fragment，并在接收文档中匹配该身份。裸 token、可变 URL、本地摘要或未带 fragment 的泛化路径不能替代 consumed-clause identity。
+每个跨文件消费条款必须记录 canonical repository `eng-cc/oasis7`、repository-relative path 和实际条款的 stable fragment，并在接收文档中匹配该身份。裸 token、可变 URL、本地摘要或未带 fragment 的泛化路径不能替代 consumed-clause identity。
 
 - 产品承诺迁入对应模块根 PRD 或稳定专题，并建立旧条款到新 REQ/SC 的映射。
 - 专业合同留在原专业域；产品文档只说明它支持或限制的产品结果并链接准确 fragment。
@@ -117,9 +115,9 @@ python3 scripts/product-doc-content-check.py --repo-root <canonical-worktree> --
 
 `--full-corpus` 与 `--base`、`--head`、`--worktree` 互斥；它读取所选 canonical worktree 的全部 `doc/product/**/*.prd.md` 与 `doc/product/**/*.design.md`，按 repository-relative path 排序。成功输出稳定的 mode、checked 数量和零 error 结果并返回 0；内容缺口逐行输出稳定 error code、路径与 detail 并返回 1；参数或身份错误返回 2。checker 回归必须覆盖选择互斥、文件排序、生命周期合同、空树、失败码和诊断稳定性。
 
-现有 changed-range 路径及其 trusted base/head、merge-base 和 worktree overlay 语义保持不变。`doc-governance-check.sh` 在当前全量治理任务及其 required CI/PR-prep 范围中显式调用 full-corpus 模式；治理合入后，仓库的持续验证必须保留全量回归，不能退回只验证一次性基线或用 full-corpus 替换作者变更范围身份。
+现有 changed-range 路径及其 trusted base/head、merge-base 和 worktree overlay 语义保持不变。全量治理使用 `doc-governance-check.sh --full-corpus`；治理合入后，仓库的持续验证必须保留全量回归，不能退回只验证一次性基线或用 full-corpus 替换作者变更范围身份。
 
-aggregate completion 只能从全部治理单元、required obligations 和 Plan-Gap 状态推导。任一 `unknown`、`pending`、失败诊断、未关闭 gap、缺失 authority/traceability、未清 blocking feedback 或未映射 required obligation 都使结果为 incomplete/blocked；checker 通过、文件计数完成或某个模块局部 green 不能单独产生“全部治理完成”结论。
+整体完成需要范围清单内的条款均完整接收或有明确保留理由、authority 与引用可达、全量和变更范围检查通过、阻断评审问题解决。检查器通过或单个模块成功不能单独证明全部治理完成；剩余缺口直接列在 PR 或按需协调 Issue 中。
 
 ## 7. 角色与集成
 
@@ -130,17 +128,17 @@ aggregate completion 只能从全部治理单元、required obligations 和 Plan
 - `repository_health_engineer` 负责结构、重复、链接、checker 与迁移完整性。
 - `qa_engineer` 复核 AC 可判定性、证据层级和全量验证结果。
 - `liveops_community` 复核公开承诺、发行范围和玩家沟通边界。
-- `tpm` 维护单一 task/worktree/PR 主链并按互斥写范围集成。
+- 负责人集成结果；需要多人协调时由 `tpm` 协助管理依赖和写入范围。
 
-专业 slice 不创建第二任务、工作树或 PR，不在共享文件上并发写入。根入口、checker、治理规范和跨模块索引由 TPM 串行集成。
+专业协作按具体问题选择，明确写入范围并避免重叠。根入口、checker、治理规范和跨模块索引由负责人集成，不要求固定角色逐一签收。
 
 ## 8. 验证与失败处理
 
-每个模块批次先运行其全量内容检查和链接检查；跨模块集成后运行完整文档治理、checker 回归、README 链接、workflow lint 与 `git diff --check`。最终冻结 HEAD 必须由涉及角色审查。
+每个模块批次先运行其全量内容检查和链接检查；跨模块集成后运行完整文档治理、checker 回归、README 链接与 `git diff --check`。评审按实际复杂度与风险安排，记录审阅版本与结论。
 
 检查失败按稳定诊断定位到文件、条款和缺失关系。语义归属冲突返回产品 owner 与专业 owner 共同裁定；无法证明专业 authority 的内容不得写成当前事实。无法形成安全恢复或可判定 AC 时，专题保持未完成，不通过治理验收。
 
-需要行动的跨 role finding 必须保留现有 Issue comment、artifact 或 `path#fragment` 等稳定 source locator，并沿 `receiving owner -> disposition authority -> decision and basis -> authorized revision 或 explicit no-change -> affected consumer/blocking effect -> clearance evidence` 闭合。未解决的 blocking feedback 继续作为 outstanding obligation；finding 本身不授权自动派发或扩大写范围。
+阻断反馈记录具体条款、事实与处置；修复或以可复核事实说明不适用。非阻断建议按价值处理，不自动扩大治理范围。
 
 ## 9. 非目标
 

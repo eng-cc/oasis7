@@ -343,6 +343,12 @@ pub use state::{
 pub(crate) use state::{ModuleVisualMutation, parse_module_visual_emit};
 
 // World
+#[cfg(test)]
+pub(crate) use world::agent_delegation::AgentDelegationDecisionV1;
+pub use world::agent_delegation::{
+    AgentCausalReceiptV1, AgentDecisionCausalContextV1, AgentDelegationAuthorizationV1,
+    AgentDelegationGrantV1, AgentOwnerControlKindV1, AgentOwnerControlV1,
+};
 pub use world::{
     AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome,
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
@@ -356,6 +362,8 @@ pub use world::{
     TransitionPrepareError, TransitionRollbackError, TransitionSavepoint, WarDeclarationQuote,
     World, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use world::{ObserverLoadError, ObserverReadLimits};
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event

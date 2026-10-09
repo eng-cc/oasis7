@@ -4,6 +4,10 @@
 
 审计轮次: 11
 
+## 当前阶段代表性体验
+
+当前交付目标是受控真实玩家通过有界授权的 Agent 在同一持久世界获得首产物、形成可恢复的持续能力，再次进入后继续原有目标。唯一代表性链为 `starter-industrial-smelter-to-assembler-v1`：合法建成 Smelter，以铁锭配方完成合法生产 cycle，在 owner-bound output ledger 形成首笔匹配正量铁锭结算，采用 `production_only`，随后只开放 Assembler 候选。详细边界见[首产物结算合同](gameplay/gameplay-industrial-starter-completion-contract.prd.md)。实现存在与同候选端到端通过分别表达；首产物、稳定能力、交付各自验收。
+
 ## 目标
 - 作为 game 模块的活跃玩法基线入口，回答当前玩家体验目标、阶段口径、权威专题和完成定义。
 - 保持 PRD-ID、专题文档、执行任务和验证证据可追踪，但不在根 PRD 重复展开每个专题的完整规格。

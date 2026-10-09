@@ -27,6 +27,7 @@ function createTestCrypto() {
   const privateBytes = new Uint8Array(32).fill(7);
   const publicBytes = new Uint8Array(32).fill(9);
   return {
+    getRandomValues(bytes) { return bytes.fill(42); },
     subtle: {
       async generateKey() {
         return {
@@ -46,6 +47,7 @@ function createTestCrypto() {
         }
         throw new Error(`unsupported test key export: ${format}`);
       },
+      async verify() { return true; },
       async importKey() {
         return { kind: "test-ed25519-imported" };
       },
@@ -118,7 +120,7 @@ function sampleSnapshot(overrides = {}) {
         "agent-0": "local-test-player-bound",
       },
       agent_player_public_key_bindings: {
-        "agent-0": "abcdef0123456789abcdef0123456789",
+        "agent-0": "abcdef0123456789abcdef0123456789".repeat(2),
       },
       ...(overrides.model || {}),
     },
@@ -241,7 +243,7 @@ async function renderViewerApp({
   const appRoot = document.createElement("div");
   appRoot.id = "app";
   document.body.appendChild(appRoot);
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   if (snapshot) {
     core.injectSnapshot(snapshot);
@@ -263,6 +265,9 @@ async function renderViewerApp({
   }
   if (starterOcOnboardingComplete) {
     main.__markStarterOcOnboardingCompleteForTest(core.state.auth.boundAgentId);
+  }
+  if (/^[0-9a-f]{64}$/i.test(core.state.auth.privateKey || "")) {
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
   }
   const dispose = mountViewerApp(appRoot);
   const cleanup = () => {
@@ -286,7 +291,7 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
   window.localStorage.clear();
   document.body.innerHTML = "";
   const core = await import("./legacy_core.js");
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   if (snapshot) {
     core.injectSnapshot(snapshot);
@@ -329,14 +334,16 @@ async function setupConnectedSemanticCore({
   document.body.innerHTML = "";
   const { sockets, sentMessages } = installMockWebSocket();
   const core = await import("./legacy_core.js");
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
+  bindLocalTestAgent(core, agentId);
+  await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
   sockets[0].open();
   sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
   await settleLocalTestAuthStartup(core, sentMessages);
+  sockets[0].receive({ type: "authoritative_recovery_ack", ack: { status: "catch_up_ready", player_id: core.state.auth.playerId, session_pubkey: core.state.auth.publicKey, agent_id: agentId, session_epoch: 1, binding_epoch: 1 } });
   sentMessages.length = 0;
   core.injectSnapshot(snapshot);
   core.applySelection({ kind: "agent", id: agentId });
-  bindLocalTestAgent(core, agentId);
   activeCleanup = () => {
     for (const socket of sockets) {
       if (socket.readyState !== socket.CLOSED) {
@@ -393,7 +400,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Control Proof")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Player Intent")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("World Consequence")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Actual world result")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Recovery Move")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Next Move").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Attraction Proof")).toBeInTheDocument();
@@ -507,7 +514,7 @@ describe("viewer web ui automation baseline", () => {
     document.body.innerHTML = "";
     let core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.sendGameplayAction({
       actionId: "claim_first_agent",
       protocolAction: "gameplay_action.submit",
@@ -525,7 +532,7 @@ describe("viewer web ui automation baseline", () => {
     vi.resetModules();
     document.body.innerHTML = "";
     core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.sendGameplayAction({
       actionId: "claim_first_agent",
       protocolAction: "gameplay_action.submit",
@@ -554,7 +561,7 @@ describe("viewer web ui automation baseline", () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     expect(sockets.length).toBe(1);
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
@@ -631,7 +638,7 @@ describe("viewer web ui automation baseline", () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
 
@@ -722,7 +729,7 @@ describe("viewer web ui automation baseline", () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
 
@@ -804,7 +811,7 @@ describe("viewer web ui automation baseline", () => {
           ...core.state.auth,
           available: true,
           playerId: "local-test-player-new",
-          publicKey: "abcdef0123456789abcdef0123456789",
+          publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
           privateKey: "private-key-must-stay-hidden",
           source: "local_test_api_ephemeral",
           registrationStatus: "issued",
@@ -832,7 +839,7 @@ describe("viewer web ui automation baseline", () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
 
@@ -911,7 +918,7 @@ describe("viewer web ui automation baseline", () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
 
@@ -1284,7 +1291,7 @@ describe("viewer web ui automation baseline", () => {
     document.body.innerHTML = "";
 
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     expect(sockets.length).toBe(1);
     sockets[0].open();
     sockets[0].receive({
@@ -1759,7 +1766,7 @@ describe("viewer web ui automation baseline", () => {
           ...core.state.auth,
           available: true,
           playerId: "local-test-player-fresh",
-          publicKey: "abcdef0123456789abcdef0123456789",
+          publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
           privateKey: "private-key-must-stay-hidden",
           source: "local_test_api_ephemeral",
           registrationStatus: "registered",
@@ -1801,7 +1808,7 @@ describe("viewer web ui automation baseline", () => {
           ...core.state.auth,
           available: true,
           playerId: "local-test-player-fresh",
-          publicKey: "abcdef0123456789abcdef0123456789",
+          publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
           privateKey: "private-key-must-stay-hidden",
           source: "local_test_api_ephemeral",
           registrationStatus: "registered",
@@ -2253,6 +2260,7 @@ describe("viewer web ui automation baseline", () => {
     });
     sentMessages.length = 0;
 
+    core.state.lastGameplayActionFeedback = { action: "claim_first_agent", agentId: "starter-agent-0", stage: "sent" };
     sockets[0].receive({
       type: "gameplay_action_ack",
       ack: {
@@ -2297,48 +2305,28 @@ describe("viewer web ui automation baseline", () => {
       .toBeGreaterThan(snapshotRequestsBeforeAutoRefresh);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("resolves pending session registration when runtime returns catch_up_ready", async () => {
+  it("resolves pending session registration when runtime returns session_registered", async () => {
     activeCleanup?.();
     activeCleanup = null;
     vi.resetModules();
     window.history.replaceState(
       {},
       "",
-      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://198.51.100.1:5011",
     );
     window.localStorage.clear();
     document.body.innerHTML = "";
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
-    sockets[0].open();
-    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
-    await waitFor(() => {
-      expect(sentMessages).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            type: "authoritative_recovery",
-            command: expect.objectContaining({ mode: "reconnect_sync" }),
-          }),
-        ]),
-      );
-    });
-    sockets[0].receive({
-      type: "authoritative_recovery_ack",
-      ack: {
-        status: "catch_up_ready",
-        player_id: core.state.auth.playerId,
-        session_pubkey: core.state.auth.publicKey,
-      },
-    });
+    await core.initializeSoftwareSafeCore();
     core.injectSnapshot(sampleSnapshot());
     core.applySelection({ kind: "agent", id: "agent-0" });
     core.state.auth = {
       ...core.state.auth,
       available: true,
       playerId: "local-test-player-bound",
-      publicKey: "abcdef0123456789abcdef0123456789",
+      publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
       privateKey: "07".repeat(32),
       source: "local_test_api_ephemeral",
       registrationStatus: "registered",
@@ -2347,6 +2335,10 @@ describe("viewer web ui automation baseline", () => {
       syncInFlight: false,
     };
 
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
+    expect((await import("./viewer_auth_session_module.js")).hasSigningIdentity(core.state.auth)).toBe(true);
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     const registerPromise = core.registerPlayerSessionForTest("agent-0");
 
     await waitFor(() => {
@@ -2369,33 +2361,33 @@ describe("viewer web ui automation baseline", () => {
     sockets[0].receive({
       type: "authoritative_recovery_ack",
       ack: {
-        status: "catch_up_ready",
+        status: "session_registered",
         player_id: "local-test-player-bound",
-        session_pubkey: "abcdef0123456789abcdef0123456789",
+        session_pubkey: "abcdef0123456789abcdef0123456789".repeat(2),
         agent_id: "agent-0",
       },
     });
     await expect(registerPromise).resolves.toEqual(
-      expect.objectContaining({ status: "catch_up_ready" }),
+      expect.objectContaining({ status: "session_registered" }),
     );
 
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("clears stale player session registration timeout after runtime action ack", async () => {
+  it("does not resolve registration from an ordinary runtime action ACK", async () => {
     activeCleanup?.();
     activeCleanup = null;
     vi.resetModules();
     window.history.replaceState(
       {},
       "",
-      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://198.51.100.1:5011",
     );
     window.localStorage.clear();
     document.body.innerHTML = "";
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
 
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     core.injectSnapshot(sampleSnapshot());
@@ -2404,7 +2396,7 @@ describe("viewer web ui automation baseline", () => {
       ...core.state.auth,
       available: true,
       playerId: "local-test-player-bound",
-      publicKey: "abcdef0123456789abcdef0123456789",
+      publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
       privateKey: "07".repeat(32),
       source: "local_test_api_ephemeral",
       registrationStatus: "registered",
@@ -2413,6 +2405,7 @@ describe("viewer web ui automation baseline", () => {
       syncInFlight: false,
     };
 
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
     const registerPromise = core.registerPlayerSessionForTest("agent-0");
     await waitFor(() => {
       expect(sentMessages).toEqual(
@@ -2448,6 +2441,11 @@ describe("viewer web ui automation baseline", () => {
       },
     });
 
+    let settled = false;
+    void registerPromise.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    sockets[0].receive({ type: "authoritative_recovery_ack", ack: { status: "session_registered", agent_id: "agent-0", player_id: core.state.auth.playerId, session_pubkey: core.state.auth.publicKey } });
     await expect(registerPromise).resolves.toEqual(
       expect.objectContaining({
         agent_id: "agent-0",
@@ -2638,8 +2636,8 @@ describe("viewer web ui automation baseline", () => {
           ...core.state.auth,
           available: true,
           playerId: "local-test-player-visible",
-          publicKey: "abcdef0123456789abcdef0123456789",
-          privateKey: "private-key-must-stay-hidden",
+          publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
+          privateKey: "07".repeat(32),
           source: "local_test_api_ephemeral",
           registrationStatus: "registered",
           runtimeStatus: "registered",
@@ -2657,7 +2655,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(identityCard).getByText(/player=local-test-player-visible/)).toBeInTheDocument();
     expect(within(identityCard).getByText(/pubkey=abcdef012345/)).toBeInTheDocument();
     expect(within(identityCard).getByText(/not an email login account/)).toBeInTheDocument();
-    expect(identityCard).not.toHaveTextContent("private-key-must-stay-hidden");
+    expect(identityCard).not.toHaveTextContent("07".repeat(32));
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("shows guest identity before local test auth is generated", async () => {
@@ -2712,7 +2710,7 @@ describe("viewer web ui automation baseline", () => {
           ...core.state.auth,
           available: true,
           playerId: "local-test-player-fresh",
-          publicKey: "abcdef0123456789abcdef0123456789",
+          publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
           privateKey: "private-key-must-stay-hidden",
           source: "local_test_api_ephemeral",
           registrationStatus: "registered",
@@ -2897,7 +2895,7 @@ describe("viewer web ui automation baseline", () => {
         },
         agent_player_public_key_bindings: {
           ...base.model.agent_player_public_key_bindings,
-          "starter-agent-0": "abcdef0123456789abcdef0123456789",
+          "starter-agent-0": "abcdef0123456789abcdef0123456789".repeat(2),
         },
       },
       player_gameplay: {
@@ -3330,7 +3328,7 @@ describe("viewer web ui automation baseline", () => {
         expect(card.textContent).not.toMatch(
           /product_validation_rejected|consumed_lost|inspect_product_validation_and_reschedule/,
         );
-        expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open");
+        await waitFor(() => expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open"));
         expect(elementPrecedes(
           card,
           within(container.querySelector("#viewer-gameplay-details")).getByText("Control Proof").closest(".event-card"),

@@ -14,6 +14,19 @@ function createFeedbackModule(state) {
 }
 
 describe("viewer feedback module", () => {
+  it("projects agency only from a visible canonical primary intent", () => {
+    const agency = { causal_receipt: { receipt_id: "canonical-receipt" }, memory_corrections: [] };
+    const state = { uiLocale: "en", snapshot: {
+      model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+      player_gameplay: { primary_intent: { intent_id: "intent-1", agent_id: "agent-0", agency_read_model: agency } },
+    } };
+    const projected = createFeedbackModule(state).buildGameplaySummary().controlProof;
+    expect(projected.intentId).toBe("intent-1");
+    expect(projected.agency).toEqual(agency);
+    expect(projected.agency).not.toBe(agency);
+    delete state.snapshot.player_gameplay.primary_intent.intent_id;
+    expect(createFeedbackModule(state).buildGameplaySummary().controlProof.agency).toBeNull();
+  });
   it.each([
     ["accepted", "accepted"],
     ["applied", "applied"],

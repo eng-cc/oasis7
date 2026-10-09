@@ -8,6 +8,7 @@ import {
   LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
 } from "../software_safe_src/software_safe_constants.js";
 
+globalThis.__OASIS7_VISUAL_TEST__ = true;
 globalThis.window = {
   location: { search: "?test_api=1", href: "http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&test_api=1", pathname: "/software_safe.html" },
   history: { replaceState() {} },
@@ -15,6 +16,7 @@ globalThis.window = {
   addEventListener() {},
 };
 globalThis.document = {
+  querySelectorAll() { return [{ textContent: JSON.stringify({ deploymentMode: "hosted_public_join", viewerWsEndpoint: "ws://127.0.0.1:5011" }) }]; },
   documentElement: { lang: "en" },
   createElement() {
     return {
@@ -130,7 +132,7 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
   assert.match(gameplaySummary.controlProof.consequence, /World Constraint/i);
   assert.match(gameplaySummary.controlProof.recovery, /Advance 1 step/i);
   assert.match(gameplaySummary.controlProof.nextMove, /Replenish upstream materials/i);
-  assert.match(gameplaySummary.controlProof.summary, /control is blocked but recoverable/i);
+  assert.match(gameplaySummary.controlProof.summary, /Detailed causal receipt unavailable/i);
   assert.equal(gameplaySummary.agencyMoves.interrupt, "available");
   assert.equal(gameplaySummary.agencyMoves.reprioritize, "available");
   assert.match(gameplaySummary.agencyMoves.correction, /material recovery/i);
@@ -305,7 +307,8 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
   assert.match(gameplaySummary.executionCauseLabel, /Agent Chose Differently/i);
   assert.match(gameplaySummary.executionCauseDetail, /policy\.guard/i);
   assert.match(gameplaySummary.controlProof.consequence, /Agent Chose Differently/i);
-  assert.match(gameplaySummary.controlProof.summary, /Control proved/i);
+  assert.match(gameplaySummary.controlProof.summary, /Detailed causal receipt unavailable/i);
+  assert.doesNotMatch(gameplaySummary.controlProof.summary, /Control proved/i);
 }
 
 {
@@ -556,16 +559,12 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
     error_code: "llm_init_failed",
     error_message: "gameplay requires a configured and reachable LLM provider",
   });
-  assert.equal(core.state.lastControlFeedback.stage, "blocked");
-  assert.equal(
-    core.state.lastControlFeedback.reason,
-    "gameplay requires a configured and reachable LLM provider",
-  );
-  assert.equal(
-    core.state.lastControlFeedback.hint,
-    "Recover the lane before retrying world controls.",
-  );
-  assert.match(core.state.lastControlFeedback.effect, /blocked before requested advance/i);
+  // A manually-created last feedback is not an outstanding request. An
+  // unsolicited completion must not adopt status, errors, or world deltas.
+  assert.equal(core.state.lastControlFeedback.stage, "queued");
+  assert.equal(core.state.lastControlFeedback.reason, null);
+  assert.equal(core.state.lastControlFeedback.hint, null);
+  assert.equal(core.state.lastControlFeedback.effect, "queued");
 }
 
 {
@@ -589,9 +588,9 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
     delta_logical_time: 0,
     delta_event_seq: 0,
   });
-  assert.equal(core.state.lastControlFeedback.stage, "completed_no_progress");
-  assert.equal(core.state.lastControlFeedback.reason, "timeout_no_progress");
-  assert.match(core.state.lastControlFeedback.effect, /no visible world delta/i);
+  assert.equal(core.state.lastControlFeedback.stage, "queued");
+  assert.equal(core.state.lastControlFeedback.reason, null);
+  assert.equal(core.state.lastControlFeedback.effect, "queued");
 }
 
 {
