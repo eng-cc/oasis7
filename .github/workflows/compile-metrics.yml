@@ -288,7 +288,7 @@ jobs:
 
       - name: Upload compile metrics artifact
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: compile-metrics-${{ matrix.platform }}
           path: output/compile-metrics/${{ matrix.platform }}
@@ -322,7 +322,7 @@ jobs:
           cat output/compile-metrics/combined-summary.md >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload combined compile metrics summary
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: compile-metrics-summary
           path: output/compile-metrics/combined-summary.md
