@@ -6,6 +6,72 @@ use std::time::Duration;
 
 use super::*;
 
+fn governance_snapshot_response() -> Value {
+    let mut snapshot = oasis7::simulator::WorldKernel::new().snapshot();
+    let mut runtime = oasis7::runtime::World::new().snapshot();
+    runtime.governance_finality_epoch_snapshots.insert(
+        0,
+        oasis7::runtime::GovernanceFinalityEpochSnapshot::default(),
+    );
+    snapshot.runtime_snapshot = Some(runtime);
+    serde_json::to_value(ViewerResponse::Snapshot { snapshot }).expect("snapshot wire JSON")
+}
+
+#[test]
+fn snapshot_response_preserves_numeric_governance_epoch_keys() {
+    let raw = governance_snapshot_response();
+    let before = raw.clone();
+    // This is a legitimate serialized wire snapshot; the tagged enum path loses
+    // the JSON object-key semantics before reaching its typed inner snapshot.
+    assert!(serde_json::from_value::<ViewerResponse>(raw.clone()).is_err());
+    assert!(
+        serde_json::from_str::<ViewerResponse>(&serde_json::to_string(&raw).expect("wire JSON"))
+            .is_err()
+    );
+    let ViewerResponse::Snapshot { snapshot } = decode_viewer_response(&raw).expect("decode")
+    else {
+        panic!("expected snapshot");
+    };
+    assert!(
+        snapshot
+            .runtime_snapshot
+            .expect("runtime")
+            .governance_finality_epoch_snapshots
+            .contains_key(&0)
+    );
+    assert_eq!(raw, before);
+}
+
+#[test]
+fn snapshot_response_rejects_invalid_envelopes_and_numeric_values() {
+    for raw in [
+        serde_json::json!({"type":"snapshot"}),
+        serde_json::json!({"type":"snapshot","snapshot":null}),
+        serde_json::json!({"type":"snapshot","snapshot":{}}),
+        serde_json::json!({"type":"unknown"}),
+    ] {
+        assert!(decode_viewer_response(&raw).is_err());
+    }
+    for value in [
+        serde_json::json!("0"),
+        serde_json::json!(true),
+        serde_json::json!(0.0),
+        serde_json::json!(-1),
+    ] {
+        let mut raw = governance_snapshot_response();
+        raw["snapshot"]["runtime_snapshot"]["governance_finality_epoch_snapshots"]["0"]["epoch_id"] =
+            value;
+        assert!(decode_viewer_response(&raw).is_err());
+    }
+    let mut raw = governance_snapshot_response();
+    let epochs = raw["snapshot"]["runtime_snapshot"]["governance_finality_epoch_snapshots"]
+        .as_object_mut()
+        .expect("epoch map");
+    let epoch = epochs.remove("0").expect("epoch");
+    epochs.insert("invalid-u64".into(), epoch);
+    assert!(decode_viewer_response(&raw).is_err());
+}
+
 fn fixed_private_key_hex(seed: u8) -> String {
     hex::encode([seed; 32])
 }

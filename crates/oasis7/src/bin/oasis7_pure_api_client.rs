@@ -625,7 +625,7 @@ impl ViewerConnection {
             Ok(_) => {
                 let raw: Value = serde_json::from_str(line.trim_end())
                     .map_err(|err| format!("parse response json failed: {err}"))?;
-                let response: ViewerResponse = serde_json::from_value(raw.clone())
+                let response = decode_viewer_response(&raw)
                     .map_err(|err| format!("decode response failed: {err}"))?;
                 Ok(ReadResponseOutcome::Response(CollectedResponse {
                     response,
@@ -644,6 +644,19 @@ impl ViewerConnection {
             }
             Err(err) => Err(format!("read response failed: {err}")),
         }
+    }
+}
+
+// Decode the snapshot directly from JSON: internally tagged enum buffering loses
+// serde_json's numeric object-key handling for runtime governance epoch maps.
+fn decode_viewer_response(raw: &Value) -> Result<ViewerResponse, serde_json::Error> {
+    if raw.get("type").and_then(Value::as_str) == Some("snapshot") {
+        let snapshot = serde_json::from_value::<WorldSnapshot>(
+            raw.get("snapshot").cloned().unwrap_or(Value::Null),
+        )?;
+        Ok(ViewerResponse::Snapshot { snapshot })
+    } else {
+        serde_json::from_value(raw.clone())
     }
 }
 
