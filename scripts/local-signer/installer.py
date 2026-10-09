@@ -101,11 +101,7 @@ def plan_installation(request, release, backend):
         raise InstallError("INSTALLATION_DRIFT", "trusted runtime identity is missing")
     facts["runtime_identity"] = dict(runtime_identity)
     if facts.get("target") != release["manifest"]["target"] or not all(facts.get(key) is True for key in ("safe", "acl_safe", "sudo_safe", "identity_available")):
-        error = InstallError("INSTALLATION_DRIFT", "host isolation preflight blocked")
-        error.preflight_flags = {key: facts.get(key) is True for key in
-                                ("safe", "acl_safe", "sudo_safe", "identity_available")}
-        error.preflight_flags["target_matches"] = facts.get("target") == release["manifest"]["target"]
-        raise error
+        raise InstallError("INSTALLATION_DRIFT", "host isolation preflight blocked")
     uid, gid, caller = facts.get("signer_uid"), facts.get("signer_gid"), facts.get("caller_uid")
     if not all(type(value) is int and 0 < value < 2**32 for value in (uid, gid, caller)) or caller == uid:
         raise InstallError("INSTALLATION_DRIFT", "invalid identity allocation")

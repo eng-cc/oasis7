@@ -590,31 +590,6 @@ def approved_modules(expected_manifest_sha256, captured_files=None):
     return sys.modules["installer"], sys.modules["macos_host"]
 
 
-def blocked_output(error, api=None):
-    """Local diagnostic build: no raw subprocess output or traceback source text."""
-    value = dict(status="BLOCKED", code=getattr(error, "code", "INSTALLATION_DRIFT"),
-                 host_mutated=False, signing_enabled=False,
-                 exception_type=type(error).__name__)
-    frame = error.__traceback__
-    while frame and frame.tb_next:
-        frame = frame.tb_next
-    if frame:
-        value["failure_location"] = (Path(frame.tb_frame.f_code.co_filename).name
-                                     + ":" + str(frame.tb_lineno) + ":"
-                                     + frame.tb_frame.f_code.co_name)
-    if api is not None and isinstance(error, api.InstallError):
-        value["reason"] = str(error)[:256]
-        flags = getattr(error, "preflight_flags", None)
-        if isinstance(flags, dict):
-            value["preflight_flags"] = {key: flags[key] for key in
-                ("target_matches", "safe", "acl_safe", "sudo_safe", "identity_available")
-                if key in flags and type(flags[key]) is bool}
-    cause = error.__cause__
-    if isinstance(cause, OSError):
-        value["cause_errno"] = cause.errno
-    return value
-
-
 def main():
     captured_files = globals().get("_CAPTURED_RELEASE_FILES")
     runtime_identity = globals().get("_RUNTIME_ATTESTATION")
@@ -625,10 +600,6 @@ def main():
         print(json.dumps({"status": "BLOCKED", "code": "TRUSTED_BOOTSTRAP_REQUIRED", "host_mutated": False, "signing_enabled": False}, sort_keys=True))
         return 9
     args = parser().parse_args()
-    if args.command != "plan":
-        print(json.dumps(dict(status="BLOCKED", code="LOCAL_DIAGNOSTIC_PLAN_ONLY",
-                              host_mutated=False, signing_enabled=False), sort_keys=True))
-        return 9
     try:
         api, host_module = approved_modules(args.expected_manifest_sha256, captured_files)
         target = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}.get(platform.machine(), "unsupported")
@@ -645,7 +616,7 @@ def main():
         print(json.dumps(output, sort_keys=True, separators=(",", ":")))
         return 10 if output["status"] == "RECOVERY_REQUIRED" else 0
     except Exception as error:
-        print(json.dumps(blocked_output(error, locals().get("api")), sort_keys=True))
+        print(json.dumps({"status": "BLOCKED", "code": getattr(error, "code", "INSTALLATION_DRIFT"), "host_mutated": False, "signing_enabled": False}, sort_keys=True))
         return 9
 
 
