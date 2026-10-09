@@ -277,8 +277,7 @@
       "match": [
         "scripts/cargo-dev*",
         "scripts/check-standalone-tool-lockfiles*",
-        "scripts/check-launcher-p2p-dependency*",
-        "scripts/new-task-worktree*"
+        "scripts/check-launcher-p2p-dependency*"
       ],
       "groups": [
         "cargo_tooling_contracts"
@@ -287,7 +286,6 @@
     },
     {
       "match": [
-        "scripts/resource-cleanup*",
         "scripts/pr-review-thread-closeout*"
       ],
       "groups": [
@@ -350,6 +348,35 @@
         "viewer_performance_report"
       ],
       "reason": "viewer_performance_report"
+    },
+    {
+      "match": [
+        "scripts/new-task-worktree*"
+      ],
+      "groups": [
+        "cargo_tooling_contracts",
+        "fleet_health"
+      ],
+      "reason": "worktree_bootstrap"
+    },
+    {
+      "match": [
+        "scripts/resource-cleanup*"
+      ],
+      "groups": [
+        "workflow_governance",
+        "fleet_health"
+      ],
+      "reason": "resource_cleanup"
+    },
+    {
+      "match": [
+        "scripts/worktree-gc-report*"
+      ],
+      "groups": [
+        "workflow_governance"
+      ],
+      "reason": "worktree_report"
     }
   ]
 }
