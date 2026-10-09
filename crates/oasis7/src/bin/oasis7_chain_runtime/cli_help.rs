@@ -67,6 +67,7 @@ Options:\n\
   --execution-bridge-state <path>   override execution bridge state file path\n\
   --execution-world-dir <path>      override execution world directory\n\
   --execution-records-dir <path>    override execution records directory\n\
+  --capture-schedule-recipe-history  capture bounded recipe history for offline verification (no authority activation)\n\
   --provider-bootstrap-authority <path>\n\
                                     explicit JSON Runtime authority bundle; repeat per provider-backed agent\n\
   --local-test-provider-authority <path>\n\

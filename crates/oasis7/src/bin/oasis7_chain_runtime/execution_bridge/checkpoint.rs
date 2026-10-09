@@ -305,6 +305,9 @@ fn collect_execution_bridge_record_retained_refs(
 ) {
     if retain_archive {
         maybe_insert_pin_ref(pinned_refs, record.commit_log_ref.as_deref());
+        // The closed package contains all historical capture bytes. Preserve it
+        // with the archived record, rather than pinning mutable input sidecars.
+        maybe_insert_pin_ref(pinned_refs, record.controlled_capture_ref.as_deref());
         maybe_insert_pin_ref(
             best_effort_pinned_refs,
             record.external_effect_ref.as_deref(),
@@ -1059,7 +1062,11 @@ pub(super) fn persist_execution_bridge_record_only(
     let bytes = serde_json::to_vec_pretty(&normalized)
         .map_err(|err| format!("serialize execution bridge record failed: {}", err))?;
     let path = execution_bridge_record_path(execution_records_dir, normalized.height);
-    write_bytes_atomic(path.as_path(), bytes.as_slice())?;
+    if normalized.controlled_capture_ref.is_some() {
+        super::durable_transaction::write_file_durable(&path, &bytes)?;
+    } else {
+        write_bytes_atomic(path.as_path(), bytes.as_slice())?;
+    }
     Ok(bytes)
 }
 
@@ -1069,5 +1076,9 @@ pub(super) fn persist_execution_bridge_record(
 ) -> Result<(), String> {
     let bytes = persist_execution_bridge_record_only(execution_records_dir, record)?;
     let latest_path = execution_records_dir.join("latest.json");
-    write_bytes_atomic(latest_path.as_path(), bytes.as_slice())
+    if record.controlled_capture_ref.is_some() {
+        super::durable_transaction::write_file_durable(&latest_path, &bytes)
+    } else {
+        write_bytes_atomic(latest_path.as_path(), bytes.as_slice())
+    }
 }

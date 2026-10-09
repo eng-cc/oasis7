@@ -117,6 +117,7 @@ pub(super) struct CliOptions {
     pub execution_bridge_state_path: Option<PathBuf>,
     pub execution_world_dir: Option<PathBuf>,
     pub execution_records_dir: Option<PathBuf>,
+    pub capture_schedule_recipe_history: bool,
     pub provider_backed_bootstrap_authority_paths: Vec<PathBuf>,
     pub local_test_provider_authority_path: Option<PathBuf>,
     pub local_test_provider_wasm_path: Option<PathBuf>,
@@ -194,6 +195,7 @@ impl Default for CliOptions {
             execution_bridge_state_path: None,
             execution_world_dir: None,
             execution_records_dir: None,
+            capture_schedule_recipe_history: false,
             provider_backed_bootstrap_authority_paths: Vec::new(),
             local_test_provider_authority_path: None,
             local_test_provider_wasm_path: None,
@@ -452,6 +454,15 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 let raw = parse_required_value(&mut iter, "--execution-world-dir")?;
                 options.execution_world_dir = Some(PathBuf::from(raw));
             }
+            "--capture-schedule-recipe-history" => {
+                if !cfg!(unix) {
+                    return Err("durable history capture is unsupported on this platform".into());
+                }
+                if !cfg!(feature = "wasmtime") {
+                    return Err("history capture requires wasmtime feature".into());
+                }
+                options.capture_schedule_recipe_history = true;
+            }
             "--execution-records-dir" => {
                 let raw = parse_required_value(&mut iter, "--execution-records-dir")?;
                 options.execution_records_dir = Some(PathBuf::from(raw));
@@ -601,6 +612,11 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     }
     if !options.node_gossip_peers.is_empty() && options.node_gossip_bind.is_none() {
         return Err("--node-gossip-peer requires --node-gossip-bind".to_string());
+    }
+    if options.capture_schedule_recipe_history
+        && !super::execution_role::node_role_materializes_execution_state(options.node_role)
+    {
+        return Err("history capture requires an execution-materializing node role".into());
     }
     validate_local_test_provider_options(&options)?;
     if let Some(manifest_path) = options.network_tier_manifest_path.as_ref() {

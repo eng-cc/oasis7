@@ -564,6 +564,42 @@ impl World {
     }
 }
 
+impl World {
+    /// Reuse observer structural limits for typed in-memory offline snapshots.
+    /// No filesystem reads or writes and no change to default resource limits.
+    pub fn validate_offline_snapshot_cbor_budget(
+        bytes: &[u8],
+        limits: ObserverReadLimits,
+    ) -> Result<(), ObserverLoadError> {
+        if bytes.len() > limits.max_file_bytes {
+            return Err(ObserverLoadError::ResourceLimited);
+        }
+        decode_budget::snapshot_cbor(bytes, limits)
+    }
+    /// Preflight only ClosedRecord root objects[].bytes as u8 payloads.
+    /// The caller must also apply the existing typed closed-record validator.
+    pub fn validate_offline_closed_record_cbor_budget(
+        bytes: &[u8],
+        limits: ObserverReadLimits,
+    ) -> Result<(), ObserverLoadError> {
+        if bytes.len() > limits.max_file_bytes {
+            return Err(ObserverLoadError::ResourceLimited);
+        }
+        decode_budget::closed_record_cbor(bytes, limits)
+    }
+
+    /// Generic persisted-value preflight (including WorldEvent journals).
+    pub fn validate_offline_cbor_budget(
+        bytes: &[u8],
+        limits: ObserverReadLimits,
+    ) -> Result<(), ObserverLoadError> {
+        if bytes.len() > limits.max_file_bytes {
+            return Err(ObserverLoadError::ResourceLimited);
+        }
+        decode_budget::cbor(bytes, limits)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
