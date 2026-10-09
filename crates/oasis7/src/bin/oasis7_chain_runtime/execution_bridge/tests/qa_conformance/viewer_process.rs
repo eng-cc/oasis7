@@ -1,7 +1,7 @@
 //! Exercises the shipped viewer main and newline protocol with no node filesystem access.
 use super::*;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 
 struct ViewerProcess {
     child: Child,
@@ -34,17 +34,20 @@ impl ViewerProcess {
         );
         // This independent probe proves the exact launch profile denies an existing node file.
         // The shipped executable is launched under that same profile, without a test-only probe.
-        let probe = Command::new("/usr/bin/sandbox-exec")
-            .args(["-p", &profile, "/bin/cat"])
+        let probe = application_sandbox::command(std::path::Path::new("/bin/cat"), &root, &profile)
             .arg(denied.join("world/world-service-identity.json"))
             .output()
             .unwrap();
         assert!(!probe.status.success());
-        assert!(String::from_utf8_lossy(&probe.stderr).contains("Operation not permitted"));
+        let stderr = String::from_utf8_lossy(&probe.stderr);
+        assert!(
+            stderr.contains("Operation not permitted") || stderr.contains("Permission denied"),
+            "{stderr}"
+        );
         println!(
             "shipped_viewer_artifact_blake3={} sandbox_profile_blake3={} os_denial_probe=independent_same_profile isolated_cwd=true",
             blake3::hash(&fs::read(&binary).unwrap()),
-            blake3::hash(profile.as_bytes())
+            application_sandbox::profile_digest(std::path::Path::new(&binary), &root, &profile)
         );
         println!(
             "shipped_viewer_public_configuration={}",
@@ -52,9 +55,7 @@ impl ViewerProcess {
         );
         let stdout = fs::File::create(root.join("stdout.log")).unwrap();
         let stderr = fs::File::create(root.join("stderr.log")).unwrap();
-        let child = Command::new("/usr/bin/sandbox-exec")
-            .args(["-p", &profile])
-            .arg(&binary)
+        let child = application_sandbox::command(std::path::Path::new(&binary), &root, &profile)
             .args([
                 "--bind",
                 &addr,

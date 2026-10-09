@@ -27,6 +27,7 @@ mod application_memory_authority;
 mod application_memory_recovery;
 mod application_memory_tamper;
 mod application_metadata;
+mod application_sandbox;
 mod application_stream_boundaries;
 mod hosted_wait_clock;
 mod provider_metadata;
@@ -420,7 +421,32 @@ impl Fixture {
                     &signer,
                 );
                 eprintln!("fixture_dispatch method={method} path={path} result={result:?}");
-                if !lose {
+                // A verified whole-process exit at the intentional Settle gate may
+                // close its response socket. Admission and canonical execution must
+                // still complete, exactly as the real node's separate commit worker does.
+                let expected_settle_disconnect = path == SUBMIT_PATH
+                    && worker_controlled.load(Ordering::SeqCst)
+                    && result.as_ref().err().is_some_and(|error| {
+                        error == &std::io::Error::from_raw_os_error(libc::EPIPE).to_string()
+                    })
+                    && worker_gate.root.lock().unwrap().as_ref().is_some_and(|root| {
+                        root.join("world-settle-crash-exit73-confirmed").exists()
+                    })
+                    && crate::feedback_submit_api::extract_http_json_body(&bytes).ok()
+                        .and_then(|body| serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(body).ok())
+                        .is_some_and(|request| matches!(&request.signed_payload,
+                            WorldServicePayloadV1::Scheduler(signed) if matches!(signed.request.operation, SchedulerOperationV1::SettleLease { .. }))
+                            && worker_gate.root.lock().unwrap().as_ref().is_some_and(|root| {
+                                fs::read(root.join("world-settle-started")).ok()
+                                    .and_then(|bytes| serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(&bytes).ok())
+                                    .is_some_and(|original| original == request)
+                            }));
+                if expected_settle_disconnect {
+                    println!(
+                        "PRE2_VERIFIED_CRASH_SETTLE_RESPONSE_DISCONNECTED original_bytes_preserved=true canonical_commit_still_required=true"
+                    );
+                }
+                if !lose && !expected_settle_disconnect {
                     assert!(
                         result.unwrap(),
                         "actual dispatcher did not handle requested route"

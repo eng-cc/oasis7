@@ -22,6 +22,9 @@ fn stream(
     )
 }
 fn subscribe(socket: &mut TcpStream) {
+    // Keep identical newline-delimited frames in one write so the probe does
+    // not measure client Nagle/delayed-ACK scheduling between tiny requests.
+    let mut batch = Vec::new();
     for request in [
         serde_json::json!({"type":"hello_v2","client":"PRE2 metadata concurrent QA","version":2,"capabilities":[]}),
         serde_json::json!({"type":"subscribe","streams":["snapshot","events"],"event_kinds":[]}),
@@ -29,8 +32,9 @@ fn subscribe(socket: &mut TcpStream) {
     ] {
         let mut bytes = serde_json::to_vec(&request).unwrap();
         bytes.push(b'\n');
-        socket.write_all(&bytes).unwrap();
+        batch.extend_from_slice(&bytes);
     }
+    socket.write_all(&batch).unwrap();
 }
 pub(super) fn verify_metadata_responsiveness(client: &RemoteWorldServiceClient) {
     let shared = Arc::new(Mutex::new(application_hosted::prepare_server(client)));

@@ -248,13 +248,14 @@ pub(super) fn run_isolated_application_mode(
     );
     let config = fixture.client.config();
     println!(
-        "application_artifact_blake3={} mechanism=sandbox-exec",
-        blake3::hash(&fs::read(&executable).unwrap())
+        "application_artifact_blake3={} mechanism={}",
+        blake3::hash(&fs::read(&executable).unwrap()),
+        application_sandbox::mechanism()
     );
     println!(
         "application_config_identity={} sandbox_profile_blake3={} isolated_cwd=true",
         serde_json::json!({"endpoint":config.endpoint,"trusted_service_public_key":config.trusted_service_public_key,"world":config.expected_world,"scope":config.scope_id,"agent_scope":"agent:agent-a","owner_public_key":sign_read_request("owner",(),&config.read_private_key_hex).unwrap().subject_public_key,"agent_delegate_public_key":sign_read_request("delegate",(),&hex::encode([8u8;32])).unwrap().subject_public_key,"delegation_generation":1,"decision_source":"provider_backed","provider_backend":"provider_local_mock","execution_lane":"headless_agent"}),
-        blake3::hash(profile.as_bytes())
+        application_sandbox::profile_digest(&executable, &app_dir, &profile)
     );
     let boundary_mode = matches!(
         admission_mode,
@@ -317,10 +318,8 @@ pub(super) fn run_isolated_application_mode(
         .as_ref()
         .map(|server| server.endpoint.as_str())
         .unwrap_or(config.endpoint.as_str());
-    let mut command = std::process::Command::new("/usr/bin/sandbox-exec");
+    let mut command = application_sandbox::command(&executable, &app_dir, &profile);
     command
-        .args(["-p", &profile])
-        .arg(&executable)
         .args([
             "--ignored",
             "--exact",
@@ -807,7 +806,17 @@ pub(super) fn run_isolated_application_mode(
         );
         assert!(app_dir.join("world-settle-started").exists());
         let checkpoint = fs::read(app_dir.join("native-memory-lineage.json")).unwrap();
+        fs::write(
+            app_dir.join("world-settle-crash-exit73-confirmed"),
+            b"actual child exit73",
+        )
+        .unwrap();
         fs::write(app_dir.join("world-settle-release"), b"release").unwrap();
+        let settlement: SubmitIntentRequest<WorldServicePayloadV1> =
+            serde_json::from_slice(&fs::read(app_dir.join("world-settle-started")).unwrap())
+                .unwrap();
+        // committed() requires the signed original identity and rejects canonical rejection.
+        let _settled_commit = fixture.committed(&settlement);
         if admission_mode == "memory-crash-tamper" {
             application_memory_tamper::verify_processes(
                 &fixture,
