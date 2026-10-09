@@ -845,6 +845,7 @@ pub(crate) use self::driver_observability::{
 #[cfg(not(test))]
 pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;
 
+mod controlled_bootstrap_anchor;
 mod controlled_capture;
 
 pub(crate) mod controlled_history;
