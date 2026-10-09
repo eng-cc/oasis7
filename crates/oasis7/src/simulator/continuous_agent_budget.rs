@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// The normalized request budget used by the native continuous-agent lane.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BudgetContractV1 {
     pub max_latency_ms: u64,
     pub max_repair_attempts: u32,

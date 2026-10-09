@@ -261,6 +261,10 @@ pub struct LlmChatMessageTrace {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct LlmDecisionDiagnostics {
+    /// A bounded public explanation supplied by the Agent. This is never
+    /// Runtime evidence that its prediction or proposed action took effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agency_explanation: Option<AgentDecisionExplanationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -284,6 +288,20 @@ pub struct LlmDecisionDiagnostics {
     pub max_tool_calls: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls_used: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentDecisionExplanationV1 {
+    pub status: String,
+    pub provenance: String,
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dissent: Option<String>,
+    pub evidence_refs: Vec<String>,
+    pub stakes: Option<String>,
+    pub expected_consequence: Option<String>,
+    pub alternatives: Vec<String>,
+    pub next_step: String,
 }
 
 /// Result of an action execution, providing feedback to the agent.

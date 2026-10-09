@@ -8,7 +8,72 @@ use crate::simulator::ActionResult;
 use crate::simulator::{Action as SimulatorAction, FeedbackEnvelopeV1};
 use serde_json::Value as JsonValue;
 
+#[cfg(test)]
+thread_local! { static TERMINAL_CHECKPOINT_CUT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+
 impl RuntimeLlmSidecar {
+    #[cfg(test)]
+    pub(in crate::viewer::runtime_live) fn cut_terminal_checkpoint_for_test() {
+        TERMINAL_CHECKPOINT_CUT.with(|cut| cut.set(true));
+    }
+
+    fn checkpoint_terminal_feedbacks_for_recovery(
+        &self,
+        outbox: &[crate::runtime::RuntimeFeedbackOutboxRecordV1],
+    ) -> Result<Vec<FeedbackEnvelopeV1>, String> {
+        self.provider_terminal_states
+            .values()
+            .filter(|terminal| matches!(terminal.status.as_str(), "rejected" | "failed"))
+            .map(|terminal| {
+                // Native outbox truth wins over optional compatibility metadata.
+                if let Some(native) = outbox.iter().find(|record| {
+                    record.agent_subject == terminal.agent_id
+                        && record.agent_session_id == terminal.agent_session_id
+                        && record.agent_turn_id == terminal.agent_turn_id
+                        && record.decision_request_id == terminal.decision_request_id
+                        && record.request_digest == terminal.request_digest
+                        && record.payload["status"] == terminal.status
+                }) {
+                    FeedbackEnvelopeV1::validate_value(&native.payload)
+                        .map_err(|e| e.to_string())?;
+                    if terminal
+                        .feedback
+                        .as_ref()
+                        .is_some_and(|feedback| feedback.feedback_seq != native.feedback_seq)
+                    {
+                        return Err("terminal/native feedback sequence conflict".to_string());
+                    }
+                    return Ok(None);
+                }
+                let feedback = terminal
+                    .feedback
+                    .clone()
+                    .ok_or_else(|| "legacy terminal feedback envelope unavailable".to_string())?;
+                if feedback.agent_subject != terminal.agent_id
+                    || feedback.agent_session_id != terminal.agent_session_id
+                    || feedback.agent_turn_id != terminal.agent_turn_id
+                    || feedback.decision_request_id != terminal.decision_request_id
+                    || feedback.request_digest.as_str() != terminal.request_digest
+                    || feedback.status != terminal.status
+                    || feedback.reject_reason != terminal.reject_reason
+                    || Some(&feedback.feedback_id) != terminal.feedback_id.as_ref()
+                    || feedback.feedback_seq == 0
+                    || feedback.runtime_receipt_id.is_some()
+                    || feedback.candidate_action_id.is_some()
+                    || feedback.provenance != "runtime_authoritative"
+                {
+                    return Err("checkpoint terminal feedback identity invalid".to_string());
+                }
+                FeedbackEnvelopeV1::validate_value(
+                    &serde_json::to_value(&feedback).map_err(|e| e.to_string())?,
+                )
+                .map_err(|e| e.to_string())?;
+                Ok(Some(feedback))
+            })
+            .collect::<Result<Vec<_>, String>>()
+            .map(|values| values.into_iter().flatten().collect())
+    }
+
     pub(in crate::viewer::runtime_live) fn pending_provider_action_for_recovery(
         &self,
     ) -> Option<(u64, String, RuntimeProviderActionContext)> {
@@ -269,7 +334,14 @@ impl RuntimeLlmSidecar {
                     Some(receipt),
                     &mut self.provider_memory_store,
                 )
-                .map_err(|error| format!("provider memory receipt gate rejected intents: {error}"))
+                .map_err(|error| {
+                    format!("provider memory receipt gate rejected intents: {error}")
+                })?;
+            self.provider_memory_store
+                .finalize_corrections(receipt)
+                .map_err(|error| {
+                    format!("provider memory correction receipt gate rejected: {error}")
+                })
         }
         #[cfg(target_arch = "wasm32")]
         {
@@ -365,6 +437,14 @@ impl RuntimeLlmSidecar {
     /// Close a provider response that did not produce a Runtime action (for
     /// example an unmappable or non-retryable candidate).
     pub(in crate::viewer::runtime_live) fn fail_provider_turn(&mut self, agent_id: &str) {
+        if let Some(context) = self.provider_contexts.get(agent_id) {
+            self.provider_memory_store.ignore_corrections_for_decision(
+                agent_id,
+                &context.request_context.decision_request_id,
+                context.request_context.request_digest.as_str(),
+                "provider_turn_failed_without_runtime_effect",
+            );
+        }
         self.clear_provider_stale_replans(agent_id);
         self.provider_held_decisions.remove(agent_id);
         self.release_provider_turn(agent_id);
@@ -497,39 +577,114 @@ impl RuntimeLlmSidecar {
         agent_id: &str,
         status: &str,
         reject_reason: impl Into<String>,
-    ) -> Option<FeedbackEnvelopeV1> {
+    ) -> Result<Option<FeedbackEnvelopeV1>, String> {
         if !matches!(status, "rejected" | "failed") {
-            return None;
+            return Ok(None);
         }
         let context = self.provider_recovery_context(agent_id);
         let reject_reason = reject_reason.into();
-        let feedback = context.as_ref().map(|context| {
-            self.provider_feedback_for_request(
+        let Some(context) = context else {
+            // Successful Wait compensation has already closed its authority
+            // context. The polling adapter can still retain its error result;
+            // release that result without inventing another feedback identity.
+            if self.provider_held_decisions.contains_key(agent_id)
+                && !self.provider_active_turns.contains_key(agent_id)
+                && !self.provider_cognition_leases.contains_key(agent_id)
+                && !self.provider_recovery_pending.contains_key(agent_id)
+                && !self
+                    .provider_continuation_recovery_pending
+                    .contains_key(agent_id)
+                && !self.has_pending_runtime_wake_for_agent(agent_id)
+            {
+                self.release_provider_turn_checked(agent_id)?;
+            }
+            return Ok(None);
+        };
+        let existing = self
+            .provider_terminal_states
+            .get(agent_id)
+            .filter(|terminal| {
+                self.provider_terminal_matches_request(agent_id, &context.request_context)
+                    && terminal.status == status
+                    && terminal.reject_reason.as_deref() == Some(reject_reason.as_str())
+            });
+        let previous_sequences = self.provider_feedback_seq.clone();
+        let previous_session_sequences = self.provider_feedback_seq_by_session.clone();
+        let previous_terminals = self.provider_terminal_states.clone();
+        let feedback = if let Some(terminal) = existing {
+            terminal.feedback.clone().ok_or_else(|| {
+                "terminal feedback envelope unavailable; cannot infer legacy sequence".to_string()
+            })?
+        } else {
+            let feedback = self.stage_provider_feedback_for_request(
                 &context.request_context,
                 None,
                 status,
                 None,
                 None,
                 Some(reject_reason.clone()),
-            )
-        });
-        if let Some(context) = context.as_ref() {
-            self.record_provider_terminal_state(
-                agent_id,
-                context,
-                status,
-                Some(reject_reason.clone()),
-                feedback
-                    .as_ref()
-                    .map(|feedback| feedback.feedback_id.clone()),
             );
+            self.provider_terminal_states.insert(
+                agent_id.to_string(),
+                lineage_persistence::ProviderTerminalState {
+                    agent_id: agent_id.to_string(),
+                    agent_session_id: context.request_context.agent_session_id.clone(),
+                    agent_turn_id: context.request_context.agent_turn_id.clone(),
+                    decision_request_id: context.request_context.decision_request_id.clone(),
+                    request_digest: context.request_context.request_digest.to_string(),
+                    status: status.to_string(),
+                    reject_reason: Some(reject_reason.clone()),
+                    feedback_id: Some(feedback.feedback_id.clone()),
+                    feedback: Some(feedback.clone()),
+                },
+            );
+            feedback
+        };
+        // Sequence, full envelope and exact terminal identity are one checkpoint.
+        // A failed write cannot leave a consumed sequence or release the actor.
+        // Exact retries also write strictly; an in-memory marker is not durability.
+        if let Err(error) = self.persist_provider_lineage() {
+            self.provider_feedback_seq = previous_sequences;
+            self.provider_feedback_seq_by_session = previous_session_sequences;
+            self.provider_terminal_states = previous_terminals;
+            return Err(error);
+        }
+        #[cfg(test)]
+        if TERMINAL_CHECKPOINT_CUT.with(|cut| cut.replace(false)) {
+            return Err("test crash cut after strict terminal checkpoint".to_string());
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(runner) = self
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+        {
+            runner
+                .consume_runtime_feedback_with_lineage(
+                    agent_id,
+                    feedback.clone(),
+                    None,
+                    &mut self.provider_memory_store,
+                )
+                .map_err(|error| format!("provider terminal feedback gate rejected: {error}"))?;
+        }
+        {
+            if reject_reason != "stale_base" {
+                // Finalize only corrections bound to this exact request before
+                // the terminal marker is persisted or its identity is released.
+                self.provider_memory_store.ignore_corrections_for_decision(
+                    agent_id,
+                    &context.request_context.decision_request_id,
+                    context.request_context.request_digest.as_str(),
+                    "provider_turn_failed_without_runtime_effect",
+                );
+            }
         }
         if reject_reason != "stale_base" {
             self.clear_provider_stale_replans(agent_id);
         }
-        self.provider_held_decisions.remove(agent_id);
-        self.release_provider_turn(agent_id);
-        feedback
+        self.release_provider_turn_checked(agent_id)?;
+        Ok(Some(feedback))
     }
 
     /// Build a stable terminal feedback envelope without releasing the
@@ -592,6 +747,36 @@ impl RuntimeLlmSidecar {
         feedback_id: Option<String>,
         reject_reason: Option<String>,
     ) -> FeedbackEnvelopeV1 {
+        let feedback = self.stage_provider_feedback_for_request(
+            request,
+            candidate_action_id,
+            status,
+            runtime_receipt_id,
+            feedback_id,
+            reject_reason,
+        );
+        if matches!(status, "committed" | "rejected" | "failed") {
+            self.record_provider_terminal_state_for_request(
+                request.agent_subject.as_str(),
+                request,
+                status,
+                feedback.reject_reason.clone(),
+                Some(feedback.feedback_id.clone()),
+            );
+        }
+        self.persist_provider_lineage_best_effort();
+        feedback
+    }
+
+    fn stage_provider_feedback_for_request(
+        &mut self,
+        request: &crate::simulator::ContinuousAgentRequestContextV1,
+        candidate_action_id: Option<u64>,
+        status: &str,
+        runtime_receipt_id: Option<String>,
+        feedback_id: Option<String>,
+        reject_reason: Option<String>,
+    ) -> FeedbackEnvelopeV1 {
         let session_key = lineage::provider_feedback_session_key(
             request.agent_subject.as_str(),
             request.agent_session_id.as_str(),
@@ -616,7 +801,7 @@ impl RuntimeLlmSidecar {
                 request.agent_subject, request.agent_session_id, sequence
             )
         });
-        let feedback = FeedbackEnvelopeV1 {
+        FeedbackEnvelopeV1 {
             feedback_id,
             feedback_seq: sequence,
             agent_subject: request.agent_subject.clone(),
@@ -629,18 +814,7 @@ impl RuntimeLlmSidecar {
             request_digest: request.request_digest.clone(),
             reject_reason,
             provenance: "runtime_authoritative".to_string(),
-        };
-        if matches!(status, "committed" | "rejected" | "failed") {
-            self.record_provider_terminal_state_for_request(
-                request.agent_subject.as_str(),
-                request,
-                status,
-                feedback.reject_reason.clone(),
-                Some(feedback.feedback_id.clone()),
-            );
         }
-        self.persist_provider_lineage_best_effort();
-        feedback
     }
 
     /// Deliver the Runtime-committed feedback through the same provider
@@ -839,5 +1013,71 @@ impl RuntimeLlmSidecar {
             RuntimeWorldEventBody::Domain(RuntimeDomainEvent::ActionRejected { .. })
         );
         self.notify_action_result(*action_id, mapped_event, rejected);
+    }
+}
+
+impl crate::viewer::runtime_live::ViewerRuntimeLiveServer {
+    pub(in crate::viewer::runtime_live) fn recover_checkpoint_terminal_feedback(
+        &mut self,
+    ) -> Result<(), String> {
+        let native_outbox = self
+            .world
+            .runtime_feedback_outbox()
+            .map_err(|e| format!("{e:?}"))?;
+        let feedbacks = self
+            .llm_sidecar
+            .checkpoint_terminal_feedbacks_for_recovery(&native_outbox)?;
+        let economy = self
+            .world
+            .cognition_economy()
+            .map_err(|e| format!("{e:?}"))?;
+        for feedback in feedbacks {
+            let known = self
+                .world
+                .runtime_feedback_outbox()
+                .map_err(|e| format!("{e:?}"))?
+                .iter()
+                .any(|record| {
+                    record.agent_subject == feedback.agent_subject
+                        && record.agent_session_id == feedback.agent_session_id
+                        && record.agent_turn_id == feedback.agent_turn_id
+                        && record.decision_request_id == feedback.decision_request_id
+                        && record.request_digest == feedback.request_digest.as_str()
+                        && record.payload["status"] == feedback.status
+                        && record.payload["reject_reason"]
+                            == serde_json::to_value(&feedback.reject_reason).unwrap()
+                });
+            let admitted = economy.leases.values().any(|lease| {
+                lease.agent_id == feedback.agent_subject
+                    && lease.agent_session_id == feedback.agent_session_id
+                    && lease.agent_turn_id == feedback.agent_turn_id
+                    && lease.decision_request_id == feedback.decision_request_id
+                    && lease.request_digest == feedback.request_digest.as_str()
+            });
+            if !known && !admitted {
+                return Err("terminal feedback lacks exact Runtime admission authority".to_string());
+            }
+            let mut transaction = self.world.clone();
+            let record = transaction
+                .allocate_runtime_feedback(crate::runtime::RuntimeFeedbackRequestV1 {
+                    feedback_id: None,
+                    agent_subject: feedback.agent_subject,
+                    agent_session_id: feedback.agent_session_id,
+                    agent_turn_id: feedback.agent_turn_id,
+                    decision_request_id: feedback.decision_request_id,
+                    candidate_action_id: None,
+                    runtime_receipt_id: None,
+                    status: feedback.status,
+                    request_digest: feedback.request_digest.to_string(),
+                    reject_reason: feedback.reject_reason,
+                })
+                .map_err(|e| format!("terminal feedback recovery allocation rejected: {e:?}"))?;
+            if record.feedback_seq != feedback.feedback_seq {
+                return Err("terminal feedback recovery sequence mismatch".to_string());
+            }
+            self.world = transaction;
+        }
+        self.drain_provider_feedback_outbox();
+        Ok(())
     }
 }

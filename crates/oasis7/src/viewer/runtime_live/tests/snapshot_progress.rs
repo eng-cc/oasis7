@@ -1,5 +1,44 @@
 use super::snapshot_provider_probe::spawn_runtime_provider_probe_server;
 use super::*;
+
+#[test]
+fn accepted_intent_identity_requires_current_canonical_runtime_projection() {
+    let from_runtime = super::super::player_agency_projection::canonical_accepted_runtime_intent_id(
+        "accepted",
+        Some("runtime_projection"),
+        Some("current"),
+        Some("intent:agent-0:7"),
+    );
+    assert_eq!(from_runtime.as_deref(), Some("intent:agent-0:7"));
+    assert_eq!(
+        super::super::player_agency_projection::canonical_accepted_runtime_intent_id(
+            "accepted",
+            Some("prompt_control_compatibility"),
+            Some("current"),
+            Some("move_agent"),
+        ),
+        None,
+        "action labels from legacy feedback are not accepted AgentIntent IDs"
+    );
+    assert_eq!(
+        super::super::player_agency_projection::canonical_accepted_runtime_intent_id(
+            "accepted",
+            Some("runtime_projection"),
+            Some("stale"),
+            Some("intent:agent-0:7"),
+        ),
+        None
+    );
+    assert_eq!(
+        super::super::player_agency_projection::canonical_accepted_runtime_intent_id(
+            "proposed",
+            Some("runtime_projection"),
+            Some("current"),
+            Some("intent:agent-0:7"),
+        ),
+        None
+    );
+}
 use std::thread;
 use std::time::Duration;
 
@@ -401,7 +440,7 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
         to: crate::geometry::GeoPos::new(250, 0, 0),
     };
     let causality =
-        super::super::gameplay_snapshot::player_gameplay_causality_from_runtime_events(&[
+        super::super::player_agency_projection::player_gameplay_causality_from_runtime_events(&[
             crate::runtime::WorldEvent {
                 id: 1,
                 time: 1,
@@ -479,7 +518,7 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
             .as_deref()
             .is_some_and(|detail| detail.contains("reroute to safer waypoint"))
     );
-    assert_eq!(gameplay.accepted_intent_id.as_deref(), Some("move_agent"));
+    assert_eq!(gameplay.accepted_intent_id, None);
     assert_eq!(
         gameplay.status_reason.as_deref(),
         gameplay.causality_detail.as_deref()
@@ -534,10 +573,7 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
         .player_gameplay
         .as_ref()
         .expect("player gameplay snapshot");
-    assert_eq!(
-        gameplay.accepted_intent_id.as_deref(),
-        Some("gameplay_action:build_factory_smelter_mk1")
-    );
+    assert_eq!(gameplay.accepted_intent_id.as_deref(), None);
     assert_eq!(
         gameplay.intent_summary.as_deref(),
         Some("queue gameplay action build_factory_smelter_mk1 for agent-0")
