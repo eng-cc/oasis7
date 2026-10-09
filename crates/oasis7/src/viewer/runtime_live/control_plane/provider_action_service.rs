@@ -20,7 +20,20 @@ impl ViewerRuntimeLiveServer {
     }
     #[cfg(any(test, feature = "test_tier_required"))]
     pub fn test_canonical_provider_summary(&self) -> serde_json::Value {
-        self.llm_sidecar.service_test_summary()
+        let mut summary = self.llm_sidecar.service_test_summary();
+        summary["hosted_service_inflight"] = self
+            .llm_sidecar
+            .hosted_service_inflight
+            .as_ref()
+            .map(|token| {
+                serde_json::json!({
+                    "generation": token.generation,
+                    "phase_digest": token.phase_digest,
+                })
+            })
+            .unwrap_or(serde_json::Value::Null);
+        summary["agent_service_pump_error"] = serde_json::json!(self.agent_service_pump_error);
+        summary
     }
     #[cfg(any(test, feature = "test_tier_required"))]
     pub fn test_prepare_canonical_provider_response(

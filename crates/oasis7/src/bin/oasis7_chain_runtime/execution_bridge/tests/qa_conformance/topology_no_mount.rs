@@ -21,9 +21,9 @@ fn copy_tree(source: &Path, target: &Path) {
 fn no_mount_prepare_service() {
     let destination = std::path::PathBuf::from(std::env::var("PRE2_SERVER_ROOT").unwrap());
     assert!(!destination.join("world").exists(), "fresh volume required");
-    let fixture = Fixture::with_options(true, true);
+    let mut fixture = Fixture::with_options(true, true);
+    fixture.preserve_root = true;
     fixture.finish_http_workers().unwrap();
-    copy_tree(&fixture.root, &destination);
     let node = fixture.node.lock().unwrap().snapshot();
     let topology = serde_json::json!({"node_id":node.node_id,"world_id":node.world_id,
         "role":format!("{:?}",node.role),"running":node.running,
@@ -31,6 +31,20 @@ fn no_mount_prepare_service() {
     let public_config = serde_json::json!({"service_public_key":fixture.client.config().trusted_service_public_key,
         "world":fixture.client.config().expected_world,"topology_scope":"real NodeRuntime execution fixture; consensus membership not evaluated",
         "node_snapshot":topology,"genesis":"fixture-genesis-v1"});
+    let source_root = fixture.root.clone();
+    // Process ownership is not durable world data. Stop the actual Node and
+    // release its guard before copying, so no live PID lock crosses namespaces.
+    drop(fixture);
+    assert!(
+        !source_root.join("world.lock").exists(),
+        "original writer guard must release before copying"
+    );
+    copy_tree(&source_root, &destination);
+    assert!(
+        !destination.join("world.lock").exists(),
+        "prepared service cannot inherit process ownership"
+    );
+    fs::remove_dir_all(&source_root).unwrap();
     fs::write(
         destination.join("app-public-config.json"),
         serde_json::to_vec(&public_config).unwrap(),

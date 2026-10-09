@@ -96,7 +96,8 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
         .unwrap();
     let ordered = session.snapshot_ordered(Duration::from_secs(3), true);
     let eligibility = shared.lock().unwrap().test_agent_service_pump_status();
-    let deadline = Instant::now() + Duration::from_secs(12);
+    let readout_started = Instant::now();
+    let deadline = readout_started + Duration::from_secs(12);
     let mut summary = serde_json::Value::Null;
     let mut completed = false;
     let readout_stop = Arc::new(AtomicBool::new(false));
@@ -110,7 +111,11 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
             // once after each socket timeout. No provider or factory is called.
             let actual = {
                 let guard = readout_server.lock().unwrap();
-                guard.test_canonical_provider_summary()
+                {
+                    let mut actual = guard.test_canonical_provider_summary();
+                    actual["pump_status"] = guard.test_agent_service_pump_status();
+                    actual
+                }
             };
             let captured_at = Instant::now();
             if captured_at < deadline && !stop.load(Ordering::SeqCst) {
@@ -120,6 +125,8 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
         }
         finished_tx.send(()).unwrap();
     });
+    let mut phase_transitions = Vec::new();
+    let mut last_phase_state = serde_json::Value::Null;
     let mut sample_count = 0;
     let mut snapshot_frames = 0;
     let mut next_snapshot = Instant::now();
@@ -160,6 +167,24 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
                 continue;
             }
             sample_count += 1;
+            let phase_state = serde_json::json!({
+                "phase": actual["hosted_service_phase"],
+                "inflight": actual["hosted_service_inflight"],
+                "pump_status": actual["pump_status"],
+                "pump_error": actual["agent_service_pump_error"],
+                "pending_intent_count": actual["pending_intent_count"],
+                "terminal_states": actual["terminal_states"],
+            });
+            if phase_state != last_phase_state {
+                // Capture times are measured before the unchanged acceptance deadline.
+                // Never use a later cleanup transition as a successful readout.
+                phase_transitions.push(serde_json::json!({
+                    "captured_elapsed_ms": captured_at.duration_since(readout_started).as_millis(),
+                    "received_elapsed_ms": Instant::now().duration_since(readout_started).as_millis(),
+                    "state": phase_state,
+                }));
+                last_phase_state = phase_state;
+            }
             summary = actual;
             if let Ok(bytes) = fs::read(root.join("hosted-resumed-model.json")) {
                 let resumed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -182,7 +207,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
         root.join("wait-capture-live-readout.json"),
         serde_json::to_vec(
             &serde_json::json!({"sample_count":sample_count,"snapshot_frames":snapshot_frames,
-            "completed_before_deadline":completed,"last_summary":summary}),
+            "completed_before_deadline":completed,"phase_transitions":phase_transitions,"last_summary":summary}),
         )
         .unwrap(),
     )

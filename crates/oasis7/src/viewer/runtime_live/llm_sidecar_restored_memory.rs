@@ -74,10 +74,36 @@ impl RuntimeLlmSidecar {
             return Ok(());
         };
         let validation = (|| {
-            if serde_json::to_value(restored).map_err(|error| error.to_string())?
-                != serde_json::to_value(pending).map_err(|error| error.to_string())?
+            // The restored Cognition/captured-memory authority is immutable.
+            // ACK consumption and its delivery progress are later transitions,
+            // not part of the original model request snapshot.
+            let mut original = restored.clone();
+            let mut current = pending.clone();
+            let original_ack = original.feedback_ack.take();
+            let current_ack = current.feedback_ack.take();
+            if serde_json::to_value(&original).map_err(|error| error.to_string())?
+                != serde_json::to_value(&current).map_err(|error| error.to_string())?
             {
                 return Err("restored original memory checkpoint changed; fenced".into());
+            }
+            match (original_ack, current_ack) {
+                (Some(mut original), Some(mut current)) => {
+                    // These flags never authenticate delivery or network effects.
+                    // All signed bytes, raw feedback, receipt and correlation stay exact.
+                    original.delivered = false;
+                    original.issued = false;
+                    current.delivered = false;
+                    current.issued = false;
+                    if serde_json::to_value(original).map_err(|error| error.to_string())?
+                        != serde_json::to_value(current).map_err(|error| error.to_string())?
+                    {
+                        return Err("restored original ACK checkpoint changed; fenced".into());
+                    }
+                    self.validate_pending_feedback_consumption(pending)?;
+                }
+                (None, Some(_)) => self.validate_pending_feedback_consumption(pending)?,
+                (Some(_), None) => return Err("restored ACK consumption removed; fenced".into()),
+                (None, None) => {}
             }
             validate_original_memory_checkpoint(world, pending)
         })();

@@ -134,7 +134,13 @@ impl ViewerRuntimeLiveServer {
                             in_flight = false;
                             match server.apply_agent_service_io(result) {
                                 Ok(value) => { server.observe_agent_pump_progress(&value); progress = Some(value); }
-                                Err(_) => server.record_agent_pump_error("Agent service result could not be applied; original work remains pending"),
+                                Err(_error) => {
+                                    #[cfg(any(test, feature = "test_tier_required"))]
+                                    if std::env::var("PRE2_RESUME_REJECTION_RECOVERY_TRACE").as_deref() == Ok("1") {
+                                        eprintln!("pre2_private_recovery_apply_error={_error}");
+                                    }
+                                    server.record_agent_pump_error("Agent service result could not be applied; original work remains pending");
+                                },
                             }
                         }
                         Err(mpsc::TryRecvError::Disconnected) => {
