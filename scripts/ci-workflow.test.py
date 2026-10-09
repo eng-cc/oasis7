@@ -44,6 +44,32 @@ def validate_candidate_graph(workflow, config):
 
 
 class Workflow(unittest.TestCase):
+    def test_manual_candidate_full_is_read_only_and_not_scheduled(self):
+        candidate = JOBS['candidate-full-regression']
+        self.assertIn("if: github.ref != 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'", candidate)
+        self.assertIn('cache-mode: read', candidate)
+        self.assertNotIn('cache-mode: write', candidate)
+        self.assertNotIn('trusted cache sentinel', candidate)
+        self.assertNotIn('actions/cache/save@', candidate)
+        self.assertIn('save-if: false', candidate)
+        self.assertIn('actions/cache/restore@', candidate)
+        self.assertIn('git rev-parse --verify', candidate)
+        self.assertIn('GITHUB_SHA', candidate)
+        self.assertIn('GITHUB_STEP_SUMMARY', candidate)
+        self.assertIn('CI_VERBOSE=1 ./scripts/ci-tests.sh full', candidate)
+
+    def test_candidate_full_preserves_full_setup_and_execution(self):
+        # Compare the complete execution body, allowing only identity reporting
+        # and the cache trust boundary to differ from the protected main writer.
+        writer = JOBS['full-regression'].split('    steps:\n', 1)[1]
+        candidate = JOBS['candidate-full-regression'].split('    steps:\n', 1)[1]
+        candidate = re.sub(r'      - name: Record exact candidate identity\n.*?(?=      - name: Resolve)', '', candidate, flags=re.S)
+        writer = re.sub(r'      - name: Prepare trusted cache sentinel\n.*?(?=      - name: Run full)', '', writer, flags=re.S)
+        candidate = candidate.replace('          save-if: false\n', '')
+        candidate = candidate.replace('actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0',
+                                      'actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5')
+        self.assertEqual(candidate.strip(), writer.strip())
+
     def test_pinned_trunk_helper_failure_and_success_paths(self):
         # The protected baseline already executes this suite during migration.
         subprocess.run(['bash',str(ROOT/'scripts/install-ci-trunk.test.sh')],cwd=ROOT,check=True)
@@ -120,7 +146,7 @@ class Workflow(unittest.TestCase):
 
     def test_download_caches_follow_actual_worksets(self):
         node_jobs={name for name,job in JOBS.items() if 'uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' in job}
-        self.assertEqual(node_jobs,{'viewer-js-required','viewer-performance-report','launcher-web','full-regression'})
+        self.assertEqual(node_jobs,{'viewer-js-required','viewer-performance-report','launcher-web','full-regression','candidate-full-regression'})
         for name in node_jobs:
             self.assertIn('cache: npm',JOBS[name])
             self.assertIn('cache-dependency-path: crates/oasis7_viewer/package-lock.json',JOBS[name])
