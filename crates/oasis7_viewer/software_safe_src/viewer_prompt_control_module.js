@@ -198,6 +198,8 @@ export function createViewerPromptControlModule({
   }
 
   function handleAck(ack) {
+    const pending = state.lastPromptFeedback;
+    if (!pending || (ack?.request_id != null && ack.request_id !== pending.requestId) || ack?.agent_id !== pending.agentId) return;
     clearPendingPromptControlAckTimer();
     const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_ack", ack?.agent_id || null);
     const operation = String(ack?.operation || (ack?.preview ? "preview" : "apply"));

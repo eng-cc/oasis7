@@ -17,8 +17,10 @@ mod replay_flow;
 mod replica_maintenance;
 mod util;
 
-#[cfg(feature = "libp2p")]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 mod libp2p_net;
+#[cfg(feature = "libp2p")]
+mod peer_manager_policy;
 
 pub mod distributed_net {
     pub use super::network::*;
@@ -106,13 +108,13 @@ pub use replica_maintenance::{
     run_replica_maintenance_poll,
 };
 
-#[cfg(feature = "libp2p")]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 pub use libp2p_net::error_mapping::{
     Libp2pAvailabilityClass, classify_world_error_availability, world_error_is_missing_handler,
     world_error_is_publish_failure, world_error_is_retryable_connection_gap,
 };
 
-#[cfg(feature = "libp2p")]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 pub use libp2p_net::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pNetwork, Libp2pNetworkConfig,
     Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot, LiveAutoNatStatus,
@@ -125,3 +127,6 @@ pub use libp2p_net::{
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(feature = "libp2p", target_arch = "wasm32"))]
+pub use peer_manager_policy::PeerManagerPolicy;

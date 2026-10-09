@@ -229,6 +229,8 @@ fn parse_options_accepts_overrides() {
             "dist",
             "--chain-status-bind",
             "127.0.0.1:6331",
+            "--chain-execution-world-dir",
+            "output/trusted-chain-execution",
             "--chain-link-policy",
             "shadow",
             "--chain-node-id",
@@ -297,6 +299,10 @@ fn parse_options_accepts_overrides() {
     assert_eq!(options.viewer_static_dir, "dist");
     assert!(options.auto_play);
     assert_eq!(options.chain_status_bind, "127.0.0.1:6331");
+    assert_eq!(
+        options.chain_execution_world_dir,
+        Some(std::path::PathBuf::from("output/trusted-chain-execution"))
+    );
     assert_eq!(options.chain_link_policy, "shadow");
     assert_eq!(options.chain_node_id, "chain-a");
     assert_eq!(options.chain_network_tier_manifest, "");

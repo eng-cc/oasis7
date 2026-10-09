@@ -160,7 +160,7 @@ describe("WorldFeedSurface", () => {
     try {
       vi.resetModules();
       const core = await import("./legacy_core.js");
-      core.initializeSoftwareSafeCore();
+      await core.initializeSoftwareSafeCore();
       render(() => <WorldFeedSurface core={core} locale={() => "en"} tr={tr} />);
       expect(sockets).toHaveLength(1);
       expect(screen.queryByRole("button", { name: /locate module/i })).not.toBeInTheDocument();

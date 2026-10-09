@@ -117,10 +117,10 @@ resolve_changed_paths_from_git() {
     return 0
   fi
 
-  while IFS= read -r path; do
+  while IFS= read -r -d '' path; do
     [[ -n "$path" ]] || continue
     changed_paths+=("$path")
-  done < <(git diff --name-only "$diff_base" "$head_ref")
+  done < <(git diff --name-only -z "$diff_base" "$head_ref" --)
 }
 
 classify_changed_path() {
@@ -220,11 +220,13 @@ elif [[ "${#changed_paths[@]}" -eq 0 ]]; then
   resolve_changed_paths_from_git
 fi
 
-if [[ "$run_all" -eq 0 ]]; then
-  for path in "${changed_paths[@]-}"; do
-    classify_changed_path "$path"
-  done
-fi
+for path in "${changed_paths[@]-}"; do
+    if [[ "$path" =~ [[:cntrl:]] ]]; then
+      printf 'error: changed path contains control characters\n' >&2
+      exit 1
+    fi
+    if [[ "$run_all" -eq 0 ]]; then classify_changed_path "$path"; fi
+done
 
 scope="skip"
 selected_module_sets=""

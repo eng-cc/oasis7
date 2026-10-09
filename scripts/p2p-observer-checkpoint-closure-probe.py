@@ -275,27 +275,23 @@ def package_file(package_dir: Path, name: str, label: str) -> Path:
 
 
 def validate_ops_tools_archive(archive_path: Path, destination: Path) -> None:
-    with tarfile.open(archive_path, "r:gz") as archive:
-        members = archive.getmembers()
-        for member in members:
-            target = (destination / member.name).resolve()
-            try:
-                target.relative_to(destination.resolve())
-            except ValueError:
-                die(f"ops-tools archive member escapes extraction root: {member.name}")
-            if not (member.isdir() or member.isreg()):
-                die(f"ops-tools archive contains non-regular member: {member.name}")
-        for member in members:
-            target = destination / member.name
-            if member.isdir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            source = archive.extractfile(member)
-            if source is None:
-                die(f"ops-tools archive member cannot be read: {member.name}")
-            with source, target.open("xb") as output:
-                shutil.copyfileobj(source, output)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("safe_git_archive", Path(__file__).resolve().with_name("safe_git_archive.py"))
+    helper = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = helper
+    spec.loader.exec_module(helper)
+    try:
+        helper.extract_archive(archive_path, destination)
+    except (ValueError, OSError, tarfile.TarError) as error:
+        die("ops-tools archive rejected: " + str(error))
+    try:
+        _verify_ops_tools_tree(destination)
+    except BaseException:
+        shutil.rmtree(destination, ignore_errors=True)
+        raise
+
+
+def _verify_ops_tools_tree(destination: Path) -> None:
     manifest = destination / "oasis7-linux-x64-ops-tools/.oasis7-ops-tools-manifest.json"
     sums = destination / "oasis7-linux-x64-ops-tools/SHA256SUMS"
     if not manifest.is_file() or not sums.is_file():

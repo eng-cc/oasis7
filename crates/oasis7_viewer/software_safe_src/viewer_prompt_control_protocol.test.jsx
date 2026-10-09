@@ -1,3 +1,4 @@
+async function installSession(state, auth) { return (await import("./viewer_auth_session_module.js")).installSession(state, auth); }
 import { waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTaskGame076ScenarioSnapshot } from "./gameplay_attraction_scenario.js";
@@ -13,6 +14,7 @@ function createTestCrypto() {
   const privateBytes = new Uint8Array(32).fill(7);
   const publicBytes = new Uint8Array(32).fill(9);
   return {
+    getRandomValues(bytes) { return bytes.fill(42); },
     subtle: {
       async generateKey() {
         return { privateKey: { kind: "test-private" }, publicKey: { kind: "test-public" } };
@@ -27,6 +29,7 @@ function createTestCrypto() {
         if (format === "raw") return publicBytes.buffer.slice(0);
         throw new Error(`unsupported test key export: ${format}`);
       },
+      async verify() { return true; },
       async importKey() {
         return { kind: "test-imported" };
       },
@@ -85,25 +88,26 @@ function sampleSnapshot(overrides = {}) {
     model: {
       ...base.model,
       agent_player_bindings: { "agent-0": "local-test-player-bound" },
-      agent_player_public_key_bindings: { "agent-0": "abcdef0123456789abcdef0123456789" },
+      agent_player_public_key_bindings: { "agent-0": "abcdef0123456789abcdef0123456789".repeat(2) },
       ...(overrides.model || {}),
     },
     player_gameplay: { ...base.player_gameplay, ...(overrides.player_gameplay || {}) },
   };
 }
 
-function bindLocalTestAgent(core, agentId = "agent-0") {
+async function bindLocalTestAgent(core, agentId = "agent-0") {
   core.state.auth = {
     ...core.state.auth,
     available: true,
     playerId: "local-test-player-bound",
-    publicKey: "abcdef0123456789abcdef0123456789",
-    privateKey: "private-key-must-stay-hidden",
+    publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
+    privateKey: "07".repeat(32),
     source: "local_test_api_ephemeral",
     registrationStatus: "registered",
     runtimeStatus: "registered",
     boundAgentId: agentId,
   };
+  await installSession(core.state, core.state.auth);
 }
 
 async function setupConnectedSemanticCore({
@@ -123,12 +127,12 @@ async function setupConnectedSemanticCore({
   document.body.innerHTML = "";
   const { sockets, sentMessages } = installMockWebSocket();
   const core = await import("./legacy_core.js");
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
+  await bindLocalTestAgent(core, agentId);
   sockets[0].open();
   sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
   core.injectSnapshot(snapshot);
   core.applySelection({ kind: "agent", id: agentId });
-  bindLocalTestAgent(core, agentId);
   activeCleanup = () => {
     for (const socket of sockets) {
       if (socket.readyState !== socket.CLOSED) socket.close();
@@ -153,6 +157,29 @@ afterEach(() => {
 });
 
 describe("viewer prompt control protocol", () => {
+  it("ignores unrelated control, prompt and chat acknowledgements before feedback effects", async () => {
+    const { core, sockets } = await setupConnectedSemanticCore();
+    core.state.lastControlFeedback = { requestId: "wanted", stage: "sent" };
+    sockets[0].receive({ type: "control_completion_ack", ack: { request_id: "other", status: "advanced" } });
+    expect(core.state.lastControlFeedback.stage).toBe("sent");
+    core.state.lastPromptFeedback = { requestId: "wanted", agentId: "agent-0", stage: "sent" };
+    sockets[0].receive({ type: "prompt_control_ack", ack: { request_id: "other", agent_id: "agent-0", status: "applied" } });
+    expect(core.state.lastPromptFeedback.stage).toBe("sent");
+    core.state.lastChatFeedback = { agentId: "agent-0", stage: "sent" };
+    sockets[0].receive({ type: "agent_chat_ack", ack: { agent_id: "other", accepted_at_tick: 4 } });
+    expect(core.state.lastChatFeedback.stage).toBe("sent");
+  });
+  it.each(["control_completion_ack", "prompt_control_ack"])("rejects conflicting identity in %s before feedback effects", async type => {
+    const { core, sockets } = await setupConnectedSemanticCore();
+    core.state.lastControlFeedback = { requestId: "wanted", stage: "sent" };
+    core.state.lastPromptFeedback = { requestId: "wanted", agentId: "agent-0", stage: "sent" };
+    sockets[0].receive({ type, ack: { request_id: "wanted", agent_id: "agent-0", player_id: "intruder", status: "applied" } });
+    expect(core.state.lastControlFeedback.stage).toBe("sent");
+    expect(core.state.lastPromptFeedback.stage).toBe("sent");
+    expect(core.state.auth.playerId).toBe("local-test-player-bound");
+    expect(core.state.connectionStatus).toBe("error");
+  });
+
   it("projects a stale chat authority refusal and clears it after binding recovery", async () => {
     const { core, sockets } = await setupConnectedSemanticCore();
     core.state.auth.releaseToken = "release-token-must-survive";
@@ -188,9 +215,9 @@ describe("viewer prompt control protocol", () => {
     sockets[0].receive({
       type: "authoritative_recovery_ack",
       ack: {
-        status: "session_registered",
+        status: "catch_up_ready",
         player_id: "local-test-player-bound",
-        session_pubkey: "abcdef0123456789abcdef0123456789",
+        session_pubkey: "abcdef0123456789abcdef0123456789".repeat(2),
         agent_id: "agent-0",
         session_epoch: 13,
         binding_epoch: 10,
@@ -248,7 +275,7 @@ describe("viewer prompt control protocol", () => {
       ...core.state.auth,
       available: true,
       playerId: "local-test-player-bound",
-      publicKey: "abcdef0123456789abcdef0123456789",
+      publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
       privateKey: "07".repeat(32),
       source: "local_test_api_ephemeral",
       registrationStatus: "issued",
@@ -258,6 +285,7 @@ describe("viewer prompt control protocol", () => {
       boundAgentId: "agent-0",
       syncInFlight: false,
     };
+    await installSession(core.state, core.state.auth);
     const registerPromise = core.registerPlayerSessionForTest("agent-0");
     await waitFor(() => {
       expect(sentMessages).toEqual(expect.arrayContaining([
@@ -275,7 +303,7 @@ describe("viewer prompt control protocol", () => {
       ack: {
         status: "session_registered",
         player_id: "local-test-player-bound",
-        session_pubkey: "abcdef0123456789abcdef0123456789",
+        session_pubkey: "abcdef0123456789abcdef0123456789".repeat(2),
         agent_id: "agent-0",
         session_epoch: 12,
         binding_epoch: 9,
@@ -317,7 +345,7 @@ describe("viewer prompt control protocol", () => {
       ...core.state.auth,
       available: true,
       playerId: "local-test-player-bound",
-      publicKey: "abcdef0123456789abcdef0123456789",
+      publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
       privateKey: "07".repeat(32),
       registrationGrant: "grant-before-metadata",
       registrationStatus: "issued",
@@ -328,6 +356,7 @@ describe("viewer prompt control protocol", () => {
       syncInFlight: false,
     };
 
+    await installSession(core.state, core.state.auth);
     const registerPromise = core.registerPlayerSessionForTest("agent-0");
     await waitFor(() => {
       expect(sentMessages).toEqual(expect.arrayContaining([
@@ -356,7 +385,7 @@ describe("viewer prompt control protocol", () => {
         agent_id: null,
       },
     });
-    expect(core.state.auth.registrationGrant).toBe("grant-before-metadata");
+    expect(core.state.auth.registrationGrant).toBeUndefined();
     expect(core.state.auth.registrationStatus).toBe("registering");
     expect(core.state.auth.runtimeStatus).toBe("registering");
     expect(core.state.auth.sessionEpoch).toBeNull();
@@ -364,20 +393,20 @@ describe("viewer prompt control protocol", () => {
     sockets[0].receive({
       type: "authoritative_recovery_ack",
       ack: {
-        status: "catch_up_ready",
+        status: "session_registered",
         player_id: "local-test-player-bound",
-        session_pubkey: "abcdef0123456789abcdef0123456789",
+        session_pubkey: "abcdef0123456789abcdef0123456789".repeat(2),
         session_epoch: 1,
         binding_epoch: null,
         agent_id: "agent-0",
       },
     });
     await expect(registerPromise).resolves.toEqual(expect.objectContaining({
-      status: "catch_up_ready",
+      status: "session_registered",
       player_id: "local-test-player-bound",
       session_epoch: 1,
     }));
-    expect(core.state.auth.registrationGrant).toBeNull();
+    expect(core.state.auth.registrationGrant).toBeUndefined();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("waits for the authoritative snapshot after an enhanced applied receipt", async () => {
@@ -399,7 +428,7 @@ describe("viewer prompt control protocol", () => {
       ...core.state.auth,
       available: true,
       playerId: "local-test-player-bound",
-      publicKey: "abcdef0123456789abcdef0123456789",
+      publicKey: "abcdef0123456789abcdef0123456789".repeat(2),
       privateKey: "07".repeat(32),
       source: "local_test_api_ephemeral",
       registrationStatus: "registered",
@@ -410,6 +439,7 @@ describe("viewer prompt control protocol", () => {
       boundAgentId: "agent-0",
       syncInFlight: false,
     };
+    await installSession(core.state, core.state.auth);
     expect(core.sendPromptControl("apply", { agentId: "agent-0", systemPrompt: "authoritative prompt" }))
       .toEqual(expect.objectContaining({ ok: true }));
     await waitFor(() => {

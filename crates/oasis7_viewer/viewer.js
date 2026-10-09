@@ -1089,8 +1089,166 @@ function Portal(props) {
 	return marker;
 }
 //#endregion
+//#region node_modules/solid-js/store/dist/store.js
+var $RAW = Symbol("store-raw");
+var $NODE = Symbol("store-node");
+var $HAS = Symbol("store-has");
+var $SELF = Symbol("store-self");
+function isWrappable(obj) {
+	let proto;
+	return obj != null && typeof obj === "object" && (obj[$PROXY] || !(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype || Array.isArray(obj));
+}
+function unwrap(item, set = /* @__PURE__ */ new Set()) {
+	let result, unwrapped, v, prop;
+	if (result = item != null && item[$RAW]) return result;
+	if (!isWrappable(item) || set.has(item)) return item;
+	if (Array.isArray(item)) {
+		if (Object.isFrozen(item)) item = item.slice(0);
+		else set.add(item);
+		for (let i = 0, l = item.length; i < l; i++) {
+			v = item[i];
+			if ((unwrapped = unwrap(v, set)) !== v) item[i] = unwrapped;
+		}
+	} else {
+		if (Object.isFrozen(item)) item = Object.assign({}, item);
+		else set.add(item);
+		const keys = Object.keys(item), desc = Object.getOwnPropertyDescriptors(item);
+		for (let i = 0, l = keys.length; i < l; i++) {
+			prop = keys[i];
+			if (desc[prop].get) continue;
+			v = item[prop];
+			if ((unwrapped = unwrap(v, set)) !== v) item[prop] = unwrapped;
+		}
+	}
+	return item;
+}
+function getNodes(target, symbol) {
+	let nodes = target[symbol];
+	if (!nodes) Object.defineProperty(target, symbol, { value: nodes = Object.create(null) });
+	return nodes;
+}
+function getNode(nodes, property, value) {
+	if (nodes[property]) return nodes[property];
+	const [s, set] = createSignal(value, {
+		equals: false,
+		internal: true
+	});
+	s.$ = set;
+	return nodes[property] = s;
+}
+function trackSelf(target) {
+	getListener() && getNode(getNodes(target, $NODE), $SELF)();
+}
+function ownKeys(target) {
+	trackSelf(target);
+	return Reflect.ownKeys(target);
+}
+function setProperty(state, property, value, deleting = false) {
+	if (property === "__proto__") return;
+	if (!deleting && state[property] === value) return;
+	const prev = state[property], len = state.length;
+	if (value === void 0) {
+		delete state[property];
+		if (state[$HAS] && state[$HAS][property] && prev !== void 0) state[$HAS][property].$();
+	} else {
+		state[property] = value;
+		if (state[$HAS] && state[$HAS][property] && prev === void 0) state[$HAS][property].$();
+	}
+	let nodes = getNodes(state, $NODE), node;
+	if (node = getNode(nodes, property, prev)) node.$(() => value);
+	if (Array.isArray(state) && state.length !== len) {
+		for (let i = state.length; i < len; i++) (node = nodes[i]) && node.$();
+		(node = getNode(nodes, "length", len)) && node.$(state.length);
+	}
+	(node = nodes[$SELF]) && node.$();
+}
+function proxyDescriptor(target, property) {
+	const desc = Reflect.getOwnPropertyDescriptor(target, property);
+	if (!desc || desc.get || desc.set || !desc.configurable || property === $PROXY || property === $NODE) return desc;
+	delete desc.value;
+	delete desc.writable;
+	desc.get = () => target[$PROXY][property];
+	desc.set = (v) => target[$PROXY][property] = v;
+	return desc;
+}
+var proxyTraps = {
+	get(target, property, receiver) {
+		if (property === $RAW) return target;
+		if (property === $PROXY) return receiver;
+		if (property === $TRACK) {
+			trackSelf(target);
+			return receiver;
+		}
+		const nodes = getNodes(target, $NODE);
+		const tracked = nodes[property];
+		let value = tracked ? tracked() : target[property];
+		if (property === $NODE || property === $HAS || property === "__proto__") return value;
+		if (!tracked) {
+			const desc = Object.getOwnPropertyDescriptor(target, property);
+			const isFunction = typeof value === "function";
+			if (getListener() && (!isFunction || Object.prototype.hasOwnProperty.call(target, property)) && !(desc && desc.get)) value = getNode(nodes, property, value)();
+			else if (value != null && isFunction && value === Array.prototype[property]) return (...args) => batch(() => Array.prototype[property].apply(receiver, args));
+		}
+		return isWrappable(value) ? wrap(value) : value;
+	},
+	has(target, property) {
+		if (property === $RAW || property === $PROXY || property === $TRACK || property === $NODE || property === $HAS || property === "__proto__") return true;
+		getListener() && getNode(getNodes(target, $HAS), property)();
+		return property in target;
+	},
+	set(target, property, value) {
+		batch(() => setProperty(target, property, unwrap(value)));
+		return true;
+	},
+	deleteProperty(target, property) {
+		batch(() => setProperty(target, property, void 0, true));
+		return true;
+	},
+	ownKeys,
+	getOwnPropertyDescriptor: proxyDescriptor
+};
+function wrap(value) {
+	let p = value[$PROXY];
+	if (!p) {
+		Object.defineProperty(value, $PROXY, { value: p = new Proxy(value, proxyTraps) });
+		const keys = Object.keys(value), desc = Object.getOwnPropertyDescriptors(value);
+		const proto = Object.getPrototypeOf(value);
+		const isClass = proto !== null && value !== null && typeof value === "object" && !Array.isArray(value) && proto !== Object.prototype;
+		if (isClass) {
+			let curProto = proto;
+			while (curProto != null) {
+				const descriptors = Object.getOwnPropertyDescriptors(curProto);
+				keys.push(...Object.keys(descriptors));
+				Object.assign(desc, descriptors);
+				curProto = Object.getPrototypeOf(curProto);
+			}
+		}
+		for (let i = 0, l = keys.length; i < l; i++) {
+			const prop = keys[i];
+			if (isClass && prop === "constructor") continue;
+			if (desc[prop].get) {
+				const get = desc[prop].get.bind(p);
+				Object.defineProperty(value, prop, {
+					get,
+					configurable: true
+				});
+			}
+			if (desc[prop].set) {
+				const og = desc[prop].set, set = (v) => batch(() => og.call(p, v));
+				Object.defineProperty(value, prop, {
+					set,
+					configurable: true
+				});
+			}
+		}
+	}
+	return p;
+}
+function createMutable(state, options) {
+	return wrap(unwrap(state || {}));
+}
+//#endregion
 //#region software_safe_src/software_safe_constants.js
-var TEST_API_GLOBAL_NAME = "__AW_TEST__";
 var RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
 var VIEWER_RENDER_MODE = "viewer";
 var SOFTWARE_SAFE_RENDER_MODE_ALIAS = "software_safe";
@@ -1112,7 +1270,6 @@ var HOSTED_ACCOUNT_TEST_LOGIN_ROUTE = "/api/public/hosted-account/test-login";
 var HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
 var HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE = "hosted_public_join";
 var HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 3e4;
-var DEFAULT_WS_ADDR = "ws://127.0.0.1:5011";
 var SOFTWARE_RENDERER_MARKERS = [
 	"swiftshader",
 	"llvmpipe",
@@ -1123,6 +1280,343 @@ var SOFTWARE_RENDERER_MARKERS = [
 ];
 function isHostedPublicJoinDeploymentMode(deploymentMode) {
 	return String(deploymentMode || "").trim() === HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE;
+}
+//#endregion
+//#region software_safe_src/viewer_auth_crypto.js
+var ED25519_PKCS8_PREFIX = new Uint8Array([
+	48,
+	46,
+	2,
+	1,
+	0,
+	48,
+	5,
+	6,
+	3,
+	43,
+	101,
+	112,
+	4,
+	34,
+	4,
+	32
+]);
+var textEncoder = new TextEncoder();
+var authKeyCache = /* @__PURE__ */ new Map();
+var signingIdentityCache = /* @__PURE__ */ new Map();
+var nextIdentityId = 0;
+var HEX_BYTE_LOOKUP = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
+function cborHeader(majorType, length) {
+	if (!Number.isInteger(length) || length < 0) throw new Error(`invalid CBOR length: ${length}`);
+	if (length < 24) return Uint8Array.of(majorType << 5 | length);
+	if (length < 256) return Uint8Array.of(majorType << 5 | 24, length);
+	if (length < 65536) return Uint8Array.of(majorType << 5 | 25, length >> 8 & 255, length & 255);
+	if (length <= 4294967295) return Uint8Array.of(majorType << 5 | 26, length >>> 24 & 255, length >>> 16 & 255, length >>> 8 & 255, length & 255);
+	if (length <= Number.MAX_SAFE_INTEGER) {
+		const value = BigInt(length);
+		return Uint8Array.of(majorType << 5 | 27, Number(value >> 56n & 255n), Number(value >> 48n & 255n), Number(value >> 40n & 255n), Number(value >> 32n & 255n), Number(value >> 24n & 255n), Number(value >> 16n & 255n), Number(value >> 8n & 255n), Number(value & 255n));
+	}
+	throw new Error("CBOR length exceeds Number.MAX_SAFE_INTEGER");
+}
+function concatBytes(...parts) {
+	const totalLength = parts.reduce((sum, bytes) => sum + bytes.length, 0);
+	const out = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const bytes of parts) {
+		out.set(bytes, offset);
+		offset += bytes.length;
+	}
+	return out;
+}
+function cborEncode(value) {
+	if (value === null) return Uint8Array.of(246);
+	if (value === false) return Uint8Array.of(244);
+	if (value === true) return Uint8Array.of(245);
+	if (typeof value === "number") {
+		if (!Number.isInteger(value) || value < 0) throw new Error(`unsupported CBOR number: ${value}`);
+		return cborHeader(0, value);
+	}
+	if (typeof value === "string") {
+		const bytes = textEncoder.encode(value);
+		return concatBytes(cborHeader(3, bytes.length), bytes);
+	}
+	if (Array.isArray(value)) return concatBytes(cborHeader(4, value.length), ...value.map((entry) => cborEncode(entry)));
+	if (value instanceof Uint8Array) return concatBytes(cborHeader(2, value.length), value);
+	if (typeof value === "object") {
+		const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== void 0);
+		const encoded = [cborHeader(5, entries.length)];
+		for (const [key, entryValue] of entries) {
+			encoded.push(cborEncode(String(key)));
+			encoded.push(cborEncode(entryValue));
+		}
+		return concatBytes(...encoded);
+	}
+	throw new Error(`unsupported CBOR type: ${typeof value}`);
+}
+function hexToBytes(raw) {
+	const value = String(raw || "").trim().toLowerCase();
+	if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) throw new Error("invalid hex payload");
+	const bytes = new Uint8Array(value.length / 2);
+	for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+	return bytes;
+}
+function bytesToHex(bytes) {
+	let out = "";
+	for (let index = 0; index < bytes.length; index += 1) out += HEX_BYTE_LOOKUP[bytes[index]];
+	return out;
+}
+function bytesStartWith(bytes, prefix) {
+	if (bytes.length < prefix.length) return false;
+	for (let index = 0; index < prefix.length; index += 1) if (bytes[index] !== prefix[index]) return false;
+	return true;
+}
+async function importEd25519SigningKey(privateKeyHex) {
+	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
+	if (!authKeyCache.has(privateKeyHex)) {
+		const rawPrivateKey = hexToBytes(privateKeyHex);
+		if (rawPrivateKey.length !== 32) throw new Error(`viewer auth private key length mismatch: expected 32 bytes, got ${rawPrivateKey.length}`);
+		const pkcs8 = concatBytes(ED25519_PKCS8_PREFIX, rawPrivateKey);
+		authKeyCache.set(privateKeyHex, window.crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]));
+	}
+	return authKeyCache.get(privateKeyHex);
+}
+function importSigningIdentity(publicKeyHex, privateKeyHex) {
+	if (typeof publicKeyHex !== "string" || typeof privateKeyHex !== "string" || !/^[0-9a-f]{64}$/i.test(publicKeyHex) || !/^[0-9a-f]{64}$/i.test(privateKeyHex)) throw new Error("viewer auth keys require strict hex encoding of exactly 32 bytes");
+	const publicBytes = hexToBytes(publicKeyHex);
+	const privateBytes = hexToBytes(privateKeyHex);
+	if (publicBytes.length !== 32 || privateBytes.length !== 32) throw new Error("viewer auth keys must each contain exactly 32 bytes");
+	const publicKey = bytesToHex(publicBytes);
+	const cacheKey = `${publicKey}:${bytesToHex(privateBytes)}`;
+	if (!signingIdentityCache.has(cacheKey)) {
+		const pending = (async () => {
+			if (!window.crypto?.subtle) throw new Error("Ed25519 Web Crypto is unavailable");
+			const privateKey = await importEd25519SigningKey(bytesToHex(privateBytes));
+			const verifyKey = await window.crypto.subtle.importKey("raw", publicBytes, { name: "Ed25519" }, false, ["verify"]);
+			const challenge = window.crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(32));
+			const proof = await window.crypto.subtle.sign("Ed25519", privateKey, challenge);
+			if (!await window.crypto.subtle.verify("Ed25519", verifyKey, proof, challenge)) throw new Error("viewer auth public and private keys do not match");
+			return Object.freeze({
+				identityId: ++nextIdentityId,
+				publicKey,
+				sign: async (bytes) => new Uint8Array(await window.crypto.subtle.sign("Ed25519", privateKey, bytes))
+			});
+		})();
+		signingIdentityCache.set(cacheKey, pending);
+		pending.catch(() => signingIdentityCache.delete(cacheKey));
+	}
+	return signingIdentityCache.get(cacheKey);
+}
+var identityLookup = () => null;
+var signingGeneration = () => 0;
+function setSigningIdentityLookup(lookup, generation) {
+	identityLookup = lookup;
+	signingGeneration = generation;
+}
+async function signAuthPayload(signingPayloadBytes, auth) {
+	const generation = signingGeneration();
+	const installed = identityLookup(auth);
+	if (!installed) throw new Error("authentication requires a verified installed signing identity");
+	const signature = await installed.sign(signingPayloadBytes);
+	if (signingGeneration() !== generation || installed && identityLookup(auth) !== installed) throw new Error("authentication context changed during signing");
+	return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(signature)}`;
+}
+async function generateEphemeralEd25519Keypair() {
+	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
+	const keyPair = await window.crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+	const pkcs8 = new Uint8Array(await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
+	if (!bytesStartWith(pkcs8, ED25519_PKCS8_PREFIX) || pkcs8.length !== ED25519_PKCS8_PREFIX.length + 32) throw new Error("unexpected Ed25519 pkcs8 encoding from Web Crypto");
+	const rawPublicKey = new Uint8Array(await window.crypto.subtle.exportKey("raw", keyPair.publicKey));
+	if (rawPublicKey.length !== 32) throw new Error(`unexpected Ed25519 public key length: ${rawPublicKey.length}`);
+	return {
+		publicKey: bytesToHex(rawPublicKey),
+		privateKey: bytesToHex(pkcs8.slice(ED25519_PKCS8_PREFIX.length))
+	};
+}
+function buildAuthEnvelope(payload) {
+	return cborEncode({
+		version: 1,
+		payload
+	});
+}
+function promptFieldPatchV1(patch) {
+	if (!patch || patch.mode === "unchanged") return "unchanged";
+	if (patch.mode === "clear") return "clear";
+	const value = String(patch.value ?? "").trim();
+	return value ? { set: value } : "clear";
+}
+function buildPromptControlSigningPayload(mode, request, auth) {
+	const normalizedMode = String(mode || "").trim().toLowerCase();
+	const rollback = normalizedMode === "rollback";
+	const preview = normalizedMode === "preview";
+	return {
+		operation: rollback ? "prompt_control_rollback" : preview ? "prompt_control_preview" : "prompt_control_apply",
+		preview,
+		request_id: String(request?.request_id || "").trim(),
+		agent_id: String(request?.agent_id || "").trim(),
+		player_id: String(auth?.playerId || request?.player_id || "").trim(),
+		public_key: String(auth?.publicKey || request?.public_key || "").trim().toLowerCase(),
+		nonce: request?.nonce,
+		session_epoch: Number(request?.session_epoch),
+		binding_epoch: Number(request?.binding_epoch),
+		expected_authority_epoch: String(request?.expected_authority_epoch || "").trim(),
+		expected_version: Number(request?.expected_version),
+		system_prompt: rollback ? "unchanged" : promptFieldPatchV1(request?.system_prompt_override),
+		short_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.short_term_goal_override),
+		long_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.long_term_goal_override),
+		rollback_target: rollback ? Number(request?.to_version) : null,
+		updated_by: String(request?.updated_by || "").trim() || void 0
+	};
+}
+//#endregion
+//#region software_safe_src/viewer_auth_session_module.js
+var sessions = /* @__PURE__ */ new WeakMap();
+var generations = /* @__PURE__ */ new WeakMap();
+var credentialFields = [
+	"privateKey",
+	"releaseToken",
+	"registrationGrant"
+];
+function authCredentials(auth) {
+	const held = sessions.get(unwrap(auth));
+	return held ? Object.freeze({
+		privateKey: held.privateKey,
+		releaseToken: held.releaseToken,
+		registrationGrant: held.grantGeneration === connectionGeneration ? held.registrationGrant : null
+	}) : {};
+}
+var connectionGeneration = 0;
+function invalidateAuthConnection() {
+	connectionGeneration += 1;
+}
+function authConnectionGeneration() {
+	return connectionGeneration;
+}
+function authSigningIdentity(auth) {
+	return sessions.get(unwrap(auth))?.identity || null;
+}
+function hasSigningIdentity(auth) {
+	return Boolean(authSigningIdentity(auth));
+}
+function clearSession(state, projection = {}) {
+	if (state.auth) sessions.delete(unwrap(state.auth));
+	invalidateAuthConnection();
+	generations.set(state, (generations.get(state) || 0) + 1);
+	state.auth = {
+		...projection,
+		available: false,
+		playerId: null,
+		publicKey: null
+	};
+	for (const key of credentialFields) delete state.auth[key];
+	return state.auth;
+}
+async function installSession(state, verifiedLogin, expectedAuth = state.auth) {
+	if (verifiedLogin?.source === "visual_fixture_projection") throw new Error("visual fixture projection cannot install authentication");
+	const generation = generations.get(state) || 0;
+	const login = { ...verifiedLogin };
+	const credentials = sessions.get(unwrap(verifiedLogin)) || Object.fromEntries(credentialFields.map((key) => [key, verifiedLogin[key]]));
+	const identity = credentials.privateKey && login.publicKey ? await importSigningIdentity(login.publicKey, credentials.privateKey) : null;
+	if (state.auth !== expectedAuth || (generations.get(state) || 0) !== generation) throw new Error("authentication context changed during identity installation");
+	if (credentials.privateKey && !identity) throw new Error("signing identity validation failed");
+	const projection = login;
+	for (const key of credentialFields) delete projection[key];
+	Object.defineProperties(projection, {
+		playerId: {
+			value: login.playerId || null,
+			enumerable: true,
+			writable: false,
+			configurable: false
+		},
+		publicKey: {
+			value: identity?.publicKey || login.publicKey || null,
+			enumerable: true,
+			writable: false,
+			configurable: false
+		}
+	});
+	if (state.auth) sessions.delete(unwrap(state.auth));
+	invalidateAuthConnection();
+	sessions.set(projection, {
+		identity,
+		privateKey: credentials.privateKey || null,
+		releaseToken: credentials.releaseToken || null,
+		registrationGrant: credentials.registrationGrant || null,
+		grantGeneration: connectionGeneration
+	});
+	generations.set(state, generation + 1);
+	state.auth = projection;
+	return state.auth;
+}
+function updateRegistrationGrant(auth, grant, deviceSessionId = null) {
+	const held = sessions.get(unwrap(auth));
+	if (!held) throw new Error("registration grant requires an installed session");
+	held.registrationGrant = grant;
+	held.grantGeneration = connectionGeneration;
+	if (deviceSessionId != null) auth.deviceSessionId = deviceSessionId;
+}
+function captureSessionContext(state, socketGeneration, endpointId) {
+	return Object.freeze({
+		authGeneration: generations.get(state) || 0,
+		socketGeneration,
+		endpointId,
+		identityId: authSigningIdentity(state.auth)?.identityId || null,
+		playerId: state.auth.playerId,
+		publicKey: state.auth.publicKey
+	});
+}
+function isSessionContextCurrent(state, context, socketGeneration, endpointId) {
+	const current = captureSessionContext(state, socketGeneration, endpointId);
+	return Object.keys(current).every((key) => current[key] === context[key]);
+}
+setSigningIdentityLookup(authSigningIdentity, authConnectionGeneration);
+//#endregion
+//#region software_safe_src/viewer_runtime_config_policy.js
+var CONFIG_ID = "oasis7-viewer-runtime-config";
+var MODES = /* @__PURE__ */ new Set(["trusted_local_only", "hosted_public_join"]);
+function normalizeTrustedWsEndpoint(value) {
+	if (typeof value !== "string" || !value) throw new Error("viewer endpoint must be a URL string");
+	const url = new URL(value);
+	if (!["ws:", "wss:"].includes(url.protocol) || url.username || url.password || value.includes("#") || /^wss?:\/\/[^/?#]*@/i.test(value)) throw new Error("viewer endpoint contains a forbidden URL component");
+	return url.href;
+}
+function parseViewerRuntimeConfig(documentRef) {
+	const nodes = documentRef.querySelectorAll(`[id="${CONFIG_ID}"]`);
+	if (nodes.length !== 1 || nodes[0].type !== "application/json") throw new Error("viewer requires exactly one trusted runtime configuration");
+	const raw = JSON.parse(nodes[0].textContent);
+	if (!raw || !MODES.has(raw.deploymentMode)) throw new Error("invalid viewer deployment mode");
+	const viewerWsEndpoint = normalizeTrustedWsEndpoint(raw.viewerWsEndpoint);
+	if (raw.deploymentMode === "hosted_public_join" && !viewerWsEndpoint.startsWith("wss:") && ![
+		"127.0.0.1",
+		"localhost",
+		"[::1]"
+	].includes(new URL(viewerWsEndpoint).hostname)) throw new Error("hosted viewer requires a secure WebSocket endpoint");
+	return Object.freeze({
+		deploymentMode: raw.deploymentMode,
+		viewerWsEndpoint,
+		endpointId: viewerWsEndpoint
+	});
+}
+function resolveViewerEndpoint(config, params) {
+	for (const key of ["ws", "addr"]) if (params.has(key) && normalizeTrustedWsEndpoint(params.get(key)) !== config.viewerWsEndpoint) throw new Error("viewer URL endpoint does not match trusted configuration");
+	return config.viewerWsEndpoint;
+}
+//#endregion
+//#region software_safe_src/viewer_runtime_config_module.js
+var fixedConfig;
+function viewerRuntimeConfig() {
+	if (!fixedConfig) fixedConfig = parseViewerRuntimeConfig(document);
+	return fixedConfig;
+}
+//#endregion
+//#region software_safe_src/viewer_runtime_ack_identity.js
+function validateRuntimeAckIdentity(ack, auth, registration = false, requestedAgentId = null) {
+	const player = ack?.player_id;
+	const publicKey = ack?.session_pubkey ?? ack?.public_key;
+	if (registration && (!player || !publicKey)) return "runtime ACK is missing identity";
+	if (player != null && player !== auth?.playerId) return "runtime ACK player identity conflict";
+	if (publicKey != null && String(publicKey).toLowerCase() !== String(auth?.publicKey).toLowerCase()) return "runtime ACK signing identity conflict";
+	if (registration && ack?.status !== "session_revoked" && requestedAgentId != null && ack?.agent_id !== requestedAgentId) return "runtime registration ACK target conflict";
+	return null;
 }
 //#endregion
 //#region software_safe_src/viewer_auth_surface_module.js
@@ -1343,7 +1837,7 @@ function createViewerAuthSurfaceModule({ getSearchParams, localeText, state, win
 		const currentTier = state.auth.available ? "player_session" : "guest_session";
 		return {
 			deploymentHint,
-			source: state.hostedAccess ? state.auth.available ? state.auth.source === "legacy_viewer_auth_bootstrap" ? `${LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE}+hosted_access_hint` : "hosted_player_issue+browser_local_device_session" : "hosted_access_hint" : state.auth.available ? state.auth.source : "guest_only",
+			source: isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) ? state.auth.available ? state.auth.source === "legacy_viewer_auth_bootstrap" ? `${LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE}+hosted_access_hint` : "hosted_player_issue+browser_local_device_session" : "hosted_access_hint" : state.auth.available ? state.auth.source : "guest_only",
 			currentTier,
 			currentTierReason: currentTier === "player_session" ? playerSessionReason(state.auth, deploymentHint) : guestSessionReason(state.auth, deploymentHint),
 			tiers: [
@@ -2693,9 +3187,9 @@ function createViewerHostedAuthStateModule({ hostedPlayerSessionStoragePrefix, i
 				playerId: auth.playerId,
 				loginChannel: auth.loginChannel || null,
 				maskedLoginHint: auth.maskedLoginHint || null,
-				deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
-				releaseToken: auth.releaseToken || null,
-				registrationGrant: auth.registrationGrant || null,
+				deviceSessionId: auth.deviceSessionId || authCredentials(auth).releaseToken || null,
+				releaseToken: authCredentials(auth).releaseToken || null,
+				registrationGrant: authCredentials(auth).registrationGrant || null,
 				issuedAtUnixMs: auth.issuedAtUnixMs ?? null,
 				sessionEpoch: auth.sessionEpoch ?? null
 			}));
@@ -2769,7 +3263,7 @@ function createViewerHostedAuthStateModule({ hostedPlayerSessionStoragePrefix, i
 		return resolveStoredHostedPlayerSession() || bootstrap;
 	}
 	function authHasSigningKeyMaterial(auth) {
-		return !!String(auth?.publicKey || "").trim() && !!String(auth?.privateKey || "").trim();
+		return hasSigningIdentity(auth);
 	}
 	return {
 		authHasSigningKeyMaterial,
@@ -2813,7 +3307,7 @@ function createViewerHostedTestLoginModule({ clone, fetchImpl, generateEphemeral
 			const grant = payload?.grant;
 			if (!response.ok || !payload?.ok || !grant?.player_id || !grant?.device_session_id || !grant?.release_token || !grant?.registration_grant) throw new Error(payload?.error || payload?.error_code || `hosted test login failed with HTTP ${response.status}`);
 			state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
-			state.auth = {
+			await installSession(state, {
 				available: true,
 				hostedAccountId: null,
 				playerId: String(grant.player_id).trim(),
@@ -2843,7 +3337,7 @@ function createViewerHostedTestLoginModule({ clone, fetchImpl, generateEphemeral
 				pendingRequestedAgentId: null,
 				pendingForceRebind: false,
 				rebindNotice: null
-			};
+			});
 			persistHostedPlayerSession(state.auth);
 			resetHostedLoginChallenge();
 			state.hostedLogin.channel = "test";
@@ -2935,15 +3429,43 @@ function createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, sig
 }
 //#endregion
 //#region software_safe_src/viewer_hosted_session_refresh_module.js
-function createViewerHostedSessionRefreshModule({ clone, ensureHostedAuthSigningKey, fetchImpl, legacyViewerAuthBootstrapSource, persistHostedPlayerSession, refreshRoute, state }) {
-	async function refreshHostedPlayerLease() {
-		const auth = await ensureHostedAuthSigningKey(state.auth);
+function createViewerHostedSessionRefreshModule({ clone, ensureHostedAuthSigningKey, fetchImpl, legacyViewerAuthBootstrapSource, persistHostedPlayerSession, refreshRoute, state, captureConnection = () => state.wsUrl }) {
+	let active = null;
+	function refreshHostedPlayerLease() {
+		const auth = state.auth;
+		const connection = captureConnection();
+		if (active?.auth === auth && active.connection === connection) return active.promise;
+		active?.controller.abort();
+		const controller = new AbortController();
+		const current = {
+			auth,
+			connection,
+			endpoint: state.wsUrl,
+			controller,
+			promise: null,
+			generation: authConnectionGeneration()
+		};
+		active = current;
+		current.promise = performRefresh(current).finally(() => {
+			if (active === current) active = null;
+		});
+		return current.promise;
+	}
+	async function performRefresh(current) {
+		const isCurrent = () => active === current && state.auth === current.auth && captureConnection() === current.connection && state.wsUrl === current.endpoint && authConnectionGeneration() === current.generation && state.auth.playerId === playerId && state.auth.publicKey === publicKey && authCredentials(state.auth).releaseToken === releaseToken;
+		const auth = await ensureHostedAuthSigningKey(current.auth);
+		const installedNewIdentity = auth !== current.auth && hasSigningIdentity(auth);
+		const expectedGeneration = current.generation + (installedNewIdentity ? 1 : 0);
+		if (active !== current || state.auth !== auth || captureConnection() !== current.connection || state.wsUrl !== current.endpoint || authConnectionGeneration() !== expectedGeneration) return null;
+		current.auth = auth;
+		current.generation = authConnectionGeneration();
 		const playerId = String(auth.playerId || "").trim();
-		const releaseToken = String(auth.releaseToken || "").trim();
+		const releaseToken = String(authCredentials(auth).releaseToken || "").trim();
 		const publicKey = String(auth.publicKey || "").trim();
-		if (!playerId || !releaseToken || !publicKey || auth.source === legacyViewerAuthBootstrapSource) return null;
+		if (!playerId || !releaseToken || !publicKey || legacyViewerAuthBootstrapSource != null && auth.source === legacyViewerAuthBootstrapSource) return null;
 		try {
 			const response = await fetchImpl(refreshRoute, {
+				signal: current.controller.signal,
 				method: "POST",
 				cache: "no-store",
 				headers: {
@@ -2957,27 +3479,34 @@ function createViewerHostedSessionRefreshModule({ clone, ensureHostedAuthSigning
 				})
 			});
 			const payload = await response.json();
+			if (!isCurrent()) return null;
 			if (payload?.admission) state.hostedAdmission = clone(payload.admission);
 			if (!response.ok || !payload?.ok) throw new Error(payload?.error || payload?.error_code || `hosted player-session refresh failed with HTTP ${response.status}`);
 			if (payload.registration_grant) {
-				auth.registrationGrant = String(payload.registration_grant).trim() || null;
+				updateRegistrationGrant(auth, String(payload.registration_grant).trim() || null);
 				auth.deviceSessionId = String(payload.device_session_id || auth.deviceSessionId || "").trim() || null;
 				persistHostedPlayerSession(auth);
 			}
 			return payload;
 		} catch (error) {
-			state.auth.error = String(error);
+			if (isCurrent() && error?.name !== "AbortError") state.auth.error = String(error);
 			return null;
 		}
 	}
-	return { refreshHostedPlayerLease };
+	return {
+		refreshHostedPlayerLease,
+		cancelRefresh: () => {
+			active?.controller.abort();
+			active = null;
+		}
+	};
 }
 //#endregion
 //#region software_safe_src/viewer_hosted_session_reconnect_module.js
 function createViewerHostedSessionReconnectModule({ authHasSigningKeyMaterial, legacyViewerAuthBootstrapSource, onRefreshFailure, refreshHostedPlayerLease, registerHostedPlayerSession, sendReconnectSync, state }) {
 	function needsHostedKeyRecovery() {
 		const auth = state.auth;
-		return auth?.available && auth.source !== legacyViewerAuthBootstrapSource && !!String(auth.releaseToken || "").trim() && !authHasSigningKeyMaterial(auth);
+		return auth?.available && auth.source !== legacyViewerAuthBootstrapSource && !!String(authCredentials(auth).releaseToken || "").trim() && !authHasSigningKeyMaterial(auth);
 	}
 	async function syncHostedPlayerSessionOnConnect() {
 		if (!state.auth.available || state.auth.source === legacyViewerAuthBootstrapSource || state.auth.syncInFlight) return {
@@ -3170,6 +3699,8 @@ function createViewerPromptControlModule({ applyPromptAckLocally, assertPromptFe
 		}
 	}
 	function handleAck(ack) {
+		const pending = state.lastPromptFeedback;
+		if (!pending || ack?.request_id != null && ack.request_id !== pending.requestId || ack?.agent_id !== pending.agentId) return;
 		clearPendingPromptControlAckTimer();
 		const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_ack", ack?.agent_id || null);
 		const operation = String(ack?.operation || (ack?.preview ? "preview" : "apply"));
@@ -3500,7 +4031,7 @@ function createViewerBrowserPersistenceModule({ chatHistoryLimit, chatHistorySto
 				playerId: auth.playerId,
 				deviceSessionId: auth.deviceSessionId || auth.playerId,
 				publicKey: auth.publicKey || null,
-				privateKey: auth.privateKey || null,
+				privateKey: authCredentials(auth).privateKey || null,
 				issuedAtUnixMs: auth.issuedAtUnixMs || Date.now()
 			}));
 		} catch (_) {}
@@ -3910,8 +4441,8 @@ function createViewerBrowserRaceIdentityTestApi({ authHasSigningKeyMaterial, bum
 		browserRaceIdentityOffer?.dispose?.();
 		browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
 			publicKey: state.auth.publicKey,
-			privateKey: state.auth.privateKey,
-			releaseToken: state.auth.releaseToken,
+			privateKey: authCredentials(state.auth).privateKey,
+			releaseToken: authCredentials(state.auth).releaseToken,
 			playerId: state.auth.playerId,
 			sessionEpoch: state.auth.sessionEpoch,
 			bindingEpoch: state.auth.bindingEpoch,
@@ -3927,9 +4458,10 @@ function createViewerBrowserRaceIdentityTestApi({ authHasSigningKeyMaterial, bum
 		const claimedPlayerId = String(keyMaterial.playerId || "").trim();
 		const currentPlayerId = String(state.auth.playerId || "").trim();
 		if (!claimedPlayerId || !currentPlayerId || claimedPlayerId !== currentPlayerId) throw new Error("browser race identity claim player binding mismatch");
-		state.auth.publicKey = keyMaterial.publicKey;
-		state.auth.privateKey = keyMaterial.privateKey;
-		state.auth.releaseToken = keyMaterial.releaseToken;
+		await installSession(state, {
+			...state.auth,
+			...keyMaterial
+		});
 		state.auth.sessionEpoch = keyMaterial.sessionEpoch;
 		state.auth.bindingEpoch = keyMaterial.bindingEpoch;
 		state.auth.boundAgentId = keyMaterial.boundAgentId;
@@ -4130,20 +4662,6 @@ function createViewerWorldScaleModule({ documentRef, state, isLocaleZh, normaliz
 }
 //#endregion
 //#region software_safe_src/refine_quote_preflight_state.js
-var VISUAL_FIXTURE_NAME$4 = "refine_quote_preflight";
-var visualFixtureQuote$4 = Object.freeze({
-	owner_agent_id: "agent-0",
-	compound_mass_g: 40,
-	electricity_cost: 12,
-	electricity_after: 88,
-	hardware_output: 20,
-	target_id: "factory_build_hardware",
-	target_gap_before: 20,
-	target_gap_after: 0,
-	target_linkage: "enables_factory_build_hardware_goal",
-	recommended_refine_amount: 40,
-	value_classification: "enough_to_advance"
-});
 function createRefineQuotePreflightStateModule({ clone, getSearchParams, isTestApiEnabled, render, state }) {
 	function handleRefineQuotePreflight(quote) {
 		if (!quote || typeof quote !== "object") return;
@@ -4168,8 +4686,8 @@ function createRefineQuotePreflightStateModule({ clone, getSearchParams, isTestA
 		return clone(state.refineQuotePreflight);
 	}
 	function installRefineQuotePreflightVisualFixture() {
-		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== VISUAL_FIXTURE_NAME$4) return;
-		handleRefineQuotePreflight(visualFixtureQuote$4);
+		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== null) return;
+		handleRefineQuotePreflight(null);
 	}
 	return {
 		handleRefineQuotePreflight,
@@ -4286,19 +4804,6 @@ function createProductValidationQuoteRequestModule({ buildAuthEnvelope, clone, e
 }
 //#endregion
 //#region software_safe_src/product_validation_quote_state.js
-var VISUAL_FIXTURE_NAME$3 = "product_validation_quote";
-var visualFixtureQuote$3 = Object.freeze({
-	product_id: "logistics_drone",
-	product_role: "explore",
-	tradable: true,
-	stage_before: "bootstrap",
-	stage_after: "bootstrap",
-	unlock_or_value_class: "scale_out",
-	recommended_action: "advance_industry_stage",
-	submission_allowed: true,
-	missing_prerequisite: "industry_stage=scale_out",
-	reachable_advance_or_recovery: "complete_reachable_industry_progress"
-});
 function createProductValidationQuoteStateModule({ clone, getSearchParams, isTestApiEnabled, render, state }) {
 	function handleProductValidationQuote(quote) {
 		if (!quote || typeof quote !== "object") return;
@@ -4323,8 +4828,8 @@ function createProductValidationQuoteStateModule({ clone, getSearchParams, isTes
 		return clone(state.productValidationQuote);
 	}
 	function installProductValidationQuoteVisualFixture() {
-		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== VISUAL_FIXTURE_NAME$3) return;
-		handleProductValidationQuote(visualFixtureQuote$3);
+		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== null) return;
+		handleProductValidationQuote(null);
 	}
 	return {
 		handleProductValidationQuote,
@@ -4459,24 +4964,6 @@ function createPowerSurvivalQuoteRequestModule({ buildAuthEnvelope, clone, ensur
 }
 //#endregion
 //#region software_safe_src/power_survival_quote_state.js
-var VISUAL_FIXTURE_NAME$2 = "power_survival_quote";
-var visualFixtureQuote$2 = Object.freeze({
-	buyer_agent_id: "agent-0",
-	seller_agent_id: "agent-1",
-	current_power_level: 2,
-	power_state_before: "critical",
-	recovery_action: "buy_power",
-	recovery_amount: 18,
-	power_gain_estimate: 18,
-	requested_price_per_pu: 3,
-	price_per_pu: 3,
-	price_or_time_cost: 54,
-	power_state_after_recovery: "low_power",
-	survival_runway_ticks: 20,
-	next_action_affordability_after_recovery: "limited",
-	shutdown_avoidance_reason: "recovery restores 20 runway ticks and lifts agent from critical to low_power; recommended action: buy_power_partial",
-	recommended_power_action: "buy_power_partial"
-});
 function createPowerSurvivalQuoteStateModule({ clone, getSearchParams, isTestApiEnabled, render, state }) {
 	function handlePowerSurvivalQuote(quote, acceptUnsolicited = false) {
 		if (!quote || typeof quote !== "object" || !acceptUnsolicited && state.powerSurvivalQuoteRequest?.status !== "pending") return false;
@@ -4509,8 +4996,8 @@ function createPowerSurvivalQuoteStateModule({ clone, getSearchParams, isTestApi
 		};
 	}
 	function installPowerSurvivalQuoteVisualFixture() {
-		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== VISUAL_FIXTURE_NAME$2) return;
-		handlePowerSurvivalQuote(visualFixtureQuote$2, true);
+		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== null) return;
+		handlePowerSurvivalQuote(null, true);
 	}
 	return {
 		handlePowerSurvivalQuote,
@@ -4641,29 +5128,6 @@ function createScheduleRecipeQuoteRequestModule({ buildAuthEnvelope, clone, ensu
 }
 //#endregion
 //#region software_safe_src/schedule_recipe_quote_state.js
-var VISUAL_FIXTURE_NAME$1 = "schedule_recipe_quote";
-var visualFixtureQuote$1 = Object.freeze({
-	owner_agent_id: "agent-0",
-	factory_id: "factory-0",
-	recipe_id: "assemble_hardware",
-	batches: 2,
-	base_duration_ticks: 6,
-	electricity_cost: 12,
-	electricity_after: 88,
-	hardware_cost: 4,
-	data_output: 8,
-	finished_product_id: "hardware",
-	finished_product_units: 2,
-	local_shortage_delay_ticks: 0,
-	shortage_reason: "none",
-	recommended_pre_step: "schedule_now",
-	runway_before_ticks: 40,
-	runway_after_ticks: 40,
-	downtime_threshold_ppm: 25e4,
-	continue_production_risk: "normal",
-	maintenance_pressure_delta: "unchanged",
-	recommended_maintenance_action: "none"
-});
 function createScheduleRecipeQuoteStateModule({ clone, getSearchParams, isTestApiEnabled, render, state }) {
 	function handleScheduleRecipeQuote(quote, acceptUnsolicited = false) {
 		if (!quote || typeof quote !== "object" || !acceptUnsolicited && state.scheduleRecipeQuoteRequest?.status !== "pending") return false;
@@ -4696,8 +5160,8 @@ function createScheduleRecipeQuoteStateModule({ clone, getSearchParams, isTestAp
 		};
 	}
 	function installScheduleRecipeQuoteVisualFixture() {
-		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== VISUAL_FIXTURE_NAME$1) return;
-		handleScheduleRecipeQuote(visualFixtureQuote$1, true);
+		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== null) return;
+		handleScheduleRecipeQuote(null, true);
 	}
 	return {
 		handleScheduleRecipeQuote,
@@ -4854,37 +5318,6 @@ function createTransferMaterialQuoteRequestModule({ buildAuthEnvelope, clone, en
 }
 //#endregion
 //#region software_safe_src/transfer_material_quote_state.js
-var VISUAL_FIXTURE_NAME = "transfer_material_quote";
-var visualFixtureQuote = Object.freeze({
-	requester_agent_id: "agent-0",
-	from_ledger: "site:source",
-	to_ledger: "site:destination",
-	kind: "iron_ingot",
-	requested_amount: 20,
-	submission_feasible: true,
-	max_transferable_amount: 40,
-	sent_amount: 20,
-	distance_km: 200,
-	loss_bps: 5,
-	expected_loss_amount: 2,
-	expected_received_amount: 18,
-	source_amount_before: 40,
-	source_amount_after: 20,
-	destination_amount_before: 0,
-	destination_expected_amount_after: 18,
-	ticks_until_arrival: 2,
-	ready_at: 3,
-	effective_priority: "standard",
-	priority_reason: "material_default_priority",
-	inflight_before: 0,
-	inflight_capacity: 2,
-	path_id: "path:source-relay-destination",
-	route_ids: ["route:source-relay", "route:relay-destination"],
-	tariff_electricity_total: 12,
-	reroute_count: 0,
-	recommendation: "submit_transfer",
-	conditional: true
-});
 function createTransferMaterialQuoteStateModule({ clone, getSearchParams, isTestApiEnabled, render, state }) {
 	function handleTransferMaterialQuote(quote, acceptUnsolicited = false) {
 		if (!quote || typeof quote !== "object" || !acceptUnsolicited && state.transferMaterialQuoteRequest?.status !== "pending") return false;
@@ -4917,8 +5350,8 @@ function createTransferMaterialQuoteStateModule({ clone, getSearchParams, isTest
 		};
 	}
 	function installTransferMaterialQuoteVisualFixture() {
-		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== VISUAL_FIXTURE_NAME) return;
-		handleTransferMaterialQuote(visualFixtureQuote, true);
+		if (!isTestApiEnabled() || getSearchParams().get("fixture") !== null) return;
+		handleTransferMaterialQuote(null, true);
 	}
 	return {
 		handleTransferMaterialQuote,
@@ -5743,165 +6176,6 @@ function renderViewerEntityList({ state, lists }) {
   `;
 }
 //#endregion
-//#region node_modules/solid-js/store/dist/store.js
-var $RAW = Symbol("store-raw");
-var $NODE = Symbol("store-node");
-var $HAS = Symbol("store-has");
-var $SELF = Symbol("store-self");
-function isWrappable(obj) {
-	let proto;
-	return obj != null && typeof obj === "object" && (obj[$PROXY] || !(proto = Object.getPrototypeOf(obj)) || proto === Object.prototype || Array.isArray(obj));
-}
-function unwrap(item, set = /* @__PURE__ */ new Set()) {
-	let result, unwrapped, v, prop;
-	if (result = item != null && item[$RAW]) return result;
-	if (!isWrappable(item) || set.has(item)) return item;
-	if (Array.isArray(item)) {
-		if (Object.isFrozen(item)) item = item.slice(0);
-		else set.add(item);
-		for (let i = 0, l = item.length; i < l; i++) {
-			v = item[i];
-			if ((unwrapped = unwrap(v, set)) !== v) item[i] = unwrapped;
-		}
-	} else {
-		if (Object.isFrozen(item)) item = Object.assign({}, item);
-		else set.add(item);
-		const keys = Object.keys(item), desc = Object.getOwnPropertyDescriptors(item);
-		for (let i = 0, l = keys.length; i < l; i++) {
-			prop = keys[i];
-			if (desc[prop].get) continue;
-			v = item[prop];
-			if ((unwrapped = unwrap(v, set)) !== v) item[prop] = unwrapped;
-		}
-	}
-	return item;
-}
-function getNodes(target, symbol) {
-	let nodes = target[symbol];
-	if (!nodes) Object.defineProperty(target, symbol, { value: nodes = Object.create(null) });
-	return nodes;
-}
-function getNode(nodes, property, value) {
-	if (nodes[property]) return nodes[property];
-	const [s, set] = createSignal(value, {
-		equals: false,
-		internal: true
-	});
-	s.$ = set;
-	return nodes[property] = s;
-}
-function trackSelf(target) {
-	getListener() && getNode(getNodes(target, $NODE), $SELF)();
-}
-function ownKeys(target) {
-	trackSelf(target);
-	return Reflect.ownKeys(target);
-}
-function setProperty(state, property, value, deleting = false) {
-	if (property === "__proto__") return;
-	if (!deleting && state[property] === value) return;
-	const prev = state[property], len = state.length;
-	if (value === void 0) {
-		delete state[property];
-		if (state[$HAS] && state[$HAS][property] && prev !== void 0) state[$HAS][property].$();
-	} else {
-		state[property] = value;
-		if (state[$HAS] && state[$HAS][property] && prev === void 0) state[$HAS][property].$();
-	}
-	let nodes = getNodes(state, $NODE), node;
-	if (node = getNode(nodes, property, prev)) node.$(() => value);
-	if (Array.isArray(state) && state.length !== len) {
-		for (let i = state.length; i < len; i++) (node = nodes[i]) && node.$();
-		(node = getNode(nodes, "length", len)) && node.$(state.length);
-	}
-	(node = nodes[$SELF]) && node.$();
-}
-function proxyDescriptor(target, property) {
-	const desc = Reflect.getOwnPropertyDescriptor(target, property);
-	if (!desc || desc.get || desc.set || !desc.configurable || property === $PROXY || property === $NODE) return desc;
-	delete desc.value;
-	delete desc.writable;
-	desc.get = () => target[$PROXY][property];
-	desc.set = (v) => target[$PROXY][property] = v;
-	return desc;
-}
-var proxyTraps = {
-	get(target, property, receiver) {
-		if (property === $RAW) return target;
-		if (property === $PROXY) return receiver;
-		if (property === $TRACK) {
-			trackSelf(target);
-			return receiver;
-		}
-		const nodes = getNodes(target, $NODE);
-		const tracked = nodes[property];
-		let value = tracked ? tracked() : target[property];
-		if (property === $NODE || property === $HAS || property === "__proto__") return value;
-		if (!tracked) {
-			const desc = Object.getOwnPropertyDescriptor(target, property);
-			const isFunction = typeof value === "function";
-			if (getListener() && (!isFunction || Object.prototype.hasOwnProperty.call(target, property)) && !(desc && desc.get)) value = getNode(nodes, property, value)();
-			else if (value != null && isFunction && value === Array.prototype[property]) return (...args) => batch(() => Array.prototype[property].apply(receiver, args));
-		}
-		return isWrappable(value) ? wrap(value) : value;
-	},
-	has(target, property) {
-		if (property === $RAW || property === $PROXY || property === $TRACK || property === $NODE || property === $HAS || property === "__proto__") return true;
-		getListener() && getNode(getNodes(target, $HAS), property)();
-		return property in target;
-	},
-	set(target, property, value) {
-		batch(() => setProperty(target, property, unwrap(value)));
-		return true;
-	},
-	deleteProperty(target, property) {
-		batch(() => setProperty(target, property, void 0, true));
-		return true;
-	},
-	ownKeys,
-	getOwnPropertyDescriptor: proxyDescriptor
-};
-function wrap(value) {
-	let p = value[$PROXY];
-	if (!p) {
-		Object.defineProperty(value, $PROXY, { value: p = new Proxy(value, proxyTraps) });
-		const keys = Object.keys(value), desc = Object.getOwnPropertyDescriptors(value);
-		const proto = Object.getPrototypeOf(value);
-		const isClass = proto !== null && value !== null && typeof value === "object" && !Array.isArray(value) && proto !== Object.prototype;
-		if (isClass) {
-			let curProto = proto;
-			while (curProto != null) {
-				const descriptors = Object.getOwnPropertyDescriptors(curProto);
-				keys.push(...Object.keys(descriptors));
-				Object.assign(desc, descriptors);
-				curProto = Object.getPrototypeOf(curProto);
-			}
-		}
-		for (let i = 0, l = keys.length; i < l; i++) {
-			const prop = keys[i];
-			if (isClass && prop === "constructor") continue;
-			if (desc[prop].get) {
-				const get = desc[prop].get.bind(p);
-				Object.defineProperty(value, prop, {
-					get,
-					configurable: true
-				});
-			}
-			if (desc[prop].set) {
-				const og = desc[prop].set, set = (v) => batch(() => og.call(p, v));
-				Object.defineProperty(value, prop, {
-					set,
-					configurable: true
-				});
-			}
-		}
-	}
-	return p;
-}
-function createMutable(state, options) {
-	return wrap(unwrap(state || {}));
-}
-//#endregion
 //#region software_safe_src/world_feed_state.js
 var WORLD_FEED_SCHEMA_VERSION = "world_feed/v1";
 var MAX_U64_DECIMAL = "18446744073709551615";
@@ -6576,155 +6850,6 @@ function isWorldScopedCrisisRuntimeEvent(event) {
 	return WORLD_SCOPED_CRISIS_RUNTIME_KINDS.has(runtimeKind);
 }
 //#endregion
-//#region software_safe_src/viewer_auth_crypto.js
-var ED25519_PKCS8_PREFIX = new Uint8Array([
-	48,
-	46,
-	2,
-	1,
-	0,
-	48,
-	5,
-	6,
-	3,
-	43,
-	101,
-	112,
-	4,
-	34,
-	4,
-	32
-]);
-var textEncoder = new TextEncoder();
-var authKeyCache = /* @__PURE__ */ new Map();
-var HEX_BYTE_LOOKUP = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
-function cborHeader(majorType, length) {
-	if (!Number.isInteger(length) || length < 0) throw new Error(`invalid CBOR length: ${length}`);
-	if (length < 24) return Uint8Array.of(majorType << 5 | length);
-	if (length < 256) return Uint8Array.of(majorType << 5 | 24, length);
-	if (length < 65536) return Uint8Array.of(majorType << 5 | 25, length >> 8 & 255, length & 255);
-	if (length <= 4294967295) return Uint8Array.of(majorType << 5 | 26, length >>> 24 & 255, length >>> 16 & 255, length >>> 8 & 255, length & 255);
-	if (length <= Number.MAX_SAFE_INTEGER) {
-		const value = BigInt(length);
-		return Uint8Array.of(majorType << 5 | 27, Number(value >> 56n & 255n), Number(value >> 48n & 255n), Number(value >> 40n & 255n), Number(value >> 32n & 255n), Number(value >> 24n & 255n), Number(value >> 16n & 255n), Number(value >> 8n & 255n), Number(value & 255n));
-	}
-	throw new Error("CBOR length exceeds Number.MAX_SAFE_INTEGER");
-}
-function concatBytes(...parts) {
-	const totalLength = parts.reduce((sum, bytes) => sum + bytes.length, 0);
-	const out = new Uint8Array(totalLength);
-	let offset = 0;
-	for (const bytes of parts) {
-		out.set(bytes, offset);
-		offset += bytes.length;
-	}
-	return out;
-}
-function cborEncode(value) {
-	if (value === null) return Uint8Array.of(246);
-	if (value === false) return Uint8Array.of(244);
-	if (value === true) return Uint8Array.of(245);
-	if (typeof value === "number") {
-		if (!Number.isInteger(value) || value < 0) throw new Error(`unsupported CBOR number: ${value}`);
-		return cborHeader(0, value);
-	}
-	if (typeof value === "string") {
-		const bytes = textEncoder.encode(value);
-		return concatBytes(cborHeader(3, bytes.length), bytes);
-	}
-	if (Array.isArray(value)) return concatBytes(cborHeader(4, value.length), ...value.map((entry) => cborEncode(entry)));
-	if (value instanceof Uint8Array) return concatBytes(cborHeader(2, value.length), value);
-	if (typeof value === "object") {
-		const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== void 0);
-		const encoded = [cborHeader(5, entries.length)];
-		for (const [key, entryValue] of entries) {
-			encoded.push(cborEncode(String(key)));
-			encoded.push(cborEncode(entryValue));
-		}
-		return concatBytes(...encoded);
-	}
-	throw new Error(`unsupported CBOR type: ${typeof value}`);
-}
-function hexToBytes(raw) {
-	const value = String(raw || "").trim().toLowerCase();
-	if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) throw new Error("invalid hex payload");
-	const bytes = new Uint8Array(value.length / 2);
-	for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-	return bytes;
-}
-function bytesToHex(bytes) {
-	let out = "";
-	for (let index = 0; index < bytes.length; index += 1) out += HEX_BYTE_LOOKUP[bytes[index]];
-	return out;
-}
-function bytesStartWith(bytes, prefix) {
-	if (bytes.length < prefix.length) return false;
-	for (let index = 0; index < prefix.length; index += 1) if (bytes[index] !== prefix[index]) return false;
-	return true;
-}
-async function importEd25519SigningKey(privateKeyHex) {
-	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
-	if (!authKeyCache.has(privateKeyHex)) {
-		const rawPrivateKey = hexToBytes(privateKeyHex);
-		if (rawPrivateKey.length !== 32) throw new Error(`viewer auth private key length mismatch: expected 32 bytes, got ${rawPrivateKey.length}`);
-		const pkcs8 = concatBytes(ED25519_PKCS8_PREFIX, rawPrivateKey);
-		authKeyCache.set(privateKeyHex, window.crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]));
-	}
-	return authKeyCache.get(privateKeyHex);
-}
-async function signAuthPayload(signingPayloadBytes, auth) {
-	const key = await importEd25519SigningKey(auth.privateKey);
-	const signature = await window.crypto.subtle.sign({ name: "Ed25519" }, key, signingPayloadBytes);
-	return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(new Uint8Array(signature))}`;
-}
-async function generateEphemeralEd25519Keypair() {
-	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
-	const keyPair = await window.crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-	const pkcs8 = new Uint8Array(await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
-	if (!bytesStartWith(pkcs8, ED25519_PKCS8_PREFIX) || pkcs8.length !== ED25519_PKCS8_PREFIX.length + 32) throw new Error("unexpected Ed25519 pkcs8 encoding from Web Crypto");
-	const rawPublicKey = new Uint8Array(await window.crypto.subtle.exportKey("raw", keyPair.publicKey));
-	if (rawPublicKey.length !== 32) throw new Error(`unexpected Ed25519 public key length: ${rawPublicKey.length}`);
-	return {
-		publicKey: bytesToHex(rawPublicKey),
-		privateKey: bytesToHex(pkcs8.slice(ED25519_PKCS8_PREFIX.length))
-	};
-}
-function buildAuthEnvelope(payload) {
-	return cborEncode({
-		version: 1,
-		payload
-	});
-}
-function promptFieldPatchV1(patch) {
-	if (!patch || patch.mode === "unchanged") return "unchanged";
-	if (patch.mode === "clear") return "clear";
-	const value = String(patch.value ?? "").trim();
-	return value ? { set: value } : "clear";
-}
-function buildPromptControlSigningPayload(mode, request, auth) {
-	const normalizedMode = String(mode || "").trim().toLowerCase();
-	const rollback = normalizedMode === "rollback";
-	const preview = normalizedMode === "preview";
-	return {
-		operation: rollback ? "prompt_control_rollback" : preview ? "prompt_control_preview" : "prompt_control_apply",
-		preview,
-		request_id: String(request?.request_id || "").trim(),
-		agent_id: String(request?.agent_id || "").trim(),
-		player_id: String(auth?.playerId || request?.player_id || "").trim(),
-		public_key: String(auth?.publicKey || request?.public_key || "").trim().toLowerCase(),
-		nonce: request?.nonce,
-		session_epoch: Number(request?.session_epoch),
-		binding_epoch: Number(request?.binding_epoch),
-		expected_authority_epoch: String(request?.expected_authority_epoch || "").trim(),
-		expected_version: Number(request?.expected_version),
-		system_prompt: rollback ? "unchanged" : promptFieldPatchV1(request?.system_prompt_override),
-		short_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.short_term_goal_override),
-		long_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.long_term_goal_override),
-		rollback_target: rollback ? Number(request?.to_version) : null,
-		updated_by: String(request?.updated_by || "").trim() || void 0
-	};
-}
-//#endregion
 //#region software_safe_src/legacy_core.js
 var legacy_core_exports = /* @__PURE__ */ __exportAll({
 	applySelection: () => applySelection,
@@ -6855,6 +6980,7 @@ var pendingSessionRegisterWaiter = null;
 var elements = {};
 var renderHook = createViewerRenderHookRegistry();
 var bootstrapped = false;
+var bootstrapPromise = null;
 var worldFeedTransport = createWorldFeedTransport({
 	getSocket: () => socket,
 	getState: () => state,
@@ -6931,8 +7057,7 @@ function getSearchParams() {
 	return new URLSearchParams(window.location.search || "");
 }
 function isTestApiEnabled() {
-	const value = String(getSearchParams().get("test_api") || "").trim().toLowerCase();
-	return value === "1" || value === "true" || value === "yes" || value === "on";
+	return false;
 }
 function resolveAgentChatOverallTimeoutMs() {
 	if (!isTestApiEnabled()) return 45e3;
@@ -6940,18 +7065,10 @@ function resolveAgentChatOverallTimeoutMs() {
 	if (!Number.isFinite(value) || value < 1) return 45e3;
 	return Math.min(value, 45e3);
 }
-function normalizeWsAddr(raw) {
-	const value = String(raw || "").trim();
-	if (!value) return DEFAULT_WS_ADDR;
-	if (value.startsWith("ws://") || value.startsWith("wss://")) return value;
-	if (value.startsWith("http://")) return `ws://${value.slice(7)}`;
-	if (value.startsWith("https://")) return `wss://${value.slice(8)}`;
-	return `ws://${value}`;
-}
 function clone(value) {
 	return value == null ? value : JSON.parse(JSON.stringify(value));
 }
-var { handleRefineQuotePreflight, handleRefineQuoteError, injectRefineQuotePreflightForTest, installRefineQuotePreflightVisualFixture: installRefineQuotePreflightVisualFixture$1 } = createRefineQuotePreflightStateModule({
+var { handleRefineQuotePreflight, handleRefineQuoteError, injectRefineQuotePreflightForTest, installRefineQuotePreflightVisualFixture } = createRefineQuotePreflightStateModule({
 	clone,
 	getSearchParams,
 	isTestApiEnabled,
@@ -7143,8 +7260,7 @@ var { buildGameplaySummary, describePromptVersionState, describeSemanticFeedback
 	state
 });
 function initialWsUrl() {
-	const params = getSearchParams();
-	return normalizeWsAddr(params.get("ws") || params.get("addr") || "ws://127.0.0.1:5011");
+	return resolveViewerEndpoint(viewerRuntimeConfig(), getSearchParams());
 }
 var { chatHistoryStorageKey, hydrateChatHistoryFromStorage, normalizeChatHistoryEntry, persistChatHistory, persistLocalTestPlayerSession, resolveStoredLocalTestPlayerSession, setChatHistory } = createViewerBrowserPersistenceModule({
 	chatHistoryLimit: CHAT_HISTORY_LIMIT,
@@ -7189,11 +7305,15 @@ var { start: startHostedTestLogin, waitForStart: waitForHostedTestLogin } = crea
 	state
 });
 async function ensureHostedAuthSigningKey(auth = state.auth) {
+	if (auth?.source === "visual_fixture_projection") throw new Error("visual fixture authentication has no signing capability");
 	if (!auth?.available || auth.source === "legacy_viewer_auth_bootstrap") return auth;
-	if (authHasSigningKeyMaterial(auth)) return auth;
+	if (hasSigningIdentity(auth)) return auth;
 	const keypair = await generateEphemeralEd25519Keypair();
-	auth.publicKey = keypair.publicKey;
-	auth.privateKey = keypair.privateKey;
+	auth = await installSession(state, {
+		...auth,
+		...authCredentials(auth),
+		...keypair
+	}, auth);
 	auth.registrationStatus = "issued";
 	auth.sessionEpoch = auth.bindingEpoch = auth.authorityEpoch = auth.boundAgentId = null;
 	viewerPromptControlModule?.clearPendingAuthoritativeRefresh();
@@ -7221,7 +7341,8 @@ async function refreshHostedAdmissionState() {
 		return state.hostedAdmission;
 	}
 }
-var { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
+var { refreshHostedPlayerLease, cancelRefresh: cancelHostedLeaseRefresh } = createViewerHostedSessionRefreshModule({
+	captureConnection: () => socket,
 	clone,
 	ensureHostedAuthSigningKey,
 	fetchImpl: fetch,
@@ -7237,7 +7358,7 @@ function stopHostedSessionRefreshLoop() {
 	}
 }
 function syncHostedSessionRefreshLoop() {
-	if (!(state.connectionStatus === "connected" && state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap" && state.auth.registrationStatus === "registered" && !!state.auth.releaseToken)) {
+	if (!(state.connectionStatus === "connected" && state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap" && state.auth.registrationStatus === "registered" && !!authCredentials(state.auth).releaseToken)) {
 		stopHostedSessionRefreshLoop();
 		return;
 	}
@@ -8245,7 +8366,8 @@ function handleDecisionTrace(trace) {
 	state.tick = state.logicalTime;
 }
 function handleControlCompletionAck(ack) {
-	const feedback = pendingControlFeedback.get(ack?.request_id) || state.lastControlFeedback;
+	if (!acceptRuntimeAckIdentity(ack)) return;
+	const feedback = pendingControlFeedback.get(ack?.request_id);
 	if (!feedback) return;
 	feedback.deltaLogicalTime = Number(ack?.delta_logical_time || 0);
 	feedback.deltaEventSeq = Number(ack?.delta_event_seq || 0);
@@ -8446,7 +8568,7 @@ function canAutoIssueLocalTestPlayerSession() {
 async function issueLocalTestPlayerSession() {
 	const stored = resolveStoredLocalTestPlayerSession();
 	if (stored) {
-		state.auth = stored;
+		await installSession(state, stored);
 		render();
 		maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
 		return state.auth;
@@ -8454,7 +8576,7 @@ async function issueLocalTestPlayerSession() {
 	const keypair = await generateEphemeralEd25519Keypair();
 	if (state.auth.available) return state.auth;
 	const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
-	state.auth = {
+	await installSession(state, {
 		available: true,
 		hostedAccountId: null,
 		playerId,
@@ -8481,8 +8603,7 @@ async function issueLocalTestPlayerSession() {
 		pendingRequestedAgentId: null,
 		pendingForceRebind: false,
 		rebindNotice: null
-	};
-	window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__?.();
+	});
 	persistLocalTestPlayerSession(state.auth);
 	render();
 	maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
@@ -8592,7 +8713,7 @@ async function completeHostedAccountLogin() {
 			throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
 		}
 		state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
-		state.auth = {
+		await installSession(state, {
 			available: true,
 			hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
 			playerId: String(payload.grant.player_id || "").trim(),
@@ -8622,7 +8743,7 @@ async function completeHostedAccountLogin() {
 			pendingRequestedAgentId: null,
 			pendingForceRebind: false,
 			rebindNotice: null
-		};
+		});
 		persistHostedPlayerSession(state.auth);
 		resetHostedLoginChallenge();
 		state.hostedLogin.startInFlight = false;
@@ -8668,7 +8789,7 @@ async function requestHostedStrongAuthGrant(actionId, agentId) {
 	const auth = await ensureHostedAuthSigningKey(state.auth);
 	const playerId = String(auth.playerId || "").trim();
 	const publicKey = String(auth.publicKey || "").trim();
-	const releaseToken = String(state.auth.releaseToken || "").trim();
+	const releaseToken = String(authCredentials(state.auth).releaseToken || "").trim();
 	const approvalCode = String(state.strongAuth.approvalCode || "").trim();
 	if (!playerId || !publicKey || !releaseToken) throw new Error("hosted strong-auth grant requires an active player_session with release token and browser session signing key");
 	if (!approvalCode) throw new Error("backend approval code is required before hosted strong auth can be granted");
@@ -8734,7 +8855,7 @@ function probeHostedRuntimeSession() {
 }
 async function releaseHostedPlayerSlot() {
 	const playerId = String(state.auth.playerId || "").trim();
-	const releaseToken = String(state.auth.releaseToken || "").trim();
+	const releaseToken = String(authCredentials(state.auth).releaseToken || "").trim();
 	if (!playerId || !releaseToken || state.auth.source === "legacy_viewer_auth_bootstrap") return {
 		ok: false,
 		skipped: true
@@ -8754,12 +8875,14 @@ async function releaseHostedPlayerSlot() {
 	return payload;
 }
 function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) {
+	cancelHostedLeaseRefresh();
+	clearPendingSessionRegisterWaiter("authentication session was invalidated");
 	stopHostedSessionRefreshLoop();
 	clearHostedPlayerSession();
 	const bootstrap = resolveAuthBootstrap();
 	const revokeReason = String(revocationMeta?.revokeReason || "").trim() || null;
 	const revokedBy = String(revocationMeta?.revokedBy || "").trim() || null;
-	state.auth = bootstrap.available ? bootstrap : {
+	clearSession(state, {
 		...bootstrap,
 		source: "guest_only",
 		registrationStatus: "guest",
@@ -8779,7 +8902,8 @@ function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) 
 		pendingRequestedAgentId: null,
 		pendingForceRebind: false,
 		rebindNotice: null
-	};
+	});
+	if (bootstrap.available) installSession(state, bootstrap).then(() => render());
 	refreshHostedAdmissionState().then(() => render());
 }
 async function logoutHostedPlayerSession() {
@@ -8834,6 +8958,25 @@ function clearPendingSessionRegisterWaiter(error = null, options = {}) {
 	if (waiter.timeoutId) window.clearTimeout(waiter.timeoutId);
 	if (error != null && options.reject !== false) waiter.reject(error instanceof Error ? error : new Error(String(error)));
 }
+function acceptRuntimeAckIdentity(ack, registration = false) {
+	const error = validateRuntimeAckIdentity(ack, state.auth, registration, pendingSessionRegisterWaiter?.requestedAgentId);
+	if (!error) return true;
+	invalidateAuthConnection();
+	const invalidSocket = socket;
+	socket = null;
+	cancelHostedLeaseRefresh();
+	invalidSocket?.close();
+	clearPendingSessionRegisterWaiter(error);
+	if (hasSigningIdentity(state.auth)) updateRegistrationGrant(state.auth, null);
+	state.auth.syncInFlight = false;
+	state.auth.runtimeStatus = "error";
+	state.auth.error = error;
+	state.connectionStatus = "error";
+	state.lastError = error;
+	stopHostedSessionRefreshLoop();
+	clearHostedRuntimeSyncTimer();
+	return false;
+}
 function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
 	if (state.connectionStatus === "error" && /player session registration timed out/i.test(String(state.lastError || ""))) {
 		state.connectionStatus = "connected";
@@ -8843,13 +8986,12 @@ function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
 	state.auth.recoveryErrorCode = null;
 	state.auth.recoveryErrorMessage = null;
 	state.auth.error = null;
-	if (ack?.player_id) state.auth.playerId = ack.player_id;
-	if (ack?.session_pubkey) state.auth.publicKey = ack.session_pubkey;
 	if (ack?.session_epoch != null) state.auth.sessionEpoch = Number(ack.session_epoch);
 	if (Object.prototype.hasOwnProperty.call(ack || {}, "binding_epoch")) state.auth.bindingEpoch = ack.binding_epoch == null ? null : Number(ack.binding_epoch);
 	state.auth.authorityEpoch = state.viewerProtocol.authorityEpoch || null;
 }
 function resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack = null) {
+	if (pendingSessionRegisterWaiter && !isSessionContextCurrent(state, pendingSessionRegisterWaiter.context, authConnectionGeneration(), state.wsUrl)) return;
 	recoverConnectedSessionStateAfterRuntimeAck(ack);
 	if (!pendingSessionRegisterWaiter) return;
 	const waiter = pendingSessionRegisterWaiter;
@@ -8874,6 +9016,10 @@ function expirePendingSessionRegisterWaiterForTest() {
 async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
 	clearHostedRuntimeSyncTimer();
 	const auth = state.auth.source === "legacy_viewer_auth_bootstrap" ? state.auth : await ensureHostedAuthSigningKey(state.auth);
+	const operationContext = captureSessionContext(state, authConnectionGeneration(), state.wsUrl);
+	if (auth.source !== "legacy_viewer_auth_bootstrap" && authCredentials(auth).releaseToken && !authCredentials(auth).registrationGrant) {
+		if (!(await refreshHostedPlayerLease())?.ok || !isSessionContextCurrent(state, operationContext, authConnectionGeneration(), state.wsUrl)) throw new Error("registration grant refresh was invalidated");
+	}
 	const normalizedRequestedAgentId = String(requestedAgentId || "").trim() || null;
 	if (state.auth.source !== "legacy_viewer_auth_bootstrap") {
 		state.auth.registrationStatus = "registering";
@@ -8883,16 +9029,18 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
 		state.auth.runtimeStatus = forceRebind === true ? "rebind_registering" : "registering";
 	}
 	if (forceRebind === true) state.auth.rebindNotice = `Switching player session to ${normalizedRequestedAgentId || "requested agent"}...`;
+	if (pendingSessionRegisterWaiter) pendingSessionRegisterWaiter.context = captureSessionContext(state, authConnectionGeneration(), state.wsUrl);
 	state.auth.pendingRequestedAgentId = normalizedRequestedAgentId;
 	state.auth.pendingForceRebind = forceRebind === true;
 	const request = {
 		player_id: auth.playerId,
 		public_key: auth.publicKey
 	};
-	if (auth.registrationGrant) request.registration_grant = auth.registrationGrant;
+	if (authCredentials(auth).registrationGrant) request.registration_grant = authCredentials(auth).registrationGrant;
 	if (normalizedRequestedAgentId) request.requested_agent_id = normalizedRequestedAgentId;
 	if (forceRebind === true) request.force_rebind = true;
 	request.auth = await buildSessionRegisterAuthProof(request, auth);
+	if (!isSessionContextCurrent(state, operationContext, authConnectionGeneration(), state.wsUrl)) throw new Error("registration context was invalidated");
 	sendJson({
 		type: "authoritative_recovery",
 		command: {
@@ -8944,6 +9092,7 @@ async function ensureRegisteredPlayerSession(requestedAgentId = null, options = 
 		rejectWaiter = reject;
 	});
 	pendingSessionRegisterWaiter = {
+		context: captureSessionContext(state, authConnectionGeneration(), state.wsUrl),
 		requestedAgentId: normalizedRequestedAgentId,
 		forceRebind,
 		promise,
@@ -9484,8 +9633,10 @@ function sendGameplayAction(actionOrId) {
 	};
 }
 function handleGameplayActionAck(ack) {
+	if (!acceptRuntimeAckIdentity(ack)) return;
+	const pendingAction = state.lastGameplayActionFeedback;
+	if (!pendingAction || ack?.action_id !== pendingAction.action || ack?.target_agent_id !== (pendingAction.targetAgentId || pendingAction.agentId)) return;
 	clearPendingGameplayActionAckTimer();
-	resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
 	const feedback = state.lastGameplayActionFeedback || createSemanticFeedback("gameplay_action", ack?.action_id || "gameplay_action", ack?.target_agent_id || null);
 	feedback.stage = "ack";
 	feedback.ok = true;
@@ -9494,7 +9645,6 @@ function handleGameplayActionAck(ack) {
 	feedback.effect = ack?.message || `gameplay action accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
 	feedback.response = clone(ack);
 	state.lastGameplayActionFeedback = feedback;
-	if (ack?.player_id) state.auth.playerId = ack.player_id;
 	if (ack?.action_id === "claim_first_agent" && ack?.target_agent_id) {
 		state.auth.boundAgentId = ack.target_agent_id;
 		state.auth.pendingRequestedAgentId = ack.target_agent_id;
@@ -9586,16 +9736,17 @@ function applyPromptAckLocally(ack) {
 	};
 }
 function handlePromptControlAck(ack) {
-	viewerPromptControlModule?.handleAck(ack);
+	if (acceptRuntimeAckIdentity(ack)) viewerPromptControlModule?.handleAck(ack);
 }
 function handlePromptControlError(error) {
 	viewerPromptControlModule?.handleError(error);
 }
 function handleAgentChatAck(ack) {
+	if (!acceptRuntimeAckIdentity(ack)) return;
+	const feedback = state.lastChatFeedback;
+	if (!agentChatFeedbackInFlight(feedback) || ack?.agent_id !== feedback.agentId) return;
 	clearPendingAgentChatAckTimer();
 	clearPendingAgentChatOverallTimer();
-	resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
-	const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", ack?.agent_id || null);
 	feedback.stage = "ack";
 	feedback.ok = true;
 	feedback.accepted = true;
@@ -9651,6 +9802,8 @@ function adoptHostedRecoveryAck(ack) {
 		ack.binding_epoch,
 		ack.agent_id
 	].every((value) => value == null)) return;
+	if (!acceptRuntimeAckIdentity(ack, ack.status === "session_registered" || ack.status === "session_revoked")) return;
+	if (ack.status === "session_registered" && (!pendingSessionRegisterWaiter || !isSessionContextCurrent(state, pendingSessionRegisterWaiter.context, authConnectionGeneration(), state.wsUrl))) return;
 	clearHostedRuntimeSyncTimer();
 	const usesLegacyPreviewBootstrap = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
 	const hadPendingForceRebind = state.auth.pendingForceRebind === true;
@@ -9663,8 +9816,6 @@ function adoptHostedRecoveryAck(ack) {
 	state.auth.error = null;
 	state.auth.revokeReason = null;
 	state.auth.revokedBy = null;
-	if (ack.player_id) state.auth.playerId = ack.player_id;
-	if (ack.session_pubkey) state.auth.publicKey = ack.session_pubkey;
 	if (ack.session_epoch != null) state.auth.sessionEpoch = Number(ack.session_epoch);
 	if (Object.prototype.hasOwnProperty.call(ack, "binding_epoch")) state.auth.bindingEpoch = ack.binding_epoch == null ? null : Number(ack.binding_epoch);
 	state.auth.boundAgentId = nextBoundAgentId;
@@ -9673,7 +9824,7 @@ function adoptHostedRecoveryAck(ack) {
 	state.auth.pendingForceRebind = false;
 	if (ack.status === "session_registered" && hadPendingForceRebind) state.auth.rebindNotice = `Player session switched to ${ack.agent_id || previousRequestedAgentId || "requested agent"}.`;
 	state.auth.registrationStatus = ack.status === "session_registered" || ack.status === "catch_up_ready" ? "registered" : ack.status === "session_revoked" ? "guest" : "issued";
-	if (ack.status === "session_registered" || ack.status === "catch_up_ready") state.auth.registrationGrant = null;
+	if (ack.status === "session_registered" || ack.status === "catch_up_ready") updateRegistrationGrant(state.auth, null);
 	state.auth.runtimeStatus = ack.status === "session_revoked" ? "revoked" : nextBoundAgentId ? "registered" : "registered_unbound";
 	if (ack.status === "session_revoked") {
 		if (usesLegacyPreviewBootstrap) {
@@ -9694,7 +9845,7 @@ function adoptHostedRecoveryAck(ack) {
 		refreshHostedPlayerLease();
 		syncHostedSessionRefreshLoop();
 	}
-	if (ack.status === "session_registered" || ack.status === "catch_up_ready") resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
+	if (ack.status === "session_registered") resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
 	maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
 	if (ack.status === "session_registered") requestSnapshotSafe();
 }
@@ -9817,7 +9968,10 @@ function handleViewerMessage(message, sourceSocket = null) {
 				scheduleInitialSnapshotRetry();
 			}
 			ensureHostedPlayerAuthAvailable().then(() => {
-				syncHostedPlayerSessionOnConnect();
+				syncHostedPlayerSessionOnConnect().catch((error) => {
+					state.auth.error = String(error);
+					render();
+				});
 				render();
 			});
 			break;
@@ -9910,6 +10064,8 @@ function attachSocket(ws) {
 	});
 	ws.addEventListener("close", () => {
 		if (socket !== ws) return;
+		invalidateAuthConnection();
+		cancelHostedLeaseRefresh();
 		worldFeedTransport.markDisconnected(ws);
 		resetViewerProtocolForConnection();
 		state.connectionStatus = "connecting";
@@ -9931,11 +10087,12 @@ function attachSocket(ws) {
 	});
 }
 function connect() {
+	invalidateAuthConnection();
 	if (socket) try {
 		socket.close();
 	} catch (_) {}
-	const params = getSearchParams();
-	state.wsUrl = normalizeWsAddr(params.get("ws") || params.get("addr") || "ws://127.0.0.1:5011");
+	cancelHostedLeaseRefresh();
+	state.wsUrl = initialWsUrl();
 	state.connectionStatus = "connecting";
 	render();
 	socket = new WebSocket(state.wsUrl);
@@ -10441,66 +10598,7 @@ function setStrongAuthApprovalCode(value) {
 		configured: !!state.strongAuth.approvalCode.trim()
 	};
 }
-function installTestApi() {
-	if (!isTestApiEnabled()) return;
-	window[TEST_API_GLOBAL_NAME] = {
-		getState,
-		describeControls,
-		fillControlExample,
-		sendControl,
-		sendGameplayAction,
-		requestRefineQuote,
-		requestProductValidationQuote,
-		requestPowerSurvivalQuote,
-		requestFragmentRefillPreview,
-		requestGovernanceVoteQuote,
-		requestWarDeclarationQuote,
-		requestPowerSaleQuote,
-		requestScheduleRecipeQuote,
-		requestTransferMaterialQuote,
-		requestMarketQuoteDecision,
-		injectMarketQuoteDecisionForTest,
-		runSteps,
-		setMode,
-		focus,
-		select,
-		sendAgentChat,
-		sendPromptControl,
-		setPromptOverridesVisible,
-		togglePromptOverridesVisible,
-		setStrongAuthApprovalCode,
-		injectSnapshot,
-		injectWorldFeedForTest(feed) {
-			if (!isTestApiEnabled() || getSearchParams().get("connect") !== "0") throw new Error("feed fixture requires test_api=1&connect=0");
-			worldFeedTransport.handleWorldFeed(clone(feed));
-			render();
-			return clone(state.worldFeed);
-		},
-		injectRefineQuotePreflightForTest,
-		injectProductValidationQuoteForTest,
-		injectPowerSaleQuoteForTest,
-		injectPowerSurvivalQuoteForTest,
-		injectWarDeclarationQuoteForTest,
-		injectScheduleRecipeQuoteForTest,
-		injectTransferMaterialQuoteForTest,
-		logoutHostedPlayerSession,
-		startHostedAccountLogin,
-		completeHostedAccountLogin,
-		startHostedTestLogin,
-		retryHostedPlayerIdentityIssue,
-		refreshPromptControlBinding,
-		registerPlayerSessionForTest,
-		expirePendingSessionRegisterWaiterForTest,
-		expireHostedRuntimeSyncTimeoutForTest,
-		expirePendingPromptControlAckTimeoutForTest,
-		expirePendingGameplayActionAckTimeoutForTest,
-		offerBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.offerBrowserRaceIdentityForTest,
-		claimBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.claimBrowserRaceIdentityForTest,
-		connectBrowserRaceActorForTest: viewerBrowserRaceIdentityTestApi.connectBrowserRaceActorForTest,
-		reportFatalError
-	};
-}
-var viewerBrowserRaceIdentityTestApi = createViewerBrowserRaceIdentityTestApi({
+createViewerBrowserRaceIdentityTestApi({
 	authHasSigningKeyMaterial,
 	clone,
 	connect,
@@ -10537,15 +10635,18 @@ viewerPromptControlModule = createViewerPromptControlModule({
 	signAuthPayload,
 	state
 });
-function bootstrap() {
+async function bootstrap() {
 	state.uiLocale = resolveInitialUiLocale();
 	state.promptOverridesVisible = resolveStoredPromptOverridesVisibility();
 	applyUiLocaleToDocument(state.uiLocale);
 	Object.assign(state, detectRendererMeta());
-	state.hostedAccess = resolveHostedAccessHint();
-	state.auth = resolveViewerAuthState();
+	state.hostedAccess = {
+		...resolveHostedAccessHint() || {},
+		deployment_mode: viewerRuntimeConfig().deploymentMode
+	};
+	await installSession(state, resolveViewerAuthState());
 	state.wsUrl = initialWsUrl();
-	installRefineQuotePreflightVisualFixture$1();
+	installRefineQuotePreflightVisualFixture();
 	productValidationQuote.installProductValidationQuoteVisualFixture();
 	powerSurvivalQuote.installPowerSurvivalQuoteVisualFixture();
 	scheduleRecipeQuote.installScheduleRecipeQuoteVisualFixture();
@@ -10559,7 +10660,6 @@ function bootstrap() {
 		vendor: state.vendor,
 		webglVersion: state.webglVersion
 	});
-	installTestApi();
 	render();
 	if (shouldRunHostedBootstrap()) {
 		refreshHostedAdmissionState().then(() => render());
@@ -10578,9 +10678,16 @@ function updatePixelWorldRuntimeMeta(meta = {}) {
 	return getState();
 }
 function initializeSoftwareSafeCore() {
-	if (bootstrapped) return;
+	if (bootstrapped) return bootstrapPromise;
 	bootstrapped = true;
-	bootstrap();
+	bootstrapPromise = bootstrap().catch((error) => {
+		state.connectionStatus = "error";
+		state.auth.error = String(error);
+		state.lastError = String(error);
+		render();
+		throw error;
+	});
+	return bootstrapPromise;
 }
 window.addEventListener("error", (event) => {
 	reportFatalError(event?.message || event?.error?.message || "window error", "window.error");
@@ -10998,608 +11105,9 @@ function createPixelWorldRendererRouteSignals(route, signalFactory) {
 	];
 }
 //#endregion
-//#region software_safe_src/pixel_world_visual_fixture_data.js
-function pixelWorldRoutesAndEventsVisualFixture() {
-	const snapshot = pixelWorldSelectedBlockerVisualFixture();
-	const relation = {
-		kind: "agent_assignment",
-		status: "active",
-		source_class: "runtime_projection",
-		freshness: "current"
-	};
-	snapshot.model.agents["agent-0"].relation = { ...relation };
-	snapshot.model.agents["agent-1"].relation = { ...relation };
-	snapshot.model.agents["agent-1"].pos = {
-		x_cm: 37e5,
-		y_cm: 23e5,
-		z_cm: 0
-	};
-	snapshot.model.locations["loc-0"].pos = {
-		x_cm: 43e5,
-		y_cm: 31e5,
-		z_cm: 0
-	};
-	snapshot.model.locations["loc-1"].pos = {
-		x_cm: 52e5,
-		y_cm: 265e4,
-		z_cm: 0
-	};
-	snapshot.model.agent_player_bindings["agent-1"] = "player-one";
-	snapshot.model.agent_player_public_key_bindings["agent-1"] = snapshot.model.agent_player_public_key_bindings["agent-0"];
-	const genericRelation = {
-		kind: "logistics_route",
-		label: "Ore logistics route",
-		status: "active",
-		source_class: "runtime_projection",
-		freshness: "current"
-	};
-	snapshot.model.agents["agent-route"] = {
-		id: "agent-route",
-		name: "Route Agent",
-		location_id: "loc-route",
-		pos: {
-			x_cm: 12e5,
-			y_cm: 9e5,
-			z_cm: 0
-		},
-		relation: { ...genericRelation },
-		resources: {}
-	};
-	snapshot.model.locations["loc-route"] = {
-		id: "loc-route",
-		name: "Ore Transfer Yard",
-		pos: {
-			x_cm: 23e5,
-			y_cm: 9e5,
-			z_cm: 0
-		},
-		profile: {
-			radius_cm: 3e4,
-			material: "ore"
-		},
-		resources: {}
-	};
-	snapshot.model.agents["agent-unknown-route"] = {
-		id: "agent-unknown-route",
-		name: "Unknown Route Agent",
-		location_id: "loc-unknown-route",
-		pos: {
-			x_cm: 12e5,
-			y_cm: 16e5,
-			z_cm: 0
-		},
-		relation: {
-			kind: "unknown",
-			status: "active",
-			source_class: "runtime_projection",
-			freshness: "current"
-		},
-		resources: {}
-	};
-	snapshot.model.locations["loc-unknown-route"] = {
-		id: "loc-unknown-route",
-		name: "Unknown Route Yard",
-		pos: {
-			x_cm: 23e5,
-			y_cm: 16e5,
-			z_cm: 0
-		},
-		profile: {
-			radius_cm: 3e4,
-			material: "ore"
-		},
-		resources: {}
-	};
-	snapshot.model.agents["agent-stale-route"] = {
-		id: "agent-stale-route",
-		name: "Stale Route Agent",
-		location_id: "loc-stale-route",
-		pos: {
-			x_cm: 12e5,
-			y_cm: 23e5,
-			z_cm: 0
-		},
-		relation: {
-			kind: "route",
-			status: "active",
-			source_class: "runtime_projection",
-			freshness: "stale"
-		},
-		resources: {}
-	};
-	snapshot.model.locations["loc-stale-route"] = {
-		id: "loc-stale-route",
-		name: "Stale Route Yard",
-		pos: {
-			x_cm: 23e5,
-			y_cm: 23e5,
-			z_cm: 0
-		},
-		profile: {
-			radius_cm: 3e4,
-			material: "ore"
-		},
-		resources: {}
-	};
-	snapshot.model.agents["agent-zero-route"] = {
-		id: "agent-zero-route",
-		name: "Zero Length Agent",
-		location_id: "loc-zero-route",
-		pos: {
-			x_cm: 75e5,
-			y_cm: 42e5,
-			z_cm: 0
-		},
-		relation: {
-			kind: "resource_flow",
-			status: "active",
-			source_class: "runtime_projection",
-			freshness: "current"
-		},
-		resources: {}
-	};
-	snapshot.model.locations["loc-zero-route"] = {
-		id: "loc-zero-route",
-		name: "Zero Length Yard",
-		pos: {
-			x_cm: 75e5,
-			y_cm: 42e5,
-			z_cm: 0
-		},
-		profile: {
-			radius_cm: 3e4,
-			material: "ore"
-		},
-		resources: {}
-	};
-	for (const id of [
-		"agent-route",
-		"agent-unknown-route",
-		"agent-stale-route",
-		"agent-zero-route"
-	]) {
-		snapshot.model.agent_player_bindings[id] = "player-one";
-		snapshot.model.agent_player_public_key_bindings[id] = snapshot.model.agent_player_public_key_bindings["agent-0"];
-	}
-	return snapshot;
-}
-function pixelWorldSelectedBlockerVisualFixture() {
-	return {
-		time: 12,
-		config: { space: {
-			width_cm: 1e7,
-			depth_cm: 5e6,
-			height_cm: 1e6
-		} },
-		model: {
-			agents: {
-				"agent-0": {
-					id: "agent-0",
-					name: "Agent 0",
-					location_id: "loc-0",
-					pos: {
-						x_cm: 29e5,
-						y_cm: 345e4,
-						z_cm: 0
-					},
-					resources: {}
-				},
-				"agent-1": {
-					id: "agent-1",
-					name: "Agent 1",
-					location_id: "loc-1",
-					pos: {
-						x_cm: 69e5,
-						y_cm: 115e4,
-						z_cm: 0
-					},
-					resources: {}
-				}
-			},
-			locations: {
-				"loc-0": {
-					id: "loc-0",
-					name: "Factory Anchor",
-					pos: {
-						x_cm: 715e4,
-						y_cm: 22e5,
-						z_cm: 0
-					},
-					profile: {
-						radius_cm: 55e3,
-						radiation_emission_per_tick: 0,
-						material: "silicate"
-					},
-					fragment_profile: { blocks: { blocks: [
-						{
-							origin_cm: {
-								x_cm: -36e3,
-								y_cm: 0,
-								z_cm: -22e3
-							},
-							size_cm: {
-								x_cm: 28e3,
-								y_cm: 7500,
-								z_cm: 2e4
-							},
-							density_kg_per_m3: 3200,
-							compounds: { ppm: {
-								silicate_matrix: 8e5,
-								water_ice: 2e5
-							} }
-						},
-						{
-							origin_cm: {
-								x_cm: 4e3,
-								y_cm: 1e3,
-								z_cm: -12e3
-							},
-							size_cm: {
-								x_cm: 42e3,
-								y_cm: 8e3,
-								z_cm: 18e3
-							},
-							density_kg_per_m3: 7800,
-							compounds: { ppm: {
-								iron_nickel_alloy: 9e5,
-								sulfide_ore: 1e5
-							} }
-						},
-						{
-							origin_cm: {
-								x_cm: -18e3,
-								y_cm: 500,
-								z_cm: 18e3
-							},
-							size_cm: {
-								x_cm: 34e3,
-								y_cm: 6e3,
-								z_cm: 24e3
-							},
-							density_kg_per_m3: 5200,
-							compounds: { ppm: {
-								sulfide_ore: 62e4,
-								hydrated_mineral: 38e4
-							} }
-						},
-						{
-							origin_cm: {
-								x_cm: 3e4,
-								y_cm: 0,
-								z_cm: 24e3
-							},
-							size_cm: {
-								x_cm: 22e3,
-								y_cm: 4500,
-								z_cm: 16e3
-							},
-							density_kg_per_m3: 2600,
-							compounds: { ppm: {
-								silicate_matrix: 7e5,
-								rare_earth_oxide: 3e5
-							} }
-						}
-					] } },
-					resources: {}
-				},
-				"loc-1": {
-					id: "loc-1",
-					name: "Assembly Nexus",
-					pos: {
-						x_cm: 455e4,
-						y_cm: 12e5,
-						z_cm: 0
-					},
-					profile: {
-						radius_cm: 38e3,
-						radiation_emission_per_tick: 0,
-						material: "alloy"
-					},
-					resources: {}
-				}
-			},
-			agent_prompt_profiles: {},
-			agent_execution_debug_contexts: {},
-			agent_player_bindings: {
-				"agent-0": "player-one",
-				"agent-1": "player-two"
-			},
-			agent_player_public_key_bindings: {
-				"agent-0": "abcdef0123456789abcdef0123456789",
-				"agent-1": "bbbbbb0123456789bbbbbb0123456789"
-			}
-		},
-		player_gameplay: {
-			stage_id: "post_onboarding",
-			stage_status: "blocked",
-			execution_state: "blocked",
-			accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
-			intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
-			intent_scope: "gameplay_action",
-			intent_target: "agent-0",
-			goal_id: "post_onboarding.recover_capability",
-			goal_kind: "RecoverCapability",
-			goal_title: "Recover sustainable capability",
-			objective: "Stabilize the first production line before expanding.",
-			progress_detail: "The primary line is blocked by missing material input.",
-			progress_percent: 68,
-			blocker_kind: "material_shortage",
-			blocker_detail: "iron input exhausted at factory-0",
-			causality_kind: "world_constraint",
-			causality_detail: "iron input exhausted at factory-0",
-			last_world_change: "Smelter build request reached factory-0; iron shortage blocks construction.",
-			blocker_supplemental_detail: null,
-			next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
-			branch_hint: null,
-			available_actions: [{
-				action_id: "build_factory_smelter_mk1",
-				target_agent_id: "agent-0",
-				label: "Build smelter mk1",
-				protocol_action: "gameplay_action.submit",
-				disabled_reason: null
-			}],
-			recent_feedback: {
-				action: "build_factory_smelter_mk1",
-				stage: "completed_no_progress",
-				effect: "Smelter build request reached factory-0; iron shortage blocks construction.",
-				reason: "iron input exhausted at factory-0",
-				hint: "Replenish upstream materials, then advance again.",
-				delta_logical_time: 1,
-				delta_event_seq: 2
-			},
-			micro_depot_facilities: [{
-				facility_id: "depot-fixture-loc-0",
-				status: "active",
-				location_id: "loc-0",
-				service_radius_cm: 24e4
-			}],
-			agent_claim: null
-		}
-	};
-}
-function pixelWorldRecommendedTargetVisualFixture() {
-	const fixture = pixelWorldSelectedBlockerVisualFixture();
-	const gameplay = fixture.player_gameplay;
-	gameplay.stage_status = "ready";
-	gameplay.execution_state = "waiting_for_intent";
-	delete gameplay.accepted_intent_id;
-	delete gameplay.intent_summary;
-	delete gameplay.intent_scope;
-	delete gameplay.intent_target;
-	delete gameplay.last_world_change;
-	gameplay.recent_feedback = null;
-	return fixture;
-}
-function microDepotStockRunwayLocation(id, name, xCm, yCm, material) {
-	return {
-		id,
-		name,
-		pos: {
-			x_cm: xCm,
-			y_cm: yCm,
-			z_cm: 0
-		},
-		profile: {
-			radius_cm: 55e3,
-			radiation_emission_per_tick: 0,
-			material
-		},
-		resources: {}
-	};
-}
-function microDepotStockRunwayFacility(facilityId, locationId, inventoryRevision, throughputEpoch, throughputRemainingUnits) {
-	return {
-		facility_id: facilityId,
-		status: "active",
-		location_id: locationId,
-		service_radius_cm: 24e4,
-		inventory_revision: inventoryRevision,
-		available_units_by_kind: { data: throughputRemainingUnits },
-		throughput_epoch: throughputEpoch,
-		throughput_remaining_units: throughputRemainingUnits,
-		throughput_limit_units_per_epoch: 8
-	};
-}
-function pixelWorldMicroDepotStockRunwayVisualFixture() {
-	const fixture = pixelWorldSelectedBlockerVisualFixture();
-	fixture.model.locations["loc-depot-healthy"] = microDepotStockRunwayLocation("loc-depot-healthy", "Healthy Depot", 46e5, 24e5, "alloy");
-	fixture.model.locations["loc-depot-low"] = microDepotStockRunwayLocation("loc-depot-low", "Low Depot", 48e5, 27e5, "silicate");
-	fixture.model.locations["loc-depot-zero"] = microDepotStockRunwayLocation("loc-depot-zero", "Zero Depot", 5e6, 3e6, "alloy");
-	fixture.player_gameplay.micro_depot_facilities = [
-		microDepotStockRunwayFacility("depot-fixture-healthy", "loc-depot-healthy", 101, 17, 8),
-		microDepotStockRunwayFacility("depot-fixture-low", "loc-depot-low", 202, 17, 2),
-		microDepotStockRunwayFacility("depot-fixture-zero", "loc-depot-zero", 303, 17, 0)
-	];
-	return fixture;
-}
-function pixelWorldModuleVisualEntitiesFixture() {
-	const fixture = pixelWorldSelectedBlockerVisualFixture();
-	fixture.model.module_visual_entities = {
-		"module-absolute": {
-			entity_id: "module-absolute",
-			module_id: "fixture-module",
-			kind: "beacon",
-			label: "Beacon marker",
-			anchor: {
-				type: "absolute",
-				data: { pos: {
-					x_cm: 185e4,
-					y_cm: 36e5,
-					z_cm: 0
-				} }
-			}
-		},
-		"module-relay": {
-			entity_id: "module-relay",
-			module_id: "fixture-module",
-			kind: "relay",
-			label: "Relay marker",
-			anchor: {
-				type: "absolute",
-				data: { pos: {
-					x_cm: 185e4,
-					y_cm: 36e5,
-					z_cm: 0
-				} }
-			}
-		},
-		"module-agent": {
-			entity_id: "module-agent",
-			module_id: "fixture-module",
-			kind: "future_module_kind",
-			label: "Unknown marker",
-			anchor: {
-				type: "agent",
-				data: { agent_id: "agent-0" }
-			}
-		}
-	};
-	return fixture;
-}
-//#endregion
-//#region software_safe_src/pixel_world_visual_fixture.js
-var PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
-var PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__";
-function pixelWorldTestApiEnabled() {
-	if (typeof window === "undefined" || !window.location) return false;
-	const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
-	return value === "1" || value === "true" || value === "yes" || value === "on";
-}
-function requestedVisualFixtureName() {
-	if (typeof window === "undefined" || !window.location) return null;
-	return String(new URLSearchParams(window.location.search || "").get("pixel_world_visual_fixture") || "").trim();
-}
-function liveConnectionDisabledForFixture() {
-	if (typeof window === "undefined" || !window.location) return false;
-	return String(new URLSearchParams(window.location.search || "").get("connect") || "").trim() === "0";
-}
-function installPixelWorldVisualFixtureHook() {
-	if (typeof window === "undefined" || !pixelWorldTestApiEnabled() || !liveConnectionDisabledForFixture()) return null;
-	const fixtures = {
-		selected_blocker: () => clone(pixelWorldSelectedBlockerVisualFixture()),
-		hotspot_tooltip: () => clone(pixelWorldSelectedBlockerVisualFixture()),
-		recent_event_glyphs: () => clone(pixelWorldSelectedBlockerVisualFixture()),
-		routes_and_events: () => clone(pixelWorldRoutesAndEventsVisualFixture()),
-		recommended_target: () => clone(pixelWorldRecommendedTargetVisualFixture()),
-		module_visual_entities: () => clone(pixelWorldModuleVisualEntitiesFixture()),
-		micro_depot_stock_runway: () => clone(pixelWorldMicroDepotStockRunwayVisualFixture())
-	};
-	window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
-	const fixtureName = requestedVisualFixtureName();
-	if (!fixtureName || !fixtures[fixtureName]) return null;
-	const fixture = fixtures[fixtureName]();
-	injectSnapshot(fixture, { returnState: false });
-	if (fixtureName === "module_visual_entities") {
-		state.worldFeed = {
-			status: "ready",
-			schemaVersion: "world_feed/v1",
-			worldId: "fixture-world",
-			reorgEpoch: "0",
-			cursor: "101",
-			events: [{
-				event_seq: 101,
-				kind: "ModuleVisualEntityUpserted",
-				summary: "Relay marker published",
-				detail: "The relay marker is available on the world map.",
-				receipt_ref: null,
-				module_visual_entity_id: "module-relay"
-			}, {
-				event_seq: 100,
-				kind: "ModuleVisualEntityRemoved",
-				summary: "Removed marker reference",
-				detail: "The referenced marker is no longer in the current snapshot.",
-				receipt_ref: null,
-				module_visual_entity_id: "module-deleted"
-			}],
-			stale: false,
-			gapReason: null,
-			unavailableReason: null,
-			snapshotReloadRequired: false,
-			requestInFlight: false,
-			requestCursor: null,
-			requestLimit: 50,
-			dedupedCount: 0,
-			lastError: null
-		};
-		window.__OASIS7_MODULE_VISUAL_FIXTURE_CONTROL__ = {
-			update(entities) {
-				const next = clone(fixture);
-				next.model.module_visual_entities = clone(entities || {});
-				injectSnapshot(next, { returnState: false });
-				requestRender();
-				return true;
-			},
-			publishEvent(event) {
-				state.worldFeed.events = [clone(event)];
-				state.worldFeed.status = "ready";
-				state.worldFeed.stale = false;
-				requestRender();
-				return true;
-			},
-			publishStaleEvent(event) {
-				state.worldFeed.events = [clone(event)];
-				state.worldFeed.status = "gap";
-				state.worldFeed.stale = true;
-				requestRender();
-				return true;
-			},
-			clear() {
-				return this.update({});
-			}
-		};
-	}
-	if (["recent_event_glyphs", "routes_and_events"].includes(fixtureName)) {
-		state.recentEvents = [{
-			event_id: "resource-transfer-fixture",
-			title: "Resource transfer completed",
-			kind: "resource_transfer"
-		}, {
-			event_id: "build-queue-fixture",
-			title: "Build queue updated",
-			kind: "build_queue"
-		}];
-		state.eventCount = state.recentEvents.length;
-	}
-	const alignFixtureAuth = () => {
-		const playerId = String(state.auth.playerId || "player-one").trim() || "player-one";
-		const publicKey = String(state.auth.publicKey || "abcdef0123456789abcdef0123456789").trim();
-		const model = state.snapshot?.model || {};
-		const alignedAgentIds = fixtureName === "routes_and_events" ? Object.keys(model.agents || {}) : ["agent-0"];
-		model.agent_player_bindings = { ...model.agent_player_bindings || {} };
-		model.agent_player_public_key_bindings = { ...model.agent_player_public_key_bindings || {} };
-		for (const agentId of alignedAgentIds) {
-			model.agent_player_bindings[agentId] = playerId;
-			model.agent_player_public_key_bindings[agentId] = publicKey;
-		}
-		state.auth = {
-			...state.auth,
-			available: true,
-			playerId,
-			publicKey,
-			privateKey: state.auth.privateKey || "private-key-must-stay-hidden",
-			source: "local_test_api_ephemeral",
-			registrationStatus: "registered",
-			runtimeStatus: "registered",
-			boundAgentId: "agent-0"
-		};
-		applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		requestRender();
-		return true;
-	};
-	window[PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL] = alignFixtureAuth;
-	alignFixtureAuth();
-	return fixtureName;
-}
-function installPixelWorldRenderDtoProbe(fixtureName, getRenderState, onCleanup) {
-	if (!fixtureName || !pixelWorldTestApiEnabled()) return;
-	window.__OASIS7_PIXEL_WORLD_RENDER_DTO__ = () => clone(getRenderState());
-	onCleanup(() => {
-		delete window.__OASIS7_PIXEL_WORLD_RENDER_DTO__;
-	});
-}
+//#region \0release-visual-fixture-disabled
+var pixelWorldTestApiEnabled = () => false;
+var installPixelWorldVisualFixtureHook = () => null;
 //#endregion
 //#region software_safe_src/pixel_world_identity.js
 function agentIdentityParts(agent, fallbackId = "") {
@@ -14732,7 +14240,6 @@ function PixelWorldHost(props) {
 	const [commandDrawerOpen, setCommandDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.commandDrawerOpen);
 	const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = createSignal(pixelWorldFocusUiSessionState.diagnosticsDrawerOpen);
 	const [maximized, setMaximized] = createSignal(pixelWorldFocusUiSessionState.maximized);
-	installPixelWorldRenderDtoProbe(visualFixtureName, renderState, onCleanup);
 	const visualOverlayEnabled = () => {
 		coreRevision();
 		return Boolean(visualFixtureName || document.body?.getAttribute("data-viewer-visual-fixture"));
@@ -18727,1024 +18234,6 @@ function GovernanceVoteQuoteGameplayPanel(props) {
 	});
 }
 //#endregion
-//#region software_safe_src/market_quote_decision_visual_fixture.js
-var quote = Object.freeze({
-	consuming_agent_id: "agent-0",
-	contributions: [{
-		material: "Iron ingot",
-		requested_amount: 4,
-		local_available_amount: 1,
-		world_available_amount: 2,
-		world_cover_amount: 2,
-		shortfall_amount: 1,
-		transit_loss_bps: 20,
-		governance_tax_bps: 100,
-		effective_cost_index_ppm: 1002e3
-	}],
-	total_shortfall_amount: 1,
-	submission_allowed: false,
-	conditional_notice: "This is a conditional preview. Inventory, tax, transit, and price may change before submission.",
-	recommendation: "Reduce the request or obtain more materials",
-	rationale: "Available local and world materials do not cover this request.",
-	next_action: "Reduce requested amounts or source the missing materials"
-});
-function installMarketQuoteDecisionVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.market_quote_decision = () => {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectMarketQuoteDecisionForTest(quote);
-	};
-}
-//#endregion
-//#region software_safe_src/power_survival_quote_visual_fixture.js
-var powerSurvivalQuoteFixture = Object.freeze({
-	buyer_agent_id: "agent-0",
-	seller_agent_id: "agent-1",
-	current_power_level: 2,
-	power_state_before: "critical",
-	recovery_action: "buy_power",
-	recovery_amount: 18,
-	power_gain_estimate: 18,
-	requested_price_per_pu: 3,
-	price_per_pu: 3,
-	price_or_time_cost: 54,
-	power_state_after_recovery: "low_power",
-	survival_runway_ticks: 20,
-	next_action_affordability_after_recovery: "limited",
-	shutdown_avoidance_reason: "recovery restores 20 runway ticks and lifts agent from critical to low_power; recommended action: buy_power_partial",
-	recommended_power_action: "buy_power_partial"
-});
-function installPowerSurvivalQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.power_survival_quote = () => {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectPowerSurvivalQuoteForTest(powerSurvivalQuoteFixture);
-	};
-}
-//#endregion
-//#region software_safe_src/power_sale_quote_visual_fixture.js
-var powerSaleQuoteFixture = Object.freeze({
-	seller_agent_id: "agent-0",
-	buyer_agent_id: "agent-buyer",
-	current_power_level: 15,
-	power_state_before: "low_power",
-	sale_amount: 10,
-	price_per_pu: 3,
-	expected_revenue: 30,
-	power_state_after_sale: "critical",
-	remaining_runway_ticks: 5,
-	next_action_affordability_after_sale: "limited",
-	production_interrupt_risk: true,
-	recommended_sale_action: "defer_sale",
-	why_sale_is_safe_or_risky: "critical power runway"
-});
-function installPowerSaleQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.power_sale_quote = () => {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectPowerSaleQuoteForTest(powerSaleQuoteFixture);
-	};
-}
-//#endregion
-//#region software_safe_src/product_validation_quote_visual_fixture.js
-var productValidationQuoteFixture = Object.freeze({
-	product_id: "logistics_drone",
-	product_role: "explore",
-	tradable: true,
-	stage_before: "bootstrap",
-	stage_after: "bootstrap",
-	unlock_or_value_class: "scale_out",
-	recommended_action: "advance_industry_stage",
-	submission_allowed: true,
-	missing_prerequisite: "industry_stage=scale_out",
-	reachable_advance_or_recovery: "complete_reachable_industry_progress"
-});
-function installProductValidationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.product_validation_quote = () => {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectProductValidationQuoteForTest(productValidationQuoteFixture);
-	};
-}
-//#endregion
-//#region software_safe_src/refine_quote_preflight_visual_fixture.js
-var refineQuotePreflightFixture = Object.freeze({
-	owner_agent_id: "agent-0",
-	compound_mass_g: 40,
-	electricity_cost: 12,
-	electricity_after: 88,
-	hardware_output: 20,
-	target_id: "factory_build_hardware",
-	target_gap_before: 20,
-	target_gap_after: 0,
-	target_linkage: "enables_factory_build_hardware_goal",
-	recommended_refine_amount: 40,
-	value_classification: "enough_to_advance"
-});
-function installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.refine_quote_preflight = () => {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectRefineQuotePreflightForTest(refineQuotePreflightFixture);
-	};
-}
-//#endregion
-//#region software_safe_src/schedule_recipe_quote_visual_fixture.js
-var normalQuote$1 = Object.freeze({
-	owner_agent_id: "agent-0",
-	factory_id: "factory-0",
-	recipe_id: "assemble_hardware",
-	batches: 2,
-	base_duration_ticks: 6,
-	electricity_cost: 12,
-	electricity_after: 88,
-	hardware_cost: 4,
-	data_output: 8,
-	finished_product_id: "hardware",
-	finished_product_units: 2,
-	local_shortage_delay_ticks: 0,
-	shortage_reason: "none",
-	recommended_pre_step: "schedule_now",
-	runway_before_ticks: 40,
-	runway_after_ticks: 40,
-	downtime_threshold_ppm: 25e4,
-	continue_production_risk: "normal",
-	maintenance_pressure_delta: "unchanged",
-	recommended_maintenance_action: "none"
-});
-function installScheduleRecipeQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	function install(quote) {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectScheduleRecipeQuoteForTest(quote);
-	}
-	fixtures.schedule_recipe_quote = () => install(normalQuote$1);
-	fixtures.schedule_recipe_quote_critical = () => install({
-		...normalQuote$1,
-		continue_production_risk: "critical",
-		recommended_pre_step: "restore_power",
-		runway_before_ticks: 3,
-		runway_after_ticks: 3,
-		local_shortage_delay_ticks: 5,
-		shortage_reason: "local_hardware_shortage"
-	});
-}
-//#endregion
-//#region software_safe_src/transfer_material_quote_visual_fixture.js
-var normalQuote = Object.freeze({
-	requester_agent_id: "agent-0",
-	from_ledger: "site:source",
-	to_ledger: "site:destination",
-	kind: "iron_ingot",
-	requested_amount: 20,
-	submission_feasible: true,
-	max_transferable_amount: 40,
-	sent_amount: 20,
-	distance_km: 200,
-	loss_bps: 5,
-	expected_loss_amount: 2,
-	expected_received_amount: 18,
-	source_amount_before: 40,
-	source_amount_after: 20,
-	destination_amount_before: 0,
-	destination_expected_amount_after: 18,
-	ticks_until_arrival: 2,
-	ready_at: 3,
-	effective_priority: "standard",
-	priority_reason: "material_default_priority",
-	inflight_before: 0,
-	inflight_capacity: 2,
-	path_id: "path:source-relay-destination",
-	route_ids: ["route:source-relay", "route:relay-destination"],
-	tariff_electricity_total: 12,
-	reroute_count: 0,
-	recommendation: "submit_transfer",
-	conditional: true
-});
-function installTransferMaterialQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	function install(quote) {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectTransferMaterialQuoteForTest(quote);
-	}
-	fixtures.transfer_material_quote = () => install(normalQuote);
-	fixtures.transfer_material_quote_capacity = () => install({
-		...normalQuote,
-		submission_feasible: false,
-		sent_amount: 0,
-		expected_loss_amount: 0,
-		expected_received_amount: 0,
-		recommendation: "wait_for_transit_capacity",
-		inflight_before: 2
-	});
-	fixtures.transfer_material_quote_power_blocked = () => install({
-		...normalQuote,
-		submission_feasible: false,
-		sent_amount: 0,
-		expected_loss_amount: 0,
-		expected_received_amount: 0,
-		recommendation: "restore_power_or_use_lower_tariff_route"
-	});
-	fixtures.transfer_material_quote_unavailable = () => install({
-		...normalQuote,
-		submission_feasible: false,
-		path_id: null,
-		route_ids: ["route:blocked"],
-		recommendation: "path_unavailable"
-	});
-}
-//#endregion
-//#region software_safe_src/wait_resolution_quote_visual_fixture.js
-var waitResolutionQuoteFixture = Object.freeze({
-	safe_to_wait: false,
-	resolution_trigger: "committed runtime event applies the queued smelter",
-	recheck_tick_or_event: "event 8",
-	expected_change: "smelter construction becomes visible",
-	unresolved_risk: "the action can still be blocked",
-	alternative_unlock_condition: "refresh the snapshot and choose an enabled action"
-});
-function installWaitResolutionQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.wait_resolution_quote = () => {
-		const snapshot = viewerFixtureBaseSnapshot();
-		Object.assign(snapshot.player_gameplay, {
-			stage_status: "accepted",
-			execution_state: "accepted",
-			fallback_tradeoff_preview: [{
-				value_class: "repair_now",
-				available: true,
-				cost: "spend repair materials",
-				progress_kept: "keeps the current capability",
-				opportunity_cost: "uses the repair reserve",
-				reason: "the local blocker is repairable",
-				recommended: true
-			}],
-			no_safe_fallback_reason: null,
-			required_next_decision_action_id: null,
-			required_next_decision_class: null,
-			wait_resolution_quote: { ...waitResolutionQuoteFixture }
-		});
-		core.injectSnapshot(snapshot, { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-	};
-}
-//#endregion
-//#region software_safe_src/war_declaration_quote_visual_fixture.js
-var warDeclarationQuoteFixture = Object.freeze({
-	actor_alliance_id: "alliance.red",
-	target_alliance_id: "alliance.blue",
-	intensity: 3,
-	settlement_path: "core_fallback",
-	conflict_status: "none",
-	minimum_winning_intensity: 2,
-	war_duration_ticks: 24,
-	aggressor_score_estimate: 38,
-	defender_score_estimate: 20,
-	likely_winner_before_action: "alliance.red",
-	projected_outcome: "aggressor_wins",
-	victory_margin_estimate: 18,
-	conflict_window_blocked_until: 36,
-	reentry_cooldown_or_active_conflict_blocker: "none",
-	settlement_risk: "core settlement changes participant resources and reputation",
-	settlement_risk_code: "resource_and_reputation_change",
-	alternative_action: "negotiate",
-	recommended_war_action: "declare_war",
-	why_this_war_is_worth_or_risky: "Proceed only if a 24-tick commitment fits the current resource runway.",
-	mobilization_electricity_required: 24,
-	mobilization_electricity_current: 40,
-	mobilization_electricity_after: 16,
-	mobilization_data_required: 17,
-	mobilization_data_current: 35,
-	mobilization_data_after: 18,
-	mobilization_affordable: true,
-	quoted_at_tick: 12,
-	state_fingerprint: "sha256:war-declaration-quote-visual-fixture"
-});
-function installWarDeclarationQuoteVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.war_declaration_quote = () => {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		core.injectWarDeclarationQuoteForTest(warDeclarationQuoteFixture);
-	};
-}
-//#endregion
-//#region software_safe_src/branch_commitment_visual_fixture.js
-function installBranchCommitmentVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.expansion_tradeoff_two_beats = () => {
-		const snapshot = viewerFixtureBaseSnapshot();
-		snapshot.player_gameplay = {
-			...snapshot.player_gameplay,
-			goal_kind: "ChooseFirstExpansionTradeoff",
-			goal_title: "Choose the first expansion tradeoff",
-			branch_hint: "Compare the published consequences before committing.",
-			branch_recommendations: [{
-				action_id: "build_alloy_factory",
-				route_label: "Scale alloy throughput",
-				immediate_gain: "Adds a second alloy production lane",
-				future_beats: ["The next expansion starts with spare capacity", "New throughput requires a steadier structural-frame supply"],
-				risk_or_lockin: "Consumes the current structural-frame reserve",
-				next_session_hook: "Return to route the first bulk alloy order",
-				first_delivery_preview: {
-					local_need: "Regional fabricators need dependable alloy plates",
-					expected_output: "Two alloy plates from the first smelter batch",
-					required_inputs: ["iron_ingot × 2", "copper_wire × 2"],
-					value_timing: "After one smelter run completes",
-					leverage_class_unlocked: "regional_material_supplier",
-					return_visit_hook: "Return to fulfill the next regional alloy order"
-				}
-			}],
-			available_actions: [{
-				action_id: "build_alloy_factory",
-				label: "Build alloy factory core",
-				protocol_action: "gameplay_action.submit",
-				disabled_reason: "missing structural frames"
-			}]
-		};
-		core.injectSnapshot(snapshot, { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-	};
-}
-var INTENT_STATUS_LABELS = {
-	proposed: ["已提出", "Proposed"],
-	submitted: ["已提交", "Submitted"],
-	accepted: ["已接受", "Accepted"],
-	blocked: ["受阻", "Blocked"],
-	completed: ["已完成", "Completed"],
-	rejected: ["已拒绝", "Rejected"],
-	expired: ["已过期", "Expired"],
-	cancelled: ["已取消", "Cancelled"],
-	superseded: ["已替换", "Replaced"]
-};
-var AGENT_INTENT_SUMMARIES = Object.freeze({
-	proposed: "Agent guidance is proposed and not yet accepted.",
-	submitted: "Agent guidance was submitted and awaits runtime acceptance.",
-	accepted: "Agent guidance accepted; the Agent will evaluate its next world action.",
-	blocked: "Agent guidance is blocked pending a runtime recheck.",
-	completed: "Agent guidance completed with a confirmed world receipt.",
-	rejected: "Agent guidance was rejected by runtime authority.",
-	expired: "Agent guidance expired before execution.",
-	cancelled: "Agent guidance was cancelled before completion.",
-	superseded: "Agent guidance was replaced by newer guidance."
-});
-var REASON_ALLOWLIST = Object.freeze({
-	insufficient_power: "Restore power to continue",
-	policy_denied: "This instruction is not permitted",
-	provider_unavailable: "Agent service is temporarily unavailable",
-	provider_rejected: "Agent service rejected this instruction",
-	missing_material: "World prerequisites changed before execution.",
-	material_shortage: "World prerequisites changed before execution.",
-	permission_changed: "The requested operation is no longer authorized.",
-	ownership_changed: "The controlling session changed before completion.",
-	world_precondition_changed: "The world position changed before execution.",
-	precondition_changed: "The world position changed before execution.",
-	agent_unavailable: "The Agent is not available for this intent.",
-	duplicate_request: "The duplicate request was already recorded.",
-	superseded_by_replacement: "A newer intent has taken over."
-});
-var NEXT_STEP_ALLOWLIST = Object.freeze({
-	unavailable: "Stop and refresh the world snapshot before retrying.",
-	missing_receipt: "Wait for a committed world receipt, then refresh.",
-	stale: "Refresh the world state before acting.",
-	conflict: "Review the latest world state and reselect an intent.",
-	reconnecting: "Wait for the runtime connection to recover.",
-	control_lost: "Reselect the Agent after control is restored.",
-	read_only: "Reselect the Agent in a controllable session.",
-	unauthorized: "Request access before viewing this intent.",
-	blocked: "Recheck runtime state before resuming.",
-	rejected: "Review the latest world state before retrying."
-});
-var ALLOWED_CONTROL_STATES = /* @__PURE__ */ new Set([
-	"controllable",
-	"read_only",
-	"control_lost",
-	"unauthorized",
-	"unavailable"
-]);
-var ALLOWED_FRESHNESS = /* @__PURE__ */ new Set([
-	"current",
-	"stale",
-	"reconnecting",
-	"conflict"
-]);
-var TERMINAL_INTENT_STATUSES = /* @__PURE__ */ new Set([
-	"completed",
-	"rejected",
-	"expired",
-	"cancelled",
-	"superseded"
-]);
-var COPY_KEY_FIELDS = [
-	"copy_schema_version",
-	"summary_schema_version",
-	"player_copy_schema_version"
-];
-function textValue$2(value) {
-	return typeof value === "string" ? value.trim() : "";
-}
-function counterIdentity(value) {
-	if (typeof value === "number") return Number.isSafeInteger(value) && value >= 0 ? String(value) : null;
-	const raw = textValue$2(value);
-	if (!/^\d+$/.test(raw)) return null;
-	try {
-		return BigInt(raw).toString();
-	} catch (_error) {
-		return null;
-	}
-}
-function hasAuthoritativePosition(intent) {
-	return textValue$2(intent.agent_id).length > 0 && textValue$2(intent.world_id).length > 0 && counterIdentity(intent.reorg_epoch) !== null && counterIdentity(intent.logical_time) !== null && counterIdentity(intent.event_seq) !== null && counterIdentity(intent.updated_at) !== null;
-}
-function hasReceiptReference(receiptRef, intent) {
-	if (!receiptRef || typeof receiptRef !== "object") return false;
-	const receiptIdentity = textValue$2(receiptRef.receipt_id);
-	const receiptEventId = receiptIdentity.startsWith("world-event:") ? counterIdentity(receiptIdentity.slice(12)) : null;
-	if (textValue$2(receiptRef.intent_id) !== textValue$2(intent?.intent_id) || textValue$2(receiptRef.world_id) !== textValue$2(intent?.world_id) || receiptEventId === null || receiptEventId === "0") return false;
-	return counterIdentity(receiptRef.reorg_epoch) === counterIdentity(intent?.reorg_epoch) && counterIdentity(receiptRef.logical_time) === counterIdentity(intent?.logical_time) && counterIdentity(receiptRef.event_seq) === counterIdentity(intent?.event_seq);
-}
-function agentIntentCopy(locale, key) {
-	const zh = String(locale || "").toLowerCase().startsWith("zh");
-	const values = {
-		heading: ["当前意图", "Current Intent"],
-		unavailable: ["意图不可用", "Intent unavailable"],
-		hiddenControlLost: ["意图已隐藏 — 控制权丢失", "Intent hidden — control lost"],
-		hiddenReadOnly: ["意图已隐藏 — 只读观察", "Intent hidden — read-only"],
-		hiddenUnauthorized: ["意图已隐藏 — 未获授权", "Intent hidden — unauthorized"],
-		stale: ["陈旧意图", "Stale intent"],
-		current: ["当前", "Current"],
-		reconnecting: ["重新连接中", "Reconnecting"],
-		offline: ["意图不可用 — 世界连接已断开", "Intent unavailable — world connection lost"],
-		needsConfirmation: ["需要确认", "Needs confirmation"],
-		reason: ["原因", "Reason"],
-		reasonUnavailable: ["原因暂不可用", "Reason unavailable"],
-		nextStep: ["下一步", "Next step"],
-		receipt: ["世界回执已确认", "World receipt confirmed"],
-		receiptMissing: ["等待世界回执", "World receipt missing"],
-		replayed: ["重复请求已合并；没有创建新的意图。", "Duplicate request coalesced; no new intent was created."],
-		replaced: ["这条意图已由较新的意图接管。", "This intent was replaced by a newer intent."]
-	}[key];
-	return values ? values[zh ? 0 : 1] : key;
-}
-function statusLabel(locale, status) {
-	const values = INTENT_STATUS_LABELS[status];
-	return values ? values[String(locale || "").toLowerCase().startsWith("zh") ? 0 : 1] : "";
-}
-function unavailable(locale, nextStep = NEXT_STEP_ALLOWLIST.unavailable, extra = {}) {
-	return {
-		kind: "unavailable",
-		label: agentIntentCopy(locale, "unavailable"),
-		nextStep,
-		receiptState: "not_applicable",
-		...extra
-	};
-}
-function copyVersion(intent) {
-	const explicit = COPY_KEY_FIELDS.map((field) => intent[field]).find((value) => value !== void 0 && value !== null);
-	return explicit === void 0 ? 1 : explicit;
-}
-function allowlistedIntentCopy(intent, status) {
-	if (copyVersion(intent) !== 1) return {
-		valid: false,
-		value: ""
-	};
-	const expected = AGENT_INTENT_SUMMARIES[status];
-	const key = textValue$2(intent.summary_key || intent.summaryKey);
-	if (key && key !== status) return {
-		valid: false,
-		value: ""
-	};
-	const supplied = textValue$2(intent.summary ?? intent.message);
-	if (!supplied || supplied !== expected) return {
-		valid: false,
-		value: ""
-	};
-	return {
-		valid: true,
-		value: expected
-	};
-}
-function allowlistedReason(intent, status) {
-	const key = textValue$2(intent.reason_code || intent.reason_key || intent.reasonKey).toLowerCase();
-	const supplied = textValue$2(intent.reason_summary);
-	if (!key) return supplied ? {
-		valid: false,
-		label: "",
-		summary: ""
-	} : {
-		valid: true,
-		label: "",
-		summary: ""
-	};
-	if (!Object.prototype.hasOwnProperty.call(REASON_ALLOWLIST, key)) return {
-		valid: false,
-		label: "",
-		summary: ""
-	};
-	const declaredKey = textValue$2(intent.reason_key || intent.reasonKey).toLowerCase();
-	if (declaredKey && declaredKey !== key) return {
-		valid: false,
-		label: "",
-		summary: ""
-	};
-	if (supplied && supplied !== REASON_ALLOWLIST[key]) return {
-		valid: false,
-		label: "",
-		summary: ""
-	};
-	if (!TERMINAL_INTENT_STATUSES.has(status) && status !== "blocked") return {
-		valid: true,
-		label: "",
-		summary: ""
-	};
-	return {
-		valid: true,
-		label: key,
-		summary: REASON_ALLOWLIST[key]
-	};
-}
-function allowlistedNextStep(intent, status, stateKind) {
-	const declared = textValue$2(intent.next_step_key || intent.nextStepKey).toLowerCase();
-	if (declared && !Object.prototype.hasOwnProperty.call(NEXT_STEP_ALLOWLIST, declared)) return {
-		valid: false,
-		value: ""
-	};
-	const expected = NEXT_STEP_ALLOWLIST[declared || (stateKind === "current" && (status === "blocked" || status === "rejected") ? status : stateKind)] || "";
-	const supplied = textValue$2(intent.next_step || intent.next_step_hint);
-	if (supplied && supplied !== expected) return {
-		valid: false,
-		value: ""
-	};
-	return {
-		valid: true,
-		value: expected
-	};
-}
-function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
-	if (!intent || typeof intent !== "object") return unavailable(locale);
-	if (intent.schema_version !== 2 || textValue$2(intent.source_class) !== "runtime_projection") return unavailable(locale);
-	const connection = textValue$2(connectionStatus).toLowerCase();
-	if (connection === "connecting" || connection === "reconnecting") return {
-		kind: "reconnecting",
-		label: agentIntentCopy(locale, "reconnecting"),
-		nextStep: NEXT_STEP_ALLOWLIST.reconnecting,
-		receiptState: "not_applicable"
-	};
-	if (connection && connection !== "connected") return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { label: agentIntentCopy(locale, "offline") });
-	const controlState = textValue$2(intent.control_state).toLowerCase();
-	if (!ALLOWED_CONTROL_STATES.has(controlState)) return unavailable(locale);
-	if (controlState === "control_lost") return {
-		kind: controlState,
-		label: agentIntentCopy(locale, "hiddenControlLost"),
-		nextStep: NEXT_STEP_ALLOWLIST.control_lost,
-		receiptState: "hidden"
-	};
-	if (controlState === "read_only") return {
-		kind: controlState,
-		label: agentIntentCopy(locale, "hiddenReadOnly"),
-		nextStep: NEXT_STEP_ALLOWLIST.read_only,
-		receiptState: "hidden"
-	};
-	if (controlState === "unauthorized") return {
-		kind: controlState,
-		label: agentIntentCopy(locale, "hiddenUnauthorized"),
-		nextStep: NEXT_STEP_ALLOWLIST.unauthorized,
-		receiptState: "hidden"
-	};
-	if (controlState === "unavailable" || !textValue$2(intent.intent_id) || !hasAuthoritativePosition(intent)) return unavailable(locale);
-	const status = textValue$2(intent.status).toLowerCase();
-	if (!statusLabel(locale, status)) return unavailable(locale);
-	const freshness = textValue$2(intent.freshness).toLowerCase();
-	if (!ALLOWED_FRESHNESS.has(freshness)) return unavailable(locale);
-	const receiptState = status === "completed" ? hasReceiptReference(intent.receipt_ref, intent) ? "confirmed" : "missing" : "not_applicable";
-	const receiptLabel = receiptState === "confirmed" ? agentIntentCopy(locale, "receipt") : receiptState === "missing" ? agentIntentCopy(locale, "receiptMissing") : "";
-	if (receiptState === "missing") return unavailable(locale, NEXT_STEP_ALLOWLIST.missing_receipt, {
-		receiptState,
-		receiptLabel
-	});
-	const safeCopy = allowlistedIntentCopy(intent, status);
-	if (!safeCopy.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { receiptState });
-	const reason = allowlistedReason(intent, status);
-	if (!reason.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { receiptState });
-	const stateKind = freshness === "stale" ? "stale" : freshness === "reconnecting" ? "reconnecting" : freshness === "conflict" ? "conflict" : "current";
-	const nextStep = allowlistedNextStep(intent, status, stateKind);
-	if (!nextStep.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { receiptState });
-	const lifecycleNote = intent.duplicate === true || intent.replayed === true || intent.replay === true ? agentIntentCopy(locale, "replayed") : textValue$2(intent.replaced_by) ? agentIntentCopy(locale, "replaced") : "";
-	return {
-		kind: stateKind,
-		label: stateKind === "stale" ? agentIntentCopy(locale, "stale") : stateKind === "conflict" ? agentIntentCopy(locale, "needsConfirmation") : stateKind === "reconnecting" ? agentIntentCopy(locale, "reconnecting") : agentIntentCopy(locale, "current"),
-		statusLabel: stateKind === "stale" ? "" : statusLabel(locale, status),
-		message: safeCopy.value,
-		receiptState,
-		receiptLabel,
-		reasonLabel: reason.label,
-		reasonSummary: reason.summary,
-		lifecycleNote,
-		nextStep: nextStep.value
-	};
-}
-//#endregion
-//#region software_safe_src/agent_intent_visual_fixture.js
-var AGENT_INTENT_STATUSES = [
-	"proposed",
-	"submitted",
-	"accepted",
-	"blocked",
-	"completed",
-	"rejected",
-	"expired",
-	"cancelled",
-	"superseded"
-];
-var AGENT_ACTIVITY_STATUSES = [
-	"idle",
-	"executing",
-	"blocked",
-	"waiting",
-	"unavailable",
-	"missing"
-];
-var AGENT_INTENT_FRESHNESS = [
-	"current",
-	"stale",
-	"conflict",
-	"reconnecting"
-];
-var AGENT_INTENT_CONTROL_STATES = [
-	"controllable",
-	"control_lost",
-	"read_only",
-	"unauthorized"
-];
-var AGENT_INTENT_RECEIPT_STATES = ["valid", "missing"];
-var AGENT_INTENT_VARIANTS = [
-	"normal",
-	"duplicate",
-	"replacement"
-];
-function oneOf$1(value, choices, fallback) {
-	return choices.includes(value) ? value : fallback;
-}
-function buildAgentIntentFixtureState(search = window.location.search || "") {
-	const params = new URLSearchParams(search);
-	const value = (name, fallback) => String(params.get(name) || fallback).trim().toLowerCase();
-	const status = oneOf$1(value("intent_status", "accepted"), [...AGENT_INTENT_STATUSES, "missing"], "accepted");
-	return {
-		status,
-		freshness: oneOf$1(value("intent_freshness", "current"), AGENT_INTENT_FRESHNESS, "current"),
-		controlState: oneOf$1(value("intent_control", "controllable"), AGENT_INTENT_CONTROL_STATES, "controllable"),
-		activityStatus: oneOf$1(value("activity_status", "executing"), AGENT_ACTIVITY_STATUSES, "executing"),
-		receiptState: oneOf$1(value("intent_receipt", value("receipt", status === "completed" ? "valid" : "missing")), AGENT_INTENT_RECEIPT_STATES, status === "completed" ? "valid" : "missing"),
-		variant: oneOf$1(value("intent_variant", "normal"), AGENT_INTENT_VARIANTS, "normal"),
-		connectionStatus: "connected"
-	};
-}
-function activityFor(status) {
-	if (status === "missing") return null;
-	if (status === "unavailable") return { status: "unavailable" };
-	return {
-		status,
-		operation: status === "idle" ? null : "resource_recovery",
-		target: status === "idle" ? null : "factory-activity-target",
-		reason: status === "blocked" ? "upstream material is not ready" : null,
-		updated_at: 7
-	};
-}
-function buildAgentIntentFixtureSnapshot(viewerFixtureBaseSnapshot, state) {
-	const { status, freshness, controlState, activityStatus, receiptState, variant } = state;
-	const base = viewerFixtureBaseSnapshot();
-	const intentId = "agent-intent-v2:headed-matrix";
-	const worldId = "live-formal-release-default";
-	const intent = status === "missing" ? null : {
-		schema_version: 2,
-		intent_id: intentId,
-		status,
-		message: AGENT_INTENT_SUMMARIES[status],
-		resume_required: status === "blocked",
-		source_class: "runtime_projection",
-		freshness,
-		control_state: controlState,
-		agent_id: "agent-0",
-		world_id: worldId,
-		reorg_epoch: 0,
-		logical_time: 7,
-		updated_at: 7,
-		event_seq: "42",
-		reason_code: status === "blocked" ? "missing_material" : status === "rejected" ? "permission_changed" : status === "expired" ? "precondition_changed" : status === "cancelled" ? "ownership_changed" : status === "superseded" ? "superseded_by_replacement" : variant === "duplicate" ? "duplicate_request" : null,
-		reason_summary: status === "blocked" ? "World prerequisites changed before execution." : status === "rejected" ? "The requested operation is no longer authorized." : status === "expired" ? "The world position changed before execution." : null,
-		next_step: status === "blocked" ? "Recheck runtime state before resuming." : null,
-		receipt_ref: status === "completed" && receiptState === "valid" ? {
-			intent_id: intentId,
-			world_id: worldId,
-			reorg_epoch: 0,
-			logical_time: 7,
-			event_seq: "42",
-			receipt_id: "world-event:43"
-		} : null,
-		replaced_by: variant === "replacement" || status === "superseded" ? "agent-intent-v2:replacement" : null,
-		duplicate: variant === "duplicate"
-	};
-	return {
-		...base,
-		model: {
-			...base.model,
-			agents: {
-				...base.model.agents,
-				"agent-0": {
-					...base.model.agents["agent-0"],
-					activity: activityFor(activityStatus)
-				}
-			}
-		},
-		player_gameplay: {
-			...base.player_gameplay,
-			primary_intent: intent
-		}
-	};
-}
-function installAgentIntentV2VisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.agent_intent_v2 = () => {
-		const state = buildAgentIntentFixtureState();
-		core.injectSnapshot(buildAgentIntentFixtureSnapshot(viewerFixtureBaseSnapshot, state), { returnState: false });
-		core.state.connectionStatus = state.connectionStatus;
-		core.state.lastError = null;
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		document.body.setAttribute("data-agent-intent-fixture-connection", state.connectionStatus);
-		document.body.setAttribute("data-agent-intent-fixture-status", state.status);
-		document.body.setAttribute("data-agent-intent-fixture-activity", state.activityStatus);
-		document.body.setAttribute("data-agent-intent-fixture-freshness", state.freshness);
-		document.body.setAttribute("data-agent-intent-fixture-control", state.controlState);
-		document.body.setAttribute("data-agent-intent-fixture-receipt", state.receiptState);
-		document.body.setAttribute("data-agent-intent-fixture-variant", state.variant);
-		core.requestRender();
-	};
-}
-//#endregion
-//#region software_safe_src/agent_context_visual_fixture.js
-var AGENT_CONTEXT_FIXTURE_MODES = Object.freeze(["rich", "unavailable"]);
-var AGENT_CONTEXT_FIXTURE_STATES = Object.freeze([
-	"current",
-	"stale",
-	"reconnecting"
-]);
-var AGENT_CONTEXT_FIXTURE_COPIES = Object.freeze(["short", "long"]);
-var FIXTURE_SCHEMA = "agent-context-fixture/v1";
-var MEASUREMENT_HOOK = "groups-fields";
-var COPY = Object.freeze({
-	en: Object.freeze({
-		short: Object.freeze({
-			objective: "Stabilize the first production line before expanding.",
-			nextStepHint: "Replenish upstream materials, then advance again to confirm the line resumes.",
-			blockerDetail: "iron input exhausted at factory-0",
-			leverageVerdict: "Watch: recovery can restore the first capability."
-		}),
-		long: Object.freeze({
-			objective: "Stabilize the first production line before expanding while keeping reserve for the next material interruption.",
-			nextStepHint: "Replenish upstream materials at Factory Anchor, advance one beat, and confirm the line resumes before expanding again.",
-			blockerDetail: "iron input remains exhausted at factory-0; production waits for a confirmed upstream refill before resuming.",
-			leverageVerdict: "Restore the upstream material path first; this preserves the current line, makes the next move observable, and keeps the expansion option open without inventing a new control."
-		})
-	}),
-	zh: Object.freeze({
-		short: Object.freeze({
-			objective: "先稳定第一条生产线，再考虑扩张。",
-			nextStepHint: "补充上游材料，然后推进一个节拍确认生产线恢复。",
-			blockerDetail: "factory-0 的铁输入已耗尽",
-			leverageVerdict: "先恢复上游材料路径，当前能力即可继续运转。"
-		}),
-		long: Object.freeze({
-			objective: "先稳定第一条生产线，再扩张，同时保留储备应对下一次材料中断。",
-			nextStepHint: "在 Factory Anchor 补充材料，推进一个节拍确认生产线恢复，再决定是否扩张。",
-			blockerDetail: "最近检查后，factory-0 的铁输入仍然耗尽；确认上游补充前，生产无法恢复。",
-			leverageVerdict: "先恢复上游材料路径；这样可以保住当前生产线，让下一步可观察，并在不凭空增加控制项的情况下保留扩张选项。"
-		})
-	})
-});
-function oneOf(value, choices, fallback) {
-	return choices.includes(value) ? value : fallback;
-}
-function queryValue(params, name, fallback) {
-	return String(params.get(name) || fallback).trim().toLowerCase();
-}
-function localeKey(locale) {
-	return String(locale || "").toLowerCase().startsWith("zh") ? "zh" : "en";
-}
-function fixtureIntent(state) {
-	return {
-		schema_version: 2,
-		intent_id: "agent-context-fixture:intent",
-		status: "accepted",
-		summary: AGENT_INTENT_SUMMARIES.accepted,
-		source_class: "runtime_projection",
-		freshness: state.state,
-		control_state: "controllable",
-		agent_id: "agent-0",
-		target_agent_id: "agent-0",
-		world_id: "agent-context-fixture-world",
-		reorg_epoch: 0,
-		logical_time: "9007199254740993",
-		updated_at: "9007199254740993",
-		event_seq: "9007199254740994",
-		reason_code: null,
-		reason_summary: null,
-		next_step: null
-	};
-}
-function buildAgentContextFixtureState(search = window.location.search || "") {
-	const params = new URLSearchParams(search);
-	return {
-		mode: oneOf(queryValue(params, "agent_context_mode", "unavailable"), AGENT_CONTEXT_FIXTURE_MODES, "unavailable"),
-		state: oneOf(queryValue(params, "agent_context_state", "current"), AGENT_CONTEXT_FIXTURE_STATES, "current"),
-		copy: oneOf(queryValue(params, "agent_context_copy", "short"), AGENT_CONTEXT_FIXTURE_COPIES, "short")
-	};
-}
-function buildAgentContextRichFixtureSnapshot(viewerFixtureBaseSnapshot, state, locale = "en") {
-	const base = viewerFixtureBaseSnapshot();
-	const selectedState = AGENT_CONTEXT_FIXTURE_STATES.includes(state?.state) ? state.state : "current";
-	const selectedCopy = AGENT_CONTEXT_FIXTURE_COPIES.includes(state?.copy) ? state.copy : "short";
-	const selectedMode = AGENT_CONTEXT_FIXTURE_MODES.includes(state?.mode) ? state.mode : "unavailable";
-	const fixtureState = {
-		mode: selectedMode,
-		state: selectedState,
-		copy: selectedCopy
-	};
-	const copy = COPY[localeKey(locale)][selectedCopy];
-	const intent = fixtureIntent(fixtureState);
-	const gameplay = {
-		agent_id: "agent-0",
-		objective: copy.objective,
-		nextStepHint: copy.nextStepHint,
-		blockerDetail: copy.blockerDetail,
-		progressionProof: {
-			leverageVerdict: copy.leverageVerdict,
-			leverageClass: "repair_elasticity"
-		},
-		primary_intent: intent
-	};
-	const playerGameplay = { ...base.player_gameplay };
-	if (selectedMode === "unavailable") delete playerGameplay.objective;
-	return {
-		...base,
-		model: {
-			...base.model,
-			agents: {
-				...base.model.agents,
-				"agent-0": {
-					...base.model.agents["agent-0"],
-					state: "executing",
-					freshness: selectedState,
-					activity: { status: "executing" }
-				}
-			}
-		},
-		player_gameplay: {
-			...playerGameplay,
-			primary_intent: selectedMode === "rich" ? intent : null
-		},
-		viewer_test_agent_context: {
-			schema_version: 1,
-			schema: FIXTURE_SCHEMA,
-			mode: selectedMode,
-			state: selectedState,
-			copy: selectedCopy,
-			measurement: MEASUREMENT_HOOK,
-			gameplay: selectedMode === "rich" ? gameplay : null
-		}
-	};
-}
-function readAgentContextFixtureMetadata(snapshot, fixtureName, testApiEnabled) {
-	if (!testApiEnabled || fixtureName !== "agent_context") return null;
-	const fixture = snapshot?.viewer_test_agent_context;
-	if (!fixture || !AGENT_CONTEXT_FIXTURE_MODES.includes(fixture.mode)) return null;
-	return {
-		mode: fixture.mode,
-		state: fixture.state,
-		copy: fixture.copy,
-		measurement: fixture.measurement,
-		schema: fixture.schema
-	};
-}
-function readAgentContextFixtureGameplay(snapshot, selectedAgentId, metadata) {
-	if (metadata?.mode !== "rich") return null;
-	const gameplay = snapshot?.viewer_test_agent_context?.gameplay;
-	return gameplay?.agent_id === selectedAgentId ? gameplay : null;
-}
-function installAgentContextVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot }) {
-	fixtures.agent_context = () => {
-		const state = buildAgentContextFixtureState();
-		const snapshot = buildAgentContextRichFixtureSnapshot(viewerFixtureBaseSnapshot, state, new URLSearchParams(window.location.search || "").get("locale") || "en");
-		core.injectSnapshot(snapshot, { returnState: false });
-		core.state.connectionStatus = "connected";
-		core.state.lastError = null;
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-		document.body.setAttribute("data-agent-context-fixture", state.mode);
-		document.body.setAttribute("data-agent-context-fixture-state", state.state);
-		document.body.setAttribute("data-agent-context-fixture-copy", state.copy);
-		document.body.setAttribute("data-agent-context-measurement", MEASUREMENT_HOOK);
-		document.body.setAttribute("data-agent-context-fixture-schema", FIXTURE_SCHEMA);
-		core.requestRender();
-	};
-}
-//#endregion
-//#region software_safe_src/major_world_event_visual_fixture.js
-function installMajorWorldEventCrisisVisualFixture(fixtures, { core, viewerFixtureBaseSnapshot }) {
-	fixtures.major_world_event_crisis = () => {
-		core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-		const mode = String(new URLSearchParams(window.location.search || "").get("major_event_state") || "current");
-		const historical = mode === "replay";
-		const suppressed = mode === "gap" || mode === "denied";
-		core.state.worldFeed = {
-			status: mode === "gap" ? "gap" : mode === "denied" ? "unavailable" : historical ? "replay" : "ready",
-			schemaVersion: "world_feed/v1",
-			worldId: "fixture-world",
-			reorgEpoch: "0",
-			cursor: "fixture-current",
-			stale: suppressed,
-			gapReason: mode === "gap" ? "reorg_epoch_changed" : null,
-			unavailableReason: mode === "denied" ? "permission_denied" : null,
-			snapshotReloadRequired: mode === "gap",
-			requestInFlight: false,
-			events: suppressed ? [] : [{
-				event_seq: "7",
-				kind: "crisis_spawned",
-				summary: "Crisis event",
-				detail: "",
-				receipt_ref: null,
-				major_event: {
-					schema_version: "major_world_event/v1",
-					identity: {
-						world_id: "fixture-world",
-						reorg_epoch: "0",
-						event_seq: "7"
-					},
-					category: "crisis",
-					subtype: "power_shortage",
-					severity: 4,
-					lifecycle: "active",
-					source: {
-						authority: "runtime_journal",
-						event_kind: "crisis_spawned"
-					},
-					freshness: historical ? "last_known" : "current",
-					visibility: "public",
-					logical_time: "42",
-					causal_reference: null,
-					world_anchor: {
-						scope: "world",
-						entity_id: "crisis-fixture"
-					}
-				}
-			}]
-		};
-		core.requestRender();
-	};
-}
-//#endregion
 //#region software_safe_src/reprioritize_action_form.jsx
 var _tmpl$$9 = /*#__PURE__*/ template(`<button data-testid=viewer-available-action-reprioritize>`);
 var _tmpl$2$8 = /*#__PURE__*/ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`);
@@ -20366,69 +18855,6 @@ function FirstDeliveryPreview(props) {
 	})();
 }
 //#endregion
-//#region software_safe_src/viewer_fallback_tradeoff_fixture.js
-function fallbackTradeoffVisualFixture() {
-	return [
-		{
-			value_class: "safe_wait",
-			available: false,
-			cost: "No bounded wait trigger is currently available.",
-			progress_kept: "Keeps the current intent unchanged.",
-			opportunity_cost: "Waiting cannot verify or repair the blocker.",
-			reason: "The runtime has no canonical tick or event trigger that bounds a safe wait.",
-			recommended: false
-		},
-		{
-			value_class: "repair_now",
-			available: false,
-			cost: "Refresh the gameplay snapshot and inspect the current blocker.",
-			progress_kept: "Keeps the current intent while checking recovery state.",
-			opportunity_cost: "Uses the next decision on diagnosis instead of a new goal.",
-			reason: "No repair action is currently available for the published blocker.",
-			recommended: false
-		},
-		{
-			value_class: "reroute_now",
-			available: false,
-			cost: "Replace the current Agent short-term goal.",
-			progress_kept: "Preserves the recorded intent for comparison, not execution progress.",
-			opportunity_cost: "Moves attention from repairing the current blocked intent.",
-			reason: "No enabled reprioritize action is currently available.",
-			recommended: false
-		}
-	];
-}
-//#endregion
-//#region software_safe_src/viewer_recovery_option_fixture.js
-function recoveryOptionVisualFixture() {
-	return [
-		{
-			kind: "repair",
-			estimated_time_class: "short",
-			estimated_resource_class: "focused_local_input",
-			risk_class: "low",
-			retained_benefit: "Retains the current local line and operating context.",
-			recommendation_reason: "Use repair when the blocker is localized."
-		},
-		{
-			kind: "rebuild",
-			estimated_time_class: "medium",
-			estimated_resource_class: "broader_local_reinvestment",
-			risk_class: "moderate",
-			retained_benefit: "Retains local ownership while replacing the fragile arrangement.",
-			recommendation_reason: "Use rebuild when the line cannot absorb the blocker."
-		},
-		{
-			kind: "pivot",
-			estimated_time_class: "medium",
-			estimated_resource_class: "redirected_local_commitment",
-			risk_class: "tradeoff",
-			retained_benefit: "Retains independent progress through a new specialization.",
-			recommendation_reason: "Use pivot when a different local path avoids the pressure."
-		}
-	];
-}
-//#endregion
 //#region software_safe_src/agent_activity_display_model.js
 var KNOWN_ACTIVITY_STATUSES = /* @__PURE__ */ new Set([
 	"idle",
@@ -20437,12 +18863,12 @@ var KNOWN_ACTIVITY_STATUSES = /* @__PURE__ */ new Set([
 	"waiting",
 	"unavailable"
 ]);
-function textValue$1(value) {
+function textValue$2(value) {
 	if (value === null || value === void 0) return "";
 	return String(value).trim();
 }
 function titleCaseIdentifier(value) {
-	const text = textValue$1(value).replace(/[_:-]+/g, " ").replace(/\s+/g, " ").trim();
+	const text = textValue$2(value).replace(/[_:-]+/g, " ").replace(/\s+/g, " ").trim();
 	if (!text || /^\d+$/.test(text) || /^(?:0x|sha256|uuid)\b/i.test(text)) return "";
 	return text.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -20473,7 +18899,7 @@ function describeAgentActivity(activity, locale = "en") {
 		targetLabel: "",
 		reason: ""
 	};
-	const status = textValue$1(activity.status).toLowerCase();
+	const status = textValue$2(activity.status).toLowerCase();
 	if (!KNOWN_ACTIVITY_STATUSES.has(status)) return {
 		kind: "unavailable",
 		label: activityCopy(locale, "unavailable"),
@@ -20586,6 +19012,283 @@ function HostedTestLoginOptIn(props) {
 	});
 }
 delegateEvents(["click"]);
+var INTENT_STATUS_LABELS = {
+	proposed: ["已提出", "Proposed"],
+	submitted: ["已提交", "Submitted"],
+	accepted: ["已接受", "Accepted"],
+	blocked: ["受阻", "Blocked"],
+	completed: ["已完成", "Completed"],
+	rejected: ["已拒绝", "Rejected"],
+	expired: ["已过期", "Expired"],
+	cancelled: ["已取消", "Cancelled"],
+	superseded: ["已替换", "Replaced"]
+};
+var AGENT_INTENT_SUMMARIES = Object.freeze({
+	proposed: "Agent guidance is proposed and not yet accepted.",
+	submitted: "Agent guidance was submitted and awaits runtime acceptance.",
+	accepted: "Agent guidance accepted; the Agent will evaluate its next world action.",
+	blocked: "Agent guidance is blocked pending a runtime recheck.",
+	completed: "Agent guidance completed with a confirmed world receipt.",
+	rejected: "Agent guidance was rejected by runtime authority.",
+	expired: "Agent guidance expired before execution.",
+	cancelled: "Agent guidance was cancelled before completion.",
+	superseded: "Agent guidance was replaced by newer guidance."
+});
+var REASON_ALLOWLIST = Object.freeze({
+	insufficient_power: "Restore power to continue",
+	policy_denied: "This instruction is not permitted",
+	provider_unavailable: "Agent service is temporarily unavailable",
+	provider_rejected: "Agent service rejected this instruction",
+	missing_material: "World prerequisites changed before execution.",
+	material_shortage: "World prerequisites changed before execution.",
+	permission_changed: "The requested operation is no longer authorized.",
+	ownership_changed: "The controlling session changed before completion.",
+	world_precondition_changed: "The world position changed before execution.",
+	precondition_changed: "The world position changed before execution.",
+	agent_unavailable: "The Agent is not available for this intent.",
+	duplicate_request: "The duplicate request was already recorded.",
+	superseded_by_replacement: "A newer intent has taken over."
+});
+var NEXT_STEP_ALLOWLIST = Object.freeze({
+	unavailable: "Stop and refresh the world snapshot before retrying.",
+	missing_receipt: "Wait for a committed world receipt, then refresh.",
+	stale: "Refresh the world state before acting.",
+	conflict: "Review the latest world state and reselect an intent.",
+	reconnecting: "Wait for the runtime connection to recover.",
+	control_lost: "Reselect the Agent after control is restored.",
+	read_only: "Reselect the Agent in a controllable session.",
+	unauthorized: "Request access before viewing this intent.",
+	blocked: "Recheck runtime state before resuming.",
+	rejected: "Review the latest world state before retrying."
+});
+var ALLOWED_CONTROL_STATES = /* @__PURE__ */ new Set([
+	"controllable",
+	"read_only",
+	"control_lost",
+	"unauthorized",
+	"unavailable"
+]);
+var ALLOWED_FRESHNESS = /* @__PURE__ */ new Set([
+	"current",
+	"stale",
+	"reconnecting",
+	"conflict"
+]);
+var TERMINAL_INTENT_STATUSES = /* @__PURE__ */ new Set([
+	"completed",
+	"rejected",
+	"expired",
+	"cancelled",
+	"superseded"
+]);
+var COPY_KEY_FIELDS = [
+	"copy_schema_version",
+	"summary_schema_version",
+	"player_copy_schema_version"
+];
+function textValue$1(value) {
+	return typeof value === "string" ? value.trim() : "";
+}
+function counterIdentity(value) {
+	if (typeof value === "number") return Number.isSafeInteger(value) && value >= 0 ? String(value) : null;
+	const raw = textValue$1(value);
+	if (!/^\d+$/.test(raw)) return null;
+	try {
+		return BigInt(raw).toString();
+	} catch (_error) {
+		return null;
+	}
+}
+function hasAuthoritativePosition(intent) {
+	return textValue$1(intent.agent_id).length > 0 && textValue$1(intent.world_id).length > 0 && counterIdentity(intent.reorg_epoch) !== null && counterIdentity(intent.logical_time) !== null && counterIdentity(intent.event_seq) !== null && counterIdentity(intent.updated_at) !== null;
+}
+function hasReceiptReference(receiptRef, intent) {
+	if (!receiptRef || typeof receiptRef !== "object") return false;
+	const receiptIdentity = textValue$1(receiptRef.receipt_id);
+	const receiptEventId = receiptIdentity.startsWith("world-event:") ? counterIdentity(receiptIdentity.slice(12)) : null;
+	if (textValue$1(receiptRef.intent_id) !== textValue$1(intent?.intent_id) || textValue$1(receiptRef.world_id) !== textValue$1(intent?.world_id) || receiptEventId === null || receiptEventId === "0") return false;
+	return counterIdentity(receiptRef.reorg_epoch) === counterIdentity(intent?.reorg_epoch) && counterIdentity(receiptRef.logical_time) === counterIdentity(intent?.logical_time) && counterIdentity(receiptRef.event_seq) === counterIdentity(intent?.event_seq);
+}
+function agentIntentCopy(locale, key) {
+	const zh = String(locale || "").toLowerCase().startsWith("zh");
+	const values = {
+		heading: ["当前意图", "Current Intent"],
+		unavailable: ["意图不可用", "Intent unavailable"],
+		hiddenControlLost: ["意图已隐藏 — 控制权丢失", "Intent hidden — control lost"],
+		hiddenReadOnly: ["意图已隐藏 — 只读观察", "Intent hidden — read-only"],
+		hiddenUnauthorized: ["意图已隐藏 — 未获授权", "Intent hidden — unauthorized"],
+		stale: ["陈旧意图", "Stale intent"],
+		current: ["当前", "Current"],
+		reconnecting: ["重新连接中", "Reconnecting"],
+		offline: ["意图不可用 — 世界连接已断开", "Intent unavailable — world connection lost"],
+		needsConfirmation: ["需要确认", "Needs confirmation"],
+		reason: ["原因", "Reason"],
+		reasonUnavailable: ["原因暂不可用", "Reason unavailable"],
+		nextStep: ["下一步", "Next step"],
+		receipt: ["世界回执已确认", "World receipt confirmed"],
+		receiptMissing: ["等待世界回执", "World receipt missing"],
+		replayed: ["重复请求已合并；没有创建新的意图。", "Duplicate request coalesced; no new intent was created."],
+		replaced: ["这条意图已由较新的意图接管。", "This intent was replaced by a newer intent."]
+	}[key];
+	return values ? values[zh ? 0 : 1] : key;
+}
+function statusLabel(locale, status) {
+	const values = INTENT_STATUS_LABELS[status];
+	return values ? values[String(locale || "").toLowerCase().startsWith("zh") ? 0 : 1] : "";
+}
+function unavailable(locale, nextStep = NEXT_STEP_ALLOWLIST.unavailable, extra = {}) {
+	return {
+		kind: "unavailable",
+		label: agentIntentCopy(locale, "unavailable"),
+		nextStep,
+		receiptState: "not_applicable",
+		...extra
+	};
+}
+function copyVersion(intent) {
+	const explicit = COPY_KEY_FIELDS.map((field) => intent[field]).find((value) => value !== void 0 && value !== null);
+	return explicit === void 0 ? 1 : explicit;
+}
+function allowlistedIntentCopy(intent, status) {
+	if (copyVersion(intent) !== 1) return {
+		valid: false,
+		value: ""
+	};
+	const expected = AGENT_INTENT_SUMMARIES[status];
+	const key = textValue$1(intent.summary_key || intent.summaryKey);
+	if (key && key !== status) return {
+		valid: false,
+		value: ""
+	};
+	const supplied = textValue$1(intent.summary ?? intent.message);
+	if (!supplied || supplied !== expected) return {
+		valid: false,
+		value: ""
+	};
+	return {
+		valid: true,
+		value: expected
+	};
+}
+function allowlistedReason(intent, status) {
+	const key = textValue$1(intent.reason_code || intent.reason_key || intent.reasonKey).toLowerCase();
+	const supplied = textValue$1(intent.reason_summary);
+	if (!key) return supplied ? {
+		valid: false,
+		label: "",
+		summary: ""
+	} : {
+		valid: true,
+		label: "",
+		summary: ""
+	};
+	if (!Object.prototype.hasOwnProperty.call(REASON_ALLOWLIST, key)) return {
+		valid: false,
+		label: "",
+		summary: ""
+	};
+	const declaredKey = textValue$1(intent.reason_key || intent.reasonKey).toLowerCase();
+	if (declaredKey && declaredKey !== key) return {
+		valid: false,
+		label: "",
+		summary: ""
+	};
+	if (supplied && supplied !== REASON_ALLOWLIST[key]) return {
+		valid: false,
+		label: "",
+		summary: ""
+	};
+	if (!TERMINAL_INTENT_STATUSES.has(status) && status !== "blocked") return {
+		valid: true,
+		label: "",
+		summary: ""
+	};
+	return {
+		valid: true,
+		label: key,
+		summary: REASON_ALLOWLIST[key]
+	};
+}
+function allowlistedNextStep(intent, status, stateKind) {
+	const declared = textValue$1(intent.next_step_key || intent.nextStepKey).toLowerCase();
+	if (declared && !Object.prototype.hasOwnProperty.call(NEXT_STEP_ALLOWLIST, declared)) return {
+		valid: false,
+		value: ""
+	};
+	const expected = NEXT_STEP_ALLOWLIST[declared || (stateKind === "current" && (status === "blocked" || status === "rejected") ? status : stateKind)] || "";
+	const supplied = textValue$1(intent.next_step || intent.next_step_hint);
+	if (supplied && supplied !== expected) return {
+		valid: false,
+		value: ""
+	};
+	return {
+		valid: true,
+		value: expected
+	};
+}
+function describeAgentIntent(intent, locale = "en", connectionStatus = "connected") {
+	if (!intent || typeof intent !== "object") return unavailable(locale);
+	if (intent.schema_version !== 2 || textValue$1(intent.source_class) !== "runtime_projection") return unavailable(locale);
+	const connection = textValue$1(connectionStatus).toLowerCase();
+	if (connection === "connecting" || connection === "reconnecting") return {
+		kind: "reconnecting",
+		label: agentIntentCopy(locale, "reconnecting"),
+		nextStep: NEXT_STEP_ALLOWLIST.reconnecting,
+		receiptState: "not_applicable"
+	};
+	if (connection && connection !== "connected") return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { label: agentIntentCopy(locale, "offline") });
+	const controlState = textValue$1(intent.control_state).toLowerCase();
+	if (!ALLOWED_CONTROL_STATES.has(controlState)) return unavailable(locale);
+	if (controlState === "control_lost") return {
+		kind: controlState,
+		label: agentIntentCopy(locale, "hiddenControlLost"),
+		nextStep: NEXT_STEP_ALLOWLIST.control_lost,
+		receiptState: "hidden"
+	};
+	if (controlState === "read_only") return {
+		kind: controlState,
+		label: agentIntentCopy(locale, "hiddenReadOnly"),
+		nextStep: NEXT_STEP_ALLOWLIST.read_only,
+		receiptState: "hidden"
+	};
+	if (controlState === "unauthorized") return {
+		kind: controlState,
+		label: agentIntentCopy(locale, "hiddenUnauthorized"),
+		nextStep: NEXT_STEP_ALLOWLIST.unauthorized,
+		receiptState: "hidden"
+	};
+	if (controlState === "unavailable" || !textValue$1(intent.intent_id) || !hasAuthoritativePosition(intent)) return unavailable(locale);
+	const status = textValue$1(intent.status).toLowerCase();
+	if (!statusLabel(locale, status)) return unavailable(locale);
+	const freshness = textValue$1(intent.freshness).toLowerCase();
+	if (!ALLOWED_FRESHNESS.has(freshness)) return unavailable(locale);
+	const receiptState = status === "completed" ? hasReceiptReference(intent.receipt_ref, intent) ? "confirmed" : "missing" : "not_applicable";
+	const receiptLabel = receiptState === "confirmed" ? agentIntentCopy(locale, "receipt") : receiptState === "missing" ? agentIntentCopy(locale, "receiptMissing") : "";
+	if (receiptState === "missing") return unavailable(locale, NEXT_STEP_ALLOWLIST.missing_receipt, {
+		receiptState,
+		receiptLabel
+	});
+	const safeCopy = allowlistedIntentCopy(intent, status);
+	if (!safeCopy.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { receiptState });
+	const reason = allowlistedReason(intent, status);
+	if (!reason.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { receiptState });
+	const stateKind = freshness === "stale" ? "stale" : freshness === "reconnecting" ? "reconnecting" : freshness === "conflict" ? "conflict" : "current";
+	const nextStep = allowlistedNextStep(intent, status, stateKind);
+	if (!nextStep.valid) return unavailable(locale, NEXT_STEP_ALLOWLIST.unavailable, { receiptState });
+	const lifecycleNote = intent.duplicate === true || intent.replayed === true || intent.replay === true ? agentIntentCopy(locale, "replayed") : textValue$1(intent.replaced_by) ? agentIntentCopy(locale, "replaced") : "";
+	return {
+		kind: stateKind,
+		label: stateKind === "stale" ? agentIntentCopy(locale, "stale") : stateKind === "conflict" ? agentIntentCopy(locale, "needsConfirmation") : stateKind === "reconnecting" ? agentIntentCopy(locale, "reconnecting") : agentIntentCopy(locale, "current"),
+		statusLabel: stateKind === "stale" ? "" : statusLabel(locale, status),
+		message: safeCopy.value,
+		receiptState,
+		receiptLabel,
+		reasonLabel: reason.label,
+		reasonSummary: reason.summary,
+		lifecycleNote,
+		nextStep: nextStep.value
+	};
+}
 //#endregion
 //#region software_safe_src/agent_intent_surface.jsx
 var _tmpl$$4 = /*#__PURE__*/ template(`<span class="badge badge--accent">`);
@@ -21399,97 +20102,6 @@ function ControlProofPanel(props) {
 		return _el$4;
 	})();
 }
-function installControlProofVisualFixture(fixtures, { core, viewerFixtureBaseSnapshot, setFixturePlayerAuth }) {
-	fixtures.control_proof_applied = () => {
-		const snapshot = viewerFixtureBaseSnapshot();
-		snapshot.player_gameplay.primary_intent = {
-			intent_id: "intent-control-proof-fixture",
-			agent_id: "agent-0",
-			status: "accepted",
-			message: "Move feedstock to the next production site.",
-			agency_read_model: {
-				status: "available",
-				causal_receipt_status: "committed_receipt_available",
-				memory_context_status: "available",
-				causal_receipt: {
-					intent_id: "intent-control-proof-fixture",
-					receipt_id: "receipt-control-proof-fixture",
-					commit_id: "commit-control-proof-fixture",
-					action_id: 19,
-					action_kind: "move_agent",
-					domain_event_refs: [42],
-					disposition: "applied",
-					primary_reason: "Follow the available supply route.",
-					next_step: "observe_domain_result",
-					actual_consequence: [{ type: "agent_moved" }],
-					expected_consequence: {
-						provenance: "agent_explanation_unverified",
-						prediction: "Production may become available after arrival."
-					},
-					stakes: {
-						provenance: "agent_explanation_unverified",
-						summary: "Preserve scarce input materials."
-					},
-					alternative: {
-						provenance: "agent_explanation_unverified",
-						alternatives: ["Wait for local supply."]
-					},
-					evidence_refs: ["observation-supply-fixture"],
-					correction_refs: ["correction-route-fixture"],
-					interruption_refs: []
-				},
-				delegation_authorizations: [{
-					grant: {
-						agent_id: "agent-0",
-						grant_id: "grant-fixture",
-						source_id: "owner-grant-fixture",
-						issuer_id: "viewer-bound",
-						object_id: "agent-0",
-						action_kinds: ["move_agent"],
-						revision: 1,
-						period_id: "fixture-period",
-						valid_from_tick: 0,
-						valid_until_tick: 20,
-						limit_units: 10,
-						resource_kind: "electricity",
-						revoked: false
-					},
-					cost_units: 2,
-					spent_units: 2,
-					remaining_units: 8
-				}],
-				referenced_memory_context: {
-					revision: 3,
-					scope: "session_private",
-					source: "private_memory_retrieval_context",
-					used_for_decision: true,
-					stale: false,
-					correction_hint: "correct_by_memory_id_and_revision",
-					entries: [{
-						id: "memory-supply-fixture",
-						summary: "The earlier supply estimate was corrected."
-					}]
-				},
-				memory_corrections: [{
-					agent_id: "agent-0",
-					correction_id: "correction-route-fixture",
-					status: "applied",
-					reason: "corrected_context_committed_decision",
-					memory_revision: 3,
-					earliest_decision_request_id: "decision-after-correction-fixture",
-					runtime_receipt_id: "receipt-control-proof-fixture",
-					action_id: "19"
-				}]
-			}
-		};
-		core.injectSnapshot(snapshot, { returnState: false });
-		core.applySelection({
-			kind: "agent",
-			id: "agent-0"
-		});
-		setFixturePlayerAuth();
-	};
-}
 //#endregion
 //#region software_safe_src/agent_context_lite.jsx
 var _tmpl$$1 = /*#__PURE__*/ template(`<div class=agent-context-lite__field><div class=metric__label></div><div class=agent-context-lite__value>`);
@@ -21984,7 +20596,7 @@ function buildAgentContextDisplayModel(input = {}) {
 	};
 }
 //#endregion
-//#region software_safe_src/main.jsx
+//#region software_safe_src/viewer_app.jsx
 var _tmpl$ = /*#__PURE__*/ template(`<span>`);
 var _tmpl$2 = /*#__PURE__*/ template(`<div>`);
 var _tmpl$3 = /*#__PURE__*/ template(`<div class=entity-list-pending__progress>`);
@@ -22059,7 +20671,6 @@ var _tmpl$69 = /*#__PURE__*/ template(`<div><div class="panel__title panel__titl
 var _tmpl$70 = /*#__PURE__*/ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`);
 var _tmpl$71 = /*#__PURE__*/ template(`<div class=viewer-module-details data-viewer-module-details=true><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class=feedback-detail><strong></strong>: </div><div class=feedback-detail><strong></strong>: </div><div class=feedback-detail><strong></strong>: `);
 var _tmpl$72 = /*#__PURE__*/ template(`<div class=viewer-shell data-viewer-shell=player-fullscreen><section class="panel panel--targets"id=viewer-targets-panel data-viewer-route-panel=targets data-viewer-overlay=targets tabindex=-1 data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body></div></section><section class="panel panel--stage"id=viewer-stage-panel tabindex=-1 data-viewer-map-layer=base data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack></div></div></section><section class="panel panel--details"id=viewer-details-panel data-viewer-route-panel=command data-viewer-overlay=command tabindex=-1 data-viewer-surface=command><div class="panel__header panel__header--stack command-route-chrome"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div><a class=panel__route-close href=#viewer-stage-panel></a></div><div class=panel__body>`);
-var VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 var [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
 	viewerStateRevision();
@@ -23336,12 +21947,6 @@ function clearStarterOcClaimPending() {
 function completeStarterOcOnboarding() {
 	starterOcOnboardingState.completedTargetAgentId = normalizedId(starterOcOnboardingState.targetAgentId || state.auth.boundAgentId);
 	clearStarterOcClaimPending();
-	touchStarterOcOnboardingState();
-}
-function __markStarterOcOnboardingCompleteForTest(agentId = state.auth.boundAgentId) {
-	starterOcOnboardingState.pending = false;
-	starterOcOnboardingState.targetAgentId = null;
-	starterOcOnboardingState.completedTargetAgentId = normalizedId(agentId);
 	touchStarterOcOnboardingState();
 }
 function starterOcClaimPendingForCurrentAgent() {
@@ -27101,646 +25706,46 @@ function AppShell() {
 		return _el$387;
 	})();
 }
+var visualTestAdapter = null;
 function viewerVisualFixtureNameFromQuery() {
-	return viewerTestApiEnabled() ? String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim() || null : null;
+	return visualTestAdapter?.fixtureName() || null;
 }
 function viewerTestApiEnabled() {
-	const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
-	return value === "1" || value === "true" || value === "yes" || value === "on";
+	return visualTestAdapter?.enabled() === true;
 }
-function viewerFixtureBaseSnapshot(overrides = {}) {
-	const base = {
-		time: 12,
-		config: { space: {
-			width_cm: 1e7,
-			depth_cm: 5e6,
-			height_cm: 1e6
-		} },
-		model: {
-			agents: {
-				"agent-0": {
-					id: "agent-0",
-					name: "Agent 0",
-					location_id: "loc-0",
-					pos: {
-						x_cm: 29e5,
-						y_cm: 345e4,
-						z_cm: 0
-					},
-					resources: { alloy: 3 }
-				},
-				"agent-1": {
-					id: "agent-1",
-					name: "Agent 1",
-					location_id: "loc-1",
-					pos: {
-						x_cm: 69e5,
-						y_cm: 115e4,
-						z_cm: 0
-					},
-					resources: {}
-				}
-			},
-			locations: {
-				"loc-0": {
-					id: "loc-0",
-					name: "Factory Anchor",
-					pos: {
-						x_cm: 715e4,
-						y_cm: 22e5,
-						z_cm: 0
-					},
-					profile: {
-						radius_cm: 55e3,
-						radiation_emission_per_tick: 0,
-						material: "silicate"
-					},
-					fragment_profile: { blocks: { blocks: [
-						{
-							origin_cm: {
-								x_cm: -36e3,
-								y_cm: 0,
-								z_cm: -22e3
-							},
-							size_cm: {
-								x_cm: 28e3,
-								y_cm: 7500,
-								z_cm: 2e4
-							},
-							density_kg_per_m3: 3200,
-							compounds: { ppm: {
-								silicate_matrix: 8e5,
-								water_ice: 2e5
-							} }
-						},
-						{
-							origin_cm: {
-								x_cm: 4e3,
-								y_cm: 1e3,
-								z_cm: -12e3
-							},
-							size_cm: {
-								x_cm: 42e3,
-								y_cm: 8e3,
-								z_cm: 18e3
-							},
-							density_kg_per_m3: 7800,
-							compounds: { ppm: {
-								iron_nickel_alloy: 9e5,
-								sulfide_ore: 1e5
-							} }
-						},
-						{
-							origin_cm: {
-								x_cm: -18e3,
-								y_cm: 500,
-								z_cm: 18e3
-							},
-							size_cm: {
-								x_cm: 34e3,
-								y_cm: 6e3,
-								z_cm: 24e3
-							},
-							density_kg_per_m3: 5200,
-							compounds: { ppm: {
-								sulfide_ore: 62e4,
-								hydrated_mineral: 38e4
-							} }
-						},
-						{
-							origin_cm: {
-								x_cm: 3e4,
-								y_cm: 0,
-								z_cm: 24e3
-							},
-							size_cm: {
-								x_cm: 22e3,
-								y_cm: 4500,
-								z_cm: 16e3
-							},
-							density_kg_per_m3: 2600,
-							compounds: { ppm: {
-								silicate_matrix: 7e5,
-								rare_earth_oxide: 3e5
-							} }
-						}
-					] } },
-					resources: { iron: 0 }
-				},
-				"loc-1": {
-					id: "loc-1",
-					name: "Assembly Nexus",
-					pos: {
-						x_cm: 455e4,
-						y_cm: 12e5,
-						z_cm: 0
-					},
-					profile: {
-						radius_cm: 38e3,
-						radiation_emission_per_tick: 0,
-						material: "alloy"
-					},
-					resources: {}
-				}
-			},
-			agent_prompt_profiles: { "agent-0": {
-				agent_id: "agent-0",
-				version: 3,
-				updated_by: "viewer-bound",
-				system_prompt: "Keep the first production line recoverable.",
-				short_term_goal: "Report the blocker and wait for material recovery.",
-				long_term_goal: "Restore sustainable capability without inventing extra automation."
-			} },
-			agent_execution_debug_contexts: { "agent-0": {
-				provider_mode: "runtime_live",
-				execution_mode: "phase_1",
-				environment_class: "software_safe_viewer",
-				observation_schema_version: "viewer.v1",
-				action_schema_version: "agent_chat.v1",
-				agent_profile: "default",
-				provider_check_status: "ok",
-				provider_check_source: "fixture",
-				fallback_reason: null,
-				provider_reported_capabilities: ["agent_chat"],
-				provider_reported_supported_action_sets: ["agent_chat"]
-			} },
-			agent_player_bindings: {
-				"agent-0": "viewer-bound",
-				"agent-1": "viewer-other"
-			},
-			agent_player_public_key_bindings: {
-				"agent-0": "oc:pk:viewer-session-key",
-				"agent-1": "oc:pk:viewer-other-session-key"
-			}
-		},
-		player_gameplay: {
-			stage_id: "post_onboarding",
-			stage_status: "blocked",
-			execution_state: "blocked",
-			accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
-			intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
-			intent_scope: "gameplay_action",
-			intent_target: "agent-0",
-			goal_id: "post_onboarding.recover_capability",
-			goal_kind: "RecoverCapability",
-			goal_title: "Recover sustainable capability",
-			objective: "Stabilize the first production line before expanding.",
-			progress_detail: "The primary line is blocked by missing material input.",
-			progress_percent: 68,
-			blocker_kind: "material_shortage",
-			blocker_detail: "iron input exhausted at factory-0",
-			causality_kind: "world_constraint",
-			causality_detail: "iron input exhausted at factory-0",
-			last_world_change: "Smelter build request reached factory-0; iron shortage blocks construction.",
-			next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
-			recovery_path_kind: "repair_rebuild_or_pivot",
-			recovery_path_detail: "Choose the local recovery path that best fits the current constraint.",
-			major_power_dependency_status: "independent_path_available",
-			repair_available: true,
-			rebuild_available: true,
-			pivot_available: true,
-			recovery_options: recoveryOptionVisualFixture(),
-			fallback_tradeoff_preview: fallbackTradeoffVisualFixture(),
-			no_safe_fallback_reason: "No repair or reroute action is currently available for this blocked intent.",
-			required_next_decision_action_id: "return_to_goal_selection",
-			required_next_decision_class: "return_to_goal_selection",
-			available_actions: [{
-				action_id: "build_factory_smelter_mk1",
-				target_agent_id: "agent-0",
-				label: "Build smelter mk1",
-				protocol_action: "gameplay_action.submit",
-				disabled_reason: null
-			}, {
-				action_id: "request_snapshot",
-				label: "Request snapshot",
-				protocol_action: "world.request_snapshot",
-				disabled_reason: null
-			}],
-			recent_feedback: {
-				action: "build_factory_smelter_mk1",
-				stage: "completed_no_progress",
-				effect: "Smelter build request reached factory-0; iron shortage blocks construction.",
-				reason: "iron input exhausted at factory-0",
-				hint: "Replenish upstream materials, then advance again.",
-				delta_logical_time: 1,
-				delta_event_seq: 2
-			},
-			agent_claim: null,
-			micro_depot_facilities: [{
-				facility_id: "depot-regional-01",
-				owner_claim_id: "claim-regional-01",
-				status: "active",
-				location_id: "loc-1",
-				service_radius_cm: 25e4,
-				inventory_revision: 7,
-				available_units_by_kind: {
-					data: 5,
-					repair_kit: 2
-				},
-				throughput_epoch: 11,
-				throughput_remaining_units: 13,
-				throughput_limit_units_per_epoch: 16,
-				supported_resource_kinds: ["data", "repair_kit"],
-				module_id: "regional.micro_depot",
-				module_version: "0.2.0",
-				wasm_hash: "sha256:micro-depot-public-evidence-1234567890",
-				upkeep_paid: true,
-				last_receipt_id: "receipt-micro-depot-public-01",
-				last_proposal_hash: "sha256:proposal-public-01",
-				available_actions: ["service_micro_depot_repair", "reclaim_micro_depot"]
-			}]
-		}
-	};
-	return {
-		...base,
-		...overrides,
-		config: {
-			...base.config,
-			...overrides.config || {}
-		},
-		model: {
-			...base.model,
-			...overrides.model || {}
-		},
-		player_gameplay: {
-			...base.player_gameplay,
-			...overrides.player_gameplay || {}
-		}
-	};
+function readAgentContextFixtureMetadata(...args) {
+	return visualTestAdapter?.readMetadata(...args) || null;
 }
-function emptyWorldRecoverySnapshot() {
-	return viewerFixtureBaseSnapshot({
-		model: {
-			agents: {},
-			locations: {},
-			agent_prompt_profiles: {},
-			agent_execution_debug_contexts: {},
-			agent_player_bindings: {},
-			agent_player_public_key_bindings: {}
-		},
-		player_gameplay: {
-			stage_id: "world_bootstrap",
-			stage_status: "blocked",
-			execution_state: "blocked",
-			goal_kind: "RecoverCapability",
-			goal_title: "Recover world snapshot",
-			objective: "Recover the world before issuing commands.",
-			progress_detail: "No agents or locations are available in the current snapshot.",
-			progress_percent: 0,
-			blocker_kind: "runtime_snapshot_empty_entities",
-			blocker_detail: "The viewer is missing a valid world snapshot.",
-			causality_kind: "world_constraint",
-			causality_detail: "empty snapshot contains zero agents and zero locations",
-			next_step_hint: "Request a fresh snapshot; if entity counts stay at zero, repair or restart the runtime world bootstrap.",
-			available_actions: [{
-				action_id: "request_snapshot",
-				label: "Request snapshot",
-				protocol_action: "world.request_snapshot",
-				disabled_reason: null
-			}],
-			recent_feedback: null,
-			agent_claim: null
-		}
-	});
-}
-function setFixturePlayerAuth() {
-	state.auth = {
-		...state.auth,
-		available: true,
-		playerId: "viewer-bound",
-		publicKey: "oc:pk:viewer-session-key",
-		privateKey: "ed25519-fixture-private-key",
-		releaseToken: "fixture-release-token",
-		source: "hosted_browser_storage",
-		registrationStatus: "registered",
-		runtimeStatus: "registered",
-		boundAgentId: "agent-0"
-	};
-}
-function setFixtureChatHistory() {
-	state.chatDraft.message = "Report nearby resources.";
-	state.chatDraft.dirty = true;
-	state.chatHistory = [
-		{
-			id: "fixture-chat-5",
-			source: "agent",
-			agentId: "agent-0",
-			targetAgentId: "agent-0",
-			speaker: "agent-0",
-			playerId: "viewer-bound",
-			locationId: "loc-0",
-			message: "Awaiting material recovery before the smelter can proceed.",
-			tick: 12,
-			intentSeq: 5
-		},
-		{
-			id: "fixture-chat-4",
-			source: "player",
-			agentId: "agent-0",
-			targetAgentId: "agent-0",
-			speaker: "viewer-bound",
-			playerId: "viewer-bound",
-			locationId: "loc-0",
-			message: "Hold position and confirm the blocker.",
-			tick: 11,
-			intentSeq: 4
-		},
-		{
-			id: "fixture-chat-3",
-			source: "agent",
-			agentId: "agent-0",
-			targetAgentId: "agent-0",
-			speaker: "agent-0",
-			playerId: "viewer-bound",
-			locationId: "loc-0",
-			message: "Factory Anchor reports iron input exhausted.",
-			tick: 10,
-			intentSeq: 3
-		}
-	];
-	state.lastChatFeedback = {
-		channel: "agent_chat",
-		action: "agent_chat",
-		stage: "acknowledged",
-		ok: true,
-		accepted: true,
-		target: "agent-0",
-		summary: "Agent chat acknowledged by the viewer fixture.",
-		detail: "Recent message flow remains visible while prompt controls stay collapsed.",
-		code: null
-	};
-}
-function setFixtureDiagnostics() {
-	state.recentEvents = [
-		{
-			id: 24,
-			time: 12,
-			kind: {
-				type: "state_sync",
-				status: "ok"
-			}
-		},
-		{
-			id: 23,
-			time: 12,
-			kind: {
-				type: "intent_tick",
-				status: "blocked"
-			}
-		},
-		{
-			id: 22,
-			time: 11,
-			kind: {
-				type: "econ_update",
-				status: "material_shortage"
-			}
-		}
-	];
-	state.eventCount = state.recentEvents.length;
-	state.metrics = {
-		total_ticks: 12,
-		decision_trace_count: 1
-	};
-}
-function setFixtureHostedGate() {
-	state.hostedAccess = {
-		deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
-		action_matrix: [{
-			action_id: "prompt_control_apply",
-			required_auth: "strong_auth",
-			availability: "public_player_plane_with_backend_reauth_preview",
-			reason: "prompt_control_apply is available after browser player-session registration plus backend re-authorization"
-		}, {
-			action_id: "main_token_transfer",
-			required_auth: "strong_auth",
-			availability: "blocked_until_strong_auth",
-			reason: "main_token_transfer remains blocked; this viewer exposes no transfer form."
-		}]
-	};
-	state.auth = {
-		...state.auth,
-		available: false,
-		playerId: null,
-		publicKey: null,
-		privateKey: null,
-		releaseToken: null,
-		source: "guest_only",
-		registrationStatus: "guest",
-		runtimeStatus: "guest",
-		error: "session validation requires hosted login"
-	};
-	state.hostedLogin.handle = "player@example.com";
-	state.hostedLogin.challengeId = "fixture-challenge";
-	state.hostedLogin.maskedLoginHint = "p***@example.com";
-	state.hostedLogin.deliveryMode = "email";
-	state.hostedLogin.accountExists = true;
-	state.hostedLogin.error = "Enter the latest verification code to continue.";
-	state.hostedLogin.retryAfterSeconds = 18;
-}
-function openFixtureDetails(name) {
-	queueMicrotask(() => {
-		if (name === "gameplay_diagnostics_expanded" || name === "factory_production_failure_disposition" || name === "control_proof_applied") {
-			document.getElementById("viewer-gameplay-details")?.setAttribute("open", "");
-			if (name === "gameplay_diagnostics_expanded") document.getElementById("viewer-diagnostics-panel")?.setAttribute("open", "");
-		}
-	});
-}
-function installViewerVisualFixture() {
-	if (!viewerTestApiEnabled()) {
-		delete window[VIEWER_VISUAL_FIXTURE_GLOBAL];
-		document.body.removeAttribute("data-viewer-visual-fixture");
-		return null;
-	}
-	const fixtures = {
-		shell_selected_blocker() {
-			injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-			applySelection({
-				kind: "agent",
-				id: "agent-0"
-			});
-			setFixturePlayerAuth();
-		},
-		agent_chat_history() {
-			injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-			applySelection({
-				kind: "agent",
-				id: "agent-0"
-			});
-			setFixturePlayerAuth();
-			setFixtureChatHistory();
-			setPromptOverridesVisible(false);
-		},
-		gameplay_diagnostics_expanded() {
-			injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-			applySelection({
-				kind: "agent",
-				id: "agent-0"
-			});
-			setFixturePlayerAuth();
-			setFixtureChatHistory();
-			setFixtureDiagnostics();
-		},
-		factory_production_failure_disposition() {
-			injectSnapshot(viewerFixtureBaseSnapshot({ player_gameplay: {
-				available_actions: [{
-					action_id: "schedule_recipe_smelter_iron_ingot",
-					label: "Queue iron ingot run",
-					protocol_action: "gameplay_action.submit",
-					target_agent_id: "agent-0",
-					disabled_reason: "insufficient iron_ore in site ledger"
-				}, {
-					action_id: "request_snapshot",
-					label: "Refresh gameplay snapshot",
-					protocol_action: "request_snapshot"
-				}],
-				factory_production_failure_disposition: {
-					action_id: "19",
-					requester_agent_id: "agent-0",
-					factory_id: "factory.target",
-					recipe_id: "recipe.smelter.iron_ingot",
-					blocker_kind: "product_validation_rejected",
-					blocker_detail: "product profile rejected the committed output",
-					disposition_kind: "consumed_lost",
-					consumed_inputs: [{
-						kind: "iron_ore",
-						amount: 3
-					}],
-					lost_inputs: [{
-						kind: "iron_ore",
-						amount: 3
-					}],
-					consumed_power: 7,
-					lost_power: 7,
-					next_action: "inspect_product_validation_and_reschedule",
-					next_recheck: null
-				}
-			} }), { returnState: false });
-			applySelection({
-				kind: "agent",
-				id: "agent-0"
-			});
-			setFixturePlayerAuth();
-		},
-		hosted_login_gate() {
-			injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
-			applySelection({
-				kind: "agent",
-				id: "agent-0"
-			});
-			setFixtureHostedGate();
-		},
-		empty_world_recovery() {
-			injectSnapshot(emptyWorldRecoverySnapshot(), { returnState: false });
-			state.selectedKind = null;
-			state.selectedId = null;
-			state.selectedObject = null;
-		}
-	};
-	installAgentContextVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installControlProofVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installAgentIntentV2VisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installMajorWorldEventCrisisVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		viewerFixtureBaseSnapshot
-	});
-	installRefineQuotePreflightVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installScheduleRecipeQuoteVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installTransferMaterialQuoteVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installProductValidationQuoteVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installPowerSaleQuoteVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installPowerSurvivalQuoteVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installMarketQuoteDecisionVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installWaitResolutionQuoteVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installWarDeclarationQuoteVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	installBranchCommitmentVisualFixture(fixtures, {
-		core: legacy_core_exports,
-		setFixturePlayerAuth,
-		viewerFixtureBaseSnapshot
-	});
-	window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
-	const fixtureName = viewerVisualFixtureNameFromQuery();
-	if (!fixtureName || !fixtures[fixtureName]) return null;
-	fixtures[fixtureName]();
-	document.body.setAttribute("data-viewer-visual-fixture", fixtureName);
-	openFixtureDetails(fixtureName);
-	return fixtureName;
+function readAgentContextFixtureGameplay(...args) {
+	return visualTestAdapter?.readGameplay(...args) || null;
 }
 function mountViewerApp(root = document.getElementById("app")) {
 	if (!root) throw new Error("viewer root #app is missing");
-	initializeSoftwareSafeCore();
+	const initialized = initializeSoftwareSafeCore();
 	let dispose = render$1(() => createComponent(AppShell, {}), root);
 	setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
-	const viewerVisualFixtureName = installViewerVisualFixture();
-	if (viewerVisualFixtureName) root.setAttribute("data-viewer-visual-fixture", viewerVisualFixtureName);
-	else root.removeAttribute("data-viewer-visual-fixture");
+	let disposed = false;
+	Promise.resolve(initialized).then(() => {
+		if (disposed) return;
+		const fixtureName = visualTestAdapter?.install() || null;
+		if (fixtureName) root.setAttribute("data-viewer-visual-fixture", fixtureName);
+		else root.removeAttribute("data-viewer-visual-fixture");
+		if (visualTestAdapter) window.__OASIS7_VIEWER_FIXTURE_READY__ = true;
+		requestRender();
+	}).catch(() => {});
 	return () => {
+		disposed = true;
 		setRenderHook(null);
 		dispose();
 		root.textContent = "";
 	};
 }
-function shouldBypassAutoMountForTestApi() {
-	const params = new URLSearchParams(window.location.search || "");
-	const value = String(params.get("test_api") || "").trim().toLowerCase();
-	const autoMount = String(params.get("auto_mount") || "").trim().toLowerCase();
-	return (value === "1" || value === "true" || value === "yes" || value === "on") && !(autoMount === "1" || autoMount === "true" || autoMount === "yes" || autoMount === "on");
-}
-var autoMountRoot = document.getElementById("app");
-if (autoMountRoot) mountViewerApp(autoMountRoot);
-else if (!shouldBypassAutoMountForTestApi()) throw new Error("viewer root #app is missing");
 delegateEvents([
 	"click",
 	"input",
 	"keydown"
 ]);
 //#endregion
-export { AppShell, __markStarterOcOnboardingCompleteForTest, mountViewerApp };
+//#region software_safe_src/main.jsx
+mountViewerApp();
+//#endregion

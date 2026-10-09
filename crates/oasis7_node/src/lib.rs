@@ -129,7 +129,7 @@ pub use libp2p_replication_network_wasm::{
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
 use node_runtime_batch_retention::{action_payload_bytes, push_committed_action_batch};
-#[cfg(feature = "libp2p")]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 pub use oasis7_net::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
     LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability, LiveTransportKind,

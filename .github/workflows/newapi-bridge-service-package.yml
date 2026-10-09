@@ -27,7 +27,7 @@ jobs:
     name: newapi-bridge-linux-x86-64
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Install pinned Rust toolchain
         run: |
@@ -50,9 +50,9 @@ jobs:
             libasound2-dev \
             libudev-dev
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: newapi-bridge-service-linux-x86-64-v1
+          shared-key: newapi-bridge-service-linux-x86-64-trusted-v2
           cache-on-failure: true
 
       - name: Build and stage deployable artifact
@@ -62,7 +62,7 @@ jobs:
             --archive output/newapi-bridge-service-linux-x86_64.tar.gz
 
       - name: Upload NewAPI bridge service artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: newapi-bridge-service-linux-x86_64-${{ github.sha }}
           path: output/newapi-bridge-service-linux-x86_64.tar.gz

@@ -1,3 +1,4 @@
+import { authCredentials, installSession, clearSession, hasSigningIdentity, updateRegistrationGrant, captureSessionContext, isSessionContextCurrent } from "./viewer_auth_session_module.js";
 import { LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE } from "./software_safe_constants.js";
 
 function buildDefaultAuthState(overrides = {}) {
@@ -94,9 +95,9 @@ export function createViewerHostedAuthStateModule({
           playerId: auth.playerId,
           loginChannel: auth.loginChannel || null,
           maskedLoginHint: auth.maskedLoginHint || null,
-          deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
-          releaseToken: auth.releaseToken || null,
-          registrationGrant: auth.registrationGrant || null,
+          deviceSessionId: auth.deviceSessionId || authCredentials(auth).releaseToken || null,
+          releaseToken: authCredentials(auth).releaseToken || null,
+          registrationGrant: authCredentials(auth).registrationGrant || null,
           issuedAtUnixMs: auth.issuedAtUnixMs ?? null,
           sessionEpoch: auth.sessionEpoch ?? null,
         }),
@@ -189,7 +190,7 @@ export function createViewerHostedAuthStateModule({
   }
 
   function authHasSigningKeyMaterial(auth) {
-    return !!String(auth?.publicKey || "").trim() && !!String(auth?.privateKey || "").trim();
+    return hasSigningIdentity(auth);
   }
 
   return {

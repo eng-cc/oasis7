@@ -29,7 +29,7 @@ def package_native_body(workflow: str, path: Path) -> str:
 def cache_steps(workflow: str, path: Path) -> list[str]:
     body = package_native_body(workflow, path)
     steps = re.findall(
-        r"^      - uses: Swatinem/rust-cache@v2\n(?P<body>.*?)(?=^      - |\Z)",
+        r"^      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2\n(?P<body>.*?)(?=^      - |\Z)",
         body,
         re.MULTILINE | re.DOTALL,
     )
@@ -41,7 +41,7 @@ def cache_steps(workflow: str, path: Path) -> list[str]:
 
 def linux_cache_guard(workflow: str, path: Path) -> str:
     body = package_native_body(workflow, path)
-    cache_marker = "      - uses: Swatinem/rust-cache@v2\n        if: runner.os == 'Linux'"
+    cache_marker = "      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2\n        if: runner.os == 'Linux'"
     cache_offset = body.find(cache_marker)
     assert cache_offset >= 0, f"{path.name} must define a Linux package cache step"
     pre_cache = body[:cache_offset]
@@ -59,9 +59,9 @@ def linux_cache_guard(workflow: str, path: Path) -> str:
 
 linux_keys: list[str] = []
 expected_non_linux_keys = {
-    "testnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-v1",
-    "mainnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-v1",
-    "release-packages-package-native-${{ runner.os }}-${{ matrix.target_triple }}-v2",
+    "testnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-trusted-v2",
+    "mainnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-trusted-v2",
+    "release-packages-package-native-${{ runner.os }}-${{ matrix.target_triple }}-trusted-v2",
 }
 observed_non_linux_keys: set[str] = set()
 
@@ -93,7 +93,7 @@ for path in workflow_paths:
     assert "GITHUB_REF_NAME" not in linux_key.group("key")
     assert "cache-on-failure: false" in linux[0], f"{path.name} Linux cache must save successful jobs only"
     assert (
-        "save-if: ${{ steps.linux-package-cache-write.outputs.save == 'true' }}"
+        ("save-if: ${{ steps.linux-package-cache-write.outputs.save == 'true' }}" if path.name == "release-packages.yml" else "save-if: false")
         in linux[0]
     ), (
         f"{path.name} Linux cache must only save when checkout matches the trusted branch"

@@ -20,8 +20,64 @@ class Workflow(unittest.TestCase):
         # The protected baseline already executes this suite during migration.
         subprocess.run(['bash',str(ROOT/'scripts/install-ci-trunk.test.sh')],cwd=ROOT,check=True)
 
+    def test_viewer_security_smoke_uses_installed_browser_after_formal_build(self):
+        job = JOBS['viewer-js-required']
+        self.assertIn('agent-browser@0.37.1', job)
+        self.assertIn('--prefix "$RUNNER_TEMP/viewer-security-browser"', job)
+        self.assertIn('"$browser_bin" install --with-deps', job)
+        self.assertIn("printf 'AGENT_BROWSER_BIN=%s\\n'", job)
+        self.assertNotIn('cache-mode: write', job)
+        group = re.search(r'^    viewer_js_required\) (.*?) ;;$',
+                          (ROOT / 'scripts/ci-tests.sh').read_text(), re.M).group(1)
+        self.assertLess(group.index('run_oasis7_viewer_software_safe_build'),
+                        group.index('viewer-auth-browser-security-smoke.mjs'))
+
+    def test_additive_security_steps_preserve_baseline_cells(self):
+        for name in ('net', 'viewer-js-required', 'viewer-performance-report', 'workflow-governance'):
+            self.assertEqual(JOBS[name].count('name: Execute selected cell'), 1)
+            self.assertIn('"$RUNNER_TEMP/ci-authority/ci-tests.sh" required', JOBS[name])
+        performance = JOBS['viewer-performance-report']
+        self.assertIn('agent-browser@0.37.1', performance)
+        self.assertIn('--prefix "$RUNNER_TEMP/viewer-performance-browser"', performance)
+        self.assertIn('"$browser_bin" install --with-deps', performance)
+        self.assertIn("printf 'AGENT_BROWSER_BIN=%s\\n'", performance)
+        self.assertLess(performance.index('Install pinned performance browser'), performance.index('Execute selected cell'))
+        self.assertLess(performance.index('Build performance test artifact'), performance.index('Execute selected cell'))
+        self.assertIn('viewer_bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"', performance)
+        self.assertIn('WASM_BINDGEN_BIN="$viewer_bindgen_bin" npm', performance)
+        viewer = JOBS['viewer-js-required']
+        self.assertGreater(viewer.index('Verify browser authentication security'), viewer.index('Execute selected cell'))
+        net = JOBS['net']
+        self.assertGreater(net.index('Verify pinned network source'), net.index('Execute selected cell'))
+        for check in ('scripts/libp2p-security-source.test.py', 'scripts/libp2p-compat.test.py',
+                      'clang --print-targets | grep -w wasm32', 'CC_wasm32_unknown_unknown: clang',
+                      'cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked',
+                      'cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked'):
+            self.assertIn(check, net)
+        governance = JOBS['workflow-governance']
+        self.assertGreater(governance.index('Verify new source archive'), governance.index('Execute selected cell'))
+        for test in ('package-source-plan.test.py', 'safe-git-archive.test.py', 'cache-permission-probe.test.cjs'):
+            self.assertIn(test, governance)
+        self.assertNotIn('run: python3 scripts/ci-workflow.test.py', governance) # already in authority cell
+
+    def test_trusted_writer_only_runs_on_protected_main(self):
+        writer = JOBS['full-regression']
+        self.assertIn("if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'))", writer)
+        self.assertIn('cache-mode: write', writer)
+
+    def test_readers_share_compatible_trusted_writer_identity(self):
+        writer = JOBS['full-regression']
+        self.assertIn('cache-mode: write', writer)
+        self.assertIn('shared-key: ci-full-regression-trusted-v2', writer)
+        self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM', writer)
+        for name, job in JOBS.items():
+            if 'save-if: false' in job and 'Swatinem/rust-cache@' in job:
+                self.assertIn('shared-key: ci-full-regression-trusted-v2', job, name)
+                self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM', job, name)
+        self.assertNotIn('ordinary-required-v2', WORKFLOW)
+
     def test_download_caches_follow_actual_worksets(self):
-        node_jobs={name for name,job in JOBS.items() if 'uses: actions/setup-node@v6' in job}
+        node_jobs={name for name,job in JOBS.items() if 'uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' in job}
         self.assertEqual(node_jobs,{'viewer-js-required','viewer-performance-report','launcher-web','full-regression'})
         for name in node_jobs:
             self.assertIn('cache: npm',JOBS[name])
@@ -29,13 +85,13 @@ class Workflow(unittest.TestCase):
             self.assertIn('npm ci --prefix crates/oasis7_viewer',JOBS[name])
         for name,job in JOBS.items():
             if 'shared-key: ordinary-required' in job:
-                self.assertIn('shared-key: ordinary-required-v2-${{ matrix.group }}',job)
+                self.assertIn('shared-key: ci-full-regression-trusted-v2',job)
                 self.assertIn('add-rust-environment-hash-key: true',job)
                 self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM',job)
-                self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@v2'))
+                self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2'))
         for name in ('launcher-web','full-regression'):
             job=JOBS[name]
-            self.assertIn('uses: actions/cache@v5',job)
+            self.assertIn('uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25',job)
             self.assertIn("hashFiles('scripts/install-ci-trunk.sh')",job)
             self.assertNotIn('cargo install trunk',job)
             self.assertNotIn('restore-keys:',job)
@@ -82,7 +138,7 @@ class Workflow(unittest.TestCase):
         self.assertIn('git show "${BASE_SHA}:scripts/${file}"', select)
         self.assertIn('--test-ref "$tested_sha"', select)
         self.assertIn('migration baseline predates pure selector', select)
-        self.assertEqual(WORKFLOW.count('uses: actions/checkout@v6'), WORKFLOW.count('persist-credentials: false'))
+        self.assertEqual(WORKFLOW.count('uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803'), WORKFLOW.count('persist-credentials: false'))
         self.assertNotIn('secrets.', WORKFLOW)
         self.assertNotIn('GH_TOKEN:', WORKFLOW)
         self.assertNotIn('scripts/pm/', WORKFLOW)
