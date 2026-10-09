@@ -28,8 +28,8 @@ rand_core = "0.10"
 getrandom = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cap-std = "3"
-cap-fs-ext = "3"
+cap-std = "4"
+cap-fs-ext = "4"
 libc = "0.2"
 aliyun-tablestore-rs = { version = "0.1.2", default-features = false, features = ["rust-tls"] }
 oasis7_distfs = { version = "0.1.0", path = "../oasis7_distfs" }
@@ -38,7 +38,7 @@ oasis7_node = { version = "0.1.0", path = "../oasis7_node", default-features = f
 oasis7_wasm_executor = { version = "0.1.0", path = "../oasis7_wasm_executor", default-features = false }
 oasis7_wasm_router = { version = "0.1.0", path = "../oasis7_wasm_router" }
 oasis7_wasm_store = { version = "0.1.0", path = "../oasis7_wasm_store" }
-async-openai = { version = "0.41.3", default-features = false, features = ["responses", "rustls"] }
+async-openai = { version = "0.42.1", default-features = false, features = ["responses", "rustls"] }
 eventsource-stream = "0.2.3"
 ctrlc = { version = "3.4", features = ["termination"] }
 futures-util = "0.3"
