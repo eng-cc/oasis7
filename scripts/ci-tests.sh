@@ -96,7 +96,25 @@ run_cargo_clippy() {
 
 
 run_oasis7_required_tier_tests() {
-  run_cargo test -p oasis7 --tests --features test_tier_required
+  local viewer_manifest viewer_binary
+  viewer_manifest="$(mktemp)"
+  run_cargo build -p oasis7 --bin oasis7_viewer_live --features test_tier_required --message-format=json > "$viewer_manifest"
+  viewer_binary="$("$ci_python" - "$viewer_manifest" <<'PY_VIEWER'
+import json, pathlib, sys
+artifacts = []
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
+    if not line.startswith('{'):
+        continue
+    value = json.loads(line)
+    if value.get('reason') == 'compiler-artifact' and value.get('target', {}).get('name') == 'oasis7_viewer_live' and value.get('executable'):
+        artifacts.append(value['executable'])
+assert len(artifacts) == 1, artifacts
+assert pathlib.Path(artifacts[0]).is_file(), artifacts
+print(artifacts[0])
+PY_VIEWER
+)"
+  rm -f "$viewer_manifest"
+  PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 --tests --features test_tier_required
 }
 
 run_scenario_regression_tests() {
@@ -148,7 +166,7 @@ run_oasis7_net_libp2p_tests() {
   run python3 ./scripts/libp2p-compat.test.py
   run_cargo test -p oasis7_net --features libp2p --lib
   if [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_OS:-}" == Linux ]]; then
-    run_cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked
+    CC_wasm32_unknown_unknown=clang AR_wasm32_unknown_unknown=llvm-ar run_cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked
     run env -u RUSTC_WRAPPER CC_wasm32_unknown_unknown=clang AR_wasm32_unknown_unknown=llvm-ar \
       cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked
   fi
@@ -223,6 +241,9 @@ run_workflow_governance_baseline_contract_tests() {
   run python3 ./scripts/plan-rust-required-scope.test.py
   run python3 ./scripts/ci-required-result.test.py
   run python3 ./scripts/ci-workflow.test.py
+  run bash ./scripts/plan-wasm-determinism-scope.test.sh
+  run bash ./scripts/ensure-wasm-bindgen-cli.test.sh
+  run python3 ./scripts/ci-local-signer-tests.test.py
   run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
   run bash ./scripts/worktree-gc-report.test.sh
   run python3 ./scripts/resource-cleanup-executor.test.py
@@ -254,6 +275,7 @@ run_packaging_artifact_contract_tests() {
 run_packaging_contract_tests() {
   run_packaging_artifact_contract_tests
   run bash ./scripts/release-packages-trunk-cache-contract.test.sh
+  run python3 ./scripts/ci-local-signer-tests.py
 
 }
 
@@ -319,6 +341,7 @@ run_oasis7_viewer_software_safe_feedback_contract_tests() {
   run npm --prefix crates/oasis7_viewer run test:frontend-structure
   run npm --prefix crates/oasis7_viewer run test:feedback-contract
   run node crates/oasis7_viewer/scripts/gameplay-attraction-scenario.test.mjs
+  run python3 scripts/tests/test_industrial_starter_evidence.py
   run ./scripts/copy-viewer-web-dist.test.sh
   run ./scripts/agent-browser-viewer-dist-freshness-test.sh
   run bash ./scripts/agent-browser-lifecycle-contract.test.sh

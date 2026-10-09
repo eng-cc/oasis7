@@ -146,11 +146,15 @@ pub(crate) fn build_network_head_status(
     } else {
         0
     };
-    let stake_quorum_met =
-        policy.quorum_mode != "stake_weighted" || selected_stake >= required_stake;
+    let stake_quorum_met = policy.quorum_mode != "authority_activation_planned"
+        && (policy.quorum_mode != "stake_weighted" || selected_stake >= required_stake);
 
     let (source, decision, selected_key): (&str, &str, Option<PeerHeadBucketKey>) =
-        if conflicting_peer_count > 0 {
+        if loaded_network_tier_manifest
+            .is_some_and(|loaded| loaded.validate_runtime_support().is_err())
+        {
+            ("authority_activation_planned", "critical", None)
+        } else if conflicting_peer_count > 0 {
             (
                 "peer_conflict",
                 "critical",
@@ -315,7 +319,11 @@ pub(crate) fn readiness_policy(
         && !snapshot.consensus.validator_stake_root.is_empty()
         && snapshot.consensus.validator_stake_proofs.len()
             == snapshot.consensus.validator_stakes.len();
-    let quorum_mode = if tier == "mainnet" && !is_observer && stake_ready {
+    let quorum_mode = if loaded_network_tier_manifest
+        .is_some_and(|loaded| loaded.validate_runtime_support().is_err())
+    {
+        "authority_activation_planned"
+    } else if tier == "mainnet" && !is_observer && stake_ready {
         "stake_weighted"
     } else if tier == "mainnet" && !is_observer {
         "count_fallback_stake_unavailable"

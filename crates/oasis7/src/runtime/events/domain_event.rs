@@ -679,6 +679,8 @@ pub enum DomainEvent {
         durability_ppm: i64,
     },
     RecipeStarted {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        committed_recipe_origin: Option<super::CommittedRecipeOrigin>,
         job_id: ActionId,
         requester_agent_id: String,
         factory_id: String,
@@ -709,6 +711,8 @@ pub enum DomainEvent {
         ready_at: WorldTime,
     },
     RecipeCompleted {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        committed_recipe_origin: Option<super::CommittedRecipeOrigin>,
         job_id: ActionId,
         requester_agent_id: String,
         factory_id: String,

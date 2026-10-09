@@ -503,6 +503,7 @@ fn chain_linked_runtime_event_suffix_delivers_new_era_recipe_completion() {
         caused_by: None,
         body: crate::runtime::WorldEventBody::Domain(
             crate::runtime::DomainEvent::RecipeCompleted {
+                committed_recipe_origin: None,
                 job_id: 7,
                 requester_agent_id: "agent-0".to_string(),
                 factory_id: "factory-smelter".to_string(),

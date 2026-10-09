@@ -1,5 +1,3 @@
-use super::*;
-
 use super::super::auth::{
     VerifiedPlayerAuth, verify_gameplay_action_auth_proof,
     verify_product_validation_quote_auth_proof, verify_refine_quote_auth_proof,
@@ -24,18 +22,12 @@ use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
     map_auth_verify_error_code, normalize_optional_public_key,
 };
-use crate::runtime::{
-    IndustryStage, StarterIndustrialFeasibilityResult, StarterIndustrialFeasibilityStatus,
-    WorldState,
-};
-use crate::simulator::persist::{
-    PlayerStarterIndustrialFeasibility, PlayerStarterIndustrialFeasibilityStatus,
-};
+use super::*;
+use crate::runtime::{IndustryStage, StarterIndustrialFeasibilityResult, WorldState};
 use crate::simulator::{
     PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceOwner, WorldKernel,
 };
 use oasis7_wasm_abi::MaterialStack;
-
 #[path = "power_survival_quote.rs"]
 mod power_survival_quote;
 #[path = "schedule_readiness.rs"]
@@ -112,29 +104,7 @@ pub(super) fn supports_runtime_gameplay_actions() -> bool {
     true
 }
 
-pub(super) fn player_starter_industrial_feasibility(
-    result: &StarterIndustrialFeasibilityResult,
-) -> PlayerStarterIndustrialFeasibility {
-    PlayerStarterIndustrialFeasibility {
-        profile_id: result.profile_id.clone(),
-        profile_revision: result.profile_revision,
-        authority_snapshot: result.authority_snapshot.clone(),
-        status: match result.status {
-            StarterIndustrialFeasibilityStatus::CandidateAvailable => {
-                PlayerStarterIndustrialFeasibilityStatus::CandidateAvailable
-            }
-            StarterIndustrialFeasibilityStatus::NoSafeStarterChain => {
-                PlayerStarterIndustrialFeasibilityStatus::NoSafeStarterChain
-            }
-        },
-        evidence_class: result.evidence_class.clone(),
-        completion_boundary: result.completion_boundary.clone(),
-        blocker: result.blocker.clone(),
-        next_action: result.next_action.clone(),
-        next_recheck: result.next_recheck,
-        progression_effect: result.progression_effect.clone(),
-    }
-}
+pub(super) use super::starter_industrial_outcome::player_starter_industrial_feasibility;
 
 fn starter_assembler_build_disabled_reason(
     feasibility: &StarterIndustrialFeasibilityResult,
@@ -534,12 +504,14 @@ impl ViewerRuntimeLiveServer {
                     action_id: Some(request.action_id.clone()),
                     target_agent_id: Some(request.target_agent_id.clone()),
                 })?;
-            let runtime_action_id = self.submit_world_service_gameplay(&request)?;
+            let (runtime_action_id, consensus_action_payload_hash) =
+                self.submit_world_service_gameplay(&request)?;
             if runtime_action_id != 0 {
                 self.runtime_action_players
                     .insert(runtime_action_id, verified.player_id.clone());
             }
             return Ok(GameplayActionAck {
+                consensus_action_payload_hash,
                 action_id: request.action_id,
                 target_agent_id: request.target_agent_id,
                 player_id: verified.player_id,
@@ -744,6 +716,7 @@ impl ViewerRuntimeLiveServer {
                 delta_event_seq: 0,
             });
             return Ok(GameplayActionAck {
+                consensus_action_payload_hash: None,
                 action_id: request.action_id,
                 target_agent_id: request.target_agent_id,
                 player_id: verified.player_id,
@@ -811,10 +784,12 @@ impl ViewerRuntimeLiveServer {
             });
 
             return Ok(GameplayActionAck {
+
                 action_id: request.action_id,
                 target_agent_id: request.target_agent_id,
                 player_id: verified.player_id,
                 runtime_action_id: submitted_action_id,
+                consensus_action_payload_hash: submitted.consensus_action_payload_hash,
                 accepted_at_tick,
                 message: Some(
                     "submitted to chain runtime; wait for committed world sync to observe the gameplay action"
@@ -863,6 +838,7 @@ impl ViewerRuntimeLiveServer {
         });
 
         Ok(GameplayActionAck {
+            consensus_action_payload_hash: None,
             action_id: request.action_id,
             target_agent_id: request.target_agent_id,
             player_id: verified.player_id,

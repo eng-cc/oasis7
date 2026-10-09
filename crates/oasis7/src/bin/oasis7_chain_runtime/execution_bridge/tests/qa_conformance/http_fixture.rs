@@ -730,6 +730,7 @@ impl WorldGate {
                         SchedulerOperationV1::SettleLease { .. }
                     ) =>
                 {
+                    started_record = serde_json::to_vec(&request).unwrap();
                     "settle"
                 }
                 _ => return GateDisposition::Continue,

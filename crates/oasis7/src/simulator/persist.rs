@@ -602,6 +602,8 @@ pub enum PlayerStarterIndustrialFeasibilityStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerStarterIndustrialFeasibility {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settled_outcome: Option<PlayerStarterIndustrialSettledOutcome>,
     pub profile_id: String,
     pub profile_revision: u64,
     pub authority_snapshot: String,
@@ -614,6 +616,14 @@ pub struct PlayerStarterIndustrialFeasibility {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_recheck: Option<WorldTime>,
     pub progression_effect: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerStarterIndustrialSettledOutcome {
+    pub settlement_job_id: u64,
+    pub settled_at: WorldTime,
+    pub output_ledger: crate::industry_types::MaterialLedgerId,
+    pub settlement: crate::industry_types::StarterIndustrialSettlementSummaryV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

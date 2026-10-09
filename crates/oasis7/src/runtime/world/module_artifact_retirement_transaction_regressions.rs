@@ -6,7 +6,11 @@ const OWNER: &str = "retirement-owner";
 const BIDDER: &str = "retirement-bidder";
 
 fn dispatch(world: &mut World, action: Action) -> Result<bool, WorldError> {
-    world.try_apply_runtime_module_action(&ActionEnvelope { id: 991, action })
+    world.try_apply_runtime_module_action(&ActionEnvelope {
+        committed_recipe_origin: None,
+        id: 991,
+        action,
+    })
 }
 
 fn register_agent(world: &mut World, id: &str) {

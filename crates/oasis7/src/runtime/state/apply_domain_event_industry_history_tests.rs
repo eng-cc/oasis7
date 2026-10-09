@@ -208,6 +208,14 @@ fn settled_history_rollover_retains_newest_low_action_id() {
 fn starter_milestone_survives_settled_history_compaction() {
     let mut state = WorldState::default();
     let milestone = StarterIndustrialMilestoneV1 {
+        settlement_summary: Some(StarterIndustrialSettlementSummaryV1 {
+            requester_agent_id: "starter-agent-0".into(),
+            accepted_batches: 12,
+            consume: vec![MaterialStack::new("iron_ore", 48)],
+            power_required: 24,
+            produce: vec![MaterialStack::new("iron_ingot", 36)],
+        }),
+        committed_recipe_origin: Some(crate::runtime::events::recipe_origin_tests::origin()),
         profile_id: STARTER_INDUSTRIAL_PROFILE_ID.to_string(),
         profile_revision: STARTER_INDUSTRIAL_PROFILE_REVISION,
         factory_id: STARTER_SMELTER_FACTORY_ID.to_string(),
@@ -236,6 +244,7 @@ fn starter_milestone_survives_settled_history_compaction() {
 
 fn pending_recipe_job(job_id: ActionId) -> RecipeJobState {
     RecipeJobState {
+        committed_recipe_origin: None,
         job_id,
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.test".to_string(),
@@ -263,6 +272,7 @@ fn first_terminal_industry_events_allocate_order_once_and_replay_is_stable() {
     state
         .apply_domain_event(
             &DomainEvent::RecipeCompleted {
+                committed_recipe_origin: None,
                 job_id: 10,
                 requester_agent_id: "builder-a".to_string(),
                 factory_id: "factory.test".to_string(),
@@ -283,6 +293,7 @@ fn first_terminal_industry_events_allocate_order_once_and_replay_is_stable() {
     state
         .apply_domain_event(
             &DomainEvent::RecipeCompleted {
+                committed_recipe_origin: None,
                 job_id: 10,
                 requester_agent_id: "builder-a".to_string(),
                 factory_id: "factory.test".to_string(),
@@ -345,4 +356,51 @@ fn legacy_industry_history_without_settlement_order_is_decodable_and_retained() 
             .factory_production_failure_dispositions
             .contains_key(&7)
     );
+}
+
+#[test]
+fn committed_recipe_origin_completion_rejects_tampering_and_replays_without_credit() {
+    let origin = crate::runtime::events::recipe_origin_tests::origin();
+    let mut state = WorldState::default();
+    let mut pending = pending_recipe_job(5);
+    pending.committed_recipe_origin = Some(origin.clone());
+    pending.produce = vec![MaterialStack::new("iron_ingot", 2)];
+    state.pending_recipe_jobs.insert(5, pending);
+    let event = DomainEvent::RecipeCompleted {
+        committed_recipe_origin: Some(origin.clone()),
+        job_id: 5,
+        requester_agent_id: "builder-a".into(),
+        factory_id: "factory.test".into(),
+        recipe_id: "recipe.test".into(),
+        accepted_batches: 1,
+        produce: vec![MaterialStack::new("iron_ingot", 2)],
+        byproducts: vec![],
+        output_ledger: MaterialLedgerId::world(),
+        bottleneck_tags: vec![],
+        logistics_route_ids: vec![],
+        logistics_path_ids: vec![],
+    };
+    let mut tampered = event.clone();
+    if let DomainEvent::RecipeCompleted {
+        committed_recipe_origin: Some(origin),
+        ..
+    } = &mut tampered
+    {
+        origin.action_payload_hash = "d".repeat(64);
+    }
+    let before = serde_json::to_vec(&state).unwrap();
+    assert!(state.apply_domain_event(&tampered, 0).is_err());
+    assert_eq!(serde_json::to_vec(&state).unwrap(), before);
+    state.apply_domain_event(&event, 0).expect("settle origin");
+    assert_eq!(
+        state.recipe_completion_receipts[&5].committed_recipe_origin,
+        Some(origin)
+    );
+    let settled = serde_json::to_vec(&state).unwrap();
+    state
+        .apply_domain_event(&event, 0)
+        .expect("same origin replay");
+    assert_eq!(serde_json::to_vec(&state).unwrap(), settled);
+    assert!(state.apply_domain_event(&tampered, 0).is_err());
+    assert_eq!(serde_json::to_vec(&state).unwrap(), settled);
 }

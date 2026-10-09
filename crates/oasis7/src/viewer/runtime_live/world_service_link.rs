@@ -348,7 +348,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn submit_world_service_gameplay<T: serde::Serialize>(
         &mut self,
         original: &T,
-    ) -> Result<u64, GameplayActionError> {
+    ) -> Result<(u64, Option<String>), GameplayActionError> {
         use oasis7_client_api::world_service::{
             IntentOutcome, SubmitIntentRequest, SubmitObservation,
         };
@@ -406,15 +406,22 @@ impl ViewerRuntimeLiveServer {
                     "submission outcome unknown; query the original signed request, do not replace its nonce".into()))
             }
             SubmitObservation::Response(response) => match response.outcome {
-                IntentOutcome::Committed { receipt, .. } => receipt
-                    .get("action_id")
-                    .and_then(serde_json::Value::as_u64)
-                    .ok_or_else(|| {
-                        error(
-                            "world_service_invalid_receipt",
-                            "receipt has no action reference".into(),
-                        )
-                    }),
+                IntentOutcome::Committed { receipt, .. } => {
+                    let action_id = receipt
+                        .get("action_id")
+                        .and_then(serde_json::Value::as_u64)
+                        .ok_or_else(|| {
+                            error(
+                                "world_service_invalid_receipt",
+                                "receipt has no action reference".into(),
+                            )
+                        })?;
+                    let payload_hash = receipt
+                        .get("consensus_action_payload_hash")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned);
+                    Ok((action_id, payload_hash))
+                }
                 IntentOutcome::Received { .. } | IntentOutcome::Pending => {
                     self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
                         "world_service_intent",
@@ -431,7 +438,7 @@ impl ViewerRuntimeLiveServer {
                         .push((correlation, payload));
                     // Legacy ACK has a scalar action ID; zero denotes no
                     // committed action reference, never execution success.
-                    Ok(0)
+                    Ok((0, None))
                 }
                 other => Err(error(
                     "world_service_intent_unresolved",

@@ -159,9 +159,9 @@ pub use cognition_wake::{
 
 // Events
 pub use events::{
-    Action, ActionEnvelope, CausedBy, DomainEvent, IndustryStage, MainTokenFeeKind,
-    MaterialMarketQuote, MaterialTransitPriority, ModuleProfileChanges, ModuleSourcePackage,
-    RejectReason,
+    Action, ActionEnvelope, CausedBy, CommittedRecipeOrigin, DomainEvent, GameplaySubmissionOrigin,
+    IndustryStage, MainTokenFeeKind, MaterialMarketQuote, MaterialTransitPriority,
+    ModuleProfileChanges, ModuleSourcePackage, RejectReason,
 };
 
 // Governance
@@ -338,8 +338,8 @@ pub use state::{
     RecipeJobState, STARTER_ASSEMBLER_FACTORY_ID, STARTER_INDUSTRIAL_COMPLETION_BOUNDARY,
     STARTER_INDUSTRIAL_PROFILE_ID, STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID,
     STARTER_SMELTER_RECIPE_ID, StarterIndustrialFeasibilityResult,
-    StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1, WorldState,
-    WorldStateProjection,
+    StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1,
+    StarterIndustrialSettlementSummaryV1, WorldState, WorldStateProjection,
 };
 pub(crate) use state::{ModuleVisualMutation, parse_module_visual_emit};
 

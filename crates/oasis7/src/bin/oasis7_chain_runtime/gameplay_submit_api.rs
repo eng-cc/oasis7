@@ -71,6 +71,8 @@ pub(super) struct ChainGameplaySubmitResponse {
     pub(super) ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) action_id: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) consensus_action_payload_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) submitted_at_unix_ms: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,6 +86,7 @@ impl ChainGameplaySubmitResponse {
         Self {
             ok: true,
             action_id: Some(action_id),
+            consensus_action_payload_hash: None,
             submitted_at_unix_ms: Some(submitted_at_unix_ms),
             error_code: None,
             error: None,
@@ -94,6 +97,7 @@ impl ChainGameplaySubmitResponse {
         Self {
             ok: false,
             action_id: None,
+            consensus_action_payload_hash: None,
             submitted_at_unix_ms: None,
             error_code: Some(error_code.into()),
             error: Some(message.into()),
@@ -178,6 +182,26 @@ fn handle_gameplay_submit(
     }
     let runtime_action = authorized.action;
 
+    let submission_origin = match (&runtime_action, authorized.legacy_auth.as_ref()) {
+        (
+            oasis7::runtime::Action::ScheduleRecipe {
+                requester_agent_id,
+                factory_id,
+                recipe_id,
+                ..
+            },
+            Some(auth),
+        ) => Some(oasis7::runtime::GameplaySubmissionOrigin {
+            verified_player_id: auth.player_id.clone(),
+            public_key: auth.public_key.clone(),
+            auth_nonce: auth.nonce,
+            hosted_registration_nonce: auth.hosted_registration_nonce.clone(),
+            requester_agent_id: requester_agent_id.clone(),
+            factory_id: factory_id.clone(),
+            recipe_id: recipe_id.clone(),
+        }),
+        _ => None,
+    };
     let world_id = runtime
         .lock()
         .map_err(|_| "node runtime lock poisoned")?
@@ -201,7 +225,7 @@ fn handle_gameplay_submit(
             },
         )
     } else {
-        build_gameplay_submit_action_payload(runtime_action)
+        build_gameplay_submit_action_payload(runtime_action, submission_origin)
     } {
         Ok(payload) => payload,
         Err(err) => {
@@ -209,6 +233,7 @@ fn handle_gameplay_submit(
             return Ok(());
         }
     };
+    let payload_hash = oasis7::runtime::blake3_hex(&payload);
     let action_id = match next_gameplay_action_id() {
         Ok(action_id) => action_id,
         Err(err) => {
@@ -233,7 +258,8 @@ fn handle_gameplay_submit(
     }
     record_accepted_request(execution_world_dir, &world_id, body, action_id)?;
 
-    let response = ChainGameplaySubmitResponse::success(action_id, super::now_unix_ms());
+    let mut response = ChainGameplaySubmitResponse::success(action_id, super::now_unix_ms());
+    response.consensus_action_payload_hash = Some(payload_hash);
     write_gameplay_submit_json_response(stream, 200, &response)
 }
 
@@ -324,8 +350,12 @@ fn authorize_chain_gameplay_submit(
 
 fn build_gameplay_submit_action_payload(
     action: oasis7::runtime::Action,
+    origin: Option<oasis7::runtime::GameplaySubmissionOrigin>,
 ) -> Result<Vec<u8>, String> {
-    let envelope = ConsensusActionPayloadEnvelope::from_runtime_action(action);
+    let envelope = match origin {
+        Some(origin) => ConsensusActionPayloadEnvelope::from_recipe_submission(action, origin),
+        None => ConsensusActionPayloadEnvelope::from_runtime_action(action),
+    };
     encode_consensus_action_payload(&envelope)
 }
 

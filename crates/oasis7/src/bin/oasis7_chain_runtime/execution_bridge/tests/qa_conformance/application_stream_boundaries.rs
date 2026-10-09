@@ -646,7 +646,22 @@ fn kernel_queued_bytes(stream: &TcpStream) -> i32 {
     assert!(queued >= 0);
     queued
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+fn kernel_queued_bytes(stream: &TcpStream) -> i32 {
+    use std::os::fd::AsRawFd;
+    unsafe extern "C" {
+        fn ioctl(fd: i32, request: std::ffi::c_ulong, ...) -> i32;
+    }
+    let mut queued = 0i32;
+    assert_eq!(
+        unsafe { ioctl(stream.as_raw_fd(), 0x5411 as std::ffi::c_ulong, &mut queued) },
+        0,
+        "read actual TCP send queue",
+    );
+    assert!(queued >= 0);
+    queued
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn kernel_queued_bytes(_: &TcpStream) -> i32 {
     panic!("actual kernel queue probe unsupported: not_run");
 }

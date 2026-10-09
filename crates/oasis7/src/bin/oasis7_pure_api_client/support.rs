@@ -111,6 +111,30 @@ pub(super) fn maybe_request_snapshot(
     Ok(())
 }
 
+pub(super) fn build_signed_session_register_request(
+    player_id: &str,
+    private_key_hex: &str,
+    public_key_hex: Option<&str>,
+    requested_agent_id: Option<String>,
+    registration_grant: Option<String>,
+) -> Result<AuthoritativeSessionRegisterRequest, String> {
+    let public_key = resolve_public_key_hex(private_key_hex, public_key_hex)?;
+    let request = AuthoritativeSessionRegisterRequest {
+        player_id: player_id.to_string(),
+        public_key: Some(public_key.clone()),
+        registration_grant,
+        auth: None,
+        requested_agent_id,
+        force_rebind: false,
+    };
+    let proof =
+        sign_session_register_auth_proof(&request, next_u64_id(), &public_key, private_key_hex)?;
+    Ok(AuthoritativeSessionRegisterRequest {
+        auth: Some(proof),
+        ..request
+    })
+}
+
 pub(super) fn build_signed_agent_chat_request(
     agent_id: &str,
     player_id: &str,

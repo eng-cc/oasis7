@@ -63,11 +63,46 @@ pub(super) fn apply_intents(
         let mut runtime_action_id = None;
         let applied = match request.signed_payload.clone() {
             WorldServicePayloadV1::GameplayJson(bytes) => {
-                gameplay::authenticated_action(&candidate, &bytes).map(|action| {
-                    let id = candidate.submit_action(action);
-                    runtime_action_id = Some(id);
-                    serde_json::json!({"action_id": action_id, "runtime_action_id": id})
-                })
+                gameplay::authenticated_action_with_origin(&candidate, &bytes).and_then(
+                    |(action, submission)| {
+                        let id = if let Some(submission) = submission {
+                            let committed = context
+                                .committed_actions
+                                .iter()
+                                .find(|committed| committed.action_id == action_id)
+                                .ok_or("service recipe consensus action missing")?;
+                            let origin = oasis7::runtime::CommittedRecipeOrigin {
+                                submission,
+                                consensus_action_id: committed.action_id,
+                                consensus_submitter_player_id: committed
+                                    .submitter_player_id
+                                    .clone(),
+                                action_payload_hash: committed.payload_hash.clone(),
+                                committed_height: context.height,
+                                action_root: context.action_root.clone(),
+                            };
+                            candidate
+                                .submit_recipe_action_with_origin(action, origin)
+                                .map_err(|error| {
+                                    format!(
+                                        "submit service committed recipe origin failed: {error:?}"
+                                    )
+                                })?
+                        } else {
+                            candidate.submit_action(action)
+                        };
+                        runtime_action_id = Some(id);
+                        let committed = context
+                            .committed_actions
+                            .iter()
+                            .find(|committed| committed.action_id == action_id)
+                            .ok_or("service gameplay consensus action missing")?;
+                        Ok(
+                            serde_json::json!({"action_id": action_id, "runtime_action_id": id,
+                        "consensus_action_payload_hash": committed.payload_hash}),
+                        )
+                    },
+                )
             }
             WorldServicePayloadV1::AgentChat(request) => {
                 let proof = request

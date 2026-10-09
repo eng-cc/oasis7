@@ -98,6 +98,7 @@ require_value() {
 }
 
 require_value "--manifest" "$manifest"
+./scripts/network-tier-manifest.sh require-legacy-runtime --manifest "$manifest" >/dev/null
 require_value "--finality-proof" "$finality_proof"
 require_value "--world-id" "$world_id"
 require_value "--expect-to-height" "$expect_to_height"

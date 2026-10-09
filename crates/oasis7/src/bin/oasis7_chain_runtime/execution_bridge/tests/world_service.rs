@@ -74,6 +74,23 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
     world
         .provision_cognition_for_agent("agent-a", "provision-a", "owner-a", 100)
         .unwrap();
+    world
+        .install_test_provider_capability_fixture_without_cognition_balance("agent-a")
+        .expect("install actual Runtime provider capability context");
+    let provider_invocation = world
+        .capability_invocation_contexts()
+        .values()
+        .find(|context| {
+            matches!(&context.subject,
+            oasis7_wasm_abi::CapabilitySubject::Agent { agent_id, .. } if agent_id == "agent-a")
+                && context.presenter.presenter_kind == "provider"
+        })
+        .expect("actual Runtime provider invocation");
+    let quote_authority = oasis7::simulator::h_v1(
+        oasis7::simulator::COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN,
+        provider_invocation,
+    )
+    .to_string();
     let base = world.current_cognition_base_binding().unwrap();
     let context_hash = super::super::execution_hash::execution_resource_context_hash("w1");
     world
@@ -130,14 +147,16 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
         &identity,
         WorldServicePayloadV1::Delegation(sign_read_request("delegation", change, &owner).unwrap()),
     );
-    // Actual node admission rejects the previous unregistered outer frame,
-    // accepts the registered inner frame, and preserves controller auth.
+    // Node admission preserves the opaque legacy outer frame as well as the
+    // registered inner frame. The canonical driver authenticates the request;
+    // direct local World execution and unsigned controller actions stay fenced.
     use oasis7::consensus_action_payload::*;
     let node = oasis7_node::NodeRuntime::new(
         oasis7_node::NodeConfig::new("node-a", "w1", NodeRole::Sequencer)
             .expect("valid node admission fixture"),
     );
     let old_frame = encode_consensus_action_payload(&ConsensusActionPayloadEnvelope {
+        gameplay_submission_origin: None,
         version: 1,
         auth: None,
         body: ConsensusActionPayloadBody::WorldServiceIntent {
@@ -145,19 +164,24 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
         },
     })
     .unwrap();
-    assert!(
-        format!(
-            "{:?}",
-            node.submit_consensus_action_payload(100, old_frame)
-                .unwrap_err()
-        )
-        .contains("WorldServiceIntent")
+    assert_eq!(
+        decode_consensus_action_payload(&old_frame).unwrap(),
+        ConsensusActionPayloadBody::WorldServiceIntent {
+            request: registration.clone(),
+        },
     );
-    node.submit_consensus_action_payload(
-        101,
-        correlation::encode_consensus_intent(&registration).unwrap(),
-    )
-    .unwrap();
+    node.submit_consensus_action_payload(100, old_frame)
+        .unwrap();
+    let registered_frame = correlation::encode_consensus_intent(&registration).unwrap();
+    let ConsensusActionPayloadBody::RuntimeAction {
+        action: Action::WorldServiceIntent { request: decoded },
+    } = decode_consensus_action_payload(&registered_frame).unwrap()
+    else {
+        panic!("registered frame must retain the Runtime world-service intent");
+    };
+    assert_eq!(decoded, serde_json::to_value(&registration).unwrap());
+    node.submit_consensus_action_payload(101, registered_frame)
+        .unwrap();
     let mut local_world = driver.execution_world.clone();
     let local_tick = local_world.state().time;
     local_world.submit_action(Action::WorldServiceIntent {
@@ -173,6 +197,7 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
         }}))
         .unwrap();
     let unsigned_controller = encode_consensus_action_payload(&ConsensusActionPayloadEnvelope {
+        gameplay_submission_origin: None,
         version: 1,
         auth: None,
         body: ConsensusActionPayloadBody::RuntimeAction {
@@ -213,13 +238,13 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
             "turn-a",
             "decision-a",
             "digest-a",
-            CognitionLeaseQuoteV1::new("quote-a", "cognition_units", 10).with_authority(
+            CognitionLeaseQuoteV1::new("quote-a", "cognition_units", 1).with_authority(
                 "owner-a",
-                "v1",
-                "cognition",
-                "agent-a",
-                "v1",
-                "owner-a",
+                oasis7::runtime::COGNITION_RESOURCE_VERSION_V1,
+                "provider_cognition",
+                "agent_turn",
+                oasis7::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+                quote_authority,
                 driver
                     .execution_world
                     .current_cognition_runtime_binding()
@@ -255,7 +280,7 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
     )
     .unwrap();
     assert_eq!(result.rejected, None);
-    assert_eq!(result.receipt["reserved_amount"], 10);
+    assert_eq!(result.receipt["reserved_amount"], 1);
     commit(&mut driver, 5, reservation.clone());
     assert_eq!(
         driver
@@ -319,3 +344,109 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
 
 #[path = "world_service_agent_chat.rs"]
 mod canonical_agent_chat;
+#[test]
+fn service_recipe_preserves_authenticated_origin_consensus_context_and_replay() {
+    let private = hex::encode([41u8; 32]);
+    let public = sign_read_request("owner", (), &private)
+        .unwrap()
+        .subject_public_key;
+    let mut gameplay = oasis7::viewer::GameplayActionRequest {
+        action_id: oasis7::viewer::ACTION_SCHEDULE_SMELTER_IRON_INGOT.into(),
+        target_agent_id: "builder-a".into(),
+        actor_agent_id: None,
+        player_id: "browser-player".into(),
+        public_key: Some(public.clone()),
+        auth: None,
+    };
+    gameplay.auth = Some(
+        oasis7::viewer::sign_gameplay_action_auth_proof(&gameplay, 7, &public, &private).unwrap(),
+    );
+    let identity = WorldIdentity {
+        world_id: "w1".into(),
+        genesis_digest: "fixture-genesis-v1".into(),
+    };
+    let original = request(
+        &identity,
+        WorldServicePayloadV1::GameplayJson(serde_json::to_vec(&gameplay).unwrap()),
+    );
+    let payload = correlation::encode_consensus_intent(&original).unwrap();
+    let committed = NodeConsensusAction::from_payload(17, "node-transport", payload).unwrap();
+    let context = NodeExecutionCommitContext {
+        world_id: "w1".into(),
+        node_id: "node-a".into(),
+        proposer_id: "node-a".into(),
+        height: 3,
+        slot: 3,
+        epoch: 0,
+        node_block_hash: "node-h3".into(),
+        action_root: compute_consensus_action_root(std::slice::from_ref(&committed)).unwrap(),
+        committed_actions: vec![committed.clone()],
+        committed_at_unix_ms: 3000,
+    };
+    let mut world = RuntimeWorld::new();
+    for index in 0..4 {
+        world.submit_action(Action::RegisterAgent {
+            agent_id: format!("queued-{index}"),
+            pos: oasis7::GeoPos::new(0, 0, 0),
+        });
+    }
+    let staged = super::super::world_service_execution::apply_intents(
+        &mut world,
+        &context,
+        Some(&identity),
+        vec![(17, original.clone()), (17, original.clone())],
+    )
+    .unwrap();
+    let snapshot = world.snapshot();
+    assert_eq!(snapshot.pending_actions.len(), 5);
+    assert_eq!(snapshot.pending_actions[4].id, 5);
+    let origin = snapshot.pending_actions[4]
+        .committed_recipe_origin
+        .clone()
+        .expect("actual service recipe origin");
+    assert_eq!(origin.consensus_action_id, 17);
+    assert_eq!(origin.consensus_submitter_player_id, "node-transport");
+    assert_eq!(origin.action_payload_hash, committed.payload_hash);
+    assert_eq!(origin.committed_height, 3);
+    assert_eq!(origin.action_root, context.action_root);
+    assert_eq!(origin.submission.verified_player_id, gameplay.player_id);
+    assert_eq!(origin.submission.public_key, public);
+    assert_eq!(origin.submission.auth_nonce, 7);
+    assert_eq!(origin.submission.hosted_registration_nonce, None);
+    let (action, submission) =
+        gameplay::authenticated_action_with_origin(&world, &serde_json::to_vec(&gameplay).unwrap())
+            .unwrap();
+    assert_eq!(submission, Some(origin.submission.clone()));
+    assert_eq!(snapshot.pending_actions[4].action, action);
+    let dir = temp_dir("service-recipe-origin");
+    world.save_to_dir(&dir).unwrap();
+    let restored = RuntimeWorld::load_from_dir(&dir).unwrap();
+    assert_eq!(
+        restored.snapshot().pending_actions[4].committed_recipe_origin,
+        Some(origin)
+    );
+    world.step().unwrap();
+    super::super::world_service_execution::finalize_intents(&mut world, staged).unwrap();
+    let key = correlation::key_digest(&original.correlation.key).unwrap();
+    let result: CanonicalIntentResultV1 = serde_json::from_value(
+        world.capability_revocation_state().world_service_results[&key].clone(),
+    )
+    .unwrap();
+    assert_eq!(result.request, original);
+    assert_eq!(result.receipt["runtime_action_id"], 5);
+    assert_eq!(
+        result.receipt["consensus_action_payload_hash"],
+        committed.payload_hash
+    );
+    let before = serde_json::to_value(world.snapshot()).unwrap();
+    let replay = super::super::world_service_execution::apply_intents(
+        &mut world,
+        &context,
+        Some(&identity),
+        vec![(17, original)],
+    )
+    .unwrap();
+    super::super::world_service_execution::finalize_intents(&mut world, replay).unwrap();
+    assert_eq!(serde_json::to_value(world.snapshot()).unwrap(), before);
+    std::fs::remove_dir_all(dir).unwrap();
+}

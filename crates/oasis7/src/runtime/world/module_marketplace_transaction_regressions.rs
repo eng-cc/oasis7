@@ -136,7 +136,11 @@ fn assert_match_tail_unchanged(list: bool) {
         }
     };
     let error = world
-        .try_apply_runtime_module_action(&ActionEnvelope { id: 950, action })
+        .try_apply_runtime_module_action(&ActionEnvelope {
+            committed_recipe_origin: None,
+            id: 950,
+            action,
+        })
         .expect_err("matched sale must honor the second publication preparation failpoint");
     assert!(
         format!("{error:?}").contains("injected"),
@@ -189,6 +193,7 @@ fn check_roots(world: &World, baseline: crate::runtime::Snapshot) {
 
 fn market_action(list: bool) -> ActionEnvelope {
     ActionEnvelope {
+        committed_recipe_origin: None,
         id: 951,
         action: if list {
             Action::ListModuleArtifactForSale {

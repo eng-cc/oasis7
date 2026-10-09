@@ -31,11 +31,11 @@ impl<'a> WorldStateProjection<'a> {
 
 #[derive(Debug)]
 pub(crate) enum PreparedIndustryEvent {
-    LogisticsTopology(PreparedLogisticsTopology),
-    MaterialTransfer(PreparedMaterialTransfer),
-    MaterialTransit(PreparedMaterialTransit),
-    FactoryLifecycle(PreparedFactoryLifecycle),
-    RecipeLifecycle(PreparedRecipeLifecycle),
+    LogisticsTopology(Box<PreparedLogisticsTopology>),
+    MaterialTransfer(Box<PreparedMaterialTransfer>),
+    MaterialTransit(Box<PreparedMaterialTransit>),
+    FactoryLifecycle(Box<PreparedFactoryLifecycle>),
+    RecipeLifecycle(Box<PreparedRecipeLifecycle>),
 }
 
 #[derive(Debug)]
@@ -121,29 +121,29 @@ impl PreparedIndustryEvent {
         match event {
             DomainEvent::LogisticsRouteRegistered { .. }
             | DomainEvent::LogisticsRouteAvailabilityChanged { .. } => Ok(Self::LogisticsTopology(
-                PreparedLogisticsTopology::prepare(state, event, now)?,
+                Box::new(PreparedLogisticsTopology::prepare(state, event, now)?),
             )),
-            DomainEvent::MaterialTransferred { .. } => Ok(Self::MaterialTransfer(
+            DomainEvent::MaterialTransferred { .. } => Ok(Self::MaterialTransfer(Box::new(
                 PreparedMaterialTransfer::prepare(state, event, now)?,
-            )),
+            ))),
             DomainEvent::MaterialTransitStarted { .. }
-            | DomainEvent::MaterialTransitCompleted { .. } => Ok(Self::MaterialTransit(
+            | DomainEvent::MaterialTransitCompleted { .. } => Ok(Self::MaterialTransit(Box::new(
                 PreparedMaterialTransit::prepare(state, event, now)?,
-            )),
+            ))),
             DomainEvent::FactoryBuildStarted { .. }
             | DomainEvent::FactoryBuilt { .. }
             | DomainEvent::FactoryDurabilityChanged { .. }
             | DomainEvent::FactoryMaintained { .. }
-            | DomainEvent::FactoryRecycled { .. } => Ok(Self::FactoryLifecycle(
+            | DomainEvent::FactoryRecycled { .. } => Ok(Self::FactoryLifecycle(Box::new(
                 PreparedFactoryLifecycle::prepare(state, event, now)?,
-            )),
+            ))),
             DomainEvent::RecipeStarted { .. }
             | DomainEvent::RecipeCompleted { .. }
             | DomainEvent::FactoryProductionBlocked { .. }
             | DomainEvent::FactoryProductionResumed { .. }
-            | DomainEvent::FactoryProductionPaused { .. } => Ok(Self::RecipeLifecycle(
+            | DomainEvent::FactoryProductionPaused { .. } => Ok(Self::RecipeLifecycle(Box::new(
                 PreparedRecipeLifecycle::prepare(state, event, now)?,
-            )),
+            ))),
             _ => Err(invalid("industry preparation requires a supported event")),
         }
     }
@@ -159,11 +159,11 @@ impl PreparedIndustryEvent {
 
     pub(crate) fn install(self, state: &mut WorldState) {
         match self {
-            Self::LogisticsTopology(value) => value.install(state),
-            Self::MaterialTransfer(value) => value.install(state),
-            Self::MaterialTransit(value) => value.install(state),
-            Self::FactoryLifecycle(value) => value.install(state),
-            Self::RecipeLifecycle(value) => value.install(state),
+            Self::LogisticsTopology(value) => (*value).install(state),
+            Self::MaterialTransfer(value) => (*value).install(state),
+            Self::MaterialTransit(value) => (*value).install(state),
+            Self::FactoryLifecycle(value) => (*value).install(state),
+            Self::RecipeLifecycle(value) => (*value).install(state),
         }
     }
 

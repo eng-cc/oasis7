@@ -1,4 +1,5 @@
 import { CanonicalAgentGoal } from "./canonical_agent_goal.jsx";
+import { IndustrialStarterOutcomeCard } from "./industrial_starter_outcome_card.jsx";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
@@ -2673,6 +2674,7 @@ function WorldSummaryPanel(props = {}) {
                   />
                 </div>
               </PanelSection>
+              <IndustrialStarterOutcomeCard profile={gameplay().industrialStarterProfile} locale={locale} />
               <MicroDepotFacilitiesPanel
                 facilities={gameplay().microDepotFacilities}
                 locale={locale}

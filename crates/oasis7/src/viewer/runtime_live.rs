@@ -115,6 +115,7 @@ mod smelter_affordability_debug;
 mod snapshot_privacy;
 #[path = "runtime_live/social_quote.rs"]
 mod social_quote;
+mod starter_industrial_outcome;
 mod stream_session;
 mod support;
 #[cfg(test)]

@@ -29,6 +29,24 @@ fn run_inner() {
         std::io::ErrorKind::PermissionDenied,
         "node file must exist and be denied by the OS"
     );
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let path = std::ffi::CString::new(
+            denied
+                .join("world/world-service-identity.json")
+                .as_os_str()
+                .as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(unsafe { libc::truncate(path.as_ptr(), 0) }, -1);
+        assert_eq!(
+            std::io::Error::last_os_error().kind(),
+            std::io::ErrorKind::PermissionDenied,
+            "Node truncate must be denied by the OS"
+        );
+        println!("PRE2_APPLICATION_OS_TRUNCATE_DENIAL_PROBE_PASSED");
+    }
     println!("PRE2_APPLICATION_OS_DENIAL_PROBE_PASSED");
     let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
         endpoint: env("PRE2_APP_ENDPOINT"),
