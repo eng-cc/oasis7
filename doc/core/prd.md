@@ -14,7 +14,7 @@
 
 ## 接口 / 数据
 - 项目级 PRD 入口: `doc/core/prd.md`
-- 可变项目管理真值: GitHub task issue evidence comments
+- 可变项目管理真值: PR、实际 CI 与评审记录（Issue 按需）
 - 文件级索引: `doc/core/prd.index.md`
 - 追踪主键: `PRD-CORE-xxx`
 - 模块入口总览: `doc/README.md`
@@ -78,11 +78,11 @@
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
-| 模块地图导航 | 模块名、职责、关键载体、入口路径 | 进入模块 PRD/design 与 GitHub task evidence | `draft -> reviewed -> published` | 默认按模块分层顺序展示 | 所有贡献者可读，维护者可改 |
+| 模块地图导航 | 模块名、职责、关键载体、入口路径 | 进入模块 PRD/design 与 PR 与实际验证记录 | `draft -> reviewed -> published` | 默认按模块分层顺序展示 | 所有贡献者可读，维护者可改 |
 | 关键链路追踪 | 链路名称、上游、下游、测试门禁 | 依据链路定位依赖变更与测试范围 | `identified -> validated -> archived` | 高风险链路优先检查 | 发布负责人具备最终裁定权 |
 | 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 以核心术语集为唯一优先级 | core 维护者审核后生效 |
 | 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并回写模块 project | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
-| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 GitHub task issue evidence comments / role review evidence，接收方确认责任边界，owner 回写正式 PRD / project / review evidence | `requested -> reviewed -> accepted -> verified` | 先按当前 GitHub-backed task owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
+| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 PR、实际 CI 与评审记录（Issue 按需） / role review evidence，接收方确认责任边界，owner 回写正式 PRD / project / review evidence | `requested -> reviewed -> accepted -> verified` | 先按当前 工作说明或按需 Issue owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
 | 下一轮优先级清单 | 优先级、主题、owner、输入、输出、进入条件 | 收口后排序并选定下一条执行主路径 | `candidate -> ranked -> selected -> planned` | 先看发布影响，再看闭环依赖，再看 owner 就绪度 | `producer_system_designer` 排序，`qa_engineer` 复核 |
 | 玩家访问模式与跨模块验收 | 产品模式 REQ/AC 引用、PRD-ID、对应模块 owner、模式适用 evidence | 评审时引用[玩家访问模式产品要求](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-mode-001)及其[验收](../product/player-entry-distribution/access-modes-and-release-readiness.prd.md#ac-entry-mode-001)，再核对相关产品/专业 authority 的输入与 core 验收映射 | `unclassified -> authority-mapped -> evidenced -> reviewed` | 按产品 REQ/AC 确定 primary mode 与产品边界；provider、execution lane 和其他专业约束按各自 authority 核验；core 不维护第二份模式 taxonomy | `producer_system_designer` 负责跨模块验收与追踪，产品/专业 owner 维护各自规则并参与联审 |
@@ -103,7 +103,7 @@
 - Non-Goals:
   - 不在 core PRD 中替代模块详细技术分册。
   - 不在 core PRD 中维护逐版本实现变更流水（该信息在 devlog）。
-  - 不在本 PRD 中重写各模块的实现细节或替代 GitHub task truth 中的执行计划。
+  - 不在本 PRD 中重写各模块的实现细节或替代 Git、PR 与实际 CI 记录 中的执行计划。
   - 不把 launcher / explorer 体验新增功能作为当前阶段的主发布驱动。
 
 ## 3. AI System Requirements (If Applicable)
@@ -117,7 +117,7 @@
 ### 当前阶段收口优先级（Stage Closure Backlog）
 | 优先级 | 目标 | 主要 owner | 输入 | 输出 | 完成定义 |
 | --- | --- | --- | --- | --- | --- |
-| P0 | 维持玩法微循环与持续游玩的当前优先级 | `producer_system_designer` / `viewer_engineer` / `qa_engineer` | `doc/game/prd.md` 的活跃玩法基线与验收、GitHub task truth 中的当前执行/阻断、适用 runtime/Viewer/QA 证据，以及根 `README.md` 与 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 的统一公开 claim gate | 可路由到当前候选的玩法决策与验证证据包，并回写对应专业 evidence 与 GitHub task truth | 玩法优先级、当前 blocker 与需要的专业验证能从 game baseline 与 GitHub task truth 回溯；任何阶段或公开 claim 只在同候选统一 gate、产品决策、QA 与 LiveOps 同步成立后才可评估，不能由单项截图、局部 green 或历史 closure 代签 |
+| P0 | 维持玩法微循环与持续游玩的当前优先级 | `producer_system_designer` / `viewer_engineer` / `qa_engineer` | `doc/game/prd.md` 的活跃玩法基线与验收、Git、PR 与实际 CI 记录 中的当前执行/阻断、适用 runtime/Viewer/QA 证据，以及根 `README.md` 与 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 的统一公开 claim gate | 可路由到当前候选的玩法决策与验证证据包，并回写对应专业 evidence 与 Git、PR 与实际 CI 记录 | 玩法优先级、当前 blocker 与需要的专业验证能从 game baseline 与 Git、PR 与实际 CI 记录 回溯；任何阶段或公开 claim 只在同候选统一 gate、产品决策、QA 与 LiveOps 同步成立后才可评估，不能由单项截图、局部 green 或历史 closure 代签 |
 | P0 | 补齐 runtime 核心边界验收 | `runtime_engineer`（联审：`producer_system_designer`） | 确定性 / WASM / 治理边界、当前 runtime 测试与限制说明 | 验收清单、阻断条件、例外口径 | 每条关键边界都有测试映射，并能直接用于发布评审 |
 | P0 | 建立 testing 触发矩阵与发布证据包 | `qa_engineer`（联审：`producer_system_designer`） | `testing-manual.md`、各模块 `test_tier_required/full`、现有脚本与证据产物 | S0~S10 触发矩阵、证据包模板、放行摘要格式 | 任一任务都能反推必跑测试，PRD-ID / 任务 / 测试结果可串联 |
 | P0 | 补齐 playability 反馈闭环 V1 | `qa_engineer`（联审：`producer_system_designer`） | 现有 playability 输出、截图/视频、玩法目标 | 反馈卡字段、评分口径、高优问题追踪模板 | 每条体验问题都有固定记录格式，且可进入发布讨论 |
@@ -181,7 +181,7 @@
   - `doc/README.md`
   - `testing-manual.md`
   - 各模块 `doc/<module>/prd.md`、design/evidence 与 README / `prd.index.md`
-  - GitHub task issue evidence comments
+  - PR、实际 CI 与评审记录（Issue 按需）
   - pre-PR local role review evidence packet
 - Edge Cases & Error Handling:
   - 模块入口失效：若目标路径迁移，core 必须同步更新导航并保留可追溯说明。
@@ -191,7 +191,7 @@
   - 测试证据缺口：无证据不得判定链路通过，必须补齐最小 required 证据。
   - 术语冲突：同术语多定义时优先使用 core 词典并登记决策记录。
   - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按当前 `.pm` task owner、正式专题文档与 pre-PR role review evidence 裁定，并回写 core / project。
-  - GitHub task truth 缺承接：若 P0 项在 PRD 已定义但对应任务未承接，状态只能记为 `candidate`，不得进入发布结论。
+  - Git、PR 与实际 CI 记录 缺承接：若 P0 项在 PRD 已定义但对应任务未承接，状态只能记为 `candidate`，不得进入发布结论。
   - 证据格式未统一：若测试闭环可跑但证据包未统一格式，仅可记为 `conditionally_ready`，不得视作 fully ready。
   - 资源抢占：若 launcher / explorer 新需求与 P0 资源冲突，默认降级到 P2，除非能直接服务玩法闭环或发布门禁。
 - Non-Functional Requirements:
@@ -202,7 +202,7 @@
   - NFR-CORE-5: core 主文档维持 <= 1000 行，超限必须拆分分册。
   - NFR-CORE-6: P0 项的 owner / 输入 / 输出 / 验收标准 / 阻断条件覆盖率 100%。
   - NFR-CORE-7: 发布评审时 P0 证据缺失数必须为 0；P1 可存在未完成项，但必须附带风险与缓解方案。
-  - NFR-CORE-8: 跨角色证据交接在 PRD / project / GitHub task issue evidence comments / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。
+  - NFR-CORE-8: 跨角色证据交接在 PRD / project / PR、实际 CI 与评审记录（Issue 按需） / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。
   - NFR-CORE-9: 一轮模块主项目全部收口后 1 个工作日内必须形成下一轮优先级清单。
 - Security & Privacy: core 仅维护结构与治理口径；涉及密钥、签名、隐私数据的要求由对应模块 PRD 细化并执行。
   发布收口文档仅记录工程与玩法证据，不引入额外敏感数据；若引用线上/远程环境信息，需与对应模块 owner 联审后落档。
@@ -222,7 +222,7 @@
   - 风险-3: 若局部修订直接上调 `审计轮次` 而未建立正式 ROUND 台账，字段会失去可比性，并破坏 reviewed-files / progress-log 对账。
   - 风险-4: 若继续把 launcher / explorer 体验扩展排在玩法与发布治理前，项目会强化“能展示”而非“能稳定发布”的错配。
   - 风险-5: 若 runtime / testing / playability 的证据标准不同步，发布评审会退化为口头判断。
-- 风险-6: 若当前排序与下一步未同步到 GitHub task truth，团队会重新回到平均发力与隐式尾注推进。
+- 风险-6: 若当前排序与下一步未同步到 Git、PR 与实际 CI 记录，团队会重新回到平均发力与隐式尾注推进。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

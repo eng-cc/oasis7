@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "448dc2beea93c373489a22d17ba0deac641cc612b92766fc534007214021e3af",
+    "content_sha256": "84f1bd7ba723f2982e1b3c8627e088204f740e7159c46f00d8c5f4372a1e8d48",
     "current_authority": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_procedure",
-    "note": "current attach-existing-node procedure; last verified example is window evidence",
+    "note": "current attach-existing-node procedure; last verified example is window evidence; developer workflow record projection updated, product authority retained",
     "path": "doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

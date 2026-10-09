@@ -7,7 +7,7 @@
 - 状态：`active`
 - Last reviewed：2026-09-13
 
-本文定义如何把已经采纳的产品文档内容规范应用到全部存量产品文档，并在不破坏专业 authority 的前提下收口外部产品语义。它补充全量治理机制，不改变四模块产品树、专业职责或 GitHub task truth。
+本文定义如何把已经采纳的产品文档内容规范应用到全部存量产品文档，并在不破坏专业 authority 的前提下收口外部产品语义。它补充全量治理机制，不改变四模块产品树、专业职责或 Git、PR 与实际 CI 记录。
 
 ## 1. 目标与完成边界
 
@@ -35,7 +35,7 @@
 
 整体完成前，协调记录必须绑定实际 Task、contract 与 evidence identity，以及同一棵可比较的 source、integration 和 tested tree。每个 required obligation 必须恰好映射到一个 owner-role 结果；任何缺失、重复、owner 不匹配或仍有 blocking feedback 的映射都使整体保持未完成。
 
-执行步骤按现行 workflow 在 GitHub task evidence 中记录 `Plan-Gap Evidence`，包括 acceptance refs、依赖、验证命令与实际证据、写范围、排除范围和 required role slices。具体任务状态、mapping 与 evidence 不复制到本文或产品目录。当前 workflow 中尚未显式启用的 traceability producer、leaf-result schema、approval map 或 live-readback gate 不因本文获得 activation；实施继续使用当时有效的仓库入口和 GitHub task truth。
+执行步骤按现行 workflow 在 PR 与实际验证记录 中记录 `Plan-Gap Evidence`，包括 acceptance refs、依赖、验证命令与实际证据、写范围、排除范围和 required role slices。具体任务状态、mapping 与 evidence 不复制到本文或产品目录。当前 workflow 中尚未显式启用的 traceability producer、leaf-result schema、approval map 或 live-readback gate 不因本文获得 activation；实施继续使用当时有效的仓库入口和 Git、PR 与实际 CI 记录。
 
 ## 3. Active 专题内容合同
 
@@ -60,14 +60,14 @@
 
 配对 design 说明信息阶段、选择理由、成本反馈、状态优先级、异常恢复、可访问性和失败信号。它通过带 fragment 的链接承接 PRD 的 REQ/AC，不复制需求，也不引入 API、schema、组件或算法 authority。
 
-如果专业角色判断专题足够简单而不需要 design，必须在 PRD 中保留简短设计说明，并在当前 GitHub task evidence 记录不适用理由。产品树不保存长期例外台账。
+如果专业角色判断专题足够简单而不需要 design，必须在 PRD 中保留简短设计说明，并在当前 PR 与实际验证记录 记录不适用理由。产品树不保存长期例外台账。
 
 ### 4.1 设计适用性与生命周期闭合字段
 
 每个 active 专题 PRD 都必须在产品正文中明确一个 `设计判定`：
 
 - `paired-design`：PRD 的“配对产品设计”链接指向同名 `*.design.md`；配对 design 只承接产品语义，不复制需求或取得专业实现 authority。
-- `simple-topic-exemption`：PRD 保留简短的设计说明、`设计适用性理由` 和当前 GitHub task evidence 链接，说明为什么独立 design 不增加新的信息分层、交互状态编排或策略取舍。该字段是本次判定的稳定结果，不是产品树中的长期例外台账。
+- `simple-topic-exemption`：PRD 保留简短的设计说明、`设计适用性理由` 和当前 PR 与实际验证记录 链接，说明为什么独立 design 不增加新的信息分层、交互状态编排或策略取舍。该字段是本次判定的稳定结果，不是产品树中的长期例外台账。
 
 每个 paired design 必须同时具备可解析的 PRD backlink，以及至少一组带 fragment 的 PRD `REQ-*` 和 `AC-*` 链接；完整映射应覆盖该 design 承接的每个产品义务。裸 token、只写文件路径、反引号中的 ID 或无 fragment 的泛化链接都不能满足这一字段。
 
@@ -80,7 +80,7 @@
 | `稳定引用` | 保留接收路径和本页仍被需要的稳定引用 | 保留历史/专业引用与当前可达入口 |
 | `删除条件` | 语义完整接收、authority 可达、活跃引用修复且无未决阻塞 | 历史/专业语义有可达接收 authority、活跃引用修复且保留理由不再成立 |
 
-上述字段只描述 authority 与迁移闭合，不复制任务状态、review ledger 或发布证据；任务证据仍由 GitHub task truth 维护。
+上述字段只描述 authority 与迁移闭合，不复制任务状态、review ledger 或发布证据；任务证据仍由 Git、PR 与实际 CI 记录 维护。
 
 ## 5. 外部语义迁移
 
@@ -90,7 +90,7 @@
 
 - 产品承诺迁入对应模块根 PRD 或稳定专题，并建立旧条款到新 REQ/SC 的映射。
 - 专业合同留在原专业域；产品文档只说明它支持或限制的产品结果并链接准确 fragment。
-- 历史过程从 active 阅读链移除，由 Git history 与 GitHub task evidence 追溯。
+- 历史过程从 active 阅读链移除，由 Git history 与 PR 与实际验证记录 追溯。
 - 未迁移语义必须记录接收 owner、阻塞原因、当前 authority 和可验证删除条件。
 
 只有产品语义完整接收、专业 authority 仍可达、所有活跃引用已修复后，才删除旧来源。混合文件不得为了目录整齐整体搬迁或整体删除。

@@ -112,15 +112,13 @@
 
 `./scripts/ci-tests.sh` 不设默认 tier；省略参数会打印 usage 并失败，避免误把升级专用的 `full` 当成本地默认。
 
-- 入口 B：`.github/workflows/rust.yml`（required-gate）
-  - planner 先执行：`./scripts/plan-rust-required-scope.sh --event-name <push|pull_request> --base-ref <base> --head-ref <head>`
-  - `CI_VERBOSE=1 ./scripts/ci-tests.sh required`
-  - 本地显式 `./scripts/ci-tests.sh required` 仍保持基础 required 语义；只有 CI `required-gate` 与 `prepare-task-pr.sh` 推荐命令会根据 planner 输出注入选择性组件环境变量，并在命中 `crates/oasis7_node/**` / `crates/oasis7_net/**` 或 shared gate/full scope 时额外拉起 support-crate shard
-  - 当 planner 选择 `crates/oasis7_viewer/**` 性能 surface 时，`required-gate` 必须通过 `viewer-performance-report-only.sh` 采集环境、web-dist 原始复现、样本 summary/markdown 与截图并上传 artifact；采集缺失、损坏或 summary/probe 状态矛盾必须阻断，只有完整有效样本的阈值 miss 在稳定可复现的环境特定采样阈值和有时限 waiver 生命周期建立前保持 report/watch
-- 入口 B2：`.github/workflows/rust.yml`（人工 full escalation）
-  - 先在绑定 task issue 写明升级理由与 frozen PR head，再以 `workflow_dispatch` 选择 `run_mode=full_escalation`，填写 `task_uid`、`pr_number`、`expected_head`、`escalation_reason`（`release|high_risk|history_defect|signal`）和同仓库 `evidence_url`；评论/标签本身不自动授权 CI
-  - preflight 必须确认当前 checkout 与 `expected_head` 完全一致；成功后执行显式 `./scripts/ci-tests.sh full`，并始终上传 `oasis7-full-escalation-receipt-v1`；失败 receipt 只证明运行与失败，不得作为通过证据
-  - schedule `full-regression` 是非 PR 定时回归，不能替代 PR exact-head escalation receipt
+- 入口 B：`.github/workflows/rust.yml`
+  - select 从 Git diff、base/head Cargo 依赖关系和小型目录映射选择真实验证组。
+  - 轻量 baseline 始终执行；Rust、Web、平台、打包和 operational 组按适用范围并行。
+  - `required-gate` 是最后汇总，明确依赖 select 和所有测试组；选中组必须真实成功，失败、取消、缺失及意外跳过均失败。
+  - 控制逻辑或共享输入变化、未知影响及依赖解析失败扩大普通 required；迁移 PR 使用完整保留组，不由候选选择器缩小覆盖。
+  - CI 和评审结果使用真实 HEAD、测试对象、Actions 运行和 review 记录，不依赖 Task、Project 或通用 receipt。
+  - `full` 可显式本地运行；nightly full 保留广覆盖回归，专项环境仅在普通 CI 存在具体不足时使用。
 - 入口 C：`.github/workflows/wasm-determinism-gate.yml`（构建 hash / receipt evidence 独立 gate）
   - GitHub-hosted runner 矩阵：`(m1|m4|m5) x (ubuntu-24.04/linux-x86_64)`
   - planner 先执行：`./scripts/plan-wasm-determinism-scope.sh --event-name <push|pull_request|workflow_dispatch> --base-ref <base> --head-ref <head>`
@@ -141,7 +139,7 @@
 - ordinary PR 的 `required-gate` 是 impact-scoped premerge 最小 blocking set：先拦截改动影响面的缺陷，再在不降低充分度的前提下优化速度；基础 required 含 `oasis7 + consensus + distfs + viewer`，GitHub 可按 planner 追加 `node + net/libp2p` support shard；
 - `full` 不是 ordinary PR 默认，只用于 release、高风险、历史缺陷升级、信号触发或 schedule 回归；planner 的 `scope=full` 仅表示 required tier 内 fail-closed 覆盖扩张，不等于选择 full tier；
 - `required-gate` 已补充 changed-path scope planner；
-- Required-gate P0 的规范目标见 [capability-selection contract](doc/engineering/workflow/source-of-truth.md#required-gate-capability-split) 与 [实施设计](doc/engineering/workflow/ci-required-gate-p0-on-demand.design.md)。S0 只采纳合同；兼容 reader/producer、runner、workflow、receipt、负例和 hosted 验证全部完成并经授权启用前，现有执行仍按 legacy 合同判定，文档合入本身不表示新选择器已生效。
+- 测试选择及结果规则见 [开发流程规范](doc/engineering/workflow/source-of-truth.md)。
 - `wasm-determinism-gate` 负责 `m1/m4/m5` hash / receipt evidence 独立 gate；
 - 若目标是“整应用充分测试”，仍需在此基础上叠加 UI 闭环层（S6）与压力层（S8）。
 
@@ -251,9 +249,7 @@ env -u RUSTC_WRAPPER cargo fmt --all -- --check
 ./scripts/ci-tests.sh required
 ```
 
-PR-ready lifecycle does not rerun S1 locally. The frozen draft candidate's
-GitHub `required-gate` supplies the trusted exact-head CI receipt; S1 remains an
-explicit diagnostic command.
+先用适用局部验证获得反馈，再核对 GitHub 当前版本的真实 required-gate 结果；S1 是显式本地诊断命令。
 - 覆盖重点：
   - runtime/simulator 大量单元与集成测试
   - `oasis7_viewer_live` 二进制测试
@@ -1264,3 +1260,7 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 - T2：完成改动路径触发矩阵与 Human/AI 共用剧本。
 - T3：完成充分度标准、证据规范、失败分诊规则。
 - T4：后续按真实缺陷复盘持续调整各层用例配额与命令清单。
+
+## 本地 CI 工具环境
+
+普通 `required` 本地入口使用 Python 3.11 或更高版本（标准库 `tomllib` 解析 TOML）。确认 `python3 --version` 指向该版本；Rust、Node 与平台依赖按对应测试组准备。

@@ -59,4 +59,4 @@ Launcher 负责配置和受控进程编排；`oasis7_chain_runtime` 负责链执
 - 实现入口：`crates/oasis7_client_launcher/`、`crates/oasis7/src/bin/oasis7_{game_launcher,web_launcher,chain_runtime}.rs` 及其拆分模块和测试。
 - 运行时持久化、回放和存储验证：`doc/world-runtime/runtime/runtime-storage-footprint-governance.{prd,design,project}.md`。
 - 文档变更验证：`./scripts/doc-governance-check.sh && ./scripts/readme-link-check.sh && git diff --check`。
-- 本稳定专题吸收的日期化 Launcher session 变更及其完成证据由 Git history 和 GitHub task issue evidence comments 追溯。
+- 本稳定专题吸收的日期化 Launcher session 变更及其完成证据由 Git history 和 PR、实际 CI 与评审记录（Issue 按需） 追溯。

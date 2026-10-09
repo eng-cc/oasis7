@@ -5,7 +5,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-if ! PYTHON_BIN="$("$repo_root/scripts/pm/find-python-with-module.sh" markdown_it)"; then
+if ! PYTHON_BIN="$("$repo_root/scripts/find-python-with-module.sh" markdown_it)"; then
   echo "doc-governance-check: markdown-it-py is required; install scripts/doc-governance-requirements.txt" >&2
   exit 1
 fi
@@ -75,9 +75,6 @@ if ! "$PYTHON_BIN" "$repo_root/scripts/document-corpus-inventory-check.py" --rep
   fail "document corpus inventory contract"
 fi
 
-if ! "$PYTHON_BIN" "$repo_root/scripts/workflow-process-identity-check.py" --repo-root "$repo_root"; then
-  fail "workflow process identity contract"
-fi
 
 run_product_doc_content_check() {
   local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"

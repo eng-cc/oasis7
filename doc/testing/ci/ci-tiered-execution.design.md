@@ -1,68 +1,47 @@
-# oasis7: CI 与提交钩子测试分级设计
+# CI 分级执行
 
-- 对应需求文档: `doc/testing/ci/ci-tiered-execution.prd.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 状态：active
+- 通用规则：[开发流程规范](../../engineering/workflow/source-of-truth.md)
+- 可执行测试命令和平台限制：[testing-manual.md](../../../testing-manual.md)
 
-## 1. 设计定位
-定义 CI 与测试门禁专题设计，统一流水线分层、门禁策略、产物校验与失败保护。
+## 测试范围
 
-CodeQL 观察性扫描的独立扫描链、来源分类及非自启用边界见 [canonical clause](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) 与 [接入设计](codeql-integration.design.md)。本专题保留现有 required/full 语义；新增规范不表示扫描实现或观察态已启用。
+普通 CI 是默认验证方式。轻量 baseline 始终执行；选择器使用完整 Git name-status diff、base/head 两侧 Cargo 关系及必要目录映射选择 Rust、Web、场景、平台、打包和运维合同测试。
 
-## 2. 设计结构
-- 流水线分层：按 `commit` / `required` / `full`、runner、target 或专题阶段划分执行链路。
-- required-scope 规划层：在保持 `required-gate` 单一上下文不变的前提下，先按 changed paths 规划 `minimal / targeted / full`，再决定哪些重型组件实际执行。
-- 门禁策略层：定义通过条件、阻断条件与 required check 保护。
-- 校验执行层：收敛构建、测试、hash/determinism 等自动校验入口。
-- 回归治理层：沉淀失败签名、发布影响与后续演进。
+Rust 变化覆盖自身及需要验证的反向消费者，删除和重命名覆盖两端；保留有效 features、WASM、生成输入和平台组合。workspace、features、锁文件、共享生成器及 CI 控制输入变化采用保守普通 required，未知路径或图解析失败扩大覆盖。
+
+`./scripts/ci-tests.sh required` 是普通必要测试的本地入口；`full` 保留广覆盖回归，nightly 执行适用 full。真实产品测试、WASM 确定性、共识、持久化、安全、升级恢复和跨平台打包均继续保留，不因流程精简删除。
+
+## 调度和结果
+
+select 先产生明确的非空矩阵，按资源组并行执行。最终唯一 `required-gate` 使用可靠的 always 汇总，并显式依赖 select 和所有组。选中组必须 success；未选中组可以 skipped 或 success；失败、取消、缺失、未知及意外 skipped 都必须阻断。矩阵不吞退出码，采用 fail-fast=false。
+
+记录 source HEAD、base 和实际测试对象及运行链接。普通 PR 权限只读，从事件 base 提取可信选择器及执行清单；候选控制变化不能缩小基线覆盖。CI 控制、安全或兼容边界变化接受对应能力的独立评审。
+
+## 专项条件
+
+缺测试先补普通 CI。只有普通 runner 难以提供的真实长期状态、专用硬件或受控环境才使用专项验证，说明具体不足、环境、版本、通过标准和实际结果。阻塞专项纳入同一 PR 最终汇总；调试 dispatch 不能替代 PR 检查。
+
+main 前进按原生 up-to-date 保护更新分支并重新执行必要普通 CI，不创建 Task、epoch、receipt 或第二条通用严格集成流程。产品层的签名、checkpoint 和状态一致性证明仍按专业合同验证。
+
+CodeQL 技术扫描见 [CodeQL 设计](codeql-integration.design.md)，实际 required/advisory 按 GitHub CI 与生效保护执行。
+
+## 2. 上游与本设计
 
 ### 2.1 需求承接与分配表
 
-| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| 上游要求 | 分配内容 | 本设计 | 负责范围 | 限制 |
 | --- | --- | --- | --- | --- |
-| [Cargo package scope and impact-scoped integration verification](../../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification) | 将 package identity、`H/B/T`、`B -> T` impact selection 与 high-risk escalation 投影到 CI 分级设计；仅在 trusted analysis 下允许 impact-scoped `integration_revalidation`。 | [包身份与 exact integration 目标语义](ci-tiered-execution.design.md#package-aware-exact-integration-target) | `producer_system_designer` 定义语义；runtime/QA/CI 实现与验证另行负责。 | 本次不实现 planner、workflow、Cargo metadata 解析或 enforcement；当前 path-based 行为保持现状。 |
-| [Required-gate capability-selection contract](../../engineering/workflow/source-of-truth.md#required-gate-capability-split) | 将 P0-R1–R5 的 baseline 保留、独立测试能力、scope/readiness 分离、兼容版本与非自启用边界映射到 CI 分级材料。 | [本专题承接](ci-tiered-execution.design.md#required-gate-capability-selection) | `repository_health_engineer` 维护 workflow contract；`qa_engineer` 验收；operational job 边界由 `blockchain_ops_engineer` 复核。 | 本行只作追溯；canonical source 是规范，代码及 hosted 行为在验证和授权启用前仍属未实现。 |
+| [测试范围](ci-tiered-execution.prd.md#测试范围) | 保留产品测试并按真实影响选择 | [测试范围](#测试范围) | 选择器与执行器 | 未知影响扩大普通 required |
+| [调度和结果](ci-tiered-execution.prd.md#调度和结果) | 最终汇总真实结果 | [调度和结果](#调度和结果) | workflow 与结果函数 | 本地回归不证明 hosted 运行成功 |
+| [专项条件](ci-tiered-execution.prd.md#专项条件) | 普通 CI 优先，专项需具体环境不足 | [专项条件](#专项条件) | 对应产品运行场景 | 不新增通用 PM 集成链 |
 
-<a id="package-aware-exact-integration-target"></a>
-### 2.2 包身份与 exact integration 目标语义（批准目标；当前实现未强制）
-
-- 规范来源是 [workflow source of truth 的 canonical clause](../../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification)，不是本设计的第二套 authority。
-- V0 activation boundary：write/migration boundaries、high-risk escalation 与 fail-closed behavior 立即按 canonical clause 生效；reduced package-aware `integration_revalidation` 在 trusted merged producer、receipt、gate implementation 与 explicit activation 具备前保持 inactive，当前 conservative/full behavior 保持权威。
-- 批准目标以 Cargo manifest 与解析后的 `cargo metadata` 图确定 package identity；普通 Rust code PR 保持单一 package 边界，CI/harness PR 不改变 business package，product/system-document PR 不含 code。
-- exact integration 绑定 `H`（source head）、`B`（target commit）与 `T`（tested tree），选择真实 `B -> T` impact，不把 `B..H` 当作 integration impact；planner 还要冻结 package、rules、profiles、commands/results、toolchain、targets/features 与 policy version。
-- `integration_revalidation` 仅在 trusted analysis 证明 impact-scoped 足够时可用；unknown impact 与 high-risk API/default/feature/dependency、ABI/signature、state-root/persistence/consensus profiles 进入 `full_escalation`。取消、超时、缺失或 unexpected skip fail closed。
-- 当前 planner 仍以 changed paths/config rules 计算 capability；`scope=full` 只是 required tier 内的覆盖扩张。本设计只记录批准目标与当前差距，不声称 package-aware `H/B/T` enforcement 已存在。
-
-<a id="required-gate-capability-selection"></a>
-### 2.3 Required-gate capability selection（P0 目标；实现尚未启用）
-
-P0-R1–R5 的规范和实施/验证映射分别见 [canonical source](../../engineering/workflow/source-of-truth.md#required-gate-capability-split) 与 [P0 design](../../engineering/workflow/ci-required-gate-p0-on-demand.design.md#p0-requirements)。本设计不复述其 capability、receipt 或 activation contract；S0 文档合入不表示当前 workflow 已实现这些目标。
-
-## 3. 关键接口 / 入口
-- `pre-commit` legacy hook 静默 no-op 入口；`commit` tier 仅供显式调用
-- CI workflow / check 入口
-- `scripts/plan-rust-required-scope.sh`
-- 门禁/required check 配置
-- runner/target/产物校验点
-- CI 回归与失败签名
-
-## 4. 约束与边界
-- 门禁变更必须可审计、可回放。
-- 本地默认提交路径与显式 required / full 门禁需边界清晰。
-- changed-path 剪裁只能作用于 CI `required-gate`，不得改变本地显式 `./scripts/ci-tests.sh required` 的语义。
-- 当前 path-based planner 命中共享 CI / gate 输入、diff base 不可解析或路径未分类时，必须在 required tier 内回退 full；这不是批准目标的 `full` tier 选择，也不替代基于 package identity 与 `H/B/T` 的 exact integration。
-- 不在本专题重构整个平台 CI 基础设施。
-
-## 11. 验证设计与可追溯性
+## 11. 验证
 
 ### 11.1 验证映射表
 
-| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| 上游要求 | 本设计 | 验收内容 | 验证来源 | 实际记录 | 限制 |
 | --- | --- | --- | --- | --- | --- |
-| [Cargo package scope and impact-scoped integration verification](../../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification) + `PRD-TESTING-CI-TIERED-004` | [ci-tiered-execution.design.md#package-aware-exact-integration-target](ci-tiered-execution.design.md#package-aware-exact-integration-target) | 文档必须把批准目标的 package identity、`H/B/T` 与 `B -> T` impact selection 映射到 CI 分级；立即 normative 的 write/migration、high-risk、fail-closed obligations 必须保留；当前 path-based planner 的非 package-aware status 与 reduced-route inactive boundary 必须成为 negative assertion。 | [ci-required-scope-audit-contract.test.sh](../../../scripts/ci-required-scope-audit-contract.test.sh) 的 required-tier planner/current-policy contract；`PRD-TESTING-CI-TIERED-004` 的 V0 文档/negative-boundary review；本次还运行 `./scripts/doc-governance-check.sh` 与 `git diff --check`。Future activation requires trusted Cargo metadata, `H/B/T` impact, producer/receipt/gate identity, and high-risk/full fail-closed receipt evidence. | 当前 task evidence 与 V0 negative assertion；future trusted CI receipt plus explicit activation record before reduced `integration_revalidation`. | 本次不证明 planner 已执行 package-aware selection、`H/B/T` binding、trusted reduced integration revalidation 或 full-escalation activation。 |
-| [Required-gate capability-selection contract](../../engineering/workflow/source-of-truth.md#required-gate-capability-split) | [本专题承接](ci-tiered-execution.design.md#required-gate-capability-selection) | 仅记录 P0-R1–R5 对 CI 分级材料的承接；当前 runner 不据此改变选择或覆盖。 | [ci-required-scope-audit-contract.test.sh](../../../scripts/ci-required-scope-audit-contract.test.sh) 保留现行共享 gate/full 负边界；P0-T01–T20 的新增与扩展场景见 linked P0 design，尚待 C1–C4 实施。 | S0 source/doc check output and a7-based design trace; later code task records tested-tree and hosted evidence. | 本次不证明新 capability selection, receipt compatibility, producer separation, hosted coverage or activation. |
-
-## 5. 设计演进计划
-- 先冻结门禁与执行分层。
-- 再补 `required-gate` 的 changed-path planner 与保护策略。
-- 后续独立实现阶段再把 Cargo metadata/package identity 与 `H/B/T` exact integration 接入 planner；在实现与 trusted evidence 具备前，不得把本设计目标当作当前 enforcement。
-- 最后固化失败签名与回归。
+| [测试范围](ci-tiered-execution.prd.md#测试范围) | [测试范围](#测试范围) | 删除、重命名、依赖和未知输入覆盖 | [选择器回归](../../../scripts/plan-rust-required-scope.test.py) | 命令退出码及输出 | 不替代真实产品组运行 |
+| [调度和结果](ci-tiered-execution.prd.md#调度和结果) | [调度和结果](#调度和结果) | 失败、取消、缺失和跳过均正确传播 | [结果函数回归](../../../scripts/ci-required-result.test.py) | 回归输出与 Actions 链接 | hosted 图仍需独立核对 |
+| [专项条件](ci-tiered-execution.prd.md#专项条件) | [专项条件](#专项条件) | 适用环境和真实场景执行 | [测试手册](../../../testing-manual.md) | 所测版本和实际环境结果 | 未执行的环境保持未证明 |

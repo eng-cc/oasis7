@@ -1,70 +1,24 @@
 ---
 name: systematic-debugging
-description: Use when you hit a bug, failing test, broken script, unexpected diff, or behavior regression. Focuses on reproduction, narrowing the failure surface, validating hypotheses, and only then patching the root cause.
+description: Use when diagnosing an oasis7 bug, failed test, or regression.
 ---
 
-# Systematic Debugging
+# systematic-debugging
 
-## When to Use
+通用规则见 [开发流程规范](../../../doc/engineering/workflow/source-of-truth.md)。
 
-Use this skill before proposing or applying a fix for:
+取得可重复失败和准确错误，区分产品、测试、环境及入口问题。缩小输入与失败边界，读相关实现和近期 diff，提出可证伪假设。
 
-- failing tests
-- broken scripts
-- runtime regressions
-- UI behavior mismatches
-- unexpected command output
+用最小实验验证关键假设，定位根因后做最小修复。不用重启、跳过测试或吞错误掩盖根因。对可自动复现行为先写或修正回归测试，观察失败再修复；测试保护真实行为，避免镜像实现。验证受影响消费者、兼容和失败路径，说明环境限制。
 
-## Core Workflow
+复杂问题按需请求领域协作，给出复现、上下文、写入范围和期望结果；不依赖流程身份。重复失败时修正假设，不堆叠猜测补丁。
 
-1. Reproduce the failure.
-2. Narrow the scope:
-   - which command
-   - which file or module
-   - which environment or precondition
-3. Collect the failure signature:
-   - exit code
-   - stack trace
-   - assertion diff
-   - screenshot or browser state when relevant
-4. Form one concrete hypothesis.
-5. Run the smallest probe that can confirm or falsify it.
-6. Patch the root cause, not the surface symptom.
-7. Re-run the failing check first, then the wider regression set.
+## Related methods
 
-## Preferred Tactics
+- [executing-project-tasks](../executing-project-tasks/SKILL.md)
+- [verification-before-completion](../verification-before-completion/SKILL.md)
+- [requesting-repo-owned-review](../requesting-repo-owned-review/SKILL.md)
 
-- Start with the exact failing command.
-- Use targeted reads and searches before broad edits.
-- Keep one active hypothesis at a time when possible.
-- If multiple causes are plausible, rank them and test the cheapest first.
+## Known Failure Modes
 
-## Oasis7-Specific Surfaces
-
-- Document / PM failures:
-  - `./scripts/pm/lint.sh`
-  - `./scripts/doc-governance-check.sh`
-  - `git diff --check`
-- Workflow failures:
-  - `./scripts/pm/task-closeout.sh`
-  - `./scripts/prepare-task-pr.sh`
-  - `./scripts/pr-review-thread-closeout.sh`
-- Web / viewer failures:
-  - repo-owned browser checks
-  - `agent-browser` when the failure is browser-visible
-
-## Output Rules
-
-- State the reproduced failure first.
-- Name the hypothesis you are testing.
-- Say what evidence changed your confidence.
-- After the fix, separate:
-  - reproduced cause
-  - patch applied
-  - verification rerun
-
-## Guardrails
-
-- Do not shotgun multiple speculative fixes into one patch.
-- Do not rewrite broad surfaces before reproducing the issue.
-- Do not stop at "probably fixed"; rerun the relevant check.
+局部失败只阻塞依赖动作，其他已授权工作继续。目标或外部影响扩大时确认新增部分；远程结果不明先查询，不重复创建或伪造完成。不以 Task、Project、模型观测或 receipt 代替真实结果。

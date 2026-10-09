@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "b7f3837ff53f0a1f1149b2e156764cc3162e5a6fc131f11747865a491f6970ce",
+    "content_sha256": "4440943b4682f9a7b7800dd6ac533f64d36fcd66f74121324b4e86c7adfd9572",
     "current_authority": "doc/product/world-infrastructure/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_authority",
-    "note": "current world-runtime requirements authority",
+    "note": "current world-runtime requirements authority; developer workflow record projection updated, product authority retained",
     "path": "doc/world-runtime/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

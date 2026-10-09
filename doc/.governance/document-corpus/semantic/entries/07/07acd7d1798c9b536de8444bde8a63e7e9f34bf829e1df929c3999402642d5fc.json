@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "45d075ab46af164d606d7e512a80439ffa7fdc5423b0939d12cb5d936a2ac345",
+    "content_sha256": "cf353621825abe6d4b2097023f4126322cf89f2509df84483f6806eb7e6f4c0b",
     "current_authority": "doc/engineering/prd.md",
     "decision_owner": "repository_health_engineer",
     "disposition": "retain_current_authority",
-    "note": "current structural size and root-cause governance contract; scan counts stay command evidence",
+    "note": "current structural size and root-cause governance contract; scan counts stay command evidence; developer workflow record projection updated, product authority retained",
     "path": "doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

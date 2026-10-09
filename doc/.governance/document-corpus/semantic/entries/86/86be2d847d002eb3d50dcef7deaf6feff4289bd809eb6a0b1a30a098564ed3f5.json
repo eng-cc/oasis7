@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "f2f496414b58e9465c0a7d7bc6be5614df0a5d59fe16ee966c3320a6818991e1",
+    "content_sha256": "42e51a33b5c44ee5d89eb64115b5e1b9b64cdb6636e753832ddf0ddc0da4864f",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_design_companion",
-    "note": "current draft and implementation-mapping companion; not readiness evidence",
+    "note": "current draft and implementation-mapping companion; not readiness evidence; developer workflow record projection updated, product authority retained",
     "path": "doc/world-runtime/runtime/runtime-integration.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

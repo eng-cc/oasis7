@@ -1,6 +1,6 @@
 # Pre-commit 与显式本地修复
 
-- 当前任务与执行证据: GitHub Issue（`Task UID` + evidence comments）及关联 GitHub Project item
+- 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用
 
 审计轮次: 4
 

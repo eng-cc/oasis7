@@ -18,7 +18,7 @@
 
 本文件是 world-simulator 的 active canonical PRD：保留当前模块目标、范围、跨模块接口、active requirement baseline 与验收总口径。
 
-本文件不承载完整专题目录、历史 milestone 流水、逐任务执行证据或 round review logs。完整专题配对关系进入 `doc/world-simulator/prd.index.md`；当前执行状态进入 GitHub task issue / Project；历史证据进入 Git history、GitHub task issue evidence comments 与 archive-only review logs。
+本文件不承载完整专题目录、历史 milestone 流水、逐任务执行证据或 round review logs。完整专题配对关系进入 `doc/world-simulator/prd.index.md`；当前执行状态进入 GitHub task issue / Project；历史证据进入 Git history、PR、实际 CI 与评审记录（Issue 按需） 与 archive-only review logs。
 
 ### Intent 批次与派生观测边界
 
@@ -54,7 +54,7 @@
 ## 模块基线
 - world-simulator 连接 runtime 与 viewer，负责把世界状态、场景初始化、规则执行、LLM/provider 决策与启动器控制面收敛为可交互体验。
 - 模块覆盖六个主题域：scenario、viewer、launcher、kernel、llm、m4；热点子域和完整文档清单以 `prd.index.md` 为准。
-- 主 PRD 只保留模块级 Why / What / Done；专题级 How、细节矩阵、历史 decision 和任务证据由专题 authority、GitHub task issue evidence comments 与 archive-only review logs 承担。已完成的 simulator kernel rule-hook / Wasm 接线历史以 `design.md` 的简明边界说明和 Git history 追溯，不恢复为 active 专题三件套。
+- 主 PRD 只保留模块级 Why / What / Done；专题级 How、细节矩阵、历史 decision 和任务证据由专题 authority、PR、实际 CI 与评审记录（Issue 按需） 与 archive-only review logs 承担。已完成的 simulator kernel rule-hook / Wasm 接线历史以 `design.md` 的简明边界说明和 Git history 追溯，不恢复为 active 专题三件套。
 
 ## Active Requirement Baseline
 
@@ -111,7 +111,7 @@
 
 ## Validation
 - 文档治理与引用可达：`./scripts/doc-governance-check.sh`
-- `.pm` task truth：`./scripts/pm/lint.sh`
+
 - Markdown / whitespace sanity：`git diff --check`
 - 行数回归观察：`wc -l doc/world-simulator/prd.md doc/world-simulator/README.md doc/world-simulator/prd.index.md`
 - 行为变更、runtime/Viewer/WASM/launcher 语义变更不由本 PRD 瘦身任务放行；需按对应专题 PRD 的验证矩阵和 owner role 复核。
@@ -127,4 +127,4 @@
 - DEC-WS-002: 主 PRD 保持模块级总览和验收总口径，专题细节下沉到 `doc/world-simulator/**` 专题文档与 `prd.index.md`。
 - DEC-WS-012/014: Viewer live 迁移采用 runtime 驱动、协议兼容适配和 runtime-only 收敛，避免长期 simulator fallback 双轨。
 - DEC-WS-024: 暂停新的 3D 可视化推进，把当前交互主路径聚焦到 `viewer` Web、launcher/runtime interaction 和 gameplay closure。
-- 历史 decision log 与逐任务 traceability 由 `doc/world-simulator/prd.index.md`、Git history 与 GitHub task issue evidence comments 保持可追溯。
+- 历史 decision log 与逐任务 traceability 由 `doc/world-simulator/prd.index.md`、Git history 与 PR、实际 CI 与评审记录（Issue 按需） 保持可追溯。

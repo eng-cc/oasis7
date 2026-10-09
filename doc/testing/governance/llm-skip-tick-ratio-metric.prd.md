@@ -1,7 +1,7 @@
 # oasis7: LLM 跳过 Tick 占比指标
 
 - 对应设计文档: `doc/testing/governance/llm-skip-tick-ratio-metric.design.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 审计轮次: 4
 

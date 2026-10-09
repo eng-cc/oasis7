@@ -6,7 +6,7 @@
 - 专业系统设计的十二段骨架、需求承接、验证映射与证据边界：`doc/engineering/doc-governance/system-design-writing-standard.design.md`
 - `doc/**` 逐对象覆盖、semantic/evidence 分片与 trusted admission：[`document-corpus-inventory-v3.design.md`](document-corpus-inventory-v3.design.md)；存储和准入切换须按 workflow source of truth 的 activation gate 完成
 - GitHub-backed 项目记录、任务合同、专业 slice 与组合验收：`doc/engineering/doc-governance/project-management-record-standard.design.md`
-- 产品/专业要求、系统设计、Task UID 与 evidence 的跨层追踪闭环：[`cross-layer-requirements-traceability.design.md`](cross-layer-requirements-traceability.design.md) 与 [`workflow source of truth`](../workflow/source-of-truth.md#traceability-record-contract)
+- 产品/专业要求、系统设计、可选 Issue 与 evidence 的跨层追踪闭环：[`cross-layer-requirements-traceability.design.md`](cross-layer-requirements-traceability.design.md) 与 [`workflow source of truth`](../workflow/source-of-truth.md)
 - 文档组织规则、后缀职责、模块 README 边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 产品文档内容要求、四模块边界与三类采纳试点：`doc/engineering/doc-governance/product-documentation-standard.design.md`
 - 产品文档存量全量治理、外部语义迁移与 full-corpus 验证：`doc/engineering/doc-governance/product-documentation-full-corpus-governance.design.md`
@@ -15,7 +15,7 @@
 - 文档 intake、迁移、registry、例外与证据生命周期的维护步骤：`doc/engineering/doc-governance/documentation-governance.manual.md`
 - 默认阅读面、活跃真值/审计留痕/历史归档/兼容跳转的消费边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 文档存量、热点目录、近限文件与维护成本判断：`doc/engineering/governance/README.md`，并用 `scripts/doc-inventory-report.sh` 复算
-- 已收口的 `world-simulator/viewer` 与 `readme/governance` 热点路径：直接进入各自 landing page；一次性路径治理三件套已退役，历史从 git 与 GitHub task evidence 追溯
+- 已收口的 `world-simulator/viewer` 与 `readme/governance` 热点路径：直接进入各自 landing page；一次性路径治理三件套已退役，历史从 git 与 PR 与实际验证记录 追溯
 - 全量专题三件套索引：`doc/engineering/prd.index.md`
 
 ## 按治理问题分流
@@ -24,7 +24,7 @@
 | 新文档应该放在哪里、承担什么职责 | `doc-structure-standard.design.md` | 顶层组织规范；定义模块、专题、分册、README、PRD/design/manual/runbook 边界，并将任务追踪定向到 GitHub Issue/Project |
 | 产品文档应该写什么、如何验收和追踪 | `product-documentation-standard.design.md` | 在现有四模块与专业 authority 上补充内容合同、REQ/AC 追踪、状态/证据边界和三类试点 |
 | 产品文档如何套用结构、迁移代表性主题 | `product-documentation-standard.templates.md` | 提供根/专题/design 模板、需求/验收卡和 Prompt/首局/SC-31 迁移模式 |
-| 产品/专业要求到系统设计、Task UID 和 evidence 的跨层关系 | `cross-layer-requirements-traceability.design.md` 与 workflow traceability contract | 复用 `oasis7.loop-change/v1`；定义 typed upstream refs、system-design/N/A、changed-scope 与投影边界 |
+| 产品/专业要求到系统设计、可选 Issue 和 evidence 的跨层关系 | `cross-layer-requirements-traceability.design.md` 与 workflow traceability contract | 复用 `oasis7.loop-change/v1`；定义 typed upstream refs、system-design/N/A、changed-scope 与投影边界 |
 | 已采纳规范如何覆盖全部存量产品文档 | `product-documentation-full-corpus-governance.design.md` | 定义 active/retired 内容闭合、外部语义迁移、配对 design 判定与全量检查 |
 | 专业系统设计如何承接需求、表达合同并映射验证 | `system-design-writing-standard.design.md` | 十二段技术骨架；不替代产品设计、实现、运行或发布证据 |
 | 任务、slice、固定输入和组合验收如何留证 | `project-management-record-standard.design.md` | 复用现有 GitHub Issue/Project 与 workflow；不新增本地台账或状态机 |
@@ -49,4 +49,4 @@
 - 新增 doc-governance 专题时，同批更新 `doc/engineering/prd.index.md`，并在本页补一行“按治理问题分流”。
 - corpus inventory v3 的 storage/admission 细则见配套 design；本页和维护手册只保留导航与操作步骤，权限和 activation 以 workflow source of truth 为准。
 - 一次性路径治理完成且目标 landing page 已承接首读分流与维护触发器后，退役该专题三件套，并在 `doc/engineering/prd.index.md` 的历史审计留痕记录替代入口；不要保留已经过期的缺口描述或 follow-up 排期。
-- 历史证据、旧审读轮次和任务过程仍保留在 GitHub task issue evidence comments、Git history 与 git history；不要为减重而批量改写历史文件。
+- 历史证据、旧审读轮次和任务过程仍保留在 PR、实际 CI 与评审记录（Issue 按需）、Git history 与 git history；不要为减重而批量改写历史文件。

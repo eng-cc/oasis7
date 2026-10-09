@@ -7,7 +7,7 @@
 - 对应专业需求：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md#1-executive-summary)
 - 上游产品要求：[`REQ-WR-IA-001`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)、[`REQ-WR-IA-002`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-002)、[`REQ-WR-IA-003`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-003)
 - 补充产品 authority：[`Agent 自治、委托与责任连续性`](../../product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)；本设计只承接其技术边界，不取代该 PRD、资产经济 authority 或玩法/Viewer 专业合同。
-- 审读基线：本文只定义长期系统设计与验证方法；实现现状、候选提交、测试结果和任务状态必须从关联 PR、实际 CI 与评审记录 读取。
+- 审读基线：本文只定义长期系统设计与验证方法；实现现状、候选提交、测试结果和任务状态必须从关联 PR、实际 CI 与评审记录读取。
 - Last reviewed：2026-10-09
 
 本文把玩家意图、Agent 解释、runtime 权威执行、Viewer/API 投影和 QA 证据组织成一条可追踪的间接控制因果链。产品 PRD 拥有玩家承诺与 REQ/AC，`PRD-GAME-014` 拥有玩法 guarantee、字段语义与失败签名，本文拥有跨组件技术边界、状态映射、恢复合同和验证设计；它不复制产品要求、任务台账或当前完成度。

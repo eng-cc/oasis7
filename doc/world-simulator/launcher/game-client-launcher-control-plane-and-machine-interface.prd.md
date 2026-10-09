@@ -64,4 +64,4 @@ native 与 Web 客户端消费同一份状态和动作合同。Web 入口可托�
 - 文档入口与链接：`./scripts/doc-governance-check.sh`、`./scripts/readme-link-check.sh`。
 - 机器接口合同：`oasis7_web_launcher` 的定向测试覆盖 capabilities、状态别名、严格 JSON/action 解析、统一响应以及 hosted operator-path gate。
 - 停止与诊断表现：实现变更时验证有界停止/失败回退、停止与窗口关闭的一致入口，以及 Web 对不可用状态的非崩溃诊断呈现；runtime/session/WASM 正确性由其 successor authority 复核。
-- 本稳定专题吸收的历史完成证据保留在 Git history 和 GitHub task issue evidence comments；不再把已删除的日期化专题作为当前入口。
+- 本稳定专题吸收的历史完成证据保留在 Git history 和 PR、实际 CI 与评审记录（Issue 按需）；不再把已删除的日期化专题作为当前入口。

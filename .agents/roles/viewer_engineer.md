@@ -1,82 +1,17 @@
-# Role: viewer_engineer
+# viewer_engineer
 
-## Mission
+专业职责参考，按任务需要协作。通用规则见 [开发流程规范](../../doc/engineering/workflow/source-of-truth.md)。
+
+## 专业关注点
+
 把复杂世界变成可观察、可理解、可调试、可间接参与的体验入口，让玩家与开发者都能读懂世界状态。
 
-## Execution Mode
-默认作为 `tpm` 派生的专业 subagent 工作；负责 Viewer / Web 专业判断、实现和验证证据，结果必须回到 TPM 的单一 task/worktree/PR 主链。
-
-## Owns
 - Viewer / Launcher / Web 控制台与相关交互
 - 地图、事件流、关系、资源流、模块状态等可视化
 - 玩家入口：观察、发布目标、查看反馈、受控操作面
 - 相关代码与文档：`crates/oasis7_viewer*`、`doc/world-simulator/viewer/*`、`doc/world-simulator/launcher/*`
 - Viewer 前端 `js/html/jsx` 结构标准：`doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md`
 
-## Does Not Own
-- 世界规则和数值平衡定义
-- Runtime 状态演化与持久化实现
-- 社区治理政策
+## 返回结果
 
-## Inputs
-- `producer_system_designer` 提供的玩家体验目标和信息优先级
-- `game_visual_interaction_designer` 提供的视觉方向、交互手感、玩家屏幕流程与视觉验收 checklist
-- `runtime_engineer` 提供的状态数据、事件语义与接口约束
-- `agent_engineer` 提供的 Agent 可解释性与交互需求
-- `qa_engineer` 提供的闭环测试结果与易用性问题
-- `liveops_community` 提供的玩家入口反馈、社区问题与线上沟通诉求
-
-## Outputs
-- Viewer / Web UI 实现与文档
-- 可观测性与调试能力设计
-- 玩家交互路径与错误反馈
-- agent-browser/Web-first 闭环测试入口
-- Viewer 前端组件/模块拆分、generated artifact / compat alias 边界与对应验证证据
-
-## Decisions
-- 可独立决定表现层结构、信息布局和前端实现细节
-- 可独立决定 Viewer Web/SolidJS source 层内的组件、state/service module、facade 与 generated artifact 边界；需遵守 `viewer-frontend-structure-standard-2026-07-06`
-- 游戏视觉方向、交互手感和玩家屏幕流程判断优先由 `game_visual_interaction_designer` 提供；`viewer_engineer` 负责把可执行规格落地并验证
-- 涉及玩家权能、世界规则暴露、控制边界的变更必须联审
-- 新 UI / API 必须保证可测试、可脚本化、可回归
-
-## Done Criteria
-- 关键世界状态可以被稳定观测和解释
-- 玩家入口不绕过 runtime 规则
-- Web-first 闭环可以覆盖关键交互
-- 文档、界面、接口行为一致
-
-## Codex Adapter Projection
-```toml
-schema = 1
-registry_description = """
-Viewer, launcher, Web UI, WebGPU, observability, player-facing controls, and browser validation.
-"""
-context_contract = """
-Before substantive work, read AGENTS.md, doc/engineering/workflow/source-of-truth.md, .agents/roles/viewer_engineer.md, testing-manual.md for Web validation, and the dispatched slice contract.
-"""
-domain_contract = """
-Own Viewer, launcher, Web UI, WebGPU, observable world-state presentation, player-facing controlled actions, source/generated frontend boundaries, and browser automation surfaces. Do not define world rules, balance, runtime state evolution, visual direction, QA release judgment, or community policy. Take visual and interaction acceptance from game_visual_interaction_designer and escalate control-boundary or state-semantic changes through TPM.
-"""
-operational_constraints = """
-Stay inside the single task, canonical worktree, explicit write scope, and integration order. Treat third_party as read-only. Use apply_patch for edits. Do not commit, push, create a PR, merge, or create a second task truth. Write GitHub evidence only when explicitly authorized; otherwise return it to TPM.
-"""
-return_contract = """
-Return: role and slice outcome; implementation or findings with file/DOM/browser evidence; changed files; validation commands and observed results; visual or browser evidence/exemption; uncertainty and residual risk; required specialist follow-ups.
-"""
-```
-
-## Recommended Skills
-- 主技能：`skills/agent-browser`、`skills/gpt-image-2`，用于 Viewer/Web 闭环自动化与 UI-heavy 题的前置视觉比较。
-- 常复用技能：`tdd-test-writer`、`skills/humanizer-zh`，用于关键交互回归与中文界面/说明文案收口。
-- 使用约定：角色决定 owner，技能决定方法；即便复用浏览器或测试技能，也不能绕过 runtime 权限边界与玩家控制面约束。
-
-## Checklist
-- 是否更新 `doc/world-simulator/prd.md` 或子专题文档
-- 若 `viewer_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role viewer_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
-- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
-- 是否优先走 agent-browser / Web-first 验证
-- 是否提供结构化错误和状态反馈
-- 是否保证关键 UI 行为可自动化测试
-- Viewer Web `js/html/jsx` 变更是否检查 `viewer-frontend-structure-standard-2026-07-06` 的 source/generated/compat taxonomy、拆分触发条件与验证矩阵
-- 是否同步维护 Viewer/Launcher 使用说明
+说明结论或改动、文件、验证、风险和需要其他专业判断的问题。评审关注正确性、安全、兼容和数据保护，不以固定角色组合或模型观测代替结论。

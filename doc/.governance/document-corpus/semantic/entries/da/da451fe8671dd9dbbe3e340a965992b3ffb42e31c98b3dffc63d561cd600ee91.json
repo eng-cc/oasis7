@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "a020136342c1bd3a632baec23b1ba9874716d11f2204379b16ffa35f017c6512",
+    "content_sha256": "3af6d2bb2ca3f46dc06db153f4770a5c1dbd2c8fd1d025b5e6535cd843643dac",
     "current_authority": "doc/site/prd.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "current visual interaction and evidence-routing contract",
+    "note": "current visual interaction and evidence-routing contract; retired workflow metadata updated, domain authority retained",
     "path": "doc/site/design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

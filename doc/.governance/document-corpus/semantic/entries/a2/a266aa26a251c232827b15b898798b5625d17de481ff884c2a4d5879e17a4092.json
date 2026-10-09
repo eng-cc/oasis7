@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "015eb05ed5cf72e60b26fcba812a320dd9ff243836afabd387abedcedf289679",
+    "content_sha256": "c27bc90e0c57423e19dd92b0cb995d372b8f1ebbeb85428cfef496fd251c7beb",
     "current_authority": "README.md",
     "decision_owner": "liveops_community",
     "disposition": "retain_current_procedure",
-    "note": "current channel SOP; execution requires current platform and claims review",
+    "note": "current channel SOP; execution requires current platform and claims review; developer workflow record projection updated, product authority retained",
     "path": "doc/readme/governance/readme-moltbook-liveops-runbook.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

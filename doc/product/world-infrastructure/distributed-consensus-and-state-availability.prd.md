@@ -22,9 +22,9 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 设计判定 task issue：#3680。
+- 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义 canonical history、可用性、权限隔离和 fail-closed 产品结果；它不声明独立玩家信息架构。
-- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 基础承诺
 
 基础层为一个 `world_id` 提供唯一的可验证提交序列：只有经验证的共识最终性才使输入成为世界历史。它提供节点间复制、状态同步、可验证的数据可用性、故障恢复与证明服务；它不定义游戏规则、Agent 行为、玩家交互或发行体验。
@@ -196,7 +196,7 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 | DCS-005/DC-5 的转换、manifest/head 负例、receipt 0/1 和消费者反馈由哪个结构化附件合同判定？ | runtime/P2P、运维、消费者 owner 与 QA；需要同候选字段、证据窗口和明确 verdict | 验证设计与附件可定位后复核；此前 state-sync 模板、health 或重连成功均不构成通过证据 |
 | DCS-001/004 表中的 required 局部检查与根 SC-1/SC-2 等 full 组合证据如何分工？ | P2P/runtime 与 QA；需要独立义务覆盖和适用环境说明 | 验证设计明确两层范围后确认；局部结果不降低根组合条件，DCS-003/005 仍按正文 full 验收 |
 
-问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收，任务依赖和执行状态由 GitHub task truth 维护，不在长期正文复制进度；解决前不新增未来路径或虚构任务。下面的“验证证据”栏尚包含导航描述，除非有同候选的实际执行证据，不能解释为测试已存在或已通过。
+问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收，任务依赖和执行状态由 Git、PR 与实际 CI 记录 维护，不在长期正文复制进度；解决前不新增未来路径或虚构任务。下面的“验证证据”栏尚包含导航描述，除非有同候选的实际执行证据，不能解释为测试已存在或已通过。
 
 ## 全量语义追踪
 

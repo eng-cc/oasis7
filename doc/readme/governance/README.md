@@ -50,10 +50,10 @@
   - `readme-link-check-automation-2026-03-11.{prd,design,project}.md`
   - `readme-root-status-alignment-2026-03-11.{prd,design,project}.md`
 - 当前承接:
-  - README 顶层链接检查的可执行入口是 `../../../scripts/readme-link-check.sh`，当前治理节奏由 `readme-quarterly-review-cycle-2026-03-11.prd.md` 与 `GitHub task issue evidence comments` 承接。
+  - README 顶层链接检查的可执行入口是 `../../../scripts/readme-link-check.sh`，当前治理节奏由 `readme-quarterly-review-cycle-2026-03-11.prd.md` 与 `PR、实际 CI 与评审记录（Issue 按需）` 承接。
   - 根 README 公开状态真值是根 `../../../README.md`；公开状态复核从白皮书总览、季度复核与 release communication surfaces 进入。
 - 追溯边界:
-  - 如需查看 2026-03-11 一次性专题原文，使用 git history 与 GitHub task issue evidence comments；不要在当前入口中恢复这些旧专题作为活跃文档。
+  - 如需查看 2026-03-11 一次性专题原文，使用 git history 与 PR、实际 CI 与评审记录（Issue 按需）；不要在当前入口中恢复这些旧专题作为活跃文档。
 
 ### 2. Release communication 与 announcement 模板
 - 首读入口:
@@ -75,7 +75,7 @@
   - Moltbook 渠道推广和持续运营该看哪里
   - 已批准主贴、首评、reply boundary 与 follow-up 素材在哪
   - 当前信任修复 / repair certification 讨论链从哪里进入
-  - 2026-03 promotion plan 与三组专题包装已退役；历史平台观察、排期和草稿从 Git history 与 GitHub task evidence 追溯
+  - 2026-03 promotion plan 与三组专题包装已退役；历史平台观察、排期和草稿从 Git history 与 PR 与实际验证记录 追溯
 
 ### 4. Limited playable technical preview 贡献奖励与台账执行
 - 首读入口:
@@ -90,7 +90,7 @@
 
 ### 历史压缩：release-candidate 与 closed-beta candidate
 - 追溯入口:
-  - Git history 与对应 GitHub task issue evidence comments
+  - Git history 与对应 PR、实际 CI 与评审记录（Issue 按需）
 - 适合问题:
   - 2026-03-11 版本候选实例当时如何生成 release brief / announcement draft
   - 旧 closed-beta-candidate 预备 runbook 如何被并入当前 limited preview invite / execution 入口
@@ -125,7 +125,7 @@
 ### 已删除世界规则入口收敛专题
 - 已删除：`readme-world-rules-consolidation.{prd,design,project}.md`
 - 当前承接：根 `../../../README.md` 只维护公开摘要与权威入口，`../../product/README.md` 维护四模块产品树和产品/专业边界，[世界规则与玩法系统产品 PRD](../../product/world-rules-core-gameplay/prd.md)维护长期玩家承诺、世界不变量与跨域验收。
-- 追溯边界：该三件套只记录一次已完成的 README 导航收敛、旧 `world-rule.md` 路由与任务过程；历史里程碑从 Git history 与 GitHub task evidence 追溯，不在产品树保留迁移包装。
+- 追溯边界：该三件套只记录一次已完成的 README 导航收敛、旧 `world-rule.md` 路由与任务过程；历史里程碑从 Git history 与 PR 与实际验证记录 追溯，不在产品树保留迁移包装。
 
 ### 已删除资源模型口径修订专题
 - 已删除：`readme-resource-model-layering.{prd,design,project}.md`
