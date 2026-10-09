@@ -6,8 +6,10 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-10-09
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+
+- 配套专业系统设计：[紧急保供授权、冻结分配与结算](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-001)（DES-WR-ES-001..004；目标技术合同，不代表已实现）。
 
 本文定义常态市场与系统性必需品危机之间的产品状态边界，以及紧急保供的授权、介入和退出语义。它不定义危机阈值、价格、补偿、配给公式、物流算法、runtime 状态机或当前实现结论。
 
@@ -15,7 +17,7 @@
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
 - 历史设计判定 Issue：#3680。
-- 设计适用性理由：本 PRD 只定义常态/紧急分界、冻结批次、结果类别和退出边界；分配算法与界面由专业 authority 决定。
+- 设计适用性理由：本 PRD 只定义常态/紧急分界、冻结批次、结果类别和退出边界；分配算法与界面由专业 authority 决定。配套专业系统设计承接授权有效性、冻结批次、跨授权去重、物理结算与恢复；本项仅豁免独立产品交互 design，不豁免专业技术设计。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
@@ -179,7 +181,7 @@
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-WR-ES-001](#req-wr-es-001) / [AC-WR-ES-001](#ac-wr-es-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-ES-004](#req-wr-es-004) / [AC-WR-ES-004](#ac-wr-es-004) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-05)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_full` |
+| [REQ-WR-ES-001](#req-wr-es-001) / [AC-WR-ES-001](#ac-wr-es-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[DES-WR-ES-001](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-001) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[DES-WR-ES-002](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-002) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[DES-WR-ES-003](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-003) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-004](#req-wr-es-004) / [AC-WR-ES-004](#ac-wr-es-004) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-05)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[DES-WR-ES-004](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-004) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_full` |
