@@ -119,6 +119,8 @@
   - 控制逻辑或共享输入变化、未知影响及依赖解析失败扩大普通 required；迁移 PR 使用完整保留组，不由候选选择器缩小覆盖。
   - CI 和评审结果使用真实 HEAD、测试对象、Actions 运行和 review 记录，不依赖 Task、Project 或通用 receipt。
   - `full` 可显式本地运行；nightly full 保留广覆盖回归，专项环境仅在普通 CI 存在具体不足时使用。
+  - 候选全量回归：`gh workflow run rust.yml --ref <candidate-branch-or-tag> -f run_mode=full`。所选 ref 必须包含该入口；非 main 手动运行执行 `candidate-full-regression`，缓存只读、不写 trusted sentinel，普通 PR 默认选择不变。main 手动 full 和 nightly 仍由原 trusted writer 执行。
+  - 候选运行 summary 记录实际 commit 和 tree，并核对 checkout 与 event SHA 相等；它验证所选源版本，不自动代表最新 main 合并组合。检查该 job 实际成功，不能将其他跳过的 job 或旧运行算作全量通过。
 - 入口 C：`.github/workflows/wasm-determinism-gate.yml`（构建 hash / receipt evidence 独立 gate）
   - GitHub-hosted runner 矩阵：`(m1|m4|m5) x (ubuntu-24.04/linux-x86_64)`
   - planner 先执行：`./scripts/plan-wasm-determinism-scope.sh --event-name <push|pull_request|workflow_dispatch> --base-ref <base> --head-ref <head>`
