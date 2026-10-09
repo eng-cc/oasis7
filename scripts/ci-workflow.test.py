@@ -65,6 +65,7 @@ class Workflow(unittest.TestCase):
         candidate = JOBS['candidate-full-regression'].split('    steps:\n', 1)[1]
         candidate = re.sub(r'      - name: Record exact candidate identity\n.*?(?=      - name: Resolve)', '', candidate, flags=re.S)
         writer = re.sub(r'      - name: Prepare trusted cache sentinel\n.*?(?=      - name: Run full)', '', writer, flags=re.S)
+        writer = re.sub(r'      - name: Save prepared wasm-bindgen tool cache\n.*?(?=      - name:)', '', writer, flags=re.S)
         candidate = candidate.replace('          save-if: false\n', '')
         candidate = candidate.replace('actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0',
                                       'actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5')
