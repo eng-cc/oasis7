@@ -69,15 +69,13 @@ impl ReplicatedCoordinator {
     ) -> Result<ProtocolOutcome, ProtocolError> {
         let p = read_status(&mut self.primary, request)?;
         let r = read_status(&mut self.replica, request)?;
+        reject_endpoint_disagreement(&p, &r)?;
         let existing = proposal(&p).or_else(|| proposal(&r));
         let signed = if let Some(existing) = existing {
             if existing.body.record != record {
                 return Err(invalid(
                     "request identity reused with changed payload/record",
                 ));
-            }
-            if proposal(&r).is_some_and(|x| x != existing) {
-                return Err(invalid("endpoint request disagreement"));
             }
             existing.clone()
         } else {
@@ -125,7 +123,9 @@ impl ReplicatedCoordinator {
     }
     /// Read-only reconciliation: no new execution, abort inference or automatic
     /// repair. Call submit with the SAME identity/record after explicit reopen to
-    /// complete a pending/uncertain original protocol.
+    /// complete a pending/uncertain original protocol. Endpoint disagreement
+    /// poisons this instance even before a decision; read-only lookup never
+    /// restores its ability to submit new requests.
     pub fn lookup(
         &mut self,
         request: &LocalRequestIdentity,
@@ -135,15 +135,16 @@ impl ReplicatedCoordinator {
         let result = (|| {
             let p = read_status(&mut self.primary, request)?;
             let r = read_status(&mut self.replica, request)?;
+            reject_endpoint_disagreement(&p, &r)?;
             if let (EndpointStatus::Qualified(p), EndpointStatus::Qualified(r)) = (&p, &r) {
                 if p != r {
-                    return Err(invalid("qualified endpoint fork"));
+                    return Err(ProtocolError::Poisoned);
                 }
                 return Ok(ProtocolOutcome::DurabilityQualified(p.clone()));
             }
             if let (EndpointStatus::Prepared(p), EndpointStatus::Prepared(r)) = (&p, &r) {
                 if p != r {
-                    return Err(invalid("prepared endpoint fork"));
+                    return Err(ProtocolError::Poisoned);
                 }
                 return Ok(ProtocolOutcome::Pending {
                     request: request.clone(),
@@ -193,4 +194,17 @@ fn proposal(status: &EndpointStatus) -> Option<&SignedProposal> {
         EndpointStatus::Qualified(e) => Some(&e.proposal),
         EndpointStatus::NotRecorded => None,
     }
+}
+
+// Two authenticated durable endpoint records disagreeing about one identity
+// are uncertain authority, regardless of stage. Client payload mistakes alone
+// remain Invalid and do not poison an otherwise coherent writer.
+fn reject_endpoint_disagreement(
+    p: &EndpointStatus,
+    r: &EndpointStatus,
+) -> Result<(), ProtocolError> {
+    if proposal(p).zip(proposal(r)).is_some_and(|(p, r)| p != r) {
+        return Err(ProtocolError::Poisoned);
+    }
+    Ok(())
 }

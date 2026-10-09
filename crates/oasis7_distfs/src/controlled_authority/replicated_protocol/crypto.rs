@@ -84,9 +84,11 @@ impl FixedTrust {
             .any(|s| s.len() > 256)
             || self.primary_id == self.replica_id
             || self.primary_key == self.replica_key
+            || self.writer_key == self.primary_key
+            || self.writer_key == self.replica_key
         {
             return Err(invalid(
-                "fixed identity/positive epoch/distinct endpoint keys and ids required",
+                "fixed identity/positive epoch/distinct writer and endpoint keys/endpoint ids required",
             ));
         }
         for hash in [
