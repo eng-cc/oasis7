@@ -2,6 +2,8 @@
 
 审计轮次: 8
 
+- 跨区物流、保管、所有权与争议恢复：[系统设计](runtime/cross-region-delivery-and-escrow-settlement.design.md)。
+
 ## 入口
 - 模块 PRD：`doc/world-runtime/prd.md`
 - 模块设计总览：`doc/world-runtime/design.md`
