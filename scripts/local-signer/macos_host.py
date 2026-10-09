@@ -394,9 +394,18 @@ def parse_ids(output):
     result = {}
     for line in output.splitlines():
         words = line.split()
-        if len(words) != 2 or not words[1].isdigit() or words[0] in result:
+        if (len(words) != 2 or words[0] in result
+                or not re.fullmatch(r"(?:0|[1-9][0-9]*|-[1-9][0-9]*)", words[1])):
             raise InstallError("INSTALLATION_DRIFT", "unobservable directory identities")
-        result[words[0]] = int(words[1])
+        value = int(words[1])
+        # Directory Services renders reserved uid_t/gid_t values as signed
+        # int32 (nobody -2, nogroup -1); normalize to their uint32 identity.
+        # Bounds prevent malformed negative values wrapping into allocatable IDs.
+        if not -(2**31) <= value < 2**32:
+            raise InstallError("INSTALLATION_DRIFT", "directory identity out of range")
+        result[words[0]] = value % 2**32
+    if not result:
+        raise InstallError("INSTALLATION_DRIFT", "empty directory identities")
     return result
 
 
