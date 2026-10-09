@@ -1033,7 +1033,7 @@ fn runtime_gameplay_action_keeps_primary_goal_when_secondary_factory_blocks() {
 }
 
 #[test]
-fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync() {
+fn legacy_operator_observer_rejects_gameplay_model_initialization() {
     let _guard = lock_test_llm_env();
     let execution_world_dir = runtime_live_temp_dir("chain_gameplay_submit");
     crate::runtime::World::new_production_hardened()
@@ -1090,58 +1090,40 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         public_key.as_str(),
         private_key.as_str(),
     );
-    let submit_ack = server
+    // A directory-backed operator observer supplies no authenticated Agent
+    // service context. A valid signed request cannot open a legacy model lane.
+    let before_world = serde_json::to_value(server.world.snapshot()).unwrap();
+    let before_events = server.world.journal().events.clone();
+    let before_provider = server.test_canonical_provider_summary();
+    let before_session = serde_json::to_value(&server.session_policy).unwrap();
+    let before_height = server.last_chain_committed_height;
+    let error = server
         .handle_gameplay_action(submit_request)
-        .expect("submit gameplay action to chain runtime");
-    assert_eq!(submit_ack.action_id, "build_factory_smelter_mk1");
-    assert_eq!(submit_ack.runtime_action_id, 1);
-    assert!(
-        !server.world.has_factory("factory.smelter.mk1"),
-        "chain-linked submit must not mutate local viewer state before committed sync"
-    );
-
-    assert!(
-        chain_status.submitted_gameplay_requests().is_empty(),
-        "chain status endpoint should remain read-only for gameplay submits"
-    );
-    let submitted = chain_submit.submitted_gameplay_requests();
-    assert_eq!(submitted.len(), 1);
-    assert_eq!(submitted[0].action_id, "build_factory_smelter_mk1");
-    assert_eq!(submitted[0].target_agent_id, agent_id);
-
-    let mut execution_world = server.world.clone();
-    let runtime_action = crate::viewer::build_runtime_action_from_gameplay_request(&submitted[0])
-        .expect("rebuild runtime action from submitted request");
-    execution_world.submit_action(runtime_action);
-    for _ in 0..2 {
-        execution_world.step().expect("advance execution world");
-    }
-    execution_world
-        .save_to_dir(execution_world_dir.as_path())
-        .expect("persist committed execution world");
-    chain_status.committed_height.store(1, Ordering::SeqCst);
-
-    let mut session = RuntimeLiveSession::new();
-    session.playing = false;
-    session.subscribed.insert(ViewerStream::Events);
-    session.subscribed.insert(ViewerStream::Snapshot);
-    let (mut writer, peer) = test_writer_pair();
-    let progressed = server
-        .sync_chain_linked_runtime(&mut session, &mut writer)
-        .expect("chain sync should succeed");
-
-    assert!(
-        progressed,
-        "committed chain world should advance viewer state"
-    );
-    assert!(server.world.has_factory("factory.smelter.mk1"));
+        .expect_err("operator observer must refuse gameplay model initialization");
+    assert_eq!(error.code, "llm_init_failed");
     assert_eq!(
-        server.last_chain_committed_height,
-        server
-            .world
-            .state()
-            .time
-            .max(latest_runtime_event_seq(&server.world))
+        error.message,
+        format!(
+            "canonical Agent observation unavailable (action_id=build_factory_smelter_mk1, target_agent_id={agent_id})"
+        )
     );
-    assert!(read_response_line(&peer, Duration::from_millis(200)).is_some());
+    assert_eq!(
+        error.action_id.as_deref(),
+        Some("build_factory_smelter_mk1")
+    );
+    assert_eq!(error.target_agent_id.as_deref(), Some(agent_id.as_str()));
+    assert_eq!(
+        serde_json::to_value(server.world.snapshot()).unwrap(),
+        before_world
+    );
+    assert_eq!(server.world.journal().events, before_events);
+    assert_eq!(server.test_canonical_provider_summary(), before_provider);
+    assert_eq!(
+        serde_json::to_value(&server.session_policy).unwrap(),
+        before_session
+    );
+    assert_eq!(server.last_chain_committed_height, before_height);
+    assert!(!server.world.has_factory("factory.smelter.mk1"));
+    assert!(chain_status.submitted_gameplay_requests().is_empty());
+    assert!(chain_submit.submitted_gameplay_requests().is_empty());
 }
