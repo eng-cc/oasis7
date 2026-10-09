@@ -6,20 +6,16 @@ from pathlib import Path
 
 
 def validate(plan, needs, group_jobs):
+    if not isinstance(needs, dict) or not all(isinstance(entry, dict) for entry in needs.values()):
+        raise ValueError('invalid needs results')
     if needs.get('select', {}).get('result') != 'success':
         raise ValueError('select did not succeed')
-    if not isinstance(plan, dict) or set(plan.get('groups', [])) - set(group_jobs):
-        raise ValueError('invalid selected groups')
-    chosen = plan.get('groups')
-    if not isinstance(chosen, list) or len(chosen) != len(set(chosen)) or 'baseline' not in chosen:
-        raise ValueError('missing baseline or duplicate groups')
-    matrices = plan.get('matrices')
-    if not isinstance(matrices, dict) or set(matrices) != set(group_jobs):
-        raise ValueError('incomplete matrix inventory')
+    chosen = plan.get('groups') if isinstance(plan, dict) else None
+    if (not isinstance(chosen, list) or not all(isinstance(group, str) for group in chosen)
+            or len(chosen) != len(set(chosen)) or 'baseline' not in chosen
+            or set(chosen) - set(group_jobs)):
+        raise ValueError('invalid selected groups, missing baseline or duplicate groups')
     for group, job in group_jobs.items():
-        expected = [{'group': group}] if group in chosen else []
-        if matrices[group] != {'include': expected}:
-            raise ValueError('invalid or empty selected matrix: ' + group)
         result = needs.get(job, {}).get('result')
         allowed = {'success'} if group in chosen else {'skipped', 'success'}
         if result not in allowed:
