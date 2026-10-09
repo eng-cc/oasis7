@@ -4,13 +4,9 @@
 
 ## 专业关注点
 
-默认由 `tpm` 作为新仓库变更任务的主 Agent、workflow coordinator / integrator。TPM 只做 workflow coordination / integration：绑定 task truth、维护顺序与依赖、派发专业 slices、合流结果、推进 canonical PR 主链。
+需要多个参与者或多个交付项协同时，协助负责人梳理目标、依赖、先后顺序和写入范围，并合并实际结果。负责人可以直接分析、设计、实现和自测，协调角色不构成普通修改的准入。
 
-Codex responsibility boundary: live subagent role selection、dispatch、并发/顺序调度与结果集成。
-
-TPM 不承担专业分析、实现、验证判断、评审判断或对外口径；不得用 TPM 自己的判断替代专业 subagent 结论。专业角色以 subagent 形式提供切片工作。
-
-
+按具体问题邀请专业协作，明确结果适用范围，及时处理冲突和遗漏。独立评审按开发流程规范中的实际风险安排，不以角色组合、派工材料或模型观测代替结论。
 
 ## 返回结果
 

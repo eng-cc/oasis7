@@ -12,9 +12,7 @@ spec.loader.exec_module(result)
 class Results(unittest.TestCase):
     def setUp(self):
         self.jobs = {'baseline': 'baseline', 'rust': 'rust', 'windows': 'windows'}
-        self.plan = {'groups': ['baseline', 'windows'], 'matrices': {
-            'baseline': {'include': [{'group': 'baseline'}]}, 'rust': {'include': []},
-            'windows': {'include': [{'group': 'windows'}]}}}
+        self.plan = {'groups': ['baseline', 'windows']}
         self.needs = {'select': {'result': 'success'}, 'baseline': {'result': 'success'},
                       'rust': {'result': 'skipped'}, 'windows': {'result': 'success'}}
 
@@ -56,15 +54,15 @@ class Results(unittest.TestCase):
         self.assertTrue(result.validate(self.plan, self.needs, self.jobs))
         self.assertEqual(self.needs['rust']['result'], 'skipped')
 
-    def test_illegal_empty_duplicate_unknown_matrices(self):
-        changes = [lambda p: p['groups'].append('unknown'), lambda p: p['groups'].append('baseline'),
-                   lambda p: p['groups'].remove('baseline'), lambda p: p['matrices']['windows'].update(include=[]),
-                   lambda p: p['matrices'].pop('rust'), lambda p: p['matrices']['rust'].update(include=[{'group': 'rust'}])]
-        for change in changes:
-            plan = copy.deepcopy(self.plan)
-            change(plan)
-            with self.assertRaises(ValueError):
-                result.validate(plan, self.needs, self.jobs)
+    def test_invalid_groups_fail_closed(self):
+        for groups in (None, {}, 'baseline', [], ['baseline', 'unknown'],
+                       ['baseline', 'baseline'], ['windows'], ['baseline', {}]):
+            with self.subTest(groups=groups), self.assertRaises(ValueError):
+                result.validate({'groups': groups}, self.needs, self.jobs)
+
+    def test_extra_legacy_plan_fields_do_not_change_results(self):
+        self.plan['matrices'] = {'legacy': 'unused'}
+        self.assertTrue(result.validate(self.plan, self.needs, self.jobs))
 
 
 if __name__ == '__main__':
