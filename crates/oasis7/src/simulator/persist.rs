@@ -620,8 +620,8 @@ pub struct PlayerStarterIndustrialFeasibility {
 pub struct PlayerStarterIndustrialSettledOutcome {
     pub settlement_job_id: u64,
     pub settled_at: WorldTime,
-    pub output_ledger: crate::runtime::MaterialLedgerId,
-    pub settlement: crate::runtime::StarterIndustrialSettlementSummaryV1,
+    pub output_ledger: crate::industry_types::MaterialLedgerId,
+    pub settlement: crate::industry_types::StarterIndustrialSettlementSummaryV1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
