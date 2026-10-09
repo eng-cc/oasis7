@@ -45,6 +45,8 @@ pub(super) fn build_oasis7_viewer_live_command(
         command
             .arg("--chain-status-bind")
             .arg(options.chain_status_bind.as_str())
+            .arg("--chain-execution-world-dir")
+            .arg(resolved_chain_execution_world_dir(options))
             .arg("--chain-link-policy")
             .arg(options.chain_link_policy.as_str());
     }

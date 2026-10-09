@@ -179,9 +179,9 @@ trap cleanup EXIT INT TERM
 
 if [[ -z "$game_url" ]]; then
   if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL ./scripts/run-launcher-stack.sh --run-id "$run_id" "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+    stdbuf -oL -eL ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist --run-id "$run_id" "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
   else
-    ./scripts/run-launcher-stack.sh --run-id "$run_id" "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+    ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist --run-id "$run_id" "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
   fi
   stack_pid=$!
 

@@ -684,10 +684,13 @@ rtk bash -lc 'target_dir=$(./scripts/cargo-dev.sh --print-target-dir); chain_sub
     --web-bind 127.0.0.1:5011 \
     --deployment-mode trusted_local_only \
     --chain-status-bind 127.0.0.1:19083 \
+    --chain-execution-world-dir "$CHAIN_EXECUTION_WORLD_DIR" \
     --chain-submit-bind "$chain_submit_bind" \
     --chain-link-policy enforcing \
     --llm'
 ```
+
+启动前由操作者把 `CHAIN_EXECUTION_WORLD_DIR` 设为本机节点实际发布 execution checkpoint 的 root；使用脚本时传 `--chain-execution-world-dir` 或 `OASIS7_CHAIN_EXECUTION_WORLD_DIR`。不从 status 响应推导该路径。缺可验证 generation 时等待 writer；`RecoveryRequired` 由 writer 恢复，`ResourceLimited` 拒收并保留旧展示。
 
 本 runbook 使用 direct `oasis7_viewer_live`，不是 `run-launcher-stack.sh`。原因是当前 wrapper 没有完整暴露 formal manifest / attach-existing-node 路径；直接绑定 `--chain-status-bind 127.0.0.1:19083` 能更清楚证明 viewer/API 从同一个 public_testnet world state 读取 committed snapshot。`--chain-submit-bind` 必须单独指向 submit-capable endpoint；如果它也指向 observer-only 的 `127.0.0.1:19083`，玩家 action 可能只会进入 observer pending queue。
 

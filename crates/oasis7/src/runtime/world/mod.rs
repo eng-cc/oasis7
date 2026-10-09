@@ -119,6 +119,7 @@ mod module_runtime_labels;
 mod module_runtime_metering;
 mod module_runtime_publication;
 mod module_tick_runtime;
+mod observer_identity;
 mod operability_release_gate;
 mod persistence;
 mod prepared_base_head;
@@ -127,6 +128,8 @@ pub use persistence::{
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
     CommittedAuthoritativeRecoveryGeneration,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use persistence::{ObserverLoadError, ObserverReadLimits};
 mod policy;
 mod product_validation_quote;
 pub use product_validation_quote::ProductValidationQuote;

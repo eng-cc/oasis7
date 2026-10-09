@@ -356,6 +356,8 @@ pub use world::{
     TransitionPrepareError, TransitionRollbackError, TransitionSavepoint, WarDeclarationQuote,
     World, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use world::{ObserverLoadError, ObserverReadLimits};
 pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event

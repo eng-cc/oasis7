@@ -1,0 +1,43 @@
+#!/usr/bin/env python3
+"""Verify the fixed network source and byte-identical swarm compatibility snapshot."""
+import hashlib
+import json
+from pathlib import Path
+import tomllib
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+REVISION = "2d8497b2615086bd88018ef3a1fb32bc613a07ca"
+URL = "https://github.com/libp2p/rust-libp2p"
+
+
+class NetworkSourceContract(unittest.TestCase):
+    def test_shared_facade_and_lock_sources(self):
+        for crate in ("oasis7_net", "oasis7_node"):
+            manifest = tomllib.loads((ROOT / "crates" / crate / "Cargo.toml").read_text())
+            dep = manifest["dependencies"]["libp2p"]
+            self.assertEqual((dep["git"], dep["rev"]), (URL, REVISION))
+            self.assertFalse(dep["default-features"])
+            self.assertTrue(dep["optional"])
+        lock = tomllib.loads((ROOT / "Cargo.lock").read_text())
+        for name in ("libp2p", "libp2p-core", "libp2p-rendezvous"):
+            packages = [p for p in lock["package"] if p["name"] == name]
+            self.assertEqual(len(packages), 1)
+            self.assertEqual(packages[0]["source"], f"git+{URL}?rev={REVISION}#{REVISION}")
+        timers = [p for p in lock["package"] if p["name"] == "futures-timer"]
+        self.assertTrue(all(tuple(map(int, p["version"].split("."))) >= (3, 0, 4) for p in timers))
+
+    def test_swarm_snapshot_has_no_source_changes(self):
+        vendor = ROOT / "vendor-libp2p-swarm-0.48.0"
+        hashes = json.loads((vendor / "upstream-source-sha256.json").read_text())
+        actual = {str(p.relative_to(vendor)): hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in (vendor / "src").rglob("*.rs")}
+        self.assertEqual(actual, hashes)
+        manifest = tomllib.loads((vendor / "Cargo.toml").read_text())
+        self.assertEqual(manifest["package"]["metadata"]["oasis7-compat"]["upstream-revision"], REVISION)
+        self.assertEqual(manifest["dependencies"]["futures-timer"]["version"], "3.0.4")
+        self.assertEqual(manifest["target"]['cfg(target_family="wasm")']["dependencies"]["wasm-bindgen-futures"]["version"], "0.4")
+
+
+if __name__ == "__main__":
+    unittest.main()

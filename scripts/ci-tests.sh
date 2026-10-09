@@ -144,7 +144,14 @@ run_oasis7_net_clippy() {
 }
 
 run_oasis7_net_libp2p_tests() {
+  run python3 ./scripts/libp2p-security-source.test.py
+  run python3 ./scripts/libp2p-compat.test.py
   run_cargo test -p oasis7_net --features libp2p --lib
+  if [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_OS:-}" == Linux ]]; then
+    run_cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked
+    run env -u RUSTC_WRAPPER CC_wasm32_unknown_unknown=clang AR_wasm32_unknown_unknown=llvm-ar \
+      cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked
+  fi
 }
 
 run_oasis7_net_libp2p_clippy() {
@@ -212,6 +219,7 @@ run_cargo_tooling_contract_tests() {
 }
 
 run_workflow_governance_baseline_contract_tests() {
+  run node ./scripts/cache-permission-probe.test.cjs
   run python3 ./scripts/plan-rust-required-scope.test.py
   run python3 ./scripts/ci-required-result.test.py
   run python3 ./scripts/ci-workflow.test.py
@@ -234,6 +242,8 @@ run_workflow_governance_contract_tests() {
 }
 
 run_packaging_artifact_contract_tests() {
+  run python3 ./scripts/package-source-plan.test.py
+  run python3 ./scripts/safe-git-archive.test.py
   run bash ./scripts/native-packaging-contract.test.sh
   run bash ./scripts/packaging-artifact-size-contract.test.sh
   run bash ./scripts/package-workflow-cache-reuse-contract.test.sh

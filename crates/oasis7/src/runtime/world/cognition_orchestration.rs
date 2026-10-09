@@ -33,7 +33,9 @@ mod cognition_turn_lifecycle;
 mod cognition_wake_orchestration;
 
 impl World {
-    fn is_terminal_continuation_status(status: ContinuationStatusV1) -> bool {
+    pub(in crate::runtime::world) fn is_terminal_continuation_status(
+        status: ContinuationStatusV1,
+    ) -> bool {
         matches!(
             status,
             ContinuationStatusV1::Completed

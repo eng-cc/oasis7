@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
@@ -195,21 +195,12 @@ function serveFile(request, response) {
 }
 
 function prepareViewerWebDist(distDir) {
-  const copyScript = resolve(repoRoot, "scripts/copy-viewer-web-dist.sh");
-  mkdirSync(distDir, { recursive: true });
-  const result = spawnSync(copyScript, ["--dist-dir", distDir], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (result.status !== 0) {
-    throw new Error([
-      "failed to prepare viewer web dist for performance probe",
-      `command: ${copyScript} --dist-dir ${distDir}`,
-      result.stdout?.trim() ? `stdout:\n${result.stdout.trim()}` : null,
-      result.stderr?.trim() ? `stderr:\n${result.stderr.trim()}` : null,
-    ].filter(Boolean).join("\n"));
+  const testDist = resolve(viewerRoot, ".viewer-test-dist");
+  if (!statSync(testDist, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new Error("viewer performance probe requires npm run build:viewer:visual-test");
   }
+  mkdirSync(distDir, { recursive: true });
+  cpSync(testDist, distDir, { recursive: true });
   const pixelWorldRuntimePath = resolve(distDir, "pixel-world-bridge/pixel_world_bridge.js");
   try {
     const stats = statSync(pixelWorldRuntimePath);
@@ -218,7 +209,7 @@ function prepareViewerWebDist(distDir) {
     throw new Error([
       "viewer performance probe requires the real pixel world renderer runtime",
       `missing: ${pixelWorldRuntimePath}`,
-      "run ./scripts/build-viewer-software-safe.sh before the performance probe",
+      "run npm run build:viewer:visual-test before the performance probe",
     ].join("\n"));
   }
   return distDir;
@@ -533,6 +524,7 @@ try {
   const cpuProcessBaseline = processSnapshot();
   console.log(`opening viewer performance probe: ${url}`);
   await runAgentBrowserJson(["open", url], { timeout: 120_000 });
+  await runAgentBrowserJson(["eval", `new Promise((resolve,reject)=>{let n=0;const t=setInterval(()=>{if(window.__OASIS7_VIEWER_FIXTURE_READY__){clearInterval(t);resolve(true);}else if(++n>100){clearInterval(t);reject(new Error("test assembly pending"));}},50);})`]);
   await runAgentBrowserJson(["set", "viewport", String(options.viewport[0]), String(options.viewport[1])]);
   const cpuAttribution = establishCpuAttribution(cpuProcessBaseline);
 

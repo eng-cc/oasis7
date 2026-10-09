@@ -121,6 +121,12 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--chain-disable" => {
                 options.chain_enabled = false;
             }
+            "--chain-execution-world-dir" => {
+                options.chain_execution_world_dir = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--chain-execution-world-dir",
+                )?));
+            }
             "--chain-status-bind" => {
                 options.chain_status_bind = parse_required_value(&mut iter, "--chain-status-bind")?;
                 options.chain_status_bind_explicit = true;
@@ -343,6 +349,15 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         options.viewer_port,
         "viewer host/port",
     )?;
+    if options.chain_status_bind_explicit
+        && !options.chain_enabled
+        && options.chain_execution_world_dir.is_none()
+    {
+        return Err(
+            "external chain status requires --chain-execution-world-dir configured by the operator"
+                .to_string(),
+        );
+    }
     if options.chain_enabled {
         let _ = parse_host_port(options.chain_status_bind.as_str(), "--chain-status-bind")?;
         let _ = parse_chain_link_policy(options.chain_link_policy.as_str())?;
@@ -785,6 +800,7 @@ Options:\n\
   --viewer-static-dir <path>   prebuilt web asset dir (default: {DEFAULT_VIEWER_STATIC_DIR})\n\
   --chain-enable               enable oasis7_chain_runtime (default)\n\
   --chain-disable              disable oasis7_chain_runtime\n\
+  --chain-execution-world-dir <path> shared local writer/observer checkpoint root\n\
   --chain-status-bind <addr>   oasis7_chain_runtime status bind (default: {DEFAULT_CHAIN_STATUS_BIND})\n\
   --chain-link-policy <mode>   viewer chain sync policy: enforcing|shadow (default: {DEFAULT_CHAIN_LINK_POLICY})\n\
   --major-world-event-visibility <policy>\n\

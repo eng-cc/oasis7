@@ -7,6 +7,7 @@ import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifec
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const viewerRoot = resolve(scriptDir, "..");
+const artifactRoot = resolve(viewerRoot, ".viewer-test-dist");
 const repoRoot = resolve(viewerRoot, "../..");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = resolve(repoRoot, "output/playwright/pixel-world-module-visual", runId);
@@ -59,8 +60,8 @@ function serveFile(request, response) {
   const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
   const rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/viewer.html" : requestUrl.pathname);
   const normalized = normalize(rawPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const filePath = normalized.startsWith("/pixel-world-bridge/") ? resolve(viewerRoot, "dist", `.${normalized}`) : resolve(viewerRoot, `.${normalized}`);
-  if (!relative(viewerRoot, filePath) || relative(viewerRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
+  const filePath = resolve(artifactRoot, `.${normalized}`);
+  if (!relative(artifactRoot, filePath) || relative(artifactRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
   try { if (!statSync(filePath).isFile()) throw new Error("not file"); response.writeHead(200, { "Content-Type": contentType(filePath), "Cache-Control": "no-store" }); response.end(readFileSync(filePath)); } catch { response.writeHead(404); response.end("not found"); }
 }
 const browserLifecycle = createOwnedSessionLifecycle({ command: browser, session });
@@ -259,6 +260,7 @@ try {
   summary.url = url;
   prepareBrowserSession();
   await browserJson(["open", url]);
+  await evalJson(`(async()=>{for(let n=0;n<100;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
   for (const [name, width, height] of [["desktop", 1440, 900], ["narrow", 390, 844]]) {
     if (name !== "desktop") await browserJson(["open", url]);
     await browserJson(["set", "viewport", String(width), String(height)]);

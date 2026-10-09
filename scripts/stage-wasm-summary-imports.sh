@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
@@ -122,18 +123,24 @@ if [[ "$external_summary_bundle" =~ ^https?:// ]]; then
   curl -fsSL "$external_summary_bundle" -o "$bundle_source"
 fi
 
-python3 - "$bundle_source" "$tmp_root/extracted" <<'PY'
+python3 -I - "$bundle_source" "$tmp_root/extracted" "$ROOT_DIR/scripts/safe_git_archive.py" <<'PY'
 import pathlib
 import shutil
 import sys
-import tarfile
+import importlib.util
 import zipfile
 
+spec = importlib.util.spec_from_file_location("safe_git_archive", pathlib.Path(sys.argv[3]).resolve())
+helper = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = helper
+spec.loader.exec_module(helper)
 source = pathlib.Path(sys.argv[1])
 extract_root = pathlib.Path(sys.argv[2])
 extract_root.mkdir(parents=True, exist_ok=True)
 
 if source.is_dir():
+    if any(path.is_symlink() for path in source.rglob("*")):
+        raise SystemExit("error: directory bundle contains a symlink")
     shutil.copytree(source, extract_root / "bundle", dirs_exist_ok=True)
     print(extract_root / "bundle")
     raise SystemExit(0)
@@ -143,16 +150,26 @@ if not source.exists():
 
 name = source.name.lower()
 target = extract_root / "bundle"
-target.mkdir(parents=True, exist_ok=True)
 if name.endswith((".tar.gz", ".tgz", ".tar")):
-    with tarfile.open(source) as archive:
-        try:
-            archive.extractall(target, filter="data")
-        except TypeError:
-            archive.extractall(target)
+    helper.extract_archive(source, target)
 elif name.endswith(".zip"):
     with zipfile.ZipFile(source) as archive:
-        archive.extractall(target)
+        entries = archive.infolist()
+        limits = helper.ArchiveLimits()
+        if len(entries) > limits.members or sum(e.file_size for e in entries) > limits.expanded_bytes:
+            raise SystemExit("error: zip bundle exceeds extraction budget")
+        seen = set()
+        for entry in entries:
+            path = helper._path(entry.filename)
+            if path in seen or entry.file_size > limits.member_bytes or ((entry.external_attr >> 16) & 0o170000) == 0o120000:
+                raise SystemExit("error: unsafe zip bundle entry")
+            seen.add(path)
+        target.mkdir(parents=True)
+        try:
+            archive.extractall(target)
+        except BaseException:
+            shutil.rmtree(target)
+            raise
 else:
     raise SystemExit(
         "error: external summary bundle must be a directory or archive (.tar/.tar.gz/.tgz/.zip)"

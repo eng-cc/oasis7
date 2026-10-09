@@ -46,12 +46,13 @@ fn chain_linked_runtime_empty_poll_does_not_advance_world() {
         .save_to_dir(execution_world_dir.as_path())
         .expect("persist empty execution world");
 
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(0, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -96,12 +97,13 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
         .save_to_dir(execution_world_dir.as_path())
         .expect("persist empty execution world");
 
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
     chain_status.committed_height.store(1, Ordering::SeqCst);
 
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -139,7 +141,7 @@ fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world
         .expect("persist execution world");
 
     let chain_status = TestChainStatusServer::start_with_release_security_policy(
-        execution_world_dir,
+        execution_world_dir.clone(),
         ReleaseSecurityPolicy::default(),
     );
     chain_status.committed_height.store(0, Ordering::SeqCst);
@@ -147,6 +149,7 @@ fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -200,7 +203,8 @@ fn chain_linked_runtime_recipe_completion_is_delivered_once_across_replay() {
     chain_status.committed_height.store(1, Ordering::SeqCst);
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_chain_status_bind(chain_status.addr.clone()),
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
     )
     .expect("runtime server");
     let mut session = RuntimeLiveSession::new();
@@ -342,6 +346,7 @@ fn chain_linked_runtime_revalidates_initial_snapshot_after_previous_session() {
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50)),
     )
     .expect("runtime server");
@@ -534,6 +539,7 @@ fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_h
             .with_hosted_public_join_mode(true)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
             .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone())
             .with_chain_poll_interval(Duration::from_millis(50))
     };
 

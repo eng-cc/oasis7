@@ -10,6 +10,7 @@ import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifec
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
+const artifactRoot = resolve(viewerRoot, ".viewer-test-dist");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = resolve(repoRoot, "output/playwright/pixel-world-hotspot-visual", runId);
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
@@ -28,8 +29,8 @@ function serveFile(request, response) {
   const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
   const rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/viewer.html" : requestUrl.pathname);
   const normalized = normalize(rawPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const filePath = normalized.startsWith("/pixel-world-bridge/") ? resolve(viewerRoot, "dist", `.${normalized}`) : resolve(viewerRoot, `.${normalized}`);
-  if (!relative(viewerRoot, filePath) || relative(viewerRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
+  const filePath = resolve(artifactRoot, `.${normalized}`);
+  if (!relative(artifactRoot, filePath) || relative(artifactRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
   try { if (!statSync(filePath).isFile()) throw new Error("not file"); response.writeHead(200, { "Content-Type": contentType(filePath), "Cache-Control": "no-store" }); response.end(readFileSync(filePath)); } catch { response.writeHead(404); response.end("not found"); }
 }
 function ensureBrowser() { if (spawnSync(agentBrowserBin, ["--version"], { stdio: "ignore" }).status !== 0) fail(`missing required browser automation command: ${agentBrowserBin}`); }
@@ -194,6 +195,7 @@ try {
   for (const [name, width, height] of [["desktop", 1440, 1000], ["narrow", 390, 844], ...((completionRun || routeMotionEvidence) ? [['compact',320,568]] : [])]) {
     await browserJson(["set", "viewport", String(width), String(height)]);
     if (name !== 'desktop') await browserJson(['open',url]);
+    await evalJson(`(async()=>{for(let n=0;n<100;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
     let state = await evalJson(String.raw`(async()=>{const read=()=>(${pageStateScript()}); const deadline=Date.now()+15000; while(Date.now()<deadline){const s=read(); if(s.rendererReady && s.runtimeStatus==='ready') return JSON.stringify(s); await new Promise(r=>setTimeout(r,100));} throw new Error('renderer not ready');})()`);
     if (routeMotionEvidence || name === 'compact') {
       await evalJson(`(async()=>{for(let n=0;n<${name === 'compact' && routeMotionEvidence ? 3 : 1};n++){document.querySelector('#pixel-world-embedded-runtime-canvas').dispatchEvent(new WheelEvent('wheel',{deltaY:300,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,80));}await new Promise(r=>setTimeout(r,250));return true;})()`);
@@ -305,7 +307,7 @@ try {
       const reducedInput=await evalJson(receiptScript('hover','recent:resource-transfer-fixture'));
       assert(reducedInput.receipt.visible,'reduced preference froze input',reducedInput);
       await evalJson(receiptScript('leave'));
-      const reducedSnapshot=await evalJson(`(async()=>{const before=window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick;const snapshot=window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.routes_and_events();snapshot.time=13;window.__AW_TEST__.injectSnapshot(snapshot);window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__();await new Promise(r=>setTimeout(r,200));return {before,after:window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches};})()`);
+      const reducedSnapshot=await evalJson(`(async()=>{const before=window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick;const snapshot=window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("routes_and_events")();snapshot.time=13;window.__AW_TEST__.injectSnapshot(snapshot);window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__();await new Promise(r=>setTimeout(r,200));return {before,after:window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches};})()`);
       assert(reducedSnapshot.reduced && reducedSnapshot.after===13,'reduced preference froze snapshot updates',reducedSnapshot);
       await browserJson(['set','media','dark']);
       const mediaRestored=await evalJson(`matchMedia('(prefers-reduced-motion: reduce)').matches`);

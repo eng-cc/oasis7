@@ -44,9 +44,11 @@ mod static_http;
 mod url_encoding;
 #[path = "oasis7_game_launcher/viewer_live_command.rs"]
 mod viewer_live_command;
+#[path = "oasis7_game_launcher/viewer_runtime_config.rs"]
+mod viewer_runtime_config;
 use chain_command::{
-    build_oasis7_chain_runtime_args, chain_execution_world_dir,
-    missing_execution_world_persistence_files,
+    build_oasis7_chain_runtime_args, missing_execution_world_persistence_files,
+    resolved_chain_execution_world_dir,
 };
 use cli::{
     major_world_event_visibility_as_str, parse_host_port, parse_options, print_help,
@@ -189,6 +191,7 @@ struct CliOptions {
     open_browser: bool,
     chain_enabled: bool,
     chain_status_bind: String,
+    chain_execution_world_dir: Option<PathBuf>,
     chain_status_bind_explicit: bool,
     chain_link_policy: String,
     major_world_event_visibility: MajorWorldEventVisibilityPermission,
@@ -249,6 +252,7 @@ impl Default for CliOptions {
             open_browser: true,
             chain_enabled: true,
             chain_status_bind: DEFAULT_CHAIN_STATUS_BIND.to_string(),
+            chain_execution_world_dir: None,
             chain_status_bind_explicit: false,
             chain_link_policy: DEFAULT_CHAIN_LINK_POLICY.to_string(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
@@ -511,6 +515,7 @@ fn start_static_http_server(
     root_dir: &Path,
     default_viewer_player_id: Option<&str>,
 ) -> Result<StaticHttpServer, String> {
+    static_http::viewer_runtime_config_json(deployment_mode, live_bind)?;
     let listener = TcpListener::bind((host, port))
         .map_err(|err| format!("failed to bind static HTTP server at {host}:{port}: {err}"))?;
     let allow_hosted_test_login = static_http::hosted_test_login_allowed_on_host(host);
@@ -732,7 +737,7 @@ fn wait_until_ready(
             )
         })?;
         poll_startup_health(world_child, chain_child.as_deref_mut())?;
-        let execution_world_dir = chain_execution_world_dir(options.chain_node_id.as_str());
+        let execution_world_dir = resolved_chain_execution_world_dir(&options);
         wait_for_chain_execution_world_ready(
             Path::new(execution_world_dir.as_str()),
             Duration::from_secs(30),

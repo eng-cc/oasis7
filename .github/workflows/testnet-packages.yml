@@ -27,6 +27,11 @@ on:
           - linux_macos_arm64
           - all_existing
 
+permissions:
+  contents: read
+
+cache-mode: read
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -41,20 +46,37 @@ jobs:
     name: plan-testnet-package-scope
     runs-on: ubuntu-24.04
     outputs:
-      ref: ${{ steps.plan.outputs.ref }}
+      checkoutSha: ${{ steps.source.outputs.checkoutSha }}
+      resolvedRef: ${{ steps.source.outputs.resolvedRef }}
+      sourcePlan: ${{ steps.source.outputs.sourcePlan }}
+      ref: ${{ steps.source.outputs.resolvedRef }}
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve immutable package source
+        id: source
+        env:
+          REQUESTED_REF: ${{ inputs.ref_or_sha || github.ref }}
+        run: python3 scripts/package-source-plan.py
       - id: plan
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_REF: ${{ inputs.ref_or_sha }}
+          INPUT_SCOPE: ${{ inputs.package_scope }}
         shell: bash
         run: |
           set -euo pipefail
 
-          ref="${{ inputs.ref_or_sha }}"
+          ref="${INPUT_REF}"
           if [[ -z "${ref}" ]]; then
             ref="${GITHUB_REF}"
           fi
 
-          case "${{ inputs.package_scope }}" in
+          case "${INPUT_SCOPE}" in
             linux_only)
               matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x64.deb","target_triple":"native"}]}'
               ;;
@@ -68,12 +90,11 @@ jobs:
               matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x64.deb","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"},{"os":"windows-2022","platform":"windows-x64","asset_name":"oasis7-windows-x64.exe","target_triple":"native"}]}'
               ;;
             *)
-              echo "error: unsupported package_scope=${{ inputs.package_scope }}" >&2
+              echo "error: unsupported package_scope=${INPUT_SCOPE}" >&2
               exit 1
               ;;
           esac
 
-          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
           echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
 
   build-web-dist:
@@ -81,10 +102,16 @@ jobs:
     needs: plan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.plan.outputs.ref }}
-      - uses: actions/setup-node@v6
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
       - name: Install viewer web dependencies
@@ -94,9 +121,10 @@ jobs:
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
           rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           rustup default "${RUST_TOOLCHAIN}"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: testnet-packages-web-wasm-v1
+          save-if: false
+          shared-key: testnet-packages-web-wasm-trusted-v2
           cache-on-failure: true
       - name: Install trunk
         run: cargo install trunk --locked
@@ -118,7 +146,7 @@ jobs:
             env -u NO_COLOR trunk build --release --dist ../../output/testnet-packages/web-launcher-dist
           )
       - name: Upload web dist artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: testnet-web-dists
           path: |
@@ -126,7 +154,7 @@ jobs:
             output/testnet-packages/web-launcher-dist
           if-no-files-found: error
       - name: Upload viewer web delivery
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: testnet-viewer-web-delivery
           path: output/testnet-packages/oasis7-viewer-web-delivery.tar.gz
@@ -142,9 +170,15 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ needs.plan.outputs.ref }}
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Compute Linux package cache save eligibility
         id: linux-package-cache-write
         if: runner.os == 'Linux'
@@ -181,19 +215,21 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         if: runner.os == 'Linux'
         with:
-          shared-key: oasis7-package-native-${{ runner.os }}-${{ matrix.target_triple }}-${{ inputs.build_profile }}-v1
+          save-if: false
+          shared-key: oasis7-package-native-${{ runner.os }}-${{ matrix.target_triple }}-${{ inputs.build_profile }}-trusted-v2
           cache-on-failure: false
-          save-if: ${{ steps.linux-package-cache-write.outputs.save == 'true' }}
-      - uses: Swatinem/rust-cache@v2
+          save-if: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         if: runner.os != 'Linux'
         with:
-          shared-key: testnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-v1
+          save-if: false
+          shared-key: testnet-packages-${{ runner.os }}-${{ matrix.target_triple }}-trusted-v2
           cache-on-failure: true
       - name: Download web dist artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: testnet-web-dists
           path: output/testnet-packages
@@ -249,17 +285,21 @@ jobs:
             "output/testnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json"
       - name: Write BUILDINFO
         shell: bash
+        env:
+          SOURCE_PLAN: ${{ needs.plan.outputs.sourcePlan }}
+          REQUESTED_REF: ${{ needs.plan.outputs.resolvedRef }}
         run: |
           set -euo pipefail
           assets="output/testnet-packages/assets"
           bundle="${assets}/oasis7-${{ matrix.platform }}"
           buildinfo="${assets}/${{ matrix.platform }}-BUILDINFO"
+          printf '%s\n' "$SOURCE_PLAN" > "${assets}/${{ matrix.platform }}-SOURCEPLAN.json"
           {
             echo "workflow=Testnet Packages"
             echo "run_id=${GITHUB_RUN_ID}"
             echo "run_number=${GITHUB_RUN_NUMBER}"
             echo "repository=${GITHUB_REPOSITORY}"
-            echo "requested_ref=${{ needs.plan.outputs.ref }}"
+            printf 'requested_ref=%s\n' "$REQUESTED_REF"
             echo "commit=$(git rev-parse HEAD)"
             echo "build_profile=${{ inputs.build_profile }}"
             echo "package_scope=${{ inputs.package_scope }}"
@@ -375,7 +415,7 @@ jobs:
             cp "${{ matrix.platform }}-ops-tools-SHA256SUMS" ../
           fi
       - name: Upload testnet package artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: testnet-package-${{ matrix.platform }}-${{ steps.package_version.outputs.value }}
           path: |

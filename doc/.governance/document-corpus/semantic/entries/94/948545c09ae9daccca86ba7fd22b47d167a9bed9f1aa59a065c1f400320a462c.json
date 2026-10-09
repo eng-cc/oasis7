@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "933002eab423eeea298ed81eeeda807d36a0830e2966d3fd938414b7e99bad7a",
+    "content_sha256": "1ab8481a1f98b0e50a29621c0292b47168a7bee712749571414e5f39032c2358",
     "current_authority": "testing-manual.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "current web harness contract; probe pass is not player performance proof; developer workflow record projection updated, product authority retained",
+    "note": "Reviewed browser performance harness using explicit visual-test build and fixture API; existing performance authority retained",
     "path": "doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

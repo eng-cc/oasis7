@@ -33,11 +33,11 @@ const knownLineDebt = new Map(Object.entries({
     reason: "task_36a85651cfec4ce2b35a20545990c69d adds a bounded power-survival quote facade while quote state, request signing, rendering, and fixtures stay outside legacy_core",
     nextTrigger: "next legacy_core behavior change must extract the remaining quote protocol dispatch/test-api facade",
   },
-  "crates/oasis7_viewer/software_safe_src/main.jsx": {
-    maxLines: 4461,
+  "crates/oasis7_viewer/software_safe_src/viewer_app.jsx": {
+    maxLines: 3978,
     owner: "viewer_engineer",
-    reason: "task_f3ba918435b24b8eadef002fed2b966a adds the bounded player-visible factory production failure disposition card while keeping runtime/display normalization outside main.jsx",
-    nextTrigger: "the next main.jsx industrial gameplay UI change must extract the factory failure card and its fixture into named adjacent modules",
+    reason: "security frontend extraction moves the shared application to viewer_app.jsx and removes visual fixture data and installers from the release entry",
+    nextTrigger: "the next shared application UI change must extract an adjacent surface; the fixture assembly is already separate",
   },
   "crates/oasis7_viewer/software_safe_src/main.test.jsx": {
     maxLines: 3446,

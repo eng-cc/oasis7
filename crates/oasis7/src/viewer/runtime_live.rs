@@ -31,7 +31,9 @@ use crate::simulator::{
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -151,6 +153,8 @@ pub struct ViewerRuntimeLiveServer {
     auto_play_paused: bool,
     next_auto_play_step_at: Option<Instant>,
     last_chain_committed_height: u64,
+    chain_observer_loader: Arc<Mutex<chain_link::ObserverLoader>>,
+    last_chain_observer_identity: Option<(u64, u64, u64, String)>,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     seed_model: Option<WorldModel>,
@@ -323,6 +327,8 @@ impl ViewerRuntimeLiveServer {
             initial_world_time,
             next_auto_play_step_at: None,
             last_chain_committed_height: 0,
+            chain_observer_loader: Arc::new(Mutex::new(chain_link::ObserverLoader::default())),
+            last_chain_observer_identity: None,
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             seed_model,

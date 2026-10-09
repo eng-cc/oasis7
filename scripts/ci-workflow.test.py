@@ -20,8 +20,19 @@ class Workflow(unittest.TestCase):
         # The protected baseline already executes this suite during migration.
         subprocess.run(['bash',str(ROOT/'scripts/install-ci-trunk.test.sh')],cwd=ROOT,check=True)
 
+    def test_readers_share_compatible_trusted_writer_identity(self):
+        writer = JOBS['full-regression']
+        self.assertIn('cache-mode: write', writer)
+        self.assertIn('shared-key: ci-full-regression-trusted-v2', writer)
+        self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM', writer)
+        for name, job in JOBS.items():
+            if 'save-if: false' in job and 'Swatinem/rust-cache@' in job:
+                self.assertIn('shared-key: ci-full-regression-trusted-v2', job, name)
+                self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM', job, name)
+        self.assertNotIn('ordinary-required-v2', WORKFLOW)
+
     def test_download_caches_follow_actual_worksets(self):
-        node_jobs={name for name,job in JOBS.items() if 'uses: actions/setup-node@v6' in job}
+        node_jobs={name for name,job in JOBS.items() if 'uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' in job}
         self.assertEqual(node_jobs,{'viewer-js-required','viewer-performance-report','launcher-web','full-regression'})
         for name in node_jobs:
             self.assertIn('cache: npm',JOBS[name])
@@ -29,13 +40,13 @@ class Workflow(unittest.TestCase):
             self.assertIn('npm ci --prefix crates/oasis7_viewer',JOBS[name])
         for name,job in JOBS.items():
             if 'shared-key: ordinary-required' in job:
-                self.assertIn('shared-key: ordinary-required-v2-${{ matrix.group }}',job)
+                self.assertIn('shared-key: ci-full-regression-trusted-v2',job)
                 self.assertIn('add-rust-environment-hash-key: true',job)
                 self.assertIn('env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM',job)
-                self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@v2'))
+                self.assertLess(job.index('rustup default'),job.index('uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2'))
         for name in ('launcher-web','full-regression'):
             job=JOBS[name]
-            self.assertIn('uses: actions/cache@v5',job)
+            self.assertIn('uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25',job)
             self.assertIn("hashFiles('scripts/install-ci-trunk.sh')",job)
             self.assertNotIn('cargo install trunk',job)
             self.assertNotIn('restore-keys:',job)
@@ -82,7 +93,7 @@ class Workflow(unittest.TestCase):
         self.assertIn('git show "${BASE_SHA}:scripts/${file}"', select)
         self.assertIn('--test-ref "$tested_sha"', select)
         self.assertIn('migration baseline predates pure selector', select)
-        self.assertEqual(WORKFLOW.count('uses: actions/checkout@v6'), WORKFLOW.count('persist-credentials: false'))
+        self.assertEqual(WORKFLOW.count('uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803'), WORKFLOW.count('persist-credentials: false'))
         self.assertNotIn('secrets.', WORKFLOW)
         self.assertNotIn('GH_TOKEN:', WORKFLOW)
         self.assertNotIn('scripts/pm/', WORKFLOW)

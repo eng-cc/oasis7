@@ -37,6 +37,7 @@ ALLOW_TRUSTED_LOCAL_PLAYTEST="${OASIS7_ALLOW_TRUSTED_LOCAL_PLAYTEST:-0}"
 CHAIN_LINK_POLICY="${OASIS7_CHAIN_LINK_POLICY:-}"
 CHAIN_NODE_ID=""
 CHAIN_STATUS_BIND_ADDR=""
+CHAIN_EXECUTION_WORLD_DIR="${OASIS7_CHAIN_EXECUTION_WORLD_DIR:-}"
 CHAIN_LOCAL_STANDALONE_TEST="${OASIS7_CHAIN_LOCAL_STANDALONE_TEST:-0}"
 CHAIN_NODE_AUTO_ATTEST_ALL="${OASIS7_CHAIN_NODE_AUTO_ATTEST_ALL:-0}"
 CHAIN_NODE_VALIDATORS=()
@@ -127,6 +128,7 @@ Options:
   --chain-enable           Enable chain runtime (default; requires execution-world persistence ready)
   --chain-disable          Disable chain runtime (Viewer/page-play mitigation only)
   --chain-node-id <id>     Override chain node id (default: fresh per run)
+  --chain-execution-world-dir <path> Shared local execution root (required for external chain)
   --chain-status-bind <a:p> Override chain status HTTP bind (default: web-bind port + 110)
   --chain-link-policy <p>  enforcing or shadow (default: shadow for trusted local playtest, otherwise enforcing)
   --major-world-event-visibility <policy>
@@ -338,6 +340,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --chain-node-id)
       CHAIN_NODE_ID="${2:-}"
+      shift 2
+      ;;
+    --chain-execution-world-dir)
+      CHAIN_EXECUTION_WORLD_DIR="${2:-}"
       shift 2
       ;;
     --chain-status-bind)
@@ -1070,6 +1076,9 @@ if [[ "$CHAIN_ENABLED" == "1" ]]; then
   fi
 else
   WORLD_ARGS+=(--chain-disable)
+fi
+if [[ -n "$CHAIN_EXECUTION_WORLD_DIR" ]]; then
+  WORLD_ARGS+=(--chain-execution-world-dir "$CHAIN_EXECUTION_WORLD_DIR")
 fi
 WORLD_ARGS+=(--with-llm)
 if ((${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]} > 0)); then

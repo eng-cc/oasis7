@@ -8,12 +8,15 @@ import { writeViewerCompatAliases } from "./viewer-compat-aliases.mjs";
 const scriptsDir = fileURLToPath(new URL(".", import.meta.url));
 const viewerRoot = resolve(scriptsDir, "..");
 const workspaceRoot = resolve(viewerRoot, "..", "..");
-const tempOutDir = resolve(viewerRoot, ".software-safe-build");
+const profile = process.argv[2] || "release";
+if (!["release", "visual-test"].includes(profile)) throw new Error("unknown viewer build profile");
+const visualTest = profile === "visual-test";
+const tempOutDir = resolve(viewerRoot, visualTest ? ".software-safe-test-build" : ".software-safe-build");
 const softwareSafeSrcDir = resolve(viewerRoot, "software_safe_src");
-const viewerDistDir = resolve(viewerRoot, "dist");
+const viewerDistDir = resolve(viewerRoot, visualTest ? ".viewer-test-dist" : "dist");
 const canonicalHtmlPath = resolve(viewerRoot, "viewer.html");
 const builtBundlePath = resolve(tempOutDir, "viewer.js");
-const finalCanonicalBundlePath = resolve(viewerRoot, "viewer.js");
+const finalCanonicalBundlePath = visualTest ? null : resolve(viewerRoot, "viewer.js");
 const finalDistBundlePath = resolve(viewerDistDir, "viewer.js");
 const staleRootCompatHtmlPath = resolve(viewerRoot, "software_safe.html");
 const staleRootCompatBundlePath = resolve(viewerRoot, "software_safe.js");
@@ -178,12 +181,12 @@ if (emittedFiles.length !== 1 || emittedFiles[0] !== "viewer.js") {
   throw new Error(`unexpected viewer canonical bundle outputs: ${emittedFiles.join(", ") || "(none)"}`);
 }
 const canonicalBundle = await canonicalBundleContents();
-await writeFile(finalCanonicalBundlePath, canonicalBundle, "utf8");
+if (!visualTest) await writeFile(finalCanonicalBundlePath, canonicalBundle, "utf8");
 await mkdir(viewerDistDir, { recursive: true });
 await copyFile(canonicalHtmlPath, resolve(viewerDistDir, "viewer.html"));
 await writeFile(finalDistBundlePath, canonicalBundle, "utf8");
-await writeViewerCompatAliases(viewerRoot, viewerDistDir);
-await Promise.all([
+if (!visualTest) await writeViewerCompatAliases(viewerRoot, viewerDistDir);
+if (!visualTest) await Promise.all([
   rm(staleRootCompatHtmlPath, { force: true }),
   rm(staleRootCompatBundlePath, { force: true }),
   rm(staleRootCompatClaimEvidencePath, { force: true }),

@@ -29,6 +29,7 @@ struct CliOptions {
     llm_mode: bool,
     deployment_mode: String,
     chain_status_bind: Option<String>,
+    chain_execution_world_dir: Option<PathBuf>,
     chain_submit_bind: Option<String>,
     chain_link_policy: ChainLinkPolicy,
     auto_play: bool,
@@ -65,6 +66,7 @@ impl Default for CliOptions {
             llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
             chain_status_bind: None,
+            chain_execution_world_dir: None,
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             auto_play: true,
@@ -182,6 +184,11 @@ fn initialize_viewer_server(options: &CliOptions) -> Result<ViewerRuntimeLiveSer
     } else {
         config
     };
+    let config = if let Some(path) = options.chain_execution_world_dir.as_ref() {
+        config.with_chain_execution_world_dir(path.clone())
+    } else {
+        config
+    };
     let config = if let Some(chain_status_bind) = options.chain_status_bind.as_ref() {
         config.with_chain_status_bind(chain_status_bind.clone())
     } else {
@@ -270,6 +277,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 let raw = parse_required_value(&mut iter, "--deployment-mode")?;
                 options.deployment_mode = parse_deployment_mode(raw.as_str())?.to_string();
             }
+            "--chain-execution-world-dir" => {
+                options.chain_execution_world_dir = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--chain-execution-world-dir",
+                )?));
+            }
             "--chain-status-bind" => {
                 options.chain_status_bind =
                     Some(parse_required_value(&mut iter, "--chain-status-bind")?);
@@ -352,6 +365,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     }
     if let Some(chain_status_bind) = options.chain_status_bind.as_deref() {
         parse_resolvable_socket_addr(chain_status_bind, "--chain-status-bind")?;
+        if options.chain_execution_world_dir.is_none() {
+            return Err(
+                "--chain-status-bind requires operator-configured --chain-execution-world-dir"
+                    .to_string(),
+            );
+        }
     }
     if let Some(chain_submit_bind) = options.chain_submit_bind.as_deref() {
         parse_resolvable_socket_addr(chain_submit_bind, "--chain-submit-bind")?;
@@ -504,6 +523,7 @@ Options:\n\
   --no-web-bind             disable websocket bridge\n\
   --llm                     enable llm mode (default; required for gameplay)\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
+  --chain-execution-world-dir <path> operator-owned local immutable execution checkpoint root\n\
   --chain-status-bind <addr> follow committed chain world from oasis7_chain_runtime status bind\n\
   --chain-submit-bind <addr> broadcast chain-linked gameplay actions to a submit-capable endpoint (defaults to chain-status-bind)\n\
   --chain-link-policy <mode> chain sync policy: enforcing|shadow (default: enforcing)\n\
@@ -569,6 +589,8 @@ mod tests {
                 "--web-bind",
                 "127.0.0.1:6300",
                 "--llm",
+                "--chain-execution-world-dir",
+                "output/test-observer-root",
                 "--chain-status-bind",
                 "127.0.0.1:7123",
                 "--chain-submit-bind",
@@ -755,6 +777,8 @@ mod tests {
     fn parse_options_accepts_resolvable_submit_hostname() {
         let options = parse_options(
             [
+                "--chain-execution-world-dir",
+                "output/test-observer-root",
                 "--chain-status-bind",
                 "127.0.0.1:7123",
                 "--chain-submit-bind",
@@ -768,8 +792,16 @@ mod tests {
 
     #[test]
     fn parse_options_accepts_resolvable_status_hostname() {
-        let options = parse_options(["--chain-status-bind", "localhost:7123"].into_iter())
-            .expect("resolvable hostname status bind");
+        let options = parse_options(
+            [
+                "--chain-execution-world-dir",
+                "output/test-observer-root",
+                "--chain-status-bind",
+                "localhost:7123",
+            ]
+            .into_iter(),
+        )
+        .expect("resolvable hostname status bind");
         assert_eq!(options.chain_status_bind.as_deref(), Some("localhost:7123"));
     }
 

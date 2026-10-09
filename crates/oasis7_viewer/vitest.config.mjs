@@ -1,8 +1,14 @@
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 import solid from "vite-plugin-solid";
 
 export default defineConfig({
   plugins: [solid()],
+  resolve: { alias: [
+    { find: /^.*\/main\.jsx$/, replacement: resolve(import.meta.dirname, "test/viewer-app-entry.jsx") },
+    { find: /^.*\/viewer_runtime_config_module\.js$/, replacement: resolve(import.meta.dirname, "test/viewer-runtime-config.js") },
+  ] },
+  define: { "__OASIS7_VISUAL_TEST__": "true" },
   test: {
     environment: "jsdom",
     globals: true,

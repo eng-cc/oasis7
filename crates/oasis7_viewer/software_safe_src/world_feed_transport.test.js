@@ -120,7 +120,7 @@ describe("World Feed transport", () => {
   it("clears retained current crisis attention when the socket disconnects", async () => {
     const { sockets } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.state.auth.available = false;
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
@@ -141,7 +141,7 @@ describe("World Feed transport", () => {
   it("keeps world-scoped crisis live events out of spatial recent-event inputs", async () => {
     const { sockets } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
 
@@ -168,7 +168,7 @@ describe("World Feed transport", () => {
   it("observes crisis identity and time without completing an accepted player control", async () => {
     const { sockets } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     core.state.lastControlFeedback = {
@@ -203,7 +203,7 @@ describe("World Feed transport", () => {
   it("requests and consumes only the world_feed/v1 response through the existing socket path", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     expect(sentMessages).toContainEqual({ type: "request_world_feed", cursor: null, limit: 50 });
@@ -217,7 +217,7 @@ describe("World Feed transport", () => {
 
   it("focuses modules only from canonical World Feed linkage", async () => {
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.state.snapshot = {
       model: {
         module_visual_entities: {
@@ -242,7 +242,7 @@ describe("World Feed transport", () => {
   it("continues an initial page asynchronously from the returned cursor", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
 
@@ -265,7 +265,7 @@ describe("World Feed transport", () => {
   it("drops a queued continuation when a gap arrives and lets snapshot recovery restart at null", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
 
@@ -297,7 +297,7 @@ describe("World Feed transport", () => {
   it("does not refresh the feed from world activity while a gap awaits snapshot recovery", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
@@ -325,7 +325,7 @@ describe("World Feed transport", () => {
   it("cancels an old continuation across reconnect and sends one fresh null request", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.state.auth.available = false;
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
@@ -351,7 +351,7 @@ describe("World Feed transport", () => {
   it("ignores late feed and event messages from a superseded socket", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.state.auth.available = false;
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
@@ -401,7 +401,7 @@ describe("World Feed transport", () => {
   it("continues after reconnect when the first page returns the same cursor as the stale local state", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.state.auth.available = false;
 
     sockets[0].open();
@@ -432,7 +432,7 @@ describe("World Feed transport", () => {
   it("refreshes the latest cursor once after world activity and does not overlap in-flight requests", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     sockets[0].receive(readyFeed({ cursor: "wf1.cursor-2" }));
@@ -464,7 +464,7 @@ describe("World Feed transport", () => {
   it("stops append on a runtime gap and asks the same socket path for an authoritative snapshot", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     sockets[0].receive(readyFeed());
@@ -486,7 +486,7 @@ describe("World Feed transport", () => {
   it("requests authoritative snapshot recovery when an event identity conflicts", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     sockets[0].receive(readyFeed());
@@ -517,7 +517,7 @@ describe("World Feed transport", () => {
   it("preserves a runtime identity-conflict gap and requests snapshot recovery", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     sockets[0].receive(readyFeed());
@@ -544,7 +544,7 @@ describe("World Feed transport", () => {
   it("does not request a snapshot loop for source unavailable", async () => {
     const { sockets, sentMessages } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
     sockets[0].receive(readyFeed());
