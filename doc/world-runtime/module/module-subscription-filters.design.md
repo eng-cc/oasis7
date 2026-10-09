@@ -28,7 +28,7 @@
 <a id="des-filter-001"></a>
 ## 4. 约束与边界
 - 过滤规则必须保持确定性、可回放。
-- 过滤失败不得产生额外副作用；直接匹配入口也拒绝非法规则。
+- 过滤失败不得产生额外副作用；直接匹配入口也拒绝任一事件/动作规则集中的非法规则。
 - `eq`/`ne` 的显式 `null` 必须保留为操作数；JSON Pointer 转义必须完整校验。
 - 不在本专题支持复杂脚本型过滤逻辑。
 
@@ -43,4 +43,4 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) | [过滤匹配与拒收边界](#des-filter-001) | 校验、预编译和直接匹配一致拒绝非法配置；合法 null、缺失路径、转义路径在事件/动作路由中行为一致。 | [filter_contract.rs](../../../crates/oasis7_wasm_router/tests/filter_contract.rs) 的三组回归；对候选版本运行 `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router`，覆盖 library 与 integration 层。 | 候选版本的 Cargo 测试结果。 | 不证明完整 sandbox 副作用隔离、共识或跨版本回放；拒收收紧后应重新验证既有模块配置。 |
+| [REQ-DWE-001](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) | [过滤匹配与拒收边界](#des-filter-001) | 校验、预编译和直接匹配一致拒绝非法配置；合法 null、缺失路径、转义路径在事件/动作路由中行为一致。 | [filter_contract.rs](../../../crates/oasis7_wasm_router/tests/filter_contract.rs) 的四组回归；对候选版本运行 `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_router`，覆盖 library 与 integration 层。 | 候选版本的 Cargo 测试结果。 | 不证明完整 sandbox 副作用隔离、共识或跨版本回放；拒收收紧后应重新验证既有模块配置。 |

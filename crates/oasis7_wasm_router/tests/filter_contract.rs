@@ -118,3 +118,32 @@ fn valid_pointer_escapes_empty_tokens_and_root_match() {
         }
     }
 }
+
+#[test]
+fn invalid_opposite_kind_rules_reject_the_entire_filter() {
+    for kind in ["event", "action"] {
+        for include_selected in [false, true] {
+            let mut sub = subscription(kind, json!({"path":"/x", "eq":1}));
+            let other = if kind == "event" { "action" } else { "event" };
+            let mut filters = json!({other: [{"path":"/x~2", "eq":1}]});
+            if include_selected {
+                filters[kind] = json!([{ "path":"/x", "eq":1 }]);
+            }
+            sub.filters = Some(filters);
+            assert!(validate_subscription_filters(&sub.filters, "test").is_err());
+            assert!(prepare_subscriptions(std::slice::from_ref(&sub), "test").is_err());
+            let payload = json!({"x":1});
+            assert!(!module_subscribes_to_event(
+                std::slice::from_ref(&sub),
+                "event",
+                &payload
+            ));
+            assert!(!module_subscribes_to_action(
+                std::slice::from_ref(&sub),
+                ModuleSubscriptionStage::PreAction,
+                "action",
+                &payload
+            ));
+        }
+    }
+}

@@ -175,6 +175,14 @@ pub(super) fn subscription_filters_match(
         Ok(parsed) => parsed,
         Err(_) => return false,
     };
+    if parsed
+        .event
+        .iter()
+        .chain(parsed.action.iter())
+        .any(|rules| validate_ruleset(rules, "routing").is_err())
+    {
+        return false;
+    }
     let rules = match kind {
         FilterKind::Event => parsed.event.as_ref(),
         FilterKind::Action => parsed.action.as_ref(),
@@ -182,7 +190,7 @@ pub(super) fn subscription_filters_match(
     let Some(rules) = rules else {
         return true;
     };
-    validate_ruleset(rules, "routing").is_ok() && ruleset_matches(rules, value)
+    ruleset_matches(rules, value)
 }
 
 pub(super) fn prepared_subscription_filters_match(
