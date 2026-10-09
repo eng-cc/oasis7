@@ -1,17 +1,17 @@
 {
   "record": {
-    "authority_entry": "doc/world-runtime/README.md",
+    "authority_entry": "doc/testing/README.md",
     "authority_layer": "professional_domain",
-    "content_sha256": "77f946bb727c801e31c16c7c02222b1930a9a6639040e19d99272310e11130cf",
+    "content_sha256": "b6465ac2398fe9086c21d2ad49fab1d263a5a9f4baa6ae01e87665f80d9a2c6b",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "active_candidate",
-    "object_kind": "prd_index",
-    "path": "doc/world-runtime/prd.index.md",
+    "object_kind": "manual",
+    "path": "doc/testing/manual/cross-region-settlement-system-acceptance.manual.md",
     "registry_type": "professional_domain",
-    "routing_batch": "world-runtime-corpus-review",
+    "routing_batch": "testing-corpus-review",
     "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
-    "semantic_decision_owner": "runtime_engineer",
-    "structural_owner": "runtime_engineer"
+    "semantic_decision_owner": "qa_engineer",
+    "structural_owner": "qa_engineer"
   },
   "schema": "oasis7.document-corpus-object/v1"
 }
