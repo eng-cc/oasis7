@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createViewerHostedSessionReconnectModule } from "./viewer_hosted_session_reconnect_module.js";
 
-function createModule(auth, overrides = {}) {
+async function createModule(auth, overrides = {}) {
   const state = { auth: { ...auth } };
+  await (await import("./viewer_auth_session_module.js")).installSession(state, { ...auth, privateKey: null });
   const calls = [];
   const module = createViewerHostedSessionReconnectModule({
-    authHasSigningKeyMaterial: (value) => !!value.publicKey && !!value.privateKey,
+    authHasSigningKeyMaterial: (value) => !!value.publicKey,
     legacyViewerAuthBootstrapSource: "legacy_viewer_auth_bootstrap",
     onRefreshFailure: vi.fn(() => calls.push("refresh-failure")),
     refreshHostedPlayerLease: vi.fn(async () => {
@@ -22,7 +23,7 @@ function createModule(auth, overrides = {}) {
 
 describe("viewer hosted session reconnect module", () => {
   it("refreshes the device lease before registering a new in-memory browser key after reload", async () => {
-    const { calls, module } = createModule({
+    const { calls, module } = await createModule({
       available: true,
       source: "hosted_browser_storage",
       playerId: "hosted-player-1",
@@ -40,7 +41,7 @@ describe("viewer hosted session reconnect module", () => {
   });
 
   it("keeps the existing reconnect path when the current browser key is present", async () => {
-    const { calls, module } = createModule({
+    const { calls, module } = await createModule({
       available: true,
       source: "hosted_test_login",
       playerId: "hosted-player-1",
@@ -62,7 +63,7 @@ describe("viewer hosted session reconnect module", () => {
     const refreshHostedPlayerLease = vi.fn(async () => ({ ok: false }));
     const registerHostedPlayerSession = vi.fn();
     const sendReconnectSync = vi.fn();
-    const { module } = createModule(
+    const { module } = await createModule(
       {
         available: true,
         source: "hosted_browser_storage",

@@ -57,6 +57,11 @@ env:
   CARGO_PROFILE_TEST_DEBUG: 0
   RUST_TOOLCHAIN: 1.96.0
 
+permissions:
+  contents: read
+
+cache-mode: read
+
 jobs:
   compile-metrics:
     name: compile-metrics-${{ matrix.platform }}
@@ -75,7 +80,7 @@ jobs:
     # consume unbounded CI time without producing evidence.
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           # Current-only measurements never inspect repository history. Fetch a
           # baseline explicitly below when one is requested instead of paying
@@ -155,9 +160,10 @@ jobs:
             libasound2-dev \
             libudev-dev
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: compile-metrics-${{ runner.os }}-rust-surface-v2
+          save-if: false
+          shared-key: compile-metrics-${{ runner.os }}-rust-surface-trusted-v2
           cache-on-failure: true
 
       - name: Resolve baseline ref
@@ -178,13 +184,17 @@ jobs:
 
       - name: Measure selected Rust compile metrics
         shell: bash
+        env:
+          METRIC_TARGET: ${{ inputs.metric_target }}
+          MEASURE_WARM: ${{ inputs.measure_warm_check }}
+          BASELINE_REF: ${{ steps.baseline.outputs.baseline_ref }}
         run: |
           set -euo pipefail
           mkdir -p "output/compile-metrics/${{ matrix.platform }}"
           package=""
           binary=""
           extra_args=()
-          case "${{ inputs.metric_target }}" in
+          case "${METRIC_TARGET}" in
             launcher)
               package="oasis7_client_launcher"
               binary="oasis7_client_launcher"
@@ -202,7 +212,7 @@ jobs:
               extra_args+=(--check-only)
               ;;
             *)
-              echo "error: unsupported metric target: ${{ inputs.metric_target }}" >&2
+              echo "error: unsupported metric target: ${METRIC_TARGET}" >&2
               exit 2
               ;;
           esac
@@ -214,12 +224,12 @@ jobs:
           if [[ -n "${binary}" ]]; then
             cmd+=(--binary "${binary}")
           fi
-          if [[ "${{ inputs.measure_warm_check }}" == "true" ]]; then
+          if [[ "${MEASURE_WARM}" == "true" ]]; then
             cmd+=(--measure-warm-check)
           fi
           cmd+=("${extra_args[@]}")
-          if [[ -n "${{ steps.baseline.outputs.baseline_ref }}" ]]; then
-            cmd+=(--baseline-ref "${{ steps.baseline.outputs.baseline_ref }}")
+          if [[ -n "${BASELINE_REF}" ]]; then
+            cmd+=(--baseline-ref "${BASELINE_REF}")
           fi
           "${cmd[@]}"
 
@@ -237,6 +247,8 @@ jobs:
         if: always()
         shell: bash
         env:
+          METRIC_TARGET: ${{ inputs.metric_target }}
+          MEASURE_WARM: ${{ inputs.measure_warm_check }}
           MAX_PACKAGE_COUNT_REGRESSION_PCT: ${{ inputs.max_package_count_regression_pct }}
           MAX_CARGO_CHECK_REGRESSION_PCT: ${{ inputs.max_cargo_check_regression_pct }}
           MAX_CARGO_BUILD_RELEASE_REGRESSION_PCT: ${{ inputs.max_cargo_build_release_regression_pct }}
@@ -251,7 +263,7 @@ jobs:
           if [[ -n "${MAX_PACKAGE_COUNT_REGRESSION_PCT}" ]]; then
             cmd+=(--max-package-count-regression-pct "${MAX_PACKAGE_COUNT_REGRESSION_PCT}")
           fi
-          if [[ "${{ inputs.metric_target }}" == "launcher" ]]; then
+          if [[ "${METRIC_TARGET}" == "launcher" ]]; then
             cmd+=(--require-wasmtime-absent)
             if [[ -n "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}" ]]; then
               cmd+=(--max-release-binary-bytes-regression-pct "${MAX_RELEASE_BINARY_BYTES_REGRESSION_PCT}")
@@ -263,7 +275,7 @@ jobs:
           if [[ -n "${MAX_CARGO_CHECK_REGRESSION_PCT}" ]]; then
             cmd+=(--max-cargo-check-regression-pct "${MAX_CARGO_CHECK_REGRESSION_PCT}")
           fi
-          if [[ "${{ inputs.measure_warm_check }}" == "true" && -n "${MAX_CARGO_CHECK_WARM_REGRESSION_PCT}" ]]; then
+          if [[ "${MEASURE_WARM}" == "true" && -n "${MAX_CARGO_CHECK_WARM_REGRESSION_PCT}" ]]; then
             cmd+=(--max-cargo-check-warm-regression-pct "${MAX_CARGO_CHECK_WARM_REGRESSION_PCT}")
           fi
           gate_output=""
@@ -276,7 +288,7 @@ jobs:
 
       - name: Upload compile metrics artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: compile-metrics-${{ matrix.platform }}
           path: output/compile-metrics/${{ matrix.platform }}
@@ -289,7 +301,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Download compile metrics artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           pattern: compile-metrics-*
           path: output/compile-metrics
@@ -310,7 +322,7 @@ jobs:
           cat output/compile-metrics/combined-summary.md >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload combined compile metrics summary
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: compile-metrics-summary
           path: output/compile-metrics/combined-summary.md

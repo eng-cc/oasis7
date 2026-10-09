@@ -1,3 +1,4 @@
+import { authCredentials, installSession, clearSession, hasSigningIdentity, updateRegistrationGrant, captureSessionContext, isSessionContextCurrent } from "./viewer_auth_session_module.js";
 export function createViewerBrowserPersistenceModule({
   chatHistoryLimit,
   chatHistoryStoragePrefix,
@@ -45,7 +46,7 @@ export function createViewerBrowserPersistenceModule({
           playerId: auth.playerId,
           deviceSessionId: auth.deviceSessionId || auth.playerId,
           publicKey: auth.publicKey || null,
-          privateKey: auth.privateKey || null,
+          privateKey: authCredentials(auth).privateKey || null,
           issuedAtUnixMs: auth.issuedAtUnixMs || Date.now(),
         }),
       );

@@ -1,0 +1,5 @@
+name: Scoped cache permission probe
+description: Verify candidate cache token cannot reserve a unique cache entry
+runs:
+  using: node24
+  main: index.cjs

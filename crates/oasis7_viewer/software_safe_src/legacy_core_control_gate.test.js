@@ -9,7 +9,7 @@ describe("legacy core live control gates", () => {
 
   it("blocks top-level live controls from camelCase gameplay actions", async () => {
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     core.injectSnapshot({
       time: 1,
       model: {

@@ -26,6 +26,11 @@ env:
   OASIS7_WASM_BUILD_STD: "1"
   OASIS7_WASM_BUILD_STD_COMPONENTS: std,panic_abort
 
+permissions:
+  contents: read
+
+cache-mode: read
+
 jobs:
   plan-wasm-determinism-scope:
     runs-on: ubuntu-24.04
@@ -40,7 +45,7 @@ jobs:
       changed_path_count: ${{ steps.scope.outputs.changed_path_count }}
       changed_paths: ${{ steps.scope.outputs.changed_paths }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
       - id: scope
@@ -64,11 +69,13 @@ jobs:
             --head-ref "${head_ref}" \
             --github-output "${GITHUB_OUTPUT}"
       - name: Report planned scope
+        env:
+          SCOPE: ${{ steps.scope.outputs.scope }}
+          SELECTED_MODULES: ${{ steps.scope.outputs.selected_module_sets }}
+          REASON_SUMMARY: ${{ steps.scope.outputs.reason_summary }}
+          CHANGED_COUNT: ${{ steps.scope.outputs.changed_path_count }}
         run: |
-          echo "scope=${{ steps.scope.outputs.scope }}"
-          echo "selected_module_sets=${{ steps.scope.outputs.selected_module_sets }}"
-          echo "reason_summary=${{ steps.scope.outputs.reason_summary }}"
-          echo "changed_path_count=${{ steps.scope.outputs.changed_path_count }}"
+          printf 'scope=%s\nselected_module_sets=%s\nreason_summary=%s\nchanged_path_count=%s\n' "$SCOPE" "$SELECTED_MODULES" "$REASON_SUMMARY" "$CHANGED_COUNT"
 
   collect-wasm-summaries:
     needs: plan-wasm-determinism-scope
@@ -87,11 +94,12 @@ jobs:
             runner_label: linux-x86_64
     runs-on: ${{ matrix.runner_os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Scope note for unrelated changes
         if: ${{ (matrix.module_set == 'm1' && needs.plan-wasm-determinism-scope.outputs.run_m1 != 'true') || (matrix.module_set == 'm4' && needs.plan-wasm-determinism-scope.outputs.run_m4 != 'true') || (matrix.module_set == 'm5' && needs.plan-wasm-determinism-scope.outputs.run_m5 != 'true') }}
-        run: |
-          echo "Skipping ${{ matrix.module_set }} summary collection; scope=${{ needs.plan-wasm-determinism-scope.outputs.scope }} selected=${{ needs.plan-wasm-determinism-scope.outputs.selected_module_sets }} reason=${{ needs.plan-wasm-determinism-scope.outputs.reason_summary }}"
+        env:
+          SKIP_MESSAGE: Skipping ${{ matrix.module_set }} summary collection; scope=${{ needs.plan-wasm-determinism-scope.outputs.scope }} selected=${{ needs.plan-wasm-determinism-scope.outputs.selected_module_sets }} reason=${{ needs.plan-wasm-determinism-scope.outputs.reason_summary }}
+        run: printf '%s\n' "$SKIP_MESSAGE"
       - name: Install pinned Rust toolchains
         if: ${{ (matrix.module_set == 'm1' && needs.plan-wasm-determinism-scope.outputs.run_m1 == 'true') || (matrix.module_set == 'm4' && needs.plan-wasm-determinism-scope.outputs.run_m4 == 'true') || (matrix.module_set == 'm5' && needs.plan-wasm-determinism-scope.outputs.run_m5 == 'true') }}
         run: |
@@ -109,7 +117,7 @@ jobs:
             --out "output/ci/${{ matrix.module_set }}-wasm-summary/${{ matrix.runner_label }}.json"
       - name: Upload ${{ matrix.module_set }} summary artifact
         if: ${{ (matrix.module_set == 'm1' && needs.plan-wasm-determinism-scope.outputs.run_m1 == 'true') || (matrix.module_set == 'm4' && needs.plan-wasm-determinism-scope.outputs.run_m4 == 'true') || (matrix.module_set == 'm5' && needs.plan-wasm-determinism-scope.outputs.run_m5 == 'true') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.module_set }}-wasm-summary-${{ matrix.runner_label }}
           path: output/ci/${{ matrix.module_set }}-wasm-summary/${{ matrix.runner_label }}.json
@@ -130,13 +138,14 @@ jobs:
     steps:
       - name: Scope note for unrelated changes
         if: ${{ (matrix.module_set == 'm1' && needs.plan-wasm-determinism-scope.outputs.run_m1 != 'true') || (matrix.module_set == 'm4' && needs.plan-wasm-determinism-scope.outputs.run_m4 != 'true') || (matrix.module_set == 'm5' && needs.plan-wasm-determinism-scope.outputs.run_m5 != 'true') }}
-        run: |
-          echo "Skipping ${{ matrix.module_set }} verify; scope=${{ needs.plan-wasm-determinism-scope.outputs.scope }} selected=${{ needs.plan-wasm-determinism-scope.outputs.selected_module_sets }} reason=${{ needs.plan-wasm-determinism-scope.outputs.reason_summary }}"
-      - uses: actions/checkout@v6
+        env:
+          SKIP_MESSAGE: Skipping ${{ matrix.module_set }} verify; scope=${{ needs.plan-wasm-determinism-scope.outputs.scope }} selected=${{ needs.plan-wasm-determinism-scope.outputs.selected_module_sets }} reason=${{ needs.plan-wasm-determinism-scope.outputs.reason_summary }}
+        run: printf '%s\n' "$SKIP_MESSAGE"
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         if: ${{ (matrix.module_set == 'm1' && needs.plan-wasm-determinism-scope.outputs.run_m1 == 'true') || (matrix.module_set == 'm4' && needs.plan-wasm-determinism-scope.outputs.run_m4 == 'true') || (matrix.module_set == 'm5' && needs.plan-wasm-determinism-scope.outputs.run_m5 == 'true') }}
       - name: Download ${{ matrix.module_set }} summary artifacts
         if: ${{ (matrix.module_set == 'm1' && needs.plan-wasm-determinism-scope.outputs.run_m1 == 'true') || (matrix.module_set == 'm4' && needs.plan-wasm-determinism-scope.outputs.run_m4 == 'true') || (matrix.module_set == 'm5' && needs.plan-wasm-determinism-scope.outputs.run_m5 == 'true') }}
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           pattern: ${{ matrix.module_set }}-wasm-summary-*
           path: output/ci/${{ matrix.module_set }}-wasm-summary
@@ -174,7 +183,7 @@ jobs:
             --expected-runners linux-x86_64,darwin-arm64
       - name: Upload ${{ matrix.module_set }} release evidence report
         if: ${{ (matrix.module_set == 'm1' && needs.plan-wasm-determinism-scope.outputs.run_m1 == 'true') || (matrix.module_set == 'm4' && needs.plan-wasm-determinism-scope.outputs.run_m4 == 'true') || (matrix.module_set == 'm5' && needs.plan-wasm-determinism-scope.outputs.run_m5 == 'true') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.module_set }}-wasm-release-evidence-report
           path: output/ci/${{ matrix.module_set }}-wasm-release-evidence

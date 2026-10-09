@@ -411,15 +411,15 @@ if [[ -z "$GAME_URL" ]]; then
 
   if command -v stdbuf >/dev/null 2>&1; then
     if [[ "${#STACK_ARGS[@]}" -gt 0 ]]; then
-      stdbuf -oL -eL ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+      stdbuf -oL -eL ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
     else
-      stdbuf -oL -eL ./scripts/run-launcher-stack.sh >"$run_game_test_log" 2>&1 &
+      stdbuf -oL -eL ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist >"$run_game_test_log" 2>&1 &
     fi
   else
     if [[ "${#STACK_ARGS[@]}" -gt 0 ]]; then
-      ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+      ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
     else
-      ./scripts/run-launcher-stack.sh >"$run_game_test_log" 2>&1 &
+      ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist >"$run_game_test_log" 2>&1 &
     fi
   fi
   stack_pid=$!

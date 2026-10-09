@@ -26,6 +26,13 @@ for (const runner of visualRunners) {
     `${runner} must never close all browser sessions`);
 }
 
+for (const runner of ["pixel-world-hotspot-visual-smoke.mjs", "pixel-world-location-frame-visual-smoke.mjs", "pixel-world-module-visual-smoke.mjs", "viewer-performance-probe.mjs"]) {
+  const source = readFileSync(join(scriptDir, runner), "utf8");
+  assert.doesNotMatch(source, /--pin-tab/, `${runner} must use flags supported by official agent-browser 0.37.1`);
+  assert.match(source, /AGENT_BROWSER_HEADED === "1" \? \["--headed"\] : \[\]/, `${runner} must preserve optional headed launch and default headless`);
+}
+assert.match(readFileSync(join(scriptDir, "viewer-performance-probe.mjs"), "utf8"), /AGENT_BROWSER_NPX_PACKAGE \|\| "agent-browser@0\.37\.1"/, "performance fallback must pin the verified CLI version");
+
 const root = mkdtempSync(join(tmpdir(), "oasis7-agent-browser-lifecycle-"));
 const fakeBrowser = join(root, "fake-agent-browser.mjs");
 const logPath = join(root, "close-calls.jsonl");

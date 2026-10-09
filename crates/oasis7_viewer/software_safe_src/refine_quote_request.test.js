@@ -41,7 +41,9 @@ function installTestCrypto() {
   Object.defineProperty(window, "crypto", {
     configurable: true,
     value: {
+      getRandomValues: (array) => array.fill(1),
       subtle: {
+        async verify() { return true; },
         async importKey() { return { kind: "test-private-key" }; },
         async sign() { return new Uint8Array(64).fill(7).buffer; },
       },
@@ -60,7 +62,7 @@ describe("requestRefineQuote", () => {
     const signSpy = vi.spyOn(window.crypto.subtle, "sign");
     const { sentMessages, sockets } = installMockWebSocket();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
 
     expect(await core.requestRefineQuote(0)).toEqual(expect.objectContaining({
       ok: false,
@@ -83,6 +85,7 @@ describe("requestRefineQuote", () => {
       runtimeStatus: "registered",
       boundAgentId: "agent-0",
     };
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
 
     expect(await window.__AW_TEST__.requestRefineQuote(40)).toEqual(expect.objectContaining({
       ok: true,
