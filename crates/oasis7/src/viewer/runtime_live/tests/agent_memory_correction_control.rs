@@ -200,6 +200,7 @@ fn current_intent(server: &ViewerRuntimeLiveServer, agent_id: &str) -> (String, 
 
 #[test]
 fn owner_interrupt_cancels_only_exact_pending_intent_and_replay_is_read_only() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(91);
     let (intent_id, request_digest) = current_intent(&server, agent_id.as_str());
     let command = AgencyControlOperation::InterruptPendingIntent {
@@ -272,6 +273,7 @@ fn owner_interrupt_cancels_only_exact_pending_intent_and_replay_is_read_only() {
 
 #[test]
 fn agency_control_owner_auth_is_bound_to_every_signed_field_and_never_mutates_on_denial() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(92);
     let before = server.world.current_state_root_hash().expect("before root");
     let (intent_id, request_digest) = current_intent(&server, agent_id.as_str());
@@ -394,6 +396,7 @@ fn agency_control_owner_auth_is_bound_to_every_signed_field_and_never_mutates_on
 
 #[test]
 fn inspection_and_player_snapshot_share_owner_projection_but_unauthenticated_snapshots_do_not() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(94);
     let owner_snapshot = server.compat_snapshot(Some(PLAYER_ID));
     let owner_model = owner_snapshot
@@ -608,6 +611,7 @@ fn inspection_and_player_snapshot_share_owner_projection_but_unauthenticated_sna
 
 #[test]
 fn inaccessible_or_stale_memory_correction_does_not_consume_nonce_or_change_runtime() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(95);
     let before = server.world.current_state_root_hash().expect("before root");
     let correction = signed_agency_request(
