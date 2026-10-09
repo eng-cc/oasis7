@@ -43,16 +43,39 @@ import sys
 
 workflow = Path(sys.argv[1]).read_text()
 config = json.loads(Path(sys.argv[2]).read_text())
-jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
-                       workflow.split('\njobs:\n', 1)[1], re.M | re.S))
-job = jobs.get('cargo-tooling-contracts', '')
-for expected in ('needs: select', "if: needs.select.outputs.run_cargo_tooling_contracts == 'true'",
-                 'fromJSON(needs.select.outputs.matrix_cargo_tooling_contracts)', '--group "${{ matrix.group }}"'):
-    if expected not in job:
-        raise SystemExit("Cargo tooling job is missing selected group execution: " + expected)
-needs = re.search(r'    needs: \[(.*)\]', jobs.get('required-gate', ''))
-if not needs or 'cargo-tooling-contracts' not in needs.group(1).split(', '):
-    raise SystemExit("final required-gate omits Cargo tooling results")
+def validate_execution(workflow):
+    jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
+                           workflow.split('\njobs:\n', 1)[1], re.M | re.S))
+    job = jobs.get('cargo-tooling-contracts', '')
+    for expected in ('needs: select', "needs.select.result == 'success'",
+                     "needs.select.outputs.run_cargo_tooling_contracts == 'true'",
+                     "fromJSON(needs.select.outputs.plan).scope == 'full'",
+                     'bash ./scripts/ci-tests.sh required --group "cargo_tooling_contracts" --repo-root "$GITHUB_WORKSPACE"'):
+        if expected not in job:
+            raise ValueError("Cargo tooling job is missing selected group execution: " + expected)
+    if 'strategy:' in job or 'ci-authority' in job or 'matrix.group' in job:
+        raise ValueError("Cargo tooling job must execute the candidate group without a singleton matrix")
+    needs = re.search(r'    needs: \[(.*)\]', jobs.get('required-gate', ''))
+    if not needs or 'cargo-tooling-contracts' not in needs.group(1).split(', '):
+        raise ValueError("final required-gate omits Cargo tooling results")
+
+try:
+    validate_execution(workflow)
+except ValueError as exc:
+    raise SystemExit(str(exc))
+
+# Isolated mutations must fail: route, selection and failure aggregation all matter.
+for changed in (
+        workflow.replace("needs.select.result == 'success'", 'true'),
+        workflow.replace("fromJSON(needs.select.outputs.plan).scope == 'full'", 'false'),
+        workflow.replace('bash ./scripts/ci-tests.sh required --group "cargo_tooling_contracts"',
+                         'bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "cargo_tooling_contracts"'),
+        workflow.replace(', cargo-tooling-contracts,', ', ')):
+    try:
+        validate_execution(changed)
+    except ValueError:
+        continue
+    raise SystemExit("Cargo tooling contract accepted a broken execution fixture")
 if 'rust_toolchain' not in config['resources']['cargo_tooling_contracts']:
     raise SystemExit("Cargo dependency checks require a Rust toolchain")
 PYTHON

@@ -12,6 +12,11 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
+cache-mode: write
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -25,13 +30,39 @@ env:
   BUILTIN_WASM_TARGET: wasm32-unknown-unknown
 
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      checkoutSha: ${{ steps.source.outputs.checkoutSha }}
+      version: ${{ steps.source.outputs.version }}
+      resolvedRef: ${{ steps.source.outputs.resolvedRef }}
+      sourcePlan: ${{ steps.source.outputs.sourcePlan }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve immutable package source
+        id: source
+        env:
+          REQUESTED_REF: ${{ inputs.tag || github.ref }}
+        run: python3 scripts/package-source-plan.py --release
+
   release_gate_runtime_core:
     name: release-gate-runtime-core
+    needs: plan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -40,9 +71,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y             jq             netcat-openbsd             pkg-config             libwayland-dev             wayland-protocols             libxkbcommon-dev             libx11-dev             libxi-dev             libxcursor-dev             libxrandr-dev             libxinerama-dev             libasound2-dev             libudev-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: release-packages-release-gate-runtime-core-v1
+          shared-key: release-packages-release-gate-runtime-core-trusted-v2
           cache-on-failure: true
       - name: Run runtime core release gate
         run: |
@@ -50,7 +81,7 @@ jobs:
           ./scripts/ci-tests.sh full-core | tee .tmp/release_gate_runtime_core/ci-tests-full-core.log
       - name: Upload runtime core gate summary
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-gate-runtime-core-summary
           path: .tmp/release_gate_runtime_core
@@ -58,11 +89,18 @@ jobs:
 
   release_gate_runtime_support:
     name: release-gate-runtime-support
+    needs: plan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -71,9 +109,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y             pkg-config             libwayland-dev             wayland-protocols             libxkbcommon-dev             libx11-dev             libxi-dev             libxcursor-dev             libxrandr-dev             libxinerama-dev             libasound2-dev             libudev-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: release-packages-release-gate-runtime-support-v1
+          shared-key: release-packages-release-gate-runtime-support-trusted-v2
           cache-on-failure: true
       - name: Run runtime support release gate
         run: |
@@ -81,7 +119,7 @@ jobs:
           ./scripts/ci-tests.sh full-support | tee .tmp/release_gate_runtime_support/ci-tests-full-support.log
       - name: Upload runtime support gate summary
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-gate-runtime-support-summary
           path: .tmp/release_gate_runtime_support
@@ -89,11 +127,18 @@ jobs:
 
   release_gate_runtime_sync:
     name: release-gate-runtime-sync
+    needs: plan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -102,9 +147,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y             jq             pkg-config             libwayland-dev             wayland-protocols             libxkbcommon-dev             libx11-dev             libxi-dev             libxcursor-dev             libxrandr-dev             libxinerama-dev             libasound2-dev             libudev-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: release-packages-release-gate-runtime-sync-v1
+          shared-key: release-packages-release-gate-runtime-sync-trusted-v2
           cache-on-failure: true
       - name: Install canonical builtin wasm toolchain
         run: |
@@ -123,7 +168,7 @@ jobs:
           } | tee .tmp/release_gate_runtime_sync/runtime-sync-checks.log
       - name: Upload runtime sync gate summary
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-gate-runtime-sync-summary
           path: .tmp/release_gate_runtime_sync
@@ -131,12 +176,19 @@ jobs:
 
   release_gate_web:
     name: release-gate-web
+    needs: plan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-      - uses: actions/setup-node@v6
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
       - name: Install viewer web dependencies
@@ -164,9 +216,9 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: release-packages-web-wasm-v2
+          shared-key: release-packages-web-wasm-trusted-v2
           cache-on-failure: true
       - name: Run web strict release gate
         run: |
@@ -183,7 +235,7 @@ jobs:
             --web-headed
       - name: Upload web gate summary
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-gate-web-summary
           path: .tmp/release_gate_web
@@ -191,11 +243,18 @@ jobs:
 
   release_gate_soak:
     name: release-gate-soak
+    needs: plan
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Install pinned Rust toolchain
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
@@ -216,9 +275,9 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: release-packages-release-gate-soak-v1
+          shared-key: release-packages-release-gate-soak-trusted-v2
           cache-on-failure: true
       - name: Prewarm soak runtime binary
         run: env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_chain_runtime
@@ -234,7 +293,7 @@ jobs:
             --skip-web-strict-reason release-workflow-web-shard-runs-web-strict
       - name: Upload soak gate summary
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-gate-soak-summary
           path: |
@@ -278,13 +337,19 @@ jobs:
           fi
 
   build-web-dist:
-    needs: release_gate
+    needs: [plan, release_gate]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
-      - uses: actions/setup-node@v6
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
       - name: Install viewer web dependencies
@@ -294,16 +359,16 @@ jobs:
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
           rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
           rustup default "${RUST_TOOLCHAIN}"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
-          shared-key: release-packages-web-wasm-v2
+          shared-key: release-packages-web-wasm-trusted-v2
           cache-on-failure: true
       - name: Restore pinned trunk binary
         id: trunk-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cargo/bin/trunk
-          key: release-packages-trunk-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ env.TRUNK_VERSION }}
+          key: release-packages-trunk-trusted-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ env.TRUNK_VERSION }}
       - name: Install pinned trunk
         if: steps.trunk-cache.outputs.cache-hit != 'true'
         run: cargo install trunk --locked --version "${TRUNK_VERSION}"
@@ -330,7 +395,7 @@ jobs:
             env -u NO_COLOR trunk build --release --dist ../../output/release/web-launcher-dist
           )
       - name: Upload web dist artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-web-dists
           path: |
@@ -338,14 +403,14 @@ jobs:
             output/release/web-launcher-dist
           if-no-files-found: error
       - name: Upload viewer web delivery
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-viewer-web-delivery
           path: output/release/oasis7-viewer-web-delivery.tar.gz
           if-no-files-found: error
 
   package-native:
-    needs: build-web-dist
+    needs: [plan, build-web-dist]
     strategy:
       fail-fast: false
       matrix:
@@ -364,9 +429,15 @@ jobs:
             target_triple: native
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ needs.plan.outputs.checkoutSha }}
+          persist-credentials: false
+      - name: Verify planned source HEAD
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
       - name: Compute Linux package cache save eligibility
         id: linux-package-cache-write
         if: runner.os == 'Linux'
@@ -403,19 +474,19 @@ jobs:
             libxinerama-dev \
             libasound2-dev \
             libudev-dev
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         if: runner.os == 'Linux'
         with:
-          shared-key: oasis7-package-native-${{ runner.os }}-${{ matrix.target_triple }}-packaging-v1
+          shared-key: oasis7-package-native-${{ runner.os }}-${{ matrix.target_triple }}-packaging-trusted-v2
           cache-on-failure: false
           save-if: ${{ steps.linux-package-cache-write.outputs.save == 'true' }}
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         if: runner.os != 'Linux'
         with:
-          shared-key: release-packages-package-native-${{ runner.os }}-${{ matrix.target_triple }}-v2
+          shared-key: release-packages-package-native-${{ runner.os }}-${{ matrix.target_triple }}-trusted-v2
           cache-on-failure: true
       - name: Download web dist artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: release-web-dists
           path: output/release
@@ -433,19 +504,9 @@ jobs:
           choco install $missing -y --no-progress
       - name: Resolve release version
         id: release_version
-        shell: bash
-        run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${GITHUB_REF_NAME}"
-          fi
-          tag="${tag#v}"
-          if [[ -z "${tag}" ]]; then
-            echo "error: release version is empty" >&2
-            exit 1
-          fi
-          echo "value=${tag}" >> "${GITHUB_OUTPUT}"
+        env:
+          PACKAGE_VERSION: ${{ needs.plan.outputs.version }}
+        run: printf 'value=%s\n' "$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
       - name: Build launcher bundle
         shell: bash
         run: |
@@ -458,16 +519,19 @@ jobs:
             --profile packaging
       - name: Write BUILDINFO into Linux bundle
         shell: bash
+        env:
+          SOURCE_PLAN: ${{ needs.plan.outputs.sourcePlan }}
         run: |
           set -euo pipefail
           assets="output/release/assets"
           bundle="${assets}/oasis7-${{ matrix.platform }}"
           buildinfo="${assets}/${{ matrix.platform }}-BUILDINFO"
+          printf '%s\n' "$SOURCE_PLAN" > "${assets}/${{ matrix.platform }}-SOURCEPLAN.json"
           {
             echo "workflow=Release Packages"
             echo "run_id=${GITHUB_RUN_ID}"
             echo "repository=${GITHUB_REPOSITORY}"
-            echo "release_tag=${GITHUB_REF_NAME}"
+            echo "release_tag=${{ needs.plan.outputs.resolvedRef }}"
             echo "commit=$(git rev-parse HEAD)"
             echo "build_profile=packaging"
             echo "platform=${{ matrix.platform }}"
@@ -496,49 +560,36 @@ jobs:
             --asset-name "${{ matrix.asset_name }}" \
             --version "${{ steps.release_version.outputs.value }}"
       - name: Upload platform asset
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-asset-${{ matrix.platform }}
-          path: output/release/assets/${{ matrix.asset_name }}
+          path: |
+            output/release/assets/${{ matrix.asset_name }}
+            output/release/assets/${{ matrix.platform }}-BUILDINFO
+            output/release/assets/${{ matrix.platform }}-SOURCEPLAN.json
           if-no-files-found: error
       - name: Upload ops-tools asset
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-asset-${{ matrix.platform }}-ops-tools
           path: output/release/assets/oasis7-${{ matrix.platform }}-ops-tools.tar.gz
           if-no-files-found: error
 
   publish-release:
-    needs: package-native
+    needs: [plan, package-native]
+    cache-mode: none
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Resolve tag
-        id: tag
-        run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${GITHUB_REF_NAME}"
-          fi
-          if [[ -z "${tag}" ]]; then
-            echo "error: release tag is empty" >&2
-            exit 1
-          fi
-          if [[ ! "${tag}" =~ ^v[0-9].* && ! "${tag}" =~ ^20[0-9]{2}-[0-9]{2}-[0-9]{2}_v[0-9]+$ ]]; then
-            echo "error: release tag must be semver-like (v*) or daily date tag (YYYY-MM-DD_vN): ${tag}" >&2
-            exit 1
-          fi
-          echo "value=${tag}" >> "${GITHUB_OUTPUT}"
       - name: Download packaged assets
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           pattern: release-asset-*
           path: output/release/assets
           merge-multiple: true
       - name: Download viewer web delivery
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: release-viewer-web-delivery
           path: output/release/assets
@@ -563,13 +614,39 @@ jobs:
             oasis7-windows-x64-ops-tools.tar.gz \
             oasis7-viewer-web-delivery.tar.gz \
             > oasis7-checksums.txt
+      - name: Verify release tag still matches plan
+        id: tag
+        env:
+          PLANNED_REF: ${{ needs.plan.outputs.resolvedRef }}
+          PLANNED_SHA: ${{ needs.plan.outputs.checkoutSha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${PLANNED_REF#refs/tags/}"
+          record="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")"
+          object="$(jq -r '.object.sha' <<< "$record")"
+          kind="$(jq -r '.object.type' <<< "$record")"
+          while [[ "$kind" == tag ]]; do
+            record="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object")"
+            object="$(jq -r '.object.sha' <<< "$record")"
+            kind="$(jq -r '.object.type' <<< "$record")"
+          done
+          test "$kind" = commit
+          test "$object" = "$PLANNED_SHA"
+          for platform in linux-x64 macos-x64 windows-x64; do
+            jq -e --arg sha "$PLANNED_SHA" '.checkoutSha == $sha' "output/release/assets/$platform-SOURCEPLAN.json" >/dev/null
+            grep -Fqx "commit=$PLANNED_SHA" "output/release/assets/$platform-BUILDINFO"
+          done
+          printf 'value=%s\n' "$tag" >> "$GITHUB_OUTPUT"
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ steps.tag.outputs.value }}
           name: oasis7 ${{ steps.tag.outputs.value }}
           generate_release_notes: true
           files: |
+            output/release/assets/*-SOURCEPLAN.json
+            output/release/assets/*-BUILDINFO
             output/release/assets/oasis7-linux-x64.deb
             output/release/assets/oasis7-macos-x64.dmg
             output/release/assets/oasis7-windows-x64.exe

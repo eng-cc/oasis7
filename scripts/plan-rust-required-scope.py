@@ -238,9 +238,7 @@ def select(config, base, source_head, test_head=None, additions=()):
     if 'packaging_contracts' in chosen:
         chosen.add('macos_package_contract')
     resources = sorted({resource for group in chosen for resource in config['resources'][group]})
-    # Each selected logical group has one nonempty cell, with platforms handled by distinct jobs.
-    matrices = {group: {'include': [{'group': group}]} if group in chosen else {'include': []} for group in config['groups']}
-    return {'groups': sorted(chosen), 'matrices': matrices, 'resources': resources,
+    return {'groups': sorted(chosen), 'resources': resources,
             'reasons': list(dict.fromkeys(reasons)), 'scope': 'full' if full else 'targeted'}
 
 
@@ -264,7 +262,6 @@ def main():
             output.write('plan=' + encoded + '\n')
             for group in config['groups']:
                 output.write(f'run_{group}=' + str(group in plan['groups']).lower() + '\n')
-                output.write(f'matrix_{group}=' + json.dumps(plan['matrices'][group], separators=(',', ':')) + '\n')
     print(encoded)
 
 

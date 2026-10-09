@@ -47,3 +47,6 @@ debug-assertions = false
 
 [patch.crates-io]
 egui-winit = { path = "vendor-egui-winit-0.33.3" }
+
+[patch."https://github.com/libp2p/rust-libp2p"]
+libp2p-swarm = { path = "vendor-libp2p-swarm-0.48.0" }

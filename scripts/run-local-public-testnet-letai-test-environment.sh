@@ -10,6 +10,7 @@ else
   NODE_BASE_URL="http://127.0.0.1:19083"
   NODE_BASE_URL_EXPLICIT="0"
 fi
+CHAIN_EXECUTION_WORLD_DIR="${OASIS7_CHAIN_EXECUTION_WORLD_DIR:-}"
 CHAIN_SUBMIT_BIND="${OASIS7_PUBLIC_TESTNET_CHAIN_SUBMIT_BIND:-}"
 CHAIN_SUBMIT_BASE_URL="${OASIS7_PUBLIC_TESTNET_CHAIN_SUBMIT_BASE_URL:-}"
 MANIFEST_PATH="${OASIS7_TESTNET_MANIFEST:-}"
@@ -67,6 +68,8 @@ Options:
   --public-testnet-base-url <url> Use one remote public_testnet node for both status/read and submit
   --chain-submit-bind <host:port> Submit-capable public_testnet endpoint for gameplay/transfer transactions
   --chain-submit-base-url <url>  HTTP submit-capable endpoint; converted to host:port for viewer live and transfer submit
+  --chain-execution-world-dir <dir>
+                                  Trusted local node execution root required by Viewer observer
   --manifest <path>              Formal public_testnet manifest path (or OASIS7_TESTNET_MANIFEST)
   --letai-config <path>          LetAI token/config file (or LETAI_TOKEN_FILE/OASIS7_LETAI_CONFIG_PATH)
   --letai-platform-env <path>    Optional env file with platform fields to merge into temp config
@@ -807,6 +810,9 @@ start_viewer_live() {
     log "viewer live generated world dir: $VIEWER_GENERATED_WORLD_DIR"
   fi
   log "viewer live provider lineage store: $provider_lineage_store"
+  if [[ -z "$CHAIN_EXECUTION_WORLD_DIR" ]]; then
+    die "Viewer observer requires --chain-execution-world-dir or OASIS7_CHAIN_EXECUTION_WORLD_DIR set to the node's local execution root"
+  fi
   log "starting viewer live api=$VIEWER_API_BIND ws=$VIEWER_WS_BIND; log=$log_path"
   submit_service "oasis7.local-public-testnet.viewer-live" "$log_path" \
     env \
@@ -824,6 +830,7 @@ start_viewer_live() {
       --web-bind "$VIEWER_WS_BIND" \
       --deployment-mode trusted_local_only \
       --chain-status-bind "$chain_status_bind" \
+      --chain-execution-world-dir "$CHAIN_EXECUTION_WORLD_DIR" \
       --chain-submit-bind "$chain_submit_bind_value" \
       --chain-link-policy enforcing \
       --provider-lineage-store "$provider_lineage_store" \
@@ -972,6 +979,10 @@ while [[ $# -gt 0 ]]; do
       NODE_BASE_URL="${2:-}"
       CHAIN_SUBMIT_BASE_URL="${2:-}"
       NODE_BASE_URL_EXPLICIT="1"
+      shift 2
+      ;;
+    --chain-execution-world-dir)
+      CHAIN_EXECUTION_WORLD_DIR="${2:-}"
       shift 2
       ;;
     --chain-submit-bind) CHAIN_SUBMIT_BIND="${2:-}"; shift 2 ;;

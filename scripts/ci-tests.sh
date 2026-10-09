@@ -144,7 +144,14 @@ run_oasis7_net_clippy() {
 }
 
 run_oasis7_net_libp2p_tests() {
+  run python3 ./scripts/libp2p-security-source.test.py
+  run python3 ./scripts/libp2p-compat.test.py
   run_cargo test -p oasis7_net --features libp2p --lib
+  if [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_OS:-}" == Linux ]]; then
+    run_cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked
+    run env -u RUSTC_WRAPPER CC_wasm32_unknown_unknown=clang AR_wasm32_unknown_unknown=llvm-ar \
+      cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked
+  fi
 }
 
 run_oasis7_net_libp2p_clippy() {
@@ -212,10 +219,12 @@ run_cargo_tooling_contract_tests() {
 }
 
 run_workflow_governance_baseline_contract_tests() {
+  run node ./scripts/cache-permission-probe.test.cjs
   run python3 ./scripts/plan-rust-required-scope.test.py
   run python3 ./scripts/ci-required-result.test.py
   run python3 ./scripts/ci-workflow.test.py
   run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
+  run bash ./scripts/worktree-gc-report.test.sh
   run python3 ./scripts/resource-cleanup-executor.test.py
   run python3 ./scripts/pr-review-threads.test.py
 }
@@ -234,6 +243,8 @@ run_workflow_governance_contract_tests() {
 }
 
 run_packaging_artifact_contract_tests() {
+  run python3 ./scripts/package-source-plan.test.py
+  run python3 ./scripts/safe-git-archive.test.py
   run bash ./scripts/native-packaging-contract.test.sh
   run bash ./scripts/packaging-artifact-size-contract.test.sh
   run bash ./scripts/package-workflow-cache-reuse-contract.test.sh
@@ -329,6 +340,12 @@ run_pixel_world_bridge_lib_tests() {
 
 run_pixel_world_bridge_wasm_check() {
   run_cargo check -p pixel_world_bridge --target wasm32-unknown-unknown
+}
+
+run_oasis7_viewer_visual_test_build() {
+  local bindgen_bin
+  bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"
+  run env WASM_BINDGEN_BIN="$bindgen_bin" npm --prefix crates/oasis7_viewer run build:viewer:visual-test
 }
 
 run_oasis7_viewer_performance_smoke_report_only() {
@@ -524,13 +541,13 @@ run_group() {
   case "$1" in
     baseline) run_required_gate_checks ;;
     rust_baseline) run_rust_baseline ;;
-    oasis7_required) run_oasis7_required_tier_tests; run_oasis7_required_tier_clippy; run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields ;;
-    consensus) run_oasis7_consensus_tests; run_oasis7_consensus_clippy ;;
-    distfs) run_oasis7_distfs_tests; run_oasis7_distfs_clippy ;;
-    node) run_oasis7_node_tests; run_oasis7_node_clippy ;;
-    net) run_oasis7_net_tests; run_oasis7_net_libp2p_tests; run_oasis7_net_clippy; run_oasis7_net_libp2p_clippy ;;
-    viewer_js_required) run_oasis7_viewer_software_safe_feedback_contract_tests; run_oasis7_viewer_software_safe_build ;;
-    viewer_performance_report) run bash ./scripts/viewer-performance-report-only-contract.test.sh; run_oasis7_viewer_software_safe_build; run_oasis7_viewer_performance_smoke_report_only ;;
+    oasis7_required) run_oasis7_required_tier_clippy; run_oasis7_required_tier_tests; run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields ;;
+    consensus) run_oasis7_consensus_clippy; run_oasis7_consensus_tests ;;
+    distfs) run_oasis7_distfs_clippy; run_oasis7_distfs_tests ;;
+    node) run_oasis7_node_clippy; run_oasis7_node_tests ;;
+    net) run_oasis7_net_clippy; run_oasis7_net_libp2p_clippy; run_oasis7_net_tests; run_oasis7_net_libp2p_tests ;;
+    viewer_js_required) run_oasis7_viewer_software_safe_feedback_contract_tests; run_oasis7_viewer_software_safe_build; run node crates/oasis7_viewer/scripts/viewer-auth-browser-security-smoke.mjs ;;
+    viewer_performance_report) run bash ./scripts/viewer-performance-report-only-contract.test.sh; run_oasis7_viewer_software_safe_build; run_oasis7_viewer_visual_test_build; run_oasis7_viewer_performance_smoke_report_only ;;
     pixel_world_bridge) run_pixel_world_bridge_lib_tests; run_pixel_world_bridge_wasm_check ;;
     launcher_web) run_oasis7_client_launcher_web_build ;;
     workspace_support) run_oasis7_workspace_support_crate_tests ;;

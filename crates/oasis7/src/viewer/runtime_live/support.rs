@@ -35,6 +35,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_execution_world_dir: None,
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
@@ -60,6 +61,7 @@ impl ViewerRuntimeLiveServerConfig {
             auto_play_on_connect: false,
             hosted_public_join_mode: false,
             chain_status_bind: None,
+            chain_execution_world_dir: None,
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
@@ -144,6 +146,11 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_hosted_public_join_mode(mut self, enabled: bool) -> Self {
         self.hosted_public_join_mode = enabled;
+        self
+    }
+
+    pub fn with_chain_execution_world_dir(mut self, path: impl Into<PathBuf>) -> Self {
+        self.chain_execution_world_dir = Some(path.into());
         self
     }
 
