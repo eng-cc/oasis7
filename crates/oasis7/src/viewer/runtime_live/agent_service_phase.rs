@@ -2,12 +2,11 @@
 use super::agent_service_io::*;
 use super::control_plane::llm_sidecar::lineage_persistence::PendingProviderServiceIntent;
 use super::control_plane::provider_action_commit::{
-    ProviderServiceCognitionReceipt, validate_provider_service_receipt,
+    ProviderServiceCognitionReceipt, decode_provider_service_receipt,
+    validate_provider_service_receipt,
 };
 use super::control_plane::simulator_action_to_runtime;
-use crate::world_service::{
-    client::WorldServicePort, verified_view::VerifiedWorldView, wire::SchedulerOperationV1,
-};
+use crate::world_service::{verified_view::VerifiedWorldView, wire::SchedulerOperationV1};
 use oasis7_client_api::world_service::*;
 
 #[derive(Clone)]
@@ -27,9 +26,24 @@ pub(super) enum HostedServicePhase {
         receipt: ProviderServiceCognitionReceipt,
         submit: bool,
     },
+    Feedback {
+        pending: PendingProviderServiceIntent,
+        receipt: ProviderServiceCognitionReceipt,
+    },
+    FeedbackAck {
+        pending: PendingProviderServiceIntent,
+        receipt: ProviderServiceCognitionReceipt,
+        submit: bool,
+    },
+    FeedbackAckView {
+        pending: PendingProviderServiceIntent,
+        receipt: ProviderServiceCognitionReceipt,
+        commit: CommitRef,
+    },
     Finalize {
         pending: PendingProviderServiceIntent,
         receipt: ProviderServiceCognitionReceipt,
+        feedback_acked: bool,
     },
 }
 impl HostedServicePhase {
@@ -40,6 +54,9 @@ impl HostedServicePhase {
             Self::ActView { settled: false, .. } => "act_view",
             Self::ActView { settled: true, .. } => "act_settled_view",
             Self::ActSettle { .. } => "act_settle",
+            Self::Feedback { .. } => "feedback",
+            Self::FeedbackAck { .. } => "feedback_ack",
+            Self::FeedbackAckView { .. } => "feedback_ack_view",
             Self::Finalize { .. } => "finalize",
         }
     }
@@ -48,6 +65,9 @@ impl HostedServicePhase {
             Self::Act { pending, .. }
             | Self::ActView { pending, .. }
             | Self::ActSettle { pending, .. }
+            | Self::Feedback { pending, .. }
+            | Self::FeedbackAck { pending, .. }
+            | Self::FeedbackAckView { pending, .. }
             | Self::Finalize { pending, .. } => pending,
         };
         let phase = match self {
@@ -55,6 +75,9 @@ impl HostedServicePhase {
             Self::ActView { settled: true, .. } => "act_settled_view",
             Self::ActView { .. } => "act_view",
             Self::ActSettle { .. } => "act_settle",
+            Self::Feedback { .. } => "feedback",
+            Self::FeedbackAck { .. } => "feedback_ack",
+            Self::FeedbackAckView { .. } => "feedback_ack_view",
             Self::Finalize { .. } => "finalize",
         };
         format!(
@@ -202,10 +225,39 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         self.llm_sidecar
             .hosted_service_config_binding
             .get_or_insert(current_config);
-        if let HostedServicePhase::Finalize { pending, receipt } = phase {
-            self.finalize_hosted_service_act(pending, receipt)?;
-            self.llm_sidecar.hosted_service_phase = None;
-            self.llm_sidecar.hosted_service_config_binding = None;
+        if let HostedServicePhase::Finalize {
+            pending,
+            receipt,
+            feedback_acked,
+        } = phase
+        {
+            if pending.feedback_ack.is_none() {
+                self.llm_sidecar.checkpoint_service_feedback_consumption(
+                    &self.world,
+                    &pending,
+                    &receipt.feedback,
+                    &receipt.lineage,
+                    receipt.raw_feedback.clone(),
+                )?;
+            }
+            let pending = self
+                .llm_sidecar
+                .provider_service_pending
+                .get(&pending.cognition.request.request_context.agent_subject)
+                .cloned()
+                .ok_or("feedback pending missing")?;
+            self.llm_sidecar
+                .validate_pending_feedback_consumption(&pending)?;
+            if feedback_acked {
+                self.finalize_hosted_service_act(pending, receipt)?;
+                self.llm_sidecar.hosted_service_phase = None;
+                self.llm_sidecar.hosted_service_config_binding = None;
+            } else {
+                // Delivery is repeated idempotently after recovery; a persisted
+                // unsigned phase bit is not proof of provider acceptance.
+                self.llm_sidecar.hosted_service_phase =
+                    Some(HostedServicePhase::Feedback { pending, receipt });
+            }
             return Ok(AgentServiceProgress::Advanced);
         }
         let client = self
@@ -250,8 +302,65 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     *submit && !existed,
                 )
             }
+            HostedServicePhase::Feedback {
+                pending,
+                receipt: _,
+            } => {
+                let ack = pending
+                    .feedback_ack
+                    .as_ref()
+                    .ok_or("feedback consumption missing")?;
+                if self.llm_sidecar.service_feedback_is_builtin() {
+                    self.mark_hosted_feedback_delivered(pending.clone())?;
+                    return Ok(AgentServiceProgress::Advanced);
+                }
+                AgentServiceIoOperation::Feedback {
+                    client: self.llm_sidecar.service_feedback_transport()?,
+                    payload: ack.original_feedback.clone(),
+                }
+            }
+            HostedServicePhase::FeedbackAck {
+                pending, submit, ..
+            } => {
+                let ack = pending
+                    .feedback_ack
+                    .as_ref()
+                    .ok_or("feedback ACK checkpoint missing")?;
+                original_intent_io(&ack.correlation, &ack.payload, *submit)
+            }
+            HostedServicePhase::FeedbackAckView {
+                pending, commit, ..
+            } => AgentServiceIoOperation::View(ReadWorldViewRequest {
+                contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                world: pending.correlation.key.world.clone(),
+                scope_id: client.config().scope_id.clone(),
+                min_commit: Some(commit.clone()),
+                fixed_commit: None,
+                deadline_unix_ms: None,
+            }),
             HostedServicePhase::Finalize { .. } => unreachable!(),
         };
+        if let HostedServicePhase::FeedbackAck {
+            pending,
+            submit: true,
+            ..
+        } = &phase
+        {
+            let agent = &pending.cognition.request.request_context.agent_subject;
+            let previous = self.llm_sidecar.provider_service_pending.clone();
+            self.llm_sidecar
+                .provider_service_pending
+                .get_mut(agent)
+                .ok_or("ACK original missing")?
+                .feedback_ack
+                .as_mut()
+                .ok_or("ACK checkpoint missing")?
+                .issued = true;
+            if let Err(error) = self.llm_sidecar.persist_provider_lineage() {
+                self.llm_sidecar.provider_service_pending = previous;
+                return Err(error);
+            }
+        }
         self.llm_sidecar.hosted_service_generation =
             self.llm_sidecar.hosted_service_generation.saturating_add(1);
         let token = AgentServiceIoToken {
@@ -263,7 +372,8 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         // After dispatch reservation any worker failure must recover by Lookup.
         match self.llm_sidecar.hosted_service_phase.as_mut() {
             Some(HostedServicePhase::Act { submit, .. })
-            | Some(HostedServicePhase::ActSettle { submit, .. }) => *submit = false,
+            | Some(HostedServicePhase::ActSettle { submit, .. })
+            | Some(HostedServicePhase::FeedbackAck { submit, .. }) => *submit = false,
             _ => {}
         }
         Ok(AgentServiceProgress::NeedsIo(AgentServiceIoJob {
@@ -311,7 +421,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 match response.outcome {
                     IntentOutcome::Committed { commit, receipt } => {
                         let receipt: ProviderServiceCognitionReceipt =
-                            serde_json::from_value(receipt).map_err(|error| error.to_string())?;
+                            decode_provider_service_receipt(receipt)?;
                         validate_provider_service_receipt(&pending, &receipt)?;
                         self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::ActView {
                             pending,
@@ -350,7 +460,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 }
                 self.apply_hosted_verified_view(view)?;
                 self.llm_sidecar.hosted_service_phase = Some(if settled {
-                    HostedServicePhase::Finalize { pending, receipt }
+                    HostedServicePhase::Finalize {
+                        pending,
+                        receipt,
+                        feedback_acked: false,
+                    }
                 } else {
                     HostedServicePhase::ActSettle {
                         pending,
@@ -394,6 +508,108 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     _ => return Err("canonical settlement cannot complete original intent".into()),
                 }
             }
+            HostedServicePhase::Feedback { pending, .. } => {
+                if !matches!(response, AgentServiceIoResponse::Feedback) {
+                    return Err("feedback transport response mismatch".into());
+                }
+                self.mark_hosted_feedback_delivered(pending)?;
+            }
+            HostedServicePhase::FeedbackAck {
+                pending, receipt, ..
+            } => {
+                let Some(response) = original_response(response)? else {
+                    return Ok(AgentServiceProgress::Advanced);
+                };
+                let ack = pending
+                    .feedback_ack
+                    .as_ref()
+                    .ok_or("ACK checkpoint missing")?;
+                response
+                    .validate(&ack.correlation)
+                    .map_err(|e| e.to_string())?;
+                match response.outcome {
+                    IntentOutcome::Committed {
+                        commit,
+                        receipt: result,
+                    } => {
+                        let crate::world_service::WorldServicePayloadV1::FeedbackAck(signed) =
+                            &ack.payload
+                        else {
+                            return Err("ACK codec mismatch".into());
+                        };
+                        if result["delivery_state"] != "acked"
+                            || result["acknowledged"]
+                                != serde_json::to_value(&signed.request)
+                                    .map_err(|e| e.to_string())?
+                        {
+                            return Err("ACK receipt mismatch".into());
+                        }
+                        self.llm_sidecar.hosted_service_phase =
+                            Some(HostedServicePhase::FeedbackAckView {
+                                pending,
+                                receipt,
+                                commit,
+                            });
+                    }
+                    IntentOutcome::Received { .. } | IntentOutcome::Pending => {}
+                    IntentOutcome::Unknown => {
+                        // Explicit absence permits replaying the exact signed
+                        // key/payload after a pre-Submit crash; no new nonce.
+                        self.llm_sidecar.hosted_service_phase =
+                            Some(HostedServicePhase::FeedbackAck {
+                                pending,
+                                receipt,
+                                submit: true,
+                            });
+                    }
+                    other => return Err(format!("ACK original not completed: {other:?}")),
+                }
+            }
+            HostedServicePhase::FeedbackAckView {
+                pending,
+                receipt,
+                commit,
+            } => {
+                let AgentServiceIoResponse::View(view) = response else {
+                    return Err("ACK minimum View missing".into());
+                };
+                if !view
+                    .version()
+                    .commit
+                    .satisfies_minimum(&commit)
+                    .map_err(|e| e.to_string())?
+                {
+                    return Err("ACK View too old".into());
+                }
+                let ack = pending
+                    .feedback_ack
+                    .as_ref()
+                    .ok_or("ACK checkpoint missing")?;
+                let crate::world_service::WorldServicePayloadV1::FeedbackAck(signed) = &ack.payload
+                else {
+                    return Err("ACK codec mismatch".into());
+                };
+                let record = view
+                    .projection()
+                    .feedback_history
+                    .as_ref()
+                    .ok_or("ACK scoped history missing")?
+                    .records
+                    .iter()
+                    .find(|record| record.feedback.feedback_id == signed.request.feedback_id)
+                    .ok_or("ACK feedback missing")?;
+                if record.delivery_state != "acked"
+                    || record.original_envelope_digest != signed.request.original_envelope_digest
+                {
+                    return Err("ACK readback mismatch".into());
+                }
+                self.apply_hosted_verified_view(view)?;
+                self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::Finalize {
+                    pending,
+                    receipt,
+                    feedback_acked: true,
+                });
+            }
             HostedServicePhase::Finalize { .. } => {
                 return Err("hosted finalization has no transport result".into());
             }
@@ -418,6 +634,47 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         self.verified_world_view = Some(view);
         self.llm_sidecar
             .sync_shadow_kernel(&self.world, &self.snapshot_config)
+    }
+    fn mark_hosted_feedback_delivered(
+        &mut self,
+        pending: PendingProviderServiceIntent,
+    ) -> Result<(), String> {
+        let agent = &pending.cognition.request.request_context.agent_subject;
+        let previous = self.llm_sidecar.provider_service_pending.clone();
+        self.llm_sidecar
+            .provider_service_pending
+            .get_mut(agent)
+            .ok_or("feedback pending missing")?
+            .feedback_ack
+            .as_mut()
+            .ok_or("consumption checkpoint missing")?
+            .delivered = true;
+        if let Err(error) = self.llm_sidecar.persist_provider_lineage() {
+            self.llm_sidecar.provider_service_pending = previous;
+            return Err(error);
+        }
+        let updated = self
+            .llm_sidecar
+            .provider_service_pending
+            .get(agent)
+            .cloned()
+            .unwrap();
+        let Some(HostedServicePhase::Feedback { receipt, .. }) =
+            self.llm_sidecar.hosted_service_phase.clone()
+        else {
+            return Err("feedback phase changed".into());
+        };
+        let submit = !updated
+            .feedback_ack
+            .as_ref()
+            .ok_or("ACK checkpoint missing")?
+            .issued;
+        self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::FeedbackAck {
+            pending: updated,
+            receipt,
+            submit,
+        });
+        Ok(())
     }
     fn finalize_hosted_service_act(
         &mut self,
@@ -460,25 +717,6 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 .as_ref()
                 .ok_or("hosted Act lease missing")?,
         )?;
-        if let Err(error) =
-            self.llm_sidecar
-                .consume_hosted_provider_memory(&self.world, &pending, &receipt)
-        {
-            #[cfg(any(test, feature = "test_tier_required"))]
-            {
-                if self.llm_sidecar.hosted_service_memory_failure
-                    != Some("restored_memory_checkpoint_invalid")
-                {
-                    self.llm_sidecar.hosted_service_memory_failure =
-                        Some(if error.contains("unknown actor outcome") {
-                            "unknown_actor_outcome"
-                        } else {
-                            "receipt_memory_gate_rejected"
-                        });
-                }
-            }
-            return Err(error);
-        }
         self.llm_sidecar
             .finalize_provider_action_with_feedback_checked(action_id, receipt.feedback)?;
         self.llm_sidecar

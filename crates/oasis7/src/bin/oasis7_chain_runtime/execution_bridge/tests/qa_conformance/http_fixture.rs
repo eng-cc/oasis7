@@ -10,6 +10,8 @@ use std::{
 };
 #[path = "http_fixture_compensation_settle_gate.rs"]
 mod http_fixture_compensation_settle_gate;
+#[path = "http_fixture_feedback_ack_gate.rs"]
+mod http_fixture_feedback_ack_gate;
 #[path = "http_fixture_rejected_admit_gate.rs"]
 mod rejected_admit_gate;
 #[path = "http_fixture_wait_admit_gate.rs"]
@@ -25,6 +27,7 @@ const RESUME_VIEW_HOLD_BUDGET: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum GateDisposition {
+    FeedbackAckAbandoned,
     Continue,
     ResumeViewAbandoned,
     WaitAdmitViewAbandoned,
@@ -350,6 +353,7 @@ pub(super) fn record_submit_digest(bytes: &[u8], trace: &Arc<Mutex<Vec<String>>>
 #[derive(Default)]
 pub(super) struct WorldGate {
     pub(super) root: Mutex<Option<std::path::PathBuf>>,
+    feedback_ack_typed_trace: Mutex<Vec<serde_json::Value>>,
     coherence: Mutex<world_coherence_gate::CoherenceGateState>,
     rejected_resume: Mutex<rejected_resume_gate::RejectedResumeGate>,
     periodic_view_claimed: AtomicBool,
@@ -672,6 +676,10 @@ impl WorldGate {
     }
 
     pub(super) fn pause(&self, path: &str, bytes: &[u8]) -> GateDisposition {
+        self.observe_feedback_ack_typed_request(path, bytes);
+        if self.pause_feedback_ack_before(path, bytes) {
+            return GateDisposition::FeedbackAckAbandoned;
+        }
         let Some(root) = self.root.lock().unwrap().clone() else {
             return GateDisposition::Continue;
         };

@@ -89,52 +89,6 @@ impl RuntimeLlmSidecar {
         }
         validation
     }
-    pub(in crate::viewer::runtime_live) fn consume_hosted_provider_memory(
-        &mut self,
-        world: &RuntimeWorld,
-        pending: &lineage_persistence::PendingProviderServiceIntent,
-        receipt: &ProviderServiceCognitionReceipt,
-    ) -> Result<(), String> {
-        let agent = &pending.cognition.request.request_context.agent_subject;
-        let Some(restored) = self.provider_restored_service_checkpoints.get(agent) else {
-            return self.consume_provider_memory_after_receipt(
-                agent,
-                receipt.feedback.clone(),
-                &receipt.lineage,
-                &pending.cognition.memory_write_intents,
-            );
-        };
-        let validation = (|| {
-            if serde_json::to_value(restored).map_err(|error| error.to_string())?
-                != serde_json::to_value(pending).map_err(|error| error.to_string())?
-            {
-                return Err("restored original memory checkpoint changed; fenced".into());
-            }
-            validate_original_memory_checkpoint(world, pending)?;
-            validate_provider_service_receipt(pending, receipt)
-        })();
-        if let Err(error) = validation {
-            #[cfg(any(test, feature = "test_tier_required"))]
-            {
-                self.hosted_service_memory_failure = Some("restored_memory_checkpoint_invalid");
-            }
-            return Err(error);
-        }
-        let backup = self.provider_memory_store.clone();
-        crate::simulator::project_receipt_memory(
-            &pending.cognition.request.turn_context,
-            &receipt.feedback,
-            &receipt.lineage,
-            &pending.cognition.memory_write_intents,
-            &mut self.provider_memory_store,
-        )
-        .map_err(|error| error.to_string())?;
-        if let Err(error) = self.persist_provider_lineage() {
-            self.provider_memory_store = backup;
-            return Err(error);
-        }
-        Ok(())
-    }
 }
 #[cfg(any(test, feature = "test_tier_required"))]
 impl crate::viewer::ViewerRuntimeLiveServer {

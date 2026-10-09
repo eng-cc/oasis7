@@ -1,7 +1,6 @@
 //! Durable fresh admission. No transport or actor callback is performed by apply.
 use super::*;
 use crate::viewer::runtime_live::agent_service_io::*;
-use crate::world_service::client::WorldServicePort;
 use oasis7_client_api::world_service::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -14,6 +13,47 @@ pub(in crate::viewer::runtime_live) struct HostedAdmission {
     lease: Option<crate::runtime::CognitionLeaseV1>,
 }
 impl RuntimeLlmSidecar {
+    fn check_scoped_feedback_fresh_admission(
+        &mut self,
+        agent: &str,
+        session: &str,
+    ) -> Result<(), String> {
+        let view = self
+            .provider_service_projection
+            .as_ref()
+            .ok_or("authenticated feedback View missing")?;
+        let authority = view
+            .agent_context
+            .as_ref()
+            .ok_or("feedback Agent authority missing")?;
+        if authority.agent_id != agent
+            || authority
+                .capability_invocation_context
+                .presenter
+                .session_id
+                .as_deref()
+                != Some(session)
+        {
+            return Err("feedback View Agent/session authority mismatch".into());
+        }
+        let history = view
+            .feedback_history
+            .as_ref()
+            .ok_or("authenticated feedback history missing")?;
+        history.check_fresh_session(agent, session)?;
+        if let Some(runner) = self
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+        {
+            history.restore_preverified(agent, runner)?;
+            if runner.feedback_recovery_blocked(agent, session) {
+                return Err("live feedback verifier conflicts with canonical history".into());
+            }
+        }
+        Ok(())
+    }
+
     pub(in crate::viewer::runtime_live) fn install_resumed_hosted_admission(
         &mut self,
         context: ProviderContextState,
@@ -71,14 +111,9 @@ impl RuntimeLlmSidecar {
         &mut self,
     ) -> Result<(), String> {
         self.ensure_canonical_agent_durable_admission()?;
-        let metadata_identity = self
-            .fresh_provider_metadata_identity()?
-            .ok_or("fresh provider metadata is not ready")?;
-        let settings = provider_settings_from_env()?
-            .ok_or("fresh service admission requires configured provider")?;
         let view = self
             .provider_service_projection
-            .as_ref()
+            .clone()
             .ok_or("fresh signed view missing")?;
         let authority = view
             .agent_context
@@ -98,6 +133,12 @@ impl RuntimeLlmSidecar {
             .session_id
             .clone()
             .ok_or("fresh canonical session missing")?;
+        self.check_scoped_feedback_fresh_admission(&agent, &session)?;
+        let metadata_identity = self
+            .fresh_provider_metadata_identity()?
+            .ok_or("fresh provider metadata is not ready")?;
+        let settings = provider_settings_from_env()?
+            .ok_or("fresh service admission requires configured provider")?;
         let capability = ProviderCapabilityContext {
             catalog: authority.capability_catalog.clone(),
             invocation: authority.capability_invocation_context.clone(),
@@ -230,14 +271,18 @@ impl RuntimeLlmSidecar {
         else {
             return Ok(false);
         };
+        let context = admission.context;
+        let agent = context.request_context.agent_subject.clone();
+        self.check_scoped_feedback_fresh_admission(
+            &agent,
+            &context.request_context.agent_session_id,
+        )?;
         let Some(identity) = self.fresh_provider_metadata_identity()? else {
             return Ok(false);
         };
         if identity != admission.metadata_identity {
             return Err("fresh provider configuration changed; original admission fenced".into());
         };
-        let context = admission.context;
-        let agent = context.request_context.agent_subject.clone();
         let lease = admission.lease.ok_or("fresh reserved lease missing")?;
         lineage_generation_recovery::validate_provider_lease_identity(
             &agent,
@@ -337,7 +382,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 AgentServiceProgress::Idle
             });
         }
-        if let Some(admission) = self.llm_sidecar.hosted_admission.as_ref() {
+        if let Some(admission) = self.llm_sidecar.hosted_admission.clone() {
             if matches!(admission.stage.as_str(), "reserve" | "prefix") {
                 let request = &admission.context.request_context;
                 let phase = if admission.stage == "reserve" {
@@ -350,6 +395,10 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     .provider_scheduler_pending
                     .contains_key(&format!("{}:{phase}", request.provider_invocation_key()));
                 if !issued {
+                    self.llm_sidecar.check_scoped_feedback_fresh_admission(
+                        &request.agent_subject,
+                        &request.agent_session_id,
+                    )?;
                     if !eligible {
                         return Ok(AgentServiceProgress::Idle);
                     }
@@ -539,3 +588,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         Ok(AgentServiceProgress::Advanced)
     }
 }
+
+#[cfg(test)]
+#[path = "llm_sidecar_feedback_admission_tests.rs"]
+mod feedback_admission_tests;

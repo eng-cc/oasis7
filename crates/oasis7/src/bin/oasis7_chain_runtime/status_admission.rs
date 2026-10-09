@@ -34,6 +34,7 @@ impl Drop for Permit {
             if let Some(peer) = state.peers.get_mut(&self.peer) {
                 peer.active = peer.active.saturating_sub(1);
             }
+            pressure_witness(&state);
         }
     }
 }
@@ -66,11 +67,33 @@ impl Admission {
         peer.tokens -= 1.0;
         peer.active += 1;
         state.active += 1;
+        pressure_witness(&state);
         Ok(Permit {
             admission: self.clone(),
             peer: address,
         })
     }
+}
+
+// Opt-in operator evidence from actual permits; never changes admission decisions.
+fn pressure_witness(state: &State) {
+    #[cfg(test)]
+    if let Some(path) = std::env::var_os("PRE2_PRESSURE_WITNESS") {
+        let path = std::path::PathBuf::from(path);
+        let peers: BTreeMap<String, usize> = state
+            .peers
+            .iter()
+            .filter(|(_, peer)| peer.active > 0)
+            .map(|(ip, peer)| (ip.to_string(), peer.active))
+            .collect();
+        let bytes =
+            serde_json::to_vec(&serde_json::json!({"active":state.active,"peers":peers})).unwrap();
+        let temporary = path.with_extension("pending");
+        std::fs::write(&temporary, bytes).expect("actual admission witness write");
+        std::fs::rename(temporary, path).expect("actual admission witness publish");
+    }
+    #[cfg(not(test))]
+    let _ = state;
 }
 
 pub(super) fn write_bounded(

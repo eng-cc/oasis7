@@ -32,7 +32,19 @@ impl RuntimeLlmSidecar {
                     "native provider runner is unavailable for feedback recovery".to_string(),
                 ));
             };
-            if runner.needs_runtime_feedback_recovery()
+            if self.provider_service_required {
+                // A redacted local World is not canonical feedback history.
+                // Missing history leaves recovery uninitialized; fresh admission
+                // fails closed separately so issued cleanup can still progress.
+                if let Some(view) = self.provider_service_projection.as_ref()
+                    && let Some(authority) = view.agent_context.as_ref()
+                    && let Some(history) = view.feedback_history.as_ref()
+                {
+                    if let Err(message) = history.restore_preverified(&authority.agent_id, runner) {
+                        tracing::warn!(%message, "authenticated feedback recovery fenced");
+                    }
+                }
+            } else if runner.needs_runtime_feedback_recovery()
                 && let Err(message) = crate::viewer::runtime_live::llm_sidecar_feedback_recovery::
                     restore_agent_feedback_history(world, runner)
             {

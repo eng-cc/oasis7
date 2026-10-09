@@ -71,6 +71,16 @@ pub fn derive_correlation(
                 request.request_digest.clone(),
             )
         }
+        WorldServicePayloadV1::FeedbackAck(signed) => {
+            verify_read_request("feedback_ack", signed)?;
+            signed.request.validate()?;
+            (
+                signed.subject_public_key.clone(),
+                "feedback_ack",
+                "agent_feedback_ack",
+                signed.request.feedback_id.clone(),
+            )
+        }
         WorldServicePayloadV1::Delegation(signed) => {
             verify_read_request("delegation", signed)?;
             (

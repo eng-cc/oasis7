@@ -34,6 +34,8 @@ impl RuntimeLlmSidecar {
             provider_agent_ids: BTreeSet::new(),
             hosted_local_mock_test_lane: false,
             #[cfg(any(test, feature = "test_tier_required"))]
+            service_test_model_calls: Default::default(),
+            #[cfg(any(test, feature = "test_tier_required"))]
             service_test_actor_agents: BTreeSet::new(),
             provider_context_seq: BTreeMap::new(),
             provider_contexts: BTreeMap::new(),

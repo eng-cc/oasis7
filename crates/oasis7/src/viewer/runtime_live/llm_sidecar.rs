@@ -286,6 +286,11 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     provider_agent_ids: BTreeSet<String>,
     hosted_local_mock_test_lane: bool,
     #[cfg(any(test, feature = "test_tier_required"))]
+    service_test_model_calls: BTreeMap<
+        String,
+        std::sync::Arc<std::sync::Mutex<crate::simulator::MockDecisionProviderState>>,
+    >,
+    #[cfg(any(test, feature = "test_tier_required"))]
     service_test_actor_agents: BTreeSet<String>,
     provider_context_seq: BTreeMap<String, u64>,
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
@@ -403,6 +408,7 @@ impl RuntimeLlmSidecar {
         serde_json::json!({
             "pending_intent_count": self.provider_service_pending.len(),
             "native_runner_present": native_runner_present,
+            "native_model_call_count": self.service_test_model_calls.values().map(|state|state.lock().unwrap().recorded_requests.len()).sum::<usize>(),
             "hosted_service_phase": self.hosted_service_phase.as_ref().map(|phase| phase.test_phase_label()),
             "hosted_service_memory_failure": self.hosted_service_memory_failure,
             "pending_action_count": self.pending_actions.len(),
@@ -442,6 +448,7 @@ impl RuntimeLlmSidecar {
             "canonical-test-provider",
             vec![Ok(cognition.response.base_decision_response.clone())],
         );
+        let model_state = provider.shared_state();
         let behavior = crate::simulator::ProviderBackedAgentBehavior::new(
             agent_id.clone(),
             provider,
@@ -454,6 +461,8 @@ impl RuntimeLlmSidecar {
             _ => crate::simulator::AsyncAgentRunner::with_default_capacity(),
         };
         if !registered {
+            self.service_test_model_calls
+                .insert(agent_id.clone(), model_state);
             runner
                 .register(behavior)
                 .map_err(|error| format!("{error:?}"))?;
@@ -1128,3 +1137,6 @@ mod budget_tests;
 #[cfg(test)]
 #[path = "llm_sidecar_tests.rs"]
 mod tests;
+
+#[path = "llm_sidecar_service_feedback_ack.rs"]
+pub(in crate::viewer::runtime_live) mod service_feedback_ack;

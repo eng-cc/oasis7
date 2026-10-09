@@ -499,6 +499,10 @@ impl ViewerRuntimeLiveServer {
                 cognition,
                 signer,
                 authority,
+                self.llm_sidecar.correction_refs_for_decision(
+                    &cognition.request.request_context.agent_subject,
+                    &cognition.request.request_context.decision_request_id,
+                ),
             )
             .map_err(ProviderRuntimeActionCommitError::Message)?;
             let correlation = crate::world_service::derive_correlation(
@@ -511,6 +515,7 @@ impl ViewerRuntimeLiveServer {
                 payload,
                 cognition: cognition.clone(),
                 action: simulator_action,
+                feedback_ack: None,
             };
             self.llm_sidecar
                 .provider_service_pending
@@ -673,6 +678,20 @@ pub(in crate::viewer::runtime_live) struct ProviderServiceCognitionReceipt {
     pub(in crate::viewer::runtime_live) commit_record: crate::runtime::WorldCommitRecordV1,
     pub(in crate::viewer::runtime_live) lineage: crate::runtime::RuntimeReceiptLineageV1,
     pub(in crate::viewer::runtime_live) feedback: crate::simulator::FeedbackEnvelopeV1,
+    #[serde(default)]
+    pub(in crate::viewer::runtime_live) raw_feedback: serde_json::Value,
+}
+pub(in crate::viewer::runtime_live) fn decode_provider_service_receipt(
+    value: serde_json::Value,
+) -> Result<ProviderServiceCognitionReceipt, String> {
+    let raw = value
+        .get("feedback")
+        .cloned()
+        .ok_or("canonical feedback payload missing")?;
+    let mut receipt: ProviderServiceCognitionReceipt =
+        serde_json::from_value(value).map_err(|e| e.to_string())?;
+    receipt.raw_feedback = raw;
+    Ok(receipt)
 }
 
 pub(in crate::viewer::runtime_live) fn validate_provider_service_receipt(
@@ -815,6 +834,7 @@ fn provider_service_cognition_payload(
     cognition: &RuntimeProviderActionContext,
     signer: &crate::world_service::client::WorldServiceAgentSignerConfig,
     authority: &crate::world_service::projection::WorldServiceAgentContext,
+    correction_refs: Vec<String>,
 ) -> Result<crate::world_service::WorldServicePayloadV1, String> {
     let (mut request, response_artifact) = provider_cognition_commit_inputs(world, cognition)?;
     if authority.agent_id != request.agent_id {
@@ -822,11 +842,32 @@ fn provider_service_cognition_payload(
     }
     request.capability_snapshot_hash = authority.capability_snapshot_hash.clone();
     request.authority_context_hash = authority.authority_context_hash.clone();
+    let explanation = cognition
+        .response
+        .base_decision_response
+        .public_agency_explanation();
+    let causal_proposal = crate::world_service::CognitionCausalProposalV1 {
+        expected_consequence: serde_json::json!({"status": explanation.status, "provenance": explanation.provenance, "prediction": explanation.expected_consequence}),
+        stakes: serde_json::json!({"provenance": "agent_explanation_unverified", "summary": explanation.stakes}),
+        alternative: serde_json::json!({"provenance": "agent_explanation_unverified", "alternatives": explanation.alternatives}),
+        evidence_refs: vec![
+            request.observation_digest.clone(),
+            cognition
+                .request
+                .request_context
+                .memory_snapshot_digest
+                .to_string(),
+        ],
+        correction_refs,
+        reason: explanation.reason,
+        dissent: explanation.dissent,
+    };
     let intent = crate::world_service::CognitionIntentV1 {
         request,
         action: runtime_action.clone(),
         response_artifact,
         delegation_generation: signer.delegation_generation,
+        causal_proposal: Some(causal_proposal),
     };
     let signed = crate::world_service::authority::sign_read_request(
         "cognition",

@@ -10,6 +10,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const PLAYER_ID: &str = "agency-owner";
 
+#[path = "agent_memory_correction_control_service_mode.rs"]
+mod service_mode;
+
 fn owner_server(seed: u8) -> (ViewerRuntimeLiveServer, String, String, String) {
     owner_server_with_config(
         seed,

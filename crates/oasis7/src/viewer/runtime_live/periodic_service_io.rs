@@ -17,6 +17,8 @@ type Pending = Vec<(RequestCorrelation, WorldServicePayloadV1)>;
 pub(super) struct Executor {
     sender: SyncSender<Job>,
     outstanding: Arc<AtomicUsize>,
+    #[cfg(any(test, feature = "test_tier_required"))]
+    worker: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 struct Permit(Arc<AtomicUsize>);
@@ -63,7 +65,7 @@ struct Completion {
 impl Executor {
     fn new() -> std::io::Result<Arc<Self>> {
         let (sender, receiver) = mpsc::sync_channel::<Job>(1);
-        std::thread::Builder::new()
+        let worker = std::thread::Builder::new()
             .name("viewer-periodic-service".into())
             .spawn(move || {
                 // The worker owns no server/Sidecar Arc. Closing the server's
@@ -84,9 +86,13 @@ impl Executor {
                     });
                 }
             })?;
+        #[cfg(not(any(test, feature = "test_tier_required")))]
+        drop(worker);
         Ok(Arc::new(Self {
             sender,
             outstanding: Arc::new(AtomicUsize::new(0)),
+            #[cfg(any(test, feature = "test_tier_required"))]
+            worker: Mutex::new(Some(worker)),
         }))
     }
 }
@@ -365,3 +371,7 @@ impl SelfFeedback {
         )
     }
 }
+
+#[cfg(any(test, feature = "test_tier_required"))]
+#[path = "periodic_service_io_test_drive.rs"]
+mod test_drive;

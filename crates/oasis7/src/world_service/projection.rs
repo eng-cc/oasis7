@@ -2,9 +2,13 @@
 use crate::runtime::{World, WorldEvent, WorldState};
 use crate::simulator::RuntimeBindingV1;
 use serde::{Deserialize, Serialize};
+mod feedback_history;
+pub use feedback_history::{WorldServiceFeedbackHistory, WorldServiceFeedbackReplayRecord};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorldServiceProjection {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_history: Option<WorldServiceFeedbackHistory>,
     pub state: WorldState,
     pub events: Vec<WorldEvent>,
     pub runtime_binding: Option<RuntimeBindingV1>,
@@ -87,6 +91,9 @@ impl WorldServiceProjection {
         // Generic journals may contain private cognition/prompt artifacts.
         // Authorized committed changes are delivered by the changes route.
         Ok(Self {
+            feedback_history: authorized_agent
+                .map(|agent| WorldServiceFeedbackHistory::from_world(world, agent))
+                .transpose()?,
             state,
             events: Vec::new(),
             runtime_binding: world.current_cognition_runtime_binding().ok(),

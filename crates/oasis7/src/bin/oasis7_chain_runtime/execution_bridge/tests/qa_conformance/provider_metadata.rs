@@ -6,10 +6,42 @@ pub(super) type DecisionObservation =
 pub(super) struct MetadataServer {
     pub(super) endpoint: String,
     pub(super) decision_count: Arc<std::sync::atomic::AtomicUsize>,
+    pub(super) feedback_payloads: Arc<Mutex<Vec<serde_json::Value>>>,
     stop: Arc<AtomicBool>,
     worker: Option<thread::JoinHandle<()>>,
 }
 impl MetadataServer {
+    pub(super) fn assert_canonical_feedback_delivery(&self, fixture: &Fixture, required: bool) {
+        let delivered = self.feedback_payloads.lock().unwrap();
+        if !required {
+            assert!(
+                delivered.is_empty(),
+                "missing runner must not deliver feedback"
+            );
+            return;
+        }
+        assert!(
+            !delivered.is_empty(),
+            "actual provider feedback delivery required"
+        );
+        let driver = fixture.driver.lock().unwrap();
+        let records = driver.execution_world.runtime_feedback_outbox().unwrap();
+        for raw in delivered.iter() {
+            let record = records
+                .iter()
+                .find(|r| r.payload == *raw)
+                .expect("provider must receive exact full canonical Node feedback");
+            record.validate().unwrap();
+        }
+        assert!(
+            delivered.iter().all(|raw| raw == &delivered[0]),
+            "recovery delivery must retain exact original payload"
+        );
+        println!(
+            "actual_provider_feedback_delivery_count={} exact_canonical_payload=true",
+            delivered.len()
+        );
+    }
     pub(super) fn start(
         gates: Option<std::path::PathBuf>,
         accounting_root: std::path::PathBuf,
@@ -22,6 +54,8 @@ impl MetadataServer {
         let stopped = stop.clone();
         let decision_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let decisions = decision_count.clone();
+        let feedback_payloads = Arc::new(Mutex::new(Vec::new()));
+        let feedbacks = feedback_payloads.clone();
         let worker = thread::spawn(move || {
             let mut preflight_reset = false;
             while !stopped.load(Ordering::SeqCst) {
@@ -158,6 +192,24 @@ impl MetadataServer {
                             };
                             decisions.fetch_add(1, Ordering::SeqCst);
                             (200, serde_json::to_string(&response).unwrap())
+                        } else if first.starts_with("POST /v1/world-simulator/feedback-context ") {
+                            let boundary =
+                                bytes.windows(4).position(|w| w == b"\r\n\r\n").unwrap() + 4;
+                            let raw: serde_json::Value =
+                                serde_json::from_slice(&bytes[boundary..]).unwrap();
+                            let feedback: oasis7::simulator::FeedbackEnvelopeV1 =
+                                serde_json::from_value(raw.clone()).unwrap();
+                            assert_eq!(feedback.provenance, "runtime_authoritative");
+                            assert!(feedback.feedback_seq > 0);
+                            assert!(!feedback.feedback_id.is_empty());
+                            assert!(matches!(
+                                feedback.status.as_str(),
+                                "committed" | "rejected" | "failed" | "pending"
+                            ));
+                            // Retain all Runtime projection extensions. The parent
+                            // verifies these bytes against the actual Node outbox.
+                            feedbacks.lock().unwrap().push(raw);
+                            (200, r#"{"ok":true}"#.to_string())
                         } else {
                             (status, static_body.to_string())
                         };
@@ -206,6 +258,7 @@ impl MetadataServer {
         Self {
             endpoint,
             decision_count,
+            feedback_payloads,
             stop,
             worker: Some(worker),
         }

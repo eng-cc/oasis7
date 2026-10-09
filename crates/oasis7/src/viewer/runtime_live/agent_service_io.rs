@@ -26,6 +26,10 @@ pub(super) enum AgentServiceIoOperation {
         original: WorldServicePayloadV1,
     },
     View(ReadWorldViewRequest),
+    Feedback {
+        client: crate::simulator::ProviderLoopbackHttpClient,
+        payload: Value,
+    },
     Metadata(crate::simulator::ProviderLoopbackHttpClient),
 }
 pub(super) struct AgentServiceIoJob {
@@ -37,6 +41,7 @@ pub(super) enum AgentServiceIoResponse {
     Submit(SubmitObservation<Value>),
     Intent(IntentResponse<Value>),
     View(VerifiedWorldView),
+    Feedback,
     Metadata(
         crate::simulator::ProviderInfo,
         crate::simulator::ProviderHealth,
@@ -49,6 +54,16 @@ pub(super) struct AgentServiceIoResult {
 impl AgentServiceIoJob {
     pub(super) fn execute(self) -> AgentServiceIoResult {
         let response = match self.operation {
+            AgentServiceIoOperation::Feedback { client, payload } => client
+                .submit_feedback_context_payload(&payload)
+                .map_err(|e| e.to_string())
+                .and_then(|ack| {
+                    if ack.ok {
+                        Ok(AgentServiceIoResponse::Feedback)
+                    } else {
+                        Err("provider rejected canonical feedback".into())
+                    }
+                }),
             AgentServiceIoOperation::Metadata(client) => client
                 .provider_info()
                 .and_then(|info| client.provider_health().map(|health| (info, health)))
@@ -66,7 +81,8 @@ impl AgentServiceIoJob {
                     AgentServiceIoOperation::View(request) => {
                         client.read_view(request).map(AgentServiceIoResponse::View)
                     }
-                    AgentServiceIoOperation::Metadata(_) => unreachable!(),
+                    AgentServiceIoOperation::Metadata(_)
+                    | AgentServiceIoOperation::Feedback { .. } => unreachable!(),
                 }
                 .map_err(|error| error.to_string()),
             },

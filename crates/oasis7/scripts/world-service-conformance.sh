@@ -19,7 +19,7 @@ snapshot={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in pa
 (pathlib.Path(sys.argv[1])/'source-before.json').write_text(json.dumps(snapshot,indent=2)+'\n')
 PY_SOURCE
 # Same worktree target/cache; preserve Cargo serialization arranged by the coordinator.
-rtk proxy env -u RUSTC_WRAPPER cargo build -p oasis7 --bin oasis7_viewer_live --no-default-features --features node-libp2p,test_tier_required --message-format=json > "$artifact_dir/viewer-build.jsonl" 2> "$artifact_dir/viewer-build.log"
+rtk proxy ./scripts/cargo-dev.sh build -p oasis7 --bin oasis7_viewer_live --no-default-features --features node-libp2p,test_tier_required --message-format=json > "$artifact_dir/viewer-build.jsonl" 2> "$artifact_dir/viewer-build.log"
 viewer_binary="$(rtk proxy python3 - "$artifact_dir/viewer-build.jsonl" <<'PY_BINARY'
 import json,pathlib,sys
 executables=[v['executable'] for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if (v:=json.loads(line)).get('reason')=='compiler-artifact' and v.get('target',{}).get('name')=='oasis7_viewer_live' and v.get('executable')]
@@ -29,7 +29,7 @@ PY_BINARY
 )"
 export PRE2_VIEWER_BINARY="$viewer_binary"
 set +e
-rtk proxy env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,test_tier_required qa_conformance:: -- --test-threads=1 --nocapture > "$artifact_dir/conformance.log" 2>&1
+rtk proxy ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,test_tier_required qa_conformance:: -- --test-threads=1 --nocapture > "$artifact_dir/conformance.log" 2>&1
 result=$?
 set -e
 rtk proxy python3 - "$artifact_dir" "$result" <<'PY_REPORT'
@@ -52,6 +52,7 @@ expected += ['real_tcp_hosted_wait_admit_rejection_compensates_original_charged_
 expected += ['real_tcp_hosted_resume_rejection_compensates_original_selected_wake','real_tcp_hosted_rejected_resume_rejection_cleanup_write_failure_restores_runtime_and_sidecar','real_tcp_hosted_rejected_resume_cleanup_crash_recovers_original_identity','real_tcp_hosted_final_wait_budget_consumes_once_without_new_model_or_lease']
 expected += ['real_tcp_hosted_final_budget_cleanup_write_failure_restores_runtime_and_sidecar','real_tcp_hosted_final_budget_cleanup_crash_recovers_original_consume']
 expected += ['real_tcp_full_node_server_restart_restores_stale_same_height_cache']
+expected += ['real_tcp_periodic_late_completion_fences_session_cursor_and_original_pending_payload', 'real_tcp_private_memory_ack_pre_submit_crash_replays_original_only', 'real_tcp_private_memory_ack_committed_response_loss_restart_and_content_tamper', 'real_tcp_private_memory_ack_missing_native_runner_cannot_ack', 'real_tcp_private_memory_ack_write_failure_restores_native_and_sidecar_ledgers']
 observed=all(re.search(r'test [^\n]*::'+re.escape(name)+r' \.\.\.(?!\s*ignored)',log) for name in expected)
 viewer_proof=all(marker in log for marker in ['PRE2_SHIPPED_VIEWER_TRANSPORT_OUTAGE_RECOVERY_PASSED','PRE2_SHIPPED_VIEWER_LOST_ACK_ORIGINAL_LOOKUP_PASSED','PRE2_SHIPPED_VIEWER_INITIAL_PERIODIC_CONTROLS_RECONNECT_PASSED','PRE2_SHIPPED_VIEWER_SIGNED_COLLECT_DATA_HANDLER_PASSED','PRE2_SHIPPED_VIEWER_TRUST_WORLD_SCOPE_FAIL_CLOSED_PASSED'])
 proof=all(marker in log for marker in ["PRE2_NATIVE_MEMORY_THREE_PROCESS_TAMPERS_REJECTED","PRE2_NATIVE_MEMORY_PROCESS_RECOVERY_PASSED","PRE2_RELEASE_LOST_ACK_ORIGINAL_LOOKUP_RECOVERY_PASSED","PRE2_FIXED_RECORD_FAILURE_PRIVACY_PASSED","PRE2_LEGACY_STATUS_GAMEPLAY_AUTH_BYTES_PASSED","PRE2_HOSTED_NATIVE_PROVIDER_CANONICAL_RECEIPT_PASSED","PRE2_HOSTED_SLOW_METADATA_SECOND_VIEWER_PASSED","PRE2_DISTINCT_LEGACY_CODECS_NEW_SERVICE_REJECTED"]) and viewer_proof and "PRE2_STRICT_HTTP_GUARANTEE_DEFAULT_OPAQUE_PASSED" in log and "PRE2_CROSS_SUBJECT_LOOKUP_CURSOR_DENIAL_PASSED" in log and "PRE2_WORLD_IDENTITY_GENESIS_FENCE_PASSED" in log and "PRE2_CANONICAL_RESUME_RECEIPT_SUCCESSOR_ASSOCIATION_PASSED" in log and "PRE2_DISPOSABLE_CACHE_EVICTION_CANONICAL_RESULT_PASSED" in log and "PRE2_FIXED_PROJECTION_PUBLICATION_PIN_PASSED" in log and "PRE2_PRODUCTION_LISTENER_PRESSURE_DEADLINE_RECOVERY_PASSED" in log and "PRE2_APPLICATION_RESOURCE_DRIFT_WAKE_REJECTED" in log and "PRE2_SAME_ARTIFACT_ENDPOINT_SWITCH_PASSED" in log and "PRE2_APPLICATION_GENUINE_WAIT_RESUME_ACT_PASSED" in log and "PRE2_APPLICATION_OS_DENIAL_AND_FIVE_OPS_PASSED signed_gameplay=true signed_cognition=true" in log and artifact is not None and "PRE2_APPLICATION_PROVIDER_ENQUEUE_RECEIPT_SETTLEMENT_MEMORY_PASSED" in log and "PRE2_FULL_NODE_SERVER_PROCESS_RESTART_PASSED" in log

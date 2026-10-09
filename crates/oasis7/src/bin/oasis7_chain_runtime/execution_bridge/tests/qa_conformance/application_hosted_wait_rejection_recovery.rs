@@ -144,6 +144,7 @@ pub(super) fn assert_original_terminal(fixture: &Fixture, root: &Path) {
         "canonical_wait_admission_rejected"
     );
     assert!(terminal["feedback_id"].is_null());
+    assert_eq!(terminal.get("feedback"), Some(&serde_json::Value::Null));
     assert!(checkpoint["hosted_wait"].is_null());
     let memory = &checkpoint["provider_memory_store"];
     assert!(

@@ -817,6 +817,23 @@ impl RuntimeLlmSidecar {
         }
     }
 
+    pub(in crate::viewer::runtime_live) fn service_feedback_is_builtin(&self) -> bool {
+        matches!(self.runner, Some(RuntimeDecisionRunner::Builtin(_)))
+    }
+    pub(in crate::viewer::runtime_live) fn service_feedback_transport(
+        &self,
+    ) -> Result<ProviderLoopbackHttpClient, String> {
+        let settings = provider_settings_from_env()?
+            .ok_or("provider settings missing for feedback delivery")?;
+        ProviderLoopbackHttpClient::new_with_transport(
+            &settings.base_url,
+            settings.auth_token.as_deref(),
+            settings.connect_timeout_ms,
+            &settings.provider_transport,
+        )
+        .map_err(|e| e.to_string())
+    }
+
     /// Deliver the Runtime-committed feedback through the same provider
     /// transport used for decisions. The receipt lineage has already been
     /// read back and verified by Runtime before this method is called.

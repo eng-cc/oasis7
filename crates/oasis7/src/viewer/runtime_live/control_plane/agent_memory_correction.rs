@@ -26,6 +26,21 @@ impl ViewerRuntimeLiveServer {
         request: AgencyControlRequest,
     ) -> AgencyControlResponse {
         let request_id = request.request_id.as_str();
+        if self.chain_link_enabled()
+            && matches!(
+                &request.command,
+                AgencyControlOperation::InstallDelegation { .. }
+                    | AgencyControlOperation::RevokeDelegation { .. }
+                    | AgencyControlOperation::OverridePendingIntent { .. }
+                    | AgencyControlOperation::InterruptPendingIntent { .. }
+            )
+        {
+            return agency_error(
+                request_id,
+                "canonical_agency_control_unavailable",
+                "world service has no registered canonical owner-control capability",
+            );
+        }
         if request.frame_type != super::super::agency_control::AGENCY_CONTROL_REQUEST_TYPE
             || request_id.trim().is_empty()
             || request_id.len() > 256

@@ -47,6 +47,9 @@ pub(in crate::viewer::runtime_live) struct PendingProviderServiceIntent {
     pub(in crate::viewer::runtime_live) payload: crate::world_service::wire::WorldServicePayloadV1,
     pub(in crate::viewer::runtime_live) cognition: RuntimeProviderActionContext,
     pub(in crate::viewer::runtime_live) action: SimulatorAction,
+    #[serde(default)]
+    pub(in crate::viewer::runtime_live) feedback_ack:
+        Option<crate::viewer::runtime_live::control_plane::llm_sidecar::service_feedback_ack::PendingFeedbackAck>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -100,6 +103,9 @@ pub(super) fn decode_provider_lineage_checkpoint(
         else {
             return Err("pending canonical Agent intent is not cognition".into());
         };
+        if let Some(ack) = &pending.feedback_ack {
+            ack.validate_memory(pending, &checkpoint.provider_memory_store)?;
+        }
         let request = &pending.cognition.request.request_context;
         let response = &pending.cognition.response;
         let identity = response.response_artifact_identity();

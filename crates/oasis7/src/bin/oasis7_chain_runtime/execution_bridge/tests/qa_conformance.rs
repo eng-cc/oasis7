@@ -3,15 +3,17 @@ use super::*;
 mod application_admission;
 mod application_admission_boundaries;
 mod application_fairness;
+mod application_feedback_ack_recovery;
+mod application_feedback_ack_write_failure;
 mod application_fresh;
 mod application_harness;
 mod application_hosted;
 mod application_hosted_final_budget;
-mod application_hosted_final_budget_write_failure;
 mod application_hosted_final_budget_recovery;
+mod application_hosted_final_budget_write_failure;
 mod application_hosted_resume_rejection;
-mod application_hosted_resume_rejection_write_failure;
 mod application_hosted_resume_rejection_recovery;
+mod application_hosted_resume_rejection_write_failure;
 mod application_hosted_resume_write_failure;
 mod application_hosted_wait;
 mod application_hosted_wait_capture_crash;
@@ -45,6 +47,7 @@ mod publication_pin;
 mod response_privacy;
 mod strict_http;
 mod topology_no_mount;
+mod topology_pressure;
 mod viewer_process;
 use oasis7::runtime::{Action, WorldState};
 use oasis7::world_service::client::{
@@ -328,7 +331,8 @@ impl Fixture {
                 let path = parts.next().unwrap();
                 if matches!(
                     worker_gate.pause(path, &bytes),
-                    http_fixture::GateDisposition::ResumeViewAbandoned
+                    http_fixture::GateDisposition::FeedbackAckAbandoned
+                        | http_fixture::GateDisposition::ResumeViewAbandoned
                         | http_fixture::GateDisposition::WaitAdmitViewAbandoned
                         | http_fixture::GateDisposition::CompensationSettleViewAbandoned
                 ) {
@@ -349,8 +353,9 @@ impl Fixture {
                     stream.shutdown(std::net::Shutdown::Write).unwrap();
                 }
                 let tamper = path == DESCRIBE_PATH && worker_tamper.swap(false, Ordering::SeqCst);
+                let capture_ack = worker_gate.capture_feedback_ack_response(path, &bytes);
                 let mut capture_peer = None;
-                let mut output_stream = if tamper {
+                let mut output_stream = if tamper || capture_ack {
                     let capture = TcpListener::bind("127.0.0.1:0").unwrap();
                     capture_peer = Some(TcpStream::connect(capture.local_addr().unwrap()).unwrap());
                     capture.accept().unwrap().0
@@ -380,21 +385,29 @@ impl Fixture {
                 if let Some(mut peer) = capture_peer {
                     let mut response = Vec::new();
                     peer.read_to_end(&mut response).unwrap();
-                    let offset = response
-                        .windows(4)
-                        .position(|window| window == b"\r\n\r\n")
-                        .unwrap()
-                        + 4;
-                    let mut body: serde_json::Value =
-                        serde_json::from_slice(&response[offset..]).unwrap();
-                    body["signature_hex"] = serde_json::json!("00".repeat(64));
-                    crate::write_json_response(
-                        &mut stream,
-                        200,
-                        &serde_json::to_vec(&body).unwrap(),
-                        false,
-                    )
-                    .unwrap();
+                    if tamper {
+                        let offset = response
+                            .windows(4)
+                            .position(|window| window == b"\r\n\r\n")
+                            .unwrap()
+                            + 4;
+                        let mut body: serde_json::Value =
+                            serde_json::from_slice(&response[offset..]).unwrap();
+                        body["signature_hex"] = serde_json::json!("00".repeat(64));
+                        crate::write_json_response(
+                            &mut stream,
+                            200,
+                            &serde_json::to_vec(&body).unwrap(),
+                            false,
+                        )
+                        .unwrap();
+                    } else {
+                        assert!(capture_ack);
+                        assert!(
+                            !response.is_empty(),
+                            "actual ACK dispatcher response captured"
+                        );
+                    }
                 }
                 if path == SUBMIT_PATH && worker_controlled.load(Ordering::SeqCst) {
                     let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
@@ -402,6 +415,9 @@ impl Fixture {
                     let mut driver = worker_driver.lock().unwrap();
                     let height = driver.state.last_applied_committed_height + 1;
                     commit_request(&mut driver, height, Some(request));
+                }
+                if capture_ack {
+                    worker_gate.hold_feedback_ack_after_commit(path, &bytes);
                 }
             });
             http_fixture::serve_listener(
@@ -743,55 +759,12 @@ fn commit_request(
         })
         .unwrap();
 }
+#[path = "qa_conformance/agent_cognition_ack.rs"]
+mod agent_cognition_ack;
+
 #[test]
 fn real_tcp_controlled_agent_cognition_receipt_and_read() {
-    let fixture = Fixture::with_controlled_commits(true);
-    fixture.client.describe().unwrap();
-    let registration = fixture.delegation();
-    fixture.client.submit(registration.clone()).unwrap();
-    commit_request(
-        &mut fixture.driver.lock().unwrap(),
-        2,
-        Some(registration.clone()),
-    );
-    fixture.committed(&registration);
-    let original = cognition_request(&fixture);
-    fixture.client.submit(original.clone()).unwrap();
-    commit_request(
-        &mut fixture.driver.lock().unwrap(),
-        3,
-        Some(original.clone()),
-    );
-    let commit = fixture.committed(&original);
-    let outcome = fixture
-        .client
-        .lookup(
-            LookupIntentRequest {
-                contract_version: 1,
-                key: original.correlation.key.clone(),
-            },
-            original.signed_payload.clone(),
-        )
-        .unwrap();
-    let IntentOutcome::Committed { receipt, .. } = outcome.outcome else {
-        panic!("missing cognition receipt")
-    };
-    assert!(receipt.get("commit_record").is_some());
-    assert!(receipt.get("lineage").is_some());
-    assert!(receipt.get("feedback").is_some());
-    let view = fixture
-        .client
-        .read_view(fixture.view(Some(commit)))
-        .unwrap();
-    fixture
-        .client
-        .read_changes(ReadWorldChangesRequest {
-            contract_version: 1,
-            cursor: view.continuation().clone(),
-            max_items: 32,
-            max_bytes: 65_536,
-        })
-        .unwrap();
+    agent_cognition_ack::run();
 }
 
 fn cognition_request(fixture: &Fixture) -> SubmitIntentRequest<WorldServicePayloadV1> {
@@ -846,6 +819,15 @@ fn cognition_request(fixture: &Fixture) -> SubmitIntentRequest<WorldServicePaylo
                 },
                 response_artifact,
                 delegation_generation: 1,
+                causal_proposal: Some(CognitionCausalProposalV1 {
+                    expected_consequence: serde_json::json!({"provenance":"agent_explanation_unverified", "prediction":"reach destination"}),
+                    stakes: serde_json::json!({"provenance":"agent_explanation_unverified", "summary":"travel cost"}),
+                    alternative: serde_json::json!({"provenance":"agent_explanation_unverified", "alternatives":["wait"]}),
+                    reason: Some("move towards goal".into()),
+                    evidence_refs: vec![digest("observation"), digest("memory")],
+                    correction_refs: vec!["correction:qa-public".into()],
+                    dissent: Some("waiting is safer".into()),
+                }),
             },
             &hex::encode([8u8; 32]),
         )
@@ -940,3 +922,5 @@ fn real_tcp_live_writer_lock_excludes_second_writer() {
     fixture.client.describe().unwrap();
     let _held = &fixture.writer_lock;
 }
+
+mod application_periodic_late_completion;

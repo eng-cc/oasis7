@@ -1,7 +1,7 @@
 use super::*;
 
 use super::super::auth::{
-    VerifiedPlayerAuth, verify_collect_data_auth_proof, verify_gameplay_action_auth_proof,
+    VerifiedPlayerAuth, verify_gameplay_action_auth_proof,
     verify_product_validation_quote_auth_proof, verify_refine_quote_auth_proof,
 };
 use super::super::gameplay_actions::{
@@ -16,23 +16,23 @@ use super::super::gameplay_actions::{
     build_runtime_action_from_gameplay_request, gameplay_action_requires_actor_agent,
 };
 use super::super::protocol::{
-    CollectDataCommand, CollectDataPreflight, GameplayActionAck, GameplayActionError,
-    GameplayActionRequest, ProductValidationQuotePreflight, ProductValidationQuoteRequest,
-    RefineQuotePreflight, RefineQuoteRequest,
+    CollectDataPreflight, GameplayActionAck, GameplayActionError, GameplayActionRequest,
+    ProductValidationQuotePreflight, ProductValidationQuoteRequest, RefineQuotePreflight,
+    RefineQuoteRequest,
 };
 use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
     map_auth_verify_error_code, normalize_optional_public_key,
 };
 use crate::runtime::{
-    Action as RuntimeAction, IndustryStage, StarterIndustrialFeasibilityResult,
-    StarterIndustrialFeasibilityStatus, WorldState,
+    IndustryStage, StarterIndustrialFeasibilityResult, StarterIndustrialFeasibilityStatus,
+    WorldState,
 };
 use crate::simulator::persist::{
     PlayerStarterIndustrialFeasibility, PlayerStarterIndustrialFeasibilityStatus,
 };
 use crate::simulator::{
-    PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind, ResourceOwner, WorldKernel,
+    PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceOwner, WorldKernel,
 };
 use oasis7_wasm_abi::MaterialStack;
 

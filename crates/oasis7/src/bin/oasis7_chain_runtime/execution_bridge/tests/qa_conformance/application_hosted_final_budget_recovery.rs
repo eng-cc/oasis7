@@ -54,6 +54,7 @@ pub(super) fn assert_original_terminal(fixture: &Fixture, root: &Path) {
     let terminal = &checkpoint["provider_terminal_states"]["agent-a"];
     assert_eq!(terminal["status"], "completed");
     assert!(terminal["feedback_id"].is_null());
+    assert_eq!(terminal.get("feedback"), Some(&serde_json::Value::Null));
     assert!(terminal["reject_reason"].is_null());
     for field in [
         "agent_session_id",

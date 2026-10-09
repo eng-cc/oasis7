@@ -85,12 +85,104 @@ impl World {
         Ok(())
     }
 
+    pub fn apply_authenticated_feedback_ack(
+        &mut self,
+        signed: SignedReadRequest<crate::world_service::FeedbackAckIntentV1>,
+    ) -> Result<serde_json::Value, String> {
+        agent_authority::validate_feedback_ack(self, &signed)?;
+        let ack = signed.request;
+        let record = self
+            .runtime_feedback_outbox()
+            .map_err(|e| format!("{e:?}"))?
+            .into_iter()
+            .find(|r| r.feedback_id == ack.feedback_id)
+            .ok_or("canonical feedback acknowledgement record missing")?;
+        // Native claim/ack events are published in one candidate transaction;
+        // never assign delivery state on a caller's sanitized projection.
+        let mut transaction = self.clone();
+        if record.state != "acked" {
+            transaction
+                .claim_runtime_feedback(&ack.feedback_id)
+                .map_err(|e| format!("{e:?}"))?;
+            transaction
+                .ack_runtime_feedback(&ack.feedback_id)
+                .map_err(|e| format!("{e:?}"))?;
+        }
+        *self = transaction;
+        Ok(serde_json::json!({"acknowledged": ack, "delivery_state": "acked"}))
+    }
+
     pub fn commit_authenticated_cognition(
         &mut self,
         signed: SignedReadRequest<CognitionIntentV1>,
     ) -> Result<serde_json::Value, String> {
         agent_authority::validate_cognition(self, &signed)?;
         let intent = signed.request;
+        // The outer service correlation already binds the signed payload. This
+        // additional canonical fence prevents a differently signed explanation
+        // from reusing a cognition decision whose request digest predates it.
+        let identity = serde_json::json!([
+            intent.request.agent_id,
+            intent.request.agent_session_id,
+            intent.request.agent_turn_id,
+            intent.request.decision_request_id,
+            intent.request.request_digest,
+        ]);
+        let key = identity.to_string();
+        let proposal = serde_json::to_value(&intent.causal_proposal).map_err(|e| e.to_string())?;
+        let stored = self
+            .cognition
+            .get("service_causal_proposals")
+            .and_then(|map| map.get(&key));
+        if stored.is_some_and(|old| old != &proposal) {
+            return Err("canonical cognition causal proposal idempotency conflict".into());
+        }
+        let committed = self
+            .cognition
+            .get("commit_records")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|records| {
+                records.iter().any(|record| {
+                    record.get("agent_id") == Some(&identity[0])
+                        && record.get("agent_session_id") == Some(&identity[1])
+                        && record.get("agent_turn_id") == Some(&identity[2])
+                        && record.get("decision_request_id") == Some(&identity[3])
+                        && record.get("request_digest") == Some(&identity[4])
+                        && record.get("status").and_then(serde_json::Value::as_str)
+                            == Some("committed")
+                })
+            });
+        // A legacy commit has no signed causal proposal. It cannot be upgraded
+        // retroactively by a replay that introduces a new explanation.
+        if committed && stored.is_none() && intent.causal_proposal.is_some() {
+            return Err("canonical cognition causal proposal missing for prior commit".into());
+        }
+        if !committed {
+            let mut context = crate::runtime::AgentDecisionCausalContextV1::default();
+            if let Some(public) = &intent.causal_proposal {
+                context.expected_consequence = public.expected_consequence.clone();
+                context.stakes = public.stakes.clone();
+                context.alternative = public.alternative.clone();
+                context.reason = public.reason.clone();
+                context.evidence_refs = public.evidence_refs.clone();
+                context.correction_refs = public.correction_refs.clone();
+                context.dissent = public.dissent.clone();
+            }
+            context.intent_id = self
+                .state()
+                .agents
+                .get(&intent.request.agent_id)
+                .and_then(|agent| agent.intent.as_ref())
+                .filter(|intent| matches!(intent.status.as_str(), "accepted" | "blocked"))
+                .map(|intent| intent.intent_id.clone());
+            self.bind_agent_causal_decision(
+                &intent.request.decision_request_id,
+                &intent.request.agent_id,
+                &intent.action,
+                context,
+            )
+            .map_err(|e| format!("{e:?}"))?;
+        }
         let (record, lineage) = self
             .commit_cognition_action(intent.request, intent.action, intent.response_artifact)
             .map_err(|e| format!("{e:?}"))?;
@@ -125,6 +217,18 @@ impl World {
             )
             .map_err(|e| format!("{e:?}"))?;
         feedback.validate().map_err(|e| e.to_string())?;
+        // This is persisted in the same canonical candidate as the delegation
+        // decision, cognition receipt and feedback; rejected candidates vanish.
+        let object = self
+            .cognition
+            .as_object_mut()
+            .ok_or("canonical cognition projection invalid")?;
+        let proposals = object
+            .entry("service_causal_proposals")
+            .or_insert_with(|| serde_json::json!({}))
+            .as_object_mut()
+            .ok_or("canonical causal proposal index invalid")?;
+        proposals.insert(key, proposal);
         Ok(
             serde_json::json!({"commit_record": record, "lineage": lineage, "feedback": feedback.payload}),
         )

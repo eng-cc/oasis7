@@ -22,6 +22,7 @@ pub(super) fn assert_original_terminal(fixture: &Fixture, root: &Path) {
     assert_eq!(terminal["status"], "rejected");
     assert_eq!(terminal["reject_reason"], "canonical_resume_rejected");
     assert!(terminal["feedback_id"].is_null());
+    assert_eq!(terminal.get("feedback"), Some(&serde_json::Value::Null));
     let original_bytes = fs::read(root.join("resume-rejection-crash-checkpoint.json"))
         .or_else(|_| fs::read(root.join("resume-rejection-original-checkpoint.json")))
         .unwrap();

@@ -85,6 +85,30 @@ pub fn validate_cognition(
         .response_artifact
         .validate_for_request(&intent.request)
         .map_err(|e| e.to_string())?;
+    if let Some(public) = &intent.causal_proposal {
+        // These are signed explanation/evidence references, not Runtime claims
+        // of truth. The observation reference is the authenticated request's.
+        if public.evidence_refs.len() != 2
+            || public.evidence_refs[0] != intent.request.observation_digest
+            || !crate::simulator::Digest32(public.evidence_refs[1].clone()).is_canonical_blake3()
+            || public.correction_refs.len() > 64
+            || public
+                .correction_refs
+                .iter()
+                .any(|value| value.trim().is_empty() || value.len() > 4096)
+            || public
+                .reason
+                .as_ref()
+                .is_some_and(|value| value.len() > 4096)
+            || public
+                .dissent
+                .as_ref()
+                .is_some_and(|value| value.len() > 4096)
+            || serde_json::to_vec(public).map_err(|e| e.to_string())?.len() > 65536
+        {
+            return Err("signed cognition causal proposal invalid".into());
+        }
+    }
     validate_agent_signer(
         world,
         &intent.request.agent_id,
@@ -123,6 +147,85 @@ pub fn validate_agent_signer(
         || delegation.branch_id != binding.branch_id
     {
         return Err("provider delegation revoked or fenced".into());
+    }
+    Ok(())
+}
+
+/// Pure admission: verify an Agent proof and match the original canonical
+/// outbox identity. Mutation remains exclusively in registered execution.
+pub fn validate_feedback_ack(
+    world: &World,
+    signed: &SignedReadRequest<super::FeedbackAckIntentV1>,
+) -> Result<(), String> {
+    verify_read_request("feedback_ack", signed)?;
+    let ack = &signed.request;
+    ack.validate()?;
+    validate_agent_signer(
+        world,
+        &ack.agent_id,
+        &signed.subject_public_key,
+        ack.delegation_generation,
+    )?;
+    let record = world
+        .runtime_feedback_outbox()
+        .map_err(|e| format!("{e:?}"))?
+        .into_iter()
+        .find(|r| r.feedback_id == ack.feedback_id)
+        .ok_or("canonical feedback acknowledgement record missing")?;
+    record.validate().map_err(|e| e.to_string())?;
+    let feedback: crate::simulator::FeedbackEnvelopeV1 =
+        serde_json::from_value(record.payload).map_err(|e| e.to_string())?;
+    if feedback.status != "committed" {
+        return Err(
+            "canonical feedback acknowledgement supports committed service feedback only".into(),
+        );
+    }
+    if record.agent_subject != ack.agent_id
+        || record.agent_session_id != ack.agent_session_id
+        || record.agent_turn_id != ack.agent_turn_id
+        || record.decision_request_id != ack.decision_request_id
+        || record.request_digest != ack.request_digest
+        || record.feedback_seq != ack.feedback_seq
+        || record.envelope_digest != ack.original_envelope_digest
+        || feedback.runtime_receipt_id != ack.runtime_receipt_id
+    {
+        return Err("canonical feedback acknowledgement identity mismatch".into());
+    }
+    let published_service_feedback = world.capability_revocation_state().world_service_results.values()
+        .any(|value| serde_json::from_value::<super::CanonicalIntentResultV1>(value.clone()).ok()
+            .is_some_and(|result| result.rejected.is_none()
+                && matches!(result.request.signed_payload, super::WorldServicePayloadV1::Cognition(ref signed)
+                    if signed.request.request.agent_id == ack.agent_id
+                        && signed.request.request.agent_session_id == ack.agent_session_id
+                        && signed.request.request.agent_turn_id == ack.agent_turn_id
+                        && signed.request.request.decision_request_id == ack.decision_request_id
+                        && signed.request.request.request_digest == ack.request_digest)
+                && result.receipt.get("lineage").and_then(|v| v.get("feedback_id")).and_then(serde_json::Value::as_str) == Some(ack.feedback_id.as_str())
+                && result.receipt.get("lineage").and_then(|v| v.get("receipt_id")).and_then(serde_json::Value::as_str) == ack.runtime_receipt_id.as_deref()));
+    if !published_service_feedback {
+        return Err("canonical feedback acknowledgement service publication missing".into());
+    }
+    if let Some(receipt_id) = &ack.runtime_receipt_id {
+        let lineage = world
+            .read_runtime_receipt_lineage(receipt_id)
+            .map_err(|e| format!("{e:?}"))?;
+        world
+            .verify_runtime_receipt_lineage(&lineage)
+            .map_err(|e| format!("{e:?}"))?;
+        if lineage.agent_id != ack.agent_id
+            || lineage.agent_session_id != ack.agent_session_id
+            || lineage.agent_turn_id != ack.agent_turn_id
+            || lineage.decision_request_id != ack.decision_request_id
+            || lineage.request_digest != ack.request_digest
+            || lineage.feedback_id != ack.feedback_id
+            || feedback
+                .candidate_action_id
+                .is_none_or(|id| lineage.action_id != format!("action:{id}"))
+        {
+            return Err("canonical feedback acknowledgement receipt mismatch".into());
+        }
+    } else if feedback.status == "committed" {
+        return Err("committed feedback acknowledgement receipt missing".into());
     }
     Ok(())
 }

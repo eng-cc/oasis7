@@ -113,6 +113,7 @@ fn fresh_resume_leaves_past_schedule_tick_for_runtime_derivation() {
         events: vec![],
         runtime_binding: None,
         agent_context: None,
+        feedback_history: None,
         scheduler_wakes: vec![wake.clone()],
         continuations: vec![continuation.clone()],
         cognition_leases: vec![],

@@ -72,6 +72,9 @@ pub(super) fn apply_intents(
             WorldServicePayloadV1::Cognition(signed) => {
                 candidate.commit_authenticated_cognition(signed)
             }
+            WorldServicePayloadV1::FeedbackAck(signed) => {
+                candidate.apply_authenticated_feedback_ack(signed)
+            }
             WorldServicePayloadV1::Delegation(signed) => candidate
                 .apply_agent_signer_delegation(&signed)
                 .map(|()| serde_json::json!({"delegation": signed.request})),

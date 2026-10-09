@@ -78,6 +78,9 @@ impl Service<'_> {
             WorldServicePayloadV1::Cognition(signed) => {
                 agent_authority::validate_cognition(&pinned.world, signed)?
             }
+            WorldServicePayloadV1::FeedbackAck(signed) => {
+                agent_authority::validate_feedback_ack(&pinned.world, signed)?
+            }
             WorldServicePayloadV1::Delegation(signed) => {
                 agent_authority::validate_delegation(&pinned.world, signed)?
             }

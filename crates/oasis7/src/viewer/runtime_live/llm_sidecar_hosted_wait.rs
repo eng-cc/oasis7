@@ -113,8 +113,18 @@ impl HostedWait {
         if cognition.request.turn_context.continuation.is_some() {
             // Provider binding hashes the raw Runtime manifest in a separate domain.
             // The retained authenticated Resume checkpoint checks the exact raw proposal.
-            if crate::simulator::h_v1("oasis7.runtime.manifest.v1", &self.runtime.runtime_manifest_hash).to_string()
-                != cognition.request.request_context.runtime_binding.runtime_manifest_hash.to_string() {
+            if crate::simulator::h_v1(
+                "oasis7.runtime.manifest.v1",
+                &self.runtime.runtime_manifest_hash,
+            )
+            .to_string()
+                != cognition
+                    .request
+                    .request_context
+                    .runtime_binding
+                    .runtime_manifest_hash
+                    .to_string()
+            {
                 return Err("resumed Wait raw manifest binding mismatch".into());
             }
             runtime.runtime_manifest_hash = self.runtime.runtime_manifest_hash.clone();

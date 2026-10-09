@@ -82,6 +82,7 @@ fn scheduler_query_cooldown_survives_client_recreation_without_submit_replay() {
             events: vec![],
             runtime_binding: Some(context.request_context.runtime_binding.clone()),
             agent_context: None,
+            feedback_history: None,
             scheduler_wakes: vec![],
             continuations: vec![],
             cognition_leases: vec![],

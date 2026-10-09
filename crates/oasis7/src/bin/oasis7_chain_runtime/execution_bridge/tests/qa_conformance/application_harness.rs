@@ -175,6 +175,13 @@ pub(super) fn run_isolated_application_mode(
     let fixture = Fixture::with_options(true, wake || ordinary_wait);
     let app_dir = temp_dir("qa-world-service-application");
     fs::create_dir_all(&app_dir).unwrap();
+    if admission_mode.starts_with("memory-ack-") {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&app_dir, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+    }
     if service_probe
         || admission_mode == "periodic-fairness"
         || resume_crash
@@ -185,6 +192,19 @@ pub(super) fn run_isolated_application_mode(
     {
         fixture.concurrent_dispatch.store(true, Ordering::SeqCst);
         *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
+    }
+    if matches!(admission_mode, "memory-ack-before" | "memory-ack-after") {
+        *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
+        let kind = if admission_mode == "memory-ack-before" {
+            "before"
+        } else {
+            "after"
+        };
+        fs::write(
+            app_dir.join(format!("world-feedback-ack-{kind}-arm")),
+            b"arm",
+        )
+        .unwrap();
     }
     if admission_mode.starts_with("memory-crash") {
         *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
@@ -392,7 +412,76 @@ pub(super) fn run_isolated_application_mode(
     if final_budget_crash {
         command.env("PRE2_FINAL_BUDGET_FS_ROOT", &app_dir);
     }
+    let ack_fs = (admission_mode == "memory-ack-write-failure")
+        .then(|| application_feedback_ack_write_failure::start(app_dir.clone(), &fixture));
+    let ack_external_models_before = metadata
+        .as_ref()
+        .map(|m| m.decision_count.load(Ordering::SeqCst));
     let mut output = command.output().unwrap();
+    if admission_mode.starts_with("memory-ack-") {
+        assert_eq!(
+            metadata
+                .as_ref()
+                .map(|m| m.decision_count.load(Ordering::SeqCst)),
+            ack_external_models_before,
+            "actual external provider model cannot be called by original scripted native ACK fixture"
+        );
+    }
+    if let Some(worker) = ack_fs {
+        application_feedback_ack_write_failure::finish(&fixture, &app_dir, &output, worker);
+        application_feedback_ack_recovery::assert_canonical_ack(&fixture, &app_dir);
+        metadata
+            .as_ref()
+            .unwrap()
+            .assert_canonical_feedback_delivery(&fixture, true);
+        fs::remove_dir_all(app_dir).unwrap();
+        return;
+    }
+    if admission_mode == "memory-ack-missing-runner" {
+        metadata
+            .as_ref()
+            .unwrap()
+            .assert_canonical_feedback_delivery(&fixture, false);
+        println!("{}", String::from_utf8_lossy(&output.stdout));
+        assert!(
+            output.status.success(),
+            "actual missing-runner refusal failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout)
+                .contains("PRE2_PRIVATE_MEMORY_ACK_MISSING_RUNNER_REFUSED")
+        );
+        application_feedback_ack_recovery::assert_initial_economic_requests(&fixture, 0);
+        let refusal: serde_json::Value = serde_json::from_slice(
+            &fs::read(app_dir.join("feedback-ack-missing-runner-refused")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            refusal["actual_error"],
+            "feedback consumption native runner missing"
+        );
+        let canonical = fixture.driver.lock().unwrap().execution_world.clone();
+        assert!(
+            canonical
+                .runtime_feedback_outbox()
+                .unwrap()
+                .iter()
+                .any(|r| r.state == "pending")
+        );
+        let disk: serde_json::Value =
+            serde_json::from_slice(&fs::read(app_dir.join("native-memory-lineage.json")).unwrap())
+                .unwrap();
+        assert!(disk["provider_service_pending"]["agent-a"]["feedback_ack"].is_null());
+        assert!(
+            disk["provider_memory_store"]["entries"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        fs::remove_dir_all(app_dir).unwrap();
+        return;
+    }
     if let Some(worker) = resume_rejection_worker {
         if resume_rejection_crash {
             application_hosted_resume_rejection_recovery::recover_parent(
@@ -678,6 +767,28 @@ pub(super) fn run_isolated_application_mode(
     observer_stop.store(true, Ordering::SeqCst);
     if let Some(observer) = observer {
         observer.join().unwrap();
+    }
+    if matches!(admission_mode, "memory-ack-before" | "memory-ack-after") {
+        application_feedback_ack_recovery::verify(
+            &fixture,
+            &mut command,
+            &app_dir,
+            &output,
+            admission_mode,
+        );
+        metadata
+            .as_ref()
+            .unwrap()
+            .assert_canonical_feedback_delivery(&fixture, true);
+        assert_eq!(
+            metadata
+                .as_ref()
+                .map(|m| m.decision_count.load(Ordering::SeqCst)),
+            ack_external_models_before,
+            "ACK restart cannot invoke actual external model"
+        );
+        fs::remove_dir_all(app_dir).unwrap();
+        return;
     }
     if admission_mode.starts_with("memory-crash") {
         println!("{}", String::from_utf8_lossy(&output.stdout));

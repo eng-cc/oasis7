@@ -48,12 +48,35 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
         .starts_with("memory-reject-")
         .then(|| fs::read(&store).unwrap());
     let created = ViewerRuntimeLiveServer::new(config.clone());
-    if matches!(mode, "memory-reject-response" | "memory-reject-intents") {
+    if matches!(
+        mode,
+        "memory-reject-response"
+            | "memory-reject-intents"
+            | "memory-reject-ack-content"
+            | "memory-reject-ack-entry"
+            | "memory-reject-ack-signature"
+            | "memory-reject-ack-signer"
+    ) {
         match created {
+            Err(oasis7::viewer::ViewerRuntimeLiveServerError::Init(reason))
+                if mode == "memory-reject-ack-signature" =>
+            {
+                assert!(
+                    reason.starts_with("feedback ACK checkpoint signature invalid:"),
+                    "specific actual signature refusal required, got {reason}"
+                )
+            }
+            Err(oasis7::viewer::ViewerRuntimeLiveServerError::Init(reason))
+                if mode == "memory-reject-ack-signer" =>
+            {
+                assert_eq!(reason, "feedback ACK checkpoint signer/authority mismatch")
+            }
             Err(oasis7::viewer::ViewerRuntimeLiveServerError::Init(reason)) => assert_eq!(
                 reason,
                 if mode == "memory-reject-response" {
                     "pending cognition response artifact invalid: response_digest_mismatch: provider response digest does not match its content"
+                } else if mode.starts_with("memory-reject-ack-") {
+                    "durable private feedback acceptance binding mismatch"
                 } else {
                     "pending cognition response or memory artifact mismatch"
                 }
@@ -74,11 +97,13 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
             disk["provider_service_pending"].as_object().unwrap().len(),
             1
         );
-        assert_eq!(
-            disk["provider_memory_store"],
-            serde_json::to_value(oasis7::simulator::MemoryWriteStore::default()).unwrap(),
-            "constructor refusal cannot release memory"
-        );
+        if !mode.starts_with("memory-reject-ack-") {
+            assert_eq!(
+                disk["provider_memory_store"],
+                serde_json::to_value(oasis7::simulator::MemoryWriteStore::default()).unwrap(),
+                "constructor refusal cannot release memory"
+            );
+        }
         println!(
             "native_memory_process_constructor_rejected kind={mode} private_bytes_unchanged=true memory_unchanged=true listener_started=false"
         );
@@ -86,7 +111,7 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
         return;
     }
     let mut server = created.unwrap();
-    if mode.starts_with("memory-crash") {
+    if mode.starts_with("memory-crash") || mode.starts_with("memory-ack-") {
         let action = oasis7::simulator::Action::MoveAgent {
             agent_id: "agent-a".into(),
             to: "runtime:2:2:0".into(),
@@ -135,7 +160,9 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
         serde_json::json!({"type":"hello_v2","client":"PRE2 memory after genuine Play","version":2,"capabilities":[]}),
         serde_json::json!({"type":"request_snapshot"}),
     ];
-    if !mode.starts_with("memory-crash") {
+    if !mode.starts_with("memory-crash")
+        && !matches!(mode, "memory-ack-before" | "memory-ack-after")
+    {
         requests.insert(
             4,
             serde_json::json!({"type":"live_control","mode":{"mode":"pause"},"request_id":902}),
@@ -147,6 +174,75 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
         socket.write_all(&bytes).unwrap();
     }
     let deadline = Instant::now() + Duration::from_secs(10);
+    if mode == "memory-ack-missing-runner" {
+        while !root.join("feedback-ack-missing-runner-refused").exists()
+            && Instant::now() < deadline
+        {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert!(
+            root.join("feedback-ack-missing-runner-refused").exists(),
+            "actual missing runner gate not reached"
+        );
+        let summary = shared.lock().unwrap().test_canonical_provider_summary();
+        assert_eq!(summary["pending_intent_count"], 1);
+        assert_eq!(summary["native_model_call_count"], 1);
+        let refusal: serde_json::Value = serde_json::from_slice(
+            &fs::read(root.join("feedback-ack-missing-runner-refused")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            refusal["actual_error"],
+            "feedback consumption native runner missing"
+        );
+        assert!(
+            summary["memory_store"]["entries"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        socket.shutdown(std::net::Shutdown::Both).unwrap();
+        assert!(worker.join().unwrap().is_ok());
+        println!(
+            "PRE2_PRIVATE_MEMORY_ACK_MISSING_RUNNER_REFUSED pending_retained=true actual_native_runner_absent=true private_memory_empty=true"
+        );
+        return;
+    }
+    if matches!(mode, "memory-ack-before" | "memory-ack-after") {
+        let marker = if mode == "memory-ack-before" {
+            "world-feedback-ack-before-started"
+        } else {
+            "world-feedback-ack-after-started"
+        };
+        while !root.join(marker).exists() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert!(
+            root.join(marker).exists(),
+            "actual ACK crash boundary not reached"
+        );
+        let summary = shared.lock().unwrap().test_canonical_provider_summary();
+        assert_eq!(summary["native_model_call_count"], 1);
+        fs::write(
+            root.join("feedback-ack-original-model-count.json"),
+            serde_json::to_vec(&summary["native_model_call_count"]).unwrap(),
+        )
+        .unwrap();
+        let bytes = fs::read(&store).unwrap();
+        let checkpoint: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(checkpoint["provider_service_pending"]["agent-a"]["feedback_ack"].is_object());
+        assert!(
+            checkpoint["provider_memory_store"]
+                .to_string()
+                .contains(MEMORY)
+        );
+        println!(
+            "PRE2_PRIVATE_MEMORY_ACK_CRASH actual_native_memory=true full_checkpoint_blake3={}",
+            blake3::hash(&bytes)
+        );
+        std::io::stdout().flush().unwrap();
+        std::process::exit(73);
+    }
     if mode.starts_with("memory-crash") {
         while !root.join("world-settle-started").exists() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(2));
@@ -211,6 +307,22 @@ fn verify_memory_process_inner(client: &RemoteWorldServiceClient, mode: &str) {
     };
     socket.shutdown(std::net::Shutdown::Both).unwrap();
     let result = worker.join().unwrap();
+    println!(
+        "actual_native_model_call_count={}",
+        summary["native_model_call_count"]
+    );
+    if matches!(mode, "memory-recover" | "memory-repeat") {
+        assert_eq!(
+            summary["native_model_call_count"], 0,
+            "restored process must not call a fresh native provider"
+        );
+    }
+    if mode == "memory-ack-write-failure" {
+        assert_eq!(
+            summary["native_model_call_count"], 1,
+            "retry must not invoke original native model again"
+        );
+    }
     let memory = summary["memory_store"].to_string().contains(MEMORY);
     println!(
         "native_memory_actual_finalize_witness native_runner_present={} hosted_phase={} memory_failure={}",

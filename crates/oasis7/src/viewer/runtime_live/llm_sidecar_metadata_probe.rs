@@ -198,3 +198,7 @@ impl RuntimeLlmSidecar {
         })
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "llm_sidecar_metadata_probe_tests.rs"]
+mod tests;

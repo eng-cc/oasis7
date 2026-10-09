@@ -41,6 +41,23 @@ cleanup() {
   printf '%s\n%s\n' "$node_volume" "$app_volume" > "$evidence/preserved-volumes.txt"
 }
 trap cleanup EXIT
+integration_deadline=$(( $(date +%s) + 300 ))
+bounded_wait() {
+  rtk proxy python3 - "$1" "$integration_deadline" <<'PY_WAIT'
+import subprocess,sys,time
+remaining=int(sys.argv[2])-time.time()
+if remaining<=0:
+    raise SystemExit('no-mount integration overall deadline expired')
+try:
+    result=subprocess.run(['rtk','proxy','docker','wait',sys.argv[1]],capture_output=True,text=True,timeout=remaining)
+except subprocess.TimeoutExpired:
+    raise SystemExit('no-mount container exceeded overall deadline: '+sys.argv[1])
+if result.returncode:
+    sys.stderr.write(result.stderr)
+    raise SystemExit(result.returncode)
+print(result.stdout.strip())
+PY_WAIT
+}
 rtk proxy docker image inspect "$image" > "$evidence/image-inspect.json"
 image="$(rtk proxy python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[0]["Id"])' "$evidence/image-inspect.json")"
 rtk proxy docker network create "$network" >/dev/null
@@ -77,14 +94,16 @@ rtk proxy docker run -d --name "$prefix-provider" --network "container:$prefix-a
   -e PRE2_APP_PRIVATE=/app-private "$image" /bundle/test-executable \
   --ignored --exact "$entry::no_mount_provider_entry" --nocapture >/dev/null
 # Wait for the actual shipped protocol listener, not an arbitrary fixed startup sleep.
-rtk proxy docker run --name "$prefix-control" --network "container:$prefix-app" \
+rtk proxy docker run -d --name "$prefix-control" --network "container:$prefix-app" \
   --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp \
   --mount "type=bind,src=$evidence/bundle,dst=/bundle,readonly" \
   --mount "type=volume,src=$app_volume,dst=/app-private" \
   --env-file "$evidence/application.env" "$image" /bundle/test-executable \
-  --ignored --exact "$entry::no_mount_application_acceptance" --nocapture > "$evidence/control-result.log" 2>&1
+  --ignored --exact "$entry::no_mount_application_acceptance" --nocapture >/dev/null
+[[ "$(bounded_wait "$prefix-control")" == 0 ]]
+rtk proxy docker logs "$prefix-control" > "$evidence/control-result.log" 2>&1
 rtk proxy docker cp "$prefix-service:/node/actual-service-witness.json" "$evidence/actual-service-witness.json"
-provider_exit="$(rtk proxy docker wait "$prefix-provider")"
+provider_exit="$(bounded_wait "$prefix-provider")"
 [[ "$provider_exit" == 0 ]]
 rtk proxy docker logs "$prefix-provider" > "$evidence/provider-result.log" 2>&1
 rtk proxy docker inspect "$prefix-app" > "$evidence/application-initial-inspect.json"
@@ -106,12 +125,14 @@ rtk proxy docker run -d --name "$prefix-app" --network "$network" \
   --mount "type=volume,src=$app_volume,dst=/app-private" \
   --env-file "$evidence/application-alias.env" "$image" sh -c \
   'export OASIS7_AGENT_PROVIDER_URL=$(cat /app-private/provider-endpoint); exec /bundle/oasis7_viewer_live --bind 0.0.0.0:4100 --no-web-bind --no-auto-play --llm --provider-lineage-store /app-private/lineage.json' >/dev/null
-rtk proxy docker run --name "$prefix-control-switch" --network "container:$prefix-app" \
+rtk proxy docker run -d --name "$prefix-control-switch" --network "container:$prefix-app" \
   --read-only --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp \
   --mount "type=bind,src=$evidence/bundle,dst=/bundle,readonly" \
   --mount "type=volume,src=$app_volume,dst=/app-private" \
   --env-file "$evidence/application-alias.env" "$image" /bundle/test-executable \
-  --ignored --exact "$entry::no_mount_endpoint_switch_acceptance" --nocapture > "$evidence/endpoint-switch-result.log" 2>&1
+  --ignored --exact "$entry::no_mount_endpoint_switch_acceptance" --nocapture >/dev/null
+[[ "$(bounded_wait "$prefix-control-switch")" == 0 ]]
+rtk proxy docker logs "$prefix-control-switch" > "$evidence/endpoint-switch-result.log" 2>&1
 rtk proxy docker cp "$prefix-service:/node/actual-service-witness.json" "$evidence/actual-service-witness-after-switch.json"
 rtk proxy docker inspect "$prefix-app" > "$evidence/application-inspect.json"
 rtk proxy python3 - "$evidence" "$node_volume" <<'PY_REPORT'
