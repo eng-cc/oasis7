@@ -5,7 +5,11 @@ use crate::simulator::ModuleInstallTarget;
 use oasis7_wasm_abi::*;
 
 fn dispatch(world: &mut World, action: Action) -> Result<bool, WorldError> {
-    world.try_apply_runtime_module_action(&ActionEnvelope { id: 980, action })
+    world.try_apply_runtime_module_action(&ActionEnvelope {
+        committed_recipe_origin: None,
+        id: 980,
+        action,
+    })
 }
 
 fn fixture() -> (World, u64) {

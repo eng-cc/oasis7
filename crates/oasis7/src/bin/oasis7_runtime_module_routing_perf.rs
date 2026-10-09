@@ -87,6 +87,7 @@ fn run() -> Result<(), String> {
         }),
     };
     let action = ActionEnvelope {
+        committed_recipe_origin: None,
         id: 1,
         action: Action::RegisterAgent {
             agent_id: "agent-perf".to_string(),

@@ -224,6 +224,7 @@ fn fixtures() -> Vec<(&'static str, World, DomainEvent)> {
         .set_agent_resource_balance("actor", ResourceKind::Electricity, 10)
         .unwrap();
     let recipe = DomainEvent::RecipeStarted {
+        committed_recipe_origin: None,
         job_id: 201,
         requester_agent_id: "actor".into(),
         factory_id: "factory".into(),
@@ -247,6 +248,7 @@ fn fixtures() -> Vec<(&'static str, World, DomainEvent)> {
     append(&mut recipe_done_base, recipe.clone());
     recipe_done_base = with_time(&recipe_done_base, recipe_done_base.state().time + 1);
     let recipe_done = DomainEvent::RecipeCompleted {
+        committed_recipe_origin: None,
         job_id: 201,
         requester_agent_id: "actor".into(),
         factory_id: "factory".into(),

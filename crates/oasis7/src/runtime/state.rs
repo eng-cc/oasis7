@@ -186,6 +186,8 @@ pub struct FactoryBuildJobState {
 /// In-flight recipe execution tracked by job id.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RecipeJobState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub committed_recipe_origin: Option<crate::runtime::CommittedRecipeOrigin>,
     pub job_id: ActionId,
     pub requester_agent_id: String,
     pub factory_id: String,

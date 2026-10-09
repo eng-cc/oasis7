@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "a806ef070ac66e836eea452643ca7131d1e7f1a7ed32d78a22b86aa2d6643562",
+    "content_sha256": "2f8d974ded605b687e515e4f6b262fc227739383c1f124b14d2a7c73a84b389d",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_authority",
-    "note": "Reviewed local read-only Observer root, immutable capture, recovery and resource limits; current product authority retained",
+    "note": "Reviewed nonce-bound committed recipe origin, explicit v2 ingress/executor rollout and legacy None continuity; retained read-only Observer/recovery limits and current runtime authority without upgrading SC8 or release evidence",
     "path": "doc/world-runtime/design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

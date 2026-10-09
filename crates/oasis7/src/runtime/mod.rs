@@ -158,9 +158,9 @@ pub use cognition_wake::{
 
 // Events
 pub use events::{
-    Action, ActionEnvelope, CausedBy, DomainEvent, IndustryStage, MainTokenFeeKind,
-    MaterialMarketQuote, MaterialTransitPriority, ModuleProfileChanges, ModuleSourcePackage,
-    RejectReason,
+    Action, ActionEnvelope, CausedBy, CommittedRecipeOrigin, DomainEvent, GameplaySubmissionOrigin,
+    IndustryStage, MainTokenFeeKind, MaterialMarketQuote, MaterialTransitPriority,
+    ModuleProfileChanges, ModuleSourcePackage, RejectReason,
 };
 
 // Governance

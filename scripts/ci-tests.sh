@@ -319,6 +319,7 @@ run_oasis7_viewer_software_safe_feedback_contract_tests() {
   run npm --prefix crates/oasis7_viewer run test:frontend-structure
   run npm --prefix crates/oasis7_viewer run test:feedback-contract
   run node crates/oasis7_viewer/scripts/gameplay-attraction-scenario.test.mjs
+  run python3 scripts/tests/test_industrial_starter_evidence.py
   run ./scripts/copy-viewer-web-dist.test.sh
   run ./scripts/agent-browser-viewer-dist-freshness-test.sh
   run bash ./scripts/agent-browser-lifecycle-contract.test.sh

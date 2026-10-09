@@ -27,6 +27,8 @@ pub(super) struct ChainGameplaySubmitResponse {
     #[serde(default)]
     pub(super) action_id: Option<u64>,
     #[serde(default)]
+    pub(super) consensus_action_payload_hash: Option<String>,
+    #[serde(default)]
     submitted_at_unix_ms: Option<i64>,
     #[serde(default)]
     error_code: Option<String>,

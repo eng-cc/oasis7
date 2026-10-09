@@ -37,6 +37,8 @@ pub const STARTER_INDUSTRIAL_COMPLETION_BOUNDARY: &str =
 /// profile from inheriting this milestone accidentally.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StarterIndustrialMilestoneV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub committed_recipe_origin: Option<crate::runtime::CommittedRecipeOrigin>,
     pub profile_id: String,
     pub profile_revision: u64,
     pub factory_id: String,

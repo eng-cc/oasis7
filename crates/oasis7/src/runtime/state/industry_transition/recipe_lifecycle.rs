@@ -111,6 +111,7 @@ impl PreparedRecipeLifecycle {
         now: WorldTime,
     ) -> Result<Self, WorldError> {
         let DomainEvent::RecipeStarted {
+            committed_recipe_origin,
             job_id,
             requester_agent_id,
             factory_id,
@@ -133,6 +134,12 @@ impl PreparedRecipeLifecycle {
         else {
             unreachable!()
         };
+        if committed_recipe_origin
+            .as_ref()
+            .is_some_and(|origin| !origin.matches_recipe(requester_agent_id, factory_id, recipe_id))
+        {
+            return Err(invalid("recipe start committed origin mismatch"));
+        }
         if state.pending_recipe_jobs.contains_key(job_id) {
             return Err(invalid(format!(
                 "recipe start job is already pending: job_id={job_id}"
@@ -325,6 +332,7 @@ impl PreparedRecipeLifecycle {
             pending: Some((
                 *job_id,
                 Some(RecipeJobState {
+                    committed_recipe_origin: committed_recipe_origin.clone(),
                     job_id: *job_id,
                     requester_agent_id: requester_agent_id.clone(),
                     factory_id: factory_id.clone(),
@@ -364,6 +372,7 @@ impl PreparedRecipeLifecycle {
         now: WorldTime,
     ) -> Result<Self, WorldError> {
         let DomainEvent::RecipeCompleted {
+            committed_recipe_origin,
             job_id,
             requester_agent_id,
             factory_id,
@@ -381,7 +390,8 @@ impl PreparedRecipeLifecycle {
             unreachable!()
         };
         let (mut materials, world) = normalized_materials(state);
-        let completion_receipt = RecipeCompletionReceiptV1 {
+        let mut completion_receipt = RecipeCompletionReceiptV1 {
+            committed_recipe_origin: committed_recipe_origin.clone(),
             job_id: *job_id,
             requester_agent_id: requester_agent_id.clone(),
             factory_id: factory_id.clone(),
@@ -425,7 +435,8 @@ impl PreparedRecipeLifecycle {
                 pending.ready_at
             )));
         }
-        if pending.requester_agent_id != *requester_agent_id
+        if pending.committed_recipe_origin != *committed_recipe_origin
+            || pending.requester_agent_id != *requester_agent_id
             || pending.factory_id != *factory_id
             || pending.recipe_id != *recipe_id
             || pending.accepted_batches != *accepted_batches
@@ -440,6 +451,7 @@ impl PreparedRecipeLifecycle {
                 "recipe completion does not match pending commitment: job_id={job_id}"
             )));
         }
+        completion_receipt.committed_recipe_origin = pending.committed_recipe_origin.clone();
         validate_recipe_output_capacity(
             &state.material_ledgers,
             output_ledger,
@@ -504,6 +516,7 @@ impl PreparedRecipeLifecycle {
                 .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0)
         {
             progress.starter_industrial_milestone = Some(StarterIndustrialMilestoneV1 {
+                committed_recipe_origin: pending.committed_recipe_origin.clone(),
                 profile_id: STARTER_INDUSTRIAL_PROFILE_ID.to_string(),
                 profile_revision: STARTER_INDUSTRIAL_PROFILE_REVISION,
                 factory_id: factory_id.clone(),

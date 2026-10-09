@@ -24,6 +24,7 @@ fn runtime_recipe_completed_event_with_identity(
         time: event_id.saturating_add(1),
         caused_by: None,
         body: RuntimeWorldEventBody::Domain(RuntimeDomainEvent::RecipeCompleted {
+            committed_recipe_origin: None,
             job_id,
             requester_agent_id: requester_agent_id.to_string(),
             factory_id: "factory.alpha".to_string(),

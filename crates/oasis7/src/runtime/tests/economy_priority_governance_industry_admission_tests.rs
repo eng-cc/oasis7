@@ -23,6 +23,7 @@ fn product_validation_failure_clears_prior_stable_line_candidate() {
     state.pending_recipe_jobs.insert(
         action_id,
         crate::runtime::RecipeJobState {
+            committed_recipe_origin: None,
             job_id: action_id,
             requester_agent_id: "stable-line-test-agent".to_string(),
             factory_id: factory_id.to_string(),
