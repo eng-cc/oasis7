@@ -329,14 +329,18 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
-    fn submit_provider_service_action(
+    pub(in crate::viewer::runtime_live) fn prepare_provider_service_action_checkpoint(
         &mut self,
         runtime_action: &crate::runtime::Action,
         cognition: &RuntimeProviderActionContext,
         simulator_action: SimulatorAction,
-    ) -> Result<(), ProviderRuntimeActionCommitError> {
-        use crate::world_service::client::WorldServicePort;
-        use oasis7_client_api::world_service::*;
+    ) -> Result<
+        (
+            super::llm_sidecar::lineage_persistence::PendingProviderServiceIntent,
+            bool,
+        ),
+        ProviderRuntimeActionCommitError,
+    > {
         let client = self
             .world_service_client()
             .map_err(|error| ProviderRuntimeActionCommitError::Message(format!("{error:?}")))?
@@ -396,6 +400,9 @@ impl ViewerRuntimeLiveServer {
             }
             pending.clone()
         } else {
+            self.config
+                .ensure_service_agent_lineage_store()
+                .map_err(ProviderRuntimeActionCommitError::Message)?;
             let signer = self
                 .config
                 .world_service_agent_signer
@@ -442,7 +449,31 @@ impl ViewerRuntimeLiveServer {
                 .map_err(ProviderRuntimeActionCommitError::Message)?;
             pending
         };
-        let response = if existing.is_some() {
+        Ok((pending, existing.is_some()))
+    }
+
+    fn submit_provider_service_action(
+        &mut self,
+        runtime_action: &crate::runtime::Action,
+        cognition: &RuntimeProviderActionContext,
+        simulator_action: SimulatorAction,
+    ) -> Result<(), ProviderRuntimeActionCommitError> {
+        use crate::world_service::client::WorldServicePort;
+        use oasis7_client_api::world_service::*;
+        let client = self
+            .world_service_client()
+            .map_err(|error| ProviderRuntimeActionCommitError::Message(format!("{error:?}")))?
+            .ok_or_else(|| {
+                ProviderRuntimeActionCommitError::Message(
+                    "canonical Agent service is not configured".into(),
+                )
+            })?;
+        let (pending, existed) = self.prepare_provider_service_action_checkpoint(
+            runtime_action,
+            cognition,
+            simulator_action,
+        )?;
+        let response = if existed {
             client
                 .lookup(
                     LookupIntentRequest {
@@ -565,14 +596,14 @@ impl ViewerRuntimeLiveServer {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct ProviderServiceCognitionReceipt {
-    commit_record: crate::runtime::WorldCommitRecordV1,
-    lineage: crate::runtime::RuntimeReceiptLineageV1,
-    feedback: crate::simulator::FeedbackEnvelopeV1,
+#[derive(Clone, serde::Deserialize)]
+pub(in crate::viewer::runtime_live) struct ProviderServiceCognitionReceipt {
+    pub(in crate::viewer::runtime_live) commit_record: crate::runtime::WorldCommitRecordV1,
+    pub(in crate::viewer::runtime_live) lineage: crate::runtime::RuntimeReceiptLineageV1,
+    pub(in crate::viewer::runtime_live) feedback: crate::simulator::FeedbackEnvelopeV1,
 }
 
-fn validate_provider_service_receipt(
+pub(in crate::viewer::runtime_live) fn validate_provider_service_receipt(
     pending: &super::llm_sidecar::lineage_persistence::PendingProviderServiceIntent,
     receipt: &ProviderServiceCognitionReceipt,
 ) -> Result<(), String> {
@@ -638,7 +669,7 @@ fn validate_provider_service_receipt(
     Ok(())
 }
 
-fn provider_cognition_commit_inputs(
+pub(in crate::viewer::runtime_live) fn provider_cognition_commit_inputs(
     world: &RuntimeWorld,
     cognition: &RuntimeProviderActionContext,
 ) -> Result<
@@ -736,7 +767,7 @@ fn provider_service_cognition_payload(
 }
 
 #[derive(Debug)]
-pub(super) enum ProviderRuntimeActionCommitError {
+pub(in crate::viewer::runtime_live) enum ProviderRuntimeActionCommitError {
     StaleBase,
     WakeHandoff(String),
     PostCommit(String),

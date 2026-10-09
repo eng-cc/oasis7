@@ -108,7 +108,9 @@ pub enum CapabilityAuthorizationEvent {
         identity: CapabilityAgentIdentity,
     },
     AgentSignerDelegationInstalled {
-        signed: crate::world_service::SignedReadRequest<crate::world_service::AgentSignerDelegationChangeV1>,
+        signed: crate::world_service::SignedReadRequest<
+            crate::world_service::AgentSignerDelegationChangeV1,
+        >,
     },
     WorldServiceIntentRecorded {
         key: String,

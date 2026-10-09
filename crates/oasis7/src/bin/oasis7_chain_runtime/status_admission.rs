@@ -1,6 +1,6 @@
 //! Bounded HTTP safety admission, independent of World authorization.
 use std::collections::BTreeMap;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::net::{IpAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -86,8 +86,20 @@ pub(super) fn write_bounded(
             .ok_or_else(|| {
                 io::Error::new(io::ErrorKind::TimedOut, "HTTP write deadline exceeded")
             })?;
-        stream.set_write_timeout(Some(timeout))?;
-        let written = stream.write(remaining)?;
+        stream.set_write_timeout(Some(timeout)).map_err(|error| {
+            trace_write_error(
+                "set_write_timeout",
+                stream,
+                deadline,
+                remaining.len(),
+                &error,
+            );
+            error
+        })?;
+        let written = stream.write(remaining).map_err(|error| {
+            trace_write_error("write", stream, deadline, remaining.len(), &error);
+            error
+        })?;
         if written == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::WriteZero,
@@ -97,6 +109,31 @@ pub(super) fn write_bounded(
         remaining = &remaining[written..];
     }
     Ok(())
+}
+
+fn trace_write_error(
+    stage: &'static str,
+    stream: &TcpStream,
+    deadline: Instant,
+    bytes_remaining: usize,
+    error: &io::Error,
+) {
+    #[cfg(any(test, feature = "test_tier_required"))]
+    if std::env::var_os("PRE2_WORLD_RESPONSE_WRITE_TRACE").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+    {
+        let remaining_ns = deadline
+            .checked_duration_since(Instant::now())
+            .map(|remaining| remaining.as_nanos())
+            .unwrap_or(0);
+        let peer_port = stream.peer_addr().ok().map(|peer| peer.port());
+        eprintln!(
+            "PRE2_WORLD_RESPONSE_WRITE_TRACE stage={stage} raw_os_error={:?} remaining_ns={remaining_ns} bytes_remaining={bytes_remaining} public_peer_port={peer_port:?}",
+            error.raw_os_error()
+        );
+    }
+    #[cfg(not(any(test, feature = "test_tier_required")))]
+    let _ = (stage, stream, deadline, bytes_remaining, error);
 }
 pub(super) fn overload(mut stream: TcpStream, status: u16) {
     let _ = stream.set_nonblocking(false);
@@ -114,6 +151,39 @@ pub(super) fn overload(mut stream: TcpStream, status: u16) {
         response.as_bytes(),
         Instant::now() + Duration::from_millis(10),
     );
+    let _ = stream.shutdown(std::net::Shutdown::Write);
+}
+
+/// Complete a rejected ingress response before boundedly discarding unread
+/// request bytes. This is handler-only: the accept loop never performs a drain.
+pub(super) fn reject_ingress(stream: &mut TcpStream, status: u16) -> io::Result<()> {
+    let text = if status == 413 {
+        "Payload Too Large"
+    } else {
+        "Request Timeout"
+    };
+    let response =
+        format!("HTTP/1.1 {status} {text}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    write_bounded(stream, response.as_bytes(), Instant::now() + IO_DEADLINE)?;
+    stream.shutdown(std::net::Shutdown::Write)?;
+    let deadline = Instant::now() + Duration::from_millis(50);
+    let mut discarded = 0;
+    let mut bytes = [0u8; 4096];
+    while discarded < 65_536 {
+        let Some(remaining) = deadline
+            .checked_duration_since(Instant::now())
+            .filter(|time| !time.is_zero())
+        else {
+            break;
+        };
+        stream.set_read_timeout(Some(remaining))?;
+        let limit = bytes.len().min(65_536 - discarded);
+        match stream.read(&mut bytes[..limit]) {
+            Ok(0) | Err(_) => break,
+            Ok(count) => discarded += count,
+        }
+    }
+    Ok(())
 }
 
 /// Assemble real production HTTP ingress around a supplied genuine NodeRuntime.

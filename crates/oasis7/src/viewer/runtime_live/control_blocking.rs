@@ -72,7 +72,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn tolerate_background_play_gameplay_block(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
         action: &str,
         play_step_interval: Duration,
         effect: &str,
@@ -114,7 +114,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn flush_pending_virtual_events(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         if self.pending_virtual_events.is_empty() {
             return Ok(());
@@ -171,7 +171,11 @@ impl ViewerRuntimeLiveServer {
         let runtime_journal_len = runtime_snapshot.journal_len;
         let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
         let next_action_id = runtime_snapshot.next_action_id.max(1);
-        self.llm_sidecar.refresh_provider_check_snapshot();
+        // The shared Agent service executor refreshes provider metadata outside
+        // the Viewer mutex. Snapshots only project its cached check state.
+        if self.config.world_service.is_none() {
+            self.llm_sidecar.refresh_provider_check_snapshot();
+        }
         let gameplay_gate = if self.llm_sidecar.is_llm_mode() {
             None
         } else {
@@ -387,9 +391,11 @@ impl ViewerRuntimeLiveServer {
     ) -> Result<(), String> {
         match mode {
             ViewerControl::Pause => Ok(()),
-            ViewerControl::Play | ViewerControl::Step { .. } => self
-                .llm_sidecar
-                .ensure_gameplay_ready(&self.world, &self.snapshot_config),
+            ViewerControl::Play | ViewerControl::Step { .. } => {
+                self.configure_service_provider();
+                self.llm_sidecar
+                    .ensure_gameplay_ready(&self.world, &self.snapshot_config)
+            }
             ViewerControl::Seek { .. } => Ok(()),
         }
     }
@@ -400,6 +406,7 @@ impl ViewerRuntimeLiveServer {
         action_id: Option<&str>,
         target_agent_id: Option<&str>,
     ) -> Result<(), (String, String)> {
+        self.configure_service_provider();
         self.llm_sidecar
             .ensure_gameplay_ready(&self.world, &self.snapshot_config)
             .map_err(|message| {
@@ -478,7 +485,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn block_gameplay_control(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
         action: &str,
         effect: &str,
         reason: String,
@@ -527,7 +534,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn block_runtime_control(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
         action: &str,
         effect: &str,
         error: ViewerRuntimeLiveServerError,

@@ -26,6 +26,10 @@ pub(crate) const FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID: &str = "starter-agen
 impl ViewerRuntimeLiveServerConfig {
     pub fn new(scenario: WorldScenario) -> Self {
         Self {
+            response_frame_max_bytes: 16 * 1024 * 1024,
+            response_turn_max_bytes: 64 * 1024 * 1024,
+            response_turn_max_frames: 256,
+            response_write_timeout: Duration::from_secs(2),
             bind_addr: "127.0.0.1:5010".to_string(),
             world_id: format!("live-runtime-{}", scenario.as_str()),
             scenario: Some(scenario),
@@ -53,6 +57,10 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn formal_release_default() -> Self {
         Self {
+            response_frame_max_bytes: 16 * 1024 * 1024,
+            response_turn_max_bytes: 64 * 1024 * 1024,
+            response_turn_max_frames: 256,
+            response_write_timeout: Duration::from_secs(2),
             bind_addr: "127.0.0.1:5010".to_string(),
             world_id: FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string(),
             scenario: None,
@@ -819,12 +827,11 @@ pub(super) fn latest_runtime_event_seq(world: &RuntimeWorld) -> u64 {
 }
 
 pub(super) fn send_response(
-    writer: &mut BufWriter<TcpStream>,
+    writer: &mut dyn Write,
     response: &ViewerResponse,
 ) -> Result<(), ViewerRuntimeLiveServerError> {
-    let payload = serde_json::to_string(response)
+    serde_json::to_writer(&mut *writer, response)
         .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
-    writer.write_all(payload.as_bytes())?;
     writer.write_all(b"\n")?;
     writer.flush()?;
     Ok(())

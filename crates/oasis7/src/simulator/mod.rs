@@ -69,6 +69,8 @@ pub use agent_intent_summary::{
 };
 pub use asteroid_fragment::generate_fragments;
 #[cfg(not(target_arch = "wasm32"))]
+pub(crate) use async_agent_runner::project_receipt_memory;
+#[cfg(not(target_arch = "wasm32"))]
 pub use async_agent_runner::{
     AsyncAgentRunner, AsyncAgentRunnerError, AsyncAgentTurnOutcome, AsyncTurnFeedback, AsyncTurnId,
     AsyncTurnLifecycle, AsyncWorldEffect, AsyncWorldProgress, RuntimeReceiptReadbackHandleV1,

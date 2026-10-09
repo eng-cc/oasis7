@@ -13,7 +13,7 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         command: CollectDataCommand,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         match self.handle_collect_data(command) {
             Ok(CollectDataResult::Preflight(quote)) => {

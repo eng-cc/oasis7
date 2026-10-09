@@ -1,6 +1,9 @@
 use super::authoritative::compute_runtime_snapshot_hash;
 pub(super) use super::world_service_link::PreparedWorldServiceSubmission;
-use super::world_service_link::prepare_world_service_update;
+use super::world_service_link::{
+    WorldServiceCoherenceTraceContext, prepare_world_service_update,
+    prepare_world_service_update_for_shared_request,
+};
 use super::*;
 
 use super::super::protocol::{CollectDataCommand, GameplayActionError, GameplayActionRequest};
@@ -51,9 +54,9 @@ pub(super) struct PreparedChainLinkedRuntimeUpdate {
         Vec<oasis7_client_api::world_service::IntentResponse<serde_json::Value>>,
 }
 
-struct ChainLinkedRuntimeDispatch {
-    advanced: bool,
-    responses: Vec<ViewerResponse>,
+pub(super) struct ChainLinkedRuntimeDispatch {
+    pub(super) advanced: bool,
+    pub(super) responses: Vec<ViewerResponse>,
 }
 
 /// Verify that a chain-linked execution snapshot already contains the exact
@@ -257,7 +260,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn sync_chain_linked_runtime(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<bool, ViewerRuntimeLiveServerError> {
         if let Some(config) = &self.config.world_service {
             let prepared = prepare_world_service_update(
@@ -345,6 +348,7 @@ impl ViewerRuntimeLiveServer {
     /// checks before it can become visible.
     pub(super) fn prime_chain_linked_runtime_for_snapshot_minimized_lock(
         shared: &Arc<Mutex<Self>>,
+        request_kind: &'static str,
     ) -> Result<bool, ViewerRuntimeLiveServerError> {
         let remote = {
             let server = lock_shared_server(shared)?;
@@ -358,7 +362,17 @@ impl ViewerRuntimeLiveServer {
             })
         };
         if let Some((config, previous, pending, query_state)) = remote {
-            let prepared = prepare_world_service_update(config, previous, pending, query_state)?;
+            let prepared = prepare_world_service_update_for_shared_request(
+                config,
+                previous,
+                pending,
+                query_state,
+                WorldServiceCoherenceTraceContext {
+                    caller_phase: "shared_request_prime",
+                    request_kind,
+                    session_fence: "not_applicable_sync_prime",
+                },
+            )?;
             let mut server = lock_shared_server(shared)?;
             let mut silent_session = RuntimeLiveSession::new_with_playing(false);
             return Ok(server
@@ -390,7 +404,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn sync_chain_linked_runtime_minimized_lock(
         shared: &Arc<Mutex<Self>>,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<bool, ViewerRuntimeLiveServerError> {
         let remote = {
             let server = lock_shared_server(shared)?;
@@ -457,7 +471,7 @@ impl ViewerRuntimeLiveServer {
         Ok(dispatch.advanced)
     }
 
-    fn apply_chain_linked_runtime_update(
+    pub(super) fn apply_chain_linked_runtime_update(
         &mut self,
         mut prepared: PreparedChainLinkedRuntimeUpdate,
         session: &mut RuntimeLiveSession,

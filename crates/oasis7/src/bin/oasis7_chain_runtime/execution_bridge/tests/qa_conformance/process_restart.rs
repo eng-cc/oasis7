@@ -40,6 +40,26 @@ fn ready(client: &RemoteWorldServiceClient, server: &mut ServerProcess) {
 }
 #[test]
 fn real_tcp_full_node_server_process_restart_recovers_exact_receipt() {
+    full_node_restart(false);
+}
+#[test]
+fn real_tcp_full_node_server_restart_restores_stale_same_height_cache() {
+    full_node_restart(true);
+}
+fn copy_cache_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_cache_tree(&entry.path(), &target);
+        } else {
+            assert!(entry.file_type().unwrap().is_file());
+            fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+fn full_node_restart(stale_cache: bool) {
     use oasis7::viewer::{CollectDataCommand, CollectDataRequest, sign_collect_data_auth_proof};
     let mut fixture = Fixture::with_controlled_commits(true);
     let root = fixture.root.clone();
@@ -47,6 +67,10 @@ fn real_tcp_full_node_server_process_restart_recovers_exact_receipt() {
     let owner = fixture.owner.clone();
     fixture.preserve_root = true;
     drop(fixture);
+    let old_cache = root.join("older-distfs-cache-generation");
+    if stale_cache {
+        copy_cache_tree(&root.join("world/.distfs-state"), &old_cache);
+    }
     let reserve = TcpListener::bind("127.0.0.1:0").unwrap();
     config.endpoint = format!("http://{}", reserve.local_addr().unwrap());
     drop(reserve);
@@ -116,6 +140,11 @@ fn real_tcp_full_node_server_process_restart_recovers_exact_receipt() {
         })
         .unwrap();
     drop(server);
+    if stale_cache {
+        // Reinstall only the older mutable cache, preserving real receipt/CAS/index/JSON.
+        fs::remove_dir_all(root.join("world/.distfs-state")).unwrap();
+        copy_cache_tree(&old_cache, &root.join("world/.distfs-state"));
+    }
     assert!(
         client.describe().is_err(),
         "killed process remained available"
@@ -178,6 +207,16 @@ fn real_tcp_full_node_server_process_restart_recovers_exact_receipt() {
         blake3::hash(&fs::read(std::env::current_exe().unwrap()).unwrap())
     );
     drop(restarted);
+    if stale_cache {
+        assert!(
+            fs::read_to_string(root.join("server-process.log"))
+                .unwrap()
+                .contains(
+                    "pre2_verified_same_height_service_cache_restored height=4 journal_len=15"
+                )
+        );
+        println!("PRE2_STALE_INDEXED_CACHE_SAME_HEIGHT_CAS_RESTORE_PASSED");
+    }
     fs::remove_dir_all(root).unwrap();
 }
 

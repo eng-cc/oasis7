@@ -13,6 +13,270 @@ use crate::simulator::continuous_agent_harness::{
 use super::{AsyncAgentRunner, AsyncAgentRunnerError, AsyncTurnId};
 
 impl AsyncAgentRunner {
+    /// Opaque same-process test witnesses, never canonical or restart evidence.
+    /// Order: Harness, continuations, awaiting runtime, awaiting outcomes, feedback.
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn rejected_wait_test_ledger_digests(&self) -> [String; 5] {
+        fn digest(domain: &str, value: &impl std::fmt::Debug) -> String {
+            let mut hash = blake3::Hasher::new();
+            hash.update(b"oasis7.rejected-wait.local-test-ledger.v1\0");
+            hash.update(domain.as_bytes());
+            hash.update(b"\0");
+            hash.update(format!("{value:?}").as_bytes());
+            hash.finalize().to_hex().to_string()
+        }
+        [
+            digest("harness", &self.continuation_harness),
+            digest("continuations", &self.continuations),
+            digest("awaiting-runtime", &self.awaiting_runtime),
+            digest("awaiting-outcomes", &self.awaiting_outcomes),
+            digest("feedback-store", &self.feedback_store),
+        ]
+    }
+
+    /// Local absence only; this does not authenticate restored rejection or settlement.
+    pub fn rejected_unprojected_wait_is_absent(
+        &self,
+        agent_id: &str,
+        proposal: &ContinuationProposalV1,
+        original: &ContinuousAgentRequestContextV1,
+    ) -> Result<bool, AsyncAgentRunnerError> {
+        original
+            .validate_production_lane()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        proposal
+            .validate()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if proposal.agent_id != agent_id
+            || original.agent_subject != agent_id
+            || proposal.world_id != original.runtime_binding.world_id
+            || proposal.origin_turn_id != original.agent_turn_id
+            || proposal.agent_session_id != original.agent_session_id
+            || proposal.agent_turn_id != original.agent_turn_id
+            || proposal.decision_request_id != original.decision_request_id
+            || proposal.origin_request_digest != original.request_digest.to_string()
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "rejected Wait absence identity mismatch".to_string(),
+            ));
+        }
+        Ok(!self.continuations.contains_key(agent_id)
+            && !self.awaiting_runtime.contains_key(agent_id)
+            && !self.awaiting_outcomes.values().any(|outcome| {
+                outcome.agent_id == agent_id
+                    || outcome.prepared_request_context.as_ref() == Some(original)
+            }))
+    }
+    /// Resume preserves the predecessor's origin while binding the new turn separately.
+    /// This witnesses local absence only; the caller authenticates canonical rejection.
+    pub fn rejected_unprojected_resume_is_absent(
+        &self,
+        agent_id: &str,
+        proposal: &ContinuationProposalV1,
+        request: &ContinuousAgentRequestContextV1,
+        turn: &ContinuousAgentTurnContextV1,
+    ) -> Result<bool, AsyncAgentRunnerError> {
+        request
+            .validate_production_lane()
+            .map_err(|e| AsyncAgentRunnerError::Cognition(e.to_string()))?;
+        turn.validate_for_agent(agent_id)
+            .map_err(|e| AsyncAgentRunnerError::Cognition(e.to_string()))?;
+        proposal
+            .validate()
+            .map_err(|e| AsyncAgentRunnerError::Cognition(e.to_string()))?;
+        if request.agent_subject != agent_id
+            || proposal.agent_id != agent_id
+            || proposal.world_id != request.runtime_binding.world_id
+            || proposal.agent_session_id != request.agent_session_id
+            || proposal.agent_turn_id != request.agent_turn_id
+            || proposal.decision_request_id != request.decision_request_id
+            || turn.agent_session_id != request.agent_session_id
+            || turn.agent_turn_id != request.agent_turn_id
+            || turn.decision_request_id != request.decision_request_id
+            || turn.request_digest != request.request_digest
+            || turn.continuation.as_ref() != Some(proposal)
+            || crate::simulator::h_v1("oasis7.cognition.continuation.v1", &turn.continuation)
+                != request.continuation_digest
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "rejected Resume absence identity mismatch".into(),
+            ));
+        }
+        let actor = self
+            .actors
+            .get(agent_id)
+            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
+        Ok(!actor.active_turn.load(std::sync::atomic::Ordering::SeqCst)
+            && !self.continuations.contains_key(agent_id)
+            && !self.awaiting_runtime.contains_key(agent_id)
+            && !self.awaiting_outcomes.values().any(|outcome| {
+                outcome.agent_id == agent_id
+                    || outcome.prepared_request_context.as_ref() == Some(request)
+            }))
+    }
+
+    /// Retire only the pristine local Wait whose canonical admission was rejected.
+    /// The caller must authenticate rejection/settlement before this local transaction.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_rejected_unprojected_wait_cleanup<F>(
+        &mut self,
+        agent_id: &str,
+        proposal: &ContinuationProposalV1,
+        current: &ContinuationCurrentContextV1,
+        original: &ContinuousAgentRequestContextV1,
+        persist: F,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError>
+    where
+        F: FnOnce(&ContinuationHandle) -> Result<(), String>,
+    {
+        self.rejected_unprojected_wait_cleanup_core(
+            agent_id,
+            proposal,
+            current,
+            original,
+            |_, handle| persist(handle),
+        )
+    }
+
+    /// Inspect staged local ledgers immediately before the sole persistence callback.
+    /// Only opaque hashes leave the runner; actors are not exposed or replaced.
+    #[cfg(all(not(target_arch = "wasm32"), any(test, feature = "test_tier_required")))]
+    pub fn with_rejected_unprojected_wait_cleanup_observed<F>(
+        &mut self,
+        agent_id: &str,
+        proposal: &ContinuationProposalV1,
+        current: &ContinuationCurrentContextV1,
+        original: &ContinuousAgentRequestContextV1,
+        persist: F,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError>
+    where
+        F: FnOnce(&ContinuationHandle, [String; 5]) -> Result<(), String>,
+    {
+        self.rejected_unprojected_wait_cleanup_core(
+            agent_id,
+            proposal,
+            current,
+            original,
+            |runner, handle| persist(handle, runner.rejected_wait_test_ledger_digests()),
+        )
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn rejected_unprojected_wait_cleanup_core<F>(
+        &mut self,
+        agent_id: &str,
+        proposal: &ContinuationProposalV1,
+        current: &ContinuationCurrentContextV1,
+        original: &ContinuousAgentRequestContextV1,
+        persist: F,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError>
+    where
+        F: FnOnce(&Self, &ContinuationHandle) -> Result<(), String>,
+    {
+        let invalid = || {
+            AsyncAgentRunnerError::Cognition(
+                "rejected Wait cleanup identity or pristine state mismatch".to_string(),
+            )
+        };
+        current
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        current
+            .authority
+            .validate_proposal(proposal)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        proposal
+            .validate()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        original
+            .validate_production_lane()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        let handle = self.continuations.get(agent_id).ok_or_else(invalid)?;
+        if handle.proposal != *proposal
+            || proposal.agent_id != agent_id
+            || original.agent_subject != agent_id
+            || proposal.world_id != original.runtime_binding.world_id
+            || proposal.origin_turn_id != original.agent_turn_id
+            || proposal.agent_session_id != original.agent_session_id
+            || proposal.agent_turn_id != original.agent_turn_id
+            || proposal.decision_request_id != original.decision_request_id
+            || proposal.origin_request_digest != original.request_digest.to_string()
+            || !handle.active
+            || handle.status != "scheduled"
+            || handle.provenance != "harness_policy"
+            || !handle.continuation_id.is_empty()
+            || !handle.wake_id.is_empty()
+            || !handle.continuation_digest.is_empty()
+            || !handle.continuation_status_digest.is_empty()
+            || handle.wake_seq != 0
+            || handle.world_effect
+            || handle.provider_invocation_count != 0
+            || handle.consumed_budget != 0
+            || handle.remaining_budget != proposal.remaining_budget
+            || handle.terminal_disposition.is_some()
+        {
+            return Err(invalid());
+        }
+        let turn_id = self.awaiting_runtime.get(agent_id).ok_or_else(invalid)?;
+        let outcome = self.awaiting_outcomes.get(turn_id).ok_or_else(invalid)?;
+        let context = outcome.prepared_context.as_ref().ok_or_else(invalid)?;
+        if outcome.agent_id != agent_id
+            || outcome.turn_id != *turn_id
+            || !matches!(
+                outcome.feedback,
+                super::AsyncTurnFeedback::Wait | super::AsyncTurnFeedback::WaitTicks(_)
+            )
+            || outcome.world_effect != super::AsyncWorldEffect::NoEffect
+            || outcome.prepared_request_context.as_ref() != Some(original)
+            || context.agent_id != agent_id
+            || context.agent_session_id != original.agent_session_id
+            || context.agent_turn_id != original.agent_turn_id
+            || context.decision_request_id != original.decision_request_id
+            || context.request_digest != original.request_digest
+        {
+            return Err(invalid());
+        }
+        let mut staged = self.continuation_harness.clone();
+        let rejected = staged
+            .invalidate(handle.clone(), ContinuationInvalidationReason::Rejected)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if rejected.proposal != *proposal
+            || rejected.chain_id != handle.chain_id
+            || rejected.remaining_budget != handle.remaining_budget
+            || rejected.consumed_budget != handle.consumed_budget
+        {
+            return Err(invalid());
+        }
+        let snapshot = (
+            self.continuation_harness.clone(),
+            self.continuations.clone(),
+            self.awaiting_runtime.clone(),
+            self.awaiting_outcomes.clone(),
+            self.feedback_store.clone(),
+        );
+        self.continuation_harness = staged;
+        self.continuations.remove(agent_id);
+        let result = self
+            .release_runtime_turn_for_continuation(
+                agent_id,
+                &original.agent_session_id,
+                &original.agent_turn_id,
+                &original.decision_request_id,
+                original.request_digest.as_str(),
+            )
+            .and_then(|()| persist(self, &rejected).map_err(AsyncAgentRunnerError::Cognition));
+        if let Err(error) = result {
+            (
+                self.continuation_harness,
+                self.continuations,
+                self.awaiting_runtime,
+                self.awaiting_outcomes,
+                self.feedback_store,
+            ) = snapshot;
+            return Err(error);
+        }
+        Ok(rejected)
+    }
     /// Return the proposal identity currently occupying an Agent's
     /// continuation slot.  Runtime-owned continuation identity is checked by
     /// the Viewer before a restarted wake is allowed to proceed.
@@ -270,6 +534,132 @@ impl AsyncAgentRunner {
             self.continuations.remove(agent_id);
         }
         Ok(handle)
+    }
+
+    /// Project the exact rejected predecessor and retire its local turn atomically
+    /// with the caller's durable sidecar checkpoint. Never dispatches an actor.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_rejected_runtime_continuation_cleanup<F>(
+        &mut self,
+        agent_id: &str,
+        runtime: RuntimeAgentContinuation,
+        authority: &ContinuationAuthorityContextV1,
+        persist: F,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError>
+    where
+        F: FnOnce() -> Result<(), String>,
+    {
+        self.rejected_runtime_continuation_cleanup_core(agent_id, runtime, authority, |_| persist())
+    }
+
+    #[cfg(all(not(target_arch = "wasm32"), any(test, feature = "test_tier_required")))]
+    pub fn with_rejected_runtime_continuation_cleanup_observed<F>(
+        &mut self,
+        agent_id: &str,
+        runtime: RuntimeAgentContinuation,
+        authority: &ContinuationAuthorityContextV1,
+        persist: F,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError>
+    where
+        F: FnOnce([String; 5]) -> Result<(), String>,
+    {
+        self.rejected_runtime_continuation_cleanup_core(agent_id, runtime, authority, |runner| {
+            persist(runner.rejected_wait_test_ledger_digests())
+        })
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn rejected_runtime_continuation_cleanup_core<F>(
+        &mut self,
+        agent_id: &str,
+        runtime: RuntimeAgentContinuation,
+        authority: &ContinuationAuthorityContextV1,
+        persist: F,
+    ) -> Result<ContinuationHandle, AsyncAgentRunnerError>
+    where
+        F: FnOnce(&Self) -> Result<(), String>,
+    {
+        if runtime.status != crate::runtime::ContinuationStatusV1::Rejected {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "rejected cleanup requires Runtime rejection".into(),
+            ));
+        }
+        let actor = self
+            .actors
+            .get(agent_id)
+            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
+        if actor.active_turn.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
+        }
+        let existing = self.continuations.get(agent_id).ok_or_else(|| {
+            AsyncAgentRunnerError::Cognition("rejected predecessor local handle missing".into())
+        })?;
+        if existing.continuation_id != runtime.continuation_id
+            || existing.wake_id != runtime.wake_id
+            || existing.wake_seq != runtime.wake_seq
+            || existing.remaining_budget.unit != runtime.remaining_budget.unit
+            || existing.remaining_budget.value != runtime.remaining_budget.value
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "rejected predecessor local identity changed".into(),
+            ));
+        }
+        let outcomes: Vec<_> = self
+            .awaiting_outcomes
+            .iter()
+            .filter(|(_, outcome)| outcome.agent_id == agent_id)
+            .collect();
+        match (self.awaiting_runtime.get(agent_id), outcomes.as_slice()) {
+            (None, []) => {}
+            (Some(mapped), [(id, outcome)]) if mapped == *id && outcome.turn_id == **id => {}
+            _ => {
+                return Err(AsyncAgentRunnerError::Cognition(
+                    "rejected predecessor pending turn map or outcomes conflict".into(),
+                ));
+            }
+        }
+        let snapshot = (
+            self.continuation_harness.clone(),
+            self.continuations.clone(),
+            self.awaiting_runtime.clone(),
+            self.awaiting_outcomes.clone(),
+            self.feedback_store.clone(),
+        );
+        let result = (|| {
+            let handle = self.apply_runtime_terminal_continuation_projection(
+                agent_id,
+                runtime.clone(),
+                authority,
+            )?;
+            // A committed Wait can already have released its original turn.
+            // Any remaining turn must still match the exact predecessor identity.
+            if self.awaiting_runtime.contains_key(agent_id)
+                || self
+                    .awaiting_outcomes
+                    .values()
+                    .any(|outcome| outcome.agent_id == agent_id)
+            {
+                self.release_runtime_turn_for_continuation(
+                    agent_id,
+                    &runtime.agent_session_id,
+                    &runtime.agent_turn_id,
+                    &runtime.decision_request_id,
+                    &runtime.origin_request_digest,
+                )?;
+            }
+            persist(self).map_err(AsyncAgentRunnerError::Cognition)?;
+            Ok(handle)
+        })();
+        if result.is_err() {
+            (
+                self.continuation_harness,
+                self.continuations,
+                self.awaiting_runtime,
+                self.awaiting_outcomes,
+                self.feedback_store,
+            ) = snapshot;
+        }
+        result
     }
 
     /// Reconcile a terminal Runtime projection after Runtime has already
@@ -638,3 +1028,7 @@ impl AsyncAgentRunner {
         Ok(handle)
     }
 }
+
+#[cfg(test)]
+#[path = "async_agent_runner_rejected_wait_tests.rs"]
+mod rejected_wait_tests;

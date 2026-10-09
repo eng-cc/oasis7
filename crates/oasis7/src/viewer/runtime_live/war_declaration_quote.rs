@@ -8,8 +8,6 @@ use crate::viewer::auth::verify_war_declaration_quote_auth_proof;
 use crate::viewer::protocol::{
     GameplayActionError, WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
 };
-use std::io::BufWriter;
-use std::net::TcpStream;
 
 impl ViewerRuntimeLiveServer {
     /// Returns a signed, read-only core war projection; it never declares or reserves a war.
@@ -101,7 +99,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_declare_war(
         &mut self,
         request: WarDeclarationQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,

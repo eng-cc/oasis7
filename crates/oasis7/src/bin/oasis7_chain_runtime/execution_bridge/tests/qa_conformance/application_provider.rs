@@ -18,6 +18,11 @@ pub(super) fn verify_provider_closure(public_client: &RemoteWorldServiceClient) 
         delegation_generation: 1,
     });
     config.decision_mode = ViewerLiveDecisionMode::Llm;
+    config.provider_lineage_store = Some(
+        std::env::current_dir()
+            .unwrap()
+            .join("provider-closure-lineage.json"),
+    );
     let mut server = ViewerRuntimeLiveServer::new(config).unwrap();
     let action = oasis7::simulator::Action::MoveAgent {
         agent_id: "agent-a".into(),

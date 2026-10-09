@@ -27,7 +27,7 @@ mod agent_chat;
 mod agent_chat_intent;
 #[path = "control_plane/auth_helpers.rs"]
 mod auth_helpers;
-mod llm_sidecar;
+pub(in crate::viewer::runtime_live) mod llm_sidecar;
 #[path = "control_plane/prompt_control_enhanced.rs"]
 mod prompt_control_enhanced;
 #[path = "control_plane/prompt_control_legacy.rs"]
@@ -42,7 +42,7 @@ use super::prompt_control_result::{
     PromptControlLedgerInsertError, PromptControlLedgerLookup, PromptControlLedgerReceipt,
 };
 #[path = "control_plane/provider_action_commit.rs"]
-mod provider_action_commit;
+pub(in crate::viewer::runtime_live) mod provider_action_commit;
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use auth_helpers::map_auth_verify_error_code;

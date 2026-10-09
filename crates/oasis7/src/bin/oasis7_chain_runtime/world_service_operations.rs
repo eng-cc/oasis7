@@ -108,7 +108,13 @@ pub(super) fn submit(
     service.check_payload(&pinned, &request.signed_payload)?;
     let existing = outcome(service, &pinned, &correlation)?;
     let status = if matches!(existing, IntentOutcome::Unknown) {
-        if request
+        if matches!(&request.signed_payload, WorldServicePayloadV1::GameplayJson(bytes)
+            if gameplay::consumed_collect_data_nonce(&pinned.world, bytes)?)
+        {
+            // Canonical nonce knowledge is not a correlated historical receipt.
+            // Preserve uncertainty instead of queueing a misleading replay.
+            IntentOutcome::HistoryUnavailable
+        } else if request
             .deadline_unix_ms
             .is_some_and(|deadline| deadline < super::super::now_unix_ms().max(0) as u64)
         {

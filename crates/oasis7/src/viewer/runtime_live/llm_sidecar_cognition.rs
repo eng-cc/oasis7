@@ -29,10 +29,26 @@ struct ProviderCapabilityContext {
     session_id: String,
 }
 
+#[path = "llm_sidecar_hosted_wait.rs"]
+mod hosted_wait;
+#[path = "llm_sidecar_wait_proposal.rs"]
+mod wait_proposal;
+pub(in crate::viewer::runtime_live) use hosted_wait::HostedWait;
+#[path = "llm_sidecar_hosted_resume.rs"]
+mod hosted_resume;
+pub(in crate::viewer::runtime_live) use hosted_resume::HostedResume;
+
+#[path = "llm_sidecar_service_admission.rs"]
+mod service_admission;
+pub(in crate::viewer::runtime_live) use service_admission::HostedAdmission;
+
+#[path = "llm_sidecar_context_digests.rs"]
+mod context_digests;
 #[path = "llm_sidecar_resume_recovery.rs"]
 mod resume_recovery;
 #[path = "llm_sidecar_cognition_service.rs"]
 mod service_cognition;
+use context_digests::{provider_policy_context_digest, provider_wait_precondition_digest};
 
 /// Viewer-side seam for the Runtime-owned cognition binding. The viewer does
 /// not inspect or synthesize persisted authority fields; Runtime is the sole
@@ -138,6 +154,11 @@ impl RuntimeLlmSidecar {
             .collect::<Vec<_>>();
 
         for agent_id in agent_ids {
+            if self.provider_service_required
+                && !self.has_pending_service_resume_for_agent(&agent_id)
+            {
+                self.ensure_canonical_agent_durable_admission()?;
+            }
             let settings = match provider_settings.as_ref() {
                 Some(settings) => settings.clone(),
                 None => continuation_support::builtin_cognition_settings(agent_id.as_str())?,
@@ -272,11 +293,6 @@ impl RuntimeLlmSidecar {
                     self.provider_continuation_recovery_pending
                         .remove(agent_id.as_str());
                     self.pending_runtime_wakes.remove(&wake.wake_id);
-                    self.provider_scheduler_pending.remove(&format!(
-                        "{}:resume:{}",
-                        request_context.provider_invocation_key(),
-                        wake.wake_id
-                    ));
                     self.provider_contexts.remove(agent_id.as_str());
                     self.provider_active_turns.remove(agent_id.as_str());
                     self.provider_retry_contexts.remove(agent_id.as_str());
@@ -585,6 +601,11 @@ impl RuntimeLlmSidecar {
                     // by the normal scheduler on a later tick; never retain
                     // the consumed lease in the adapter's mirror.
                     self.pending_runtime_wakes.remove(&wake.wake_id);
+                    self.provider_scheduler_pending.remove(&format!(
+                        "{}:resume:{}",
+                        request_context.provider_invocation_key(),
+                        wake.wake_id
+                    ));
                 }
                 ProviderContextState {
                     turn_context,
@@ -599,27 +620,6 @@ impl RuntimeLlmSidecar {
         }
         Ok(())
     }
-}
-
-fn provider_wait_precondition_digest(observation: &Observation) -> String {
-    crate::simulator::h_v1("oasis7.cognition.provider-wait-precondition.v1", &{
-        let mut stable = observation.clone();
-        stable.time = 0;
-        stable
-    })
-    .to_string()
-}
-
-fn provider_policy_context_digest(
-    request: &crate::simulator::ContinuousAgentRequestContextV1,
-) -> String {
-    let policy_hash = request
-        .base_decision_request
-        .capability_catalog
-        .as_ref()
-        .map(|catalog| catalog.policy_hash.as_str())
-        .unwrap_or("missing-provider-policy");
-    crate::simulator::h_v1("oasis7.cognition.provider-policy.v1", &policy_hash).to_string()
 }
 
 impl RuntimeLlmSidecar {

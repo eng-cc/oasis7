@@ -1,6 +1,42 @@
 use super::*;
 
 #[test]
+fn canonical_release_receipt_requires_original_identity_and_accounting() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let context = valid_test_provider_context(&world, "agent-a", "release-turn", "release-request");
+    let lease = reserve_test_provider_lease(&mut world, &context);
+    let receipt = world.release_cognition_lease(&lease.lease_id).unwrap();
+    RuntimeLlmSidecar::validate_service_release_receipt(
+        &context.request_context,
+        &lease,
+        serde_json::to_value(&receipt).unwrap(),
+    )
+    .unwrap();
+    let mut wrong_identity = receipt.clone();
+    wrong_identity.agent_turn_id = "different-turn".into();
+    wrong_identity.receipt_digest = wrong_identity.recompute_digest();
+    assert!(
+        RuntimeLlmSidecar::validate_service_release_receipt(
+            &context.request_context,
+            &lease,
+            serde_json::to_value(wrong_identity).unwrap()
+        )
+        .is_err()
+    );
+    let mut wrong_accounting = receipt;
+    wrong_accounting.released_amount = 0;
+    wrong_accounting.receipt_digest = wrong_accounting.recompute_digest();
+    assert!(
+        RuntimeLlmSidecar::validate_service_release_receipt(
+            &context.request_context,
+            &lease,
+            serde_json::to_value(wrong_accounting).unwrap()
+        )
+        .is_err()
+    );
+}
+
+#[test]
 fn settled_service_lease_cleanup_preserves_a_newer_mirror() {
     let mut world = bound_provider_lease_test_world(&["agent-a"]);
     let original_context =

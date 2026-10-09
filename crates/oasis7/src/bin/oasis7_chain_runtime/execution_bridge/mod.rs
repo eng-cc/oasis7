@@ -826,7 +826,6 @@ mod tests;
 pub(super) use self::driver::NodeRuntimeExecutionDriver;
 #[cfg(not(test))]
 pub(super) use self::driver::derive_local_execution_bootstrap;
-pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;
 #[allow(unused_imports)]
 pub(crate) use self::driver::{load_execution_world, load_execution_world_with_policy};
 #[allow(unused_imports)]
@@ -839,5 +838,6 @@ pub(crate) use self::driver_observability::{
     ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
     snapshot_execution_bridge_commit_timing, snapshot_execution_bridge_module_tick_routing_metrics,
 };
+pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;
 #[cfg(not(test))]
 pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;

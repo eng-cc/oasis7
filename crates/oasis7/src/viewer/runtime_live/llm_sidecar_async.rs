@@ -63,7 +63,7 @@ pub(super) fn reserve_provider_cognition_lease(
         .map_err(|error| format!("cognition lease admission rejected: {error:?}"))
 }
 
-fn provider_cognition_lease_request(
+pub(in crate::viewer::runtime_live) fn provider_cognition_lease_request(
     world: &RuntimeWorld,
     context: &cognition_context::ProviderContextState,
     canonical_service: bool,
@@ -149,14 +149,14 @@ impl RuntimeLlmSidecar {
                 .map(|_| ())
                 .map_err(|error| format!("{error:?}"));
         }
-        self.provider_scheduler_operation(
+        let receipt = self.provider_scheduler_operation(
             request,
             "release",
             crate::world_service::wire::SchedulerOperationV1::ReleaseLease {
                 lease_id: lease.lease_id.clone(),
             },
-        )
-        .map(|_| ())
+        )?;
+        Self::validate_service_release_receipt(request, lease, receipt)
     }
 
     pub(in crate::viewer::runtime_live) fn settle_provider_lease_at_authority(
@@ -252,7 +252,6 @@ impl RuntimeLlmSidecar {
         )>,
     ) -> Result<serde_json::Value, String> {
         use crate::world_service::{
-            authority::sign_read_request,
             client::{RemoteWorldServiceClient, WorldServicePort},
             wire::*,
         };
@@ -261,99 +260,12 @@ impl RuntimeLlmSidecar {
             .provider_service_config
             .clone()
             .ok_or("canonical provider service missing")?;
-        let signer = self
-            .provider_service_signer
-            .as_ref()
-            .ok_or("explicit canonical Agent signer missing")?;
-        let id = format!("{}:{phase}", request.provider_invocation_key());
-        let existing = self.provider_scheduler_pending.get(&id).cloned();
-        let pending = if let Some(pending) = existing.as_ref() {
-            if phase.starts_with("resume:") {
-                let (context, current) = prepared.as_ref().ok_or(
-                    "canonical ResumeWake retry requires complete original prepared context",
-                )?;
-                let original = pending.resume_context.as_ref().ok_or(
-                    "canonical ResumeWake checkpoint lacks original prepared context; fenced",
-                )?;
-                if serde_json::to_value(context).map_err(|error| error.to_string())?
-                    != serde_json::to_value(original).map_err(|error| error.to_string())?
-                    || pending.resume_current_context.as_ref() != Some(current)
-                {
-                    return Err(
-                        "canonical ResumeWake prepared checkpoint identity conflict; fenced".into(),
-                    );
-                }
-            }
-            let WorldServicePayloadV1::Scheduler(signed) = &pending.payload else {
-                return Err("pending scheduler checkpoint operation mismatch".into());
-            };
-            let key_bytes: [u8; 32] = hex::decode(&signer.private_key_hex)
-                .map_err(|_| "invalid Agent signer key")?
-                .try_into()
-                .map_err(|_| "invalid Agent signer key")?;
-            let public_key = hex::encode(
-                ed25519_dalek::SigningKey::from_bytes(&key_bytes)
-                    .verifying_key()
-                    .to_bytes(),
-            );
-            if signed.subject_public_key != public_key
-                || signed.request.agent_id != request.agent_subject
-                || signed.request.delegation_generation != signer.delegation_generation
-                || signed.request.operation != operation
-            {
-                return Err("pending scheduler request identity or generation changed; original intent fenced".into());
-            }
-            pending.clone()
-        } else {
-            let b = if phase == "reserve" || phase.starts_with("prefix:") {
-                &request.runtime_binding
-            } else {
-                self.provider_service_projection
-                    .as_ref()
-                    .and_then(|view| view.runtime_binding.as_ref())
-                    .ok_or("canonical scheduler settlement requires verified current binding")?
-            };
-            let signed = sign_read_request(
-                "scheduler",
-                SchedulerIntentV1 {
-                    agent_id: request.agent_subject.clone(),
-                    request_id: id.clone(),
-                    delegation_generation: signer.delegation_generation,
-                    captured_base_binding: crate::runtime::RuntimeCognitionBaseBindingV1 {
-                        world_id: b.world_id.clone(),
-                        branch_id: b.branch_id.clone(),
-                        finality_epoch: b.finality_epoch,
-                        finality_block_hash: b
-                            .finality_block_hash
-                            .as_ref()
-                            .map(ToString::to_string),
-                        finality_status: b.finality_status.clone(),
-                        base_tick: b.base_tick,
-                        base_world_hash: b.base_world_hash.to_string(),
-                        reorg_epoch: b.reorg_epoch,
-                        runtime_manifest_hash: b.runtime_manifest_hash.to_string(),
-                    },
-                    operation,
-                },
-                &signer.private_key_hex,
-            )?;
-            let payload = WorldServicePayloadV1::Scheduler(signed);
-            let correlation =
-                crate::world_service::derive_correlation(config.expected_world.clone(), &payload)?;
-            let pending = lineage_persistence::PendingProviderSchedulerIntent {
-                resume_context: prepared.as_ref().map(|(context, _)| context.clone()),
-                resume_current_context: prepared.map(|(_, current)| current),
-                correlation,
-                payload,
-            };
-            self.provider_scheduler_pending.insert(id, pending.clone());
-            self.persist_provider_lineage()?;
-            pending
-        };
+        let (pending, existed) =
+            self.prepare_service_scheduler_checkpoint(request, phase, operation, prepared)?;
         let client = RemoteWorldServiceClient::new(config)
             .map_err(|error| error.to_string())?
             .with_query_state(self.provider_service_query_state.clone());
-        let response = if existing.is_some() {
+        let response = if existed {
             client
                 .lookup(
                     LookupIntentRequest {
@@ -556,6 +468,9 @@ impl RuntimeLlmSidecar {
                 )
             {
                 self.fence_provider_cognition_lease(agent_id.as_str(), &context, error.clone());
+                return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
+            }
+            if let Err(error) = self.ensure_canonical_agent_durable_admission() {
                 return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
             }
             let observation = match kernel.observe(agent_id.as_str()) {

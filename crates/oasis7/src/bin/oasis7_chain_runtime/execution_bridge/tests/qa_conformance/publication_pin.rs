@@ -6,6 +6,11 @@ fn real_tcp_disposable_world_cache_eviction_preserves_exact_result_and_view() {
     let fixture = Fixture::with_controlled_commits(true);
     let original = fixture.delegation();
     fixture.client.submit(original.clone()).unwrap();
+    commit_request(
+        &mut fixture.driver.lock().unwrap(),
+        0,
+        Some(original.clone()),
+    );
     let commit = fixture.committed(&original);
     let old = fixture
         .client
@@ -68,7 +73,7 @@ fn real_tcp_fixed_projection_remains_one_generation_during_publication() {
     worker.join().unwrap();
     let current = fixture.client.read_view(fixture.view(None)).unwrap();
     assert!(current.version().commit.position > baseline.version().commit.position);
-    assert_eq!(current.version().commit, &current.continuation().commit);
+    assert_eq!(&current.version().commit, &current.continuation().commit);
     assert_eq!(current.logical_tick(), current.projection().state.time);
     println!(
         "PRE2_FIXED_PROJECTION_PUBLICATION_PIN_PASSED signed_reads=16 real_successor_commits=4"

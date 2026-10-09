@@ -4,7 +4,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn advance_runtime(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
         action: &'static str,
         step_count: usize,
         request_id: Option<u64>,

@@ -105,6 +105,12 @@ struct PersistedProviderLineageV1 {
     provider_service_pending: BTreeMap<String, PendingProviderServiceIntent>,
     #[serde(default)]
     provider_scheduler_pending: BTreeMap<String, PendingProviderSchedulerIntent>,
+    #[serde(default)]
+    hosted_admission: Option<cognition_context::HostedAdmission>,
+    #[serde(default)]
+    hosted_wait: Option<cognition_context::HostedWait>,
+    #[serde(default)]
+    hosted_resume: Option<cognition_context::HostedResume>,
     provider_wait_until: BTreeMap<String, u64>,
     provider_feedback_seq: BTreeMap<String, u64>,
     #[serde(default)]
@@ -515,7 +521,14 @@ impl RuntimeLlmSidecar {
         self.provider_recovery_pending = checkpoint.provider_recovery_pending;
         self.provider_wake_recovery_pending = checkpoint.provider_wake_recovery_pending;
         self.provider_service_pending = checkpoint.provider_service_pending;
+        self.provider_restored_service_checkpoints = self.provider_service_pending.clone();
         self.provider_scheduler_pending = checkpoint.provider_scheduler_pending;
+        self.hosted_admission = checkpoint.hosted_admission;
+        self.hosted_wait = checkpoint.hosted_wait;
+        self.hosted_resume = checkpoint.hosted_resume;
+        self.restore_hosted_wait_original()?;
+        self.restore_hosted_resume_original()?;
+        self.restore_hosted_admission_original()?;
         self.provider_wait_until = checkpoint.provider_wait_until;
         self.provider_feedback_seq = checkpoint.provider_feedback_seq;
         self.provider_feedback_seq_by_session = checkpoint.provider_feedback_seq_by_session;
@@ -527,6 +540,7 @@ impl RuntimeLlmSidecar {
             .into_iter()
             .filter(|decision| !self.provider_decision_is_terminalized(decision))
             .collect();
+        self.restore_queued_wait_originals()?;
         // A retry context is an interrupted logical request whose actor-local
         // budget ledger is absent after restart.  Do not carry it into the
         // normal retry selector: fence the identity for terminal feedback and
@@ -1046,6 +1060,9 @@ impl RuntimeLlmSidecar {
             provider_wake_recovery_pending: self.provider_wake_recovery_pending.clone(),
             provider_service_pending: self.provider_service_pending.clone(),
             provider_scheduler_pending: self.provider_scheduler_pending.clone(),
+            hosted_admission: self.hosted_admission.clone(),
+            hosted_wait: self.hosted_wait.clone(),
+            hosted_resume: self.hosted_resume.clone(),
             provider_wait_until: self.provider_wait_until.clone(),
             provider_feedback_seq: self.provider_feedback_seq.clone(),
             provider_feedback_seq_by_session: self.provider_feedback_seq_by_session.clone(),

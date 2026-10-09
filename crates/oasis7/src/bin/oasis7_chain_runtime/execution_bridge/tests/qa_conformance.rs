@@ -1,13 +1,50 @@
 //! Real-driver TCP conformance, without passing node paths to the application client.
 use super::*;
+mod application_admission;
+mod application_admission_boundaries;
+mod application_fairness;
+mod application_fresh;
 mod application_harness;
+mod application_hosted;
+mod application_hosted_final_budget;
+mod application_hosted_final_budget_write_failure;
+mod application_hosted_final_budget_recovery;
+mod application_hosted_resume_rejection;
+mod application_hosted_resume_rejection_write_failure;
+mod application_hosted_resume_rejection_recovery;
+mod application_hosted_resume_write_failure;
+mod application_hosted_wait;
+mod application_hosted_wait_capture_crash;
+mod application_hosted_wait_crash;
+mod application_hosted_wait_recovery;
+mod application_hosted_wait_rejection;
+mod application_hosted_wait_rejection_recovery;
+mod application_hosted_wait_rejection_write_failure;
+mod application_hosted_wait_write_failure;
+mod application_memory_authority;
+mod application_memory_recovery;
+mod application_memory_tamper;
+mod application_metadata;
+mod application_stream_boundaries;
+mod hosted_wait_clock;
+mod provider_metadata;
+use application_harness::run_isolated_application;
+mod application_process_dispatch;
 mod application_provider;
+mod application_release;
 mod application_wake;
+mod application_world_coherence;
 mod http_fixture;
 use http_fixture::read_request;
+mod legacy_nonce;
+mod legacy_routes;
+mod privacy_identity;
 mod process_restart;
 mod production_pressure;
 mod publication_pin;
+mod response_privacy;
+mod strict_http;
+mod topology_no_mount;
 mod viewer_process;
 use oasis7::runtime::{Action, WorldState};
 use oasis7::world_service::client::{
@@ -55,11 +92,14 @@ struct Fixture {
     root: std::path::PathBuf,
     node: Arc<Mutex<NodeRuntime>>,
     halt: Arc<AtomicBool>,
-    worker: Option<thread::JoinHandle<()>>,
+    worker: Mutex<Option<thread::JoinHandle<()>>>,
     client: RemoteWorldServiceClient,
     owner: String,
     lose_next_submit: Arc<AtomicBool>,
+    lose_next_release: Arc<AtomicBool>,
     controlled_submit_commit: Arc<AtomicBool>,
+    world_gate: Arc<http_fixture::WorldGate>,
+    concurrent_dispatch: Arc<AtomicBool>,
     lookup_digests: Arc<Mutex<Vec<String>>>,
     outage: Arc<http_fixture::Outage>,
     tamper_next_describe: Arc<AtomicBool>,
@@ -255,10 +295,16 @@ impl Fixture {
         let halt = Arc::new(AtomicBool::new(false));
         let lose_next_submit = Arc::new(AtomicBool::new(false));
         let worker_lose = lose_next_submit.clone();
+        let lose_next_release = Arc::new(AtomicBool::new(false));
+        let worker_release = lose_next_release.clone();
         let tamper_next_describe = Arc::new(AtomicBool::new(false));
         let worker_tamper = tamper_next_describe.clone();
         let controlled_submit_commit = Arc::new(AtomicBool::new(false));
         let worker_controlled = controlled_submit_commit.clone();
+        let world_gate = Arc::new(http_fixture::WorldGate::default());
+        let worker_gate = world_gate.clone();
+        let concurrent_dispatch = Arc::new(AtomicBool::new(false));
+        let worker_concurrent = concurrent_dispatch.clone();
         let lookup_digests = Arc::new(Mutex::new(Vec::new()));
         let worker_lookups = lookup_digests.clone();
         let outage = Arc::new(http_fixture::Outage::default());
@@ -269,93 +315,102 @@ impl Fixture {
         let worker_root = root.clone();
         let trusted_service_public_key = signer.public_key_hex.clone();
         let worker = thread::spawn(move || {
-            while !worker_halt.load(Ordering::SeqCst) {
-                match listener.accept() {
-                    Ok((mut stream, _)) => {
-                        http_fixture::configure_accepted_stream(&stream);
-                        let bytes = read_request(&mut stream);
-                        if bytes.is_empty() {
-                            continue;
-                        }
-                        let first = std::str::from_utf8(&bytes).unwrap().lines().next().unwrap();
-                        let mut parts = first.split_whitespace();
-                        let method = parts.next().unwrap();
-                        let path = parts.next().unwrap();
-                        if worker_outage.reject(&stream) {
-                            continue;
-                        }
-                        if path == LOOKUP_PATH {
-                            http_fixture::record_lookup_digest(&bytes, &worker_lookups);
-                        }
-                        let lose = path == SUBMIT_PATH && worker_lose.swap(false, Ordering::SeqCst);
-                        if lose {
-                            stream.shutdown(std::net::Shutdown::Write).unwrap();
-                        }
-                        let tamper =
-                            path == DESCRIBE_PATH && worker_tamper.swap(false, Ordering::SeqCst);
-                        let mut capture_peer = None;
-                        let mut output_stream = if tamper {
-                            let capture = TcpListener::bind("127.0.0.1:0").unwrap();
-                            capture_peer =
-                                Some(TcpStream::connect(capture.local_addr().unwrap()).unwrap());
-                            capture.accept().unwrap().0
-                        } else {
-                            stream.try_clone().unwrap()
-                        };
-                        let result = crate::world_service_api::maybe_handle(
-                            &mut output_stream,
-                            &bytes,
-                            &worker_node,
-                            method,
-                            path,
-                            "w1",
-                            &worker_root.join("world"),
-                            &worker_root.join("records"),
-                            &worker_root.join("store"),
-                            &signer,
-                        );
-                        eprintln!("fixture_dispatch method={method} path={path} result={result:?}");
-                        if !lose {
-                            assert!(
-                                result.unwrap(),
-                                "actual dispatcher did not handle requested route"
-                            );
-                        }
-                        drop(output_stream);
-                        if let Some(mut peer) = capture_peer {
-                            let mut response = Vec::new();
-                            peer.read_to_end(&mut response).unwrap();
-                            let offset = response
-                                .windows(4)
-                                .position(|window| window == b"\r\n\r\n")
-                                .unwrap()
-                                + 4;
-                            let mut body: serde_json::Value =
-                                serde_json::from_slice(&response[offset..]).unwrap();
-                            body["signature_hex"] = serde_json::json!("00".repeat(64));
-                            crate::write_json_response(
-                                &mut stream,
-                                200,
-                                &serde_json::to_vec(&body).unwrap(),
-                                false,
-                            )
-                            .unwrap();
-                        }
-                        if path == SUBMIT_PATH && worker_controlled.load(Ordering::SeqCst) {
-                            let body =
-                                crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
-                            let request = serde_json::from_slice(body).unwrap();
-                            let mut driver = worker_driver.lock().unwrap();
-                            let height = driver.state.last_applied_committed_height + 1;
-                            commit_request(&mut driver, height, Some(request));
-                        }
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(2))
-                    }
-                    Err(error) => panic!("accept: {error}"),
+            let concurrency_gate = worker_gate.clone();
+            let handler = Arc::new(move |mut stream: TcpStream| {
+                http_fixture::configure_accepted_stream(&stream);
+                let bytes = read_request(&mut stream);
+                if bytes.is_empty() {
+                    return;
                 }
-            }
+                let first = std::str::from_utf8(&bytes).unwrap().lines().next().unwrap();
+                let mut parts = first.split_whitespace();
+                let method = parts.next().unwrap();
+                let path = parts.next().unwrap();
+                if matches!(
+                    worker_gate.pause(path, &bytes),
+                    http_fixture::GateDisposition::ResumeViewAbandoned
+                        | http_fixture::GateDisposition::WaitAdmitViewAbandoned
+                        | http_fixture::GateDisposition::CompensationSettleViewAbandoned
+                ) {
+                    return;
+                }
+                if worker_outage.reject(&stream) {
+                    return;
+                }
+                if path == LOOKUP_PATH {
+                    http_fixture::record_lookup_digest(&bytes, &worker_lookups);
+                }
+                let release = path == SUBMIT_PATH
+                    && http_fixture::record_submit_digest(&bytes, &worker_lookups);
+                let lose = path == SUBMIT_PATH
+                    && (worker_lose.swap(false, Ordering::SeqCst)
+                        || (release && worker_release.swap(false, Ordering::SeqCst)));
+                if lose {
+                    stream.shutdown(std::net::Shutdown::Write).unwrap();
+                }
+                let tamper = path == DESCRIBE_PATH && worker_tamper.swap(false, Ordering::SeqCst);
+                let mut capture_peer = None;
+                let mut output_stream = if tamper {
+                    let capture = TcpListener::bind("127.0.0.1:0").unwrap();
+                    capture_peer = Some(TcpStream::connect(capture.local_addr().unwrap()).unwrap());
+                    capture.accept().unwrap().0
+                } else {
+                    stream.try_clone().unwrap()
+                };
+                let result = crate::world_service_api::maybe_handle(
+                    &mut output_stream,
+                    &bytes,
+                    &worker_node,
+                    method,
+                    path,
+                    "w1",
+                    &worker_root.join("world"),
+                    &worker_root.join("records"),
+                    &worker_root.join("store"),
+                    &signer,
+                );
+                eprintln!("fixture_dispatch method={method} path={path} result={result:?}");
+                if !lose {
+                    assert!(
+                        result.unwrap(),
+                        "actual dispatcher did not handle requested route"
+                    );
+                }
+                drop(output_stream);
+                if let Some(mut peer) = capture_peer {
+                    let mut response = Vec::new();
+                    peer.read_to_end(&mut response).unwrap();
+                    let offset = response
+                        .windows(4)
+                        .position(|window| window == b"\r\n\r\n")
+                        .unwrap()
+                        + 4;
+                    let mut body: serde_json::Value =
+                        serde_json::from_slice(&response[offset..]).unwrap();
+                    body["signature_hex"] = serde_json::json!("00".repeat(64));
+                    crate::write_json_response(
+                        &mut stream,
+                        200,
+                        &serde_json::to_vec(&body).unwrap(),
+                        false,
+                    )
+                    .unwrap();
+                }
+                if path == SUBMIT_PATH && worker_controlled.load(Ordering::SeqCst) {
+                    let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
+                    let request = serde_json::from_slice(body).unwrap();
+                    let mut driver = worker_driver.lock().unwrap();
+                    let height = driver.state.last_applied_committed_height + 1;
+                    commit_request(&mut driver, height, Some(request));
+                }
+            });
+            http_fixture::serve_listener(
+                listener,
+                worker_halt,
+                worker_concurrent,
+                concurrency_gate,
+                handler,
+            );
         });
         let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
             endpoint,
@@ -377,11 +432,14 @@ impl Fixture {
             root,
             node,
             halt,
-            worker: Some(worker),
+            worker: Mutex::new(Some(worker)),
             client,
             owner,
             lose_next_submit,
+            lose_next_release,
             controlled_submit_commit,
+            world_gate,
+            concurrent_dispatch,
             lookup_digests,
             outage,
             tamper_next_describe,
@@ -469,12 +527,25 @@ impl Fixture {
         }
     }
 }
+impl Fixture {
+    fn finish_http_workers(&self) -> Result<(), &'static str> {
+        self.halt.store(true, Ordering::SeqCst);
+        let worker = self
+            .worker
+            .lock()
+            .map_err(|_| "actual fixture listener ownership lock poisoned")?
+            .take();
+        if let Some(worker) = worker {
+            worker
+                .join()
+                .map_err(|_| "actual fixture listener or connection worker failed")?;
+        }
+        Ok(())
+    }
+}
 impl Drop for Fixture {
     fn drop(&mut self) {
-        self.halt.store(true, Ordering::SeqCst);
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
+        let _ = self.finish_http_workers();
         self.abort_automatic_commit.store(true, Ordering::SeqCst);
         self.automatic_commit_gate.store(true, Ordering::SeqCst);
         let _ = self.node.lock().unwrap().stop();
@@ -625,316 +696,18 @@ fn real_tcp_lost_response_signed_gameplay_and_driver_restart() {
 
 #[test]
 fn real_tcp_application_artifact_with_os_denied_node_directory() {
-    run_isolated_application(false, false);
+    run_isolated_application(false, false, false, false, false, false);
 }
 
 #[test]
 fn real_tcp_application_genuine_wait_wake_no_node_directory() {
-    run_isolated_application(true, false);
-}
-
-fn run_isolated_application(wake: bool, drift: bool) {
-    let fixture = Fixture::with_options(true, wake);
-    let app_dir = temp_dir("qa-world-service-application");
-    fs::create_dir_all(&app_dir).unwrap();
-    let registration = fixture.delegation();
-    fixture.client.submit(registration.clone()).unwrap();
-    commit_request(
-        &mut fixture.driver.lock().unwrap(),
-        2,
-        Some(registration.clone()),
-    );
-    fixture.committed(&registration);
-    let _clock = application_wake::start_parent_clock(&fixture, wake && !drift);
-    let original = cognition_request(&fixture);
-    fixture
-        .controlled_submit_commit
-        .store(true, Ordering::SeqCst);
-    let executable = std::env::current_exe().unwrap();
-    // The application receives connection configuration and signed request only.
-    // The forbidden path is supplied solely to prove OS denial, never as client configuration.
-    let denied = fs::canonicalize(&fixture.root).unwrap();
-    let profile = format!(
-        "(version 1)(allow default)(deny file-read* file-write* (subpath \"{}\"))",
-        denied.display()
-    );
-    let config = fixture.client.config();
-    println!(
-        "application_artifact_blake3={} mechanism=sandbox-exec",
-        blake3::hash(&fs::read(&executable).unwrap())
-    );
-    println!(
-        "application_config_identity={} sandbox_profile_blake3={} isolated_cwd=true",
-        serde_json::json!({"endpoint":config.endpoint,"trusted_service_public_key":config.trusted_service_public_key,"world":config.expected_world,"scope":config.scope_id,"agent_scope":"agent:agent-a","owner_public_key":sign_read_request("owner",(),&config.read_private_key_hex).unwrap().subject_public_key,"agent_delegate_public_key":sign_read_request("delegate",(),&hex::encode([8u8;32])).unwrap().subject_public_key,"delegation_generation":1,"decision_source":"provider_backed","provider_backend":"provider_local_mock","execution_lane":"headless_agent"}),
-        blake3::hash(profile.as_bytes())
-    );
-    let output = std::process::Command::new("/usr/bin/sandbox-exec")
-        .args(["-p", &profile])
-        .arg(&executable)
-        .args([
-            "--ignored",
-            "--exact",
-            "execution_bridge_real_tests::real_execution_bridge::tests::qa_conformance::application_process_probe",
-            "--nocapture",
-        ])
-        .current_dir(&app_dir)
-        .env("OASIS7_AGENT_DECISION_SOURCE", "provider_backed")
-        .env("OASIS7_AGENT_PROVIDER_BACKEND", "provider_local_mock")
-        .env("OASIS7_AGENT_PROVIDER_CONTRACT", "worldsim_provider_v1")
-        .env("OASIS7_AGENT_PROVIDER_TRANSPORT", "loopback_http")
-        .env("OASIS7_AGENT_PROVIDER_PROFILE", "oasis7_p0_low_freq_npc")
-        .env("OASIS7_AGENT_EXECUTION_LANE", "headless_agent")
-        .env("OASIS7_AGENT_PROVIDER_URL", &config.endpoint)
-        .env_remove("OASIS7_AGENT_PROVIDER_AUTH_TOKEN")
-        .env("PRE2_APP_WAKE", if wake { "1" } else { "0" })
-        .env("PRE2_APP_WAKE_DRIFT", if drift { "1" } else { "0" })
-        .env("PRE2_APP_ENDPOINT", &config.endpoint)
-        .env("PRE2_APP_TRUST", &config.trusted_service_public_key)
-        .env(
-            "PRE2_APP_WORLD",
-            serde_json::to_string(&config.expected_world).unwrap(),
-        )
-        .env("PRE2_APP_OWNER", &config.read_private_key_hex)
-        .env(
-            "PRE2_APP_REQUEST",
-            serde_json::to_string(&original).unwrap(),
-        )
-        .env("PRE2_DENIED_NODE_ROOT", &denied)
-        .output()
-        .unwrap();
-    application_harness::validate_output(&fixture, &output, wake, drift);
-    fs::remove_dir_all(app_dir).unwrap();
+    run_isolated_application(true, false, false, false, false, false);
 }
 
 #[test]
 #[ignore = "child application entrypoint; parent supplies explicit config and OS sandbox"]
 fn application_process_probe() {
-    let env = |name: &str| std::env::var(name).unwrap();
-    let denied = std::path::PathBuf::from(env("PRE2_DENIED_NODE_ROOT"));
-    let error = fs::read(denied.join("world/world-service-identity.json")).unwrap_err();
-    assert_eq!(
-        error.kind(),
-        std::io::ErrorKind::PermissionDenied,
-        "node file must exist and be denied by the OS"
-    );
-    println!("PRE2_APPLICATION_OS_DENIAL_PROBE_PASSED");
-    let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
-        endpoint: env("PRE2_APP_ENDPOINT"),
-        trusted_service_public_key: env("PRE2_APP_TRUST"),
-        expected_world: serde_json::from_str(&env("PRE2_APP_WORLD")).unwrap(),
-        scope_id: "public".into(),
-        read_private_key_hex: env("PRE2_APP_OWNER"),
-        timeout: Duration::from_secs(2),
-        max_response_bytes: 1_048_576,
-    })
-    .unwrap();
-    if env("PRE2_APP_WAKE") == "1" {
-        application_wake::verify_wait_wake(&client);
-        if std::env::var("PRE2_APP_WAKE_DRIFT").unwrap() != "1" {
-            println!("PRE2_APPLICATION_OS_DENIAL_AND_GENUINE_WAKE_PASSED");
-        }
-        return;
-    }
-    let original: SubmitIntentRequest<WorldServicePayloadV1> =
-        serde_json::from_str(&env("PRE2_APP_REQUEST")).unwrap();
-    client.describe().unwrap();
-    client.submit(original.clone()).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let commit = loop {
-        let response = client
-            .lookup(
-                LookupIntentRequest {
-                    contract_version: 1,
-                    key: original.correlation.key.clone(),
-                },
-                original.signed_payload.clone(),
-            )
-            .unwrap();
-        if let IntentOutcome::Committed { commit, .. } = response.outcome {
-            break commit;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "no application canonical receipt"
-        );
-        thread::sleep(Duration::from_millis(10));
-    };
-    let view = client
-        .read_view(ReadWorldViewRequest {
-            contract_version: 1,
-            world: client.config().expected_world.clone(),
-            scope_id: "public".into(),
-            min_commit: Some(commit),
-            fixed_commit: None,
-            deadline_unix_ms: None,
-        })
-        .unwrap();
-    client
-        .read_changes(ReadWorldChangesRequest {
-            contract_version: 1,
-            cursor: view.continuation().clone(),
-            max_items: 32,
-            max_bytes: 65_536,
-        })
-        .unwrap();
-    let mut protected_config = client.config().clone();
-    protected_config.scope_id = "agent:agent-a".into();
-    let protected = RemoteWorldServiceClient::new(protected_config).unwrap();
-    let baseline = protected
-        .read_view(ReadWorldViewRequest {
-            contract_version: 1,
-            world: protected.config().expected_world.clone(),
-            scope_id: protected.config().scope_id.clone(),
-            min_commit: None,
-            fixed_commit: None,
-            deadline_unix_ms: None,
-        })
-        .unwrap();
-    // A real signed gameplay mutation crosses the same isolated application boundary.
-    use oasis7::viewer::{CollectDataCommand, CollectDataRequest, sign_collect_data_auth_proof};
-    let public = sign_read_request("owner", (), &env("PRE2_APP_OWNER"))
-        .unwrap()
-        .subject_public_key;
-    let mut gameplay = CollectDataCommand::Submit {
-        request: CollectDataRequest {
-            electricity_cost: 7,
-            data_amount: 11,
-            player_id: "owner-a".into(),
-            public_key: Some(public.clone()),
-            auth: None,
-        },
-    };
-    let proof =
-        sign_collect_data_auth_proof(&gameplay, 10, &public, &env("PRE2_APP_OWNER")).unwrap();
-    let CollectDataCommand::Submit { request } = &mut gameplay else {
-        unreachable!()
-    };
-    request.auth = Some(proof);
-    let payload = WorldServicePayloadV1::GameplayJson(serde_json::to_vec(&gameplay).unwrap());
-    let gameplay = SubmitIntentRequest {
-        contract_version: 1,
-        correlation: derive_correlation(client.config().expected_world.clone(), &payload).unwrap(),
-        deadline_unix_ms: None,
-        signed_payload: payload,
-    };
-    client.submit(gameplay.clone()).unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let gameplay_commit = loop {
-        let response = client
-            .lookup(
-                LookupIntentRequest {
-                    contract_version: 1,
-                    key: gameplay.correlation.key.clone(),
-                },
-                gameplay.signed_payload.clone(),
-            )
-            .unwrap();
-        match response.outcome {
-            IntentOutcome::Committed { commit, receipt } => {
-                assert!(
-                    receipt["events"]
-                        .as_array()
-                        .is_some_and(|events| !events.is_empty())
-                );
-                break commit;
-            }
-            IntentOutcome::Unknown | IntentOutcome::Pending | IntentOutcome::Received { .. } => {}
-            other => panic!("signed gameplay did not commit: {other:?}"),
-        }
-        assert!(Instant::now() < deadline, "signed gameplay receipt timeout");
-        thread::sleep(Duration::from_millis(10));
-    };
-    let gameplay_view = client
-        .read_view(ReadWorldViewRequest {
-            contract_version: 1,
-            world: client.config().expected_world.clone(),
-            scope_id: "public".into(),
-            min_commit: Some(gameplay_commit.clone()),
-            fixed_commit: None,
-            deadline_unix_ms: None,
-        })
-        .unwrap();
-    client
-        .read_changes(ReadWorldChangesRequest {
-            contract_version: 1,
-            cursor: gameplay_view.continuation().clone(),
-            max_items: 32,
-            max_bytes: 65_536,
-        })
-        .unwrap();
-    let continuation_request = ReadWorldChangesRequest {
-        contract_version: 1,
-        cursor: baseline.continuation().clone(),
-        max_items: 1,
-        max_bytes: 65_536,
-    };
-    let first = protected
-        .read_changes(continuation_request.clone())
-        .unwrap();
-    assert!(
-        !first.changes.is_empty(),
-        "snapshot-to-changes boundary lost the gameplay event"
-    );
-    assert!(first.changes.len() <= 1);
-    let repeated = protected.read_changes(continuation_request).unwrap();
-    assert_eq!(
-        serde_json::to_value(&first).unwrap(),
-        serde_json::to_value(&repeated).unwrap(),
-        "stable cursor replay changed delivery"
-    );
-    let mut cursor = baseline.continuation().clone();
-    let mut delivered = Vec::new();
-    loop {
-        let changes = protected
-            .read_changes(ReadWorldChangesRequest {
-                contract_version: 1,
-                cursor: cursor.clone(),
-                max_items: 1,
-                max_bytes: 65_536,
-            })
-            .unwrap();
-        if changes.changes.is_empty() {
-            break;
-        }
-        assert_ne!(
-            cursor.sequence, changes.next_cursor.sequence,
-            "cursor did not advance"
-        );
-        delivered.extend(changes.changes.into_iter().map(|change| change.change));
-        cursor = changes.next_cursor;
-        assert!(
-            delivered.len() < 128,
-            "bounded fixture change drain did not finish"
-        );
-    }
-    assert!(delivered.iter().any(|change|matches!(serde_json::from_value::<oasis7::runtime::WorldEvent>(change.clone()).unwrap().body,oasis7::runtime::WorldEventBody::Domain(oasis7::runtime::DomainEvent::DataCollectedAuthenticated {collector_agent_id,electricity_cost:7,data_amount:11,player_id,nonce:10,..}) if collector_agent_id=="agent-a" && player_id=="owner-a")),"signed gameplay event missing from protected continuation");
-    let mut wrong_era = cursor;
-    wrong_era.era = wrong_era.era.saturating_add(1);
-    assert!(
-        protected
-            .read_changes(ReadWorldChangesRequest {
-                contract_version: 1,
-                cursor: wrong_era,
-                max_items: 1,
-                max_bytes: 65_536
-            })
-            .is_err(),
-        "cross-era cursor must demand resync"
-    );
-    protected
-        .read_view(ReadWorldViewRequest {
-            contract_version: 1,
-            world: protected.config().expected_world.clone(),
-            scope_id: protected.config().scope_id.clone(),
-            min_commit: Some(gameplay_commit),
-            fixed_commit: None,
-            deadline_unix_ms: None,
-        })
-        .unwrap();
-    application_provider::verify_provider_closure(&client);
-    println!(
-        "PRE2_APPLICATION_OS_DENIAL_AND_FIVE_OPS_PASSED signed_gameplay=true signed_cognition=true"
-    );
+    application_process_dispatch::run();
 }
 
 // Explicit controlled canonical execution is a deterministic service fixture;

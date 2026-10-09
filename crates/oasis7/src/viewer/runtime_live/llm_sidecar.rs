@@ -95,6 +95,10 @@ mod cognition_context;
 mod continuation_support;
 #[path = "llm_sidecar_decision.rs"]
 mod decision;
+#[path = "llm_sidecar_hosted_outcome.rs"]
+mod hosted_outcome;
+#[path = "llm_sidecar_initialization.rs"]
+mod initialization;
 #[path = "llm_sidecar_lease_continuity.rs"]
 mod lease_continuity;
 #[path = "llm_sidecar_lineage.rs"]
@@ -107,16 +111,24 @@ pub(in crate::viewer::runtime_live) mod lineage_persistence;
 mod lineage_recovery;
 #[path = "llm_sidecar_lineage_settlement.rs"]
 mod lineage_settlement;
+#[path = "llm_sidecar_metadata_probe.rs"]
+mod metadata_probe;
 #[path = "llm_sidecar_payer.rs"]
 mod payer_support;
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
+#[path = "llm_sidecar_release_recovery.rs"]
+mod release_recovery;
+#[path = "llm_sidecar_restored_memory.rs"]
+mod restored_memory;
 #[path = "llm_sidecar_runner.rs"]
 mod runner_init;
 #[path = "llm_sidecar_runtime_feedback.rs"]
 mod runtime_feedback;
 #[path = "llm_sidecar_runtime_support.rs"]
 mod runtime_support;
+#[path = "llm_sidecar_scheduler_checkpoint.rs"]
+mod scheduler_checkpoint;
 #[path = "llm_sidecar_stale.rs"]
 mod stale_replan;
 #[path = "llm_sidecar_world_events.rs"]
@@ -257,6 +269,16 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     pending_actions: BTreeMap<u64, RuntimePendingAction>,
     pending_provider_agent_chats: VecDeque<RuntimePendingProviderAgentChat>,
     provider_check_snapshot: Option<RuntimeProviderCheckSnapshot>,
+    pub(in crate::viewer::runtime_live) hosted_service_phase:
+        Option<crate::viewer::runtime_live::agent_service_phase::HostedServicePhase>,
+    pub(in crate::viewer::runtime_live) hosted_service_inflight:
+        Option<crate::viewer::runtime_live::agent_service_io::AgentServiceIoToken>,
+    pub(in crate::viewer::runtime_live) hosted_service_generation: u64,
+    pub(in crate::viewer::runtime_live) hosted_service_config_binding: Option<String>,
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub(in crate::viewer::runtime_live) hosted_service_memory_failure: Option<&'static str>,
+    provider_metadata_generation: u64,
+    provider_metadata_inflight: Option<(String, u64)>,
     runtime_seed_locations: Vec<Location>,
     runtime_seed_model: Option<WorldModel>,
     pub(in crate::viewer::runtime_live) chunk_runtime: ChunkRuntimeConfig,
@@ -286,10 +308,8 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     /// its authoritative lineage is repaired; it must not fall back to a new
     /// provider turn or mutate Runtime state.
     provider_continuation_recovery_pending: BTreeMap<String, String>,
-    /// An active marker without an exactly matching context is a recovery
-    /// fence, not an invitation to allocate a fresh provider turn.  Keeping
-    /// the marker durable prevents a restart from silently losing identity
-    /// evidence and issuing a duplicate provider call.
+    /// Durable active markers without matching contexts fence recovery and
+    /// prevent restart from allocating a duplicate provider turn.
     provider_recovery_pending: BTreeMap<String, lineage_persistence::ProviderRecoveryPending>,
     /// A Runtime wake handoff may fail after the provider action is terminal.
     /// Retain the exact context and disposition until Runtime accepts that
@@ -298,13 +318,31 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
         BTreeMap<String, lineage_persistence::ProviderWakeRecoveryPending>,
     pub(in crate::viewer::runtime_live) provider_service_pending:
         BTreeMap<String, lineage_persistence::PendingProviderServiceIntent>,
-    provider_scheduler_pending:
+    pub(in crate::viewer::runtime_live) hosted_wait: Option<cognition_context::HostedWait>,
+    pub(in crate::viewer::runtime_live) hosted_restored_wait: Option<(
+        cognition_context::HostedWait,
+        Option<lineage_persistence::PendingProviderSchedulerIntent>,
+    )>,
+    pub(in crate::viewer::runtime_live) hosted_restored_wait_decisions:
+        BTreeMap<String, async_support::RuntimeLlmDecision>,
+    pub(in crate::viewer::runtime_live) hosted_resume: Option<cognition_context::HostedResume>,
+    pub(in crate::viewer::runtime_live) hosted_restored_resume: Option<(
+        cognition_context::HostedResume,
+        Option<lineage_persistence::PendingProviderSchedulerIntent>,
+    )>,
+    pub(in crate::viewer::runtime_live) hosted_fresh_view_ready: bool,
+    pub(in crate::viewer::runtime_live) hosted_admission:
+        Option<cognition_context::HostedAdmission>,
+    pub(in crate::viewer::runtime_live) provider_restored_service_checkpoints:
+        BTreeMap<String, lineage_persistence::PendingProviderServiceIntent>,
+    pub(in crate::viewer::runtime_live) provider_scheduler_pending:
         BTreeMap<String, lineage_persistence::PendingProviderSchedulerIntent>,
     pub(in crate::viewer::runtime_live) provider_service_config:
         Option<crate::world_service::client::WorldServiceClientConfig>,
     pub(in crate::viewer::runtime_live) provider_service_query_state:
         crate::world_service::client::WorldServiceQueryState,
     pub(in crate::viewer::runtime_live) provider_service_required: bool,
+    pub(in crate::viewer::runtime_live) provider_service_lineage_store_explicit: bool,
     pub(in crate::viewer::runtime_live) provider_service_projection:
         Option<crate::world_service::projection::WorldServiceProjection>,
     pub(in crate::viewer::runtime_live) provider_service_signer:
@@ -354,13 +392,32 @@ impl RuntimePlayerBindingPlan {
 impl RuntimeLlmSidecar {
     #[cfg(any(test, feature = "test_tier_required"))]
     pub(in crate::viewer::runtime_live) fn service_test_summary(&self) -> serde_json::Value {
+        #[cfg(not(target_arch = "wasm32"))]
+        let native_runner_present = self
+            .runner
+            .as_ref()
+            .and_then(RuntimeDecisionRunner::async_runner)
+            .is_some();
+        #[cfg(target_arch = "wasm32")]
+        let native_runner_present = false;
         serde_json::json!({
             "pending_intent_count": self.provider_service_pending.len(),
+            "native_runner_present": native_runner_present,
+            "hosted_service_phase": self.hosted_service_phase.as_ref().map(|phase| phase.test_phase_label()),
+            "hosted_service_memory_failure": self.hosted_service_memory_failure,
             "pending_action_count": self.pending_actions.len(),
             "terminal_states": self.provider_terminal_states,
             "memory_store": self.provider_memory_store,
             "pending_wake_ids": self.pending_runtime_wakes.keys().collect::<Vec<_>>(),
             "mirrored_lease_count": self.provider_cognition_leases.len(),
+            "mirrored_lease_identities": self.provider_cognition_leases.iter().take(16)
+                .map(|(agent_id, lease)| serde_json::json!({
+                    "agent_id": agent_id,
+                    "lease_id": lease.lease_id,
+                    "request_digest": lease.request_digest,
+                    "matches_terminal_request": self.provider_terminal_states.get(agent_id)
+                        .is_some_and(|terminal| terminal.request_digest == lease.request_digest),
+                })).collect::<Vec<_>>(),
         })
     }
     #[cfg(any(test, feature = "test_tier_required"))]
@@ -369,6 +426,7 @@ impl RuntimeLlmSidecar {
         cognition: RuntimeProviderActionContext,
         _action: crate::simulator::Action,
     ) -> Result<(), String> {
+        self.ensure_canonical_agent_durable_admission()?;
         let agent_id = cognition.request.request_context.agent_subject.clone();
         let observation = self
             .shadow_kernel
@@ -477,69 +535,6 @@ impl RuntimeLlmSidecar {
         self.provider_cognition_leases.remove(agent_id);
     }
 
-    pub(in crate::viewer::runtime_live) fn new(decision_mode: ViewerLiveDecisionMode) -> Self {
-        Self {
-            decision_mode,
-            prompt_profiles: BTreeMap::new(),
-            prompt_profile_history: BTreeMap::new(),
-            agent_player_bindings: BTreeMap::new(),
-            player_agent_bindings: BTreeMap::new(),
-            agent_public_key_bindings: BTreeMap::new(),
-            player_auth_last_nonce: BTreeMap::new(),
-            player_chat_intent_acks: BTreeMap::new(),
-            primary_intents: BTreeMap::new(),
-            llm_decision_mailbox: 0,
-            runner: None,
-            shadow_kernel: None,
-            pending_actions: BTreeMap::new(),
-            pending_provider_agent_chats: VecDeque::new(),
-            provider_check_snapshot: None,
-            runtime_seed_locations: Vec::new(),
-            runtime_seed_model: None,
-            chunk_runtime: ChunkRuntimeConfig::default(),
-            provider_session_ids: BTreeMap::new(),
-            provider_agent_ids: BTreeSet::new(),
-            hosted_local_mock_test_lane: false,
-            #[cfg(any(test, feature = "test_tier_required"))]
-            service_test_actor_agents: BTreeSet::new(),
-            provider_context_seq: BTreeMap::new(),
-            provider_contexts: BTreeMap::new(),
-            provider_retry_contexts: BTreeMap::new(),
-            provider_active_turns: BTreeMap::new(),
-            provider_cognition_leases: BTreeMap::new(),
-            provider_capability_identities: BTreeMap::new(),
-            provider_continuation_proposals: BTreeMap::new(),
-            provider_continuation_recovery_pending: BTreeMap::new(),
-            provider_recovery_pending: BTreeMap::new(),
-            provider_wake_recovery_pending: BTreeMap::new(),
-            provider_service_pending: BTreeMap::new(),
-            provider_scheduler_pending: BTreeMap::new(),
-            provider_service_config: None,
-            provider_service_query_state:
-                crate::world_service::client::WorldServiceQueryState::default(),
-            provider_service_required: false,
-            provider_service_projection: None,
-            provider_service_signer: None,
-            provider_wait_until: BTreeMap::new(),
-            provider_feedback_seq: BTreeMap::new(),
-            provider_feedback_seq_by_session: BTreeMap::new(),
-            provider_memory_store: MemoryWriteStore::default(),
-            provider_completed_decisions: VecDeque::new(),
-            provider_stale_replans: BTreeMap::new(),
-            provider_transport_exhausted: BTreeSet::new(),
-            provider_terminal_states: BTreeMap::new(),
-            provider_late_response_diagnostics: VecDeque::new(),
-            provider_held_decisions: BTreeMap::new(),
-            pending_provider_world_events: BTreeMap::new(),
-            provider_world_event_quarantine: BTreeMap::new(),
-            provider_lineage_store: None,
-            provider_lineage_binding: None,
-            provider_lineage_restored: false,
-            provider_lineage_hydrated: false,
-            provider_lineage_recovery_pending: None,
-            pending_runtime_wakes: BTreeMap::new(),
-        }
-    }
     pub(in crate::viewer::runtime_live) fn with_runtime_seed_model(
         mut self,
         model: &WorldModel,

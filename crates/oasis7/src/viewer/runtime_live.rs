@@ -29,12 +29,17 @@ use crate::simulator::{
     build_world_model,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
+mod agent_service_io;
+mod agent_service_phase;
+mod agent_service_pump;
+mod periodic_service_io;
+mod response_outbox;
 use tracing::Level;
 
 #[cfg(test)]
@@ -155,6 +160,7 @@ pub struct ViewerRuntimeLiveServer {
     last_chain_committed_height: u64,
     verified_world_view: Option<crate::world_service::verified_view::VerifiedWorldView>,
     world_service_query_state: crate::world_service::client::WorldServiceQueryState,
+    periodic_service_executor: Option<Arc<periodic_service_io::Executor>>,
     prepared_world_service_submission: Option<chain_link::PreparedWorldServiceSubmission>,
     pending_world_service_gameplay: Vec<(
         oasis7_client_api::world_service::RequestCorrelation,
@@ -165,6 +171,9 @@ pub struct ViewerRuntimeLiveServer {
     seed_model: Option<WorldModel>,
     script: RuntimeLiveScript,
     llm_sidecar: RuntimeLlmSidecar,
+    agent_service_pump_started: bool,
+    agent_service_session_count: usize,
+    agent_service_pump_error: Option<&'static str>,
     pending_virtual_events: VecDeque<WorldEvent>,
     next_virtual_event_id: u64,
     authoritative_batches: VecDeque<RuntimeAuthoritativeBatchRecord>,
@@ -196,6 +205,9 @@ impl ViewerRuntimeLiveServer {
     pub fn new(
         mut config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
+        config
+            .validate_response_limits()
+            .map_err(ViewerRuntimeLiveServerError::Init)?;
         if config.world_service.is_none() {
             config.world_service =
                 crate::world_service::client::WorldServiceClientConfig::from_env()
@@ -337,6 +349,8 @@ impl ViewerRuntimeLiveServer {
         };
         llm_sidecar.provider_service_required = config.world_service.is_some() || chain_linked;
         llm_sidecar.provider_service_config = config.world_service.clone();
+        llm_sidecar.provider_service_lineage_store_explicit =
+            config.world_service.is_some() && config.ensure_service_agent_lineage_store().is_ok();
         llm_sidecar.provider_service_query_state = world_service_query_state.clone();
         llm_sidecar.provider_service_signer = config.world_service_agent_signer.clone();
         if hosted_local_mock_test_lane_active {
@@ -365,6 +379,7 @@ impl ViewerRuntimeLiveServer {
             last_chain_committed_height: 0,
             verified_world_view: None,
             world_service_query_state,
+            periodic_service_executor: None,
             prepared_world_service_submission: None,
             pending_world_service_gameplay: Vec::new(),
             confirmed_player_gameplay_progress_time: None,
@@ -372,6 +387,9 @@ impl ViewerRuntimeLiveServer {
             seed_model,
             script: RuntimeLiveScript::default(),
             llm_sidecar,
+            agent_service_pump_started: false,
+            agent_service_session_count: 0,
+            agent_service_pump_error: None,
             pending_virtual_events: recovered_generation
                 .as_ref()
                 .map(|generation| {
@@ -463,6 +481,7 @@ impl ViewerRuntimeLiveServer {
     pub fn run(self) -> Result<(), ViewerRuntimeLiveServerError> {
         let listener = TcpListener::bind(&self.config.bind_addr)?;
         let shared = Arc::new(Mutex::new(self));
+        Self::start_agent_service_pump(&shared)?;
         for incoming in listener.incoming() {
             let stream = incoming?;
             let shared = Arc::clone(&shared);
@@ -537,19 +556,35 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar.supports_agent_chat() || self.config.agent_chat_echo_enabled
     }
 
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn test_serve_shared_stream(
+        shared: Arc<Mutex<Self>>,
+        stream: TcpStream,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        Self::serve_shared_stream(shared, stream)
+    }
+
     fn serve_shared_stream(
         shared: Arc<Mutex<Self>>,
         stream: TcpStream,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        Self::start_agent_service_pump(&shared)?;
+        let mut agent_presence = agent_service_pump::AgentServicePresence::new(&shared);
         stream.set_nodelay(true)?;
         stream.set_read_timeout(Some(Duration::from_millis(50)))?;
 
         let reader_stream = stream.try_clone()?;
         let mut reader = BufReader::new(reader_stream);
-        let mut writer = BufWriter::new(stream);
+        let mut socket = stream;
+        let limits = {
+            let server = lock_shared_server(&shared)?;
+            response_outbox::ResponseLimits::from_config(&server.config)
+        };
         let mut session = RuntimeLiveSession::new_with_playing(false);
+        let mut periodic_io = periodic_service_io::SessionPoll::default();
 
         loop {
+            Self::start_agent_service_pump(&shared)?;
             let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => return Ok(()),
@@ -562,15 +597,22 @@ impl ViewerRuntimeLiveServer {
                             Self::prime_shared_request_if_needed(&shared, &request, &session)?;
                         let prepared_submission =
                             Self::prepare_shared_world_service_submission(&shared, &request)?;
-                        let mut server = lock_shared_server(&shared)?;
-                        server.prepared_world_service_submission = prepared_submission;
-                        server.handle_request_with_chain_prime(
-                            request,
-                            &mut session,
-                            &mut writer,
-                            chain_prime,
-                        )?;
-                        server.prepared_world_service_submission = None;
+                        let mut output = response_outbox::ResponseOutbox::new(limits);
+                        let handled = {
+                            let mut server = lock_shared_server(&shared)?;
+                            server.prepared_world_service_submission = prepared_submission;
+                            let handled = server.handle_request_with_chain_prime(
+                                request,
+                                &mut session,
+                                &mut output,
+                                chain_prime,
+                            );
+                            server.prepared_world_service_submission = None;
+                            agent_presence.observe(&mut server, &session);
+                            handled
+                        };
+                        output.deliver(&mut socket)?;
+                        handled?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -578,22 +620,37 @@ impl ViewerRuntimeLiveServer {
                 Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
             }
 
-            let (write_fenced, chain_link_enabled, chain_poll_interval) = {
+            let (write_fenced, chain_link_enabled, chain_poll_interval, service_mode) = {
                 let server = lock_shared_server(&shared)?;
                 (
                     server.authoritative_recovery_write_fence.is_some(),
                     server.chain_link_enabled(),
                     server.config.chain_poll_interval,
+                    server.config.world_service.is_some(),
                 )
             };
+            let mut output = response_outbox::ResponseOutbox::new(limits);
+            if service_mode {
+                if periodic_io
+                    .poll(&shared, &mut session, &mut output)
+                    .is_err()
+                {
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        "viewer periodic service read deferred",
+                        "viewer periodic service read deferred",
+                    );
+                }
+            }
             if !write_fenced
+                && !service_mode
                 && chain_link_enabled
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(chain_poll_interval)
                 && let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
                     &shared,
                     &mut session,
-                    &mut writer,
+                    &mut output,
                 )
             {
                 emit_stderr_or_event(
@@ -603,12 +660,19 @@ impl ViewerRuntimeLiveServer {
                 );
             }
 
-            let mut server = lock_shared_server(&shared)?;
-            if server.authoritative_recovery_write_fence.is_none()
-                && server.config.world_service.is_none()
-            {
-                server.drive_auto_play(&mut session, &mut writer)?;
-            }
+            let driven = {
+                let mut server = lock_shared_server(&shared)?;
+                agent_presence.observe(&mut server, &session);
+                if server.authoritative_recovery_write_fence.is_none()
+                    && server.config.world_service.is_none()
+                {
+                    server.drive_auto_play(&mut session, &mut output)
+                } else {
+                    Ok(())
+                }
+            };
+            output.deliver(&mut socket)?;
+            driven?;
         }
     }
 
@@ -618,7 +682,8 @@ impl ViewerRuntimeLiveServer {
 
         let reader_stream = stream.try_clone()?;
         let mut reader = BufReader::new(reader_stream);
-        let mut writer = BufWriter::new(stream);
+        let mut socket = stream;
+        let limits = response_outbox::ResponseLimits::from_config(&self.config);
         let mut session = RuntimeLiveSession::new_with_playing(false);
 
         loop {
@@ -630,7 +695,10 @@ impl ViewerRuntimeLiveServer {
                     if !trimmed.is_empty()
                         && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
                     {
-                        self.handle_request(request, &mut session, &mut writer)?;
+                        let mut output = response_outbox::ResponseOutbox::new(limits);
+                        let handled = self.handle_request(request, &mut session, &mut output);
+                        output.deliver(&mut socket)?;
+                        handled?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -638,11 +706,12 @@ impl ViewerRuntimeLiveServer {
                 Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
             }
 
+            let mut output = response_outbox::ResponseOutbox::new(limits);
             if self.authoritative_recovery_write_fence.is_none()
                 && self.chain_link_enabled()
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(self.config.chain_poll_interval)
-                && let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer)
+                && let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut output)
             {
                 emit_stderr_or_event(
                     Level::WARN,
@@ -651,9 +720,13 @@ impl ViewerRuntimeLiveServer {
                 );
             }
 
-            if self.authoritative_recovery_write_fence.is_none() {
-                self.drive_auto_play(&mut session, &mut writer)?;
-            }
+            let driven = if self.authoritative_recovery_write_fence.is_none() {
+                self.drive_auto_play(&mut session, &mut output)
+            } else {
+                Ok(())
+            };
+            output.deliver(&mut socket)?;
+            driven?;
         }
     }
 
@@ -661,7 +734,7 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         request: ViewerRequest,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         self.handle_request_with_chain_prime(request, session, writer, None)
     }
@@ -670,7 +743,7 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         request: ViewerRequest,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
         mut chain_prime: Option<Result<(), ViewerRuntimeLiveServerError>>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         self.resolve_authoritative_recovery_write_fence()?;
@@ -1117,7 +1190,11 @@ impl ViewerRuntimeLiveServer {
             return Ok(None);
         }
         Ok(Some(
-            Self::prime_chain_linked_runtime_for_snapshot_minimized_lock(shared).map(|_| ()),
+            Self::prime_chain_linked_runtime_for_snapshot_minimized_lock(
+                shared,
+                world_service_link::coherence_trace_request_kind(request),
+            )
+            .map(|_| ()),
         ))
     }
 }

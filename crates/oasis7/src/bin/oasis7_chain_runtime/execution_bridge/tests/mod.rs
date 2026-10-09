@@ -48,11 +48,11 @@ mod driver_storage_profile;
 // `cfg(test)` on the binary does not propagate to its library dependency.
 #[cfg(feature = "test_tier_required")]
 mod provider_bootstrap;
+mod qa_conformance;
 mod replay;
 mod retention;
 mod simulator_driver;
 mod world_service;
-mod qa_conformance;
 
 const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 

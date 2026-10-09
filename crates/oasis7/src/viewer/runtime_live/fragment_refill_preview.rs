@@ -17,7 +17,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn preview_refill(
         &mut self,
         request: FragmentRefillPreviewProtocolRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,

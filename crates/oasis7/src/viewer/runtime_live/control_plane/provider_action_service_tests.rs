@@ -1,6 +1,38 @@
 use super::*;
 
 #[test]
+fn canonical_wait_notification_without_harness_preserves_world_and_sends_no_http() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .unwrap();
+    server.llm_sidecar.provider_service_required = true;
+    let before = serde_json::to_value(server.world.snapshot()).unwrap();
+    let memory_before = serde_json::to_value(server.llm_sidecar.provider_memory_store()).unwrap();
+    assert!(
+        server
+            .llm_sidecar
+            .validate_admitted_service_wait("agent-a")
+            .unwrap_err()
+            .contains("Harness runner missing")
+    );
+    assert_eq!(
+        serde_json::to_value(server.world.snapshot()).unwrap(),
+        before
+    );
+    assert_eq!(
+        serde_json::to_value(server.llm_sidecar.provider_memory_store()).unwrap(),
+        memory_before
+    );
+    assert!(server.world.runtime_feedback_outbox().unwrap().is_empty());
+    assert_eq!(
+        listener.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}
+
+#[test]
 fn canonical_chat_refusal_precedes_auth_binding_and_world_mutation() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))

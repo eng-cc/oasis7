@@ -8,6 +8,7 @@ impl ViewerRuntimeLiveServer {
         action: crate::simulator::Action,
         intents: Vec<crate::simulator::MemoryWriteIntent>,
     ) -> Result<serde_json::Value, String> {
+        self.config.ensure_service_agent_lineage_store()?;
         let value = self.test_prepare_canonical_provider_response(agent_id, action)?;
         let mut context: super::llm_sidecar::RuntimeProviderActionContext =
             serde_json::from_value(value).map_err(|error| error.to_string())?;
@@ -27,6 +28,7 @@ impl ViewerRuntimeLiveServer {
         agent_id: &str,
         action: crate::simulator::Action,
     ) -> Result<serde_json::Value, String> {
+        self.config.ensure_service_agent_lineage_store()?;
         use crate::world_service::client::WorldServicePort;
         use oasis7_client_api::world_service::*;
         let client = self
@@ -56,6 +58,7 @@ impl ViewerRuntimeLiveServer {
         cognition: serde_json::Value,
         action: crate::simulator::Action,
     ) -> Result<(), String> {
+        self.config.ensure_service_agent_lineage_store()?;
         use crate::world_service::client::WorldServicePort;
         use oasis7_client_api::world_service::*;
         if !self.chain_link_enabled() {
@@ -101,8 +104,12 @@ impl ViewerRuntimeLiveServer {
                     .unwrap_or_else(|| "provider trace failed".into())
             })
     }
-    pub(super) fn configure_service_provider(&mut self) {
+
+    pub(in crate::viewer::runtime_live) fn configure_service_provider(&mut self) {
         self.llm_sidecar.provider_service_required = self.chain_link_enabled();
+        self.llm_sidecar.provider_service_lineage_store_explicit =
+            self.config.world_service.is_some()
+                && self.config.ensure_service_agent_lineage_store().is_ok();
         self.llm_sidecar.provider_service_config = self.config.world_service.clone();
         self.llm_sidecar.provider_service_query_state = self.world_service_query_state.clone();
         self.llm_sidecar.provider_service_signer = self.config.world_service_agent_signer.clone();
@@ -126,6 +133,13 @@ impl ViewerRuntimeLiveServer {
                 tick,
                 "verified canonical Agent view is unavailable; turn remains pending".into(),
             ));
+        }
+        if self
+            .llm_sidecar
+            .recover_service_release_checkpoints(&mut self.world)
+            .map_err(|error| wake_handoff_error_trace("world_service", tick, error))?
+        {
+            return Ok(None);
         }
         if !self.llm_sidecar.provider_service_pending.is_empty() {
             self.retry_committed_provider_action()
@@ -216,18 +230,32 @@ impl ViewerRuntimeLiveServer {
             Some(&cognition.request.request_context),
         )
         .map_err(|error| wake_handoff_error_trace(&agent_id, tick, error))?;
+        use crate::world_service::client::WorldServicePort;
+        use oasis7_client_api::world_service::*;
+        let client = self
+            .world_service_client()
+            .map_err(|error| wake_handoff_error_trace(&agent_id, tick, format!("{error:?}")))?
+            .ok_or_else(|| {
+                wake_handoff_error_trace(&agent_id, tick, "canonical Wait service missing".into())
+            })?;
+        let view = client
+            .read_view(ReadWorldViewRequest {
+                contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                world: client.config().expected_world.clone(),
+                scope_id: client.config().scope_id.clone(),
+                min_commit: None,
+                fixed_commit: None,
+                deadline_unix_ms: None,
+            })
+            .map_err(|error| wake_handoff_error_trace(&agent_id, tick, error.to_string()))?;
+        self.verified_world_view = Some(view);
+        self.configure_service_provider();
+        self.llm_sidecar
+            .validate_admitted_service_wait(&agent_id)
+            .map_err(|error| wake_handoff_error_trace(&agent_id, tick, error))?;
         self.llm_sidecar
             .finish_admitted_service_wait(&agent_id)
             .map_err(|error| wake_handoff_error_trace(&agent_id, tick, error))?;
-        let feedback = self.llm_sidecar.provider_feedback(
-            cognition,
-            None,
-            "pending",
-            None,
-            None,
-            Some("continuation_admitted".into()),
-        );
-        self.deliver_provider_feedback_best_effort(feedback);
         Ok(trace)
     }
 }

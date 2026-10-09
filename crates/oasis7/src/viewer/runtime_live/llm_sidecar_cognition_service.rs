@@ -168,6 +168,63 @@ pub(super) fn runtime_continuation_for_wake_with_identity(
 }
 
 impl crate::viewer::ViewerRuntimeLiveServer {
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn test_reserve_canonical_provider_context(
+        &mut self,
+        value: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        self.config.ensure_service_agent_lineage_store()?;
+        if !self.llm_sidecar.provider_service_required || self.config.world_service.is_none() {
+            return Err("test requires actual canonical provider service".into());
+        }
+        let mut cognition: RuntimeProviderActionContext =
+            serde_json::from_value(value).map_err(|error| error.to_string())?;
+        let lease = self
+            .llm_sidecar
+            .reserve_provider_lease_at_authority(&mut self.world, &cognition.request)?;
+        self.llm_sidecar.bind_provider_cognition_lease(
+            cognition.request.request_context.agent_subject.clone(),
+            lease.clone(),
+        );
+        self.llm_sidecar.provider_contexts.insert(
+            cognition.request.request_context.agent_subject.clone(),
+            cognition.request.clone(),
+        );
+        cognition.cognition_lease = Some(lease);
+        self.llm_sidecar.persist_provider_lineage()?;
+        serde_json::to_value(cognition).map_err(|error| error.to_string())
+    }
+
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn test_release_canonical_provider_context(
+        &mut self,
+        value: serde_json::Value,
+    ) -> Result<(), String> {
+        if !self.llm_sidecar.provider_service_required || self.config.world_service.is_none() {
+            return Err("test requires actual canonical provider service".into());
+        }
+        let cognition: RuntimeProviderActionContext =
+            serde_json::from_value(value).map_err(|error| error.to_string())?;
+        let request = &cognition.request.request_context;
+        let lease = cognition
+            .cognition_lease
+            .as_ref()
+            .ok_or("test requires actually reserved canonical lease")?;
+        self.llm_sidecar
+            .validate_provider_cognition_lease_for_request(
+                &self.world,
+                &request.agent_subject,
+                request,
+                lease,
+                "release",
+            )?;
+        self.llm_sidecar.release_provider_lease_before_io_or_fence(
+            &mut self.world,
+            &request.agent_subject,
+            &cognition.request,
+            lease,
+        )
+    }
     /// Builds a production-bound Wait response; the regular queue/poll helpers
     /// run the actor and perform actual canonical continuation admission.
     #[cfg(any(test, feature = "test_tier_required"))]
@@ -222,6 +279,9 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         action: crate::simulator::Action,
         original_proposal: SimulatorContinuationProposalV1,
     ) -> Result<serde_json::Value, String> {
+        if self.llm_sidecar.pending_admitted_service_wait().is_some() {
+            return Err("canonical Wait closure remains pending before wake preparation".into());
+        }
         let value = self.test_prepare_canonical_provider_response(agent_id, action)?;
         let mut cognition: RuntimeProviderActionContext =
             serde_json::from_value(value).map_err(|error| error.to_string())?;
@@ -335,6 +395,81 @@ impl crate::viewer::ViewerRuntimeLiveServer {
 }
 
 impl RuntimeLlmSidecar {
+    /// Admission already delivered the canonical projection and released the
+    /// actor turn. Validate that active Harness identity before durable cleanup.
+    pub(in crate::viewer::runtime_live) fn validate_admitted_service_wait(
+        &self,
+        agent_id: &str,
+    ) -> Result<(), String> {
+        let runner = self
+            .runner
+            .as_ref()
+            .ok_or("canonical Wait Harness runner missing")?;
+        let held = self
+            .provider_held_decisions
+            .get(agent_id)
+            .filter(|held| held.continuation_admitted)
+            .and_then(|held| held.cognition.as_ref())
+            .ok_or("canonical Wait original held request missing")?;
+        let request = &held.request.request_context;
+        let proposal = self
+            .provider_continuation_proposals
+            .values()
+            .find(|proposal| {
+                proposal.source == "provider_wait"
+                    && proposal.agent_id == agent_id
+                    && proposal.agent_session_id == request.agent_session_id
+                    && proposal.agent_turn_id == request.agent_turn_id
+                    && proposal.decision_request_id == request.decision_request_id
+                    && proposal.origin_turn_id == request.agent_turn_id
+                    && proposal.origin_request_digest == request.request_digest.to_string()
+            })
+            .ok_or("canonical Wait original proposal identity mismatch")?;
+        let view = self
+            .provider_service_projection
+            .as_ref()
+            .ok_or("canonical Wait verified projection missing")?;
+        let runtime = view
+            .continuations
+            .iter()
+            .find(|runtime| {
+                runtime.continuation_proposal_id == proposal.continuation_proposal_id
+                    && runtime.agent_id == agent_id
+                    && runtime.agent_session_id == request.agent_session_id
+                    && runtime.agent_turn_id == request.agent_turn_id
+                    && runtime.decision_request_id == request.decision_request_id
+                    && runtime.origin_turn_id == request.agent_turn_id
+                    && runtime.origin_request_digest == request.request_digest.to_string()
+            })
+            .ok_or("canonical Wait admitted projection identity mismatch")?;
+        let context = view
+            .continuation_contexts
+            .get(&runtime.continuation_id)
+            .ok_or("canonical Wait verified continuation authority missing")?;
+        let authority = crate::simulator::ContinuationAuthorityContextV1 {
+            baseline_observation_digest: context.baseline_observation_digest.clone(),
+            goal_digest: context.goal_digest.clone(),
+            policy_digest: context.policy_digest.clone(),
+            precondition_digest: context.precondition_digest.clone(),
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        match runner {
+            RuntimeDecisionRunner::ProviderBacked(runner)
+            | RuntimeDecisionRunner::Builtin(runner) => runner
+                .validate_active_continuation_with_authority(agent_id, &authority, runtime)
+                .map_err(|error| {
+                    format!("canonical Wait Harness admission validation failed: {error}")
+                }),
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (runner, authority);
+            runtime
+                .validate_authoritative()
+                .map_err(|error| error.to_string())
+        }
+    }
+
     pub(super) fn pending_service_resume_proposal(
         pending: &lineage_persistence::PendingProviderSchedulerIntent,
     ) -> Result<crate::runtime::CognitionContinuationProposalV1, String> {
@@ -563,6 +698,7 @@ impl RuntimeLlmSidecar {
         agent_id: &str,
         action: crate::simulator::Action,
     ) -> Result<serde_json::Value, String> {
+        self.ensure_canonical_agent_durable_admission()?;
         let view = self
             .provider_service_projection
             .as_ref()

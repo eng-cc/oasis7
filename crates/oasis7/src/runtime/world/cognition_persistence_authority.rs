@@ -11,7 +11,9 @@ use crate::simulator::{Digest32, RuntimeBindingV1};
 use serde_json::Value as JsonValue;
 
 impl World {
-    pub fn current_cognition_base_binding(&self) -> Result<RuntimeCognitionBaseBindingV1, WorldError> {
+    pub fn current_cognition_base_binding(
+        &self,
+    ) -> Result<RuntimeCognitionBaseBindingV1, WorldError> {
         let authority = self.current_cognition_runtime_authority()?;
         Ok(self.cognition_runtime_base_binding(&authority))
     }

@@ -272,7 +272,7 @@ fn handle_chain_status_connection(
             } else {
                 408
             };
-            let _ = write_json_response(&mut stream, status, b"{}", false);
+            let _ = super::status_admission::reject_ingress(&mut stream, status);
             return Err(error);
         }
     };

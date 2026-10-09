@@ -104,7 +104,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_power_sale(
         &mut self,
         request: PowerSaleQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,

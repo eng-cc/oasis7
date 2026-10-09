@@ -19,7 +19,31 @@ fn exchange(endpoint: &str, request: &[u8]) -> String {
     // Overload can arrive before the server reads this request.
     let _ = stream.write_all(request);
     let mut response = Vec::new();
-    stream.take(262144).read_to_end(&mut response).unwrap();
+    if let Err(error) = stream.take(262144).read_to_end(&mut response) {
+        assert_eq!(
+            error.kind(),
+            std::io::ErrorKind::ConnectionReset,
+            "unexpected HTTP read error: {error}"
+        );
+        let end = response
+            .windows(4)
+            .position(|bytes| bytes == b"\r\n\r\n")
+            .expect("reset before complete HTTP headers");
+        let headers = String::from_utf8_lossy(&response[..end]);
+        let length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().unwrap())
+            })
+            .expect("reset response lacks declared Content-Length");
+        assert_eq!(
+            response.len(),
+            end + 4 + length,
+            "reset before complete declared HTTP response"
+        );
+    }
     String::from_utf8(response).unwrap()
 }
 #[test]
@@ -54,7 +78,13 @@ fn real_tcp_production_listener_pressure_deadline_and_recovery() {
         .last_applied_committed_height;
     let begun = Instant::now();
     let mut slow = Vec::new();
-    for _ in 0..4 {
+    for index in 0..4 {
+        if index == 3 {
+            client.describe().unwrap();
+            println!(
+                "production_pressure_same_peer_available_slot=verified_signed_describe slow_connections=3"
+            );
+        }
         let mut socket = TcpStream::connect(endpoint.strip_prefix("http://").unwrap()).unwrap();
         socket
             .write_all(b"POST /v1/world/describe HTTP/1.1\r\nContent-Length: 100\r\n")
@@ -77,13 +107,19 @@ fn real_tcp_production_listener_pressure_deadline_and_recovery() {
         expected_world: client.config().expected_world.clone(),
         trust_config_ref: client.config().trusted_service_public_key.clone(),
     };
+    let signed_request = sign_read_request(
+        "/v1/world/describe",
+        request,
+        &client.config().read_private_key_hex,
+    )
+    .unwrap();
     let independent = reqwest::blocking::Client::builder()
         .local_address("127.0.0.2".parse::<std::net::IpAddr>().unwrap())
         .timeout(Duration::from_secs(1))
         .build()
         .unwrap()
         .post(format!("{endpoint}/v1/world/describe"))
-        .json(&request)
+        .json(&signed_request)
         .send();
     match independent {
         Ok(response) => {
@@ -91,8 +127,11 @@ fn real_tcp_production_listener_pressure_deadline_and_recovery() {
             let signed: SignedServiceResponse<DescribeWorldResponse> = response.json().unwrap();
             oasis7::world_service::authority::verify_service_response(
                 "/v1/world/describe",
-                &oasis7::world_service::authority::request_digest("/v1/world/describe", &request)
-                    .unwrap(),
+                &oasis7::world_service::authority::request_digest(
+                    "/v1/world/describe",
+                    &signed_request,
+                )
+                .unwrap(),
                 &signed,
                 &client.config().trusted_service_public_key,
             )

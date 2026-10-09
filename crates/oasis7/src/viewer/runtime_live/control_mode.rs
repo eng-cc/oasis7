@@ -6,7 +6,7 @@ impl ViewerRuntimeLiveServer {
         mode: ViewerControl,
         request_id: Option<u64>,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         if let Err(reason) = self.ensure_gameplay_ready_for_control(&mode) {
             return self.block_gameplay_control(

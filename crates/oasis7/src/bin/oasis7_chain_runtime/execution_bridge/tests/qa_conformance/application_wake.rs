@@ -118,6 +118,25 @@ fn retry(error: &str) -> bool {
 
 pub(super) fn report_canonical_resume_failure(fixture: &Fixture) {
     let driver = fixture.driver.lock().unwrap();
+    let handoffs = driver
+        .execution_world
+        .capability_revocation_state()
+        .world_service_results
+        .values()
+        .filter_map(|value| {
+            serde_json::from_value::<wire::CanonicalIntentResultV1>(value.clone()).ok()
+        })
+        .filter(|result| {
+            matches!(&result.request.signed_payload, WorldServicePayloadV1::Scheduler(signed)
+            if matches!(&signed.request.operation, SchedulerOperationV1::HandoffWake { .. }))
+        })
+        .map(|result| result.rejected.is_none())
+        .collect::<Vec<_>>();
+    println!(
+        "canonical_handoff_operations count={} accepted={}",
+        handoffs.len(),
+        handoffs.iter().filter(|accepted| **accepted).count()
+    );
     for (key, value) in driver
         .execution_world
         .capability_revocation_state()
@@ -198,6 +217,11 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
         delegation_generation: 1,
     });
     config.decision_mode = ViewerLiveDecisionMode::Llm;
+    config.provider_lineage_store = Some(
+        std::env::current_dir()
+            .unwrap()
+            .join("wait-wake-lineage.json"),
+    );
     let mut server = ViewerRuntimeLiveServer::new(config).unwrap();
     let action = oasis7::simulator::Action::MoveAgent {
         agent_id: "agent-a".into(),
@@ -224,11 +248,15 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
             }
             if let Ok(proposal) = server.test_canonical_provider_wait_proposal("agent-a") {
                 let current = view(&client);
-                if current
-                    .projection()
-                    .continuations
-                    .iter()
-                    .any(|c| c.continuation_proposal_id == proposal.continuation_proposal_id)
+                let closure = server.test_canonical_provider_summary();
+                if closure["pending_intent_count"] == 0
+                    && closure["pending_action_count"] == 0
+                    && closure["mirrored_lease_count"] == 0
+                    && current
+                        .projection()
+                        .continuations
+                        .iter()
+                        .any(|c| c.continuation_proposal_id == proposal.continuation_proposal_id)
                     && current.projection().cognition_leases.iter().any(|lease| {
                         lease.status == oasis7::runtime::CognitionLeaseStatusV1::Settled
                     })
@@ -325,15 +353,14 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
             .any(|w| w.continuation_id == continuation_id)
     );
     let deadline = Instant::now() + Duration::from_secs(20);
-    let mut last_resume_error = String::new();
     let resumed = loop {
-        match server.test_prepare_canonical_wake_provider_response(
+        let last_resume_error = match server.test_prepare_canonical_wake_provider_response(
             "agent-a",
             action.clone(),
             proposal.clone(),
         ) {
             Ok(context) => break context,
-            Err(e) if retry(&e) => last_resume_error = e,
+            Err(e) if retry(&e) => e,
             Err(e)
                 if drift
                     && e.contains("canonical scheduler rejected:")
@@ -355,7 +382,7 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
                 return;
             }
             Err(e) => panic!("ResumeWake: {e}"),
-        }
+        };
         assert!(
             Instant::now() < deadline,
             "ResumeWake timeout: {last_resume_error}"
@@ -370,49 +397,103 @@ pub(super) fn verify_wait_wake(public_client: &RemoteWorldServiceClient) {
         }
         assert!(Instant::now() < deadline, "wake Act queue timeout");
     }
+    let expected_request_digest = resumed["request"]["request_context"]["request_digest"]
+        .as_str()
+        .expect("real resumed request digest missing")
+        .to_string();
     loop {
-        match server.test_poll_canonical_provider_response() {
-            Ok(()) => {}
-            Err(e) if retry(&e) => {}
-            Err(e) => panic!("wake Act poll: {e}"),
-        }
         let summary = server.test_canonical_provider_summary();
+        let terminal = &summary["terminal_states"]["agent-a"];
         let current = view(&client);
-        if current.projection().continuations.iter().any(|c| {
-            c.continuation_id == continuation_id
-                && c.status == oasis7::runtime::ContinuationStatusV1::Completed
-        }) {
+        if terminal["status"] == "committed"
+            && terminal["request_digest"] == expected_request_digest
+            && summary["pending_intent_count"] == 0
+            && summary["pending_action_count"] == 0
+        {
+            assert!(
+                current
+                    .projection()
+                    .continuations
+                    .iter()
+                    .any(|entry| entry.continuation_id == continuation_id
+                        && entry.status == oasis7::runtime::ContinuationStatusV1::Consumed)
+            );
+            assert!(
+                current
+                    .projection()
+                    .continuations
+                    .iter()
+                    .any(|entry| entry.continuation_id != continuation_id
+                        && entry.status == oasis7::runtime::ContinuationStatusV1::Scheduled)
+            );
             assert!(
                 !current
                     .projection()
                     .scheduler_wakes
                     .iter()
-                    .any(|w| w.continuation_id == continuation_id)
+                    .any(|wake| wake.continuation_id == continuation_id)
             );
             assert_eq!(
                 current.projection().state.agents["agent-a"].state.pos,
                 oasis7::GeoPos::new(2, 2, 0)
             );
-            assert_eq!(summary["pending_intent_count"], 0);
-            assert_eq!(summary["pending_action_count"], 0);
-            assert_eq!(summary["pending_wake_ids"], serde_json::json!([]));
-            assert_eq!(summary["terminal_states"]["agent-a"]["status"], "committed");
-            let feedback = summary["terminal_states"]["agent-a"]["feedback_id"]
+            let lease = current
+                .projection()
+                .cognition_leases
+                .iter()
+                .find(|lease| lease.request_digest == expected_request_digest)
+                .expect("canonical resumed Act lease missing");
+            assert_eq!(
+                lease.status,
+                oasis7::runtime::CognitionLeaseStatusV1::Settled
+            );
+            assert!(
+                !summary["mirrored_lease_identities"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|identity| identity["request_digest"] == expected_request_digest),
+                "resumed Act mirror not retired"
+            );
+            let feedback = terminal["feedback_id"]
                 .as_str()
+                .filter(|value| !value.is_empty())
                 .unwrap();
             println!("provider_terminal_feedback_id={feedback}");
-            println!("PRE2_APPLICATION_GENUINE_WAIT_WAKE_COMPLETED_PASSED");
+            println!("provider_original_continuation_id={continuation_id}");
+            println!(
+                "provider_resumed_request_digest={expected_request_digest} canonical_settled_lease_id={}",
+                lease.lease_id
+            );
+            println!(
+                "PRE2_APPLICATION_GENUINE_WAIT_RESUME_ACT_PASSED original_consumed=true future_replan_scheduled=true exact_act_lease_settled=true exact_act_mirror_retired=true"
+            );
             break;
+        }
+        if Instant::now() >= deadline {
+            let statuses: Vec<_> = current.projection().continuations.iter().map(|entry|
+                serde_json::json!({"continuation_id":entry.continuation_id,"status":entry.status})).collect();
+            println!(
+                "canonical_wake_final_witness expected_continuation_id={continuation_id} statuses={} mirror_identities={} agent_position={:?}",
+                serde_json::to_string(&statuses).unwrap(),
+                summary["mirrored_lease_identities"],
+                current.projection().state.agents["agent-a"].state.pos
+            );
         }
         assert!(
             Instant::now() < deadline,
-            "wake canonical completion timeout: {summary}"
+            "wake canonical Act closure timeout: {summary}"
         );
+        match server.test_poll_canonical_provider_response() {
+            Ok(()) => {}
+            Err(e) if retry(&e) => {}
+            Err(e) => panic!("wake Act poll: {e}"),
+        }
         thread::sleep(Duration::from_millis(10));
     }
 }
 
 #[test]
 fn real_tcp_application_resource_drift_wake_rejected() {
-    super::run_isolated_application(true, true);
+    super::run_isolated_application(true, true, false, false, false, false);
 }
