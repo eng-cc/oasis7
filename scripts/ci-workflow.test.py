@@ -89,10 +89,23 @@ class Workflow(unittest.TestCase):
             self.assertIn(test, governance)
         self.assertNotIn('run: python3 scripts/ci-workflow.test.py', governance) # already in candidate dispatcher
 
+    def test_network_wasm_tools_precede_group_execution(self):
+        net = JOBS['net']
+        self.assertLess(net.index('Install WASM C compiler'), net.index('Execute selected group'))
+        self.assertLess(net.index('llvm-ar --version'), net.index('Execute selected group'))
+        writer = JOBS['full-regression']
+        self.assertIn('            clang \\', writer)
+        self.assertIn('            llvm \\', writer)
+        self.assertIn('rustup target add wasm32-unknown-unknown', writer)
+        for tool in ('clang --print-targets | grep -w wasm32', 'llvm-ar --version'):
+            self.assertLess(writer.index(tool), writer.index('Run full test tier'))
+
     def test_trusted_writer_only_runs_on_protected_main(self):
         writer = JOBS['full-regression']
         self.assertIn("if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'))", writer)
         self.assertIn('cache-mode: write', writer)
+        self.assertIn('test "$GITHUB_REF" = refs/heads/main', writer)
+        self.assertNotIn('test "$ACTIONS_CACHE_MODE"', writer)
 
     def test_readers_share_compatible_trusted_writer_identity(self):
         writer = JOBS['full-regression']

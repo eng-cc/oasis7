@@ -6,6 +6,10 @@ import os
 import pathlib
 import subprocess
 import ctypes
+import importlib.util
+import io
+import marshal
+import types
 import errno
 import re
 import sys
@@ -27,46 +31,74 @@ def _run(args, check=True, timeout=10):
 def git(repo, *args):
     return _run(['git', '-C', str(repo), *args]).stdout.strip()
 
-def process_identity(pid):
+def _native_process_identity(pid):
+    if sys.platform.startswith('linux'):
+        raw = pathlib.Path(f'/proc/{pid}/stat').read_text()
+        fields = raw[raw.rindex(')') + 2:].split()
+        return (pid, int(fields[19]), fields[0])
+    if sys.platform == 'darwin':
+        class BSDInfo(ctypes.Structure):
+            _fields_ = [('ids', ctypes.c_uint32 * 12), ('comm', ctypes.c_char * 16),
+                        ('name', ctypes.c_char * 32), ('tail', ctypes.c_uint32 * 6),
+                        ('sec', ctypes.c_uint64), ('usec', ctypes.c_uint64)]
+        lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
+        info = BSDInfo()
+        result = lib.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
+        if result != ctypes.sizeof(info) or info.ids[3] != pid or not info.sec:
+            raise ValueError('short or invalid libproc identity')
+        return (pid, (info.sec, info.usec), str(info.ids[1]))
+    raise ValueError('unsupported native process identity')
+
+
+def process_identity(pid, deadline=None):
     """Native start identity; only ESRCH proves an unreadable process gone."""
-    try:
-        if sys.platform.startswith('linux'):
-            raw = pathlib.Path(f'/proc/{pid}/stat').read_text()
-            fields = raw[raw.rindex(')') + 2:].split()
-            return (pid, int(fields[19]), fields[0])
-        if sys.platform == 'darwin':
-            class BSDInfo(ctypes.Structure):
-                _fields_ = [('ids', ctypes.c_uint32 * 12), ('comm', ctypes.c_char * 16),
-                            ('name', ctypes.c_char * 32), ('tail', ctypes.c_uint32 * 6),
-                            ('sec', ctypes.c_uint64), ('usec', ctypes.c_uint64)]
-            lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)
-            info = BSDInfo()
-            result = lib.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
-            if result != ctypes.sizeof(info) or info.ids[3] != pid or not info.sec:
-                raise ValueError('short or invalid libproc identity')
-            return (pid, (info.sec, info.usec), str(info.ids[1]))
-        raise ValueError('unsupported native process identity')
-    except (OSError, ValueError, IndexError):
+    for attempt in range(3):
+        if deadline is not None and time.monotonic() >= deadline:
+            raise CleanupError('process inspection budget exhausted')
         try:
-            os.kill(pid, 0)
-        except OSError as exc:
-            if exc.errno == errno.ESRCH:
-                return None
-            raise CleanupError(f'PID {pid}: identity unreadable ({exc.strerror})') from exc
-        raise CleanupError(f'PID {pid}: alive but native identity unreadable')
+            return _native_process_identity(pid)
+        except (OSError, ValueError, IndexError):
+            try:
+                os.kill(pid, 0)
+            except OSError as exc:
+                if exc.errno == errno.ESRCH:
+                    return None
+                raise CleanupError(f'PID {pid}: identity unreadable ({exc.strerror})') from exc
+            if attempt < 2:
+                # An exiting process can briefly answer kill(0) after native
+                # identity has vanished. Re-read native start identity so PID
+                # reuse produces fresh evidence; never infer exit from name.
+                remaining = .01 if deadline is None else min(.01, max(0, deadline - time.monotonic()))
+                time.sleep(remaining)
+    raise CleanupError(f'PID {pid}: alive but native identity unreadable')
 
 
 def snapshot_processes(deadline):
-    result = _run(['ps', '-axo', 'pid='], timeout=min(2, max(.01, deadline-time.monotonic())))
+    result = _run(['ps', '-axo', 'pid=,uid='], timeout=min(2, max(.01, deadline-time.monotonic())))
     identities = {}
+    seen = set()
     for line in result.stdout.splitlines():
         if time.monotonic() >= deadline:
             raise CleanupError('process inspection budget exhausted')
         try:
-            pid = int(line.strip())
+            pid_text, uid_text = line.split()
+            pid, uid = int(pid_text), int(uid_text)
         except ValueError as exc:
             raise CleanupError('malformed ps PID') from exc
-        identity = process_identity(pid)
+        # Darwin ps renders uid_t through signed 32-bit display (for
+        # example nobody=-2). Normalize that native representation only.
+        if uid < 0:
+            if sys.platform != 'darwin' or uid < -(2 ** 31):
+                raise CleanupError('invalid ps UID')
+            uid += 2 ** 32
+        if uid >= 2 ** 32:
+            raise CleanupError('invalid ps UID')
+        if pid < 0 or pid in seen:
+            raise CleanupError('invalid or duplicate ps identity')
+        seen.add(pid)
+        if uid != os.getuid():
+            continue
+        identity = process_identity(pid, deadline)
         if identity is not None:
             if pid in identities:
                 raise CleanupError('duplicate ps PID')
@@ -76,8 +108,9 @@ def snapshot_processes(deadline):
     return identities
 
 
-def read_open_files(pids, path, deadline):
-    result = _run(['lsof', '-n', '-P', '-F', 'pfnt', '-p', ','.join(map(str, pids))],
+def read_open_files(pids, path, deadline, result=None):
+    if result is None:
+        result = _run(['lsof', '-n', '-P', '-F', 'pfnt', '-p', ','.join(map(str, pids))],
                   check=False, timeout=min(10, max(.01, deadline-time.monotonic())))
     covered, busy = set(), set()
     pid, fd, kind, name = None, None, None, None
@@ -89,6 +122,11 @@ def read_open_files(pids, path, deadline):
         if kind is None or (name is None and kind not in nonfiles):
             raise CleanupError(f'PID {pid}: incomplete descriptor')
         if kind in nonfiles:
+            return
+        # macOS POSIX semaphore names live in the sem_open namespace,
+        # not the filesystem. Require the native lsof type and a single
+        # namespace component; unknown forms remain ambiguous.
+        if sys.platform == 'darwin' and kind == 'PSXSEM' and fd.isdecimal() and name and re.fullmatch(r'/[^/]+', name):
             return
         if kind not in {'REG', 'DIR', 'CHR', 'BLK', 'FIFO', 'LINK'}:
             raise CleanupError(f'PID {pid}: unknown descriptor type {kind}')
@@ -145,6 +183,29 @@ def read_open_files(pids, path, deadline):
     return covered, busy
 
 
+def visible_target_holders(path, deadline):
+    """Observe all-UID visible holders; absence is not global visibility proof."""
+    result = _run(['lsof', '-n', '-P', '-F', 'pfnt', '+D', str(path.resolve())], check=False,
+                  timeout=min(10, max(.01, deadline - time.monotonic())))
+    if result.returncode not in (0, 1) or result.stderr.strip():
+        raise CleanupError('target-use visibility unavailable: ' + result.stderr.strip())
+    holders = set()
+    for line in result.stdout.splitlines():
+        if line.startswith('p'):
+            if not re.fullmatch(r'p[1-9][0-9]*', line):
+                raise CleanupError('malformed target-use PID')
+            holders.add(int(line[1:]))
+    _, busy = read_open_files(holders, path, deadline, result=result)
+    if holders != busy:
+        raise CleanupError('target-use descriptor evidence incomplete or outside target')
+    for pid in busy:
+        # Gone collectors/holders are harmless; denied target-related native
+        # identity is unknown, never an exemption for foreign users.
+        if process_identity(pid, deadline) is not None:
+            return pid
+    return None
+
+
 def inspect_process_use(path):
     if sys.platform not in ('linux', 'darwin'):
         return {'state': 'unknown', 'reason': 'unsupported process inspection platform'}
@@ -153,6 +214,9 @@ def inspect_process_use(path):
         current = {pid: value[:2] for pid, value in snapshot_processes(deadline).items()}
         evidence = {}
         for _ in range(2):
+            holder = visible_target_holders(path, deadline)
+            if holder is not None:
+                return {'state': 'busy', 'reason': f'visible PID {holder} holds target cwd/file'}
             pending = {pid: identity for pid, identity in current.items() if evidence.get(pid) != identity}
             if pending:
                 covered, busy = read_open_files(pending, path, deadline)
@@ -167,7 +231,7 @@ def inspect_process_use(path):
             if time.monotonic() >= deadline:
                 raise CleanupError('process inspection budget exhausted')
             if all(evidence.get(pid) == identity for pid, identity in current.items()):
-                return {'state': 'clear_observed', 'reason': 'no cwd/file use observed in finite snapshot'}
+                return {'state': 'clear_observed', 'reason': 'no use observed among current-user processes or visible all-user target holders'}
         missing = [str(pid) for pid, identity in current.items() if evidence.get(pid) != identity]
         raise CleanupError('uncovered live process identities: ' + ', '.join(missing))
     except CleanupError as exc:
@@ -205,6 +269,52 @@ def ancestor(repo, older, newer):
     return result.returncode == 0
 
 
+def reconstructable_pycache(path, item):
+    """Accept only exact current-ABI compiled content of a tracked local source."""
+    relative = pathlib.PurePosixPath(item)
+    match = re.fullmatch(r'(.+)\.' + re.escape(sys.implementation.cache_tag) + r'(?:\.opt-([012]))?\.pyc', relative.name)
+    if relative.parent.name != '__pycache__' or not match:
+        return False
+    source_relative = relative.parent.parent / (match.group(1) + '.py')
+    source, cached = path / source_relative, path / relative
+    for relative_file in (relative, source_relative):
+        current = path
+        for component in relative_file.parts:
+            current = current / component
+            if current.is_symlink():
+                return False
+    tracked = _run(['git', '-C', str(path), 'ls-files', '--error-unmatch', '--', str(source_relative)], check=False)
+    if tracked.returncode or not source.is_file() or not cached.is_file():
+        return False
+    if source.stat().st_size > 16 * 1024 * 1024 or cached.stat().st_size > 16 * 1024 * 1024:
+        return False
+    raw, source_bytes = cached.read_bytes(), source.read_bytes()
+    if len(raw) < 16 or raw[:4] != importlib.util.MAGIC_NUMBER:
+        return False
+    flags = int.from_bytes(raw[4:8], 'little')
+    if flags not in (0, 1, 3):
+        return False
+    if flags and raw[8:16] != importlib.util.source_hash(source_bytes):
+        return False
+    if not flags and int.from_bytes(raw[12:16], 'little') != len(source_bytes):
+        return False
+    try:
+        payload = io.BytesIO(raw[16:])
+        code = marshal.load(payload)
+        expected = compile(source_bytes, str(source), 'exec', dont_inherit=True,
+                           optimize=int(match.group(2) or '0'))
+        # Compare code and recursively require source filename metadata too;
+        # caches with extra embedded material are not disposable. No cached
+        # bytecode is executed.
+        def same_source_metadata(value):
+            filename = pathlib.Path(value.co_filename)
+            return filename.is_absolute() and filename.resolve() == source.resolve() and all(
+                same_source_metadata(item) for item in value.co_consts if isinstance(item, types.CodeType))
+        return isinstance(code, types.CodeType) and not payload.read() and same_source_metadata(code) and code == expected
+    except (ValueError, EOFError, TypeError, SyntaxError, RecursionError, OSError, RuntimeError):
+        return False
+
+
 def user_material(repo, path, records):
     if git(path, 'status', '--porcelain', '--untracked-files=all'):
         raise CleanupError('uncommitted or untracked work retained')
@@ -212,6 +322,8 @@ def user_material(repo, path, records):
     cache = canonical.parent / '.oasis7-cache' / 'cargo-target'
     ignored = git(path, 'ls-files', '--others', '--ignored', '--exclude-standard', '-z').split('\0')
     for item in filter(None, ignored):
+        if reconstructable_pycache(path, item):
+            continue
         if item == 'config.toml':
             source, copy = canonical / item, path / item
             if canonical == path or source.is_symlink() or copy.is_symlink() or not source.is_file() or source.read_bytes() != copy.read_bytes():
@@ -296,7 +408,8 @@ def inspect(repo, path, branch, expected, base_ref='refs/remotes/origin/main', p
     if _process_mentions_path(path):
         raise CleanupError('worktree is in use')
     return {'worktree': str(path), 'branch': branch, 'head': expected, 'base_ref': base_ref,
-            'base_oid': base, 'origin_main_oid': origin, 'process_state': 'clear_observed'}
+            'base_oid': base, 'origin_main_oid': origin, 'process_state': 'clear_observed',
+            'process_scope': 'current_user_and_visible_all_user_target_holders'}
 
 
 def execute(repo, path, branch, expected, base_ref, pr, report):
@@ -332,7 +445,7 @@ def execute(repo, path, branch, expected, base_ref, pr, report):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__, epilog='Finite process snapshots report observed use only. Stop known users and run outside the target. Never fetches, sudo, or forces removal. Exit: 0 eligible/success, 1 blocked/partial, 2 invalid arguments.')
+    parser = argparse.ArgumentParser(description=__doc__, epilog='Process snapshots cover current-user processes and visible all-user target holders; invisible foreign use is outside this observation domain. Current-ABI pycache requires matching tracked source content. Unsupported cache ABI is retained. Stop known users and run outside the target. Never fetches, sudo, or forces removal. Exit: 0 eligible/success, 1 blocked/partial, 2 invalid arguments.')
     parser.add_argument('--repo-root', type=pathlib.Path, default=pathlib.Path.cwd())
     parser.add_argument('--worktree', type=pathlib.Path, required=True)
     parser.add_argument('--branch', required=True)
