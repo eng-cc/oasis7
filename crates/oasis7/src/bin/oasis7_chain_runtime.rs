@@ -33,6 +33,8 @@ mod agent_claim_api;
 mod balances_api;
 #[path = "oasis7_chain_runtime/cli.rs"]
 mod cli;
+#[path = "oasis7_chain_runtime/controlled_history_cli.rs"]
+mod controlled_history_cli;
 #[path = "oasis7_chain_runtime/distfs_probe_runtime.rs"]
 mod distfs_probe_runtime;
 #[cfg(not(test))]
@@ -174,6 +176,16 @@ mod execution_bridge {
 
     #[allow(dead_code)]
     impl NodeRuntimeExecutionDriver {
+        pub(super) fn set_controlled_capture_enabled(
+            &mut self,
+            enabled: bool,
+        ) -> Result<(), String> {
+            if enabled {
+                Err("test stub cannot produce historical capture".into())
+            } else {
+                Ok(())
+            }
+        }
         pub(super) fn new(
             _state_path: std::path::PathBuf,
             _world_dir: std::path::PathBuf,
@@ -417,6 +429,9 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         .with_allow_local_proposals(matches!(options.node_role, NodeRole::Sequencer));
     let require_execution = node_role_requires_execution_commit(options.node_role);
     let materialize_execution = node_role_materializes_execution_state(options.node_role);
+    if options.capture_schedule_recipe_history && !materialize_execution {
+        return Err("history capture requires an actual execution driver".into());
+    }
     config = config
         .with_require_execution_on_commit(require_execution)
         .with_require_peer_execution_hashes(require_execution);
@@ -531,7 +546,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         runtime = runtime.with_local_execution_bootstrap(baseline.clone());
     }
     if materialize_execution {
-        let execution_driver = if let Some(baseline) = local_execution_bootstrap {
+        let mut execution_driver = if let Some(baseline) = local_execution_bootstrap {
             #[cfg(not(test))]
             {
                 NodeRuntimeExecutionDriver::new_with_local_bootstrap(
@@ -579,6 +594,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             paths.execution_world_dir.as_path(),
             provider_bootstrap_authority_paths.as_slice(),
         )?;
+        execution_driver.set_controlled_capture_enabled(options.capture_schedule_recipe_history)?;
         runtime = runtime.with_execution_hook(execution_driver);
     }
     let (mut runtime, replication_network) =
