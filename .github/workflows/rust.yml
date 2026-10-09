@@ -563,6 +563,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
+      - name: Install pinned performance browser
+        run: |
+          npm install --prefix "$RUNNER_TEMP/viewer-performance-browser" --no-save --package-lock=false agent-browser@0.37.1
+          browser_bin="$RUNNER_TEMP/viewer-performance-browser/node_modules/.bin/agent-browser"
+          "$browser_bin" install --with-deps
+          printf 'AGENT_BROWSER_BIN=%s\n' "$browser_bin" >> "$GITHUB_ENV"
       - name: Build performance test artifact
         run: |
           viewer_bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"

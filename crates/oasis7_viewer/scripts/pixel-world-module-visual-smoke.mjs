@@ -6,7 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed", "--pin-tab"] : ["--pin-tab"];
+const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed"] : [];
 const viewerRoot = resolve(scriptDir, "..");
 const artifactRoot = resolve(viewerRoot, ".viewer-test-dist");
 const repoRoot = resolve(viewerRoot, "../..");

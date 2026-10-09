@@ -37,6 +37,11 @@ class Workflow(unittest.TestCase):
             self.assertEqual(JOBS[name].count('name: Execute selected cell'), 1)
             self.assertIn('"$RUNNER_TEMP/ci-authority/ci-tests.sh" required', JOBS[name])
         performance = JOBS['viewer-performance-report']
+        self.assertIn('agent-browser@0.37.1', performance)
+        self.assertIn('--prefix "$RUNNER_TEMP/viewer-performance-browser"', performance)
+        self.assertIn('"$browser_bin" install --with-deps', performance)
+        self.assertIn("printf 'AGENT_BROWSER_BIN=%s\\n'", performance)
+        self.assertLess(performance.index('Install pinned performance browser'), performance.index('Execute selected cell'))
         self.assertLess(performance.index('Build performance test artifact'), performance.index('Execute selected cell'))
         self.assertIn('viewer_bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"', performance)
         self.assertIn('WASM_BINDGEN_BIN="$viewer_bindgen_bin" npm', performance)

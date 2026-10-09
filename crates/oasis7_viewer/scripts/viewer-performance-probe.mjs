@@ -12,11 +12,11 @@ import {
 } from "../software_safe_src/performance_metrics.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed", "--pin-tab"] : ["--pin-tab"];
+const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed"] : [];
 const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
 const configuredAgentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
-const agentBrowserNpxPackage = process.env.AGENT_BROWSER_NPX_PACKAGE || "agent-browser";
+const agentBrowserNpxPackage = process.env.AGENT_BROWSER_NPX_PACKAGE || "agent-browser@0.37.1";
 const npxBin = process.platform === "win32" ? "npx.cmd" : "npx";
 const session = `viewer-performance-probe-${process.pid}`;
 let staticRoot = viewerRoot;

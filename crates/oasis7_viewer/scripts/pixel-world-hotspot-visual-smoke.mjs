@@ -8,7 +8,7 @@ import { completionEvidence } from './pixel-world-completion-evidence.mjs';
 import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed", "--pin-tab"] : ["--pin-tab"];
+const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed"] : [];
 const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
 const artifactRoot = resolve(viewerRoot, ".viewer-test-dist");
