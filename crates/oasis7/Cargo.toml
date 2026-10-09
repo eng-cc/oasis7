@@ -28,7 +28,7 @@ rand_core = "0.10"
 getrandom = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cap-std = "3"
+cap-std = "4"
 cap-fs-ext = "4"
 libc = "0.2"
 aliyun-tablestore-rs = { version = "0.1.2", default-features = false, features = ["rust-tls"] }
