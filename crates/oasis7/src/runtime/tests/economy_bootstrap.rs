@@ -69,6 +69,13 @@ fn step_twice(world: &mut World, sandbox: &mut WasmExecutor) {
 }
 
 fn start_and_settle_recipe(world: &mut World, sandbox: &mut WasmExecutor) {
+    let site_ledgers: Vec<_> = world
+        .state()
+        .factories
+        .values()
+        .map(|factory| factory.input_ledger.clone())
+        .collect();
+    let action = world.journal().events.len();
     world
         .step_with_modules(sandbox)
         .expect("start module-backed recipe action");
@@ -80,6 +87,57 @@ fn start_and_settle_recipe(world: &mut World, sandbox: &mut WasmExecutor) {
             .step_with_modules(sandbox)
             .expect("settle module-backed recipe action");
     }
+    assert!(
+        !world.journal().events[action..]
+            .iter()
+            .any(|event| matches!(
+                &event.body,
+                WorldEventBody::Domain(DomainEvent::ActionRejected { .. })
+            )),
+        "recipe fixture action rejected: {:?}",
+        &world.journal().events[action..]
+    );
+    for ledger in site_ledgers {
+        move_fixture_materials(world, &ledger, &MaterialLedgerId::world());
+    }
+}
+
+fn move_fixture_materials(world: &mut World, from: &MaterialLedgerId, to: &MaterialLedgerId) {
+    for stack in world.ledger_material_stacks(from) {
+        if stack.amount > 0 {
+            world
+                .transfer_material_between_ledgers(from, to, &stack.kind, stack.amount)
+                .expect("move fixture materials without duplicating them");
+        }
+    }
+}
+
+fn prepare_recipe_materials(world: &mut World, factory_id: &str) {
+    let ledger = world.state().factories[factory_id].input_ledger.clone();
+    move_fixture_materials(world, &MaterialLedgerId::world(), &ledger);
+}
+
+fn prepare_module_factory_site(world: &mut World, site_id: &str) {
+    let location_id = world.state().agent_location_authorities["builder-a"]
+        .location_id
+        .clone();
+    world
+        .set_factory_site_authority(FactorySiteAuthorityV1 {
+            site_id: site_id.to_string(),
+            location_id,
+            owner_agent_id: "builder-a".to_string(),
+            authorized_agent_ids: Vec::new(),
+            chunk_ready: true,
+            active: true,
+            authority_revision: 1,
+            registered_at: 0,
+        })
+        .expect("register module factory site");
+    move_fixture_materials(
+        world,
+        &MaterialLedgerId::world(),
+        &MaterialLedgerId::agent("builder-a"),
+    );
 }
 
 fn establish_stable_stage_fixture(world: &mut World, sandbox: &mut WasmExecutor) {
@@ -130,6 +188,7 @@ fn establish_stable_stage_fixture(world: &mut World, sandbox: &mut WasmExecutor)
         1,
     );
     for _ in 0..3 {
+        prepare_recipe_materials(world, "factory.stable-line.fixture");
         world.submit_action(Action::ScheduleRecipe {
             requester_agent_id: "builder-a".to_string(),
             factory_id: "factory.stable-line.fixture".to_string(),
@@ -154,6 +213,18 @@ fn establish_stable_stage_fixture(world: &mut World, sandbox: &mut WasmExecutor)
     );
     assert!(world.state().gameplay_policy.electricity_tax_bps > 0);
     assert_eq!(world.material_balance("stable_line_marker"), 1);
+}
+
+#[test]
+fn stable_stage_fixture_uses_site_bound_recipe_materials() {
+    let mut world = World::new();
+    let mut wasm = sandbox();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "builder-a".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("register fixture builder");
+    establish_stable_stage_fixture(&mut world, &mut wasm);
 }
 
 #[test]
@@ -343,6 +414,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
 
     establish_stable_stage_fixture(&mut world, &mut wasm);
 
+    prepare_module_factory_site(&mut world, "site-smelter");
     world.submit_action(Action::BuildFactoryWithModule {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-smelter".to_string(),
@@ -361,7 +433,13 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     step_twice(&mut world, &mut wasm);
     assert!(world.has_factory("factory.smelter.mk1"));
+    move_fixture_materials(
+        &mut world,
+        &MaterialLedgerId::agent("builder-a"),
+        &MaterialLedgerId::world(),
+    );
 
+    prepare_recipe_materials(&mut world, "factory.smelter.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.smelter.mk1".to_string(),
@@ -372,6 +450,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.smelter.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.smelter.mk1".to_string(),
@@ -382,6 +461,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.smelter.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.smelter.mk1".to_string(),
@@ -392,6 +472,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_module_factory_site(&mut world, "site-assembler");
     world.submit_action(Action::BuildFactoryWithModule {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-assembler".to_string(),
@@ -410,7 +491,13 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     step_twice(&mut world, &mut wasm);
     assert!(world.has_factory("factory.assembler.mk1"));
+    move_fixture_materials(
+        &mut world,
+        &MaterialLedgerId::agent("builder-a"),
+        &MaterialLedgerId::world(),
+    );
 
+    prepare_recipe_materials(&mut world, "factory.assembler.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.assembler.mk1".to_string(),
@@ -421,6 +508,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.assembler.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.assembler.mk1".to_string(),
@@ -431,6 +519,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.assembler.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.assembler.mk1".to_string(),
@@ -441,6 +530,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.assembler.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.assembler.mk1".to_string(),
@@ -456,6 +546,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
         IndustryStage::Governance
     );
 
+    prepare_recipe_materials(&mut world, "factory.smelter.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.smelter.mk1".to_string(),
@@ -466,6 +557,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.assembler.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.assembler.mk1".to_string(),
@@ -476,6 +568,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.assembler.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.assembler.mk1".to_string(),
@@ -486,6 +579,7 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     });
     start_and_settle_recipe(&mut world, &mut wasm);
 
+    prepare_recipe_materials(&mut world, "factory.assembler.mk1");
     world.submit_action(Action::ScheduleRecipeWithModule {
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.assembler.mk1".to_string(),
