@@ -17,6 +17,7 @@ use serde_json::Value;
 use super::cognition_policy::{ContinuationProposalV1, GoalSnapshotV1, MemoryContextSnapshotV1};
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
+#[cfg(not(target_arch = "wasm32"))]
 #[path = "continuous_agent_feedback_recovery.rs"]
 mod continuous_agent_feedback_recovery;
 
@@ -767,6 +768,7 @@ pub struct AgentCognitionStore {
     /// A durable Runtime history that is incomplete or not fully acknowledged
     /// fences only the matching Agent/session from starting a fresh request.
     feedback_recovery_blocked: BTreeMap<(String, String), String>,
+    #[cfg(not(target_arch = "wasm32"))]
     feedback_recovery_initialized: bool,
 }
 
