@@ -16,7 +16,8 @@ class FakeHost:
         self.events = []
         self.facts = {"platform": "darwin", "target": "aarch64-apple-darwin", "root": True, "safe": True, "acl_safe": True, "sudo_safe": True, "identity_available": True}
         # TPM-approved additive fixture correction: identities must be observed, never inferred.
-        self.facts.update(caller_uid=501, caller_gid=20, signer_uid=499, signer_gid=499)
+        self.facts.update(caller_uid=501, caller_gid=20, signer_uid=499, signer_gid=499,
+                          runtime_identity={"schema_version": "fixture.runtime.v1", "runtime_cdhash": "a" * 40})
         self.fault = None
         self.receipt = None
         self.last_journal = None
@@ -321,8 +322,8 @@ class SupplementalContract(InstallerContract):
         (hostile / "sitecustomize.py").write_text("from pathlib import Path; Path(" + repr(str(marker)) + ").write_text('bad')")
         environment = dict(os.environ, PYTHONPATH=str(hostile), PYTHONHOME=str(hostile))
         result = subprocess.run(["/usr/bin/python3", "-I", str(SOURCE / "install-release.py"), "--help"], env=environment, capture_output=True, text=True, check=False)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("plan", result.stdout)
+        self.assertEqual(result.returncode, 9, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["status"], "BLOCKED", "direct Python startup lacks the separately approved native gate")
         self.assertFalse(marker.exists())
         result = subprocess.run(["/usr/bin/python3", "-I", str(SOURCE / "install-release.py"), "apply", "--release-dir", str(self.bundle), "--expected-manifest-sha256", self.sha, "--plan", str(self.root / "missing-plan"), "--expected-plan-sha256", "0" * 64], env=environment, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 9)
@@ -546,6 +547,9 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         self.bootstrap_source = self.parent / "independently-reviewed-bootstrap.txt"
         self.bootstrap_source.write_bytes(self.bootstrap_code.encode())
         self.bootstrap_approval = api.digest(self.bootstrap_code.encode())
+        self.runtime_gate = self.parent / "independently-approved-runtime-gate"
+        self.runtime_gate.write_bytes(b"synthetic native gate artifact")
+        self.runtime_gate_approval = api.digest(self.runtime_gate.read_bytes())
         self.before_inline_execution = None
         self.operator_events = []
 
@@ -587,8 +591,8 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         # an earlier block or with a shell export/command substitution.
         import re
         for line in self.executable_lines(text):
-            if re.match(r"^(?:export\s+)?(?:APPROVED_BOOTSTRAP_SOURCE|EXPECTED_BOOTSTRAP_SHA256)\s*=", line):
-                raise ValueError("runbook must not assign independently approved bootstrap inputs")
+            if re.match(r"^(?:export\s+)?(?:APPROVED_RUNTIME_GATE|EXPECTED_RUNTIME_GATE_SHA256|APPROVED_BOOTSTRAP_SOURCE|EXPECTED_BOOTSTRAP_SHA256)\s*=", line):
+                raise ValueError("runbook must not assign independently approved gate or bootstrap inputs")
         return block
 
     def operator_commands(self, text=None):
@@ -605,37 +609,197 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         return commands
 
     def variables(self):
-        return dict(APPROVED_BOOTSTRAP_SOURCE=str(self.bootstrap_source), EXPECTED_BOOTSTRAP_SHA256=self.bootstrap_approval, STAGING=str(self.release), EXPECTED_MANIFEST_SHA256=self.expected, APPROVED_WORK_DIR="/Users/fixture/Documents/keys/oasis7-local-signer", APPROVED_CALLER="fixture", APPROVED_INSTALLATION_ID="fixture-install", APPROVED_DEPLOYMENT_ID="fixture-deployment", NEW_PLAN_FILE=str(self.parent / "plan.json"), INDEPENDENTLY_APPROVED_PLAN_SHA256="0" * 64)
+        return dict(APPROVED_RUNTIME_GATE=str(self.runtime_gate), EXPECTED_RUNTIME_GATE_SHA256=self.runtime_gate_approval, APPROVED_BOOTSTRAP_SOURCE=str(self.bootstrap_source), EXPECTED_BOOTSTRAP_SHA256=self.bootstrap_approval, STAGING=str(self.release), EXPECTED_MANIFEST_SHA256=self.expected, APPROVED_WORK_DIR="/Users/fixture/Documents/keys/oasis7-local-signer", APPROVED_CALLER="fixture", APPROVED_INSTALLATION_ID="fixture-install", APPROVED_DEPLOYMENT_ID="fixture-deployment", NEW_PLAN_FILE=str(self.parent / "plan.json"), INDEPENDENTLY_APPROVED_PLAN_SHA256="0" * 64)
+
+    def runtime_attestation_bytes(self):
+        override = getattr(self, "runtime_attestation_override", None)
+        if override is not None:
+            return override
+        return api.canonical_bytes({
+            "apple_anchor": "apple",
+            "bootstrap_sha256": self.bootstrap_approval,
+            "dependency_policy_id": "clt-python39-apple-dyld-v1",
+            "framework_cdhash": "a43551195b8d2eefd9356d81c1098ffc9e0a8b47",
+            "framework_dev": "1",
+            "framework_ino": "3",
+            "framework_mode": str(0o040555),
+            "framework_path": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9",
+            "framework_resource_seal": "valid",
+            "framework_uid": "0",
+            "os_build": "fixture-build",
+            "policy_id": "clt-python3.9-v1",
+            "requirement_id": "com.apple.python3",
+            "runtime_arch": "arm64",
+            "runtime_cdhash": "77e5dcc021cbfa7e2c3940b5ea150e3da037f3cf",
+            "runtime_dev": "1",
+            "runtime_ino": "2",
+            "runtime_mode": str(0o100555),
+            "runtime_path": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+            "runtime_uid": "0",
+            "runtime_version": "3.9",
+            "schema_version": "oasis7.local-signer.runtime-attestation.v1",
+            "system_volume_trust": "current-booted-apple-os",
+        })
+
+    def test_runtime_attestation_schema_and_fixed_identity_reject_before_stage_capture(self):
+        import json
+        valid = json.loads(self.runtime_attestation_bytes())
+        cases = {
+            "duplicate": b'{"apple_anchor":"apple","apple_anchor":"apple"}\n',
+            "extra": api.canonical_bytes(dict(valid, unexpected="value")),
+            "wrong type": api.canonical_bytes(dict(valid, runtime_uid=0)),
+            "noncanonical": (json.dumps(valid, sort_keys=True, indent=2) + "\n").encode(),
+            "missing final LF": api.canonical_bytes(valid).rstrip(b"\n"),
+            "oversized": b"{" + b" " * 4096 + b"}\n",
+            "wrong fixed CDHash": api.canonical_bytes(dict(valid, runtime_cdhash="0" * 40)),
+            "unsafe mode": api.canonical_bytes(dict(valid, runtime_mode=str(0o100777))),
+            "unsafe OS build": api.canonical_bytes(dict(valid, os_build="build\\n")),
+        }
+        for label, raw in cases.items():
+            with self.subTest(label=label):
+                self.acl_queries.clear()
+                self.executions.clear()
+                self.runtime_attestation_override = raw
+                with self.assertRaisesRegex(ValueError, "(?i)(runtime|attestation)"):
+                    self.launch()
+                self.assertEqual(self.acl_queries, [], "runtime proof must reject before stage descriptor ACL queries")
+                self.assertEqual(self.executions, [], "runtime proof must reject before captured candidate execution")
+        del self.runtime_attestation_override
+
+    def test_fd3_attestation_requires_fifo_effective_owner_and_readonly_access(self):
+        import ast
+        import fcntl
+        import json
+        import os
+        import re
+        import stat
+        import types
+        from unittest.mock import Mock, patch
+        tree = ast.parse(self.bootstrap_code)
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "read_runtime_attestation")
+        module = ast.Module(body=[function], type_ignores=[])
+        evidence = self.runtime_attestation_bytes()
+        for label, mode, uid, access in (
+            ("not fifo", stat.S_IFREG | 0o600, 501, os.O_RDONLY),
+            ("wrong owner", stat.S_IFIFO | 0o600, 502, os.O_RDONLY),
+            ("not readonly", stat.S_IFIFO | 0o600, 501, os.O_WRONLY),
+        ):
+            with self.subTest(label=label):
+                fake_os = Mock()
+                fake_os.fstat.return_value = types.SimpleNamespace(st_mode=mode, st_uid=uid)
+                fake_os.geteuid.return_value = 501
+                fake_os.O_ACCMODE = os.O_ACCMODE
+                fake_os.O_RDONLY = os.O_RDONLY
+                fake_fcntl = types.SimpleNamespace(F_GETFL=fcntl.F_GETFL)
+                fake_fcntl.fcntl = Mock(return_value=access)
+                namespace = {
+                    "os": fake_os, "fcntl": fake_fcntl, "stat": stat,
+                    "RUNTIME_PATH": "/fixed/runtime", "FRAMEWORK_PATH": "/fixed/framework",
+                    "RUNTIME_ATTESTATION_FIELDS": (), "RUNTIME_FIXED": {},
+                    "pairs": lambda items: dict(items), "json": json, "re": re,
+                    "MappingProxyType": types.MappingProxyType,
+                }
+                exec(compile(module, "<read-runtime-attestation>", "exec"), namespace)
+                with self.assertRaisesRegex(ValueError, "descriptor is unsafe"):
+                    namespace["read_runtime_attestation"](False)
+                fake_os.read.assert_not_called()
+                fake_os.close.assert_called_once_with(3)
+
+    def test_runtime_import_path_rejects_relative_entry_before_realpath(self):
+        import ast
+        import fcntl
+        import json
+        import os
+        import re
+        import stat
+        import types
+        from unittest.mock import patch
+        tree = ast.parse(self.bootstrap_code)
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "read_runtime_attestation")
+        module = ast.Module(body=[function], type_ignores=[])
+        sys_fixture = types.SimpleNamespace(
+            platform="darwin",
+            executable="/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+            version_info=(3, 9, 6),
+            flags=types.SimpleNamespace(isolated=1, no_site=1, dont_write_bytecode=1),
+            path=["relative-entry"],
+        )
+        with patch.object(os, "fstat", return_value=types.SimpleNamespace(st_mode=stat.S_IFIFO | 0o600, st_uid=os.geteuid())), \
+             patch.object(os, "read", side_effect=[self.runtime_attestation_bytes(), b""]), \
+             patch.object(os, "close"), patch.object(fcntl, "fcntl", return_value=os.O_RDONLY), \
+             patch.object(os.path, "realpath") as realpath:
+            namespace = {
+                "os": os, "fcntl": fcntl, "stat": stat, "sys": sys_fixture,
+                "RUNTIME_PATH": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+                "FRAMEWORK_PATH": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9",
+                "RUNTIME_ATTESTATION_FIELDS": (
+                    "apple_anchor", "bootstrap_sha256", "dependency_policy_id", "framework_cdhash",
+                    "framework_dev", "framework_ino", "framework_mode", "framework_path",
+                    "framework_resource_seal", "framework_uid", "os_build", "policy_id",
+                    "requirement_id", "runtime_arch", "runtime_cdhash", "runtime_dev",
+                    "runtime_ino", "runtime_mode", "runtime_path", "runtime_uid",
+                    "runtime_version", "schema_version", "system_volume_trust",
+                ),
+                "RUNTIME_FIXED": {
+                    "apple_anchor": "apple", "dependency_policy_id": "clt-python39-apple-dyld-v1",
+                    "framework_cdhash": "a43551195b8d2eefd9356d81c1098ffc9e0a8b47",
+                    "framework_path": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9",
+                    "framework_resource_seal": "valid", "policy_id": "clt-python3.9-v1",
+                    "requirement_id": "com.apple.python3", "runtime_cdhash": "77e5dcc021cbfa7e2c3940b5ea150e3da037f3cf",
+                    "runtime_path": "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+                    "runtime_version": "3.9", "schema_version": "oasis7.local-signer.runtime-attestation.v1",
+                    "system_volume_trust": "current-booted-apple-os",
+                },
+                "pairs": lambda items: dict(items), "json": json, "re": re,
+                "MappingProxyType": __import__("types").MappingProxyType,
+                "_verify_runtime_names": lambda _record: None,
+            }
+            exec(compile(module, "<read-runtime-attestation>", "exec"), namespace)
+            with self.assertRaisesRegex(ValueError, "runtime import path is not absolute"):
+                namespace["read_runtime_attestation"](False)
+            realpath.assert_not_called()
 
     def intercept_prefix(self, stop_index, variables, lines=None):
-        """Interpret the actual restricted shell approval prefix; invoke no OS tool.
-
-        Accepted data grammar deliberately uses fixed native cat/printf/shasum/
-        awk and an executable test ... || exit 9. GREEN docs must contain this
-        reviewable prefix; every executable line is parsed before invocation,
-        so an unknown prelude cannot silently mutate shell inputs. Strings in
-        prose or an unchecked assignment do not count. Fake commands never
-        exist on disk or in production argv/env.
-        """
+        """Interpret the approved gate/bootstrap digest checks; invoke no OS tool."""
         import re
         import shlex
         block = self.operator_block() if lines is None else lines
         phase = 0
         for line in block[:stop_index]:
-            assignment = re.fullmatch(r'APPROVED_BOOTSTRAP_CODE="\$\((.*)\)"', line)
-            if assignment:
+            if line.startswith("ACTUAL_RUNTIME_GATE_SHA256="):
+                expected = 'ACTUAL_RUNTIME_GATE_SHA256="$(/usr/bin/shasum -a 256 "$APPROVED_RUNTIME_GATE" | /usr/bin/awk \'{print $1}\')"'
                 if phase != 0:
-                    raise ValueError("bootstrap capture must be the first approval operation")
-                command = shlex.split(assignment.group(1))
-                self.assertEqual(command, ["/bin/cat", "$APPROVED_BOOTSTRAP_SOURCE"], "bootstrap code must be read as data from independent out-of-stage source")
+                    raise ValueError("gate digest must be the first approval check")
+                self.assertEqual(line, expected)
+                gate = Path(variables["APPROVED_RUNTIME_GATE"])
+                if not gate.is_file() or gate.is_symlink():
+                    raise ValueError("approved native gate must be an independent regular file")
+                variables["ACTUAL_RUNTIME_GATE_SHA256"] = api.digest(gate.read_bytes())
+                self.operator_events.append("hash-approved-gate")
+                phase = 1
+            elif line.startswith('test "$ACTUAL_RUNTIME_GATE_SHA256"'):
+                if phase != 1:
+                    raise ValueError("gate digest must precede its approval comparison")
+                self.assertEqual(shlex.split(line), ["test", "$ACTUAL_RUNTIME_GATE_SHA256", "=", "$EXPECTED_RUNTIME_GATE_SHA256", "||", "exit", "9"])
+                if variables["ACTUAL_RUNTIME_GATE_SHA256"] != variables["EXPECTED_RUNTIME_GATE_SHA256"]:
+                    raise ValueError("independent runtime gate digest approval mismatch")
+                self.operator_events.append("check-approved-gate")
+                phase = 2
+            elif line.startswith('APPROVED_BOOTSTRAP_CODE="$(/bin/cat '):
+                if phase != 2:
+                    raise ValueError("bootstrap capture must follow the gate digest approval")
+                self.assertEqual(line, 'APPROVED_BOOTSTRAP_CODE="$(/bin/cat "$APPROVED_BOOTSTRAP_SOURCE")"')
                 source = Path(variables["APPROVED_BOOTSTRAP_SOURCE"])
                 if source == self.release or self.release in source.parents:
                     raise ValueError("candidate stage cannot supply trusted bootstrap source")
-                variables["APPROVED_BOOTSTRAP_CODE"] = source.read_bytes().decode().rstrip("\n")
+                raw = source.read_bytes()
+                if raw.endswith(b"\n"):
+                    raise ValueError("bootstrap source must have no trailing line terminator")
+                variables["APPROVED_BOOTSTRAP_CODE"] = raw.decode()
                 self.operator_events.append("capture-independent-code")
-                phase = 1
+                phase = 3
             elif line.startswith("ACTUAL_BOOTSTRAP_SHA256="):
-                if phase != 1:
+                if phase != 3:
                     raise ValueError("captured bootstrap code must precede its digest")
                 # Shell hash must cover the exact captured variable bytes used
                 # by -c, never an independently reopened source pathname.
@@ -644,20 +808,20 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
                 self.assertIn("APPROVED_BOOTSTRAP_CODE", variables, "hash must follow real captured code assignment")
                 variables["ACTUAL_BOOTSTRAP_SHA256"] = api.digest(variables["APPROVED_BOOTSTRAP_CODE"].encode())
                 self.operator_events.append("hash-captured-code")
-                phase = 2
+                phase = 4
             elif line.startswith('test "$ACTUAL_BOOTSTRAP_SHA256"'):
-                if phase != 2:
+                if phase != 4:
                     raise ValueError("captured bootstrap digest must precede approval comparison")
                 self.assertEqual(shlex.split(line), ["test", "$ACTUAL_BOOTSTRAP_SHA256", "=", "$EXPECTED_BOOTSTRAP_SHA256", "||", "exit", "9"])
                 if variables.get("ACTUAL_BOOTSTRAP_SHA256") != variables["EXPECTED_BOOTSTRAP_SHA256"]:
                     raise ValueError("independent bootstrap digest approval mismatch")
-                self.operator_events.append("check-independent-approval")
-                phase = 3
+                self.operator_events.append("check-approved-bootstrap")
+                phase = 5
             else:
                 tokens = shlex.split(line)
-                invocation = tokens[:4] == ["/usr/bin/python3", "-I", "-c", "$APPROVED_BOOTSTRAP_CODE"] and any(operation in tokens for operation in ("plan", "apply"))
-                if phase != 3 or not invocation:
-                    raise ValueError(f"unsupported executable operator prelude before root invocation: {line}")
+                invocation = tokens[:6] == ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", "LC_ALL=C", "$APPROVED_RUNTIME_GATE"] and "--bootstrap-source" in tokens and "--expected-bootstrap-sha256" in tokens and "--" in tokens and any(operation in tokens for operation in ("plan", "apply"))
+                if phase != 5 or not invocation:
+                    raise ValueError(f"unsupported executable operator prelude before approved gate invocation: {line}")
 
     def invoke_operator(self, operation="apply", variables=None, runbook_text=None):
         harness_supplied = variables is None and runbook_text is None
@@ -667,22 +831,24 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         try:
             self.intercept_prefix(index, variables, lines)
         except ValueError as exc:
-            # These tests require a working trusted inline entry. A frozen
-            # source recipe that fails closed is RED, not a setup error.
+            # These tests require the supported gate contract, not a legacy
+            # direct-interpreter command.
             if harness_supplied:
-                self.fail(f"runbook has no usable independently approved inline bootstrap: {exc}")
+                self.fail(f"runbook has no usable independently approved runtime gate: {exc}")
             raise
         command = tuple(variables.get(token[1:], token) if token.startswith("$") else token for token in tokens)
-        if command[:3] != ("/usr/bin/python3", "-I", "-c"):
-            # Current runbook's actual executable command starts candidate path
-            # after separate verification. Reproduce that marker behavior only;
-            # no shell/Python subprocess or privileged operation is performed.
-            return self.legacy_launch()
-        self.assertEqual(self.operator_events[-3:], ["capture-independent-code", "hash-captured-code", "check-independent-approval"], "real digest comparison must execute before inline code")
+        expected_prefix = ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", "LC_ALL=C", str(self.runtime_gate))
+        self.assertEqual(command[:6], expected_prefix, "the approved gate must start with a clean environment")
+        self.assertEqual(self.operator_events[:5], ["hash-approved-gate", "check-approved-gate", "capture-independent-code", "hash-captured-code", "check-approved-bootstrap"], "both independent digest comparisons must execute before gate startup")
+        self.assertIn("check-approved-gate", self.operator_events, "independent native gate digest must be checked before invocation")
         self.assertTrue(self.bootstrap_code, "independently reviewed inline source bytes are absent")
-        self.assertEqual(command[3], self.bootstrap_code, "actual operator -c bytes must equal approved out-of-stage source")
+        self.assertEqual(command[command.index("--bootstrap-source") + 1], str(self.bootstrap_source))
+        self.assertEqual(command[command.index("--expected-bootstrap-sha256") + 1], self.bootstrap_approval)
+        operation_args = command[command.index("--") + 1:]
         if self.before_inline_execution:
             self.before_inline_execution()
+        if api.digest(self.bootstrap_source.read_bytes()) != self.bootstrap_approval:
+            raise ValueError("native gate bootstrap-source digest mismatch")
         from unittest.mock import patch
         namespace = {
             "__name__": "__main__",
@@ -691,20 +857,24 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
             "_bootstrap_execute": self.execute_captured,
             "_bootstrap_after_capture": self.after_capture,
             "_bootstrap_target": "aarch64-apple-darwin",
+            "_bootstrap_runtime_attestation": self.runtime_attestation_bytes,
         }
-        with patch.object(sys, "argv", ["-c", *command[4:]]):
-            exec(compile(command[3], "<independently-approved-bootstrap>", "exec"), namespace)
+        with patch.object(sys, "argv", ["-c", *operation_args]):
+            exec(compile(self.bootstrap_code, "<independently-approved-bootstrap>", "exec"), namespace)
 
     def launch(self):
         return self.invoke_operator()
 
-    def test_production_command_is_exact_isolated_inline_code(self):
+    def test_production_command_uses_clean_env_and_approved_gate(self):
         for _, command in self.operator_commands():
-            self.assertEqual(command[:4], ["/usr/bin/python3", "-I", "-c", "$APPROVED_BOOTSTRAP_CODE"], "every actual operator command must use independently approved inline captured bytes")
+            self.assertEqual(command[:6], ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", "LC_ALL=C", "$APPROVED_RUNTIME_GATE"], "every actual operator command must clear the environment before loading the gate")
+            self.assertEqual(command[command.index("--bootstrap-source") + 1], "$APPROVED_BOOTSTRAP_SOURCE")
+            self.assertEqual(command[command.index("--expected-bootstrap-sha256") + 1], "$EXPECTED_BOOTSTRAP_SHA256")
+            self.assertEqual(command[command.index("--") + 1], "plan" if "plan" in command else "apply")
             self.assertEqual(command[command.index("--expected-manifest-sha256") + 1], "$EXPECTED_MANIFEST_SHA256")
 
     def test_actual_inline_bootstrap_positive_executes_captured_launcher(self):
-        self.assertTrue(all(command[2] == "-c" for _, command in self.operator_commands()), "positive must exercise actual inline entry")
+        self.assertTrue(all(command[0] == "/usr/bin/env" and command[1] == "-i" for _, command in self.operator_commands()), "positive must exercise actual clean-environment gate entry")
         self.launch()
         self.assertEqual(self.executions[0]["launcher"], self.initial_launcher)
         self.assertEqual(self.executions[0]["files"]["install-release.py"], self.initial_launcher)
@@ -714,7 +884,7 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
             self.executions.clear()
             self.operator_events.clear()
             self.invoke_operator(operation)
-            self.assertEqual(self.operator_events[:3], ["capture-independent-code", "hash-captured-code", "check-independent-approval"])
+            self.assertEqual(self.operator_events[:5], ["hash-approved-gate", "check-approved-gate", "capture-independent-code", "hash-captured-code", "check-approved-bootstrap"])
             self.assertEqual(self.executions[0]["launcher"], self.initial_launcher)
 
     def test_wrong_independent_bootstrap_digest_stops_real_snippet(self):
@@ -722,12 +892,12 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         variables["EXPECTED_BOOTSTRAP_SHA256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "independent bootstrap digest approval mismatch"):
             self.invoke_operator(variables=variables)
-        self.assertEqual(self.operator_events, ["capture-independent-code", "hash-captured-code"])
+        self.assertEqual(self.operator_events, ["hash-approved-gate", "check-approved-gate", "capture-independent-code", "hash-captured-code"])
         self.assertEqual(self.executions, [], "actual digest guard, not prose, must block code startup")
 
     def test_stage_source_and_self_hash_exports_are_rejected_before_root_invocation(self):
-        import re
         runbook = (SOURCE.parents[1] / "doc/p2p/blockchain/local-file-signing-backend.runbook.md").read_text()
+        marker = '/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C "$APPROVED_RUNTIME_GATE" \\\n'
         patterns = (
             'export APPROVED_BOOTSTRAP_SOURCE="$STAGING/install-release.py"',
             'export EXPECTED_BOOTSTRAP_SHA256="$(/usr/bin/shasum -a 256 "$STAGING/install-release.py" | /usr/bin/awk \'{print $1}\')"',
@@ -737,21 +907,17 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         )
         for injected in patterns:
             with self.subTest(injected=injected):
-                modified, count = re.subn(r"(?m)^(/usr/bin/python3 -I .*? plan \\\n)", injected + "\\n\\1", runbook, count=1)
-                if count == 0:
-                    # Current source still invokes the staged launcher. Inject
-                    # before that concrete plan command to test parser behavior.
-                    modified, count = re.subn(r"(?m)^(/usr/bin/python3 -I .*? plan \\\n)", injected + "\\n\\1", runbook, count=1)
-                self.assertEqual(count, 1, "fixture must prepend the adversarial shell line to the actual plan command")
+                self.assertEqual(runbook.count(marker), 2)
+                modified = runbook.replace(marker, injected + "\n" + marker, 1)
                 with self.assertRaises(ValueError):
                     self.invoke_operator(runbook_text=modified)
                 self.assertEqual(self.executions, [], "candidate source/self-hash must not reach root invocation")
 
     def test_unknown_executable_prelude_is_never_ignored(self):
-        import re
         runbook = (SOURCE.parents[1] / "doc/p2p/blockchain/local-file-signing-backend.runbook.md").read_text()
-        modified, count = re.subn(r"(?m)^(/usr/bin/python3 -I .*? plan \\\n)", 'printf "unexpected"\\n\\1', runbook, count=1)
-        self.assertEqual(count, 1)
+        marker = '/usr/bin/env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C "$APPROVED_RUNTIME_GATE" \\\n'
+        self.assertEqual(runbook.count(marker), 2)
+        modified = runbook.replace(marker, 'printf "unexpected"\n' + marker, 1)
         with self.assertRaisesRegex(ValueError, "unsupported executable operator prelude"):
             self.invoke_operator(runbook_text=modified)
         self.assertEqual(self.executions, [])
@@ -761,14 +927,14 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         variables["APPROVED_BOOTSTRAP_SOURCE"] = str(self.release / "install-release.py")
         with self.assertRaisesRegex(ValueError, "candidate stage cannot supply trusted bootstrap source"):
             self.invoke_operator(variables=variables)
-        self.assertEqual(self.operator_events, [])
+        self.assertEqual(self.operator_events, ["hash-approved-gate", "check-approved-gate"])
         self.assertEqual(self.executions, [], "trusted source must be independent of candidate stage")
 
     def test_bootstrap_source_path_replacement_cannot_change_executed_inline_bytes(self):
         self.before_inline_execution = lambda: self.bootstrap_source.write_bytes(b"raise RuntimeError('replacement bootstrap')")
-        self.invoke_operator()
-        self.assertEqual(self.operator_events[:3], ["capture-independent-code", "hash-captured-code", "check-independent-approval"])
-        self.assertEqual(self.executions[0]["launcher"], self.initial_launcher)
+        with self.assertRaisesRegex(ValueError, "native gate bootstrap-source digest mismatch"):
+            self.invoke_operator()
+        self.assertEqual(self.executions, [], "the native gate independently reopens and hashes the protected bootstrap source")
 
     def test_complete_snapshot_contains_manifest_and_every_member_once(self):
         expected = {name: (self.release / name).read_bytes() for name in (*api.FILES, "manifest.json")}

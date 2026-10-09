@@ -1,6 +1,7 @@
 //! Local, exact-grant signing worker and strict IPC protocol.
 
 pub mod protocol;
+pub mod runtime_gate;
 
 pub mod admin;
 pub mod authorization;
