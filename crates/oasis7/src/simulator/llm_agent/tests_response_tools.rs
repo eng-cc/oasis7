@@ -1,4 +1,15 @@
 #[test]
+fn responses_tools_preserve_synchronous_wire_contract() {
+    for tool in responses_tools_with_debug_mode(true) {
+        let value = serde_json::to_value(tool).expect("serialize response tool");
+        assert_eq!(value["type"], "function");
+        for field in ["async", "output_schema", "allowed_callers"] {
+            assert!(value.get(field).is_none(), "unexpected optional field {field}");
+        }
+    }
+}
+
+#[test]
 fn responses_tools_register_expected_function_names() {
     let tools = responses_tools();
     assert_eq!(tools.len(), 10);
@@ -62,6 +73,8 @@ fn response_function_call_maps_to_typed_module_call_turn() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -83,6 +96,8 @@ fn response_function_call_maps_module_lifecycle_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -104,6 +119,8 @@ fn response_function_call_maps_world_rules_guide_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -128,6 +145,8 @@ fn response_function_call_maps_power_order_book_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -152,6 +171,8 @@ fn response_function_call_maps_module_market_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -180,6 +201,8 @@ fn response_function_call_maps_social_state_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -232,6 +255,8 @@ fn response_function_call_invalid_json_arguments_are_preserved_as_raw() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -255,6 +280,8 @@ fn response_function_call_maps_decision_tool_to_typed_decision_turn() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("decision turn");
@@ -282,6 +309,8 @@ fn response_function_call_maps_debug_grant_tool_to_typed_decision_turn() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("decision turn");
