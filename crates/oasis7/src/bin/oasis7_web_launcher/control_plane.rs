@@ -833,6 +833,7 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
         }
         if let Err(err) =
             LoadedNetworkTierManifest::load(std::path::Path::new(network_tier_manifest))
+                .and_then(|loaded| loaded.validate_runtime_support())
         {
             issues.push(format!("chain network tier manifest is invalid: {err}"));
         }

@@ -1572,6 +1572,8 @@ def escape_markdown_cell(raw: str) -> str:
 lanes = []
 missing_required_lanes = list(required_lanes)
 manifest_blockers = []
+if data["schema_version"] == "oasis7.network_tier_manifest.v2":
+    manifest_blockers.append("planned_authority_not_activated")
 manifest_required_gates = list(data["promotion_policy"]["required_gates"])
 missing_manifest_required_gates = [
     lane_id for lane_id in active_required_lanes if lane_id not in manifest_required_gates
@@ -1614,7 +1616,7 @@ for endpoint_name in ("rpc_ref", "explorer_ref", "faucet_ref"):
 if data["status"] not in {"specified_skeleton_only", "rehearsal", "live"}:
     manifest_blockers.append(f"unsupported_public_testnet_status:{data['status']}")
 
-if lanes_tsv_arg:
+if lanes_tsv_arg and data["schema_version"] != "oasis7.network_tier_manifest.v2":
     lanes_tsv_path = pathlib.Path(lanes_tsv_arg).resolve()
     seen_lane_ids = set()
     with lanes_tsv_path.open("r", encoding="utf-8", newline="") as fh:
@@ -1703,7 +1705,12 @@ if lanes_tsv_arg:
         lane_id for lane_id in required_lanes if lane_id not in seen_lane_ids
     ]
 
-if data["status"] == "specified_skeleton_only" and not lanes:
+if data["schema_version"] == "oasis7.network_tier_manifest.v2":
+    readiness_verdict = "block"
+    live_candidate_allowed = False
+    claim_recommendation = "hold_public_testnet_claims"
+    gate_result = "block"
+elif data["status"] == "specified_skeleton_only" and not lanes:
     readiness_verdict = "specified_skeleton_only"
     live_candidate_allowed = False
     claim_recommendation = "hold_public_testnet_claims"
@@ -1759,6 +1766,13 @@ summary = {
     "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "manifest_path": str(manifest_path),
     "manifest_status": data["status"],
+    **({
+        "manifest_schema_version": data["schema_version"],
+        "runtime_supported": False,
+        "release_policy": data["release_policy"],
+        "world_policy": data["world_policy"],
+        "authority_policy": data["authority_policy"],
+    } if data["schema_version"] == "oasis7.network_tier_manifest.v2" else {}),
     "tier": data["tier"],
     "network_id": data["network_id"],
     "chain_id": data["chain_id"],
@@ -1766,7 +1780,7 @@ summary = {
     "release_candidate_bundle_resolved_path": str(bundle_path),
     "rpc_ref": endpoint_policy["rpc_ref"],
     "explorer_ref": endpoint_policy["explorer_ref"],
-    "faucet_ref": endpoint_policy["faucet_ref"],
+    "faucet_ref": endpoint_policy.get("faucet_ref"),
     "required_lanes": required_lanes,
     "manifest_required_gates": manifest_required_gates,
     "missing_required_lanes": missing_required_lanes,

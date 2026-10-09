@@ -1,0 +1,72 @@
+{
+  "schema_version": "oasis7.network_tier_manifest.v2",
+  "tier": "public_testnet",
+  "status": "planned",
+  "network_id": "oasis7-public-testnet-example",
+  "chain_id": "oasis7-public-testnet-example",
+  "runtime_refs": {
+    "release_candidate_bundle_ref": "output/release-candidates/public-testnet-example.json",
+    "genesis_ref": "public-testnet-genesis.example.json",
+    "bootstrap_peer_ref": "public-testnet-bootstrap.example.txt"
+  },
+  "endpoint_policy": {
+    "rpc_ref": "https://public-testnet.example.invalid/rpc",
+    "explorer_ref": "https://public-testnet.example.invalid/explorer",
+    "faucet_ref": null
+  },
+  "validator_policy": {
+    "governance_mode": "governance_registry",
+    "validator_admission": "allowlist_or_governed_candidate",
+    "target_validator_count": 1,
+    "allow_observer_nodes": true
+  },
+  "token_policy": {
+    "symbol": "OC",
+    "faucet_mode": "operator_grant",
+    "value_semantics": "preview"
+  },
+  "claims_policy": {
+    "allowed_claims": [
+      "public_testnet",
+      "limited_preview_planned"
+    ],
+    "denied_claims": [
+      "mainnet_live",
+      "production_oc_settlement",
+      "persistent_world_live",
+      "distributed_finality"
+    ]
+  },
+  "promotion_policy": {
+    "promote_from": [
+      "governed_bootstrap_rehearsal"
+    ],
+    "required_gates": [
+      "public_rpc_ready",
+      "explorer_public_ready",
+      "faucet_guard_ready",
+      "reset_policy_announced",
+      "runtime_bootstrap",
+      "world_resource_provenance_ready",
+      "provider_resource_provenance_ready",
+      "resource_delta_replay_ready",
+      "api_viewer_projection_ready",
+      "same_world_hosted_entry_ready",
+      "claims_boundary_review"
+    ]
+  },
+  "evidence_refs": [],
+  "release_policy": {
+    "stage": "limited_preview"
+  },
+  "world_policy": {
+    "world_id": "oasis7-public-testnet-example",
+    "retention": "persistent",
+    "reset_policy": "frozen"
+  },
+  "authority_policy": {
+    "profile": "controlled_single_authority",
+    "profile_version": 1,
+    "activation": "planned"
+  }
+}

@@ -1030,6 +1030,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   --manifest doc/testing/templates/network-tier-public-testnet.example.json
 ./scripts/network-tier-manifest-smoke.sh
 ```
+- v2 planned 配置验证沿用 manifest smoke 及 Rust schema/CLI/launcher 回归，合同见[计划配置与运行支持边界](doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md#p2p-tier-planned-world-policy)。schema 合法不表示已激活：启动入口必须在写入前拒绝，readiness/exit-review 与旧证明入口不得给出可运行/已提交结论。实际单权威、独立故障域恢复及正式 profile verifier 仍需后续专项验收。
 - Testnet-connected hosted entry flow:
   - 本机暴露 `hosted_public_join` / hosted-login 形态入口时，先证明本机节点已按 formal `public_testnet` manifest / `world_id` / `chain_id` / genesis / bootstrap peers 接入并同步到 testnet，再证明 hosted-login / launcher / viewer / pure API 的 runtime/status/API endpoint 指向该节点 world state。
   - 最小证据包括：manifest validation、local observer sync/preflight 输出、节点 health/status、connected peers、height/head 推进、hosted-login `login/start -> login/complete` smoke、以及 viewer / pure API 读取同一 testnet world state 的截图或 JSON 摘要。

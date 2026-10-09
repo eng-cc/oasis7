@@ -605,6 +605,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     validate_local_test_provider_options(&options)?;
     if let Some(manifest_path) = options.network_tier_manifest_path.as_ref() {
         let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path())?;
+        loaded.validate_runtime_support()?;
         validate_current_runtime_hash_against_network_tier_bundle(
             manifest_path.as_path(),
             &loaded,
