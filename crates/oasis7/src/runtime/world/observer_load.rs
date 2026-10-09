@@ -359,198 +359,6 @@ fn capture(reader: &RootedReader) -> Result<CapturedGeneration, ObserverLoadErro
     Ok(CapturedGeneration { record })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn temp_root() -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "oasis7-observer-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
-    fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
-        fn walk(base: &Path, dir: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
-            for entry in fs::read_dir(dir).unwrap() {
-                let path = entry.unwrap().path();
-                if path.is_dir() {
-                    walk(base, &path, files);
-                } else {
-                    files.insert(
-                        path.strip_prefix(base)
-                            .unwrap()
-                            .to_string_lossy()
-                            .into_owned(),
-                        fs::read(path).unwrap(),
-                    );
-                }
-            }
-        }
-        let mut files = BTreeMap::new();
-        walk(root, root, &mut files);
-        files
-    }
-    #[test]
-    fn rejects_path_shapes_and_missing_root_is_not_ready() {
-        for path in [
-            "/snapshot.json",
-            "../snapshot.json",
-            "a/../b",
-            "a//b",
-            "C:/secret",
-            "\\\\server\\share",
-            "a\\b",
-            "a/./b",
-        ] {
-            assert!(matches!(
-                RelativeArtifactPath::parse(path),
-                Err(ObserverLoadError::SecurityViolation(_))
-            ));
-        }
-        assert!(matches!(
-            World::load_observer_from_dir(
-                temp_root().join("missing"),
-                ObserverReadLimits::default()
-            ),
-            Err(ObserverLoadError::NotReady)
-        ));
-    }
-    #[test]
-    fn loading_valid_checkpoint_has_zero_source_writes_and_no_persistence_attachment() {
-        let root = temp_root();
-        World::new().save_to_dir(&root).unwrap();
-        let before = tree(&root);
-        let world = World::load_observer_from_dir(&root, ObserverReadLimits::default()).unwrap();
-        assert!(world.persistence_dir.borrow().is_none());
-        assert_eq!(tree(&root), before);
-        let limits = ObserverReadLimits {
-            max_file_bytes: 1,
-            ..ObserverReadLimits::default()
-        };
-        assert!(matches!(
-            World::load_observer_from_dir(&root, limits),
-            Err(ObserverLoadError::ResourceLimited)
-        ));
-        assert_eq!(tree(&root), before);
-        fs::remove_dir_all(root).unwrap();
-    }
-    #[cfg(unix)]
-    #[test]
-    fn rejects_intermediate_and_final_symlinks() {
-        use std::os::unix::fs::symlink;
-        let root = temp_root();
-        let outside = temp_root();
-        fs::write(outside.join("secret.json"), b"outside").unwrap();
-        symlink(&outside, root.join("escape")).unwrap();
-        symlink(outside.join("secret.json"), root.join("secret.json")).unwrap();
-        let reader = RootedReader::new(
-            &root,
-            ObserverReadLimits::default(),
-            Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        )
-        .unwrap();
-        assert!(matches!(
-            reader.read("escape/secret.json"),
-            Err(ObserverLoadError::SecurityViolation(_))
-        ));
-        assert!(matches!(
-            reader.read("secret.json"),
-            Err(ObserverLoadError::SecurityViolation(_))
-        ));
-        fs::remove_dir_all(root).unwrap();
-        fs::remove_dir_all(outside).unwrap();
-    }
-    #[cfg(unix)]
-    #[test]
-    fn special_file_is_rejected_without_waiting_for_a_writer() {
-        let root = temp_root();
-        assert!(
-            std::process::Command::new("mkfifo")
-                .arg(root.join("snapshot.json"))
-                .status()
-                .unwrap()
-                .success()
-        );
-        let thread_root = root.clone();
-        let (send, receive) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let reader = RootedReader::new(
-                &thread_root,
-                ObserverReadLimits::default(),
-                Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            )
-            .unwrap();
-            send.send(reader.read("snapshot.json")).unwrap();
-        });
-        assert!(matches!(
-            receive
-                .recv_timeout(std::time::Duration::from_secs(3))
-                .unwrap(),
-            Err(ObserverLoadError::SecurityViolation(_))
-        ));
-        fs::remove_dir_all(root).unwrap();
-    }
-    #[test]
-    fn captured_generation_survives_a_newer_publication() {
-        let root = temp_root();
-        let world = World::new();
-        world.save_to_dir(&root).unwrap();
-        let reader = RootedReader::new(
-            &root,
-            ObserverReadLimits::default(),
-            Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        )
-        .unwrap();
-        let first = capture(&reader).unwrap().record;
-        world.save_to_dir(&root).unwrap();
-        let second = capture(&reader).unwrap().record;
-        assert_ne!(first.generation_id, second.generation_id);
-        let manifest: SnapshotManifest = reader
-            .json(&format!(".distfs-state/{}", first.snapshot_manifest_path))
-            .unwrap();
-        let restored: Snapshot = assemble_snapshot(&manifest, &reader).unwrap();
-        assert_eq!(restored.state, world.snapshot().state);
-        fs::remove_dir_all(root).unwrap();
-    }
-    #[test]
-    fn cancellation_and_corruption_reject_without_source_writes() {
-        let root = temp_root();
-        World::new().save_to_dir(&root).unwrap();
-        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let reader =
-            RootedReader::new(&root, ObserverReadLimits::default(), cancelled.clone()).unwrap();
-        let captured = capture(&reader).unwrap();
-        let manifest: SnapshotManifest = reader
-            .json(&format!(
-                ".distfs-state/{}",
-                captured.record.snapshot_manifest_path
-            ))
-            .unwrap();
-        cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
-        assert!(matches!(
-            reader.read("snapshot.json"),
-            Err(ObserverLoadError::Cancelled)
-        ));
-        let path = root.join(format!(
-            ".distfs-state/blobs/{}.blob",
-            manifest.chunks[0].content_hash
-        ));
-        fs::write(path, b"corrupt captured immutable content").unwrap();
-        let corrupted = tree(&root);
-        assert!(matches!(
-            World::load_observer_from_dir(&root, ObserverReadLimits::default()),
-            Err(ObserverLoadError::IntegrityFailure(_))
-        ));
-        assert_eq!(tree(&root), corrupted);
-        fs::remove_dir_all(root).unwrap();
-    }
-}
-
 impl World {
     /// Load only verifiable immutable checkpoints, without writer recovery,
     /// persistence attachment, audits, GC, or mutable legacy-file fallback.
@@ -753,5 +561,197 @@ impl World {
             .validate_observer_cognition()
             .map_err(ObserverLoadError::from)?;
         Ok(world)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn temp_root() -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "oasis7-observer-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+    fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
+        fn walk(base: &Path, dir: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
+            for entry in fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(base, &path, files);
+                } else {
+                    files.insert(
+                        path.strip_prefix(base)
+                            .unwrap()
+                            .to_string_lossy()
+                            .into_owned(),
+                        fs::read(path).unwrap(),
+                    );
+                }
+            }
+        }
+        let mut files = BTreeMap::new();
+        walk(root, root, &mut files);
+        files
+    }
+    #[test]
+    fn rejects_path_shapes_and_missing_root_is_not_ready() {
+        for path in [
+            "/snapshot.json",
+            "../snapshot.json",
+            "a/../b",
+            "a//b",
+            "C:/secret",
+            "\\\\server\\share",
+            "a\\b",
+            "a/./b",
+        ] {
+            assert!(matches!(
+                RelativeArtifactPath::parse(path),
+                Err(ObserverLoadError::SecurityViolation(_))
+            ));
+        }
+        assert!(matches!(
+            World::load_observer_from_dir(
+                temp_root().join("missing"),
+                ObserverReadLimits::default()
+            ),
+            Err(ObserverLoadError::NotReady)
+        ));
+    }
+    #[test]
+    fn loading_valid_checkpoint_has_zero_source_writes_and_no_persistence_attachment() {
+        let root = temp_root();
+        World::new().save_to_dir(&root).unwrap();
+        let before = tree(&root);
+        let world = World::load_observer_from_dir(&root, ObserverReadLimits::default()).unwrap();
+        assert!(world.persistence_dir.borrow().is_none());
+        assert_eq!(tree(&root), before);
+        let limits = ObserverReadLimits {
+            max_file_bytes: 1,
+            ..ObserverReadLimits::default()
+        };
+        assert!(matches!(
+            World::load_observer_from_dir(&root, limits),
+            Err(ObserverLoadError::ResourceLimited)
+        ));
+        assert_eq!(tree(&root), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[cfg(unix)]
+    #[test]
+    fn rejects_intermediate_and_final_symlinks() {
+        use std::os::unix::fs::symlink;
+        let root = temp_root();
+        let outside = temp_root();
+        fs::write(outside.join("secret.json"), b"outside").unwrap();
+        symlink(&outside, root.join("escape")).unwrap();
+        symlink(outside.join("secret.json"), root.join("secret.json")).unwrap();
+        let reader = RootedReader::new(
+            &root,
+            ObserverReadLimits::default(),
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )
+        .unwrap();
+        assert!(matches!(
+            reader.read("escape/secret.json"),
+            Err(ObserverLoadError::SecurityViolation(_))
+        ));
+        assert!(matches!(
+            reader.read("secret.json"),
+            Err(ObserverLoadError::SecurityViolation(_))
+        ));
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(outside).unwrap();
+    }
+    #[cfg(unix)]
+    #[test]
+    fn special_file_is_rejected_without_waiting_for_a_writer() {
+        let root = temp_root();
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(root.join("snapshot.json"))
+                .status()
+                .unwrap()
+                .success()
+        );
+        let thread_root = root.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let reader = RootedReader::new(
+                &thread_root,
+                ObserverReadLimits::default(),
+                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            )
+            .unwrap();
+            send.send(reader.read("snapshot.json")).unwrap();
+        });
+        assert!(matches!(
+            receive
+                .recv_timeout(std::time::Duration::from_secs(3))
+                .unwrap(),
+            Err(ObserverLoadError::SecurityViolation(_))
+        ));
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn captured_generation_survives_a_newer_publication() {
+        let root = temp_root();
+        let world = World::new();
+        world.save_to_dir(&root).unwrap();
+        let reader = RootedReader::new(
+            &root,
+            ObserverReadLimits::default(),
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        )
+        .unwrap();
+        let first = capture(&reader).unwrap().record;
+        world.save_to_dir(&root).unwrap();
+        let second = capture(&reader).unwrap().record;
+        assert_ne!(first.generation_id, second.generation_id);
+        let manifest: SnapshotManifest = reader
+            .json(&format!(".distfs-state/{}", first.snapshot_manifest_path))
+            .unwrap();
+        let restored: Snapshot = assemble_snapshot(&manifest, &reader).unwrap();
+        assert_eq!(restored.state, world.snapshot().state);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn cancellation_and_corruption_reject_without_source_writes() {
+        let root = temp_root();
+        World::new().save_to_dir(&root).unwrap();
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let reader =
+            RootedReader::new(&root, ObserverReadLimits::default(), cancelled.clone()).unwrap();
+        let captured = capture(&reader).unwrap();
+        let manifest: SnapshotManifest = reader
+            .json(&format!(
+                ".distfs-state/{}",
+                captured.record.snapshot_manifest_path
+            ))
+            .unwrap();
+        cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(matches!(
+            reader.read("snapshot.json"),
+            Err(ObserverLoadError::Cancelled)
+        ));
+        let path = root.join(format!(
+            ".distfs-state/blobs/{}.blob",
+            manifest.chunks[0].content_hash
+        ));
+        fs::write(path, b"corrupt captured immutable content").unwrap();
+        let corrupted = tree(&root);
+        assert!(matches!(
+            World::load_observer_from_dir(&root, ObserverReadLimits::default()),
+            Err(ObserverLoadError::IntegrityFailure(_))
+        ));
+        assert_eq!(tree(&root), corrupted);
+        fs::remove_dir_all(root).unwrap();
     }
 }

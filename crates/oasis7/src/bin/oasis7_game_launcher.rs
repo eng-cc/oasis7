@@ -737,7 +737,7 @@ fn wait_until_ready(
             )
         })?;
         poll_startup_health(world_child, chain_child.as_deref_mut())?;
-        let execution_world_dir = resolved_chain_execution_world_dir(&options);
+        let execution_world_dir = resolved_chain_execution_world_dir(options);
         wait_for_chain_execution_world_ready(
             Path::new(execution_world_dir.as_str()),
             Duration::from_secs(30),

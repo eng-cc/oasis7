@@ -15,7 +15,7 @@ class NetworkSourceContract(unittest.TestCase):
     def test_shared_facade_and_lock_sources(self):
         for crate in ("oasis7_net", "oasis7_node"):
             manifest = tomllib.loads((ROOT / "crates" / crate / "Cargo.toml").read_text())
-            dep = manifest["dependencies"]["libp2p"]
+            dep = manifest["dependencies"].get("libp2p") or manifest["target"]['cfg(not(target_arch = "wasm32"))']["dependencies"]["libp2p"]
             self.assertEqual((dep["git"], dep["rev"]), (URL, REVISION))
             self.assertFalse(dep["default-features"])
             self.assertTrue(dep["optional"])

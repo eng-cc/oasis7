@@ -564,7 +564,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
       - name: Build performance test artifact
-        run: npm --prefix crates/oasis7_viewer run build:viewer:visual-test
+        run: |
+          viewer_bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"
+          WASM_BINDGEN_BIN="$viewer_bindgen_bin" npm --prefix crates/oasis7_viewer run build:viewer:visual-test
       - name: Execute selected cell
         shell: bash
         env:

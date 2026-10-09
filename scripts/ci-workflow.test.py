@@ -38,6 +38,8 @@ class Workflow(unittest.TestCase):
             self.assertIn('"$RUNNER_TEMP/ci-authority/ci-tests.sh" required', JOBS[name])
         performance = JOBS['viewer-performance-report']
         self.assertLess(performance.index('Build performance test artifact'), performance.index('Execute selected cell'))
+        self.assertIn('viewer_bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"', performance)
+        self.assertIn('WASM_BINDGEN_BIN="$viewer_bindgen_bin" npm', performance)
         viewer = JOBS['viewer-js-required']
         self.assertGreater(viewer.index('Verify browser authentication security'), viewer.index('Execute selected cell'))
         net = JOBS['net']

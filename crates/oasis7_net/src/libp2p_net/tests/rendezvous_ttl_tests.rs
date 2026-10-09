@@ -157,14 +157,14 @@ fn discovery_ttl_boundaries_survive_timer_poll_and_subsequent_request() {
             };
             client.dial(address).unwrap();
             loop {
-                match futures::future::select(client.select_next_some(), server.select_next_some())
-                    .await
+                if let futures::future::Either::Left((
+                    SwarmEvent::ConnectionEstablished { .. },
+                    _,
+                )) =
+                    futures::future::select(client.select_next_some(), server.select_next_some())
+                        .await
                 {
-                    futures::future::Either::Left((
-                        SwarmEvent::ConnectionEstablished { .. },
-                        _,
-                    )) => break,
-                    _ => {}
+                    break;
                 }
             }
             let ttls = [1, 31_556_951, 31_556_952, 31_556_953, u64::MAX, 2];
