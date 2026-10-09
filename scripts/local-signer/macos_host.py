@@ -39,7 +39,7 @@ class SudoPolicyObservation:
             return False
         denials = {f"User {self.caller} is not allowed to run sudo on {name}." + ending
                    for name in (self.hostname, self.hostname.split('.')[0]) for ending in ("", "\n")}
-        return (self.returncode == 1 and
+        return (type(self.returncode) is int and self.returncode in (0, 1) and
                 ((not self.stdout and self.stderr in denials) or
                  (not self.stderr and self.stdout in denials)))
 
