@@ -212,7 +212,22 @@ fn module_world() -> RuntimeWorld {
 #[cfg(feature = "wasmtime")]
 fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
     let dir = temp_dir("controlled-history-real-wasm");
-    let world = module_world();
+    let original_world = module_world();
+    let cached_snapshot = original_world.snapshot_with_chain_resource_context(
+        oasis7::runtime::ChainResourceDerivationContext {
+            world_id: "w1",
+            chain_id: "c1",
+            genesis_ref: None,
+            created_at_height: 0,
+            manifest_height: 0,
+            commit_block_hash: None,
+            tick: original_world.state().time,
+        },
+        "original-bootstrap-config",
+        "original-bootstrap-generator",
+    );
+    let world =
+        RuntimeWorld::from_snapshot(cached_snapshot, original_world.journal().clone()).unwrap();
     let initial_height = world.state().time;
     let initial_root = execution_world_snapshot_root(&world).unwrap();
     let store = LocalCasStore::new(dir.join("store"));
@@ -379,7 +394,84 @@ fn controlled_history_real_wasm_two_records_reexecute_and_fail_closed() {
             snapshot_hash: blake3_hex(&published_snapshot),
             journal_path: fs::canonicalize(journal_path).unwrap(),
             journal_hash: blake3_hex(&first_preparation.before_journal),
+            cached_resource_snapshot: None,
         });
+    assert!(
+        verify_history(&published_config, &history)
+            .unwrap_err()
+            .contains("unrecognized resource annotation")
+    );
+    let cached_path = dir.join("external-original-cached-snapshot.cbor");
+    fs::write(&cached_path, &first_preparation.before_snapshot).unwrap();
+    published_config
+        .published_initial_anchor
+        .as_mut()
+        .unwrap()
+        .cached_resource_snapshot =
+        Some(super::super::controlled_history::PinnedResourceSnapshot {
+            snapshot_path: fs::canonicalize(&cached_path).unwrap(),
+            snapshot_hash: blake3_hex(&first_preparation.before_snapshot),
+        });
+    verify_history(&published_config, &history).unwrap();
+    let mut relative_pin = published_config.clone();
+    relative_pin
+        .published_initial_anchor
+        .as_mut()
+        .unwrap()
+        .cached_resource_snapshot
+        .as_mut()
+        .unwrap()
+        .snapshot_path = "relative-snapshot.cbor".into();
+    assert!(
+        verify_history(&relative_pin, &history)
+            .unwrap_err()
+            .contains("must be absolute")
+    );
+    let cached_original = fs::read(&cached_path).unwrap();
+    // A trusted complete pair cannot be switched, split, or supplied with an
+    // altered pin. Current state/Journal still come from the published anchor.
+    let mut bad_pin = published_config.clone();
+    bad_pin
+        .published_initial_anchor
+        .as_mut()
+        .unwrap()
+        .cached_resource_snapshot
+        .as_mut()
+        .unwrap()
+        .snapshot_hash = "0".repeat(64);
+    assert!(verify_history(&bad_pin, &history).is_err());
+    for mutation in 0..6 {
+        let mut switched = capture::decode_snapshot(&cached_original).unwrap();
+        match mutation {
+            0 => {
+                switched.chain_resource_manifest = capture::decode_snapshot(&published_snapshot)
+                    .unwrap()
+                    .chain_resource_manifest
+            }
+            1 => {
+                switched.latest_chain_resource_delta = capture::decode_snapshot(&published_snapshot)
+                    .unwrap()
+                    .latest_chain_resource_delta
+            }
+            2 => switched.latest_chain_resource_delta.as_mut().unwrap().tick += 1,
+            3 => switched.chain_resource_manifest.world_id = "foreign-world".into(),
+            4 => switched.chain_resource_manifest.manifest_height = u64::MAX,
+            _ => switched.state.time = u64::MAX,
+        }
+        let changed = to_cbor(switched).unwrap();
+        fs::write(&cached_path, &changed).unwrap();
+        let mut altered = published_config.clone();
+        altered
+            .published_initial_anchor
+            .as_mut()
+            .unwrap()
+            .cached_resource_snapshot
+            .as_mut()
+            .unwrap()
+            .snapshot_hash = blake3_hex(&changed);
+        assert!(verify_history(&altered, &history).is_err());
+    }
+    fs::write(&cached_path, &cached_original).unwrap();
     verify_history(&published_config, &history).unwrap();
     let mut wrong_published = published_config.clone();
     wrong_published

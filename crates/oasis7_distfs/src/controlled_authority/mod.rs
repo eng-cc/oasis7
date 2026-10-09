@@ -10,8 +10,8 @@
 
 mod journal;
 mod proof;
-mod storage;
 pub mod replicated_protocol;
+mod storage;
 
 pub use journal::ControlledAuthorityLocalJournal;
 pub use proof::verify_local_decision_proof;

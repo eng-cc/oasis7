@@ -44,6 +44,16 @@ pub(crate) struct PublishedInitialAnchor {
     pub snapshot_hash: String,
     pub journal_path: std::path::PathBuf,
     pub journal_hash: String,
+    /// Independently saved before input; authenticates only the complete cached
+    /// diagnostic pair, never the current published state or genesis authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_resource_snapshot: Option<PinnedResourceSnapshot>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct PinnedResourceSnapshot {
+    pub snapshot_path: std::path::PathBuf,
+    pub snapshot_hash: String,
 }
 #[derive(Debug, Serialize)]
 pub(crate) struct HistoryVerification {
@@ -206,6 +216,9 @@ fn validate_published_initial_anchor(
     preparation: &CapturePreparation,
 ) -> Result<(), String> {
     fn pinned(path: &std::path::Path, hash: &str, maximum: u64) -> Result<Vec<u8>, String> {
+        if !path.is_absolute() {
+            return Err("external anchor path must be absolute".into());
+        }
         let bytes = crate::controlled_history_cli::read_bounded(path, maximum)?;
         if hash.len() != 64 || blake3_hex(&bytes) != hash {
             return Err("external published anchor content hash mismatch".into());
@@ -268,7 +281,22 @@ fn validate_published_initial_anchor(
     {
         return Err("published anchor diagnostic resource context mismatch".into());
     }
-    capture::validate_snapshot_continuity(&snapshot, journal, None, preparation)
+    let cached = anchor
+        .cached_resource_snapshot
+        .as_ref()
+        .map(|pin| -> Result<Snapshot, String> {
+            let bytes = pinned(&pin.snapshot_path, &pin.snapshot_hash, 64 * 1024 * 1024)?;
+            let cached = capture::decode_snapshot(&bytes)?;
+            if cached.chain_resource_manifest.world_id != record.world_id
+                || cached.state.time > record.height
+                || cached.chain_resource_manifest.manifest_height > record.height
+            {
+                return Err("external cached resource snapshot context mismatch".into());
+            }
+            Ok(cached)
+        })
+        .transpose()?;
+    capture::validate_snapshot_continuity(&snapshot, journal, cached.as_ref(), preparation)
 }
 
 fn reexecute(
