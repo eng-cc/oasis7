@@ -16,6 +16,8 @@
 - 想先看线上模块发布合法性与 binary-only 边界：`doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想进入治理事件、审计导出或收据安全专题：`doc/world-runtime/governance/README.md`
 
+- 想确认组织解散、不活跃保护、reclaim/申诉与授权交接的技术边界：[组织连续性与处置设计](runtime/organization-continuity-and-disposition.design.md)。
+
 ## 入口
 - PRD: `doc/world-runtime/prd.md`
 - 设计总览: `doc/world-runtime/design.md`
