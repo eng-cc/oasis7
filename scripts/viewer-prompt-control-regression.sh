@@ -1455,7 +1455,7 @@ if [[ -z "$GAME_URL" ]]; then
     STACK_ARGS+=(--chain-disable)
   fi
   if ((${#STACK_ARGS[@]} > 0)); then
-    "$ROOT_DIR/scripts/run-launcher-stack.sh" \
+    "$ROOT_DIR/scripts/run-launcher-stack.sh" --viewer-static-dir "$ROOT_DIR/crates/oasis7_viewer/.viewer-test-dist" \
       --with-llm \
       --agent-decision-source "$([[ "$HOSTED_LOCAL_MOCK" == "1" ]] && printf provider_backed || printf builtin_llm)" \
       --deployment-mode "$([[ "$FULL_GAMEPLAY" == "1" ]] && printf trusted_local_only || printf hosted_public_join)" \
@@ -1464,7 +1464,7 @@ if [[ -z "$GAME_URL" ]]; then
       --output-dir "$OUT_DIR/runtime" \
       "${STACK_ARGS[@]}" >"$LAUNCH_LOG" 2>&1 &
   else
-    "$ROOT_DIR/scripts/run-launcher-stack.sh" \
+    "$ROOT_DIR/scripts/run-launcher-stack.sh" --viewer-static-dir "$ROOT_DIR/crates/oasis7_viewer/.viewer-test-dist" \
       --with-llm \
       --agent-decision-source "$([[ "$HOSTED_LOCAL_MOCK" == "1" ]] && printf provider_backed || printf builtin_llm)" \
       --deployment-mode "$([[ "$FULL_GAMEPLAY" == "1" ]] && printf trusted_local_only || printf hosted_public_join)" \

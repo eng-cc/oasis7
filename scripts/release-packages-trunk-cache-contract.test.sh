@@ -31,7 +31,7 @@ def step(name: str) -> str:
 
 
 cache = step("Restore pinned trunk binary")
-assert "uses: actions/cache@v4" in cache
+assert "uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830" in cache
 assert "path: ~/.cargo/bin/trunk" in cache
 for key_part in (
     "runner.os",

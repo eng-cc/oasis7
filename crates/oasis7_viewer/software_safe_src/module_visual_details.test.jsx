@@ -22,7 +22,7 @@ async function renderModuleDetails(moduleLabel = "Relay Seven", moduleLocale = "
   const root = document.createElement("div");
   root.id = "app";
   document.body.appendChild(root);
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
   core.setViewerLocale(moduleLocale);
   const snapshot = sampleSnapshot();
   snapshot.model.module_visual_entities = {

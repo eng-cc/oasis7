@@ -13,16 +13,17 @@ function installMockWebSocket() {
   }
   Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket }); return { sentMessages, sockets };
 }
-function installTestCrypto() { Object.defineProperty(window, "crypto", { configurable: true, value: { subtle: { async importKey() { return {}; }, async sign() { return new Uint8Array(64).fill(7).buffer; } } } }); }
+function installTestCrypto() { Object.defineProperty(window, "crypto", { configurable: true, value: { getRandomValues: (array) => array.fill(1), subtle: { async verify() { return true; }, async importKey() { return {}; }, async sign() { return new Uint8Array(64).fill(7).buffer; } } } }); }
 
 describe("requestPowerSaleQuote", () => {
   beforeEach(() => { vi.resetModules(); window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0"); installTestCrypto(); });
 
   it("sends a seller-session-bound, signed, read-only request with buyer, amount, and price", async () => {
     const signSpy = vi.spyOn(window.crypto.subtle, "sign"); const { sentMessages, sockets } = installMockWebSocket();
-    const core = await import("./legacy_core.js"); core.initializeSoftwareSafeCore();
+    const core = await import("./legacy_core.js"); await core.initializeSoftwareSafeCore();
     sockets[0].open();
     core.state.auth = { ...core.state.auth, available: true, playerId: "seller-player", publicKey: "09".repeat(32), privateKey: "07".repeat(32), registrationStatus: "registered", runtimeStatus: "registered", boundAgentId: "agent-seller" };
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
     expect(await core.requestPowerSaleQuote("", 10, 3)).toEqual(expect.objectContaining({ ok: false }));
     expect(await window.__AW_TEST__.requestPowerSaleQuote("agent-buyer", 10, 3)).toEqual(expect.objectContaining({ ok: true, request: expect.objectContaining({ buyer_agent_id: "agent-buyer", amount: 10, requested_price_per_pu: 3 }) }));
     expect(core.state.powerSaleQuoteRequest.status).toBe("pending");

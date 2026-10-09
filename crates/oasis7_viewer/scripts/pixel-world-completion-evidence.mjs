@@ -54,7 +54,7 @@ export async function completionEvidence({name,url,outDir,evalJson,browserJson,r
   }
   const result={before,after,focused,keyboardBefore,keyboard,touchBefore,touch,feedStates};
   const pending=await evalJson(`(async()=>{
-    const snapshot=window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.selected_blocker();
+    const snapshot=window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("selected_blocker")();
     snapshot.model.agents={};
     snapshot.player_gameplay={stage_id:'awaiting_agent_claim',stage_status:'ready',execution_state:'waiting_for_intent',available_actions:[{action_id:'claim_first_agent',label:'Claim First Agent',protocol_action:'gameplay_action.submit',target_agent_id:'agent-0',disabled_reason:null}],recent_feedback:null};
     window.__AW_TEST__.injectSnapshot(snapshot);

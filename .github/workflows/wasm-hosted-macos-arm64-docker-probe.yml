@@ -20,13 +20,16 @@ on:
 env:
   PROBE_ROOT: output/ci/wasm-hosted-macos-arm64-docker-probe
 
+permissions:
+  contents: read
+
 jobs:
   probe-hosted-macos-arm64-docker:
     name: hosted-macos-arm64-docker-probe
     runs-on: ${{ inputs.runner_image }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Collect host and Docker probe evidence
         id: probe
@@ -130,7 +133,7 @@ jobs:
 
       - name: Upload probe evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: hosted-macos-arm64-docker-probe-${{ inputs.runner_image }}-${{ github.run_id }}
           path: ${{ env.PROBE_ROOT }}

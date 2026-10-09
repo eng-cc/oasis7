@@ -6,6 +6,8 @@ const ED25519_PKCS8_PREFIX = new Uint8Array([
 ]);
 const textEncoder = new TextEncoder();
 const authKeyCache = new Map();
+const signingIdentityCache = new Map();
+let nextIdentityId = 0;
 const HEX_BYTE_LOOKUP = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
 
 function cborHeader(majorType, length) {
@@ -146,10 +148,52 @@ async function importEd25519SigningKey(privateKeyHex) {
   return authKeyCache.get(privateKeyHex);
 }
 
+export function importSigningIdentity(publicKeyHex, privateKeyHex) {
+  if (typeof publicKeyHex !== "string" || typeof privateKeyHex !== "string" || !/^[0-9a-f]{64}$/i.test(publicKeyHex) || !/^[0-9a-f]{64}$/i.test(privateKeyHex)) {
+    throw new Error("viewer auth keys require strict hex encoding of exactly 32 bytes");
+  }
+  // Cache the exact pair, never just the public key: mismatched material must
+  // prove possession independently. Failed imports are evicted for retry.
+  const publicBytes = hexToBytes(publicKeyHex);
+  const privateBytes = hexToBytes(privateKeyHex);
+  if (publicBytes.length !== 32 || privateBytes.length !== 32) {
+    throw new Error("viewer auth keys must each contain exactly 32 bytes");
+  }
+  const publicKey = bytesToHex(publicBytes);
+  const cacheKey = `${publicKey}:${bytesToHex(privateBytes)}`;
+  if (!signingIdentityCache.has(cacheKey)) {
+    const pending = (async () => {
+      if (!window.crypto?.subtle) throw new Error("Ed25519 Web Crypto is unavailable");
+      const privateKey = await importEd25519SigningKey(bytesToHex(privateBytes));
+      const verifyKey = await window.crypto.subtle.importKey("raw", publicBytes, { name: "Ed25519" }, false, ["verify"]);
+      const challenge = window.crypto.getRandomValues(new Uint8Array(32));
+      const proof = await window.crypto.subtle.sign("Ed25519", privateKey, challenge);
+      if (!await window.crypto.subtle.verify("Ed25519", verifyKey, proof, challenge)) {
+        throw new Error("viewer auth public and private keys do not match");
+      }
+      return Object.freeze({
+        identityId: ++nextIdentityId,
+        publicKey,
+        sign: async (bytes) => new Uint8Array(await window.crypto.subtle.sign("Ed25519", privateKey, bytes)),
+      });
+    })();
+    signingIdentityCache.set(cacheKey, pending);
+    pending.catch(() => signingIdentityCache.delete(cacheKey));
+  }
+  return signingIdentityCache.get(cacheKey);
+}
+
+let identityLookup = () => null;
+let signingGeneration = () => 0;
+export function setSigningIdentityLookup(lookup, generation) { identityLookup = lookup; signingGeneration = generation; }
 export async function signAuthPayload(signingPayloadBytes, auth) {
-  const key = await importEd25519SigningKey(auth.privateKey);
-  const signature = await window.crypto.subtle.sign({ name: "Ed25519" }, key, signingPayloadBytes);
-  return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(new Uint8Array(signature))}`;
+  const generation = signingGeneration();
+  const installed = identityLookup(auth);
+  if (!installed) throw new Error("authentication requires a verified installed signing identity");
+  const identity = installed;
+  const signature = await identity.sign(signingPayloadBytes);
+  if (signingGeneration() !== generation || (installed && identityLookup(auth) !== installed)) throw new Error("authentication context changed during signing");
+  return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(signature)}`;
 }
 
 export async function generateEphemeralEd25519Keypair() {

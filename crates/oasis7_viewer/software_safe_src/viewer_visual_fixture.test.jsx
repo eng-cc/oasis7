@@ -27,10 +27,10 @@ describe("Viewer visual fixture integration", () => {
     expect(state.selectedId).toBe("agent-0");
     const targetsPanel = app.container.querySelector("#viewer-targets-panel");
     const agentButton = within(targetsPanel).getByTestId("viewer-playthrough-select-agent");
-    const locationButton = within(targetsPanel).getByTestId("viewer-select-location-loc-1");
+    const locationButton = within(targetsPanel).getByTestId("viewer-select-location-loc-0");
     expect(within(targetsPanel).getByText("agent-0")).toBeInTheDocument();
     expect(within(agentButton).getByText("Selected")).toBeInTheDocument();
-    expect(within(targetsPanel).getByText("Assembly Nexus")).toBeInTheDocument();
+    expect(within(targetsPanel).getByText("Factory Anchor")).toBeInTheDocument();
     expect(within(app.container.querySelector("#viewer-details-panel")).getByText("Agent Chat")).toBeInTheDocument();
     const agentContext = within(app.container.querySelector("#viewer-details-panel"))
       .getByRole("region", { name: "Agent Context" });

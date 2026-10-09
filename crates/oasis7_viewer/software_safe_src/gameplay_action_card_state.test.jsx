@@ -81,7 +81,7 @@ async function renderActionCards() {
   appRoot.id = "app";
   document.body.appendChild(appRoot);
 
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   core.injectSnapshot(snapshot);
   core.state.auth = {

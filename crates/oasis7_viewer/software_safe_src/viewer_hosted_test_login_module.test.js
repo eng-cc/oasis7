@@ -11,6 +11,7 @@ function deferred() {
 
 describe("viewer hosted test login module", () => {
   it("lets registration readiness await an in-flight issuer response", async () => {
+    Object.defineProperty(window, "crypto", { configurable: true, value: { getRandomValues: array => array.fill(1), subtle: { importKey: async () => ({}), sign: async () => new Uint8Array(64), verify: async () => true } } });
     const response = deferred();
     const state = {
       auth: {
@@ -29,8 +30,8 @@ describe("viewer hosted test login module", () => {
       clone: structuredClone,
       fetchImpl: vi.fn(async () => response.promise),
       generateEphemeralEd25519Keypair: vi.fn(async () => ({
-        publicKey: "test-public-key",
-        privateKey: "test-private-key",
+        publicKey: "09".repeat(32),
+        privateKey: "07".repeat(32),
       })),
       getSearchParams: () => new URLSearchParams("hosted_test_login=1"),
       isHostedPublicJoinDeploymentMode: (mode) => mode === "hosted_public_join",

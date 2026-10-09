@@ -1,0 +1,43 @@
+[package]
+name = "libp2p-swarm"
+edition = "2024"
+rust-version = "1.88"
+description = "The libp2p swarm"
+version = "0.48.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+either = "1.16"
+fnv = "1.0"
+futures = { version = "0.3" }
+futures-timer = { version = "3.0.4" }
+web-time = { version = "1.1" }
+hashlink = { version = "0.12" }
+libp2p-core = { git = "https://github.com/libp2p/rust-libp2p", rev = "2d8497b2615086bd88018ef3a1fb32bc613a07ca" }
+libp2p-identity = { version = "0.3.0" }
+libp2p-swarm-derive = { git = "https://github.com/libp2p/rust-libp2p", rev = "2d8497b2615086bd88018ef3a1fb32bc613a07ca", optional = true }
+multistream-select = { git = "https://github.com/libp2p/rust-libp2p", rev = "2d8497b2615086bd88018ef3a1fb32bc613a07ca" }
+rand = { version = "0.10" }
+smallvec = "1.15"
+tracing = { version = "0.1" }
+
+[target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
+tokio = { version = "1.53", default-features = false, features = ["rt"], optional = true }
+
+[target.'cfg(target_family="wasm")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+wasm-bindgen-futures = { version = "0.4" }
+
+[features]
+macros = ["dep:libp2p-swarm-derive"]
+tokio = ["dep:tokio"]
+
+
+[workspace]
+
+[package.metadata.oasis7-compat]
+upstream-revision = "2d8497b2615086bd88018ef3a1fb32bc613a07ca"

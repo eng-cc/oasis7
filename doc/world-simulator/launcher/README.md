@@ -14,6 +14,7 @@
 - 想精确找某份 launcher 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
+- Viewer 认证连接使用 launcher 注入的固定部署模式与 WS 目标；公开反代须配置 `OASIS7_VIEWER_PUBLIC_WS_URL` 的实际 WSS 地址，URL 的 `ws`/`addr` 参数只能匹配该目标。操作步骤见 [`hosted-player-access-operator-runbook.md`](../../p2p/blockchain/hosted-player-access-operator-runbook.md)。
 - 当前页只承担 `launcher/` 子目录 landing page 职责，不复制完整长表。
 - `../README.md` 是 world-simulator 模块级 landing page，负责跨 `viewer / launcher / llm / kernel / scenario / m4` 分流。
 - GitHub task issue evidence 是 launcher 活跃任务、阻断和验证状态的唯一 mutable truth；`.pm/github-project-sync` 只作为 task_uid 到 issue/project item 的本地 mapping/archive 辅助。

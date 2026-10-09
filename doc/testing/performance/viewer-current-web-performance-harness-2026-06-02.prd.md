@@ -26,6 +26,7 @@
 
 ## 接口 / 数据
 - Active commands:
+  - 先执行 `npm --prefix crates/oasis7_viewer run build:viewer:visual-test`；probe 只从 `.viewer-test-dist/` 读取显式测试产物，release 产物不含测试 API。
   - `./scripts/viewer-performance-probe.sh --profile smoke`
   - `./scripts/viewer-performance-probe.sh --profile release --duration-ms 8000`
   - `npm --prefix crates/oasis7_viewer run test:performance -- --profile smoke`
