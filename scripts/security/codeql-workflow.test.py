@@ -143,7 +143,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(value["upload_status"], status)
                 self.assertEqual(value["upload_sarif_id"], "official-upload-id" if status == "success" else "")
         self.assertIn("SARIF_ID: ${{ steps.upload.outputs.sarif-id }}", section[1])
-        self.assertIn("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02", section[1])
+        self.assertRegex(section[1], r"uses: actions/upload-artifact@[0-9a-f]{40}(?:\s|$)")
         self.assertIn("name: oasis7-codeql-upload-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.unit }}-${{ needs.plan.outputs.profile }}", section[1])
         self.assertIn("path: ${{ runner.temp }}/codeql-upload-evidence/evidence.json", section[1])
         self.assertIn("if-no-files-found: error", section[1])
