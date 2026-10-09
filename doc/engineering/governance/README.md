@@ -19,7 +19,7 @@
 
 工程治理 owner 人工触发巡检；仓库不维护 scheduler 或 GitHub Actions 定时任务。巡检是人工分类的 health review，不新增 required gate，也不替代 [canonical workflow](../workflow/source-of-truth.md)。
 
-巡检按需在独立分支或只读环境进行，记录问题、验证和建议。命令摘要、角色归因和后续处置按 [execution evidence](../workflow/source-of-truth.md) 记录；本页不重复 task truth、派工、PR 或 merge 规则。
+巡检按需在独立分支或只读环境进行，记录问题、验证和建议。记录实际版本、命令结果和后续处置；通用规则见 [开发流程规范](../workflow/source-of-truth.md)。
 
 ### 基线检查
 
@@ -27,7 +27,7 @@
 ./scripts/doc-inventory-report.sh
 ./scripts/doc-governance-check.sh
 ./scripts/lint-skills.sh
-./scripts/worktree-gc-report.sh --prunable-only
+./scripts/worktree-gc-report.sh --footprint
 
 ./scripts/ci-rust-governance-report.sh --out-dir "output/rust-governance/repository-health-$(date +%Y%m%d)"
 ```
@@ -44,8 +44,7 @@
 | --- | --- |
 | `doc-governance-check` / `lint-skills` 失败 | 作为 P0/P1 engineering-governance follow-up candidate，定位到具体文档或 workflow surface。 |
 | `doc-inventory-report` 返回 `action_required` | 按 module/hotspot 分类；在聚焦 path-governance follow-up 与季度趋势证据之间做明确选择。 |
-| `worktree-gc-report --prunable-only` 有候选 | 仅作只读线索。清理前确认非 main worktree、无有用 dirty state，且不属于 active task。 |
-| `pm lint` 失败 | 分开当前 task 失败与历史 execution-log debt；未经聚焦 follow-up 定界的历史债务不自动阻断本次巡检。 |
+| `worktree-gc-report` 的注册、文件或体积异常 | 仅作 Git/文件事实线索，不判定删除资格。清理使用 `resource-cleanup-executor.py`，明确目标、branch 和 expected HEAD，并重新检查合入、资料及占用。 |
 | Rust governance report finding | 阅读 duplicate counts 和 top-crate list；将 advisory upgrade、routine refresh、dependency prune 和 unsafe-boundary review 分类，不在巡检 task 内直接升级依赖。 |
 | `ci-tests.sh required` 失败 | 区分 formatting、RustSec、file-size/code-health、scoped test 和 workflow-surface 失败。只有当前 task 引入或它已是 active merge/release blocker 时，才将巡检标为 blocked。 |
 
@@ -64,6 +63,6 @@
 - runtime、Viewer/Web、WASM、agent、blockchain ops、gameplay 或视觉/交互：对应专业角色。
 - 对外公告、incident 或玩家承诺：`liveops_community`。
 
-季度复核比较近期巡检中的 doc hotspot、worktree 候选、PM 历史债务、Rust/dependency/unsafe backlog 和重复 governance 失败。趋势基线见 `../evidence/engineering-governance-trend-baseline-2026-03-11.md`。只有策略、阈值或 active owner 改变时，才更新对应 engineering governance 专题文档。
+季度复核比较近期巡检中的 doc hotspot、worktree 注册与体积异常、Rust/dependency/unsafe backlog 和重复 governance 失败。趋势基线见 `../evidence/engineering-governance-trend-baseline-2026-03-11.md`。只有策略、阈值或 active owner 改变时，才更新对应 engineering governance 专题文档。
 
-复核记录至少包含 review ID/quarter/date、参与角色、trigger、inputs、`pass|watchlist|fix_required` 结论，以及每个 finding 的 category、scope/evidence、disposition、owner 和 priority。不得沿用 2026-03 baseline 的 audit-round counter；当前 task evidence 定义新观察窗口。
+复核记录至少包含 review ID/quarter/date、参与角色、trigger、inputs、`pass|watchlist|fix_required` 结论，以及每个 finding 的 category、scope/evidence、disposition、owner 和 priority。不得沿用 2026-03 baseline 的 audit-round counter；当前巡检结果定义新观察窗口。

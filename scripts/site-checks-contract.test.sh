@@ -47,17 +47,39 @@ driver, workflow = (Path(path).read_text() for path in sys.argv[1:3])
 config = json.loads(Path(sys.argv[3]).read_text())
 if not re.search(r'^\s*site_quality\)\s+run_site_contract_tests\s*;;', driver, re.M):
     raise SystemExit("site quality group does not execute its product checks")
-jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
-                       workflow.split('\njobs:\n', 1)[1], re.M | re.S))
-job = jobs.get('site-quality', '')
-for expected in ('needs: select', "if: needs.select.outputs.run_site_quality == 'true'",
-                 'fromJSON(needs.select.outputs.matrix_site_quality)', '--group "${{ matrix.group }}"'):
-    if expected not in job:
-        raise SystemExit("site quality job is missing selected group execution: " + expected)
-gate = jobs.get('required-gate', '')
-needs = re.search(r'    needs: \[(.*)\]', gate)
-if not needs or 'site-quality' not in needs.group(1).split(', '):
-    raise SystemExit("final required-gate omits site quality results")
+def validate_execution(workflow):
+    jobs = dict(re.findall(r'^  ([a-z][a-z0-9-]*):\n(.*?)(?=^  [a-z][a-z0-9-]*:|\Z)',
+                           workflow.split('\njobs:\n', 1)[1], re.M | re.S))
+    job = jobs.get('site-quality', '')
+    for expected in ('needs: select', "needs.select.result == 'success'",
+                     "needs.select.outputs.run_site_quality == 'true'",
+                     "fromJSON(needs.select.outputs.plan).scope == 'full'",
+                     'bash ./scripts/ci-tests.sh required --group "site_quality" --repo-root "$GITHUB_WORKSPACE"'):
+        if expected not in job:
+            raise ValueError("site quality job is missing selected group execution: " + expected)
+    if 'strategy:' in job or 'ci-authority' in job or 'matrix.group' in job:
+        raise ValueError("site quality job must execute the candidate group without a singleton matrix")
+    needs = re.search(r'    needs: \[(.*)\]', jobs.get('required-gate', ''))
+    if not needs or 'site-quality' not in needs.group(1).split(', '):
+        raise ValueError("final required-gate omits site quality results")
+
+try:
+    validate_execution(workflow)
+except ValueError as exc:
+    raise SystemExit(str(exc))
+
+# Isolated mutations must fail: route, selection and failure aggregation all matter.
+for changed in (
+        workflow.replace("needs.select.result == 'success'", 'true'),
+        workflow.replace("fromJSON(needs.select.outputs.plan).scope == 'full'", 'false'),
+        workflow.replace('bash ./scripts/ci-tests.sh required --group "site_quality"',
+                         'bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "site_quality"'),
+        workflow.replace(', site-quality,', ', ')):
+    try:
+        validate_execution(changed)
+    except ValueError:
+        continue
+    raise SystemExit("site quality contract accepted a broken execution fixture")
 if 'site_quality' not in config['groups'] or not any(
         'site_quality' in rule.get('groups', []) and 'site/**' in rule['match']
         for rule in config['rules']):

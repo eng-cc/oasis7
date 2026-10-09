@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import contextlib
+import io
+import sys
+from unittest.mock import patch
 import importlib.util
 import json
 import os
@@ -114,15 +118,47 @@ class Selection(unittest.TestCase):
         plan = selector.select(self.config, self.base, source, tested)
         self.assertIn('other', plan['groups'])
 
-    def test_additions_only_expand_and_nonempty_matrices(self):
+    def test_additions_only_expand_and_groups_only(self):
         self.write('doc/readme.md', 'changed')
         head = self.commit()
         plan = selector.select(self.config, self.base, head, additions=['other'])
         self.assertEqual(set(plan['groups']), {'baseline', 'other'})
-        for group in self.config['groups']:
-            self.assertEqual(bool(plan['matrices'][group]['include']), group in plan['groups'])
+        self.assertNotIn('matrices', plan)
         with self.assertRaises(ValueError):
             selector.select(self.config, self.base, head, additions=['unknown'])
+
+    def test_github_output_contains_plan_and_flags_without_matrix_outputs(self):
+        self.write('doc/readme.md', 'changed')
+        head = self.commit()
+        Path('config.json').write_text(json.dumps(self.config))
+        arguments = ['selector', '--base-ref', self.base, '--head-ref', head,
+                     '--config', 'config.json', '--github-output', 'outputs.txt']
+        with patch.object(sys, 'argv', arguments), contextlib.redirect_stdout(io.StringIO()):
+            selector.main()
+        outputs = dict(line.split('=', 1) for line in Path('outputs.txt').read_text().splitlines())
+        plan = json.loads(outputs['plan'])
+        self.assertEqual(set(plan), {'groups', 'resources', 'reasons', 'scope'})
+        self.assertEqual(outputs['run_baseline'], 'true')
+        self.assertEqual(outputs['run_other'], 'false')
+        self.assertFalse(any(name.startswith('matrix') for name in outputs))
+
+    def test_real_tool_rules_select_only_related_groups(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        cases = {
+            'resource-cleanup-executor.py': {'baseline', 'workflow_governance', 'fleet_health'},
+            'new-task-worktree.sh': {'baseline', 'cargo_tooling_contracts', 'fleet_health'},
+            'worktree-gc-report.sh': {'baseline', 'workflow_governance'},
+            'pr-review-thread-closeout.py': {'baseline', 'workflow_governance'},
+            'cargo-dev.sh': {'baseline', 'cargo_tooling_contracts'},
+        }
+        for filename, expected in cases.items():
+            with self.subTest(filename=filename):
+                self.write('scripts/' + filename, 'fixture')
+                head = self.commit()
+                plan = selector.select(config, self.base, head)
+                self.assertEqual(set(plan['groups']), expected)
+                self.assertEqual(plan['scope'], 'targeted')
+                self.base = head
 
 
 if __name__ == '__main__':
