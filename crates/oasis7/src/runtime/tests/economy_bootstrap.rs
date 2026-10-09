@@ -95,6 +95,21 @@ fn establish_stable_stage_fixture(world: &mut World, sandbox: &mut WasmExecutor)
     spec.recipe_slots = 1;
     spec.maintenance_per_tick = 0;
 
+    super::economy_factory_lifecycle::install_factory_authority(
+        world,
+        "builder-a",
+        "site-stable-line-fixture",
+        &spec.factory_id,
+        0,
+    );
+    world
+        .upsert_factory_profile(FactoryProfileV1 {
+            factory_id: spec.factory_id.clone(),
+            tier: spec.tier,
+            recipe_slots: spec.recipe_slots,
+            tags: spec.tags.clone(),
+        })
+        .expect("install stable-line fixture capability profile");
     world.submit_action(Action::BuildFactory {
         builder_agent_id: "builder-a".to_string(),
         site_id: "site-stable-line-fixture".to_string(),
