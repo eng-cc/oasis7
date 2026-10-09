@@ -404,16 +404,17 @@ impl Fixture {
                 } else {
                     None
                 };
-                // Drain View responses concurrently so the real dispatcher completes
+                // Drain authenticated read responses concurrently so the real dispatcher completes
                 // before a client teardown can interrupt the response relay.
-                let capture_view = method == "POST" && path == VIEW_PATH;
-                let mut view_reader = None;
+                let capture_read =
+                    method == "POST" && matches!(path, VIEW_PATH | CHANGES_PATH | LOOKUP_PATH);
+                let mut read_reader = None;
                 let mut capture_peer = None;
-                let mut output_stream = if capture_view {
+                let mut output_stream = if capture_read {
                     let capture = TcpListener::bind("127.0.0.1:0").unwrap();
                     let mut peer = TcpStream::connect(capture.local_addr().unwrap()).unwrap();
                     peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
-                    view_reader = Some(thread::spawn(move || {
+                    read_reader = Some(thread::spawn(move || {
                         let mut response = Vec::new();
                         (&mut peer)
                             .take(16 * 1024 * 1024 + 1)
@@ -421,7 +422,7 @@ impl Fixture {
                             .unwrap();
                         assert!(
                             response.len() <= 16 * 1024 * 1024,
-                            "View capture exceeds bound"
+                            "Read response capture exceeds bound"
                         );
                         response
                     }));
@@ -485,33 +486,89 @@ impl Fixture {
                     commit_request(&mut driver, height, Some(request));
                 }
                 drop(output_stream);
-                if let Some(reader) = view_reader {
-                    let response = reader.join().expect("View capture reader failed");
+                if let Some(reader) = read_reader {
+                    let response = reader.join().expect("Read response capture reader failed");
                     let verified_success = response.starts_with(b"HTTP/1.1 200 ");
                     if verified_success {
                         let body =
                             crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
-                        let request: SignedReadRequest<ReadWorldViewRequest> =
-                            serde_json::from_slice(body).unwrap();
                         let offset = response
                             .windows(4)
                             .position(|window| window == b"\r\n\r\n")
                             .unwrap()
                             + 4;
-                        let signed: SignedServiceResponse<
-                            ReadWorldViewResponse<
-                                oasis7::world_service::projection::WorldServiceProjection,
-                            >,
-                        > = serde_json::from_slice(&response[offset..]).unwrap();
-                        oasis7::world_service::authority::verify_service_response(
-                            VIEW_PATH,
-                            &oasis7::world_service::authority::request_digest(VIEW_PATH, &request)
-                                .unwrap(),
-                            &signed,
-                            &signer.public_key_hex,
-                        )
-                        .unwrap();
-                        signed.payload.validate(&request.request).unwrap();
+                        match path {
+                            VIEW_PATH => {
+                                let request: SignedReadRequest<ReadWorldViewRequest> =
+                                    serde_json::from_slice(body).unwrap();
+                                let signed: SignedServiceResponse<
+                                    ReadWorldViewResponse<
+                                        oasis7::world_service::projection::WorldServiceProjection,
+                                    >,
+                                > = serde_json::from_slice(&response[offset..]).unwrap();
+                                oasis7::world_service::authority::verify_service_response(
+                                    path,
+                                    &oasis7::world_service::authority::request_digest(
+                                        path, &request,
+                                    )
+                                    .unwrap(),
+                                    &signed,
+                                    &signer.public_key_hex,
+                                )
+                                .unwrap();
+                                signed.payload.validate(&request.request).unwrap();
+                            }
+                            CHANGES_PATH => {
+                                let request: SignedReadRequest<ReadWorldChangesRequest> =
+                                    serde_json::from_slice(body).unwrap();
+                                let signed: SignedServiceResponse<
+                                    ReadWorldChangesResponse<serde_json::Value>,
+                                > = serde_json::from_slice(&response[offset..]).unwrap();
+                                oasis7::world_service::authority::verify_service_response(
+                                    path,
+                                    &oasis7::world_service::authority::request_digest(
+                                        path, &request,
+                                    )
+                                    .unwrap(),
+                                    &signed,
+                                    &signer.public_key_hex,
+                                )
+                                .unwrap();
+                                signed.payload.validate(&request.request).unwrap();
+                                assert!(
+                                    serde_json::to_vec(&signed.payload).unwrap().len() as u64
+                                        <= request.request.max_bytes
+                                );
+                            }
+                            LOOKUP_PATH => {
+                                // Lookup authenticates the original signed payload rather
+                                // than wrapping the lookup in a SignedReadRequest.
+                                let request: wire::AuthenticatedLookup =
+                                    serde_json::from_slice(body).unwrap();
+                                let signed: SignedServiceResponse<
+                                    IntentResponse<serde_json::Value>,
+                                > = serde_json::from_slice(&response[offset..]).unwrap();
+                                oasis7::world_service::authority::verify_service_response(
+                                    path,
+                                    &oasis7::world_service::authority::request_digest(
+                                        path, &request,
+                                    )
+                                    .unwrap(),
+                                    &signed,
+                                    &signer.public_key_hex,
+                                )
+                                .unwrap();
+                                request.request.validate().unwrap();
+                                let expected = derive_correlation(
+                                    request.request.key.world.clone(),
+                                    &request.original,
+                                )
+                                .unwrap();
+                                assert_eq!(expected.key, request.request.key);
+                                signed.payload.validate(&expected).unwrap();
+                            }
+                            _ => unreachable!("only authenticated read routes are captured"),
+                        }
                     }
                     if let Err(error) = stream.write_all(&response) {
                         assert!(
@@ -520,10 +577,10 @@ impl Fixture {
                                     error.raw_os_error(),
                                     Some(libc::EPIPE) | Some(libc::ECONNRESET)
                                 ),
-                            "View relay failed without a verified successful read: {error}"
+                            "Read response relay failed without a verified successful read: {error}"
                         );
                         println!(
-                            "PRE2_VERIFIED_VIEW_RESPONSE_CANCELLED dispatcher_completed=true signed_response_verified=true unchanged_response_relay_attempted=true"
+                            "PRE2_VERIFIED_READ_RESPONSE_CANCELLED route={path} dispatcher_completed=true signed_response_verified=true unchanged_response_relay_attempted=true"
                         );
                     }
                 }
