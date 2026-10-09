@@ -1147,3 +1147,7 @@ fn recent_runtime_event_summaries(world: &RuntimeWorld) -> Vec<String> {
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "llm_sidecar_host_goal_tests.rs"]
+mod host_goal_tests;
