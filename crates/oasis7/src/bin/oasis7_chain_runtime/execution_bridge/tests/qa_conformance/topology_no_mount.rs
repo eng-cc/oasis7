@@ -23,6 +23,37 @@ fn no_mount_prepare_service() {
     assert!(!destination.join("world").exists(), "fresh volume required");
     let mut fixture = Fixture::with_options(true, true);
     fixture.preserve_root = true;
+    // Install the Hosted Agent signer through the same owner-signed canonical
+    // transaction used by real application fixtures, before copying storage.
+    let registration = fixture.delegation();
+    fixture.client.submit(registration.clone()).unwrap();
+    commit_request(
+        &mut fixture.driver.lock().unwrap(),
+        2,
+        Some(registration.clone()),
+    );
+    let delegation_commit = fixture.committed(&registration);
+    let WorldServicePayloadV1::Delegation(signed) = &registration.signed_payload else {
+        panic!("original owner-signed delegation codec required");
+    };
+    let driver = fixture.driver.lock().unwrap();
+    assert_eq!(
+        driver
+            .execution_world
+            .capability_revocation_state()
+            .agent_signer_delegations
+            .get("agent-a"),
+        Some(&signed.request),
+        "exact canonical owner-signed delegate authorization required"
+    );
+    assert_eq!(signed.request.agent_identity_generation, 1);
+    assert_eq!(signed.request.generation, 1);
+    assert!(!signed.request.revoked);
+    assert_eq!(
+        delegation_commit.world,
+        fixture.client.config().expected_world
+    );
+    drop(driver);
     fixture.finish_http_workers().unwrap();
     let node = fixture.node.lock().unwrap().snapshot();
     let topology = serde_json::json!({"node_id":node.node_id,"world_id":node.world_id,

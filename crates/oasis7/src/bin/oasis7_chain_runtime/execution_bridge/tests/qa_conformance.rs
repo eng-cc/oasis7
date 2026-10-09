@@ -57,7 +57,7 @@ use oasis7::world_service::*;
 use oasis7_node::{
     NodeConfig, NodeConsensusAction, NodeExecutionCommitResult, NodeExecutionHook, NodeRuntime,
 };
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{
     Arc, Mutex,
@@ -354,8 +354,28 @@ impl Fixture {
                 }
                 let tamper = path == DESCRIBE_PATH && worker_tamper.swap(false, Ordering::SeqCst);
                 let capture_ack = worker_gate.capture_feedback_ack_response(path, &bytes);
+                let gated_ack = if path == SUBMIT_PATH
+                    && worker_gate
+                        .root
+                        .lock()
+                        .unwrap()
+                        .as_ref()
+                        .is_some_and(|root| {
+                            root.join("world-feedback-ack-single-submit-proof").exists()
+                        }) {
+                    let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
+                    let request: SubmitIntentRequest<WorldServicePayloadV1> =
+                        serde_json::from_slice(body).unwrap();
+                    matches!(
+                        &request.signed_payload,
+                        WorldServicePayloadV1::FeedbackAck(_)
+                    )
+                    .then_some(request)
+                } else {
+                    None
+                };
                 let mut capture_peer = None;
-                let mut output_stream = if tamper || capture_ack {
+                let mut output_stream = if tamper || capture_ack || gated_ack.is_some() {
                     let capture = TcpListener::bind("127.0.0.1:0").unwrap();
                     capture_peer = Some(TcpStream::connect(capture.local_addr().unwrap()).unwrap());
                     capture.accept().unwrap().0
@@ -381,6 +401,13 @@ impl Fixture {
                         "actual dispatcher did not handle requested route"
                     );
                 }
+                if gated_ack.is_some() && worker_controlled.load(Ordering::SeqCst) {
+                    let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
+                    let request = serde_json::from_slice(body).unwrap();
+                    let mut driver = worker_driver.lock().unwrap();
+                    let height = driver.state.last_applied_committed_height + 1;
+                    commit_request(&mut driver, height, Some(request));
+                }
                 drop(output_stream);
                 if let Some(mut peer) = capture_peer {
                     let mut response = Vec::new();
@@ -401,6 +428,48 @@ impl Fixture {
                             false,
                         )
                         .unwrap();
+                    } else if let Some(request) = gated_ack.as_ref() {
+                        // The existing real execution driver remains the sole committer.
+                        // Never retain its mutex while waiting for a future commit.
+                        let key = correlation::key_digest(&request.correlation.key).unwrap();
+                        let deadline = Instant::now() + Duration::from_secs(15);
+                        loop {
+                            let result = {
+                                let driver = worker_driver.lock().unwrap();
+                                driver
+                                    .execution_world
+                                    .capability_revocation_state()
+                                    .world_service_results
+                                    .get(&key)
+                                    .cloned()
+                            };
+                            if let Some(result) = result {
+                                let result: wire::CanonicalIntentResultV1 =
+                                    serde_json::from_value(result).unwrap();
+                                assert_eq!(result.request.correlation, request.correlation);
+                                assert_eq!(result.request.signed_payload, request.signed_payload);
+                                assert!(result.rejected.is_none());
+                                assert!(
+                                    worker_root
+                                        .join("records")
+                                        .join(format!("{:020}.json", result.committed_height))
+                                        .exists()
+                                );
+                                break;
+                            }
+                            assert!(
+                                Instant::now() < deadline,
+                                "real automatic ACK commit did not reach proof boundary"
+                            );
+                            thread::sleep(Duration::from_millis(2));
+                        }
+                        assert!(
+                            !response.is_empty(),
+                            "actual ACK dispatcher response captured"
+                        );
+                        if !capture_ack {
+                            stream.write_all(&response).unwrap();
+                        }
                     } else {
                         assert!(capture_ack);
                         assert!(
@@ -409,7 +478,10 @@ impl Fixture {
                         );
                     }
                 }
-                if path == SUBMIT_PATH && worker_controlled.load(Ordering::SeqCst) {
+                if path == SUBMIT_PATH
+                    && gated_ack.is_none()
+                    && worker_controlled.load(Ordering::SeqCst)
+                {
                     let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
                     let request = serde_json::from_slice(body).unwrap();
                     let mut driver = worker_driver.lock().unwrap();

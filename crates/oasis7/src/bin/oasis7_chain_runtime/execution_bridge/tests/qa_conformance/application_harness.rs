@@ -175,6 +175,16 @@ pub(super) fn run_isolated_application_mode(
     let fixture = Fixture::with_options(true, wake || ordinary_wait);
     let app_dir = temp_dir("qa-world-service-application");
     fs::create_dir_all(&app_dir).unwrap();
+    if matches!(
+        admission_mode,
+        "memory-ack-before" | "memory-ack-after" | "memory-ack-write-failure"
+    ) {
+        fs::write(
+            app_dir.join("world-feedback-ack-single-submit-proof"),
+            b"await actual canonical commit before releasing original response",
+        )
+        .unwrap();
+    }
     if admission_mode.starts_with("memory-ack-") {
         #[cfg(unix)]
         {
