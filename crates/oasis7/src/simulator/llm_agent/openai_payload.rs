@@ -217,6 +217,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_ENVIRONMENT_CURRENT_OBSERVATION.to_string(),
@@ -228,6 +231,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MEMORY_SHORT_TERM_RECENT.to_string(),
@@ -245,6 +251,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MEMORY_LONG_TERM_SEARCH.to_string(),
@@ -265,6 +274,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_WORLD_RULES_GUIDE.to_string(),
@@ -290,6 +302,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MODULE_LIFECYCLE_STATUS.to_string(),
@@ -315,6 +330,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_POWER_ORDER_BOOK_STATUS.to_string(),
@@ -332,6 +350,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_MODULE_MARKET_STATUS.to_string(),
@@ -355,6 +376,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_SOCIAL_STATE_STATUS.to_string(),
@@ -378,6 +402,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
         Tool::Function(FunctionTool {
             name: OPENAI_TOOL_AGENT_SUBMIT_DECISION.to_string(),
@@ -387,6 +414,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             parameters: Some(decision_tool_parameters()),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }),
     ];
 
@@ -408,6 +438,9 @@ pub(super) fn responses_tools_with_debug_mode(debug_mode: bool) -> Vec<Tool> {
             })),
             strict: None,
             defer_loading: None,
+            r#async: None,
+            output_schema: None,
+            allowed_callers: None,
         }));
     }
 
@@ -669,13 +702,14 @@ pub(super) fn build_responses_request_payload(
             MessageItem::Input(InputMessage {
                 content: vec![InputContent::InputText(InputTextContent {
                     text: request.user_prompt.clone(),
+                    prompt_cache_breakpoint: None,
                 })],
                 role: InputRole::User,
                 status: None,
             }),
         ))]))
         .tools(responses_tools_with_debug_mode(request.debug_mode))
-        .tool_choice(ToolChoiceParam::Mode(ToolChoiceOptions::Required))
+        .tool_choice(ToolChoiceParam::Option(ToolChoiceOptions::Required))
         .parallel_tool_calls(false)
         .build()
         .map_err(|err| LlmClientError::DecodeResponse {
@@ -693,6 +727,7 @@ pub(super) fn build_text_probe_request_payload(
             MessageItem::Input(InputMessage {
                 content: vec![InputContent::InputText(InputTextContent {
                     text: user_prompt.to_string(),
+                    prompt_cache_breakpoint: None,
                 })],
                 role: InputRole::User,
                 status: None,
@@ -715,13 +750,14 @@ pub(super) fn build_tool_probe_request_payload(
             MessageItem::Input(InputMessage {
                 content: vec![InputContent::InputText(InputTextContent {
                     text: "Call one tool now with the smallest valid argument object.".to_string(),
+                    prompt_cache_breakpoint: None,
                 })],
                 role: InputRole::User,
                 status: None,
             }),
         ))]))
         .tools(responses_tools_with_debug_mode(false))
-        .tool_choice(ToolChoiceParam::Mode(ToolChoiceOptions::Required))
+        .tool_choice(ToolChoiceParam::Option(ToolChoiceOptions::Required))
         .parallel_tool_calls(false)
         .build()
         .map_err(|err| LlmClientError::DecodeResponse {
