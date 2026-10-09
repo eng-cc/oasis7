@@ -682,7 +682,7 @@ impl World {
             }
             self.append_event(
                 WorldEventBody::Domain(DomainEvent::RecipeCompleted {
-                    committed_recipe_origin: None,
+                    committed_recipe_origin: job.committed_recipe_origin,
                     job_id: job.job_id,
                     requester_agent_id: job.requester_agent_id,
                     factory_id: job.factory_id,
