@@ -673,77 +673,17 @@ def scenario_aggregate_criterion_accepts_body_definition() -> None:
     )
 
 
-def scenario_full_corpus_requires_bound_repository_task_evidence() -> None:
-    cases = (
-        """
-
-## 设计判定
-- 设计判定：`simple-topic-exemption`
-- 设计判定 task issue：#3680
-- 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
-- 当前 GitHub task evidence：见下一行。
-- [issue evidence](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)
-""",
-        """
-
-## 设计判定
-- 设计判定：`simple-topic-exemption`
-- 设计判定 task issue：#3680
-- 设计适用性理由：这是简单专题，不增加新的信息分层、交互状态编排或策略取舍。
-- 当前 GitHub task evidence：[`issue evidence`](https://github.com/example-owner/example-repo/issues/3680#issuecomment-5652870280)
-""",
-    )
-    for exemption in cases:
-        root, _base, _head = make_repo()
-        try:
-            (root / DESIGN).unlink()
-            (root / "doc/product/world-rules-core-gameplay/legacy.prd.md").unlink()
-            (root / TOPIC).write_text(
-                TOPIC_TEXT.replace("- 设计判定：`paired-design`\n", "")
-                .replace("- 配对产品设计：[`sample.design.md`](sample.design.md)\n", "")
-                + exemption,
-                encoding="utf-8",
-            )
-            result = invoke_full_corpus(root)
-            output = result.stdout + result.stderr
-            assert result.returncode == 1, output
-            assert f"missing-design-exemption-evidence: {TOPIC}" in output, output
-        finally:
-            shutil.rmtree(root)
-
+def scenario_simple_topic_needs_no_remote_task_binding() -> None:
     root, _base, _head = make_repo()
     try:
         (root / DESIGN).unlink()
         isolate_topic_full_corpus(root)
-        mixed = simple_topic_text().replace(
-            "https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)",
-            "https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280) and "
-            "[other task](https://github.com/eng-cc/oasis7/issues/12#issuecomment-99)",
-        )
-        (root / TOPIC).write_text(mixed, encoding="utf-8")
+        text = simple_topic_text()
+        text = "\n".join(line for line in text.splitlines()
+                         if "设计判定 task issue" not in line and "当前 GitHub task evidence" not in line)
+        (root / TOPIC).write_text(text, encoding="utf-8")
         result = invoke_full_corpus(root)
-        output = result.stdout + result.stderr
-        assert result.returncode == 1, output
-        assert f"ambiguous-design-exemption-task: {TOPIC}" in output, output
-    finally:
-        shutil.rmtree(root)
-
-
-def scenario_full_corpus_rejects_mismatched_task_evidence() -> None:
-    root, _base, _head = make_repo()
-    try:
-        (root / DESIGN).unlink()
-        isolate_topic_full_corpus(root)
-        (root / TOPIC).write_text(
-            simple_topic_text().replace(
-                "设计判定 task issue：#3680", "设计判定 task issue：#12"
-            ),
-            encoding="utf-8",
-        )
-        result = invoke_full_corpus(root)
-        output = result.stdout + result.stderr
-        assert result.returncode == 1, output
-        assert f"mismatched-design-exemption-task: {TOPIC}" in output, output
+        assert result.returncode == 0, result.stdout + result.stderr
     finally:
         shutil.rmtree(root)
 
@@ -1424,8 +1364,7 @@ def main() -> None:
     scenario_active_simple_topic_trace_requires_row_contract()
     scenario_aggregate_criterion_requires_body_definition()
     scenario_aggregate_criterion_accepts_body_definition()
-    scenario_full_corpus_requires_bound_repository_task_evidence()
-    scenario_full_corpus_rejects_mismatched_task_evidence()
+    scenario_simple_topic_needs_no_remote_task_binding()
     scenario_full_corpus_requires_complete_prd_consistent_design_mapping()
     scenario_full_corpus_requires_paired_design_link()
     scenario_full_corpus_requires_prd_trace_fragments()

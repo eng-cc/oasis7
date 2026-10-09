@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "372cd9abc1e615b0a630fec709fd9c84350e049ff754cc43b0be2de6b2904b9f",
+    "content_sha256": "408e889b4ab59378ad2c3ecc092ac769ff8ebcd366b5c6f8fe0b04c2c9f5c074",
     "current_authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
     "decision_owner": "producer_system_designer",
     "disposition": "retain_mixed_contract_snapshot",
-    "note": "environment taxonomy and claim prohibitions durable; hosts services lanes endpoints and readiness are dated snapshots",
+    "note": "environment taxonomy and claim prohibitions durable; hosts services lanes endpoints and readiness are dated snapshots; developer workflow record projection updated, product authority retained",
     "path": "doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

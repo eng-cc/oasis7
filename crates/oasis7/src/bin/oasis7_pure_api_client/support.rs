@@ -1,5 +1,62 @@
 use super::*;
 
+pub(super) fn run_agency_control(
+    addr: &str,
+    client: &str,
+    timeout: Duration,
+    request_json: &str,
+) -> Result<(), String> {
+    let request: Value = serde_json::from_str(request_json)
+        .map_err(|err| format!("invalid agency-control JSON: {err}"))?;
+    if request.get("type").and_then(Value::as_str) != Some("agency_control_request") {
+        return Err("agency-control request must use type=agency_control_request".to_string());
+    }
+    let mut conn = ViewerConnection::connect(addr, client, timeout)?;
+    send_raw_json_line(&mut conn, &request)?;
+    let response = read_raw_json_line(&mut conn, timeout)?;
+    if response.get("type").and_then(Value::as_str) != Some("agency_control_response") {
+        return Err("server returned a non-agency-control response".to_string());
+    }
+    print_json(&response)
+}
+
+pub(super) fn send_raw_json_line(
+    conn: &mut ViewerConnection,
+    request: &Value,
+) -> Result<(), String> {
+    let payload = serde_json::to_string(request)
+        .map_err(|err| format!("serialize agency-control request failed: {err}"))?;
+    conn.writer
+        .write_all(payload.as_bytes())
+        .map_err(|err| format!("write agency-control request failed: {err}"))?;
+    conn.writer
+        .write_all(b"\n")
+        .map_err(|err| format!("write agency-control delimiter failed: {err}"))?;
+    conn.writer
+        .flush()
+        .map_err(|err| format!("flush agency-control request failed: {err}"))
+}
+
+pub(super) fn read_raw_json_line(
+    conn: &mut ViewerConnection,
+    timeout: Duration,
+) -> Result<Value, String> {
+    conn.reader
+        .get_mut()
+        .set_read_timeout(Some(timeout))
+        .map_err(|err| format!("set agency-control response timeout failed: {err}"))?;
+    let mut line = String::new();
+    let bytes = conn
+        .reader
+        .read_line(&mut line)
+        .map_err(|err| format!("read agency-control response failed: {err}"))?;
+    if bytes == 0 {
+        return Err("connection closed before agency-control response".to_string());
+    }
+    serde_json::from_str(line.trim_end())
+        .map_err(|err| format!("parse agency-control response failed: {err}"))
+}
+
 pub(super) fn parse_bool_flag(args: &mut ArgCursor, flag_name: &str) -> Result<bool, String> {
     let mut enabled = false;
     while matches!(args.peek(), Some(flag) if flag == flag_name) {

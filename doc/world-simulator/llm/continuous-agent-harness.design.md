@@ -10,7 +10,7 @@
 
 | 状态 | 本设计口径 |
 | --- | --- |
-| `current` | simulator/兼容 `AgentBehavior::decide` 仍同步，legacy builtin execute-until continuation 保留内存语义；native runtime-live 的 Builtin/ProviderBacked 均使用 `AsyncAgentRunner` worker 与非阻塞 mailbox/result polling，另有诊断 trace 与 provider DTO。 |
+| `current` | native `LlmAgentBehavior` 已有 request-bound model/tool call admission、zero-is-deny、repair/transport retry 单调计数与 exhaustion-to-Wait；native runtime-live 已从 host prompt profile 构建并绑定 GoalSnapshot。simulator/兼容 `AgentBehavior::decide` 仍同步，legacy builtin execute-until continuation 保留内存语义；native runtime-live 的 Builtin/ProviderBacked 均使用 `AsyncAgentRunner` worker 与非阻塞 mailbox/result polling，另有诊断 trace 与 provider DTO。 |
 | `partial` | native 普通 `Wait` 已有当前 context/Harness proposal、Runtime admission、projection/readback、Runtime wake selection/resume 和 Harness reconcile seam；admission failure 不冒充成功等待，`WaitTicks` 仍走本地 timer。`DecisionProvider`、loopback、capability context、`MemoryWriteIntent` 等接线与有界 fixtures 不证明完整 identity/反馈隔离/provider convergence、durable production scheduler、WASM/browser 服务、远端 restart/rebind/reorg、全量恢复或真实 provider parity。 |
 | `target` | 本文的 Session/Turn/request identity、canonical digest、single in-flight、共同 adapter lifecycle、feedback/memory policy 和 bounded goal/continuation 合同。 |
 | `proven` | 仅当 PRD verification matrix 的 required/full/rollout artifact 证明对应成功与负例，才可标记；本文不预先标记任何 target 为 proven。 |
@@ -279,9 +279,9 @@ Observation、memory、goal、capability schema 等大字段以已经验证的 c
 
 ### 4.3 C0 request-bound call budget
 
-`budget_contract` 已经是 outer context 的输入，但现有 timeout/repair 字段不等于调用配额。
-C0 选定一个 additive `BudgetContractV1` projection，且只覆盖 native
-`LlmAgentBehavior` lane，补充两个不带默认值的上限字段：
+`budget_contract` 已经是 outer context 的输入。当前 C0 在 timeout/repair 字段之外已有
+request-bound model/tool call admission；这不是 paid cognition。`BudgetContractV1` 只覆盖 native
+`LlmAgentBehavior` lane，包含两个不带默认值的上限字段：
 
 ```text
 BudgetContractV1 {
@@ -299,6 +299,13 @@ context/legacy fixture 缺少这些 additive 字段时，adapter 必须显式选
 不能静默填充、升级为 C0 target，也不能把 legacy request 当成 paid economy。Rust wire evolution、
 旧 snapshot 反序列化和 compatibility marker 由 Agent implementation slice 冻结，但必须保留
 上述 fail-closed 语义。
+
+V1 `budget_contract` 的字段集合固定为 `max_latency_ms`、`max_repair_attempts`、
+`max_model_calls`、`max_tool_calls`。嵌套预算对象也必须拒绝未知字段；不能静默丢弃
+`unlimited`、其他 limit alias 或未来 authority 字段后按较窄的合同继续调用。
+缺失调用上限仍在 wire decode 拒绝；outer `validate_value` 对未知预算字段返回
+`unknown_context_field`，不进入 executor、不产生 action 或 memory effect。新增字段需要
+显式协议演进与兼容路径，不能把“可反序列化”当成 V1 认可。
 
 C0 admission 的顺序和计数边界固定为：
 
@@ -563,6 +570,14 @@ Agent config/runtime goal projection > legacy provider `goal_summary/blocked_rea
 `blocked_reason` 的显式 empty snapshot。provider 可以返回 `goal_update_intent`，但 world goal
 completion、权威 priority、玩家承诺和跨 Agent goal 关系需要产品/runtime authority。
 
+当前 native runtime-live 的 `trusted_provider_goal_snapshot` 从 host-owned
+`AgentPromptProfile` 投影目标：revision 为 `max(profile.version, 1)`（无 profile 时为 1），
+短期目标使用 host override 或 phase-1 host goal，长期目标使用 host override 或空字符串。
+这是一份有 host 目标的快照，不是通用 empty snapshot；provider 输出不作为 goal source。
+快照经过 NFC/trim、大小和 digest 校验后同时进入 turn context 与 outer request digest。
+规范化后的目标文本或 snapshot revision 改变必须改变 goal digest；这不证明旧待决请求的清理、
+远端重绑定、恢复或完整 GoalGraph 已完成。
+
 ### 9.2 Continuation
 
 ```text
@@ -714,7 +729,7 @@ Adapter 将 transport/model-specific failures 映射到稳定 Harness errors：
 
 ## 11. Rollout design
 
-### C0 request-bound call budget（selected next closure）
+### C0 request-bound call budget（native implemented / bounded verification）
 
 C0 是 Harness 的 economy-neutral prerequisite，先于任何 paid Cognition Economy 或 Native
 TurnEngine claim，且只适用于 native `LlmAgentBehavior` lane。Agent implementation 必须在
@@ -731,7 +746,7 @@ commit。
 旧 outer context/legacy fixture 缺少新字段时必须显式选择 additive compatibility lane，不得
 静默填充或标记为 C0 target/proven。C0 fixture 只验证 identity binding、调用计数、zero/positive
 边界、retry/repair 和 no-side-effect；不定义 token/latency/cost rate，也不定义 Electricity/Data
-debit、lease、reserve、settle、release、refund 或 receipt。Integration order 固定为 product
+debit、lease、reserve、settle、release、refund 或 receipt。验收顺序固定为 product
 C0 contract -> Agent implementation -> QA focused fixtures。C0 通过后，Native TurnEngine、
 dynamic ToolRegistry 和 continuation convergence 可在对应 authority seam 上继续，但不能从
 本阶段外推完整 Cognition Economy。opaque ProviderBacked 的内部 model/tool calls、provider-side
@@ -804,6 +819,19 @@ The merged GWSC semantic validator already requires unequal migration versions; 
 fixture、canonical bytes/digest/key、provider invocation count 与 feedback partition；命令
 不存在或未执行时仍是 target，不是通过。
 
+### 12.1 C0 与 host goal 的局部验证
+
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib cognition_budget`：wire 必填/未知字段、
+  model/tool zero、repair/transport retry、计数与 exhaustion 无新效果；同时检查预算任一上限
+  改变会改变 request digest，原 request key 重绑预算产生 collision。
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib runtime_live_host_goal`：host 默认目标、
+  profile override、revision/text digest 变化、NFC/trim 与超限拒绝。
+- `env -u RUSTC_WRAPPER cargo test -p oasis7 --lib agent_cognition_live_harness`：共同 actor
+  消费 host goal、receipt-gated memory、失败不冒充成功等待与 continuation 终态隔离。
+
+上述测试只支持局部实现结论；未执行或失败不得算通过。它们不替代 required/full、
+真实 provider、远端恢复、玩家表面或发布验收。
+
 ## 13. Paired specialist follow-ups
 
 - `runtime_engineer`：scheduler 非阻塞语义、candidate/action MVCC、stale/precondition、receipt/journal/replay 和恢复的权威合同；Harness 只接收其 binding。
@@ -814,4 +842,4 @@ fixture、canonical bytes/digest/key、provider invocation count 与 feedback pa
 - gameplay/product/Agent authority：GoalGraph、belief memory、偏好、共享/玩家可见 memory 和目标完成语义。
 - viewer/runtime-live owners：trace delivery 与玩家可见诊断；不得把 Viewer transcript 当成 cognition journal。
 
-任何 follow-up 都必须回到同一 task/worktree/PR 主链；本设计不创建第二份 mutable task truth。
+同一目的继续更新原 PR，follow-up 按实际范围处理；本设计不创建第二份 mutable task truth。

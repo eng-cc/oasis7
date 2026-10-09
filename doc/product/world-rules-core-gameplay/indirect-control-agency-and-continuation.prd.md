@@ -16,9 +16,9 @@
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
 - 产品权威边界：本 PRD 是本专题唯一的产品权威，直接承载玩家价值、产品承诺、REQ/AC 与组合验收；本专题不设置配对产品 design。其他专业 PRD 或 design 只是依赖，不重定义本文的产品语义。
 - 专业合同委托：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md) 继续拥有玩法保证、字段/状态/失败签名与专业验收；[`DES-WR-IA`](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md) 仅承接跨 runtime、Agent、Viewer/API 与 QA 的技术边界和验证映射。上述专业文档不把实现状态、任务或证据迁入本文，也不能替代本文的产品 authority。
-- 设计判定 task issue：#3680。
+- 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 已直接承载产品承诺与 REQ/AC；独立 design 不增加新的信息分层、交互状态编排或策略取舍，专业文档只保留其各自的玩法和技术合同。
-- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
 玩家通过目标与 Agent 间接推动持续世界时，始终能理解自己正在追求什么、系统是否接受并如何推进、当前后果或阻塞为何发生，以及现在可以如何继续、改道或恢复；离开后返回仍可从这一决策链继续，而不是旁观不可解释的自动行为。

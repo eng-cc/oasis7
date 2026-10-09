@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "54cf5701fd71df49fdf226f542400ce4ce893aa9feaf4a3a9ed777150b70aa96",
+    "content_sha256": "e90615c5498260275a622a030792deb1c320e7bb46853f94223ea4fa96908051",
     "current_authority": "doc/world-simulator/viewer/viewer-manual.manual.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "current CN EN static mirror contract",
+    "note": "current CN EN static mirror contract; retired workflow metadata updated, domain authority retained",
     "path": "doc/site/manual/site-manual-static-docs.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

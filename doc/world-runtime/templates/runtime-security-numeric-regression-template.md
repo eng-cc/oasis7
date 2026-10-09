@@ -52,4 +52,4 @@
 - 是否同时覆盖安全与数值两大维度。
 - 是否为每一项填写命令 / 方法、证据路径、结果与失败签名。
 - `fail/blocked` 是否已有问题 ID 与负责人。
-- 是否已将结果回写对应 GitHub task issue evidence comments，并在数值语义变化时更新现行 PRD/design。
+- 是否已将结果回写对应 PR、实际 CI 与评审记录（Issue 按需），并在数值语义变化时更新现行 PRD/design。

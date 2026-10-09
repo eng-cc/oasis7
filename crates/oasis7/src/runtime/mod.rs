@@ -344,6 +344,12 @@ pub use state::{
 pub(crate) use state::{ModuleVisualMutation, parse_module_visual_emit};
 
 // World
+#[cfg(test)]
+pub(crate) use world::agent_delegation::AgentDelegationDecisionV1;
+pub use world::agent_delegation::{
+    AgentCausalReceiptV1, AgentDecisionCausalContextV1, AgentDelegationAuthorizationV1,
+    AgentDelegationGrantV1, AgentOwnerControlKindV1, AgentOwnerControlV1,
+};
 pub use world::{
     AgentIntentProviderFailureDisposition, AgentIntentRecordOutcome,
     AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,

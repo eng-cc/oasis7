@@ -14,9 +14,9 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 设计判定 task issue：#3680。
+- 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 直接承载控制权确认、失去控制后的连续性和重认领的产品承诺；独立 design 会重复 ownership authority。
-- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
 玩家以明确、非零且可理解的承诺取得自己的 Agent 控制权，并持续看见这份控制权的成本、义务、风险和下一次选择。首个支持路径可以降低进入门槛，但不会把 Agent 所有权变成免费、可套现或可无限复制的能力。

@@ -1,7 +1,7 @@
 # oasis7 主流公链测试体系对标与缺口矩阵
 
 - 对应设计文档: `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 - 原始基准日期: `2026-03-24`
 
 审计轮次: 1

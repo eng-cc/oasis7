@@ -463,6 +463,7 @@ impl RuntimeLlmSidecar {
                         status: "completed".into(),
                         reject_reason: None,
                         feedback_id: None,
+                        feedback: None,
                     },
                 );
                 #[cfg(any(test, feature = "test_tier_required"))]

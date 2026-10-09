@@ -5,6 +5,7 @@ pub(crate) mod agent_claim_economic_publication;
 pub(crate) mod agent_claim_light_lifecycle_publication;
 pub(crate) mod agent_claim_terminal_publication;
 mod agent_claims;
+pub(crate) mod agent_delegation;
 mod agent_intent;
 #[cfg(test)]
 pub(crate) use agent_intent::derive_agent_chat_request_digest;
@@ -68,6 +69,7 @@ mod governed_module_lifecycle_transaction_regressions;
 pub(crate) mod main_token_governance_monetary_publication;
 pub(crate) mod main_token_monetary_publication;
 pub(crate) mod main_token_restricted_claim_publication;
+mod module_admission_freeze;
 #[cfg(test)]
 mod module_artifact_deployment_transaction_regressions;
 #[cfg(test)]
@@ -140,21 +142,10 @@ mod snapshot;
 mod step;
 mod tick_consensus;
 mod tick_consensus_state_root;
+#[cfg(test)]
+mod tick_consensus_test_support;
 mod transition;
 mod world_service;
-
-pub use local_test_provider_bootstrap::{
-    LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS, LOCAL_TEST_PROVIDER_GRANT_TTL_TICKS,
-    LocalTestProviderAuthorityConfig, LocalTestProviderAuthorityMode, LocalTestProviderGrantStatus,
-    LocalTestProviderModuleArtifact, LocalTestProviderProvisioning, LocalTestProviderSessionMode,
-};
-pub use provider_backed_bootstrap::ProviderBackedBootstrapAuthorityV1;
-pub use transition::{
-    ExecutionTransaction, PreparedCommit, TransitionBaseHead, TransitionBuffer,
-    TransitionCommitError, TransitionKernelEntriesView, TransitionKernelState,
-    TransitionKernelView, TransitionPrepareError, TransitionRollbackError, TransitionSavepoint,
-};
-
 pub use cognition_economy::{
     COGNITION_ECONOMY_SCHEMA_VERSION, COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
     COGNITION_LEASE_SCHEMA_VERSION, COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION,
@@ -166,6 +157,17 @@ pub use cognition_economy::{
     CognitionProvisioningEventV1, CognitionProvisioningReceiptV1, CognitionProvisioningRecordV1,
     CognitionProvisioningRequestV1, CognitionQuoteV1, CognitionReceipt, CognitionReceiptV1,
     CognitionResourceBalanceV1,
+};
+pub use local_test_provider_bootstrap::{
+    LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS, LOCAL_TEST_PROVIDER_GRANT_TTL_TICKS,
+    LocalTestProviderAuthorityConfig, LocalTestProviderAuthorityMode, LocalTestProviderGrantStatus,
+    LocalTestProviderModuleArtifact, LocalTestProviderProvisioning, LocalTestProviderSessionMode,
+};
+pub use provider_backed_bootstrap::ProviderBackedBootstrapAuthorityV1;
+pub use transition::{
+    ExecutionTransaction, PreparedCommit, TransitionBaseHead, TransitionBuffer,
+    TransitionCommitError, TransitionKernelEntriesView, TransitionKernelState,
+    TransitionKernelView, TransitionPrepareError, TransitionRollbackError, TransitionSavepoint,
 };
 
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
@@ -179,10 +181,8 @@ pub use module_tick_runtime::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::{cell::RefCell, path::PathBuf, sync::Arc};
 
 #[cfg(test)]
 use oasis7_wasm_router::PreparedSubscription;

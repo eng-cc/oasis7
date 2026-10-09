@@ -5,6 +5,9 @@ use super::{World, WorldError};
 use crate::simulator::ResourceKind;
 use oasis7_wasm_abi::*;
 
+#[path = "rollback_admission_freeze_test.rs"]
+mod rollback_admission_freeze_regressions;
+
 fn manifest(world: &mut World, version: &str) -> ModuleManifest {
     let bytes = format!("governed-atomic-{version}").into_bytes();
     let hash = crate::runtime::util::sha256_hex(&bytes);
@@ -393,6 +396,8 @@ fn rollback_reducer_rejections_preserve_priority_and_all_observables() {
             from_module_version: "2.0.0".into(),
             to_module_version: "1.0.0".into(),
             wasm_hash: "old-hash".into(),
+            from_wasm_hash: None,
+            from_release_request_id: None,
             install_target: crate::simulator::ModuleInstallTarget::SelfAgent,
             active: true,
             proposal_id: 0,
@@ -400,6 +405,13 @@ fn rollback_reducer_rejections_preserve_priority_and_all_observables() {
             fee_kind: ResourceKind::Electricity,
             fee_amount: 2,
         };
+        if case == "negative" {
+            let encoded = serde_json::to_value(&event).unwrap();
+            assert!(encoded["data"].get("from_wasm_hash").is_none());
+            assert!(encoded["data"].get("from_release_request_id").is_none());
+            let decoded = serde_json::from_value::<DomainEvent>(encoded).unwrap();
+            assert_eq!(decoded, event);
+        }
         if let DomainEvent::ModuleRollbackApplied {
             operator_agent_id,
             instance_id,

@@ -11,6 +11,8 @@ use oasis7_wasm_abi::{CapabilityCatalogSnapshot, CapabilityPresenter, Capability
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[path = "llm_sidecar_memory_correction.rs"]
+mod memory_correction;
 #[path = "llm_sidecar_cognition_wait.rs"]
 mod wait_admission;
 
@@ -427,6 +429,12 @@ impl RuntimeLlmSidecar {
                     runtime_resume_proposal = Some(Self::pending_service_resume_proposal(pending)?);
                     turn_context = original.turn_context.clone();
                     request_context = original.request_context.clone();
+                }
+                self.provider_memory_store
+                    .bind_corrections_to_decision(&turn_context)
+                    .map_err(|error| error.to_string())?;
+                if let Some(cause) = replan_cause.as_ref() {
+                    self.rebind_memory_corrections_for_stale_replan(cause, &turn_context)?;
                 }
                 if let Some(identity) =
                     lineage_generation_recovery::provider_request_capability_identity(
@@ -1198,3 +1206,7 @@ fn recent_runtime_event_summaries(world: &RuntimeWorld) -> Vec<String> {
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "llm_sidecar_host_goal_tests.rs"]
+mod host_goal_tests;

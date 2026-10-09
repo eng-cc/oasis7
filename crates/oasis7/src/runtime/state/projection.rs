@@ -3,6 +3,9 @@ pub use super::body_projection::BodyOverlay;
 use super::governance_identity_projection::{
     GovernanceIdentityProfileMapProjection, GovernanceIdentityProfileOverlay,
 };
+use super::module_admission_freeze::{
+    projection_has_freeze_field, serialize_module_instance_projection,
+};
 use super::module_release_transition::ReleaseMapProjection;
 use super::*;
 use serde::Serialize;
@@ -527,6 +530,7 @@ where
     } = state;
 
     let field_count = 95
+        + usize::from(projection_has_freeze_field(state, module_instance_overlay))
         - usize::from(
             state.agent_intent_ledger.is_empty()
                 && agent_intent_overlay.is_none_or(|overlay| overlay.ledger_updates.is_empty()),
@@ -971,11 +975,7 @@ where
         output.serialize_field("module_artifact_listings", &state.module_artifact_listings)?;
         output.serialize_field("module_artifact_bids", &state.module_artifact_bids)?;
     }
-    if let Some(overlay) = module_instance_overlay {
-        overlay.serialize_fields(state, &mut output)?;
-    } else {
-        output.serialize_field("module_instances", &state.module_instances)?;
-    }
+    serialize_module_instance_projection(state, module_instance_overlay, &mut output)?;
     if let Some(overlay) = module_release_overlay {
         output.serialize_field(
             "module_release_requests",

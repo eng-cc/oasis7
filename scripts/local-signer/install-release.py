@@ -14,6 +14,7 @@ import types
 TRUSTED_BOOTSTRAP = r"""import ctypes
 import ctypes.util
 import errno
+import fcntl
 import hashlib
 import json
 import os
@@ -39,6 +40,30 @@ MANIFEST_FIELDS = {
     "installation_schema_version", "control_schema_version", "files",
 }
 SEAM_NAMES = ("_bootstrap_acl_query", "_bootstrap_metadata", "_bootstrap_execute", "_bootstrap_target")
+RUNTIME_PATH = "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9"
+FRAMEWORK_PATH = "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9"
+RUNTIME_ATTESTATION_FIELDS = (
+    "apple_anchor", "bootstrap_sha256", "dependency_policy_id", "framework_cdhash",
+    "framework_dev", "framework_ino", "framework_mode", "framework_path",
+    "framework_resource_seal", "framework_uid", "os_build", "policy_id",
+    "requirement_id", "runtime_arch", "runtime_cdhash", "runtime_dev",
+    "runtime_ino", "runtime_mode", "runtime_path", "runtime_uid",
+    "runtime_version", "schema_version", "system_volume_trust",
+)
+RUNTIME_FIXED = {
+    "apple_anchor": "apple",
+    "dependency_policy_id": "clt-python39-apple-dyld-v1",
+    "framework_cdhash": "a43551195b8d2eefd9356d81c1098ffc9e0a8b47",
+    "framework_path": FRAMEWORK_PATH,
+    "framework_resource_seal": "valid",
+    "policy_id": "clt-python3.9-v1",
+    "requirement_id": "com.apple.python3",
+    "runtime_cdhash": "77e5dcc021cbfa7e2c3940b5ea150e3da037f3cf",
+    "runtime_path": RUNTIME_PATH,
+    "runtime_version": "3.9",
+    "schema_version": "oasis7.local-signer.runtime-attestation.v1",
+    "system_volume_trust": "current-booted-apple-os",
+}
 
 
 def pairs(items):
@@ -59,6 +84,121 @@ def option(name):
 
 def valid_hash(value):
     return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+
+
+def read_runtime_attestation(seams):
+    if seams:
+        provider = globals().get("_bootstrap_runtime_attestation")
+        if not callable(provider):
+            raise ValueError("native runtime attestation is missing")
+        raw = provider()
+        if type(raw) is not bytes:
+            raise ValueError("native runtime attestation test evidence is malformed")
+    else:
+        descriptor = 3
+        try:
+            info = os.fstat(descriptor)
+            flags = fcntl.fcntl(descriptor, fcntl.F_GETFL)
+            if (not stat.S_ISFIFO(info.st_mode) or info.st_uid != os.geteuid()
+                    or flags & os.O_ACCMODE != os.O_RDONLY):
+                raise ValueError("native runtime attestation descriptor is unsafe")
+            chunks = []
+            size = 0
+            while size <= 4096:
+                chunk = os.read(descriptor, min(4097 - size, 1024))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                size += len(chunk)
+            raw = b"".join(chunks)
+            if size > 4096:
+                raise ValueError("native runtime attestation exceeds its bound")
+        finally:
+            os.close(descriptor)
+    if not raw or len(raw) > 4096 or not raw.endswith(b"\n"):
+        raise ValueError("native runtime attestation framing is invalid")
+    try:
+        value = json.loads(raw.decode("ascii"), object_pairs_hook=pairs,
+                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite JSON")))
+    except (UnicodeError, ValueError) as error:
+        raise ValueError("native runtime attestation JSON is invalid") from error
+    if (type(value) is not dict or tuple(sorted(value)) != RUNTIME_ATTESTATION_FIELDS
+            or set(value) != set(RUNTIME_ATTESTATION_FIELDS)
+            or any(type(item) is not str for item in value.values())):
+        raise ValueError("native runtime attestation schema is invalid")
+    canonical = (json.dumps(value, sort_keys=True, separators=(",", ":"),
+                            ensure_ascii=True, allow_nan=False) + "\n").encode("ascii")
+    if raw != canonical:
+        raise ValueError("native runtime attestation is not canonical")
+    for name, expected in RUNTIME_FIXED.items():
+        if value[name] != expected:
+            raise ValueError("native runtime attestation fixed identity mismatch")
+    for name in ("bootstrap_sha256",):
+        if not re.fullmatch(r"[0-9a-f]{64}", value[name]):
+            raise ValueError("native runtime attestation digest is malformed")
+    for name in ("runtime_cdhash", "framework_cdhash"):
+        if not re.fullmatch(r"[0-9a-f]{40}", value[name]):
+            raise ValueError("native runtime attestation code identity is malformed")
+    if value["runtime_arch"] not in ("arm64", "x86_64"):
+        raise ValueError("native runtime attestation architecture is unsupported")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", value["os_build"]):
+        raise ValueError("native runtime attestation OS build is malformed")
+    for prefix, expected_path, directory in (("runtime", RUNTIME_PATH, False), ("framework", FRAMEWORK_PATH, True)):
+        if value[prefix + "_path"] != expected_path or value[prefix + "_uid"] != "0":
+            raise ValueError("native runtime attestation path or owner mismatch")
+        for suffix in ("dev", "ino", "mode"):
+            number = value[prefix + "_" + suffix]
+            if not re.fullmatch(r"(?:0|[1-9][0-9]{0,19})", number):
+                raise ValueError("native runtime attestation metadata is noncanonical")
+        if value[prefix + "_dev"] == "0" or value[prefix + "_ino"] == "0":
+            raise ValueError("native runtime attestation metadata is empty")
+        mode = int(value[prefix + "_mode"])
+        if mode < 0 or mode & (stat.S_ISUID | stat.S_ISGID | stat.S_ISVTX) or mode & 0o022:
+            raise ValueError("native runtime attestation mode is unsafe")
+        if directory:
+            if not stat.S_ISDIR(mode) or mode & 0o500 != 0o500:
+                raise ValueError("native framework attestation is not a directory")
+        elif not stat.S_ISREG(mode) or not mode & 0o100:
+            raise ValueError("native runtime attestation is not an executable regular file")
+    if value["framework_mode"] == "0" or value["runtime_mode"] == "0":
+        raise ValueError("native runtime attestation mode is empty")
+    if not seams:
+        if (sys.platform != "darwin" or sys.executable != RUNTIME_PATH
+                or tuple(sys.version_info[:2]) != (3, 9)
+                or not sys.flags.isolated or not sys.flags.no_site
+                or not sys.flags.dont_write_bytecode):
+            raise ValueError("approved isolated CLT Python runtime is required")
+        _verify_runtime_names(value)
+        for entry in sys.path:
+            if not entry or not os.path.isabs(entry):
+                raise ValueError("runtime import path is not absolute")
+            resolved = os.path.realpath(entry)
+            if resolved != FRAMEWORK_PATH and not resolved.startswith(FRAMEWORK_PATH + os.sep):
+                raise ValueError("runtime import path escapes the approved framework")
+    return MappingProxyType(value)
+
+
+def _verify_runtime_names(value):
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    if hasattr(os, "O_DIRECTORY"):
+        framework_fd = os.open(FRAMEWORK_PATH, flags | os.O_DIRECTORY)
+    else:
+        raise ValueError("native runtime directory descriptor check is unavailable")
+    try:
+        runtime_fd = os.open(RUNTIME_PATH, flags)
+        try:
+            for prefix, fd in (("framework", framework_fd), ("runtime", runtime_fd)):
+                info = os.fstat(fd)
+                mode = str(info.st_mode)
+                if (str(info.st_dev) != value[prefix + "_dev"]
+                        or str(info.st_ino) != value[prefix + "_ino"]
+                        or str(info.st_uid) != value[prefix + "_uid"]
+                        or mode != value[prefix + "_mode"]):
+                    raise ValueError("native runtime descriptor identity changed")
+        finally:
+            os.close(runtime_fd)
+    finally:
+        os.close(framework_fd)
 
 
 def acl_empty(fd, seams):
@@ -303,9 +443,7 @@ def invoke():
         if (not callable(_bootstrap_acl_query) or not callable(_bootstrap_metadata)
                 or not callable(_bootstrap_execute) or _bootstrap_target not in ("aarch64-apple-darwin", "x86_64-apple-darwin")):
             raise ValueError("invalid importer-only bootstrap test seam")
-    else:
-        if sys.platform != "darwin" or not sys.flags.isolated or sys.executable != "/usr/bin/python3":
-            raise ValueError("fixed isolated macOS interpreter required")
+    runtime_identity = read_runtime_attestation(seams)
     if len(sys.argv) < 2 or sys.argv[1] not in ("plan", "apply"):
         raise ValueError("unsupported installer operation")
     operation = sys.argv[1]
@@ -348,6 +486,7 @@ def invoke():
                 "__name__": "__main__",
                 "__file__": "<approved-captured-install-release.py>",
                 "_CAPTURED_RELEASE_FILES": capsule,
+                "_RUNTIME_ATTESTATION": runtime_identity,
             }
             exec(compile(capsule["install-release.py"], namespace["__file__"], "exec"), namespace)
     finally:
@@ -384,8 +523,9 @@ def parser():
 
 
 def approved_modules(expected_manifest_sha256, captured_files=None):
-    if not sys.flags.isolated or Path(sys.executable) != Path("/usr/bin/python3"):
-        raise ValueError("fixed isolated /usr/bin/python3 required")
+    if (not sys.flags.isolated or not sys.flags.no_site or not sys.flags.dont_write_bytecode
+            or Path(sys.executable) != Path(RUNTIME_PATH) or tuple(sys.version_info[:2]) != (3, 9)):
+        raise ValueError("fixed isolated CLT Python 3.9 runtime required")
     if captured_files is None:
         root = Path(__file__).absolute().parent
         if os.geteuid() == 0:
@@ -450,7 +590,11 @@ def approved_modules(expected_manifest_sha256, captured_files=None):
 
 def main():
     captured_files = globals().get("_CAPTURED_RELEASE_FILES")
+    runtime_identity = globals().get("_RUNTIME_ATTESTATION")
     if os.geteuid() == 0 and not isinstance(captured_files, types.MappingProxyType):
+        print(json.dumps({"status": "BLOCKED", "code": "TRUSTED_BOOTSTRAP_REQUIRED", "host_mutated": False, "signing_enabled": False}, sort_keys=True))
+        return 9
+    if not isinstance(runtime_identity, Mapping):
         print(json.dumps({"status": "BLOCKED", "code": "TRUSTED_BOOTSTRAP_REQUIRED", "host_mutated": False, "signing_enabled": False}, sort_keys=True))
         return 9
     args = parser().parse_args()
@@ -458,7 +602,7 @@ def main():
         api, host_module = approved_modules(args.expected_manifest_sha256, captured_files)
         target = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}.get(platform.machine(), "unsupported")
         release = api.validate_release(args.release_dir, args.expected_manifest_sha256, target, captured_files=captured_files)
-        host = host_module.MacOSHost()
+        host = host_module.MacOSHost(runtime_identity=runtime_identity)
         if args.command == "plan":
             request = {name: getattr(args, name) for name in ("store_dir", "work_dir", "caller_user", "signer_user", "installation_id", "deployment_id")}
             plan = api.plan_installation(request, release, host)

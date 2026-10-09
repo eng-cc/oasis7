@@ -1,147 +1,27 @@
-# oasis7: CI 与提交钩子测试分级
+# CI 分级执行
 
-- 对应设计文档: `doc/testing/ci/ci-tiered-execution.design.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 状态：active
+- 通用规则：[开发流程规范](../../engineering/workflow/source-of-truth.md)
+- 可执行测试命令和平台限制：[testing-manual.md](../../../testing-manual.md)
 
-审计轮次: 4
+## 测试范围
 
+普通 CI 是默认验证方式。轻量 baseline 始终执行；选择器使用完整 Git name-status diff、base/head 两侧 Cargo 关系及必要目录映射选择 Rust、Web、场景、平台、打包和运维合同测试。
 
-## ROUND-002 口径归属（2026-03-05）
-- 本文档是 `commit` / `required` / `full` 分层触发策略的权威定义入口。
-- 其它文档（含 `doc/scripts/precommit/pre-commit.prd.md`）仅引用本口径，不再重复定义分层规则。
+Rust 变化覆盖自身及需要验证的反向消费者，删除和重命名覆盖两端；保留有效 features、WASM、生成输入和平台组合。workspace、features、锁文件、共享生成器及 CI 控制输入变化采用保守普通 required，未知路径或图解析失败扩大覆盖。
 
-## ROUND-003 包级别 exact-integration 语义对齐（2026-09-17）
-- 本文档消费的批准目标语义以 [workflow source of truth 的 Cargo package scope and impact-scoped integration verification](../../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification) 为唯一规范来源；本节只把它投影到 CI 分级的目标与验收边界。
-- 批准目标语义要求 Cargo manifest 与解析后的 `cargo metadata` 图确定 package identity，而不是从 `crates/<name>` 路径猜测；普通 Rust code PR 只能涉及一个 package（含其 source/tests/fixtures/examples/binaries 与 package-local manifest），CI/harness PR 不改变 business package，product/system-document PR 不含 code。
-- 批准目标语义的 exact integration 以 `H`（source head）、`B`（target commit）和 `T`（tested tree）绑定，按真实的 `B -> T` impact 选择，而不是用 `B..H` 代替；planner 还必须冻结 package、rules、profiles、commands/results、toolchain、targets/features 与 policy version。
-- `integration_revalidation` 只有在 trusted analysis 证明 impact-scoped 足够时才适用；unknown impact 与 high-risk API/default/feature/dependency、ABI/signature、state-root/persistence/consensus 等 profile 进入 `full_escalation`。取消、超时、缺失或 unexpected skip 都是阻断条件，selection 不得削弱 high-risk 或 readiness gate。
-- V0 activation boundary：write/migration boundaries、high-risk escalation 与 fail-closed behavior 立即生效；reduced package-aware `integration_revalidation` 只有在 trusted merged producer、receipt、gate implementation 被显式激活后才可用。在此之前，当前 conservative/full behavior 保持权威。
-- 当前实现边界必须单独保留：`scripts/plan-rust-required-scope.py` 仍按 changed paths 与 config glob rules 规划 capability；它的 `scope=full` 只是 required tier 内的 fail-closed 扩张，不等于选择 `full` tier，也不证明 package-aware `H/B/T` enforcement 已经存在。本次文档同步不宣称该目标语义已由 planner 或 CI 强制执行；这也是 `PRD-TESTING-CI-TIERED-004` 的当前 negative assertion。
+`./scripts/ci-tests.sh required` 是普通必要测试的本地入口；`full` 保留广覆盖回归，nightly 执行适用 full。真实产品测试、WASM 确定性、共识、持久化、安全、升级恢复和跨平台打包均继续保留，不因流程精简删除。
 
-## 1. Executive Summary
-- Problem Statement: CI 必须先以最小充分覆盖拦截改动引入的缺陷；若普通 PR 与发布/高风险回归共用 full，会拉长反馈，但仅以速度剪裁又会漏掉应当阻断的影响面。
-- Proposed Solution: 保留 `commit` / `required` / `full` 显式命令分级。普通 `git commit` 不调用验证；普通 PR 使用 impact-scoped `required-gate` 作为 premerge 最小阻断集，缺陷拦截优先、速度优化其次；`full` 只用于发布、高风险、历史/信号升级与定时回归。性能在被选择的 surface 必须采集，但在稳定可复现的环境特定样本、阈值、原始复现与 waiver 生命周期建立前保持 report/watch。
-- Success Criteria:
-  - SC-1: `scripts/ci-tests.sh` 支持显式 `commit` / `required` / `full` 分级参数并统一入口；省略 tier 必须 fail-fast，不得隐式进入 `full`。
-  - SC-2: `pre-commit` 静默成功且不执行验证，普通提交不被本地检查阻塞。
-  - SC-3: GitHub Actions 对普通 push/PR 跑 stable-context、impact-scoped `required-gate`，作为 premerge 最小 blocking set；planner 先按 changed-path 选取充分覆盖，缺陷拦截优先于速度。
-  - SC-3B: `full` 不是普通 PR 默认；只用于 release、高风险、历史缺陷升级、信号触发或 schedule 回归。
-  - SC-3D: PR 的人工 full 升级必须通过 `workflow_dispatch/full_escalation` 绑定 task UID、PR、exact head、枚举 reason 与同仓库 issue-comment evidence URL，并产出 trusted CI receipt；评论内容不作为自动授权输入。
-  - SC-3C: 被选择的性能 surface 必须采集环境、原始复现与样本；采集缺失、损坏或互相矛盾时阻断，只有完整有效样本的阈值 miss 在环境特定、稳定可复现的采样阈值及 waiver 生命周期就绪前作 report/watch。
-  - SC-3A: `required-gate` 在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 变更时，必须按需安装 `trunk` 并执行 launcher Web build。
-  - SC-4: 分级策略在脚本、workflow、文档三端口径一致。
-  - SC-5: docs-only / `.pm` / 纯元数据 PR 不再实际执行 viewer/runtime/support 重型测试，但仍保留 `required-gate` check context。
-  - SC-6: 文档必须明确区分当前 path-based planner implementation 与批准的 package-aware exact-integration target；target 绑定 package identity、`H/B/T` 与 `B -> T` impact，并保留 high-risk / unknown-impact 的 `full_escalation`。
+## 调度和结果
 
-## 2. User Experience & Functionality
-- User Personas:
-  - 开发者：希望提交前获得更快反馈。
-  - CI 维护者：希望门禁策略以缺陷拦截为先、清晰且不漂移。
-  - 发布负责人：希望 full 回归仍覆盖主干风险。
-- User Scenarios & Frequency:
-  - 本地提交：不执行验证。
-  - 显式本地重门禁：需要补跑 runtime/simulator 核心 shard、`pixel_world_bridge` Rust/wasm 目标检查或 Viewer Web required 合同时，手动执行 `required`。
-  - PR 门禁：每次普通 push/PR 先规划 impact-scoped required scope，再执行命中的 premerge 最小阻断组件。
-  - full 回归：仅由 release/high-risk、历史/信号升级、手动授权或 schedule 触发；每日 schedule 是默认持续入口。
-- User Stories:
-  - PRD-TESTING-CI-TIERED-001: As a 开发者, I want ordinary commits to run no validation, so that CI and frozen-head readiness remain the authoritative gates.
-  - PRD-TESTING-CI-TIERED-002: As a CI 维护者, I want one unified test entrypoint with tier flags, so that policy drift is reduced.
-  - PRD-TESTING-CI-TIERED-003: As a 发布负责人, I want daily full regression preserved, so that deep regressions are still caught.
-  - PRD-TESTING-CI-TIERED-004: As a CI 维护者, I want package-aware reduced integration revalidation to remain disabled until its trusted producer/receipt/gate is explicitly activated, so that current conservative/full behavior remains authoritative and cannot be self-authorized.
-- Critical User Flows:
-  1. Flow-TIERED-001: `本地提交 -> legacy pre-commit no-op -> 成功返回`
-  2. Flow-TIERED-002: `push/PR -> planner 基于 changed paths 规划 required scope -> workflow 执行命中的 required 组件 -> 决定是否可合入`
-  3. Flow-TIERED-003: `每日定时 -> workflow 执行 full -> 生成重型回归结果`
-  4. Flow-TIERED-004（批准目标语义；显式 activation 前保守/full 行为生效）: `解析 H/B/T -> 由 Cargo metadata 确定 package identity -> 计算 B -> T impact -> trusted producer/receipt/gate 与 explicit activation 通过后选择 impact-scoped integration_revalidation，否则进入 full_escalation`
-- Functional Specification Matrix:
-| 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
-| --- | --- | --- | --- | --- | --- |
-| 分级入口脚本 | `commit` / `required` / `full` 参数 | 调用 `scripts/ci-tests.sh` | `idle -> running -> passed/failed` | required 是 impact-scoped premerge 最小阻断集，先拦截缺陷再优化速度；full 只作升级/低频高覆盖 | CI/开发者可触发 |
-| pre-commit 接线 | 兼容行为 | `pre-commit.sh` 静默成功且不调用检查 | `hooked -> no-op -> success` | 普通提交零验证 | legacy hook 可调用 |
-| workflow 分流 | 触发器类型、执行等级 | 普通 push/PR 跑 impact-scoped required；release/high-risk/history/signal 升级与 schedule 跑 full | `triggered -> running -> archived` | 先满足缺陷拦截，再优化速度 | 维护者可调整触发策略 |
-| required-gate scope planner | `changed_paths`, `scope`, `run_*` 布尔量 | `required-gate` 先规划 `minimal / targeted / full`，再只执行命中的重型组件，必要时安装 `trunk` 并补 launcher Web build | `planned -> pruned -> executed` | planner 的 `scope=full` 是 required tier 内 fail-closed 覆盖扩张，不等于选择 `full` tier；docs-only / 无关元数据走 governance/fmt-only；共享 CI/脚本输入命中时必须扩张覆盖 | workflow 自动执行；本地显式 `required` 不受影响 |
-| performance evidence | selected surface、environment、raw reproduction、sample、threshold、waiver | 选中的性能 surface 采集 evidence；阈值成熟前 report/watch | `selected -> collected -> watch -> thresholded/waived` | 环境特定稳定复现的采样阈值、原始复现与有时限 waiver 才可升级 blocking | QA/CI 维护者保留 evidence |
-- Acceptance Criteria:
-  - AC-1: `scripts/ci-tests.sh` 分级参数行为明确并可复现。
-  - AC-2: `scripts/pre-commit.sh` 不执行格式化、编译、测试、lint 或治理检查。
-  - AC-3: `.github/workflows/rust.yml` 按触发器分流 required/full。
-  - AC-4: 文档与任务日志回写完整。
-  - AC-5: `.github/workflows/rust.yml` 的 `required-gate` 在 push/PR 上先执行 changed-path planner；docs-only / `.pm` / 无关元数据改动只跑 governance/fmt，且 `required-gate` check context 名称保持不变。
-  - AC-6: `required-gate` 对 launcher/shared runtime 命中路径必须输出 `run_launcher_web_build=true` / `needs_trunk=true`，并仅在该分支向 `scripts/ci-tests.sh required` 透传 `OASIS7_CI_RUN_LAUNCHER_WEB_BUILD=true`。
-  - AC-7: 文档明确 ordinary PR 的 required 是 impact-scoped premerge 最小 blocking set，`full` 仅在 release/high-risk/history/signal/schedule 升级；planner 的 `scope=full` 不得误写为 ordinary PR 选择 full tier。
-  - AC-8: 选中的性能 surface 记录环境、原始复现与样本；缺失、损坏或互相矛盾的 evidence 阻断；完整样本在没有稳定可复现的环境特定采样阈值和有时限 waiver 生命周期时保持 report/watch。
-  - AC-9: full escalation preflight 对缺失/非法输入或 actual head 与 expected head 不一致 fail-closed；通过 preflight 后无论 full 成败都上传绑定 run/head/conclusion 的 `oasis7-full-escalation-receipt-v1`，且 full 失败保持 job failure。
-  - AC-10: 本 PRD 必须保留当前 path-based planner implementation 与批准目标语义的显式边界；不得把当前 changed-path 选择器描述为 package-aware `H/B/T` enforcement。
-  - AC-11: 批准目标验收口径必须可追溯到 package identity、`H/B/T`、`B -> T` impact、`integration_revalidation` 与 high-risk/unknown-impact `full_escalation`，且不降低既有 readiness/high-risk gate。
-  - AC-12: 在 trusted merged producer、receipt、gate implementation 与显式 activation 具备前，package-aware reduced `integration_revalidation` 必须保持未激活；当前 path-based conservative/full behavior 的 negative assertion 必须保留，且 write/migration、high-risk 与 fail-closed obligations 不得被削弱。
-- Non-Goals:
-  - 不做 case-level / flaky-aware 的动态测试选择，也不把本地显式 `./scripts/ci-tests.sh required` 改成 changed-path 按需运行。
-  - 不做缓存、并行矩阵、runner 基础设施优化。
-  - 不变更业务测试断言。
+select 先产生明确的非空矩阵，按资源组并行执行。最终唯一 `required-gate` 使用可靠的 always 汇总，并显式依赖 select 和所有组。选中组必须 success；未选中组可以 skipped 或 success；失败、取消、缺失、未知及意外 skipped 都必须阻断。矩阵不吞退出码，采用 fail-fast=false。
 
-## 3. AI System Requirements (If Applicable)
-- Tool Requirements: 不适用（本任务为测试执行策略治理）。
-- Evaluation Strategy: 不适用。
+记录 source HEAD、base 和实际测试对象及运行链接。普通 PR 权限只读，从事件 base 提取可信选择器及执行清单；候选控制变化不能缩小基线覆盖。CI 控制、安全或兼容边界变化接受对应能力的独立评审。
 
-## 4. Technical Specifications
-- Architecture Overview: 普通 commit 与验证解耦；impact-scoped required 是 ordinary-PR 的 premerge 最小 blocking set，full 是 release/high-risk/history/signal/schedule 升级；frozen-head Pre-PR Ready、CI required gate 与定时 full 回归继续使用统一测试入口。
-- Approved target contract (canonical, not an enforcement claim): package identity comes from Cargo metadata; exact integration binds `H`/`B`/`T` and selects the real `B -> T` impact; `integration_revalidation` is allowed only for trusted impact-scoped analysis, while unknown/high-risk impact requires `full_escalation`.
-- Activation boundary (current): write/migration boundaries, high-risk escalation, and fail-closed behavior are normative now. The reduced package-aware `integration_revalidation` route remains inactive until a trusted merged producer, receipt, and gate implementation is explicitly activated; current conservative/full behavior remains authoritative beforehand.
-- Current implementation status (observed): the current planner remains changed-path/config-rule based. Its fail-closed `scope=full` fallback is required-tier coverage expansion, not the `full` tier and not evidence that the approved package-aware target is enforced; this is the negative assertion for `PRD-TESTING-CI-TIERED-004`.
-- Integration Points:
-  - `scripts/ci-tests.sh`
-  - `scripts/pre-commit.sh`
-  - `.github/workflows/rust.yml`
-  - `doc/scripts/precommit/pre-commit.prd.md`
-  - `doc/testing/ci/ci-test-coverage.prd.md`
-- Edge Cases & Error Handling:
-  - commit 覆盖过窄：可能把 runtime/simulator 回归延后到显式 required 或 CI required gate 暴露，需结合缺陷复盘补齐。
-  - commit 误挂目标特定 Viewer/Bevy 校验：会重新拉长默认提交耗时，需把 `pixel_world_bridge` lib tests、wasm32 编译检查与 Viewer Web required 合同限制在显式 `required` / CI required gate。
-  - required 覆盖过窄：可能延后发现问题，先以缺陷复盘扩大 required mapping；每日 full 是补充，不得成为普通 PR 漏检的常规替代。
-  - required planner 漏判：若 diff base 不可解析、命中共享 CI / gate 脚本输入、或落入未分类代码路径，必须在 required tier 内 fail-closed 扩张覆盖，不能静默少跑；这不等于 ordinary PR 选择 full tier。
-  - launcher Web 漏判：若 `oasis7_client_launcher` 或 launcher shared runtime 变更未命中 planner，编译错误会推迟到 release `build-web-dist` 才暴露；因此 launcher 相关路径必须显式映射到 `run_launcher_web_build`。
-  - docs-only / `.pm` 元数据 PR：允许 `required-gate` 退化为 governance/fmt-only，但 check context 仍必须存在，避免分支保护漂移。
-  - full 仅定时执行：发现延迟增加，需保留 release/high-risk/history/signal 的升级与手动触发路径。
-  - 性能阈值不稳定：选中的 surface 仍必须收集环境、原始复现与样本；未满足环境特定稳定复现、采样阈值和有时限 waiver 生命周期前只 report/watch，不能伪造 blocking 阈值。
-  - 旧命令调用习惯：不带参数调用时需定义默认行为避免误解。
-  - 策略漂移：脚本与 workflow 不一致时，以统一入口脚本为基线回收。
-- Non-Functional Requirements:
-  - NFR-TIERED-1: required 首先充分拦截已知影响面缺陷；在不降低该充分度的前提下才优化反馈时延。
-  - NFR-TIERED-2: full 回归覆盖范围不低于迁移前。
-  - NFR-TIERED-3: 分级策略变更具备可追溯证据。
-- Security & Privacy: 不涉及新数据采集，仅为执行策略调整。
+## 专项条件
 
-## 5. Risks & Roadmap
-- Phased Rollout:
-  - MVP (T1): 文档与项目管理落地。
-  - v1.1 (T2): 脚本分级改造与 pre-commit 接线。
-  - v2.0 (T3/T4): workflow 分流、文档回写、验证收口。
-- Technical Risks:
-  - 风险-1: required 覆盖下降导致回归延后暴露。
-  - 风险-2: full 定时执行带来发现延迟。
-  - 风险-3: 默认参数语义不清导致团队误用。
+缺测试先补普通 CI。只有普通 runner 难以提供的真实长期状态、专用硬件或受控环境才使用专项验证，说明具体不足、环境、版本、通过标准和实际结果。阻塞专项纳入同一 PR 最终汇总；调试 dispatch 不能替代 PR 检查。
 
-## 6. Validation & Decision Record
-- Test Plan & Traceability:
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
-| --- | --- | --- | --- | --- |
-| PRD-TESTING-CI-TIERED-001 | T1/T2 | no-op contract + `test_tier_required` | `bash scripts/pre-commit.test.sh` 验证普通 commit 兼容入口不执行检查；CI required 与 frozen-head readiness evidence 验证 authoritative gates | 本地提交反馈效率与门禁归属 |
-| PRD-TESTING-CI-TIERED-002 | T2/T3/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` | 脚本参数、changed-path planner、launcher Web build planner 输出与 workflow 分流检查 | CI 门禁一致性 |
-| PRD-TESTING-CI-TIERED-003 | T3/T4/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | required-gate scope 剪裁验证、launcher Web build 命中/未命中回归，以及 schedule full 回归与结果审查 | 发布前深度回归覆盖 |
-| PRD-TESTING-CI-TIERED-004 | V0 documentation boundary / future package-aware integration activation | governance + future trusted integration evidence | Current negative assertion: `scripts/plan-rust-required-scope.py` remains path/config based and its `scope=full` is not package-aware `H/B/T` enforcement; future activation requires trusted Cargo metadata, `H/B/T` impact, producer/receipt/gate identity, high-risk escalation, and fail-closed evidence on the merged policy | V0 task evidence now; future trusted CI receipt and activation record before reduced `integration_revalidation` is enabled |
-- Decision Log:
-| 决策ID | 选定方案 | 备选方案（否决） | 依据 |
-| --- | --- | --- | --- |
-| DEC-TIERED-001 | `commit` / `required` / `full` 分级执行 | 每次全量执行 | required 先服务缺陷拦截，分级仅在最小充分覆盖后优化反馈效率。 |
-| DEC-TIERED-002 | pre-commit 静默 no-op；`commit` tier 仅显式调用 | pre-commit 自动执行 `commit` / `required` / `full` | 普通提交与验证解耦，CI required 与 frozen-head readiness 保持 authoritative。 |
-| DEC-TIERED-003 | schedule 承担 full 回归 | 取消 full | 无法保证主干深度质量。 |
-| DEC-TIERED-004 | `required-gate` 保持单一 check context，但在 CI job 内按 changed paths 剪裁重型组件 | 把 docs-only / 元数据 PR 继续送进全量 required，或把 `required-gate` 拆成新 check 名称 | 前者无法改善平均时长，后者会引入分支保护漂移与 required context 迁移成本。 |
-| DEC-TIERED-005 | launcher Web build 继续保持 CI planner 按需触发，不把本地显式 `required` 改成默认 `trunk build` | 无条件把 launcher `trunk build` 加进所有 `required` 执行 | 用户要求“按需跑”，且本地显式 `required` 仍需保持固定重门禁语义，不把 release-only Web 成本扩散到所有场景。 |
-| DEC-TIERED-006 | ordinary PR 默认 impact-scoped required；full 仅 release/high-risk/history/signal/schedule 升级；selected performance 先 collect/report/watch | ordinary PR 默认 full，或未成熟性能阈值直接 blocking | 先拦截缺陷；性能数据没有稳定环境特定复现、采样阈值与 waiver 生命周期前不能提供可信 blocking 判定。 |
+main 前进按原生 up-to-date 保护更新分支并重新执行必要普通 CI，不创建 Task、epoch、receipt 或第二条通用严格集成流程。产品层的签名、checkpoint 和状态一致性证明仍按专业合同验证。
 
-## 原文约束点映射（内容保真）
-- 原“目标（降低提交耗时 + 保留主干覆盖 + 统一入口）” -> 第 1 章与第 2 章 AC。
-- 原“In/Out of Scope” -> 第 2 章 AC 与 Non-Goals。
-- 原“接口/数据（scripts/workflow）” -> 第 4 章 Integration Points。
-- 原“里程碑 T1~T4” -> 第 5 章 Phased Rollout。
-- 原“风险（覆盖下降、发现延迟、默认参数误解）” -> 第 4 章 Edge Cases + 第 5 章 Risks。
+CodeQL 技术扫描见 [CodeQL 设计](codeql-integration.design.md)，实际 required/advisory 按 GitHub CI 与生效保护执行。

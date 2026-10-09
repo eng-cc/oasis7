@@ -90,7 +90,6 @@ Rejected as defaults:
 - Minimum skill-surface checks after editing this skill:
   - `./scripts/lint-skills.sh`
   - `./scripts/doc-governance-check.sh`
-  - `./scripts/pm/lint.sh`
   - `git diff --check`
 - Expected result:
   - the skill stays concise, links only existing supporting files, and preserves the role/verification boundary.

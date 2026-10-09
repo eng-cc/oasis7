@@ -57,9 +57,10 @@ mod tests;
 // Re-export all public types
 pub use crate::capability_invocation_context::CapabilityInvocationContext;
 pub use agent::{
-    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQuery, AgentQueryResult,
-    LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics, LlmEffectIntentTrace,
-    LlmEffectReceiptTrace, LlmPromptSectionTrace, LlmStepTrace, MicroDepotQuoteRequest,
+    ActionResult, AgentBehavior, AgentDecision, AgentDecisionExplanationV1, AgentDecisionTrace,
+    AgentQuery, AgentQueryResult, LlmChatMessageTrace, LlmChatRole, LlmDecisionDiagnostics,
+    LlmEffectIntentTrace, LlmEffectReceiptTrace, LlmPromptSectionTrace, LlmStepTrace,
+    MicroDepotQuoteRequest,
 };
 pub use agent_intent_summary::{
     AGENT_INTENT_SUMMARY_MAX_CHARS, AGENT_INTENT_SUMMARY_SCHEMA_VERSION,
@@ -85,9 +86,10 @@ pub use cognition_policy::{
     ContinuationCurrentContextV1, ContinuationHandle, ContinuationHarness,
     ContinuationInvalidationReason, ContinuationProjectionV1, ContinuationProposalV1,
     GoalSnapshotInputV1, GoalSnapshotProjector, GoalSnapshotV1, MemoryContextEntryV1,
-    MemoryContextSnapshotV1, MemoryWriteIntentPolicyV1, MemoryWritePolicyContextV1,
-    MemoryWritePolicyOutcome, MemoryWriteStore, NormalizedMemoryWriteIntentV1,
-    RuntimeContinuationStatusV1, WakeConditionSubjectV1, WakeConditionV1,
+    MemoryContextSnapshotV1, MemoryCorrectionV1, MemoryWriteIntentPolicyV1,
+    MemoryWritePolicyContextV1, MemoryWritePolicyOutcome, MemoryWriteStore,
+    NormalizedMemoryWriteIntentV1, RuntimeContinuationStatusV1, WakeConditionSubjectV1,
+    WakeConditionV1,
 };
 pub use cognition_response_identity::{
     COGNITION_LEGACY_RESPONSE_DIGEST_DOMAIN, COGNITION_RESPONSE_DIGEST_DOMAIN,

@@ -25,6 +25,8 @@ use sha2::{Digest, Sha256};
 #[path = "control_plane/agent_chat.rs"]
 mod agent_chat;
 mod agent_chat_intent;
+#[path = "control_plane/agent_memory_correction.rs"]
+mod agent_memory_correction;
 #[path = "control_plane/auth_helpers.rs"]
 mod auth_helpers;
 pub(in crate::viewer::runtime_live) mod llm_sidecar;

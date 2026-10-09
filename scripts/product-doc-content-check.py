@@ -866,39 +866,8 @@ def check_active_topic_design_contract(
         reason_match = re.search(r"设计适用性理由[ \t]*[:：][ \t]*(.*)", visible)
         if not reason_match or lifecycle_field_value(reason_match.group(1)) in DESIGN_EXEMPTION_REASON_PLACEHOLDERS:
             fail(errors, "missing-design-exemption-reason", path, "simple-topic-exemption requires 设计适用性理由")
-        task_binding = re.search(
-            r"设计判定\s+task\s+issue\s*[:：]\s*#?([0-9]+)",
-            visible,
-            re.IGNORECASE,
-        )
-        if not task_binding:
-            fail(errors, "missing-design-exemption-task", path, "simple-topic-exemption requires an explicit 设计判定 task issue binding")
-        evidence_lines = [
-            number
-            for number, line in visible_lines(text)
-            if re.search(r"当前\s+GitHub\s+task\s+evidence\s*[:：]", line, re.IGNORECASE)
-        ]
-        valid_evidence_link = False
-        evidence_issue_numbers: set[str] = set()
-        for number, _raw, target in markdown_links(text):
-            if number not in evidence_lines:
-                continue
-            link_path, fragment = split_link_target(target)
-            locator = link_path + (f"#{fragment}" if fragment else "")
-            evidence_match = re.fullmatch(
-                r"https://github\.com/eng-cc/oasis7/issues/([0-9]+)#issuecomment-[0-9]+",
-                locator,
-                re.IGNORECASE,
-            )
-            if evidence_match:
-                valid_evidence_link = True
-                evidence_issue_numbers.add(evidence_match.group(1))
-        if not valid_evidence_link:
-            fail(errors, "missing-design-exemption-evidence", path, "simple-topic-exemption requires a current GitHub task issue-comment evidence link")
-        elif len(evidence_issue_numbers) != 1:
-            fail(errors, "ambiguous-design-exemption-task", path, "simple-topic-exemption evidence links must bind to one task issue")
-        elif task_binding and task_binding.group(1) not in evidence_issue_numbers:
-            fail(errors, "mismatched-design-exemption-task", path, "simple-topic-exemption evidence must match its bound task issue")
+        # A reasoned local design decision is sufficient. Optional historical
+        # Issue/PR references remain readable but do not admit ordinary edits.
         return
     fail(errors, "missing-design-or-exemption", path, "active topic design decision must be paired-design or simple-topic-exemption")
 

@@ -16,11 +16,11 @@
 
 - `doc/testing/README.md`：testing 模块首读与子域选择；涉及 testing governance 时只路由到本页。
 - `doc/testing/prd.index.md`：文件级精确检索和三件套可达性；本页不复制其完整长表。
-- `doc/testing/prd.md` / GitHub task issue evidence comments：模块测试门禁基线与当前执行状态；本页不承载模块状态。
+- `doc/testing/prd.md` / PR、实际 CI 与评审记录（Issue 按需）：模块测试门禁基线与当前执行状态；本页不承载模块状态。
 - `testing-manual.md` 与 `doc/testing/manual/*.manual.md`：operator 操作步骤；本页只把需要操作的读者导向对应 manual，不重述步骤。
 
 ## 维护规则
 
 - 新增或退役 `governance/` 专题时：更新 `doc/testing/prd.index.md` 的文件级可达性；若其改变首读问题或 canonical authority，同时更新本页的一行分流。
-- 专题正文、证据和历史留痕仍留在其专业 authority、Git history 与 GitHub task evidence；本页不是新的规则正文或状态汇总面。
+- 专题正文、证据和历史留痕仍留在其专业 authority、Git history 与 PR 与实际验证记录；本页不是新的规则正文或状态汇总面。
 - `L4A`、`L4B`、`L5` 的语义、角色越权边界与 release/claim 结论以 `doc/testing/prd.md` 和 `testing-manual.md` 为准，导航文字不得覆盖它们。

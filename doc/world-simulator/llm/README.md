@@ -83,5 +83,5 @@ and Project for the active task.
   subject to the parity PRD's behavior and latency gates.
 
 Use the linked PRD/design/contract for durable technical or product claims.
-Use GitHub task evidence for the mutable work history that previously appeared
-in GitHub task issue evidence comments records.
+Use PR 与实际验证记录 for the mutable work history that previously appeared
+in PR、实际 CI 与评审记录（Issue 按需） records.

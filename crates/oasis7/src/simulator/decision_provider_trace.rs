@@ -408,6 +408,7 @@ pub(super) fn response_to_trace(
                 .as_ref()
                 .and_then(|usage| usage.total_tokens),
             retry_count: response.diagnostics.retry_count,
+            agency_explanation: Some(public_decision_explanation(response)),
             ..LlmDecisionDiagnostics::default()
         }),
         llm_effect_intents: vec![],
@@ -418,4 +419,99 @@ pub(super) fn response_to_trace(
     };
     normalize_trace_aggregate(&mut trace, overflow);
     trace
+}
+
+/// Only the dedicated public explanation extension crosses this boundary.
+/// Raw transcript, prompt, tool trace and other upstream fields are excluded.
+impl DecisionResponse {
+    /// Public metadata only; callers must keep Runtime effect truth separate.
+    pub fn public_agency_explanation(&self) -> super::super::AgentDecisionExplanationV1 {
+        public_decision_explanation(self)
+    }
+}
+
+fn public_decision_explanation(
+    response: &DecisionResponse,
+) -> super::super::AgentDecisionExplanationV1 {
+    let unavailable = || super::super::AgentDecisionExplanationV1 {
+        status: "unavailable".into(),
+        provenance: "agent_explanation_unverified".into(),
+        reason: None,
+        dissent: None,
+        evidence_refs: vec![],
+        stakes: None,
+        expected_consequence: None,
+        alternatives: vec![],
+        next_step: "inspect_runtime_result_or_request_agent_explanation".into(),
+    };
+    let Some(value) = response
+        .trace_payload
+        .upstream_trace
+        .as_ref()
+        .and_then(|value| value.get("decision_explanation"))
+    else {
+        return unavailable();
+    };
+    let Some(object) = value.as_object() else {
+        return unavailable();
+    };
+    if object.keys().any(|key| {
+        ![
+            "reason",
+            "dissent",
+            "evidence_refs",
+            "stakes",
+            "expected_consequence",
+            "alternatives",
+        ]
+        .contains(&key.as_str())
+    }) {
+        return unavailable();
+    }
+    let text = |key: &str| -> Option<String> {
+        let text = object.get(key)?.as_str()?;
+        if text.trim().is_empty() || text.len() > 512 || text.chars().any(char::is_control) {
+            return None;
+        }
+        let redacted = redact_trace_text(text);
+        (redacted != TRACE_REDACTED_VALUE).then_some(redacted)
+    };
+    let list = |key: &str| -> Vec<String> {
+        object
+            .get(key)
+            .and_then(Value::as_array)
+            .filter(|items| items.len() <= 8)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| {
+                        let text = item.as_str()?;
+                        if text.trim().is_empty()
+                            || text.len() > 256
+                            || text.chars().any(char::is_control)
+                        {
+                            return None;
+                        }
+                        let redacted = redact_trace_text(text);
+                        (redacted != TRACE_REDACTED_VALUE).then_some(redacted)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let reason = text("reason");
+    if reason.is_none() {
+        return unavailable();
+    }
+    super::super::AgentDecisionExplanationV1 {
+        status: "available".into(),
+        provenance: "agent_explanation_unverified".into(),
+        reason,
+        dissent: text("dissent"),
+        evidence_refs: list("evidence_refs"),
+        stakes: text("stakes"),
+        expected_consequence: text("expected_consequence"),
+        alternatives: list("alternatives"),
+        next_step: "compare_prediction_with_authoritative_runtime_receipt".into(),
+    }
 }

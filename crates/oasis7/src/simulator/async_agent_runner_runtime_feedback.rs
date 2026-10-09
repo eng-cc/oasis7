@@ -1,7 +1,36 @@
 use super::feedback::RuntimeReceiptReadbackVerifier;
 use super::*;
+use crate::runtime::RuntimeFeedbackOutboxRecordV1;
 
 impl AsyncAgentRunner {
+    pub(crate) fn needs_runtime_feedback_recovery(&self) -> bool {
+        !self.feedback_store.feedback_recovery_initialized()
+    }
+
+    pub(crate) fn feedback_recovery_blocked(&self, agent: &str, session: &str) -> bool {
+        self.feedback_store
+            .feedback_recovery_blocked(agent, session)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn agent_feedback_recovery_blocked(&self, agent: &str) -> bool {
+        self.feedback_store.agent_feedback_recovery_blocked(agent)
+    }
+
+    /// Restore only the bounded replay/collision verifier from Runtime's
+    /// durable outbox. Feedback is not consumed again and memory is untouched.
+    pub(crate) fn restore_runtime_feedback_outbox(
+        &mut self,
+        records: &[RuntimeFeedbackOutboxRecordV1],
+    ) -> Result<(), AsyncAgentRunnerError> {
+        if !self.needs_runtime_feedback_recovery() {
+            return Ok(());
+        }
+        self.feedback_store
+            .restore_runtime_feedback_outbox(records)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
+    }
+
     pub fn consume_runtime_feedback(
         &mut self,
         agent_id: &str,

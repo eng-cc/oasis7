@@ -7,7 +7,7 @@
 - 想判断好玩性证据、`L4A/L4B/L5` 边界、角色 subagent review 或 simulated player persona 的 canonical topic：`doc/testing/governance/README.md`
 - 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先经 `doc/testing/governance/README.md` 确认所需证据层，再读 `testing-manual.md` 的 `L4A/L4B/L5` 章节并执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
 - 想执行 Web UI、Playwright、public-testnet attach 或模型视觉评审手册：先读 `doc/testing/manual/README.md`，再按问题进入对应 manual。
-- 想看当前测试策略、覆盖缺口与 QA 证据边界：`doc/testing/prd.md`；可变任务状态和历史以 GitHub task issue evidence comments 为准。
+- 想看当前测试策略、覆盖缺口与 QA 证据边界：`doc/testing/prd.md`；可变任务状态和历史以 PR、实际 CI 与评审记录（Issue 按需） 为准。
 - 想先判断要跑哪套测试或查操作步骤：先读 `testing-manual.md`；涉及专项操作再进入 `doc/testing/manual/README.md`。
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
 - 想先确认云上测试/正式环境、hosted-login 服务清单与 testnet/mainnet 口径边界：`doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
@@ -16,20 +16,20 @@
 ## 入口
 - PRD: `doc/testing/prd.md`
 - 设计总览: `doc/testing/design.md`
-- 任务状态与历史: GitHub task issue evidence comments
+- 任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 - 文件级索引: `doc/testing/prd.index.md`
 
 ## 入口分工
 - `README.md` 只承担 landing page 职责：告诉读者先去哪个权威入口，不重复长表索引内容。
 - `prd.md` 是模块权威规格入口，适合先理解 required/full 分层、证据包与跨模块测试边界。
-- GitHub task issue evidence comments 是唯一的可变执行台账；PRD、manual 与 evidence 文档只保留可复用的测试合同、命令、证据字段和声明边界。
+- PR、实际 CI 与评审记录（Issue 按需） 是唯一的可变执行台账；PRD、manual 与 evidence 文档只保留可复用的测试合同、命令、证据字段和声明边界。
 - `evidence/README.md` 是当前最高密度热点子域 `evidence/` 的 canonical 入口，适合先按“release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit / 定向验证”分流，再进入具体留痕文件。
 - `testing-manual.md` 与 `manual/README.md` 是 operator 手册层：前者决定通用测试路径，后者把 Web UI、Playwright、public-testnet attach 与模型视觉评审分流到对应步骤。
 - `prd.index.md` 是定向检索索引，适合已知主题后按文件名查找，不是新读者的首读入口。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接罗列近期专题长名单。
-- 高频 active 入口保留在 `prd.md`、GitHub task issue evidence comments、`testing-manual.md`、`manual/*.manual.md`、`evidence/README.md` 与 `prd.index.md`。
+- 高频 active 入口保留在 `prd.md`、PR、实际 CI 与评审记录（Issue 按需）、`testing-manual.md`、`manual/*.manual.md`、`evidence/README.md` 与 `prd.index.md`。
 - evidence、templates 与历史 blocker/closure 留痕继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径进入。
 
 ## 模块职责

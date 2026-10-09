@@ -532,6 +532,7 @@ impl RuntimeLlmSidecar {
                 status: "rejected".into(),
                 reject_reason: Some(reason),
                 feedback_id: None,
+                        feedback: None,
             },
         );
         Ok(())

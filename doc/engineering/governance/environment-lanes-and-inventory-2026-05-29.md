@@ -212,7 +212,7 @@ Hosted-login 形态接入 testnet 大世界的追加验证：
 
 1. 本文件的对应矩阵。
 2. 相关 runbook 或 module README 的入口链接。
-3. GitHub task issue evidence comments 的部署与验证证据。
+3. PR、实际 CI 与评审记录（Issue 按需） 的部署与验证证据。
 4. PR body 的环境状态摘要。
 
 禁止项：

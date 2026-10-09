@@ -72,12 +72,12 @@ if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$t
 fi
 grep -Fq "unsupported CI event range: schedule" "$tmp_dir/schedule.out"
 
-printf '{"inputs":{"run_mode":"full_escalation","expected_head":"%s"}}\n' "$head_oid" >"$tmp_dir/full-escalation-missing-base.json"
-if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$tmp_dir/full-escalation-missing-base.json" GITHUB_EVENT_NAME=workflow_dispatch GITHUB_SHA="$head_oid" product_doc_range) >"$tmp_dir/full-escalation-missing-base.out" 2>&1; then
-  echo "product-doc-content-callers.test: full escalation without integration base unexpectedly passed" >&2
+printf '{}\n' >"$tmp_dir/manual.json"
+if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$tmp_dir/manual.json" GITHUB_EVENT_NAME=workflow_dispatch GITHUB_SHA="$head_oid" product_doc_range) >"$tmp_dir/manual.out" 2>&1; then
+  echo "product-doc-content-callers.test: manual CI without an explicit range unexpectedly passed" >&2
   exit 1
 fi
-grep -Fq "did not provide both base/head OIDs" "$tmp_dir/full-escalation-missing-base.out"
+grep -Fq "unsupported CI event range: workflow_dispatch" "$tmp_dir/manual.out"
 
 if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; CI=true GITHUB_ACTIONS=true GITHUB_EVENT_PATH="" GITHUB_EVENT_NAME="" product_doc_range) >"$tmp_dir/no-event.out" 2>&1; then
   echo "product-doc-content-callers.test: CI without event/range unexpectedly fell back" >&2
@@ -85,26 +85,14 @@ if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; CI=true GITHUB_ACTION
 fi
 grep -Fq "CI requires explicit base/head OIDs" "$tmp_dir/no-event.out"
 
-grep -Fq -- '--head "$SOURCE_HEAD" --worktree' ./scripts/prepare-task-pr.sh
-grep -Fq './scripts/doc-governance-check.sh --full-corpus' ./scripts/prepare-task-pr.sh
-grep -Fq 'SYSTEM_DESIGN_TRACEABILITY_CHECKER=' ./scripts/prepare-task-pr.sh
-grep -Fq 'system-design-traceability-check.py' ./scripts/prepare-task-pr.sh
-workflow_source='doc/engineering/workflow/source-of-truth.md'
-grep -Fq '**Product-document and system-design content gate integration.**' "$workflow_source"
-grep -Fq 'The system-design checker is changed-scope-only' "$workflow_source"
-grep -Fq 'Target-only changes already present in a divergent checkout are not source' "$workflow_source"
-grep -Fq 'no caller-controlled skip is available' "$workflow_source"
 grep -Fq 'run_system_design_traceability_check()' ./scripts/doc-governance-check.sh
 
-sed -n '/^  full-regression:/,/^  full-escalation:/p' .github/workflows/rust.yml >"$tmp_dir/full-regression.yml"
-sed -n '/^  full-escalation:/,$p' .github/workflows/rust.yml >"$tmp_dir/full-escalation.yml"
-for full_workflow in "$tmp_dir/full-regression.yml" "$tmp_dir/full-escalation.yml"; do
-  grep -Fq 'fetch-depth: 0' "$full_workflow"
-  grep -Fq 'name: Resolve product-document gate range' "$full_workflow"
-  grep -Fq "git rev-parse --verify 'HEAD^1'" "$full_workflow"
-  grep -Fq "git rev-parse --verify 'HEAD^{commit}'" "$full_workflow"
-  grep -Fq 'OASIS7_PRODUCT_DOC_BASE=' "$full_workflow"
-  grep -Fq 'OASIS7_PRODUCT_DOC_HEAD=' "$full_workflow"
-  grep -Fq 'GITHUB_ENV' "$full_workflow"
-done
+sed -n '/^  full-regression:/,/^  newapi-bridge-package:/p' .github/workflows/rust.yml >"$tmp_dir/full-regression.yml"
+grep -Fq 'fetch-depth: 0' "$tmp_dir/full-regression.yml"
+grep -Fq 'name: Resolve product-document gate range' "$tmp_dir/full-regression.yml"
+grep -Fq "git rev-parse --verify 'HEAD^1'" "$tmp_dir/full-regression.yml"
+grep -Fq "git rev-parse --verify 'HEAD^{commit}'" "$tmp_dir/full-regression.yml"
+grep -Fq 'OASIS7_PRODUCT_DOC_BASE=' "$tmp_dir/full-regression.yml"
+grep -Fq 'OASIS7_PRODUCT_DOC_HEAD=' "$tmp_dir/full-regression.yml"
+grep -Fq 'GITHUB_ENV' "$tmp_dir/full-regression.yml"
 echo "product-doc-content-callers.test: OK"

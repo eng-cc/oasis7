@@ -10,7 +10,7 @@ world-simulator 仍保留 `AgentRunner::tick` 的同步 simulator 基线；但�
 
 本专题冻结一个 provider-neutral 的 Continuous Agent Harness 合同。Harness 负责一次 Agent session 内的感知组装、记忆检索、目标/continuation 投影、provider 调用、候选决策规范化、反馈路由和 memory write intent policy；Runtime 仍是世界事实、动作语义、授权、前置条件、提交、receipt、replay 与最终副作用的唯一权威。Harness 的任何成功都不等于世界状态已经改变。
 
-本文是 durable authority，不是任务板。实现状态、任务分工和验证历史仍属于 GitHub task truth；本文的 `current/partial/target/proven` 只描述能力证明边界，不描述任务进度。
+本文是 durable authority，不是任务板。实现状态、任务分工和验证历史仍属于 Git、PR 与实际 CI 记录；本文的 `current/partial/target/proven` 只描述能力证明边界，不描述任务进度。
 
 ## 2. 能力状态矩阵
 
@@ -24,7 +24,7 @@ world-simulator 仍保留 `AgentRunner::tick` 的同步 simulator 基线；但�
 | concurrency | 单一同步 runner 的调用序列隐含串行 | sidecar 有 pending/mailbox 状态 | 每个 Agent 至多一个 in-flight turn；不同 Agent 可并行 | 并发/重入 fixture 无双 provider call、双 action 或反馈串线 | 单 Agent 的隐含串行不等于跨 adapter 的协议保证 |
 | feedback | `FeedbackEnvelope` 与 bridge feedback endpoint 存在；deterministic local bridge 已有按 subject/session 分区、顺序和 gap/collision 校验；native Builtin/ProviderBacked 都进入 typed Runtime feedback seam | Runtime-owned identity/disposition-to-receipt mapping、paired production feedback 与 restart/late-response proof 仍不完整 | 反馈按 `agent/session/turn/request/action/receipt` 关联、分区、排序 | A/B Agent 交错反馈永不进入对方 context；late/unknown feedback 不产生 cognition effect | local `ProviderState` 的 `recent_feedback` 已按 `(agent_subject, agent_session_id)` 分区并校验 `feedback_seq`、gap 与 collision；real HTTP/paired-artifact 与端到端 production proof 仍缺失 |
 | memory | builtin 有本地 AgentMemory；native ProviderBacked receipt-gated consumer 与 `memory_write_intents` policy seam 可观察 | ProviderBacked production/wasm consumer、paired journal exactly-once、restart/replay proof 仍缺失 | retrieval 是带 digest 的 snapshot；write intent 经 Harness policy 且只在 authoritative outcome 后提交 | 未提交/拒绝/超时不会写入；同 intent retry exactly-once；越权 scope 被拒绝 | native path 仅在匹配 Runtime receipt lineage 后消费 intents；deterministic/DTO evidence 不能替代 paired production proof |
-| goals | builtin short/long goal 与 typed `GoalSnapshot` projection/validation seam 存在；provider 可携带 summary | live ProviderBacked 的 trusted host goal binding、非空/当前 revision 与 stale cleanup 尚未形成完整 proof | P0 使用兼容性的 `GoalSnapshot`；后续再演进 GoalGraph | goal revision 纳入 digest，旧计划不会跨 revision 执行 | GoalGraph/belief memory 不在 P0；live ProviderBacked empty/unbound GoalSnapshot 仍是 partial 风险 |
+| goals | builtin short/long goal 与 typed `GoalSnapshot` projection/validation seam 存在；native runtime-live 已从 trusted host profile/default 绑定目标 | 当前 revision、stale cleanup 与远端恢复的完整 proof 仍缺失 | P0 使用兼容性的 `GoalSnapshot`；后续再演进 GoalGraph | goal revision 纳入 digest，旧计划不会跨 revision 执行 | GoalGraph/belief memory 不在 P0；native runtime-live 已从 host profile/phase-1 default 投影并绑定 GoalSnapshot；旧待决请求清理、远端恢复与完整 revision convergence 仍需独立证明 |
 | continuation | native runtime-live 的 ordinary `Wait` 已经走 Harness current-context/proposal 校验、Runtime admission、durable wake selection/readback 与 resume；Builtin/ProviderBacked 共享该 async lifecycle | `WaitTicks` compatibility timer、WASM durable admission、remote paired Runtime、failure/restart/reconnect/rebind/reorg 与完整 production proof 仍缺失 | Harness-owned bounded continuation，Builtin/ProviderBacked 共用 | world/goal/policy/observation digest 变化、reject 或 expiry 会停止 continuation | Runtime owns durable schedule/wake; current native `Wait` wiring is implemented, but real-provider paired/restart evidence remains absent |
 | failure policy | timeout/invalid output 已有 trace/Wait/ActionRejected 方向 | adapter-specific 错误分类不完全统一 | 稳定 error code、无 heuristic fallback、无失败副作用 | 每类错误均有 deterministic terminal state 和负例副作用证明 | provider 错误不能成为 world fact |
 | durable turn/replay | `AgentDecisionTrace` 是 diagnostics/observability payload | `replay_id` 可随 request 传递 | cognition journal/replay 与 runtime paired contract 对齐 | replay 不重新调用 provider、不重复 action/memory/effect | journal schema/实现明确留给 paired runtime docs |
@@ -209,11 +209,11 @@ Harness 与 Runtime 的 canonical wire mapping 使用 paired runtime PRD 的
 branch/finality、base tick/hash、reorg epoch 与 runtime manifest hash。adapter 不得自行创造
 别名或从缺失字段猜测 identity。
 
-### 4.3.1 C0 request-bound call budget（selected next scope）
+### 4.3.1 C0 request-bound call budget（native implemented / bounded verification）
 
-当前 Harness 的 budget 仅覆盖 timeout/repair 语义；它没有可宣称为 paid cognition 的
-调用配额、reserve 或 settlement。C0 是下一步可独立验收的 economy-neutral protocol
-admission，且只覆盖 native `LlmAgentBehavior` lane：在
+当前 Harness 的 C0 budget 已有 timeout/repair 与 request-bound model/tool 调用上限及
+admission；它不提供 paid cognition 的 reserve 或 settlement。C0 是可独立验收的
+economy-neutral protocol guard，且只覆盖 native `LlmAgentBehavior` lane：在
 `ContinuousAgentRequestContextV1.budget_contract` 中采用 `BudgetContractV1` 的两个调用
 上限字段：
 
@@ -234,6 +234,10 @@ BudgetContractV1 {
 字段时，只能进入显式 compatibility lane；该 lane 不得伪装为 C0 target/proven，也不得把
 缺失字段静默升级成 paid economy policy。具体 Rust wire evolution 与旧 snapshot 的反序列化
 策略由 Agent implementation slice 冻结，但不得改变旧 lane 的语义。
+
+V1 嵌套 `budget_contract` 只接受 `max_latency_ms`、`max_repair_attempts`、
+`max_model_calls`、`max_tool_calls`；未知字段不得静默丢弃。outer validation 返回
+`unknown_context_field`，具体 wire 拒绝与负例由配套设计及 implementation 冻结。
 
 C0 native lane 的最小行为合同如下：
 
@@ -512,7 +516,7 @@ Harness 只能消费 Runtime-owned status projection，不能生成或改写 `co
 
 ## 11. P0-P2 rollout
 
-### C0：request-bound call budget（selected next closure）
+### C0：request-bound call budget（native implemented / bounded verification）
 
 - Agent implementation 只在 native `LlmAgentBehavior` lane 把
   `BudgetContractV1.max_model_calls` 与 `BudgetContractV1.max_tool_calls` 作为 request-bound

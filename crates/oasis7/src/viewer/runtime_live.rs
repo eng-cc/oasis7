@@ -52,6 +52,7 @@ pub(super) fn canonical_runtime_provider_env_lock() -> &'static Mutex<()> {
 mod advance_runtime_server;
 #[path = "runtime_live/advance_tick.rs"]
 mod advance_tick;
+mod agency_control;
 mod authoritative;
 mod auto_play;
 mod branch_commitment;
@@ -82,10 +83,14 @@ mod gameplay_snapshot_lane;
 mod gameplay_validation_preview;
 mod governance_vote_quote;
 mod governance_vote_quote_debug;
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "runtime_live/llm_sidecar_feedback_recovery.rs"]
+mod llm_sidecar_feedback_recovery;
 mod mapping;
 mod market_quote_decision;
 #[cfg(test)]
 mod module_visual_driver;
+mod player_agency_projection;
 mod player_gameplay;
 #[path = "runtime_live/power_projection.rs"]
 mod power_projection;
@@ -131,11 +136,13 @@ use control_utils::{
 };
 use decision_trace::{append_decision_upstream_trace, decision_trace_provider_error_retryable};
 use gameplay_snapshot::{
-    PlayerGameplayCausalitySignal, apply_runtime_snapshot_empty_entities_blocker,
-    build_player_gameplay_snapshot, player_gameplay_causality_from_runtime_events,
+    apply_runtime_snapshot_empty_entities_blocker, build_player_gameplay_snapshot,
     player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
+use player_agency_projection::{
+    PlayerGameplayCausalitySignal, player_gameplay_causality_from_runtime_events,
+};
 use prompt_control_result::PromptControlRuntimeAuthority;
 use runtime_script::RuntimeLiveScript;
 use session_policy::{
@@ -590,27 +597,53 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty()
-                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
-                    {
-                        let chain_prime =
-                            Self::prime_shared_request_if_needed(&shared, &request, &session)?;
-                        let prepared_submission =
-                            Self::prepare_shared_world_service_submission(&shared, &request)?;
+                    if !trimmed.is_empty() {
                         let mut output = response_outbox::ResponseOutbox::new(limits);
-                        let handled = {
-                            let mut server = lock_shared_server(&shared)?;
-                            server.prepared_world_service_submission = prepared_submission;
-                            let handled = server.handle_request_with_chain_prime(
-                                request,
-                                &mut session,
-                                &mut output,
-                                chain_prime,
-                            );
-                            server.prepared_world_service_submission = None;
-                            agent_presence.observe(&mut server, &session);
-                            handled
-                        };
+                        let mut handled = Ok(());
+                        match agency_control::parse_agency_control_frame(trimmed) {
+                            agency_control::ParsedAgencyControlFrame::Request(request) => {
+                                let response = {
+                                    let mut server = lock_shared_server(&shared)?;
+                                    server.handle_agency_control_request(request)
+                                };
+                                agency_control::write_agency_control_response(
+                                    &mut output,
+                                    &response,
+                                )?;
+                            }
+                            agency_control::ParsedAgencyControlFrame::Invalid(response) => {
+                                agency_control::write_agency_control_response(
+                                    &mut output,
+                                    &response,
+                                )?;
+                            }
+                            agency_control::ParsedAgencyControlFrame::NotAgencyControl => {
+                                if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                                {
+                                    let chain_prime = Self::prime_shared_request_if_needed(
+                                        &shared, &request, &session,
+                                    )?;
+                                    let prepared_submission =
+                                        Self::prepare_shared_world_service_submission(
+                                            &shared, &request,
+                                        )?;
+                                    handled = {
+                                        let mut server = lock_shared_server(&shared)?;
+                                        server.prepared_world_service_submission =
+                                            prepared_submission;
+                                        let handled = server.handle_request_with_chain_prime(
+                                            request,
+                                            &mut session,
+                                            &mut output,
+                                            chain_prime,
+                                        );
+                                        server.prepared_world_service_submission = None;
+                                        agent_presence.observe(&mut server, &session);
+                                        handled
+                                    };
+                                }
+                            }
+                        }
                         output.deliver(&mut socket)?;
                         handled?;
                     }
@@ -692,11 +725,31 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty()
-                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
-                    {
+                    if !trimmed.is_empty() {
                         let mut output = response_outbox::ResponseOutbox::new(limits);
-                        let handled = self.handle_request(request, &mut session, &mut output);
+                        let mut handled = Ok(());
+                        match agency_control::parse_agency_control_frame(trimmed) {
+                            agency_control::ParsedAgencyControlFrame::Request(request) => {
+                                let response = self.handle_agency_control_request(request);
+                                agency_control::write_agency_control_response(
+                                    &mut output,
+                                    &response,
+                                )?;
+                            }
+                            agency_control::ParsedAgencyControlFrame::Invalid(response) => {
+                                agency_control::write_agency_control_response(
+                                    &mut output,
+                                    &response,
+                                )?;
+                            }
+                            agency_control::ParsedAgencyControlFrame::NotAgencyControl => {
+                                if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                                {
+                                    handled =
+                                        self.handle_request(request, &mut session, &mut output);
+                                }
+                            }
+                        }
                         output.deliver(&mut socket)?;
                         handled?;
                     }

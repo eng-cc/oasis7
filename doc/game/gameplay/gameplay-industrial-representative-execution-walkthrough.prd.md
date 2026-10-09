@@ -28,6 +28,23 @@ fixture 的档案必须同时读出 factory/recipe authority 与 fit、两类 in
 
 `production-only` profile 只允许 matching production receipt 完成一次首产物并标为 `produced/undelivered`，不能减少 delivery demand 或发 terminal reward；稳定条件另行决定何时标为 `production-stable`，不得反过来延迟首产物完成。`terminal-admission` profile 必须等匹配的 delivery/terminal settlement。未声明 profile 或无法证明 boundary 时保持 blocked，不能从 bucket 名称推断完成。
 
+<a id="single-constraint-decision-transfer"></a>
+### 3.1 成功基线后的单约束决策理解样例
+
+本配对样例承接产品 [2.2.5 与 FS-16](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#225-首局决策理解迁移)。它使用本合同已有的两类 required inputs 与准备缺料动作，不新增材料、数值或玩法机制；仅在当前 authority 和 fresh evidence 支持该情境时执行，否则保留 `target-contract` 或未覆盖结论。
+
+| 配对阶段 | 已有事实与玩家决策 | 应观察的因果理解 |
+| --- | --- | --- |
+| 成功基线 | 声明 `production_only` profile，沿五阶段走完一个合法 cycle，取得 matching production receipt；成果保持 `produced/undelivered`，稳定与交付仍按各自条件判断 | 首产物已完成，尚未交付；这个 receipt 不证明稳定，也不能用于完成下一 cycle |
+| 单约束变化 | 下一次同一 candidate 的 cycle 中，仅一类 required input 未齐套，另一类输入可用；factory/recipe、path/capacity、power、output 与权限保持可比并 fresh revalidate。只在缺料是唯一新增约束时采用此样例 | 当前 blocker 是下一 cycle 缺少该类输入，不是上一 cycle 生产失败；不能在未齐套时重复排程期待产出 |
+| 下一安全动作 | 玩家依据现行 profile 比较 `prepare_or_source_missing_inputs` 与 `defer`；存在受支持且可达的补料路径时准备该输入，再复查齐套与其他前置；没有安全路径时延期或回到重新定目标 | 上一 cycle 已结算产物不被撤销；另一类输入的可用/占用状态、已消费或损失部分按账本解释，不承诺“全部资源都还在”。补料本身不等于排程/生产成功，下一次提交仍须 fresh confirm |
+
+这是验收 fixture 的前后对照，不要求在玩家会话中故意扣走输入或强制失败。若下一 cycle 与基线无法隔离为单一变化、补料路径缺 authority，或必须换 recipe/来源等形成新 candidate，应按既有 continuation/cutover 合同处理并记录样例未覆盖，不强凑迁移结论。其他 completion profile 需另行取得其匹配完成基线，不能套用本样例的 production receipt。
+
+记录应保留同一配对样例的入口、candidate/cycle/profile、前后 authority revision、matching receipt、唯一变化与未变化条件，以及玩家解释/选择/行动和对应事实依据。对“链路完成”“理解 blocker/保留价值/下一安全动作”“继续意愿”分别给出已观察、未观察或不支持的结论；另记正常引导、额外提示或代操作的内容、介入时点与前后表现，不能把照做提示当作独立理解。正常指导持续可用，不用隐藏恢复信息换取所谓无提示通过；继续意愿需可归因的选择或表达，不能由循环成功、停留时间或再次确认推断。
+
+`test_tier_required` 可验证这对 fixture 的状态与后果：基线 receipt、单一缺料、未齐套无新 sink/产出、保留价值及安全动作条件。适用入口的组合验证沿 `test_tier_full` 要求执行；玩家理解与意愿按 testing 的 playability 层级另记样本性质和未覆盖范围。静态合同、确定性 fixture、模型/Agent 观察与真人证据各自保持原有 claim boundary，本节没有实际试玩或 current capability 的通过结论。
+
 ## 4. 失败恢复与状态守恒
 
 - 两类 input 未齐套、批次不适用、物流 edge 满/失效、power 或 factory fit 漂移、mandatory output destination 失效、terminal owner/资格/容量失效时，首个不可逆 sink 前只能延期或 atomic reject；已存在的 WIP、in-transit、buffer-held、terminal-pending 或 settled branch 只能按 profile 支持的 hold、等待、改道、返工、return、reroute/handoff/reject、salvage 或终止各处置一次。

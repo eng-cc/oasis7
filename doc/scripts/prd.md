@@ -40,12 +40,6 @@
   - SC-8: repo-owned provider real-play helper 文档与脚本（公开 `site/skills/oasis7.md` 以及 `scripts/setup-provider-oasis7-runtime.sh`、`scripts/provider-parity-p0.sh`）中的当前 cargo 运行命令与入口路径必须统一使用 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在兼容说明、历史证据或外部原文引用中。
   - SC-9: `run-launcher-stack.sh`、`run-producer-playtest.sh` 与新的 worktree harness 主入口必须支持“每个 git worktree 一套独立端口、独立 bundle、独立日志 / 产物目录、独立浏览器 session”的隔离执行，不再默认复用全局端口与全局 bundle 目录。
   - SC-10: 仓库必须提供标准化 `git worktree` 创建入口，让每个新需求都能按统一命名、统一路径和统一失败语义落到独立 worktree，而不是依赖人工手写 `git worktree add`。
-  - SC-11: 标准化 task worktree bootstrap 入口必须支持“创建后立刻检查模块 PRD / project，并在启用 PM bootstrap 时返回 GitHub task issue evidence comments 入口与 mapping 记录”和“可选预热该 worktree 的隔离 harness”，让新需求能直接进入文档与验证闭环。
-  - SC-12: 仓库必须提供标准化 task worktree GitHub PR 收口入口，让已完成需求能够在干净状态下统一执行 PR preflight / create；将 draft candidate 晋级为可合入 PR 前必须已有 source-bound 的本地相关角色 subagent review evidence packet，并继续把 required checks、requested changes、comment/thread closeout、mergeability 与 GitHub merge path 作为 `main` 的服务端保护边界；普通 PR 创建后默认继续 watch required checks / mergeability / comments，`REVIEW_REQUIRED` 仅回报不阻塞，review-approval-only `BLOCKED` 在用户/task policy 明确授权时可走 repo admin merge path，失败修复并重推，存在 actionable comments 则回复/整改/resolve，通过且 comments/thread 已收口后合入与清理。
-  - SC-12E: `./scripts/prepare-task-pr.sh --draft-candidate --create` 必须在 push / `gh pr create` 前先向 source worktree 绑定 task 的 GitHub issue 写入 canonical `<!-- oasis7-pm-evidence -->` frozen identity，再 read back 并确认其中的 `Task UID`、`Source Worktree`、`Source Branch`、`Source Head`、`Comparison Ref` 与 `Comparison OID`；写入失败、缺少或不匹配的 issue evidence 必须 fail closed。draft candidate 创建不得要求 `Pre-PR Local Role Review: passed`，该 review evidence 保留到 exact-head CI、同头 role review 与 task closeout 形成 `Pre-PR Ready` 时校验。task-bound legacy `--create` 必须 fail closed，不得记录 `pr_watch`；只有在 exact-head CI、同头 role review、task closeout、fresh live CI receipt 与 draft-state 检查通过后，才能使用 `./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json>`。PR helper 不再请求 Copilot review；只有明确记录 manual packaging/release CI purpose 的 PR 才允许在创建后停在人工打包 gate。
-  - SC-12A: `scripts/land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不再作为默认最终合流入口；其帮助文案与专题文档必须明确这一边界。
-  - SC-12B: 仓库必须提供单命令 task closeout helper，在 implementation-freeze commit 后把“selected-task read-only audit -> detached immutable verification -> transactional remote closeout -> atomic cache replace”收口为一个稳定入口，默认只把任务推进到 ready-for-PR；`done` 仅用于 post-PR merge/cleanup 或显式非 PR 任务，`deferred` 仅用于明确延后收口，避免不同 owner 手工串接 closeout 命令链或把 ready-for-PR 误写成最终完成。
-  - SC-12F: 仓库必须提供 repo-owned workflow behavior eval 入口，把 task-worktree bootstrap、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成可重复的本地验证链，避免默认 workflow 只剩文档口号。
   - SC-12C: 仓库必须提供同一 PR 内 review comment 收口 helper，能够统一盘点 unresolved review threads、按 thread id 执行显式 resolve，并在每次操作后回报 `reviewDecision` / `mergeStateStatus`，避免 comment 处理继续依赖临时 GraphQL 命令拼装。
   - SC-12D: 仓库必须提供 `.pm` rebase 冲突辅助入口，在 branch 跟进最新 `main` 时统一报告 `.pm/**` 未合并路径；`.pm/inbox/signals.jsonl` 已退休，命中时只能提示删除退休文件或人工归档，git-ignored 本地视图冲突只能提示“保留 `main` 删除并重建”，不能回退到人工恢复共享视图文件。
   - SC-13: 每个 task `worktree` 在 PR 合入后都必须回收，不允许长期保留“已完成但未清理”的 task worktree/branch。
@@ -59,9 +53,7 @@
 - Worktree harness 的产品承诺是 machine-readable、worktree-scoped 的启动与证据隔离；teardown 终止运行栈并保留证据。其 `ready` / `smoke` 只证明本地 launcher/Viewer reachability 边界，不证明 headed S6、玩法、持久化、replay/recovery、共识或发布就绪。
 - Worktree harness 发布 `state.json` 与 `session.meta` 时必须原子替换完整记录，避免并发读取看到部分状态，并保持既有记录格式可兼容读取；旧记录缺少稳定进程身份且对应进程仍存活时，必须拒绝发送信号，确认进程已退出后才可清理陈旧记录。`ready`、`status`、`url` 与重复 `up` 仅在记录的 PID、PGID 和稳定 leader identity 一致时承认进程仍属于该 harness；`down` 发出 TERM 前须核对进程组归属，再使用有界等待和 KILL 升级。端口分配按同一仓库 worktree 家族串行保留，过期保留仅在核对 owner 存活状态后回收。
 - 每个请求从绑定单一 task truth 的独立 task worktree 开始；复用必须有用户明确授权。Bootstrap 部分失败时必须保留已创建的 branch/worktree，并返回可执行的 refresh/retry 恢复指令。
-- 已完成工作默认通过 repository GitHub PR lifecycle 进入受保护 `main`，并使用 source-bound review evidence 与 canonical post-merge cleanup；具体状态、门禁和 receipt 规则只由 `doc/engineering/workflow/source-of-truth.md` 定义。
-- `land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不是默认最终集成路径，也不能绕过 canonical cleanup。
-- CI package scope 与 exact-integration 语义以 [workflow source of truth 的 canonical clause](../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification) 为准；本 PRD 仅保留此链接，不重复定义该规则。
+- CI package scope 与 exact-integration 语义以 [workflow source of truth 的 canonical clause](../engineering/workflow/source-of-truth.md) 为准；本 PRD 仅保留此链接，不重复定义该规则。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -78,10 +70,7 @@
   - PRD-SCRIPTS-002: As a CI 维护者, I want deterministic script contracts, so that pipeline changes are controlled.
   - PRD-SCRIPTS-003: As a 排障人员, I want explicit fallback tooling rules, so that issue triage is faster.
   - PRD-SCRIPTS-004: As a `qa_engineer`, I want a worktree-isolated harness for Viewer Web / launcher stack, so that multiple agent tasks can boot, verify, and tear down isolated stacks without port, artifact, or browser-session collisions.
-  - PRD-SCRIPTS-005: As a `producer_system_designer`, I want a standard task-worktree bootstrap script, so that every new requirement starts from one isolated branch/worktree with consistent naming and minimal manual git ceremony.
-  - PRD-SCRIPTS-006: As a `qa_engineer`, I want the task-worktree bootstrap command to optionally inspect module docs and prewarm the worktree harness, so that a new task can move from creation to “read docs + boot isolated stack” in one hop.
   - PRD-SCRIPTS-007: As a `producer_system_designer`, I want a standard task-worktree GitHub PR closure command, so that completed work enters protected `main` with one consistent, auditable path instead of ad hoc local landing.
-  - PRD-SCRIPTS-007A: As a `producer_system_designer`, I want a one-command PM task closeout helper, so that closeout bookkeeping and fresh verification no longer depend on manually chaining `claim-ready`、`workflow-report` 与 `move-task` before commit/PR.
   - PRD-SCRIPTS-007B: As a `producer_system_designer`, I want a PR review-thread closeout helper, so that same-PR comment maintenance no longer depends on ad hoc `gh api graphql` snippets and can recheck merge state after each resolve batch.
   - PRD-SCRIPTS-007C: As a `producer_system_designer`, I want a `.pm` rebase conflict helper, so that same-PR rebase maintenance can distinguish retired signal inbox conflicts, generated-view conflicts, and canonical task/memory/stage conflicts that still require manual judgment.
   - PRD-SCRIPTS-008: As a `producer_system_designer`, I want every completed task worktree deleted after PR merge or explicit local-only fallback completion, so that the local workspace and branch namespace do not fill with stale finished slices.
@@ -92,13 +81,8 @@
   2. Flow-SCR-002: `CI 触发脚本 -> 失败定位到参数/环境 -> 修复后重跑`
   3. Flow-SCR-003: `常规链路无法复现 -> 触发 fallback 工具 -> 采集诊断证据`
   4. Flow-SCR-004: `new-task-worktree.sh <module> <task> -> 校验源 worktree 状态 -> 创建 task/<module>-<task> 分支与独立 worktree -> 输出进入新 worktree 的下一步命令`
-  5. Flow-SCR-005: `new-task-worktree.sh <module> <task> --init-docs --with-harness -> 检查 doc/<module>/{prd,project}.md，并在启用 PM bootstrap 时返回 GitHub task issue evidence comments 入口与 mapping 记录 -> 在新 worktree 中后台预热 worktree-harness.sh up（formal gameplay 默认 LLM path）-> 输出文档检查与 harness 摘要`
-  6. Flow-SCR-006: `./scripts/prepare-task-pr.sh [task/<module>-<task>] --draft-candidate --create -> 检查 source task worktree 干净状态、base 分支对齐情况与 Task UID / frozen-head identity -> 创建 frozen-head draft candidate -> exact-head CI 与 role review -> task-closeout 记录 Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> -> 记录 PR purpose decision -> normal PR 盯 required checks + mergeability + comments/threads，REVIEW_REQUIRED 仅回报不阻塞，review-approval-only BLOCKED 可按授权 admin merge，失败修复并重推，comments 先处理/resolve，通过后合入 `main` -> 同步本地 `main` 并删除已完成 task worktree/branch`
-  6D. Flow-SCR-006D: `./scripts/prepare-task-pr.sh --draft-candidate --create -> 在 push / gh create 前校验 source-bound 的 Task UID / frozen-head identity（不要求 role-review packet） -> 创建 draft candidate -> exact-head CI / role review -> task-closeout 形成 Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> 前校验 source-bound review evidence、live receipt 与 draft state；task-bound legacy --create 在 push / gh create / record-pr 前失败退出 -> 不再追加 Copilot reviewer request；除非明确记录 manual packaging/release CI hold，否则 PR 创建后继续 normal CI/comment/mergeability watch-fix-merge，且 REVIEW_REQUIRED 仅回报不阻塞；review-approval-only BLOCKED 可按授权 admin merge`
-  6A. Flow-SCR-006A: `implementation-freeze commit -> detached immutable verification -> pre-PR local role review 已通过且 findings 已处置 -> task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>" -> 校验 task 已有 last_started_at -> 复用 frozen-tree claim evidence -> transactional remote closeout -> atomic cache replace -> 输出下一步 evidence-only commit / prepare-task-pr 提示；只有 post-PR merge/cleanup 或显式非 PR 任务才改用 --to-status done，明确延后收口才使用 --to-status deferred`
   6B. Flow-SCR-006B: `pr-review-thread-closeout.sh [pr-number] --unresolved-only -> 盘点 unresolved review threads -> 修复并 push 当前 PR -> pr-review-thread-closeout.sh --resolve-thread <id>|--resolve-all-unresolved -> resolve thread -> 回报 reviewDecision / mergeStateStatus 并继续下一轮 comment closeout`
   6C. Flow-SCR-006C: `git rebase origin/main -> 命中 .pm/** 冲突 -> rebase-conflict-helper.sh --json -> 若命中 retired signal inbox 则删除退休文件或人工归档 -> 若命中 registry/backlog 视图则保留 main 删除并执行 sync-views -> 其余 canonical task/memory/stage 冲突人工处理`
-  6E. Flow-SCR-006E: `workflow-behavior-eval.sh -> 跑 task-worktree bootstrap smoke -> 校验可选/必需 routing scenarios 与 subagent contract surface -> 跑 PM runtime/closeout smoke -> 跑 prepare-task-pr fixture test -> 跑 pr-review-thread-closeout fixture test -> 输出统一 workflow eval 摘要`
   7. Flow-SCR-007: `用户只说“先写一版 / 先不要提交 / 顺手改一下” -> 仍判定为新需求 -> 先切独立 worktree 再开始编辑；若已在错误 worktree 开工 -> 立即说明并切走`
   8. Flow-SCR-008: `cargo-dev.sh check/test/run -> 解析当前 repo family + worktree source identity 的 target namespace -> 导出稳定 CARGO_TARGET_DIR -> 以 env -u RUSTC_WRAPPER cargo 执行开发态命令`
   9. Flow-SCR-009: `local smoke / regression / drill script -> source cargo-dev-lib.sh -> 调用 oasis7_cargo_dev build/test/run -> 本地复用 shared target；CI 或显式 raw 环境回退原始 cargo target 语义`
@@ -111,14 +95,9 @@
 | fallback 规则 | 触发条件、替代脚本、产物要求 | 满足条件后才允许 fallback | `normal -> fallback -> diagnosed` | 常规链路优先 | 仅排障场景允许触发 |
 | 标题品牌治理 | 标题前缀、适用专题、兼容命名说明 | 将脚本治理专题标题统一切到 `oasis7` | `legacy_title -> oasis7_title -> audited` | 先改治理主入口，再改周边专题 | owner 可改，治理门禁复核 |
 | worktree-isolated harness | `worktree_id`、端口组、状态文件、bundle 根目录、artifact 根目录、browser session | 通过单一 harness 入口执行 `up/down/status/url/logs/smoke` | `idle -> booting -> ready -> verifying -> torn_down` | 先按 worktree 生成稳定身份，再为该 worktree 派生 bundle / port / output | `qa_engineer` 维护主入口，runtime/viewer 协同实现 |
-| task worktree bootstrap | `module_slug`、`task_slug`、`branch_name`、`worktree_path`、`base_ref` | 通过统一入口创建或附着任务 worktree，并输出下一步命令 / JSON 摘要 | `draft -> validated -> created/attached -> ready` | 默认派生 `task/<module>-<task>` 分支与 `../worktrees/<repo>-<module>-<task>` 路径 | `producer_system_designer` 定流程，scripts owner 维护入口 |
-| task bootstrap followups | `doc_checks`、`pm_task.issue_url`、`pm_task.mapping_path`、`harness_mode`、`harness_state_file`、`viewer_url` | 通过 `--init-docs` / `--with-harness` 补齐文档检查与 harness 预热；启用 PM bootstrap 时返回 GitHub task issue evidence comments 入口与 mapping 记录 | `ready -> doc_checked -> harness_booted` | `--init-docs` 只读检查模块 PRD / project；`--with-harness` 默认调用 `worktree-harness.sh up` 并继承 formal gameplay 的 active LLM preflight | `qa_engineer` 与 scripts owner 协同维护 |
-| task worktree PR closure | `source_branch`、`source_worktree`、`base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`create_command`、`cleanup_commands`、`local_required_validation.scope`、`local_required_validation.reason_summary`、`local_required_validation.recommended_required_command`、`pr_purpose_decision` | 通过统一入口校验任务分支、输出或执行 GitHub PR create 命令，并给出 PR 合入前的本地 required 验证建议、planner 原因摘要与合入后的本地同步/cleanup 命令；普通 PR 创建后继续盯 required checks/mergeability/comments，`REVIEW_REQUIRED` 仅回报不阻塞，`mergeStateStatus=BEHIND` 仅表示落后基线且在 GitHub merge path 仍接受时不必先 rebase，review-approval-only `BLOCKED` 在明确授权时可走 repo admin merge path，失败修复并重推，actionable comments 回复/整改/resolve 后才合入；明确 manual packaging/release CI purpose 的 PR 可停在人工打包 gate | `ready_to_pr -> preflighted -> locally_recommended -> pr_opened -> purpose_decided -> watching_ci_comments_mergeability -> fixing? -> branch_sync_if_required? -> authorized_admin_merge? -> comment_closeout -> merged -> cleaned_up` | 默认源分支取当前 branch，base 默认 `main`、remote 默认 `origin`；本地推荐只复用 changed-path planner 做只读建议，不自动执行；未明确记录 manual packaging/release CI purpose 时默认 `normal_pr_ci_watch` | `producer_system_designer` 定流程，scripts owner 维护入口 |
 | lifecycle hardening | `bootstrap_journal`、`slice_provenance`、`merge_hold`、`pr_gate`、`cleanup_preconditions` | journal resume、exact head/base PR recovery、full PR gate、non-force cleanup | `planned -> remote_partial/resume -> ready -> pr_watch/hold -> merge_ready -> merged -> done -> cleaned` | vacuous verify、self-attested review、active hold、partial comment scan、dirty cleanup 一律 fail closed | `repository_health_engineer` 维护，`qa_engineer` 验证 |
 | `.pm` rebase conflict helper | `rebase_in_progress`、`summary.total_conflicted_paths`、`summary.retired_signal_conflicts`、`summary.generated_view_conflicts`、`summary.manual_conflicts`、`conflicts[].category`、`conflicts[].recommended_action`、`resolved_now` | 在 active rebase 中只读分类 `.pm/**` 未合并路径；不自动修复任何 `.pm/**` 路径 | `rebase_conflicted -> classified -> manual_resolution_pending` | `.pm/inbox/signals.jsonl` 已退休，命中时只提示删除退休文件或人工归档；`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 只提示保留 `main` 删除并执行 `sync-views.sh` | `producer_system_designer` / `qa_engineer` 可读，scripts owner 维护入口 |
 | PR review thread closeout | `pr_number`、`thread_id`、`is_resolved`、`is_outdated`、`path`、`line`、`latest_comment`、`review_decision`、`merge_state_status` | 通过统一入口读取当前 PR review threads，并在显式 resolve 时批量关闭指定 unresolved thread | `reported -> patched -> resolved -> rechecked` | 默认 PR 取当前 branch 关联 PR；`--resolve-all-unresolved` 只处理当前 unresolved thread；每次 resolve 后都必须回报最新 PR state | `producer_system_designer` 定流程，scripts owner 维护入口 |
-| worktree lifecycle report | `worktree_path`、`branch`、`prunable_reason`、`dirty`、`pm_task_uid`、`pm_task_status`、`cleanup_candidate`、`cleanup_commands[]` | 通过统一入口只读盘点当前 repo 的 worktree 生命周期状态，并给出建议 cleanup 命令 | `discovered -> classified -> cleanup_candidate/retained` | 默认同时看 `git worktree list --porcelain` 与 GitHub-backed task mapping / issue status；prunable 和 closed clean worktree 优先暴露 | `producer_system_designer` 定流程，scripts owner 维护入口 |
-| shared cargo dev cache | `shared_target_dir`、`cache_namespace`、`worktree_source_identity`、`host_triple`、`rustc_release` | 通过 `cargo-dev.sh` 为手工开发态 `cargo` 命令注入当前 worktree 内稳定共享的 `CARGO_TARGET_DIR`；通过 `cargo-dev-lib.sh` 为本地 smoke / regression / drill / longrun 脚本复用同一入口 | `idle -> cache_ready -> cargo_running -> success/failed` | 默认按 `git-common-dir` 与当前 worktree source root 派生 repo-family/worktree namespace，并按 host/toolchain 拆分目录；不同 worktree 默认不得互选 artifacts；CI、deterministic wasm、release、hash/receipt evidence 流程继续保留原始 cargo 语义 | 开发者可执行，scripts owner 维护入口 |
 - Acceptance Criteria:
   - AC-1: scripts PRD 明确脚本分类、入口、约束。
   - AC-2: scripts project 文档维护脚本治理任务。
@@ -134,26 +113,12 @@
   - AC-12: 新增 `scripts/new-task-worktree.sh`，默认根据 `<module> <task>` 生成稳定分支名与 worktree 路径，并执行 `git worktree add`。
   - AC-13: `scripts/new-task-worktree.sh` 默认在源 worktree 脏时阻断，并给出显式 override；对已存在路径、已被其他 worktree 占用的分支和非法空 slug 提供清晰失败语义。
   - AC-14: `scripts/new-task-worktree.sh --json` 必须输出机器可读摘要，至少包含 `branch`、`worktree_path`、`module`、`task`、`base_ref` 与 `mode`。
-  - AC-15: `scripts/new-task-worktree.sh --help` 必须列出 `--init-docs` 与 `--with-harness`；前者输出 `doc/<module>/prd.md` 与 GitHub task issue evidence comments 的存在性摘要，后者在新 worktree 中后台预热 `./scripts/worktree-harness.sh up` 并继承 formal gameplay 的 active LLM preflight；启用 PM bootstrap 时输出对应 GitHub task issue evidence comments 入口与 mapping 记录。
   - AC-16: `scripts/new-task-worktree.sh --json --init-docs` 必须输出机器可读 `doc_checks`；加 `--with-harness` 时，stdout 仍保持单个 JSON 对象，并附带 `harness` 摘要字段。
-  - AC-17: 新增 `scripts/prepare-task-pr.sh`，默认以当前 task branch 为 source、以 `origin/main`（若存在）或本地 `main` 为对齐基线，执行“source clean 检查 -> base 对齐检查 -> 输出或执行 GitHub PR create 命令 -> 输出 PR 合入后的本地同步/cleanup 命令”；PR 创建后默认继续 normal required-check/review watch-fix-merge，只有明确 manual packaging/release CI purpose 才停在人工 gate。
-  - AC-18: `scripts/prepare-task-pr.sh --help` 必须明确列出 `--base`、`--remote`、`--create`、`--draft` 与 `--json`；`--json` 至少输出 `source_branch`、`source_worktree`、`base_branch`、`comparison_ref`、`ahead_count`、`behind_count`、`create_command`、`cleanup_commands`、`local_required_validation.scope` / `local_required_validation.reason_summary` / `local_required_validation.recommended_required_command` 与 `pre_pr_local_role_review.status` / `pre_pr_local_role_review.execution_log_path`（GitHub-backed task 下为 issue URL）/ `pre_pr_local_role_review.missing_markers`。
-  - AC-18J: `scripts/prepare-task-pr.sh` 不得请求 Copilot review，也不得公开 `--no-copilot-review`。task-bound legacy `--create` 必须在 push / `gh pr create` / `record-pr` 前 fail closed；`--draft-candidate --create` 只在候选创建前强制校验 source-bound Task UID / frozen-head identity，并把 pre-PR local role review evidence 留到 `Pre-PR Ready` / draft promotion；非 `--create` preflight 必须报告 evidence 状态，便于 owner 在晋级前补齐。
-  - AC-18A: `scripts/pm/task-closeout.sh` 默认目标状态为 `ready`，并在写入 ready/done closeout 前强制要求 `--verify-command`；默认链路必须先做 selected-task read-only audit，再由 `claim-ready --claim-type ready_for_pr` 在 frozen HEAD 的 detached worktree 验证，随后以远端步骤优先、单次原子 cache replace 收口。当 closeout 显式指向 `done` 时，必须使用 `task_complete` claim 并只允许用于 post-PR merge/cleanup 或显式非 PR 任务；`deferred` 仅用于明确延后收口。若 task 缺少 `last_started_at`、已经处于 `done/deferred`，或 ready/done closeout 缺少 fresh verification，脚本必须在写入前失败退出。
-  - AC-18B: `scripts/pm/task-closeout.sh --help` 必须明确列出 `--role`、`--task-uid`、`--to-status`、`--verify-command`、`--claim-type`、`--no-lint` 与 `--json`；`--json` 至少输出 `task_uid`、`previous_status`、`final_status`、`last_started_at`、`last_closed_at`、`claim_verification.status`、`workflow_close` 与 `move_task`。
   - AC-18C: 新增 `scripts/pr-review-thread-closeout.sh`，默认按当前 branch 关联的 PR 读取 review threads；`--unresolved-only` 仅返回 unresolved threads，`--resolve-thread <id>` 可重复，`--resolve-all-unresolved` 只在显式传入时执行批量 resolve。
   - AC-18D: `scripts/pr-review-thread-closeout.sh --help` 必须明确列出 `[pr-number]`、`--unresolved-only`、`--resolve-thread`、`--resolve-all-unresolved` 与 `--json`；`--json` 至少输出 `pr.number`、`pr.review_decision`、`pr.merge_state_status`、`summary.total_threads`、`summary.unresolved_threads`、`resolved_now.thread_ids` 与每个 thread 的 `id`、`is_resolved`、`is_outdated`、`path`、`line`、`latest_comment`。
-  - AC-18E: `scripts/prepare-task-pr.sh` 必须在 preflight 阶段输出 changed-path 对齐的本地 required 验证建议，推荐命令统一复用 `./scripts/ci-tests.sh required` 的现有组件开关；脚本不得自动执行该建议，也不得改变 `required/full` 的既有语义。
-  - AC-18F: `scripts/prepare-task-pr.sh` 必须同时输出 rust required planner 的 `reason_summary`；文本模式直接显示摘要，`--json` 还需提供拆分后的 `reason_items[]` 以便 agent 侧直接消费。
-  - AC-18G: 新增 `scripts/pm/rebase-conflict-helper.sh`；默认只读扫描 `git ls-files -u -- .pm`，`--json` 至少输出 `rebase_in_progress`、`summary.total_conflicted_paths`、`summary.retired_signal_conflicts`、`summary.generated_view_conflicts`、`summary.manual_conflicts`、`conflicts[].path/category/stages/recommended_action`、`resolved_now` 与 `recommended_commands[]`。
-  - AC-18H: `scripts/pm/rebase-conflict-helper.sh` 不自动修复任何 `.pm/**` 路径；若冲突命中 `.pm/inbox/signals.jsonl`，只能建议删除退休文件或人工归档；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml`，脚本只能建议“保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`”，不得自动恢复这些 git-ignored 本地视图，也不得自动覆盖 canonical task/memory/stage 文件。
   - AC-18I: 仓库必须提供轻量 Web/UI automation smoke `scripts/viewer-software-safe-step-regression-smoke.sh`；该脚本需在不启动完整 runtime 栈的前提下，通过临时 fixture 页面复用真 `agent-browser` 与 `scripts/viewer-software-safe-step-regression.sh`，并验证 `software-safe-step-summary.json` 与关键 state artifact 的最小契约。
-  - AC-18K: 新增 `scripts/pm/workflow-behavior-eval.sh`，至少覆盖 task-worktree bootstrap、可选/必需 routing scenarios、subagent contract surface、PM closeout/claim gate、`prepare-task-pr` fixture 与 `pr-review-thread-closeout` fixture；`--json` 必须输出 `workflow_path`、`fixture_scope`、`expected_agent_behavior`、`verification_surface`、`failure_signature`、`routing_scenarios` 与各 segment 的状态摘要。
   - AC-19: 当 source worktree 脏、source 分支未被任何 worktree 检出、base ref 不存在、或 `--create` 时 source 分支落后于 comparison ref，脚本必须阻断并给出修复建议。
   - AC-20: PR 合入后，正式流程文档与脚本输出必须明确该 task `worktree` / branch 需要被删除；cleanup 命令不得再被表述为“可选建议”。
-  - AC-20A: `scripts/land-task-worktree.sh` 的帮助文案与正式专题文档必须明确它只是 local-only / fallback 兼容工具，不再是默认最终合流入口。
-  - AC-20B: 新增 `scripts/worktree-gc-report.sh`，默认只读输出当前 repo 的 worktree 生命周期报告，并在 `--json` 模式下至少包含 `repo_root`、`current_worktree`、`summary.total_worktrees`、`summary.cleanup_candidates`、以及每个 worktree 的 `path`、`branch`、`prunable`、`dirty`、`pm_task_uid`、`pm_task_status`、`cleanup_candidate` 与 `cleanup_commands`。
-  - AC-21: `AGENTS.md`、`doc/scripts/prd.md` 与 task-worktree bootstrap 专题必须统一写明：文档/脚本/测试/话术改动也算新需求，不能因为改动小而复用已有 worktree。
   - AC-22: 上述正式文档必须统一列出“复用当前 worktree / 就在这里改 / 不要切新 worktree”为允许例外的显式表述，并明确“先写一版 / 先不要提交 / 顺手改一下”不构成复用授权；若已切错 worktree，必须立即切走。
   - AC-23: 新增 `scripts/cargo-dev.sh`，为本地开发态 `cargo check/test/run/build` 提供 worktree-scoped shared cache 入口，并默认使用 `env -u RUSTC_WRAPPER cargo ...`。
   - AC-23A: 新增 `scripts/cargo-dev-lib.sh`，为本地 smoke / playtest / prewarm / regression / drill / longrun 脚本提供 `oasis7_cargo_dev` 与 shared-target debug binary 解析 helper；默认本地复用 `cargo-dev.sh`，但在 `CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 时回退到原始 cargo target 语义。
@@ -180,14 +145,9 @@
   - `scripts/worktree-harness.sh`
   - `scripts/cargo-dev.sh`
   - `scripts/new-task-worktree.sh`
-  - `scripts/prepare-task-pr.sh`
-  - `scripts/pm/task-closeout.sh`
-  - `scripts/pm/workflow-behavior-eval.sh`
-  - `scripts/pm/rebase-conflict-helper.sh`
   - `scripts/viewer-software-safe-step-regression-smoke.sh`
   - `scripts/pr-review-thread-closeout.sh`
   - `scripts/worktree-gc-report.sh`
-  - `scripts/land-task-worktree.sh`
   - `scripts/build-wasm-module.sh`
   - `testing-manual.md`
   - `.github/workflows/*`
@@ -204,12 +164,10 @@
   - 错误 worktree：若任务开始后才发现 worktree 用错，必须立即说明并切走；不允许把“已经开始改了几行”当作继续复用的理由。
   - bootstrap followups：`--json` 模式下即便开启 `--with-harness`，也不得把 harness 子命令的人类输出混入 JSON；模块文档不存在时只报告缺失，不替用户静默创建空文档。
   - task PR closure：若 base branch 缺少本地/远端 ref、source 分支落后于 comparison ref、`gh` 不可用，或 `--create` 时 push/PR create 失败，脚本只中断并保留现场，不擅自修改 `main` 或删除 branch/worktree。
-  - task closeout helper：helper 只负责 GitHub-backed ready-for-PR closeout bookkeeping 与 ready/done closeout 前的 fresh verification，不替代 commit、`prepare-task-pr`、PR watch/fix/merge 或 post-merge cleanup；若 task 尚未 start、已处于关闭态，或 ready/done closeout 缺少 `--verify-command`，脚本必须在改动前失败，不允许留下半收口状态。
   - PR review thread closeout：resolve review thread 只代表线程被收口，不代表 PR 已 merge-ready；helper 必须继续单独回报 `reviewDecision`、`mergeStateStatus` 与剩余 unresolved thread 数，避免把“threads 全关掉”和“可以合并”混成同一状态。
-  - `.pm` rebase conflict helper：helper 不自动修复任何 `.pm/**` 路径；若冲突来自 retired signal inbox、GitHub-backed task mapping / archive、memory、stage 或其他 canonical 对象，脚本只能分类并提示删除/人工归档/人工处理，不得擅自重写真值。
-  - local-only landing compatibility：`land-task-worktree.sh` 仍可用于用户显式要求的本地合流或离线应急，但帮助文案和正式文档必须明确它不是默认最终合流入口。
+  - `.pm` rebase conflict helper：helper 不自动修复任何 `.pm/**` 路径；若冲突来自 retired signal inbox、工作说明或按需 Issue mapping / archive、memory、stage 或其他 canonical 对象，脚本只能分类并提示删除/人工归档/人工处理，不得擅自重写真值。
   - task cleanup：已完成任务的 task `worktree` 若长期不删，会让后续搜索、branch 占用检查与本地磁盘占用持续失真；因此 cleanup 必须成为 PR 合入后的必做步骤。
-  - worktree lifecycle report：缺失路径、prunable 记录、dirty worktree 与未绑定 GitHub-backed task mapping 的 worktree 都必须 truthfully 报告，不允许脚本为了“看起来整洁”而隐式删除或跳过。
+  - worktree lifecycle report：缺失路径、prunable 记录、dirty worktree 与未绑定 工作说明或按需 Issue mapping 的 worktree 都必须 truthfully 报告，不允许脚本为了“看起来整洁”而隐式删除或跳过。
   - shared cargo dev cache：同一 repo family 的每个 worktree 必须映射到自己的 stable source-identity target namespace；同一 worktree 可复用该 namespace，默认不同 worktree 不得共享编译 artifacts。deterministic wasm / release 脚本若要求 `CARGO_TARGET_DIR` 为空，必须继续走原始 cargo 入口而不是 `cargo-dev.sh`。
 - Non-Functional Requirements:
   - NFR-SCR-1: 核心脚本具备可读帮助信息与失败语义说明。
@@ -219,8 +177,6 @@
   - NFR-SCR-5: fallback 流程必须可追溯到故障诊断记录。
   - NFR-SCR-6: worktree harness 的状态文件必须机器可读，允许 agent 直接拿到 URL、端口组、输出目录与 PID，而不依赖 stdout 文本解析。
   - NFR-SCR-7: 同一仓库下至少两份 worktree 可在默认配置下并行起栈，不因固定端口或全局 bundle 目录直接冲突。
-  - NFR-SCR-8: task worktree bootstrap 入口必须生成稳定默认分支名 / 路径，并支持 JSON 摘要，便于 agent 或上层脚本直接消费。
-  - NFR-SCR-9: task worktree bootstrap 入口在开启 followup 选项后，仍需保证 stdout 契约稳定；JSON 模式下所有附加说明必须写入结构化字段或 stderr。
   - NFR-SCR-10: task worktree GitHub PR 收口入口必须默认使用非交互、可审计的 preflight / create 策略；JSON 模式下 stdout 只能输出单个结构化对象。
   - NFR-SCR-11: 已完成 task 的 cleanup 语义必须清晰一致，不允许不同文档同时出现“建议删除”和“必须删除”两套口径；PR 合入后的本地同步/cleanup 与 local-only fallback cleanup 不得混成两套默认流程。
   - NFR-SCR-12: worktree 例外授权与错误 worktree 处置口径在 `AGENTS.md`、模块 PRD 与专题文档之间必须保持一致，不允许根规则更严、模块专题更松。
@@ -252,7 +208,6 @@
 | PRD-SCRIPTS-004 | TASK-SCRIPTS-014 | `test_tier_required` | `bash -n` + `--help` + 双实例并行 smoke + `state.json` / ready payload 检查 + 文档治理检查 | 多 worktree 并行执行稳定性与 agent 可驱动性 |
 | PRD-SCRIPTS-005 | TASK-SCRIPTS-015/020 | `test_tier_required` | `bash -n` + `--help` + 真实 create/remove smoke + worktree 例外授权文案一致性检查 + 文档治理检查 | 多任务并行的 worktree/branch 命名一致性与启动成本 |
 | PRD-SCRIPTS-006 | TASK-SCRIPTS-016/020 | `test_tier_required` | `--init-docs` / `--with-harness` 真机 create/remove smoke + 错误 worktree 处置文案一致性检查 + 文档治理检查 | 新任务从创建到文档/验证闭环的一跳成本 |
-| PRD-SCRIPTS-007 | TASK-SCRIPTS-017/024/task-closeout-helper/pr-review-thread-closeout-helper/prepare-task-pr-local-required-recommendation/prepare-task-pr-planner-reason-summary/pm-rebase-conflict-helper | `test_tier_required` | `bash -n` + `prepare-task-pr` `--help/--json` + JSON 字段断言 + reason summary 断言 + `task-closeout.sh --help` + `required-tier-smoke` closeout helper 断言 + `pr-review-thread-closeout.sh --help/--json` + fake-`gh` review-thread 测试 + `rebase-conflict-helper.sh --help/--json` + 合同测试 `scripts/pm/rebase-conflict-helper.test.sh` + `land-task-worktree` compatibility 文案检查 + 文档治理检查 | 多 task worktree 向受保护 `main` 回流的一致性、可审计性、本地最小验证建议与 retired signal inbox / `.pm` rebase 冲突收口边界 |
 | PRD-SCRIPTS-008 | TASK-SCRIPTS-018/025 | `test_tier_required` | landing/cleanup 文案与脚本输出一致性检查、`worktree-gc-report.sh --json` 结构化字段检查 + 文档治理检查 | task worktree 生命周期收口与本地环境整洁度 |
 | PRD-SCRIPTS-009 | TASK-SCRIPTS-021/022 | `test_tier_required` | `bash -n` + `--help` + `--print-target-dir` 跨 worktree 一致性检查 + `AGENTS.md`/scripts/testing 文档口径一致性检查 + 文档治理检查 | 多 worktree Rust 开发回归速度与 deterministic wasm/release 口径隔离 |
 - Decision Log:
@@ -262,3 +217,5 @@
 | DEC-SCR-002 | 参数契约显式化 | 依赖隐式约定 | 可减少 CI 误用与回归。 |
 | DEC-SCR-003 | fallback 仅在受控场景启用 | 默认对所有场景开放 | 可避免过度依赖应急链路。 |
 | DEC-SCR-004 | 用独立 `cargo-dev.sh` 包装开发态共享 `CARGO_TARGET_DIR`，而不把共享 target 设成仓库全局默认 | 直接把所有 cargo 流程切到同一个全局 `CARGO_TARGET_DIR` | 能让日常多 worktree 开发复用缓存，同时不破坏 deterministic wasm / release 脚本对空 `CARGO_TARGET_DIR` 的围栏。 |
+
+开发脚本只提供 Git worktree、共享 Cargo 缓存、运行隔离和真实验证。普通 PR 使用 Git、gh、实际 CI 与评审，不依赖本地 PM 身份。资源清理保留用户资料、未提交、未推送及使用中资源。

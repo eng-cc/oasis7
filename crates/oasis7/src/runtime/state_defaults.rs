@@ -123,6 +123,7 @@ impl Default for WorldState {
             module_artifact_listings: BTreeMap::new(),
             module_artifact_bids: BTreeMap::new(),
             module_instances: BTreeMap::new(),
+            module_admission_freezes: BTreeMap::new(),
             module_release_requests: BTreeMap::new(),
             module_release_manifest_mappings: BTreeMap::new(),
             next_module_release_request_id: default_next_module_release_request_id(),

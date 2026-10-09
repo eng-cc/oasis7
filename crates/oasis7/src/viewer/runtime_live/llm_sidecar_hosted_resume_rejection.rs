@@ -421,6 +421,7 @@ impl RuntimeLlmSidecar {
                         status: "rejected".into(),
                         reject_reason: Some("canonical_resume_rejected".into()),
                         feedback_id: None,
+                        feedback: None,
                     },
                 );
                 #[cfg(any(test, feature = "test_tier_required"))]

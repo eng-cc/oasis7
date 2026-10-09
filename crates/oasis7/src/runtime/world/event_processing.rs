@@ -367,6 +367,14 @@ impl World {
         envelope: &ActionEnvelope,
     ) -> Result<WorldEventBody, WorldError> {
         let action_id = envelope.id;
+        if let Err(error) = self.delegation_action_admission(&envelope.action) {
+            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!("{error:?}")],
+                },
+            }));
+        }
         match &envelope.action {
             Action::WorldServiceIntent { .. } => Err(WorldError::DistributedValidationFailed {
                 reason: "world-service intent requires canonical driver admission".into(),
@@ -792,7 +800,11 @@ impl World {
                         | DomainEvent::ModuleUpgraded { .. }
                         | DomainEvent::ModuleRollbackApplied { .. }
                 ) {
-                    let prepared = self.state.prepare_module_instance_event(event, time)?;
+                    let prepared = self.state.prepare_module_instance_event_with_registry(
+                        event,
+                        time,
+                        Some(&self.module_registry),
+                    )?;
                     let schedule = self.prepare_module_instance_schedule(event, time)?;
                     prepared.install_infallible(&mut self.state);
                     self.install_prepared_module_instance_schedule(schedule);

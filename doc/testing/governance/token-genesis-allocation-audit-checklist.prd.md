@@ -1,7 +1,7 @@
 # oasis7 主链 Token 创世分配审计清单
 
 - 对应设计文档: `doc/testing/governance/token-genesis-allocation-audit-checklist.design.md`
-- 可变任务状态与历史: GitHub task issue evidence comments
+- 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 状态: `active`；首次真实控制主体冻结前仍须执行独立的正式审计。
 

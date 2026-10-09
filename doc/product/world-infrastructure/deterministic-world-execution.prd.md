@@ -24,9 +24,9 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 设计判定 task issue：#3680。
+- 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义确定性提交、待决恢复、幂等和版本边界；执行流程与状态呈现由 runtime/P2P 专业 authority 负责。
-- 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+- 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 执行与共识边界
 
 - 每个活动验证者在 attestation 前完整重执行同一输入。权威世界结果只在 verified commit certificate 后生效；未最终化的 signed intent 不改变世界。
@@ -147,7 +147,7 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 | DWE-004 的激活证明、工件可用性、首次已提交区块选版、跨版本 linked replacement 与历史 replay 如何共同验证？ | runtime、适用 WASM/模块 owner、P2P、消费者 owner 与 QA；需要激活窗口、历史版本、失败关闭和消费者重规划判定 | 条款及同候选验证设计可定位后复核；缺证/冲突时仍按正文拒绝或无效果待决，不锁定旧版本、不静默翻译 |
 | DWE-001 的 required 局部检查与 SC-4 的 full 组合证据如何区分？ | runtime/P2P 与 QA；需要全部活动验证者及 replay 的适用范围和证据身份 | 验证设计明确范围后确认；局部检查不能代签组合条件，DWE-004/DE-4 仍按 full 验收 |
 
-问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收；任务、依赖和解决进度由 GitHub task truth 维护，本表不维护第二台账。下面的“验证证据”导航描述不表示测试已接入或已执行，准确专业设计及验证回链尚须复核。
+问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收；任务、依赖和解决进度由 Git、PR 与实际 CI 记录 维护，本表不维护第二台账。下面的“验证证据”导航描述不表示测试已接入或已执行，准确专业设计及验证回链尚须复核。
 
 ## 全量语义追踪
 

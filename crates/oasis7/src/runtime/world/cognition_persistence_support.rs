@@ -421,7 +421,16 @@ impl World {
             return Ok((prepared, lineage));
         }
         transaction.bind_cognition_response_artifact(&prepared.commit_id, &response_artifact)?;
-        let committed = transaction.finalize_cognition_commit(&prepared.commit_id)?;
+        let committed = match transaction.finalize_cognition_commit(&prepared.commit_id) {
+            Ok(committed) => committed,
+            Err(error) => {
+                if matches!(&error, WorldError::ResourceBalanceInvalid { reason } if reason.starts_with("agent_delegation:"))
+                {
+                    *self = transaction;
+                }
+                return Err(error);
+            }
+        };
         let lineage = transaction.read_runtime_receipt_lineage(&committed.receipt_id)?;
         transaction.verify_runtime_receipt_lineage(&lineage)?;
         *self = transaction;

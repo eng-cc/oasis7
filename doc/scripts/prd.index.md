@@ -20,7 +20,7 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 通用脚本入口、参数、worktree harness、bootstrap、PR closure 与 local landing 的稳定语义已归入 `doc/scripts/{prd,design}.md`；可变任务状态与执行证据归入 GitHub task issue。
-- 专题稳定语义使用 `*.prd.md`、`*.design.md` 与 evidence/runbook；不再创建或要求 GitHub task issue evidence comments 配对。
+- 专题稳定语义使用 `*.prd.md`、`*.design.md` 与 evidence/runbook；不再创建或要求 PR、实际 CI 与评审记录（Issue 按需） 配对。
 - 首次选择 pre-commit 的当前门禁契约或失败修复流程时，先读
   `doc/scripts/precommit/README.md`；本页保留精确文件检索。
 - WASM 当前发布要求由 world-runtime canonical pipeline 承接；已吸收的 nightly/build-std 参数、CI 约束与 hash 漂移背景只在上述 evidence historical provenance 中追溯，不定义 Docker-only publishable build、receipt、single canonical token 或 cross-host evidence。

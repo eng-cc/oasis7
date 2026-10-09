@@ -17,6 +17,10 @@ use serde_json::Value;
 use super::cognition_policy::{ContinuationProposalV1, GoalSnapshotV1, MemoryContextSnapshotV1};
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "continuous_agent_feedback_recovery.rs"]
+mod continuous_agent_feedback_recovery;
+
 pub const CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR: &str = "oasis7.continuous-agent-context";
 pub const CONTINUOUS_AGENT_CONTEXT_VERSION: u16 = 1;
 pub const COGNITION_REQUEST_DIGEST_DOMAIN: &str = "oasis7.cognition.request.v1";
@@ -761,6 +765,11 @@ pub struct AgentCognitionStore {
     /// Feedback replay state is partitioned by `(agent_subject, session)`;
     /// no Agent can observe another Agent's feedback history.
     feedback_partitions: BTreeMap<(String, String), FeedbackPartition>,
+    /// A durable Runtime history that is incomplete or not fully acknowledged
+    /// fences only the matching Agent/session from starting a fresh request.
+    feedback_recovery_blocked: BTreeMap<(String, String), String>,
+    #[cfg(not(target_arch = "wasm32"))]
+    feedback_recovery_initialized: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -781,6 +790,15 @@ impl AgentCognitionStore {
         turn: &ContinuousAgentTurnContextV1,
     ) -> Result<(), CognitionError> {
         turn.validate_for_agent(turn.agent_id.as_str())?;
+        if let Some(reason) = self
+            .feedback_recovery_blocked
+            .get(&(turn.agent_id.clone(), turn.agent_session_id.clone()))
+        {
+            return Err(CognitionError::new(
+                "feedback_recovery_blocked",
+                reason.clone(),
+            ));
+        }
         if let Some(active) = self.active_by_agent.get(&turn.agent_id) {
             if active.session_id == turn.agent_session_id
                 && active.turn_id == turn.agent_turn_id
@@ -836,6 +854,15 @@ impl AgentCognitionStore {
         request: ContinuousAgentRequestContextV1,
     ) -> Result<(), CognitionError> {
         request.validate()?;
+        if let Some(reason) = self.feedback_recovery_blocked.get(&(
+            request.agent_subject.clone(),
+            request.agent_session_id.clone(),
+        )) {
+            return Err(CognitionError::new(
+                "feedback_recovery_blocked",
+                reason.clone(),
+            ));
+        }
         let digest = request.request_digest();
         if let Some(previous) = self.digest_by_request_id.get(&request.decision_request_id) {
             if previous != &digest {

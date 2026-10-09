@@ -30,6 +30,8 @@ pub(super) struct ProviderTerminalState {
     pub(in crate::viewer::runtime_live) status: String,
     pub(super) reject_reason: Option<String>,
     pub(super) feedback_id: Option<String>,
+    #[serde(default)]
+    pub(super) feedback: Option<crate::simulator::FeedbackEnvelopeV1>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -777,6 +779,15 @@ impl RuntimeLlmSidecar {
                     reject_reason: marker.abort_reason.clone(),
                     feedback_id: (!marker.feedback_id.is_empty())
                         .then_some(marker.feedback_id.clone()),
+                    feedback: self
+                        .provider_terminal_states
+                        .get(&agent_id)
+                        .and_then(|terminal| terminal.feedback.clone())
+                        .filter(|feedback| {
+                            feedback.feedback_id == marker.feedback_id
+                                && feedback.decision_request_id == marker.decision_request_id
+                                && feedback.request_digest.to_string() == marker.request_digest
+                        }),
                 },
             );
             if let Some(wake) = committed_wake {
@@ -869,6 +880,11 @@ impl RuntimeLlmSidecar {
             .collect::<Vec<_>>();
         let mut recovered_orphan = false;
         for (agent_id, active, context, same_identity, retained) in orphaned_active_markers {
+            if self.provider_terminal_matches_request(&agent_id, &active.request_context) {
+                // A strictly persisted terminal owns recovery of this exact
+                // request. It is not an orphaned transport to exhaust again.
+                continue;
+            }
             if capability_identity_changed_agents.contains(&agent_id) && context.is_none() {
                 // An active marker can be the only persisted copy of a
                 // request in the reserve-before-mirror crash prefix. Keep it
@@ -1009,6 +1025,7 @@ impl RuntimeLlmSidecar {
             })
             .collect::<Vec<_>>();
         for agent_id in terminal_agents {
+            self.provider_transport_exhausted.remove(agent_id.as_str());
             self.provider_contexts.remove(agent_id.as_str());
             self.provider_retry_contexts.remove(agent_id.as_str());
             self.provider_active_turns.remove(agent_id.as_str());
@@ -1155,6 +1172,7 @@ impl RuntimeLlmSidecar {
                 status: status.to_string(),
                 reject_reason,
                 feedback_id,
+                feedback: None,
             },
         );
         self.persist_provider_lineage_best_effort();
