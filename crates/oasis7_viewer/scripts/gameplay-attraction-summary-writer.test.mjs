@@ -110,4 +110,29 @@ assert.match(
   "required automation must include the summary writer contract guard",
 );
 
+assert.equal(summary.evidence_sources.fixture_structure.scope, "fixture_structure_only");
+assert.equal(summary.evidence_sources.live_operations.status, "unverified");
+assert.equal(summary.evidence_sources.human_observation.status, "unverified");
+assert.equal(summary.evidence_sources.human_observation.meaningful_decision_count, null);
+const observedInput = JSON.parse(readFileSync(inputPath, "utf8"));
+observedInput.tier = "live";
+observedInput.commands.live_pure_api_gameplay = { status: "pass", log: "candidate-api.log" };
+observedInput.humanObservations = [
+  { participant_id: "p1", session_id: "s1", decision_id: "reduce-batch", choice: "small batch", consequence: "kept power reserve" },
+  { participant_id: "p1", session_id: "s2", decision_id: "reduce-batch", choice: "small batch", consequence: "kept power reserve" },
+];
+writeFileSync(inputPath, JSON.stringify(observedInput));
+execFileSync("node", ["crates/oasis7_viewer/scripts/write-gameplay-attraction-automation-summary.mjs", inputPath, summaryJsonPath, summaryMdPath]);
+const observed = JSON.parse(readFileSync(summaryJsonPath, "utf8"));
+assert.equal(observed.evidence_sources.live_operations.commands.live_pure_api_gameplay.log, "candidate-api.log");
+assert.equal(observed.evidence_sources.human_observation.meaningful_decision_count, 1);
+assert.equal(observed.evidence_sources.human_observation.retention_status, "unverified");
+observedInput.commands.live_pure_api_gameplay.status = "unknown";
+observedInput.humanObservations = [{ choice: "two buttons" }];
+writeFileSync(inputPath, JSON.stringify(observedInput));
+execFileSync("node", ["crates/oasis7_viewer/scripts/write-gameplay-attraction-automation-summary.mjs", inputPath, summaryJsonPath, summaryMdPath]);
+const unknown = JSON.parse(readFileSync(summaryJsonPath, "utf8"));
+assert.equal(unknown.overall_status, "unverified");
+assert.equal(unknown.evidence_sources.human_observation.status, "unverified");
+assert.equal(unknown.evidence_sources.human_observation.meaningful_decision_count, null);
 console.log("TASK-GAME-076 summary writer contract passed");

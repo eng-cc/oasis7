@@ -19,9 +19,9 @@
 
 ## 3. 目标设计结构
 
-- **分布式基础层（`doc/p2p/` authority）**：governance registry、validator set、Tendermint/CometBFT-style BFT finality、P2P、DistFS、checkpoint/source selection 与 state sync。它决定何时一个 action batch 已有可验证的 finality certificate。
+- **分布式基础层（`doc/p2p/` authority）**：governance registry、validator set、Tendermint/CometBFT-style BFT finality、P2P、DistFS、checkpoint/source selection 与 state sync。它按合法激活 authority profile 决定何时 action batch 的正式提交证明及持久条件成立；首次开放目标为受控单权威，BFT 为后续经验证激活的 profile。
 - **版本化 consensus-execution protocol**：请求绑定 `world_id`、protocol/runtime-manifest version、parent committed height/hash、ordered action envelope 与 `action_root`；结果绑定 execution block/hash、`state_root`、receipt/journal references 和结构化 reject/fault。in-process adapter 是当前部署选择，future IPC adapter 是同一协议的另一 transport；两者必须跑同一 conformance 与 replay fixtures。
-- **确定性执行层（本模块 authority）**：从同一个 committed parent state 重放 action sequence，运行已治理激活的 runtime manifest，持久化结果与 checkpoint/replay anchors。proposer 的结果只是候选；每个 active validator 必须 independently re-execute，并只在 root/hash/result 相符时对 BFT vote/certificate 作出本地执行证明。
+- **确定性执行层（本模块 authority）**：从同一个 committed parent state 重放 action sequence，运行已治理激活的 runtime manifest，持久化结果与 checkpoint/replay anchors。proposer 的结果只是候选；`bft` 下每个 active validator 必须 independently re-execute，并只在 root/hash/result 相符时对 BFT vote/certificate 作出本地执行证明。
 - **消费者层**：ordinary player game + light companion、operator full infrastructure node、dev/local game + embedded/full local node 都使用同一协议。消费者只投影 finalized/verified state；light companion 可提交 signed intent，但不模拟权威状态。
 - **验证层**：determinism/replay, manifest/artifact compatibility, root mismatch, recovery and adapter conformance tests. 任何 root、artifact、certificate、continuity 或 replay mismatch 都 fail closed。
 
@@ -30,7 +30,15 @@
 - **Governed activation**：ordinary runtime upgrades are content-addressed manifests/version selected by governance and activated at a committed height. Validators prefetch and verify before activation; missing or mismatched artifacts block execution/voting. Node software delivery does not itself activate deterministic world semantics.
 - **Four release lanes**：(1) rolling node-software patches, (2) governance-activated runtime manifests, (3) independent client applications, and (4) coordinated foundational protocol upgrades/forks. The last lane is required when consensus rules, the consensus-execution protocol, or host ABI become incompatible; it needs coordinated binaries and migration proof.
 - **Fail-closed availability**：when finality is unavailable, player/light-companion profiles expose only the last verified state plus clearly pending intents with no world effect. Dev/local execution uses a separate `world_id` and is never reconciled into the global history.
-- **Recovery trust chain**：immutable tier/genesis identity manifest -> quorum-finalized checkpoint/header bound to the active validator registry -> hash-bound snapshot -> canonical committed-log replay -> state-root verification -> serve/vote. Snapshot and DistFS are transport/cache material, not independent authority.
+- **Recovery trust chain**：fixed world/chain/genesis identity -> legal historical profile/epoch/manifest activation chain -> verified committed checkpoint/header bound to the authority active at that height -> hash-bound snapshot -> canonical committed-log replay -> state-root verification -> serve/vote. Snapshot and DistFS are transport/cache material, not independent authority.
+
+### Authority-profile commit and recovery seam（目标）
+
+[执行需求](prd.md#runtime-authority-profile-commit) 对接 [P2P authority profiles](../p2p/prd.md#p2p-authority-profiles)；同一 ordered-input/receipt/replay seam 接受合法单权威证明或 BFT 证书，不新建第二套状态机。prepare 与 committed decision 分开；原子校验 writer epoch、parent/head、顺序后，完整输入、结果、事件、里程碑、去重与正式证明/决定在本机及独立故障域达到持久条件，才发布 committed。实际首轮路径适用，局部 prepared publication 和 local fsync 不证明该端到端合同。
+
+断连/超时而提交未知时查询原 identity 的持久决定，不能重新生成 action identity；恢复不从预备记录推导效果。已知无效果 pending 按当前权限/资源/manifest 重审，未知提交先核对。历史先验证只读，当前权威/head/版本/持久条件与旧 signer/写权隔离成立后再写入；replay 不回退 epoch、不重发外部行为。
+
+H 交接记录的结果根必须与其正式证明相符；H 提交后 H+1 只允许新 BFT profile。新集合未产生首提交或重启不能回到旧权威。故障验证应分别注入副本写入、正式提交决定/证明写入、committed 回复前失败，并对账 root、receipt、资产、授权、里程碑及幂等；实际独立故障域恢复另取运行证据。
 
 ## 5. Current implementation boundary and target gap
 
@@ -659,7 +667,7 @@ while installation remains unrouted and replay shares the same raw reducer seman
 
 <a id="runtime-deterministic-design"></a>
 ### 确定性执行与证书绑定
-输入 producer 是已认证的 canonical committed context：world/parent/ordered action、action root、governing manifest 与适用 proof；proposer output 仅候选。runtime 从同 parent 准备执行结果并绑定 execution hash/state root/receipt-journal，P2P 验证同 world/validator epoch/threshold/round certificate。每个 active validator 在 attestation 前重执行并比较，缺 proof/artifact、root mismatch、越权、超限或输出 fault 不能 vote/commit 或本地修补越过。§6.2.1 buffer 统一暂存业务状态；§6.2.2 rejected/faulted 不冒充成功或业务可继续。in-process 和未来 IPC 使用相同 conformance/replay 输入，transport 不授予额外权威。已有 bridge/local tests 仅证明各自有界场景，完整所有活动验证者及 BFT 是 target。
+输入 producer 是已认证的 canonical committed context：world/parent/ordered action、action root、governing manifest 与适用 proof；proposer output 仅候选。runtime 从同 parent 准备执行结果并绑定 execution hash/state root/receipt-journal，P2P 验证同 world、合法历史 authority profile/epoch 与适用提交证明；`bft` 额外验证 validator epoch/threshold/round certificate，每个 active validator 在 attestation 前重执行并比较。缺 proof/artifact、root mismatch、越权、超限或输出 fault 不能 vote/commit 或本地修补越过。§6.2.1 buffer 统一暂存业务状态；§6.2.2 rejected/faulted 不冒充成功或业务可继续。in-process 和未来 IPC 使用相同 conformance/replay 输入，transport 不授予额外权威。已有 bridge/local tests 仅证明各自有界场景，完整所有活动验证者及 BFT 是 target。
 
 <a id="runtime-pending-design"></a>
 ### 待决持久化与恢复重审
@@ -676,7 +684,7 @@ while installation remains unrouted and replay shares the same raw reducer seman
 
 <a id="runtime-recovery-design"></a>
 ### 同世界恢复与服务闸门
-恢复输入链逐环验证 immutable identity/genesis、同 world finalized checkpoint 与 active registry、hash snapshot、canonical log/replay、root。snapshot/DistFS/CAS 是材料，不能独立赋 finality。错误 world、缺失或矛盾材料保留原历史供诊断，进入 unavailable/isolation，无新权威效果；不得换 endpoint/缓存/local 世界伪造连续恢复或静默处理未 final 请求。
+恢复输入链逐环验证固定 world/chain/genesis 身份、各高度合法 profile/epoch/manifest 激活链、同 world 已确认 checkpoint 与 authority transition、hash snapshot、canonical committed log/replay、root；BFT 历史另验证当时的 active registry 与 certificate。snapshot/DistFS/CAS 是材料，不能独立赋 finality。错误 world、缺失或矛盾材料保留原历史供诊断，进入 unavailable/isolation，无新权威效果；不得换 endpoint/缓存/local 世界伪造连续恢复或静默处理未 final 请求。
 历史链通过仅足以进入 verified readonly 的候选。开放 serving 必须同窗口证明 append/finality/versioned execution compatibility/monotonic head continuity 全部成立；stale/catching-up 或 unavailable 不开放写入。每个闸门失败时的新 intent 原子拒绝或无效果 pending，committed receipt=0；开放后按当前条件和 canonical 顺序重审既有 pending，不继承停机期限/优先级，每个被接受新 intent receipt≤1 且无第二效果。提交/恢复过程中任一 guard 回退则停止新世界效果、回 readonly/isolation，已 confirmed receipt/root 不撤销/重放/改写。Agent/Viewer/API 投影等级、主要 blocker、下一步；scope/状态 DTO 依赖消费者 authority。
 验证采用 [state-sync 执行 lane](../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md) 与 [现有证据 envelope](../testing/templates/state-sync-closure-evidence-packet-template.md)。同候选/同窗口 ops topology/inventory/health/status/peer-head/state-sync/restore 事实必须与 runtime guard、QA 判定关联；覆盖状态转换、manifest/head 负例、逐 intent receipt0/1、blocker/next step 的结构化 attachment/schema 尚须 owner 批准并提供，缺失阻断完整服务验收，本设计不伪造该 schema。
 

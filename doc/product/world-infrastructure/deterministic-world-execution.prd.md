@@ -27,9 +27,11 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义确定性提交、待决恢复、幂等和版本边界；执行流程与状态呈现由 runtime/P2P 专业 authority 负责。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+提交边界沿用 [P2P 合法 authority profile](../../p2p/prd.md#p2p-authority-profiles)：受控单权威不等于 BFT；超时/断连且不能证明未提交时必须表达提交未知并按原身份核对，下文无效果 pending 只用于已知尚无效果的请求。实际开放路径的投入、产出、事件、结果、里程碑和去重事实共同持久提交，replay 不重发外部行为。固定身份与合法 manifest/profile 激活链保持连续，不把版本升级当新世界。
+
 ## 1. 执行与共识边界
 
-- 每个活动验证者在 attestation 前完整重执行同一输入。权威世界结果只在 verified commit certificate 后生效；未最终化的 signed intent 不改变世界。
+- 两种合法 authority profile 复用同一确定性执行；`bft` 下每个活动验证者在 attestation 前完整重执行同一输入。权威世界结果只在适用 profile 的 verified commit proof 与持久提交条件成立后生效；未最终化的 signed intent 不改变世界。
 - 共识和执行是独立协议而非必须独立进程：它们通过版本化语义合同通信，in-process 与未来 IPC/network transport 必须通过同一 conformance suite。首个 triad 可单进程共运行。
 - 执行版本、manifest 与激活必须可审计、治理激活且 replay-safe。软件 rolling upgrade、治理激活 runtime manifest、独立客户端升级、基础协议 fork 是不同 release lane；若混合版本能对同一输入计算不同权威结果，则必须走协调协议升级/fork。
 
@@ -125,7 +127,7 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 
 ## 5. 组合验收
 
-- DE-1：相同 execution version、已排序输入和 world state 在全部活动验证者上产生相同结果；缺证、冲突、越权或版本不匹配的输入不产生部分副作用。
+- DE-1：两种 profile 复用同一确定性执行；相同 execution version、已排序输入和 world state 在 BFT 全部活动验证者上产生相同结果；缺证、冲突、越权或版本不匹配的输入不产生部分副作用。
 - DE-2：游戏/Agent/入口通过稳定协议仅见 committed state，能验证或获得适用证明，并在 finality 缺失时将 pending 表达为无世界效果的待决请求，而非结果。恢复样例必须证明待决请求按当时条件重审、只有 committed receipt 更新结论，并能区分待决、无效/拒绝、须重新规划及已生效；对明确互斥的同 lineage 成员，竞态、替代/撤回、重复重试和 receipt 重放至多产生一个有效世界效果，拒绝/过期不取消独立 intent。
 - DE-3：执行升级、snapshot/replay、node recovery 与版本混合的样例证明同一 `world_id` 历史和 state root 连续；未证明则 fail closed。
 - DE-4：版本激活窗口样例证明 intent 的 governing version 由首次进入**已 committed/finalized 的 canonical block** 与激活边界确定，而不是由提交端的非权威 compatibility declaration、提交时间或本地版本决定；candidate/proposed block 不产生世界效果。激活前待决请求在激活后按新 manifest 重新校验，不能兼容时原子拒绝/过期或经明确的新版本请求重提，不能静默翻译、沿用旧报价或产生部分副作用。旧请求与明确 linked replacement 的新请求发生竞态时，必须进入 2.1 的同一 intent lineage/互斥成员规则，由首个有效 committed receipt 原子胜出，另一方无效果，合计至多一次世界效果；未关联且专业域确认独立的新 intent 才可并发。历史 receipt 按原 block 的 manifest replay，激活证据缺失/冲突时 fail closed。玩家可区分待决、拒绝/过期、重规划与已结算结果。测试层级：`test_tier_full`。

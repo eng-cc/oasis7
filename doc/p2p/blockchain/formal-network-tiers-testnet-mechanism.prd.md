@@ -6,6 +6,14 @@
 审计轮次: 2
 建档日期: 2026-05-14
 
+## 当前 schema 与目标解耦边界
+
+当前 `network_tier_manifest.rs` 仍按 `local_devnet=preview+ephemeral`、`public_testnet=testnet+resettable`、`mainnet=production+frozen` 校验；下文 schema、tier 表和组合规则描述该现行实现及发行 skeleton，不代表世界保留承诺的唯一合法组合，也不证明持久单权威已实现。
+
+目标在既有 manifest 中分别表达网络环境/发行阶段、世界生命周期/保留承诺、合法提交 authority profile/激活版本，以及资产价值/faucet/结算资格。受限 preview 的正式世界可承诺持久保留合法身份、设施、材料、资格及来源；生产结算资格由经济规则与发行条件独立决定，修改 tier 不升值测试奖励，也不能因此清空已承诺世界。`frozen + preview` 只是需求组合；`token_policy.reset_policy` 不足以代表全世界保留，字段归属、兼容迁移、示例与 readiness 消费者须随实现共同闭合，不能仅放宽枚举后宣称保证成立。
+
+固定 `world_id`、`chain_id`、`genesis_hash` 与可演进软件/runtime manifest/authority 分开；后者只能按同世界历史合法升级。已有保留承诺时沿既有身份接续，隔离 local/dev 不并入长期世界。正式提交 profile、持久性和交接验收见 [P2P 合同](../prd.md#p2p-authority-profiles)；当前公开状态仍以根 README 和同候选任务证据为准。该目标解耦不是本次文档已开放的配置能力。
+
 ## 1. Executive Summary
 - Problem Statement: oasis7 现在需要把“本地 / test / 正式”三套环境讲清楚；历史 `shared_devnet/staging/canary` 容易被误读成目标 test 环境，而 `mainnet` 又容易被误读成“等 mainnet gates 文档齐了就能直接上线”。
 - Proposed Solution: 冻结一份 producer-owned 的正式网络分层 PRD，明确 `local_devnet -> public_testnet -> mainnet` 的 operator/runtime tier、各层 network manifest 真值、faucet/reset/validator/claims policy 边界，以及 repo-owned script/config skeleton；`shared_devnet` 只作为 legacy/rehearsal evidence 追溯，不再作为目标环境入口。Network tier 是统一持久大世界的运行/验证载体分层，不是玩家可见的多个世界模型。
