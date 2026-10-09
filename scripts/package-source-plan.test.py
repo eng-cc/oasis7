@@ -49,8 +49,47 @@ print("ok: immutable source plan tags, commits, branches, ambiguity, input injec
 
 import re
 repo = Path(__file__).resolve().parent.parent
+def reject_duplicate_workflow_keys(text):
+    # Repository workflow mappings use plain scalar keys and block scalars.
+    # Unlike safe_load, retain every mapping entry and reject repeated keys.
+    scopes = {}
+    scalar_indent = None
+    for number, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if scalar_indent is not None:
+            if indent > scalar_indent:
+                continue
+            scalar_indent = None
+        content = line.lstrip()
+        for depth in list(scopes):
+            if depth > indent:
+                del scopes[depth]
+        if content.startswith("- "):
+            scopes.pop(indent + 2, None)
+            content = content[2:]
+            indent += 2
+        match = re.match(r"([A-Za-z_][A-Za-z0-9_-]*):(?:\s|$)", content)
+        if not match:
+            continue
+        key = match.group(1).lower()
+        keys = scopes.setdefault(indent, {})
+        assert key not in keys, f"duplicate YAML key {key} at {number}; first at {keys.get(key)}"
+        keys[key] = number
+        if re.match(r"[|>][+-]?[0-9]?$", content[match.end():].strip()):
+            scalar_indent = indent
+
+try:
+    reject_duplicate_workflow_keys("with:\n  save-if: false\n  save-if: false\n")
+except AssertionError:
+    pass
+else:
+    raise AssertionError("duplicate mapping entry accepted")
+
 for path in (repo / ".github/workflows").glob("*.yml"):
     workflow = path.read_text()
+    reject_duplicate_workflow_keys(workflow)
     assert "\npermissions:\n" in workflow, path
     for action in re.findall(r"uses: ([^\s]+)", workflow):
         if not action.startswith("./"):

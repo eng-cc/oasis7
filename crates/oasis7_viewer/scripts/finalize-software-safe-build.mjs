@@ -185,7 +185,8 @@ if (!visualTest) await writeFile(finalCanonicalBundlePath, canonicalBundle, "utf
 await mkdir(viewerDistDir, { recursive: true });
 await copyFile(canonicalHtmlPath, resolve(viewerDistDir, "viewer.html"));
 await writeFile(finalDistBundlePath, canonicalBundle, "utf8");
-if (!visualTest) await writeViewerCompatAliases(viewerRoot, viewerDistDir);
+await writeViewerCompatAliases(viewerRoot, viewerDistDir);
+if (visualTest) await Promise.all(["viewer_terminal_shell.css", "favicon.ico", "viewer_first_agent_claim_evidence.html"].map(name => copyFile(resolve(viewerRoot, name), resolve(viewerDistDir, name))));
 if (!visualTest) await Promise.all([
   rm(staleRootCompatHtmlPath, { force: true }),
   rm(staleRootCompatBundlePath, { force: true }),

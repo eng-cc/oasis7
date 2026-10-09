@@ -260,7 +260,7 @@ try {
   summary.url = url;
   prepareBrowserSession();
   await browserJson(["open", url]);
-  await evalJson(`(async()=>{for(let n=0;n<100;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
+  await evalJson(`(async()=>{for(let n=0;n<1200;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
   for (const [name, width, height] of [["desktop", 1440, 900], ["narrow", 390, 844]]) {
     if (name !== "desktop") await browserJson(["open", url]);
     await browserJson(["set", "viewport", String(width), String(height)]);

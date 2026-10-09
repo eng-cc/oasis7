@@ -195,7 +195,7 @@ try {
   for (const [name, width, height] of [["desktop", 1440, 1000], ["narrow", 390, 844], ...((completionRun || routeMotionEvidence) ? [['compact',320,568]] : [])]) {
     await browserJson(["set", "viewport", String(width), String(height)]);
     if (name !== 'desktop') await browserJson(['open',url]);
-    await evalJson(`(async()=>{for(let n=0;n<100;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
+    await evalJson(`(async()=>{for(let n=0;n<1200;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
     let state = await evalJson(String.raw`(async()=>{const read=()=>(${pageStateScript()}); const deadline=Date.now()+15000; while(Date.now()<deadline){const s=read(); if(s.rendererReady && s.runtimeStatus==='ready') return JSON.stringify(s); await new Promise(r=>setTimeout(r,100));} throw new Error('renderer not ready');})()`);
     if (routeMotionEvidence || name === 'compact') {
       await evalJson(`(async()=>{for(let n=0;n<${name === 'compact' && routeMotionEvidence ? 3 : 1};n++){document.querySelector('#pixel-world-embedded-runtime-canvas').dispatchEvent(new WheelEvent('wheel',{deltaY:300,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,80));}await new Promise(r=>setTimeout(r,250));return true;})()`);

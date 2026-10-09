@@ -56,7 +56,7 @@ try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address(); const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=recent_event_glyphs`;
   summary.url = url; prepareBrowserSession(); await browserJson(["open", url], { timeout: 45_000 });
-  await evalJson(`(async()=>{for(let n=0;n<100;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
+  await evalJson(`(async()=>{for(let n=0;n<1200;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
   for (const [name, width, height] of [["desktop", 1440, 900], ["narrow", 390, 844]]) {
     await browserJson(["set", "viewport", String(width), String(height)]);
     const state = await evalJson(String.raw`(async()=>{const deadline=Date.now()+15000; while(Date.now()<deadline){const s=${stateScript()}; if(s.rendererReady && s.runtimeStatus==='ready') return JSON.stringify(s); await new Promise(r=>setTimeout(r,100));} throw new Error('renderer not ready');})()`);

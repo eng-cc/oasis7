@@ -514,7 +514,6 @@ jobs:
           save-if: false
           shared-key: oasis7-package-native-${{ runner.os }}-${{ matrix.target_triple }}-packaging-trusted-v2
           cache-on-failure: false
-          save-if: false
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         if: runner.os != 'Linux'
         with:

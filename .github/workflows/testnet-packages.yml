@@ -64,7 +64,6 @@ jobs:
         run: python3 scripts/package-source-plan.py
       - id: plan
         env:
-          INPUT_TAG: ${{ inputs.tag }}
           INPUT_REF: ${{ inputs.ref_or_sha }}
           INPUT_SCOPE: ${{ inputs.package_scope }}
         shell: bash
@@ -221,7 +220,6 @@ jobs:
           save-if: false
           shared-key: oasis7-package-native-${{ runner.os }}-${{ matrix.target_triple }}-${{ inputs.build_profile }}-trusted-v2
           cache-on-failure: false
-          save-if: false
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         if: runner.os != 'Linux'
         with:
