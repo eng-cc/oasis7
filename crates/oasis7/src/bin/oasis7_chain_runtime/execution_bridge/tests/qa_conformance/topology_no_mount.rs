@@ -280,6 +280,31 @@ fn no_mount_application_acceptance() {
     let public = sign_read_request("owner", (), &owner)
         .unwrap()
         .subject_public_key;
+    // Establish the player's session through the shipped authenticated protocol,
+    // exactly as a normal client does before submitting gameplay.
+    let mut registration = oasis7::viewer::AuthoritativeSessionRegisterRequest {
+        player_id: "owner-a".into(),
+        public_key: Some(public.clone()),
+        registration_grant: None,
+        auth: None,
+        requested_agent_id: Some("agent-a".into()),
+        force_rebind: false,
+    };
+    registration.auth = Some(
+        oasis7::viewer::sign_session_register_auth_proof(&registration, 550, &public, &owner)
+            .unwrap(),
+    );
+    send(
+        &mut stream,
+        serde_json::json!({
+            "type": "authoritative_recovery",
+            "command": {"mode": "register_session", "request": registration}
+        }),
+    );
+    let registration_ack = receive(&mut stream, "authoritative_recovery_ack");
+    assert_eq!(registration_ack["ack"]["status"], "session_registered");
+    assert_eq!(registration_ack["ack"]["player_id"], "owner-a");
+    assert_eq!(registration_ack["ack"]["agent_id"], "agent-a");
     let mut command = CollectDataCommand::Submit {
         request: CollectDataRequest {
             electricity_cost: 7,

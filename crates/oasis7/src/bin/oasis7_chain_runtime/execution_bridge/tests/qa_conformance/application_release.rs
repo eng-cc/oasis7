@@ -58,17 +58,105 @@ pub(super) fn verify_release(public: &RemoteWorldServiceClient) {
         .unwrap()
         .to_string();
     let error = server
-        .test_release_canonical_provider_context(reserved)
+        .test_release_canonical_provider_context(reserved.clone())
         .unwrap_err();
     assert!(
         error.contains("unknown") || error.contains("pending") || error.contains("retained"),
         "unexpected Release ambiguity: {error}"
     );
+    let lineage: serde_json::Value =
+        serde_json::from_slice(&fs::read("release-private-lineage.json").unwrap()).unwrap();
+    let originals: Vec<SubmitIntentRequest<WorldServicePayloadV1>> = lineage["provider_scheduler_pending"]
+        .as_object().unwrap().values().filter_map(|pending| {
+            let payload: WorldServicePayloadV1 = serde_json::from_value(pending["payload"].clone()).unwrap();
+            if !matches!(&payload, WorldServicePayloadV1::Scheduler(signed)
+                if matches!(&signed.request.operation, SchedulerOperationV1::ReleaseLease { lease_id: original } if original == &lease_id)) {
+                return None;
+            }
+            Some(SubmitIntentRequest { contract_version: 1,
+                correlation: serde_json::from_value(pending["correlation"].clone()).unwrap(),
+                deadline_unix_ms: None, signed_payload: payload })
+        }).collect();
+    assert_eq!(
+        originals.len(),
+        1,
+        "one durable original Release checkpoint required"
+    );
+    let original_release = &originals[0];
+    assert_eq!(
+        derive_correlation(
+            original_release.correlation.key.world.clone(),
+            &original_release.signed_payload
+        )
+        .unwrap(),
+        original_release.correlation
+    );
+    let release_deadline = Instant::now() + Duration::from_secs(10);
+    let release_commit = loop {
+        assert!(
+            Instant::now() < release_deadline,
+            "original Release Lookup timeout"
+        );
+        let response = client
+            .lookup(
+                LookupIntentRequest {
+                    contract_version: 1,
+                    key: original_release.correlation.key.clone(),
+                },
+                original_release.signed_payload.clone(),
+            )
+            .unwrap();
+        assert!(
+            Instant::now() < release_deadline,
+            "original Release response arrived after deadline"
+        );
+        response.validate(&original_release.correlation).unwrap();
+        match response.outcome {
+            IntentOutcome::Committed { commit, receipt } => {
+                let receipt: oasis7::runtime::CognitionReceiptV1 =
+                    serde_json::from_value(receipt).unwrap();
+                receipt.validate().unwrap();
+                assert_eq!(receipt.operation, "release");
+                assert_eq!(
+                    receipt.status,
+                    oasis7::runtime::CognitionLeaseStatusV1::Released
+                );
+                assert_eq!(receipt.lease_id, lease_id);
+                let expected = &reserved["cognition_lease"];
+                let actual = serde_json::to_value(&receipt).unwrap();
+                for field in [
+                    "agent_id",
+                    "agent_session_id",
+                    "agent_turn_id",
+                    "decision_request_id",
+                    "request_digest",
+                    "account_id",
+                    "idempotency_key",
+                    "quote",
+                    "reserved_amount",
+                ] {
+                    assert_eq!(
+                        actual[field], expected[field],
+                        "original Release receipt identity {field}"
+                    );
+                }
+                assert_eq!(receipt.released_amount, receipt.reserved_amount);
+                assert_eq!(receipt.consumed_amount, 0);
+                assert_eq!(receipt.refunded_amount, 0);
+                assert_eq!(receipt.net_amount, 0);
+                break commit;
+            }
+            IntentOutcome::Unknown | IntentOutcome::Received { .. } | IntentOutcome::Pending => {
+                thread::sleep(Duration::from_millis(10))
+            }
+            other => panic!("original Release failed: {other:?}"),
+        }
+    };
     let view_request = ReadWorldViewRequest {
         contract_version: 1,
         world: client.config().expected_world.clone(),
         scope_id: client.config().scope_id.clone(),
-        min_commit: None,
+        min_commit: Some(release_commit),
         fixed_commit: None,
         deadline_unix_ms: None,
     };

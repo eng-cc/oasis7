@@ -48,7 +48,9 @@ while True:
     state=json.loads(result.stdout)[0]['State']
     # The authoritative terminal state, never a pre-start wait notification.
     if state['Status'] in ['exited','dead'] and not state['Running']:
-        print(state['ExitCode'])
+        if state['ExitCode'] != 0:
+            raise SystemExit('container failed with exit '+str(state['ExitCode'])+': '+sys.argv[1])
+        print(0)
         break
     time.sleep(min(0.1,remaining))
 PY_WAIT
@@ -90,9 +92,9 @@ for n in $(seq 1 8); do
     --mount "type=bind,src=$evidence/bundle,dst=/bundle,readonly" \
     -e PRE2_PRESSURE_SOURCE="$n" "$image" /bundle/test-executable --ignored --exact "$entry::pressure_source_entry" --nocapture >/dev/null
 done
-[[ "$(bounded_wait "$prefix-controller")" == 0 ]]
-for n in $(seq 1 8); do [[ "$(bounded_wait "$prefix-source$n")" == 0 ]]; done
-[[ "$(bounded_wait "$prefix-service")" == 0 ]]
+bounded_wait "$prefix-controller" >/dev/null || exit 1
+for n in $(seq 1 8); do bounded_wait "$prefix-source$n" >/dev/null || exit 1; done
+bounded_wait "$prefix-service" >/dev/null || exit 1
 rtk proxy docker cp "$prefix-service:/coord/pressure-result.json" "$evidence/report.json"
 rtk proxy docker inspect "$prefix-app" > "$evidence/application-inspect.json"
 rtk proxy python3 - "$evidence" <<'PY'

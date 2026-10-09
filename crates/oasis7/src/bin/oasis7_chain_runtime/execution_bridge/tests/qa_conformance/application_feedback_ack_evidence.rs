@@ -11,7 +11,11 @@ pub(in super::super) fn economy(fixture: &Fixture) -> serde_json::Value {
     )
     .unwrap()
 }
-pub(in super::super) fn assert_initial_economic_requests(fixture: &Fixture, ack_count: usize) {
+pub(in super::super) fn assert_initial_economic_requests(
+    fixture: &Fixture,
+    ack_count: usize,
+    canonical_ack_count: usize,
+) {
     let mut counts = [0usize; 5];
     let mut originals: [Option<SubmitIntentRequest<WorldServicePayloadV1>>; 5] =
         std::array::from_fn(|_| None);
@@ -83,11 +87,26 @@ pub(in super::super) fn assert_initial_economic_requests(fixture: &Fixture, ack_
             })
             .filter(|result| result.request.correlation == request.correlation)
             .collect();
+        let expected_results = if matches!(
+            &request.signed_payload,
+            WorldServicePayloadV1::FeedbackAck(_)
+        ) {
+            canonical_ack_count
+        } else {
+            1
+        };
         assert_eq!(
             matches.len(),
-            1,
-            "one actual canonical result per original key"
+            expected_results,
+            "canonical result count must match the actual dispatch/crash boundary"
         );
+        if expected_results == 0 {
+            assert!(matches!(
+                &request.signed_payload,
+                WorldServicePayloadV1::FeedbackAck(_)
+            ));
+            continue;
+        }
         assert_eq!(matches[0].request.signed_payload, request.signed_payload);
         assert!(matches[0].rejected.is_none());
         match &request.signed_payload {

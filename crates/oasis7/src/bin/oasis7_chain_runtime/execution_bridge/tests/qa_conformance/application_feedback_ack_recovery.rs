@@ -49,7 +49,7 @@ pub(super) fn verify(
     let original: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     let baseline_trace = fixture.world_gate.feedback_ack_trace();
     let baseline_economy = economy(fixture);
-    assert_initial_economic_requests(fixture, 1);
+    assert_initial_economic_requests(fixture, 1, usize::from(mode == "memory-ack-after"));
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(
             &fs::read(root.join("feedback-ack-original-model-count.json")).unwrap()

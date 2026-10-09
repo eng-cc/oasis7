@@ -59,7 +59,9 @@ while True:
     state=json.loads(result.stdout)[0]['State']
     # The authoritative terminal state, never a pre-start wait notification.
     if state['Status'] in ['exited','dead'] and not state['Running']:
-        print(state['ExitCode'])
+        if state['ExitCode'] != 0:
+            raise SystemExit('container failed with exit '+str(state['ExitCode'])+': '+sys.argv[1])
+        print(0)
         break
     time.sleep(min(0.1,remaining))
 PY_WAIT
@@ -106,11 +108,10 @@ rtk proxy docker run -d --name "$prefix-control" --network "container:$prefix-ap
   --mount "type=volume,src=$app_volume,dst=/app-private" \
   --env-file "$evidence/application.env" "$image" /bundle/test-executable \
   --ignored --exact "$entry::no_mount_application_acceptance" --nocapture >/dev/null
-[[ "$(bounded_wait "$prefix-control")" == 0 ]]
+bounded_wait "$prefix-control" >/dev/null || exit 1
 rtk proxy docker logs "$prefix-control" > "$evidence/control-result.log" 2>&1
 rtk proxy docker cp "$prefix-service:/node/actual-service-witness.json" "$evidence/actual-service-witness.json"
-provider_exit="$(bounded_wait "$prefix-provider")"
-[[ "$provider_exit" == 0 ]]
+bounded_wait "$prefix-provider" >/dev/null || exit 1
 rtk proxy docker logs "$prefix-provider" > "$evidence/provider-result.log" 2>&1
 rtk proxy docker inspect "$prefix-app" > "$evidence/application-initial-inspect.json"
 rtk proxy docker logs "$prefix-app" > "$evidence/application-initial.log" 2>&1
@@ -137,7 +138,7 @@ rtk proxy docker run -d --name "$prefix-control-switch" --network "container:$pr
   --mount "type=volume,src=$app_volume,dst=/app-private" \
   --env-file "$evidence/application-alias.env" "$image" /bundle/test-executable \
   --ignored --exact "$entry::no_mount_endpoint_switch_acceptance" --nocapture >/dev/null
-[[ "$(bounded_wait "$prefix-control-switch")" == 0 ]]
+bounded_wait "$prefix-control-switch" >/dev/null || exit 1
 rtk proxy docker logs "$prefix-control-switch" > "$evidence/endpoint-switch-result.log" 2>&1
 rtk proxy docker cp "$prefix-service:/node/actual-service-witness.json" "$evidence/actual-service-witness-after-switch.json"
 rtk proxy docker inspect "$prefix-app" > "$evidence/application-inspect.json"

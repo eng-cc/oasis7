@@ -153,7 +153,7 @@ pub(super) fn finish(
         &proof.staged["pending"]["agent-a"],
         &proof.economy,
     );
-    application_feedback_ack_recovery::assert_initial_economic_requests(fixture, 1);
+    application_feedback_ack_recovery::assert_initial_economic_requests(fixture, 1, 1);
     println!(
         "PRE2_PRIVATE_MEMORY_ACK_REAL_FS_ROLLBACK_PASSED native_ledgers=5 original_bytes_blake3={}",
         blake3::hash(&proof.original)

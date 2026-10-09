@@ -449,7 +449,7 @@ pub(super) fn run_isolated_application_mode(
             String::from_utf8_lossy(&output.stdout)
                 .contains("PRE2_PRIVATE_MEMORY_ACK_MISSING_RUNNER_REFUSED")
         );
-        application_feedback_ack_recovery::assert_initial_economic_requests(&fixture, 0);
+        application_feedback_ack_recovery::assert_initial_economic_requests(&fixture, 0, 0);
         let refusal: serde_json::Value = serde_json::from_slice(
             &fs::read(app_dir.join("feedback-ack-missing-runner-refused")).unwrap(),
         )
