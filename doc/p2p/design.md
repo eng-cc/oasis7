@@ -130,14 +130,6 @@ prepare、primary decision 与 replica decision 分别使用签名域。接收�
 
 交接停写排空后，新集合同步 H−1；旧 authority 在 H 正式记录新集合/profile/epoch/H+1 边界及结果根。H 提交前可取消，提交后接续权不可撤回，入口/存储/signer/proof verifier 均拒绝 H+1 旧 profile；新集合启动失败保持停写。历史仍按各阶段合法 profile 验证。演练覆盖 H 已提交而 H+1 未提交时宕机/取消、重启拒绝旧 writer，以及无资产重发/断链/失效 pending 自动生效。该设计尚需协议、消费者与故障域实证，不是当前 readiness。
 
-#### des-p2p-initial-activation-verifier-prerequisite
-
-`controlled_authority::activation` provides an offline initial-activation prerequisite. It does not change manifest v2 planned status, startup readiness, legacy finality, or CommitRef. The caller independently authenticates an issuer key and fixes world/chain/genesis, initial epoch, writer/P/R, initial state root, execution manifest root, activation height, and the external genesis head. Certificate declarations, self-signatures, and configuration hashes cannot establish this authority. Writer/P/R keys must be pairwise distinct.
-
-A dedicated-domain strict schema v1 signature binds `controlled_single_authority` profile/version 1, position 1, genesis parent, height, before/after state roots, and all eight non-Input artifact roots. Input is the original canonical CBOR signed envelope, whose BLAKE3 must equal the record payload digest and Input root. The signed body excludes Input to avoid circular signature/hash binding. The envelope is bounded to 16 KiB; existing closed-record budgets remain unchanged. Verification requires the complete nine-role record, writer proposal, and both P/R DecisionDurable receipts. Prepare-only evidence, a missing receipt, a wrong external anchor, and later positions fail closed.
-
-Only successful verification constructs opaque `VerifiedInitialActivation`. It is not yet connected to execution-semantic verification, formal CommitRef, durable epoch publication, handoff, or runtime activation. Real FileEndpoint/coordinator fixtures exercise the local synchronous filesystem contract; they do not prove retained-world issuer authorization, independent deployment fault domains, or a formal opening. Upgrades require an explicit old-profile transition action and evidence chain; this initial-only verifier rejects them. Regression: `cargo test -p oasis7_distfs --lib activation`.
-
 #### des-p2p-controlled-history-reexecution-prerequisite
 
 execution bridge 的历史 capture 为显式 opt-in（`--capture-schedule-recipe-history`，默认关闭），只支持每高度恰好一个带既有已验证 ingress origin 的 `ScheduleRecipe`。它在真实执行前保存原始 Snapshot、Journal、上下文及实际 security policy，将该引用绑定进首次 product-validation intent 原子发布；执行后封闭包保存九角色真实字节、typed module registry 所声明的全部 WASM 和前缀关联。启用时材料持久或校验失败阻止记录发布并回滚内存执行；旧记录的 None 不反填，普通/BFT 默认路径不改变。
@@ -149,6 +141,13 @@ execution bridge 的历史 capture 为显式 opt-in（`--capture-schedule-recipe
 连续性保留完整 Snapshot/Journal 字节约束，仅两个已验证资源注解允许既有缓存、重开或按实际 manifest hash/journal 长度生成的默认完整 pair 演进；delta 必须绑定相同 manifest，不能混合 pair 或任意去字段归一化 root。真实 pre/post roots 始终绑定原始材料。当前 driver 的 diagnostic resource context 使用 chain_id=world_id、genesis_ref=None，这些注解不证明正式 genesis；外部 fixed trust 不补写历史身份。
 
 文件输入有界、拒绝观察到的祖先/末端 symlink，支持范围为 Unix 操作员受控目录；不承诺防同权限恶意进程替换祖先。合格输出仅为本地持久协议与重执行前置验证，不转换正式 CommitRef、不激活 planned profile、不改变 BFT、开放全路径 nonce 共持久或创建新世界。Rules 角色保存实际前后 World Manifest 配置，原生配置绑定在 Snapshot，security policy 与操作员配置核对；原 Runtime 没有可历史加载的 native Rust 规则二进制工件，本入口仅证明同候选 Runtime 语义下重执行，不宣称任意旧 native 版本的可移植 replay。真实候选须显式打开 capture 生成新材料；既有未 capture 世界不能通过补造 sidecar 获得此证明。回归入口为 `cargo test -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,wasmtime controlled_history`；当次命令、候选与结果另由工程 evidence 维护。
+#### des-p2p-initial-activation-verifier-prerequisite
+
+`controlled_authority::activation` provides an offline initial-activation prerequisite. It does not change manifest v2 planned status, startup readiness, legacy finality, or CommitRef. The caller independently authenticates an issuer key and fixes world/chain/genesis, initial epoch, writer/P/R, initial state root, execution manifest root, activation height, and the external genesis head. Certificate declarations, self-signatures, and configuration hashes cannot establish this authority. Writer/P/R keys must be pairwise distinct.
+
+A dedicated-domain strict schema v1 signature binds `controlled_single_authority` profile/version 1, position 1, genesis parent, height, before/after state roots, and all eight non-Input artifact roots. Input is the original canonical CBOR signed envelope, whose BLAKE3 must equal the record payload digest and Input root. The signed body excludes Input to avoid circular signature/hash binding. The envelope is bounded to 16 KiB; existing closed-record budgets remain unchanged. Verification requires the complete nine-role record, writer proposal, and both P/R DecisionDurable receipts. Prepare-only evidence, a missing receipt, a wrong external anchor, and later positions fail closed.
+
+Only successful verification constructs opaque `VerifiedInitialActivation`. It is not yet connected to execution-semantic verification, formal CommitRef, durable epoch publication, handoff, or runtime activation. Real FileEndpoint/coordinator fixtures exercise the local synchronous filesystem contract; they do not prove retained-world issuer authorization, independent deployment fault domains, or a formal opening. Upgrades require an explicit old-profile transition action and evidence chain; this initial-only verifier rejects them. Regression: `cargo test -p oasis7_distfs --lib activation`.
 
 #### des-p2p-certificate-bound-bootstrap-anchor-prerequisite
 
