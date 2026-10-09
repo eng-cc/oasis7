@@ -1,39 +1,7 @@
 use eframe::egui;
-#[cfg(not(target_arch = "wasm32"))]
-use oasis7::simulator::ProviderCompatibilityStatus as SimulatorProviderCompatibilityStatus;
-use serde::{Deserialize, Serialize};
+pub(crate) use oasis7_client_api::ProviderCompatibilityStatus;
 
 use crate::UiLanguage;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ProviderCompatibilityStatus {
-    #[default]
-    Ready,
-    Degraded,
-    Incompatible,
-}
-
-impl ProviderCompatibilityStatus {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Ready => "ready",
-            Self::Degraded => "degraded",
-            Self::Incompatible => "incompatible",
-        }
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl From<SimulatorProviderCompatibilityStatus> for ProviderCompatibilityStatus {
-    fn from(value: SimulatorProviderCompatibilityStatus) -> Self {
-        match value {
-            SimulatorProviderCompatibilityStatus::Ready => Self::Ready,
-            SimulatorProviderCompatibilityStatus::Degraded => Self::Degraded,
-            SimulatorProviderCompatibilityStatus::Incompatible => Self::Incompatible,
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ProviderSnapshot {

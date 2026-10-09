@@ -1,16 +1,18 @@
 use super::*;
 #[cfg(not(target_arch = "wasm32"))]
-use oasis7::simulator::{
-    ProviderLoopbackHttpClient, ProviderLoopbackHttpError, evaluate_provider_compatibility,
-};
+use oasis7_client_api::{ProviderHealth, ProviderInfo, evaluate_provider_compatibility};
+#[cfg(not(target_arch = "wasm32"))]
+use reqwest::blocking::Client;
+#[cfg(not(target_arch = "wasm32"))]
+use reqwest::{StatusCode, Url};
+#[cfg(not(target_arch = "wasm32"))]
+use serde::de::DeserializeOwned;
 #[cfg(all(not(target_arch = "wasm32"), test))]
 use std::io::{Read, Write};
 #[cfg(all(not(target_arch = "wasm32"), test))]
 use std::net::{TcpStream, ToSocketAddrs};
-#[cfg(all(not(target_arch = "wasm32"), test))]
-use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[cfg(all(not(target_arch = "wasm32"), test))]
 pub(crate) fn probe_chain_status_endpoint(bind: &str) -> Result<(), String> {
@@ -80,16 +82,12 @@ pub(crate) fn check_provider_http_provider(
 ) -> Result<ProviderSnapshot, ProviderCheckError> {
     validate_provider_base_url_for_transport(base_url, transport)
         .map_err(ProviderCheckError::InvalidConfig)?;
-    let client =
-        ProviderLoopbackHttpClient::new_with_transport(base_url, auth_token, timeout_ms, transport)
-            .map_err(map_provider_client_error)?;
+    let client = ProviderProbeHttpClient::new(base_url, auth_token, timeout_ms, transport)?;
     let info_started_at = Instant::now();
-    let info = client.provider_info().map_err(map_provider_client_error)?;
+    let info: ProviderInfo = client.get_json("/v1/provider/info")?;
     let info_latency_ms = info_started_at.elapsed().as_millis().min(u64::MAX as u128) as u64;
     let health_started_at = Instant::now();
-    let health = client
-        .provider_health()
-        .map_err(map_provider_client_error)?;
+    let health: ProviderHealth = client.get_json("/v1/provider/health")?;
     let health_latency_ms = health_started_at
         .elapsed()
         .as_millis()
@@ -109,7 +107,7 @@ pub(crate) fn check_provider_http_provider(
         chain_resource_delta_schema_version: info.chain_resource_delta_schema_version,
         capabilities: info.capabilities,
         supported_action_sets: info.supported_action_sets,
-        compatibility_status: compatibility.status.into(),
+        compatibility_status: compatibility.status,
         status,
         queue_depth: health.queue_depth,
         last_error: health.last_error,
@@ -121,19 +119,73 @@ pub(crate) fn check_provider_http_provider(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn map_provider_client_error(error: ProviderLoopbackHttpError) -> ProviderCheckError {
-    match error {
-        ProviderLoopbackHttpError::InvalidBaseUrl(detail) => {
-            ProviderCheckError::InvalidConfig(detail)
+struct ProviderProbeHttpClient {
+    base_url: Url,
+    auth_token: Option<String>,
+    http: Client,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl ProviderProbeHttpClient {
+    fn new(
+        base_url: &str,
+        auth_token: Option<&str>,
+        timeout_ms: u64,
+        transport: &str,
+    ) -> Result<Self, ProviderCheckError> {
+        let base_url = Url::parse(base_url.trim())
+            .map_err(|err| ProviderCheckError::InvalidConfig(err.to_string()))?;
+        let mut builder = Client::builder().timeout(Duration::from_millis(timeout_ms.max(1)));
+        if transport.trim() == LOOPBACK_HTTP_PROVIDER_TRANSPORT {
+            builder = builder.no_proxy();
         }
-        ProviderLoopbackHttpError::Unauthorized { detail, .. } => {
-            ProviderCheckError::Unauthorized(detail)
+        let http = builder
+            .build()
+            .map_err(|err| ProviderCheckError::Unreachable(err.to_string()))?;
+        Ok(Self {
+            base_url,
+            auth_token: auth_token
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned),
+            http,
+        })
+    }
+
+    fn get_json<Response>(&self, path: &str) -> Result<Response, ProviderCheckError>
+    where
+        Response: DeserializeOwned,
+    {
+        let url = self
+            .base_url
+            .join(path.trim_start_matches('/'))
+            .map_err(|err| ProviderCheckError::InvalidConfig(err.to_string()))?;
+        let mut request = self.http.get(url);
+        if let Some(token) = &self.auth_token {
+            request = request.bearer_auth(token);
         }
-        ProviderLoopbackHttpError::RequestFailed { detail, .. }
-        | ProviderLoopbackHttpError::UnexpectedStatus { body: detail, .. }
-        | ProviderLoopbackHttpError::DecodeFailed { detail, .. } => {
-            ProviderCheckError::Unreachable(detail)
+        let response = request
+            .send()
+            .map_err(|err| ProviderCheckError::Unreachable(err.to_string()))?;
+        let status = response.status();
+        let body = response
+            .bytes()
+            .map_err(|err| ProviderCheckError::Unreachable(err.to_string()))?;
+        if status == StatusCode::UNAUTHORIZED {
+            let detail = String::from_utf8_lossy(body.as_ref()).trim().to_string();
+            return Err(ProviderCheckError::Unauthorized(if detail.is_empty() {
+                "HTTP 401".to_string()
+            } else {
+                detail
+            }));
         }
+        if !status.is_success() {
+            return Err(ProviderCheckError::Unreachable(
+                String::from_utf8_lossy(body.as_ref()).trim().to_string(),
+            ));
+        }
+        serde_json::from_slice(body.as_ref())
+            .map_err(|err| ProviderCheckError::Unreachable(err.to_string()))
     }
 }
 
