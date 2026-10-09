@@ -129,6 +129,7 @@ fn static_http_server_serves_large_static_asset_completely() {
     let mut server = start_static_http_server(
         DeploymentMode::TrustedLocalOnly,
         "127.0.0.1:0",
+        "127.0.0.1:5011",
         "127.0.0.1",
         port,
         temp_dir.as_path(),
@@ -170,6 +171,7 @@ fn hosted_public_unauthenticated_get_cannot_issue_player_session() {
     let mut server = start_static_http_server(
         DeploymentMode::HostedPublicJoin,
         "127.0.0.1:0",
+        "127.0.0.1:5011",
         "127.0.0.1",
         port,
         temp_dir.as_path(),
@@ -226,6 +228,7 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
     let mut server = start_static_http_server(
         DeploymentMode::HostedPublicJoin,
         "127.0.0.1:0",
+        "127.0.0.1:5011",
         "127.0.0.1",
         port,
         temp_dir.as_path(),
@@ -315,6 +318,7 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
     let mut wildcard_server = start_static_http_server(
         DeploymentMode::HostedPublicJoin,
         "127.0.0.1:0",
+        "127.0.0.1:5011",
         "0.0.0.0",
         wildcard_port,
         temp_dir.as_path(),
@@ -355,6 +359,7 @@ fn director_capability_endpoint_reports_explicit_unavailable_state() {
     let mut server = start_static_http_server(
         DeploymentMode::HostedPublicJoin,
         "127.0.0.1:0",
+        "127.0.0.1:5011",
         "127.0.0.1",
         port,
         temp_dir.as_path(),
@@ -388,4 +393,48 @@ fn director_capability_endpoint_reports_explicit_unavailable_state() {
         "unavailable endpoint must not issue a grant: {body}"
     );
     let _ = fs::remove_dir_all(temp_dir);
+}
+
+#[test]
+fn static_http_index_trusts_web_bridge_not_raw_runtime_endpoint() {
+    let temp_dir = make_temp_dir("distinct_runtime_endpoints");
+    fs::write(
+        temp_dir.join("index.html"),
+        b"<html><head></head><body>viewer</body></html>",
+    )
+    .expect("write index");
+    let probe = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = probe.local_addr().unwrap().port();
+    drop(probe);
+    let mut server = start_static_http_server(
+        DeploymentMode::TrustedLocalOnly,
+        "127.0.0.1:49423",
+        "127.0.0.1:49411",
+        "127.0.0.1",
+        port,
+        temp_dir.as_path(),
+        None,
+    )
+    .expect("start server with distinct raw and websocket endpoints");
+    let mut response = Vec::new();
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    stream
+        .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+        .unwrap();
+    stream.read_to_end(&mut response).unwrap();
+    stop_static_http_server(&mut server);
+    let response = String::from_utf8(response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
+    assert!(response.contains(r#""viewerWsEndpoint":"ws://127.0.0.1:49411/""#));
+    assert!(!response.contains("ws://127.0.0.1:49423/"));
+    let config = static_http::StaticHttpRuntimeConfig::new(
+        DeploymentMode::TrustedLocalOnly,
+        "127.0.0.1:49423",
+        "127.0.0.1:49411",
+    )
+    .unwrap();
+    assert_eq!(
+        config.live_bind, "127.0.0.1:49423",
+        "session and presence endpoint is unchanged"
+    );
 }

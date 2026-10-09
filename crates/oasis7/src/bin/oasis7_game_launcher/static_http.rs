@@ -62,6 +62,24 @@ struct HostedTestLoginRequest {
     public_key: String,
 }
 
+pub(super) struct StaticHttpRuntimeConfig {
+    pub(super) live_bind: String,
+    viewer_runtime_config_json: String,
+}
+
+impl StaticHttpRuntimeConfig {
+    pub(super) fn new(
+        deployment_mode: DeploymentMode,
+        live_bind: &str,
+        web_bind: &str,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            live_bind: live_bind.to_string(),
+            viewer_runtime_config_json: viewer_runtime_config_json(deployment_mode, web_bind)?,
+        })
+    }
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
@@ -69,13 +87,14 @@ struct HostedTestLoginRequest {
 pub(super) fn handle_http_connection(
     mut stream: TcpStream,
     root_dir: &Path,
-    live_bind: &str,
+    runtime_config: &StaticHttpRuntimeConfig,
     allow_hosted_test_login: bool,
     default_viewer_player_id: Option<&str>,
     deployment_mode: DeploymentMode,
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
     hosted_account_broker: &Arc<Mutex<HostedAccountIdentityBroker>>,
 ) -> Result<(), String> {
+    let live_bind = runtime_config.live_bind.as_str();
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))
         .map_err(|err| format!("failed to set read timeout: {err}"))?;
@@ -326,7 +345,10 @@ pub(super) fn handle_http_connection(
                 viewer_auth_bootstrap.as_ref(),
             );
             let body = if path.extension() == Some(OsStr::new("html")) {
-                inject_viewer_runtime_config(&body, deployment_mode, live_bind)?
+                super::viewer_runtime_config::inject_config(
+                    &body,
+                    &runtime_config.viewer_runtime_config_json,
+                )?
             } else {
                 body
             };
@@ -780,23 +802,13 @@ pub(super) fn sanitize_index_html_for_embedded_server(
 
 pub(super) fn viewer_runtime_config_json(
     deployment_mode: DeploymentMode,
-    live_bind: &str,
+    web_bind: &str,
 ) -> Result<String, String> {
     let configured = std::env::var("OASIS7_VIEWER_PUBLIC_WS_URL").ok();
     super::viewer_runtime_config::viewer_runtime_config_json(
         deployment_mode,
-        live_bind,
+        web_bind,
         configured.as_deref(),
-    )
-}
-fn inject_viewer_runtime_config(
-    body: &[u8],
-    deployment_mode: DeploymentMode,
-    live_bind: &str,
-) -> Result<Vec<u8>, String> {
-    super::viewer_runtime_config::inject_config(
-        body,
-        &viewer_runtime_config_json(deployment_mode, live_bind)?,
     )
 }
 
