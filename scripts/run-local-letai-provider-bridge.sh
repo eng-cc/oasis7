@@ -144,7 +144,7 @@ export OASIS7_LOCAL_LETAI_PROVIDER_THINKING="$PROVIDER_THINKING"
 export OASIS7_LOCAL_LETAI_PROVIDER_BACKEND="$PROVIDER_BACKEND"
 export OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN="$AUTH_TOKEN"
 export OASIS7_LOCAL_LETAI_PROVIDER_CLI="$ROOT_DIR/scripts/provider-remote-https/letai_provider_cli.py"
-export OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="$ROOT_DIR/target/debug/oasis7_provider_local_bridge"
+export OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="${OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN:-$ROOT_DIR/target/debug/oasis7_provider_local_bridge}"
 
 WRAPPER_CMD=("$ROOT_DIR/scripts/with-letai-llm-config.sh")
 if [[ "${#CONFIG_ARGS[@]}" -gt 0 ]]; then

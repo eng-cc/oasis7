@@ -123,6 +123,7 @@ fn perf_probe_runtime_module_routing_with_many_active_manifests() {
         ),
     };
     let action = crate::runtime::ActionEnvelope {
+        committed_recipe_origin: None,
         id: 1,
         action: crate::runtime::Action::RegisterAgent {
             agent_id: "agent-perf".to_string(),

@@ -8,11 +8,20 @@
 
 ## 当前 schema 与目标解耦边界
 
-当前 `network_tier_manifest.rs` 仍按 `local_devnet=preview+ephemeral`、`public_testnet=testnet+resettable`、`mainnet=production+frozen` 校验；下文 schema、tier 表和组合规则描述该现行实现及发行 skeleton，不代表世界保留承诺的唯一合法组合，也不证明持久单权威已实现。
+v1 `network_tier_manifest.rs` 保留 `local_devnet=preview+ephemeral`、`public_testnet=testnet+resettable`、`mainnet=production+frozen` 的兼容校验；下文旧 schema、tier 表和组合规则适用于 v1，不代表世界保留承诺的唯一合法组合，也不证明持久单权威已实现。
 
 目标在既有 manifest 中分别表达网络环境/发行阶段、世界生命周期/保留承诺、合法提交 authority profile/激活版本，以及资产价值/faucet/结算资格。受限 preview 的正式世界可承诺持久保留合法身份、设施、材料、资格及来源；生产结算资格由经济规则与发行条件独立决定，修改 tier 不升值测试奖励，也不能因此清空已承诺世界。`frozen + preview` 只是需求组合；`token_policy.reset_policy` 不足以代表全世界保留，字段归属、兼容迁移、示例与 readiness 消费者须随实现共同闭合，不能仅放宽枚举后宣称保证成立。
 
-固定 `world_id`、`chain_id`、`genesis_hash` 与可演进软件/runtime manifest/authority 分开；后者只能按同世界历史合法升级。已有保留承诺时沿既有身份接续，隔离 local/dev 不并入长期世界。正式提交 profile、持久性和交接验收见 [P2P 合同](../prd.md#p2p-authority-profiles)；当前公开状态仍以根 README 和同候选任务证据为准。该目标解耦不是本次文档已开放的配置能力。
+固定 `world_id`、`chain_id`、`genesis_hash` 与可演进软件/runtime manifest/authority 分开；后者只能按同世界历史合法升级。已有保留承诺时沿既有身份接续，隔离 local/dev 不并入长期世界。正式提交 profile、持久性和交接验收见 [P2P 合同](../prd.md#p2p-authority-profiles)；当前公开状态仍以根 README 和同候选任务证据为准。v2 的计划配置声明不授予运行权威。
+
+<a id="p2p-tier-planned-world-policy"></a>
+### PRD-P2P-TIER-002：v2 计划配置与运行支持边界
+
+v2 在同一 manifest 增加 `release_policy.stage`、`world_policy.world_id/retention/reset_policy` 与 `authority_policy.profile/profile_version/activation`。首个支持的声明组合为 `limited_preview`、`preview` 价值、`persistent/frozen` 世界保留及 `controlled_single_authority` version `1`、`planned` 激活；环境 tier 独立声明。v2 的 token policy 不再拥有世界 reset；同时声明两处 reset 或缺少新 policy 均拒绝。v1 不接受这些 v2 policy，避免反序列化忽略字段后进入旧协议。
+
+`AC-P2P-TIER-PLANNED-001`：Rust 与脚本使用同一正负 fixture 验证版本及组合；v1 结果保持兼容。v2 只接受 planned 且不得 `status=live`，生产结算与 mainnet/live claims 保持禁止。world_id 是计划的目标身份，须与 genesis_ref 中的 world_id、chain_id 对齐；genesis_ref 仍是工件引用，此校验不证明固定 genesis_hash、既有世界、独立副本或保留承诺已经成立。可复用[计划配置模板](../../testing/templates/network-tier-persistent-preview-planned.example.json)，其中引用的身份工件须由目标计划提供。
+
+`AC-P2P-TIER-PLANNED-002`：schema-valid 与 runtime-supported 分开。chain runtime 与 launcher 在任何导入/执行状态写入前拒绝 planned v2；readiness/exit review 即使旧 lanes 全 pass 也不能给出 ready/live。旧 BFT/threshold verifier 与 light-client 证据入口不得替 v2 controlled profile 放行。正式 active 的历史激活证明、提交日志和 fault-domain 条件由后续 [Issue #4363](https://github.com/eng-cc/oasis7/issues/4363) 实施，不由配置文件激活。
 
 ## 1. Executive Summary
 - Problem Statement: oasis7 现在需要把“本地 / test / 正式”三套环境讲清楚；历史 `shared_devnet/staging/canary` 容易被误读成目标 test 环境，而 `mainnet` 又容易被误读成“等 mainnet gates 文档齐了就能直接上线”。

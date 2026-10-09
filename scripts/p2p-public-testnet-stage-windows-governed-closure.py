@@ -253,6 +253,11 @@ def localize(stage_root: Path, out_dir: Path) -> None:
         if not path.is_file():
             die(f"staged deployment output missing {label}: {path}")
 
+    manifest = load_json(required["manifest"])
+    if manifest.get("schema_version") != "oasis7.network_tier_manifest.v1" or any(
+        field in manifest for field in ("release_policy", "world_policy", "authority_policy")
+    ):
+        die("planned authority is not activated; only v1 may use legacy Windows deployment")
     out_dir.mkdir(parents=True)
     localizer = Localizer(stage_root, out_dir)
     bundle = load_json(required["bundle"])

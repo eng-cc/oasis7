@@ -32,11 +32,17 @@ pub const STARTER_ASSEMBLER_FACTORY_ID: &str = "factory.assembler.mk1";
 pub const STARTER_INDUSTRIAL_COMPLETION_BOUNDARY: &str =
     "starter Smelter first settled iron_ingot production";
 
+pub use crate::industry_types::StarterIndustrialSettlementSummaryV1;
+
 /// Durable identity of the first starter-chain production settlement. The
 /// profile and output-ledger bindings prevent a later recipe or a replacement
 /// profile from inheriting this milestone accidentally.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StarterIndustrialMilestoneV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settlement_summary: Option<StarterIndustrialSettlementSummaryV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub committed_recipe_origin: Option<crate::runtime::CommittedRecipeOrigin>,
     pub profile_id: String,
     pub profile_revision: u64,
     pub factory_id: String,

@@ -899,3 +899,93 @@ fn node_runtime_execution_driver_restores_predecessor_before_gap_commit() {
 
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn committed_recipe_origin_preserves_exact_consensus_context_and_runtime_id_allocation() {
+    let action = RuntimeAction::ScheduleRecipe {
+        requester_agent_id: "builder-a".into(),
+        factory_id: "factory.test".into(),
+        recipe_id: "recipe.test".into(),
+        plan: oasis7_wasm_abi::RecipeExecutionPlan::accepted(1, vec![], vec![], vec![], 0, 1),
+        logistics_route_ids: vec![],
+        logistics_path_ids: vec![],
+    };
+    let mut envelope = ConsensusActionPayloadEnvelope::from_runtime_action(action);
+    envelope.version = 2;
+    envelope.gameplay_submission_origin = Some(oasis7::runtime::GameplaySubmissionOrigin {
+        verified_player_id: "browser-player".into(),
+        public_key: "a".repeat(64),
+        auth_nonce: 7,
+        hosted_registration_nonce: None,
+        requester_agent_id: "builder-a".into(),
+        factory_id: "factory.test".into(),
+        recipe_id: "recipe.test".into(),
+    });
+    let payload = encode_consensus_action_payload(&envelope).unwrap();
+    let committed =
+        oasis7_node::NodeConsensusAction::from_payload(2, "node-transport", payload).unwrap();
+    let root = compute_consensus_action_root(std::slice::from_ref(&committed)).unwrap();
+    let context = NodeExecutionCommitContext {
+        world_id: "w1".into(),
+        node_id: "node-a".into(),
+        proposer_id: "node-a".into(),
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        node_block_hash: "node-h1".into(),
+        action_root: root.clone(),
+        committed_actions: vec![committed.clone()],
+        committed_at_unix_ms: 1000,
+    };
+    let (mut decoded, _, _) =
+        super::super::driver_replicated_input::decode_committed_actions(&context).unwrap();
+    let (action, origin) = decoded.pop().unwrap();
+    let origin = origin.expect("new verified metadata");
+    assert_eq!(origin.consensus_action_id, 2);
+    assert_eq!(origin.action_payload_hash, committed.payload_hash);
+    assert_eq!(origin.action_root, root);
+    assert_eq!(origin.committed_height, 1);
+    assert_eq!(origin.submission.verified_player_id, "browser-player");
+    assert_eq!(origin.consensus_submitter_player_id, "node-transport");
+    let mut world = RuntimeWorld::new();
+    for index in 0..4 {
+        world.submit_action(RuntimeAction::RegisterAgent {
+            agent_id: format!("queued-{index}"),
+            pos: oasis7::geometry::GeoPos::new(0, 0, 0),
+        });
+    }
+    assert_eq!(
+        world
+            .submit_recipe_action_with_origin(action, origin.clone())
+            .unwrap(),
+        5
+    );
+    let snapshot = world.snapshot();
+    assert_eq!(
+        snapshot.pending_actions[4].committed_recipe_origin,
+        Some(origin.clone())
+    );
+    let restored = RuntimeWorld::from_snapshot(snapshot, world.journal().clone()).unwrap();
+    assert_eq!(
+        restored.snapshot().pending_actions[4].committed_recipe_origin,
+        Some(origin)
+    );
+    envelope.gameplay_submission_origin = None;
+    envelope.version = 1;
+    let legacy = oasis7_node::NodeConsensusAction::from_payload(
+        2,
+        "node-transport",
+        encode_consensus_action_payload(&envelope).unwrap(),
+    )
+    .unwrap();
+    let mut legacy_context = context;
+    legacy_context.action_root =
+        compute_consensus_action_root(std::slice::from_ref(&legacy)).unwrap();
+    legacy_context.committed_actions = vec![legacy];
+    let (decoded, _, _) =
+        super::super::driver_replicated_input::decode_committed_actions(&legacy_context).unwrap();
+    assert!(
+        decoded[0].1.is_none(),
+        "legacy metadata must never be retroactively synthesized"
+    );
+}

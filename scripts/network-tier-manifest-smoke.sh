@@ -242,6 +242,37 @@ cat >"$same_world_hosted_entry_mismatch_evidence" <<'EOF'
 }
 EOF
 
+# Synthetic same-world files belong to this smoke test, not a live verdict.
+python3 - "$tmpdir" <<'PYFIXTURE'
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+identity = {"world_id": "oasis7-public-testnet-smoke-world", "chain_id": "oasis7-public-testnet-smoke"}
+status_path = root / "synthetic-chain-status.json"
+status_path.write_text(json.dumps({
+    "ok": True, "readiness": {"ready": True, "failed_gates": []},
+    "world_resource": {**identity, "readiness_status": "ready", "failed_gates": []},
+}))
+snapshot_path = root / "synthetic-pure-api-snapshot.json"
+snapshot_path.write_text(json.dumps({
+    "chain_resource_manifest": identity,
+    "runtime_snapshot": {"chain_resource_manifest": identity},
+    "latest_chain_resource_delta": identity,
+}))
+for name in ("hosted-entry", "launcher-config", "viewer-config", "pure-api-config"):
+    (root / f"synthetic-{name}.json").write_text(json.dumps({"sample_path": str(snapshot_path)}))
+for name in ("ready", "invalid", "mismatch"):
+    path = root / f"same-world-hosted-entry-{name}.json"
+    data = json.loads(path.read_text())
+    data["chain_status_samples_ref"] = str(status_path)
+    for key, name in (("hosted_entry_ref", "hosted-entry"), ("launcher_config_ref", "launcher-config"),
+                      ("viewer_config_ref", "viewer-config"), ("pure_api_config_ref", "pure-api-config")):
+        data[key] = str(root / f"synthetic-{name}.json")
+    data["raw_samples"] = {"pure_api_snapshot": str(snapshot_path)}
+    path.write_text(json.dumps(data))
+PYFIXTURE
+
 cat >"$legacy_coarse_gate_evidence" <<'EOF'
 # public testnet rehearsal coarse gate evidence
 
@@ -510,5 +541,7 @@ PY
   --out-dir "$out_dir/legacy-manifest-gate-block" >/dev/null
 jq -e '.readiness_verdict == "block" and .live_candidate_allowed == false and (.manifest_blockers | any(. == "manifest_declares_unsupported_required_gates:public_testnet_rehearsal_pass"))' \
   "$(latest_summary "$out_dir/legacy-manifest-gate-block")/summary.json" >/dev/null
+
+python3 scripts/network-tier-manifest-v2.test.py
 
 echo "network-tier-manifest smoke passed"

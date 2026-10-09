@@ -66,7 +66,15 @@ summary = {
     "denied_claims": denied_claims,
 }
 
-if tier == "public_testnet":
+if data["schema_version"] == "oasis7.network_tier_manifest.v2":
+    summary["exit_review_readiness"] = "planned_authority_not_activated"
+    summary["live_candidate_allowed"] = False
+    summary["manifest_schema_version"] = data["schema_version"]
+    summary["runtime_supported"] = False
+    summary["release_policy"] = data["release_policy"]
+    summary["world_policy"] = data["world_policy"]
+    summary["authority_policy"] = data["authority_policy"]
+elif tier == "public_testnet":
     required = {
         "public_rpc_ready",
         "explorer_public_ready",

@@ -121,6 +121,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$source_manifest" ]]; then
+  "$repo_root/scripts/network-tier-manifest.sh" require-legacy-runtime --manifest "$source_manifest" >/dev/null
+fi
+
 require_non_empty "--source-env" "$source_env"
 require_non_empty "--source-manifest" "$source_manifest"
 require_non_empty "--runtime-build-ref" "$runtime_build_ref"

@@ -145,7 +145,7 @@ jobs:
             env -u NO_COLOR trunk build --release --dist ../../output/testnet-packages/web-launcher-dist
           )
       - name: Upload web dist artifacts
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: testnet-web-dists
           path: |
@@ -153,7 +153,7 @@ jobs:
             output/testnet-packages/web-launcher-dist
           if-no-files-found: error
       - name: Upload viewer web delivery
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: testnet-viewer-web-delivery
           path: output/testnet-packages/oasis7-viewer-web-delivery.tar.gz
@@ -413,7 +413,7 @@ jobs:
             cp "${{ matrix.platform }}-ops-tools-SHA256SUMS" ../
           fi
       - name: Upload testnet package artifacts
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: testnet-package-${{ matrix.platform }}-${{ steps.package_version.outputs.value }}
           path: |
