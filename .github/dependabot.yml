@@ -1,0 +1,55 @@
+# Twice-weekly version updates use ordinary PR review and CI; no automatic merging.
+# Compatibility fixtures and vendored/third_party sources are intentionally
+# excluded. Root Cargo workspace members are covered by the root manifest.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directories:
+      - "/"
+      - "/crates/oasis7_builtin_wasm_modules/m*"
+      - "/crates/oasis7_builtin_wasm_modules/local_test_provider"
+      - "/tools/scenario_test_runner"
+    schedule:
+      interval: cron
+      cronjob: "0 9 * * 1,3"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    groups:
+      cargo-minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: "/crates/oasis7_viewer"
+    schedule:
+      interval: cron
+      cronjob: "0 9 * * 1,3"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    groups:
+      npm-minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: cron
+      cronjob: "0 9 * * 1,3"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    groups:
+      actions-minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: "/docker/wasm-builder"
+    schedule:
+      interval: cron
+      cronjob: "0 9 * * 1,3"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    groups:
+      docker-images:
+        patterns: ["*"]
