@@ -223,6 +223,7 @@ impl ViewerRuntimeLiveServer {
                     reason_summary: None,
                     receipt_ref: None,
                     next_step: None,
+                    agency_read_model: None,
                 });
             };
             if let Some(intent) = runtime_agent.intent.as_ref() {
@@ -269,6 +270,7 @@ impl ViewerRuntimeLiveServer {
                         receipt_ref: committed_receipt_tuple(intent, self.world.journal()),
                         next_step: (intent.status == "blocked")
                             .then(|| "Recheck runtime state before resuming.".to_string()),
+                        agency_read_model: None,
                     }
                 })
             } else {
@@ -303,6 +305,7 @@ impl ViewerRuntimeLiveServer {
                             reason_summary: None,
                             receipt_ref: None,
                             next_step: None,
+                            agency_read_model: None,
                         },
                     )
             }
@@ -327,6 +330,32 @@ impl ViewerRuntimeLiveServer {
             first_agent_claim_target_available,
             primary_agent_claim,
         );
+        if let (Some(player_id), Some(agent_id)) = (snapshot_player_id, snapshot_bound_agent_id)
+            && self
+                .llm_sidecar
+                .agent_player_bindings
+                .get(agent_id)
+                .map(String::as_str)
+                == Some(player_id)
+            && self
+                .world
+                .state()
+                .starter_oc_claims
+                .get(agent_id)
+                .is_some_and(|claim| claim.player_id == player_id)
+            && let Some(primary_intent) = player_gameplay.primary_intent.as_mut()
+            && primary_intent.source_class.as_deref() == Some("runtime_projection")
+            && primary_intent.freshness.as_deref() == Some("current")
+        {
+            primary_intent.agency_read_model = Some(
+                super::player_agency_projection::project_player_agency_read_model(
+                    &self.world,
+                    &self.llm_sidecar,
+                    agent_id,
+                    primary_intent.intent_id.as_deref(),
+                ),
+            );
+        }
         player_gameplay.micro_depot_facilities = micro_depot_facilities;
         if snapshot_player_id.is_some() && snapshot_bound_agent_id.is_none() {
             player_gameplay.available_actions.retain(|action| {

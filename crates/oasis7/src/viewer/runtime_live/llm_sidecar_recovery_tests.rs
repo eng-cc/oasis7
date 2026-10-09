@@ -538,6 +538,7 @@ fn assert_terminal_marker_suppresses_queued_provider_decision(decision: AgentDec
     first.provider_terminal_states.insert(
         agent_id.to_string(),
         lineage_persistence::ProviderTerminalState {
+            feedback: None,
             agent_id: agent_id.to_string(),
             agent_session_id: "session-test".to_string(),
             agent_turn_id: "turn-terminal-queued".to_string(),

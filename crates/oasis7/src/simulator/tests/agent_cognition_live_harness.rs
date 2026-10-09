@@ -102,6 +102,66 @@ fn wait_response_with_memory_intent() -> DecisionResponse {
     }
 }
 
+#[test]
+fn provider_agency_explanation_is_bounded_public_metadata_and_never_an_effect_receipt() {
+    let mut response = wait_response_with_memory_intent();
+    response.trace_payload.upstream_trace = Some(json!({
+        "private_prompt": "must-not-project",
+        "decision_explanation": {
+            "reason": "wait until production capacity is available",
+            "dissent": "prefer waiting over the requested production step",
+            "evidence_refs": ["observation:capacity", "bearer secret-credential"],
+            "stakes": "avoid consuming scarce material",
+            "expected_consequence": "next quote may permit production",
+            "alternatives": ["gather available feedstock"]
+        }
+    }));
+    let mut runner = provider_backed_runner_with_response(response);
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .unwrap();
+    let outcome = completed_turn(&mut runner);
+    let trace = outcome.decision_trace.unwrap();
+    let explanation = trace.llm_diagnostics.unwrap().agency_explanation.unwrap();
+    assert_eq!(explanation.status, "available");
+    assert_eq!(explanation.provenance, "agent_explanation_unverified");
+    assert_eq!(
+        explanation.dissent.as_deref(),
+        Some("prefer waiting over the requested production step")
+    );
+    assert_eq!(explanation.evidence_refs, ["observation:capacity"]);
+    assert_eq!(
+        explanation.expected_consequence.as_deref(),
+        Some("next quote may permit production")
+    );
+    assert!(trace.llm_effect_receipts.is_empty());
+    let projected = serde_json::to_string(&explanation).unwrap();
+    assert!(!projected.contains("must-not-project"));
+    assert!(!projected.contains("secret-credential"));
+
+    let mut response = wait_response_with_memory_intent();
+    response.trace_payload.upstream_trace = Some(json!({"decision_explanation": {
+        "reason": "bearer private-credential", "actual_result": "forged applied"
+    }}));
+    let mut runner = provider_backed_runner_with_response(response);
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .unwrap();
+    let explanation = completed_turn(&mut runner)
+        .decision_trace
+        .unwrap()
+        .llm_diagnostics
+        .unwrap()
+        .agency_explanation
+        .unwrap();
+    assert_eq!(explanation.status, "unavailable");
+    assert!(explanation.reason.is_none());
+    assert_eq!(
+        explanation.next_step,
+        "inspect_runtime_result_or_request_agent_explanation"
+    );
+}
+
 fn provider_backed_runner() -> AsyncAgentRunner {
     provider_backed_runner_with_state().0
 }
@@ -509,8 +569,37 @@ fn target_actor_memory_intents_require_matching_committed_runtime_receipt_exactl
     }
 
     let mut runner = provider_backed_runner();
-    let turn_id = runner
+    runner
         .start_turn_with_context(AGENT_ID, host_context())
+        .unwrap();
+    let rejected_outcome = completed_turn(&mut runner);
+    let mut rejected = rejected_outcome
+        .feedback_for_runtime_status("rejected", None)
+        .unwrap();
+    rejected.provenance = "runtime_authoritative".into();
+    rejected.reject_reason = Some("stale_base".into());
+    let mut wrong_terminal = rejected.clone();
+    wrong_terminal.decision_request_id = "wrong-terminal-request".into();
+    assert!(
+        runner
+            .consume_runtime_feedback_with_lineage(AGENT_ID, wrong_terminal, None, &mut store)
+            .is_err()
+    );
+    runner
+        .consume_runtime_feedback_with_lineage(AGENT_ID, rejected.clone(), None, &mut store)
+        .unwrap();
+    runner
+        .consume_runtime_feedback_with_lineage(AGENT_ID, rejected, None, &mut store)
+        .unwrap();
+    assert!(
+        store.entries().is_empty(),
+        "terminal feedback cannot write memory"
+    );
+    let mut replacement_context = host_context();
+    replacement_context.agent_turn_id = "replacement-turn".into();
+    replacement_context.decision_request_id = "replacement-request".into();
+    let turn_id = runner
+        .start_turn_with_context(AGENT_ID, replacement_context)
         .expect("open provider-backed target turn");
     let outcome = completed_turn(&mut runner);
     assert_eq!(outcome.turn_id, turn_id);
@@ -520,6 +609,7 @@ fn target_actor_memory_intents_require_matching_committed_runtime_receipt_exactl
         .feedback_for_runtime_status("committed", Some("receipt-live-harness-1"))
         .expect("build correlated committed feedback");
     committed.candidate_action_id = Some(7);
+    committed.feedback_seq = 2;
     committed.provenance = "runtime_authoritative".to_string();
     let receipt = runtime_receipt_for_feedback(&committed);
     runner
@@ -779,6 +869,219 @@ fn runtime_receipt_for_feedback(feedback: &FeedbackEnvelopeV1) -> RuntimeReceipt
         request_digest: feedback.request_digest.to_string(),
         feedback_id: feedback.feedback_id.clone(),
     }
+}
+
+#[test]
+fn memory_correction_links_only_matching_committed_decision_across_restart_and_retry() {
+    let mut runner = provider_backed_runner();
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .unwrap();
+    let outcome = completed_turn(&mut runner);
+    let mut feedback = outcome
+        .feedback_for_runtime_status("committed", Some("receipt-correction-source"))
+        .unwrap();
+    feedback.candidate_action_id = Some(91);
+    feedback.provenance = "runtime_authoritative".into();
+    let receipt = runtime_receipt_for_feedback(&feedback);
+    let mut store = MemoryWriteStore::default();
+    runner
+        .consume_runtime_feedback_with_lineage(AGENT_ID, feedback, Some(&receipt), &mut store)
+        .unwrap();
+    let snapshot = store.context_snapshot(AGENT_ID, SESSION_ID, "session_private", 8);
+    let input = json!({
+        "correction_id": "correction-1", "agent_id": AGENT_ID,
+        "agent_session_id": SESSION_ID, "scope": "session_private",
+        "target_memory_id": snapshot.entries[0].id, "expected_revision": snapshot.revision,
+        "replacement_summary": "the previous prediction was wrong", "status": "applied",
+        "reason": "untrusted", "memory_revision": 999,
+        "earliest_decision_request_id": null, "earliest_request_digest": null,
+        "runtime_receipt_id": "forged", "action_id": "forged"
+    });
+    let correction = serde_json::from_value(input.clone()).unwrap();
+    let accepted = store.correct_memory(correction).unwrap();
+    assert_eq!(accepted.status, "accepted");
+    assert!(accepted.runtime_receipt_id.is_none());
+    let mut turn = host_context();
+    turn.decision_request_id = "next-corrected-decision".into();
+    turn.memory_snapshot = store.context_snapshot(AGENT_ID, SESSION_ID, "session_private", 8);
+    store.bind_corrections_to_decision(&turn).unwrap();
+    let mut restored: MemoryWriteStore =
+        serde_json::from_value(serde_json::to_value(&store).unwrap()).unwrap();
+    restored.finalize_corrections(&receipt).unwrap();
+    assert_eq!(
+        restored.corrections()[0].status,
+        "accepted",
+        "old receipt cannot apply correction"
+    );
+    let mut matching = receipt.clone();
+    matching.decision_request_id = turn.decision_request_id.clone();
+    matching.receipt_id = "receipt-corrected-decision".into();
+    matching.action_id = "92".into();
+    let mut wrong = matching.clone();
+    wrong.agent_session_id = "other-session".into();
+    restored.finalize_corrections(&wrong).unwrap();
+    assert_eq!(restored.corrections()[0].status, "accepted");
+    wrong = matching.clone();
+    wrong.request_digest =
+        "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into();
+    restored.finalize_corrections(&wrong).unwrap();
+    assert_eq!(restored.corrections()[0].status, "accepted");
+    // New unrelated turns cannot hijack the first prepared binding.
+    let mut replacement = turn.clone();
+    replacement.decision_request_id = "stale-parent-replacement".into();
+    restored.bind_corrections_to_decision(&replacement).unwrap();
+    assert_eq!(
+        restored.corrections()[0]
+            .active_decision_request_id
+            .as_deref(),
+        Some(turn.decision_request_id.as_str())
+    );
+    restored
+        .rebind_corrections_after_stale_parent(
+            "wrong-parent",
+            &turn.request_digest.to_string(),
+            &replacement,
+        )
+        .unwrap();
+    assert_eq!(
+        restored.corrections()[0]
+            .active_decision_request_id
+            .as_deref(),
+        Some(turn.decision_request_id.as_str())
+    );
+    restored
+        .rebind_corrections_after_stale_parent(
+            &turn.decision_request_id,
+            "wrong-digest",
+            &replacement,
+        )
+        .unwrap();
+    assert_eq!(
+        restored.corrections()[0]
+            .active_decision_request_id
+            .as_deref(),
+        Some(turn.decision_request_id.as_str())
+    );
+    // Older serialized records use earliest identity as the active fallback.
+    let mut legacy = serde_json::to_value(&restored).unwrap();
+    let rows = legacy
+        .get_mut("corrections")
+        .unwrap()
+        .as_array_mut()
+        .unwrap();
+    rows[0]
+        .as_object_mut()
+        .unwrap()
+        .remove("active_decision_request_id");
+    rows[0]
+        .as_object_mut()
+        .unwrap()
+        .remove("active_request_digest");
+    restored = serde_json::from_value(legacy).unwrap();
+    restored
+        .rebind_corrections_after_stale_parent(
+            &turn.decision_request_id,
+            &turn.request_digest.to_string(),
+            &replacement,
+        )
+        .unwrap();
+    restored.bind_corrections_to_decision(&replacement).unwrap();
+    restored = serde_json::from_value(serde_json::to_value(&restored).unwrap()).unwrap();
+    restored.ignore_corrections_for_decision(
+        AGENT_ID,
+        &turn.decision_request_id,
+        &turn.request_digest.to_string(),
+        "old-parent-failure",
+    );
+    restored.finalize_corrections(&matching).unwrap();
+    assert_eq!(
+        restored.corrections()[0].status,
+        "accepted",
+        "old parent cannot finalize a replacement"
+    );
+    matching.decision_request_id = replacement.decision_request_id.clone();
+    restored.finalize_corrections(&matching).unwrap();
+    restored.finalize_corrections(&matching).unwrap();
+    assert_eq!(restored.corrections().len(), 1);
+    assert_eq!(restored.corrections()[0].status, "applied");
+    assert_eq!(
+        restored.corrections()[0]
+            .earliest_decision_request_id
+            .as_deref(),
+        Some(turn.decision_request_id.as_str())
+    );
+    assert_eq!(
+        restored.corrections()[0]
+            .committed_decision_request_id
+            .as_deref(),
+        Some(replacement.decision_request_id.as_str())
+    );
+    assert_eq!(
+        restored.corrections()[0].runtime_receipt_id.as_deref(),
+        Some("receipt-corrected-decision")
+    );
+    let replay = restored
+        .correct_memory(serde_json::from_value(input.clone()).unwrap())
+        .unwrap();
+    assert_eq!(replay.status, "applied");
+    let mut stale = input.clone();
+    stale["correction_id"] = json!("correction-stale");
+    assert_eq!(
+        restored
+            .correct_memory(serde_json::from_value(stale).unwrap())
+            .unwrap()
+            .status,
+        "stale"
+    );
+    let mut ignored = input;
+    ignored["correction_id"] = json!("correction-other-agent");
+    ignored["agent_id"] = json!("other-agent");
+    ignored["expected_revision"] = json!(turn.memory_snapshot.revision);
+    assert_eq!(
+        restored
+            .correct_memory(serde_json::from_value(ignored).unwrap())
+            .unwrap()
+            .status,
+        "ignored"
+    );
+    assert_eq!(
+        restored
+            .context_snapshot(AGENT_ID, SESSION_ID, "session_private", 8)
+            .entries[0]
+            .summary,
+        "the previous prediction was wrong"
+    );
+    let mut failed_input = serde_json::to_value(restored.corrections()[0].clone()).unwrap();
+    failed_input["correction_id"] = json!("correction-no-effect");
+    failed_input["expected_revision"] = json!(turn.memory_snapshot.revision);
+    failed_input["replacement_summary"] = json!("new bounded correction");
+    restored
+        .correct_memory(serde_json::from_value(failed_input).unwrap())
+        .unwrap();
+    turn.decision_request_id = "failed-next-decision".into();
+    turn.memory_snapshot = restored.context_snapshot(AGENT_ID, SESSION_ID, "session_private", 8);
+    restored.bind_corrections_to_decision(&turn).unwrap();
+    restored.ignore_corrections_for_decision(
+        AGENT_ID,
+        "wrong-decision",
+        turn.request_digest.as_str(),
+        "failed",
+    );
+    assert_eq!(restored.corrections().last().unwrap().status, "accepted");
+    restored.ignore_corrections_for_decision(
+        AGENT_ID,
+        &turn.decision_request_id,
+        turn.request_digest.as_str(),
+        "provider_turn_failed_without_runtime_effect",
+    );
+    let ignored = restored.corrections().last().unwrap();
+    assert_eq!(ignored.status, "ignored");
+    assert!(ignored.runtime_receipt_id.is_none());
+    assert_eq!(
+        ignored.reason,
+        "provider_turn_failed_without_runtime_effect"
+    );
 }
 
 fn rejected_runtime_projection(proposal: &ContinuationProposalV1) -> AgentContinuation {

@@ -396,9 +396,289 @@ pub struct MemoryWriteStore {
     revision: u64,
     entries: Vec<Value>,
     committed_by_digest: BTreeMap<String, String>,
+    #[serde(default)]
+    corrections: Vec<MemoryCorrectionV1>,
+    #[serde(default)]
+    referenced_context_by_agent: BTreeMap<String, Value>,
+}
+
+/// Private-memory correction evidence. `applied` means a corrected retrieval
+/// participated in a committed decision, never that the prediction came true.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemoryCorrectionV1 {
+    pub correction_id: String,
+    pub agent_id: String,
+    pub agent_session_id: String,
+    pub scope: String,
+    pub target_memory_id: String,
+    pub expected_revision: u64,
+    pub replacement_summary: String,
+    pub status: String,
+    pub reason: String,
+    pub memory_revision: u64,
+    pub earliest_decision_request_id: Option<String>,
+    pub earliest_request_digest: Option<String>,
+    #[serde(default)]
+    pub active_decision_request_id: Option<String>,
+    #[serde(default)]
+    pub active_request_digest: Option<String>,
+    #[serde(default)]
+    pub committed_decision_request_id: Option<String>,
+    #[serde(default)]
+    pub committed_request_digest: Option<String>,
+    pub runtime_receipt_id: Option<String>,
+    pub action_id: Option<String>,
 }
 
 impl MemoryWriteStore {
+    pub fn corrections(&self) -> &[MemoryCorrectionV1] {
+        &self.corrections
+    }
+
+    pub fn referenced_memory_context(&self, agent_id: &str) -> Option<&Value> {
+        self.referenced_context_by_agent.get(agent_id)
+    }
+
+    pub fn ignore_corrections_for_decision(
+        &mut self,
+        agent_id: &str,
+        decision_request_id: &str,
+        request_digest: &str,
+        reason: &str,
+    ) {
+        for correction in &mut self.corrections {
+            if correction.status == "accepted"
+                && correction.agent_id == agent_id
+                && correction
+                    .active_decision_request_id
+                    .as_ref()
+                    .or(correction.earliest_decision_request_id.as_ref())
+                    .map(String::as_str)
+                    == Some(decision_request_id)
+                && correction
+                    .active_request_digest
+                    .as_ref()
+                    .or(correction.earliest_request_digest.as_ref())
+                    .map(String::as_str)
+                    == Some(request_digest)
+            {
+                correction.status = "ignored".into();
+                correction.reason = reason.to_string();
+            }
+        }
+    }
+
+    /// The host must authorize the subject/session before calling this method.
+    /// Exact revision and target checks prevent an old client overwriting a
+    /// newer memory or a different subject's private context.
+    pub fn correct_memory(
+        &mut self,
+        mut correction: MemoryCorrectionV1,
+    ) -> Result<MemoryCorrectionV1, CognitionError> {
+        if correction.correction_id.trim().is_empty() || correction.correction_id.len() > 256 {
+            return Err(error(
+                "memory_correction_identity_invalid",
+                "invalid correction identity",
+            ));
+        }
+        correction.replacement_summary = normalized_text(
+            &correction.replacement_summary,
+            MAX_MEMORY_SUMMARY_BYTES,
+            "memory_summary_too_large",
+            "memory_summary_invalid",
+        )?;
+        if correction.replacement_summary.is_empty() {
+            return Err(error("memory_summary_invalid", "empty correction summary"));
+        }
+        if let Some(previous) = self
+            .corrections
+            .iter()
+            .find(|item| item.correction_id == correction.correction_id)
+        {
+            if previous.agent_id == correction.agent_id
+                && previous.agent_session_id == correction.agent_session_id
+                && previous.scope == correction.scope
+                && previous.target_memory_id == correction.target_memory_id
+                && previous.expected_revision == correction.expected_revision
+                && previous.replacement_summary == correction.replacement_summary
+            {
+                return Ok(previous.clone());
+            }
+            return Err(error(
+                "memory_correction_identity_reused",
+                "correction identity has different payload",
+            ));
+        }
+        correction.earliest_decision_request_id = None;
+        correction.earliest_request_digest = None;
+        correction.active_decision_request_id = None;
+        correction.active_request_digest = None;
+        correction.committed_decision_request_id = None;
+        correction.committed_request_digest = None;
+        correction.runtime_receipt_id = None;
+        correction.action_id = None;
+        let target = self.entries.iter_mut().find(|entry| {
+            entry.get("intent_digest").and_then(Value::as_str)
+                == Some(correction.target_memory_id.as_str())
+                && entry.get("agent_id").and_then(Value::as_str)
+                    == Some(correction.agent_id.as_str())
+                && entry.get("agent_session_id").and_then(Value::as_str)
+                    == Some(correction.agent_session_id.as_str())
+                && entry.get("scope").and_then(Value::as_str) == Some(correction.scope.as_str())
+        });
+        if correction.expected_revision != self.revision {
+            correction.status = "stale".into();
+            correction.reason = "memory_revision_changed".into();
+        } else if let Some(target) = target {
+            target["summary"] = json!(correction.replacement_summary);
+            self.revision = self.revision.saturating_add(1);
+            correction.status = "accepted".into();
+            correction.reason = "next_retrieval_pending".into();
+        } else {
+            correction.status = "ignored".into();
+            correction.reason = "memory_target_or_scope_unavailable".into();
+        }
+        correction.memory_revision = self.revision;
+        self.corrections.push(correction.clone());
+        Ok(correction)
+    }
+
+    pub fn bind_corrections_to_decision(
+        &mut self,
+        turn: &super::continuous_agent_harness::ContinuousAgentTurnContextV1,
+    ) -> Result<(), CognitionError> {
+        turn.validate_for_agent(&turn.agent_id)?;
+        let sources = turn.memory_snapshot.entries.iter().map(|selected| {
+            let source = self.entries.iter().find(|entry| entry.get("intent_digest").and_then(Value::as_str) == Some(selected.id.as_str()));
+            json!({ "memory_id": selected.id,
+                "origin_receipt_id": source.and_then(|entry| entry.get("receipt_id")).cloned(),
+                "correction_refs": self.corrections.iter().filter(|correction| correction.target_memory_id == selected.id && correction.agent_id == turn.agent_id && correction.agent_session_id == turn.agent_session_id && matches!(correction.status.as_str(), "accepted" | "applied") && correction.replacement_summary == selected.summary).map(|correction| correction.correction_id.clone()).collect::<Vec<_>>()
+            })
+        }).collect::<Vec<_>>();
+        self.referenced_context_by_agent.insert(
+            turn.agent_id.clone(),
+            json!({
+                "agent_session_id": turn.agent_session_id,
+                "decision_request_id": turn.decision_request_id,
+                "request_digest": turn.request_digest.to_string(),
+                "scope": turn.memory_snapshot.scope,
+                "revision": turn.memory_snapshot.revision,
+            "entries": turn.memory_snapshot.entries,
+            "sources": sources,
+            "source": "private_memory_retrieval_context",
+                "used_for_decision": false,
+                "current_use": "included_in_prepared_decision_request",
+                "correction_hint": "correct_by_memory_id_and_revision",
+            }),
+        );
+        for correction in &mut self.corrections {
+            if correction.status == "accepted"
+                && correction.earliest_decision_request_id.is_none()
+                && correction.agent_id == turn.agent_id
+                && correction.agent_session_id == turn.agent_session_id
+                && correction.scope == turn.memory_snapshot.scope
+                && turn.memory_snapshot.revision >= correction.memory_revision
+                && turn.memory_snapshot.entries.iter().any(|entry| {
+                    entry.id == correction.target_memory_id
+                        && entry.summary == correction.replacement_summary
+                })
+            {
+                correction.earliest_decision_request_id = Some(turn.decision_request_id.clone());
+                correction.earliest_request_digest = Some(turn.request_digest.to_string());
+                correction.active_decision_request_id = Some(turn.decision_request_id.clone());
+                correction.active_request_digest = Some(turn.request_digest.to_string());
+                correction.reason = "runtime_result_pending".into();
+            }
+        }
+        Ok(())
+    }
+
+    /// Host-only continuation of an authoritative stale parent. Earliest
+    /// preparation provenance remains immutable; only finalization moves.
+    pub(crate) fn rebind_corrections_after_stale_parent(
+        &mut self,
+        parent_request_id: &str,
+        parent_digest: &str,
+        turn: &super::continuous_agent_harness::ContinuousAgentTurnContextV1,
+    ) -> Result<(), CognitionError> {
+        turn.validate_for_agent(&turn.agent_id)?;
+        for correction in &mut self.corrections {
+            if correction.status == "accepted"
+                && correction.agent_id == turn.agent_id
+                && correction.agent_session_id == turn.agent_session_id
+                && correction.scope == turn.memory_snapshot.scope
+                && turn.memory_snapshot.revision >= correction.memory_revision
+                && correction
+                    .active_decision_request_id
+                    .as_ref()
+                    .or(correction.earliest_decision_request_id.as_ref())
+                    .map(String::as_str)
+                    == Some(parent_request_id)
+                && correction
+                    .active_request_digest
+                    .as_ref()
+                    .or(correction.earliest_request_digest.as_ref())
+                    .map(String::as_str)
+                    == Some(parent_digest)
+                && turn.memory_snapshot.entries.iter().any(|entry| {
+                    entry.id == correction.target_memory_id
+                        && entry.summary == correction.replacement_summary
+                })
+            {
+                correction.active_decision_request_id = Some(turn.decision_request_id.clone());
+                correction.active_request_digest = Some(turn.request_digest.to_string());
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn finalize_corrections(
+        &mut self,
+        receipt: &crate::runtime::RuntimeReceiptLineageV1,
+    ) -> Result<(), CognitionError> {
+        receipt
+            .validate()
+            .map_err(|err| error("memory_runtime_receipt_invalid", err.to_string()))?;
+        if let Some(context) = self.referenced_context_by_agent.get_mut(&receipt.agent_id)
+            && context.get("agent_session_id").and_then(Value::as_str)
+                == Some(receipt.agent_session_id.as_str())
+            && context.get("decision_request_id").and_then(Value::as_str)
+                == Some(receipt.decision_request_id.as_str())
+            && context.get("request_digest").and_then(Value::as_str)
+                == Some(receipt.request_digest.as_str())
+        {
+            context["used_for_decision"] = json!(true);
+            context["current_use"] = json!("committed_decision_context");
+        }
+        for correction in &mut self.corrections {
+            if correction.status == "accepted"
+                && correction.agent_id == receipt.agent_id
+                && correction.agent_session_id == receipt.agent_session_id
+                && correction
+                    .active_decision_request_id
+                    .as_ref()
+                    .or(correction.earliest_decision_request_id.as_ref())
+                    .map(String::as_str)
+                    == Some(receipt.decision_request_id.as_str())
+                && correction
+                    .active_request_digest
+                    .as_ref()
+                    .or(correction.earliest_request_digest.as_ref())
+                    .map(String::as_str)
+                    == Some(receipt.request_digest.as_str())
+            {
+                correction.status = "applied".into();
+                correction.reason = "corrected_context_committed_decision".into();
+                correction.runtime_receipt_id = Some(receipt.receipt_id.clone());
+                correction.action_id = Some(receipt.action_id.clone());
+                correction.committed_decision_request_id =
+                    Some(receipt.decision_request_id.clone());
+                correction.committed_request_digest = Some(receipt.request_digest.clone());
+            }
+        }
+        Ok(())
+    }
     pub fn entries(&self) -> &[Value] {
         &self.entries
     }
@@ -557,6 +837,17 @@ impl MemoryWriteStore {
         receipt.validate().map_err(|runtime_error| {
             error("memory_runtime_receipt_invalid", runtime_error.to_string())
         })?;
+        if let Some(context) = context
+            && (context.agent_id != receipt.agent_id
+                || context.agent_session_id != receipt.agent_session_id
+                || context.agent_turn_id != receipt.agent_turn_id
+                || context.request_digest != receipt.request_digest)
+        {
+            return Err(error(
+                "memory_runtime_context_mismatch",
+                "memory context does not match committed receipt",
+            ));
+        }
         self.apply(
             intent,
             digest.clone(),

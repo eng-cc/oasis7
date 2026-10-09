@@ -11,6 +11,62 @@ fn fixed_private_key_hex(seed: u8) -> String {
 }
 
 #[test]
+fn agency_control_cli_accepts_one_exact_tagged_json_request() {
+    let mut args = ArgCursor {
+        args: vec![
+            "agency-control".to_string(),
+            "--request-json".to_string(),
+            r#"{"type":"agency_control_request","request_id":"r1"}"#.to_string(),
+        ],
+        pos: 0,
+    };
+    let config = parse_cli(&mut args).expect("parse agency-control command");
+    assert!(matches!(config.command, Command::AgencyControl { .. }));
+    assert!(!args.has_more());
+}
+
+#[test]
+fn agency_control_pure_client_sends_and_reads_matching_json_line() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test socket");
+    let address = listener.local_addr().expect("socket address");
+    let client_stream = TcpStream::connect(address).expect("connect test client");
+    let (server_stream, _) = listener.accept().expect("accept test client");
+    let mut conn = ViewerConnection {
+        reader: BufReader::new(client_stream.try_clone().expect("clone client stream")),
+        writer: BufWriter::new(client_stream),
+        hello_ack: Value::Null,
+    };
+    let server = thread::spawn(move || {
+        let server_reader = server_stream.try_clone().expect("clone server stream");
+        let mut reader = BufReader::new(server_reader);
+        let mut request_line = String::new();
+        reader
+            .read_line(&mut request_line)
+            .expect("read request line");
+        let request: Value = serde_json::from_str(request_line.trim()).expect("decode request");
+        assert_eq!(request["type"], "agency_control_request");
+        assert_eq!(request["request_id"], "r1");
+        let mut writer = server_stream;
+        serde_json::to_writer(
+            &mut writer,
+            &json!({"type":"agency_control_response","request_id":"r1","status":"ok"}),
+        )
+        .expect("write response");
+        writer.write_all(b"\n").expect("write response newline");
+        writer.flush().expect("flush response");
+    });
+    let request = json!({"type":"agency_control_request","request_id":"r1"});
+    oasis7_pure_api_client_support::send_raw_json_line(&mut conn, &request)
+        .expect("send agency command");
+    let response =
+        oasis7_pure_api_client_support::read_raw_json_line(&mut conn, Duration::from_secs(1))
+            .expect("read agency response");
+    assert_eq!(response["type"], "agency_control_response");
+    assert_eq!(response["request_id"], "r1");
+    server.join().expect("server thread");
+}
+
+#[test]
 fn derive_public_key_hex_matches_signing_key() {
     let private_key_hex = fixed_private_key_hex(7);
     let derived = derive_public_key_hex(private_key_hex.as_str()).expect("derive public key");

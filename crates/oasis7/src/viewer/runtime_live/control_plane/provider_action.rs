@@ -1,11 +1,27 @@
 use super::super::decision_trace::{is_budget_exhausted_wait, is_trace_only_overflow};
 use super::*;
-use crate::runtime::{
-    CognitionCommitRejectReasonV1, RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1,
-};
+use crate::runtime::{RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1};
 use crate::simulator::AgentDecision;
 
 impl ViewerRuntimeLiveServer {
+    /// Report a stale parent only if a bounded replacement was actually queued.
+    pub(in crate::viewer::runtime_live) fn schedule_provider_stale_replan_disposition(
+        &mut self,
+        agent_id: &str,
+        parent_turn_id: &str,
+        parent_request_id: &str,
+    ) -> (&'static str, bool) {
+        if self.llm_sidecar.schedule_provider_stale_replan(
+            agent_id,
+            parent_turn_id,
+            parent_request_id,
+        ) {
+            ("stale_base", true)
+        } else {
+            ("provider_stale_replan_exhausted", false)
+        }
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "Provider decision traces retain the stable typed transport error envelope"
@@ -13,6 +29,10 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn enqueue_llm_action_from_sidecar(
         &mut self,
     ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
+        self.recover_checkpoint_terminal_feedback()
+            .map_err(|error| {
+                wake_handoff_error_trace("runtime-feedback", self.world.state().time, error)
+            })?;
         self.drain_provider_feedback_outbox();
         // A failed wake retry fences only its own Agent. Keep the error for
         // an actionable no-decision result while allowing a healthy sibling
@@ -144,14 +164,24 @@ impl ViewerRuntimeLiveServer {
                             error,
                         )
                     })?;
-                    if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
-                        decision.agent_id.as_str(),
-                        "failed",
-                        trace
-                            .llm_error
-                            .clone()
-                            .unwrap_or_else(|| "provider decision failed".to_string()),
-                    ) {
+                    if let Some(feedback) = self
+                        .llm_sidecar
+                        .fail_provider_turn_with_feedback(
+                            decision.agent_id.as_str(),
+                            "failed",
+                            trace
+                                .llm_error
+                                .clone()
+                                .unwrap_or_else(|| "provider decision failed".to_string()),
+                        )
+                        .map_err(|error| {
+                            wake_handoff_error_trace(
+                                decision.agent_id.as_str(),
+                                self.world.state().time,
+                                error,
+                            )
+                        })?
+                    {
                         self.deliver_provider_feedback_best_effort(feedback);
                     }
                     if let Err(error) = self.handoff_runtime_wake_for_agent(
@@ -188,11 +218,21 @@ impl ViewerRuntimeLiveServer {
                         error,
                     )
                 })?;
-                if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
-                    decision.agent_id.as_str(),
-                    "rejected",
-                    message.clone(),
-                ) {
+                if let Some(feedback) = self
+                    .llm_sidecar
+                    .fail_provider_turn_with_feedback(
+                        decision.agent_id.as_str(),
+                        "rejected",
+                        message.clone(),
+                    )
+                    .map_err(|error| {
+                        wake_handoff_error_trace(
+                            decision.agent_id.as_str(),
+                            self.world.state().time,
+                            error,
+                        )
+                    })?
+                {
                     self.deliver_provider_feedback_best_effort(feedback);
                 }
                 self.enqueue_virtual_event(WorldEventKind::ActionRejected {
@@ -252,45 +292,54 @@ impl ViewerRuntimeLiveServer {
                                     )
                                 })?;
                                 let stale_base = error.is_stale_base();
-                                let reason = error.reason();
-                                if stale_base {
-                                    let request = &cognition.request.request_context;
-                                    self.llm_sidecar.schedule_provider_stale_replan(
-                                        request.agent_subject.as_str(),
-                                        request.agent_turn_id.as_str(),
-                                        request.decision_request_id.as_str(),
-                                    );
-                                }
-                                if let Some(feedback) =
-                                    self.llm_sidecar.fail_provider_turn_with_feedback(
+                                let request = &cognition.request.request_context;
+                                let (reason, stale_replan_queued) = if stale_base {
+                                    let (reason, queued) = self
+                                        .schedule_provider_stale_replan_disposition(
+                                            request.agent_subject.as_str(),
+                                            request.agent_turn_id.as_str(),
+                                            request.decision_request_id.as_str(),
+                                        );
+                                    (reason.to_string(), queued)
+                                } else {
+                                    (error.reason(), false)
+                                };
+                                if let Some(feedback) = self
+                                    .llm_sidecar
+                                    .fail_provider_turn_with_feedback(
                                         cognition.request.request_context.agent_subject.as_str(),
                                         "rejected",
-                                        if stale_base {
-                                            CognitionCommitRejectReasonV1::StaleBase
-                                                .code()
-                                                .to_string()
-                                        } else {
-                                            reason.clone()
-                                        },
+                                        reason.clone(),
                                     )
+                                    .map_err(|error| {
+                                        wake_handoff_error_trace(
+                                            cognition
+                                                .request
+                                                .request_context
+                                                .agent_subject
+                                                .as_str(),
+                                            self.world.state().time,
+                                            error,
+                                        )
+                                    })?
                                 {
                                     self.deliver_provider_feedback_best_effort(feedback);
                                 }
                                 self.enqueue_virtual_event(WorldEventKind::ActionRejected {
                                     reason: SimulatorRejectReason::RuleDenied {
-                                        notes: vec![if stale_base {
+                                        notes: vec![if stale_replan_queued {
                                             "stale_base".to_string()
                                         } else {
                                             reason
                                         }],
                                     },
                                 });
-                                let handoff_status = if stale_base {
+                                let handoff_status = if stale_replan_queued {
                                     crate::runtime::ContinuationStatusV1::Invalidated
                                 } else {
                                     crate::runtime::ContinuationStatusV1::Rejected
                                 };
-                                let handoff_reason = if stale_base {
+                                let handoff_reason = if stale_replan_queued {
                                     "provider_stale_base_replan"
                                 } else {
                                     "provider_action_commit_rejected"
@@ -354,11 +403,21 @@ impl ViewerRuntimeLiveServer {
                                 error,
                             )
                         })?;
-                    if let Some(feedback) = self.llm_sidecar.fail_provider_turn_with_feedback(
-                        decision.agent_id.as_str(),
-                        "rejected",
-                        reason.clone(),
-                    ) {
+                    if let Some(feedback) = self
+                        .llm_sidecar
+                        .fail_provider_turn_with_feedback(
+                            decision.agent_id.as_str(),
+                            "rejected",
+                            reason.clone(),
+                        )
+                        .map_err(|error| {
+                            wake_handoff_error_trace(
+                                decision.agent_id.as_str(),
+                                self.world.state().time,
+                                error,
+                            )
+                        })?
+                    {
                         self.deliver_provider_feedback_best_effort(feedback);
                     }
                     self.enqueue_virtual_event(WorldEventKind::ActionRejected {
@@ -972,7 +1031,7 @@ impl ViewerRuntimeLiveServer {
     /// transport part of the World transaction. Claimed records remain
     /// durable and are returned to `pending` on transport failure, including
     /// across a viewer restart.
-    pub(super) fn drain_provider_feedback_outbox(&mut self) {
+    pub(in crate::viewer::runtime_live) fn drain_provider_feedback_outbox(&mut self) {
         let pending = match self.world.pending_runtime_feedback() {
             Ok(pending) => pending,
             Err(error) => {
