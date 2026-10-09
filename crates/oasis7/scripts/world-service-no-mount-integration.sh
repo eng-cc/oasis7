@@ -26,7 +26,7 @@ assert all(manifest.get(k) for k in ['source_head','candidate_patch_sha256','fea
 assert manifest['test_executable_sha256']==values['bundle/test-executable'] and manifest['viewer_sha256']==values['app-bundle/oasis7_viewer_live'], 'artifact/build manifest mismatch'
 (root/'artifact-sha256.json').write_text(json.dumps(values,indent=2)+'\n')
 PY_HASH
-image="${PRE2_NO_MOUNT_IMAGE:-ubuntu:24.04}"
+image="${PRE2_NO_MOUNT_IMAGE:-oasis7-world-service-conformance-runtime:local}"
 prefix="pre2-nomount-$(date +%s)-$$"
 network="$prefix-net"; node_volume="$prefix-node"; app_volume="$prefix-app"
 entry='execution_bridge_real_tests::real_execution_bridge::tests::qa_conformance::topology_no_mount'
@@ -44,18 +44,24 @@ trap cleanup EXIT
 integration_deadline=$(( $(date +%s) + 300 ))
 bounded_wait() {
   rtk proxy python3 - "$1" "$integration_deadline" <<'PY_WAIT'
-import subprocess,sys,time
-remaining=int(sys.argv[2])-time.time()
-if remaining<=0:
-    raise SystemExit('no-mount integration overall deadline expired')
-try:
-    result=subprocess.run(['rtk','proxy','docker','wait',sys.argv[1]],capture_output=True,text=True,timeout=remaining)
-except subprocess.TimeoutExpired:
-    raise SystemExit('no-mount container exceeded overall deadline: '+sys.argv[1])
-if result.returncode:
-    sys.stderr.write(result.stderr)
-    raise SystemExit(result.returncode)
-print(result.stdout.strip())
+import json,subprocess,sys,time
+while True:
+    remaining=int(sys.argv[2])-time.time()
+    if remaining<=0:
+        raise SystemExit('container exceeded overall deadline: '+sys.argv[1])
+    try:
+        result=subprocess.run(['rtk','proxy','docker','inspect',sys.argv[1]],capture_output=True,text=True,timeout=min(10,remaining))
+    except subprocess.TimeoutExpired:
+        raise SystemExit('container state query exceeded deadline: '+sys.argv[1])
+    if result.returncode:
+        sys.stderr.write(result.stderr)
+        raise SystemExit(result.returncode)
+    state=json.loads(result.stdout)[0]['State']
+    # The authoritative terminal state, never a pre-start wait notification.
+    if state['Status'] in ['exited','dead'] and not state['Running']:
+        print(state['ExitCode'])
+        break
+    time.sleep(min(0.1,remaining))
 PY_WAIT
 }
 rtk proxy docker image inspect "$image" > "$evidence/image-inspect.json"

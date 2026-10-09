@@ -221,8 +221,7 @@ fn receive(stream: &mut BufReader<TcpStream>, kind: &str) -> serde_json::Value {
             !value["type"]
                 .as_str()
                 .is_some_and(|v| v.ends_with("_error")),
-            "protocol error type={}",
-            value["type"]
+            "protocol error response={value}"
         );
         if value["type"] == kind {
             return value;

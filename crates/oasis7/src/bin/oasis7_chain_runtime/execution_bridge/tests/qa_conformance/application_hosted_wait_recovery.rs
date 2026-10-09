@@ -20,6 +20,7 @@ fn real_tcp_hosted_resume_process_crash_recovers_original_identity() {
 pub(super) fn start_selector(fixture: &Fixture) -> thread::JoinHandle<()> {
     let driver = fixture.driver.clone();
     let gate = fixture.world_gate.clone();
+    gate.arm_resume_view_selector();
     let mut config = fixture.client.config().clone();
     config.scope_id = "agent:agent-a".into();
     thread::spawn(move || {

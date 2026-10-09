@@ -19,7 +19,7 @@ snapshot={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in pa
 (pathlib.Path(sys.argv[1])/'source-before.json').write_text(json.dumps(snapshot,indent=2)+'\n')
 PY_SOURCE
 # Same worktree target/cache; preserve Cargo serialization arranged by the coordinator.
-rtk proxy ./scripts/cargo-dev.sh build -p oasis7 --bin oasis7_viewer_live --no-default-features --features node-libp2p,test_tier_required --message-format=json > "$artifact_dir/viewer-build.jsonl" 2> "$artifact_dir/viewer-build.log"
+rtk proxy ./scripts/cargo-dev.sh build --locked -p oasis7 --bin oasis7_viewer_live --no-default-features --features node-libp2p,test_tier_required --message-format=json > "$artifact_dir/viewer-build.jsonl" 2> "$artifact_dir/viewer-build.log"
 viewer_binary="$(rtk proxy python3 - "$artifact_dir/viewer-build.jsonl" <<'PY_BINARY'
 import json,pathlib,sys
 executables=[v['executable'] for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if (v:=json.loads(line)).get('reason')=='compiler-artifact' and v.get('target',{}).get('name')=='oasis7_viewer_live' and v.get('executable')]
@@ -29,7 +29,7 @@ PY_BINARY
 )"
 export PRE2_VIEWER_BINARY="$viewer_binary"
 set +e
-rtk proxy ./scripts/cargo-dev.sh test -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,test_tier_required qa_conformance:: -- --test-threads=1 --nocapture > "$artifact_dir/conformance.log" 2>&1
+rtk proxy ./scripts/cargo-dev.sh test --locked -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,test_tier_required qa_conformance:: -- --test-threads=1 --nocapture > "$artifact_dir/conformance.log" 2>&1
 result=$?
 set -e
 rtk proxy python3 - "$artifact_dir" "$result" <<'PY_REPORT'

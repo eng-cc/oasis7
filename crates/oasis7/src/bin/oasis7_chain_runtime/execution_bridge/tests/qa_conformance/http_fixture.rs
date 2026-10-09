@@ -358,6 +358,7 @@ pub(super) struct WorldGate {
     rejected_resume: Mutex<rejected_resume_gate::RejectedResumeGate>,
     periodic_view_claimed: AtomicBool,
     periodic_view_owner: Mutex<Option<thread::ThreadId>>,
+    resume_view_armed: AtomicBool,
     resume_view: Mutex<ResumeViewGateState>,
     resume_view_changed: Condvar,
     admit_wait_view: Mutex<wait_admit_gate::AdmitWaitViewGateState>,
@@ -375,6 +376,15 @@ impl WorldGate {
             .as_ref()
             .is_some_and(|root| root.join("world-concurrent-ready").exists())
     }
+    /// Only the dedicated Resume-before-View process-crash oracle participates
+    /// in selector rendezvous. Ordinary Resume traffic must never wait for it.
+    pub(super) fn arm_resume_view_selector(&self) {
+        assert!(
+            !self.resume_view_armed.swap(true, Ordering::SeqCst),
+            "Resume View selector must be armed exactly once"
+        );
+    }
+
     pub(super) fn install_resume_view_selector_from_authenticated_lookup(
         &self,
         client: &RemoteWorldServiceClient,
@@ -549,6 +559,9 @@ impl WorldGate {
         _root: &Path,
         request: &SubmitIntentRequest<WorldServicePayloadV1>,
     ) {
+        if !self.resume_view_armed.load(Ordering::SeqCst) {
+            return;
+        }
         let Ok(candidate) = parse_resume_candidate(request) else {
             return;
         };
@@ -571,6 +584,9 @@ impl WorldGate {
         root: &Path,
         request: &wire::SignedReadRequest<ReadWorldViewRequest>,
     ) -> bool {
+        if !self.resume_view_armed.load(Ordering::SeqCst) {
+            return false;
+        }
         let Some(min_commit) = request.request.min_commit.as_ref() else {
             return false;
         };

@@ -33,21 +33,27 @@ cleanup() {
 trap cleanup EXIT
 bounded_wait() {
   rtk proxy python3 - "$1" "$pressure_deadline" <<'PY_WAIT'
-import subprocess,sys,time
-remaining=int(sys.argv[2])-time.time()
-if remaining<=0:
-    raise SystemExit('pressure overall deadline expired')
-try:
-    result=subprocess.run(['rtk','proxy','docker','wait',sys.argv[1]],capture_output=True,text=True,timeout=remaining)
-except subprocess.TimeoutExpired:
-    raise SystemExit('pressure container exceeded overall deadline: '+sys.argv[1])
-if result.returncode:
-    sys.stderr.write(result.stderr)
-    raise SystemExit(result.returncode)
-print(result.stdout.strip())
+import json,subprocess,sys,time
+while True:
+    remaining=int(sys.argv[2])-time.time()
+    if remaining<=0:
+        raise SystemExit('container exceeded overall deadline: '+sys.argv[1])
+    try:
+        result=subprocess.run(['rtk','proxy','docker','inspect',sys.argv[1]],capture_output=True,text=True,timeout=min(10,remaining))
+    except subprocess.TimeoutExpired:
+        raise SystemExit('container state query exceeded deadline: '+sys.argv[1])
+    if result.returncode:
+        sys.stderr.write(result.stderr)
+        raise SystemExit(result.returncode)
+    state=json.loads(result.stdout)[0]['State']
+    # The authoritative terminal state, never a pre-start wait notification.
+    if state['Status'] in ['exited','dead'] and not state['Running']:
+        print(state['ExitCode'])
+        break
+    time.sleep(min(0.1,remaining))
 PY_WAIT
 }
-image="${PRE2_NO_MOUNT_IMAGE:-ubuntu:24.04}"
+image="${PRE2_NO_MOUNT_IMAGE:-oasis7-world-service-conformance-runtime:local}"
 rtk proxy docker image inspect "$image" > "$evidence/image-inspect.json"
 image="$(rtk proxy python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[0]["Id"])' "$evidence/image-inspect.json")"
 rtk proxy docker network create "$network" >/dev/null
