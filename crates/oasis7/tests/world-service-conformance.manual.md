@@ -2,7 +2,23 @@
 
 Task: `task_490d0cf6273b423eb9510723170eef9a`, Issue #4254. QA authoring slice; this document does not constitute independent review.
 
-Current evidence status: the complete current 70-parent runner is **not_run**; the historical 64-parent collection failed. Focused executed results and historical failures are recorded below. Topology A and B are **not_evaluated**, C is **not_run**, and production is **not_evaluated**. Focused client/authority/outage results do not establish A/B closure.
+## Latest aggregate acceptance — 2026-10-09
+
+A and B passed on immutable source `5e5dad4d63cf3ceb62f01c9e9755ccebb0f1d3e5`. PR #4378 CI and merge remain pending; this is local acceptance, not completed code delivery. C is `not_run`; production is `not_evaluated`.
+
+| Required scope | Actual result and evidence |
+| --- | --- |
+| A: pure contract, signing, provider compatibility (TA01–02, TA15) | 24 tests passed in `/tmp/pre2-client-api-5e5dad4d6-20261009.log`; client_api has no core/NodeRuntime/network/filesystem dependencies or calls. |
+| A: real TCP, canonical correlation, authorization, fixed-generation CAS, cursor, recovery, live consumers (TA05–23, TA27) | Full70 passed, zero failures, 10 internal/manual cases ignored, 331.62s; source stable and all expected parent/proof markers observed. `/tmp/pre2-conformance-70-5e5dad4d6-serial-20261009/report.json` and `conformance.log`. Strict identity tests reject topology identity injection and wrong genesis; view clock axes remain distinct. |
+| B: real single Node, shipped application without node-directory access (TA04) | Linux integration exit0; signed gameplay and Hosted Agent five-operation/private Memory/ACK parent passed in4.37s. `/tmp/pre2-linux-nomount-5e5dad4d6-20261009/report.json`, `control-result.log`, mount and real service witnesses. |
+| B: same application artifact endpoint switching (TA03, TA24) | Same Viewer ELF restart, fresh signed local session registration, exact original CollectData551 Lookup/replay passed in0.75s; canonical event remains unique. `control-switch.log`. Two aliases of one service prove transport compatibility, not two nodes or a second provider turn. |
+| B: production ingress pressure/recovery (TA18, TA21) | Actual global32/per-peer4 bounds, independent source,429/503 RetryAfter, signed Describe and shipped snapshot recovery passed. `/tmp/pre2-linux-pressure-5e5dad4d6-20261009/report.json`. |
+
+Linux arm64 build identity/configuration/world/service-key evidence is in `/tmp/pre2-linux-build-5e5dad4d6-20261009/build-manifest.json` and the integration report's `topology_evidence`. Linux test ELF SHA256 `9e40e4353dd8ea315a3b867e78acf85cf14041820bcde7a7e339cc005d5c84e7`; shipped Viewer ELF SHA256 `6e332078c87e618874a3e6549ac366366b9d68eec90fbd928999109be8e20295`. Runtime image `sha256:278a56aea9756566c3e23c72776531c4c5f49de21f94502f9ad10e42b834ddcc`. The app mounts only its bundle/private storage, not node storage/source/Docker socket. Docker memory was the original4096MiB during this build and acceptance. Darwin full70 has its own platform artifacts/digests; no cross-platform artifact equivalence is claimed.
+
+Component runners retain conservative `topology_A/B: not_evaluated` fields because each alone cannot establish aggregate acceptance. The joined results above cover the required A/B scope; no individual field was rewritten to fabricate a pass. Historical failures below describe earlier checkpoints and are superseded only by these actual final results.
+
+## Runner and historical execution record
 
 After the coordinator releases the exclusive Cargo slot, run from the canonical worktree:
 
@@ -20,7 +36,7 @@ Focused cases cover direct authenticated Cognition receipt/lineage/feedback, own
 
 Historical 52-parent checkpoint: registration included 52 required real TCP parents and that checkpoint compiled artifact listed the same 52. The full52 combination has not been executed. Earlier focused results for endpoint switching, OS denial/five operations, bootstrap/cache/publication, nonce-history, privacy, legacy codec and shipped Viewer handlers remain checkpoint-specific evidence. They require fresh integration on the final frozen candidate before aggregate acceptance.
 
-Current focused results include real Wait/Resume rejection recovery and final-budget rollback/crash tests at their recorded earlier checkpoints, plus current metadata TTL/failure/old-configuration probes, authenticated feedback-history/admission checks, canonical ACK codec checks, and signed owner-control service/offline RED→GREEN. The current staged ACK path still requires its real TCP crash, write-failure and missing-runner tests; late periodic completion and actual global32/independent-source pressure remain unrun. All affected behavior must pass the complete frozen 70-parent runner and final D0 negative/offline/legacy checks. A/B configurations and immutable shipped-application no-mount acceptance remain not_evaluated; C not_run and production not_evaluated. Historical open rows below retain their checkpoint context; later focused results do not establish aggregate completion.
+Historical focused results included real Wait/Resume rejection recovery and final-budget rollback/crash tests at their recorded earlier checkpoints, plus current metadata TTL/failure/old-configuration probes, authenticated feedback-history/admission checks, canonical ACK codec checks, and signed owner-control service/offline RED→GREEN. The current staged ACK path still requires its real TCP crash, write-failure and missing-runner tests; late periodic completion and actual global32/independent-source pressure remain unrun. All affected behavior must pass the complete frozen 70-parent runner and final D0 negative/offline/legacy checks. A/B configurations and immutable shipped-application no-mount acceptance remain not_evaluated; C not_run and production not_evaluated. Historical open rows below retain their checkpoint context; later focused results do not establish aggregate completion.
 
 The direct-provider genuine wake case runs a separate sandboxed application against a scheduler-enabled canonical fixture. It uses the production Wait checkpoint getter, controlled real canonical steps, wake selection, ResumeWake and Act closure. It verifies the original continuation becomes Consumed, the actual Resume receipt links its canonical successor, and the specific resumed Act commits with its exact lease settled and original mirror retired. A future successor can remain Scheduled; this case does not require all future work to become Completed or remove every wake. It does not replace genuine Hosted Wait/Resume acceptance through the production listener.
 
