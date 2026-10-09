@@ -127,6 +127,31 @@ pub(super) fn start_chain_status_server(
     })
 }
 
+/// Test-only handled-route evidence; never records body, keys or signatures.
+#[cfg(test)]
+fn record_test_service_request_witness(method: &str, path: &str) -> Result<(), String> {
+    let Some(destination) = std::env::var_os("PRE2_SERVICE_REQUEST_WITNESS") else {
+        return Ok(());
+    };
+    static COUNTS: std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<String, u64>>> =
+        std::sync::OnceLock::new();
+    let mut counts = COUNTS
+        .get_or_init(Default::default)
+        .lock()
+        .map_err(|_| "test service route witness mutex poisoned".to_string())?;
+    let key = format!("{method} {path}");
+    let count = counts.entry(key).or_default();
+    *count = count
+        .checked_add(1)
+        .ok_or("test service route witness overflow")?;
+    let destination = std::path::PathBuf::from(destination);
+    let temporary = destination.with_extension("pending.json");
+    let bytes = serde_json::to_vec(&*counts).map_err(|e| e.to_string())?;
+    std::fs::write(&temporary, bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(temporary, destination).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn build_chain_runtime_perf_snapshot(
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
     node_role: NodeRole,
@@ -304,6 +329,8 @@ fn handle_chain_status_connection(
         execution_storage_root,
         feedback_submit_signer,
     )? {
+        #[cfg(test)]
+        record_test_service_request_witness(method, path)?;
         return Ok(());
     }
 

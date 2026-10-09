@@ -142,34 +142,23 @@ fn no_mount_service_entry() {
             .subject_public_key,
         private_key_hex,
     };
-    let listener = TcpListener::bind(endpoint.strip_prefix("http://").unwrap()).unwrap();
-    let mut requests = std::collections::BTreeMap::<String, u64>::new();
-    loop {
-        let (mut stream, _) = listener.accept().unwrap();
-        http_fixture::configure_accepted_stream(&stream);
-        let bytes = read_request(&mut stream);
-        if bytes.is_empty() {
-            continue;
-        }
-        let first = std::str::from_utf8(&bytes).unwrap().lines().next().unwrap();
-        let mut parts = first.split_whitespace();
-        let method = parts.next().unwrap();
-        let path = parts.next().unwrap();
-        let handled = crate::world_service_api::maybe_handle(
-            &mut stream,
-            &bytes,
-            &node,
-            method,
-            path,
-            "w1",
-            &root.join("world"),
-            &root.join("records"),
-            &root.join("store"),
-            &signer,
-        )
-        .unwrap();
-        assert!(handled, "unexpected service route");
-        *requests.entry(format!("{method} {path}")).or_default() += 1;
+    let request_witness = root.join("handled-service-requests.json");
+    assert_eq!(
+        std::path::PathBuf::from(
+            std::env::var_os("PRE2_SERVICE_REQUEST_WITNESS")
+                .expect("service process must opt into handled-route evidence")
+        ),
+        request_witness,
+    );
+    let mut server =
+        crate::status_admission::start_test_server(&root, &endpoint, node.clone(), signer).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(120);
+    while Instant::now() < deadline && !root.join("service-stop").exists() {
+        let requests: std::collections::BTreeMap<String, u64> = match fs::read(&request_witness) {
+            Ok(bytes) => serde_json::from_slice(&bytes).unwrap(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Default::default(),
+            Err(error) => panic!("actual handled-route evidence unreadable: {error}"),
+        };
         let snapshot = node.lock().unwrap().snapshot();
         // Operator evidence reads the immutable execution record/CAS, never the redacted public projection.
         let identity =
@@ -204,7 +193,10 @@ fn no_mount_service_entry() {
         let temporary = root.join("actual-service-witness.pending.json");
         fs::write(&temporary, serde_json::to_vec(&witness).unwrap()).unwrap();
         fs::rename(temporary, root.join("actual-service-witness.json")).unwrap();
+        thread::sleep(Duration::from_millis(250));
     }
+    crate::status_server_support::stop_chain_status_server(&mut server);
+    node.lock().unwrap().stop().unwrap();
 }
 
 fn client() -> RemoteWorldServiceClient {

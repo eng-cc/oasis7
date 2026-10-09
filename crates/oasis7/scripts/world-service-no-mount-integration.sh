@@ -80,6 +80,7 @@ rtk proxy docker run -d --name "$prefix-service" --network "$network" --network-
   --mount "type=bind,src=$evidence/bundle,dst=/bundle,readonly" \
   --mount "type=volume,src=$node_volume,dst=/node" \
   -e PRE2_SERVER_ROOT=/node -e PRE2_SERVER_ENDPOINT=http://0.0.0.0:4200 \
+  -e PRE2_SERVICE_REQUEST_WITNESS=/node/handled-service-requests.json \
   "$image" /bundle/test-executable --ignored --exact \
   "$entry::no_mount_service_entry" --nocapture >/dev/null
 rtk proxy docker cp "$prefix-service:/node/app-public-config.json" "$evidence/app-public-config.json"

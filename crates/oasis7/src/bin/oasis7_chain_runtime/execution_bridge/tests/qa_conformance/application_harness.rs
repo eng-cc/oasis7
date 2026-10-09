@@ -172,7 +172,7 @@ pub(super) fn run_isolated_application_mode(
         || admit_crash
         || capture_crash
         || wait_rejected;
-    let fixture = Fixture::with_options(true, wake || ordinary_wait);
+    let fixture = Fixture::with_clock_options(true, wake || ordinary_wait, wake && !drift);
     let app_dir = temp_dir("qa-world-service-application");
     fs::create_dir_all(&app_dir).unwrap();
     if matches!(

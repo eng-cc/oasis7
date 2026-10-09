@@ -115,6 +115,9 @@ impl Fixture {
         Self::with_options(controlled, false)
     }
     fn with_options(controlled: bool, scheduler: bool) -> Self {
+        Self::with_clock_options(controlled, scheduler, false)
+    }
+    fn with_clock_options(controlled: bool, scheduler: bool, quiet_clock: bool) -> Self {
         let root = temp_dir("qa-world-service-tcp");
         let writer_lock =
             crate::world_writer_lock::acquire_live_world_writer_lock(&root.join("world")).unwrap();
@@ -126,7 +129,29 @@ impl Fixture {
             world_id: "w1".into(),
             genesis_digest: "fixture-genesis-v1".into(),
         };
-        let mut world = RuntimeWorld::new_with_state(WorldState::default());
+        let mut state = WorldState::default();
+        if quiet_clock {
+            // Isolate a genuine empty-clock observation from unrelated automatic
+            // crisis lifecycle events. This is original canonical fixture state,
+            // never a mutation or a filter applied around the clock assertion.
+            state.crises.insert(
+                "fixture.clock.active".into(),
+                oasis7::runtime::CrisisState {
+                    crisis_id: "fixture.clock.active".into(),
+                    kind: "supply_shock".into(),
+                    severity: 1,
+                    status: oasis7::runtime::CrisisStatus::Active,
+                    opened_at: 0,
+                    expires_at: u64::MAX,
+                    resolver_agent_id: None,
+                    strategy: None,
+                    success: None,
+                    impact: 0,
+                    resolved_at: None,
+                },
+            );
+        }
+        let mut world = RuntimeWorld::new_with_state(state);
         if scheduler {
             use oasis7::runtime::SchedulerPolicyV1;
             world = world
