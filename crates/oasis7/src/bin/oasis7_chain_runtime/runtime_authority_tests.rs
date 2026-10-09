@@ -38,6 +38,9 @@ fn loaded_manifest(path: &Path) -> LoadedNetworkTierManifest {
     LoadedNetworkTierManifest {
         source_path: path.to_string_lossy().to_string(),
         manifest: NetworkTierManifest {
+            release_policy: None,
+            world_policy: None,
+            authority_policy: None,
             schema_version: NETWORK_TIER_MANIFEST_SCHEMA_V1.to_string(),
             tier: "public_testnet".to_string(),
             status: "rehearsal".to_string(),
@@ -62,7 +65,7 @@ fn loaded_manifest(path: &Path) -> LoadedNetworkTierManifest {
             token_policy: NetworkTierTokenPolicy {
                 symbol: "OC".to_string(),
                 faucet_mode: "guarded_testnet_faucet".to_string(),
-                reset_policy: "resettable".to_string(),
+                reset_policy: Some("resettable".to_string()),
                 value_semantics: "testnet".to_string(),
             },
             claims_policy: NetworkTierClaimsPolicy {

@@ -1354,6 +1354,10 @@ fi
 
 case "$mode" in
   render|apply)
+    authority_admission_manifest=${manifest_source:-$manifest_path}
+    if [[ -n "$authority_admission_manifest" ]]; then
+      "$script_dir/network-tier-manifest.sh" require-legacy-runtime --manifest "$authority_admission_manifest" >/dev/null
+    fi
     [[ -n "$local_env" ]] || die "--local-env is required"
     [[ -n "$sequencer_env" ]] || die "--sequencer-env is required"
     [[ -n "$storage_env" ]] || die "--storage-env is required"
