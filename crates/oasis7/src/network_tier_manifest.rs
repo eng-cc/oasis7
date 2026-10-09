@@ -3,6 +3,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[path = "network_tier_manifest/policies.rs"]
+mod policies;
+pub use policies::{NetworkTierAuthorityPolicy, NetworkTierReleasePolicy, NetworkTierWorldPolicy};
+
+pub const NETWORK_TIER_MANIFEST_SCHEMA_V2: &str = "oasis7.network_tier_manifest.v2";
+
 pub const NETWORK_TIER_MANIFEST_SCHEMA_V1: &str = "oasis7.network_tier_manifest.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -10,6 +16,12 @@ pub struct NetworkTierManifest {
     pub schema_version: String,
     pub tier: String,
     pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release_policy: Option<NetworkTierReleasePolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_policy: Option<NetworkTierWorldPolicy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_policy: Option<NetworkTierAuthorityPolicy>,
     pub network_id: String,
     pub chain_id: String,
     pub runtime_refs: NetworkTierRuntimeRefs,
@@ -48,7 +60,8 @@ pub struct NetworkTierValidatorPolicy {
 pub struct NetworkTierTokenPolicy {
     pub symbol: String,
     pub faucet_mode: String,
-    pub reset_policy: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_policy: Option<String>,
     pub value_semantics: String,
 }
 
@@ -76,6 +89,14 @@ pub struct LoadedNetworkTierManifest {
 }
 
 impl LoadedNetworkTierManifest {
+    /// Schema validity does not activate a formal authority profile.
+    pub fn validate_runtime_support(&self) -> Result<(), String> {
+        if self.manifest.schema_version != NETWORK_TIER_MANIFEST_SCHEMA_V1 {
+            return Err("network tier manifest authority activation is planned and unsupported by this runtime; v2 cannot start the compatibility prototype".to_string());
+        }
+        Ok(())
+    }
+
     pub fn load(path: &Path) -> Result<Self, String> {
         let source_path = path
             .canonicalize()
@@ -88,6 +109,13 @@ impl LoadedNetworkTierManifest {
                 path.display()
             )
         })?;
+        let source: serde_json::Value = serde_json::from_str(raw.as_str()).map_err(|err| {
+            format!(
+                "parse network tier manifest {} failed: {err}",
+                path.display()
+            )
+        })?;
+        policies::validate_schema_fields(&source)?;
         let manifest: NetworkTierManifest = serde_json::from_str(raw.as_str()).map_err(|err| {
             format!(
                 "parse network tier manifest {} failed: {err}",
@@ -107,7 +135,10 @@ impl LoadedNetworkTierManifest {
 }
 
 fn validate_manifest(manifest: &NetworkTierManifest, path: &Path) -> Result<(), String> {
-    if manifest.schema_version != NETWORK_TIER_MANIFEST_SCHEMA_V1 {
+    if !matches!(
+        manifest.schema_version.as_str(),
+        NETWORK_TIER_MANIFEST_SCHEMA_V1 | NETWORK_TIER_MANIFEST_SCHEMA_V2
+    ) {
         return Err(format!(
             "network tier manifest {} has unsupported schema_version `{}`",
             path.display(),
@@ -190,12 +221,18 @@ fn validate_manifest(manifest: &NetworkTierManifest, path: &Path) -> Result<(), 
         "token_policy.faucet_mode",
         path,
     )?;
-    validate_choice(
-        manifest.token_policy.reset_policy.as_str(),
-        &["ephemeral", "resettable", "frozen"],
-        "token_policy.reset_policy",
-        path,
-    )?;
+    if manifest.schema_version == NETWORK_TIER_MANIFEST_SCHEMA_V1 {
+        validate_choice(
+            manifest
+                .token_policy
+                .reset_policy
+                .as_deref()
+                .unwrap_or_default(),
+            &["ephemeral", "resettable", "frozen"],
+            "token_policy.reset_policy",
+            path,
+        )?;
+    }
     validate_choice(
         manifest.token_policy.value_semantics.as_str(),
         &["preview", "testnet", "production"],
@@ -243,7 +280,11 @@ fn validate_manifest(manifest: &NetworkTierManifest, path: &Path) -> Result<(), 
         ));
     }
 
-    validate_tier_semantics(manifest, path)?;
+    if manifest.schema_version == NETWORK_TIER_MANIFEST_SCHEMA_V1 {
+        validate_tier_semantics(manifest, path)?;
+    } else {
+        policies::validate_planned_policy(manifest, path)?;
+    }
     Ok(())
 }
 
@@ -295,7 +336,7 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
                     path.display()
                 ));
             }
-            if token_policy.reset_policy != "ephemeral" {
+            if token_policy.reset_policy.as_deref() != Some("ephemeral") {
                 return Err(format!(
                     "network tier manifest {} requires local_devnet reset_policy=ephemeral",
                     path.display()
@@ -315,7 +356,7 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
                     path.display()
                 ));
             }
-            if token_policy.reset_policy != "resettable" {
+            if token_policy.reset_policy.as_deref() != Some("resettable") {
                 return Err(format!(
                     "network tier manifest {} requires public_testnet reset_policy=resettable",
                     path.display()
@@ -374,7 +415,7 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
                     path.display()
                 ));
             }
-            if token_policy.reset_policy != "frozen" {
+            if token_policy.reset_policy.as_deref() != Some("frozen") {
                 return Err(format!(
                     "network tier manifest {} requires mainnet reset_policy=frozen",
                     path.display()
@@ -489,287 +530,9 @@ fn load_bootstrap_peers(path: &Path) -> Result<Vec<String>, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+#[path = "network_tier_manifest/tests.rs"]
+mod tests;
 
-    fn temp_dir(label: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!("oasis7-network-tier-{label}-{nonce}"));
-        fs::create_dir_all(&dir).expect("create temp dir");
-        dir
-    }
-
-    #[test]
-    fn load_manifest_reads_bootstrap_peer_file() {
-        let dir = temp_dir("load");
-        let peers_path = dir.join("bootstrap.txt");
-        let genesis_path = dir.join("genesis.json");
-        fs::write(
-            &peers_path,
-            "# comment\n/ip4/127.0.0.1/tcp/4100\n/dns4/bootstrap.example/tcp/4101\n",
-        )
-        .expect("write peers");
-        fs::write(&genesis_path, "{}\n").expect("write genesis");
-        let manifest_path = dir.join("manifest.json");
-        fs::write(
-            &manifest_path,
-            format!(
-                r#"{{
-  "schema_version": "{NETWORK_TIER_MANIFEST_SCHEMA_V1}",
-  "tier": "public_testnet",
-  "status": "rehearsal",
-  "network_id": "oasis7-public-testnet",
-  "chain_id": "oasis7-public-testnet",
-  "runtime_refs": {{
-    "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
-    "genesis_ref": "{}",
-    "bootstrap_peer_ref": "{}"
-  }},
-  "endpoint_policy": {{
-    "rpc_ref": "https://public-testnet.example.invalid/rpc",
-    "explorer_ref": "https://public-testnet.example.invalid/explorer",
-    "faucet_ref": "https://public-testnet.example.invalid/faucet"
-  }},
-  "validator_policy": {{
-    "governance_mode": "shared_ops",
-    "validator_admission": "allowlist_or_governed_candidate",
-    "target_validator_count": 4,
-    "allow_observer_nodes": true
-  }},
-  "token_policy": {{
-    "symbol": "OC",
-    "faucet_mode": "guarded_testnet_faucet",
-    "reset_policy": "resettable",
-    "value_semantics": "testnet"
-  }},
-  "claims_policy": {{
-    "allowed_claims": ["public_testnet"],
-    "denied_claims": ["mainnet_live", "production_oc_settlement"]
-  }},
-  "promotion_policy": {{
-    "promote_from": ["local_devnet"],
-    "required_gates": ["public_testnet_rehearsal_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
-  }},
-  "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
-}}"#,
-                genesis_path.display(),
-                peers_path.display()
-            ),
-        )
-        .expect("write manifest");
-
-        let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load");
-        assert_eq!(loaded.manifest.tier, "public_testnet");
-        assert_eq!(
-            loaded.bootstrap_peers,
-            vec![
-                "/ip4/127.0.0.1/tcp/4100".to_string(),
-                "/dns4/bootstrap.example/tcp/4101".to_string()
-            ]
-        );
-
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn load_manifest_rejects_unknown_tier() {
-        let dir = temp_dir("invalid");
-        let peers_path = dir.join("bootstrap.txt");
-        fs::write(&peers_path, "/ip4/127.0.0.1/tcp/4100\n").expect("write peers");
-        let manifest_path = dir.join("manifest.json");
-        fs::write(
-            &manifest_path,
-            format!(
-                r#"{{
-  "schema_version": "{NETWORK_TIER_MANIFEST_SCHEMA_V1}",
-  "tier": "wrong",
-  "status": "planned",
-  "network_id": "oasis7-public-testnet",
-  "chain_id": "oasis7-public-testnet",
-  "runtime_refs": {{
-    "release_candidate_bundle_ref": "a",
-    "genesis_ref": "b",
-    "bootstrap_peer_ref": "{}"
-  }},
-  "endpoint_policy": {{
-    "rpc_ref": "https://public-testnet.example.invalid/rpc",
-    "explorer_ref": "https://public-testnet.example.invalid/explorer",
-    "faucet_ref": null
-  }},
-  "validator_policy": {{
-    "governance_mode": "shared_ops",
-    "validator_admission": "shared_allowlist",
-    "target_validator_count": 3,
-    "allow_observer_nodes": true
-  }},
-  "token_policy": {{
-    "symbol": "OC",
-    "faucet_mode": "operator_grant",
-    "reset_policy": "resettable",
-    "value_semantics": "preview"
-  }},
-  "claims_policy": {{
-    "allowed_claims": [],
-    "denied_claims": []
-  }},
-  "promotion_policy": {{
-    "promote_from": [],
-    "required_gates": []
-  }},
-  "evidence_refs": []
-}}"#,
-                peers_path.display()
-            ),
-        )
-        .expect("write manifest");
-
-        let err = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect_err("reject");
-        assert!(err.contains("invalid tier"));
-
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn load_manifest_rejects_missing_genesis_ref_file() {
-        let dir = temp_dir("missing-genesis");
-        let peers_path = dir.join("bootstrap.txt");
-        fs::write(&peers_path, "/ip4/127.0.0.1/tcp/4100\n").expect("write peers");
-        let manifest_path = dir.join("manifest.json");
-        fs::write(
-            &manifest_path,
-            format!(
-                r#"{{
-  "schema_version": "{NETWORK_TIER_MANIFEST_SCHEMA_V1}",
-  "tier": "public_testnet",
-  "status": "specified_skeleton_only",
-  "network_id": "oasis7-public-testnet",
-  "chain_id": "oasis7-public-testnet",
-  "runtime_refs": {{
-    "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
-    "genesis_ref": "missing-genesis.json",
-    "bootstrap_peer_ref": "{}"
-  }},
-  "endpoint_policy": {{
-    "rpc_ref": "https://public-testnet.example.invalid/rpc",
-    "explorer_ref": "https://public-testnet.example.invalid/explorer",
-    "faucet_ref": "https://public-testnet.example.invalid/faucet"
-  }},
-  "validator_policy": {{
-    "governance_mode": "shared_ops",
-    "validator_admission": "allowlist_or_governed_candidate",
-    "target_validator_count": 4,
-    "allow_observer_nodes": true
-  }},
-  "token_policy": {{
-    "symbol": "OC",
-    "faucet_mode": "guarded_testnet_faucet",
-    "reset_policy": "resettable",
-    "value_semantics": "testnet"
-  }},
-  "claims_policy": {{
-    "allowed_claims": ["public_testnet"],
-    "denied_claims": ["mainnet_live", "production_oc_settlement"]
-  }},
-  "promotion_policy": {{
-    "promote_from": ["local_devnet"],
-    "required_gates": ["public_testnet_rehearsal_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
-  }},
-  "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
-}}"#,
-                peers_path.display()
-            ),
-        )
-        .expect("write manifest");
-
-        let err = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect_err("reject");
-        assert!(err.contains("missing runtime_refs.genesis_ref"));
-
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn load_manifest_rejects_public_testnet_without_production_settlement_deny() {
-        let dir = temp_dir("claims");
-        let peers_path = dir.join("bootstrap.txt");
-        let genesis_path = dir.join("genesis.json");
-        fs::write(&peers_path, "/ip4/127.0.0.1/tcp/4100\n").expect("write peers");
-        fs::write(&genesis_path, "{}\n").expect("write genesis");
-        let manifest_path = dir.join("manifest.json");
-        fs::write(
-            &manifest_path,
-            format!(
-                r#"{{
-  "schema_version": "{NETWORK_TIER_MANIFEST_SCHEMA_V1}",
-  "tier": "public_testnet",
-  "status": "specified_skeleton_only",
-  "network_id": "oasis7-public-testnet",
-  "chain_id": "oasis7-public-testnet",
-  "runtime_refs": {{
-    "release_candidate_bundle_ref": "output/release-candidates/public-testnet.json",
-    "genesis_ref": "{}",
-    "bootstrap_peer_ref": "{}"
-  }},
-  "endpoint_policy": {{
-    "rpc_ref": "https://public-testnet.example.invalid/rpc",
-    "explorer_ref": "https://public-testnet.example.invalid/explorer",
-    "faucet_ref": "https://public-testnet.example.invalid/faucet"
-  }},
-  "validator_policy": {{
-    "governance_mode": "shared_ops",
-    "validator_admission": "allowlist_or_governed_candidate",
-    "target_validator_count": 4,
-    "allow_observer_nodes": true
-  }},
-  "token_policy": {{
-    "symbol": "OC",
-    "faucet_mode": "guarded_testnet_faucet",
-    "reset_policy": "resettable",
-    "value_semantics": "testnet"
-  }},
-  "claims_policy": {{
-    "allowed_claims": ["public_testnet"],
-    "denied_claims": ["mainnet_live"]
-  }},
-  "promotion_policy": {{
-    "promote_from": ["local_devnet"],
-    "required_gates": ["public_testnet_rehearsal_pass", "public_rpc_ready", "faucet_guard_ready", "reset_policy_announced"]
-  }},
-  "evidence_refs": ["doc/testing/evidence/public-testnet.md"]
-}}"#,
-                genesis_path.display(),
-                peers_path.display()
-            ),
-        )
-        .expect("write manifest");
-
-        let err = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect_err("reject");
-        assert!(err.contains("production_oc_settlement"));
-
-        let _ = fs::remove_dir_all(dir);
-    }
-
-    #[test]
-    fn claim_list_contains_ascii_case_insensitive_substrings_without_joining() {
-        let claims = vec![
-            "PUBLIC_TESTNET_READY".to_string(),
-            "production_OC_settlement_denied".to_string(),
-        ];
-
-        assert!(string_list_contains_ascii_case_insensitive(
-            claims.as_slice(),
-            "public_testnet"
-        ));
-        assert!(string_list_contains_ascii_case_insensitive(
-            claims.as_slice(),
-            "production_oc_settlement"
-        ));
-        assert!(!string_list_contains_ascii_case_insensitive(
-            claims.as_slice(),
-            "mainnet"
-        ));
-    }
-}
+#[cfg(test)]
+#[path = "network_tier_manifest/planned_policy_tests.rs"]
+mod planned_policy_tests;

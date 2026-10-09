@@ -255,6 +255,7 @@ require_file "$runtime_build_ref"
 require_file "$bootstrap_peers_file"
 require_file "$base_genesis"
 require_file "$base_manifest"
+"$repo_root/scripts/network-tier-manifest.sh" require-legacy-runtime --manifest "$base_manifest" >/dev/null
 triad_bootstrap_peer_sha256=$(sha256_file "$bootstrap_peers_file")
 if [[ $has_validator_47 -eq 1 ]]; then
   require_file "$TRIAD_INVENTORY_PATH"

@@ -9,6 +9,7 @@ usage() {
 Usage:
   ./scripts/network-tier-manifest.sh create [options]
   ./scripts/network-tier-manifest.sh validate --manifest <path>
+  ./scripts/network-tier-manifest.sh require-legacy-runtime --manifest <path>
 
 Purpose:
   Freeze and validate one machine-readable formal network tier manifest for:
@@ -16,8 +17,19 @@ Purpose:
   - public_testnet
   - mainnet
 
+  v2 is a planned declaration only: schema validity never enables runtime,
+  readiness or formal finality. Genesis identity matching checks the referenced
+  declaration, not an authenticated hash-bound genesis proof.
+
 Create options:
   --manifest <path>                    Output manifest json path (required)
+  --schema-version <name>              oasis7.network_tier_manifest.v1 (default)|oasis7.network_tier_manifest.v2
+  --release-stage <name>               v2: limited_preview
+  --world-id <id>                      v2: fixed world identity
+  --world-retention <name>             v2: persistent
+  --authority-profile <name>           v2: controlled_single_authority
+  --authority-profile-version <n>      v2: 1
+  --authority-activation <name>         v2: planned; does not enable runtime
   --tier <name>                        local_devnet|public_testnet|mainnet
   --status <name>                      planned|specified_skeleton_only|rehearsal|live
   --network-id <id>                    Stable network id
@@ -34,7 +46,7 @@ Create options:
   --allow-observer-nodes <bool>        true|false
   --token-symbol <symbol>              Usually OC
   --faucet-mode <name>                 none|operator_grant|guarded_testnet_faucet
-  --reset-policy <name>                ephemeral|resettable|frozen
+  --reset-policy <name>                v1 token reset; v2 world reset (frozen)
   --value-semantics <name>             preview|testnet|production
   --promote-from <tier>                Repeatable source tier
   --require-gate <gate>                Repeatable gate requirement
@@ -58,6 +70,13 @@ if [[ -z "$mode" ]]; then
 fi
 shift || true
 
+schema_version="oasis7.network_tier_manifest.v1"
+release_stage=""
+world_id=""
+world_retention=""
+authority_profile=""
+authority_profile_version=""
+authority_activation=""
 manifest_path=""
 tier=""
 status=""
@@ -85,6 +104,34 @@ declare -a evidence_refs=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --schema-version)
+      schema_version=${2:-}
+      shift 2
+      ;;
+    --release-stage)
+      release_stage=${2:-}
+      shift 2
+      ;;
+    --world-id)
+      world_id=${2:-}
+      shift 2
+      ;;
+    --world-retention)
+      world_retention=${2:-}
+      shift 2
+      ;;
+    --authority-profile)
+      authority_profile=${2:-}
+      shift 2
+      ;;
+    --authority-profile-version)
+      authority_profile_version=${2:-}
+      shift 2
+      ;;
+    --authority-activation)
+      authority_activation=${2:-}
+      shift 2
+      ;;
     --manifest)
       manifest_path=${2:-}
       shift 2
@@ -226,6 +273,17 @@ case "$mode" in
       echo "error: $tier is no longer a manifest tier; use --tier public_testnet --status rehearsal for public testnet rehearsal manifests" >&2
       exit 2
     fi
+    if [[ "$schema_version" == "oasis7.network_tier_manifest.v2" ]]; then
+      require_non_empty "--release-stage" "$release_stage"
+      require_non_empty "--world-id" "$world_id"
+      require_non_empty "--world-retention" "$world_retention"
+      require_non_empty "--authority-profile" "$authority_profile"
+      require_non_empty "--authority-profile-version" "$authority_profile_version"
+      require_non_empty "--authority-activation" "$authority_activation"
+    elif [[ -n "$release_stage$world_id$world_retention$authority_profile$authority_profile_version$authority_activation" ]]; then
+      echo "error: v2 policy options require --schema-version oasis7.network_tier_manifest.v2" >&2
+      exit 2
+    fi
     mkdir -p "$(dirname "$manifest_path")"
     join_with_newline() {
       local out=""
@@ -238,7 +296,10 @@ case "$mode" in
       done
       printf '%s' "$out"
     }
-    NETWORK_TIER_MANIFEST="$manifest_path" python3 - "$tier" "$status" "$network_id" "$chain_id" "$release_candidate_bundle_ref" "$genesis_ref" "$bootstrap_peer_ref" "$rpc_ref" "$explorer_ref" "$faucet_ref" "$governance_mode" "$validator_admission" "$target_validator_count" "$allow_observer_nodes" "$token_symbol" "$faucet_mode" "$reset_policy" "$value_semantics" "$(join_with_newline "${promote_from[@]}")" "$(join_with_newline "${require_gates[@]}")" "$(join_with_newline "${allowed_claims[@]}")" "$(join_with_newline "${denied_claims[@]}")" "$(join_with_newline "${evidence_refs[@]}")" <<'PY'
+    NETWORK_TIER_SCHEMA="$schema_version" NETWORK_TIER_RELEASE_STAGE="$release_stage" \
+      NETWORK_TIER_WORLD_ID="$world_id" NETWORK_TIER_WORLD_RETENTION="$world_retention" \
+      NETWORK_TIER_AUTHORITY_PROFILE="$authority_profile" NETWORK_TIER_AUTHORITY_VERSION="$authority_profile_version" \
+      NETWORK_TIER_AUTHORITY_ACTIVATION="$authority_activation" NETWORK_TIER_MANIFEST="$manifest_path" python3 - "$tier" "$status" "$network_id" "$chain_id" "$release_candidate_bundle_ref" "$genesis_ref" "$bootstrap_peer_ref" "$rpc_ref" "$explorer_ref" "$faucet_ref" "$governance_mode" "$validator_admission" "$target_validator_count" "$allow_observer_nodes" "$token_symbol" "$faucet_mode" "$reset_policy" "$value_semantics" "$(join_with_newline "${promote_from[@]}")" "$(join_with_newline "${require_gates[@]}")" "$(join_with_newline "${allowed_claims[@]}")" "$(join_with_newline "${denied_claims[@]}")" "$(join_with_newline "${evidence_refs[@]}")" <<'PY'
 import json
 import os
 import pathlib
@@ -299,7 +360,7 @@ def manifest_relative_file_ref(raw: str) -> str:
     return os.path.relpath(resolved, manifest_path.parent)
 
 manifest = {
-    "schema_version": "oasis7.network_tier_manifest.v1",
+    "schema_version": os.environ["NETWORK_TIER_SCHEMA"],
     "tier": tier,
     "status": status,
     "network_id": network_id,
@@ -337,25 +398,60 @@ manifest = {
     "evidence_refs": split_items(evidence_refs_raw),
 }
 
+if manifest["schema_version"] == "oasis7.network_tier_manifest.v2":
+    del manifest["token_policy"]["reset_policy"]
+    manifest["release_policy"] = {"stage": os.environ["NETWORK_TIER_RELEASE_STAGE"]}
+    manifest["world_policy"] = {
+        "world_id": os.environ["NETWORK_TIER_WORLD_ID"],
+        "retention": os.environ["NETWORK_TIER_WORLD_RETENTION"],
+        "reset_policy": reset_policy,
+    }
+    manifest["authority_policy"] = {
+        "profile": os.environ["NETWORK_TIER_AUTHORITY_PROFILE"],
+        "profile_version": int(os.environ["NETWORK_TIER_AUTHORITY_VERSION"]),
+        "activation": os.environ["NETWORK_TIER_AUTHORITY_ACTIVATION"],
+    }
+
 manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 PY
     "$0" validate --manifest "$manifest_path" >/dev/null
     echo "$manifest_path"
     ;;
-  validate)
+  validate|require-legacy-runtime)
     require_non_empty "--manifest" "$manifest_path"
     if [[ ! -f "$manifest_path" ]]; then
       echo "error: manifest not found: $manifest_path" >&2
       exit 2
     fi
-    python3 - "$manifest_path" <<'PY'
+    python3 - "$manifest_path" "$mode" <<'PY'
 import json
 import pathlib
 import sys
 
 manifest_path = pathlib.Path(sys.argv[1]).resolve()
+duplicate_fields = []
+def inspect_pairs(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            duplicate_fields.append(key)
+        obj[key] = value
+    return obj
+
 with manifest_path.open("r", encoding="utf-8") as fh:
-    data = json.load(fh)
+    data = json.load(fh, object_pairs_hook=inspect_pairs)
+if data.get("schema_version") == "oasis7.network_tier_manifest.v2" and duplicate_fields:
+    raise SystemExit("v2 duplicate manifest fields: " + ", ".join(duplicate_fields))
+
+if sys.argv[2] == "require-legacy-runtime":
+    # Admission guard only; source manifests may be localized later. Full
+    # schema validation remains the validate command and runtime obligation.
+    if data.get("schema_version") != "oasis7.network_tier_manifest.v1" or any(
+        key in data for key in ("release_policy", "world_policy", "authority_policy")
+    ):
+        raise SystemExit("planned authority is not activated; only v1 may use legacy runtime or proof consumers")
+    print(json.dumps({"legacy_runtime_admission": "pass"}))
+    raise SystemExit(0)
 
 required_top = [
     "schema_version",
@@ -375,8 +471,54 @@ for field in required_top:
     if field not in data:
         raise SystemExit(f"missing top-level field: {field}")
 
-if data["schema_version"] != "oasis7.network_tier_manifest.v1":
+schema = data["schema_version"]
+if schema not in {"oasis7.network_tier_manifest.v1", "oasis7.network_tier_manifest.v2"}:
     raise SystemExit("unsupported schema_version")
+is_v2 = schema == "oasis7.network_tier_manifest.v2"
+policy_fields = ("release_policy", "world_policy", "authority_policy")
+if not is_v2 and any(field in data for field in policy_fields):
+    raise SystemExit("v1 must not contain v2 release/world/authority policies")
+if is_v2:
+    if data["status"] == "live":
+        raise SystemExit("v2 planned authority cannot use status=live")
+    if data["tier"] == "mainnet":
+        raise SystemExit("v2 limited preview cannot use tier=mainnet")
+    expected_policy_keys = {
+        "release_policy": {"stage"},
+        "world_policy": {"world_id", "retention", "reset_policy"},
+        "authority_policy": {"profile", "profile_version", "activation"},
+    }
+    for field in policy_fields:
+        if not isinstance(data.get(field), dict):
+            raise SystemExit(f"v2 requires {field} object")
+        if set(data[field]) != expected_policy_keys[field]:
+            raise SystemExit(f"v2 {field} has missing or unknown fields")
+    if data["release_policy"].get("stage") != "limited_preview":
+        raise SystemExit("v2 requires release_policy.stage=limited_preview")
+    world = data["world_policy"]
+    if not isinstance(world.get("world_id"), str) or not world["world_id"].strip():
+        raise SystemExit("v2 requires nonempty world_policy.world_id")
+    if world.get("retention") != "persistent" or world.get("reset_policy") != "frozen":
+        raise SystemExit("v2 requires world_policy persistent retention and frozen reset_policy")
+    authority = data["authority_policy"]
+    if authority.get("profile") != "controlled_single_authority" or authority.get("activation") != "planned":
+        raise SystemExit("v2 only supports controlled_single_authority with activation=planned")
+    if type(authority.get("profile_version")) is not int or authority["profile_version"] != 1:
+        raise SystemExit("v2 requires authority_policy.profile_version=1")
+    if "reset_policy" in data["token_policy"]:
+        raise SystemExit("v2 token_policy must not contain reset_policy; use world_policy")
+    symbol = data["token_policy"].get("symbol")
+    if not isinstance(symbol, str) or not symbol.strip():
+        raise SystemExit("v2 requires nonempty token_policy.symbol")
+    faucet_ref = data["endpoint_policy"].get("faucet_ref")
+    if faucet_ref is not None and (not isinstance(faucet_ref, str) or not faucet_ref.strip()):
+        raise SystemExit("v2 faucet_ref must be null or nonempty text")
+    if data["token_policy"].get("value_semantics") != "preview":
+        raise SystemExit("v2 requires token_policy.value_semantics=preview")
+    if data["token_policy"].get("faucet_mode") not in {"none", "operator_grant"}:
+        raise SystemExit("v2 requires faucet_mode none or operator_grant")
+    if data["token_policy"]["faucet_mode"] == "none" and data["endpoint_policy"].get("faucet_ref") is not None:
+        raise SystemExit("v2 faucet_mode none must not define faucet_ref")
 
 tiers = {"local_devnet", "public_testnet", "mainnet"}
 statuses = {"planned", "specified_skeleton_only", "rehearsal", "live"}
@@ -409,7 +551,8 @@ require_enum("status", data["status"], statuses)
 require_enum("governance_mode", data["validator_policy"]["governance_mode"], governance_modes)
 require_enum("validator_admission", data["validator_policy"]["validator_admission"], validator_admissions)
 require_enum("faucet_mode", data["token_policy"]["faucet_mode"], faucet_modes)
-require_enum("reset_policy", data["token_policy"]["reset_policy"], reset_policies)
+if not is_v2:
+    require_enum("reset_policy", data["token_policy"]["reset_policy"], reset_policies)
 require_enum("value_semantics", data["token_policy"]["value_semantics"], value_semantics)
 
 for field in ("network_id", "chain_id"):
@@ -427,6 +570,10 @@ if not genesis_ref_path.is_file():
     raise SystemExit(f"missing runtime_refs.genesis_ref file: {genesis_ref_path}")
 if not bootstrap_ref_path.is_file():
     raise SystemExit(f"missing runtime_refs.bootstrap_peer_ref file: {bootstrap_ref_path}")
+if is_v2:
+    genesis = json.loads(genesis_ref_path.read_text(encoding="utf-8"))
+    if genesis.get("world_id") != data["world_policy"]["world_id"] or genesis.get("chain_id") != data["chain_id"]:
+        raise SystemExit("v2 world/chain identity must match referenced genesis")
 
 for field in ("rpc_ref", "explorer_ref"):
     value = data["endpoint_policy"].get(field)
@@ -435,7 +582,7 @@ for field in ("rpc_ref", "explorer_ref"):
 
 target_validator_count = data["validator_policy"].get("target_validator_count")
 allow_observer_nodes = data["validator_policy"].get("allow_observer_nodes")
-if not isinstance(target_validator_count, int) or target_validator_count <= 0:
+if not isinstance(target_validator_count, int) or target_validator_count <= 0 or (is_v2 and (type(target_validator_count) is not int or target_validator_count > 2**64 - 1)):
     raise SystemExit("invalid validator_policy.target_validator_count")
 if not isinstance(allow_observer_nodes, bool):
     raise SystemExit("invalid validator_policy.allow_observer_nodes")
@@ -466,21 +613,21 @@ claims_policy = data["claims_policy"]
 if tier == "local_devnet":
     if token_policy["value_semantics"] != "preview":
         raise SystemExit("local_devnet must use value_semantics=preview")
-    if token_policy["reset_policy"] != "ephemeral":
+    if not is_v2 and token_policy["reset_policy"] != "ephemeral":
         raise SystemExit("local_devnet must use reset_policy=ephemeral")
     if validator_policy["validator_admission"] != "local_only":
         raise SystemExit("local_devnet must use validator_admission=local_only")
 
 if tier == "public_testnet":
-    if token_policy["value_semantics"] != "testnet":
+    if not is_v2 and token_policy["value_semantics"] != "testnet":
         raise SystemExit("public_testnet must use value_semantics=testnet")
-    if token_policy["reset_policy"] != "resettable":
+    if not is_v2 and token_policy["reset_policy"] != "resettable":
         raise SystemExit("public_testnet must use reset_policy=resettable")
-    if token_policy["faucet_mode"] != "guarded_testnet_faucet":
+    if not is_v2 and token_policy["faucet_mode"] != "guarded_testnet_faucet":
         raise SystemExit("public_testnet must use faucet_mode=guarded_testnet_faucet")
     if validator_policy["validator_admission"] not in {"allowlist_or_governed_candidate", "shared_allowlist"}:
         raise SystemExit("public_testnet validator admission is too weak or too strong")
-    if not endpoint_policy.get("faucet_ref"):
+    if not is_v2 and not endpoint_policy.get("faucet_ref"):
         raise SystemExit("public_testnet requires endpoint_policy.faucet_ref")
 
 if tier == "mainnet":
@@ -506,9 +653,13 @@ if tier != "mainnet" and "mainnet" not in joined_denied:
     raise SystemExit("non-mainnet tiers must explicitly deny mainnet claims")
 
 joined_allowed = " ".join(claims_policy["allowed_claims"]).lower()
+if is_v2:
+    for forbidden in ("mainnet", "production_oc_settlement", "controlled_single_authority_live", "persistent_world_live", "distributed_finality"):
+        if forbidden in joined_allowed:
+            raise SystemExit(f"v2 must not allow active or production claim: {forbidden}")
 if tier == "public_testnet" and "public_testnet" not in joined_allowed:
     raise SystemExit("public_testnet must explicitly allow public_testnet claims")
-if tier == "public_testnet" and "production_oc_settlement" not in joined_denied:
+if (tier == "public_testnet" or is_v2) and "production_oc_settlement" not in joined_denied:
     raise SystemExit("public_testnet must explicitly deny production_oc_settlement claims")
 if tier == "mainnet" and "faucet" in joined_allowed:
     raise SystemExit("mainnet must not allow faucet claims")
@@ -525,6 +676,10 @@ print(json.dumps(
         "chain_id": data["chain_id"],
         "validator_count": target_validator_count,
         "validate_result": "pass",
+        "schema_valid": True,
+        "runtime_supported": not is_v2,
+        "runtime_support_scope": "legacy_compatibility_only_not_formal_finality" if not is_v2 else "planned_declaration_only",
+        "authority_activation": data["authority_policy"]["activation"] if is_v2 else None,
     },
     ensure_ascii=True,
     indent=2,

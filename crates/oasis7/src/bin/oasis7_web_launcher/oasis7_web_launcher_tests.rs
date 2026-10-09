@@ -1173,3 +1173,18 @@ fn make_temp_dir(label: &str) -> PathBuf {
     fs::create_dir_all(&path).expect("create temp dir");
     path
 }
+
+#[test]
+fn validate_chain_config_refuses_schema_valid_planned_authority() {
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../doc/testing/templates/network-tier-persistent-preview-planned.example.json");
+    let issues = validate_chain_config(&LauncherConfig {
+        chain_enabled: true,
+        chain_network_tier_manifest: manifest.to_string_lossy().into_owned(),
+        ..LauncherConfig::default()
+    });
+    assert!(contains_issue(
+        &issues,
+        "authority activation is planned and unsupported"
+    ));
+}

@@ -26,11 +26,19 @@
 
 ## 当前 schema 与目标解耦边界
 
-当前 `network_tier_manifest.rs` 仍按 `local_devnet=preview+ephemeral`、`public_testnet=testnet+resettable`、`mainnet=production+frozen` 校验；下文 schema、tier 表和组合规则描述该现行实现及发行 skeleton，不代表世界保留承诺的唯一合法组合，也不证明持久单权威已实现。
+v1 `network_tier_manifest.rs` 保留 `local_devnet=preview+ephemeral`、`public_testnet=testnet+resettable`、`mainnet=production+frozen` 兼容校验；下文旧 schema 与组合规则适用于 v1，不代表唯一合法保留组合，也不证明持久单权威已实现。
 
 目标在既有 manifest 中分别表达网络环境/发行阶段、世界生命周期/保留承诺、合法提交 authority profile/激活版本，以及资产价值/faucet/结算资格。受限 preview 的正式世界可承诺持久保留合法身份、设施、材料、资格及来源；生产结算资格由经济规则与发行条件独立决定，修改 tier 不升值测试奖励，也不能因此清空已承诺世界。`frozen + preview` 只是需求组合；`token_policy.reset_policy` 不足以代表全世界保留，字段归属、兼容迁移、示例与 readiness 消费者须随实现共同闭合，不能仅放宽枚举后宣称保证成立。
 
-固定 `world_id`、`chain_id`、`genesis_hash` 与可演进软件/runtime manifest/authority 分开；后者只能按同世界历史合法升级。已有保留承诺时沿既有身份接续，隔离 local/dev 不并入长期世界。正式提交 profile、持久性和交接验收见 [P2P 合同](../prd.md#p2p-authority-profiles)；当前公开状态仍以根 README 和同候选任务证据为准。该目标解耦不是本次文档已开放的配置能力。
+固定 `world_id`、`chain_id`、`genesis_hash` 与可演进软件/runtime manifest/authority 分开；后者只能按同世界历史合法升级。已有保留承诺时沿既有身份接续，隔离 local/dev 不并入长期世界。正式提交 profile、持久性和交接验收见 [P2P 合同](../prd.md#p2p-authority-profiles)；v2 planned 配置不授予运行权威。
+
+### v2 planned 配置接线
+
+承接 [AC-P2P-TIER-PLANNED-001/002](formal-network-tiers-testnet-mechanism.prd.md#p2p-tier-planned-world-policy)：schema validator 按版本分别校验，v2 显式分开 release、world 和 authority policy，token 只拥有经济语义；拒绝混合版本字段与双 reset 真值。v1 消费路径不改变。
+
+配置验证返回 schema-valid 后，运行启动入口另行拒绝 planned/unsupported authority，且该检查必须早于 registry import 或 execution world 写入。readiness 与 exit review 输出未激活 blocker，旧 proof producer 拒绝 v2，不能将其套入现有三节点 threshold 运行路径。status 若呈现声明，应同时呈现 runtime-supported=false；声明不是已生效世界状态。
+
+验证沿用 `network-tier-manifest-smoke.sh` 与 Rust manifest/CLI/launcher 回归：同一 v2 fixture 的合法计划声明、缺 policy、未知 profile/version、live、双 reset、v1 混入 v2 policy，以及旧 lanes 全通过仍不能放行。实际提交证明、fencing、独立故障域持久确认和恢复不在这个 schema 变更的通过结论中。
 
 ## 分层模型
 Network tier 是统一持久大世界的运行/验证载体分层，不是玩家可见的多个世界模型。
