@@ -272,7 +272,7 @@ pub enum AdmissionDurability {
 pub enum IntentOutcome<T> {
     Received { durability: AdmissionDurability },
     Pending,
-    Committed { commit: CommitRef, receipt: T },
+    Committed { commit: Box<CommitRef>, receipt: T },
     Rejected { reason: WorldServiceErrorKind },
     Expired,
     Unknown,
@@ -306,7 +306,7 @@ impl<T> IntentResponse<T> {
 /// A local observation, never an authoritative intent lifecycle state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubmitObservation<T> {
-    Response(IntentResponse<T>),
+    Response(Box<IntentResponse<T>>),
     OutcomeUnknown(RequestCorrelation),
 }
 
@@ -330,10 +330,10 @@ impl ReadWorldViewRequest {
                 return Err(ContractError("read world mismatch"));
             }
         }
-        if let (Some(fixed), Some(minimum)) = (&self.fixed_commit, &self.min_commit) {
-            if !fixed.satisfies_minimum(minimum)? {
-                return Err(ContractError("fixed commit below minimum"));
-            }
+        if let (Some(fixed), Some(minimum)) = (&self.fixed_commit, &self.min_commit)
+            && !fixed.satisfies_minimum(minimum)?
+        {
+            return Err(ContractError("fixed commit below minimum"));
         }
         Ok(())
     }
@@ -361,15 +361,15 @@ impl<T> ReadWorldViewResponse<T> {
         {
             return Err(ContractError("view and continuation mismatch"));
         }
-        if let Some(minimum) = &request.min_commit {
-            if !self.version.commit.satisfies_minimum(minimum)? {
-                return Err(ContractError("read not caught up"));
-            }
+        if let Some(minimum) = &request.min_commit
+            && !self.version.commit.satisfies_minimum(minimum)?
+        {
+            return Err(ContractError("read not caught up"));
         }
-        if let Some(fixed) = &request.fixed_commit {
-            if &self.version.commit != fixed {
-                return Err(ContractError("fixed view mismatch"));
-            }
+        if let Some(fixed) = &request.fixed_commit
+            && &self.version.commit != fixed
+        {
+            return Err(ContractError("fixed view mismatch"));
         }
         Ok(())
     }

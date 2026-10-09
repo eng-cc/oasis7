@@ -1,21 +1,11 @@
 use multiaddr::Multiaddr;
 
 const MULTIADDR_EXAMPLE: &str = "/dns4/bootstrap1.oasis7.tech/tcp/5612";
-pub const DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS: &[&str] = &[
-    "/dns4/bootstrap1.oasis7.tech/tcp/5612",
-    "/dns4/bootstrap2.oasis7.tech/tcp/5611",
-];
 
-pub fn default_chain_replication_bootstrap_peers_csv() -> String {
-    DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS.join(",")
-}
-
-pub fn default_chain_replication_bootstrap_peers_vec() -> Vec<String> {
-    DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS
-        .iter()
-        .map(|peer| (*peer).to_string())
-        .collect()
-}
+pub use oasis7_client_api::{
+    DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS, default_chain_replication_bootstrap_peers_csv,
+    default_chain_replication_bootstrap_peers_vec,
+};
 
 pub fn parse_chain_replication_bootstrap_peer(raw: &str) -> Result<String, String> {
     let token = raw.trim();
@@ -54,6 +44,10 @@ mod tests {
     fn default_chain_replication_bootstrap_peers_match_official_anchor_domains() {
         assert_eq!(
             DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS,
+            oasis7_client_api::DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS
+        );
+        assert_eq!(
+            DEFAULT_CHAIN_REPLICATION_BOOTSTRAP_PEERS,
             [
                 "/dns4/bootstrap1.oasis7.tech/tcp/5612",
                 "/dns4/bootstrap2.oasis7.tech/tcp/5611",
@@ -61,8 +55,16 @@ mod tests {
         );
         assert_eq!(
             default_chain_replication_bootstrap_peers_csv(),
+            oasis7_client_api::default_chain_replication_bootstrap_peers_csv()
+        );
+        assert_eq!(
+            default_chain_replication_bootstrap_peers_csv(),
             "/dns4/bootstrap1.oasis7.tech/tcp/5612,/dns4/bootstrap2.oasis7.tech/tcp/5611"
                 .to_string()
+        );
+        assert_eq!(
+            default_chain_replication_bootstrap_peers_vec(),
+            oasis7_client_api::default_chain_replication_bootstrap_peers_vec()
         );
         assert_eq!(
             default_chain_replication_bootstrap_peers_vec(),

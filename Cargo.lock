@@ -6164,6 +6164,7 @@ dependencies = [
  "lettre",
  "libc",
  "multiaddr 0.18.2",
+ "oasis7_client_api",
  "oasis7_distfs",
  "oasis7_launcher_ui",
  "oasis7_node",
