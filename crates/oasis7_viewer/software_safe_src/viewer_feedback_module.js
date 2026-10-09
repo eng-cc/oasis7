@@ -786,43 +786,26 @@ export function createViewerFeedbackModule({
       || economicSurface?.repairAction
       || blockerLabel
       || null;
-    const controlProofSummary = (() => {
-      if (executionState === "completed") {
-        return localeText(
-          locale,
-          "控制已证明：已接受意图产生了世界级结果，玩家可以继续放大或切换下一条主线。",
-          "Control proved: the accepted intent produced a world-level result, so the player can amplify it or switch to the next line.",
-        );
-      }
-      if (executionState === "blocked") {
-        return localeText(
-          locale,
-          "控制被阻塞但可恢复：系统已把主因果和下一步恢复动作暴露给玩家。",
-          "Player control is blocked but recoverable: the system exposes the primary cause and next recovery move.",
-        );
-      }
-      if (executionState === "accepted") {
-        return localeText(
-          locale,
-          "控制已提交：系统已接受玩家意图，正在等待 committed world delta 或后续回执。",
-          "Control submitted: the system accepted the player's intent and is waiting for committed world delta or follow-up feedback.",
-        );
-      }
-      if (executionState === "rejected") {
-        return localeText(
-          locale,
-          "控制未生效：请求已被拒绝，玩家需要先修正权限、模式或动作前提。",
-          "Control did not land: the request was rejected, so the player must fix the permission, mode, or action prerequisite first.",
-        );
-      }
-      return localeText(
-        locale,
-        "控制正在证明：玩家应先读取主因果、下一步和回执，再决定是否继续推进或改道。",
-        "Control is being proven: read the primary cause, next step, and receipt before advancing or redirecting.",
-      );
-    })();
+    const primaryIntent = gameplay.primary_intent || {};
+    const receipt = primaryIntent.agency_read_model?.causal_receipt;
+    const matchingReceipt = receipt?.intent_id === primaryIntent.intent_id && primaryIntent.intent_id
+      && primaryIntent.agent_id && isAgentVisibleToCurrentSession(primaryIntent.agent_id)
+      && Number.isSafeInteger(receipt?.action_id) && receipt.action_id >= 0
+      && displayableString(receipt.receipt_id) && displayableString(receipt.commit_id);
+    const controlProofSummary = matchingReceipt && receipt.disposition === "applied"
+      && Array.isArray(receipt.domain_event_refs) && receipt.domain_event_refs.some((ref) => Number.isSafeInteger(ref) && ref >= 0)
+      ? localeText(locale, "权威回执已提交世界效果；Agent 预测仍需与实际结果核对。", "An authoritative receipt committed a world effect; compare the Agent prediction with the actual result.")
+      : matchingReceipt && receipt.disposition === "not_applied"
+        ? localeText(locale, "权威回执记录世界效果未生效；请读取原因与下一步。", "An authoritative receipt records no applied world effect; read the reason and next step.")
+        : localeText(locale, "详细因果回执尚不可用；接受意图或 Agent 预测不证明世界效果。", "Detailed causal receipt unavailable; accepted intent or Agent prediction does not prove a world effect.");
     const controlProof = {
-      intent: acceptedIntentSummary,
+      intentId: displayableString(gameplay.primary_intent?.intent_id),
+      agentId: displayableString(gameplay.primary_intent?.agent_id),
+      primaryNextStep: displayableString(primaryIntent.next_step),
+      agency: gameplay.primary_intent?.intent_id && gameplay.primary_intent?.agent_id && isAgentVisibleToCurrentSession(gameplay.primary_intent.agent_id)
+        ? clone(gameplay.primary_intent.agency_read_model || null)
+        : null,
+      intent: displayableString(primaryIntent.message) || acceptedIntentSummary,
       consequence: controlProofConsequence,
       recovery: controlProofRecovery,
       nextMove: narrativeNextStep,

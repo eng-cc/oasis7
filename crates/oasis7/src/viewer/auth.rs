@@ -25,10 +25,15 @@ pub use fragment_refill_preview::{
 };
 #[path = "auth/agent_chat.rs"]
 mod agent_chat;
+#[path = "auth/agent_memory_correction.rs"]
+mod agent_memory_correction;
 pub use agent_chat::{
     sign_agent_chat_auth_proof, verify_agent_chat_auth_proof,
     verify_agent_chat_auth_proof_with_authority,
 };
+#[cfg(test)]
+pub(crate) use agent_memory_correction::sign_agency_control_auth_proof_for_test;
+pub(crate) use agent_memory_correction::verify_agency_control_auth_proof;
 mod refine_quote;
 pub use refine_quote::{sign_refine_quote_auth_proof, verify_refine_quote_auth_proof};
 mod schedule_recipe_quote;
