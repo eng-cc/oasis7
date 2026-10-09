@@ -702,13 +702,14 @@ pub(super) fn build_responses_request_payload(
             MessageItem::Input(InputMessage {
                 content: vec![InputContent::InputText(InputTextContent {
                     text: request.user_prompt.clone(),
+                    prompt_cache_breakpoint: None,
                 })],
                 role: InputRole::User,
                 status: None,
             }),
         ))]))
         .tools(responses_tools_with_debug_mode(request.debug_mode))
-        .tool_choice(ToolChoiceParam::Mode(ToolChoiceOptions::Required))
+        .tool_choice(ToolChoiceParam::Option(ToolChoiceOptions::Required))
         .parallel_tool_calls(false)
         .build()
         .map_err(|err| LlmClientError::DecodeResponse {
@@ -726,6 +727,7 @@ pub(super) fn build_text_probe_request_payload(
             MessageItem::Input(InputMessage {
                 content: vec![InputContent::InputText(InputTextContent {
                     text: user_prompt.to_string(),
+                    prompt_cache_breakpoint: None,
                 })],
                 role: InputRole::User,
                 status: None,
@@ -748,13 +750,14 @@ pub(super) fn build_tool_probe_request_payload(
             MessageItem::Input(InputMessage {
                 content: vec![InputContent::InputText(InputTextContent {
                     text: "Call one tool now with the smallest valid argument object.".to_string(),
+                    prompt_cache_breakpoint: None,
                 })],
                 role: InputRole::User,
                 status: None,
             }),
         ))]))
         .tools(responses_tools_with_debug_mode(false))
-        .tool_choice(ToolChoiceParam::Mode(ToolChoiceOptions::Required))
+        .tool_choice(ToolChoiceParam::Option(ToolChoiceOptions::Required))
         .parallel_tool_calls(false)
         .build()
         .map_err(|err| LlmClientError::DecodeResponse {

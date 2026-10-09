@@ -73,6 +73,8 @@ fn response_function_call_maps_to_typed_module_call_turn() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -94,6 +96,8 @@ fn response_function_call_maps_module_lifecycle_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -115,6 +119,8 @@ fn response_function_call_maps_world_rules_guide_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -139,6 +145,8 @@ fn response_function_call_maps_power_order_book_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -163,6 +171,8 @@ fn response_function_call_maps_module_market_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -191,6 +201,8 @@ fn response_function_call_maps_social_state_status_tool_name() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -243,6 +255,8 @@ fn response_function_call_invalid_json_arguments_are_preserved_as_raw() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("module_call turn");
@@ -266,6 +280,8 @@ fn response_function_call_maps_decision_tool_to_typed_decision_turn() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("decision turn");
@@ -293,6 +309,8 @@ fn response_function_call_maps_debug_grant_tool_to_typed_decision_turn() {
         id: None,
         status: None,
         namespace: None,
+        caller: None,
+        r#async: None,
     });
 
     let turn = output_item_to_completion_turn(&output_item).expect("decision turn");
