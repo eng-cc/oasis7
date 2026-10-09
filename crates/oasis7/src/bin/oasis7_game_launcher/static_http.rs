@@ -325,6 +325,11 @@ pub(super) fn handle_http_connection(
                 body.as_slice(),
                 viewer_auth_bootstrap.as_ref(),
             );
+            let body = if path.extension() == Some(OsStr::new("html")) {
+                inject_viewer_runtime_config(&body, deployment_mode, live_bind)?
+            } else {
+                body
+            };
             write_http_response(
                 &mut stream,
                 200,
@@ -771,6 +776,28 @@ pub(super) fn sanitize_index_html_for_embedded_server(
     } else {
         sanitized
     }
+}
+
+pub(super) fn viewer_runtime_config_json(
+    deployment_mode: DeploymentMode,
+    live_bind: &str,
+) -> Result<String, String> {
+    let configured = std::env::var("OASIS7_VIEWER_PUBLIC_WS_URL").ok();
+    super::viewer_runtime_config::viewer_runtime_config_json(
+        deployment_mode,
+        live_bind,
+        configured.as_deref(),
+    )
+}
+fn inject_viewer_runtime_config(
+    body: &[u8],
+    deployment_mode: DeploymentMode,
+    live_bind: &str,
+) -> Result<Vec<u8>, String> {
+    super::viewer_runtime_config::inject_config(
+        body,
+        &viewer_runtime_config_json(deployment_mode, live_bind)?,
+    )
 }
 
 fn strip_trunk_autoreload_script(body: &[u8]) -> Vec<u8> {

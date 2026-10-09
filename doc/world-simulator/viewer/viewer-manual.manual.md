@@ -33,6 +33,7 @@
 - 启动后等 `<output-dir>/launcher/session.meta` 出现 `STACK_READY=1`，再打开其中 `GAME_URL`。默认日常 URL 形如 `http://127.0.0.1:48420/?ws=ws://127.0.0.1:48421&test_api=1&locale=zh`。
 - 需要冷构建、严格 provider smoke 或换端口时，再显式展开参数；例如第一次构建可去掉 `--local-world-playtest` 或去掉 `--reuse-existing-build`，临时换 HTTP 端口可在末尾透传 `-- --viewer-port 4174 --json-ready`。
 - 默认 chain-enabled 路径会启动 launcher-managed chain runtime，并通过 `--chain-local-standalone-test` 保持本地 submit -> commit -> snapshot 闭环可在单节点试玩栈内完成。该路径只有在 `output/chain-runtime/<node-id>/reward-runtime-execution-world/snapshot.json` 与 `journal.json` 都出现后，才算 chain-enabled 本地世界就绪。
+- launcher 的 `--chain-execution-world-dir` 统一 writer/Observer 的本地 root，默认是 `output/chain-runtime/<node-id>/reward-runtime-execution-world`。外部 status 必须由操作者显式传入本地 root；远端 `execution_world_dir` 不参与读文件。Observer 等待可验证的 immutable generation checkpoint，缺失显示初始化中；`RecoveryRequired` 等待 writer 修复，`ResourceLimited` 拒收并保留上一观察状态，不能裁剪队列或修改世界。
 - launcher 管理 `oasis7_chain_runtime`、进程编排与持久 execution-world readiness；Viewer 只观察 runtime/world 输出。snapshot/event 是观测面，恢复与 replay 仍以权威 state + journal/event chain 为准。
 - 如果页面停在“认领已提交，正在等待链上 committed 快照同步”，先检查启动命令是否漏掉 local standalone chain 配置；漏掉时 gameplay action 可能已进入 pending consensus queue，但本地单节点不会完成 commit/snapshot。
 - 如果页面短暂打开后出现 `viewer.ws` / WebSocket 错误，先检查脚本输出目录下的 `launcher/oasis7_viewer_live.log` 是否报 execution-world persistence ready gate，而不要先把它归因成 Viewer 前端问题。
@@ -362,6 +363,7 @@ turn those tests into issuer-backed production access or a release claim.
 ### 进程与 Launcher 边界
 
 - `oasis7_viewer_live` 不启动或拥有 chain node、consensus gate、reward runtime、topology 或 execution-world directory。
+- 独立 `oasis7_viewer_live --chain-status-bind <addr>` 必须同时传 `--chain-execution-world-dir <local-path>`；目录由受信 writer 管理。
 - chain-linked formal/local evidence 使用 Launcher 管理的 `oasis7_chain_runtime`；Viewer 的 `--chain-status-bind` / `--chain-submit-bind` 只承担 client linkage。
 - 退役的 embedded-node flags 必须失败并引导到 `oasis7_chain_runtime` / `oasis7_game_launcher`；编排、stale-world 与恢复合同见 `../launcher/game-client-launcher-runtime-session-continuity.prd.md`。
 - `--no-llm` 仍只可作为 observer/debug，不是 formal gameplay evidence。

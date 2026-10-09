@@ -15,21 +15,21 @@ describe("pixel world visual fixtures", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=hotspot_tooltip");
 
     expect(installPixelWorldVisualFixtureHook()).toBe("hotspot_tooltip");
-    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.hotspot_tooltip).toEqual(expect.any(Function));
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("hotspot_tooltip")).toEqual(expect.any(Function));
   });
 
   it("installs a recommendation-only fixture with an enabled rendered Agent target and no receipt inputs", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=recommended_target");
 
     expect(installPixelWorldVisualFixtureHook()).toBe("recommended_target");
-    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.recommended_target()).toMatchObject({
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("recommended_target")()).toMatchObject({
       model: { agents: { "agent-0": { id: "agent-0" } } },
       player_gameplay: {
         available_actions: [{ target_agent_id: "agent-0", disabled_reason: null }],
         recent_feedback: null,
       },
     });
-    const gameplay = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.recommended_target().player_gameplay;
+    const gameplay = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("recommended_target")().player_gameplay;
     expect(gameplay.accepted_intent_id).toBeUndefined();
     expect(gameplay.intent_target).toBeUndefined();
     expect(gameplay.last_world_change).toBeUndefined();
@@ -39,7 +39,7 @@ describe("pixel world visual fixtures", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=selected_blocker");
 
     expect(installPixelWorldVisualFixtureHook()).toBe("selected_blocker");
-    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.selected_blocker()).toMatchObject({
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("selected_blocker")()).toMatchObject({
       model: { locations: { "loc-0": { id: "loc-0" } } },
       player_gameplay: {
         micro_depot_facilities: [{
@@ -50,7 +50,7 @@ describe("pixel world visual fixtures", () => {
       },
     });
     expect(
-      window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.selected_blocker().player_gameplay
+      window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("selected_blocker")().player_gameplay
         .micro_depot_facilities[0].service_radius_cm,
     ).toBe(240_000);
   });
@@ -59,7 +59,7 @@ describe("pixel world visual fixtures", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=module_visual_entities");
 
     expect(installPixelWorldVisualFixtureHook()).toBe("module_visual_entities");
-    const entities = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.module_visual_entities().model.module_visual_entities;
+    const entities = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("module_visual_entities")().model.module_visual_entities;
 
     expect(entities["module-absolute"].anchor).toEqual({
       type: "absolute",
@@ -75,7 +75,7 @@ describe("pixel world visual fixtures", () => {
     window.history.replaceState({}, "", "/viewer.html?test_api=1&connect=0&pixel_world_visual_fixture=micro_depot_stock_runway");
 
     expect(installPixelWorldVisualFixtureHook()).toBe("micro_depot_stock_runway");
-    const fixture = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.micro_depot_stock_runway();
+    const fixture = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("micro_depot_stock_runway")();
     const facilities = fixture.player_gameplay.micro_depot_facilities;
 
     expect(facilities).toHaveLength(3);

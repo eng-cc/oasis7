@@ -1,3 +1,6 @@
+import { invalidateAuthConnection, authConnectionGeneration, authCredentials, installSession, clearSession, hasSigningIdentity, updateRegistrationGrant, captureSessionContext, isSessionContextCurrent } from "./viewer_auth_session_module.js";
+import { viewerRuntimeConfig, resolveViewerEndpoint } from "./viewer_runtime_config_module.js";
+import { validateRuntimeAckIdentity } from "./viewer_runtime_ack_identity.js";
 import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
@@ -83,7 +86,8 @@ const pendingSemanticCommands = [];
 let pendingSessionRegisterWaiter = null;
 const elements = {};
 const renderHook = createViewerRenderHookRegistry();
-let bootstrapped = false; const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
+let bootstrapped = false;
+let bootstrapPromise = null; const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
 export const requestWorldFeed = (...args) => worldFeedTransport.requestWorldFeed(...args); export const reloadWorldFeedFromAuthoritativeSnapshot = (...args) => worldFeedTransport.reloadWorldFeedFromAuthoritativeSnapshot(...args);
 const HELLO_ACK_TIMEOUT_MS = 2000; const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000; const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
 const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000; const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
@@ -150,6 +154,7 @@ function getSearchParams() {
   return new URLSearchParams(window.location.search || "");
 }
 function isTestApiEnabled() {
+  if (__OASIS7_VISUAL_TEST__ !== true) return false;
   const value = String(getSearchParams().get("test_api") || "").trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes" || value === "on";
 }
@@ -162,14 +167,6 @@ function resolveAgentChatOverallTimeoutMs() {
     return 45000;
   }
   return Math.min(value, 45000);
-}
-function normalizeWsAddr(raw) {
-  const value = String(raw || "").trim();
-  if (!value) return DEFAULT_WS_ADDR;
-  if (value.startsWith("ws://") || value.startsWith("wss://")) return value;
-  if (value.startsWith("http://")) return `ws://${value.slice("http://".length)}`;
-  if (value.startsWith("https://")) return `wss://${value.slice("https://".length)}`;
-  return `ws://${value}`;
 }
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -291,8 +288,7 @@ const {
   state,
 });
 function initialWsUrl() {
-  const params = getSearchParams();
-  return normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
+  return resolveViewerEndpoint(viewerRuntimeConfig(), getSearchParams());
 }
 const {
   chatHistoryStorageKey,
@@ -335,20 +331,16 @@ const {
   viewerPlayerIdKey: VIEWER_PLAYER_ID_KEY,
   windowRef: window,
 });
-function resetHostedLoginChallenge() {
-  resetHostedLoginChallengeState(state.hostedLogin);
-}
+function resetHostedLoginChallenge() { resetHostedLoginChallengeState(state.hostedLogin); }
 const { start: startHostedTestLogin, waitForStart: waitForHostedTestLogin } = createViewerHostedTestLoginModule({ clone, fetchImpl: (...args) => fetch(...args), generateEphemeralEd25519Keypair, getSearchParams, isHostedPublicJoinDeploymentMode, persistHostedPlayerSession, render, resetHostedLoginChallenge, route: HOSTED_ACCOUNT_TEST_LOGIN_ROUTE, state });
 async function ensureHostedAuthSigningKey(auth = state.auth) {
+  if (auth?.source === "visual_fixture_projection") throw new Error("visual fixture authentication has no signing capability");
   if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return auth;
   }
-  if (authHasSigningKeyMaterial(auth)) {
-    return auth;
-  }
+  if (hasSigningIdentity(auth)) return auth;
   const keypair = await generateEphemeralEd25519Keypair();
-  auth.publicKey = keypair.publicKey;
-  auth.privateKey = keypair.privateKey;
+  auth = await installSession(state, { ...auth, ...authCredentials(auth), ...keypair }, auth);
   auth.registrationStatus = "issued";
   auth.sessionEpoch = auth.bindingEpoch = auth.authorityEpoch = auth.boundAgentId = null;
   viewerPromptControlModule?.clearPendingAuthoritativeRefresh();
@@ -377,7 +369,8 @@ async function refreshHostedAdmissionState() {
     return state.hostedAdmission;
   }
 }
-const { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
+const { refreshHostedPlayerLease, cancelRefresh: cancelHostedLeaseRefresh } = createViewerHostedSessionRefreshModule({
+  captureConnection: () => socket,
   clone,
   ensureHostedAuthSigningKey,
   fetchImpl: fetch,
@@ -398,7 +391,7 @@ function syncHostedSessionRefreshLoop() {
     && state.auth.available
     && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE
     && state.auth.registrationStatus === "registered"
-    && !!state.auth.releaseToken;
+    && !!authCredentials(state.auth).releaseToken;
   if (!shouldRun) {
     stopHostedSessionRefreshLoop();
     return;
@@ -1607,7 +1600,8 @@ function handleDecisionTrace(trace) {
 }
 
 function handleControlCompletionAck(ack) {
-  const feedback = pendingControlFeedback.get(ack?.request_id) || state.lastControlFeedback;
+  if (!acceptRuntimeAckIdentity(ack)) return;
+  const feedback = pendingControlFeedback.get(ack?.request_id);
   if (!feedback) return;
   feedback.deltaLogicalTime = Number(ack?.delta_logical_time || 0);
   feedback.deltaEventSeq = Number(ack?.delta_event_seq || 0);
@@ -1759,7 +1753,6 @@ async function requestRefineQuote(compoundMassG) {
   }
 }
 
-
 function canAutoIssueHostedPlayerSession() {
   return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
     && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
@@ -1795,7 +1788,7 @@ function canAutoIssueLocalTestPlayerSession() {
 async function issueLocalTestPlayerSession() {
   const stored = resolveStoredLocalTestPlayerSession();
   if (stored) {
-    state.auth = stored;
+    await installSession(state, stored);
     render();
     maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
     return state.auth;
@@ -1808,7 +1801,7 @@ async function issueLocalTestPlayerSession() {
     return state.auth;
   }
   const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
-  state.auth = {
+  await installSession(state, {
     available: true,
     hostedAccountId: null,
     playerId,
@@ -1835,8 +1828,8 @@ async function issueLocalTestPlayerSession() {
     pendingRequestedAgentId: null,
     pendingForceRebind: false,
     rebindNotice: null,
-  };
-  window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__?.();
+  });
+  if (__OASIS7_VISUAL_TEST__ === true) window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__?.();
   persistLocalTestPlayerSession(state.auth);
   render();
   maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
@@ -1948,7 +1941,7 @@ async function completeHostedAccountLogin() {
       throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
     }
     state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
-    state.auth = {
+    await installSession(state, {
       available: true,
       hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
       playerId: String(payload.grant.player_id || "").trim(),
@@ -1980,7 +1973,7 @@ async function completeHostedAccountLogin() {
       pendingRequestedAgentId: null,
       pendingForceRebind: false,
       rebindNotice: null,
-    };
+    });
     persistHostedPlayerSession(state.auth);
     resetHostedLoginChallenge();
     state.hostedLogin.startInFlight = false;
@@ -2032,7 +2025,7 @@ async function requestHostedStrongAuthGrant(actionId, agentId) {
   const auth = await ensureHostedAuthSigningKey(state.auth);
   const playerId = String(auth.playerId || "").trim();
   const publicKey = String(auth.publicKey || "").trim();
-  const releaseToken = String(state.auth.releaseToken || "").trim();
+  const releaseToken = String(authCredentials(state.auth).releaseToken || "").trim();
   const approvalCode = String(state.strongAuth.approvalCode || "").trim();
   if (!playerId || !publicKey || !releaseToken) {
     throw new Error("hosted strong-auth grant requires an active player_session with release token and browser session signing key");
@@ -2118,7 +2111,7 @@ function probeHostedRuntimeSession() {
 
 async function releaseHostedPlayerSlot() {
   const playerId = String(state.auth.playerId || "").trim();
-  const releaseToken = String(state.auth.releaseToken || "").trim();
+  const releaseToken = String(authCredentials(state.auth).releaseToken || "").trim();
   if (!playerId || !releaseToken || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return { ok: false, skipped: true };
   }
@@ -2140,14 +2133,14 @@ async function releaseHostedPlayerSlot() {
 }
 
 function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) {
+  cancelHostedLeaseRefresh();
+  clearPendingSessionRegisterWaiter("authentication session was invalidated");
   stopHostedSessionRefreshLoop();
   clearHostedPlayerSession();
   const bootstrap = resolveAuthBootstrap();
   const revokeReason = String(revocationMeta?.revokeReason || "").trim() || null;
   const revokedBy = String(revocationMeta?.revokedBy || "").trim() || null;
-  state.auth = bootstrap.available
-    ? bootstrap
-    : {
+  clearSession(state, {
         ...bootstrap,
         source: "guest_only",
         registrationStatus: "guest",
@@ -2167,7 +2160,8 @@ function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) 
         pendingRequestedAgentId: null,
         pendingForceRebind: false,
         rebindNotice: null,
-      };
+      });
+  if (bootstrap.available) void installSession(state, bootstrap).then(() => render());
   void refreshHostedAdmissionState().then(() => render());
 }
 
@@ -2235,6 +2229,26 @@ function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   }
 }
 
+function acceptRuntimeAckIdentity(ack, registration = false) {
+  const error = validateRuntimeAckIdentity(ack, state.auth, registration, pendingSessionRegisterWaiter?.requestedAgentId);
+  if (!error) return true;
+  invalidateAuthConnection();
+  const invalidSocket = socket;
+  socket = null;
+  cancelHostedLeaseRefresh();
+  invalidSocket?.close();
+  clearPendingSessionRegisterWaiter(error);
+  if (hasSigningIdentity(state.auth)) updateRegistrationGrant(state.auth, null);
+  state.auth.syncInFlight = false;
+  state.auth.runtimeStatus = "error";
+  state.auth.error = error;
+  state.connectionStatus = "error";
+  state.lastError = error;
+  stopHostedSessionRefreshLoop();
+  clearHostedRuntimeSyncTimer();
+  return false;
+}
+
 function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
   if (state.connectionStatus === "error" && /player session registration timed out/i.test(String(state.lastError || ""))) {
     state.connectionStatus = "connected";
@@ -2244,12 +2258,6 @@ function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
   state.auth.recoveryErrorCode = null;
   state.auth.recoveryErrorMessage = null;
   state.auth.error = null;
-  if (ack?.player_id) {
-    state.auth.playerId = ack.player_id;
-  }
-  if (ack?.session_pubkey) {
-    state.auth.publicKey = ack.session_pubkey;
-  }
   if (ack?.session_epoch != null) {
     state.auth.sessionEpoch = Number(ack.session_epoch);
   }
@@ -2260,6 +2268,7 @@ function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
 }
 
 function resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack = null) {
+  if (pendingSessionRegisterWaiter && !isSessionContextCurrent(state, pendingSessionRegisterWaiter.context, authConnectionGeneration(), state.wsUrl)) return;
   recoverConnectedSessionStateAfterRuntimeAck(ack);
   if (!pendingSessionRegisterWaiter) {
     return;
@@ -2296,6 +2305,11 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   const auth = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE
     ? state.auth
     : await ensureHostedAuthSigningKey(state.auth);
+  const operationContext = captureSessionContext(state, authConnectionGeneration(), state.wsUrl);
+  if (auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE && authCredentials(auth).releaseToken && !authCredentials(auth).registrationGrant) {
+    const refreshed = await refreshHostedPlayerLease();
+    if (!refreshed?.ok || !isSessionContextCurrent(state, operationContext, authConnectionGeneration(), state.wsUrl)) throw new Error("registration grant refresh was invalidated");
+  }
   const normalizedRequestedAgentId = String(requestedAgentId || "").trim() || null;
   if (state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     state.auth.registrationStatus = "registering";
@@ -2307,14 +2321,15 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   if (forceRebind === true) {
     state.auth.rebindNotice = `Switching player session to ${normalizedRequestedAgentId || "requested agent"}...`;
   }
+  if (pendingSessionRegisterWaiter) pendingSessionRegisterWaiter.context = captureSessionContext(state, authConnectionGeneration(), state.wsUrl);
   state.auth.pendingRequestedAgentId = normalizedRequestedAgentId;
   state.auth.pendingForceRebind = forceRebind === true;
   const request = {
     player_id: auth.playerId,
     public_key: auth.publicKey,
   };
-  if (auth.registrationGrant) {
-    request.registration_grant = auth.registrationGrant;
+  if (authCredentials(auth).registrationGrant) {
+    request.registration_grant = authCredentials(auth).registrationGrant;
   }
   if (normalizedRequestedAgentId) {
     request.requested_agent_id = normalizedRequestedAgentId;
@@ -2323,6 +2338,7 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
     request.force_rebind = true;
   }
   request.auth = await buildSessionRegisterAuthProof(request, auth);
+  if (!isSessionContextCurrent(state, operationContext, authConnectionGeneration(), state.wsUrl)) throw new Error("registration context was invalidated");
   sendJson({
     type: "authoritative_recovery",
     command: {
@@ -2410,6 +2426,7 @@ async function ensureRegisteredPlayerSession(requestedAgentId = null, options = 
     rejectWaiter = reject;
   });
   pendingSessionRegisterWaiter = {
+    context: captureSessionContext(state, authConnectionGeneration(), state.wsUrl),
     requestedAgentId: normalizedRequestedAgentId,
     forceRebind,
     promise,
@@ -3014,8 +3031,10 @@ function sendGameplayAction(actionOrId) {
 }
 
 function handleGameplayActionAck(ack) {
+  if (!acceptRuntimeAckIdentity(ack)) return;
+  const pendingAction = state.lastGameplayActionFeedback;
+  if (!pendingAction || ack?.action_id !== pendingAction.action || ack?.target_agent_id !== (pendingAction.targetAgentId || pendingAction.agentId)) return;
   clearPendingGameplayActionAckTimer();
-  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     ack?.action_id || "gameplay_action",
@@ -3028,9 +3047,6 @@ function handleGameplayActionAck(ack) {
   feedback.effect = ack?.message || `gameplay action accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
   feedback.response = clone(ack);
   state.lastGameplayActionFeedback = feedback;
-  if (ack?.player_id) {
-    state.auth.playerId = ack.player_id;
-  }
   if (ack?.action_id === "claim_first_agent" && ack?.target_agent_id) {
     state.auth.boundAgentId = ack.target_agent_id;
     state.auth.pendingRequestedAgentId = ack.target_agent_id;
@@ -3152,18 +3168,16 @@ function applyPromptAckLocally(ack) {
 }
 
 function handlePromptControlAck(ack) {
-  viewerPromptControlModule?.handleAck(ack);
+  if (acceptRuntimeAckIdentity(ack)) viewerPromptControlModule?.handleAck(ack);
 }
-
 function handlePromptControlError(error) {
   viewerPromptControlModule?.handleError(error);
 }
-
 function handleAgentChatAck(ack) {
-  clearPendingAgentChatAckTimer();
-  clearPendingAgentChatOverallTimer();
-  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
-  const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", ack?.agent_id || null);
+  if (!acceptRuntimeAckIdentity(ack)) return;
+  const feedback = state.lastChatFeedback;
+  if (!agentChatFeedbackInFlight(feedback) || ack?.agent_id !== feedback.agentId) return;
+  clearPendingAgentChatAckTimer(); clearPendingAgentChatOverallTimer();
   feedback.stage = "ack";
   feedback.ok = true;
   feedback.accepted = true;
@@ -3215,6 +3229,8 @@ function handleAgentChatError(error) {
 
 function adoptHostedRecoveryAck(ack) {
   if (!ack || !state.auth.available || (ack.status === "catch_up_ready" && ack.message === "snapshot_sync_metadata" && [ack.player_id, ack.session_pubkey, ack.session_epoch, ack.binding_epoch, ack.agent_id].every((value) => value == null))) return;
+  if (!acceptRuntimeAckIdentity(ack, ack.status === "session_registered" || ack.status === "session_revoked")) return;
+  if (ack.status === "session_registered" && (!pendingSessionRegisterWaiter || !isSessionContextCurrent(state, pendingSessionRegisterWaiter.context, authConnectionGeneration(), state.wsUrl))) return;
   clearHostedRuntimeSyncTimer();
   const usesLegacyPreviewBootstrap = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
@@ -3229,12 +3245,6 @@ function adoptHostedRecoveryAck(ack) {
   state.auth.error = null;
   state.auth.revokeReason = null;
   state.auth.revokedBy = null;
-  if (ack.player_id) {
-    state.auth.playerId = ack.player_id;
-  }
-  if (ack.session_pubkey) {
-    state.auth.publicKey = ack.session_pubkey;
-  }
   if (ack.session_epoch != null) {
     state.auth.sessionEpoch = Number(ack.session_epoch);
   }
@@ -3256,7 +3266,7 @@ function adoptHostedRecoveryAck(ack) {
       ? "guest"
       : "issued";
   if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
-    state.auth.registrationGrant = null;
+    updateRegistrationGrant(state.auth, null);
   }
   state.auth.runtimeStatus = ack.status === "session_revoked"
     ? "revoked"
@@ -3287,7 +3297,7 @@ function adoptHostedRecoveryAck(ack) {
       syncHostedSessionRefreshLoop();
     }
   }
-  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+  if (ack.status === "session_registered") {
     resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   }
   maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
@@ -3445,7 +3455,7 @@ function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket &&
         scheduleInitialSnapshotRetry();
       }
       void ensureHostedPlayerAuthAvailable().then(() => {
-        syncHostedPlayerSessionOnConnect();
+        void syncHostedPlayerSessionOnConnect().catch((error) => { state.auth.error = String(error); render(); });
         render();
       });
       break;
@@ -3537,7 +3547,7 @@ function attachSocket(ws) {
     reportFatalError("websocket error", "viewer.ws");
   });
 
-  ws.addEventListener("close", () => { if (socket !== ws) return; worldFeedTransport.markDisconnected(ws);
+  ws.addEventListener("close", () => { if (socket !== ws) return; invalidateAuthConnection(); cancelHostedLeaseRefresh(); worldFeedTransport.markDisconnected(ws);
     resetViewerProtocolForConnection();
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();
@@ -3570,14 +3580,15 @@ function attachSocket(ws) {
 }
 
 function connect() {
+  invalidateAuthConnection();
   if (socket) {
     try {
       socket.close();
     } catch (_) {
     }
   }
-  const params = getSearchParams();
-  state.wsUrl = normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
+  cancelHostedLeaseRefresh();
+  state.wsUrl = initialWsUrl();
   state.connectionStatus = "connecting";
   render();
   socket = new WebSocket(state.wsUrl);
@@ -4215,19 +4226,8 @@ function setStrongAuthApprovalCode(value) {
   };
 }
 
-function mountApp() {
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    <section class="panel"><div class="panel__header"><div class="panel__title">Targets</div></div><div id="left-panel" class="panel__body"></div></section>
-    <section class="panel"><div class="panel__header"><div class="panel__title">World Summary</div></div><div id="center-panel" class="panel__body"></div></section>
-    <section class="panel"><div class="panel__header"><div class="panel__title">Details</div></div><div id="right-panel" class="panel__body"></div></section>
-  `;
-  elements.leftPanel = document.getElementById("left-panel");
-  elements.centerPanel = document.getElementById("center-panel");
-  elements.rightPanel = document.getElementById("right-panel");
-}
-
 function installTestApi() {
+  if (__OASIS7_VISUAL_TEST__ !== true) return;
   if (!isTestApiEnabled()) {
     return;
   }
@@ -4285,13 +4285,13 @@ viewerPromptControlModule = createViewerPromptControlModule({
   nextRequestId, nextAuthNonce, onControlLost: (agentId) => viewerControlLossModule?.markControlLost(agentId), render, requestSnapshotSafe, selectedAgentId, selectedAgentPromptProfile, signAuthPayload, state,
 });
 
-function bootstrap() {
+async function bootstrap() {
   state.uiLocale = resolveInitialUiLocale();
   state.promptOverridesVisible = resolveStoredPromptOverridesVisibility();
   applyUiLocaleToDocument(state.uiLocale);
   Object.assign(state, detectRendererMeta());
-  state.hostedAccess = resolveHostedAccessHint();
-  state.auth = resolveViewerAuthState();
+  state.hostedAccess = { ...(resolveHostedAccessHint() || {}), deployment_mode: viewerRuntimeConfig().deploymentMode };
+  await installSession(state, resolveViewerAuthState());
   state.wsUrl = initialWsUrl();
   installRefineQuotePreflightVisualFixture();
   productValidationQuote.installProductValidationQuoteVisualFixture();
@@ -4341,11 +4341,10 @@ function updatePixelWorldRuntimeMeta(meta = {}) {
 }
 
 export function initializeSoftwareSafeCore() {
-  if (bootstrapped) {
-    return;
-  }
+  if (bootstrapped) return bootstrapPromise;
   bootstrapped = true;
-  bootstrap();
+  bootstrapPromise = bootstrap().catch((error) => { state.connectionStatus = "error"; state.auth.error = String(error); state.lastError = String(error); render(); throw error; });
+  return bootstrapPromise;
 }
 
 window.addEventListener("error", (event) => {

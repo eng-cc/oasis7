@@ -12,7 +12,7 @@ beforeEach(async () => {
   document.body.innerHTML = "";
   const core = await import("./legacy_core.js");
   const { mountViewerApp } = await import("./main.jsx");
-  core.initializeSoftwareSafeCore();
+  await core.initializeSoftwareSafeCore();
   const root = document.createElement("div");
   document.body.appendChild(root);
   dispose = mountViewerApp(root);

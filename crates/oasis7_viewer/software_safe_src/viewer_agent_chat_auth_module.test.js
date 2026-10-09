@@ -165,6 +165,7 @@ describe("viewer agent chat auth", () => {
     Object.defineProperty(window, "crypto", {
       configurable: true,
       value: {
+        getRandomValues: (array) => array.fill(1),
         subtle: {
           async generateKey() {
             return { privateKey: "test-private", publicKey: "test-public" };
@@ -175,6 +176,7 @@ describe("viewer agent chat auth", () => {
             }
             return new Uint8Array(32).fill(9).buffer;
           },
+          async verify() { return true; },
           async importKey() {
             return { kind: "test-signing-key" };
           },
@@ -192,7 +194,7 @@ describe("viewer agent chat auth", () => {
     );
     vi.resetModules();
     const core = await import("./legacy_core.js");
-    core.initializeSoftwareSafeCore();
+    await core.initializeSoftwareSafeCore();
     sockets[0].open();
     sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "runtime-world-7" });
     await settleLocalTestAuthStartup(core, sentMessages);
@@ -210,6 +212,7 @@ describe("viewer agent chat auth", () => {
       runtimeStatus: "registered",
       boundAgentId: "agent-0",
     };
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
     core.state.worldFeed = {
       status: "ready",
       stale: false,

@@ -11,7 +11,7 @@ const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES_
 const PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__";
 
 export function pixelWorldTestApiEnabled() {
-  if (typeof window === "undefined" || !window.location) {
+  if (__OASIS7_VISUAL_TEST__ !== true || typeof window === "undefined" || !window.location) {
     return false;
   }
   const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
@@ -19,14 +19,14 @@ export function pixelWorldTestApiEnabled() {
 }
 
 function requestedVisualFixtureName() {
-  if (typeof window === "undefined" || !window.location) {
+  if (__OASIS7_VISUAL_TEST__ !== true || typeof window === "undefined" || !window.location) {
     return null;
   }
   return String(new URLSearchParams(window.location.search || "").get("pixel_world_visual_fixture") || "").trim();
 }
 
 function liveConnectionDisabledForFixture() {
-  if (typeof window === "undefined" || !window.location) {
+  if (__OASIS7_VISUAL_TEST__ !== true || typeof window === "undefined" || !window.location) {
     return false;
   }
   return String(new URLSearchParams(window.location.search || "").get("connect") || "").trim() === "0";
@@ -36,7 +36,7 @@ export function installPixelWorldVisualFixtureHook() {
   if (typeof window === "undefined" || !pixelWorldTestApiEnabled() || !liveConnectionDisabledForFixture()) {
     return null;
   }
-  const fixtures = {
+  const fixtures = new Map(Object.entries({
     selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     hotspot_tooltip: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
     recent_event_glyphs: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
@@ -44,14 +44,14 @@ export function installPixelWorldVisualFixtureHook() {
     recommended_target: () => core.clone(pixelWorldRecommendedTargetVisualFixture()),
     module_visual_entities: () => core.clone(pixelWorldModuleVisualEntitiesFixture()),
     micro_depot_stock_runway: () => core.clone(pixelWorldMicroDepotStockRunwayVisualFixture()),
-  };
+  }));
   window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
   const fixtureName = requestedVisualFixtureName();
-  if (!fixtureName || !fixtures[fixtureName]) {
+  if (!fixtureName || !fixtures.has(fixtureName)) {
     return null;
   }
-  const fixture = fixtures[fixtureName]();
+  const fixture = fixtures.get(fixtureName)();
   core.injectSnapshot(fixture, { returnState: false });
   if (fixtureName === "module_visual_entities") {
     const moduleFixtureEvents = [
@@ -149,8 +149,10 @@ export function installPixelWorldVisualFixtureHook() {
     available: true,
       playerId,
       publicKey,
-      privateKey: core.state.auth.privateKey || "private-key-must-stay-hidden",
-    source: "local_test_api_ephemeral",
+      privateKey: null,
+      releaseToken: null,
+      registrationGrant: null,
+    source: "visual_fixture_projection",
     registrationStatus: "registered",
     runtimeStatus: "registered",
     boundAgentId: "agent-0",

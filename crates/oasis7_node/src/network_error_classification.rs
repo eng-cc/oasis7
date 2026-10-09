@@ -117,22 +117,22 @@ pub(crate) fn replication_network_error_should_keep_timeout_over_provider_gap(
             || replication_network_error_is_availability_gap(candidate))
 }
 
-#[cfg(feature = "libp2p")]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 pub(crate) fn network_world_error_is_retryable_connection_gap(err: &WorldError) -> bool {
     oasis7_net::world_error_is_retryable_connection_gap(err)
 }
 
-#[cfg(not(feature = "libp2p"))]
+#[cfg(not(all(feature = "libp2p", not(target_arch = "wasm32"))))]
 pub(crate) fn network_world_error_is_retryable_connection_gap(_err: &WorldError) -> bool {
     false
 }
 
-#[cfg(feature = "libp2p")]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 pub(crate) fn network_world_error_is_publish_failure(err: &WorldError) -> bool {
     oasis7_net::world_error_is_publish_failure(err)
 }
 
-#[cfg(not(feature = "libp2p"))]
+#[cfg(not(all(feature = "libp2p", not(target_arch = "wasm32"))))]
 pub(crate) fn network_world_error_is_publish_failure(_err: &WorldError) -> bool {
     false
 }

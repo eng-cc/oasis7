@@ -615,7 +615,7 @@ PY
 
     wh_state_phase "$STATE_FILE" "starting_launcher" "launching run-launcher-stack.sh" "$STARTUP_DEADLINE_MS"
     launch_stack() {
-      nohup ./scripts/run-launcher-stack.sh "${run_args[@]}"
+      nohup ./scripts/run-launcher-stack.sh --viewer-static-dir crates/oasis7_viewer/.viewer-test-dist "${run_args[@]}"
     }
     wh_start_managed launch_stack >"$STARTUP_LOG" 2>&1
     HARNESS_PID=$WH_MANAGED_PID

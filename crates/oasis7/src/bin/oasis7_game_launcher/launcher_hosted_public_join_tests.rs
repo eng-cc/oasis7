@@ -14,6 +14,8 @@ fn build_viewer_live_command_keeps_explicit_chain_status_bind_for_hosted_public_
         [
             "--deployment-mode",
             "hosted_public_join",
+            "--chain-execution-world-dir",
+            "output/test-observer-root",
             "--chain-status-bind",
             "39.104.204.172:6631",
             "--chain-link-policy",

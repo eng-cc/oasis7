@@ -181,7 +181,7 @@ make_ops_tools_archive() {
   local platform="$1" platform_dir="$2"
   local ops_root="$TMP_DIR/ops-bundle/oasis7-${platform}-ops-tools"
   mkdir -p "$ops_root/bin"
-  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
+  for binary in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit service-readback; do
     printf '#!/usr/bin/env bash\n' >"$ops_root/bin/$binary"
     chmod +x "$ops_root/bin/$binary"
   done
@@ -2054,6 +2054,7 @@ original_body = parsed_remote[2]
 helper_name = "p2p-public-testnet-package-node-upgrade.sh"
 required_helpers = (
     "p2p-safe-extract-tar.py",
+    "safe_git_archive.py",
     "p2p-safe-validate-deb-tree.py",
     "p2p-verify-linux-package-bundle.py",
     "p2p-rebuild-linux-bundle-checksums.py",
@@ -2103,7 +2104,9 @@ with tempfile.TemporaryDirectory(prefix="oasis7-streamed-helper-reparse-") as tm
             'tar -xzf - -C "$stage"',
             f'test -f "$stage/{helper_name}"',
             f'for required_helper in {required_helper_literals}; do',
-            f'  grep -Fq "$required_helper" "$stage/{helper_name}" || {{',
+            f'  reference="$stage/{helper_name}"',
+            '  if [[ "$required_helper" == safe_git_archive.py ]]; then reference="$stage/p2p-safe-extract-tar.py"; fi',
+            '  grep -Fq "$required_helper" "$reference" || {',
             '    printf \'%s\\n\' "node-upgrade helper does not reference $required_helper" >&2',
             "    exit 43",
             "  }",

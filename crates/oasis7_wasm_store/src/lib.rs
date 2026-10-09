@@ -173,17 +173,7 @@ impl ModuleStore {
         if !self.registry_path.exists() {
             return Ok(ModuleRegistry::default());
         }
-        let file: ModuleRegistryFile = read_json_from_path(&self.registry_path)?;
-        if file.version != REGISTRY_VERSION {
-            return Err(ModuleStoreError::VersionMismatch {
-                expected: REGISTRY_VERSION,
-                found: file.version,
-            });
-        }
-        Ok(ModuleRegistry {
-            records: file.records,
-            active: file.active,
-        })
+        decode_module_registry(&fs::read(&self.registry_path)?)
     }
 
     fn ensure_dirs(&self) -> Result<(), ModuleStoreError> {
@@ -191,6 +181,21 @@ impl ModuleStore {
         fs::create_dir_all(&self.modules_dir)?;
         Ok(())
     }
+}
+
+/// Parse a registry without opening paths or materializing a store.
+pub fn decode_module_registry(bytes: &[u8]) -> Result<ModuleRegistry, ModuleStoreError> {
+    let file: ModuleRegistryFile = serde_json::from_slice(bytes)?;
+    if file.version != REGISTRY_VERSION {
+        return Err(ModuleStoreError::VersionMismatch {
+            expected: REGISTRY_VERSION,
+            found: file.version,
+        });
+    }
+    Ok(ModuleRegistry {
+        records: file.records,
+        active: file.active,
+    })
 }
 
 fn now_unix() -> i64 {

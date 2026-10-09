@@ -414,7 +414,7 @@ describe("fullscreen map shell contract", () => {
   it("keeps the Command route chrome and truthful context available at scroll bottom", async () => {
     const [{ terminalShellCss }, mainSource] = await Promise.all([
       readViewerHtml(),
-      readFile("software_safe_src/main.jsx", "utf8"),
+      readFile("software_safe_src/viewer_app.jsx", "utf8"),
     ]);
     expect(mainSource).toMatch(
       /id="viewer-details-panel"[\s\S]*?class="panel__header panel__header--stack command-route-chrome"[\s\S]*?href="#viewer-stage-panel"/i,
@@ -453,7 +453,7 @@ describe("fullscreen map shell contract", () => {
   it("keeps Hosted prompt rollback reachable in the true phone-width Command drawer", async () => {
     const [{ terminalShellCss }, mainSource] = await Promise.all([
       readViewerHtml(),
-      readFile("software_safe_src/main.jsx", "utf8"),
+      readFile("software_safe_src/viewer_app.jsx", "utf8"),
     ]);
     expect(mainSource).toMatch(/class="command-surface__prompt-panel"/);
     expect(mainSource).toMatch(/class="toolbar command-surface__rollback-actions"/);
@@ -537,7 +537,7 @@ describe("fullscreen map shell contract", () => {
   it("moves the selected chip when normal AppShell places World Summary between Host and Feed", async () => {
     const [{ terminalShellCss }, mainSource] = await Promise.all([
       readViewerHtml(),
-      readFile("software_safe_src/main.jsx", "utf8"),
+      readFile("software_safe_src/viewer_app.jsx", "utf8"),
     ]);
     expect(mainSource).toMatch(/<PixelWorldHost[\s\S]*<WorldSummaryPanel[\s\S]*<WorldFeedSurface/);
     const tabletBlock = terminalShellCss.match(/@media\s*\(max-width:\s*1240px\)[\s\S]*?(?=@media\s*\(max-width:\s*640px\))/i)?.[0] || "";
@@ -582,7 +582,7 @@ describe("hotspot overlay contract", () => {
 
 describe("fullscreen map fixture composition", () => {
   it("retains fullscreen map and overlay anchors through fixture composition", async () => {
-    const mainSource = await readFile("software_safe_src/main.jsx", "utf8");
+    const mainSource = await readFile("software_safe_src/viewer_app.jsx", "utf8");
     const pixelWorldHostSource = await readFile("software_safe_src/pixel_world_host.jsx", "utf8");
     const worldFeedSource = await readFile("software_safe_src/world_feed_panel.jsx", "utf8");
     const viewerNavigationSource = await readFile("software_safe_src/viewer_navigation.jsx", "utf8");
