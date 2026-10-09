@@ -208,6 +208,13 @@ fn settled_history_rollover_retains_newest_low_action_id() {
 fn starter_milestone_survives_settled_history_compaction() {
     let mut state = WorldState::default();
     let milestone = StarterIndustrialMilestoneV1 {
+        settlement_summary: Some(StarterIndustrialSettlementSummaryV1 {
+            requester_agent_id: "starter-agent-0".into(),
+            accepted_batches: 12,
+            consume: vec![MaterialStack::new("iron_ore", 48)],
+            power_required: 24,
+            produce: vec![MaterialStack::new("iron_ingot", 36)],
+        }),
         committed_recipe_origin: Some(crate::runtime::events::recipe_origin_tests::origin()),
         profile_id: STARTER_INDUSTRIAL_PROFILE_ID.to_string(),
         profile_revision: STARTER_INDUSTRIAL_PROFILE_REVISION,

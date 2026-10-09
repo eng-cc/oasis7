@@ -106,6 +106,7 @@ mod session_policy;
 mod smelter_affordability_debug;
 #[path = "runtime_live/social_quote.rs"]
 mod social_quote;
+mod starter_industrial_outcome;
 mod support;
 #[cfg(test)]
 mod tests;

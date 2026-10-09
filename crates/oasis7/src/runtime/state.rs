@@ -74,6 +74,7 @@ pub use self::starter_industrial::{
     STARTER_INDUSTRIAL_PROFILE_ID, STARTER_INDUSTRIAL_PROFILE_REVISION, STARTER_SMELTER_FACTORY_ID,
     STARTER_SMELTER_RECIPE_ID, StarterIndustrialFeasibilityResult,
     StarterIndustrialFeasibilityStatus, StarterIndustrialMilestoneV1,
+    StarterIndustrialSettlementSummaryV1,
 };
 use self::support::*;
 pub(crate) use command_projection::{
