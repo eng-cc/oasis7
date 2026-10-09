@@ -4,6 +4,8 @@
 
 审计轮次: 11
 
+- 想确认跨区到达、存储接收、所有权与 escrow 单次结算：[跨区物流与 escrow 结算设计](runtime/cross-region-delivery-and-escrow-settlement.design.md)。
+
 ## 从这里开始
 - 想先理解 runtime 的可信边界、目标态与验收范围：`doc/world-runtime/prd.md`
 - 想看当前活跃任务、阻断、测试层级与最新完成项：对应 GitHub task issue / Project。
