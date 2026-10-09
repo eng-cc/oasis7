@@ -31,8 +31,9 @@ Options:
   --path <path>           Override target worktree path
   --worktrees-root <dir>  Override default worktrees root
   --allow-dirty-source    Allow creating from a dirty source worktree
-  --init-docs             Inspect module PRD/project in the new worktree
+  --init-docs             Inspect module PRD in the new worktree
   --with-harness          Asynchronously prewarm ./scripts/worktree-harness.sh up in the new worktree
+  --resume-setup          Complete missing setup in an existing matching worktree
   --json                  Print machine-readable JSON summary only
   -h, --help              Show this help
 
@@ -51,6 +52,7 @@ ALLOW_DIRTY_SOURCE=0
 INIT_DOCS=0
 WITH_HARNESS=0
 OUTPUT_JSON=0
+RESUME_SETUP=0
 BASE_REF="HEAD"
 BRANCH_NAME=""
 TARGET_PATH=""
@@ -59,20 +61,14 @@ POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --base)
-      BASE_REF="${2:-}"
-      shift 2
-      ;;
-    --branch)
-      BRANCH_NAME="${2:-}"
-      shift 2
-      ;;
-    --path)
-      TARGET_PATH="${2:-}"
-      shift 2
-      ;;
-    --worktrees-root)
-      WORKTREES_ROOT="${2:-}"
+    --base|--branch|--path|--worktrees-root)
+      if [[ $# -lt 2 || "$2" == --* ]]; then echo "error: missing option value: $1" >&2; exit 2; fi
+      case "$1" in
+        --base) BASE_REF="$2" ;;
+        --branch) BRANCH_NAME="$2" ;;
+        --path) TARGET_PATH="$2" ;;
+        --worktrees-root) WORKTREES_ROOT="$2" ;;
+      esac
       shift 2
       ;;
     --allow-dirty-source)
@@ -87,6 +83,10 @@ while [[ $# -gt 0 ]]; do
       WITH_HARNESS=1
       shift
       ;;
+    --resume-setup)
+      RESUME_SETUP=1
+      shift
+      ;;
     --json)
       OUTPUT_JSON=1
       shift
@@ -94,6 +94,10 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       usage
       exit 0
+      ;;
+    --*)
+      echo "error: unknown option: $1" >&2
+      exit 2
       ;;
     *)
       POSITIONAL+=("$1")
@@ -233,40 +237,10 @@ else
 fi
 
 
-if [[ "$ALLOW_DIRTY_SOURCE" != "1" ]] && [[ -n "$(git status --short)" ]]; then
-  echo "error: source worktree is dirty; commit/stash changes first or rerun with --allow-dirty-source" >&2
-  exit 1
-fi
-
-if ! git rev-parse --verify --quiet "$BASE_REF^{commit}" >/dev/null; then
-  echo "error: base ref not found: $BASE_REF" >&2
-  exit 1
-fi
-
-if [[ -e "$TARGET_PATH" ]]; then
-  echo "error: target worktree path already exists: $TARGET_PATH" >&2
-  echo "hint: choose a different task slug/path or remove the old directory first" >&2
-  exit 1
-fi
-
-if existing_branch_path="$(branch_checkout_path "$BRANCH_NAME" 2>/dev/null)"; then
-  echo "error: branch is already checked out in another worktree: $BRANCH_NAME" >&2
-  echo "hint: existing worktree path: $existing_branch_path" >&2
-  exit 1
-fi
-
-mkdir -p "$(dirname "$TARGET_PATH")"
-
 MODE="create_new_branch"
-if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
-  MODE="attach_existing_branch"
-  git worktree add --quiet "$TARGET_PATH" "$BRANCH_NAME"
-else
-  git worktree add --quiet -b "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF"
-fi
-git -C "$TARGET_PATH" config oasis7.task-worktree-family-name "$FAMILY_REPO_NAME"
-git -C "$TARGET_PATH" config oasis7.task-worktrees-root "$WORKTREES_ROOT"
-
+WORKTREE_CREATED=0
+SETUP_STATUS="failed"
+FAILED_STEP="identity"
 CANONICAL_CONFIG_SOURCE="$CANONICAL_REPO_ROOT/config.toml"
 TARGET_CONFIG_PATH="$TARGET_PATH/config.toml"
 CANONICAL_CONFIG_EXISTS=0
@@ -274,53 +248,106 @@ CANONICAL_CONFIG_COPIED=0
 CARGO_SHARED_TARGET_DIR=""
 TARGET_CARGO_TARGET_PATH="$TARGET_PATH/target"
 CARGO_TARGET_LINKED=0
+RECOVERY_COMMAND="$(printf '%q ' "$ROOT_DIR/scripts/new-task-worktree.sh" "$MODULE_INPUT" "$TASK_INPUT" --branch "$BRANCH_NAME" --path "$TARGET_PATH" --resume-setup --json)"
 
-cleanup_bootstrap_failure() {
-  git worktree remove --force "$TARGET_PATH" >/dev/null 2>&1 || true
-  if [[ "$MODE" == "create_new_branch" ]]; then
-    git branch -D "$BRANCH_NAME" >/dev/null 2>&1 || true
+report_failure() {
+  local status=$?
+  [[ "$status" != 0 ]] || return 0
+  trap - EXIT
+  local actual_head=""
+  actual_head="$(git -C "$TARGET_PATH" rev-parse --verify HEAD 2>/dev/null || true)"
+  if [[ "$(branch_checkout_path "$BRANCH_NAME" 2>/dev/null || true)" == "$TARGET_PATH" ]]; then WORKTREE_CREATED=1; fi
+  echo "error: $FAILED_STEP failed; existing resources retained. Recovery: $RECOVERY_COMMAND" >&2
+  if [[ "$OUTPUT_JSON" == 1 ]]; then
+    "$PYTHON_BIN" - "$TARGET_PATH" "$BRANCH_NAME" "$actual_head" "$WORKTREE_CREATED" "$FAILED_STEP" "$RECOVERY_COMMAND" <<'RESULT'
+import json,sys
+print(json.dumps(dict(worktree=sys.argv[1],worktree_path=sys.argv[1],branch=sys.argv[2],head=sys.argv[3] or None,worktree_created=sys.argv[4]=='1',setup_status='failed',failed_step=sys.argv[5],recovery_command=sys.argv[6])))
+RESULT
   fi
+  [[ "$status" == 2 ]] || status=1
+  exit "$status"
 }
+trap report_failure EXIT
 
-if [[ -f "$CANONICAL_CONFIG_SOURCE" ]]; then
-  CANONICAL_CONFIG_EXISTS=1
-fi
-if [[ "$CANONICAL_CONFIG_EXISTS" == "1" ]]; then
-  if ! cp "$CANONICAL_CONFIG_SOURCE" "$TARGET_CONFIG_PATH"; then
-    cleanup_bootstrap_failure
-    echo "error: failed to copy canonical config.toml into target worktree; cleaned up created worktree" >&2
-    exit 1
+if ! git check-ref-format --branch "$BRANCH_NAME" >/dev/null 2>&1; then exit 2; fi
+if [[ "$RESUME_SETUP" == 1 ]]; then
+  MODE="resume_setup"
+  if [[ "$WITH_HARNESS" == 1 ]]; then
+    echo 'error: --resume-setup cannot use --with-harness; run worktree-harness.sh up separately' >&2
+    exit 2
   fi
-  CANONICAL_CONFIG_COPIED=1
+  existing_branch_path="$(branch_checkout_path "$BRANCH_NAME" 2>/dev/null || true)"
+  target_common="$(git -C "$TARGET_PATH" rev-parse --git-common-dir 2>/dev/null || true)"
+  if [[ "$existing_branch_path" != "$TARGET_PATH" || ! -f "$TARGET_PATH/.git" || -z "$target_common" ]]; then exit 2; fi
+  target_common="$(cd "$TARGET_PATH" && cd "$target_common" && pwd -P)"
+  [[ "$target_common" == "$COMMON_GIT_DIR" ]] || exit 2
+  WORKTREE_CREATED=1
+else
+  if [[ "$ALLOW_DIRTY_SOURCE" != 1 && -n "$(git status --short)" ]]; then
+    echo 'error: source worktree is dirty; use --allow-dirty-source' >&2; exit 1
+  fi
+  git rev-parse --verify --quiet "$BASE_REF^{commit}" >/dev/null || exit 2
+  [[ ! -e "$TARGET_PATH" && ! -L "$TARGET_PATH" ]] || exit 2
+  if branch_checkout_path "$BRANCH_NAME" >/dev/null 2>&1; then exit 2; fi
+  FAILED_STEP="git_add"
+  mkdir -p "$(dirname "$TARGET_PATH")"
+  if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
+    MODE="attach_existing_branch"
+    git worktree add --quiet "$TARGET_PATH" "$BRANCH_NAME" >&2
+  else
+    git worktree add --quiet -b "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" >&2
+  fi
+  WORKTREE_CREATED=1
 fi
-
-if ! CARGO_SHARED_TARGET_DIR="$(cd "$TARGET_PATH" && "$ROOT_DIR/scripts/cargo-dev.sh" --print-target-dir)"; then
-  cleanup_bootstrap_failure
-  echo "error: failed to resolve shared cargo target dir from target worktree; cleaned up created worktree" >&2
-  exit 1
+FAILED_STEP="family_config"
+if ! git -C "$TARGET_PATH" config --local --get oasis7.task-worktree-family-name >/dev/null; then
+  git -C "$TARGET_PATH" config --local oasis7.task-worktree-family-name "$FAMILY_REPO_NAME"
 fi
-
+if ! git -C "$TARGET_PATH" config --local --get oasis7.task-worktrees-root >/dev/null; then
+  git -C "$TARGET_PATH" config --local oasis7.task-worktrees-root "$WORKTREES_ROOT"
+fi
+FAILED_STEP="config"
+[[ ! -f "$CANONICAL_CONFIG_SOURCE" ]] || CANONICAL_CONFIG_EXISTS=1
+if [[ "$CANONICAL_CONFIG_EXISTS" == 1 && ! -e "$TARGET_CONFIG_PATH" && ! -L "$TARGET_CONFIG_PATH" ]]; then
+  # Link-publish a private copy: a concurrent config always wins without overwrite.
+  CANONICAL_CONFIG_COPIED="$("$PYTHON_BIN" - "$CANONICAL_CONFIG_SOURCE" "$TARGET_CONFIG_PATH" <<'CONFIG'
+import os,shutil,sys,tempfile
+source,target=sys.argv[1:]
+fd,temp=tempfile.mkstemp(prefix='.bootstrap-config-',dir=os.path.dirname(target))
+os.close(fd)
+try:
+    shutil.copyfile(source,temp)
+    try:
+        os.link(temp,target)
+        print("1")
+    except FileExistsError: print("0")
+finally: os.unlink(temp)
+CONFIG
+)"
+fi
+FAILED_STEP="cache_resolve"
+CARGO_SHARED_TARGET_DIR="$(cd "$TARGET_PATH" && "$ROOT_DIR/scripts/cargo-dev.sh" --print-target-dir)"
+FAILED_STEP="cache_target"
 if [[ -e "$TARGET_CARGO_TARGET_PATH" || -L "$TARGET_CARGO_TARGET_PATH" ]]; then
-  cleanup_bootstrap_failure
-  echo "error: existing target path in newly created worktree; retained shared caches" >&2
-  exit 1
+  "$PYTHON_BIN" - "$TARGET_CARGO_TARGET_PATH" "$CARGO_SHARED_TARGET_DIR" <<'LINK'
+import os,sys
+if not os.path.islink(sys.argv[1]) or os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]):
+    print('error: target conflicts with shared cache; preserved',file=sys.stderr)
+    raise SystemExit(1)
+LINK
+else
+  FAILED_STEP="cache_mkdir"
+  mkdir -p "$CARGO_SHARED_TARGET_DIR"
+  FAILED_STEP="cache_link"
+  ln -s "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH"
 fi
-if ! mkdir -p "$CARGO_SHARED_TARGET_DIR"; then
-  cleanup_bootstrap_failure
-  echo "error: failed to create shared cargo target dir; cleaned up created worktree: $CARGO_SHARED_TARGET_DIR" >&2
-  exit 1
-fi
-if [[ "$CARGO_TARGET_LINKED" != "1" ]] && ! ln -s "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH"; then
-  cleanup_bootstrap_failure
-  echo "error: failed to link target worktree cargo target to shared cache; cleaned up created worktree" >&2
-  exit 1
-fi
+FAILED_STEP="cache_mkdir"
+mkdir -p "$CARGO_SHARED_TARGET_DIR"
 CARGO_TARGET_LINKED=1
+FAILED_STEP="optional_setup"
 
 DOC_PRD_PATH=""
-DOC_PROJECT_PATH=""
 DOC_PRD_EXISTS=0
-DOC_PROJECT_EXISTS=0
 if [[ "$INIT_DOCS" == "1" ]]; then
   DOC_PRD_PATH="$TARGET_PATH/doc/$MODULE_SLUG/prd.md"
   [[ -f "$DOC_PRD_PATH" ]] && DOC_PRD_EXISTS=1
@@ -348,13 +375,22 @@ if [[ "$WITH_HARNESS" == "1" ]]; then
   [[ -n "$HARNESS_STATUS" ]] || HARNESS_STATUS="booting"
 fi
 
-SUMMARY_JSON="$("$PYTHON_BIN" - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" <<'PY'
+SETUP_STATUS="complete"
+FAILED_STEP=""
+HEAD_OID="$(git -C "$TARGET_PATH" rev-parse HEAD)"
+SUMMARY_JSON="$("$PYTHON_BIN" - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$HEAD_OID" "$RECOVERY_COMMAND" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 
 payload = {
+    "worktree": sys.argv[6],
+    "head": sys.argv[27],
+    "worktree_created": True,
+    "setup_status": "complete",
+    "failed_step": None,
+    "recovery_command": sys.argv[28],
     "module": sys.argv[1],
     "task": sys.argv[2],
     "module_slug": sys.argv[3],
@@ -382,12 +418,12 @@ if sys.argv[19] == "1":
     payload["doc_checks"] = {
         "prd": {"path": sys.argv[20], "exists": sys.argv[21] == "1"},
     }
-if sys.argv[24] == "1":
+if sys.argv[22] == "1":
     payload["harness"] = {
-        "bootstrap_log": sys.argv[25],
-        "state_file": sys.argv[26],
-        "status": sys.argv[27],
-        "viewer_url": sys.argv[28],
+        "bootstrap_log": sys.argv[23],
+        "state_file": sys.argv[24],
+        "status": sys.argv[25],
+        "viewer_url": sys.argv[26],
     }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -433,7 +469,6 @@ if [[ "$INIT_DOCS" == "1" ]]; then
 
 Docs bootstrap:
 - module PRD: $([[ "$DOC_PRD_EXISTS" == "1" ]] && printf 'present' || printf 'missing') ($DOC_PRD_PATH)
-- module project: $([[ "$DOC_PROJECT_EXISTS" == "1" ]] && printf 'present' || printf 'missing') ($DOC_PROJECT_PATH)
 INFO
 fi
 

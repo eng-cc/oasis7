@@ -224,6 +224,7 @@ run_workflow_governance_baseline_contract_tests() {
   run python3 ./scripts/ci-required-result.test.py
   run python3 ./scripts/ci-workflow.test.py
   run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
+  run bash ./scripts/worktree-gc-report.test.sh
   run python3 ./scripts/resource-cleanup-executor.test.py
   run python3 ./scripts/pr-review-threads.test.py
 }
@@ -540,11 +541,11 @@ run_group() {
   case "$1" in
     baseline) run_required_gate_checks ;;
     rust_baseline) run_rust_baseline ;;
-    oasis7_required) run_oasis7_required_tier_tests; run_oasis7_required_tier_clippy; run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields ;;
-    consensus) run_oasis7_consensus_tests; run_oasis7_consensus_clippy ;;
-    distfs) run_oasis7_distfs_tests; run_oasis7_distfs_clippy ;;
-    node) run_oasis7_node_tests; run_oasis7_node_clippy ;;
-    net) run_oasis7_net_tests; run_oasis7_net_libp2p_tests; run_oasis7_net_clippy; run_oasis7_net_libp2p_clippy ;;
+    oasis7_required) run_oasis7_required_tier_clippy; run_oasis7_required_tier_tests; run_cargo test -p oasis7 --lib snapshot_progress::; run_cargo test -p oasis7 --lib snapshot_player_gameplay_execution_state_backfills_from_legacy_fields ;;
+    consensus) run_oasis7_consensus_clippy; run_oasis7_consensus_tests ;;
+    distfs) run_oasis7_distfs_clippy; run_oasis7_distfs_tests ;;
+    node) run_oasis7_node_clippy; run_oasis7_node_tests ;;
+    net) run_oasis7_net_clippy; run_oasis7_net_libp2p_clippy; run_oasis7_net_tests; run_oasis7_net_libp2p_tests ;;
     viewer_js_required) run_oasis7_viewer_software_safe_feedback_contract_tests; run_oasis7_viewer_software_safe_build; run node crates/oasis7_viewer/scripts/viewer-auth-browser-security-smoke.mjs ;;
     viewer_performance_report) run bash ./scripts/viewer-performance-report-only-contract.test.sh; run_oasis7_viewer_software_safe_build; run_oasis7_viewer_visual_test_build; run_oasis7_viewer_performance_smoke_report_only ;;
     pixel_world_bridge) run_pixel_world_bridge_lib_tests; run_pixel_world_bridge_wasm_check ;;
