@@ -80,9 +80,20 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     /// the authoritative per-height record is published.
     pub(super) pending_product_validation_intent: Option<ProductValidationIntentMarkerV1>,
     pub(super) local_execution_bootstrap: Option<NodeExecutionBootstrap>,
+    pub(super) controlled_capture_enabled: bool,
 }
 
 impl NodeRuntimeExecutionDriver {
+    pub(crate) fn set_controlled_capture_enabled(&mut self, enabled: bool) -> Result<(), String> {
+        if enabled && !cfg!(unix) {
+            return Err("durable history capture is unsupported on this platform".into());
+        }
+        if enabled && !cfg!(feature = "wasmtime") {
+            return Err("historical capture requires the real wasmtime executor".into());
+        }
+        self.controlled_capture_enabled = enabled;
+        Ok(())
+    }
     pub(crate) fn new(
         state_path: std::path::PathBuf,
         world_dir: std::path::PathBuf,
@@ -266,6 +277,7 @@ impl NodeRuntimeExecutionDriver {
             retention_reconcile_next_height,
             pending_product_validation_intent: None,
             local_execution_bootstrap: None,
+            controlled_capture_enabled: false,
         }
     }
 
@@ -584,6 +596,9 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let decode_ms = decode_started_at.elapsed();
         let runtime_action_count = decoded_runtime_actions.len();
 
+        if self.controlled_capture_enabled {
+            super::durable_transaction::ensure_dir_all_durable(&self.records_dir)?;
+        }
         fs::create_dir_all(self.records_dir.as_path()).map_err(|err| {
             format!(
                 "create execution records dir {} failed: {}",
@@ -591,6 +606,45 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 err
             )
         })?;
+
+        // Capture only the explicit supported operation. Legacy/generic actions
+        // retain their current record encoding and cannot enter captured history.
+        let controlled_preparation = if self.controlled_capture_enabled
+            && super::controlled_capture::supported_origin(&context).is_ok()
+        {
+            if resume_after_product_validation_intent {
+                let reference = self
+                    .pending_product_validation_intent
+                    .as_ref()
+                    .and_then(|marker| marker.controlled_preparation_ref.as_deref())
+                    .ok_or("supported capture recovery requires original pre-step material")?;
+                Some(super::controlled_capture::load_preparation(
+                    &self.execution_store,
+                    reference,
+                    &context,
+                )?)
+            } else {
+                Some(super::controlled_capture::prepare(
+                    &self.execution_world,
+                    &context,
+                )?)
+            }
+        } else {
+            None
+        };
+        if controlled_preparation.as_ref().is_some_and(|preparation| {
+            preparation.release_security_policy != *self.execution_world.release_security_policy()
+        }) {
+            return Err(
+                "capture recovery security policy differs from original preparation".into(),
+            );
+        }
+        let controlled_preparation_ref = controlled_preparation
+            .as_ref()
+            .map(|preparation| {
+                super::controlled_capture::persist_preparation(&self.execution_store, preparation)
+            })
+            .transpose()?;
 
         let previous_execution_world = self.execution_world.clone();
         let previous_simulator_mirror = self.simulator_mirror.clone();
@@ -679,13 +733,13 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         } else if !service_admin_only {
             let intent_world_dir = self.world_dir.clone();
             let intent_records_dir = self.records_dir.clone();
-            let intent_world_id = context.world_id.clone();
             let intent_height = context.height;
-            let intent_action_root = context.action_root.clone();
             let intent_pre_step_execution_state_root = pre_step_execution_state_root
                 .clone()
                 .ok_or_else(|| "missing pre-step execution state root for intent".to_string())?;
             let intent_pre_step_external_effect = external_effect.clone();
+            let intent_controlled_preparation_ref = controlled_preparation_ref.clone();
+            let intent_commit_context = context.clone();
             let mut publish_product_validation_intent = move |staged: &RuntimeWorld| {
                 // Publish the complete intent before the staged world. A
                 // crash after this write is recognizable as an exact
@@ -694,11 +748,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 persist_product_validation_intent_for_staged_world(
                     intent_records_dir.as_path(),
                     staged,
-                    intent_world_id.as_str(),
-                    intent_height,
-                    intent_action_root.as_str(),
+                    &intent_commit_context,
                     intent_pre_step_execution_state_root.as_str(),
                     intent_pre_step_external_effect.clone(),
+                    intent_controlled_preparation_ref.clone(),
                 )
                 .map_err(|err| WorldError::DistributedValidationFailed {
                     reason: format!(
@@ -860,6 +913,53 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             simulator_mirror,
             context.committed_at_unix_ms,
         );
+        if let Some(preparation) = controlled_preparation.as_ref() {
+            // The closed package is self-contained, and the legacy recovery
+            // reader still dereferences these real CAS objects separately.
+            for bytes in [
+                &snapshot_bytes,
+                &journal_bytes,
+                &rollback_on_error!(super::to_cbor(&external_effect)),
+            ] {
+                rollback_on_error!(super::controlled_capture::persist_capture_bytes(
+                    &self.execution_store,
+                    bytes
+                ));
+            }
+
+            let preceding = rollback_on_error!((|| -> Result<_, String> {
+                Ok(if self.state.last_applied_committed_height > 0 {
+                    let previous_record = load_execution_bridge_record(
+                        execution_bridge_record_path(
+                            self.records_dir.as_path(),
+                            self.state.last_applied_committed_height,
+                        )
+                        .as_path(),
+                    )?;
+                    previous_record.controlled_capture_ref.as_ref().map(|reference| {
+                    let package = super::controlled_capture::load_package(&self.execution_store, reference)?;
+                    let manifest = super::controlled_capture::decode_role::<super::controlled_capture::CaptureManifest>(&package, oasis7_distfs::controlled_authority::replicated_protocol::ArtifactRole::ExecutionManifest)?;
+                    Ok::<_, String>((package, manifest))
+                }).transpose()?
+                } else {
+                    None
+                })
+            })());
+            let package = rollback_on_error!(super::controlled_capture::build(
+                preparation,
+                &record,
+                &snapshot_bytes,
+                &journal_bytes,
+                &external_effect,
+                preceding.as_ref().map(|(p, m)| (p, m))
+            ));
+            record.controlled_capture_ref = Some(rollback_on_error!(
+                super::controlled_capture::persist_capture_bytes(
+                    &self.execution_store,
+                    &rollback_on_error!(super::to_cbor(package))
+                )
+            ));
+        }
         let checkpoint_started_at = Instant::now();
         record.checkpoint_ref = rollback_on_error!(maybe_persist_execution_checkpoint_for_record(
             self.records_dir.as_path(),

@@ -45,6 +45,9 @@ enum Schema {
     Generic,
     SnapshotRoot,
     ModuleArtifacts,
+    ClosedRecordRoot,
+    ArtifactObjects,
+    ArtifactObject,
 }
 struct Check<'a>(&'a mut Budget, Schema);
 impl<'de> DeserializeSeed<'de> for Check<'_> {
@@ -53,7 +56,11 @@ impl<'de> DeserializeSeed<'de> for Check<'_> {
         self.0.spend()?;
         match self.1 {
             Schema::Generic => decoder.deserialize_any(self),
-            Schema::SnapshotRoot | Schema::ModuleArtifacts => decoder.deserialize_map(self),
+            Schema::SnapshotRoot
+            | Schema::ModuleArtifacts
+            | Schema::ClosedRecordRoot
+            | Schema::ArtifactObject => decoder.deserialize_map(self),
+            Schema::ArtifactObjects => decoder.deserialize_seq(self),
         }
     }
 }
@@ -116,7 +123,14 @@ impl<'de> Visitor<'de> for Check<'_> {
         self.0.enter(seq.size_hint())?;
         let mut length = 0usize;
         while seq
-            .next_element_seed(Check(self.0, Schema::Generic))?
+            .next_element_seed(Check(
+                self.0,
+                if matches!(self.1, Schema::ArtifactObjects) {
+                    Schema::ArtifactObject
+                } else {
+                    Schema::Generic
+                },
+            ))?
             .is_some()
         {
             length += 1;
@@ -133,8 +147,17 @@ impl<'de> Visitor<'de> for Check<'_> {
         self.0.enter(map.size_hint())?;
         let mut length = 0usize;
         loop {
-            let artifact_field = if matches!(self.1, Schema::SnapshotRoot) {
-                match map.next_key_seed(SnapshotKey(self.0))? {
+            let artifact_field = if matches!(
+                self.1,
+                Schema::SnapshotRoot | Schema::ClosedRecordRoot | Schema::ArtifactObject
+            ) {
+                let selected = match self.1 {
+                    Schema::SnapshotRoot => "module_artifact_bytes",
+                    Schema::ClosedRecordRoot => "objects",
+                    Schema::ArtifactObject => "bytes",
+                    _ => unreachable!(),
+                };
+                match map.next_key_seed(SnapshotKey(self.0, selected))? {
                     Some(value) => value,
                     None => break,
                 }
@@ -150,11 +173,17 @@ impl<'de> Visitor<'de> for Check<'_> {
                     "ResourceLimited: serde map budget",
                 ));
             }
-            if matches!(self.1, Schema::ModuleArtifacts) {
+            if matches!(self.1, Schema::ModuleArtifacts)
+                || (matches!(self.1, Schema::ArtifactObject) && artifact_field)
+            {
                 map.next_value_seed(BytePayload(self.0))?;
             } else {
                 let schema = if artifact_field {
-                    Schema::ModuleArtifacts
+                    if matches!(self.1, Schema::ClosedRecordRoot) {
+                        Schema::ArtifactObjects
+                    } else {
+                        Schema::ModuleArtifacts
+                    }
                 } else {
                     Schema::Generic
                 };
@@ -165,9 +194,10 @@ impl<'de> Visitor<'de> for Check<'_> {
         Ok(())
     }
 }
-// Only a direct Snapshot root key selects the artifact-byte schema. Nested
-// maps, journal events, and strings named the same never inherit this state.
-struct SnapshotKey<'a>(&'a mut Budget);
+// Only exact typed schema paths select byte payloads: Snapshot root
+// module_artifact_bytes values or ClosedRecord root objects[].bytes. Nested
+// maps and journal events never inherit those states.
+struct SnapshotKey<'a>(&'a mut Budget, &'static str);
 impl<'de> DeserializeSeed<'de> for SnapshotKey<'_> {
     type Value = bool;
     fn deserialize<D: serde::Deserializer<'de>>(self, decoder: D) -> Result<bool, D::Error> {
@@ -184,7 +214,7 @@ impl<'de> Visitor<'de> for SnapshotKey<'_> {
         if value.len() > self.0.string_limit {
             return Err(E::custom("ResourceLimited: serde string budget"));
         }
-        Ok(value == "module_artifact_bytes")
+        Ok(value == self.1)
     }
 }
 struct BytePayload<'a>(&'a mut Budget);
@@ -285,6 +315,18 @@ pub(super) fn snapshot_cbor(
     decoder.end().map_err(failure)
 }
 
+pub(super) fn closed_record_cbor(
+    bytes: &[u8],
+    limits: ObserverReadLimits,
+) -> Result<(), ObserverLoadError> {
+    let mut budget = Budget::new(limits);
+    let mut decoder = serde_cbor::Deserializer::from_slice(bytes);
+    Check(&mut budget, Schema::ClosedRecordRoot)
+        .deserialize(&mut decoder)
+        .map_err(failure)?;
+    decoder.end().map_err(failure)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,3 +356,78 @@ mod tests {
 #[cfg(test)]
 #[path = "observer_decode_budget_tests.rs"]
 mod snapshot_tests;
+
+#[cfg(test)]
+mod closed_record_tests {
+    use super::*;
+    use serde_cbor::Value;
+    fn record(payload: Value) -> Vec<u8> {
+        serde_cbor::to_vec(&Value::Map(std::collections::BTreeMap::from([(
+            Value::Text("objects".into()),
+            Value::Array(vec![Value::Map(std::collections::BTreeMap::from([(
+                Value::Text("bytes".into()),
+                payload,
+            )]))]),
+        )])))
+        .unwrap()
+    }
+    #[test]
+    fn closed_record_payload_path_has_byte_width_and_strict_bounds() {
+        let width = std::mem::size_of::<WorldEvent>().max(256);
+        let limits = ObserverReadLimits {
+            max_elements: 300_000,
+            max_single_allocation_bytes: width * 2,
+            ..ObserverReadLimits::default()
+        };
+        assert!(
+            closed_record_cbor(
+                &record(Value::Array(vec![Value::Integer(0); width])),
+                limits
+            )
+            .is_ok()
+        );
+        for payload in [
+            Value::Array(vec![Value::Integer(0); width * 2 + 1]),
+            Value::Bytes(vec![0; width * 2 + 1]),
+            Value::Array(vec![Value::Integer(256)]),
+            Value::Array(vec![Value::Array(vec![])]),
+        ] {
+            assert!(closed_record_cbor(&record(payload), limits).is_err());
+        }
+        let huge_hint = b"\xa1\x67objects\x81\xa1\x65bytes\x9a\x00\x10\x00\x00";
+        assert!(matches!(
+            closed_record_cbor(huge_hint, limits),
+            Err(ObserverLoadError::ResourceLimited)
+        ));
+        let global = ObserverReadLimits {
+            max_elements: 3,
+            ..limits
+        };
+        assert!(closed_record_cbor(&record(Value::Bytes(vec![0; 4])), global).is_err());
+        // A nested same-name field remains an ordinary WorldEvent-width sequence.
+        let fake = serde_cbor::to_vec(
+            &serde_json::json!({"nested":{"objects":[{"bytes":vec![0u8;width*2+1]}]}}),
+        )
+        .unwrap();
+        assert!(closed_record_cbor(&fake, limits).is_err());
+    }
+    #[test]
+    fn closed_record_large_artifact_preflight_without_default_changes() {
+        let bytes = if let Ok(path) = std::env::var("OASIS7_CONTROLLED_HISTORY_WASM_FIXTURE") {
+            let bytes = std::fs::read(path).unwrap();
+            assert_eq!(bytes.len(), 203153);
+            assert!(bytes.starts_with(b"\0asm"));
+            bytes
+        } else {
+            vec![0; 203153]
+        };
+        let encoded = record(Value::Array(
+            bytes
+                .into_iter()
+                .map(|b| Value::Integer(b.into()))
+                .collect(),
+        ));
+        assert!(cbor(&encoded, ObserverReadLimits::default()).is_err());
+        assert!(closed_record_cbor(&encoded, ObserverReadLimits::default()).is_ok());
+    }
+}

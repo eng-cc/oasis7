@@ -6,6 +6,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 static UNIQUE_SUFFIX: AtomicU64 = AtomicU64::new(0);
 
+/// Synchronize a verified existing blob and its directory entry. The caller
+/// must create its directory through ensure_dir_all_durable before publication.
+pub(super) fn sync_existing_file_durable(path: &Path) -> Result<(), String> {
+    sync_tree(path)?;
+    sync_directory(parent_dir(path)?)
+}
+
 pub(super) fn write_file_durable(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = parent_dir(path)?;
     ensure_dir_all_durable(parent)?;

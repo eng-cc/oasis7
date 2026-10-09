@@ -724,6 +724,7 @@ pub(super) fn install_checkpoint_bundle(
         external_effect_ref: None,
         world_head_proof_ref: None,
         world_head_proof_hash: None,
+        controlled_capture_ref: None,
         simulator_mirror: None,
         timestamp_ms: context.committed_at_unix_ms,
     };
