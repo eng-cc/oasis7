@@ -20830,13 +20830,13 @@ function FactoryProductionFailureDispositionCard(props) {
 delegateEvents(["click"]);
 //#endregion
 //#region software_safe_src/control_proof_panel.jsx
-var _tmpl$$2 = /*#__PURE__*/ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`);
+var _tmpl$$2 = /*#__PURE__*/ template(`<div class=metric style=min-width:0><div class=metric__label style=overflow-wrap:anywhere></div><div class=metric__value style=white-space:normal;overflow-wrap:anywhere>`);
 var _tmpl$2$2 = /*#__PURE__*/ template(`<div class=feedback-detail>`);
-var _tmpl$3$2 = /*#__PURE__*/ template(`<div class=summary-grid data-testid=control-proof-receipt>`);
-var _tmpl$4$2 = /*#__PURE__*/ template(`<div data-testid=control-proof-memory><div class=summary-grid>`);
-var _tmpl$5$2 = /*#__PURE__*/ template(`<div class=event-card data-testid=control-proof-panel><div class=event-card__title><span></span><span class=badge></span></div><div class=event-card__meta></div><div class=feedback-summary></div><div class=summary-grid></div><div class=summary-grid data-testid=control-proof-prediction></div><div class=summary-grid>`);
-var _tmpl$6$2 = /*#__PURE__*/ template(`<div class=summary-grid data-testid=control-proof-authorization>`);
-var _tmpl$7$2 = /*#__PURE__*/ template(`<div class=summary-grid data-testid=control-proof-correction>`);
+var _tmpl$3$2 = /*#__PURE__*/ template(`<div class=summary-grid data-testid=control-proof-receipt style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr))">`);
+var _tmpl$4$2 = /*#__PURE__*/ template(`<div data-testid=control-proof-memory><div class=summary-grid style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr))">`);
+var _tmpl$5$2 = /*#__PURE__*/ template(`<div class=event-card data-testid=control-proof-panel><div class=event-card__title><span></span><span class=badge></span></div><div class=event-card__meta></div><div class=feedback-summary></div><div class=summary-grid style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr))"></div><div class=summary-grid data-testid=control-proof-prediction style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr))"></div><div class=summary-grid style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr))">`);
+var _tmpl$6$2 = /*#__PURE__*/ template(`<div class=summary-grid data-testid=control-proof-authorization style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr))">`);
+var _tmpl$7$2 = /*#__PURE__*/ template(`<div class=summary-grid data-testid=control-proof-correction style="grid-template-columns:repeat(auto-fit, minmax(min(100%, 180px), 1fr))">`);
 var record = (value) => value && typeof value === "object" && !Array.isArray(value);
 var text = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
 var strings = (value) => Array.isArray(value) ? value.map(text).filter(Boolean) : [];
