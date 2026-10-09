@@ -474,7 +474,15 @@ impl World {
             | Action::GovernProductProfile { .. }
             | Action::GovernRecipeProfile { .. }
             | Action::GovernFactoryProfile { .. } => {
-                self.action_to_event_economy(action_id, &envelope.action)
+                let mut body = self.action_to_event_economy(action_id, &envelope.action)?;
+                if let WorldEventBody::Domain(DomainEvent::RecipeStarted {
+                    committed_recipe_origin,
+                    ..
+                }) = &mut body
+                {
+                    *committed_recipe_origin = envelope.committed_recipe_origin.clone();
+                }
+                Ok(body)
             }
         }
     }

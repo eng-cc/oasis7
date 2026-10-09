@@ -100,7 +100,7 @@ jobs:
           python3 "$authority/plan-rust-required-scope.py" --base-ref "$BASE_SHA" --head-ref "$SOURCE_SHA" --test-ref "$tested_sha" --github-output "$GITHUB_OUTPUT" --output "$RUNNER_TEMP/selection.json"
           printf 'Base: %s\nSource HEAD: %s\nTested merge: %s\n' "$BASE_SHA" "$SOURCE_SHA" "$tested_sha" >>"$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/selection.json" >>"$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ci-authority
           path: ${{ runner.temp }}/ci-authority
@@ -150,7 +150,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -195,7 +195,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -237,7 +237,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -275,7 +275,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -313,7 +313,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -351,7 +351,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -376,17 +376,6 @@ jobs:
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash ./scripts/ci-tests.sh required --group "net" --repo-root "$GITHUB_WORKSPACE"
-      - name: Verify pinned network source and process compatibility
-        run: |
-          python3 scripts/libp2p-security-source.test.py
-          python3 scripts/libp2p-compat.test.py
-      - name: Verify WASM network and node feature boundaries
-        env:
-          CC_wasm32_unknown_unknown: clang
-          AR_wasm32_unknown_unknown: llvm-ar
-        run: |
-          env -u RUSTC_WRAPPER cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked
-          env -u RUSTC_WRAPPER cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked
 
   viewer-js-required:
     needs: select
@@ -420,7 +409,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -432,6 +421,36 @@ jobs:
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
+      - name: Resolve wasm-bindgen tool cache metadata
+        id: bindgen-meta
+        shell: bash
+        run: |
+          source scripts/wasm-bindgen-cli-common.sh
+          printf 'version=%s\nroot=%s\n' "$WASM_BINDGEN_LOCK_VERSION" "$WASM_BINDGEN_CACHE_ROOT" >> "$GITHUB_OUTPUT"
+      - name: Restore exact wasm-bindgen tool cache
+        id: bindgen-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ steps.bindgen-meta.outputs.root }}
+          key: wasm-bindgen-cli-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ steps.bindgen-meta.outputs.version }}-${{ hashFiles('scripts/ensure-wasm-bindgen-cli.sh', 'scripts/wasm-bindgen-cli-common.sh') }}
+      - name: Prepare exact wasm-bindgen tool directory
+        id: prepare-bindgen
+        shell: bash
+        env:
+          BINDGEN_CACHE_HIT: ${{ steps.bindgen-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          source scripts/wasm-bindgen-cli-common.sh
+          if [[ "$BINDGEN_CACHE_HIT" == true ]]; then
+            bindgen_bin="$WASM_BINDGEN_CACHE_ROOT/bin/wasm-bindgen"
+            test -x "$bindgen_bin"
+            test "$("$bindgen_bin" --version)" = "wasm-bindgen $WASM_BINDGEN_LOCK_VERSION"
+          else
+            bindgen_bin="$(bash scripts/ensure-wasm-bindgen-cli.sh --ensure-cache --print-bin)"
+          fi
+          test -x "$bindgen_bin"
+          test "$("$bindgen_bin" --version)" = "wasm-bindgen $WASM_BINDGEN_LOCK_VERSION"
+          printf 'WASM_BINDGEN_BIN=%s\n' "$bindgen_bin" >> "$GITHUB_ENV"
       - name: Install native libraries
         run: |
           sudo apt-get update
@@ -443,8 +462,6 @@ jobs:
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash ./scripts/ci-tests.sh required --group "viewer_js_required" --repo-root "$GITHUB_WORKSPACE"
-      - name: Verify browser authentication security
-        run: node crates/oasis7_viewer/scripts/viewer-auth-browser-security-smoke.mjs
 
   viewer-performance-report:
     needs: select
@@ -471,7 +488,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -483,6 +500,36 @@ jobs:
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
+      - name: Resolve wasm-bindgen tool cache metadata
+        id: bindgen-meta
+        shell: bash
+        run: |
+          source scripts/wasm-bindgen-cli-common.sh
+          printf 'version=%s\nroot=%s\n' "$WASM_BINDGEN_LOCK_VERSION" "$WASM_BINDGEN_CACHE_ROOT" >> "$GITHUB_OUTPUT"
+      - name: Restore exact wasm-bindgen tool cache
+        id: bindgen-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ steps.bindgen-meta.outputs.root }}
+          key: wasm-bindgen-cli-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ steps.bindgen-meta.outputs.version }}-${{ hashFiles('scripts/ensure-wasm-bindgen-cli.sh', 'scripts/wasm-bindgen-cli-common.sh') }}
+      - name: Prepare exact wasm-bindgen tool directory
+        id: prepare-bindgen
+        shell: bash
+        env:
+          BINDGEN_CACHE_HIT: ${{ steps.bindgen-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          source scripts/wasm-bindgen-cli-common.sh
+          if [[ "$BINDGEN_CACHE_HIT" == true ]]; then
+            bindgen_bin="$WASM_BINDGEN_CACHE_ROOT/bin/wasm-bindgen"
+            test -x "$bindgen_bin"
+            test "$("$bindgen_bin" --version)" = "wasm-bindgen $WASM_BINDGEN_LOCK_VERSION"
+          else
+            bindgen_bin="$(bash scripts/ensure-wasm-bindgen-cli.sh --ensure-cache --print-bin)"
+          fi
+          test -x "$bindgen_bin"
+          test "$("$bindgen_bin" --version)" = "wasm-bindgen $WASM_BINDGEN_LOCK_VERSION"
+          printf 'WASM_BINDGEN_BIN=%s\n' "$bindgen_bin" >> "$GITHUB_ENV"
       - name: Install native libraries
         run: |
           sudo apt-get update
@@ -493,10 +540,6 @@ jobs:
           browser_bin="$RUNNER_TEMP/viewer-performance-browser/node_modules/.bin/agent-browser"
           "$browser_bin" install --with-deps
           printf 'AGENT_BROWSER_BIN=%s\n' "$browser_bin" >> "$GITHUB_ENV"
-      - name: Build performance test artifact
-        run: |
-          viewer_bindgen_bin="$(./scripts/ensure-wasm-bindgen-cli.sh --print-bin)"
-          WASM_BINDGEN_BIN="$viewer_bindgen_bin" npm --prefix crates/oasis7_viewer run build:viewer:visual-test
       - name: Execute selected group
         shell: bash
         env:
@@ -506,7 +549,7 @@ jobs:
         run: bash ./scripts/ci-tests.sh required --group "viewer_performance_report" --repo-root "$GITHUB_WORKSPACE"
       - name: Upload Viewer performance evidence
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: viewer-performance-${{ github.run_id }}-${{ github.run_attempt }}
           path: output/ci/viewer-performance/**
@@ -531,7 +574,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -580,7 +623,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -630,7 +673,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -672,7 +715,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -764,7 +807,7 @@ jobs:
         uses: ./.github/actions/cache-permission-probe
       - name: Restore trusted cache sentinel
         id: trusted-cache-sentinel
-        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/cache-permission-sentinel
           key: oasis7-cache-permission-sentinel-trusted-v2
@@ -903,7 +946,7 @@ jobs:
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
-          rustup toolchain install "$RUST_TOOLCHAIN" --profile default --component rustfmt --component clippy
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustup toolchain install "$OASIS7_WASM_TOOLCHAIN" --profile minimal --component rust-src
           rustup target add "$OASIS7_WASM_TARGET" --toolchain "$OASIS7_WASM_TOOLCHAIN"
@@ -987,6 +1030,12 @@ jobs:
         shell: bash
         run: python scripts/p2p-public-testnet-fleet-health.test.py
 
+      - name: Verify local signer contracts on macOS
+        if: runner.os == 'macOS'
+        env:
+          TMPDIR: /private/tmp
+        run: python3 scripts/ci-local-signer-tests.py --require-darwin
+
       - name: Ensure Linux process inspection dependency
         if: runner.os == 'Linux'
         shell: bash
@@ -1041,7 +1090,7 @@ jobs:
         run: npm ci --prefix crates/oasis7_viewer
       - name: Install pinned Rust toolchains
         run: |
-          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt --component clippy
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rustfmt --component clippy
           rustup default "${RUST_TOOLCHAIN}"
           rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
           rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
@@ -1075,6 +1124,48 @@ jobs:
           add-rust-environment-hash-key: true
           env-vars: CARGO CC CFLAGS CXX CMAKE RUST OASIS7_WASM
           cache-on-failure: true
+      - name: Resolve wasm-bindgen tool cache metadata
+        id: bindgen-meta
+        shell: bash
+        run: |
+          source scripts/wasm-bindgen-cli-common.sh
+          printf 'version=%s\nroot=%s\n' "$WASM_BINDGEN_LOCK_VERSION" "$WASM_BINDGEN_CACHE_ROOT" >> "$GITHUB_OUTPUT"
+      - name: Restore exact wasm-bindgen tool cache
+        id: bindgen-cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ steps.bindgen-meta.outputs.root }}
+          key: wasm-bindgen-cli-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ steps.bindgen-meta.outputs.version }}-${{ hashFiles('scripts/ensure-wasm-bindgen-cli.sh', 'scripts/wasm-bindgen-cli-common.sh') }}
+      - name: Prepare exact wasm-bindgen tool directory
+        id: prepare-bindgen
+        shell: bash
+        env:
+          BINDGEN_CACHE_HIT: ${{ steps.bindgen-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          source scripts/wasm-bindgen-cli-common.sh
+          if [[ "$BINDGEN_CACHE_HIT" == true ]]; then
+            bindgen_bin="$WASM_BINDGEN_CACHE_ROOT/bin/wasm-bindgen"
+            test -x "$bindgen_bin"
+            test "$("$bindgen_bin" --version)" = "wasm-bindgen $WASM_BINDGEN_LOCK_VERSION"
+          else
+            bindgen_bin="$(bash scripts/ensure-wasm-bindgen-cli.sh --ensure-cache --print-bin)"
+          fi
+          test -x "$bindgen_bin"
+          test "$("$bindgen_bin" --version)" = "wasm-bindgen $WASM_BINDGEN_LOCK_VERSION"
+          printf 'WASM_BINDGEN_BIN=%s\n' "$bindgen_bin" >> "$GITHUB_ENV"
+      - name: Save prepared wasm-bindgen tool cache
+        if: >-
+          ${{
+            success() &&
+            github.ref == 'refs/heads/main' &&
+            steps.bindgen-cache.outputs.cache-hit != 'true' &&
+            steps.prepare-bindgen.outcome == 'success'
+          }}
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ steps.bindgen-meta.outputs.root }}
+          key: wasm-bindgen-cli-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ steps.bindgen-meta.outputs.version }}-${{ hashFiles('scripts/ensure-wasm-bindgen-cli.sh', 'scripts/wasm-bindgen-cli-common.sh') }}
       - name: Cache pinned Trunk release archive
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
@@ -1110,7 +1201,7 @@ jobs:
 
       - name: Upload Rust governance report
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rust-governance-report
           path: output/rust-governance
@@ -1127,7 +1218,7 @@ jobs:
 
       - name: Install pinned Rust toolchain
         run: |
-          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal
           rustup default "${RUST_TOOLCHAIN}"
 
       - name: Install system deps
@@ -1158,7 +1249,7 @@ jobs:
             --archive output/newapi-bridge-service-linux-x86_64.tar.gz
 
       - name: Upload NewAPI bridge service artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: newapi-bridge-service-linux-x86_64-${{ github.sha }}
           path: output/newapi-bridge-service-linux-x86_64.tar.gz

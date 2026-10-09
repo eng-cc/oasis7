@@ -847,6 +847,7 @@ fn industrial_integrity_tampered_recipe_completion_fails_before_mutation() {
     let mut replay = world.state().clone();
     let before = serde_json::to_vec(&replay).expect("serialize state before tampered completion");
     let event = DomainEvent::RecipeCompleted {
+        committed_recipe_origin: None,
         job_id: pending.job_id,
         requester_agent_id: pending.requester_agent_id,
         factory_id: pending.factory_id,
@@ -1036,6 +1037,7 @@ fn industrial_integrity_unknown_recipe_completion_fails_before_mutation() {
     let mut replay = world.state().clone();
     let before = serde_json::to_vec(&replay).expect("serialize state before unknown completion");
     let event = DomainEvent::RecipeCompleted {
+        committed_recipe_origin: None,
         job_id: 9_999,
         requester_agent_id: "builder-a".to_string(),
         factory_id: "factory.identity.unknown-completion".to_string(),

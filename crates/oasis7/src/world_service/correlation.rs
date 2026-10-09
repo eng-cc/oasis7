@@ -125,6 +125,7 @@ pub fn encode_consensus_intent(
     encode_consensus_action_payload(&ConsensusActionPayloadEnvelope {
         version: 1,
         auth: None,
+        gameplay_submission_origin: None,
         body: ConsensusActionPayloadBody::RuntimeAction {
             action: crate::runtime::Action::WorldServiceIntent {
                 request: serde_json::to_value(request).map_err(|error| error.to_string())?,

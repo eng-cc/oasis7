@@ -86,7 +86,7 @@ class WindowsGovernedClosureTests(unittest.TestCase):
             json.dumps(bundle), encoding="utf-8"
         )
         (config / "public-testnet-governed-bootstrap-manifest-2026-06-06.json").write_text(
-            json.dumps({"tier": "public_testnet", "runtime_refs": {}}), encoding="utf-8"
+            json.dumps({"schema_version": "oasis7.network_tier_manifest.v1", "tier": "public_testnet", "runtime_refs": {}}), encoding="utf-8"
         )
         (config / "public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt").write_text(
             "/ip4/127.0.0.1/tcp/4100/p2p/test\n", encoding="utf-8"

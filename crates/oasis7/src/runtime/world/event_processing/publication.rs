@@ -178,11 +178,11 @@ impl World {
                 if crate::runtime::state::core_policy_transition::PreparedCorePolicyEvent::supports(event) =>
             {
                 Some(PreparedEventStateDelta::CorePolicy(
-                    crate::runtime::state::core_policy_transition::PreparedCorePolicyEvent::prepare(
+                    Box::new(crate::runtime::state::core_policy_transition::PreparedCorePolicyEvent::prepare(
                         &self.state,
                         event,
                         self.state.time,
-                    )?,
+                    )?),
                 ))
             }
             WorldEventBody::Domain(
@@ -271,7 +271,7 @@ impl World {
                 | CapabilityAuthorizationEvent::BudgetAccountInstalled { .. }
                 | CapabilityAuthorizationEvent::GrantRegistered { .. }),
             ) => Some(PreparedEventStateDelta::CapabilityAuthorization(
-                self.prepare_raw_capability_authorization_event(event)?,
+                Box::new(self.prepare_raw_capability_authorization_event(event)?),
             )),
             WorldEventBody::CapabilityAuthorization(
                 event @ CapabilityAuthorizationEvent::CommandCommitted { .. },
@@ -317,7 +317,7 @@ impl World {
             return self.append_event_internal(
                 body,
                 caused_by,
-                PreparedEventStateDelta::CorePolicy(prepared),
+                PreparedEventStateDelta::CorePolicy(Box::new(prepared)),
             );
         }
         Err(WorldError::ResourceBalanceInvalid {

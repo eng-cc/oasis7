@@ -48,6 +48,7 @@ fn recipe_fixture() -> WorldState {
 
 fn recipe_started(job_id: ActionId, now: WorldTime) -> DomainEvent {
     DomainEvent::RecipeStarted {
+        committed_recipe_origin: None,
         job_id,
         requester_agent_id: AGENT_ID.to_string(),
         factory_id: FACTORY_ID.to_string(),
@@ -71,6 +72,7 @@ fn recipe_started(job_id: ActionId, now: WorldTime) -> DomainEvent {
 
 fn recipe_completed(job_id: ActionId) -> DomainEvent {
     DomainEvent::RecipeCompleted {
+        committed_recipe_origin: None,
         job_id,
         requester_agent_id: AGENT_ID.to_string(),
         factory_id: FACTORY_ID.to_string(),

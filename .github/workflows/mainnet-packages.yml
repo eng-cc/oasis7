@@ -106,7 +106,7 @@ jobs:
           ./scripts/ci-tests.sh full-core | tee .tmp/release_gate_runtime_core/ci-tests-full-core.log
       - name: Upload runtime core gate summary
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-release-gate-runtime-core-summary
           path: .tmp/release_gate_runtime_core
@@ -156,7 +156,7 @@ jobs:
           ./scripts/ci-tests.sh full-support | tee .tmp/release_gate_runtime_support/ci-tests-full-support.log
       - name: Upload runtime support gate summary
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-release-gate-runtime-support-summary
           path: .tmp/release_gate_runtime_support
@@ -218,7 +218,7 @@ jobs:
           } | tee .tmp/release_gate_runtime_sync/runtime-sync-checks.log
       - name: Upload runtime sync gate summary
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-release-gate-runtime-sync-summary
           path: .tmp/release_gate_runtime_sync
@@ -286,7 +286,7 @@ jobs:
             --web-headed
       - name: Upload web gate summary
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-release-gate-web-summary
           path: .tmp/release_gate_web
@@ -345,7 +345,7 @@ jobs:
             --skip-web-strict-reason mainnet-workflow-web-shard-runs-web-strict
       - name: Upload soak gate summary
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-release-gate-soak-summary
           path: |
@@ -439,7 +439,7 @@ jobs:
             env -u NO_COLOR trunk build --release --dist ../../output/mainnet-packages/web-launcher-dist
           )
       - name: Upload web dist artifacts
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-web-dists
           path: |
@@ -447,7 +447,7 @@ jobs:
             output/mainnet-packages/web-launcher-dist
           if-no-files-found: error
       - name: Upload viewer web delivery
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-viewer-web-delivery
           path: output/mainnet-packages/oasis7-viewer-web-delivery.tar.gz
@@ -662,7 +662,7 @@ jobs:
           cp "output/mainnet-packages/assets/oasis7-${{ matrix.platform }}-ops-tools.tar.gz" "${upload_dir}/"
           cp "output/mainnet-packages/assets/${{ matrix.platform }}-ops-tools-SHA256SUMS" "${upload_dir}/"
       - name: Upload mainnet package artifacts
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-package-${{ matrix.platform }}-${{ needs.plan.outputs.version }}
           path: output/mainnet-packages/upload/${{ matrix.platform }}
@@ -716,7 +716,7 @@ jobs:
             oasis7-viewer-web-delivery.tar.gz \
             > oasis7-mainnet-checksums.txt
       - name: Upload aggregate mainnet package index
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mainnet-package-index-${{ needs.plan.outputs.version }}
           path: |

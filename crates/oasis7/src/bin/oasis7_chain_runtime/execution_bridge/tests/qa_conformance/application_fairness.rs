@@ -5,6 +5,7 @@ use std::io::{BufRead, BufReader, Write};
 struct Session {
     reader: BufReader<TcpStream>,
     accepted_probe: TcpStream,
+    normal_send_buffer: Option<i32>,
     worker: Option<thread::JoinHandle<Result<(), oasis7::viewer::ViewerRuntimeLiveServerError>>>,
 }
 impl Session {
@@ -18,8 +19,9 @@ impl Session {
             .set_write_timeout(Some(Duration::from_secs(1)))
             .unwrap();
         let (accepted, _) = listener.accept().unwrap();
+        let normal_send_buffer = small_buffers.then(|| send_buffer(&accepted));
         if small_buffers {
-            set_small_buffers(&accepted, &socket);
+            set_small_send_buffer(&accepted);
         }
         let accepted_probe = accepted.try_clone().unwrap();
         let server = shared.clone();
@@ -29,6 +31,7 @@ impl Session {
         Self {
             reader: BufReader::new(socket),
             accepted_probe,
+            normal_send_buffer,
             worker: Some(worker),
         }
     }
@@ -125,10 +128,17 @@ impl Session {
         expected_snapshots: usize,
         budget: Duration,
     ) -> (bool, usize, bool) {
+        // Pressure and primed-observer proofs are already complete. Restore
+        // the original send buffer after pressure release. The client receive
+        // window stays at its normal size throughout this real nonreader test.
+        if let Some(size) = self.normal_send_buffer.take() {
+            restore_send_buffer(&self.accepted_probe, size);
+        }
         self.send(serde_json::json!({"type":"hello_v2","client":"PRE2 pressure drain sentinel","version":2,"capabilities":[]}));
         let deadline = Instant::now() + budget;
         let mut snapshots = 0;
         let mut hello_ack_seen = false;
+        let mut line = String::new();
         while Instant::now() < deadline {
             self.reader
                 .get_mut()
@@ -139,10 +149,12 @@ impl Session {
                         .max(Duration::from_millis(1)),
                 ))
                 .unwrap();
-            let mut line = String::new();
             match self.reader.read_line(&mut line) {
                 Ok(0) => return (false, snapshots, hello_ack_seen),
                 Ok(_) => {
+                    if !line.ends_with('\n') {
+                        continue;
+                    }
                     if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                         if value["type"] == "snapshot" {
                             snapshots += 1;
@@ -154,6 +166,7 @@ impl Session {
                             return (true, snapshots, hello_ack_seen);
                         }
                     }
+                    line.clear();
                 }
                 Err(error)
                     if matches!(
@@ -397,7 +410,7 @@ pub(crate) fn verify_periodic_view_gate(client: &RemoteWorldServiceClient) {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn set_small_buffers(accepted: &TcpStream, socket: &TcpStream) {
+fn set_small_send_buffer(accepted: &TcpStream) {
     use std::os::fd::AsRawFd;
     unsafe extern "C" {
         fn setsockopt(
@@ -409,29 +422,98 @@ fn set_small_buffers(accepted: &TcpStream, socket: &TcpStream) {
         ) -> i32;
     }
     #[cfg(target_os = "macos")]
-    let (level, send, receive) = (0xffff, 0x1001, 0x1002);
+    let (level, send) = (0xffff, 0x1001);
     #[cfg(target_os = "linux")]
-    let (level, send, receive) = (1, 7, 8);
-    for (stream, option) in [(accepted, send), (socket, receive)] {
-        let value = 1024i32;
-        assert_eq!(
-            unsafe {
-                setsockopt(
-                    stream.as_raw_fd(),
-                    level,
-                    option,
-                    (&value as *const i32).cast(),
-                    4,
-                )
-            },
-            0,
-            "set actual small TCP buffers"
-        );
-    }
+    let (level, send) = (1, 7);
+    let value = 1024i32;
+    assert_eq!(
+        unsafe {
+            setsockopt(
+                accepted.as_raw_fd(),
+                level,
+                send,
+                (&value as *const i32).cast(),
+                4,
+            )
+        },
+        0,
+        "set actual small TCP send buffer"
+    );
 }
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn send_buffer(socket: &TcpStream) -> i32 {
+    use std::os::fd::AsRawFd;
+    unsafe extern "C" {
+        fn getsockopt(
+            fd: i32,
+            level: i32,
+            name: i32,
+            value: *mut std::ffi::c_void,
+            len: *mut u32,
+        ) -> i32;
+    }
+    #[cfg(target_os = "macos")]
+    let (level, option) = (0xffff, 0x1001);
+    #[cfg(target_os = "linux")]
+    let (level, option) = (1, 7);
+    let mut size = 0i32;
+    let mut len = 4u32;
+    assert_eq!(
+        unsafe {
+            getsockopt(
+                socket.as_raw_fd(),
+                level,
+                option,
+                (&mut size as *mut i32).cast(),
+                &mut len,
+            )
+        },
+        0
+    );
+    assert_eq!(len, 4);
+    assert!(size > 0);
+    size
+}
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn restore_send_buffer(socket: &TcpStream, size: i32) {
+    use std::os::fd::AsRawFd;
+    unsafe extern "C" {
+        fn setsockopt(
+            fd: i32,
+            level: i32,
+            name: i32,
+            value: *const std::ffi::c_void,
+            len: u32,
+        ) -> i32;
+    }
+    #[cfg(target_os = "macos")]
+    let (level, option, size) = (0xffff, 0x1001, size);
+    // Linux getsockopt reports twice the setsockopt requested buffer.
+    #[cfg(target_os = "linux")]
+    let (level, option, size) = (1, 7, size / 2);
+    assert_eq!(
+        unsafe {
+            setsockopt(
+                socket.as_raw_fd(),
+                level,
+                option,
+                (&size as *const i32).cast(),
+                4,
+            )
+        },
+        0
+    );
+}
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-fn set_small_buffers(_: &TcpStream, _: &TcpStream) {
+fn send_buffer(_: &TcpStream) -> i32 {
+    0
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn restore_send_buffer(_: &TcpStream, _: i32) {}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn set_small_send_buffer(_: &TcpStream) {
     panic!("actual kernel queue pressure probe unsupported on this target");
 }
 

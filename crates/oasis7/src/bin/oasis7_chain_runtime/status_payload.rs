@@ -45,7 +45,6 @@ pub(super) use status_payload_network_head::{
     ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus, applied_slashing_receipt_hashes,
     build_network_head_status, pending_slashing_intent_count, readiness_policy,
 };
-use status_payload_network_tier::ChainNetworkTierStatus;
 #[cfg(test)]
 pub(super) use status_payload_publication::publication_lifecycle_rejection_reason;
 use status_payload_publication::{
@@ -693,6 +692,15 @@ fn build_chain_node_observability_status_with_transactions(
             format!("reward runtime degraded: {reason}"),
         );
     }
+    if network_head.source == "authority_activation_planned" {
+        push_observability_alert(
+            &mut alerts,
+            "critical",
+            "authority_activation_planned",
+            "manifest policy is planned and unsupported; prototype readiness cannot activate it"
+                .into(),
+        );
+    }
     let runtime_perf_observability =
         build_runtime_perf_observability_status(runtime_perf, &mut alerts);
 
@@ -1027,29 +1035,8 @@ pub(super) fn build_chain_status_payload_with_storage_root_and_authority(
         worker_poll_count: snapshot.tick_count,
         tick_count: snapshot.tick_count,
         last_tick_unix_ms: snapshot.last_tick_unix_ms,
-        network_tier: loaded_network_tier_manifest.map(|loaded| ChainNetworkTierStatus {
-            source_path: loaded.source_path.clone(),
-            schema_version: loaded.manifest.schema_version.clone(),
-            tier: loaded.manifest.tier.clone(),
-            status: loaded.manifest.status.clone(),
-            network_id: loaded.manifest.network_id.clone(),
-            chain_id: loaded.manifest.chain_id.clone(),
-            bootstrap_peer_count: loaded.bootstrap_peers.len(),
-            governance_mode: loaded.manifest.validator_policy.governance_mode.clone(),
-            validator_admission: loaded.manifest.validator_policy.validator_admission.clone(),
-            target_validator_count: loaded.manifest.validator_policy.target_validator_count,
-            allow_observer_nodes: loaded.manifest.validator_policy.allow_observer_nodes,
-            token_symbol: loaded.manifest.token_policy.symbol.clone(),
-            faucet_mode: loaded.manifest.token_policy.faucet_mode.clone(),
-            reset_policy: loaded.manifest.token_policy.reset_policy.clone(),
-            value_semantics: loaded.manifest.token_policy.value_semantics.clone(),
-            rpc_ref: loaded.manifest.endpoint_policy.rpc_ref.clone(),
-            explorer_ref: loaded.manifest.endpoint_policy.explorer_ref.clone(),
-            faucet_ref: loaded.manifest.endpoint_policy.faucet_ref.clone(),
-            required_gates: loaded.manifest.promotion_policy.required_gates.clone(),
-            allowed_claims: loaded.manifest.claims_policy.allowed_claims.clone(),
-            denied_claims: loaded.manifest.claims_policy.denied_claims.clone(),
-        }),
+        network_tier: loaded_network_tier_manifest
+            .map(status_payload_network_tier::build_network_tier_status),
         world_resource,
         consensus: ChainConsensusStatus {
             slot: snapshot.consensus.slot,

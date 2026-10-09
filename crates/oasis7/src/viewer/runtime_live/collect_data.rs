@@ -71,12 +71,14 @@ impl ViewerRuntimeLiveServer {
                     action_id: Some("collect_data".into()),
                     target_agent_id: None,
                 })?;
-            let runtime_action_id = self.submit_world_service_gameplay(&command)?;
+            let (runtime_action_id, consensus_action_payload_hash) =
+                self.submit_world_service_gameplay(&command)?;
             if runtime_action_id != 0 {
                 self.runtime_action_players
                     .insert(runtime_action_id, verified.player_id.clone());
             }
             return Ok(CollectDataResult::Submit(GameplayActionAck {
+                consensus_action_payload_hash,
                 action_id: "collect_data".into(),
                 target_agent_id: self
                     .llm_sidecar
@@ -128,12 +130,14 @@ impl ViewerRuntimeLiveServer {
                     });
                 }
                 if self.config.world_service.is_some() {
-                    let runtime_action_id = self.submit_world_service_gameplay(&command)?;
+                    let (runtime_action_id, consensus_action_payload_hash) =
+                        self.submit_world_service_gameplay(&command)?;
                     if runtime_action_id != 0 {
                         self.runtime_action_players
                             .insert(runtime_action_id, verified.player_id.clone());
                     }
                     return Ok(CollectDataResult::Submit(GameplayActionAck {
+                        consensus_action_payload_hash,
                         action_id: "collect_data".into(),
                         target_agent_id: collector_agent_id,
                         player_id: verified.player_id,
@@ -167,6 +171,7 @@ impl ViewerRuntimeLiveServer {
                     self.runtime_action_players
                         .insert(runtime_action_id, verified.player_id.clone());
                     return Ok(CollectDataResult::Submit(GameplayActionAck {
+                        consensus_action_payload_hash: submitted.consensus_action_payload_hash,
                         action_id: "collect_data".to_string(),
                         target_agent_id: collector_agent_id,
                         player_id: verified.player_id,
@@ -186,6 +191,7 @@ impl ViewerRuntimeLiveServer {
                 self.runtime_action_players
                     .insert(runtime_action_id, verified.player_id.clone());
                 Ok(CollectDataResult::Submit(GameplayActionAck {
+                    consensus_action_payload_hash: None,
                     action_id: "collect_data".to_string(),
                     target_agent_id: collector_agent_id,
                     player_id: verified.player_id,

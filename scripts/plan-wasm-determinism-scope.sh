@@ -1,22 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$repo_root"
-
-event_name=""
-base_ref=""
-head_ref=""
-github_output_path=""
-
-declare -a changed_paths=()
-declare -a reasons=()
-
-run_all=0
-run_m1=0
-run_m4=0
-run_m5=0
-
 usage() {
   cat <<'USAGE'
 Usage:
@@ -77,7 +59,7 @@ csv_join() {
 }
 
 resolve_changed_paths_from_git() {
-  local diff_base=""
+  local diff_base="" diff_paths_file
 
   if [[ -z "$head_ref" ]]; then
     head_ref="HEAD"
@@ -105,7 +87,7 @@ resolve_changed_paths_from_git() {
 
   case "$event_name" in
     pull_request)
-      diff_base="$(git merge-base "$base_ref" "$head_ref")"
+      diff_base="$(git merge-base "$base_ref" "$head_ref")" || { mark_all "missing_diff_base"; return 0; }
       ;;
     *)
       diff_base="$base_ref"
@@ -117,10 +99,17 @@ resolve_changed_paths_from_git() {
     return 0
   fi
 
+  diff_paths_file="$(mktemp)" || return 1
+  if ! git diff --name-only -z "$diff_base" "$head_ref" -- > "$diff_paths_file"; then
+    rm -f "$diff_paths_file"
+    echo "error: unable to enumerate changed paths" >&2
+    return 1
+  fi
   while IFS= read -r -d '' path; do
     [[ -n "$path" ]] || continue
     changed_paths+=("$path")
-  done < <(git diff --name-only -z "$diff_base" "$head_ref" --)
+  done < "$diff_paths_file"
+  rm -f "$diff_paths_file"
 }
 
 classify_changed_path() {
@@ -175,6 +164,71 @@ classify_changed_path() {
   esac
 }
 
+module_sets_json() {
+  local result="[" separator="" module
+  for module in "$@"; do
+    [[ -n "$module" ]] || continue
+    result+="${separator}\"${module}\""
+    separator=,
+  done
+  printf '%s]\n' "$result"
+}
+
+validate_plan() {
+  local flag expected_csv expected_json
+  local -a expected=()
+  for flag in "$run_all" "$run_m1" "$run_m4" "$run_m5"; do
+    [[ "$flag" == 0 || "$flag" == 1 ]] || { echo "error: invalid plan flag" >&2; return 1; }
+  done
+  [[ "$run_m1" == 1 ]] && expected+=(m1)
+  [[ "$run_m4" == 1 ]] && expected+=(m4)
+  [[ "$run_m5" == 1 ]] && expected+=(m5)
+  expected_csv="$(csv_join "${expected[@]-}")"
+  expected_json="$(module_sets_json "${expected[@]-}")"
+  [[ ${#selected[@]} == ${#expected[@]} &&
+     "$(csv_join "${selected[@]-}")" == "$expected_csv" &&
+     "$selected_module_sets" == "$expected_csv" &&
+     "$selected_module_sets_json" == "$expected_json" ]] || {
+    echo "error: inconsistent selected module sets" >&2; return 1;
+  }
+  case "$scope" in
+    skip) [[ "$run_all" == 0 && ${#expected[@]} == 0 ]] ;;
+    all) [[ "$run_all" == 1 && ${#expected[@]} == 3 ]] ;;
+    partial) [[ "$run_all" == 0 && ${#expected[@]} -gt 0 ]] ;;
+    *) echo "error: invalid plan scope" >&2; return 1 ;;
+  esac || { echo "error: inconsistent plan scope" >&2; return 1; }
+}
+
+emit_plan() {
+  validate_plan || return 1
+  local output
+  output="$(
+    printf 'scope=%s\n' "$scope"
+    printf 'run_all=%s\n' "$([[ "$run_all" == 1 ]] && echo true || echo false)"
+    printf 'run_m1=%s\n' "$([[ "$run_m1" == 1 ]] && echo true || echo false)"
+    printf 'run_m4=%s\n' "$([[ "$run_m4" == 1 ]] && echo true || echo false)"
+    printf 'run_m5=%s\n' "$([[ "$run_m5" == 1 ]] && echo true || echo false)"
+    printf 'selected_module_sets=%s\n' "$selected_module_sets"
+    printf 'selected_module_sets_json=%s\n' "$selected_module_sets_json"
+    printf 'reason_summary=%s\n' "$reason_summary"
+    printf 'changed_path_count=%s\n' "${#changed_paths[@]}"
+    printf 'changed_paths=%s\n' "$changed_paths_summary"
+  )"
+  if [[ -n "$github_output_path" ]]; then
+    printf '%s\n' "$output" >> "$github_output_path" || return 1
+  fi
+  printf '%s\n' "$output"
+}
+
+main() {
+  set -euo pipefail
+  local repo_root
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  cd "$repo_root"
+  local event_name="" base_ref="" head_ref="" github_output_path=""
+  local -a changed_paths=() reasons=() selected=()
+  local run_all=0 run_m1=0 run_m4=0 run_m5=0
+  local scope selected_module_sets selected_module_sets_json reason_summary changed_paths_summary path
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --event-name)
@@ -229,49 +283,22 @@ for path in "${changed_paths[@]-}"; do
 done
 
 scope="skip"
-selected_module_sets=""
-if [[ "$run_all" -eq 1 ]]; then
-  scope="all"
-  selected_module_sets="m1,m4,m5"
-elif [[ "$run_m1" -eq 1 || "$run_m4" -eq 1 || "$run_m5" -eq 1 ]]; then
-  scope="partial"
-  selected=()
-  [[ "$run_m1" -eq 1 ]] && selected+=("m1")
-  [[ "$run_m4" -eq 1 ]] && selected+=("m4")
-  [[ "$run_m5" -eq 1 ]] && selected+=("m5")
-  selected_module_sets="$(csv_join "${selected[@]}")"
+[[ "$run_all" == 1 ]] && scope="all"
+if [[ "$run_m1" == 1 || "$run_m4" == 1 || "$run_m5" == 1 ]]; then
+  [[ "$scope" == all ]] || scope="partial"
+  [[ "$run_m1" == 1 ]] && selected+=(m1)
+  [[ "$run_m4" == 1 ]] && selected+=(m4)
+  [[ "$run_m5" == 1 ]] && selected+=(m5)
 else
   append_reason "no_builtin_wasm_inputs_changed"
 fi
-
+selected_module_sets="$(csv_join "${selected[@]-}")"
+selected_module_sets_json="$(module_sets_json "${selected[@]-}")"
 reason_summary="$(printf '%s\n' "${reasons[@]-}" | paste -sd ';' -)"
 changed_paths_summary="$(printf '%s\n' "${changed_paths[@]-}" | paste -sd ';' -)"
-
-emit_output() {
-  local dest="$1"
-  {
-    echo "scope=$scope"
-    echo "run_all=$([[ "$run_all" -eq 1 ]] && echo true || echo false)"
-    echo "run_m1=$([[ "$run_m1" -eq 1 ]] && echo true || echo false)"
-    echo "run_m4=$([[ "$run_m4" -eq 1 ]] && echo true || echo false)"
-    echo "run_m5=$([[ "$run_m5" -eq 1 ]] && echo true || echo false)"
-    echo "selected_module_sets=$selected_module_sets"
-    echo "reason_summary=$reason_summary"
-    echo "changed_path_count=${#changed_paths[@]}"
-    echo "changed_paths=$changed_paths_summary"
-  } >> "$dest"
+emit_plan
 }
 
-if [[ -n "$github_output_path" ]]; then
-  emit_output "$github_output_path"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
 fi
-
-echo "scope=$scope"
-echo "run_all=$([[ "$run_all" -eq 1 ]] && echo true || echo false)"
-echo "run_m1=$([[ "$run_m1" -eq 1 ]] && echo true || echo false)"
-echo "run_m4=$([[ "$run_m4" -eq 1 ]] && echo true || echo false)"
-echo "run_m5=$([[ "$run_m5" -eq 1 ]] && echo true || echo false)"
-echo "selected_module_sets=$selected_module_sets"
-echo "reason_summary=$reason_summary"
-echo "changed_path_count=${#changed_paths[@]}"
-echo "changed_paths=$changed_paths_summary"

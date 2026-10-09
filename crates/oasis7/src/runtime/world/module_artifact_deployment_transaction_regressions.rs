@@ -7,7 +7,11 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn dispatch(world: &mut World, action: Action) -> Result<bool, WorldError> {
-    world.try_apply_runtime_module_action(&ActionEnvelope { id: 990, action })
+    world.try_apply_runtime_module_action(&ActionEnvelope {
+        committed_recipe_origin: None,
+        id: 990,
+        action,
+    })
 }
 
 fn register_agent(world: &mut World, id: &str) {

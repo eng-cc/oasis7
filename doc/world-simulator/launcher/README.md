@@ -14,6 +14,7 @@
 - 想精确找某份 launcher 专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
+- Viewer 的默认可信 WS 目标来自 `--web-bind`，会话注册与 Runtime 在线探测仍使用独立的 `--live-bind`。
 - Viewer 认证连接使用 launcher 注入的固定部署模式与 WS 目标；公开反代须配置 `OASIS7_VIEWER_PUBLIC_WS_URL` 的实际 WSS 地址，URL 的 `ws`/`addr` 参数只能匹配该目标。操作步骤见 [`hosted-player-access-operator-runbook.md`](../../p2p/blockchain/hosted-player-access-operator-runbook.md)。
 - 当前页只承担 `launcher/` 子目录 landing page 职责，不复制完整长表。
 - `../README.md` 是 world-simulator 模块级 landing page，负责跨 `viewer / launcher / llm / kernel / scenario / m4` 分流。

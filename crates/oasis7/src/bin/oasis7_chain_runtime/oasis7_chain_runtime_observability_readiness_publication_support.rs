@@ -9,6 +9,9 @@ pub(super) fn publication_test_manifest(
     LoadedNetworkTierManifest {
         source_path: format!("test-{tier}-manifest.json"),
         manifest: NetworkTierManifest {
+            release_policy: None,
+            world_policy: None,
+            authority_policy: None,
             schema_version: NETWORK_TIER_MANIFEST_SCHEMA_V1.to_string(),
             tier: tier.to_string(),
             status: "live".to_string(),
@@ -33,7 +36,7 @@ pub(super) fn publication_test_manifest(
             token_policy: NetworkTierTokenPolicy {
                 symbol: "OC".to_string(),
                 faucet_mode: "disabled".to_string(),
-                reset_policy: "never".to_string(),
+                reset_policy: Some("never".to_string()),
                 value_semantics: "test_only".to_string(),
             },
             claims_policy: NetworkTierClaimsPolicy {

@@ -1,5 +1,5 @@
 use oasis7::consensus_action_payload::{
-    ConsensusActionPayloadBody, decode_consensus_action_payload,
+    ConsensusActionPayloadBody, decode_consensus_action_payload_envelope,
 };
 use oasis7::runtime::Action as RuntimeAction;
 use oasis7::runtime::ProviderBackedBootstrapAuthorityV1;
@@ -17,7 +17,10 @@ pub(super) fn decode_committed_actions(
     context: &NodeExecutionCommitContext,
 ) -> Result<
     (
-        Vec<RuntimeAction>,
+        Vec<(
+            RuntimeAction,
+            Option<oasis7::runtime::CommittedRecipeOrigin>,
+        )>,
         Vec<(SimulatorAction, ActionSubmitter)>,
         Option<Vec<ProviderBackedBootstrapAuthorityV1>>,
         Vec<(
@@ -70,23 +73,35 @@ pub(super) fn decode_committed_actions(
             );
             continue;
         }
-        match decode_consensus_action_payload(action.payload_cbor.as_slice()) {
-            Ok(ConsensusActionPayloadBody::WorldServiceIntent { request }) => {
-                service_intents.push((action.action_id, request));
-            }
-            Ok(ConsensusActionPayloadBody::RuntimeAction { action: decoded }) => {
-                if let RuntimeAction::WorldServiceIntent { request } = decoded {
-                    let request = serde_json::from_value(request).map_err(|error| {
-                        format!("invalid registered world-service intent: {error}")
-                    })?;
+        match decode_consensus_action_payload_envelope(action.payload_cbor.as_slice()) {
+            Ok(envelope) => match envelope.body {
+                ConsensusActionPayloadBody::WorldServiceIntent { request } => {
                     service_intents.push((action.action_id, request));
-                } else {
-                    decoded_runtime_actions.push(decoded);
                 }
-            }
-            Ok(ConsensusActionPayloadBody::SimulatorAction { action, submitter }) => {
-                decoded_simulator_actions.push((action, submitter));
-            }
+                ConsensusActionPayloadBody::RuntimeAction { action: decoded } => {
+                    if let RuntimeAction::WorldServiceIntent { request } = decoded {
+                        let request = serde_json::from_value(request).map_err(|error| {
+                            format!("invalid registered world-service intent: {error}")
+                        })?;
+                        service_intents.push((action.action_id, request));
+                    } else {
+                        let origin = envelope.gameplay_submission_origin.map(|submission| {
+                            oasis7::runtime::CommittedRecipeOrigin {
+                                submission,
+                                consensus_action_id: action.action_id,
+                                consensus_submitter_player_id: action.submitter_player_id.clone(),
+                                action_payload_hash: action.payload_hash.clone(),
+                                committed_height: context.height,
+                                action_root: context.action_root.clone(),
+                            }
+                        });
+                        decoded_runtime_actions.push((decoded, origin));
+                    }
+                }
+                ConsensusActionPayloadBody::SimulatorAction { action, submitter } => {
+                    decoded_simulator_actions.push((action, submitter));
+                }
+            },
             Err(err) => {
                 return Err(format!(
                     "execution driver decode committed action failed action_id={} err={}",

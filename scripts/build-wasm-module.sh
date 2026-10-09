@@ -181,6 +181,8 @@ enforce_deterministic_build_inputs() {
 }
 
 prepare_container_build_std() {
+  # Select the canonical toolchain before rustup resolves the workspace override.
+  export RUSTUP_TOOLCHAIN="$WASM_TOOLCHAIN"
   if ! command -v rustup >/dev/null 2>&1; then
     echo "error: containerized wasm build requires rustup in PATH" >&2
     exit 1
@@ -194,7 +196,6 @@ prepare_container_build_std() {
     exit 1
   fi
 
-  export RUSTUP_TOOLCHAIN="$WASM_TOOLCHAIN"
   set_wasm_env "BUILD_STD" "1"
   set_wasm_env "BUILD_STD_COMPONENTS" "$WASM_BUILD_STD_COMPONENTS"
   set_wasm_env "BUILD_STD_FEATURES" "$WASM_BUILD_STD_FEATURES"

@@ -461,7 +461,7 @@ impl World {
                 "snapshot state root mismatch".into(),
             ));
         }
-        decode_budget::cbor(&assembled.bytes, reader.limits)?;
+        decode_budget::snapshot_cbor(&assembled.bytes, reader.limits)?;
         let mut snapshot: Snapshot = serde_cbor::from_slice(&assembled.bytes)
             .map_err(|error| ObserverLoadError::IntegrityFailure(error.to_string()))?;
         drop(assembled);
@@ -641,6 +641,21 @@ mod tests {
             World::load_observer_from_dir(&root, limits),
             Err(ObserverLoadError::ResourceLimited)
         ));
+        assert_eq!(tree(&root), before);
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn observer_loads_large_artifact_byte_sequence_without_source_writes() {
+        let root = temp_root();
+        let mut world = World::new();
+        let bytes = vec![42; 203_153];
+        let hash = crate::runtime::util::sha256_hex(&bytes);
+        world.module_artifact_bytes.insert(hash, bytes.into());
+        world.save_to_dir(&root).unwrap();
+        let before = tree(&root);
+        let restored = World::load_observer_from_dir(&root, ObserverReadLimits::default()).unwrap();
+        assert_eq!(restored.module_artifact_bytes, world.module_artifact_bytes);
+        assert!(restored.persistence_dir.borrow().is_none());
         assert_eq!(tree(&root), before);
         fs::remove_dir_all(root).unwrap();
     }

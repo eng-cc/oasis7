@@ -161,5 +161,62 @@ class Selection(unittest.TestCase):
                 self.base = head
 
 
+    def test_local_signer_precise_consumers(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        common = {'baseline', 'packaging_contracts', 'macos_package_contract', 'fleet_health'}
+        cases = {
+            'scripts/local-signer/tests/test_future.py': common,
+            'doc/p2p/blockchain/local-file-signing-backend.runbook.md': common,
+            **{'scripts/local-signer/' + name: common | {'workspace_support'}
+               for name in ['installer.py', 'macos_host.py', 'install-release.py', 'package-release.py']},
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                self.write(path, 'fixture')
+                head = self.commit()
+                plan = selector.select(config, self.base, head)
+                self.assertEqual(set(plan['groups']), expected)
+                self.assertEqual(plan['scope'], 'targeted')
+                self.base = head
+        self.write('scripts/local-signer/new-production.py', 'fixture')
+        self.assertEqual(selector.select(config, self.base, self.commit())['scope'], 'full')
+
+    def test_local_signer_deletion_and_rename(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        self.write('scripts/local-signer/installer.py', 'unique production fixture')
+        self.base = self.commit()
+        Path('scripts/local-signer/tests').mkdir()
+        self.git('mv', 'scripts/local-signer/installer.py', 'scripts/local-signer/tests/test_moved.py')
+        head = self.commit()
+        self.assertEqual(set(selector.select(config, self.base, head)['groups']),
+                         {'baseline', 'packaging_contracts', 'macos_package_contract', 'fleet_health', 'workspace_support'})
+        self.base = head
+        Path('scripts/local-signer/tests/test_moved.py').unlink()
+        self.assertEqual(set(selector.select(config, self.base, self.commit())['groups']),
+                         {'baseline', 'packaging_contracts', 'macos_package_contract', 'fleet_health'})
+
+    def test_local_signer_crate_keeps_reverse_consumers(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        self.write('crates/oasis7_local_signer/Cargo.toml', '[package]\nname="oasis7_local_signer"\nversion="0.1.0"\n')
+        self.write('crates/oasis7_local_signer/src/lib.rs', '')
+        self.write('crates/consumer/Cargo.toml', '[package]\nname="consumer"\nversion="0.1.0"\n[dependencies]\noasis7_local_signer={path="../oasis7_local_signer"}\n')
+        config['package_groups']['consumer'] = ['node']
+        self.base = self.commit()
+        self.write('crates/oasis7_local_signer/src/lib.rs', '// changed')
+        plan = selector.select(config, self.base, self.commit())
+        self.assertEqual(plan['scope'], 'targeted')
+        self.assertTrue({'workspace_support', 'node', 'rust_baseline', 'packaging_contracts',
+                         'macos_package_contract', 'fleet_health'}.issubset(plan['groups']))
+
+    def test_local_signer_combination_and_security_overlay(self):
+        config = json.loads((HERE / 'ci-required-scope.json').read_text())
+        for path in ['scripts/local-signer/installer.py', 'scripts/local-signer/tests/test_fixture.py',
+                     'doc/p2p/blockchain/local-file-signing-backend.runbook.md', 'scripts/security/fixture.py']:
+            self.write(path, 'fixture')
+        self.assertEqual(set(selector.select(config, self.base, self.commit())['groups']),
+                         {'baseline', 'packaging_contracts', 'macos_package_contract', 'fleet_health',
+                          'workspace_support', 'workflow_governance'})
+
+
 if __name__ == '__main__':
     unittest.main()
