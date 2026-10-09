@@ -58,20 +58,26 @@ pub(super) fn verify_metadata_responsiveness(client: &RemoteWorldServiceClient) 
         let began = Instant::now();
         let deadline = began + Duration::from_millis(150);
         let mut snapshot = false;
+        let mut line = String::new();
+        let mut frames = Vec::new();
         while Instant::now() < deadline {
             let remaining = deadline
                 .saturating_duration_since(Instant::now())
                 .max(Duration::from_millis(1));
             reader.get_mut().set_read_timeout(Some(remaining)).unwrap();
-            let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => break,
                 Ok(_) => {
+                    if !line.ends_with('\n') {
+                        continue;
+                    }
                     let value: serde_json::Value = serde_json::from_str(&line).unwrap();
+                    frames.push(serde_json::json!({"type":value["type"],"bytes":line.len(),"elapsed_us":began.elapsed().as_micros()}));
                     if value["type"] == "snapshot" {
-                        snapshot = true;
+                        snapshot = Instant::now() < deadline;
                         break;
                     }
+                    line.clear();
                 }
                 Err(e)
                     if matches!(
@@ -91,20 +97,27 @@ pub(super) fn verify_metadata_responsiveness(client: &RemoteWorldServiceClient) 
         let _ = reader.get_mut().shutdown(std::net::Shutdown::Both);
         secondary_workers.push(second_worker);
         println!(
+            "hosted_metadata_frames kind={kind} frames={frames:?} partial_bytes={}",
+            line.len()
+        );
+        println!(
             "hosted_metadata_concurrency kind={kind} parsed_request={started} snapshot_before_release={snapshot} gate_held={still_held} elapsed_ms={} read_budget_ms=150 test_gate_deadline_ms=2000 worker_join_deferred=true",
             elapsed.as_millis()
         );
         observations.push((kind, started, snapshot && still_held));
     }
     let _ = first.shutdown(std::net::Shutdown::Both);
-    let joined = worker.join().is_ok();
+    let joined = worker.join();
     assert!(
         secondary_workers
             .into_iter()
-            .all(|worker| worker.join().is_ok()),
+            .all(|worker| matches!(worker.join(), Ok(Ok(())))),
         "secondary serving worker panicked"
     );
-    assert!(joined, "primary serving worker panicked");
+    assert!(
+        matches!(joined, Ok(Ok(()))),
+        "primary serving worker failed: {joined:?}"
+    );
     assert!(
         observations
             .iter()

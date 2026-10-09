@@ -13,6 +13,121 @@ pub(in crate::viewer::runtime_live) struct HostedAdmission {
     lease: Option<crate::runtime::CognitionLeaseV1>,
 }
 impl RuntimeLlmSidecar {
+    /// A canonical rejection of an exact Reserve is pre-effect. Retire only
+    /// this prepared turn; never repair its signature or reuse its correlation.
+    fn retire_rejected_reserve(&mut self, response: &IntentResponse<Value>) -> Result<(), String> {
+        use crate::world_service::wire::{SchedulerOperationV1, WorldServicePayloadV1};
+        let admission = self
+            .hosted_admission
+            .clone()
+            .ok_or("rejected Reserve admission missing")?;
+        let request = &admission.context.request_context;
+        let agent = request.agent_subject.as_str();
+        request.validate().map_err(|error| error.to_string())?;
+        Self::validate_resumed_turn_identity(&admission.context)?;
+        if admission.context.turn_context.agent_id != request.agent_subject
+            || admission.context.turn_context.agent_session_id != request.agent_session_id
+            || request.continuation_digest
+                != crate::simulator::h_v1(
+                    "oasis7.cognition.continuation.v1",
+                    &serde_json::Value::Null,
+                )
+        {
+            return Err(
+                "rejected Reserve is not an authenticated fresh turn; original retained".into(),
+            );
+        }
+        if admission.stage != "reserve"
+            || admission.context.turn_context.continuation.is_some()
+            || admission.lease.is_some()
+            || admission.commit.is_some()
+            || self.provider_active_turns.contains_key(agent)
+            || self.provider_recovery_pending.contains_key(agent)
+            || self.provider_held_decisions.contains_key(agent)
+            || self.provider_cognition_leases.contains_key(agent)
+            || !self.provider_service_pending.is_empty()
+        {
+            return Err("rejected Reserve is not proven pre-effect; original retained".into());
+        }
+        if self.provider_lineage_store.is_none() {
+            return Err("rejected Reserve retirement requires durable private lineage".into());
+        }
+        let id = format!("{}:reserve", request.provider_invocation_key());
+        let pending = self
+            .provider_scheduler_pending
+            .get(&id)
+            .ok_or("rejected Reserve original checkpoint missing")?;
+        let config = self
+            .provider_service_config
+            .as_ref()
+            .ok_or("rejected Reserve configuration missing")?;
+        Self::validate_scheduler_checkpoint_integrity(&config.expected_world, &id, pending)?;
+        response
+            .validate(&pending.correlation)
+            .map_err(|error| error.to_string())?;
+        let IntentOutcome::Rejected { reason } = &response.outcome else {
+            return Err("Reserve retirement requires authenticated canonical Rejected".into());
+        };
+        let WorldServicePayloadV1::Scheduler(signed) = &pending.payload else {
+            unreachable!()
+        };
+        let SchedulerOperationV1::ReserveLease(lease) = &signed.request.operation else {
+            return Err("rejected Reserve original operation mismatch".into());
+        };
+        let signer = self
+            .provider_service_signer
+            .as_ref()
+            .ok_or("rejected Reserve Agent signer missing")?;
+        let public =
+            crate::world_service::sign_read_request("signer", (), &signer.private_key_hex)?
+                .subject_public_key;
+        if signed.subject_public_key != public
+            || signed.request.delegation_generation != signer.delegation_generation
+            || signed.request.agent_id != agent
+            || lease.agent_id != agent
+            || lease.agent_session_id != request.agent_session_id
+            || lease.agent_turn_id != request.agent_turn_id
+            || lease.decision_request_id != request.decision_request_id
+            || lease.request_digest != request.request_digest.to_string()
+            || self.provider_scheduler_pending.keys().any(|key| {
+                key.starts_with(&format!("{}:", request.provider_invocation_key())) && key != &id
+            })
+        {
+            return Err("rejected Reserve original identity or effects conflict".into());
+        }
+        let old_terminal = self.provider_terminal_states.get(agent).cloned();
+        let old_ready = self.hosted_fresh_view_ready;
+        self.provider_terminal_states.insert(
+            agent.into(),
+            lineage_persistence::ProviderTerminalState {
+                agent_id: agent.into(),
+                agent_session_id: request.agent_session_id.clone(),
+                agent_turn_id: request.agent_turn_id.clone(),
+                decision_request_id: request.decision_request_id.clone(),
+                request_digest: request.request_digest.to_string(),
+                status: "rejected".into(),
+                reject_reason: Some(format!(
+                    "canonical Reserve rejected: {reason:?}; original_key={}",
+                    pending.correlation.key.request_id_or_nonce
+                )),
+                feedback_id: None,
+                feedback: None,
+            },
+        );
+        self.hosted_admission = None;
+        self.hosted_fresh_view_ready = false;
+        if let Err(error) = self.persist_provider_lineage() {
+            self.hosted_admission = Some(admission.clone());
+            self.hosted_fresh_view_ready = old_ready;
+            if let Some(terminal) = old_terminal {
+                self.provider_terminal_states.insert(agent.into(), terminal);
+            } else {
+                self.provider_terminal_states.remove(agent);
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
     fn check_scoped_feedback_fresh_admission(
         &mut self,
         agent: &str,
@@ -721,7 +836,18 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             }
             IntentOutcome::Received { .. } | IntentOutcome::Pending | IntentOutcome::Unknown => {}
             IntentOutcome::Rejected { reason } => {
-                return Err(format!("canonical admission rejected: {reason:?}"));
+                if stage == "reserve" {
+                    self.llm_sidecar.retire_rejected_reserve(&IntentResponse {
+                        contract_version: response.contract_version,
+                        correlation: response.correlation,
+                        outcome: IntentOutcome::Rejected { reason },
+                    })?;
+                } else {
+                    return Err(format!(
+                        "canonical admission phase={stage} original_key={:?} rejected: {reason:?}",
+                        checkpoint.correlation.key
+                    ));
+                }
             }
             _ => return Err("canonical admission cannot complete original checkpoint".into()),
         }
@@ -732,3 +858,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
 #[cfg(test)]
 #[path = "llm_sidecar_feedback_admission_tests.rs"]
 mod feedback_admission_tests;
+
+#[cfg(test)]
+#[path = "llm_sidecar_reserve_rejection_tests.rs"]
+mod reserve_rejection_tests;

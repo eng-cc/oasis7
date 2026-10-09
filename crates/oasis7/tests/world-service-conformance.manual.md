@@ -384,3 +384,27 @@ Same-head serial no-mount still failed its Hosted proof (`/tmp/pre2-linux-nomoun
 New-artifact `f0a39390b4c7fc1942ea35f1c12bdc91f30d9344` no-mount ran serially and failed after22.72s when the control observer unwrapped actual production Cooldown429/Retry-After1s (`/tmp/pre2-linux-nomount-f0a39390b-20261009`); the real provider decision had begun. Control now retries only read-only View Cooldown within the original35s remaining budget and polls at250ms instead of50ms. All other errors fail, all successful Views retain authentication/CAS checks, and production limits remain unchanged. No-mutating retry was added; final Linux rerun remains required.
 
 Immutable `9afbdcb600cf18e4b3376a30f3341f4caf7aac2c` Linux main no-mount parent passed all shipped gameplay/Agent five-operation and private Memory/ACK proofs in4.33s (`/tmp/pre2-linux-nomount-9afbdcb60-20261009/control-result.log`). The endpoint-switch supplement failed because the restarted Viewer had no local authenticated player session. It now reuses the identical real signed registration protocol before replaying the exact original CollectData551; no new gameplay identity or canonical effect is introduced. Original Lookup/result/effect uniqueness checks remain. Whole-script A/B remains incomplete until the supplement and final report pass. Linux4GB cold-library retry was SIGKILL; bounded8GB build succeeded, then Docker was restored and actual4GB memory verified before runtime acceptance.
+
+## Fresh Reserve rejection and Prefix binding
+
+An authenticated canonical rejection of the exact original fresh Reserve can
+terminalize its prepared turn only before any lease, commit or dispatched work.
+The signed Reserve checkpoint remains unchanged. The full turn identity and
+rejection are persisted together with removal of the admission; a failed write
+restores the prior local state. Restart must retain the original checkpoint and
+terminal without restoring an admission. A later attempt requires a new verified
+View and a genuinely new prepared turn. Continuation-bearing requests, including
+requests whose continuation field was removed while retaining its original
+digest, cannot use this fresh-turn recovery path.
+
+A newly created Prefix checkpoint uses the verified post-Reserve View binding
+for its outer scheduler intent. Its original provider request and context digest
+remain unchanged; an already issued Prefix is replayed with exactly its original
+signed bytes. Later-phase rejection remains explicit and retains the original
+request rather than silently treating rejection as Pending.
+
+The scheduler checkpoint regressions cover current-binding creation and immutable
+replay. The Reserve rejection regression covers wrong correlation, conflicting
+effects, turn/continuation tampering, actual persistence failure and restart.
+These regressions do not replace ordinary required CI or fresh Linux no-mount
+and pressure acceptance on the final source and compiled artifacts.
