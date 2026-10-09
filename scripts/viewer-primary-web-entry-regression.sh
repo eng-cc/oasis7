@@ -23,7 +23,7 @@ Options:
   --chain-status-bind <a:p>  chain status HTTP bind (default: web-bind port + 110)
   --viewer-host <host>       web viewer host (default: 127.0.0.1)
   --viewer-port <port>       web viewer port (default: 4173)
-  --viewer-static-dir <dir>  viewer static asset dir (default: web)
+  --viewer-static-dir <dir>  viewer test artifact dir (default: crates/oasis7_viewer/.viewer-test-dist)
   --out-dir <path>           artifact root (default: output/playwright/viewer-primary-web-entry)
   --headed                   open browser in headed mode
   --headless                 open browser in headless mode (default)
@@ -284,7 +284,7 @@ web_bind="127.0.0.1:5011"
 chain_status_bind=""
 viewer_host="127.0.0.1"
 viewer_port="4173"
-viewer_static_dir="web"
+viewer_static_dir="$repo_root/crates/oasis7_viewer/.viewer-test-dist"
 out_root="output/playwright/viewer-primary-web-entry"
 headed=0
 

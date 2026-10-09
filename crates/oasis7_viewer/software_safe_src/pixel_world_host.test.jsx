@@ -1325,7 +1325,7 @@ describe("pixel world host", () => {
 
     const host = document.querySelector(".pixel-world-host");
     expect(host).toHaveAttribute("data-visual-fixture", "selected_blocker");
-    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.selected_blocker()).toMatchObject({
+    expect(window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("selected_blocker")()).toMatchObject({
       player_gameplay: {
         blocker_kind: "material_shortage",
         intent_target: "agent-0",

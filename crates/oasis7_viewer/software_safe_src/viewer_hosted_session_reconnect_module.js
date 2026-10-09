@@ -1,3 +1,4 @@
+import { authCredentials, installSession, clearSession, hasSigningIdentity, updateRegistrationGrant, captureSessionContext, isSessionContextCurrent } from "./viewer_auth_session_module.js";
 export function createViewerHostedSessionReconnectModule({
   authHasSigningKeyMaterial,
   legacyViewerAuthBootstrapSource,
@@ -11,7 +12,7 @@ export function createViewerHostedSessionReconnectModule({
     const auth = state.auth;
     return auth?.available
       && auth.source !== legacyViewerAuthBootstrapSource
-      && !!String(auth.releaseToken || "").trim()
+      && !!String(authCredentials(auth).releaseToken || "").trim()
       && !authHasSigningKeyMaterial(auth);
   }
 

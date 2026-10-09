@@ -13,15 +13,16 @@ function installMockWebSocket() {
   }
   Object.defineProperty(window, "WebSocket", { configurable: true, value: MockWebSocket }); return { sentMessages, sockets };
 }
-function installTestCrypto() { Object.defineProperty(window, "crypto", { configurable: true, value: { subtle: { async importKey() { return {}; }, async sign() { return new Uint8Array(64).fill(7).buffer; } } } }); }
+function installTestCrypto() { Object.defineProperty(window, "crypto", { configurable: true, value: { getRandomValues: (array) => array.fill(1), subtle: { async verify() { return true; }, async importKey() { return {}; }, async sign() { return new Uint8Array(64).fill(7).buffer; } } } }); }
 
 describe("requestFragmentRefillPreview", () => {
   beforeEach(() => { vi.resetModules(); window.history.replaceState({}, "", "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0"); installTestCrypto(); });
 
   it("binds the exact chunk in a signed read-only preview request and rejects a duplicate request", async () => {
     const signSpy = vi.spyOn(window.crypto.subtle, "sign"); const { sentMessages, sockets } = installMockWebSocket();
-    const core = await import("./legacy_core.js"); core.initializeSoftwareSafeCore(); sockets[0].open();
+    const core = await import("./legacy_core.js"); await core.initializeSoftwareSafeCore(); sockets[0].open();
     core.state.auth = { ...core.state.auth, available: true, playerId: "player-fragment-preview", publicKey: "09".repeat(32), privateKey: "07".repeat(32), registrationStatus: "registered", runtimeStatus: "registered", boundAgentId: "agent-0" };
+    await (await import("./viewer_auth_session_module.js")).installSession(core.state, core.state.auth);
     expect(await core.requestFragmentRefillPreview("invalid", 0, 0)).toEqual(expect.objectContaining({ ok: false }));
     expect(await window.__AW_TEST__.requestFragmentRefillPreview(2, -1, 0)).toEqual(expect.objectContaining({ ok: true, request: expect.objectContaining({ chunk: { x: 2, y: -1, z: 0 } }) }));
     expect(await core.requestFragmentRefillPreview(2, -1, 0)).toEqual(expect.objectContaining({ ok: false, reason: expect.stringContaining("already pending") }));

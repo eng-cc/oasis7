@@ -316,7 +316,7 @@ export function createViewerAuthSurfaceModule({
     const mainTokenTransferCapability = buildSemanticCapability("main_token_transfer");
     const strongAuthTier = buildStrongAuthTier();
     const currentTier = state.auth.available ? "player_session" : "guest_session";
-    const source = state.hostedAccess
+    const source = isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)
       ? state.auth.available
         ? state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE
           ? `${LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE}+hosted_access_hint`

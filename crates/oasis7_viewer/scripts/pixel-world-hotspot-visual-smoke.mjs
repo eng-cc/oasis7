@@ -8,8 +8,10 @@ import { completionEvidence } from './pixel-world-completion-evidence.mjs';
 import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
+const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed"] : [];
 const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
+const artifactRoot = resolve(viewerRoot, ".viewer-test-dist");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const outDir = resolve(repoRoot, "output/playwright/pixel-world-hotspot-visual", runId);
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
@@ -28,25 +30,25 @@ function serveFile(request, response) {
   const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
   const rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/viewer.html" : requestUrl.pathname);
   const normalized = normalize(rawPath).replace(/^(\.\.(\/|\\|$))+/, "");
-  const filePath = normalized.startsWith("/pixel-world-bridge/") ? resolve(viewerRoot, "dist", `.${normalized}`) : resolve(viewerRoot, `.${normalized}`);
-  if (!relative(viewerRoot, filePath) || relative(viewerRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
+  const filePath = resolve(artifactRoot, `.${normalized}`);
+  if (!relative(artifactRoot, filePath) || relative(artifactRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
   try { if (!statSync(filePath).isFile()) throw new Error("not file"); response.writeHead(200, { "Content-Type": contentType(filePath), "Cache-Control": "no-store" }); response.end(readFileSync(filePath)); } catch { response.writeHead(404); response.end("not found"); }
 }
 function ensureBrowser() { if (spawnSync(agentBrowserBin, ["--version"], { stdio: "ignore" }).status !== 0) fail(`missing required browser automation command: ${agentBrowserBin}`); }
-const browserLifecycle = createOwnedSessionLifecycle({ command: agentBrowserBin, session });
+const browserLifecycle = createOwnedSessionLifecycle({ command: agentBrowserBin, session, prefixArgs: browserLaunchArgs });
 const closeBrowser = browserLifecycle.close;
 const prepareBrowserSession = browserLifecycle.prepare;
 function runBrowser(args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(agentBrowserBin, ["--session", session, ...args], { stdio: ["pipe", "pipe", "pipe"] }); let stdout = ""; let stderr = "";
+    const child = spawn(agentBrowserBin, ["--session", session, ...browserLaunchArgs, ...args], { stdio: ["pipe", "pipe", "pipe"] }); let stdout = ""; let stderr = "";
     const timer = setTimeout(() => { child.kill("SIGTERM"); rejectRun(new Error(`agent-browser timed out: ${args.join(" ")}`)); }, options.timeout ?? 30_000);
     child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8"); child.stdout.on("data", (chunk) => { stdout += chunk; }); child.stderr.on("data", (chunk) => { stderr += chunk; });
     child.on("error", (error) => { clearTimeout(timer); rejectRun(error); }); child.on("close", (code) => { clearTimeout(timer); code === 0 ? resolveRun(stdout) : rejectRun(new Error(`agent-browser failed: ${args.join(" ")}\n${stdout}\n${stderr}`)); });
-    child.stdin.end(options.input);
+    if (options.input !== undefined) child.stdin.end(options.input);
   });
 }
 async function browserJson(args, options) { const output = await runBrowser(["--json", ...args], options); const parsed = JSON.parse(output); if (!parsed.success) fail(parsed.error || "agent-browser JSON failure"); return parsed.data; }
-async function evalJson(source) { const data = await browserJson(["eval", "--stdin"], { input: source, timeout: 60_000 }); return typeof data.result === "string" ? JSON.parse(data.result) : data.result; }
+async function evalJson(source) { const data = await browserJson(["eval", source], { timeout: 60_000 }); return typeof data.result === "string" ? JSON.parse(data.result) : data.result; }
 function screenshotBitmap(path) { const bmpPath = path.replace(/\.png$/, ".bmp"); const converted = spawnSync("sips", ["-s", "format", "bmp", path, "--out", bmpPath], { encoding: "utf8" }); if (converted.status !== 0) fail("could not inspect screenshot pixels", { path, stderr: converted.stderr }); const bytes = readFileSync(bmpPath); const offset = bytes.readUInt32LE(10); const width = bytes.readInt32LE(18); const height = Math.abs(bytes.readInt32LE(22)); const bitCount = bytes.readUInt16LE(28); return { bytes, offset, width, height, bitCount, stride: Math.ceil((width * bitCount) / 32) * 4 }; }
 function pixelAt(bitmap, x, y) { const index = bitmap.offset + (y * bitmap.stride) + (x * (bitmap.bitCount / 8)); return [bitmap.bytes[index], bitmap.bytes[index + 1], bitmap.bytes[index + 2]]; }
 function screenshotStats(path) { const bitmap = screenshotBitmap(path); let brightness = 0; let nonBlack = 0; let count = 0; for (let y = 0; y < bitmap.height; y += 1) { for (let x = 0; x < bitmap.width; x += 1) { const value = pixelAt(bitmap, x, y).reduce((total, channel) => total + channel, 0); brightness += value; if (value > 24) nonBlack += 1; count += 1; } } return { meanBrightness: Number((brightness / Math.max(1, count)).toFixed(2)), nonBlackRatio: Number((nonBlack / Math.max(1, count)).toFixed(4)) }; }
@@ -190,10 +192,11 @@ try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=${fixtureName}`;
-  summary.url = url; prepareBrowserSession(); await browserJson(["open", url], { timeout: 45_000 });
+  summary.url = url; prepareBrowserSession(); await new Promise((resolve) => setTimeout(resolve, 500)); await browserJson(["open", url], { timeout: 45_000 });
   for (const [name, width, height] of [["desktop", 1440, 1000], ["narrow", 390, 844], ...((completionRun || routeMotionEvidence) ? [['compact',320,568]] : [])]) {
     await browserJson(["set", "viewport", String(width), String(height)]);
     if (name !== 'desktop') await browserJson(['open',url]);
+    await evalJson(`(async()=>{for(let n=0;n<1200;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
     let state = await evalJson(String.raw`(async()=>{const read=()=>(${pageStateScript()}); const deadline=Date.now()+15000; while(Date.now()<deadline){const s=read(); if(s.rendererReady && s.runtimeStatus==='ready') return JSON.stringify(s); await new Promise(r=>setTimeout(r,100));} throw new Error('renderer not ready');})()`);
     if (routeMotionEvidence || name === 'compact') {
       await evalJson(`(async()=>{for(let n=0;n<${name === 'compact' && routeMotionEvidence ? 3 : 1};n++){document.querySelector('#pixel-world-embedded-runtime-canvas').dispatchEvent(new WheelEvent('wheel',{deltaY:300,bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,80));}await new Promise(r=>setTimeout(r,250));return true;})()`);
@@ -259,7 +262,7 @@ try {
     // The viewport correction intentionally moves the world for visible
     // hotspot evidence. Reload the fixture before the independent selection
     // projection check so its agent target starts from the normal camera fit.
-    prepareBrowserSession();
+    prepareBrowserSession(); await new Promise((resolve) => setTimeout(resolve, 500));
     await browserJson(['open', url], { timeout: 45_000 });
     await browserJson(['set', 'viewport', String(width), String(height)]);
     await evalJson(String.raw`(async()=>{const deadline=Date.now()+5000; while(Date.now()<deadline){const s=${pageStateScript()}; if(s.rendererReady && s.runtimeStatus==='ready') return true; await new Promise(r=>setTimeout(r,100));} throw new Error('renderer not ready after viewport evidence reset');})()`);
@@ -305,7 +308,7 @@ try {
       const reducedInput=await evalJson(receiptScript('hover','recent:resource-transfer-fixture'));
       assert(reducedInput.receipt.visible,'reduced preference froze input',reducedInput);
       await evalJson(receiptScript('leave'));
-      const reducedSnapshot=await evalJson(`(async()=>{const before=window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick;const snapshot=window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.routes_and_events();snapshot.time=13;window.__AW_TEST__.injectSnapshot(snapshot);window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__();await new Promise(r=>setTimeout(r,200));return {before,after:window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches};})()`);
+      const reducedSnapshot=await evalJson(`(async()=>{const before=window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick;const snapshot=window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__.get("routes_and_events")();snapshot.time=13;window.__AW_TEST__.injectSnapshot(snapshot);await new Promise(r=>setTimeout(r,200));return {before,after:window.__OASIS7_PIXEL_WORLD_RENDER_DTO__().world_tick,reduced:matchMedia('(prefers-reduced-motion: reduce)').matches};})()`);
       assert(reducedSnapshot.reduced && reducedSnapshot.after===13,'reduced preference froze snapshot updates',reducedSnapshot);
       await browserJson(['set','media','dark']);
       const mediaRestored=await evalJson(`matchMedia('(prefers-reduced-motion: reduce)').matches`);

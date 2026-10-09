@@ -243,20 +243,6 @@ pub(super) fn handle_dht_progress(
                 kad::QueryResult::GetRecord(Err(kad::GetRecordError::NotFound { .. })) => {
                     *error = None;
                 }
-                kad::QueryResult::GetRecord(Err(kad::GetRecordError::QuorumFailed {
-                    records,
-                    ..
-                })) => {
-                    if let Some(record) = records.first() {
-                        if let Ok(decoded) = super::decode_world_head(&record.record.value) {
-                            *head = Some(decoded);
-                        }
-                    } else {
-                        *error = Some(WorldError::NetworkProtocolUnavailable {
-                            protocol: "kad get_record quorum failed".to_string(),
-                        });
-                    }
-                }
                 kad::QueryResult::GetRecord(Err(err)) => {
                     *error = Some(WorldError::NetworkProtocolUnavailable {
                         protocol: format!("kad get_record failed: {err}"),
@@ -293,22 +279,6 @@ pub(super) fn handle_dht_progress(
                 )) => {}
                 kad::QueryResult::GetRecord(Err(kad::GetRecordError::NotFound { .. })) => {
                     *error = None;
-                }
-                kad::QueryResult::GetRecord(Err(kad::GetRecordError::QuorumFailed {
-                    records,
-                    ..
-                })) => {
-                    if let Some(record) = records.first() {
-                        if let Ok(decoded) =
-                            super::decode_membership_directory(&record.record.value)
-                        {
-                            *snapshot = Some(decoded);
-                        }
-                    } else {
-                        *error = Some(WorldError::NetworkProtocolUnavailable {
-                            protocol: "kad get_record quorum failed".to_string(),
-                        });
-                    }
                 }
                 kad::QueryResult::GetRecord(Err(err)) => {
                     *error = Some(WorldError::NetworkProtocolUnavailable {
@@ -348,21 +318,6 @@ pub(super) fn handle_dht_progress(
                 )) => {}
                 kad::QueryResult::GetRecord(Err(kad::GetRecordError::NotFound { .. })) => {
                     *error = None;
-                }
-                kad::QueryResult::GetRecord(Err(kad::GetRecordError::QuorumFailed {
-                    records,
-                    ..
-                })) => {
-                    if let Some(found) = records.first() {
-                        match decode_peer_record_for_target(&found.record.value, *peer_id) {
-                            Ok(decoded) => *record = Some(decoded),
-                            Err(err) => *error = Some(err),
-                        }
-                    } else {
-                        *error = Some(WorldError::NetworkProtocolUnavailable {
-                            protocol: "kad get_record quorum failed".to_string(),
-                        });
-                    }
                 }
                 kad::QueryResult::GetRecord(Err(err)) => {
                     *error = Some(WorldError::NetworkProtocolUnavailable {
@@ -428,21 +383,6 @@ pub(super) fn handle_dht_progress(
                 )) => {}
                 kad::QueryResult::GetRecord(Err(kad::GetRecordError::NotFound { .. })) => {
                     *error = None;
-                }
-                kad::QueryResult::GetRecord(Err(kad::GetRecordError::QuorumFailed {
-                    records,
-                    ..
-                })) => {
-                    if let Some(found) = records.first() {
-                        match decode_peer_record(&found.record.value) {
-                            Ok(decoded) => *record = Some(decoded),
-                            Err(err) => *error = Some(err),
-                        }
-                    } else {
-                        *error = Some(WorldError::NetworkProtocolUnavailable {
-                            protocol: "kad get_record quorum failed".to_string(),
-                        });
-                    }
                 }
                 kad::QueryResult::GetRecord(Err(err)) => {
                     *error = Some(WorldError::NetworkProtocolUnavailable {

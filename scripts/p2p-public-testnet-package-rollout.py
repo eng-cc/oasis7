@@ -864,6 +864,7 @@ def linux_plan_commands(
     helper_asset = ROOT_DIR / "scripts" / "p2p-public-testnet-package-node-upgrade.sh"
     direct_helper_assets = [
         ("safe_extract", ROOT_DIR / "scripts" / "p2p-safe-extract-tar.py"),
+        ("archive_policy", ROOT_DIR / "scripts" / "safe_git_archive.py"),
         ("safe_validate", ROOT_DIR / "scripts" / "p2p-safe-validate-deb-tree.py"),
         ("verify_bundle", ROOT_DIR / "scripts" / "p2p-verify-linux-package-bundle.py"),
         ("rebuild_checksums", ROOT_DIR / "scripts" / "p2p-rebuild-linux-bundle-checksums.py"),
