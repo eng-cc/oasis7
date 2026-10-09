@@ -18,6 +18,8 @@ struct AgencyControlSigningPayloadV1<'a> {
     command: &'a Value,
 }
 
+// Keep the complete signed identity fields explicit at this authentication boundary.
+#[allow(clippy::too_many_arguments)]
 fn payload_bytes(
     request_id: &str,
     player_id: &str,
@@ -43,6 +45,8 @@ fn payload_bytes(
     .map_err(|error| format!("agency_control signing payload failed: {error}"))
 }
 
+// Keep the complete signed identity fields explicit at this authentication boundary.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn verify_agency_control_auth_proof(
     request_id: &str,
     player_id: &str,
@@ -92,6 +96,8 @@ pub(crate) fn verify_agency_control_auth_proof(
 }
 
 #[cfg(test)]
+// Keep the complete signed identity fields explicit at this authentication boundary.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sign_agency_control_auth_proof_for_test(
     request_id: &str,
     player_id: &str,

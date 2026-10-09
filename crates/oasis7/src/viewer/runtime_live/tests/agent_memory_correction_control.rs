@@ -146,6 +146,7 @@ impl Drop for ProviderEnvironmentCleanup {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn signed_agency_request(
     server: &ViewerRuntimeLiveServer,
     agent_id: &str,

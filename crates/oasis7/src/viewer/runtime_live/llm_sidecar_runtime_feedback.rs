@@ -801,7 +801,7 @@ impl RuntimeLlmSidecar {
                 request.agent_subject, request.agent_session_id, sequence
             )
         });
-        let feedback = FeedbackEnvelopeV1 {
+        FeedbackEnvelopeV1 {
             feedback_id,
             feedback_seq: sequence,
             agent_subject: request.agent_subject.clone(),
@@ -814,8 +814,7 @@ impl RuntimeLlmSidecar {
             request_digest: request.request_digest.clone(),
             reject_reason,
             provenance: "runtime_authoritative".to_string(),
-        };
-        feedback
+        }
     }
 
     /// Deliver the Runtime-committed feedback through the same provider

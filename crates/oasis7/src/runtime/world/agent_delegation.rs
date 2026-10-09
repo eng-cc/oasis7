@@ -353,20 +353,19 @@ impl World {
         {
             return Err(denied("grant_scope_mismatch"));
         }
-        if let Action::TransferMaterial { from_ledger, .. } = action {
-            if from_ledger != &crate::runtime::MaterialLedgerId::agent(&decision.agent_id) {
-                return Err(denied("asset_source_unsupported"));
-            }
+        if let Action::TransferMaterial { from_ledger, .. } = action
+            && from_ledger != &crate::runtime::MaterialLedgerId::agent(&decision.agent_id)
+        {
+            return Err(denied("asset_source_unsupported"));
         }
-        if let Some(intent_id) = &decision.context.intent_id {
-            if self
+        if let Some(intent_id) = &decision.context.intent_id
+            && self
                 .state
                 .agent_intent_ledger
                 .get(intent_id)
                 .is_none_or(|intent| intent.actor_id != grant.owner_id)
-            {
-                return Err(denied("intent_authority_changed"));
-            }
+        {
+            return Err(denied("intent_authority_changed"));
         }
         if let Some(actor) = &decision.context.override_actor {
             if actor != &grant.owner_id {

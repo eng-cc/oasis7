@@ -339,21 +339,19 @@ impl World {
             .capability_revocation_state
             .authority_records
             .get(ISSUER_ID)
+            && existing.world_id == world_id
+            && existing.branch_id == branch_id
+            && existing.finality_epoch == finality_epoch
+            && existing.finality_block_hash
+                == finality_block_hash
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("runtime-test-finality-block:{finality_epoch}"))
+            && self
+                .capability_revocation_state
+                .authority_finality_proofs
+                .contains_key(ISSUER_ID)
         {
-            if existing.world_id == world_id
-                && existing.branch_id == branch_id
-                && existing.finality_epoch == finality_epoch
-                && existing.finality_block_hash
-                    == finality_block_hash
-                        .map(str::to_string)
-                        .unwrap_or_else(|| format!("runtime-test-finality-block:{finality_epoch}"))
-                && self
-                    .capability_revocation_state
-                    .authority_finality_proofs
-                    .contains_key(ISSUER_ID)
-            {
-                return Ok(());
-            }
+            return Ok(());
         }
         let issuer_key = fixture_signing_key(ISSUER_SEED);
         let finality_key = fixture_signing_key(FINALITY_SIGNER_SEED);
