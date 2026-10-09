@@ -130,6 +130,18 @@ prepare、primary decision 与 replica decision 分别使用签名域。接收�
 
 交接停写排空后，新集合同步 H−1；旧 authority 在 H 正式记录新集合/profile/epoch/H+1 边界及结果根。H 提交前可取消，提交后接续权不可撤回，入口/存储/signer/proof verifier 均拒绝 H+1 旧 profile；新集合启动失败保持停写。历史仍按各阶段合法 profile 验证。演练覆盖 H 已提交而 H+1 未提交时宕机/取消、重启拒绝旧 writer，以及无资产重发/断链/失效 pending 自动生效。该设计尚需协议、消费者与故障域实证，不是当前 readiness。
 
+#### des-p2p-controlled-history-reexecution-prerequisite
+
+execution bridge 的历史 capture 为显式 opt-in（`--capture-schedule-recipe-history`，默认关闭），只支持每高度恰好一个带既有已验证 ingress origin 的 `ScheduleRecipe`。它在真实执行前保存原始 Snapshot、Journal、上下文及实际 security policy，将该引用绑定进首次 product-validation intent 原子发布；执行后封闭包保存九角色真实字节、typed module registry 所声明的全部 WASM 和前缀关联。启用时材料持久或校验失败阻止记录发布并回滚内存执行；旧记录的 None 不反填，普通/BFT 默认路径不改变。
+
+这里的 outcome index 仅是所支持连续记录前缀派生的 execution request outcome 累积索引，绑定既有 player/key/nonce/session tuple、实际提交 CBOR hash、parent/input/result。它不是 GameplayNonceLedger，不证明 ingress reservation 已成为正式提交，也不覆盖其他操作或所有 nonce domains。origin 是现行 ingress 签名、nonce 与玩家身份校验所得的受信 producer 请求身份；包中 tuple 不替代原玩家签名证明、Agent 控制 grant 或 Hosted issuer 授权，离线验证不授予玩家控制权。
+
+只读入口 `oasis7_chain_runtime verify-controlled-history --trusted-config <json> --evidence <json>` 要求操作员独立固定 world/chain/genesis、writer/不同端点 keys、epoch、最低 qualified head、初始执行 height/root/block 与 security policy。完整连续历史必须从声明的初始锚起，不能跳过缺 capture 的旧记录、prepare-only 或单回执。初始锚可选显式外部 published anchor：操作员在输入前保存原 V3 record、Snapshot CBOR、Journal CBOR 的路径和独立 BLAKE3 hash；trust JSON 仍限 64KiB，record 限 64KiB、Snapshot/Journal 各限 64MiB并保留原 typed budget/no-follow。其 world/height/block/root/CAS refs、journal 长度和原 driver diagnostic context 必须相符；初始 pre-state 只能按已验证的 published/default 完整资源注解 pair 演进，全部其余 state 和 Journal 原字节连续。不接受任意旧缓存 pair 或从待验证 capture 自选外部信任；原 exact raw pre-root 路径保持兼容。入口验证双端证据、请求和实际 payload、所有 typed 引用闭包与前缀，再以原始 Snapshot/Journal、原模块字节和相同 committed context 调用既有 Runtime 的真实 WASM step，比较完整结果 Snapshot/Journal、state/block root 与 effect 材料。内存恢复不配置持久目录或 dispatcher；WASM 使用既有空 Linker，无新 LLM 调用、网络 host function 或替代模块。
+
+连续性保留完整 Snapshot/Journal 字节约束，仅两个已验证资源注解允许既有缓存、重开或按实际 manifest hash/journal 长度生成的默认完整 pair 演进；delta 必须绑定相同 manifest，不能混合 pair 或任意去字段归一化 root。真实 pre/post roots 始终绑定原始材料。当前 driver 的 diagnostic resource context 使用 chain_id=world_id、genesis_ref=None，这些注解不证明正式 genesis；外部 fixed trust 不补写历史身份。
+
+文件输入有界、拒绝观察到的祖先/末端 symlink，支持范围为 Unix 操作员受控目录；不承诺防同权限恶意进程替换祖先。合格输出仅为本地持久协议与重执行前置验证，不转换正式 CommitRef、不激活 planned profile、不改变 BFT、开放全路径 nonce 共持久或创建新世界。Rules 角色保存实际前后 World Manifest 配置，原生配置绑定在 Snapshot，security policy 与操作员配置核对；原 Runtime 没有可历史加载的 native Rust 规则二进制工件，本入口仅证明同候选 Runtime 语义下重执行，不宣称任意旧 native 版本的可移植 replay。真实候选须显式打开 capture 生成新材料；既有未 capture 世界不能通过补造 sidecar 获得此证明。回归入口为 `cargo test -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,wasmtime controlled_history`；当次命令、候选与结果另由工程 evidence 维护。
+
 ## 5. 关键运行流程
 
 先校验提交身份/大小/队列→固定有序actions/root→同parent/manifest执行并匹配receipt commitments→fenced epoch/parent/head 下原子预备追加及跨故障域持久确认→合法 profile 生成并验证提交决定/证明→最终决定/证明跨故障域持久确认→消费者committed读取。BFT 的独立重执行与投票步骤继续适用其专属合同；单权威不通过等待尚未生成的证明制造循环依赖。当前prototype推进与目标QC闸门不是同一实现证明。恢复先证明原world历史链再判只读；当前追加/finality/manifest/head全满足才重新serve/vote，失效回只读/隔离。

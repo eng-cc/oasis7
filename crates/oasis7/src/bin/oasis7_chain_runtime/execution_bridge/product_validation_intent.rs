@@ -32,6 +32,8 @@ pub(super) struct ProductValidationIntentMarkerV1 {
     /// from the staged world for replay compatibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_step_external_effect: Option<ExecutionExternalEffectMaterialization>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controlled_preparation_ref: Option<String>,
     /// Root of the exact staged world described by this marker.  A marker is
     /// published before that world, so a later output can temporarily leave
     /// the previous same-height generation on disk.
@@ -182,6 +184,9 @@ pub(super) fn build_product_validation_intent_marker(
         journal_len: staged.journal().len(),
         pre_step_execution_state_root: pre_step_execution_state_root.to_string(),
         pre_step_external_effect: Some(pre_step_external_effect),
+        controlled_preparation_ref: previous_marker
+            .as_ref()
+            .and_then(|marker| marker.controlled_preparation_ref.clone()),
         staged_execution_state_root,
         previous_staged_execution_state_root: previous_marker.as_ref().and_then(|marker| {
             (!marker.staged_execution_state_root.trim().is_empty())
@@ -194,21 +199,23 @@ pub(super) fn build_product_validation_intent_marker(
 pub(super) fn persist_product_validation_intent_for_staged_world(
     records_dir: &Path,
     staged: &RuntimeWorld,
-    world_id: &str,
-    height: u64,
-    action_root: &str,
+    context: &oasis7_node::NodeExecutionCommitContext,
     pre_step_execution_state_root: &str,
     pre_step_external_effect: ExecutionExternalEffectMaterialization,
+    controlled_preparation_ref: Option<String>,
 ) -> Result<(), String> {
-    let marker = build_product_validation_intent_marker(
+    let mut marker = build_product_validation_intent_marker(
         records_dir,
         staged,
-        world_id,
-        height,
-        action_root,
+        &context.world_id,
+        context.height,
+        &context.action_root,
         pre_step_execution_state_root,
         pre_step_external_effect,
     )?;
+    if controlled_preparation_ref.is_some() {
+        marker.controlled_preparation_ref = controlled_preparation_ref;
+    }
     persist_product_validation_intent(records_dir, &marker)
 }
 
@@ -225,10 +232,14 @@ pub(super) fn persist_product_validation_intent(
     })?;
     let bytes = serde_json::to_vec_pretty(marker)
         .map_err(|err| format!("serialize product validation intent marker failed: {err}"))?;
-    write_bytes_atomic(
-        product_validation_intent_path(records_dir).as_path(),
-        bytes.as_slice(),
-    )
+    if marker.controlled_preparation_ref.is_some() {
+        super::durable_transaction::write_file_durable(
+            &product_validation_intent_path(records_dir),
+            &bytes,
+        )
+    } else {
+        write_bytes_atomic(&product_validation_intent_path(records_dir), &bytes)
+    }
 }
 
 pub(super) fn clear_product_validation_intent(records_dir: &Path) -> Result<(), String> {
