@@ -30,7 +30,7 @@ Before root startup, obtain the native runtime gate and stdlib-only trusted boot
 
 ## Installation plan and apply
 
-The approved release entrypoint accepts `plan` and `apply` as defined in [interfaces](local-file-signing-backend.design.md#6-接口与数据合同). Plan binds release digest, explicit installation/deployment IDs, caller/signer identities and paths. Example selected locations are private store `/Library/Application Support/oasis7-local-signer` and ordinary jobs `${CALLER_HOME}/Documents/keys/oasis7-local-signer`; exact absolute paths belong in the approved host plan. They are agreed locations, not evidence that an installation exists.
+The approved release entrypoint accepts `plan` and `apply` as defined in [interfaces](local-file-signing-backend.design.md#6-接口与数据合同). Plan binds release digest, explicit installation/deployment IDs, caller/signer identities and paths. Example selected locations are private store `/Library/Application Support/oasis7-local-signer` and ordinary jobs `/private/var/db/oasis7-local-signer-jobs/${CALLER_USER}/oasis7-local-signer`; exact absolute paths belong in the approved host plan. They are agreed locations, not evidence that an installation exists.
 
 Plan performs readonly checks and writes only the requested new plan artifact. If readonly host evidence is inaccessible, report BLOCKED; a host administrator can run an approved readonly plan. Review exact actions and canonical plan bytes, then independently approve its SHA256. Apply requires root and both expected digests, checks the live plan again, journals effects and publishes sudo last.
 
@@ -60,6 +60,10 @@ The approved work parent must already exist and belong to the caller; the instal
 Successful installation reports INSTALLED_UNREADY with signing_enabled false. It creates no key, policy or grant. Existing doctor reports AUTHORIZATION_DENIED with ready false for missing policy, the intended initial unready state. Installation does not admit any blockchain/governance signer. Key creation, policy, grant and enabling require separate content-specific authorization through existing root admin commands.
 
 ## acceptance-checklist
+
+For this host, use the approved external jobs layout: `/private/var/db/oasis7-local-signer-jobs` root:wheel 0711, an exact caller-owned 0700 child, and the installer-created caller-owned 0700 leaf. Resolve and approve the actual caller UID/GID before provisioning the parent. This is a proposed installation location, not evidence that provisioning has occurred. Keep HOME/Documents and its ACL unchanged.
+
+Filesystem admission examines each installation path and existing ancestor through retained nofollow descriptors. Only local, ownership-enforcing APFS/HFS is admitted; a target on autofs, a remote/unknown filesystem or `noowners` is blocked. Unrelated mounts such as default `auto_home` do not block installation. Filesystem identity is bound in the plan and rechecked before apply; this does not authorize host mutation or expand the documented trusted-root race boundary.
 
 | Check | Isolated source fixture | Required separate macOS host evidence |
 | --- | --- | --- |
