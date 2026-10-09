@@ -182,6 +182,16 @@ pub(super) fn run_isolated_application_mode(
             fs::set_permissions(&app_dir, fs::Permissions::from_mode(0o700)).unwrap();
         }
     }
+    if wake {
+        // Controlled Submit persistence runs after its HTTP response. Keep
+        // the real read API available while that durable commit completes,
+        // instead of serializing every read behind fsync on the accept loop.
+        // The existing fixture limits this to four connection workers; CAS
+        // publication and authenticated View coherence remain unchanged.
+        fixture.concurrent_dispatch.store(true, Ordering::SeqCst);
+        *fixture.world_gate.root.lock().unwrap() = Some(app_dir.clone());
+        fs::write(app_dir.join("world-concurrent-ready"), b"ready").unwrap();
+    }
     if service_probe
         || admission_mode == "periodic-fairness"
         || resume_crash

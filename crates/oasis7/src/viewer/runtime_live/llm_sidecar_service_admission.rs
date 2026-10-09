@@ -26,20 +26,25 @@ impl RuntimeLlmSidecar {
             .agent_context
             .as_ref()
             .ok_or("feedback Agent authority missing")?;
-        if authority.agent_id != agent
-            || authority
-                .capability_invocation_context
-                .presenter
-                .session_id
-                .as_deref()
-                != Some(session)
-        {
+        let canonical_session = authority
+            .capability_invocation_context
+            .presenter
+            .session_id
+            .as_deref()
+            .ok_or("feedback View canonical session missing")?;
+        if authority.agent_id != agent {
             return Err("feedback View Agent/session authority mismatch".into());
+        }
+        if canonical_session != session {
+            self.validate_resumed_feedback_session(agent, session, canonical_session)?;
         }
         let history = view
             .feedback_history
             .as_ref()
             .ok_or("authenticated feedback history missing")?;
+        // A resumed partition cannot evade an outstanding fence in its canonical
+        // source session. Both checks use the authenticated scoped history.
+        history.check_fresh_session(agent, canonical_session)?;
         history.check_fresh_session(agent, session)?;
         if let Some(runner) = self
             .runner
@@ -47,11 +52,150 @@ impl RuntimeLlmSidecar {
             .and_then(RuntimeDecisionRunner::async_runner_mut)
         {
             history.restore_preverified(agent, runner)?;
-            if runner.feedback_recovery_blocked(agent, session) {
+            if runner.feedback_recovery_blocked(agent, canonical_session)
+                || runner.feedback_recovery_blocked(agent, session)
+            {
                 return Err("live feedback verifier conflicts with canonical history".into());
             }
         }
         Ok(())
+    }
+
+    fn validate_resumed_turn_identity(context: &ProviderContextState) -> Result<(), String> {
+        let request = &context.request_context;
+        let turn = &context.turn_context;
+        if turn.request_digest != request.request_digest
+            || turn.agent_turn_id != request.agent_turn_id
+            || turn.decision_request_id != request.decision_request_id
+        {
+            return Err("resumed feedback prepared turn/request identity mismatch".into());
+        }
+        Ok(())
+    }
+
+    /// A Resume has a new model session, while the canonical capability
+    /// presenter keeps its original session. Authenticate the durable handoff,
+    /// rather than treating a caller-selected suffix as a new authority.
+    fn validate_resumed_feedback_session(
+        &self,
+        agent: &str,
+        session: &str,
+        canonical_session: &str,
+    ) -> Result<(), String> {
+        use crate::world_service::wire::{SchedulerOperationV1, WorldServicePayloadV1};
+        let context = &self
+            .hosted_admission
+            .as_ref()
+            .ok_or("derived feedback session lacks original admission")?
+            .context;
+        Self::validate_resumed_turn_identity(context)?;
+        let request = &context.request_context;
+        request
+            .validate_production_lane()
+            .map_err(|e| e.to_string())?;
+        context
+            .turn_context
+            .validate_for_agent(agent)
+            .map_err(|e| e.to_string())?;
+        if request.agent_subject != agent
+            || request.agent_session_id != session
+            || context.turn_context.agent_session_id != session
+            || request
+                .base_decision_request
+                .capability_invocation_context
+                .as_ref()
+                .and_then(|invocation| invocation.presenter.session_id.as_deref())
+                != Some(canonical_session)
+        {
+            return Err("resumed feedback original capability/session mismatch".into());
+        }
+        let signer = self
+            .provider_service_signer
+            .as_ref()
+            .ok_or("resumed feedback signer missing")?;
+        let key: [u8; 32] = hex::decode(&signer.private_key_hex)
+            .map_err(|_| "resumed feedback signer invalid")?
+            .try_into()
+            .map_err(|_| "resumed feedback signer invalid")?;
+        let public_key = hex::encode(
+            ed25519_dalek::SigningKey::from_bytes(&key)
+                .verifying_key()
+                .to_bytes(),
+        );
+        let view = self
+            .provider_service_projection
+            .as_ref()
+            .ok_or("resumed feedback view missing")?;
+        for (id, pending) in &self.provider_scheduler_pending {
+            let WorldServicePayloadV1::Scheduler(signed) = &pending.payload else {
+                continue;
+            };
+            let SchedulerOperationV1::ResumeWake {
+                resume,
+                proposal,
+                wake_id,
+                ..
+            } = &signed.request.operation
+            else {
+                continue;
+            };
+            if pending.resume_context.as_ref().is_none_or(|original| {
+                serde_json::to_value(original).ok() != serde_json::to_value(context).ok()
+            }) {
+                continue;
+            }
+            crate::world_service::verify_read_request("scheduler", signed)?;
+            proposal.validate().map_err(|e| e.to_string())?;
+            let expected_world = &self
+                .provider_service_config
+                .as_ref()
+                .ok_or("resumed feedback service configuration missing")?
+                .expected_world;
+            if pending.correlation.key.world != *expected_world
+                || signed.subject_public_key != public_key
+                || signed.request.delegation_generation != signer.delegation_generation
+                || signed.request.agent_id != agent
+                || signed.request.request_id != *id
+                || *id != format!("{}:resume:{wake_id}", request.provider_invocation_key())
+                || crate::world_service::derive_correlation(
+                    pending.correlation.key.world.clone(),
+                    &pending.payload,
+                )? != pending.correlation
+                || resume.agent_session_id != session
+                || resume.agent_turn_id != request.agent_turn_id
+                || resume.decision_request_id != request.decision_request_id
+                || resume.request_digest != request.request_digest.to_string()
+                || resume.context_digest != async_support::runtime_provider_context_digest(request)
+            {
+                return Err("resumed feedback signed handoff identity mismatch".into());
+            }
+            let actual = view
+                .continuations
+                .iter()
+                .find(|actual| actual.continuation_proposal_id == proposal.continuation_proposal_id)
+                .ok_or("resumed feedback canonical successor missing")?;
+            if actual.world_id != proposal.world_id
+                || actual.world_id != expected_world.world_id
+                || actual.branch_id != proposal.branch_id
+                || actual.finality_epoch != proposal.finality_epoch
+                || actual.finality_block_hash != proposal.finality_block_hash
+                || actual.finality_status != proposal.finality_status
+                || actual.reorg_epoch != proposal.reorg_epoch
+                || actual.runtime_manifest_hash != proposal.runtime_manifest_hash
+                || actual.origin_turn_id != proposal.origin_turn_id
+                || actual.precondition_digest != proposal.precondition_digest
+                || actual.agent_id != agent
+                || actual.agent_session_id != session
+                || actual.agent_turn_id != request.agent_turn_id
+                || actual.decision_request_id != request.decision_request_id
+                || actual.origin_request_digest != proposal.origin_request_digest
+                || actual.proposal_digest != proposal.proposal_digest
+            {
+                return Err("resumed feedback canonical successor identity mismatch".into());
+            }
+            return Ok(());
+        }
+        Err("derived feedback session lacks authenticated Resume handoff".into())
     }
 
     pub(in crate::viewer::runtime_live) fn install_resumed_hosted_admission(

@@ -1648,6 +1648,7 @@ dependencies = [
  "lettre",
  "libc",
  "multiaddr",
+ "oasis7_client_api",
  "oasis7_distfs",
  "oasis7_launcher_ui",
  "oasis7_node",
@@ -1660,6 +1661,7 @@ dependencies = [
  "reqwest 0.13.4",
  "serde",
  "serde_cbor",
+ "serde_ignored",
  "serde_json",
  "sha2 0.11.0",
  "tokio",
@@ -1669,6 +1671,16 @@ dependencies = [
  "tungstenite",
  "unicode-normalization",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "oasis7_client_api"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2468,6 +2480,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.4",
+]
+
+[[package]]
+name = "serde_ignored"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115dffd5f3853e06e746965a20dcbae6ee747ae30b543d91b0e089668bb07798"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]

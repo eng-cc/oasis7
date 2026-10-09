@@ -1,6 +1,20 @@
 //! Isolated application protocol dispatch; the ignored test keeps its canonical path.
 use super::*;
 pub(super) fn run() {
+    // The same-artifact child starts on libtest's 2 MiB worker stack rather
+    // than an ordinary application's main stack. Debug typed World/View and
+    // durable recovery values need the same budget as the native-memory
+    // child. Keep the real OS sandbox, constructor, transport and serving
+    // paths intact; this changes only the test process execution boundary.
+    thread::Builder::new()
+        .name("pre2-isolated-application".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(run_inner)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+fn run_inner() {
     if std::env::var("RUST_LOG").is_ok() {
         let _ = tracing_subscriber::fmt()
             .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())

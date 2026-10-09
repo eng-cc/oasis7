@@ -156,3 +156,42 @@ fn authenticated_history_cannot_reset_initialized_native_verifier_ahead_of_runti
     );
     assert!(calls.lock().unwrap().recorded_requests.is_empty());
 }
+
+#[test]
+fn derived_session_suffix_without_signed_published_resume_is_rejected() {
+    let (_world, projection, session) = actual_world_history(&[]);
+    let (mut sidecar, calls) = registered_sidecar(projection);
+    let error = sidecar
+        .check_scoped_feedback_fresh_admission("agent-a", &format!("{session}-resume-1"))
+        .unwrap_err();
+    assert!(error.contains("original admission"), "{error}");
+    assert!(sidecar.provider_scheduler_pending.is_empty());
+    assert!(sidecar.provider_active_turns.is_empty());
+    assert!(calls.lock().unwrap().recorded_requests.is_empty());
+}
+
+#[test]
+fn resumed_prepared_turn_cannot_disagree_with_signed_request_identity() {
+    let original =
+        super::super::super::tests::test_provider_context("agent-a", "turn-4", "request-4", 1);
+    RuntimeLlmSidecar::validate_resumed_turn_identity(&original).unwrap();
+    for field in 0..3 {
+        let mut changed = original.clone();
+        match field {
+            0 => {
+                changed.turn_context.request_digest =
+                    crate::simulator::h_v1("tampered-turn", &field)
+            }
+            1 => changed.turn_context.agent_turn_id.push_str("-tampered"),
+            _ => changed
+                .turn_context
+                .decision_request_id
+                .push_str("-tampered"),
+        }
+        let error = RuntimeLlmSidecar::validate_resumed_turn_identity(&changed).unwrap_err();
+        assert!(error.contains("turn/request identity mismatch"), "{error}");
+        // Copying a changed unsigned context to a second checkpoint cannot
+        // make its identity agree with the immutable signed request.
+        assert!(RuntimeLlmSidecar::validate_resumed_turn_identity(&changed.clone()).is_err());
+    }
+}
