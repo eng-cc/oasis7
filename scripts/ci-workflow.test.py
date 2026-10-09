@@ -64,6 +64,8 @@ class Workflow(unittest.TestCase):
         writer = JOBS['full-regression']
         self.assertIn("if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full'))", writer)
         self.assertIn('cache-mode: write', writer)
+        self.assertIn('test "$GITHUB_REF" = refs/heads/main', writer)
+        self.assertNotIn('test "$ACTIONS_CACHE_MODE"', writer)
 
     def test_readers_share_compatible_trusted_writer_identity(self):
         writer = JOBS['full-regression']

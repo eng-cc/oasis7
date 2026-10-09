@@ -1205,7 +1205,7 @@ jobs:
       - name: Prepare trusted cache sentinel
         if: github.ref == 'refs/heads/main'
         run: |
-          test "$ACTIONS_CACHE_MODE" = write
+          test "$GITHUB_REF" = refs/heads/main
           mkdir -p "$RUNNER_TEMP/cache-permission-sentinel"
           printf 'trusted-v2\n' > "$RUNNER_TEMP/cache-permission-sentinel/sentinel"
       - name: Save trusted cache sentinel
