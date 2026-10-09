@@ -67,8 +67,15 @@ fn runtime_network_replication_gap_sync_reports_error_after_retries_exhausted() 
     let reached = wait_until(Instant::now() + Duration::from_secs(2), || {
         runtime_a.snapshot().consensus.committed_height >= 3
     });
-    assert!(reached, "sequencer did not reach target height in time");
-    let target_height = runtime_a.snapshot().consensus.committed_height;
+    let snapshot_a = runtime_a.snapshot();
+    assert!(
+        reached,
+        "sequencer did not reach target height in time: committed_height={} network_committed_height={} last_error={:?}",
+        snapshot_a.consensus.committed_height,
+        snapshot_a.consensus.network_committed_height,
+        snapshot_a.last_error
+    );
+    let target_height = snapshot_a.consensus.committed_height;
     runtime_a.stop().expect("stop a");
 
     let request = signed_fetch_commit_request_for_test(world_id, target_height, 89);
