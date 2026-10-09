@@ -27,6 +27,17 @@ class NetworkSourceContract(unittest.TestCase):
         timers = [p for p in lock["package"] if p["name"] == "futures-timer"]
         self.assertTrue(all(tuple(map(int, p["version"].split("."))) >= (3, 0, 4) for p in timers))
 
+    def test_wasm_builder_includes_workspace_path_patch(self):
+        # cargo install resolves root patches even for a non-network tool.
+        root = tomllib.loads((ROOT / "Cargo.toml").read_text())
+        patch = root["patch"][URL]["libp2p-swarm"]["path"]
+        docker = (ROOT / "docker/wasm-builder/Dockerfile").read_text().splitlines()
+        self.assertIn(f"COPY {patch} /opt/oasis7/{patch}", docker)
+        self.assertTrue((ROOT / patch / "Cargo.toml").is_file())
+        context_policy = (ROOT / ".dockerignore").read_text().splitlines()
+        self.assertIn(f"!{patch}/", context_policy)
+        self.assertIn(f"!{patch}/**", context_policy)
+
     def test_swarm_snapshot_has_no_source_changes(self):
         vendor = ROOT / "vendor-libp2p-swarm-0.48.0"
         hashes = json.loads((vendor / "upstream-source-sha256.json").read_text())
