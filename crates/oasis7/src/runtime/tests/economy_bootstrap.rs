@@ -364,6 +364,13 @@ fn module_factory_fixture_admission_uses_registered_capabilities() {
     });
     step_twice(&mut world, &mut wasm);
     assert!(world.has_factory("factory.assembler.mk1"));
+    assert_eq!(
+        world
+            .agent_resource_balance("builder-a", ResourceKind::Electricity)
+            .expect("builder electricity after construction"),
+        400 - 6 - 8,
+        "both StartOnlySink construction obligations must charge the builder"
+    );
 }
 
 #[test]
@@ -759,11 +766,37 @@ fn m4_economy_modules_drive_resource_to_product_chain() {
     assert_eq!(world.material_balance("calibration_scrap"), 2);
     assert_eq!(world.material_balance("precision_scrap"), 1);
     assert_eq!(world.material_balance("structural_waste"), 1);
+    let mut recipe_power = 0;
+    let mut construction_power = 0;
+    for event in &world.journal().events {
+        match &event.body {
+            WorldEventBody::Domain(DomainEvent::RecipeStarted {
+                power_required,
+                power_owner_agent_id,
+                ..
+            }) => {
+                assert_eq!(power_owner_agent_id.as_deref(), Some("builder-a"));
+                recipe_power += power_required;
+            }
+            WorldEventBody::Domain(DomainEvent::FactoryBuildStarted {
+                construction_power_obligation: Some(obligation),
+                ..
+            }) => {
+                assert_eq!(obligation.payer_agent_id, "builder-a");
+                construction_power += obligation.electricity_amount;
+            }
+            _ => {}
+        }
+    }
+    // The eleven builtin recipes charge per batch: 12*8 + 12*6 + 4*7 +
+    // 4*4 + 4*6 + 2*7 + 1*12 + 3*9 + 2*8 + 1*10 + 1*14 = 329.
+    assert_eq!(recipe_power, 329);
+    assert_eq!(construction_power, 6 + 8);
     assert_eq!(
         world
             .agent_resource_balance("builder-a", ResourceKind::Electricity)
             .expect("builder electricity"),
-        71
+        400 - recipe_power - construction_power
     );
     assert_eq!(world.resource_balance(ResourceKind::Electricity), 400);
     assert_eq!(world.material_balance("stable_line_marker"), 1);
