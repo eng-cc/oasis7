@@ -429,8 +429,19 @@ import pathlib
 import sys
 
 manifest_path = pathlib.Path(sys.argv[1]).resolve()
+duplicate_fields = []
+def inspect_pairs(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            duplicate_fields.append(key)
+        obj[key] = value
+    return obj
+
 with manifest_path.open("r", encoding="utf-8") as fh:
-    data = json.load(fh)
+    data = json.load(fh, object_pairs_hook=inspect_pairs)
+if data.get("schema_version") == "oasis7.network_tier_manifest.v2" and duplicate_fields:
+    raise SystemExit("v2 duplicate manifest fields: " + ", ".join(duplicate_fields))
 
 if sys.argv[2] == "require-legacy-runtime":
     # Admission guard only; source manifests may be localized later. Full

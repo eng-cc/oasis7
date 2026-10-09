@@ -12,7 +12,7 @@ V2 = ROOT / "doc/testing/templates/network-tier-persistent-preview-planned.examp
 
 class PlannedManifestTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(dir=V2.parent)
+        self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / "manifest.json"
 
@@ -34,6 +34,21 @@ class PlannedManifestTests(unittest.TestCase):
                     self.write(data)
                     result = self.run_script("network-tier-manifest.sh", "validate", "--manifest", str(self.path))
                     self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_v2_duplicate_policy_fields_rejected(self):
+        self.write(json.loads(V2.read_text()))
+        source = self.path.read_text()
+        for original, duplicate in (
+            ('"profile_version": 1', '"profile_version": 0, "profile_version": 1'),
+            ('"activation": "planned"', '"activation": "live", "activation": "planned"'),
+            ('"schema_version": "oasis7.network_tier_manifest.v2"', '"schema_version": "oasis7.network_tier_manifest.v1", "schema_version": "oasis7.network_tier_manifest.v2"'),
+        ):
+            with self.subTest(original=original):
+                self.assertIn(original, source)
+                self.path.write_text(source.replace(original, duplicate))
+                result = self.run_script("network-tier-manifest.sh", "validate", "--manifest", str(self.path))
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("duplicate", result.stderr)
 
     def test_v2_planned_valid_and_never_ready(self):
         self.write(json.loads(V2.read_text()))
