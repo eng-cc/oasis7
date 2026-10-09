@@ -299,56 +299,7 @@ fn no_mount_application_acceptance() {
     send(&mut stream, serde_json::json!({"type":"request_snapshot"}));
     receive(&mut stream, "snapshot");
     use oasis7::viewer::{CollectDataCommand, CollectDataRequest, sign_collect_data_auth_proof};
-    let owner = hex::encode([7u8; 32]);
-    let public = sign_read_request("owner", (), &owner)
-        .unwrap()
-        .subject_public_key;
-    // Establish the player's session through the shipped authenticated protocol,
-    // exactly as a normal client does before submitting gameplay.
-    let mut registration = oasis7::viewer::AuthoritativeSessionRegisterRequest {
-        player_id: "owner-a".into(),
-        public_key: Some(public.clone()),
-        registration_grant: None,
-        auth: None,
-        requested_agent_id: Some("agent-a".into()),
-        force_rebind: false,
-    };
-    registration.auth = Some(
-        oasis7::viewer::sign_session_register_auth_proof(&registration, 550, &public, &owner)
-            .unwrap(),
-    );
-    send(
-        &mut stream,
-        serde_json::json!({
-            "type": "authoritative_recovery",
-            "command": {"mode": "register_session", "request": registration}
-        }),
-    );
-    let registration_deadline = Instant::now() + Duration::from_secs(15);
-    let registration_ack = loop {
-        assert!(
-            Instant::now() < registration_deadline,
-            "signed session registration acknowledgement missing"
-        );
-        let ack = receive(&mut stream, "authoritative_recovery_ack");
-        assert!(
-            Instant::now() < registration_deadline,
-            "session acknowledgement arrived after registration budget"
-        );
-        if ack["ack"]["status"] == "session_registered" {
-            break ack;
-        }
-        // Snapshot/subscribe metadata can already be queued ahead of the
-        // registration response. It never proves session registration.
-        assert_eq!(ack["ack"]["status"], "catch_up_ready");
-        assert_eq!(ack["ack"]["message"], "snapshot_sync_metadata");
-        assert!(ack["ack"]["player_id"].is_null());
-        assert!(ack["ack"]["agent_id"].is_null());
-        assert!(ack["ack"]["session_pubkey"].is_null());
-    };
-    assert_eq!(registration_ack["ack"]["status"], "session_registered");
-    assert_eq!(registration_ack["ack"]["player_id"], "owner-a");
-    assert_eq!(registration_ack["ack"]["agent_id"], "agent-a");
+    let (owner, public) = register_owner_session(&mut stream);
     let mut command = CollectDataCommand::Submit {
         request: CollectDataRequest {
             electricity_cost: 7,
@@ -520,6 +471,60 @@ fn no_mount_application_acceptance() {
     println!("PRE2_NO_MOUNT_SHIPPED_GAMEPLAY_AGENT_FIVE_OPS_PASSED");
 }
 
+fn register_owner_session(stream: &mut BufReader<TcpStream>) -> (String, String) {
+    let owner = hex::encode([7u8; 32]);
+    let public = sign_read_request("owner", (), &owner)
+        .unwrap()
+        .subject_public_key;
+    // Establish the player's session through the shipped authenticated protocol,
+    // exactly as a normal client does before submitting gameplay.
+    let mut registration = oasis7::viewer::AuthoritativeSessionRegisterRequest {
+        player_id: "owner-a".into(),
+        public_key: Some(public.clone()),
+        registration_grant: None,
+        auth: None,
+        requested_agent_id: Some("agent-a".into()),
+        force_rebind: false,
+    };
+    registration.auth = Some(
+        oasis7::viewer::sign_session_register_auth_proof(&registration, 550, &public, &owner)
+            .unwrap(),
+    );
+    send(
+        stream,
+        serde_json::json!({
+            "type": "authoritative_recovery",
+            "command": {"mode": "register_session", "request": registration}
+        }),
+    );
+    let registration_deadline = Instant::now() + Duration::from_secs(15);
+    let registration_ack = loop {
+        assert!(
+            Instant::now() < registration_deadline,
+            "signed session registration acknowledgement missing"
+        );
+        let ack = receive(stream, "authoritative_recovery_ack");
+        assert!(
+            Instant::now() < registration_deadline,
+            "session acknowledgement arrived after registration budget"
+        );
+        if ack["ack"]["status"] == "session_registered" {
+            break ack;
+        }
+        // Snapshot/subscribe metadata can already be queued ahead of the
+        // registration response. It never proves session registration.
+        assert_eq!(ack["ack"]["status"], "catch_up_ready");
+        assert_eq!(ack["ack"]["message"], "snapshot_sync_metadata");
+        assert!(ack["ack"]["player_id"].is_null());
+        assert!(ack["ack"]["agent_id"].is_null());
+        assert!(ack["ack"]["session_pubkey"].is_null());
+    };
+    assert_eq!(registration_ack["ack"]["status"], "session_registered");
+    assert_eq!(registration_ack["ack"]["player_id"], "owner-a");
+    assert_eq!(registration_ack["ack"]["agent_id"], "agent-a");
+    (owner, public)
+}
+
 #[test]
 #[ignore = "same shipped Viewer artifact restarted with endpoint alias; same actual Node"]
 fn no_mount_endpoint_switch_acceptance() {
@@ -591,6 +596,9 @@ fn no_mount_endpoint_switch_acceptance() {
     receive(&mut stream, "snapshot");
     let recovery = receive(&mut stream, "authoritative_recovery_ack");
     assert!(recovery["ack"]["snapshot_height"].as_u64().unwrap() >= commit.position);
+    // A restarted Viewer re-establishes its authenticated local session before
+    // replaying the exact original canonical gameplay request.
+    register_owner_session(&mut stream);
     send(
         &mut stream,
         serde_json::json!({"type":"collect_data","command":original["command"]}),
