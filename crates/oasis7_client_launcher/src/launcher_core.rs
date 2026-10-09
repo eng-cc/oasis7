@@ -1,21 +1,26 @@
+use super::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
 use super::*;
-use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
+use oasis7_client_api::{
+    AGENT_DECISION_SOURCE_BUILTIN_LLM as BUILTIN_LLM_DECISION_SOURCE,
+    AGENT_DECISION_SOURCE_PROVIDER_BACKED as PROVIDER_BACKED_DECISION_SOURCE,
+    AGENT_PROVIDER_BACKEND_LOCAL_BRIDGE as LOCAL_BRIDGE_PROVIDER_BACKEND,
+    AGENT_PROVIDER_CONTRACT_WORLDSIM_V1 as WORLDSIM_PROVIDER_CONTRACT,
+    AGENT_PROVIDER_MODE_DIRECT_CONNECT_ALIAS as AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS,
+    AGENT_PROVIDER_MODE_PROVIDER_LOOPBACK_HTTP_ALIAS as PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION,
+    AGENT_PROVIDER_TRANSPORT_LOOPBACK_HTTP as LOOPBACK_HTTP_PROVIDER_TRANSPORT,
+    AGENT_PROVIDER_TRANSPORT_REMOTE_HTTPS as REMOTE_HTTPS_PROVIDER_TRANSPORT,
+    DEFAULT_AGENT_PROVIDER_URL as DEFAULT_PROVIDER_DISCOVERY_BASE_URL,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::Read;
+
+#[cfg(test)]
+const DEFAULT_FORMAL_RELEASE_WORLD_ID: &str = "live-formal-release-default";
 
 #[cfg(not(target_arch = "wasm32"))]
 const OASIS7_GAME_STATIC_DIR_ENV: &str = "OASIS7_GAME_STATIC_DIR";
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_VIEWER_STATIC_DIR: &str = "web";
-pub(super) const PROVIDER_LOOPBACK_HTTP_IMPLEMENTATION: &str = "provider_loopback_http";
-pub(super) const BUILTIN_LLM_DECISION_SOURCE: &str = "builtin_llm";
-pub(super) const PROVIDER_BACKED_DECISION_SOURCE: &str = "provider_backed";
-pub(super) const LOCAL_BRIDGE_PROVIDER_BACKEND: &str = "provider_local_bridge";
-pub(super) const WORLDSIM_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
-pub(super) const LOOPBACK_HTTP_PROVIDER_TRANSPORT: &str = "loopback_http";
-pub(super) const REMOTE_HTTPS_PROVIDER_TRANSPORT: &str = "remote_https";
-pub(super) const AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS: &str = "agent_direct_connect";
-pub(super) const DEFAULT_PROVIDER_DISCOVERY_BASE_URL: &str = DEFAULT_AGENT_PROVIDER_URL;
 const HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 const HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY";
 const HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE";
@@ -739,7 +744,7 @@ pub(super) fn build_chain_runtime_args(config: &LaunchConfig) -> Result<Vec<Stri
         parse_chain_replication_bootstrap_peers(config.chain_replication_bootstrap_peers.as_str())?;
     let scenario = config.scenario.trim();
     let default_world_id = if scenario.is_empty() {
-        oasis7::viewer::VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string()
+        DEFAULT_FORMAL_RELEASE_WORLD_ID.to_string()
     } else {
         format!("live-{scenario}")
     };

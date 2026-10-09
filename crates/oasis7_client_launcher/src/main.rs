@@ -17,8 +17,18 @@ use feedback_entry::FeedbackDraft;
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
 use llm_settings::LlmSettingsPanel;
-use oasis7::chain_pos_defaults;
-use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
+#[cfg(not(target_arch = "wasm32"))]
+use oasis7_client_api::AGENT_PROVIDER_MODE_DIRECT_CONNECT_ALIAS as AGENT_DIRECT_CONNECT_PROVIDER_MODE_ALIAS;
+use oasis7_client_api::{
+    AGENT_DECISION_SOURCE_BUILTIN_LLM as DEFAULT_AGENT_DECISION_SOURCE,
+    AGENT_EXECUTION_LANE_PLAYER_PARITY as DEFAULT_AGENT_EXECUTION_LANE,
+    AGENT_PROVIDER_BACKEND_LOCAL_BRIDGE as DEFAULT_AGENT_PROVIDER_BACKEND,
+    AGENT_PROVIDER_CONTRACT_WORLDSIM_V1 as DEFAULT_AGENT_PROVIDER_CONTRACT,
+    AGENT_PROVIDER_TRANSPORT_LOOPBACK_HTTP as DEFAULT_AGENT_PROVIDER_TRANSPORT,
+    DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS, DEFAULT_AGENT_PROVIDER_PROFILE,
+    DEFAULT_AGENT_PROVIDER_URL, DEFAULT_CHAIN_NETWORK_TIER,
+    default_chain_replication_bootstrap_peers_csv,
+};
 use platform_ops::open_browser;
 use platform_ops::resolve_static_dir_path;
 #[cfg(not(target_arch = "wasm32"))]
@@ -43,6 +53,7 @@ use web_time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod app_process;
 #[cfg(target_arch = "wasm32")]
 mod app_process_web;
+mod chain_pos_defaults;
 mod config_ui;
 mod explorer_window;
 #[cfg(not(target_arch = "wasm32"))]
@@ -54,6 +65,7 @@ mod feedback_window;
 #[cfg(target_arch = "wasm32")]
 mod feedback_window_web;
 mod http_helpers;
+mod launcher_bootstrap_peers;
 mod launcher_core;
 #[cfg(target_arch = "wasm32")]
 mod launcher_test_hook_web;
@@ -88,9 +100,11 @@ mod web_api_support;
 use config_ui::StartupGuideState;
 use launcher_core::*;
 use main_chain_status::*;
-pub(crate) use provider_check_status::{
-    ProviderCheckStatus, ProviderCompatibilityStatus, ProviderSnapshot,
-};
+pub(crate) use provider_check_status::ProviderCheckStatus;
+#[cfg(any(not(target_arch = "wasm32"), test))]
+pub(crate) use provider_check_status::ProviderCompatibilityStatus;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use provider_check_status::ProviderSnapshot;
 use self_guided::{
     DemoModePhase, LauncherUxState, NextTaskHint, OnboardingState, resolve_next_task_hint,
 };
@@ -109,19 +123,10 @@ const DEFAULT_LIVE_BIND: &str = "127.0.0.1:5023";
 const DEFAULT_WEB_BIND: &str = "127.0.0.1:5011";
 const DEFAULT_VIEWER_HOST: &str = "127.0.0.1";
 const DEFAULT_VIEWER_PORT: &str = "4173";
-const DEFAULT_AGENT_DECISION_SOURCE: &str = "builtin_llm";
-const DEFAULT_AGENT_PROVIDER_BACKEND: &str = "provider_local_bridge";
-const DEFAULT_AGENT_PROVIDER_CONTRACT: &str = "worldsim_provider_v1";
-const DEFAULT_AGENT_PROVIDER_TRANSPORT: &str = "loopback_http";
-const DEFAULT_AGENT_PROVIDER_URL: &str = "http://127.0.0.1:5841";
-const DEFAULT_AGENT_PROVIDER_CONNECT_TIMEOUT_MS: &str = "15000";
-const DEFAULT_AGENT_EXECUTION_LANE: &str = "player_parity";
-const DEFAULT_AGENT_PROVIDER_PROFILE: &str = "oasis7_p0_low_freq_npc";
 const DEFAULT_CHAIN_STATUS_BIND: &str = "127.0.0.1:5121";
 const DEFAULT_CHAIN_NODE_ID: &str = "viewer-live-node";
 const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
 const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
-const DEFAULT_CHAIN_NETWORK_TIER: &str = "local_devnet";
 const PUBLIC_TESTNET_NETWORK_TIER_MANIFEST: &str =
     "doc/testing/templates/network-tier-public-testnet.example.json";
 const MAINNET_NETWORK_TIER_MANIFEST: &str =

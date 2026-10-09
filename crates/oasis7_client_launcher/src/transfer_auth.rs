@@ -1,24 +1,12 @@
-#[cfg(target_arch = "wasm32")]
-use ed25519_dalek::{Signer, SigningKey};
-#[cfg(not(target_arch = "wasm32"))]
-use oasis7::consensus_action_payload::sign_main_token_runtime_action_auth;
-#[cfg(not(target_arch = "wasm32"))]
-use oasis7::runtime::Action;
-#[cfg(target_arch = "wasm32")]
-use serde::Serialize;
+use oasis7_client_api::{
+    MainTokenTransfer, TRANSFER_TX_TYPE_ASSET_TRANSFER, TRANSFER_TX_VERSION_V2,
+    sign_main_token_transfer,
+};
 
 use super::WebTransferSubmitRequest;
 
-#[cfg(target_arch = "wasm32")]
-const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
-#[cfg(target_arch = "wasm32")]
-const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V1_PREFIX: &str = "octransferauth:v1:";
-#[cfg(target_arch = "wasm32")]
-const MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX: &str = "octransferauth:v2:";
 const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
-const TRANSFER_TX_VERSION_V2: u8 = 2;
-const TRANSFER_TX_TYPE_ASSET_TRANSFER: &str = "asset_transfer";
 #[cfg(test)]
 pub(crate) static TRANSFER_AUTH_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[cfg(not(target_arch = "wasm32"))]
@@ -36,54 +24,6 @@ const VIEWER_AUTH_BOOTSTRAP_OBJECT: &str = "__OASIS7_VIEWER_AUTH_ENV";
 struct TransferAuthSigner {
     public_key: String,
     private_key: String,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[derive(Debug, Serialize)]
-struct TransferActionData<'a> {
-    from_account_id: &'a str,
-    to_account_id: &'a str,
-    amount: u64,
-    nonce: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    asset_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    memo: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    chain_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    network_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tx_version: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tx_type: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    valid_until_unix_ms: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_fee: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fee_asset_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    application_payload_hash: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client_request_id: Option<&'a str>,
-}
-
-#[cfg(target_arch = "wasm32")]
-#[derive(Debug, Serialize)]
-#[serde(tag = "type", content = "data")]
-enum TransferActionEnvelope<'a> {
-    TransferMainToken(TransferActionData<'a>),
-}
-
-#[cfg(target_arch = "wasm32")]
-#[derive(Debug, Serialize)]
-struct MainTokenTransferSigningEnvelope<'a> {
-    version: u8,
-    operation: &'static str,
-    account_id: &'a str,
-    public_key: &'a str,
-    action: TransferActionEnvelope<'a>,
 }
 
 pub(super) fn build_signed_web_transfer_submit_request(
@@ -135,7 +75,6 @@ pub(super) fn build_signed_web_transfer_submit_request(
     })
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn sign_transfer_request(
     signer: TransferAuthSigner,
     from_account_id: &str,
@@ -145,25 +84,11 @@ fn sign_transfer_request(
     chain_id: Option<&str>,
     network_id: Option<&str>,
 ) -> Result<(String, String), String> {
-    let action = Action::TransferMainToken {
-        from_account_id: from_account_id.to_string(),
-        to_account_id: to_account_id.to_string(),
-        amount,
-        nonce,
-        asset_id: Some("main_token".to_string()),
-        memo: None,
-        chain_id: chain_id.map(ToOwned::to_owned),
-        network_id: network_id.map(ToOwned::to_owned),
-        tx_version: Some(TRANSFER_TX_VERSION_V2),
-        tx_type: Some(TRANSFER_TX_TYPE_ASSET_TRANSFER.to_string()),
-        valid_until_unix_ms: None,
-        max_fee: None,
-        fee_asset_id: None,
-        application_payload_hash: None,
-        client_request_id: None,
-    };
-    let proof = sign_main_token_runtime_action_auth(
-        &action,
+    let mut transfer = MainTokenTransfer::new(from_account_id, to_account_id, amount, nonce);
+    transfer.chain_id = chain_id.map(ToOwned::to_owned);
+    transfer.network_id = network_id.map(ToOwned::to_owned);
+    let proof = sign_main_token_transfer(
+        &transfer,
         from_account_id,
         signer.public_key.as_str(),
         signer.private_key.as_str(),
@@ -276,115 +201,6 @@ fn resolve_bootstrap_string(
         .ok_or_else(|| format!("{key} is missing"))
 }
 
-#[cfg(target_arch = "wasm32")]
-fn sign_transfer_request(
-    signer: TransferAuthSigner,
-    from_account_id: &str,
-    to_account_id: &str,
-    amount: u64,
-    nonce: u64,
-    chain_id: Option<&str>,
-    network_id: Option<&str>,
-) -> Result<(String, String), String> {
-    let public_key = normalize_hex_array::<32>(
-        signer.public_key.as_str(),
-        "main token auth signer public key",
-    )?;
-    let private_key = decode_hex_array::<32>(
-        signer.private_key.as_str(),
-        "main token auth signer private key",
-    )?;
-    let signing_key = SigningKey::from_bytes(&private_key);
-    let expected_public_key = hex::encode(signing_key.verifying_key().to_bytes());
-    if expected_public_key != public_key {
-        return Err(format!(
-            "main token auth signer public key does not match private key: expected={expected_public_key} actual={public_key}"
-        ));
-    }
-    let expected_account_id = format!("oc:pk:{public_key}");
-    if from_account_id.trim() != expected_account_id {
-        return Err(format!(
-            "main token auth account_id does not match signer public key: expected={expected_account_id} actual={}",
-            from_account_id.trim()
-        ));
-    }
-    let payload = build_transfer_signing_payload(
-        from_account_id.trim(),
-        to_account_id.trim(),
-        amount,
-        nonce,
-        public_key.as_str(),
-        chain_id,
-        network_id,
-    )?;
-    let signature = signing_key.sign(payload.as_slice());
-    Ok((
-        public_key,
-        format!(
-            "{}{}",
-            MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX,
-            hex::encode(signature.to_bytes())
-        ),
-    ))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn build_transfer_signing_payload(
-    from_account_id: &str,
-    to_account_id: &str,
-    amount: u64,
-    nonce: u64,
-    public_key: &str,
-    chain_id: Option<&str>,
-    network_id: Option<&str>,
-) -> Result<Vec<u8>, String> {
-    let envelope = MainTokenTransferSigningEnvelope {
-        version: MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION,
-        operation: "transfer_main_token",
-        account_id: from_account_id,
-        public_key,
-        action: TransferActionEnvelope::TransferMainToken(TransferActionData {
-            from_account_id,
-            to_account_id,
-            amount,
-            nonce,
-            asset_id: Some("main_token"),
-            memo: None,
-            chain_id,
-            network_id,
-            tx_version: Some(TRANSFER_TX_VERSION_V2),
-            tx_type: Some(TRANSFER_TX_TYPE_ASSET_TRANSFER),
-            valid_until_unix_ms: None,
-            max_fee: None,
-            fee_asset_id: None,
-            application_payload_hash: None,
-            client_request_id: None,
-        }),
-    };
-    serde_json::to_vec(&envelope)
-        .map_err(|err| format!("encode main token auth signing payload failed: {err}"))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn normalize_hex_array<const N: usize>(raw: &str, label: &str) -> Result<String, String> {
-    let bytes = decode_hex_array::<N>(raw, label)?;
-    Ok(hex::encode(bytes))
-}
-
-#[cfg(target_arch = "wasm32")]
-fn decode_hex_array<const N: usize>(raw: &str, label: &str) -> Result<[u8; N], String> {
-    let bytes = hex::decode(raw.trim()).map_err(|err| format!("decode {label} failed: {err}"))?;
-    if bytes.len() != N {
-        return Err(format!(
-            "{label} length mismatch: expected {N} bytes, got {}",
-            bytes.len()
-        ));
-    }
-    let mut fixed = [0_u8; N];
-    fixed.copy_from_slice(bytes.as_slice());
-    Ok(fixed)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -392,11 +208,12 @@ mod tests {
         build_signed_web_transfer_submit_request, resolve_transfer_auth_signer_from_env,
         resolve_transfer_auth_signer_from_path,
     };
-    use oasis7::consensus_action_payload::{
-        MainTokenActionAuthScheme, sign_main_token_runtime_action_auth,
-        verify_main_token_runtime_action_auth,
+    use oasis7_client_api::{
+        MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION, MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX,
+        MainTokenActionAuthProof, MainTokenActionAuthScheme, MainTokenTransfer,
+        build_main_token_transfer_signing_payload, sign_main_token_transfer,
+        verify_main_token_transfer_signature,
     };
-    use oasis7::runtime::Action;
     use serde::Serialize;
     use std::fs;
     use std::path::PathBuf;
@@ -520,17 +337,17 @@ mod tests {
         let _guard = super::TRANSFER_AUTH_ENV_LOCK.lock().expect("env lock");
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
+            std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
         }
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "private");
+            std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, "private");
         }
         let err = resolve_transfer_auth_signer_from_env().expect_err("missing public key");
         assert!(err.contains(VIEWER_AUTH_PUBLIC_KEY_ENV));
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+            std::env::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
         }
     }
 
@@ -553,30 +370,14 @@ mod tests {
         let _guard = super::TRANSFER_AUTH_ENV_LOCK.lock().expect("env lock");
         let (public_key, private_key) = test_signer(21);
         let from_account_id = format!("oc:pk:{public_key}");
-        let action = Action::TransferMainToken {
-            from_account_id: from_account_id.clone(),
-            to_account_id: "protocol:treasury".to_string(),
-            amount: 7,
-            nonce: 3,
-            asset_id: Some("main_token".to_string()),
-            memo: None,
-            chain_id: None,
-            network_id: None,
-            tx_version: Some(2),
-            tx_type: Some("asset_transfer".to_string()),
-            valid_until_unix_ms: None,
-            max_fee: None,
-            fee_asset_id: None,
-            application_payload_hash: None,
-            client_request_id: None,
-        };
+        let transfer = MainTokenTransfer::new(from_account_id.clone(), "protocol:treasury", 7, 3);
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
+            std::env::set_var(VIEWER_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
         }
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
+            std::env::set_var(VIEWER_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
         }
         let request = build_signed_web_transfer_submit_request(
             from_account_id.as_str(),
@@ -587,9 +388,9 @@ mod tests {
             None,
         )
         .expect("signed request");
-        let verified = verify_main_token_runtime_action_auth(
-            &action,
-            &oasis7::consensus_action_payload::MainTokenActionAuthProof {
+        let verified = verify_main_token_transfer_signature(
+            &transfer,
+            &MainTokenActionAuthProof {
                 scheme: MainTokenActionAuthScheme::Ed25519,
                 account_id: request.from_account_id.clone(),
                 public_key: Some(request.public_key.clone()),
@@ -603,37 +404,21 @@ mod tests {
         assert_eq!(verified.signer_public_keys, vec![public_key.clone()]);
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
+            std::env::remove_var(VIEWER_AUTH_PUBLIC_KEY_ENV);
         }
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
+            std::env::remove_var(VIEWER_AUTH_PRIVATE_KEY_ENV);
         }
     }
 
     #[test]
-    fn wasm_transfer_signing_payload_matches_runtime_helper_shape() {
+    fn client_api_signing_payload_matches_native_and_web_wire_bytes() {
         let (public_key, private_key) = test_signer(23);
         let from_account_id = format!("oc:pk:{public_key}");
-        let action = Action::TransferMainToken {
-            from_account_id: from_account_id.clone(),
-            to_account_id: "protocol:treasury".to_string(),
-            amount: 7,
-            nonce: 9,
-            asset_id: Some("main_token".to_string()),
-            memo: None,
-            chain_id: None,
-            network_id: None,
-            tx_version: Some(2),
-            tx_type: Some("asset_transfer".to_string()),
-            valid_until_unix_ms: None,
-            max_fee: None,
-            fee_asset_id: None,
-            application_payload_hash: None,
-            client_request_id: None,
-        };
-        let proof = sign_main_token_runtime_action_auth(
-            &action,
+        let transfer = MainTokenTransfer::new(from_account_id.clone(), "protocol:treasury", 7, 9);
+        let proof = sign_main_token_transfer(
+            &transfer,
             from_account_id.as_str(),
             public_key.as_str(),
             private_key.as_str(),
@@ -641,7 +426,7 @@ mod tests {
         .expect("native proof");
 
         let native_payload = serde_json::to_vec(&NativeMainTokenTransferSigningEnvelope {
-            version: 1,
+            version: MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION,
             operation: "transfer_main_token",
             account_id: from_account_id.as_str(),
             public_key: public_key.as_str(),
@@ -666,7 +451,7 @@ mod tests {
         .expect("native payload");
 
         let wasm_payload = serde_json::to_vec(&WasmMainTokenTransferSigningEnvelope {
-            version: 1,
+            version: MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION,
             operation: "transfer_main_token",
             account_id: from_account_id.as_str(),
             public_key: public_key.as_str(),
@@ -695,9 +480,23 @@ mod tests {
             String::from_utf8(wasm_payload.clone()).expect("wasm utf8"),
         );
 
+        let api_payload = build_main_token_transfer_signing_payload(
+            &transfer,
+            from_account_id.as_str(),
+            public_key.as_str(),
+        )
+        .expect("client API canonical payload");
+        assert_eq!(api_payload, native_payload);
+        assert_eq!(api_payload, wasm_payload);
+
+        let verified = verify_main_token_transfer_signature(&transfer, &proof)
+            .expect("client API signed proof verifies");
+        assert_eq!(verified.account_id, from_account_id);
+        assert_eq!(verified.signer_public_keys, vec![public_key.clone()]);
+
         let signature = proof.signature.expect("signature");
         let signature_hex = signature
-            .strip_prefix("octransferauth:v2:")
+            .strip_prefix(MAIN_TOKEN_TRANSFER_AUTH_SIGNATURE_V2_PREFIX)
             .expect("transfer prefix");
         let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(
             &hex::decode(public_key.as_str())
