@@ -106,6 +106,7 @@ mod logistics;
 pub use logistics::LogisticsTransferQuote;
 mod market_quote_decision_preview;
 pub use market_quote_decision_preview::{MarketQuoteDecisionPreview, MarketQuoteSupplyDelta};
+mod defaults;
 mod local_test_provider_bootstrap;
 mod main_token_economy_audit;
 mod module_actions;
@@ -1192,11 +1193,5 @@ impl World {
         self.enforce_pending_effect_limit();
         self.enforce_inflight_effect_limit();
         self.enforce_journal_event_limit();
-    }
-}
-
-impl Default for World {
-    fn default() -> Self {
-        Self::new()
     }
 }

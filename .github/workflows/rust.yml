@@ -439,6 +439,22 @@ jobs:
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+      - name: Install WASM C compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+          clang --print-targets | grep -w wasm32
+      - name: Verify pinned network source and process compatibility
+        run: |
+          python3 scripts/libp2p-security-source.test.py
+          python3 scripts/libp2p-compat.test.py
+      - name: Verify WASM network and node feature boundaries
+        env:
+          CC_wasm32_unknown_unknown: clang
+          AR_wasm32_unknown_unknown: llvm-ar
+        run: |
+          env -u RUSTC_WRAPPER cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked
+          env -u RUSTC_WRAPPER cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked
 
   viewer-js-required:
     needs: select
@@ -466,6 +482,13 @@ jobs:
           cache-dependency-path: crates/oasis7_viewer/package-lock.json
       - name: Install viewer dependencies
         run: npm ci --prefix crates/oasis7_viewer
+      - name: Install pinned security smoke browser
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/viewer-security-browser" --no-save --package-lock=false agent-browser@0.37.1
+          browser_bin="$RUNNER_TEMP/viewer-security-browser/node_modules/.bin/agent-browser"
+          "$browser_bin" install --with-deps
+          printf 'AGENT_BROWSER_BIN=%s\n' "$browser_bin" >> "$GITHUB_ENV"
       - name: Install pinned Rust toolchains
         shell: bash
         run: |
@@ -492,6 +515,8 @@ jobs:
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+      - name: Verify browser authentication security
+        run: node crates/oasis7_viewer/scripts/viewer-auth-browser-security-smoke.mjs
 
   viewer-performance-report:
     needs: select
@@ -538,6 +563,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev wayland-protocols libxkbcommon-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libasound2-dev libudev-dev
+      - name: Build performance test artifact
+        run: npm --prefix crates/oasis7_viewer run build:viewer:visual-test
       - name: Execute selected cell
         shell: bash
         env:
@@ -854,6 +881,11 @@ jobs:
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash "$RUNNER_TEMP/ci-authority/ci-tests.sh" required --group "${{ matrix.group }}" --repo-root "$GITHUB_WORKSPACE"
+      - name: Verify new source archive and cache permission contracts
+        run: |
+          python3 scripts/package-source-plan.test.py
+          python3 scripts/safe-git-archive.test.py
+          node scripts/cache-permission-probe.test.cjs
 
   codex-agent-config-validation:
     needs: select

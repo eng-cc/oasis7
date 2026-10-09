@@ -20,6 +20,39 @@ class Workflow(unittest.TestCase):
         # The protected baseline already executes this suite during migration.
         subprocess.run(['bash',str(ROOT/'scripts/install-ci-trunk.test.sh')],cwd=ROOT,check=True)
 
+    def test_viewer_security_smoke_uses_installed_browser_after_formal_build(self):
+        job = JOBS['viewer-js-required']
+        self.assertIn('agent-browser@0.37.1', job)
+        self.assertIn('--prefix "$RUNNER_TEMP/viewer-security-browser"', job)
+        self.assertIn('"$browser_bin" install --with-deps', job)
+        self.assertIn("printf 'AGENT_BROWSER_BIN=%s\\n'", job)
+        self.assertNotIn('cache-mode: write', job)
+        group = re.search(r'^    viewer_js_required\) (.*?) ;;$',
+                          (ROOT / 'scripts/ci-tests.sh').read_text(), re.M).group(1)
+        self.assertLess(group.index('run_oasis7_viewer_software_safe_build'),
+                        group.index('viewer-auth-browser-security-smoke.mjs'))
+
+    def test_additive_security_steps_preserve_baseline_cells(self):
+        for name in ('net', 'viewer-js-required', 'viewer-performance-report', 'workflow-governance'):
+            self.assertEqual(JOBS[name].count('name: Execute selected cell'), 1)
+            self.assertIn('"$RUNNER_TEMP/ci-authority/ci-tests.sh" required', JOBS[name])
+        performance = JOBS['viewer-performance-report']
+        self.assertLess(performance.index('Build performance test artifact'), performance.index('Execute selected cell'))
+        viewer = JOBS['viewer-js-required']
+        self.assertGreater(viewer.index('Verify browser authentication security'), viewer.index('Execute selected cell'))
+        net = JOBS['net']
+        self.assertGreater(net.index('Verify pinned network source'), net.index('Execute selected cell'))
+        for check in ('scripts/libp2p-security-source.test.py', 'scripts/libp2p-compat.test.py',
+                      'clang --print-targets | grep -w wasm32', 'CC_wasm32_unknown_unknown: clang',
+                      'cargo check -p oasis7_net --no-default-features --target wasm32-unknown-unknown --locked',
+                      'cargo check -p oasis7_node --features libp2p --target wasm32-unknown-unknown --locked'):
+            self.assertIn(check, net)
+        governance = JOBS['workflow-governance']
+        self.assertGreater(governance.index('Verify new source archive'), governance.index('Execute selected cell'))
+        for test in ('package-source-plan.test.py', 'safe-git-archive.test.py', 'cache-permission-probe.test.cjs'):
+            self.assertIn(test, governance)
+        self.assertNotIn('run: python3 scripts/ci-workflow.test.py', governance) # already in authority cell
+
     def test_readers_share_compatible_trusted_writer_identity(self):
         writer = JOBS['full-regression']
         self.assertIn('cache-mode: write', writer)

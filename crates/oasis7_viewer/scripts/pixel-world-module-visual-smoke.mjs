@@ -6,6 +6,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
+const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed", "--pin-tab"] : ["--pin-tab"];
 const viewerRoot = resolve(scriptDir, "..");
 const artifactRoot = resolve(viewerRoot, ".viewer-test-dist");
 const repoRoot = resolve(viewerRoot, "../..");
@@ -64,12 +65,12 @@ function serveFile(request, response) {
   if (!relative(artifactRoot, filePath) || relative(artifactRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
   try { if (!statSync(filePath).isFile()) throw new Error("not file"); response.writeHead(200, { "Content-Type": contentType(filePath), "Cache-Control": "no-store" }); response.end(readFileSync(filePath)); } catch { response.writeHead(404); response.end("not found"); }
 }
-const browserLifecycle = createOwnedSessionLifecycle({ command: browser, session });
+const browserLifecycle = createOwnedSessionLifecycle({ command: browser, session, prefixArgs: browserLaunchArgs });
 const closeBrowser = browserLifecycle.close;
 const prepareBrowserSession = browserLifecycle.prepare;
-function runBrowser(args, input) { return new Promise((resolveRun, rejectRun) => { const child = spawn(browser, ["--session", session, ...args], { stdio: ["pipe", "pipe", "pipe"] }); let stdout = ""; let stderr = ""; child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8"); child.stdout.on("data", (chunk) => { stdout += chunk; }); child.stderr.on("data", (chunk) => { stderr += chunk; }); child.on("error", rejectRun); child.on("close", (code) => code === 0 ? resolveRun(stdout) : rejectRun(new Error(`${args.join(" ")} failed\n${stdout}\n${stderr}`))); child.stdin.end(input); }); }
+function runBrowser(args, input) { return new Promise((resolveRun, rejectRun) => { const child = spawn(browser, ["--session", session, ...browserLaunchArgs, ...args], { stdio: ["pipe", "pipe", "pipe"] }); let stdout = ""; let stderr = ""; child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8"); child.stdout.on("data", (chunk) => { stdout += chunk; }); child.stderr.on("data", (chunk) => { stderr += chunk; }); child.on("error", rejectRun); child.on("close", (code) => code === 0 ? resolveRun(stdout) : rejectRun(new Error(`${args.join(" ")} failed\n${stdout}\n${stderr}`))); if (input !== undefined) child.stdin.end(input); }); }
 async function browserJson(args, input) { const result = JSON.parse(await runBrowser(["--json", ...args], input)); if (!result.success) fail(result.error || "browser JSON failure"); return result.data; }
-async function evalJson(script) { const data = await browserJson(["eval", "--stdin"], script); return typeof data.result === "string" ? JSON.parse(data.result) : data.result; }
+async function evalJson(script) { const data = await browserJson(["eval", script]); return typeof data.result === "string" ? JSON.parse(data.result) : data.result; }
 async function clickVisible(selector) {
   await browserJson(["scrollintoview", selector]);
   const target = await evalJson(`(() => { const node = document.querySelector(${JSON.stringify(selector)}); if (!node) throw new Error("missing visible target"); const rect = node.getBoundingClientRect(); const x = rect.left + rect.width / 2; const y = rect.top + rect.height / 2; const hit = document.elementFromPoint(x, y); const style = getComputedStyle(node); return JSON.stringify({ visible: rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight && rect.left >= 0 && rect.right <= innerWidth && style.display !== "none" && style.visibility !== "hidden", targetTop: hit === node || node.contains(hit), rect: { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height }, hash: location.hash, active: document.activeElement?.id || null, hit: hit?.outerHTML?.slice(0, 200) || null }); })()`);
@@ -85,17 +86,16 @@ function pageStateScript() { return String.raw`(() => { const state = window.__A
 function canvasDimensionsScript() { return String.raw`(() => { const canvas = document.querySelector('#pixel-world-embedded-runtime-canvas'); if (!canvas) throw new Error('pixel world canvas unavailable'); const rect = canvas.getBoundingClientRect(); return JSON.stringify({ cssWidth: rect.width, cssHeight: rect.height, bitmapWidth: canvas.width, bitmapHeight: canvas.height }); })()`; }
 function scrollCanvasIntoViewScript() { return String.raw`(() => { const canvas = document.querySelector('#pixel-world-embedded-runtime-canvas'); if (!canvas) throw new Error('pixel world canvas unavailable'); canvas.scrollIntoView({ block: 'center', inline: 'center' }); return JSON.stringify(true); })()`; }
 function zoomCanvasScript(deltaY, repeats) { return String.raw`(() => { const canvas = document.querySelector('#pixel-world-embedded-runtime-canvas'); if (!canvas) throw new Error('pixel world canvas unavailable'); const rect = canvas.getBoundingClientRect(); const clientX = rect.left + (rect.width / 2); const clientY = rect.top + (rect.height / 2); for (let index = 0; index < ${repeats}; index += 1) canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: ${deltaY}, clientX, clientY, bubbles: true, cancelable: true })); return JSON.stringify(true); })()`; }
-function panCanvasScript(direction = 1, ratio = 0.4, minimum = 230) { return String.raw`(() => { const canvas = document.querySelector('#pixel-world-embedded-runtime-canvas'); if (!canvas) throw new Error('pixel world canvas unavailable'); canvas.setPointerCapture = () => {}; canvas.releasePointerCapture = () => {}; const rect = canvas.getBoundingClientRect(); const pointerId = 77; const startX = rect.left + (rect.width / 2); const startY = rect.top + (rect.height / 2); const endX = startX + (${direction} * Math.max(rect.width * ${ratio}, ${minimum})); canvas.dispatchEvent(new PointerEvent('pointerdown', { pointerId, clientX: startX, clientY: startY, button: 0, buttons: 1, bubbles: true })); canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId, clientX: endX, clientY: startY, buttons: 1, bubbles: true })); canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId, clientX: endX, clientY: startY, button: 0, bubbles: true })); return JSON.stringify(true); })()`; }
+function panCanvasScript(direction = 1, ratio = 0.4, minimum = 230, vertical = 0) { return String.raw`(() => { const canvas = document.querySelector('#pixel-world-embedded-runtime-canvas'); if (!canvas) throw new Error('pixel world canvas unavailable'); canvas.setPointerCapture = () => {}; canvas.releasePointerCapture = () => {}; const rect = canvas.getBoundingClientRect(); const pointerId = 77; const startX = rect.left + (rect.width / 2); const startY = rect.top + (rect.height / 2); const endX = startX + (${direction} * Math.max(rect.width * ${ratio}, ${minimum})); const endY = startY + ${vertical}; canvas.dispatchEvent(new PointerEvent('pointerdown', { pointerId, clientX: startX, clientY: startY, button: 0, buttons: 1, bubbles: true })); canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId, clientX: endX, clientY: endY, buttons: 1, bubbles: true })); canvas.dispatchEvent(new PointerEvent('pointerup', { pointerId, clientX: endX, clientY: endY, button: 0, bubbles: true })); return JSON.stringify(true); })()`; }
 function clickModuleScript(id) { return String.raw`(() => { const expectedId = ${JSON.stringify(id)}; const marker = [...document.querySelectorAll('[data-pixel-world-module-marker="true"]')].find((candidate) => candidate.dataset.moduleId === expectedId && candidate.dataset.rendererTarget === 'true'); if (!marker) throw new Error(JSON.stringify({ message: 'actual-WASM module target unavailable', expectedId, markers: [...document.querySelectorAll('[data-pixel-world-module-marker="true"]')].map((candidate) => ({ id: candidate.dataset.moduleId, rendererTarget: candidate.dataset.rendererTarget, ariaLabel: candidate.getAttribute('aria-label') })) })); const keyboardReachable = marker instanceof HTMLButtonElement && marker.tabIndex >= 0; if (!keyboardReachable) throw new Error(JSON.stringify({ message: 'module target is not keyboard reachable', id: expectedId, tagName: marker.tagName, tabIndex: marker.tabIndex })); marker.focus(); const focusedBeforeClick = document.activeElement === marker; marker.click(); return JSON.stringify({ id: expectedId, ariaLabel: marker.getAttribute('aria-label'), keyboardReachable, focused: focusedBeforeClick }); })()`; }
 function metadataSnapshotScript(stage) {
   return String.raw`(() => {
     const fixtures = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__;
     const inject = window.__AW_TEST__?.injectSnapshot;
-    const align = window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__;
-    if (!fixtures?.module_visual_entities || typeof inject !== 'function' || typeof align !== 'function') {
+    if (typeof fixtures?.get('module_visual_entities') !== 'function' || typeof inject !== 'function') {
       throw new Error('metadata fixture injection API unavailable');
     }
-    const snapshot = structuredClone(fixtures.module_visual_entities());
+    const snapshot = structuredClone(fixtures.get("module_visual_entities")());
     const baseline = ${JSON.stringify(stage === 'baseline')};
     const metadataStage = ${JSON.stringify(stage === 'metadata')};
     const explicitRouteLabel = ${JSON.stringify(stage === 'baseline' || stage === 'metadata')};
@@ -139,7 +139,6 @@ function metadataSnapshotScript(stage) {
     snapshot.player_gameplay.blocker_kind = baseline ? 'material_shortage' : metadataStage ? 'power_shortage' : 'updated_blocker';
     snapshot.player_gameplay.blocker_label = baseline ? 'Initial blocker' : 'Updated blocker';
     inject(snapshot, { returnState: false });
-    align();
     return JSON.stringify({ stage: ${JSON.stringify(stage)}, locale: snapshot.locale, explicitRouteLabel });
   })()`;
 }
@@ -258,7 +257,7 @@ try {
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=module_visual_entities`;
   summary.url = url;
-  prepareBrowserSession();
+  prepareBrowserSession(); await new Promise((resolve) => setTimeout(resolve, 500));
   await browserJson(["open", url]);
   await evalJson(`(async()=>{for(let n=0;n<1200;n++){if(window.__OASIS7_VIEWER_FIXTURE_READY__) return true; await new Promise(r=>setTimeout(r,50));} throw new Error("test fixture never became ready");})()`);
   for (const [name, width, height] of [["desktop", 1440, 900], ["narrow", 390, 844]]) {
@@ -284,7 +283,7 @@ try {
     await evalJson(metadataSnapshotScript("baseline"));
     const metadataBaselineState = await evalJson(String.raw`(async()=>{const deadline=Date.now()+5000; let state; while(Date.now()<deadline){state=JSON.parse(${pageStateScript()}); if(state.renderLocale === 'en' && state.links.some((link)=>link.label === 'Initial logistics route') && state.visualHotspots.some((hotspot)=>hotspot.label === 'Initial objective') && state.visualHotspots.some((hotspot)=>hotspot.label === 'Missing Material')) return JSON.stringify(state); await new Promise((resolve)=>setTimeout(resolve,50));} throw new Error(JSON.stringify({message:'metadata baseline did not reach the real Render DTO',state}));})()`);
     await evalJson(String.raw`new Promise((resolve)=>setTimeout(resolve,250))`);
-    const metadataBaselineStableState = await evalJson(pageStateScript());
+    const metadataBaselineStableState = await evalJson(String.raw`(async()=>{await new Promise((resolve)=>setTimeout(resolve,2000)); const deadline=Date.now()+10000; let previous=null; let stableSamples=0; let state; while(Date.now()<deadline){state=JSON.parse(${pageStateScript()}); const camera=JSON.stringify(state.camera); stableSamples=camera===previous?stableSamples+1:0; if(stableSamples>=2) return JSON.stringify(state); previous=camera; await new Promise((resolve)=>setTimeout(resolve,250));} throw new Error(JSON.stringify({message:'renderer camera did not settle before metadata baseline',state}));})()`);
     const metadataBaselineCanvasPng = join(outDir, `${name}-metadata-baseline-canvas.png`);
     await browserJson(["screenshot", "#pixel-world-embedded-runtime-canvas", metadataBaselineCanvasPng]);
 
@@ -395,6 +394,11 @@ try {
     const locationCameraBeforePan = await evalJson(pageStateScript());
     await evalJson(panCanvasScript(-1));
     const locationCameraAfterPan = await evalJson(String.raw`(async()=>{const deadline=Date.now()+5000; let state; while(Date.now()<deadline){state=JSON.parse(${pageStateScript()}); if(state.camera?.pan_x_px < ${locationCameraBeforePan.camera?.pan_x_px ?? 0}) return JSON.stringify(state); await new Promise((resolve)=>setTimeout(resolve,50));} throw new Error(JSON.stringify({message:'location co-anchor camera reframe did not move the actual renderer camera',before:${JSON.stringify(locationCameraBeforePan)},state}));})()`);
+    if (name === "narrow") {
+      // Reframe the actual canvas target below the focus-entry UI before native input.
+      await evalJson(panCanvasScript(0, 0, 0, 150));
+      await evalJson(String.raw`new Promise((resolve)=>setTimeout(resolve,1000))`);
+    }
     const locationTargetGeometry = await evalJson(rendererTargetGeometryScript());
     const locationTargetGeometryPath = writeJson(`${name}-location-native-canvas-preflight.json`, locationTargetGeometry);
     const locationPair = targetSeparation(locationTargetGeometry, "locations", "loc-0", "module-location", "Location co-anchor");
@@ -448,13 +452,14 @@ try {
 
     const locateTarget = await evalJson(String.raw`(() => { const locator = document.querySelector('[data-world-feed-module-locate="module-agent"]'); if (!locator) throw new Error('module event locator unavailable'); const rect = locator.getBoundingClientRect(); const style = getComputedStyle(locator); return JSON.stringify({ id: locator.dataset.worldFeedModuleLocate, keyboardReachable: locator instanceof HTMLButtonElement && locator.tabIndex >= 0, visible: rect.width > 0 && rect.height > 0 && rect.top >= 0 && rect.bottom <= innerHeight && style.display !== 'none' && style.visibility !== 'hidden', rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom } }); })()`);
     assert(locateTarget.id === "module-agent" && locateTarget.keyboardReachable && locateTarget.visible, "module event locator was not a visible keyboard-reachable control", locateTarget);
+    const locateCameraBeforeClick = await evalJson(pageStateScript());
     const locateClick = await clickVisible('[data-world-feed-module-locate="module-agent"]');
     const locatedModuleState = await evalJson(String.raw`(async()=>{const deadline=Date.now()+5000; let state; while(Date.now()<deadline){state=JSON.parse(${pageStateScript()}); if(state.selectedKind === 'module_visual' && state.selectedId === 'module-agent' && state.moduleMarkers.some((marker)=>marker.id === 'module-agent' && marker.selected) && /Module Details/i.test(state.detailsText)) return JSON.stringify(state); await new Promise((resolve)=>setTimeout(resolve,50));} throw new Error(JSON.stringify({message:'module event locator did not select its module',state}));})()`);
     assert(locatedModuleState.detailsVisible && locatedModuleState.detailsActive && locatedModuleState.moduleDetailsVisible, "located module did not expose the visible active Command details panel", locatedModuleState);
     assert(/future_module_kind/i.test(locatedModuleState.detailsText) && locatedModuleState.detailsText.includes("Unknown marker") && /agent\s*[·:]\s*agent-0/i.test(locatedModuleState.detailsText), "module event locate did not expose the target module details", locatedModuleState);
     await evalJson(String.raw`new Promise((resolve)=>setTimeout(resolve,250))`);
     const locatedAfterFocusState = await evalJson(pageStateScript());
-    assert(locatedAfterFocusState.camera && selectedModuleState.camera && (locatedAfterFocusState.camera.pan_x_px !== selectedModuleState.camera.pan_x_px || locatedAfterFocusState.camera.pan_y_px !== selectedModuleState.camera.pan_y_px), "module event locate did not move the actual renderer camera to the target", { before: selectedModuleState.camera, after: locatedAfterFocusState.camera, locatedModuleState });
+    assert(locatedAfterFocusState.camera && locateCameraBeforeClick.camera && (locatedAfterFocusState.camera.pan_x_px !== locateCameraBeforeClick.camera.pan_x_px || locatedAfterFocusState.camera.pan_y_px !== locateCameraBeforeClick.camera.pan_y_px), "module event locate did not move the actual renderer camera to the target", { before: locateCameraBeforeClick.camera, after: locatedAfterFocusState.camera, locatedModuleState });
     const moduleLocateStatePath = writeJson(`${name}-module-event-locate-state.json`, locatedAfterFocusState);
     const moduleLocatePng = join(outDir, `${name}-module-event-locate.png`); await runBrowser(["screenshot", "--full", moduleLocatePng]);
 

@@ -12,6 +12,7 @@ import {
 } from "../software_safe_src/performance_metrics.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
+const browserLaunchArgs = process.env.AGENT_BROWSER_HEADED === "1" ? ["--headed", "--pin-tab"] : ["--pin-tab"];
 const viewerRoot = resolve(scriptDir, "..");
 const repoRoot = resolve(viewerRoot, "../..");
 const configuredAgentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
@@ -53,7 +54,7 @@ function resolveAgentBrowserInvocation() {
 const agentBrowserInvocation = resolveAgentBrowserInvocation();
 const browserLifecycle = createOwnedSessionLifecycle({
   command: agentBrowserInvocation.command,
-  prefixArgs: agentBrowserInvocation.prefixArgs,
+  prefixArgs: [...agentBrowserInvocation.prefixArgs, ...browserLaunchArgs],
   session,
 });
 const closeBrowser = browserLifecycle.close;
@@ -231,7 +232,7 @@ function runAgentBrowser(args, options = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(
       agentBrowserInvocation.command,
-      [...agentBrowserInvocation.prefixArgs, "--session", session, ...args],
+      [...agentBrowserInvocation.prefixArgs, "--session", session, ...browserLaunchArgs, ...args],
       { stdio: ["pipe", "pipe", "pipe"] },
     );
     let stdout = "";
@@ -261,7 +262,7 @@ function runAgentBrowser(args, options = {}) {
         stderr.trim() ? `stderr:\n${stderr.trim()}` : null,
       ].filter(Boolean).join("\n")));
     });
-    child.stdin.end(options.input ?? "");
+    if (options.input !== undefined) child.stdin.end(options.input);
   });
 }
 
@@ -273,7 +274,7 @@ async function runAgentBrowserJson(args, options = {}) {
 }
 
 async function evalJson(source, options = {}) {
-  const data = await runAgentBrowserJson(["eval", "--stdin"], { input: source, ...options });
+  const data = await runAgentBrowserJson(["eval", source], options);
   return typeof data.result === "string" ? JSON.parse(data.result) : data.result;
 }
 
@@ -520,7 +521,7 @@ try {
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&hosted_bootstrap=0&t=${Date.now()}`;
 
-  prepareBrowserSession();
+  prepareBrowserSession(); await new Promise((resolve) => setTimeout(resolve, 500));
   const cpuProcessBaseline = processSnapshot();
   console.log(`opening viewer performance probe: ${url}`);
   await runAgentBrowserJson(["open", url], { timeout: 120_000 });

@@ -539,8 +539,8 @@ run_group() {
     distfs) run_oasis7_distfs_tests; run_oasis7_distfs_clippy ;;
     node) run_oasis7_node_tests; run_oasis7_node_clippy ;;
     net) run_oasis7_net_tests; run_oasis7_net_libp2p_tests; run_oasis7_net_clippy; run_oasis7_net_libp2p_clippy ;;
-    viewer_js_required) run_oasis7_viewer_software_safe_feedback_contract_tests; run_oasis7_viewer_software_safe_build ;;
-    viewer_performance_report) run bash ./scripts/viewer-performance-report-only-contract.test.sh; run_oasis7_viewer_software_safe_build; run_oasis7_viewer_performance_smoke_report_only ;;
+    viewer_js_required) run_oasis7_viewer_software_safe_feedback_contract_tests; run_oasis7_viewer_software_safe_build; run node crates/oasis7_viewer/scripts/viewer-auth-browser-security-smoke.mjs ;;
+    viewer_performance_report) run bash ./scripts/viewer-performance-report-only-contract.test.sh; run_oasis7_viewer_software_safe_build; run npm --prefix crates/oasis7_viewer run build:viewer:visual-test; run_oasis7_viewer_performance_smoke_report_only ;;
     pixel_world_bridge) run_pixel_world_bridge_lib_tests; run_pixel_world_bridge_wasm_check ;;
     launcher_web) run_oasis7_client_launcher_web_build ;;
     workspace_support) run_oasis7_workspace_support_crate_tests ;;

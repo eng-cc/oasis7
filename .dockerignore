@@ -10,8 +10,6 @@
 !vendor-libp2p-swarm-0.48.0/
 !vendor-libp2p-swarm-0.48.0/**
 !vendor-egui-winit-0.33.3/
-!vendor-libp2p-swarm-0.48.0/
-!vendor-libp2p-swarm-0.48.0/**
 !vendor-egui-winit-0.33.3/**
 !tools/
 !tools/wasm_build_suite/
