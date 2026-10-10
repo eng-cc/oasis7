@@ -3,12 +3,15 @@
 - 对应设计文档：`doc/world-simulator/llm/continuous-agent-harness.design.md`
 - 上游 provider 边界：`doc/world-simulator/llm/decision-provider-contract.prd.md`
 - 专题入口：`doc/world-simulator/llm/README.md`
+- 上游产品目标：[外部 Agent Runtime 自主游戏](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)
 
 ## 1. Executive Summary
 
 world-simulator 仍保留 `AgentRunner::tick` 的同步 simulator 基线；但在 native runtime-live lane，`RuntimeDecisionRunner::Builtin` 与 `RuntimeDecisionRunner::ProviderBacked` 现在都使用同一个 `AsyncAgentRunner`。Provider 的 `Wait` 结果会经过 Harness proposal/current-context 校验、Runtime admission、durable wake selection/readback，再恢复下一次 cognition turn；等待 provider 时 world 不被阻塞。这是当前可观察的 native wiring，不等于完整的 remote paired、restart/reconnect 或 release 证明。
 
 本专题冻结一个 provider-neutral 的 Continuous Agent Harness 合同。Harness 负责一次 Agent session 内的感知组装、记忆检索、目标/continuation 投影、provider 调用、候选决策规范化、反馈路由和 memory write intent policy；Runtime 仍是世界事实、动作语义、授权、前置条件、提交、receipt、replay 与最终副作用的唯一权威。Harness 的任何成功都不等于世界状态已经改变。
+
+产品上的完成标准是用户携带的外部 Runtime 在有效授权和预算内持续推进游戏目标，具体首期 Runtime、代表性首局和恢复旅程由[上游产品 PRD](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)定义。OpenClaw 与 Codex 分别验收；本专题的 lifecycle、Mock/loopback 或低频 NPC 技术通过不能代替任何一个 Runtime 的完整产品证据。无 GUI 持续执行以外部 Runtime 在线为前提，不隐含云托管、离线推理或授权自动续期。
 
 本文是 durable authority，不是任务板。实现状态、任务分工和验证历史仍属于 Git、PR 与实际 CI 记录；本文的 `current/partial/target/proven` 只描述能力证明边界，不描述任务进度。
 
@@ -66,6 +69,8 @@ Harness 是 Agent 的认知边界，拥有：
 - provider-neutral 的错误分类、降级到 `Wait`/`ActionRejected` 的行为。
 
 Harness 可以提出候选动作、目标变更或记忆写入意图，但不能直接写 world state、receipt、authority、grant、资源余额或玩家承诺。
+
+上述 host-side 责任统一世界交互的身份、生命周期和提交策略，不要求外部 Runtime 放弃自身规划、私有记忆或工具编排。外部私有记忆可以保留带来源的观察与推断，但不能把未经世界确认的结果升级为权威事实；向 oasis7 写入的 memory intent 仍适用本文 scope、provenance 和 receipt 门槛。
 
 ### 3.2 Runtime owns truth
 
@@ -209,6 +214,7 @@ Harness 与 Runtime 的 canonical wire mapping 使用 paired runtime PRD 的
 branch/finality、base tick/hash、reorg epoch 与 runtime manifest hash。adapter 不得自行创造
 别名或从缺失字段猜测 identity。
 
+<a id="request-bound-call-budget"></a>
 ### 4.3.1 C0 request-bound call budget（native implemented / bounded verification）
 
 当前 Harness 的 C0 budget 已有 timeout/repair 与 request-bound model/tool 调用上限及
@@ -646,4 +652,4 @@ invocation count、feedback partition 和 terminal disposition。
   仍是 P0 之外的独立 product/gameplay/runtime/QA authority chain。C0 的 call count 不得被
   解释为 lease、quote 或 paid cognition。
 - GoalGraph、belief memory、长期偏好纠正、共享/玩家可见 memory：分别由产品/玩法/Agent authority 联审，不能在本合同中隐式扩大。
-- Viewer transcript/diagnostic delivery、QA release judgment、repository Codex adapter/runtime dispatch：不属于本专题 ownership。
+- Viewer transcript/diagnostic delivery、QA release judgment、仓库开发用 Codex adapter/runtime dispatch：不属于本专题 ownership。游戏用外部 Runtime 的适配与对外支持范围由 provider adapter 专题与上游产品 PRD 承接，不由 Harness 技术通过自动授予。

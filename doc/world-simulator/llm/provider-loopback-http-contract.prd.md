@@ -2,8 +2,15 @@
 
 - 对应设计文档: `doc/world-simulator/llm/provider-loopback-http-contract.design.md`
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
+- 上游产品目标: [外部 Agent Runtime 自主游戏](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)
 
 审计轮次: 1
+
+## 产品目标与本地传输范围
+
+本专题提供外部 Runtime 自主游戏的一种本地传输与适配方案。`Local Provider` 是接入角色，loopback HTTP 是传输选择；二者均不代表已支持某个完整 Agent Runtime。用户携带已有 Runtime 的产品旅程、OpenClaw 与 Codex 分别验收的范围及支持声明，以[上游产品 PRD](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)为准。用户只提供 API key 并改用游戏内置模型，不足以证明其原有 Runtime 已接入。
+
+下文 Launcher 流程描述图形配置入口，不把 Launcher/Viewer 变成持续执行依赖。下文首期六动作、单 NPC 和 mock required 范围仅验证本地 adapter 合同，不能替代产品首局的生产、恢复与回访结果。远程传输、凭据和部署的实现仍由对应专业合同维护，本次产品目标细化不改变其安全边界或实现状态。
 
 ## 1. Executive Summary
 - Problem Statement: `Decision Provider` 标准层已经明确了“外部 provider 可参与 Agent 决策，但不得替代 runtime 权威”的边界；但若要回答“安装在用户机器上的 `Local Provider` 怎么玩这个游戏”，还缺一份面向真实用户安装场景的接入方案，尤其是本地发现、握手、配置、玩家-agent 绑定、决策接口、失败恢复与最小可玩范围。
@@ -16,6 +23,7 @@
   - SC-5: `Local Provider` 决策过程可映射到 `AgentDecisionTrace`，在 viewer / QA 调试面中可见 provider 名称、延迟、错误与最近一次结构化决策。
   - SC-6: 首期 required 验证不依赖真实 `Local Provider` 网络环境，必须可由 mock local HTTP server 覆盖。
 
+<a id="local-provider-user-flows"></a>
 ## 2. User Experience & Functionality
 - User Personas:
   - 玩家 / 制作人：希望在自己电脑上装好 `Local Provider` 后，能通过 provider-backed Local Provider 路径让游戏里的部分 agent 由它驱动，并知道当前是否正常连接。
@@ -32,11 +40,11 @@
   1. Flow-OC-LOCAL-001（首次安装与发现）:
      `用户安装并启动 Local Provider 本地服务 -> launcher 探测 localhost provider -> 显示版本/状态 -> 用户选择 provider-backed Local Provider（compat alias 可显示为 agent_direct_connect/Local Provider(Local HTTP)）`。
   2. Flow-OC-LOCAL-002（玩家绑定与启动）:
-     `选择 provider -> 绑定 player_id / agent_id 或 NPC profile -> 启动游戏 -> runtime 为目标 agent 使用 Local ProviderAdapter`。
+     `选择 provider -> 核验玩家身份与目标 Agent 的取得/委托权限 -> 绑定 player_id / agent_id -> 启动游戏 -> runtime 为目标 agent 使用 Local ProviderAdapter`。绑定不会创建免费的游戏 Agent 或扩大授权；NPC profile 是测试配置，不能代替真实玩家绑定验收。
   3. Flow-OC-LOCAL-003（决策闭环）:
      `ObservationEnvelope -> ContinuousAgentRequestContextV1 -> POST /v1/world-simulator/decision-context -> ContinuousAgentResponseContextV1 -> runtime validate/execute -> POST /v1/world-simulator/feedback-context (FeedbackEnvelopeV1) -> trace`；旧 DTO 只能通过对应的 bare legacy 路由进入 compatibility-only lane，不得进入 target cognition proof。当前 HTTP body 没有 `compatibility_lane` wire 字段，路由/adapter 配置才是 lane 选择依据。
   4. Flow-OC-LOCAL-004（失败恢复）:
-     `provider offline / version mismatch / timeout / invalid action -> launcher/viewer 告警 -> fallback 内置 provider 或禁用 provider`。
+     `provider offline / version mismatch / timeout / invalid action -> 输出结构化状态与安全下一步 -> 按合同有界重试或等待 -> 用户可显式选择内置 provider 或禁用 provider`。切换 provider 不能伪装成原 Runtime 已恢复，不能扩大 Agent 授权或将待决动作当作已取消。
   5. Flow-OC-LOCAL-005（用户可观测）:
      `viewer 右侧调试面显示 provider=Local Provider(Local HTTP)、连接状态、最近延迟、最后错误、最近动作摘要`。
 - Functional Specification Matrix:
@@ -58,7 +66,7 @@
   - AC-6: 文档定义 required/full 验证矩阵，要求可用 mock local HTTP server 覆盖首期协议。
 - Non-Goals:
   - 不在首期引入远程 `Local Provider` provider、云托管 provider 或公网隧道。
-  - 不在首期让 `Local Provider` 直接执行高频战斗、经济关键路径或批量 agent 群控。
+  - 本专题的单 NPC PoC 不承担高频战斗、完整经济关键路径或批量 agent 群控验收；该范围不能免除上游产品首局的生产结果要求。
   - 不在首期引入反向 tool callback、双向流式 event feed 或复杂 OAuth 登录。
   - 不在首期把 `Local Provider` 变成 launcher / viewer 的统一控制面；它只负责世界内 agent 决策。
 
