@@ -43,6 +43,9 @@
 - 给定：有持久 operation ledger 的临时世界，记录初始资源和 world receipt。
 - 执行：在登记前、登记后、admission 后、commit 后、HTTP reply 前分别 kill 自有测试进程；用同一键重试并用异内容同键请求。
 - 判定：同键同内容只关联一个 effect/receipt；异内容冲突；未知先查询；授权撤销后不因缓存返回私密历史。
+- 不确定结果回归：在 admission 已接受而权威结果暂时无法回读时，持久保留同一 operation 为 recovery_required；两个查询入口都以受权 OperationView 返回该状态、原因和 lookup_original，不伪装 failed、404 或普通 pending。重复同键、进程重启、context 到期与 stop 均不能新建第二个 action/nonce 或清除未知结果。
+- 对账恢复：分别恢复“确认仍待决”“确认已结算”“确认拒绝/终态失败”的真实证据，验证只能转为对应 pending/终态且保留原操作身份；原 receipt/effect 至多一份。无法确认或底层去重保护不可验证时只回查/阻塞，不盲重投；只有原请求可安全幂等重投的已验证条件成立才允许 outbox 重投。
+- 客户端消费：Worker/Web/native 显示结果待恢复确认并停止该 Agent 新副作用，仍可读取授权允许的信息。操作存储不可读返回 503，不能据此创建新键；401/403 先拒绝，不能从回放泄露历史。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
 
 <a id="api-first-session"></a>
@@ -61,6 +64,7 @@
 - 给定：已实现新 Game API 的服务，普通 HTTP 客户端，不启动任何 Provider Bridge、OpenClaw 或 Codex。
 - 执行：按发现→鉴权→task/context→query→action→operation→events 顺序请求，再验证 query-only 后用 context outcomes 进入等待/收口，覆盖非法 JSON、未知字段、超大整数和错误 schema。
 - 判定：状态/幂等/版本可消费，accepted 不代签 committed；只读无世界效果；旧 provider DTO 不被当新请求。
+- 消费 DTO：验证 active_goal 完整正文与 null 条件，以及 OperationView 的 recovery_required/recovery/retry_advice 能被严格解码；不识别这些必要语义的旧草案客户端应停止，不默认成功或盲重试。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
 
 <a id="api-safety"></a>
@@ -97,6 +101,8 @@
 - 给定：临时单权威世界与私有内容 store，包含已确认目标、未答问题、待批申请和未结算操作。
 - 执行：在正文 fsync、control commit、outbox 发布之间注入 crash；恢复并核验缺正文/坏 digest/旧备份情况。
 - 判定：不丢已确认引用；缺正文保持 recovery_required；不以空目标、旧 epoch 或旧批准继续。
+- 冷启动回归：先激活含非空完整正文的 G1，使激活事件早于切点 S 并从事件重放窗口移除；另保存未激活 G2。使用无任何本地缓存的新受权 executor，仅 GET snapshot 和 after-S 事件初始化。必须取得 G1 的完整 GoalVersionProjectionV1，task/revision/digest/activation ref 与切点一致，可确认 received 并申请对应 context；不能用 G2、摘要或空目标替代。
+- 失败与竞态：缺正文、损坏 digest、正文超限均不得返回伪完整 snapshot 或启动认知；撤销/转让后不泄露正文/指纹；真正无激活目标才有 active_goal=null。snapshot 后激活 G2，按 G1 申请 context 必须被拒绝并重取 G2，不重新标注旧正文。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
 
 <a id="collab-bind"></a>
@@ -178,6 +184,7 @@
 - 给定：fake driver 需要两次查询、一次提案与一次等待，运行时同时发布新目标。
 - 执行：控制循环在推理未完成时读取变更；送达新 context，旧提案和新的合法提案分别请求 admission。
 - 判定：控制消息不被模型长调用阻塞，旧 context 拒绝；后续版本与许可有效，world 不等待模型。
+- 恢复输入：首次运行没有本地目标缓存、历史激活事件已不在重放范围时，必须从 snapshot 正文而非仅 revision/digest 得到目标；收到 recovery_required 的世界操作则保持原关联并对账，不开新的副作用轮次。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
 
 <a id="adapter-liveness"></a>
@@ -196,6 +203,9 @@
 - 给定：fake driver 提供延迟、未知上游状态、缺失 usage 与不响应取消的子进程。
 - 执行：用有限任务预算运行重试、取消和进程恢复；OpenClaw CLI profile 验证 timeout 单位是秒，不自动 --local。
 - 判定：总 deadline 不重置；只结束自有进程；unknown/partial 如实披露，无盲目第二次推理或自动充值。
+- 量值与去重：fake driver 在同一 meter 依次报告累计 input_tokens=100/150、output_tokens=20/30、cached_input_tokens=40/60、cost=0.01/0.02 USD。交错 poll/stream/reconcile 重放、乱序旧 sequence、相同 measurement_id，以及消费持久化前后的崩溃恢复；结果应是 150/30/60 和 0.02 USD，而非相加后的 250/50/100 或 0.03 USD，总 token 不重复包含 cached 子集。
+- 范围与缺失：加入另一不重叠 meter 的 50/10 token 与 0.03 USD，任务已知合计为 input=200、output=40、cost=0.05 USD；其他币种单列，不叠加父运行汇总与已计入子项。只报告 token 而缺 cost 时保留已知 token 和未知费用；无 usage 不等于零。
+- 负例：同 ID/sequence 异内容、累计值倒退、冲突终值、非法单位/币种/小数、未知指标、超过条数/字节限制与无法证明作用域不重叠，必须拒绝或标计量未核对且不静默增加可用预算。delta-only driver 先持久去重后规范为累计值；本地 ledger 丢失不能重置消费。估计/预留与实际报告分列，计量完成不由取消请求推断。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
 
 <a id="skill-release"></a>

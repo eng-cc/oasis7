@@ -60,7 +60,7 @@ Agent owner 维护 Runtime 驱动和版本兼容；Runtime owner 验证 task/exe
 
 控制循环独立于一次模型推理：核对当前 task/fence，增量读取目标、未答问题及授权变更，维持有时效的诊断心跳。没有执行许可、预算或 driver 时保持 awaiting_executor/blocked，不发起模型调用。
 
-决策循环：读取当前 task snapshot → 获得 Game API context → 把受权观察、目标版本、Skill 和待处理消息交给实际 Runtime → Runtime 按需查询、提案、汇报或提问 → 回读世界结果 → 在仍有效的许可下继续。worker 不固定“移动三次即完成”之类策略，也不把默认 Wait 替代未取得的模型结果。
+决策循环：读取当前 task snapshot 并验证内联 active_goal 正文、revision/digest 和切点 → 获得匹配该激活版本的 Game API context → 把受权观察、完整目标、Skill 和待处理消息交给实际 Runtime → Runtime 按需查询、提案、汇报或提问 → 回读世界结果 → 在仍有效的许可下继续。worker 不固定“移动三次即完成”之类策略，也不把默认 Wait 替代未取得的模型结果。
 
 Runtime 可以在一次本地推理中调用多个只读工具；等待、阻塞或放弃当前轮次时使用 Game API context outcomes 收口，不能一直占用活动 turn。每次副作用都经 Game API 当前 context/fence/goal/grant 校验。目标变化时允许完成旧本地计算，但旧 context 的新 action 必须被阻断；worker 给出新的上下文后才能重新规划。对硬撤销立即停止新的工具出站，并请求 driver 中断，世界侧 fence 才是最终防线。
 
@@ -88,10 +88,24 @@ RuntimeDriver:
 
 NormalizedRuntimeEvent = {invocation_key, runtime_session_ref, run_ref,
   provider_submission_ref?, event_id, kind, observed_at,
-  summary?, usage: reported|unknown, result_ref?}
+  summary?, usage: UsageReportV1, result_ref?}
+UsageReportV1 = {status: unknown, reason}
+  | {status: reported, coverage: complete|partial,
+     measurements: UsageMeasurementV1[], missing_metrics: string[]}
+UsageMeasurementV1 = {measurement_id, meter_id, metric,
+  amount, unit: tokens|calls|currency, currency?, source_ref,
+  sequence, is_final}
 ```
 
 `invocation_key` 为 worker 本地固定调用身份，不是 Game API 的 action 幂等键或世界 turn ID。外部 Runtime 的 thought/reasoning stream 不进入玩家报告；只投影必要的计划摘要、工具状态与错误。缺少 usage 保留 unknown，不算零。
+
+**实际用量合同**：`UsageMeasurementV1` 保存 runtime/provider 确实报告的数值，而非根据定价估算。metric 首期为 input_tokens、output_tokens、cached_input_tokens、tool_calls、cost；相应 unit 为 tokens、calls、currency。amount 使用非负十进制字符串：tokens/calls 是 u64 整数，cost 最多 18 位整数与 9 位小数；cost 必填明确币种，非 cost 不允许币种，禁止浮点、负值、静默截断和自动汇率换算。source_ref 是有界、不含秘密的原计量记录关联，不是任意外部 URL；measurement_id、meter_id、source_ref 各最多 128 UTF-8 bytes，sequence 是 u64 十进制字符串。
+
+同一 `(invocation_key, meter_id, metric, unit, currency)` 的 amount 始终是该计量作用域的**累计值**；driver 若只收到 delta，先按稳定原事件 ID 在持久状态中去重累加，再输出累计值，不混用两种模式。meter_id 在 poll/stream/reconcile 和进程恢复间稳定，标识无重叠的调用计量范围；不能把相同费用同时作为父运行总计和子调用明细相加。不能证明计量范围不重叠时保持 coverage=partial，不伪造总数。
+
+worker 对较新 sequence 替换该 meter 的上一累计值，而不是把每次累计通知相加；同 measurement_id 同内容或同一计量键/sequence 同内容只消费一次，异内容为 usage_conflict 并保留原值和未核对标记；乱序旧 sequence 不覆盖新值。同 meter 累计值倒退或终值之后有冲突更正时先核对来源，不擅自归零或通过退款调整扩大预算。cached_input_tokens 是 input_tokens 的子集，不能为“总 token”再相加；金额按币种分别汇总，报告部分覆盖时同时保留已知值和缺失项。
+
+reported 必须包含至少一个有效测量；没有值使用 unknown，缺少费用不因有 token 数而写成零费用。missing_metrics 明确未报告/不可确定的指标；coverage=complete 仅表示该报告时点已覆盖 driver manifest 声明的计量范围和指标，任一缺项或范围未知必须 partial；is_final=false 表示可能继续增长，取消也不能代签计量完成。每事件最多 32 个 measurements、8 个 missing_metrics，usage 编码最多 8 KiB、完整标准化事件最多 16 KiB；超限或未知指标不能无声丢弃并标为完整，保留有界错误与 partial/unknown。运行日志、摘要和游戏内资源账不替代该来源明确的模型用量。
 
 GameRequest 是一个受限 HTTP 请求适配工具，不是完整游戏 CLI 产品。只允许当前配对 world/task/Agent 的固定 Game API 路由和 scopes，输出 JSON；不允许任意 URL、任意 header 或改变 actor。worker 可以通过 scoped 本机 IPC 提供它，避免向模型 Prompt 暴露 token；原始 HTTP 客户端仍可按同一合同直接使用自己受控的短凭据，不依赖此工具。
 
@@ -108,9 +122,11 @@ Skill 必须教会：确认目标世界/身份 → 获取当前 task/goal → �
 
 ## 7. 状态、事务与持久化
 
-worker 本地保存 `task_binding / executor_epoch / current goal revision / event cursor / runtime_session_ref / active RunRef / pending client_operation_ids`。记录存于用户专用权限目录，写入使用临时文件、fsync 和原子替换；凭据用系统安全存储或受限文件，与可导出的诊断分开。
+worker 本地保存 `task_binding / executor_epoch / current goal revision / event cursor / runtime_session_ref / active RunRef / pending client_operation_ids`。记录存于用户专用权限目录，写入使用临时文件、fsync 和原子替换；凭据用系统安全存储或受限文件，与可导出的诊断分开。用量另外保存受限的 measurement 去重身份、每 meter 最新 sequence/累计值、计量覆盖范围与 final 标记；该状态与 inbox 消费位点原子持久后才 ack。事件压缩不能删除仍可重放窗口内的去重索引；无法恢复计量状态时先与原来源对账并标 usage_recovery_required，不能把余额恢复为未消耗。
 
 worker 运行记录必须先持久保存 invocation_key，再启动 driver；若崩溃发生在上游接受之后、RunRef 回包之前，重启先查原 session/调用记录。无法确认则 run_unknown，不能自动 start 第二次。上游不提供幂等时不声称推理 exactly-once；世界副作用仍由 Game API 幂等/fence 保证。
+
+世界操作返回 `OperationViewV1.status=recovery_required` 与模型 run_unknown 分开处理：保留原 client_operation_id/context/关联，阻断该 Agent 新副作用，不以重新启动模型或轮次绕过；继续按 Game API retry_advice 查询同一操作。只有权威结果已对账且当前许可有效，才决定下一轮。context 到期或 worker stop 不意味着旧世界操作已取消。
 
 重复通知按 event_id 与固定关联去重；本机 inbox 持久后才 ack。恢复先核对世界 binding、当前 executor epoch、最新目标与未决 operation，再考虑 resume 本地 session。允许会话丢失后重新规划，但必须声明 memory unavailable，不能导入其他 Runtime 的私有记忆或复活旧批准。
 
@@ -130,6 +146,8 @@ worker 运行记录必须先持久保存 invocation_key，再启动 driver；若
 
 可强制限制的 worker 请求数、并发、时间和出站工具调用数与“runtime/provider 报告 token/费用”分开。无法拦截 Runtime 内部子调用时，报告 budget_enforcement=partial，达到外层限额停止新启动，但不能声称下游费用已被硬封顶。严重费用未知或上游 run_unknown 时保留保守预留，先人工/可信状态核对，不重复启动以试探。
 
+预算视图按任务汇总不重叠 meter 的实际已报告用量，并分别呈现估计、保守预留和未知部分；重放通知、流式中间累计值与最终累计值不能重复扣减。现有任务 report 只发布有界、脱敏的计量摘要及来源关联，不上传本机私有 ledger 路径或凭据；driver 报告仍不是世界结算或账单审计证明。未知/未终结用量保留预留，无法拦截的下游消费仍为 partial enforcement。
+
 首期一个 Agent 一个决策执行器，stdout/stderr/event 缓冲必须有界；超出时停止该 run 并保留操作关联，不截掉最后错误后误报成功。计划报告可以合并，授权/停止/结果确认不得被降采样丢失。
 
 ## 10. 兼容、迁移与回滚
@@ -137,6 +155,8 @@ worker 运行记录必须先持久保存 invocation_key，再启动 driver；若
 两个 driver 与 API/Skill 单独版本化；受支持矩阵记录实际 runtime/driver/schema/平台而非写一个任意二进制路径。新 Skill 替代旧 `site/skills/oasis7.md` 的推荐 Bridge 路径之前，两个 runtime 的代表性首局分别通过。
 
 切换 driver 是显式 owner 操作：撤销旧 fence、核对 pending、激活新执行方，私有上下文默认不迁移。回滚 worker/Skill 只在协议和本地状态 schema 可读时进行；不兼容保持暂停并提供明确恢复，不删本地 ledger 以重新获得预算或新键。旧 Bridge 不自动成为 failover。
+
+本次 UsageReportV1 替换尚未发布草案的 reported/unknown 字符串；driver、worker ledger 与测试 schema 同批更新，不从旧 reported 标记猜测金额。旧 ledger 无量值时保留 unknown 并核对，不把缺值迁移成零。
 
 ## 11. 验证设计与可追溯性
 

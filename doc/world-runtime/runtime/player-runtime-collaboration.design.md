@@ -68,7 +68,7 @@ Runtime owner 负责世界侧 control fence、顺序、授权及恢复；Agent o
 1. 玩家读取 task snapshot，同时取得 expected goal/control revision。写入时先重验身份/控制权；control-lost 不返回新 owner 的内容或差异。
 2. `PUT goal` 必须带 client_operation_id、expected revision、完整目标与允许的软约束。expected goal revision 比较 latest_goal_revision（包含已保存但尚未激活版本），task_revision 同时防止改绑竞态。旧基准 `409 goal_conflict`；保留草稿，不自动最后写覆盖。
 3. 完整正文先持久化并校验 digest；提交 GoalVersionSaved 引用。目标在权威控制提交中激活后才更新 active_goal_revision；accepted/pending activation 与 active 分开返回。
-4. 原执行器增量读取目标，分别提交 `received` 与 `adoption_reported`，绑定 task、revision、executor_epoch 和独立消息 ID。旧确认可以保留历史，但不前推当前版本的状态。
+4. 执行器首次接入、重启或 cursor reset 时先验证 snapshot 内联的激活目标正文、revision/digest 与切点；已建立基线后再增量读取变化，分别提交 `received` 与 `adoption_reported`，绑定 task、revision、executor_epoch 和独立消息 ID。旧确认可以保留历史，但不前推当前版本的状态。
 5. Harness 捕获该激活版本的上下文。边界记录 `context_presented`；执行器返回合法提案、等待或阻塞时记录 `decision_submitted`，世界 admission 验证时记录 `decision_context_validated`。这些只证明版本关联，不能证明模型内部语义服从；界面不得把单纯自报升级为“已实际执行”。
 6. 目标再次变化使旧 context 不可用于新的副作用；旧提案必须重新取得上下文并作出新决策。已经受理的待决动作按当时及提交时有效的授权与 Runtime 规则重验，已结算成果不撤销。
 
@@ -102,8 +102,11 @@ HTTP 路由由 Game API 设计拥有；本节定义它们调用的 RuntimePort �
 TaskSnapshotV1 = {world_binding, task_id, agent_id, owner_revision,
   task_revision, latest_goal_revision, active_goal_revision, active_goal_digest, grant_revision,
   executor_binding, task_status, activation_operation?,
-  goal_delivery, latest_reports, unanswered_questions, pending_approvals,
+  active_goal: GoalVersionProjectionV1|null, goal_delivery, latest_reports, unanswered_questions, pending_approvals,
   unsettled_operation_refs, snapshot_seq, resume_cursor, completeness}
+GoalVersionProjectionV1 = {schema_revision, task_id, goal_revision,
+  goal_digest, activation_commit_ref, content: GoalContentV1}
+GoalContentV1 = {goal_text, soft_constraints: string[]}
 ExecutorBindingV1 = {executor_id, executor_epoch, device_ref,
   permitted_scopes, activated_at_tick, revoked_at_tick?}
 GoalDeliveryV1 = {goal_revision, executor_epoch, received_at?,
@@ -116,6 +119,12 @@ ApprovalRequestV1 = {approval_id, request_revision, task_id,
   requested_grant_scope, cumulative_limit, valid_until_tick,
   status, decision_ref?, grant_ref?}
 ```
+
+`active_goal` 是 `GET T/snapshot` 的必需字段：有激活目标时，内联返回该调用者有权读取的完整 `GoalVersionProjectionV1`，而不只是 revision/digest 或无法解引用的存储地址。`content` 与 `PUT goal` 接受并持久化的完整目标正文使用同一 `GoalContentV1` schema，不以摘要、裁剪文本或尚未激活的新版本替代；硬授权仍单独来自 grant。只有切点 S 上确实没有激活目标（active_goal_revision="0"）时才返回 `active_goal=null`、`active_goal_digest=null`，此时不能开启有目标的决策。
+
+投影的 task_id、goal_revision、goal_digest 和 activation_commit_ref 必须与同一切点 S 的 TaskControl、world_binding 一致；正文按版本化 GoalVersion codec 重算并匹配所引用 digest。该私有正文 digest 与 Harness 的 GoalSnapshot/context digest 各有原合同，不得混为一个哈希。goal_text 非空，完整正文继续受 4 KiB 上限约束，任何超限/截断不得伪装成功。latest_goal_revision 可大于 active_goal_revision，但未激活内容不得作为 executor 当前目标。
+
+解密/投影前及响应交付前按当前 owner/audience 和 executor fence 验证读取资格；切点 S 或旧 token 不保留已撤销的读权。无权请求不返回正文、正文指纹或新 owner 的差异。元数据引用的正文缺失、损坏或无法验证时，返回 `503 ErrorV1(code=recovery_required, refresh=task_snapshot)`，不返回伪完整 TaskSnapshot、空目标或公开内容 URL，相关新 context 保持阻塞。客户端只能在授权仍有效后重新读取 snapshot，不挂载私有存储或依赖历史事件取回正文。
 
 端点不接受客户端填写的“世界结果 status=committed”来写回权威任务成果。`goal-receipts` 只允许 received/adoption_reported；context/decision/admission 的证据由各自受信边界记录。对没有外部观测能力的纯 Runtime 自报，保留 reported 等级，不伪造硬件或模型证明。
 
@@ -136,7 +145,7 @@ ApprovalRequestV1 = {approval_id, request_revision, task_id,
 
 Runtime 生成 task-scoped 单调 event_seq，投递至少一次。cursor 是服务端签发的不透明值，绑定 world branch、task、受众与权限 revision、位置及有效窗口；不能将全局消息总量或其他人的事件通过游标泄露。
 
-收到消息后执行器先持久化本地 inbox/去重位点，再确认。服务端同 message_id 同内容幂等，不同内容冲突。任务 snapshot 包含一致读取切点 S：该切点的当前目标、授权、未答问题、待决批准和未结算 operation，与 `events after S` 接续。snapshot 生成时并发新消息只会出现在增量中，不会落在两者之间。
+收到消息后执行器先持久化本地 inbox/去重位点，再确认。服务端同 message_id 同内容幂等，不同内容冲突。任务 snapshot 包含一致读取切点 S：该切点的当前目标、授权、未答问题、待决批准和未结算 operation，与 `events after S` 接续。snapshot 生成时并发新消息只会出现在增量中，不会落在两者之间。激活目标正文作为该 snapshot 的必需当前态，不依赖 S 之前的 GoalVersionSaved/Activated 事件是否仍在重放窗口内。首次连接且没有任何本地缓存的执行器也能仅凭授权 snapshot 与 after-S 事件完成初始化；若取得 context 前目标再次激活，按 expected revision 拒绝并重新同步，不把旧正文重新标注为新版本。
 
 游标过期、分支/受众变化或存储窗口外返回 `cursor_reset_required`，提供允许访问的当前 snapshot 获取方式；客户端标记历史缺口，不当作“无新事件”。恢复只消费当前有效目标/批准，不按旧历史顺序重演副作用；已知世界 operation 逐项先对账。
 
@@ -163,6 +172,8 @@ Stop 的效果是持久失效当前执行许可并阻断新受限提案，保留
 新增协作记录使用 revision 1 独立 namespace，旧 Prompt/profile 可作为显式初始 GoalVersion 导入，保留来源与 owner 重新确认；不得把历史聊天批量变成新批准。旧 provider history 可以只读追溯，不迁移其不可信“成功”成 world receipt。
 
 实现可复用既有 goal/journal，但必须提供新语义的完整回读，不通过 alias 默默丢掉版本。回滚关闭新命令、保留任务与操作结果查询；schema 不可读时 fail closed，不清空状态或自动回退到旧 executor。未满足持久一致性与私有存储验证前不能对外承诺跨节点恢复。
+
+本修订补齐尚未发布的 revision 1 目标快照合同，不需要为缺少 active_goal 的草案实现保留静默兼容；读取不完整旧形状时停止认知并要求 schema 对齐。
 
 ## 11. 验证设计与可追溯性
 

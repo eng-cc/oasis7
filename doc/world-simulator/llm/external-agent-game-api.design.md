@@ -96,7 +96,7 @@ Agent owner 负责协议与能力投影；Runtime owner 负责最终裁决、授
 <a id="api-context"></a>
 ### 5.2 一次可执行的决策上下文
 
-1. 执行器完成现有 World Service 委托的签名注册及回读后，读取任务 snapshot，取得当前 executor fence、有效目标和授权；陈旧版本先重新同步。
+1. 执行器完成现有 World Service 委托的签名注册及回读后，读取任务 snapshot，取得当前 executor fence、完整激活目标正文及其 revision/digest 和授权；正文必须通过[协作快照合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)验证，缺失/不一致阻止 context 创建，陈旧版本先重新同步。
 2. `POST .../agents/{agent}/contexts` 申请上下文，host-side Harness 分配已有 session/turn/request identity，记录同一已提交 WorldBinding、目标/授权版本及有效期，返回不可猜测 `context_id`。
 3. 能力目录从 Runtime capability registry 和当前主体授权投影。每项包含稳定 action_ref、参数 schema、是否有副作用、前置与不可用原因；过滤目录不能取代提交时再校验。
 4. 客户端可查询更多合法信息；副作用提案携带 context_id 和稳定 client_operation_id。服务端回读上下文，填充而非相信客户端提供的 authority/capability/MVCC 字段，转换为既有 AgentDecisionEnvelope。
@@ -134,9 +134,9 @@ context 创建也必须携带 client_operation_id；超时重试返回原 contex
 | GET `W/agents/{A}/capabilities`；POST `W/agents/{A}/queries` | 条件化能力目录 / schema-validated query | 只读；查询不产生 world effect |
 | POST `W/agents/{A}/contexts` | client_operation_id、task_id、executor fence、expected goal revision | Harness 生成 ContextHandle；消费单 Agent 活动 turn 约束 |
 | POST `W/agents/{A}/contexts/{C}/outcomes` | client_operation_id、kind=wait/blocked/abandoned、reason、wake_proposal? | 无动作轮次收口；校验当前 context 后关闭或走既有 Runtime continuation admission，不伪造世界效果 |
-| POST `W/agents/{A}/actions`；GET `W/operations/{id}` | context_id、client_operation_id、action_ref、arguments；OperationView | AdmissionPort；受理、待决、拒绝、失败和结算分开 |
+| POST `W/agents/{A}/actions`；GET `W/operations/{id}` | context_id、client_operation_id、action_ref、arguments；OperationView | AdmissionPort；待决、结果待恢复确认、拒绝、失败和结算分开 |
 | GET `W/operations/by-client-id` | actor-scoped client_operation_id + operation_kind + agent_id | 不确定响应时找回原操作；不能读取他人操作 |
-| POST `W/tasks`；GET `T/snapshot` | agent_id / task snapshot | 协作设计拥有任务唯一性与切点 |
+| POST `W/tasks`；GET `T/snapshot` | agent_id / TaskSnapshotV1（含受权 active_goal 正文） | 协作设计拥有任务唯一性、正文验证与一致切点；不能只返回 revision/digest |
 | PUT `T/goal`；POST `T/goal-receipts` | expected revision / executor read-adopt report | 保存、激活、读取、采纳、用于决策五类证据分开 |
 | POST `T/reports`；POST `T/questions`；POST `T/questions/{Q}/answers` | 稳定消息 ID、关联版本、source 与有界正文 | 协作主责；普通文本不授权 |
 | POST `T/approval-requests`；POST `T/approval-requests/{P}/decisions` | 精确方案与范围 / owner 明确决定 | 只申请不自行批准；世界执行仍重验 |
@@ -154,8 +154,11 @@ ContextHandleV1 = {api_revision, context_id, world_binding: RuntimeBindingV1,
 ActionSubmissionV1 = {api_revision, client_operation_id, task_id,
   executor_epoch, context_id, action_ref, arguments, actor_proof}
 OperationViewV1 = {api_revision, operation_id, client_operation_id,
-  status: pending|committed|rejected|failed, disposition_reason,
-  receipt_ref?, world_binding, observed_at, retry_advice}
+  status: pending|recovery_required|committed|rejected|failed, disposition_reason,
+  receipt_ref?, world_binding, observed_at,
+  retry_advice: lookup_original|wait|none, recovery?: OperationRecoveryV1}
+OperationRecoveryV1 = {reason, last_known_status: registered|pending,
+  reconciliation: queued|running|blocked, last_attempt_at?, next_lookup_after_ms?}
 ErrorV1 = {code, message, request_trace_id, operation_id?, retryable,
   retry_after_ms?, refresh: none|context|task_snapshot|reauth}
 ```
@@ -164,11 +167,26 @@ ErrorV1 = {code, message, request_trace_id, operation_id?, retryable,
 
 完整 WorldBinding/finality、ActionCatalogEntry、请求 digest、反馈和 receipt lineage 复用共享 crate 与 Runtime 合同，不在此另定哈希算法。客户端不能凭 receipt_ref 字符串自证提交成功，必须权威回读。
 
+### 6.3 操作状态、回查和恢复协议
+
+| OperationView 状态 | 可依赖事实 | 后续行为 |
+| --- | --- | --- |
+| pending | 权威登记/受理已确认，仍沿正常处理路径等待结果 | retry_advice=wait；按原 operation 查询，不新建重复行动 |
+| recovery_required | 已有操作关联，但因恢复/回读缺口无法证明其执行结果；不是终态失败 | retry_advice=lookup_original，recovery 必填；保留原身份和最后已验证 binding，暂停相关新副作用并对账 |
+| committed | 原请求的持久 receipt 与有效 finality binding 已核对 | retry_advice=none；回放同一结果，不再执行 |
+| rejected / failed | 权威 disposition 已确认拒绝或终态失败，不是由超时推断 | retry_advice=none；展示真实原因及已产生的费用/预留等结果，不自动换键重做 |
+
+`GET operations/{id}` 和 `by-client-id` 在当前读取获权且操作记录可读时，以 `200 OperationViewV1` 返回 recovery_required；不得伪装成 404、failed 或无区别的 pending。`world_binding` 在该状态是最后已验证的关联，不宣称当前最终性。若连操作记录也无法受信回读，返回 503/明确 error 并保留客户端原键，而非制造终态；401/403 仍先执行且不得泄露操作存在性。传输 ErrorV1 的 retryable 仅是对应请求的恢复建议，绝不授权重建世界意图。
+
+`pending -> recovery_required` 必须留下持久原因与最后已知关联；恢复服务重查原 request/correlation/receipt 和有效世界分支后，才可 `recovery_required -> pending`（确认仍受理待决）或进入上述有证据终态。轮询时间、重试次数或用户停止不能把未知结果改成失败或取消。recovery.reason 有界且脱敏；reconciliation 与 last_attempt_at 表达恢复进展，阻塞时可升级人工诊断但不授予重放权限。终态历史与 reorg/finality 变化仍按既有世界合同处理，不由本地计时器反向改写。
+
+同键重试首先查询既有 operation，返回相同的 recovery 状态或已经核实的新状态；禁止更换 client_operation_id、重新签 nonce、开启新的副作用 context 或靠 outcome=abandoned 遗忘未知操作。只有恢复服务核实底层仍持久保有原身份去重、允许原请求重投时，才可重送原 outbox 内容；否则只回查并保留阻塞。Worker、Web 和 native 将它显示为“结果待恢复确认”，不复用表示普通排队的 pending 或原模型调用的 run_unknown；只读查询、任务沟通和原结果核对仍可按当前权限进行。
+
 ## 7. 状态、事务与持久化
 
 API 入口无独立世界事务。token/配对的凭据记录由可信身份服务保存；task/goal/grant/fence 由协作权威保存；context/operation/dedup/disposition 由 Runtime/Harness 持久边界保存；渲染缓存随时可重建。各自的状态转换与崩溃恢复不可互相代签。
 
-操作登记与 Runtime admission 跨进程时使用 durable ingress + outbox，不声称网络原子提交：outbox 可能重复，Runtime 按稳定 operation/request identity 去重。恢复扫描 registered/pending 操作，只重送同一请求；无法证明是否执行则保持 recovery_required。终态去重索引至少与权威操作历史同寿命；大正文可压缩，但删除键后不得把迟到请求作为新操作重新执行。
+操作登记与 Runtime admission 跨进程时使用 durable ingress + outbox，不声称网络原子提交：outbox 可能重复，Runtime 按稳定 operation/request identity 去重。恢复扫描 registered/pending/recovery_required 操作；无法证明是否执行时，持久保留 recovery_required 和原 request/correlation，再按 §6.3 查询或在已核实的底层持久去重保护下重投原请求，不盲目再次发送。终态去重索引至少与权威操作历史同寿命；大正文可压缩，但删除键后不得把迟到请求作为新操作重新执行。
 
 ## 8. 部署、安全与运行约束
 
@@ -188,6 +206,8 @@ HTTP 普通请求客户端 deadline 初值 10 秒；事件 long-poll 服务端�
 新路径只使用 Game API revision 1，不接收旧 Provider wire 作为 alias。实施顺序：接通权威读与鉴权 → context/catalog/operation → 协作与 worker → Viewer/native → 两 Runtime 首局。上线前先验证唯一 writer、持久 replay 与权限负例，随后把推荐 Skill 改指向新路径。
 
 旧 Bridge 允许直接删除，不强制双写或永久兼容层；删除前列清仍在使用的 builtin、mock、运维与独立消费者并各自处置。撤回新入口是禁止新提交、继续查询既有 operation，不是把旧 bridge 静默接管当前 task；新旧存储不能无检查相互降级。schema 不兼容时旧服务拒绝打开新快照，恢复需采用明确的备份/转换方案，世界已提交历史不回滚。
+
+本次在尚未发布的 revision 1 草案中补齐 recovery_required；OpenAPI、共享 DTO、Worker 和 Viewer 消费者必须同时识别，旧草案消费者不能把新状态降格为 pending/failed。
 
 ## 11. 验证设计与可追溯性
 
