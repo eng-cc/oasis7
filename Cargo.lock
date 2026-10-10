@@ -6200,6 +6200,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_agent_harness"
+version = "0.1.0"
+dependencies = [
+ "oasis7_agent_api",
+ "oasis7_wasm_abi",
+ "serde",
+ "serde_json",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "oasis7_client_api"
 version = "0.1.0"
 dependencies = [
