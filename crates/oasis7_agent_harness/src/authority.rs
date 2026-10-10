@@ -59,3 +59,86 @@ pub trait RuntimeAuthority {
         continuation: &Self::Continuation,
     ) -> Result<ContinuationHostProjection, CognitionError>;
 }
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use oasis7_agent_api::{
+        CognitionError, CognitionLeaseConsumptionViewV1, ContinuousAgentRequestContextV1,
+        FeedbackEnvelopeV1, ResponseArtifactIdentityV1, RuntimeReceiptLineageV1,
+    };
+
+    use crate::cognition::FeedbackHistoryProjection;
+    use crate::{ContinuationHostProjection, MemoryWritePolicyContextV1};
+
+    use super::RuntimeAuthority;
+
+    #[derive(Default)]
+    pub(crate) struct FixtureAuthority {
+        pub feedback_history: Vec<FeedbackHistoryProjection>,
+        pub feedback_history_error: Option<CognitionError>,
+        pub history_reads: Arc<AtomicUsize>,
+    }
+
+    impl RuntimeAuthority for FixtureAuthority {
+        type Lease = ();
+        type Receipt = ();
+        type Continuation = ();
+
+        fn validate_lease(
+            &self,
+            _lease: &Self::Lease,
+            _request: &ContinuousAgentRequestContextV1,
+        ) -> Result<CognitionLeaseConsumptionViewV1, CognitionError> {
+            Err(CognitionError::new(
+                "fixture_unused",
+                "lease validation unused",
+            ))
+        }
+
+        fn verify_receipt_readback(
+            &self,
+            _feedback: &FeedbackEnvelopeV1,
+            _receipt: &Self::Receipt,
+            _response_identity: &ResponseArtifactIdentityV1,
+        ) -> Result<RuntimeReceiptLineageV1, CognitionError> {
+            Err(CognitionError::new(
+                "fixture_unused",
+                "receipt readback unused",
+            ))
+        }
+
+        fn verify_memory_receipt(
+            &self,
+            _receipt: &Self::Receipt,
+            _context: Option<&MemoryWritePolicyContextV1>,
+        ) -> Result<RuntimeReceiptLineageV1, CognitionError> {
+            Err(CognitionError::new(
+                "fixture_unused",
+                "memory verification unused",
+            ))
+        }
+
+        fn validated_feedback_history(
+            &self,
+        ) -> Result<Vec<FeedbackHistoryProjection>, CognitionError> {
+            self.history_reads.fetch_add(1, Ordering::SeqCst);
+            if let Some(error) = &self.feedback_history_error {
+                return Err(error.clone());
+            }
+            Ok(self.feedback_history.clone())
+        }
+
+        fn continuation_projection(
+            &self,
+            _continuation: &Self::Continuation,
+        ) -> Result<ContinuationHostProjection, CognitionError> {
+            Err(CognitionError::new(
+                "fixture_unused",
+                "continuation projection unused",
+            ))
+        }
+    }
+}

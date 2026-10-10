@@ -50,6 +50,7 @@ pub struct AgentCognitionStore {
     subject_by_request_id: BTreeMap<String, String>,
     feedback_partitions: BTreeMap<(String, String), FeedbackPartition>,
     feedback_recovery_blocked: BTreeMap<(String, String), String>,
+    feedback_recovery_loaded: bool,
     feedback_recovery_initialized: bool,
 }
 
@@ -58,6 +59,8 @@ impl AgentCognitionStore {
         &mut self,
         authority: &A,
     ) -> Result<(), CognitionError> {
+        self.feedback_recovery_loaded = false;
+        self.feedback_recovery_initialized = false;
         let history = authority.validated_feedback_history()?;
         self.restore_validated_feedback_history(&history)
     }
@@ -68,6 +71,8 @@ impl AgentCognitionStore {
         &mut self,
         records: &[FeedbackHistoryProjection],
     ) -> Result<(), CognitionError> {
+        self.feedback_recovery_loaded = false;
+        self.feedback_recovery_initialized = false;
         let mut groups = BTreeMap::<(String, String), Vec<&FeedbackHistoryProjection>>::new();
         let mut id_partitions = BTreeMap::<String, BTreeSet<(String, String)>>::new();
         for record in records {
@@ -201,7 +206,12 @@ impl AgentCognitionStore {
             }
         }
         self.feedback_recovery_initialized = self.feedback_recovery_blocked.is_empty();
+        self.feedback_recovery_loaded = true;
         Ok(())
+    }
+
+    pub(crate) fn feedback_recovery_loaded(&self) -> bool {
+        self.feedback_recovery_loaded
     }
 
     pub fn feedback_recovery_initialized(&self) -> bool {

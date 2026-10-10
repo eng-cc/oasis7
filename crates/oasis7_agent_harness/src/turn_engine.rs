@@ -186,6 +186,18 @@ where
         self.runner.register(agent_id, provider).map_err(Into::into)
     }
 
+    /// Restore replay and collision metadata through the host's validated
+    /// Runtime history projection. The host remains the authority for the
+    /// underlying durable records and their validation.
+    pub fn restore_feedback_history<H: RuntimeAuthority>(
+        &mut self,
+        authority: &H,
+    ) -> Result<(), TurnEngineError> {
+        self.runner
+            .restore_feedback_history(authority)
+            .map_err(Into::into)
+    }
+
     pub fn start_turn<H: RuntimeAuthority<Lease = L>>(
         &mut self,
         request: TurnRequest<L>,
@@ -212,6 +224,12 @@ where
                     "turn and request contexts do not correlate",
                 ),
             )));
+        }
+        if !self.runner.feedback_recovery_loaded()
+            || (self.runner.needs_feedback_history_refresh()
+                && self.runner.active_turn_count() == 0)
+        {
+            self.restore_feedback_history(authority)?;
         }
         if let Some(lease) = request.lease.as_ref() {
             let view = authority
@@ -1029,3 +1047,7 @@ mod tests {
         assert_eq!(phase_for_feedback(&committed), TurnEnginePhase::Completed);
     }
 }
+
+#[cfg(test)]
+#[path = "turn_engine_recovery_tests.rs"]
+mod recovery_tests;

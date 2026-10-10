@@ -20,6 +20,7 @@ use oasis7_agent_api::{
 use serde::Serialize;
 use serde_json::Value;
 
+use crate::authority::RuntimeAuthority;
 use crate::cognition::AgentCognitionStore;
 use crate::provider::{DecisionProvider, DecisionProviderError};
 
@@ -359,6 +360,39 @@ where
         self.active_turns + self.awaiting_runtime.len()
     }
 
+    /// Restore replay and collision metadata from the host's validated durable
+    /// feedback history before the runner dispatches its first provider turn.
+    /// A complete restore is idempotent. A fenced partition can be refreshed
+    /// while idle, but never while a provider turn or Runtime handoff is active.
+    pub fn restore_feedback_history<H: RuntimeAuthority>(
+        &mut self,
+        authority: &H,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        if self.cognition.feedback_recovery_loaded()
+            && self.cognition.feedback_recovery_initialized()
+        {
+            return Ok(());
+        }
+        if self.active_turn_count() > 0 {
+            return Err(AsyncAgentRunnerError::Cognition(CognitionError::new(
+                "feedback_recovery_active_turn",
+                "feedback history cannot be restored while a turn is active or awaiting Runtime",
+            )));
+        }
+        self.cognition
+            .restore_from_runtime(authority)
+            .map_err(AsyncAgentRunnerError::Cognition)
+    }
+
+    pub(crate) fn feedback_recovery_loaded(&self) -> bool {
+        self.cognition.feedback_recovery_loaded()
+    }
+
+    pub(crate) fn needs_feedback_history_refresh(&self) -> bool {
+        !self.cognition.feedback_recovery_loaded()
+            || !self.cognition.feedback_recovery_initialized()
+    }
+
     pub fn provider_is_still_in_flight(&self, agent_id: &str) -> bool {
         self.actors
             .get(agent_id)
@@ -370,6 +404,12 @@ where
         request: ContinuousAgentRequestContextV1,
     ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
         request.validate_production_lane()?;
+        if !self.cognition.feedback_recovery_loaded() {
+            return Err(AsyncAgentRunnerError::Cognition(CognitionError::new(
+                "feedback_recovery_required",
+                "restore host-validated feedback history before dispatching a provider turn",
+            )));
+        }
         let agent_id = request.agent_subject.clone();
         if self.awaiting_runtime.contains_key(&agent_id)
             || self
@@ -643,8 +683,13 @@ fn classify_decision<A, Q>(
 }
 
 #[cfg(test)]
+#[path = "actor_recovery_tests.rs"]
+mod recovery_tests;
+
+#[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::authority::test_support::FixtureAuthority;
     use oasis7_agent_api::{
         BudgetContractV1, CapabilityInvocationContext, DecisionRequest, DecisionResponse, Digest32,
         ObservationEnvelope, ProviderObservation, RuntimeBindingV1, h_v1,
@@ -779,9 +824,15 @@ pub(crate) mod tests {
         request
     }
 
-    struct WaitProvider {
-        calls: Arc<AtomicUsize>,
-        delay: Duration,
+    fn restore_empty_history(runner: &mut AsyncAgentRunner<Value, Value>) {
+        runner
+            .restore_feedback_history(&FixtureAuthority::default())
+            .expect("empty host history is a successful restore");
+    }
+
+    pub(crate) struct WaitProvider {
+        pub(crate) calls: Arc<AtomicUsize>,
+        pub(crate) delay: Duration,
     }
 
     impl DecisionProvider for WaitProvider {
@@ -817,6 +868,7 @@ pub(crate) mod tests {
     fn slow_provider_does_not_block_other_actor_progress_and_retry_changes_only_transport() {
         let calls = Arc::new(AtomicUsize::new(0));
         let mut runner = AsyncAgentRunner::<Value, Value>::new(1).unwrap();
+        restore_empty_history(&mut runner);
         runner
             .register(
                 "agent-a",
@@ -889,6 +941,7 @@ pub(crate) mod tests {
     fn request_identity_mismatch_is_rejected_before_provider_dispatch() {
         let calls = Arc::new(AtomicUsize::new(0));
         let mut runner = AsyncAgentRunner::<Value, Value>::new(1).unwrap();
+        restore_empty_history(&mut runner);
         runner
             .register(
                 "agent-a",
