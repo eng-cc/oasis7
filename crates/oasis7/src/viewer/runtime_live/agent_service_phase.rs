@@ -25,6 +25,7 @@ pub(super) enum HostedServicePhase {
         pending: PendingProviderServiceIntent,
         receipt: ProviderServiceCognitionReceipt,
         submit: bool,
+        replay_authorized: bool,
     },
     Feedback {
         pending: PendingProviderServiceIntent,
@@ -296,7 +297,10 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 deadline_unix_ms: None,
             }),
             HostedServicePhase::ActSettle {
-                pending, submit, ..
+                pending,
+                submit,
+                replay_authorized,
+                ..
             } => {
                 let request = &pending.cognition.request.request_context;
                 let lease = pending
@@ -304,7 +308,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     .cognition_lease
                     .as_ref()
                     .ok_or("hosted settled Act missing lease")?;
-                let (checkpoint, _) = self.llm_sidecar.prepare_service_scheduler_checkpoint(
+                let (checkpoint, existed) = self.llm_sidecar.prepare_service_scheduler_checkpoint(
                     request,
                     "settle",
                     SchedulerOperationV1::SettleLease {
@@ -313,7 +317,13 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     },
                     None,
                 )?;
-                original_settlement_io(&checkpoint.correlation, &checkpoint.payload, *submit)
+                original_settlement_io(
+                    &checkpoint.correlation,
+                    &checkpoint.payload,
+                    *submit,
+                    existed,
+                    *replay_authorized,
+                )
             }
             HostedServicePhase::Feedback {
                 pending,
@@ -488,6 +498,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         pending,
                         receipt,
                         submit: true,
+                        replay_authorized: false,
                     }
                 });
             }
@@ -508,6 +519,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         pending,
                         receipt,
                         submit: true,
+                        replay_authorized: true,
                     });
                     return Ok(AgentServiceProgress::Advanced);
                 }
@@ -896,11 +908,17 @@ fn original_settlement_io(
     correlation: &RequestCorrelation,
     payload: &crate::world_service::WorldServicePayloadV1,
     submit: bool,
+    existed: bool,
+    replay_authorized: bool,
 ) -> AgentServiceIoOperation {
-    // The checkpoint's existence is precisely what binds an authorized replay
-    // to the original bytes. Dispatch reservation already resets submit=false;
-    // only verified Unknown schedules a further original Submit.
-    original_intent_io(correlation, payload, submit)
+    // Existing durable requests first reconcile by Lookup. Only a verified
+    // Unknown authorizes replay; an ActView transition is not that evidence.
+    // Dispatch reservation consumes submit before any completion is applied.
+    original_intent_io(
+        correlation,
+        payload,
+        submit && (!existed || replay_authorized),
+    )
 }
 #[cfg(any(test, feature = "test_tier_required"))]
 impl crate::viewer::ViewerRuntimeLiveServer {
@@ -914,6 +932,45 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         {
             return Err("settlement operation required".into());
         }
+        assert!(
+            matches!(
+                original_settlement_io(
+                    &original.correlation,
+                    &original.signed_payload,
+                    true,
+                    true,
+                    false
+                ),
+                AgentServiceIoOperation::Lookup { .. }
+            ),
+            "existing settlement first reconciles by Lookup"
+        );
+        assert!(
+            matches!(
+                original_settlement_io(
+                    &original.correlation,
+                    &original.signed_payload,
+                    true,
+                    false,
+                    false
+                ),
+                AgentServiceIoOperation::Submit(_)
+            ),
+            "new settlement may first Submit"
+        );
+        assert!(
+            matches!(
+                original_settlement_io(
+                    &original.correlation,
+                    &original.signed_payload,
+                    false,
+                    true,
+                    true
+                ),
+                AgentServiceIoOperation::Lookup { .. }
+            ),
+            "dispatch consumes an authorized Submit"
+        );
         let response = client
             .lookup(
                 LookupIntentRequest {
@@ -926,9 +983,13 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         if !original_settlement_requires_replay(&response, &original.correlation)? {
             return Err("unpublished settlement required".into());
         }
-        let AgentServiceIoOperation::Submit(replay) =
-            original_settlement_io(&original.correlation, &original.signed_payload, true)
-        else {
+        let AgentServiceIoOperation::Submit(replay) = original_settlement_io(
+            &original.correlation,
+            &original.signed_payload,
+            true,
+            true,
+            true,
+        ) else {
             return Err("retained settlement was not submitted".into());
         };
         assert_eq!(replay.correlation, original.correlation);

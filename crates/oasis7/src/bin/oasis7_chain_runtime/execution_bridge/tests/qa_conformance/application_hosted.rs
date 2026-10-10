@@ -99,6 +99,21 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
         summary["pending_action_count"],
         summary["pending_intent_count"]
     );
+    if summary["terminal_states"]["agent-a"]["status"] != "committed" {
+        println!(
+            "hosted_failed_terminal_diagnostic={}",
+            serde_json::json!({
+                "hosted_service_phase": summary["hosted_service_phase"],
+                "hosted_service_inflight": summary["hosted_service_inflight"],
+                "hosted_service_memory_failure": summary["hosted_service_memory_failure"],
+                "agent_service_pump_error": summary["agent_service_pump_error"],
+                "pending_intent_count": summary["pending_intent_count"],
+                "pending_action_count": summary["pending_action_count"],
+                "native_model_call_count": summary["native_model_call_count"],
+                "mirrored_lease_count": summary["mirrored_lease_count"],
+            })
+        );
+    }
     assert!(
         play_processed,
         "genuine LiveControl Play was not followed by ordered protocol response"
