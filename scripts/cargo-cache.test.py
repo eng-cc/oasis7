@@ -101,6 +101,33 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(cache.collect(self.root, True)["actions"][0]["action"], "preserved-symlink")
         self.assertTrue(target.exists())
 
+    @unittest.skipUnless(os.name == "posix", "GC deletion window uses Unix leases")
+    def test_worktree_attachment_protects_orphan_through_registration(self):
+        owner = Path(self.tmp.name) / "reused"
+        target = self.create(owner)
+        with cache.locked(self.family / ".attachments", self.family):
+            self.assertEqual(cache.collect(self.root, True)["actions"][0]["action"], "busy-or-unsafe")
+            self.git("worktree", "add", "-b", "reused", str(owner))
+        self.assertEqual(cache.collect(self.root, True)["actions"], [])
+        self.assertTrue(target.exists())
+
+    @unittest.skipUnless(os.name == "posix", "Unix attachment lock")
+    def test_attachment_waits_for_deletion_window(self):
+        ready = Path(self.tmp.name) / "attached"
+        command = [sys.executable, "-c", "from pathlib import Path; Path(%r).touch()" % str(ready)]
+        with cache.locked(self.family / ".attachments", self.family, exclusive=True):
+            child = subprocess.Popen([sys.executable, cache.__file__, "attach", "--repo-root", str(self.root), "--", *command])
+            try:
+                time.sleep(0.2)
+                self.assertIsNone(child.poll())
+                self.assertFalse(ready.exists())
+            except BaseException:
+                child.kill()
+                child.wait(timeout=5)
+                raise
+        self.assertEqual(child.wait(timeout=5), 0)
+        self.assertTrue(ready.exists())
+
     def test_lease_enrolls_empty_only_and_propagates_exit(self):
         target = self.target(self.root)
         self.assertEqual(cache.lease(target, self.root, self.common, [sys.executable, "-c", "raise SystemExit(7)"]), 7)

@@ -49,7 +49,7 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7
 python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 ```
 
-仅回收具有当前 wrapper 管理标记、所属工作区已不在 Git 注册表、没有其他 target 链接引用、超过保留期且能取得排他使用锁的缓存。仍注册（包括路径已缺失）、正在编译/运行、标记异常、身份未知和 legacy 缓存均保留。wrapper 更新最后使用时间并在 Cargo 及其运行子进程生命周期内持锁；worktree 清理后再次执行缓存回收，工作区清理本身不递归清空外部缓存。显式 target override 不纳入自动管理。首次报告中的历史缓存不因名称相似而自动取得删除资格。
+仅回收具有当前 wrapper 管理标记、所属工作区已不在 Git 注册表、没有其他 target 链接引用、超过保留期且能取得排他使用锁的缓存。仍注册（包括路径已缺失）、正在编译/运行、标记异常、身份未知和 legacy 缓存均保留。wrapper 更新最后使用时间并在 Cargo 及其运行子进程生命周期内持锁；`new-task-worktree.sh` 的 Git 注册与回收的重新检查/删除窗口使用同一仓库锁，避免固定路径重新挂接时被删除；手工 `git worktree add` 若与回收并发，应通过 `python3 scripts/cargo-cache.py attach -- git worktree add ...` 执行。worktree 清理后再次执行缓存回收，工作区清理本身不递归清空外部缓存。显式 target override 不纳入自动管理。首次报告中的历史缓存不因名称相似而自动取得删除资格。
 
 低调试配置不会清除已有大体积产物；本地普通 `target` 也不会被自动搬移或删除。报告预算无法满足时列出剩余占用与保护原因，不把未知目录视为可释放空间。
 

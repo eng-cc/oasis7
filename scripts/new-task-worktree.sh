@@ -293,9 +293,9 @@ else
   mkdir -p "$(dirname "$TARGET_PATH")"
   if git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
     MODE="attach_existing_branch"
-    git worktree add --quiet "$TARGET_PATH" "$BRANCH_NAME" >&2
+    "$PYTHON_BIN" "$ROOT_DIR/scripts/cargo-cache.py" attach --repo-root "$ROOT_DIR" -- git worktree add --quiet "$TARGET_PATH" "$BRANCH_NAME" >&2
   else
-    git worktree add --quiet -b "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" >&2
+    "$PYTHON_BIN" "$ROOT_DIR/scripts/cargo-cache.py" attach --repo-root "$ROOT_DIR" -- git worktree add --quiet -b "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" >&2
   fi
   WORKTREE_CREATED=1
 fi

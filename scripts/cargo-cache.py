@@ -164,7 +164,7 @@ def collect(root, apply=False, min_age_days=7, budget_gib=None):
             break
         target = Path(row["target"])
         try:
-            with locked(target, Path(report["family"]), exclusive=True, blocking=False):
+            with locked(Path(report["family"]) / ".attachments", Path(report["family"]), exclusive=True, blocking=False), locked(target, Path(report["family"]), exclusive=True, blocking=False):
                 # Recheck registration, references and marker under the same lock
                 # used by wrapper commands; never delete nested symlinks.
                 fresh = next((r for r in inventory(root, measure=False)["targets"] if r["target"] == str(target)), None)
@@ -184,6 +184,14 @@ def collect(root, apply=False, min_age_days=7, budget_gib=None):
             actions.append(dict(target=str(target), action="busy-or-unsafe"))
     report.update(actions=actions, remaining_bytes=remaining, size_accounting="snapshot", applied=apply, budget_met=None if budget_gib is None else report["unknown_size_count"] == 0 and remaining <= budget_gib * 1024 ** 3)
     return report
+
+
+def attach(root, command):
+    # Registration must serialize with the GC registration recheck + deletion.
+    # After registration, inventory protects this owner's targets before linking.
+    _, _, family = layout(root)
+    with locked(family / ".attachments", family) as lock_fd:
+        return subprocess.call(command, pass_fds=(lock_fd,) if os.name == "posix" else ())
 
 
 def lease(target, root, common, command):
@@ -220,12 +228,14 @@ def lease(target, root, common, command):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     subs = parser.add_subparsers(dest="mode", required=True)
-    for mode in ("report", "gc", "lease"):
+    for mode in ("report", "gc", "lease", "attach"):
         sub = subs.add_parser(mode)
         sub.add_argument("--repo-root", default=os.getcwd())
         if mode == "lease":
             sub.add_argument("--target", required=True)
             sub.add_argument("--common-dir", required=True)
+            sub.add_argument("command", nargs=argparse.REMAINDER)
+        elif mode == "attach":
             sub.add_argument("command", nargs=argparse.REMAINDER)
         else:
             sub.add_argument("--json", action="store_true")
@@ -235,11 +245,11 @@ def main():
                 sub.add_argument("--budget-gib", type=float)
     args = parser.parse_args()
     try:
-        if args.mode == "lease":
+        if args.mode in ("lease", "attach"):
             command = args.command[1:] if args.command[:1] == ["--"] else args.command
             if not command:
-                parser.error("lease requires a command")
-            code = lease(args.target, args.repo_root, args.common_dir, command)
+                parser.error(args.mode + " requires a command")
+            code = attach(args.repo_root, command) if args.mode == "attach" else lease(args.target, args.repo_root, args.common_dir, command)
             return code if code >= 0 else 128 - code
         result = inventory(args.repo_root) if args.mode == "report" else collect(args.repo_root, args.apply, args.min_age_days, args.budget_gib)
         print(json.dumps(result, indent=2))
