@@ -3,6 +3,7 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
 
+use crate::world_service::client::RemoteWorldServiceClient;
 use tracing::Level;
 use tungstenite::error::ProtocolError;
 use tungstenite::handshake::HandshakeError;
@@ -48,11 +49,60 @@ impl From<WsError> for ViewerWebBridgeError {
 
 pub struct ViewerWebBridge {
     config: ViewerWebBridgeConfig,
+    game_read_client: Option<RemoteWorldServiceClient>,
+    game_read_enabled: bool,
 }
 
 impl ViewerWebBridge {
     pub fn new(config: ViewerWebBridgeConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            game_read_client: None,
+            game_read_enabled: false,
+        }
+    }
+
+    pub fn with_game_read_api(mut self, client: RemoteWorldServiceClient) -> Result<Self, String> {
+        let bind: std::net::SocketAddr = self
+            .config
+            .bind_addr
+            .parse()
+            .map_err(|_| "Game API bootstrap requires a loopback IP bind")?;
+        if !bind.ip().is_loopback() {
+            return Err("Game API bootstrap requires a loopback IP bind".into());
+        }
+        let endpoint = reqwest::Url::parse(&client.config().endpoint)
+            .map_err(|_| "invalid World Service endpoint")?;
+        if endpoint.scheme() != "https"
+            && !endpoint.host_str().is_some_and(|host| {
+                host.trim_matches(['[', ']'])
+                    .parse::<std::net::IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback())
+            })
+        {
+            return Err("Game API World Service requires HTTPS or a loopback IP endpoint".into());
+        }
+        let safe_id = |id: &str| {
+            !id.is_empty()
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.~".contains(&b))
+        };
+        if !safe_id(&client.config().expected_world.world_id)
+            || !client
+                .config()
+                .scope_id
+                .strip_prefix("agent:")
+                .is_some_and(safe_id)
+        {
+            return Err(
+                "Game API bootstrap requires URI-safe world/Agent identifiers and an agent scope"
+                    .into(),
+            );
+        }
+        self.game_read_client = Some(client);
+        self.game_read_enabled = true;
+        Ok(self)
     }
 
     pub fn run(&self) -> Result<(), ViewerWebBridgeError> {
@@ -71,8 +121,14 @@ impl ViewerWebBridge {
                 }
             };
             let config = self.config.clone();
+            let game_read_client = self.game_read_client.clone();
+            let game_read_enabled = self.game_read_enabled;
             thread::spawn(move || {
-                let bridge = ViewerWebBridge::new(config);
+                let bridge = ViewerWebBridge {
+                    config,
+                    game_read_client,
+                    game_read_enabled,
+                };
                 if let Err(err) = bridge.serve_stream(stream)
                     && !is_expected_bridge_disconnect(&err)
                 {
@@ -88,9 +144,19 @@ impl ViewerWebBridge {
         Ok(())
     }
 
-    fn serve_stream(&self, stream: TcpStream) -> Result<(), ViewerWebBridgeError> {
+    fn serve_stream(&self, mut stream: TcpStream) -> Result<(), ViewerWebBridgeError> {
         const WS_READ_TIMEOUT: Duration = Duration::from_millis(20);
 
+        stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(10)))?;
+        if self.game_read_enabled
+            && super::game_read_api::serve_if_game_request(
+                &mut stream,
+                self.game_read_client.as_ref(),
+            )?
+        {
+            return Ok(());
+        }
         let mut websocket = accept(stream).map_err(map_handshake_error)?;
         websocket
             .get_mut()

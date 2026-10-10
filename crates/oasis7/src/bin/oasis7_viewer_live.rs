@@ -28,6 +28,7 @@ struct CliOptions {
     debug_scenario: Option<DebugScenario>,
     bind_addr: String,
     web_bind_addr: Option<String>,
+    game_api_read: bool,
     llm_mode: bool,
     deployment_mode: String,
     chain_status_bind: Option<String>,
@@ -65,6 +66,7 @@ impl Default for CliOptions {
             debug_scenario: None,
             bind_addr: DEFAULT_BIND.to_string(),
             web_bind_addr: Some(DEFAULT_WEB_BIND.to_string()),
+            game_api_read: false,
             llm_mode: true,
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
             chain_status_bind: None,
@@ -131,13 +133,28 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         "starting viewer live runtime"
     );
     let server = initialize_viewer_server(&options)?;
+    let game_read_client = if options.game_api_read {
+        let config = oasis7::world_service::client::WorldServiceClientConfig::from_env()?
+            .ok_or("--game-api-read requires authenticated World Service configuration")?;
+        Some(
+            oasis7::world_service::client::RemoteWorldServiceClient::new(config)
+                .map_err(|error| error.to_string())?,
+        )
+    } else {
+        None
+    };
     if let Some(web_bind_addr) = options.web_bind_addr.clone() {
         let upstream_addr = options.bind_addr.clone();
+        let bridge = ViewerWebBridge::new(ViewerWebBridgeConfig::new(
+            web_bind_addr.clone(),
+            upstream_addr,
+        ));
+        let bridge = if let Some(client) = game_read_client {
+            bridge.with_game_read_api(client)?
+        } else {
+            bridge
+        };
         thread::spawn(move || {
-            let bridge = ViewerWebBridge::new(ViewerWebBridgeConfig::new(
-                web_bind_addr.clone(),
-                upstream_addr,
-            ));
             if let Err(err) = bridge.run() {
                 warn!(bind_addr = %web_bind_addr, error = ?err, "viewer web bridge exited with error");
             }
@@ -300,6 +317,9 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--no-web-bind" => {
                 options.web_bind_addr = None;
             }
+            "--game-api-read" => {
+                options.game_api_read = true;
+            }
             "--llm" => {
                 options.llm_mode = true;
             }
@@ -393,6 +413,9 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     }
 
     parse_socket_addr(options.bind_addr.as_str(), "--bind")?;
+    if options.game_api_read && options.web_bind_addr.is_none() {
+        return Err("--game-api-read requires --web-bind".into());
+    }
     if let Some(web_bind_addr) = options.web_bind_addr.as_deref() {
         parse_socket_addr(web_bind_addr, "--web-bind")?;
     }
@@ -548,6 +571,7 @@ Options:\n\
   --bind <host:port>        viewer live server bind (default: {DEFAULT_BIND})\n\
   --web-bind <host:port>    websocket bridge bind (default: {DEFAULT_WEB_BIND})\n\
   --no-web-bind             disable websocket bridge\n\
+  --game-api-read           enable loopback signed Game API reads (requires World Service)\n\
   --llm                     enable llm mode (default; required for gameplay)\n\
   --no-llm                  disable llm mode (observer/debug only; gameplay blocked)\n\
   --chain-execution-world-dir <path> operator-owned local observer checkpoint root; unavailable with world service\n\
@@ -697,6 +721,17 @@ mod tests {
     fn parse_options_supports_no_web_bind() {
         let options = parse_options(["--no-web-bind"].into_iter()).expect("no web bind");
         assert_eq!(options.web_bind_addr, None);
+    }
+
+    #[test]
+    fn parse_options_requires_web_bridge_for_opt_in_game_reads() {
+        assert!(!CliOptions::default().game_api_read);
+        assert!(
+            parse_options(["--game-api-read"].into_iter())
+                .unwrap()
+                .game_api_read
+        );
+        assert!(parse_options(["--game-api-read", "--no-web-bind"].into_iter()).is_err());
     }
 
     #[test]
