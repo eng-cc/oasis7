@@ -91,6 +91,7 @@ impl NodeRuntime {
 pub(super) fn bind_pending_replicated_execution_inputs(
     runtime: &NodeRuntime,
     target_height: u64,
+    engine_reserved_bytes: usize,
 ) -> Result<(), NodeError> {
     let mut pending = runtime
         .pending_consensus_actions
@@ -101,7 +102,13 @@ pub(super) fn bind_pending_replicated_execution_inputs(
             return Err(NodeError::Consensus { reason });
         }
     }
-    let pending_bytes = action_payload_bytes(pending.iter());
+    // Bootstrap may have restored an original guarded proposal reservation.
+    // Binding the external queue must retain that engine-owned reservation.
+    let pending_bytes = action_payload_bytes(pending.iter())
+        .checked_add(engine_reserved_bytes)
+        .ok_or_else(|| NodeError::Consensus {
+            reason: "pending execution input and restored proposal byte count overflow".to_string(),
+        })?;
     if pending_bytes > runtime.config.max_pending_consensus_action_queue_bytes {
         return Err(NodeError::Consensus {
             reason: format!(

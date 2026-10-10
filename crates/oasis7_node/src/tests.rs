@@ -96,3 +96,5 @@ mod tests_fetch_blob_chunking;
 #[path = "tests_hello_throttle.rs"]
 mod tests_hello_throttle;
 include!("tests_replicated_execution_input.rs");
+#[path = "tests_guarded_execution.rs"]
+mod tests_guarded_execution;

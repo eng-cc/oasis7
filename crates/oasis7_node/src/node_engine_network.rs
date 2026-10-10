@@ -480,6 +480,9 @@ impl PosNodeEngine {
         payload: &ReplicationCommitPayload,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<(String, i64), NodeError> {
+        super::node_engine_guarded_local::ensure_ordinary_network_recovery(
+            execution_hook.as_deref(),
+        )?;
         if payload.execution_block_hash.is_some() != payload.execution_state_root.is_some() {
             return Err(NodeError::Replication {
                 reason: format!(
