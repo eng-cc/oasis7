@@ -30,7 +30,7 @@
 
 ## TCP conformance 完成条件
 
-Hosted fresh admission、metadata release 和 ordinary cadence 的功能验证等待原 canonical receipt、settled lease，以及有 memory intent 的双 turn 对应 memory，不把原来的三、四、八秒观察窗口当作产品 SLA。这三个用例的 isolated child 分别使用其父进程设置的同一个 60 秒单调硬截止；父进程并发读取输出，超时只终止自有 child。真实 pump、memory 或 terminal rejection 提前失败；metadata-held 的零提交断言、协议顺序和双 turn identity/nonce 验证仍保留。
+Hosted fresh admission、metadata release 和 ordinary cadence 的功能验证等待原 canonical receipt、settled lease，以及有 memory intent 的双 turn 对应 memory，不把原来的三、四、八秒观察窗口当作产品 SLA。这三个用例的 isolated child 分别使用其父进程设置的同一个 60 秒单调硬截止；父进程使用私有 regular log 文件并保留最多 2 MiB tail，避免继承 pipe 阻塞；`PRE2_CONFORMANCE_EVIDENCE_DIR` 可保留完整日志，超时只终止自有 child。真实 pump、memory 或 terminal rejection 提前失败；metadata-held 的零提交断言、协议顺序和双 turn identity/nonce 验证仍保留。
 
 因果延迟探针只在已验证成功的 View 响应上等待，响应字节保持原样。串行运行目标用例时，可设置 `PRE2_CONFORMANCE_VIEW_DELAY_MS=600`（低于 transport timeout），分别过滤 `real_tcp_hosted_fresh_admission_observes_reserves_and_invokes_provider`、`real_tcp_fresh_admission_waits_for_successful_metadata` 和 `real_tcp_hosted_ordinary_cadence_commits_two_distinct_turns`。日志记录原请求和阶段推进；通过仍须获得同一原请求的 canonical result、唯一结算；双 turn 还须保留各自 memory。该探针验证多阶段累计延迟，不是吞吐或性能验收。
 

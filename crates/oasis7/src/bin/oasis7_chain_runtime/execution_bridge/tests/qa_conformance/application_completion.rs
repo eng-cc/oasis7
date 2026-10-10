@@ -1,7 +1,8 @@
 //! Functional completion barriers share one bounded isolated-child budget.
 //! This budget prevents hangs; it is not an end-to-end latency promise.
 use super::*;
-use std::process::{Command, Output, Stdio};
+use std::io::{Seek, SeekFrom};
+use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const CHILD_BUDGET: Duration = Duration::from_secs(60);
@@ -22,25 +23,28 @@ pub(super) fn child_deadline() -> Instant {
     Instant::now() + remaining.min(CHILD_BUDGET)
 }
 
-pub(super) fn run_child(command: &mut Command) -> Output {
+pub(super) fn run_child(command: &mut Command, root: &std::path::Path) -> Output {
     let deadline = Instant::now() + CHILD_BUDGET;
     let unix_deadline = SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + CHILD_BUDGET;
     command.env(DEADLINE_ENV, unix_deadline.as_millis().to_string());
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let stdout_path = root.join("completion-child.stdout.log");
+    let stderr_path = root.join("completion-child.stderr.log");
+    let open = |path: &std::path::Path| {
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .unwrap()
+    };
+    let stdout = open(&stdout_path);
+    let stderr = open(&stderr_path);
+    // Regular files never wait for inherited pipe descriptors to reach EOF.
+    // Retain bounded tails; full logs can be preserved by the parent evidence run.
+    command
+        .stdout(stdout.try_clone().unwrap())
+        .stderr(stderr.try_clone().unwrap());
     let mut child = command.spawn().expect("isolated completion child");
-    let mut stdout = child.stdout.take().unwrap();
-    let mut stderr = child.stderr.take().unwrap();
-    // Drain concurrently: waiting on full output pipes would deadlock.
-    let out = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stdout.read_to_end(&mut bytes).unwrap();
-        bytes
-    });
-    let err = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        stderr.read_to_end(&mut bytes).unwrap();
-        bytes
-    });
     let status = loop {
         if let Some(status) = child.try_wait().unwrap() {
             break status;
@@ -59,11 +63,39 @@ pub(super) fn run_child(command: &mut Command) -> Output {
         }
         thread::sleep(Duration::from_millis(10));
     };
-    Output {
+    let output = Output {
         status,
-        stdout: out.join().unwrap(),
-        stderr: err.join().unwrap(),
+        stdout: retained_output(stdout),
+        stderr: retained_output(stderr),
+    };
+    if let Ok(evidence_dir) = std::env::var("PRE2_CONFORMANCE_EVIDENCE_DIR") {
+        let destination = std::path::PathBuf::from(evidence_dir).join(root.file_name().unwrap());
+        fs::create_dir_all(&destination).unwrap();
+        // Move the complete regular logs without an unbounded read/copy loop.
+        for path in [&stdout_path, &stderr_path] {
+            fs::rename(path, destination.join(path.file_name().unwrap())).unwrap();
+        }
+        eprintln!("conformance_full_child_logs={}", destination.display());
     }
+    output
+}
+
+fn retained_output(mut file: fs::File) -> Vec<u8> {
+    const MAX_RETAINED: u64 = 2 * 1024 * 1024;
+    let captured_len = file.metadata().unwrap().len();
+    file.seek(SeekFrom::Start(captured_len.saturating_sub(MAX_RETAINED)))
+        .unwrap();
+    let mut bytes = Vec::new();
+    file.take(captured_len.min(MAX_RETAINED))
+        .read_to_end(&mut bytes)
+        .unwrap();
+    eprintln!(
+        "conformance_child_output captured_bytes={captured_len} retained_bytes={} retained_blake3={} truncated={}",
+        bytes.len(),
+        blake3::hash(&bytes),
+        captured_len > MAX_RETAINED
+    );
+    bytes
 }
 
 pub(super) fn has_failure(summary: &serde_json::Value) -> bool {

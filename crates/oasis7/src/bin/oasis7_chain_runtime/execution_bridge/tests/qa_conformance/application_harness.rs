@@ -440,7 +440,7 @@ pub(super) fn run_isolated_application_mode(
         admission_mode,
         "fresh-admission" | "fresh-metadata" | "repeated-turns"
     ) {
-        application_completion::run_child(&mut command)
+        application_completion::run_child(&mut command, &app_dir)
     } else {
         command.output().unwrap()
     };
