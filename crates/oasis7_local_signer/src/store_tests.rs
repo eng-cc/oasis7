@@ -1005,3 +1005,6 @@ fn admin_enable_requires_valid_bound_key_and_disable_is_immediate() {
         Ok(IpcResponse::Sign(SignResult { status, .. })) if status == "committed"
     ));
 }
+
+#[path = "store_management_tests.rs"]
+mod management_tests;

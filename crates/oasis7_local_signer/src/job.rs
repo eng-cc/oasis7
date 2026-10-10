@@ -207,12 +207,14 @@ fn validate_job_input(input: &JobInput) -> Result<(), SignerError> {
         .and_then(|()| validate_id(&input.purpose))
         .and_then(|()| validate_id(&input.signer_id))
         .map_err(|error| SignerError::InvalidInput(error.to_string()))?;
-    if input.purpose != "rollback_strict_audit_v1"
-        || input.provider_id.0.is_some()
+    if !matches!(
+        input.purpose.as_str(),
+        "rollback_strict_audit_v1" | "file_ed25519_v1"
+    ) || input.provider_id.0.is_some()
         || input.grant_id.0.is_none()
     {
         return Err(SignerError::InvalidInput(
-            "M0 job must bind rollback purpose, null provider, and a grant".to_owned(),
+            "job must bind a supported purpose, null provider, and a grant".to_owned(),
         ));
     }
     validate_id(input.grant_id.0.as_deref().unwrap_or_default())

@@ -3,9 +3,24 @@
 Status: source implementation under verification; release installer not deployed or accepted on a host.
 Owner: `blockchain_ops_engineer`; interface/security: `runtime_engineer`; independent verification: `qa_engineer`.
 Professional domain: [P2P design](../design.md); operator companion: [runbook](local-file-signing-backend.runbook.md).
+Key management source extension: [manual](local-file-key-management.manual.md); the extension contract below is independent of historical host acceptance.
 Source baseline: `80efde80d0751e146233259e44c275d4120109a9`; source delivery evidence: [Issue 4200 dispatch](https://github.com/eng-cc/oasis7/issues/4200#issuecomment-5923478626).
 
 ## 1. 问题、目标与非目标
+
+### Ed25519 key management extension
+
+The current extension adds root-only semantic inventory, lifecycle state, encrypted import/export, encrypted custody snapshots and generic file signing. It does not deploy a release or enable installed-host signing. `control/key-catalog.json` is canonical root-owned control with installation binding, immutable signer IDs/public keys, mutable descriptions/tags, lifecycle state and ordered public events. Existing uncatalogued keys retain rollback-only nonexportable behavior. Generic signing requires a catalog entry. Every worker authorization path, including retries and result inspection, checks current key state.
+
+Creation and import publish an inactive catalog entry under the custody lock before materializing private files. Creation activates only after validating the complete pair; imports remain inactive. Rotation first disables the old key and does not rewrite grants. Deletion first records a public tombstone and then removes the seed. Interrupted operations therefore fail closed, and administrative recovery must bind the exact existing maintenance target. IDs and retained public fingerprints are never recycled.
+
+Encrypted envelopes have closed authenticated headers, fixed Argon2id v19 parameters (64 MiB, three iterations, one lane), random salt/nonce and XChaCha20-Poly1305 encryption. Decrypted secret buffers and derived keys use zeroizing storage. The administrator can export only explicitly exportable keys; encrypted whole-store disaster recovery includes nonexportable seeds only through explicit opt-in. This is software authorization, not hardware-backed extraction resistance.
+
+Snapshots include keys, canonical control and signing reservations/results. Backup requires disabled policy and a locked coherent snapshot. Restore validates before effects, binds a reviewed plan to the current installation configuration and encrypted input, and creates files only in an empty target or the exact matching interrupted restore. Durable maintenance blocks worker use until completion. Restored policy is disabled and all historical grants are revoked; consumed records remain. Host accounts, executable bindings and sudo policy are outside the snapshot.
+
+`file_ed25519_v1` signs the `oasis7:file-signature:v1` domain separator and canonical context/file-digest/length envelope. Exact payload approval and existing restricted grants remain required. Rollback signing retains its existing wire contract. Verification must reconstruct this envelope; no generic signature constitutes blockchain authority.
+
+Acceptance covers key lifecycle denial, default export denial, wrong-password/tamper rejection, imported inactive state, committed-record snapshot integrity, interrupted restore durability and existing rollback negative regressions. Independent security review and applicable CI are required before delivery; fixture checks do not establish host deployment.
 
 Merged M0 provides the three Rust executables and root-only post-install management. This source delivery implements a versioned release package and real macOS installation backend with explicit plan/apply, protected custody, external caller jobs and no initial signing authority. Source tests do not establish a host installation or permission acceptance.
 

@@ -196,13 +196,16 @@ impl IpcRequest {
                 validate_id(signer_id)?;
                 validate_optional_id(provider_id.0.as_deref())?;
                 validate_optional_id(grant_id.0.as_deref())?;
-                if purpose == "rollback_strict_audit_v1" && provider_id.0.is_some() {
-                    return Err(ProtocolError::Invalid("rollback provider_id must be null"));
-                }
-                if purpose != "rollback_strict_audit_v1" {
+                if provider_id.0.is_some() {
                     return Err(ProtocolError::Invalid(
-                        "only rollback signing is supported in M0",
+                        "local signing provider_id must be null",
                     ));
+                }
+                if !matches!(
+                    purpose.as_str(),
+                    "rollback_strict_audit_v1" | "file_ed25519_v1"
+                ) {
+                    return Err(ProtocolError::Invalid("unsupported local signing purpose"));
                 }
                 if grant_id.0.is_none() {
                     return Err(ProtocolError::Invalid("grant_id must not be null"));
@@ -355,7 +358,7 @@ fn check_schema(schema_version: &str) -> Result<(), ProtocolError> {
     Ok(())
 }
 
-fn validate_context(context: &SignContext) -> Result<(), ProtocolError> {
+pub(crate) fn validate_context(context: &SignContext) -> Result<(), ProtocolError> {
     for (label, value) in [
         ("deployment_id", context.deployment_id.as_str()),
         ("network_id", context.network_id.as_str()),

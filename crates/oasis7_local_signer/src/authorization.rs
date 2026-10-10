@@ -25,7 +25,7 @@ pub struct AuthorizedSign {
     pub expires_at_ms: u64,
     pub context: SignContext,
     pub payload: Vec<u8>,
-    pub rollback: ValidatedRollbackPayload,
+    pub rollback: Option<ValidatedRollbackPayload>,
 }
 
 pub fn authorize_sign(
@@ -70,7 +70,10 @@ pub fn authorize_sign(
         || context.network_id != grant.network_id
         || context.task_uid != grant.task_uid
         || context.source_head_oid != grant.source_head_oid
-        || purpose != "rollback_strict_audit_v1"
+        || !matches!(
+            purpose.as_str(),
+            "rollback_strict_audit_v1" | "file_ed25519_v1"
+        )
         || provider_id.0.is_some()
     {
         return Err(SignerError::AuthorizationDenied);
@@ -92,10 +95,23 @@ pub fn authorize_sign(
     }
     let payload_digest_bytes = crate::identity::sha256(&payload);
     let payload_sha256 = hex::encode(payload_digest_bytes);
-    let rollback = validate_canonical_payload(&payload, &context.protocol_context)
-        .map_err(|_| SignerError::CryptoOrBindingInvalid)?;
-    let not_before_ms = grant.not_before.max(rollback.issued_at_ms);
-    let expires_at_ms = grant.expires_at.min(rollback.expires_at_ms);
+    let rollback = match purpose.as_str() {
+        "rollback_strict_audit_v1" => Some(
+            validate_canonical_payload(&payload, &context.protocol_context)
+                .map_err(|_| SignerError::CryptoOrBindingInvalid)?,
+        ),
+        "file_ed25519_v1" => {
+            crate::detached::validate_signing_payload(&payload, context)?;
+            None
+        }
+        _ => return Err(SignerError::AuthorizationDenied),
+    };
+    let not_before_ms = rollback.as_ref().map_or(grant.not_before, |value| {
+        grant.not_before.max(value.issued_at_ms)
+    });
+    let expires_at_ms = rollback.as_ref().map_or(grant.expires_at, |value| {
+        grant.expires_at.min(value.expires_at_ms)
+    });
     if now_ms < not_before_ms || now_ms >= expires_at_ms {
         return Err(SignerError::AuthorizationDenied);
     }

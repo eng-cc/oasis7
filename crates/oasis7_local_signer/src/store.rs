@@ -188,8 +188,14 @@ impl SignerStore {
                 self.control_group_gid,
             ) {
                 Ok(policy) if policy.validate(&self.installation).is_ok() => {
-                    let ready = !policy.enabled_purposes.is_empty();
-                    (ready, if ready { "READY" } else { "DISABLED" })
+                    if policy.enabled_purposes.is_empty() {
+                        (false, "DISABLED")
+                    } else {
+                        match self.check_ready_key_lifecycle(&policy) {
+                            Ok(()) => (true, "READY"),
+                            Err(error) => (false, error.code()),
+                        }
+                    }
                 }
                 Ok(_) => (false, "INSTALLATION_DRIFT"),
                 Err(error) => (false, error.code()),
@@ -201,6 +207,32 @@ impl SignerStore {
             ready,
             status_code: status_code.to_owned(),
         }))
+    }
+
+    // Enabled policy is insufficient when any bound key is administratively
+    // inactive, archived or deleted. Disabled purposes do not affect readiness.
+    fn check_ready_key_lifecycle(&self, policy: &Policy) -> Result<(), SignerError> {
+        for purpose in &policy.enabled_purposes {
+            let bindings: Vec<_> = policy
+                .key_bindings
+                .iter()
+                .filter(|binding| &binding.purpose == purpose)
+                .collect();
+            if bindings.is_empty() {
+                return Err(SignerError::KeyOrAuthorityUnavailable);
+            }
+            for binding in bindings {
+                crate::key_management::require_active_key(
+                    &self.root,
+                    self.control_owner_uid,
+                    self.control_group_gid,
+                    &self.installation.installation_id,
+                    &binding.signer_id,
+                    purpose,
+                )?;
+            }
+        }
+        Ok(())
     }
 
     fn inspect(
@@ -395,6 +427,14 @@ impl SignerStore {
         if authorized.signer_id != *signer_id {
             return Err(SignerError::AuthorizationDenied);
         }
+        crate::key_management::require_active_key(
+            &self.root,
+            self.control_owner_uid,
+            self.control_group_gid,
+            &self.installation.installation_id,
+            &authorized.signer_id,
+            &authorized.purpose,
+        )?;
         Ok(authorized)
     }
 
@@ -403,6 +443,14 @@ impl SignerStore {
         reservation: &Reservation,
         now_ms: u64,
     ) -> Result<(), SignerError> {
+        crate::key_management::require_active_key(
+            &self.root,
+            self.control_owner_uid,
+            self.control_group_gid,
+            &self.installation.installation_id,
+            &reservation.signer_id,
+            &reservation.purpose,
+        )?;
         let grant_id = &reservation.grant_id;
         if path_exists(
             &self
@@ -562,6 +610,14 @@ impl SignerStore {
         &self,
         authorized: &AuthorizedSign,
     ) -> Result<(SigningKey, VerifyingKey), SignerError> {
+        crate::key_management::require_active_key(
+            &self.root,
+            self.control_owner_uid,
+            self.control_group_gid,
+            &self.installation.installation_id,
+            &authorized.signer_id,
+            &authorized.purpose,
+        )?;
         let key_dir = self.root.join("keys").join(&authorized.signer_id);
         reject_symlink_components(&key_dir)?;
         validate_owned_directory(
@@ -726,7 +782,10 @@ impl SignerStore {
             })
             .collect();
         let permitted = match components.as_slice() {
-            ["control", "policy.json"] => true,
+            [
+                "control",
+                "policy.json" | "key-catalog.json" | "restore.json",
+            ] => true,
             ["control", "grants" | "revoked-grants", file] => file
                 .strip_suffix(".json")
                 .is_some_and(|id| validate_id(id).is_ok()),
@@ -808,6 +867,15 @@ fn read_committed_result(
     let response_bytes = read_regular(&result_dir.join("response.json"), MAX_RESULT_FILE_BYTES)?;
     let audit_bytes = read_regular(&result_dir.join("audit.json"), MAX_RESULT_FILE_BYTES)?;
     let manifest_bytes = read_regular(&result_dir.join("manifest.json"), MAX_RESULT_FILE_BYTES)?;
+    validate_committed_bytes(reservation, &response_bytes, &audit_bytes, &manifest_bytes)
+}
+
+fn validate_committed_bytes(
+    reservation: &Reservation,
+    response_bytes: &[u8],
+    audit_bytes: &[u8],
+    manifest_bytes: &[u8],
+) -> Result<(SignResult, String, String), SignerError> {
     let response: SignResult =
         serde_json::from_slice(&response_bytes).map_err(|_| SignerError::RecoveryRequired)?;
     let audit: AuditRecord =
@@ -829,6 +897,7 @@ fn read_committed_result(
         || manifest.audit_sha256 != audit_sha
         || audit.schema_version != "oasis7.local_signer_audit.v1"
         || audit.recorded_at == 0
+        || audit.status != "committed"
         || audit.caller_uid != reservation.caller_uid
         || audit.signer_uid != reservation.signer_uid
         || audit.installation_id != reservation.installation_id
@@ -854,6 +923,106 @@ fn read_committed_result(
         return Err(SignerError::RecoveryRequired);
     }
     Ok((response, audit_sha, response_sha))
+}
+
+pub(crate) fn validate_snapshot_record(
+    request_key: &str,
+    reservation_bytes: &[u8],
+    result: Option<(&[u8], &[u8], &[u8])>,
+    installation: &InstallationConfig,
+    grants: &std::collections::BTreeMap<String, BatchGrant>,
+) -> Result<(), SignerError> {
+    let r: Reservation =
+        serde_json::from_slice(reservation_bytes).map_err(|_| SignerError::RecoveryRequired)?;
+    if canonical_json(&r)? != reservation_bytes
+        || r.schema_version != "oasis7.local_signer_reservation.v1"
+        || r.installation_id != installation.installation_id
+        || r.deployment_id != installation.deployment_id
+        || r.signer_uid != installation.signer_uid
+        || installation.caller(r.caller_uid).is_none()
+        || r.request_key != request_key
+        || r.status != "reserved"
+        || r.not_before_ms >= r.expires_at_ms
+        || !crate::key_management::supported_purpose(&r.purpose)
+    {
+        return Err(SignerError::RecoveryRequired);
+    }
+    for id in [
+        &r.release_id,
+        &r.policy_revision,
+        &r.grant_id,
+        &r.request_id,
+        &r.signer_id,
+    ] {
+        validate_id(id).map_err(|_| SignerError::RecoveryRequired)?;
+    }
+    for hash in [
+        &r.worker_sha256,
+        &r.operation_key,
+        &r.request_key,
+        &r.fingerprint,
+        &r.public_key_sha256,
+        &r.payload_sha256,
+    ] {
+        crate::types::validate_sha256(hash).map_err(|_| SignerError::RecoveryRequired)?;
+    }
+    if crate::identity::request_key(
+        &r.installation_id,
+        &r.purpose,
+        r.caller_uid,
+        r.provider_id.0.as_deref(),
+        &r.request_id,
+    )? != r.request_key
+    {
+        return Err(SignerError::RecoveryRequired);
+    }
+    let g = grants
+        .get(&r.grant_id)
+        .ok_or(SignerError::RecoveryRequired)?;
+    if g.caller_uid != r.caller_uid
+        || g.policy_revision != r.policy_revision
+        || g.not_before > r.not_before_ms
+        || g.expires_at < r.expires_at_ms
+        || g.network_id != r.context.network_id
+        || g.task_uid != r.context.task_uid
+        || g.source_head_oid != r.context.source_head_oid
+        || r.context.deployment_id != r.deployment_id
+        || !g.items.iter().any(|item| {
+            item.operation_key == r.operation_key
+                && item.payload_sha256 == r.payload_sha256
+                && item.purpose == r.purpose
+                && item.signer_id == r.signer_id
+                && item.public_key_sha256 == r.public_key_sha256
+                && item.provider_id == r.provider_id
+                && item.protocol_bindings == r.context.protocol_context
+        })
+    {
+        return Err(SignerError::RecoveryRequired);
+    }
+    if let Some((response, audit, manifest)) = result {
+        let (response, _, _) = validate_committed_bytes(&r, response, audit, manifest)?;
+        let public = base64::engine::general_purpose::STANDARD
+            .decode(
+                response
+                    .public_key_base64
+                    .0
+                    .as_deref()
+                    .ok_or(SignerError::RecoveryRequired)?,
+            )
+            .map_err(|_| SignerError::RecoveryRequired)?;
+        if public.len() != 32
+            || sha256_hex(&public) != r.public_key_sha256
+            || response
+                .signature_base64
+                .0
+                .as_deref()
+                .and_then(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
+                .is_none_or(|b| b.len() != 64)
+        {
+            return Err(SignerError::RecoveryRequired);
+        }
+    }
+    Ok(())
 }
 
 fn audit_response_hash(response: &SignResult) -> Result<String, SignerError> {
