@@ -521,6 +521,12 @@ def parser():
         plan.add_argument("--" + name, required=True)
     apply.add_argument("--plan", required=True)
     apply.add_argument("--expected-plan-sha256", required=True)
+    recovery = apply.add_mutually_exclusive_group()
+    recovery.add_argument("--completion-only", action="store_true")
+    recovery.add_argument("--completion-check", action="store_true")
+    apply.add_argument("--installed-release-dir")
+    apply.add_argument("--expected-installed-manifest-sha256")
+    apply.add_argument("--expected-journal-sha256")
     return result
 
 
@@ -612,7 +618,30 @@ def main():
             output = {"status": "PLANNED", "plan_sha256": api.digest(api.canonical_bytes(plan)), "host_mutated": False, "signing_enabled": False}
         else:
             plan = api.parse_json(api.read_file(args.plan, 1024 * 1024))
-            output = api.apply_installation(release, plan, args.expected_plan_sha256, host)
+            if args.completion_only or args.completion_check:
+                if os.geteuid() != 0 or not args.installed_release_dir or not args.expected_installed_manifest_sha256:
+                    raise api.InstallError("INSTALLATION_DRIFT", "explicit root recovery inputs required")
+                original_root = host_module.RELEASE_ROOT / plan["release_id"]
+                if Path(args.installed_release_dir) != original_root:
+                    raise api.InstallError("INSTALLATION_DRIFT", "fixed installed release path required")
+                host.inspect_path(Path(args.plan), protected=True)
+                info = Path(args.plan).lstat()
+                if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o600, 1):
+                    raise api.InstallError("INSTALLATION_DRIFT", "unsafe original recovery plan")
+                for name in (*api.FILES, "manifest.json"):
+                    host.inspect_path(original_root / name, protected=True)
+                    info = (original_root / name).lstat()
+                    mode = 0o444 if name.endswith(".py") or name == "manifest.json" else 0o555
+                    if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, mode, 1):
+                        raise api.InstallError("INSTALLATION_DRIFT", "unsafe original installed release")
+                original = api.validate_release(original_root, args.expected_installed_manifest_sha256, target)
+                output = api.recover_completion(original, plan, args.expected_plan_sha256, host,
+                    expected_journal_sha256=args.expected_journal_sha256, check_only=args.completion_check)
+                output["recovery_manifest_sha256"] = release["manifest_sha256"]
+            else:
+                if args.installed_release_dir or args.expected_installed_manifest_sha256 or args.expected_journal_sha256:
+                    raise api.InstallError("INSTALLATION_DRIFT", "recovery inputs require explicit recovery mode")
+                output = api.apply_installation(release, plan, args.expected_plan_sha256, host)
         print(json.dumps(output, sort_keys=True, separators=(",", ":")))
         return 10 if output["status"] == "RECOVERY_REQUIRED" else 0
     except Exception as error:

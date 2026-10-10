@@ -11,6 +11,7 @@ import re
 import stat
 import subprocess
 import socket
+import shlex
 from dataclasses import dataclass
 import sys
 from collections.abc import Mapping
@@ -121,7 +122,7 @@ class MacOSHost:
     @staticmethod
     def read_sudo_policy(caller):
         try:
-            result = subprocess.run(["/usr/bin/sudo", "-n", "-l", "-U", caller],
+            result = subprocess.run(["/usr/bin/sudo", "-n", "-ll", "-U", caller],
                                     env=ENV, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE, text=True, timeout=30, check=False)
         except (OSError, subprocess.TimeoutExpired) as error:
@@ -232,6 +233,22 @@ class MacOSHost:
         self.inspect_path(JOURNAL, protected=True)
         self.receipt = parse_json(read_file(JOURNAL, 1024 * 1024))
         return self.receipt
+
+    def recovery_snapshot(self):
+        self.inspect_path(JOURNAL, protected=True)
+        info = JOURNAL.lstat()
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o600, 1):
+            raise InstallError("INSTALLATION_DRIFT", "unsafe recovery journal")
+        raw = read_file(JOURNAL, 1024 * 1024)
+        value = parse_json(raw)
+        if raw != canonical_bytes(value):
+            raise InstallError("INSTALLATION_DRIFT", "noncanonical recovery journal")
+        self.receipt = value
+        return value, digest(raw)
+
+    def installed_config(self):
+        self.inspect_path(CONFIG, protected=True)
+        return parse_json(read_file(CONFIG, 65536))
 
     def journal(self, record):
         if self.config is not None:
@@ -492,12 +509,59 @@ def validate_filesystem(facts):
         raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "installation requires local ownership-enforcing APFS/HFS")
 
 
+# Only the native defaults evidenced on the supported macOS host. No loader,
+# identity, search-path, interpreter or installation selector may be preserved.
+SAFE_ENV_KEEP = frozenset("BLOCKSIZE COLORFGBG COLORTERM __CF_USER_TEXT_ENCODING CHARSET LANG LANGUAGE LC_ALL LC_COLLATE LC_CTYPE LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME LINES COLUMNS LSCOLORS SSH_AUTH_SOCK TZ DISPLAY XAUTHORIZATION XAUTHORITY EDITOR VISUAL HOME MAIL".split())
+
+
+def detailed_sudo_safe(output, uid, gid, worker, caller, hostname):
+    try:
+        short = hostname.split('.')[0]
+        defaults_header, rest = output.split("\n", 1)
+        if defaults_header not in {f"Matching Defaults entries for {caller} on {name}:" for name in (hostname, short)}:
+            return False
+        defaults, commands = rest.split("\n\n", 1)
+        seen_reset = False
+        for item in " ".join(defaults.split()).split(","):
+            token = shlex.split(item.strip())
+            if len(token) != 1:
+                return False
+            token = token[0]
+            if token == "env_reset":
+                if seen_reset:
+                    return False
+                seen_reset = True
+            elif token in ("lecture_file=/etc/sudo_lecture", "!log_allowed"):
+                pass
+            elif token.startswith("env_keep+="):
+                names = token[len("env_keep+="):].split()
+                if not names or not set(names) <= SAFE_ENV_KEEP:
+                    return False
+            else:
+                return False
+        if not seen_reset:
+            return False
+        lines = [line.strip() for line in commands.splitlines() if line.strip()]
+        if len(lines) < 7 or lines[0] not in {f"User {caller} may run the following commands on {name}:" for name in (hostname, short)}:
+            return False
+        if lines[1:4] != ["Sudoers entry: " + str(SUDO), f"RunAsUsers: #{uid}", f"RunAsGroups: #{gid}"]:
+            return False
+        if not lines[4].startswith("Options: ") or lines[5] != "Commands:":
+            return False
+        options = [word.strip() for word in lines[4][len("Options: "):].split(",")]
+        return len(options) == 2 and set(options) == {"!setenv", "!authenticate"} and " ".join(lines[6:]) == worker + ' ""'
+    except (ValueError, IndexError):
+        return False
+
+
 def sudo_policy_safe(output, uid, gid, worker, require_worker=False):
     if isinstance(output, SudoPolicyObservation):
         if output.no_grants:
             return not require_worker
         if output.returncode != 0 or output.stderr:
             return False
+        if output.stdout.startswith("Matching Defaults entries for "):
+            return detailed_sudo_safe(output.stdout, uid, gid, worker, output.caller, output.hostname)
         output = output.stdout
     if not output.strip() or any(token in output for token in ("UNOBSERVABLE", "!authenticate", "exempt_group", "!env_reset", "env_keep", "setenv")) or "SETENV:" in output.replace("NOSETENV:", ""):
         return False

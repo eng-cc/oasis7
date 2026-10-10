@@ -159,6 +159,52 @@ def apply_installation(release, plan, expected_plan_sha256, backend):
             return report(plan, expected_plan_sha256, "RECOVERY_REQUIRED", "RECOVERY_REQUIRED", completed, True)
 
 
+def recover_completion(release, plan, expected_plan_sha256, backend, *, expected_journal_sha256=None, check_only=False):
+    """Explicit terminal recovery only: never replay installation actions."""
+    if (not valid_hash(expected_plan_sha256) or digest(canonical_bytes(plan)) != expected_plan_sha256
+            or plan.get("schema_version") != PLAN_SCHEMA or plan.get("signing_enabled") is not False
+            or plan.get("manifest_sha256") != release["manifest_sha256"]
+            or plan.get("release_id") != release["manifest"]["release_id"]):
+        raise InstallError("INSTALLATION_DRIFT", "original recovery plan binding mismatch")
+    request = {"installation_id": plan["installation_id"], "deployment_id": plan["deployment_id"],
+               "store_dir": plan["store_dir"], "work_dir": plan["caller"]["work_dir"],
+               "caller_user": plan["caller"]["name"], "signer_user": plan["signer"]["name"]}
+    facts = backend.observe(request, release)
+    if (facts.get("platform") != "darwin" or facts.get("root") is not True
+            or canonical_bytes(facts.get("runtime_identity")) != canonical_bytes(plan["observations"][0]["facts"]["runtime_identity"])):
+        raise InstallError("INSTALLATION_DRIFT", "recovery runtime identity mismatch")
+    with backend.lock():
+        previous, journal_sha256 = backend.recovery_snapshot()
+        if not check_only and (not valid_hash(expected_journal_sha256) or journal_sha256 != expected_journal_sha256):
+            raise InstallError("INSTALLATION_DRIFT", "recovery journal preimage mismatch")
+        required = {"stage", "completed_actions", "plan_sha256", "manifest_sha256", "installation_id", "deployment_id", "installation_config"}
+        if (set(previous) != required or previous["stage"] != "recovery"
+                or previous["completed_actions"] != list(ACTIONS[:-1])
+                or previous["plan_sha256"] != expected_plan_sha256
+                or previous["manifest_sha256"] != release["manifest_sha256"]
+                or previous["installation_id"] != plan["installation_id"]
+                or previous["deployment_id"] != plan["deployment_id"]):
+            raise InstallError("INSTALLATION_DRIFT", "recovery journal scope mismatch")
+        if not backend.validate_installed(plan, release) or previous["installation_config"] != backend.installed_config():
+            raise InstallError("INSTALLATION_DRIFT", "recovery installed state verification failed")
+        if check_only:
+            value = report(plan, expected_plan_sha256, "RECOVERY_VERIFIED", "OK", list(ACTIONS[:-1]), False)
+            value["journal_sha256"] = journal_sha256
+            return value
+        # Pin the verified configuration so journal cannot omit its binding.
+        backend.config = previous["installation_config"]
+        try:
+            backend.journal(dict(previous, stage="complete", completed_actions=list(ACTIONS)))
+        except Exception:
+            # Never report success after an ambiguous fsync; restore recovery if possible.
+            try:
+                backend.journal(previous)
+            except Exception:
+                pass
+            return report(plan, expected_plan_sha256, "RECOVERY_REQUIRED", "RECOVERY_REQUIRED", list(ACTIONS[:-1]), True)
+        return report(plan, expected_plan_sha256, "INSTALLED_UNREADY", "OK", list(ACTIONS), True)
+
+
 TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin")
 
 
