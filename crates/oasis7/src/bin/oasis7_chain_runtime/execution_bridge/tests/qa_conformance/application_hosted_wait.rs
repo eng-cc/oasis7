@@ -74,7 +74,7 @@ pub(super) fn observation(
             panic!("incoming model callback needs actual signed Prefix Lookup commit");
         };
         let mut minimum_read = read.clone();
-        minimum_read.min_commit = Some(commit);
+        minimum_read.min_commit = Some(*commit);
         let view = client.read_view(minimum_read).unwrap();
         let lease = view
             .projection()

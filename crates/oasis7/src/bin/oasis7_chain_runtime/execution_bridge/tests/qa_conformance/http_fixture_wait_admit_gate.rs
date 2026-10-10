@@ -277,7 +277,7 @@ impl super::WorldGate {
         let selector = AdmitWaitViewSelector {
             world: expected.world.clone(),
             scope_id: expected.scope_id.clone(),
-            min_commit: commit.clone(),
+            min_commit: commit.as_ref().clone(),
             origin_request_digest: expected.origin_request_digest.clone(),
             continuation_proposal_id_digest: expected.continuation_proposal_id_digest.clone(),
             proposal_digest: expected.proposal_digest.clone(),
@@ -322,7 +322,7 @@ impl super::WorldGate {
             self.admit_wait_view_changed.notify_all();
         }
         Ok(WaitAdmitViewSelectorEvidence {
-            commit,
+            commit: *commit,
             selector_digest,
             correlation_digest: expected.correlation_digest,
             payload_digest: expected.payload_digest,

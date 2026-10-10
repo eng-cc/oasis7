@@ -453,7 +453,7 @@ impl WorldGate {
             if commit.world != candidate.world {
                 return Err("ResumeWake CommitRef world differs from candidate".into());
             }
-            Ok(commit)
+            Ok(*commit)
         })();
 
         let commit = match lookup_result {

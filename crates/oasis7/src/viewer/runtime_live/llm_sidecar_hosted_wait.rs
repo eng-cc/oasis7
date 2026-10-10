@@ -1019,7 +1019,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         )?
                     };
                     wait.stage = format!("{}_view", wait.stage);
-                    wait.commit = Some(commit);
+                    wait.commit = Some(*commit);
                 }
                 IntentOutcome::Received { .. }
                 | IntentOutcome::Pending

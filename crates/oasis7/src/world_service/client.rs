@@ -301,7 +301,7 @@ impl WorldServicePort for RemoteWorldServiceClient {
                 response
                     .validate(&correlation)
                     .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
-                Ok(SubmitObservation::Response(response))
+                Ok(SubmitObservation::Response(Box::new(response)))
             }
             // A lost/malformed/untrusted response cannot establish rejection.
             Err(

@@ -156,7 +156,7 @@ pub(super) fn verify_release(public: &RemoteWorldServiceClient) {
         contract_version: 1,
         world: client.config().expected_world.clone(),
         scope_id: client.config().scope_id.clone(),
-        min_commit: Some(release_commit),
+        min_commit: Some(*release_commit),
         fixed_commit: None,
         deadline_unix_ms: None,
     };

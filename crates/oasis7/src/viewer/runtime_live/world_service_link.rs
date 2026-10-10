@@ -551,10 +551,10 @@ fn prepare_world_service_update_with_trace_context(
                     .satisfies_minimum(current)
                     .map_err(|e| ViewerRuntimeLiveServerError::Init(e.to_string()))?
                 {
-                    minimum = Some(commit.clone());
+                    minimum = Some(commit.as_ref().clone());
                 }
             } else {
-                minimum = Some(commit.clone());
+                minimum = Some(commit.as_ref().clone());
             }
         }
         intent_results.push(result);

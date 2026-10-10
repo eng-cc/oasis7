@@ -570,7 +570,7 @@ impl ViewerRuntimeLiveServer {
                 })
                 .map_err(|error| ProviderRuntimeActionCommitError::Message(error.to_string()))?
             {
-                SubmitObservation::Response(response) => response,
+                SubmitObservation::Response(response) => *response,
                 SubmitObservation::OutcomeUnknown(_) => {
                     return Err(ProviderRuntimeActionCommitError::Message(
                         "canonical Agent outcome unknown; original intent retained for Lookup"
@@ -598,7 +598,7 @@ impl ViewerRuntimeLiveServer {
                         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                         world: pending.correlation.key.world.clone(),
                         scope_id: client.config().scope_id.clone(),
-                        min_commit: Some(commit),
+                        min_commit: Some(*commit),
                         fixed_commit: None,
                         deadline_unix_ms: None,
                     })

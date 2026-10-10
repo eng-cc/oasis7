@@ -795,7 +795,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         return Err("hosted Resume receipt identity mismatch".into());
                     };
                     resume.receipt = Some(receipt);
-                    resume.commit = Some(commit);
+                    resume.commit = Some(*commit);
                     resume.stage = "resume_view".into();
                 }
                 IntentOutcome::Received { .. }

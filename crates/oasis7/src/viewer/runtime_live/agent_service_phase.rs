@@ -443,7 +443,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::ActView {
                             pending,
                             receipt,
-                            commit,
+                            commit: *commit,
                             settled: false,
                         });
                     }
@@ -514,7 +514,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::ActView {
                             pending,
                             receipt,
-                            commit,
+                            commit: *commit,
                             settled: true,
                         });
                     }
@@ -565,7 +565,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                             Some(HostedServicePhase::FeedbackAckView {
                                 pending,
                                 receipt,
-                                commit,
+                                commit: *commit,
                             });
                     }
                     IntentOutcome::Received { .. } | IntentOutcome::Pending => {}
@@ -817,10 +817,8 @@ pub(super) fn original_response(
     response: AgentServiceIoResponse,
 ) -> Result<Option<IntentResponse<serde_json::Value>>, String> {
     match response {
-        AgentServiceIoResponse::Intent(response)
-        | AgentServiceIoResponse::Submit(SubmitObservation::Response(response)) => {
-            Ok(Some(response))
-        }
+        AgentServiceIoResponse::Intent(response) => Ok(Some(response)),
+        AgentServiceIoResponse::Submit(SubmitObservation::Response(response)) => Ok(Some(*response)),
         AgentServiceIoResponse::Submit(SubmitObservation::OutcomeUnknown(_)) => Ok(None),
         _ => Err("hosted service response operation mismatch".into()),
     }

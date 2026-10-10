@@ -294,7 +294,7 @@ impl RuntimeLlmSidecar {
                 })
                 .map_err(|error| error.to_string())?
             {
-                SubmitObservation::Response(response) => response,
+                SubmitObservation::Response(response) => *response,
                 SubmitObservation::OutcomeUnknown(_) => {
                     return Err(
                         "canonical scheduler outcome unknown; original request retained".into(),

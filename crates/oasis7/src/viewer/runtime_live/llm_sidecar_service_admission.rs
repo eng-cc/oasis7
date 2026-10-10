@@ -829,7 +829,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 };
                 let mut next = admission;
                 next.stage = format!("{stage}_view");
-                next.commit = Some(commit);
+                next.commit = Some(*commit);
                 next.lease = lease;
                 self.llm_sidecar.hosted_admission = Some(next);
                 self.llm_sidecar.persist_provider_lineage()?;

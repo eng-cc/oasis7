@@ -757,7 +757,7 @@ impl Fixture {
                 )
                 .unwrap();
             match result.outcome {
-                IntentOutcome::Committed { commit, .. } => return commit,
+                IntentOutcome::Committed { commit, .. } => return *commit,
                 IntentOutcome::Unknown
                 | IntentOutcome::Received { .. }
                 | IntentOutcome::Pending => {}
@@ -843,10 +843,8 @@ fn real_tcp_five_operations_delegation_and_minimum_commit() {
     let replay = fixture.client.submit(original.clone()).unwrap();
     assert!(matches!(
         replay,
-        SubmitObservation::Response(IntentResponse {
-            outcome: IntentOutcome::Committed { .. },
-            ..
-        })
+        SubmitObservation::Response(response)
+            if matches!(response.outcome, IntentOutcome::Committed { .. })
     ));
     let mut future = commit;
     future.position = u64::MAX;
@@ -945,7 +943,7 @@ fn real_tcp_lost_response_signed_gameplay_and_driver_restart() {
         )
         .unwrap();
     assert!(
-        matches!(outcome.outcome,IntentOutcome::Committed { commit: recovered,.. } if recovered==commit)
+        matches!(outcome.outcome,IntentOutcome::Committed { commit: recovered,.. } if *recovered==commit)
     );
     // The restarted driver and immutable persisted service read agree on the exact receipt.
     let key = correlation::key_digest(&original.correlation.key).unwrap();

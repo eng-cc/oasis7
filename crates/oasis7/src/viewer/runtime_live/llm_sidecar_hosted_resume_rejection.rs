@@ -280,7 +280,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     return Err("Resume compensation receipt identity mismatch".into());
                 }
                 resume.rejected_predecessor = Some(predecessor);
-                resume.commit = Some(commit);
+                resume.commit = Some(*commit);
                 resume.stage = "reject_predecessor_view".into();
                 Ok(())
             }

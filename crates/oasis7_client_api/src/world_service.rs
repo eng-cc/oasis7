@@ -269,10 +269,6 @@ pub enum AdmissionDurability {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "Keep the public lifecycle API allocation-free; committed values already own their bounded commit metadata"
-)]
 pub enum IntentOutcome<T> {
     Received { durability: AdmissionDurability },
     Pending,
@@ -309,10 +305,6 @@ impl<T> IntentResponse<T> {
 
 /// A local observation, never an authoritative intent lifecycle state.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "Keep submit observations allocation-free and preserve the published response API"
-)]
 pub enum SubmitObservation<T> {
     Response(Box<IntentResponse<T>>),
     OutcomeUnknown(RequestCorrelation),

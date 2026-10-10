@@ -173,7 +173,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             IntentOutcome::Committed { commit, receipt } => {
                 RuntimeLlmSidecar::validate_hosted_settlement_receipt(request, lease, receipt)?;
                 wait.stage = "compensate_settle_view".into();
-                wait.commit = Some(commit);
+                wait.commit = Some(*commit);
                 Ok(())
             }
             IntentOutcome::Received { .. } | IntentOutcome::Pending | IntentOutcome::Unknown => {

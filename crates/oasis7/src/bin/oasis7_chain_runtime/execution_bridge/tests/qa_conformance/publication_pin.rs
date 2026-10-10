@@ -30,7 +30,7 @@ fn real_tcp_disposable_world_cache_eviction_preserves_exact_result_and_view() {
         )
         .unwrap();
     assert!(
-        matches!(outcome.outcome,IntentOutcome::Committed { commit:found,.. } if found==commit)
+        matches!(outcome.outcome,IntentOutcome::Committed { commit:found,.. } if *found==commit)
     );
     let recovered = fixture
         .client
