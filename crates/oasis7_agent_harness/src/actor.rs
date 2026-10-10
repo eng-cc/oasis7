@@ -583,6 +583,8 @@ pub struct AsyncAgentRunner<A = Value, Q = Value, I = Value, O = Value, F = Feed
     actor_lanes: BTreeMap<String, ActorLane>,
     completed: VecDeque<AsyncAgentTurnOutcome<A, Q>>,
     compatibility_completed: VecDeque<CompatibilityTurnOutcome<O>>,
+    reported_completed: usize,
+    reported_compatibility_completed: usize,
     cognition: AgentCognitionStore,
 }
 
@@ -646,6 +648,8 @@ where
             actor_lanes: BTreeMap::new(),
             completed: VecDeque::new(),
             compatibility_completed: VecDeque::new(),
+            reported_completed: 0,
+            reported_compatibility_completed: 0,
             cognition: AgentCognitionStore::default(),
         })
     }

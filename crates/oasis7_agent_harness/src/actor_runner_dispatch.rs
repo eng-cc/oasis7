@@ -158,29 +158,39 @@ where
         Ok(turn_id)
     }
 
-    /// Poll every actor without blocking for provider work.
+    /// Poll every actor without blocking for provider work. Returns production
+    /// outcomes not yet returned by this method, including outcomes pumped by
+    /// the compatibility poll; `take_completed` remains the draining API.
     pub fn poll_completed(
         &mut self,
     ) -> Result<Vec<AsyncAgentTurnOutcome<A, Q>>, AsyncAgentRunnerError> {
-        let previous_len = self.completed.len();
         self.pump_completed()?;
-        Ok(self.completed.iter().skip(previous_len).cloned().collect())
+        let start = self.reported_completed;
+        let end = self.completed.len();
+        let outcomes = self.completed.iter().skip(start).cloned().collect();
+        self.reported_completed = end;
+        Ok(outcomes)
     }
 
     /// Polls the same actor mailboxes as `poll_completed`, returning only
     /// reduced compatibility outcomes. Production outcomes remain in their
-    /// own queue and cannot be promoted by this API.
+    /// own queue and cannot be promoted by this API. Returns compatibility
+    /// outcomes not yet returned by this method, including outcomes pumped by
+    /// the production poll.
     pub fn poll_compatibility_completed(
         &mut self,
     ) -> Result<Vec<CompatibilityTurnOutcome<O>>, AsyncAgentRunnerError> {
-        let previous_len = self.compatibility_completed.len();
         self.pump_completed()?;
-        Ok(self
+        let start = self.reported_compatibility_completed;
+        let end = self.compatibility_completed.len();
+        let outcomes = self
             .compatibility_completed
             .iter()
-            .skip(previous_len)
+            .skip(start)
             .cloned()
-            .collect())
+            .collect();
+        self.reported_compatibility_completed = end;
+        Ok(outcomes)
     }
 
     fn pump_completed(&mut self) -> Result<(), AsyncAgentRunnerError> {
@@ -282,7 +292,9 @@ where
     }
 
     pub fn take_completed(&mut self) -> Vec<AsyncAgentTurnOutcome<A, Q>> {
-        self.completed.drain(..).collect()
+        let outcomes = self.completed.drain(..).collect();
+        self.reported_completed = 0;
+        outcomes
     }
 
     /// Retry only a Runtime-awaiting turn and only from its exact last
@@ -338,7 +350,14 @@ where
         turn.awaiting_runtime = false;
         turn.last_outcome = None;
         self.awaiting_runtime.remove(&agent_id);
+        let removed_reported = self
+            .completed
+            .iter()
+            .take(self.reported_completed)
+            .filter(|outcome| outcome.turn_id == turn_id)
+            .count();
         self.completed.retain(|outcome| outcome.turn_id != turn_id);
+        self.reported_completed -= removed_reported;
         Ok(turn_id)
     }
 
