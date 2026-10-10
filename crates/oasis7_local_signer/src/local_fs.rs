@@ -100,12 +100,7 @@ pub(crate) fn directory_identity(path: &Path) -> Result<fs::Metadata, SignerErro
 fn directory_identity_inner(path: &Path, protected: bool) -> Result<fs::Metadata, SignerError> {
     crate::types::validate_absolute_path(&path.to_string_lossy())
         .map_err(|_| SignerError::InstallationDrift)?;
-    #[cfg(target_os = "macos")]
-    let access = OFlag::from_bits_retain(libc::O_SEARCH);
-    #[cfg(target_os = "linux")]
-    let access = OFlag::O_PATH;
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    let access = OFlag::O_RDONLY;
+    let access = search_directory_access();
     let mut directory = File::open("/")?;
     for component in std::iter::once(None).chain(path.components().filter_map(|component| {
         if let Component::Normal(part) = component {
@@ -133,6 +128,21 @@ fn directory_identity_inner(path: &Path, protected: bool) -> Result<fs::Metadata
     Ok(directory.metadata()?)
 }
 
+fn search_directory_access() -> OFlag {
+    #[cfg(target_os = "macos")]
+    {
+        OFlag::from_bits_retain(libc::O_SEARCH)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        OFlag::O_PATH
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        OFlag::O_RDONLY
+    }
+}
+
 /// A retained directory capability; subsequent operations never resolve its ancestors again.
 pub(crate) struct Directory(File);
 
@@ -145,21 +155,36 @@ impl Directory {
             validate_protected_metadata(&directory.metadata()?, false)?;
             reject_extended_acl(&directory)?;
         }
-        for component in path.components() {
-            if let Component::Normal(part) = component {
-                directory = File::from(
-                    openat(
-                        directory.as_fd(),
-                        part,
-                        OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-                        Mode::empty(),
-                    )
-                    .map_err(map_openat_error)?,
-                );
-                if protected {
-                    validate_protected_metadata(&directory.metadata()?, false)?;
-                    reject_extended_acl(&directory)?;
+        let parts: Vec<_> = path
+            .components()
+            .filter_map(|component| {
+                if let Component::Normal(part) = component {
+                    Some(part)
+                } else {
+                    None
                 }
+            })
+            .collect();
+        for (index, part) in parts.iter().enumerate() {
+            // Search ancestors without requiring directory listing access.
+            // The final descriptor retains the original read-capable contract.
+            let access = if index + 1 == parts.len() {
+                OFlag::O_RDONLY
+            } else {
+                search_directory_access()
+            };
+            directory = File::from(
+                openat(
+                    directory.as_fd(),
+                    *part,
+                    access | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                    Mode::empty(),
+                )
+                .map_err(map_openat_error)?,
+            );
+            if protected {
+                validate_protected_metadata(&directory.metadata()?, false)?;
+                reject_extended_acl(&directory)?;
             }
         }
         Ok(Self(directory))
@@ -995,6 +1020,25 @@ mod candidate_tests {
 #[cfg(all(test, target_os = "macos"))]
 mod directory_identity_tests {
     use super::*;
+    #[test]
+    fn content_directory_traverses_search_only_ancestor_but_requires_readable_leaf() {
+        let base =
+            std::env::temp_dir().join(format!("signer-ancestor-search-{}", std::process::id()));
+        fs::create_dir(&base).unwrap();
+        let base = fs::canonicalize(base).unwrap();
+        let leaf = base.join("leaf");
+        fs::create_dir(&leaf).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o111)).unwrap();
+        let directory = Directory::open(&leaf, false).unwrap();
+        directory.write_new("request.json", b"fixture").unwrap();
+        assert_eq!(directory.read("request.json", 32).unwrap(), b"fixture");
+        fs::set_permissions(&leaf, fs::Permissions::from_mode(0o111)).unwrap();
+        assert!(Directory::open(&leaf, false).is_err());
+        fs::set_permissions(&leaf, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(base).unwrap();
+    }
+
     #[test]
     fn identity_check_does_not_require_directory_read_permission() {
         let path = std::env::temp_dir().join(format!("signer-search-{}", std::process::id()));

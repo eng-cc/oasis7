@@ -524,6 +524,12 @@ def parser():
     recovery = apply.add_mutually_exclusive_group()
     recovery.add_argument("--completion-only", action="store_true")
     recovery.add_argument("--completion-check", action="store_true")
+    recovery.add_argument("--binding-repair-plan-out")
+    recovery.add_argument("--binding-repair-apply")
+    recovery.add_argument("--binding-repair-check")
+    recovery.add_argument("--binding-repair-quarantine")
+    apply.add_argument("--expected-repair-receipt-sha256")
+    apply.add_argument("--expected-repair-plan-sha256")
     apply.add_argument("--installed-release-dir")
     apply.add_argument("--expected-installed-manifest-sha256")
     apply.add_argument("--expected-journal-sha256")
@@ -596,6 +602,29 @@ def approved_modules(expected_manifest_sha256, captured_files=None):
     return sys.modules["installer"], sys.modules["macos_host"]
 
 
+def original_repair_inputs(args, api, host_module, host, plan, target):
+    if os.geteuid() != 0 or not args.installed_release_dir or not args.expected_installed_manifest_sha256:
+        raise api.InstallError("INSTALLATION_DRIFT", "explicit root repair inputs required")
+    original_root = host_module.RELEASE_ROOT / plan["release_id"]
+    if Path(args.installed_release_dir) != original_root:
+        raise api.InstallError("INSTALLATION_DRIFT", "fixed original installed release path required")
+    protected_plan(Path(args.plan), host, api)
+    for name in (*api.FILES, "manifest.json"):
+        host.inspect_path(original_root / name, protected=True)
+        info = (original_root / name).lstat()
+        mode = 0o444 if name.endswith(".py") or name == "manifest.json" else 0o555
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, mode, 1):
+            raise api.InstallError("INSTALLATION_DRIFT", "unsafe original installed release")
+    return api.validate_release(original_root, args.expected_installed_manifest_sha256, target)
+
+
+def protected_plan(path, host, api):
+    host.inspect_path(path, protected=True)
+    info = path.lstat()
+    if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o600, 1):
+        raise api.InstallError("INSTALLATION_DRIFT", "unsafe protected plan")
+
+
 def main():
     captured_files = globals().get("_CAPTURED_RELEASE_FILES")
     runtime_identity = globals().get("_RUNTIME_ATTESTATION")
@@ -618,7 +647,39 @@ def main():
             output = {"status": "PLANNED", "plan_sha256": api.digest(api.canonical_bytes(plan)), "host_mutated": False, "signing_enabled": False}
         else:
             plan = api.parse_json(api.read_file(args.plan, 1024 * 1024))
-            if args.completion_only or args.completion_check:
+            if args.binding_repair_plan_out or args.binding_repair_apply or args.binding_repair_check or args.binding_repair_quarantine:
+                if args.expected_journal_sha256:
+                    raise api.InstallError("INSTALLATION_DRIFT", "completion input in binding repair")
+                original = original_repair_inputs(args, api, host_module, host, plan, target)
+                if args.binding_repair_plan_out:
+                    if args.expected_repair_plan_sha256 or args.expected_repair_receipt_sha256:
+                        raise api.InstallError("INSTALLATION_DRIFT", "repair apply digest in planning")
+                    repair = api.plan_binding_repair(original, plan, args.expected_plan_sha256, release, host)
+                    destination = Path(args.binding_repair_plan_out)
+                    if destination.parent != Path(args.plan).parent:
+                        raise api.InstallError("INSTALLATION_DRIFT", "repair plan must use protected original plan directory")
+                    host.inspect_path(destination.parent, protected=True)
+                    api.write_new(destination, api.canonical_bytes(repair), 0o600)
+                    output = dict(status="BINDING_REPAIR_PLANNED", code="OK", host_mutated=False,
+                                  signing_enabled=False, repair_plan_sha256=api.digest(api.canonical_bytes(repair)),
+                                  manifest_sha256=release["manifest_sha256"], original_manifest_sha256=original["manifest_sha256"])
+                else:
+                    path = Path(args.binding_repair_apply or args.binding_repair_check or args.binding_repair_quarantine)
+                    protected_plan(path, host, api)
+                    repair = api.parse_json(api.read_file(path, 1024 * 1024))
+                    if args.binding_repair_quarantine:
+                        output = api.quarantine_binding_repair(plan, repair, args.expected_repair_plan_sha256, args.expected_repair_receipt_sha256, host)
+                    elif args.binding_repair_check:
+                        if args.expected_repair_receipt_sha256:
+                            raise api.InstallError("INSTALLATION_DRIFT", "quarantine digest in readonly verification")
+                        output = api.verify_binding_repair(release, repair, args.expected_repair_plan_sha256, host)
+                    else:
+                        if args.expected_repair_receipt_sha256:
+                            raise api.InstallError("INSTALLATION_DRIFT", "quarantine digest in repair apply")
+                        output = api.apply_binding_repair(original, plan, release, repair, args.expected_repair_plan_sha256, host)
+            elif args.completion_only or args.completion_check:
+                if args.expected_repair_plan_sha256 or args.expected_repair_receipt_sha256:
+                    raise api.InstallError("INSTALLATION_DRIFT", "binding repair input in completion mode")
                 if os.geteuid() != 0 or not args.installed_release_dir or not args.expected_installed_manifest_sha256:
                     raise api.InstallError("INSTALLATION_DRIFT", "explicit root recovery inputs required")
                 original_root = host_module.RELEASE_ROOT / plan["release_id"]
@@ -639,7 +700,7 @@ def main():
                     expected_journal_sha256=args.expected_journal_sha256, check_only=args.completion_check)
                 output["recovery_manifest_sha256"] = release["manifest_sha256"]
             else:
-                if args.installed_release_dir or args.expected_installed_manifest_sha256 or args.expected_journal_sha256:
+                if args.installed_release_dir or args.expected_installed_manifest_sha256 or args.expected_journal_sha256 or args.expected_repair_plan_sha256 or args.expected_repair_receipt_sha256:
                     raise api.InstallError("INSTALLATION_DRIFT", "recovery inputs require explicit recovery mode")
                 output = api.apply_installation(release, plan, args.expected_plan_sha256, host)
         print(json.dumps(output, sort_keys=True, separators=(",", ":")))

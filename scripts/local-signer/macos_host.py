@@ -21,6 +21,7 @@ RELEASE_ROOT = Path("/usr/local/libexec/oasis7-local-signer")
 JOURNAL = Path("/private/var/db/oasis7-local-signer-install.json")
 JOBS_ROOT = Path("/private/var/db/oasis7-local-signer-jobs")
 LOCK = Path("/private/var/db/oasis7-local-signer-install.lock")
+REPAIR = Path("/private/var/db/oasis7-local-signer-binding-repair.json")
 SUDO = Path("/private/etc/sudoers.d/oasis7-local-signer")
 ENV = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C"}
 RUNTIME_PATH = Path("/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9")
@@ -228,6 +229,8 @@ class MacOSHost:
             os.close(fd)
 
     def completed_installation(self):
+        if os.path.lexists(REPAIR):
+            raise InstallError("RECOVERY_REQUIRED", "binding repair requires explicit current receipt verification")
         if not JOURNAL.exists():
             return None
         self.inspect_path(JOURNAL, protected=True)
@@ -350,7 +353,7 @@ class MacOSHost:
         if not self.validate_installed(value["plan"], value["release"], check_sudo=False):
             raise InstallError("INSTALLATION_DRIFT", "installed readback mismatch")
 
-    def validate_installed(self, plan, release, check_sudo=True):
+    def validate_installed(self, plan, release, check_sudo=True, *, check_original_receipt=True):
         try:
             caller = pwd.getpwnam(plan["caller"]["name"])
             if caller.pw_uid != plan["caller"]["uid"] or caller.pw_gid != plan["observations"][0]["facts"]["caller_gid"]:
@@ -359,7 +362,7 @@ class MacOSHost:
             self.verify_identity(plan["signer"])
             self.inspect_path(CONFIG, protected=True)
             config = parse_json(read_file(CONFIG, 65536))
-            if self.receipt and self.receipt.get("stage") == "complete" and self.receipt.get("installation_config") != config:
+            if check_original_receipt and self.receipt and self.receipt.get("stage") == "complete" and self.receipt.get("installation_config") != config:
                 return False
             if config["installation_id"] != plan["installation_id"] or config["deployment_id"] != plan["deployment_id"] or config["release_id"] != plan["release_id"] or config["signer_uid"] != plan["signer"]["uid"] or config["signer_gid"] != plan["signer"]["gid"]:
                 return False
@@ -417,6 +420,136 @@ class MacOSHost:
     def report(self, value):
         if not self.validate_installed(value["plan"], value["release"]):
             raise InstallError("INSTALLATION_DRIFT", "final installation verification failed")
+
+    def repair_preflight(self, old_plan, old_release, new_release):
+        """Observe a first, empty-authority binding repair; never adopt prior repairs."""
+        self.inspect_path(REPAIR.parent, protected=True)
+        if os.path.lexists(REPAIR) or os.path.lexists(RELEASE_ROOT / new_release["manifest"]["release_id"]):
+            raise InstallError("INSTALLATION_DRIFT", "repair receipt or target release already exists")
+        if not self.validate_installed(old_plan, old_release):
+            raise InstallError("INSTALLATION_DRIFT", "old installed binding failed repair preflight")
+        self.inspect_path(CONFIG, protected=True)
+        info = CONFIG.lstat()
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o644, 1):
+            raise InstallError("INSTALLATION_DRIFT", "unsafe original config")
+        return dict(safe=True, new_release_absent=True, repair_absent=True, config_sha256=digest(read_file(CONFIG, 65536)),
+                    sudo_sha256=digest(read_file(SUDO, 65536)),
+                    sudo_policy_sha256=digest(self.read_sudo_policy(old_plan["caller"]["name"]).encode()),
+                    runtime_identity=dict(self.runtime_identity))
+
+    def repair_environment(self):
+        self.validate_interpreter(self.runtime_identity)
+        return dict(platform=sys.platform, root=os.geteuid() == 0, runtime_identity=dict(self.runtime_identity))
+
+    def repair_snapshot(self):
+        self.inspect_path(REPAIR, protected=True)
+        info = REPAIR.lstat()
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o600, 1):
+            raise InstallError("INSTALLATION_DRIFT", "unsafe repair receipt")
+        raw = read_file(REPAIR, 1024 * 1024)
+        value = parse_json(raw)
+        if raw != canonical_bytes(value):
+            raise InstallError("INSTALLATION_DRIFT", "noncanonical repair receipt")
+        return value, digest(raw)
+
+    def quarantine_preflight(self, repair):
+        """Quarantine never runs either release or replays installation effects."""
+        plan = repair["new_installation_plan"]
+        old_config = repair["original_journal"]["installation_config"]
+        config = self.installed_config()
+        if config not in (old_config, repair["new_installation_config"]):
+            raise InstallError("INSTALLATION_DRIFT", "foreign config during quarantine")
+        info = CONFIG.lstat()
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o644, 1):
+            raise InstallError("INSTALLATION_DRIFT", "unsafe quarantine config")
+        self.inspect_path(SUDO, protected=True)
+        info = SUDO.lstat()
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o440, 1):
+            raise InstallError("INSTALLATION_DRIFT", "unsafe quarantine sudo file")
+        disabled = b"# oasis7 local signer binding repair: worker authorization disabled\n"
+        old_plan = dict(plan, release_id=old_config["release_id"])
+        if read_file(SUDO, 65536) not in (disabled, sudo_rule(old_plan).encode(), sudo_rule(plan).encode()):
+            raise InstallError("INSTALLATION_DRIFT", "foreign sudo rule during quarantine")
+        self.verify_identity(plan["signer"])
+        caller = pwd.getpwnam(plan["caller"]["name"])
+        if (caller.pw_uid, caller.pw_gid) != (plan["caller"]["uid"], plan["observations"][0]["facts"]["caller_gid"]):
+            raise InstallError("INSTALLATION_DRIFT", "quarantine caller drift")
+        self.validate_jobs(Path(plan["caller"]["work_dir"]), caller)
+        for path, uid, gid, mode in layout(plan):
+            self.inspect_path(path, protected=False)
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode) or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != (uid, gid, mode):
+                raise InstallError("INSTALLATION_DRIFT", "quarantine layout drift")
+        store, work = Path(plan["store_dir"]).lstat(), Path(plan["caller"]["work_dir"]).lstat()
+        if ((store.st_dev, store.st_ino) != (old_config["store_device_id"], old_config["store_inode"])
+                or (work.st_dev, work.st_ino) != (old_config["callers"][0]["work_device_id"], old_config["callers"][0]["work_inode"])):
+            raise InstallError("INSTALLATION_DRIFT", "quarantine inode drift")
+        for name in ("keys", "state/records", "control/grants", "control/revoked-grants", "work", "backup-staging"):
+            if os.listdir(Path(plan["store_dir"]) / name):
+                raise InstallError("INSTALLATION_DRIFT", "quarantine requires empty authority")
+        if os.path.lexists(Path(plan["store_dir"]) / "control/policy.json"):
+            raise InstallError("INSTALLATION_DRIFT", "quarantine policy exists")
+        return True
+
+    def repair_receipt(self, record):
+        # Separate receipt: the original completed installation journal is immutable history.
+        if os.path.lexists(REPAIR):
+            self.inspect_path(REPAIR, protected=True)
+            info = REPAIR.lstat()
+            if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o600, 1):
+                raise InstallError("INSTALLATION_DRIFT", "unsafe repair receipt")
+        self.atomic_root_file(REPAIR, canonical_bytes(record), 0o600, replace=os.path.lexists(REPAIR))
+
+    def disable_sudo(self, plan):
+        self.atomic_root_file(SUDO, b"# oasis7 local signer binding repair: worker authorization disabled\n", 0o440, replace=True)
+        self.run(["/usr/sbin/visudo", "-c"])
+        if not self.read_sudo_policy(plan["caller"]["name"]).no_grants:
+            raise InstallError("INSTALLATION_DRIFT", "caller retains sudo authority during repair")
+
+    def repair_binding(self, plan, release, config):
+        store, work = Path(plan["store_dir"]).lstat(), Path(plan["caller"]["work_dir"]).lstat()
+        if config != build_installation_config(plan, release, store, work):
+            raise InstallError("INSTALLATION_DRIFT", "repair config identity changed")
+        self.atomic_root_file(CONFIG, canonical_bytes(config), 0o644, replace=True)
+
+    def repair_publish_sudo(self, value):
+        raw = sudo_rule(value["plan"]).encode()
+        candidate = SUDO.with_name(".oasis7-local-signer-repair-" + str(os.getpid()))
+        self.atomic_root_file(candidate, raw, 0o440)
+        self.run(["/usr/sbin/visudo", "-c", "-f", str(candidate)])
+        self.atomic_root_file(SUDO, raw, 0o440, replace=True)
+        parent = self.open_dir(candidate.parent)
+        try:
+            os.unlink(candidate.name, dir_fd=parent)
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+        self.run(["/usr/sbin/visudo", "-c"])
+
+    def validate_repaired(self, plan, release, old_config, *, check_sudo=True):
+        config = self.installed_config()
+        unchanged = {key: value for key, value in config.items() if key not in ("release_id", "worker_executable", "worker_sha256")}
+        old = {key: value for key, value in old_config.items() if key not in ("release_id", "worker_executable", "worker_sha256")}
+        return unchanged == old and self.validate_installed(plan, release, check_sudo=check_sudo, check_original_receipt=False)
+
+    def verify_caller_doctor(self, plan):
+        # Fixed installed CLI, actual bound caller, unchanged narrow worker sudo boundary.
+        argv = ["/usr/bin/sudo", "-n", "-u", "#" + str(plan["caller"]["uid"]),
+                "/usr/bin/env", "-i", "PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", "LC_ALL=C",
+                str(RELEASE_ROOT / plan["release_id"] / "oasis7_local_signer"), "doctor"]
+        try:
+            result = subprocess.run(argv, env=ENV, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, timeout=30, check=False)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise InstallError("INSTALLATION_DRIFT", "caller doctor unavailable") from error
+        if len(result.stdout) > 65536 or len(result.stderr) > 65536:
+            raise InstallError("INSTALLATION_DRIFT", "caller doctor output too large")
+        value = parse_json(result.stdout)
+        expected = dict(command="doctor", schema_version="oasis7.local_signer_doctor.v1",
+                        installation_id=plan["installation_id"], ready=False, status_code="AUTHORIZATION_DENIED")
+        if value != expected or result.returncode != 3 or result.stderr != b"AUTHORIZATION_DENIED: operation failed\n":
+            raise InstallError("INSTALLATION_DRIFT", "caller doctor did not prove policyless unready state")
+        return dict(stdout_sha256=digest(result.stdout), stderr_sha256=digest(result.stderr), exit_code=result.returncode)
 
     def atomic_root_file(self, path, raw, mode, replace=False):
         path = Path(path)
