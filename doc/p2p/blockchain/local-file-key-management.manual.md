@@ -34,6 +34,8 @@ Encrypted input must be an absolute root-owned regular file with mode `0600`, a 
 
 Disable signing authority first: backup requires a policy with no enabled purposes. `backup-create --output ABSOLUTE --passphrase-stdin` creates an encrypted custody snapshot. If the snapshot contains nonexportable private keys, it requires the explicit `--include-nonexportable` option. This is a deliberate administrative disaster-recovery exception; nonexportable is an application rule, not hardware protection against the custody administrator.
 
+Snapshots support up to 450,000 files and 1 GiB of raw custody data, including the signer’s supported 100,000 retained records. Encrypted backup input is bounded at 2 GiB; individual key envelopes remain bounded at 32 MiB. Backup and restore currently operate in memory, so large snapshots need several GiB of available RAM. A store exceeding the byte budget requires a separately designed archival workflow; records are never silently dropped.
+
 Restore uses an empty, separately installed custody store with the same installation and deployment IDs:
 
 1. Run `restore-plan --input ABSOLUTE --expected-sha256 SHA256 --output ABSOLUTE --passphrase-stdin`.

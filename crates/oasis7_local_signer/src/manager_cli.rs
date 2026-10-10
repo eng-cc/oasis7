@@ -173,8 +173,11 @@ fn file_path(path: &str) -> Result<(Directory, String), SignerError> {
     Ok((Directory::open(parent, true)?, name.into()))
 }
 fn read_input(path: &str, digest: &str) -> Result<Vec<u8>, SignerError> {
+    read_input_bounded(path, digest, MAX_FILE)
+}
+fn read_input_bounded(path: &str, digest: &str, limit: usize) -> Result<Vec<u8>, SignerError> {
     let (dir, name) = file_path(path)?;
-    let bytes = dir.read(&name, MAX_FILE)?;
+    let bytes = dir.read(&name, limit)?;
     let metadata = std::fs::symlink_metadata(path)?;
     if !metadata.is_file()
         || metadata.file_type().is_symlink()
@@ -291,7 +294,11 @@ fn execute(args: &[String]) -> Result<Value, SignerError> {
             )?
         }
         "restore-plan" => {
-            let encrypted = read_input(&v["--input"], &v["--expected-sha256"])?;
+            let encrypted = read_input_bounded(
+                &v["--input"],
+                &v["--expected-sha256"],
+                crate::key_envelope::MAX_BACKUP_ENVELOPE_BYTES,
+            )?;
             let password = password()?;
             let plan = admin.restore_plan(&encrypted, &password)?;
             let bytes = serde_json::to_vec(&plan).map_err(|_| invalid())?;
@@ -299,7 +306,11 @@ fn execute(args: &[String]) -> Result<Value, SignerError> {
             json!({"plan":plan,"file":output})
         }
         "restore-apply" => {
-            let encrypted = read_input(&v["--input"], &v["--expected-sha256"])?;
+            let encrypted = read_input_bounded(
+                &v["--input"],
+                &v["--expected-sha256"],
+                crate::key_envelope::MAX_BACKUP_ENVELOPE_BYTES,
+            )?;
             let bytes = read_input(&v["--plan"], &v["--expected-plan-sha256"])?;
             let plan: RestorePlan = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
             let password = password()?;

@@ -12,6 +12,18 @@ use zeroize::Zeroizing;
 
 pub const MAX_ENVELOPE_BYTES: usize = 32 * 1024 * 1024;
 // Reserve JSON/header and base64 expansion space before allocating or deriving.
+pub const MAX_BACKUP_ENVELOPE_BYTES: usize = 2 * 1024 * 1024 * 1024;
+fn envelope_limit(kind: &str) -> usize {
+    if kind == "backup" {
+        MAX_BACKUP_ENVELOPE_BYTES
+    } else {
+        MAX_ENVELOPE_BYTES
+    }
+}
+fn plaintext_limit(kind: &str) -> usize {
+    (envelope_limit(kind) - 4096) / 4 * 3 - 16
+}
+#[cfg(test)]
 const MAX_PLAINTEXT_BYTES: usize = (MAX_ENVELOPE_BYTES - 4096) / 4 * 3 - 16;
 const MEMORY_KIB: u32 = 65536;
 const ITERATIONS: u32 = 3;
@@ -65,7 +77,7 @@ fn derive(passphrase: &[u8], salt: &[u8]) -> Result<Zeroizing<[u8; 32]>, SignerE
 /// Encrypt bytes with a random 128-bit salt and 192-bit nonce. No plaintext is serialized.
 pub fn seal(kind: &str, plaintext: &[u8], passphrase: &[u8]) -> Result<Vec<u8>, SignerError> {
     validate_inputs(kind, passphrase)?;
-    if plaintext.len() > MAX_PLAINTEXT_BYTES {
+    if plaintext.len() > plaintext_limit(kind) {
         return Err(invalid());
     }
     let mut salt = [0u8; 16];
@@ -96,7 +108,7 @@ pub fn seal(kind: &str, plaintext: &[u8], passphrase: &[u8]) -> Result<Vec<u8>, 
         ciphertext: STANDARD.encode(&*bytes),
     })
     .map_err(|_| invalid())?;
-    if output.len() > MAX_ENVELOPE_BYTES {
+    if output.len() > envelope_limit(kind) {
         return Err(invalid());
     }
     Ok(output)
@@ -108,7 +120,7 @@ pub fn open(
     passphrase: &[u8],
 ) -> Result<Zeroizing<Vec<u8>>, SignerError> {
     validate_inputs(expected_kind, passphrase)?;
-    if envelope.len() > MAX_ENVELOPE_BYTES {
+    if envelope.len() > envelope_limit(expected_kind) {
         return Err(invalid());
     }
     let parsed: Envelope = serde_json::from_slice(envelope).map_err(|_| invalid())?;
@@ -134,7 +146,7 @@ pub fn open(
         .try_into()
         .map_err(|_| invalid())?;
     let mut bytes = Zeroizing::new(STANDARD.decode(&parsed.ciphertext).map_err(|_| invalid())?);
-    if bytes.len() < 16 || bytes.len() > MAX_PLAINTEXT_BYTES + 16 {
+    if bytes.len() < 16 || bytes.len() > plaintext_limit(expected_kind) + 16 {
         return Err(invalid());
     }
     let aad = serde_json::to_vec(h).map_err(|_| invalid())?;
@@ -177,6 +189,15 @@ mod tests {
         value = serde_json::from_slice(&original).unwrap();
         value["header"]["kind"] = "key".into();
         assert!(open("key", &serde_json::to_vec(&value).unwrap(), PASS).is_err());
+    }
+    #[test]
+    fn backup_archive_exceeds_key_envelope_limit_without_widening_key_import() {
+        let plaintext = Zeroizing::new(vec![7; 25 * 1024 * 1024]);
+        assert!(seal("key", &plaintext, PASS).is_err());
+        let envelope = seal("backup", &plaintext, PASS).unwrap();
+        assert!(envelope.len() > MAX_ENVELOPE_BYTES);
+        assert!(open("key", &envelope, PASS).is_err());
+        assert_eq!(*open("backup", &envelope, PASS).unwrap(), *plaintext);
     }
     #[test]
     fn input_bounds_before_crypto() {

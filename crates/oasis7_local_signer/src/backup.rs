@@ -20,8 +20,11 @@ use std::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
-const MAX_BYTES: usize = 16 * 1024 * 1024;
-const MAX_FILES: usize = 8192;
+// Whole snapshots remain bounded; encoding/decryption can hold several GiB of
+// temporary memory near the cap. This is an offline, stopped-authority operation.
+const MAX_BYTES: usize = 1024 * 1024 * 1024;
+const MAX_MEMBER_BYTES: usize = 1024 * 1024;
+const MAX_FILES: usize = 450_000;
 const RECEIPT: &str = "control/restore.json";
 #[cfg(test)]
 thread_local! {pub(crate) static FAIL_RESTORE_DIR_SYNC: std::cell::Cell<bool> = const {std::cell::Cell::new(false)};}
@@ -141,7 +144,7 @@ fn collect(
             if !m.is_file() || m.nlink() != 1 || out.len() >= MAX_FILES {
                 return Err(SignerError::RecoveryRequired);
             }
-            let bytes = Zeroizing::new(read_regular(&path, MAX_BYTES)?);
+            let bytes = Zeroizing::new(read_regular(&path, MAX_MEMBER_BYTES)?);
             *total = total
                 .checked_add(bytes.len())
                 .ok_or(SignerError::RecoveryRequired)?;
@@ -262,7 +265,10 @@ impl AdminStore {
         })?;
         if old.as_ref().is_some_and(|r| r.phase == "committed") {
             if files.iter().any(|(p, b)| {
-                read_regular(&self.root.join(p), MAX_BYTES).ok().as_deref() != Some(b.as_slice())
+                read_regular(&self.root.join(p), MAX_MEMBER_BYTES)
+                    .ok()
+                    .as_deref()
+                    != Some(b.as_slice())
             }) {
                 return Err(SignerError::RecoveryRequired);
             }
@@ -302,7 +308,7 @@ impl AdminStore {
             let parent = target.parent().ok_or(SignerError::RecoveryRequired)?;
             ensure_parents(self, parent)?;
             if target.exists() {
-                if read_regular(&target, MAX_BYTES)?.as_slice() != bytes.as_slice() {
+                if read_regular(&target, MAX_MEMBER_BYTES)?.as_slice() != bytes.as_slice() {
                     return Err(SignerError::RecoveryRequired);
                 }
             } else {
@@ -434,11 +440,18 @@ fn validate_snapshot(a: &AdminStore, s: &Snapshot) -> Result<(), SignerError> {
     let mut total = 0usize;
     for (p, b) in &s.files {
         path_kind(p)?;
+        // Reject oversized base64 members before allocating decoded bytes.
+        if b.len() > MAX_MEMBER_BYTES.div_ceil(3) * 4 {
+            return Err(SignerError::RecoveryRequired);
+        }
         let bytes = Zeroizing::new(
             base64::engine::general_purpose::STANDARD
                 .decode(b)
                 .map_err(|_| SignerError::RecoveryRequired)?,
         );
+        if bytes.len() > MAX_MEMBER_BYTES {
+            return Err(SignerError::RecoveryRequired);
+        }
         total = total
             .checked_add(bytes.len())
             .ok_or(SignerError::RecoveryRequired)?;
@@ -585,7 +598,7 @@ fn sync_restored_tree(
     let mut dirs = std::collections::BTreeSet::new();
     for (rel, expected) in files {
         let path = a.root.join(rel);
-        if read_regular(&path, MAX_BYTES)?.as_slice() != expected.as_slice() {
+        if read_regular(&path, MAX_MEMBER_BYTES)?.as_slice() != expected.as_slice() {
             return Err(SignerError::RecoveryRequired);
         }
         crate::local_fs::sync_file_and_parent(&path)?;
@@ -629,6 +642,10 @@ fn restore_baseline(
         return Err(SignerError::AuthorizationDenied);
     }
     for (p, b) in &existing.files {
+        // Reject oversized base64 members before allocating decoded bytes.
+        if b.len() > MAX_MEMBER_BYTES.div_ceil(3) * 4 {
+            return Err(SignerError::RecoveryRequired);
+        }
         let bytes = Zeroizing::new(
             base64::engine::general_purpose::STANDARD
                 .decode(b)
@@ -678,4 +695,65 @@ fn publish_receipt(a: &AdminStore, bytes: &[u8]) -> Result<(), SignerError> {
             replace: true,
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn snapshot_accepts_more_than_old_file_cap_and_keeps_member_bounds() {
+        let installation:crate::types::InstallationConfig=serde_json::from_value(serde_json::json!({
+            "schema_version":crate::types::INSTALLATION_SCHEMA,"installation_id":"install-01","deployment_id":"deployment-01",
+            "store_dir":"/unused-fixture","store_device_id":1,"store_inode":1,"signer_uid":501,"signer_gid":20,
+            "callers":[{"uid":502,"work_dir":"/unused-jobs","work_device_id":1,"work_inode":2}],
+            "release_id":"release-01","worker_executable":"/unused-worker","worker_sha256":"ab".repeat(32),"control_schema_version":"control-v1"
+        })).unwrap();
+        let a = AdminStore::from_config_fixture(installation);
+        let public = ed25519_dalek::SigningKey::from_bytes(&[5; 32])
+            .verifying_key()
+            .to_bytes();
+        let policy:Policy=serde_json::from_value(serde_json::json!({"schema_version":crate::types::POLICY_SCHEMA,
+            "installation_id":"install-01","deployment_id":"deployment-01","policy_revision":"disabled-01","enabled_purposes":[],
+            "key_bindings":[{"purpose":"rollback_strict_audit_v1","signer_id":"signer-01","public_key_sha256":sha256_hex(&public),
+                "protocol_authorities":[],"provider_ids":[],"deployment_ids":[],"network_ids":[]}],
+            "limits":{"max_batch_items":64,"max_distinct_requests_per_item":16,"max_payload_bytes":16*1024*1024}})).unwrap();
+        let mut s = Snapshot {
+            schema_version: "oasis7.custody_snapshot.v1".into(),
+            installation_id: "install-01".into(),
+            deployment_id: "deployment-01".into(),
+            created_at_ms: 1,
+            files: BTreeMap::new(),
+        };
+        let b64 = base64::engine::general_purpose::STANDARD;
+        s.files.insert(
+            POLICY_FILE.into(),
+            b64.encode(canonical_json(&policy).unwrap()),
+        );
+        s.files
+            .insert("keys/signer-01/public.bin".into(), b64.encode(public));
+        s.files
+            .insert("keys/signer-01/seed.bin".into(), b64.encode([5; 32]));
+        for i in 0..8200 {
+            let id = format!("grant-{i}");
+            s.files.insert(
+                format!("control/revoked-grants/{id}.json"),
+                b64.encode(
+                    canonical_json(&Revocation {
+                        schema_version: "oasis7.local_signer_revocation.v1".into(),
+                        installation_id: "install-01".into(),
+                        grant_id: id,
+                        revoked_at_ms: 1,
+                    })
+                    .unwrap(),
+                ),
+            );
+        }
+        validate_snapshot(&a, &s).unwrap();
+        assert!(MAX_FILES >= 100_000 * 4 + 512);
+        s.files.insert(
+            "keys/signer-01/seed.bin".into(),
+            "A".repeat(MAX_MEMBER_BYTES.div_ceil(3) * 4 + 4),
+        );
+        assert!(validate_snapshot(&a, &s).is_err());
+    }
 }

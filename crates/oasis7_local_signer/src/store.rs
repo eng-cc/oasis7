@@ -188,8 +188,14 @@ impl SignerStore {
                 self.control_group_gid,
             ) {
                 Ok(policy) if policy.validate(&self.installation).is_ok() => {
-                    let ready = !policy.enabled_purposes.is_empty();
-                    (ready, if ready { "READY" } else { "DISABLED" })
+                    if policy.enabled_purposes.is_empty() {
+                        (false, "DISABLED")
+                    } else {
+                        match self.check_ready_key_lifecycle(&policy) {
+                            Ok(()) => (true, "READY"),
+                            Err(error) => (false, error.code()),
+                        }
+                    }
                 }
                 Ok(_) => (false, "INSTALLATION_DRIFT"),
                 Err(error) => (false, error.code()),
@@ -201,6 +207,32 @@ impl SignerStore {
             ready,
             status_code: status_code.to_owned(),
         }))
+    }
+
+    // Enabled policy is insufficient when any bound key is administratively
+    // inactive, archived or deleted. Disabled purposes do not affect readiness.
+    fn check_ready_key_lifecycle(&self, policy: &Policy) -> Result<(), SignerError> {
+        for purpose in &policy.enabled_purposes {
+            let bindings: Vec<_> = policy
+                .key_bindings
+                .iter()
+                .filter(|binding| &binding.purpose == purpose)
+                .collect();
+            if bindings.is_empty() {
+                return Err(SignerError::KeyOrAuthorityUnavailable);
+            }
+            for binding in bindings {
+                crate::key_management::require_active_key(
+                    &self.root,
+                    self.control_owner_uid,
+                    self.control_group_gid,
+                    &self.installation.installation_id,
+                    &binding.signer_id,
+                    purpose,
+                )?;
+            }
+        }
+        Ok(())
     }
 
     fn inspect(
