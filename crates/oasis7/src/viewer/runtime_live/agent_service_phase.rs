@@ -818,7 +818,9 @@ pub(super) fn original_response(
 ) -> Result<Option<IntentResponse<serde_json::Value>>, String> {
     match response {
         AgentServiceIoResponse::Intent(response) => Ok(Some(response)),
-        AgentServiceIoResponse::Submit(SubmitObservation::Response(response)) => Ok(Some(*response)),
+        AgentServiceIoResponse::Submit(SubmitObservation::Response(response)) => {
+            Ok(Some(*response))
+        }
         AgentServiceIoResponse::Submit(SubmitObservation::OutcomeUnknown(_)) => Ok(None),
         _ => Err("hosted service response operation mismatch".into()),
     }
