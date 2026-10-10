@@ -134,6 +134,15 @@ fn runtime_provider_continuation_recovery_fence_blocks_retained_context_after_re
         .shadow_kernel
         .take()
         .expect("restarted shadow kernel");
+    crate::viewer::runtime_live::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &world,
+        restarted
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("restarted native provider runner"),
+    )
+    .expect("restore Runtime feedback history before sibling dispatch");
     let decision = restarted.next_async_provider_decision(&mut world, &mut kernel, world_id);
     assert!(
         decision.is_none(),
@@ -474,6 +483,15 @@ fn provider_dispatch_persists_active_marker_before_actor_start() {
         .sync_shadow_kernel(&world, &WorldConfig::default())
         .expect("sync provider shadow kernel");
     let mut kernel = first.shadow_kernel.take().expect("provider shadow kernel");
+    crate::viewer::runtime_live::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &world,
+        first
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("fresh native provider runner"),
+    )
+    .expect("restore Runtime feedback history before first marker dispatch");
 
     let decision = first.next_async_provider_decision(&mut world, &mut kernel, world_id);
     assert!(
@@ -521,6 +539,15 @@ fn provider_dispatch_persists_active_marker_before_actor_start() {
         .shadow_kernel
         .take()
         .expect("restarted provider shadow kernel");
+    crate::viewer::runtime_live::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &world,
+        restarted
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("restarted native provider runner"),
+    )
+    .expect("restore Runtime feedback history before restart-fenced dispatch");
     let restarted_decision =
         restarted.next_async_provider_decision(&mut world, &mut restarted_kernel, world_id);
     assert!(
