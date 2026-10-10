@@ -3,6 +3,25 @@ use super::*;
 #[cfg(test)]
 use crate::runtime::RuntimeFeedbackOutboxRecordV1;
 
+fn runtime_receipt_from_api_projection(
+    receipt: &oasis7_agent_api::RuntimeReceiptLineageV1,
+) -> RuntimeReceiptLineageV1 {
+    RuntimeReceiptLineageV1 {
+        schema_version: receipt.schema_version.clone(),
+        status: receipt.status.clone(),
+        receipt_id: receipt.receipt_id.clone(),
+        receipt_digest: receipt.receipt_digest.clone(),
+        envelope_digest: receipt.envelope_digest.clone(),
+        action_id: receipt.action_id.clone(),
+        agent_id: receipt.agent_id.clone(),
+        agent_session_id: receipt.agent_session_id.clone(),
+        agent_turn_id: receipt.agent_turn_id.clone(),
+        decision_request_id: receipt.decision_request_id.clone(),
+        request_digest: receipt.request_digest.clone(),
+        feedback_id: receipt.feedback_id.clone(),
+    }
+}
+
 impl AsyncAgentRunner {
     /// Restore only the bounded replay/collision verifier from an Oasis-owned
     /// Runtime authority projection. The Harness receives validated history,
@@ -17,9 +36,69 @@ impl AsyncAgentRunner {
         if self.harness.active_turn_count() > 0 && self.harness.feedback_recovery_loaded() {
             return Ok(());
         }
+        // Read once from the real host authority, then give the Harness and
+        // this Oasis-side replay cache the same authenticated snapshot. The
+        // Harness recovery adapter is history-only and cannot mint receipts,
+        // leases, memory authority, or continuations.
+        let mut history = authority
+            .validated_feedback_history()
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        for projection in &history {
+            let key = (
+                projection.feedback.agent_subject.clone(),
+                projection.feedback.agent_session_id.clone(),
+                projection.feedback.feedback_id.clone(),
+            );
+            let receipt_lineage = projection
+                .lineage
+                .as_ref()
+                .and_then(|lineage| lineage.receipt_lineage.as_ref())
+                .map(runtime_receipt_from_api_projection);
+            if self
+                .runtime_feedback_replays
+                .get(&key)
+                .is_some_and(|accepted| accepted.receipt_lineage != receipt_lineage)
+            {
+                return Err(AsyncAgentRunnerError::Cognition(
+                    "Runtime feedback history conflicts with accepted receipt lineage".into(),
+                ));
+            }
+        }
+        history.sort_by(|left, right| {
+            left.feedback
+                .agent_subject
+                .cmp(&right.feedback.agent_subject)
+                .then_with(|| {
+                    left.feedback
+                        .agent_session_id
+                        .cmp(&right.feedback.agent_session_id)
+                })
+                .then_with(|| left.feedback.feedback_seq.cmp(&right.feedback.feedback_seq))
+        });
+        let history_authority =
+            super::agent_harness_adapter::ScopedFeedbackHistoryAuthority::new(history.clone());
         self.harness
-            .restore_feedback_history(authority)
-            .map_err(map_harness_error)
+            .restore_feedback_history(&history_authority)
+            .map_err(map_harness_error)?;
+
+        for projection in history {
+            if self
+                .harness
+                .replay_feedback(&projection.feedback)
+                .map_err(map_harness_error)?
+            {
+                let receipt_lineage = projection
+                    .lineage
+                    .as_ref()
+                    .and_then(|lineage| lineage.receipt_lineage.as_ref())
+                    .map(runtime_receipt_from_api_projection);
+                self.remember_runtime_feedback_replay(
+                    &super::super::agent_api_compat::feedback_from_api(projection.feedback),
+                    receipt_lineage,
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Release exactly the completed production turn around a host durability
@@ -229,7 +308,7 @@ impl AsyncAgentRunner {
         let result = self.harness.accept_feedback_with_persistence_observed(
             harness_turn,
             super::super::agent_api_compat::feedback_to_api(&feedback),
-            |harness_cognition_digest| {
+            |_harness_cognition_digest| {
                 *memory = staged_memory.clone();
                 #[cfg(any(test, feature = "test_tier_required"))]
                 if std::env::var("PRE2_APP_ADMISSION").ok().as_deref()
@@ -243,7 +322,7 @@ impl AsyncAgentRunner {
                         let mut hash = blake3::Hasher::new();
                         hash.update(b"oasis7.rejected-wait.local-test-ledger.v1\0");
                         hash.update(b"feedback-store\0");
-                        hash.update(harness_cognition_digest.as_bytes());
+                        hash.update(_harness_cognition_digest.as_bytes());
                         staged[4] = hash.finalize().to_hex().to_string();
                         for (name, value) in [
                             ("feedback-ack-native-before.json", native_before),
@@ -277,14 +356,25 @@ impl AsyncAgentRunner {
         Ok(())
     }
 
-    /// Consume feedback accompanied by a Runtime-issued receipt lineage.
-    /// Caller-signed feedback remains useful for diagnostics, but cannot
-    /// promote provider memory intents without this projection.
+    /// Preserve the historical receipt-lineage lifecycle API. The DTO is
+    /// correlation data only; memory intents require the strict World-readback
+    /// entry point below.
     pub fn consume_runtime_feedback_with_lineage(
         &mut self,
         agent_id: &str,
         feedback: FeedbackEnvelopeV1,
         runtime_receipt: Option<&RuntimeReceiptLineageV1>,
+        store: &mut MemoryWriteStore,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        self.consume_runtime_feedback_inner(agent_id, feedback, runtime_receipt, None, store)
+    }
+
+    fn consume_runtime_feedback_inner(
+        &mut self,
+        agent_id: &str,
+        feedback: FeedbackEnvelopeV1,
+        runtime_receipt: Option<&RuntimeReceiptLineageV1>,
+        readback: Option<&super::feedback::RuntimeReceiptReadbackHandleV1>,
         store: &mut MemoryWriteStore,
     ) -> Result<(), AsyncAgentRunnerError> {
         let harness_feedback = super::super::agent_api_compat::feedback_to_api(&feedback);
@@ -298,10 +388,10 @@ impl AsyncAgentRunner {
                 feedback.agent_session_id.clone(),
                 feedback.feedback_id.clone(),
             );
-            if self
-                .runtime_feedback_replays
-                .get(&replay_key)
-                .is_some_and(|accepted| accepted.receipt_lineage.as_ref() != runtime_receipt)
+            let accepted = self.runtime_feedback_replays.get(&replay_key);
+            if accepted.is_some_and(|accepted| accepted.receipt_lineage.as_ref() != runtime_receipt)
+                || (accepted.is_none()
+                    && (feedback.status == "committed" || runtime_receipt.is_some()))
             {
                 return Err(AsyncAgentRunnerError::Cognition(
                     "Runtime feedback replay receipt lineage mismatch".into(),
@@ -330,15 +420,24 @@ impl AsyncAgentRunner {
                 )
             })?;
             validate_runtime_receipt_lineage(context, &feedback, runtime_receipt)?;
-            let mut staged = store.clone();
-            project_receipt_memory(
-                context,
-                &feedback,
-                runtime_receipt,
-                &outcome.memory_write_intents,
-                &mut staged,
-            )?;
-            staged_memory = Some(staged);
+            if let Some(readback) = readback {
+                if readback.receipt_id() != runtime_receipt.receipt_id
+                    || readback.receipt_digest().as_str() != runtime_receipt.receipt_digest
+                {
+                    return Err(AsyncAgentRunnerError::Cognition(
+                        "Runtime readback handle does not match the accepted receipt".into(),
+                    ));
+                }
+                let mut staged = store.clone();
+                project_receipt_memory(
+                    context,
+                    &feedback,
+                    runtime_receipt,
+                    &outcome.memory_write_intents,
+                    &mut staged,
+                )?;
+                staged_memory = Some(staged);
+            }
         }
 
         let production_lane = outcome.prepared_request_context.is_some();
@@ -428,7 +527,7 @@ impl AsyncAgentRunner {
                     "Runtime readback requires an awaiting outcome".to_string(),
                 )
             })?;
-        if feedback.status == "committed" {
+        let readback = if feedback.status == "committed" {
             let context = outcome
                 .prepared_context
                 .as_ref()
@@ -457,8 +556,56 @@ impl AsyncAgentRunner {
                     "Runtime readback verifier returned mismatched identity".to_string(),
                 ));
             }
-        }
-        self.consume_runtime_feedback_with_lineage(agent_id, feedback, Some(runtime_receipt), store)
+            Some(handle)
+        } else {
+            None
+        };
+        self.consume_runtime_feedback_inner(
+            agent_id,
+            feedback,
+            Some(runtime_receipt),
+            readback.as_ref(),
+            store,
+        )
+    }
+
+    /// Production helper for the Runtime adapter: derive the expected
+    /// response identity from the exact still-awaiting actor outcome rather
+    /// than accepting a parallel caller-provided identity at the host seam.
+    pub(crate) fn consume_runtime_feedback_with_world_readback_from_outcome(
+        &mut self,
+        agent_id: &str,
+        feedback: FeedbackEnvelopeV1,
+        runtime_receipt: &RuntimeReceiptLineageV1,
+        verifier: &dyn RuntimeReceiptReadbackVerifier,
+        store: &mut MemoryWriteStore,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        let response_identity = self
+            .awaiting_outcomes
+            .values()
+            .find(|outcome| {
+                outcome.agent_id == agent_id
+                    && outcome.prepared_context.as_ref().is_some_and(|context| {
+                        context.agent_session_id == feedback.agent_session_id
+                            && context.agent_turn_id == feedback.agent_turn_id
+                            && context.decision_request_id == feedback.decision_request_id
+                    })
+            })
+            .and_then(|outcome| outcome.prepared_response_context.as_ref())
+            .map(|response| response.response_artifact_identity())
+            .ok_or_else(|| {
+                AsyncAgentRunnerError::Cognition(
+                    "Runtime response artifact identity is unavailable".to_string(),
+                )
+            })?;
+        self.consume_runtime_feedback_with_world_readback(
+            agent_id,
+            feedback,
+            runtime_receipt,
+            &response_identity,
+            verifier,
+            store,
+        )
     }
 
     /// Explicitly expire a Runtime-owned pending lease. This is the only

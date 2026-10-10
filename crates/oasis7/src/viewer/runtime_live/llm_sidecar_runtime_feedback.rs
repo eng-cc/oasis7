@@ -309,9 +309,12 @@ impl RuntimeLlmSidecar {
     /// and verified the committed receipt lineage. Rejected or pending
     /// dispositions never enter the MemoryWriteStore. Native actors retain
     /// their awaiting outcome in AsyncAgentRunner, while the WASM synchronous
-    /// lane projects the same bounded intent policy here.
+    /// lane projects the same bounded intent policy here. Pass `None` for a
+    /// canonical WorldService receipt absent from this local World: that path
+    /// preserves lifecycle/replay handling without projecting local memory.
     pub(in crate::viewer::runtime_live) fn consume_provider_memory_after_receipt(
         &mut self,
+        world: Option<&crate::runtime::World>,
         agent_id: &str,
         feedback: FeedbackEnvelopeV1,
         receipt: &crate::runtime::RuntimeReceiptLineageV1,
@@ -327,24 +330,45 @@ impl RuntimeLlmSidecar {
             else {
                 return Ok(());
             };
-            runner
-                .consume_runtime_feedback_with_lineage(
-                    agent_id,
-                    feedback,
-                    Some(receipt),
-                    &mut self.provider_memory_store,
-                )
-                .map_err(|error| {
-                    format!("provider memory receipt gate rejected intents: {error}")
-                })?;
-            self.provider_memory_store
-                .finalize_corrections(receipt)
-                .map_err(|error| {
-                    format!("provider memory correction receipt gate rejected: {error}")
-                })
+            if let Some(world) = world {
+                let authority = super::super::harness_authority::RuntimeWorldAuthority::new(world);
+                runner
+                    .consume_runtime_feedback_with_world_readback_from_outcome(
+                        agent_id,
+                        feedback,
+                        receipt,
+                        &authority,
+                        &mut self.provider_memory_store,
+                    )
+                    .map_err(|error| {
+                        format!("provider memory receipt gate rejected intents: {error}")
+                    })?;
+                self.provider_memory_store
+                    .finalize_corrections(receipt)
+                    .map_err(|error| {
+                        format!("provider memory correction receipt gate rejected: {error}")
+                    })
+            } else {
+                // Canonical WorldService receipts are not necessarily present
+                // in this process's local Runtime World. Preserve Harness
+                // lifecycle/replay handling, but do not infer memory authority
+                // from the service DTO or commit its memory intents locally.
+                runner
+                    .consume_runtime_feedback_with_lineage(
+                        agent_id,
+                        feedback,
+                        Some(receipt),
+                        &mut self.provider_memory_store,
+                    )
+                    .map_err(|error| {
+                        format!("provider feedback lifecycle gate rejected: {error}")
+                    })?;
+                Ok(())
+            }
         }
         #[cfg(target_arch = "wasm32")]
         {
+            let _ = world;
             if feedback.status != "committed" {
                 return Ok(());
             }

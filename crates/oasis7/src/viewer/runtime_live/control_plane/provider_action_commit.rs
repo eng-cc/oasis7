@@ -135,6 +135,7 @@ impl ViewerRuntimeLiveServer {
         };
         self.llm_sidecar
             .consume_provider_memory_after_receipt(
+                Some(&self.world),
                 request.agent_subject.as_str(),
                 feedback.clone(),
                 &lineage,
@@ -353,6 +354,7 @@ impl ViewerRuntimeLiveServer {
             .unwrap_or(feedback);
         self.llm_sidecar
             .consume_provider_memory_after_receipt(
+                Some(&self.world),
                 cognition.request.request_context.agent_subject.as_str(),
                 feedback.clone(),
                 &lineage,
@@ -670,6 +672,7 @@ impl ViewerRuntimeLiveServer {
                     .map_err(ProviderRuntimeActionCommitError::WakeHandoff)?;
                 self.llm_sidecar
                     .consume_provider_memory_after_receipt(
+                        None,
                         &request.agent_subject,
                         receipt.feedback.clone(),
                         &receipt.lineage,

@@ -582,10 +582,22 @@ fn invalid_memory_after_committed_receipt_preserves_runtime_commit_disposition()
     committed.candidate_action_id = Some(7);
     committed.provenance = "runtime_authoritative".to_string();
     let receipt = runtime_receipt_for_feedback(&committed);
+    let response_identity = outcome
+        .prepared_response_context
+        .as_ref()
+        .expect("response context retained")
+        .response_artifact_identity();
     let mut store = MemoryWriteStore::default();
 
     runner
-        .consume_runtime_feedback_with_lineage(AGENT_ID, committed, Some(&receipt), &mut store)
+        .consume_runtime_feedback_with_world_readback(
+            AGENT_ID,
+            committed,
+            &receipt,
+            &response_identity,
+            &VerifiedWorldReadback,
+            &mut store,
+        )
         .expect("invalid provider memory must not rewrite committed Runtime feedback");
     assert!(
         store.entries().is_empty(),
@@ -771,9 +783,21 @@ fn memory_correction_links_only_matching_committed_decision_across_restart_and_r
     feedback.candidate_action_id = Some(91);
     feedback.provenance = "runtime_authoritative".into();
     let receipt = runtime_receipt_for_feedback(&feedback);
+    let response_identity = outcome
+        .prepared_response_context
+        .as_ref()
+        .expect("response context retained for committed turn")
+        .response_artifact_identity();
     let mut store = MemoryWriteStore::default();
     runner
-        .consume_runtime_feedback_with_lineage(AGENT_ID, feedback, Some(&receipt), &mut store)
+        .consume_runtime_feedback_with_world_readback(
+            AGENT_ID,
+            feedback,
+            &receipt,
+            &response_identity,
+            &VerifiedWorldReadback,
+            &mut store,
+        )
         .unwrap();
     let snapshot = store.context_snapshot(AGENT_ID, SESSION_ID, "session_private", 8);
     let input = json!({
