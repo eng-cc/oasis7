@@ -647,7 +647,8 @@ impl ViewerRuntimeLiveServer {
                                     )?;
                                     handled = {
                                         let mut server = lock_shared_server(&shared)?;
-                                        server.prepared_owner_read = prepared_owner_read.map(Box::new);
+                                        server.prepared_owner_read =
+                                            prepared_owner_read.map(Box::new);
                                         server.prepared_world_service_submission =
                                             prepared_submission;
                                         let handled = server.handle_request_with_chain_prime(
