@@ -86,6 +86,7 @@ fn response(request: &ReadWorldViewRequest) -> ReadWorldViewResponse<WorldServic
         state_root_ref: "root".into(),
     };
     ReadWorldViewResponse {
+        execution_evidence_scope: None,
         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
         version: ProjectionVersion {
             commit: commit.clone(),
