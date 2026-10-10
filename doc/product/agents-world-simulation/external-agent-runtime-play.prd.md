@@ -1,0 +1,315 @@
+# 外部 Agent Runtime 接入与持续游玩
+
+## 文档身份
+
+- 所属产品模块：智能体、世界模拟与交互
+- 上位产品 PRD：[prd.md](prd.md)
+- 配对产品 design：[external-agent-runtime-play.design.md](external-agent-runtime-play.design.md)
+- 生命周期：`active`
+- Owner role：`producer_system_designer`
+- 专业域权威：[Decision Provider](../../world-simulator/llm/decision-provider-contract.prd.md)、[Continuous Agent Harness](../../world-simulator/llm/continuous-agent-harness.prd.md)、[Runtime cognition lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md)
+- Last reviewed：2026-10-10
+- 适用入口：外部 Runtime 接入后的 Agent 决策与持续游玩；玩家通过现行 `viewer` / `pure_api` 入口观察和间接引导。
+
+本文拥有“用户带现有 Agent Runtime 来玩 oasis7”的端到端产品目标、首期范围与组合验收。`active` 表示本文是有效产品要求，不表示 OpenClaw、Codex 或任一适配组合已可用、通过验收或获准公开发行。协议、适配实现、世界结算和具体支持证据仍由专业域拥有。
+
+## 设计适用性与生命周期闭合
+
+- 设计判定：`paired-design`。
+- 配对关系：[同名产品设计](external-agent-runtime-play.design.md)承接首次接入、委托运行、结果阅读、目标调整和恢复的体验设计；本 PRD 拥有产品要求和验收。
+- 设计适用性理由：本主题跨越 Runtime、游戏 Agent、玩家入口和世界结果，需要共同的信息层级与失败解释；具体 API、CLI 参数和存储算法留在专业设计。
+
+## 1. 产品目标
+
+### 1.1 目标与代表性情境
+
+用户可以把自己使用的 OpenClaw、Codex 等 Agent Runtime 接入 oasis7，在高层目标、有效委托和已说明的预算范围内，驱动合法绑定的游戏 Agent 自主、持续地推进游戏任务。oasis7 提供受约束的世界观察、可理解的合法能力、权威行动结果和继续游玩的依据。
+
+代表性情境：玩家已有一个 Runtime，希望让自己的 Agent 建立第一项工业成果。他确认连接目标、Agent 资格、可玩范围与开销，给出生产目标并开始委托；Runtime 自行理解处境、规划和执行。玩家能看到已经发生的世界成果、主要阻塞和下一步，可以调整高层目标，也可以离开观战界面后再回来继续。
+
+本主题的成功由“接入、理解、行动、反馈、继续”这一完整经历判断。接通模型、返回合法 JSON、出现一次动作或通过低频 NPC 测试，分别只证明其自身范围。
+
+### 1.2 角色与职责
+
+| 对象 | 拥有的职责 | 约束与组合关系 |
+| --- | --- | --- |
+| 人类玩家 | 选择 Runtime、确认身份与委托、提供高层目标和提示词、观察与纠正策略 | 间接控制与严重后果授权沿用[Agent 自治与委托](agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)。 |
+| 外部 Agent Runtime | 运用自身推理、规划、会话记忆和工具编排能力，形成候选行动并利用反馈继续决策 | OpenClaw、Codex 是首批适配与验收目标。内部工具或子任务不自动成为游戏实体，也不获得额外世界权限。 |
+| oasis7 的 Agent 接入层与 Harness | 将合法观察、目标、能力和反馈接入同一 Agent 会话，维持世界相关认知上下文的边界与连续性 | [Harness 合同](../../world-simulator/llm/continuous-agent-harness.prd.md#3-权威边界)拥有生命周期与策略约束；Runtime 内部会话能力和 Harness 职责须能配合，不重复宣称世界权威。 |
+| 游戏 Agent | 作为世界中被认领、维护和授权的实体承担行动及后果 | 取得与维护消费[Agent 所有权与持续经营](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#1-产品承诺)；接入软件不赠送、复制或重新认领实体。 |
+| 世界 Runtime | 校验权限、规则与前置条件，裁决和提交行动，提供权威结果与历史 | 外部 Runtime、模型输出、工具日志和玩家界面均不能自行确认世界状态已改变。 |
+| 模型服务 / Token Bridge | 提供或转接推理能力及其计量、账户服务 | 模型账户、连接认证和游戏 Agent 委托分别成立；更换模型端点不自动证明已支持某个 Agent Runtime。 |
+
+### 1.3 依据、目标与现状
+
+- 上位产品承诺由[模块根 PRD 的外部 Runtime 目标与 SC-14](prd.md#external-runtime-play)承载；首局成果消费[首局与持续游玩](../world-rules-core-gameplay/first-session-and-continuation.prd.md#1-产品目标)。
+- 已有专业合同包括 Decision Provider、Local Provider HTTP、持续 Harness、执行 lane 和 parity；它们各自的 `current` / `partial` / `target` 与证据范围继续由原文维护。
+- 本文冻结首批 Runtime 与体验验收目标，不据此上调当前支持矩阵、默认选择或公开状态。当前公开口径仍从[根 README](../../../README.md)进入。
+- 设计假设：用户希望保留熟悉的 Runtime 使用方式，并以世界成果和可理解的恢复判断可玩性。体验有效性需要真实使用者验证，不能由结构检查或 Agent 自报完成推出。
+
+## 2. 范围与阶段
+
+### 2.1 首批 Runtime 与支持单位
+
+OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 Runtime 及版本、适配方式、模型/profile、世界候选、玩家入口、执行 lane、能力范围与验证窗口。一个 Runtime 的通过不会自动覆盖另一个；通用协议存在或可配置可执行文件名，也不能代替适配与真实会话证据。
+
+接入文档应给出每个受支持组合的一条可复现推荐路径，说明凭据归属、连接与启动方式、就绪判定、恢复方式及限制。实现可采用符合专业合同的协议或适配器；产品不预设 HTTP、MCP、CLI、进程内 SDK 中哪一种是唯一解法。
+
+### 2.2 阶段目标
+
+| 阶段 | 要证明的结果 | 适用边界 |
+| --- | --- | --- |
+| 契约与适配验证 | 观察、能力、输出、错误和反馈可按声明范围互通 | 既有 P0 低频 NPC profile、mock、loopback 与 smoke 保留原范围，只作协议及局部行为证据。 |
+| 外部 Runtime 首局闭环 | OpenClaw、Codex 各自驱动一个合法绑定 Agent，完成代表性首产物、一次真实阻塞后的继续、目标调整及断连/重启后的续接 | 本文首期产品验收；以同一 Agent、同一世界历史连续取证，见 [AC-EXT-010](#ac-ext-010)。 |
+| 持续游玩与扩面 | 更长任务、多 Agent、更多受治理玩法、更多 Runtime 及经声明的切换组合 | 按能力逐项取证；模型训练、认证制度和情报机制沿用[长期专题](provider-learning-intelligence-and-cadence.prd.md#2-范围与玩家边界)。 |
+
+首期复用玩法主责当前选定的 `starter-industrial-smelter-to-assembler-v1` / `production_only` 代表链，成果边界消费[首局主责](../world-rules-core-gameplay/first-session-and-continuation.prd.md)与[工业结算合同](../../game/gameplay/gameplay-industrial-starter-completion-contract.prd.md)。适配需要覆盖这条链实际所需的合法能力；具体资源、配方、建造条件、结算和后续候选均不在本文另行定义。首产物、经营恢复、Runtime 恢复和玩家回访分别判定，首产物不自动证明稳定生产、交付或需求满足。
+
+### 2.3 入口与运行边界
+
+正式玩家访问模式沿用[玩家接入与发行](../player-entry-distribution/prd.md#玩家访问模式与证据边界)的 `viewer` / `pure_api`。`headless_agent` / `player_parity` 是执行或观察 lane；Runtime 类型、部署位置和连接方式不增加玩家访问模式。各 lane 的信息可见性沿用[双轨执行合同](../../world-simulator/llm/provider-agent-dual-mode.prd.md)。
+
+无 GUI 是首期执行能力。关闭 Viewer 后能否继续，取决于实际运行的 Runtime、连接和独立委托仍有效；世界在玩家离开或 Runtime 停止后仍按自身规则推进。远程托管 Runtime 是一种部署选择，本目标不承诺替已关闭的本机 Runtime 提供后台推理服务。
+
+### 2.4 Non-Goals
+
+- 首期不交付任意 Runtime 即插即用、所有原生插件自动可用或跨 Runtime 私有记忆无损迁移。
+- 首期不以未知 WASM 制度自动开发、完整市场/战争、多 Agent 协作或模型训练体系作为首局完成前置；对应长期要求继续由各自主责文档维护。
+- 不重新定义世界规则、认领成本、固定权威节奏、资源计费公式或治理权限；不把外部推理更快解释成更多世界行动权。
+- 不创建人类逐动作遥控游戏 Agent 的入口，不把观战、对话、目标草稿或 Runtime 的内部子任务当作已授权世界行动。
+- 不在本产品文档中冻结协议字段、CLI 参数、认证算法、持久化格式、重试算法或发布 verdict。
+
+## 3. 用户流程与关键决策
+
+### 3.1 正常路径
+
+| 阶段 | 玩家知道什么 | 可以选择什么 | 代价 / 承诺 | 可观察结果与下一步 |
+| --- | --- | --- | --- | --- |
+| 选择接入 | 当前支持的 Runtime 组合、目标世界与可玩范围 | 使用已有 Runtime，完成缺失配置或暂不开始 | 运行环境、模型费用与数据范围可读 | 连接就绪或具体缺项；尚未开始游戏委托。 |
+| 绑定与委托 | 当前身份、可控制 Agent、目标及授权范围 | 绑定已取得的 Agent，按既有规则认领，或先观察 | 认领/维护由玩法主责；执行预算和委托范围分别说明 | 目标 Agent 与有效委托明确，才能开始对应任务。 |
+| 自主推进 | 当前高层目标、阶段进展和主要阻塞 | 在有效授权内让 Runtime 自主推进；需要时调整高层策略 | 已发生与预计开销分开 | Runtime 持续读取观察、调用能力、接收结果并规划下一步。 |
+| 阅读后果 | 哪些行动已结算、仍待决、被拒绝或没有进展 | 等待、补足条件、调整目标或使用受支持恢复路径 | 世界资源变化与推理费用分别归因 | 首局成果由权威结果确认，失败有适用下一步。 |
+| 调整与离开 | 新目标是否已应用；观战和执行是否分别在线 | 修改目标、停止后续委托，或保持授权离开 Viewer | 已提交行动按原权威规则处理 | 新决策消费有效目标；离开观战界面不被误报为停止执行。 |
+| 恢复与继续 | 原世界成果、未完成义务、当前权限和恢复缺项 | 核对待决结果、恢复受支持会话、重新规划或结束 | 不重复结算旧动作，不复活失效委托 | 在同一世界历史上继续，或明确说明不能继续的原因。 |
+
+### 3.2 主要失败与恢复
+
+| 情境 | 产品必须说明 | 适用下一步 |
+| --- | --- | --- |
+| Runtime 不兼容、认证失败或 Agent 不属于当前委托 | 失败所在层、未获得的能力与缺项 | 更正配置、重新认证、选择合法 Agent；不能通过静默更换实现掩盖失败。 |
+| 目标所需能力不在当前范围 | 缺失能力如何阻断当前目标 | 选择适用目标或等待能力补齐；不持续要求 Runtime 猜测不可用命令。 |
+| 资源不足、观察过期、世界拒绝行动 | 当前事实与拒绝原因，已发生和未发生的后果 | 更新观察、补足、等待或重排；适用路径由世界与玩法主责决定。 |
+| 超时或提交结果未知 | 未确认的是推理、投递还是世界结果 | 保留关联并核对原结果；未知不等于取消或确定失败。 |
+| 委托/预算失效、Runtime 停止或重连 | 观战连接、执行连接、授权和世界运行分别处于何种状态 | 停止新的未授权决策或提交，处理已有结果；恢复前重新核对资格。 |
+
+流程呈现、状态优先级与可访问性由[配对产品设计](external-agent-runtime-play.design.md#3-状态与恢复)细化。
+
+## 4. 产品要求
+
+以下均为目标要求，具体支持与完成状态须按 §5 取证。每条要求上承根 SC-14，并消费所列相邻条款；本文只新增外部 Runtime 的组合义务。
+
+<a id="req-ext-001"></a>
+### REQ-EXT-001：Runtime 支持必须有独立、可复现的使用路径
+
+- 要求：每个声明受支持的 Runtime 组合必须提供可复现的接入、就绪、启动和恢复路径；实际承担决策的 Runtime 与所声明对象一致，能力限制在开始委托前可知。
+- 理由：用户能够使用已有 Runtime，并明确区分 Runtime 适配与模型服务接通。
+- 上位承诺：[根 SC-14](prd.md#external-runtime-play)。专业权威：[Local Provider](../../world-simulator/llm/provider-loopback-http-contract.prd.md#local-provider-user-flows)。
+- 验收：[AC-EXT-001](#ac-ext-001)。
+
+<a id="req-ext-002"></a>
+### REQ-EXT-002：连接身份、Agent 资格与委托必须分别成立
+
+- 要求：开始任务前必须核对连接身份、目标 Agent 与有效委托；更换 Runtime、模型或支付路由不得取得别人的 Agent 权限或费用承担资格。接入不得创建额外游戏实体或绕过既有认领与维护条件。
+- 理由：用户知道谁在替哪个 Agent 执行、谁承担哪类成本。
+- 上位承诺：[根 SC-8 / SC-11 / SC-14](prd.md#external-runtime-play)。消费主责：[Agent 委托](agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)、[认领与维护](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#1-产品承诺)。
+- 验收：[AC-EXT-002](#ac-ext-002)。
+
+<a id="req-ext-003"></a>
+### REQ-EXT-003：观察和公布能力必须足以支持声明的玩法
+
+- 要求：Runtime 必须能理解授权视角下的观察、当前目标、可用能力、必要输入和失败含义；声明支持的玩法所需能力必须可经同一权威路径执行。能力或前置条件变化时，接入层必须明确反映限制，不把无法解析或不允许的能力公布成可用。
+- 理由：Runtime 能自主选择有意义的行动，并在世界变化后纠正决策。
+- 上位承诺：[根 SC-6 / SC-7 / SC-14](prd.md#external-runtime-play)。专业权威：[Decision Provider](../../world-simulator/llm/decision-provider-contract.prd.md#4-technical-specifications)、[双轨观察](../../world-simulator/llm/provider-agent-dual-mode.prd.md#provider-execution-user-flows)。
+- 验收：[AC-EXT-003](#ac-ext-003)。
+
+<a id="req-ext-004"></a>
+### REQ-EXT-004：接入必须支持 Runtime 自主推进多轮任务
+
+- 要求：在有效授权内，Runtime 必须能够利用其声明保留的规划、会话上下文和工具编排能力自主形成后续决策；接入方式及能力裁剪必须明示，不能要求用户逐动作重新输入任务。世界事实与 Runtime 的计划、推测和私有记忆必须可区分。
+- 理由：接入保留已有 Runtime 的使用价值，任务能跨多轮连贯推进。
+- 上位承诺：[根 SC-2 / SC-14](prd.md#external-runtime-play)。专业权威：[Harness 权威边界](../../world-simulator/llm/continuous-agent-harness.prd.md#3-权威边界)。
+- 验收：[AC-EXT-004](#ac-ext-004)。
+
+<a id="req-ext-005"></a>
+### REQ-EXT-005：权威结果必须进入后续认知
+
+- 要求：行动结果必须关联到正确 Agent 与任务，已结算成功、拒绝、失败和待决的真实含义必须进入后续决策及玩家反馈；模型自报、请求接受或超时不能代替世界结算，也不能隐式触发另一轮重复执行。
+- 理由：Runtime 能根据真实后果继续，玩家能确认成果和安全下一步。
+- 上位承诺：[根 SC-2 / SC-5 / SC-14](prd.md#external-runtime-play)。专业权威：[反馈隔离](../../world-simulator/llm/continuous-agent-harness.prd.md#7-feedback-correlation-与-isolation)、[世界恢复规则](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#42-recovery-rules)。
+- 验收：[AC-EXT-005](#ac-ext-005)。
+
+<a id="req-ext-006"></a>
+### REQ-EXT-006：高层目标调整必须可确认生效
+
+- 要求：玩家必须能够对合法绑定的 Agent 调整持续目标或提示词，并区分草稿、已接受、已应用和被阻塞；后续决策必须消费当时有效的目标与委托。停止后续委托不自动取消或抹去已有待决行动。
+- 理由：玩家能持续引导自主 Agent，并知道系统何时采用了新的方向。
+- 上位承诺：[根 SC-9 / SC-11 / SC-14](prd.md#external-runtime-play)。消费主责：[Prompt 与目标](agent-conversation-and-prompt-control.prd.md#23-agent-prompt-与目标调整)、[在途意图](provider-agent-experience-continuity.prd.md#21-切换窗口与在途意图)。
+- 验收：[AC-EXT-006](#ac-ext-006)。
+
+<a id="req-ext-007"></a>
+### REQ-EXT-007：执行与观战的在线状态必须分开
+
+- 要求：无 GUI 的 Runtime 执行路径必须可用；关闭或断开观战界面时，只要 Runtime、所需连接、预算和独立委托仍有效，任务应继续。Runtime 停止或执行资格失效时必须如实表达，不能承诺继续产生新决策，也不能暂停世界或伪造既有行动取消。
+- 理由：用户能够离开界面，并准确理解持续运行所需条件。
+- 上位承诺：[根 SC-4 / SC-14](prd.md#external-runtime-play)。专业权威：[双轨执行](../../world-simulator/llm/provider-agent-dual-mode.prd.md#1-executive-summary)；消费主责：[玩家接入与发行中的会话与委托连续性](../player-entry-distribution/prd.md)。
+- 验收：[AC-EXT-007](#ac-ext-007)。
+
+<a id="req-ext-008"></a>
+### REQ-EXT-008：断连和重启必须在原世界历史上恢复
+
+- 要求：受支持的断连/Runtime 重启恢复必须重新核对世界、Agent、权限、有效目标与未决结果；已结算结果不得重做，未知提交先核对，失效授权不得自动复活。无法恢复的 Runtime 私有上下文必须明示，并提供从可信世界事实重新规划的路径。
+- 理由：玩家可以继续已有任务，恢复不会复制成果或悄悄丢失重要义务。
+- 上位承诺：[根 SC-5 / SC-14](prd.md#external-runtime-play)。专业权威：[Runtime recovery](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#42-recovery-rules)；消费主责：[Provider 切换窗口](provider-agent-experience-continuity.prd.md#21-切换窗口与在途意图)。
+- 验收：[AC-EXT-008](#ac-ext-008)。
+
+<a id="req-ext-009"></a>
+### REQ-EXT-009：持续执行的成本和预算边界必须可理解
+
+- 要求：开始和持续执行时必须区分外部推理/工具开销与世界资源成本，说明可执行的预算限制、估计值和未知值；达到可执行限制或授权失效后停止新的受限请求或提交，并保留已有结果的处理路径。无法保证的下游硬上限不得被显示为已强制生效，未知开销不得按零处理。
+- 理由：玩家能够判断是否继续委托，并理解 Runtime 内部调用对开销的影响。
+- 上位承诺：[根 SC-7 / SC-12 / SC-14](prd.md#external-runtime-play)。专业权威：[Harness 有界调用预算](../../world-simulator/llm/continuous-agent-harness.prd.md#request-bound-call-budget)；世界经济与固定节奏消费[长期主责](provider-learning-intelligence-and-cadence.prd.md#21-认证-provider-与固定权威-cadence)。
+- 验收：[AC-EXT-009](#ac-ext-009)。
+
+<a id="req-ext-010"></a>
+### REQ-EXT-010：首期完成必须由真实 Runtime 的完整游戏任务证明
+
+- 要求：OpenClaw 与 Codex 必须分别在声明组合内完成 §2.2 的首局闭环，并提供可追溯的权威结果、目标调整、阻塞与恢复证据。旧 P0 smoke、单次调用、累计动作数量或另一 Runtime 的成功均不能代签。
+- 理由：产品完成对应用户能持续玩起来，而支持范围可以准确评估。
+- 上位承诺：[根 SC-7 / SC-14](prd.md#external-runtime-play)。消费主责：[首局工业结果](../world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-004)；专业权威：[parity](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary)。
+- 验收：[AC-EXT-010](#ac-ext-010)。
+
+## 5. 验收与证据
+
+### 5.1 可独立判定的场景
+
+<a id="ac-ext-001"></a>
+### AC-EXT-001：从已有 Runtime 完成接入
+
+- 覆盖要求：[REQ-EXT-001](#req-ext-001)。
+- 给定：一份声明版本和适配方式的 OpenClaw 或 Codex 环境及其使用说明。
+- 当：用户按推荐路径接入并启动任务。
+- 则：实际决策由声明的 Runtime 会话承担；用户可核对目标世界、适用能力和就绪结果。缺少依赖、不兼容或无法认证时给出明确缺项，不静默换成其他 Runtime 或直接模型调用。
+
+<a id="ac-ext-002"></a>
+### AC-EXT-002：错误绑定和越权成本路由被拒绝
+
+- 覆盖要求：[REQ-EXT-002](#req-ext-002)。
+- 给定：一个合法委托，以及他人 Agent、失效委托或不属于当前身份的费用路由作为负例。
+- 当：执行方尝试绑定、开始任务或在资格改变后继续。
+- 则：只有合法组合取得相应能力；公开标识或路由选择不能代替认证和授权，非法组合不产生新世界动作或未经授权的费用。接入不增加游戏实体、认领补贴或维护豁免。
+
+<a id="ac-ext-003"></a>
+### AC-EXT-003：公布能力与首局执行一致
+
+- 覆盖要求：[REQ-EXT-003](#req-ext-003)。
+- 给定：首局代表链所需的合法观察和能力，以及前置条件已变化的负例。
+- 当：Runtime 根据公布的语义和输入要求选择行动。
+- 则：合法行动能走到世界裁决并产生对应结果；不支持的能力在选择前可知，前置变化形成可理解的拒绝或重新观察路径。受限 lane 不泄露其他 lane 才能观察的信息。
+
+<a id="ac-ext-004"></a>
+### AC-EXT-004：目标驱动的多轮自主推进
+
+- 覆盖要求：[REQ-EXT-004](#req-ext-004)。
+- 给定：有效目标、委托与声明的 Runtime 会话能力。
+- 当：任务需要多次观察、规划和行动才能推进。
+- 则：Runtime 使用前轮上下文和反馈继续，用户无需逐动作重复任务；可观察到计划变化与工具/行动结果的关联，且私有推测不会被呈现为世界事实。不要求披露模型内部思维过程。
+
+<a id="ac-ext-005"></a>
+### AC-EXT-005：成功、拒绝和未知结果均形成闭环
+
+- 覆盖要求：[REQ-EXT-005](#req-ext-005)。
+- 给定：分别成功结算、被拒绝、仍待决以及投递后超时的关联请求。
+- 当：世界返回结果，或执行方恢复查询原结果。
+- 则：真实反馈进入正确 Agent 的后续决策，成功不会被反馈通道丢弃；拒绝可用于修正，未知保留关联并等待核对。客户端重试或响应迟到不产生第二次世界效果。
+
+<a id="ac-ext-006"></a>
+### AC-EXT-006：目标调整与停止后续委托可读
+
+- 覆盖要求：[REQ-EXT-006](#req-ext-006)。
+- 给定：正在执行的任务、一个有效新目标，以及一个尚未结算的旧请求。
+- 当：玩家修改持续目标或停止后续委托。
+- 则：可以区分接受与实际应用；应用后新决策依据有效目标和授权，旧请求仍按原权威合同处理。对话回复、草稿更新或“已停止”的界面提示不能伪造应用、取消或结算。
+
+<a id="ac-ext-007"></a>
+### AC-EXT-007：断开观战与停止 Runtime 产生不同结果
+
+- 覆盖要求：[REQ-EXT-007](#req-ext-007)。
+- 给定：一个可无 GUI 运行、独立委托有效的 Runtime 会话及其声明的 primary mode。
+- 当：先按声明入口断开观战并恢复，再停止 Runtime 或使执行资格失效；`viewer` 验证关闭/回访，`pure_api` 验证断开观察客户端/重新读取观察。
+- 则：第一种情形下任务可以继续且回访可看到真实后果；第二种情形如实停止新决策或受限提交，世界继续推进，已受理行动仍可核对。所声明入口提供可理解或可消费的对应状态；一个入口通过不代签另一个。
+
+<a id="ac-ext-008"></a>
+### AC-EXT-008：断连和进程重启后安全继续
+
+- 覆盖要求：[REQ-EXT-008](#req-ext-008)。
+- 给定：同时存在已结算成果和未决请求的任务。
+- 当：分别发生连接中断和受支持 Runtime 进程重启，再尝试恢复。
+- 则：在原世界与 Agent 身份上核对结果，不重放已结算动作，不把旧会话恢复视为新授权；上下文缺失或资格失效时说明限制和重新规划/授权路径。两类故障分别留下证据。
+
+<a id="ac-ext-009"></a>
+### AC-EXT-009：预算耗尽与未知开销如实表达
+
+- 覆盖要求：[REQ-EXT-009](#req-ext-009)。
+- 给定：一组可执行预算限制和一组下游内部开销不可完全观测的组合。
+- 当：持续执行达到限制，或成本数据缺失。
+- 则：受限新请求停止；待决结果仍可查询与处理；已知实际值、估计与未知分开，世界消耗与模型/工具费用分别归因。受限观测不能被表述为下游全链路硬预算保证。
+
+<a id="ac-ext-010"></a>
+### AC-EXT-010：两个 Runtime 分别完成首局闭环
+
+- 覆盖要求：[REQ-EXT-010](#req-ext-010)。
+- 给定：对 OpenClaw、Codex 分别声明的实际运行组合，以及同一玩法版本下可比较、满足既有首局可行性条件的初始场景。
+- 当：用户按推荐路径接入，绑定一个合法 Agent，提供高层目标，并让其自主完成代表性工业任务。
+- 则：每个 Runtime 各自取得首局主责要求的权威生产成果；在同一世界、Agent 与任务历史上，分别证明一次真实资源/生产阻塞及继续、一次持续目标应用、按声明入口离开后的回访，以及断连与 Runtime 重启后的原任务续接。`viewer` 验证关闭/回访，`pure_api` 验证观察客户端断开/重新读取；不要求进程重启后保留同一 Runtime 私有会话身份。世界成果、反馈、目标和主要开销可追溯；各项分别判定，失败不得被累计动作数掩盖。
+- 完成边界：首产物只证明 `production_only` 成果；稳定生产、交付、需求满足、节点灾备、另一个玩家入口和更广 Runtime 支持均需其自身证据。首局通过也不自动替代专业 parity 或公开发行准入。
+
+### 5.2 叶级追踪
+
+| REQ / AC 关系 | 专业 owner | 专业权威 | 验证证据（应提供） | 测试层级 |
+| --- | --- | --- | --- | --- |
+| [REQ-EXT-001](#req-ext-001) / [AC-EXT-001](#ac-ext-001) | agent_engineer / qa_engineer | [Local Provider 使用路径](../../world-simulator/llm/provider-loopback-http-contract.prd.md#local-provider-user-flows) | Runtime 版本、适配方式、实际会话与接入正负例 | test_tier_full |
+| [REQ-EXT-002](#req-ext-002) / [AC-EXT-002](#ac-ext-002) | agent_engineer / runtime_engineer / qa_engineer | [Runtime 权威边界](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#6-agentintentv2-与-authoritycapability-边界) | 合法委托、错误身份/Agent/费用路由与资格变化负例 | test_tier_required |
+| [REQ-EXT-003](#req-ext-003) / [AC-EXT-003](#ac-ext-003) | agent_engineer / gameplay_designer / runtime_engineer | [Decision Provider 能力合同](../../world-simulator/llm/decision-provider-contract.prd.md#4-technical-specifications) | 首局能力的公布、解析、裁决与可见性一致性 | test_tier_required |
+| [REQ-EXT-004](#req-ext-004) / [AC-EXT-004](#ac-ext-004) | agent_engineer / qa_engineer | [Harness 生命周期](../../world-simulator/llm/continuous-agent-harness.prd.md#3-权威边界) | 真实 Runtime 的多轮目标、上下文和行动结果关联 | test_tier_full |
+| [REQ-EXT-005](#req-ext-005) / [AC-EXT-005](#ac-ext-005) | agent_engineer / runtime_engineer / qa_engineer | [反馈关联](../../world-simulator/llm/continuous-agent-harness.prd.md#7-feedback-correlation-与-isolation) | 真实成功反馈及拒绝、未知、迟到和重复反馈对账 | test_tier_full |
+| [REQ-EXT-006](#req-ext-006) / [AC-EXT-006](#ac-ext-006) | agent_engineer / viewer_engineer / qa_engineer | [目标与 continuation](../../world-simulator/llm/continuous-agent-harness.prd.md#9-goal-与-continuation-边界) | 目标接受/应用、新决策及旧待决请求的各自结果 | test_tier_full |
+| [REQ-EXT-007](#req-ext-007) / [AC-EXT-007](#ac-ext-007) | agent_engineer / viewer_engineer / qa_engineer | [无 GUI 执行](../../world-simulator/llm/provider-agent-dual-mode.prd.md#1-executive-summary) | Viewer 关闭/回访、执行停止和授权失效的区别 | test_tier_full |
+| [REQ-EXT-008](#req-ext-008) / [AC-EXT-008](#ac-ext-008) | agent_engineer / runtime_engineer / qa_engineer | [Runtime 恢复](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#42-recovery-rules) | 连接与进程故障、旧结果不重做和权限重验 | test_tier_full |
+| [REQ-EXT-009](#req-ext-009) / [AC-EXT-009](#ac-ext-009) | agent_engineer / runtime_engineer / qa_engineer | [有界调用预算](../../world-simulator/llm/continuous-agent-harness.prd.md#request-bound-call-budget) | 限制生效、未知开销及两类成本归因 | test_tier_required |
+| [REQ-EXT-010](#req-ext-010) / [AC-EXT-010](#ac-ext-010) | producer_system_designer / agent_engineer / gameplay_designer / qa_engineer | [parity 证据范围](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary) | 两个 Runtime 各自的代表性首局与恢复完整记录 | test_tier_full |
+
+### 5.3 证据范围与判定
+
+每次判断保留适用 Runtime/版本、adapter、模型/profile、世界与玩法候选、Agent、primary mode、执行 lane、权限/预算、场景和时间窗口。普通 CI 优先验证可稳定复现的协议、授权、反馈、重复与恢复负例；真实 Runtime 会话证明实际适配及多轮行为，世界 receipt/journal 证明世界效果，玩家体验核对证明目标、阻塞和下一步可读。各类证据分别说明其覆盖范围，不要求为同一可自动验证事实重复增加专用环境验收。
+
+OpenClaw 与 Codex 逐项、分别出结论；一个组合可以先形成其有限证据，两者完成才满足本文首批目标。需要宣称 `viewer` 与 `pure_api` 都可用时分别提供入口证据；主流程没有图形依赖不自动证明 Viewer 交互或浏览器内 Runtime 已实现。
+
+模型行为存在不确定性，重复样本、任务完成率、等待与失败阈值沿用专业 parity 对相应场景的定义；真实首局场景应有自己的对应证据，不能搬用六动作 profile 的历史阈值和样本。产品验收不要求不同模型产生相同计划，也不把底层模型能力差异算作接入缺陷；接入导致的能力缺失、结果丢失和恢复错误须单独识别。
+
+## 6. 权威与相邻专题
+
+| 本文组合的语义 | 唯一主责与边界 |
+| --- | --- |
+| 外部 Runtime 首次接入至持续游玩的完整体验 | 本 PRD；同名 design 负责体验组织。 |
+| 认领、维护、生产成果、资源与经营恢复 | [玩法产品](../world-rules-core-gameplay/prd.md)与其首局/所有权分册；本文不新增经济权利或完成定义。 |
+| 自治、委托、提示词与 provider 切换 | [自治与责任](agent-authority-ownership-and-accountability.prd.md)、[Prompt](agent-conversation-and-prompt-control.prd.md)、[体验连续性](provider-agent-experience-continuity.prd.md)；本文消费其规则，新增外部 Runtime 路径的可用性要求。 |
+| 账户、会话、访问模式和公开 claim | [玩家接入与发行](../player-entry-distribution/prd.md)；Runtime 接入不产生新玩家模式或默认发行资格。 |
+| 观察/决策/反馈、适配、记忆策略与持续调度 | [LLM/provider 专业入口](../../world-simulator/llm/README.md)及对应合同；协议路线由专业设计决定。 |
+| 世界提交、持久化、恢复与最终性 | [权威世界基础设施](../world-infrastructure/prd.md)与 [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md)；Runtime 自述不产生世界事实。 |
+| 具体组合的行为、时延与发布条件 | [parity 权威](../../world-simulator/llm/provider-agent-experience-parity.prd.md)及 QA 证据；旧 P0、Harness 验证和本文首局各自保留其范围。 |
+
+## 7. 设计取舍与后续细化
+
+产品目标、首批 Runtime、代表性首局与上述验收义务已明确。后续系统设计需给出各 Runtime 的适配方式、会话保留方式、实际可执行预算、能力映射与恢复方案；这些实现选择不能降低产品完成标准，也不在本 PRD 中预设未验证接口。
+
+进入具体组合的实现和试点前，agent/runtime/QA owner 应选定可复现版本、部署环境、模型/profile 与对应场景阈值；判断记录保存在 Git、PR 和实际验证结果中。跨 Runtime 私有上下文迁移、更多玩法和托管运行按各自范围推进，不作为首期闭环的隐藏依赖。

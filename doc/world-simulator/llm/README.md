@@ -1,9 +1,23 @@
 # World-simulator LLM and provider authority
 
 This directory contains durable requirements and contracts for in-world Agent
-decision providers.  It is not a task board: mutable task status, assignments,
-checklists, execution history, and review evidence belong to the GitHub Issue
-and Project for the active task.
+decision providers. It is not a task board: mutable delivery facts belong to
+Git, PRs and actual verification records; Issues and Projects are used when
+tracking needs them, as defined by the development workflow.
+
+## Product outcome
+
+The [external Agent Runtime gameplay PRD](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)
+owns the user-facing goal, first-release Runtime scope, complete first-session
+journey and support claims. Users bring an existing Agent Runtime, bind it to a
+lawfully acquired or authorized in-world Agent, and let it repeatedly observe,
+act and learn from authoritative outcomes. OpenClaw and Codex are separate
+first-release acceptance targets; naming either is not evidence of support.
+
+The contracts below supply the provider, transport, observation, cognition and
+evaluation requirements for that outcome. Their original low-frequency NPC P0
+smoke and technical milestones remain scoped evidence. They do not replace the
+product's representative production, recovery and return-session acceptance.
 
 ## Authority map
 
@@ -48,8 +62,10 @@ and Project for the active task.
   default experience.
 - `provider-agent-dual-mode.prd.md` and
   `provider-agent-dual-mode-contract.md` define the `player_parity` and
-  `headless_agent` observation modes.  They share the same action schema and
-  runtime validation; only their observation exposure differs.
+  `headless_agent` execution/observation lanes. They share the same action schema
+  and runtime validation; only their observation exposure differs. Formal
+  player access modes remain `viewer` and `pure_api`, as defined by the
+  [player-entry authority](../../product/player-entry-distribution/prd.md).
 - `llm-factory-strategy-optimization.*` and `llm-lmso29-stability.*` define
   prompt, typed-decision, recovery, and context-budget safeguards for the
   builtin Agent loop.
@@ -60,6 +76,11 @@ and Project for the active task.
   semantics, resource effects, replay, memory truth, or player promises.
   Unknown, malformed, timed-out, or disallowed provider output must have a
   structured trace and follow the documented safe failure path.
+- Provider-neutral contracts preserve each external Runtime's own planning,
+  private memory and tool orchestration within the applicable authorization
+  and budget. They standardize world-facing requests and outcomes, not the
+  Runtime's internal implementation. Runtime-private beliefs cannot become
+  authoritative world facts without the world's validated outcome.
 - Prompt/module history, memory digests, raw provider output, token counts,
   latency, and retries are diagnostic or evaluation inputs.  They do not by
   themselves prove parity, cost, replay closure, release readiness, or default
@@ -81,7 +102,10 @@ and Project for the active task.
   headless success does not establish player-experience parity.  Dual-mode
   contract completion likewise does not grant default enablement; that remains
   subject to the parity PRD's behavior and latency gates.
+- Running without a GUI assumes the external Runtime is still online and its
+  budget and delegation remain valid. Closing a Viewer does not create hosted
+  execution or continued computation after that Runtime stops. Each claimed
+  Runtime/version/configuration and primary access mode needs its own evidence.
 
 Use the linked PRD/design/contract for durable technical or product claims.
-Use PR 与实际验证记录 for the mutable work history that previously appeared
-in PR、实际 CI 与评审记录（Issue 按需） records.
+Use PRs and actual verification records for mutable work history.
