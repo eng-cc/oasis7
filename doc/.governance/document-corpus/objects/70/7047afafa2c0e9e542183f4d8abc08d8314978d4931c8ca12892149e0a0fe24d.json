@@ -1,14 +1,14 @@
 {
   "record": {
-    "authority_entry": "doc/world-simulator/README.md",
+    "authority_entry": "doc/world-runtime/README.md",
     "authority_layer": "professional_domain",
-    "content_sha256": "54f4b15bff5c0b29c4b2166931c8912b10c569afe99ab616accadb9146eeff80",
+    "content_sha256": "d667e7a43bdea1cc9680bcd472b864eb18f78b24fe02d0d17726dee7cbb8ba40",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "active_candidate",
-    "object_kind": "landing",
-    "path": "doc/world-simulator/llm/README.md",
+    "object_kind": "design",
+    "path": "doc/world-runtime/runtime/player-runtime-collaboration.design.md",
     "registry_type": "professional_domain",
-    "routing_batch": "world-simulator-corpus-review",
+    "routing_batch": "world-runtime-corpus-review",
     "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
     "semantic_decision_owner": "runtime_engineer",
     "structural_owner": "runtime_engineer"
