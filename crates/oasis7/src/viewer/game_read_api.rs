@@ -76,10 +76,16 @@ pub(super) fn handle(
     request: &Request,
     client: Option<&RemoteWorldServiceClient>,
 ) -> ErrorResponse {
-    let result = route(request, client);
+    render_response(route(request, client))
+}
+
+fn render_response(result: Result<Value, (u16, &'static str)>) -> ErrorResponse {
     let (mut status, mut body) = match result {
         Ok(value) => (200, value),
-        Err((status, code)) => (status, json!({"code":code, "retryable":status == 503})),
+        Err((status, code)) => (
+            status,
+            json!({"code":code, "retryable":matches!(status, 429 | 503)}),
+        ),
     };
     if body.to_string().len() > 2 * 1024 * 1024 {
         status = 503;
@@ -167,6 +173,10 @@ fn route(
     if signed.request.fixed_commit.is_some() {
         return Err((400, "historical_read_unavailable"));
     }
+    signed
+        .request
+        .validate()
+        .map_err(|_| (400, "invalid_actor_proof"))?;
     let _permit = ReadPermit::acquire()?;
     let view = client
         .read_actor_view(signed)

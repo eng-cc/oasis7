@@ -280,3 +280,25 @@ fn bootstrap_rejects_public_bind_and_plaintext_remote_backend() {
             .is_ok()
     );
 }
+
+#[test]
+fn read_errors_distinguish_transient_limits_from_invalid_requests() {
+    let response = render_response(Err((429, "read_limit_exceeded")));
+    assert_eq!(response.status(), 429);
+    let body: Value = serde_json::from_str(response.body().as_ref().unwrap()).unwrap();
+    assert_eq!(body["retryable"], true);
+
+    let client = client("http://127.0.0.1:1".into());
+    let mut payload = proof(&client).request;
+    payload.contract_version = WORLD_SERVICE_CONTRACT_VERSION + 1;
+    let signed = authority::sign_read_request(VIEW_PATH, payload, &hex::encode([8; 32])).unwrap();
+    let response = handle(&request(Some(&signed)), Some(&client));
+    assert_eq!(
+        response.status(),
+        400,
+        "invalid signed payload must not contact backend"
+    );
+    let body: Value = serde_json::from_str(response.body().as_ref().unwrap()).unwrap();
+    assert_eq!(body["code"], "invalid_actor_proof");
+    assert_eq!(body["retryable"], false);
+}
