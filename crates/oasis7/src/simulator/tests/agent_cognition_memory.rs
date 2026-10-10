@@ -48,6 +48,10 @@ fn empty_memory_snapshot_is_explicit_and_digest_stable() {
     assert!(first.entries.is_empty());
     assert_eq!(first.scope, "turn_private");
     assert!(!first.digest.is_empty());
+    assert_eq!(
+        first.digest,
+        "blake3:e6c8320449505fd5dc2fe87f7081a41be6e2264645190f86fb716006bb93879d"
+    );
     assert_eq!(first.digest, second.digest);
     assert_eq!(
         serde_json::to_value(&first).expect("encode empty memory snapshot")["digest"],

@@ -39,6 +39,10 @@ fn empty_goal_snapshot_is_explicit_revision_zero_and_digest_stable() {
     assert_eq!(first.blocked_reason, None);
     assert_eq!(first.provenance, "harness_projection");
     assert!(!first.digest.is_empty());
+    assert_eq!(
+        first.digest,
+        "blake3:31c93293570c36946869bc941435981ad5063734e65342a5eda6b79ec6fc9fe9"
+    );
     assert_eq!(first.digest, second.digest);
 
     let encoded = serde_json::to_value(&first).expect("encode empty GoalSnapshot");
