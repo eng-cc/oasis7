@@ -37,6 +37,23 @@ routing, or the local HTTP provider callback with an authenticated world
 play API. Removal requires checking actual independent consumers and preserving
 world execution authority, durable results and active player permissions.
 
+## Agent-initiated gameplay system designs
+
+The following target contracts implement the product scope merged in #4493.
+They are technical design inputs, not shipped endpoints or runtime proof.
+
+| Technical responsibility | Canonical design |
+| --- | --- |
+| Versioned Game API, identity, capabilities, admission and recoverable operations | [Game API](external-agent-game-api.design.md) |
+| Runtime-owned task/goal/approval state, executor fences and durable message recovery | [Player/runtime collaboration](../../world-runtime/runtime/player-runtime-collaboration.design.md) |
+| Official Skill, OpenClaw/Codex drivers, local worker lifecycle and budget boundaries | [Runtime adapters](external-agent-runtime-adapter.design.md) |
+| Shared Web/native world projections, spatial navigation and authorized guidance | [World view](../viewer/external-agent-world-view.design.md) |
+| Deterministic contract, fault-injection and separately authorized real-runtime/UI scenarios | [Validation manual](../../testing/manual/external-agent-runtime-contract-validation.manual.md) |
+
+All four designs consume the existing product requirements and preserve Runtime
+world authority. The new Game API is not the old Provider callback under an alias;
+its rollout may retire unnecessary Bridge code after checking real consumers.
+
 ## Authority map
 
 - `decision-provider-contract.prd.md` and `.design.md` define the provider-
