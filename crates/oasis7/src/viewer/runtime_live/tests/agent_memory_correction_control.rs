@@ -122,6 +122,16 @@ pub(super) fn drive_provider_action(
         match server.enqueue_llm_action_from_sidecar() {
             Ok(Some(_trace)) if !expect_failure => return Ok(None),
             Err(trace) if expect_failure => {
+                // Recovery/settlement failures are not the requested provider
+                // disposition. Preserve their full trace instead of letting a
+                // later correction-state assertion hide the first failure.
+                if super::super::decision_trace::decision_trace_provider_error_retryable(&trace)
+                    != Some(false)
+                {
+                    return Err(format!(
+                        "provider did not return a typed nonretryable error: {trace:?}"
+                    ));
+                }
                 return Ok(Some(
                     trace.llm_error.unwrap_or_else(|| "provider failed".into()),
                 ));
@@ -1041,6 +1051,7 @@ fn owner_signed_memory_correction_applies_to_matching_provider_receipt_and_reloa
     );
     let failed = drive_provider_action(&mut server, true)
         .expect("nonretryable provider error terminalizes the correction");
+    println!("nonretryable_provider_failure_actual={failed:?}");
     assert!(failed
         .as_deref()
         .is_some_and(|message| message.contains("unauthorized") || message.contains("provider")));
