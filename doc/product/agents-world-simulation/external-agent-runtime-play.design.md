@@ -64,6 +64,14 @@
 
 正式桌面客户端可以内嵌 Web 舞台，但必须在客户端内部操作世界；仅跳转系统浏览器不算满足客户端体验。世界浏览、空间数据和 P1-A/B/C 前置由[世界舞台单一主责](player-readable-world-stage.prd.md#world-exploration-surfaces)及其配对设计定义。本设计只是外部 Runtime 游戏闭环的组合，不声明旧 2D overview 或 native viewer 已交付。
 
+### 2.6 玩家与外部 Runtime 的双向持续协作
+
+Web/桌面玩家不直接控制 OpenClaw/Codex 的聊天进程，而是将有权发布的目标、约束、问题和决定保存到同一游戏任务。当前受权执行方经 Game API 读取版本化目标与增量变化，分别确认读取、声明采纳并将有效版本用于新决策；计划与阻塞报告、双向问答、授权申请和世界结果返回同一任务上下文。跨设备回访不要求复制原聊天记录或重新创建 Agent。
+
+目标已保存、执行方已读取、采纳声明、实际用于决策和世界已执行是不同事实。普通聊天不能自动改目标或批准权限；累计预算、撤销和过期按世界权威规则生效，不等待执行方确认。离线发布显示等待执行方，增量缺口/重复/迟到消息按当前目标与权限恢复，而非重演旧指令。
+
+[玩家与外部 Runtime 持续协作 PRD](player-runtime-collaboration.prd.md#player-runtime-collaboration)拥有该通路的局部功能清单和验收，[配对协作设计](player-runtime-collaboration.design.md)承接状态、问答与授权交互。其要求细化本体验既有的目标应用、授权、反馈和恢复，不新建一套世界权威或开发任务台账。实际启动/接收/等待/唤醒能力须由各受支持执行组合提供；Skill 不是常驻进程，关闭执行方后不能承诺后台推理。
+
 ## 3. 状态与恢复
 
 ### 3.1 分开表达四类状态
@@ -143,7 +151,7 @@
 | [REQ-EXT-003](external-agent-runtime-play.prd.md#req-ext-003) | [AC-EXT-003](external-agent-runtime-play.prd.md#ac-ext-003) | §2.2 合法能力、前置变化与首局结果。 |
 | [REQ-EXT-004](external-agent-runtime-play.prd.md#req-ext-004) | [AC-EXT-004](external-agent-runtime-play.prd.md#ac-ext-004) | §2.1–2.2 自主推进；§4 计划与反馈层次。 |
 | [REQ-EXT-005](external-agent-runtime-play.prd.md#req-ext-005) | [AC-EXT-005](external-agent-runtime-play.prd.md#ac-ext-005) | §2.2 权威后果；§3 未知结果与核对。 |
-| [REQ-EXT-006](external-agent-runtime-play.prd.md#req-ext-006) | [AC-EXT-006](external-agent-runtime-play.prd.md#ac-ext-006) | §2.3 目标应用与停止后续委托。 |
+| [REQ-EXT-006](external-agent-runtime-play.prd.md#req-ext-006) | [AC-EXT-006](external-agent-runtime-play.prd.md#ac-ext-006) | §2.3 目标应用与停止后续委托；§2.6 跨 Runtime 协作。 |
 | [REQ-EXT-007](external-agent-runtime-play.prd.md#req-ext-007) | [AC-EXT-007](external-agent-runtime-play.prd.md#ac-ext-007) | §2.3 回访；§3.1 分开的四类状态。 |
 | [REQ-EXT-008](external-agent-runtime-play.prd.md#req-ext-008) | [AC-EXT-008](external-agent-runtime-play.prd.md#ac-ext-008) | §3.2 故障恢复与原世界历史。 |
 | [REQ-EXT-009](external-agent-runtime-play.prd.md#req-ext-009) | [AC-EXT-009](external-agent-runtime-play.prd.md#ac-ext-009) | §3.2 预算限制；§5 两类成本与继续选择。 |

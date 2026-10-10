@@ -2,11 +2,11 @@
   "record": {
     "authority_entry": "doc/product/README.md",
     "authority_layer": "product_overlay",
-    "content_sha256": "5e1fcc0ad1d6fd632435530be68fd9c9beca884263e3f2c5c8aca74a0b874765",
+    "content_sha256": "3413bdd8ef7e3aeb598e92ec6133ae7be12873fb7077ac9608fbc6cdbf95b509",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "active_candidate",
     "object_kind": "design",
-    "path": "doc/product/agents-world-simulation/external-agent-runtime-play.design.md",
+    "path": "doc/product/agents-world-simulation/player-runtime-collaboration.design.md",
     "registry_type": "product_overlay",
     "routing_batch": "product-corpus-review",
     "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",

@@ -18,6 +18,7 @@
 ### 活跃产品专题
 
 - [外部 Agent Runtime 接入与持续游玩](external-agent-runtime-play.prd.md)：明确用户带 OpenClaw、Codex 等 Runtime 接入的产品目标、职责边界、首期完整游戏流程与分别验收；[配对产品设计](external-agent-runtime-play.design.md)承接接入、委托、运行和恢复体验。
+- [玩家与外部 Runtime 的持续协作](player-runtime-collaboration.prd.md)：细化 Web/桌面玩家与 OpenClaw/Codex 的任务绑定、目标版本确认、进度汇报、双向问答、授权申请及离线恢复；[配对产品设计](player-runtime-collaboration.design.md)承接协作交互。
 - [Agent/provider 体验连续性](provider-agent-experience-continuity.prd.md)：只收敛玩家体验承诺；provider 组合的场景范围、评估方法与结论仍由专业域权威文档维护。
 - [玩家可读的世界舞台](player-readable-world-stage.prd.md)：约束正式世界表面的首读层级、空间关系来源、可归因玩家因果与按需诊断边界。
 - [玩家可读表面的连续性](player-readable-surface-continuity.prd.md)：约束 viewport、信息密度、语言与连接状态变化时，主要决策面仍可读、可操作且可恢复。
@@ -56,6 +57,8 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 
 本节与 SC-14 的首期范围、用户流程、**官方 Skill 引导 + 可直接调用的标准 Game API** 及叶子验收由[外部 Runtime 产品分册](external-agent-runtime-play.prd.md#external-runtime-canonical-interface)拥有。外部 Runtime 主动读取观察、发现能力、提交并追读权威结果；原 Provider callback/Bridge 仅是可替换的既有实现，不能代签完整产品能力。OpenClaw 与 Codex 是分别取证的首批目标；产品目标不表示当前已经支持或默认启用。`viewer` / `pure_api` 仍是玩家访问模式，`headless_agent` / `player_parity` 是执行 lane；关闭观战界面后的持续执行以 Runtime、连接、预算和独立委托仍有效为条件。认领/维护、工业成果、自治与授权、公开状态继续消费各自主责条款。
 
+玩家与外部 Runtime 通过持久化的游戏任务、目标、消息和有效委托协作，而非由网页直接控制某个聊天进程。目标保存、执行方读取、采纳声明、实际用于新决策和世界结果分别表达；普通聊天不自动改目标或授权。具体协作功能与验收见[持续协作分册](player-runtime-collaboration.prd.md#player-runtime-collaboration)，其[局部功能清单](player-runtime-collaboration.prd.md#collaboration-feature-catalog)细化外部 Runtime 主清单已有承诺，不重编主功能编号。
+
 ## 3. 权威与冲突处理
 
 | 产品层拥有 | 专业域权威 |
@@ -90,7 +93,7 @@ Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[A
 - SC-11：玩家可在高自治和有界授权模式间作出可读选择；严重后果只在有效的提前授权或后续有效确认下执行。Agent 团队扩张、转让、异议、owner override 与组织责任保持身份连续、授权边界和可审计因果，不把 Agent 当作责任替身。
 - SC-12：代表性 Agent 样例证明可选择 provider profile 只能经证据优先的准入、有限试点/分层/范围与暂停/撤销后使用，且不会改变固定权威节奏或 action slots；训练、认证、重训与情报在可审计、可更新和安全披露边界下形成连续历史，不以现有 Local Provider parity 或局部证据代签当前 readiness。
 - SC-13：长期世界舞台保持世界、Agent/路线、blocker 与下一步为默认 primary decision surface；真实 Web 和受支持桌面客户端分别可从世界总览浏览区域/Fragment、缩放平移、定位选择与查看对象和事件并返回合法指导；terrain/blocks 不暗示直接 edit/harvest/build，不将长期可视化方向误报为当前 2D/native/zoom 已交付。
-- SC-14：OpenClaw、Codex 各自在声明组合中驱动合法绑定 Agent 完成代表性首局，包括自主多轮决策、合法能力、权威反馈、持续目标应用、无 GUI 运行和恢复；玩家另通过真实 Web 和受支持桌面客户端分别探索同一大世界、定位 Agent、查看权威结果并合法间接指导。API、旧 P0 smoke、模型连通或另一 surface 的证据不代签完整游戏体验。
+- SC-14：OpenClaw、Codex 各自在声明组合中驱动合法绑定 Agent 完成代表性首局，包括自主多轮决策、合法能力、权威反馈、持续目标应用、无 GUI 运行和恢复；玩家另通过真实 Web 和受支持桌面客户端分别探索同一大世界、定位 Agent、查看权威结果并合法间接指导。玩家与执行方还须能围绕同一任务发布并确认目标、汇报、问答、明确授权及断线后恢复；目标/授权的当前版本不能被旧消息覆盖。API、旧 P0 smoke、模型连通或另一 surface 的证据不代签完整游戏体验。
 
 ### 5.1 验收追踪
 
@@ -109,7 +112,7 @@ Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[A
 | SC-11 | producer_system_designer / agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md`; `doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 自治/授权、规模、转让、异议/override、责任 receipt 和正式 surface 可读性的组合证据；系统边界追踪见 DES-WR-IA-010..012 | test_tier_required |
 | SC-12 | producer_system_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/provider-learning-intelligence-and-cadence.prd.md`; `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | provider 准入/暂停、固定 cadence、训练/认证/重训历史、情报私有期/披露/公共 baseline 与 freshness 的组合证据 | test_tier_full |
 | SC-13 | producer_system_designer / game_visual_interaction_designer / viewer_engineer / gameplay_designer / qa_engineer | PRD-GAME-014 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/player-readable-world-stage.prd.md`; `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 世界舞台、Web/native 分别交互、区域/Fragment 下钻、定位选择、合法指导与回执、terrain 非直接动作与当前 claim 分离证据 | test_tier_required |
-| SC-14 | producer_system_designer / agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-038 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/external-agent-runtime-play.prd.md`; `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`; `doc/world-simulator/prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 两真实 Runtime 分别用 Skill/Game API 完成首局、目标、反馈与恢复；Web 和桌面客户端分别完成世界交互、Agent 定位与合法指导；旧 Bridge 非默认前置，支持范围绑定版本、玩法、入口与证据窗口 | test_tier_full |
+| SC-14 | producer_system_designer / agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-038 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/external-agent-runtime-play.prd.md`; `doc/product/agents-world-simulation/player-runtime-collaboration.prd.md`; `doc/world-simulator/llm/provider-agent-experience-parity.prd.md`; `doc/world-simulator/prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 两真实 Runtime 分别用 Skill/Game API 完成首局、目标、反馈与恢复；Web 和桌面客户端分别完成世界交互、Agent 定位与合法指导；同一任务的目标接收/采纳、问答、授权和离线恢复分别有证据；旧 Bridge 非默认前置，支持范围绑定版本、玩法、入口与证据窗口 | test_tier_full |
 
 ## 6. Non-Goals
 
