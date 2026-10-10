@@ -91,6 +91,58 @@ pub(crate) fn read_regular(path: &Path, max_bytes: usize) -> Result<Vec<u8>, Sig
     read_open_candidate(file, max_bytes)
 }
 
+/// Check directory identity without requiring permission to list its contents.
+/// The retained descriptor is never exposed as a content-capable Directory.
+pub(crate) fn directory_identity(path: &Path) -> Result<fs::Metadata, SignerError> {
+    directory_identity_inner(path, true)
+}
+
+fn directory_identity_inner(path: &Path, protected: bool) -> Result<fs::Metadata, SignerError> {
+    crate::types::validate_absolute_path(&path.to_string_lossy())
+        .map_err(|_| SignerError::InstallationDrift)?;
+    let access = search_directory_access();
+    let mut directory = File::open("/")?;
+    for component in std::iter::once(None).chain(path.components().filter_map(|component| {
+        if let Component::Normal(part) = component {
+            Some(Some(part))
+        } else {
+            None
+        }
+    })) {
+        if let Some(part) = component {
+            directory = File::from(
+                openat(
+                    directory.as_fd(),
+                    part,
+                    access | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                    Mode::empty(),
+                )
+                .map_err(map_openat_error)?,
+            );
+        }
+        if protected {
+            validate_protected_metadata(&directory.metadata()?, false)?;
+            reject_extended_acl(&directory)?;
+        }
+    }
+    Ok(directory.metadata()?)
+}
+
+fn search_directory_access() -> OFlag {
+    #[cfg(target_os = "macos")]
+    {
+        OFlag::from_bits_retain(libc::O_SEARCH)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        OFlag::O_PATH
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        OFlag::O_RDONLY
+    }
+}
+
 /// A retained directory capability; subsequent operations never resolve its ancestors again.
 pub(crate) struct Directory(File);
 
@@ -103,21 +155,36 @@ impl Directory {
             validate_protected_metadata(&directory.metadata()?, false)?;
             reject_extended_acl(&directory)?;
         }
-        for component in path.components() {
-            if let Component::Normal(part) = component {
-                directory = File::from(
-                    openat(
-                        directory.as_fd(),
-                        part,
-                        OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
-                        Mode::empty(),
-                    )
-                    .map_err(map_openat_error)?,
-                );
-                if protected {
-                    validate_protected_metadata(&directory.metadata()?, false)?;
-                    reject_extended_acl(&directory)?;
+        let parts: Vec<_> = path
+            .components()
+            .filter_map(|component| {
+                if let Component::Normal(part) = component {
+                    Some(part)
+                } else {
+                    None
                 }
+            })
+            .collect();
+        for (index, part) in parts.iter().enumerate() {
+            // Search ancestors without requiring directory listing access.
+            // The final descriptor retains the original read-capable contract.
+            let access = if index + 1 == parts.len() {
+                OFlag::O_RDONLY
+            } else {
+                search_directory_access()
+            };
+            directory = File::from(
+                openat(
+                    directory.as_fd(),
+                    *part,
+                    access | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                    Mode::empty(),
+                )
+                .map_err(map_openat_error)?,
+            );
+            if protected {
+                validate_protected_metadata(&directory.metadata()?, false)?;
+                reject_extended_acl(&directory)?;
             }
         }
         Ok(Self(directory))
@@ -245,12 +312,93 @@ pub(crate) fn read_protected(
     read_open_candidate(file, max)
 }
 
+/// Validate an OS executable which may permit execution but not content reads.
+/// Restricted to the fixed system sudo caller; release binaries still use read_protected.
+pub(crate) fn validate_system_sudo_metadata(path: &Path) -> Result<(), SignerError> {
+    use nix::fcntl::AtFlags;
+    use nix::sys::stat::{FileStat, fstatat};
+    if path != Path::new("/usr/bin/sudo") {
+        return Err(SignerError::InstallationDrift);
+    }
+    let parent_path = path.parent().ok_or(SignerError::InstallationDrift)?;
+    let parent = Directory::open(parent_path, true)?;
+    let name = path.file_name().ok_or(SignerError::InstallationDrift)?;
+    let observe =
+        || fstatat(parent.0.as_fd(), name, AtFlags::AT_SYMLINK_NOFOLLOW).map_err(map_openat_error);
+    let before = observe()?;
+    let valid = |facts: &FileStat| {
+        protected_facts(
+            facts.st_uid,
+            facts.st_mode as u32,
+            false,
+            facts.st_mode as u32 & libc::S_IFMT as u32 == libc::S_IFREG as u32,
+            facts.st_nlink as u64,
+            true,
+        )
+    };
+    if !valid(&before) {
+        return Err(SignerError::InstallationDrift);
+    }
+    reject_path_extended_acl(path)?;
+    let after = observe()?;
+    let identity = |facts: &FileStat| {
+        (
+            facts.st_dev,
+            facts.st_ino,
+            facts.st_mode,
+            facts.st_nlink,
+            facts.st_uid,
+            facts.st_gid,
+            facts.st_ctime,
+            facts.st_ctime_nsec,
+        )
+    };
+    let retained = parent.metadata()?;
+    let current = Directory::open(parent_path, true)?.metadata()?;
+    if !valid(&after)
+        || identity(&before) != identity(&after)
+        || (retained.dev(), retained.ino()) != (current.dev(), current.ino())
+    {
+        return Err(SignerError::InstallationDrift);
+    }
+    // Execution uses the fixed pathname. Protected root-owned ancestry prevents
+    // caller replacement; concurrent trusted-root changes remain outside this boundary.
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)] // Darwin no-follow ACL query, never opens executable contents.
+fn reject_path_extended_acl(path: &Path) -> Result<(), SignerError> {
+    use std::os::unix::ffi::OsStrExt;
+    unsafe extern "C" {
+        fn acl_get_link_np(path: *const libc::c_char, kind: libc::c_int) -> *mut libc::c_void;
+    }
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| SignerError::InstallationDrift)?;
+    let acl = unsafe { acl_get_link_np(path.as_ptr(), 0x100) };
+    validate_empty_acl(acl)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reject_path_extended_acl(_path: &Path) -> Result<(), SignerError> {
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)] // Darwin libc ACL API; retained fd only, owned ACL freed exactly once.
 fn reject_extended_acl(file: &File) -> Result<(), SignerError> {
     use std::os::fd::AsRawFd;
     unsafe extern "C" {
         fn acl_get_fd_np(fd: libc::c_int, kind: libc::c_int) -> *mut libc::c_void;
+    }
+    let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), 0x100) };
+    validate_empty_acl(acl)
+}
+
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)] // Consumes one Darwin ACL allocation and frees it exactly once.
+fn validate_empty_acl(acl: *mut libc::c_void) -> Result<(), SignerError> {
+    unsafe extern "C" {
         fn acl_get_entry(
             acl: *mut libc::c_void,
             entry_id: libc::c_int,
@@ -260,8 +408,6 @@ fn reject_extended_acl(file: &File) -> Result<(), SignerError> {
         fn acl_valid(value: *mut libc::c_void) -> libc::c_int;
     }
     // Darwin ACL_TYPE_EXTENDED = 0x100, ACL_FIRST_ENTRY = 0.
-    // Query only the retained descriptor; no pathname or privileged subprocess.
-    let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), 0x100) };
     if acl.is_null() {
         // Darwin reports ENOENT for absence of an extended ACL on an open fd.
         // The fd metadata was validated already; other retrieval failures deny.
@@ -772,6 +918,54 @@ mod candidate_tests {
         assert!(directory.child("job-01", false).is_err());
     }
 
+    #[test]
+    fn identity_rejects_symlink_and_non_directory_paths() {
+        let scratch = Scratch::new();
+        let real = scratch.path().join("real");
+        fs::create_dir(&real).unwrap();
+        fs::create_dir(real.join("leaf")).unwrap();
+        let alias = scratch.path().join("alias");
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+        assert!(directory_identity_inner(&alias, false).is_err());
+        assert!(directory_identity_inner(&alias.join("leaf"), false).is_err());
+        let file = scratch.path().join("file");
+        fs::write(&file, b"fixture").unwrap();
+        assert!(directory_identity_inner(&file, false).is_err());
+        assert!(directory_identity(&real).is_err()); // non-root fixture denied
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn search_descriptor_rejects_extended_directory_acl() {
+        let scratch = Scratch::new();
+        let path = scratch.path().join("acl-directory");
+        fs::create_dir(&path).unwrap();
+        let fd = openat(
+            File::open(scratch.path()).unwrap().as_fd(),
+            "acl-directory",
+            OFlag::from_bits_retain(libc::O_SEARCH) | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW,
+            Mode::empty(),
+        )
+        .unwrap();
+        let file = File::from(fd);
+        reject_extended_acl(&file).unwrap();
+        let user = std::process::Command::new("/usr/bin/id")
+            .arg("-un")
+            .output()
+            .unwrap();
+        assert!(user.status.success());
+        let user = String::from_utf8(user.stdout).unwrap();
+        assert!(
+            std::process::Command::new("/bin/chmod")
+                .args(["+a", &format!("user:{} allow list", user.trim())])
+                .arg(path)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(reject_extended_acl(&file).is_err());
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn protected_system_worker_read_checks_real_darwin_acl_and_mode() {
@@ -790,6 +984,7 @@ mod candidate_tests {
         fs::write(&path, b"public fixture").unwrap();
         let file = File::open(&path).unwrap();
         reject_extended_acl(&file).unwrap();
+        reject_path_extended_acl(&path).unwrap();
         let user = std::process::Command::new("/usr/bin/id")
             .arg("-un")
             .output()
@@ -803,6 +998,13 @@ mod candidate_tests {
             .unwrap();
         assert!(status.success());
         assert!(reject_extended_acl(&file).is_err());
+        assert!(reject_path_extended_acl(&path).is_err());
+    }
+
+    #[test]
+    fn system_sudo_metadata_cannot_validate_alternate_executables() {
+        assert!(validate_system_sudo_metadata(Path::new("/bin/sh")).is_err());
+        assert!(validate_system_sudo_metadata(Path::new("/usr/bin/../bin/sudo")).is_err());
     }
 
     #[test]
@@ -899,5 +1101,41 @@ mod candidate_tests {
 
         assert!(returned_promptly, "candidate FIFO open blocked");
         assert!(matches!(final_result, Err(SignerError::InvalidInput(_))));
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod directory_identity_tests {
+    use super::*;
+    #[test]
+    fn content_directory_traverses_search_only_ancestor_but_requires_readable_leaf() {
+        let base =
+            std::env::temp_dir().join(format!("signer-ancestor-search-{}", std::process::id()));
+        fs::create_dir(&base).unwrap();
+        let base = fs::canonicalize(base).unwrap();
+        let leaf = base.join("leaf");
+        fs::create_dir(&leaf).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o111)).unwrap();
+        let directory = Directory::open(&leaf, false).unwrap();
+        directory.write_new("request.json", b"fixture").unwrap();
+        assert_eq!(directory.read("request.json", 32).unwrap(), b"fixture");
+        fs::set_permissions(&leaf, fs::Permissions::from_mode(0o111)).unwrap();
+        assert!(Directory::open(&leaf, false).is_err());
+        fs::set_permissions(&leaf, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn identity_check_does_not_require_directory_read_permission() {
+        let path = std::env::temp_dir().join(format!("signer-search-{}", std::process::id()));
+        fs::create_dir(&path).unwrap();
+        let path = fs::canonicalize(path).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o111)).unwrap();
+        assert!(Directory::open(&path, false).is_err());
+        let identity = directory_identity_inner(&path, false).unwrap();
+        assert_eq!(identity.ino(), fs::symlink_metadata(&path).unwrap().ino());
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir(path).unwrap();
     }
 }

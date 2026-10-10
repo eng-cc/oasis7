@@ -45,6 +45,40 @@ class SudoObservation(unittest.TestCase):
         self.assertTrue(host.sudo_policy_safe(self.observe(0, output), 401, 401, "/worker", require_worker=True))
         self.assertFalse(host.sudo_policy_safe(self.observe(0, "User may run the following commands:\n (ALL) NOPASSWD: ALL"), 401, 401, "/worker"))
 
+    def native_detailed(self, defaults='env_reset, env_keep+="HOME MAIL", env_keep+=SSH_AUTH_SOCK, lecture_file=/etc/sudo_lecture, !log_allowed'):
+        return ('Matching Defaults entries for oasis7-codex on Mac:\n    ' + defaults + '\n\n'
+                'User oasis7-codex may run the following commands on Mac:\n\n'
+                'Sudoers entry: /private/etc/sudoers.d/oasis7-local-signer\n'
+                '    RunAsUsers: #401\n    RunAsGroups: #401\n'
+                '    Options: !setenv, !authenticate\n    Commands:\n'
+                '        /worker\n        ""\n')
+
+    def test_native_detailed_rule_and_evidenced_defaults(self):
+        self.assertTrue(host.sudo_policy_safe(self.observe(0, self.native_detailed()), 401, 401, '/worker', require_worker=True))
+
+    def test_actual_macos_wrapped_defaults_fixture(self):
+        defaults = ('env_reset, env_keep+=BLOCKSIZE, env_keep+="COLORFGBG COLORTERM", '
+                    'env_keep+=__CF_USER_TEXT_ENCODING, env_keep+="CHARSET LANG LANGUAGE LC_ALL LC_COLLATE\n    LC_CTYPE", '
+                    'env_keep+="LC_MESSAGES LC_MONETARY LC_NUMERIC LC_TIME", env_keep+="LINES\n    COLUMNS", '
+                    'env_keep+=LSCOLORS, env_keep+=SSH_AUTH_SOCK, env_keep+=TZ, '
+                    'env_keep+="DISPLAY XAUTHORIZATION XAUTHORITY", env_keep+="EDITOR VISUAL", '
+                    'env_keep+="HOME MAIL", lecture_file=/etc/sudo_lecture, !log_allowed')
+        self.assertTrue(host.sudo_policy_safe(self.observe(0, self.native_detailed(defaults)), 401, 401, '/worker', require_worker=True))
+
+    def test_detailed_policy_rejects_dangerous_defaults_and_extra_authority(self):
+        valid = self.native_detailed()
+        bad = [self.native_detailed('env_reset, env_keep+=' + name) for name in
+               ('SUDO_UID', 'DYLD_LIBRARY_PATH', 'PATH', 'PYTHONPATH', 'TMPDIR')]
+        bad += [self.native_detailed('!env_reset'), self.native_detailed('env_reset, exempt_group=staff'),
+                valid.replace('!setenv, !authenticate', 'setenv, !authenticate'),
+                valid.replace('RunAsUsers: #401', 'RunAsUsers: ALL'),
+                valid.replace('/worker\n        ""', '/worker argument'),
+                valid + valid[valid.index('Sudoers entry:'):],
+                valid.replace('/worker', '/other'), valid.replace('oasis7-codex', 'other')]
+        for out in bad:
+            with self.subTest(out=out):
+                self.assertFalse(host.sudo_policy_safe(self.observe(0, out), 401, 401, '/worker', require_worker=True))
+
     def test_invalid_hostname_and_inconsistent_observation_fail_closed(self):
         denial = "User oasis7-codex is not allowed to run sudo on Mac.\n"
         for code, out, err, caller, hostname in ((2, "", denial, "oasis7-codex", "Mac"),
