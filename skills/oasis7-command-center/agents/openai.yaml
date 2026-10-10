@@ -1,0 +1,13 @@
+interface:
+  display_name: Oasis7 项目指挥看板
+  short_description: 构建和维护 oasis7 开发指挥看板，关联目标、规范、交付与 Agent 状态
+  default_prompt: 使用 $oasis7-command-center，结合 oasis7 当前仓库实现并验证第一版开发指挥看板，展示目标与进度、有效规范、执行现场和待我决策。
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true
