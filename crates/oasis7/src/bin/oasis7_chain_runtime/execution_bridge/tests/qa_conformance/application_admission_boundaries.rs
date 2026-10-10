@@ -294,6 +294,9 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
         send(&mut socket, serde_json::json!({"type":"request_snapshot"}));
     }
     let mut snapshot_requests = usize::from(initial_request_complete);
+    // Cover the full observation window rather than consuming every bounded
+    // request before a failed metadata probe can recover after its cache TTL.
+    let mut last_snapshot_request = Instant::now();
     let terminal_deadline = Instant::now() + Duration::from_secs(4);
     let mut summary = serde_json::Value::Null;
     loop {
@@ -308,10 +311,15 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
             break;
         }
         let completed = snapshot_completions.load(Ordering::SeqCst);
-        if initial_request_complete && completed > observed_completions && snapshot_requests < 16 {
+        if initial_request_complete
+            && completed > observed_completions
+            && snapshot_requests < 16
+            && last_snapshot_request.elapsed() >= Duration::from_millis(250)
+        {
             observed_completions = completed;
             send(&mut socket, serde_json::json!({"type":"request_snapshot"}));
             snapshot_requests += 1;
+            last_snapshot_request = Instant::now();
         }
         thread::sleep(Duration::from_millis(10));
     }

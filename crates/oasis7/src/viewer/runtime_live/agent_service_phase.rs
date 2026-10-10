@@ -304,7 +304,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     .cognition_lease
                     .as_ref()
                     .ok_or("hosted settled Act missing lease")?;
-                let (checkpoint, existed) = self.llm_sidecar.prepare_service_scheduler_checkpoint(
+                let (checkpoint, _) = self.llm_sidecar.prepare_service_scheduler_checkpoint(
                     request,
                     "settle",
                     SchedulerOperationV1::SettleLease {
@@ -313,11 +313,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     },
                     None,
                 )?;
-                original_intent_io(
-                    &checkpoint.correlation,
-                    &checkpoint.payload,
-                    *submit && !existed,
-                )
+                original_settlement_io(&checkpoint.correlation, &checkpoint.payload, *submit)
             }
             HostedServicePhase::Feedback {
                 pending,
@@ -507,9 +503,14 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 let Some(response) = original_response(response)? else {
                     return Ok(AgentServiceProgress::Advanced);
                 };
-                response
-                    .validate(&checkpoint.correlation)
-                    .map_err(|error| error.to_string())?;
+                if original_settlement_requires_replay(&response, &checkpoint.correlation)? {
+                    self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::ActSettle {
+                        pending,
+                        receipt,
+                        submit: true,
+                    });
+                    return Ok(AgentServiceProgress::Advanced);
+                }
                 match response.outcome {
                     IntentOutcome::Committed {
                         receipt: settled,
@@ -527,7 +528,12 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     IntentOutcome::Rejected { reason } => {
                         return Err(format!("canonical settlement rejected: {reason:?}"));
                     }
-                    _ => return Err("canonical settlement cannot complete original intent".into()),
+                    state => {
+                        return Err(format!(
+                            "canonical settlement cannot complete original intent: {state:?}; original_key={:?}",
+                            checkpoint.correlation.key
+                        ));
+                    }
                 }
             }
             HostedServicePhase::Feedback { pending, .. } => {
@@ -874,5 +880,59 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         assert_eq!(replay.correlation, original.correlation);
         assert_eq!(replay.signed_payload, original.signed_payload);
         client.submit(replay).map_err(|error| error.to_string())
+    }
+}
+
+fn original_settlement_requires_replay(
+    response: &IntentResponse<serde_json::Value>,
+    original: &RequestCorrelation,
+) -> Result<bool, String> {
+    response
+        .validate(original)
+        .map_err(|error| error.to_string())?;
+    Ok(matches!(response.outcome, IntentOutcome::Unknown))
+}
+fn original_settlement_io(
+    correlation: &RequestCorrelation,
+    payload: &crate::world_service::WorldServicePayloadV1,
+    submit: bool,
+) -> AgentServiceIoOperation {
+    // The checkpoint's existence is precisely what binds an authorized replay
+    // to the original bytes. Dispatch reservation already resets submit=false;
+    // only verified Unknown schedules a further original Submit.
+    original_intent_io(correlation, payload, submit)
+}
+#[cfg(any(test, feature = "test_tier_required"))]
+impl crate::viewer::ViewerRuntimeLiveServer {
+    pub fn test_replay_original_hosted_settlement(
+        client: crate::world_service::client::RemoteWorldServiceClient,
+        original: SubmitIntentRequest<crate::world_service::WorldServicePayloadV1>,
+    ) -> Result<SubmitObservation<serde_json::Value>, String> {
+        use crate::world_service::client::WorldServicePort;
+        original.validate().map_err(|error| error.to_string())?;
+        if !matches!(&original.signed_payload, crate::world_service::WorldServicePayloadV1::Scheduler(s) if matches!(s.request.operation, SchedulerOperationV1::SettleLease {..}))
+        {
+            return Err("settlement operation required".into());
+        }
+        let response = client
+            .lookup(
+                LookupIntentRequest {
+                    contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                    key: original.correlation.key.clone(),
+                },
+                original.signed_payload.clone(),
+            )
+            .map_err(|e| e.to_string())?;
+        if !original_settlement_requires_replay(&response, &original.correlation)? {
+            return Err("unpublished settlement required".into());
+        }
+        let AgentServiceIoOperation::Submit(replay) =
+            original_settlement_io(&original.correlation, &original.signed_payload, true)
+        else {
+            return Err("retained settlement was not submitted".into());
+        };
+        assert_eq!(replay.correlation, original.correlation);
+        assert_eq!(replay.signed_payload, original.signed_payload);
+        client.submit(replay).map_err(|e| e.to_string())
     }
 }
