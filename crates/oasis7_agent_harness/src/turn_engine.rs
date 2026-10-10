@@ -287,7 +287,19 @@ where
     }
 
     pub fn active_turn_count(&self) -> usize {
-        self.runner.active_turn_count()
+        self.turns
+            .values()
+            .filter(|record| {
+                matches!(
+                    record.phase,
+                    TurnEnginePhase::Preparing
+                        | TurnEnginePhase::InFlight
+                        | TurnEnginePhase::Candidate
+                        | TurnEnginePhase::AwaitingReceipt
+                        | TurnEnginePhase::Pending
+                )
+            })
+            .count()
     }
 
     pub fn provider_is_still_in_flight(&self, agent_id: &str) -> bool {
@@ -747,6 +759,25 @@ mod tests {
         }
     }
 
+    struct FailingProvider;
+
+    impl DecisionProvider for FailingProvider {
+        fn provider_id(&self) -> &str {
+            "failure"
+        }
+
+        fn decide(
+            &mut self,
+            _request: &ContinuousAgentRequestContextV1,
+        ) -> Result<ContinuousAgentResponseContextV1, crate::DecisionProviderError> {
+            Err(crate::DecisionProviderError::new(
+                "fixture_failure",
+                "deterministic provider failure",
+                false,
+            ))
+        }
+    }
+
     fn context(request: &ContinuousAgentRequestContextV1) -> ContinuousAgentTurnContextV1 {
         ContinuousAgentTurnContextV1 {
             agent_id: request.agent_subject.clone(),
@@ -917,7 +948,8 @@ mod tests {
         engine
             .release_after_continuation_handoff(turn_id, &FakeContinuation, &admitted)
             .unwrap();
-        assert_eq!(engine.active_turn_count(), 0);
+        assert_eq!(engine.active_turn_count(), 1);
+        assert!(engine.runner.awaiting_outcome(turn_id).is_none());
     }
 
     #[test]
@@ -942,6 +974,36 @@ mod tests {
             Err(TurnEngineError::InvalidContinuationHandoff(id, _)) if id == turn_id
         ));
         assert_eq!(engine.active_turn_count(), 1);
+    }
+
+    #[test]
+    fn turn_engine_active_count_preserves_failed_phase_semantics() {
+        let request = crate::actor::tests::request("agent-a", "request-a", "turn-a");
+        let mut engine = TurnEngine::<serde_json::Value, serde_json::Value, ()>::new(1).unwrap();
+        engine.register("agent-a", FailingProvider).unwrap();
+        let turn_id = engine
+            .start_turn(
+                TurnRequest::new(context(&request), request),
+                &authority(false),
+            )
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let events = loop {
+            let events = engine.poll_completed().unwrap();
+            if !events.is_empty() {
+                break events;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "provider failure must become pollable"
+            );
+            std::thread::yield_now();
+        };
+
+        assert_eq!(events[0].phase, TurnEnginePhase::Failed);
+        assert_eq!(engine.phase(turn_id), Some(TurnEnginePhase::Failed));
+        assert_eq!(engine.active_turn_count(), 0);
+        assert!(engine.runner.awaiting_outcome(turn_id).is_some());
     }
 
     #[test]
