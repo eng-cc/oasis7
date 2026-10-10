@@ -32,6 +32,7 @@
 - 若当前是在同一 repo family 的多个 git worktree 之间做本地迭代，开发态 `cargo check/test/run/build` 默认优先使用 `./scripts/cargo-dev.sh <cargo-args...>`。每个 worktree 按自身 source identity 使用稳定、隔离的 target namespace；同一 worktree 内可复用缓存，divergent worktree 不得互选 artifacts。通过 `./scripts/new-task-worktree.sh` 创建的新 task worktree 会把 git-ignored `target` 链接到该 worktree 的 namespace，使直接 cargo 与 wrapper 在同一 worktree 内复用同一开发态缓存。
 - 本地 smoke / playtest / prewarm / regression / drill / longrun 脚本若只是为了开发反馈，应优先 source `scripts/cargo-dev-lib.sh` 并调用 `oasis7_cargo_dev ...` / `oasis7_cargo_dev_debug_bin_dir`，从而与手工 `cargo-dev.sh` 使用同一个当前-worktree target；`CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 会回退到原始 cargo target 解析。
 - 该入口只服务开发态缓存复用，不替代本手册中的正式验收命令；手册里的 canonical 验收命令仍显式写原始 `env -u RUSTC_WRAPPER cargo ...`。
+- 跨 worktree 的 registry 依赖编译结果复用由 sccache 提供，不共用 target artifacts。安装 `sccache`（macOS: `brew install sccache`）后，`cargo-dev.sh build/test/run` 自动启用它、通过参数传递 target（避免 `CARGO_TARGET_DIR` 污染缓存键）并关闭该调用的 Rust incremental；`check/clippy` 保留增量编译。`OASIS7_CARGO_SCCACHE=0` 或 CI 可禁用，未安装时沿用 Cargo。用 `sccache --show-stats` 查看命中；首次编译填充缓存，workspace/path crates 的源码路径仍进入 Rust cache key，最终链接、proc-macro 和 check 不保证命中。统一使用 wrapper，避免普通目录 `target` 与开发缓存重复构建；不要为此搬移或删除已有 target。
 - deterministic wasm / release 链路继续保持 `CARGO_TARGET_DIR` 为空；涉及 `scripts/build-wasm-module.sh`、release evidence 或 hash/receipt 对账时，不要改用 `scripts/cargo-dev.sh`。
 
 ## 当前实现分布（2026-02-18 基线）
@@ -243,6 +244,8 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 ./scripts/doc-governance-check.sh
 ./scripts/check-script-executable-bits.sh
 ./scripts/cargo-dev-lib.test.sh
+# 可选真实跨路径缓存验证（需要 sccache 和本地已下载的 itoa）
+./scripts/cargo-dev-sccache.test.sh --real
 ./scripts/check-rust-file-size.sh
 env -u RUSTC_WRAPPER cargo fmt --all -- --check
 ```

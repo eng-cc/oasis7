@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
 CONFIG_ARGS=()
 BIND_ADDR="127.0.0.1:5841"
 PROVIDER_AGENT="letai-local"
@@ -144,7 +145,8 @@ export OASIS7_LOCAL_LETAI_PROVIDER_THINKING="$PROVIDER_THINKING"
 export OASIS7_LOCAL_LETAI_PROVIDER_BACKEND="$PROVIDER_BACKEND"
 export OASIS7_LOCAL_LETAI_PROVIDER_AUTH_TOKEN="$AUTH_TOKEN"
 export OASIS7_LOCAL_LETAI_PROVIDER_CLI="$ROOT_DIR/scripts/provider-remote-https/letai_provider_cli.py"
-export OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="${OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN:-$ROOT_DIR/target/debug/oasis7_provider_local_bridge}"
+export OASIS7_LOCAL_LETAI_PROVIDER_REPO_ROOT="$ROOT_DIR"
+export OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="${OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN:-$(oasis7_cargo_dev_debug_bin_dir "$ROOT_DIR")/oasis7_provider_local_bridge}"
 
 WRAPPER_CMD=("$ROOT_DIR/scripts/with-letai-llm-config.sh")
 if [[ "${#CONFIG_ARGS[@]}" -gt 0 ]]; then
@@ -153,6 +155,8 @@ fi
 
 exec "${WRAPPER_CMD[@]}" -- bash -s <<'BASH'
 set -euo pipefail
+cd "$OASIS7_LOCAL_LETAI_PROVIDER_REPO_ROOT"
+source "$OASIS7_LOCAL_LETAI_PROVIDER_REPO_ROOT/scripts/cargo-dev-lib.sh"
 export OASIS7_REMOTE_LLM_BASE_URL="$OASIS7_LLM_BASE_URL"
 export OASIS7_REMOTE_LLM_API_KEY="$OASIS7_LLM_API_KEY"
 export OASIS7_REMOTE_LLM_MODEL="$OASIS7_LLM_MODEL"
@@ -166,6 +170,8 @@ export OASIS7_REMOTE_LLM_PLATFORM_BASE_URL="${OASIS7_REMOTE_LLM_PLATFORM_BASE_UR
 
 if [[ -x "$OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN" && "${OASIS7_LOCAL_LETAI_PROVIDER_FORCE_CARGO_RUN:-0}" != "1" ]]; then
   cmd=("$OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN")
+elif oasis7_cargo_dev_use_shared_target; then
+  cmd=("$OASIS7_LOCAL_LETAI_PROVIDER_REPO_ROOT/scripts/cargo-dev.sh" run -p oasis7 --bin oasis7_provider_local_bridge --)
 else
   cmd=(env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge --)
 fi

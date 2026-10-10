@@ -38,4 +38,5 @@ if [[ "$default_raw" != "$ROOT_DIR/target" ]]; then
   exit 1
 fi
 
+bash "$ROOT_DIR/scripts/cargo-dev-sccache.test.sh"
 echo "cargo-dev-lib.test: OK"

@@ -13,13 +13,16 @@ Default behavior:
 - Computes a stable cache namespace from the git common dir and current
   worktree source root
 - Stores shared targets under `<repo-parent>/.oasis7-cache/cargo-target/`
-- Unsets `RUSTC_WRAPPER` to match the repository's default cargo invocation rule
+- Uses installed sccache for build/test/run; check keeps Cargo incremental builds
+- Keeps each worktree target isolated while sccache shares compiler results
 
 Options:
   --print-target-dir   Print the resolved shared target dir and exit
   -h, --help           Show this help
 
 Environment:
+  OASIS7_CARGO_SCCACHE=0
+      Disable automatic sccache use (also disabled in CI).
   OASIS7_CARGO_SHARED_TARGET_DIR
       Override the resolved target dir. This is an explicit escape hatch from
       worktree isolation and should only be used for compatible sources.
@@ -197,4 +200,20 @@ PY
 fi
 
 mkdir -p "$TARGET_DIR"
-exec env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$TARGET_DIR" "$CARGO_BIN" "$@"
+# Only development commands which emit linkable Rust libraries benefit from
+# sccache. Keep check/clippy incremental and leave formal CI/release entrypoints
+# on their existing raw Cargo path. Do not inherit an arbitrary compiler wrapper.
+CARGO_ENV=(env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$TARGET_DIR")
+case "${1:-}" in
+  build|test|run)
+    if [[ "${OASIS7_CARGO_SCCACHE:-1}" != "0" && "${CI:-}" != "1" && "${CI:-}" != "true" ]] &&
+       SCCACHE_BIN="$(command -v sccache)"; then
+      # Cargo hashes CARGO_TARGET_DIR in sccache Rust keys. Pass the target
+      # as an argument so registry dependencies can hit across worktrees.
+      exec env -u RUSTC_WRAPPER -u CARGO_TARGET_DIR RUSTC_WRAPPER="$SCCACHE_BIN" \
+        CARGO_INCREMENTAL=0 \
+        "$CARGO_BIN" "$1" --target-dir "$TARGET_DIR" "${@:2}"
+    fi
+    ;;
+esac
+exec "${CARGO_ENV[@]}" "$CARGO_BIN" "$@"
