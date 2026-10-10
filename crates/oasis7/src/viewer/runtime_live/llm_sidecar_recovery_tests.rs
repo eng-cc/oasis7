@@ -958,6 +958,16 @@ fn restored_missing_active_identity_terminalizes_runtime_and_feedback() {
 
 #[test]
 fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
+    // Feedback recovery reads env-backed transport settings; isolate selection.
+    let _env_guard = crate::viewer::runtime_live::canonical_runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = ProviderEnvSnapshot::capture(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+    ]);
+
     let lineage_path = std::env::temp_dir().join(format!(
         "oasis7-provider-wake-recovery-{}-{}.json",
         std::process::id(),
