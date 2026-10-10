@@ -3,6 +3,11 @@ use super::*;
 use std::sync::{Weak, mpsc};
 
 const PUMP_INTERVAL: Duration = Duration::from_millis(50);
+const MAX_LOCAL_ADVANCES: usize = 8;
+
+fn continue_local_advance(advanced: bool, had_phase: bool, has_phase: bool, count: usize) -> bool {
+    advanced && had_phase && has_phase && count < MAX_LOCAL_ADVANCES
+}
 
 /// Connection presence is independent of playback: Pause is shared server policy.
 pub(super) struct AgentServicePresence {
@@ -121,6 +126,7 @@ impl ViewerRuntimeLiveServer {
         let weak = Arc::downgrade(shared);
         thread::spawn(move || {
             let mut in_flight = false;
+            let mut local_advances = 0;
             loop {
                 let Some(shared) = weak.upgrade() else {
                     break;
@@ -128,6 +134,7 @@ impl ViewerRuntimeLiveServer {
                 let Ok(mut server) = shared.lock() else {
                     break;
                 };
+                let had_phase = server.llm_sidecar.hosted_service_phase.is_some();
                 let mut progress = None;
                 if in_flight {
                     match results.try_recv() {
@@ -177,11 +184,15 @@ impl ViewerRuntimeLiveServer {
                                 {
                                     eprintln!("pre2_private_recovery_prepare_error={_error}");
                                 }
+                                progress = None;
                                 server.record_agent_pump_error("Agent service preparation is blocked; original work remains pending");
                             }
                         }
                     }
-                    if let Some(AgentServiceProgress::NeedsIo(job)) = progress {
+                    if matches!(progress, Some(AgentServiceProgress::NeedsIo(_))) {
+                        let Some(AgentServiceProgress::NeedsIo(job)) = progress.take() else {
+                            unreachable!()
+                        };
                         // One owned in-flight job guarantees capacity; never wait under the mutex.
                         match jobs.try_send(*job) {
                             Ok(()) => in_flight = true,
@@ -192,11 +203,49 @@ impl ViewerRuntimeLiveServer {
                         }
                     }
                 }
+                let advance_without_sleep = continue_local_advance(
+                    matches!(progress, Some(AgentServiceProgress::Advanced)),
+                    had_phase,
+                    server.llm_sidecar.hosted_service_phase.is_some(),
+                    local_advances + 1,
+                );
+                // Release between every local transition so Viewer controls and
+                // observers retain access. Fresh admission and terminal phase
+                // removal stop the burst; it never starts another model turn.
                 drop(server);
                 drop(shared);
+                if advance_without_sleep {
+                    local_advances += 1;
+                    continue;
+                }
+                local_advances = 0;
                 thread::sleep(PUMP_INTERVAL);
             }
         });
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn local_advance_burst_requires_existing_phase_and_is_bounded() {
+        assert!(continue_local_advance(true, true, true, 0));
+        assert!(continue_local_advance(
+            true,
+            true,
+            true,
+            MAX_LOCAL_ADVANCES - 1
+        ));
+        assert!(!continue_local_advance(
+            true,
+            true,
+            true,
+            MAX_LOCAL_ADVANCES
+        ));
+        assert!(!continue_local_advance(false, true, true, 0)); // Idle or NeedsIo
+        assert!(!continue_local_advance(true, false, true, 0)); // Fresh turn
+        assert!(!continue_local_advance(true, true, false, 0)); // Terminal
     }
 }

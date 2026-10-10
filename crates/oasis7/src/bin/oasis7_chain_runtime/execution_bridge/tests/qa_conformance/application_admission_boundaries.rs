@@ -369,6 +369,21 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
         assert_ne!(summary["terminal_states"]["agent-a"]["status"], "committed");
         println!("PRE2_FRESH_PAUSE_METADATA_NO_ADMISSION_PASSED");
     } else {
+        if summary["terminal_states"]["agent-a"]["status"] != "committed" {
+            println!(
+                "fresh_metadata_failed_terminal_diagnostic={}",
+                serde_json::json!({
+                    "hosted_service_phase": summary["hosted_service_phase"],
+                    "hosted_service_inflight": summary["hosted_service_inflight"],
+                    "hosted_service_memory_failure": summary["hosted_service_memory_failure"],
+                    "agent_service_pump_error": summary["agent_service_pump_error"],
+                    "pending_intent_count": summary["pending_intent_count"],
+                    "pending_action_count": summary["pending_action_count"],
+                    "native_model_call_count": summary["native_model_call_count"],
+                    "metadata_ready": metadata_ready,
+                })
+            );
+        }
         assert_eq!(summary["terminal_states"]["agent-a"]["status"], "committed");
         assert!(after.unwrap()["model_decisions"].as_u64().unwrap() > 0);
         println!("PRE2_FRESH_METADATA_BEFORE_ADMISSION_PASSED");
