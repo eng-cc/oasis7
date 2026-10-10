@@ -132,14 +132,11 @@ impl RuntimeLlmSidecar {
             .provider_service_projection
             .as_ref()
             .and_then(|view| view.canonical_agent_chat.as_ref())
-            .map(|chat| {
-                (
-                    chat.agent_id.clone(),
-                    chat.goal
-                        .as_ref()
-                        .filter(|goal| matches!(goal.status.as_str(), "accepted" | "blocked"))
-                        .map(|goal| goal.intent_id.clone()),
-                )
+            .and_then(|chat| {
+                chat.goal
+                    .as_ref()
+                    .filter(|goal| matches!(goal.status.as_str(), "accepted" | "blocked"))
+                    .map(|goal| (chat.agent_id.clone(), Some(goal.intent_id.clone())))
             });
         if current == self.canonical_goal_prompt_applied {
             return Ok(());
