@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Contract: divergent git worktrees must not share development Cargo artifacts.
 set -euo pipefail
+# Exercise local storage behavior even when the regression itself runs in CI.
+export CI=
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -116,6 +118,9 @@ ln -s "$LEGACY_CACHE" "$WORKTREE_A/target"
 (cd "$WORKTREE_A" && PATH="$FAKE_BIN:$PATH" FAKE_SOURCE_ID=divergent-a ./scripts/cargo-dev.sh build -p oasis7_proto)
 (cd "$WORKTREE_B" && PATH="$FAKE_BIN:$PATH" FAKE_SOURCE_ID=divergent-b ./scripts/cargo-dev.sh build -p oasis7_proto)
 
+[[ -L "$WORKTREE_B/target" ]] || { echo "missing target link" >&2; exit 1; }
+(cd "$WORKTREE_B" && ./scripts/cargo-dev.sh --prepare-target)
+
 ACTUAL_TARGET_A="$("$PYTHON_BIN" - "$WORKTREE_A/target" <<'PY'
 import os
 import sys
@@ -131,7 +136,7 @@ if [[ "$(<"$LEGACY_CACHE/sentinel.txt")" != must-survive-wrapper-migration ]]; t
   exit 1
 fi
 (cd "$WORKTREE_A" && env -u CARGO_TARGET_DIR "$REAL_CARGO" test --manifest-path Cargo.toml --locked --offline)
-(cd "$WORKTREE_B" && CARGO_TARGET_DIR="$TARGET_B" "$REAL_CARGO" test --manifest-path Cargo.toml --locked --offline)
+(cd "$WORKTREE_B" && env -u CARGO_TARGET_DIR "$REAL_CARGO" test --manifest-path Cargo.toml --locked --offline)
 if [[ "$(<"$TARGET_A/fixture-artifacts/oasis7_proto-source.txt")" != divergent-a ]]; then
   echo "worktree A artifact marker was contaminated by another worktree" >&2
   exit 1
@@ -141,9 +146,24 @@ if [[ "$(<"$TARGET_B/fixture-artifacts/oasis7_proto-source.txt")" != divergent-b
   exit 1
 fi
 
+# Preparation is non-destructive and CI leaves its checkout layout unchanged.
+unlink "$WORKTREE_B/target"
+(cd "$WORKTREE_B" && CI=1 ./scripts/cargo-dev.sh --prepare-target)
+[[ ! -e "$WORKTREE_B/target" && ! -L "$WORKTREE_B/target" ]]
+mkdir "$WORKTREE_B/target"
+printf 'preserve\n' >"$WORKTREE_B/target/sentinel"
+if (cd "$WORKTREE_B" && ./scripts/cargo-dev.sh --prepare-target) >"$TMPDIR/ordinary.out" 2>&1; then
+  echo "preparation accepted an ordinary target" >&2; exit 1
+fi
+[[ "$(<"$WORKTREE_B/target/sentinel")" == preserve ]]
+rm "$WORKTREE_B/target/sentinel"
+rmdir "$WORKTREE_B/target"
+(cd "$WORKTREE_B" && ./scripts/cargo-dev.sh --prepare-target)
+
 EXTERNAL_CACHE="$TMPDIR/external-cache"
 mkdir -p "$EXTERNAL_CACHE"
 printf '%s\n' external >"$EXTERNAL_CACHE/sentinel.txt"
+unlink "$WORKTREE_B/target"
 ln -s "$EXTERNAL_CACHE" "$WORKTREE_B/target"
 set +e
 (cd "$WORKTREE_B" && PATH="$FAKE_BIN:$PATH" ./scripts/cargo-dev.sh build -p oasis7_proto) \
@@ -159,5 +179,22 @@ if [[ "$(<"$EXTERNAL_CACHE/sentinel.txt")" != external ]]; then
   echo "cargo-dev changed data in the unmanaged cache" >&2
   exit 1
 fi
+
+# Simulate Windows privilege failure against the actual embedded link code.
+"$PYTHON_BIN" - "$ROOT_DIR/scripts/cargo-dev.sh" <<'WINTEST'
+import contextlib, io, pathlib, sys
+from unittest.mock import patch
+source = pathlib.Path(sys.argv[1]).read_text().split("<<'LINK'\n", 1)[1].split("\nLINK", 1)[0]
+error = OSError("A required privilege is not held by the client")
+error.winerror = 1314
+for command in ("build", "--prepare-target"):
+    with patch("os.name", "nt"), patch("os.symlink", side_effect=error), patch.object(sys, "argv", ["-", "cache", "target", command]), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            exec(compile(source, "cargo-dev-link", "exec"), {})
+        except SystemExit:
+            assert command == "--prepare-target"
+        else:
+            assert command == "build"
+WINTEST
 
 echo "cargo-dev-worktree-isolation.test: OK"
