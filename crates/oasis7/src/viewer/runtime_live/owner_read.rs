@@ -225,7 +225,8 @@ impl ViewerRuntimeLiveServer {
             .map_err(ViewerRuntimeLiveServerError::Init)?;
         let echo = serde_json::to_value(&original)
             .map_err(|error| ViewerRuntimeLiveServerError::Serde(error.to_string()))?;
-        let verified = if let Some((prepared, result)) = self.prepared_owner_read.take() {
+        let verified = if let Some(prepared) = self.prepared_owner_read.take() {
+            let (prepared, result) = *prepared;
             if prepared != original {
                 return Err(ViewerRuntimeLiveServerError::Init(
                     "prepared owner read proof mismatch".into(),

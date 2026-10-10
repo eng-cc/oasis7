@@ -175,7 +175,7 @@ pub struct ViewerRuntimeLiveServer {
     verified_world_view: Option<crate::world_service::verified_view::VerifiedWorldView>,
     world_service_query_state: crate::world_service::client::WorldServiceQueryState,
     periodic_service_executor: Option<Arc<periodic_service_io::Executor>>,
-    prepared_owner_read: Option<owner_read::PreparedOwnerRead>,
+    prepared_owner_read: Option<Box<owner_read::PreparedOwnerRead>>,
     prepared_world_service_submission: Option<chain_link::PreparedWorldServiceSubmission>,
     pending_world_service_gameplay: Vec<(
         oasis7_client_api::world_service::RequestCorrelation,
@@ -647,7 +647,7 @@ impl ViewerRuntimeLiveServer {
                                     )?;
                                     handled = {
                                         let mut server = lock_shared_server(&shared)?;
-                                        server.prepared_owner_read = prepared_owner_read;
+                                        server.prepared_owner_read = prepared_owner_read.map(Box::new);
                                         server.prepared_world_service_submission =
                                             prepared_submission;
                                         let handled = server.handle_request_with_chain_prime(

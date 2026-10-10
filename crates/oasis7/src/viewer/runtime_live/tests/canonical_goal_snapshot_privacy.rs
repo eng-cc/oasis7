@@ -406,7 +406,7 @@ fn canonical_goal_owner_browser_read_forwards_original_proof_and_isolates_sessio
     )
     .unwrap();
     let mut server = shared.lock().unwrap();
-    server.prepared_owner_read = prepared;
+    server.prepared_owner_read = prepared.map(Box::new);
     server
         .handle_owner_read(original.clone(), &mut owner, &mut output)
         .unwrap();
