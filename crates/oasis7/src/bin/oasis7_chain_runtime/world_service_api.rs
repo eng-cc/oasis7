@@ -21,10 +21,25 @@ pub(super) struct Service<'a> {
     identity: WorldIdentity,
     signer: &'a FeedbackSubmitSigner,
     runtime: &'a Arc<Mutex<NodeRuntime>>,
+    guarded: Option<(
+        &'a Path,
+        &'a super::controlled_live_config::GuardedReadAuthority,
+    )>,
 }
 impl Service<'_> {
     fn pin(&self, fixed: Option<&CommitRef>) -> Result<PinnedWorld, String> {
-        world_service_read::pin(self.records, self.storage, &self.identity, fixed)
+        if let Some((config, authority)) = self.guarded {
+            world_service_read::pin_guarded(self.records, config, authority, fixed, None)
+        } else {
+            world_service_read::pin(self.records, self.storage, &self.identity, fixed)
+        }
+    }
+    fn pin_at_height(&self, height: u64) -> Result<PinnedWorld, String> {
+        if let Some((config, authority)) = self.guarded {
+            world_service_read::pin_guarded(self.records, config, authority, None, Some(height))
+        } else {
+            world_service_read::pin_at_height(self.records, self.storage, &self.identity, height)
+        }
     }
     fn signed<Q: Serialize, T: Serialize>(
         &self,
@@ -134,6 +149,28 @@ pub(super) fn maybe_handle(
     storage: &Path,
     signer: &FeedbackSubmitSigner,
 ) -> Result<bool, String> {
+    maybe_handle_with_guarded(
+        stream, bytes, runtime, method, path, world_id, world_dir, records, storage, signer, None,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Existing dispatcher authority/storage roots plus explicit engineering policy."
+)]
+pub(super) fn maybe_handle_with_guarded(
+    stream: &mut TcpStream,
+    bytes: &[u8],
+    runtime: &Arc<Mutex<NodeRuntime>>,
+    method: &str,
+    path: &str,
+    world_id: &str,
+    world_dir: &Path,
+    records: &Path,
+    storage: &Path,
+    signer: &FeedbackSubmitSigner,
+    guarded: Option<(&Path, &super::controlled_live_config::GuardedReadAuthority)>,
+) -> Result<bool, String> {
     if ![
         DESCRIBE_PATH,
         SUBMIT_PATH,
@@ -150,13 +187,25 @@ pub(super) fn maybe_handle(
             return Err("world service requires POST".into());
         }
         let body = super::feedback_submit_api::extract_http_json_body(bytes)?;
-        let identity = world_service_read::identity(world_dir, world_id)?;
+        let identity = if let Some((config, _)) = guarded {
+            let authority = super::controlled_live_config::GuardedAuthority::load(config)?;
+            if authority.policy.trust.world_id != world_id {
+                return Err("guarded runtime world differs from external policy".into());
+            }
+            WorldIdentity {
+                world_id: authority.policy.trust.world_id,
+                genesis_digest: authority.policy.trust.genesis_digest,
+            }
+        } else {
+            world_service_read::identity(world_dir, world_id)?
+        };
         let service = Service {
             records,
             storage,
             identity,
             signer,
             runtime,
+            guarded,
         };
         match path {
             DESCRIBE_PATH => operations::describe(&service, parse(body)?),

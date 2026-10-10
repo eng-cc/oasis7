@@ -206,6 +206,8 @@ pub struct WorldAvailability {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DescribeWorldResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_evidence_scope: Option<String>,
     pub contract_version: u32,
     pub world: WorldIdentity,
     pub binding: ExecutionBinding,
@@ -281,6 +283,8 @@ pub enum IntentOutcome<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntentResponse<T> {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_evidence_scope: Option<String>,
     pub contract_version: u32,
     pub correlation: RequestCorrelation,
     pub outcome: IntentOutcome<T>,
@@ -342,6 +346,9 @@ impl ReadWorldViewRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadWorldViewResponse<T> {
     pub contract_version: u32,
+    /// Signed engineering evidence claim; absent retains the ordinary wire contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_evidence_scope: Option<String>,
     pub version: ProjectionVersion,
     /// Logical world time is never a commit position or event sequence.
     pub logical_tick: u64,
@@ -401,6 +408,8 @@ pub struct WorldChange<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadWorldChangesResponse<T> {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_evidence_scope: Option<String>,
     pub contract_version: u32,
     pub changes: Vec<WorldChange<T>>,
     pub next_cursor: EventCursor,

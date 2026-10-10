@@ -903,3 +903,69 @@ pub(super) fn write_json_response(
     stream.flush()?;
     Ok(())
 }
+
+/// The explicit engineering branch admits only existing signed WorldService
+/// routes on loopback; checkpoint, CAS, observer and legacy submit routes have
+/// no reachable handler here.
+pub(super) fn handle_guarded_connection(
+    mut stream: TcpStream,
+    runtime: &Arc<Mutex<NodeRuntime>>,
+    options: &CliOptions,
+    records: &Path,
+    signer: &FeedbackSubmitSigner,
+) -> Result<(), String> {
+    if !stream
+        .peer_addr()
+        .map_err(|e| e.to_string())?
+        .ip()
+        .is_loopback()
+    {
+        return Err("guarded ingress requires loopback".into());
+    }
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .map_err(|e| e.to_string())?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .map_err(|e| e.to_string())?;
+    let bytes = read_complete_status_http_request(&mut stream)?;
+    let request = String::from_utf8_lossy(&bytes);
+    let mut line = request
+        .lines()
+        .next()
+        .ok_or("guarded request line missing")?
+        .split_whitespace();
+    let method = line.next().ok_or("guarded method missing")?;
+    let target = line.next().ok_or("guarded path missing")?;
+    let path = target.split('?').next().unwrap_or(target);
+    let config = options
+        .guarded_initial_config
+        .as_deref()
+        .ok_or("guarded configuration missing")?;
+    let fence = options
+        .guarded_read_authority
+        .as_ref()
+        .ok_or("guarded publication fence missing")?;
+    if !super::world_service_api::maybe_handle_with_guarded(
+        &mut stream,
+        &bytes,
+        runtime,
+        method,
+        path,
+        &options.world_id,
+        Path::new(""),
+        records,
+        Path::new(""),
+        signer,
+        Some((config, fence)),
+    )? {
+        write_json_response(
+            &mut stream,
+            404,
+            b"{\"error\":\"guarded_route_unavailable\"}",
+            false,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

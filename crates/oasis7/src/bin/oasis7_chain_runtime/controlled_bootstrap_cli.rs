@@ -1,8 +1,12 @@
 //! Offline certificate-bound checkpoint verification; dispatches before runtime startup.
 #[cfg(not(test))]
-use super::execution_bridge::controlled_bootstrap_anchor::verify_bootstrap_anchor;
+use super::execution_bridge::controlled_bootstrap_anchor::{
+    VerifiedBootstrapAnchor, verify_bootstrap_anchor,
+};
 #[cfg(test)]
-use super::execution_bridge_real_tests::real_execution_bridge::controlled_bootstrap_anchor::verify_bootstrap_anchor;
+use super::execution_bridge_real_tests::real_execution_bridge::controlled_bootstrap_anchor::{
+    VerifiedBootstrapAnchor, verify_bootstrap_anchor,
+};
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7_distfs::controlled_authority::{
     activation::{InitialActivationPolicy, verify_initial_activation},
@@ -65,38 +69,28 @@ struct BootstrapVerification {
     journal_len: usize,
     module_count: usize,
 }
-pub(super) fn run<'a>(mut args: impl Iterator<Item = &'a str>) -> Result<(), String> {
-    let mut config_path = None;
-    let mut evidence_path = None;
-    while let Some(arg) = args.next() {
-        let destination = match arg {
-            "--trusted-config" => &mut config_path,
-            "--evidence" => &mut evidence_path,
-            _ => return Err(format!("unknown bootstrap verifier argument: {arg}")),
-        };
-        if destination.is_some() {
-            return Err(format!("duplicate bootstrap verifier argument: {arg}"));
-        }
-        *destination = Some(PathBuf::from(
-            args.next()
-                .ok_or("missing bootstrap verifier argument value")?,
-        ));
-    }
-    let config: TrustedBootstrapConfiguration =
-        serde_json::from_slice(&super::controlled_history_cli::read_bounded(
-            &config_path.ok_or("required --trusted-config")?,
-            64 * 1024,
-        )?)
-        .map_err(|e| format!("trusted bootstrap configuration: {e}"))?;
+pub(crate) fn load_verified_bootstrap(
+    config_path: &std::path::Path,
+    evidence_path: &std::path::Path,
+) -> Result<
+    (
+        VerifiedBootstrapAnchor,
+        InitialActivationPolicy,
+        ReleaseSecurityPolicy,
+    ),
+    String,
+> {
+    let config: TrustedBootstrapConfiguration = serde_json::from_slice(
+        &super::controlled_history_cli::read_bounded(config_path, 64 * 1024)?,
+    )
+    .map_err(|e| format!("trusted bootstrap configuration: {e}"))?;
     if config.schema_version != 1 {
         return Err("unsupported trusted bootstrap configuration version".into());
     }
-    let evidence: DurabilityEvidence =
-        serde_json::from_slice(&super::controlled_history_cli::read_bounded(
-            &evidence_path.ok_or("required --evidence")?,
-            64 * 1024 * 1024,
-        )?)
-        .map_err(|e| format!("original bootstrap evidence: {e}"))?;
+    let evidence: DurabilityEvidence = serde_json::from_slice(
+        &super::controlled_history_cli::read_bounded(evidence_path, 64 * 1024 * 1024)?,
+    )
+    .map_err(|e| format!("original bootstrap evidence: {e}"))?;
     let record = &evidence.proposal.body.record;
     let input_root = record
         .roots
@@ -118,8 +112,32 @@ pub(super) fn run<'a>(mut args: impl Iterator<Item = &'a str>) -> Result<(), Str
     let activation =
         verify_initial_activation(&input.bytes, &evidence, &policy, &config.minimum_head)
             .map_err(|e| format!("initial activation evidence: {e}"))?;
-    let verified =
-        verify_bootstrap_anchor(&activation, record, &config.release_security_policy.into())?;
+    let security: ReleaseSecurityPolicy = config.release_security_policy.into();
+    let verified = verify_bootstrap_anchor(&activation, record, &security)?;
+    Ok((verified, policy, security))
+}
+
+pub(super) fn run<'a>(mut args: impl Iterator<Item = &'a str>) -> Result<(), String> {
+    let mut config_path = None;
+    let mut evidence_path = None;
+    while let Some(arg) = args.next() {
+        let destination = match arg {
+            "--trusted-config" => &mut config_path,
+            "--evidence" => &mut evidence_path,
+            _ => return Err(format!("unknown bootstrap verifier argument: {arg}")),
+        };
+        if destination.is_some() {
+            return Err(format!("duplicate bootstrap verifier argument: {arg}"));
+        }
+        *destination = Some(PathBuf::from(
+            args.next()
+                .ok_or("missing bootstrap verifier argument value")?,
+        ));
+    }
+    let (verified, policy, _) = load_verified_bootstrap(
+        &config_path.ok_or("required --trusted-config")?,
+        &evidence_path.ok_or("required --evidence")?,
+    )?;
     let activation = verified.activation();
     let result = BootstrapVerification {
         schema_version: 1,

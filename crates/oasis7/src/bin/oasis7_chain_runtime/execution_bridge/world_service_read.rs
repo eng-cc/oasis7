@@ -165,3 +165,35 @@ fn load(
         commit,
     })
 }
+
+/// Engineering reader uses the writer's verified publication fence. A missing
+/// tail cannot turn an older valid prefix into current read authority.
+pub(crate) fn pin_guarded(
+    records: &Path,
+    config: &Path,
+    authority: &crate::controlled_live_config::GuardedReadAuthority,
+    fixed: Option<&CommitRef>,
+    height: Option<u64>,
+) -> Result<PinnedWorld, String> {
+    let trusted = crate::controlled_live_config::GuardedAuthority::load(config)?;
+    authority.check_configuration(&trusted.configuration_digest)?;
+    if records != trusted.config.records_directory {
+        return Err("guarded read private directory changed".into());
+    }
+    let current = super::controlled_live_history::load_head(&trusted, records, None)?;
+    if current.head != authority.current()? {
+        return Err("guarded current publication tail is missing or changed".into());
+    }
+    let head = if let Some(height) = height {
+        super::controlled_live_history::load_at_height(&trusted, records, height)?
+    } else {
+        super::controlled_live_history::load_head(&trusted, records, fixed)?
+    };
+    let commit = head.commit(&trusted)?;
+    let world = head.world(&trusted.release_policy)?;
+    Ok(PinnedWorld {
+        world,
+        record: head.record,
+        commit,
+    })
+}

@@ -114,6 +114,7 @@ fn verified_pre_effect_reserve_rejection_retires_original_without_replacing_chec
     };
     server.llm_sidecar.hosted_service_inflight = Some(token.clone());
     let response = IntentResponse {
+        execution_evidence_scope: None,
         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
         correlation: pending.correlation.clone(),
         outcome: IntentOutcome::Rejected {

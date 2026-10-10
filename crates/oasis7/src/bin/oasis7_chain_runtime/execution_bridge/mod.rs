@@ -5,6 +5,9 @@ use oasis7::runtime::{BlobStore, LocalCasStore, blake3_hex};
 use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHeadAnnounce};
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod controlled_live;
+mod controlled_live_history;
+mod controlled_live_package;
 mod driver_startup_recovery;
 mod execution_hash;
 mod product_validation_intent;

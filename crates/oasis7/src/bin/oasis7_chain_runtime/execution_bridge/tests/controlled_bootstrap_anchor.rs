@@ -384,6 +384,30 @@ fn cli_fixture(absent_genesis: bool) -> (Vec<u8>, Vec<u8>) {
     if absent_genesis {
         snapshot.chain_resource_manifest.genesis_ref = None;
     }
+    cli_fixture_with_snapshot(snapshot, journal)
+}
+pub(crate) fn live_cli_fixture() -> (Vec<u8>, Vec<u8>) {
+    let public = oasis7::world_service::sign_read_request("owner", (), &hex::encode([7; 32]))
+        .unwrap()
+        .subject_public_key;
+    let world = super::super::tests::world_service::live_fixture_world(&trust().world_id, &public);
+    let t = trust();
+    let snapshot = world.snapshot_with_chain_resource_context(
+        ChainResourceDerivationContext {
+            world_id: &t.world_id,
+            chain_id: &t.chain_id,
+            genesis_ref: Some(&t.genesis_digest),
+            created_at_height: 0,
+            manifest_height: 41,
+            commit_block_hash: Some("fixture-block"),
+            tick: world.state().time,
+        },
+        "fixture-config",
+        "fixture-generation",
+    );
+    cli_fixture_with_snapshot(snapshot, world.journal().clone())
+}
+fn cli_fixture_with_snapshot(snapshot: Snapshot, journal: Journal) -> (Vec<u8>, Vec<u8>) {
     let (_, _, policy, evidence) = seal_full(package(&snapshot, &journal, 41));
     let config = serde_json::json!({
         "schema_version": 1,

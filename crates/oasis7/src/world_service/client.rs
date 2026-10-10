@@ -1,6 +1,9 @@
 //! Bounded HTTP transport for the five WorldService operations.
 use super::{
-    authority, projection::WorldServiceProjection, verified_view::VerifiedWorldView, wire::*,
+    authority,
+    projection::WorldServiceProjection,
+    verified_view::{ReadEvidencePolicy, VerifiedWorldView},
+    wire::*,
 };
 use oasis7_client_api::world_service::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -150,12 +153,22 @@ pub trait WorldServicePort {
 
 #[derive(Clone)]
 pub struct RemoteWorldServiceClient {
+    evidence_policy: ReadEvidencePolicy,
     config: WorldServiceClientConfig,
     http: reqwest::blocking::Client,
     query_state: WorldServiceQueryState,
 }
 impl RemoteWorldServiceClient {
     pub fn new(config: WorldServiceClientConfig) -> Result<Self, WorldServiceClientError> {
+        Self::new_with_evidence_policy(config, ReadEvidencePolicy::Ordinary)
+    }
+
+    /// The controlled prerequisite policy must be deliberately configured by
+    /// the caller. It permits one exact signed engineering scope only.
+    pub fn new_with_evidence_policy(
+        config: WorldServiceClientConfig,
+        evidence_policy: ReadEvidencePolicy,
+    ) -> Result<Self, WorldServiceClientError> {
         config
             .expected_world
             .validate()
@@ -196,6 +209,7 @@ impl RemoteWorldServiceClient {
             .build()
             .map_err(|e| WorldServiceClientError::Configuration(e.to_string()))?;
         Ok(Self {
+            evidence_policy,
             config,
             http,
             query_state: WorldServiceQueryState::default(),
@@ -205,6 +219,27 @@ impl RemoteWorldServiceClient {
         self.query_state = state;
         self
     }
+    fn check_evidence_scope(&self, scope: Option<&str>) -> Result<(), WorldServiceClientError> {
+        if self.evidence_policy.accepts(scope) {
+            Ok(())
+        } else {
+            Err(WorldServiceClientError::Assurance(
+                "service evidence scope is not allowed by explicit client policy".into(),
+            ))
+        }
+    }
+    pub fn read_authority_identity(&self) -> Result<String, String> {
+        let identity = self.config.read_authority_identity()?;
+        if self.evidence_policy == ReadEvidencePolicy::Ordinary {
+            Ok(identity)
+        } else {
+            authority::request_digest(
+                "local-read-evidence-policy",
+                &(identity, self.evidence_policy),
+            )
+        }
+    }
+
     pub fn config(&self) -> &WorldServiceClientConfig {
         &self.config
     }
@@ -291,6 +326,7 @@ impl WorldServicePort for RemoteWorldServiceClient {
                 trust_config_ref: self.config.trusted_service_public_key.clone(),
             },
         )?;
+        self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
         response
             .validate(&self.config.expected_world)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -311,6 +347,7 @@ impl WorldServicePort for RemoteWorldServiceClient {
         let correlation = request.correlation.clone();
         match self.call::<_, IntentResponse<Value>>(SUBMIT_PATH, &request) {
             Ok(response) => {
+                self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
                 response
                     .validate(&correlation)
                     .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -342,6 +379,7 @@ impl WorldServicePort for RemoteWorldServiceClient {
         }
         let response: IntentResponse<Value> =
             self.call(LOOKUP_PATH, &AuthenticatedLookup { request, original })?;
+        self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
         response
             .validate(&expected)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -362,10 +400,14 @@ impl WorldServicePort for RemoteWorldServiceClient {
         let response: ReadWorldViewResponse<WorldServiceProjection> =
             self.signed_call(VIEW_PATH, request.clone())?;
         let identity = self
-            .config
             .read_authority_identity()
             .map_err(WorldServiceClientError::Assurance)?;
-        VerifiedWorldView::new(response, &request)
+        let verified = if self.evidence_policy == ReadEvidencePolicy::Ordinary {
+            VerifiedWorldView::new(response, &request)
+        } else {
+            VerifiedWorldView::new_with_evidence_policy(response, &request, self.evidence_policy)
+        };
+        verified
             .map(|view| view.bind_read_authority(identity))
             .map_err(WorldServiceClientError::Assurance)
     }
@@ -385,6 +427,7 @@ impl WorldServicePort for RemoteWorldServiceClient {
         }
         let response: ReadWorldChangesResponse<Value> =
             self.signed_call(CHANGES_PATH, request.clone())?;
+        self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
         response
             .validate(&request)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -424,6 +467,13 @@ mod tests {
     fn serve(
         transform: impl FnOnce(&mut SignedServiceResponse<Value>) + Send + 'static,
     ) -> (String, thread::JoinHandle<()>) {
+        serve_payload(VIEW_PATH, serde_json::json!({"ok":true}), transform)
+    }
+    fn serve_payload(
+        path: &'static str,
+        payload: Value,
+        transform: impl FnOnce(&mut SignedServiceResponse<Value>) + Send + 'static,
+    ) -> (String, thread::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let task = thread::spawn(move || {
@@ -453,15 +503,11 @@ mod tests {
             };
             let signed: SignedReadRequest<Value> =
                 serde_json::from_slice(&request[head_end..head_end + length]).unwrap();
-            authority::verify_read_request(VIEW_PATH, &signed).unwrap();
-            let digest = authority::request_digest(VIEW_PATH, &signed).unwrap();
-            let mut response = authority::sign_service_response(
-                VIEW_PATH,
-                digest,
-                serde_json::json!({"ok":true}),
-                &hex::encode([9; 32]),
-            )
-            .unwrap();
+            authority::verify_read_request(path, &signed).unwrap();
+            let digest = authority::request_digest(path, &signed).unwrap();
+            let mut response =
+                authority::sign_service_response(path, digest, payload, &hex::encode([9; 32]))
+                    .unwrap();
             transform(&mut response);
             let body = serde_json::to_vec(&response).unwrap();
             write!(
@@ -473,6 +519,50 @@ mod tests {
             stream.write_all(&body).unwrap();
         });
         (endpoint, task)
+    }
+    #[test]
+    fn signed_http_scope_rejects_unknown_downgrade_and_unsigned_tamper() {
+        let payload = serde_json::json!({
+            "contract_version":1,"world":{"world_id":"world","genesis_digest":"genesis"},
+            "binding":{"provider_world_id":"world","branch_id":"main","finality_ref":"fixture",
+                "reorg_generation":0,"governing_manifest_ref":"fixture","authority_generation":1,"permission_generation":1},
+            "capabilities":[],"availability":{"readable":false,"writable":false,"recovering":true,
+                "reason":null,"retry_after_ms":null},"current_view":null
+        });
+        for scope in [None, Some("unknown_scope")] {
+            let mut changed = payload.clone();
+            if let Some(scope) = scope {
+                changed["execution_evidence_scope"] = serde_json::json!(scope);
+            }
+            let (endpoint, task) = serve_payload(DESCRIBE_PATH, changed, |_| {});
+            let client = RemoteWorldServiceClient::new_with_evidence_policy(
+                config(endpoint),
+                ReadEvidencePolicy::AllowControlledPrerequisite,
+            )
+            .unwrap();
+            assert!(matches!(
+                client.describe(),
+                Err(WorldServiceClientError::Assurance(_))
+            ));
+            task.join().unwrap();
+        }
+        let mut signed = payload;
+        signed["execution_evidence_scope"] = serde_json::json!(
+            crate::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE
+        );
+        let (endpoint, task) = serve_payload(DESCRIBE_PATH, signed, |response| {
+            response
+                .payload
+                .as_object_mut()
+                .unwrap()
+                .remove("execution_evidence_scope");
+        });
+        let client = RemoteWorldServiceClient::new(config(endpoint)).unwrap();
+        assert!(matches!(
+            client.describe(),
+            Err(WorldServiceClientError::Assurance(_))
+        ));
+        task.join().unwrap();
     }
     #[test]
     fn response_is_bound_to_trusted_key_request_and_operation() {

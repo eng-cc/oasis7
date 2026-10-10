@@ -79,6 +79,8 @@ pub(super) struct CliOptions {
     pub node_id: String,
     pub world_id: String,
     pub status_bind: String,
+    pub guarded_initial_config: Option<PathBuf>,
+    pub guarded_read_authority: Option<super::controlled_live_config::GuardedReadAuthority>,
     pub storage_profile: StorageProfile,
     pub traffic_profile: TrafficProfile,
     pub node_role: NodeRole,
@@ -157,6 +159,8 @@ impl Default for CliOptions {
             node_id: DEFAULT_NODE_ID.to_string(),
             world_id: DEFAULT_WORLD_ID.to_string(),
             status_bind: DEFAULT_STATUS_BIND.to_string(),
+            guarded_initial_config: None,
+            guarded_read_authority: None,
             storage_profile: StorageProfile::DevLocal,
             traffic_profile: TrafficProfile::Default,
             node_role: NodeRole::Sequencer,
@@ -239,6 +243,12 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         match arg {
             "--node-id" => options.node_id = parse_required_value(&mut iter, "--node-id")?,
             "--world-id" => options.world_id = parse_required_value(&mut iter, "--world-id")?,
+            "--guarded-initial-config" => {
+                options.guarded_initial_config = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--guarded-initial-config",
+                )?));
+            }
             "--status-bind" => {
                 options.status_bind = parse_required_value(&mut iter, "--status-bind")?;
             }

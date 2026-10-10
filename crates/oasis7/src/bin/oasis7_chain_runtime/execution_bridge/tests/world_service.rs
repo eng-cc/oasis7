@@ -38,6 +38,35 @@ fn request(
     }
 }
 
+pub(crate) fn live_fixture_world(world_id: &str, public: &str) -> RuntimeWorld {
+    let mut world = RuntimeWorld::new_with_state(WorldState::default());
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-a".into(),
+        pos: oasis7::GeoPos::new(0, 0, 0),
+    });
+    world.step().unwrap();
+    world.submit_action(Action::ClaimStarterOc {
+        agent_id: "agent-a".into(),
+        player_id: "owner-a".into(),
+        public_key: Some(public.into()),
+    });
+    world.step().unwrap();
+    assert!(world.state().starter_oc_claims.contains_key("agent-a"));
+    world
+        .install_capability_agent_identity("agent-a", "owner-a", 1)
+        .unwrap();
+    world
+        .bind_cognition_runtime(world_id, "main", 0, None, "pending", 0)
+        .unwrap();
+    world
+        .provision_cognition_for_agent("agent-a", "provision-a", "owner-a", 100)
+        .unwrap();
+    world
+        .install_test_provider_capability_fixture_without_cognition_balance("agent-a")
+        .expect("install actual Runtime provider capability context");
+    world
+}
+
 #[test]
 fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
     let dir = temp_dir("world-service-admin");
@@ -52,31 +81,7 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
         world_id: "w1".into(),
         genesis_digest: "fixture-genesis-v1".into(),
     };
-    let mut world = RuntimeWorld::new_with_state(WorldState::default());
-    world.submit_action(Action::RegisterAgent {
-        agent_id: "agent-a".into(),
-        pos: oasis7::GeoPos::new(0, 0, 0),
-    });
-    world.step().unwrap();
-    world.submit_action(Action::ClaimStarterOc {
-        agent_id: "agent-a".into(),
-        player_id: "owner-a".into(),
-        public_key: Some(public),
-    });
-    world.step().unwrap();
-    assert!(world.state().starter_oc_claims.contains_key("agent-a"));
-    world
-        .install_capability_agent_identity("agent-a", "owner-a", 1)
-        .unwrap();
-    world
-        .bind_cognition_runtime("w1", "main", 0, None, "pending", 0)
-        .unwrap();
-    world
-        .provision_cognition_for_agent("agent-a", "provision-a", "owner-a", 100)
-        .unwrap();
-    world
-        .install_test_provider_capability_fixture_without_cognition_balance("agent-a")
-        .expect("install actual Runtime provider capability context");
+    let world = live_fixture_world("w1", &public);
     let provider_invocation = world
         .capability_invocation_contexts()
         .values()

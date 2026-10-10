@@ -53,7 +53,9 @@ mod network_bridge_gap_sync_budget;
 mod network_bridge_gap_sync_observability;
 mod network_error_classification;
 mod node_engine_core;
+mod node_engine_execution;
 mod node_engine_gap_sync_outcome;
+mod node_engine_guarded_local;
 mod node_engine_local_bootstrap;
 mod node_engine_network;
 mod node_engine_network_hash;
@@ -103,12 +105,12 @@ pub use error::NodeError;
 pub use execution_hook::{
     NodeExecutionBootstrap, NodeExecutionCheckpointBlob, NodeExecutionCheckpointBlobRef,
     NodeExecutionCheckpointBundle, NodeExecutionCheckpointDescriptor,
-    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitResult,
-    NodeExecutionHook, NodeReplicatedExecutionInputV1,
-    PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND, REPLICATED_EXECUTION_INPUT_ACTION_ID,
-    REPLICATED_EXECUTION_INPUT_SUBMITTER, REPLICATED_EXECUTION_INPUT_VERSION,
-    bind_replicated_execution_input_action, decode_replicated_execution_input_action,
-    validate_replicated_execution_input_actions,
+    NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionCommitOutcome,
+    NodeExecutionCommitResult, NodeExecutionHook, NodeLocalExecutionContinuation,
+    NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
+    REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
+    REPLICATED_EXECUTION_INPUT_VERSION, bind_replicated_execution_input_action,
+    decode_replicated_execution_input_action, validate_replicated_execution_input_actions,
 };
 use gossip_udp::{
     GossipAttestationMessage, GossipCommitMessage, GossipEndpoint, GossipMessage,
@@ -422,7 +424,8 @@ impl NodeRuntime {
                 return Err(err);
             }
         }
-        if let Err(err) = bind_replicated_inputs(self, engine.next_height) {
+        let reserved_bytes = engine.pending_action_reservation_bytes();
+        if let Err(err) = bind_replicated_inputs(self, engine.next_height, reserved_bytes) {
             self.running.store(false, Ordering::SeqCst);
             return Err(err);
         }

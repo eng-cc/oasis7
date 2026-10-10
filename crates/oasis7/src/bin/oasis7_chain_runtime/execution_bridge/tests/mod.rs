@@ -52,7 +52,7 @@ mod qa_conformance;
 mod replay;
 mod retention;
 mod simulator_driver;
-mod world_service;
+pub(super) mod world_service;
 
 const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 

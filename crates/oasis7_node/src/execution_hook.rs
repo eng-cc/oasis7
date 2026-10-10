@@ -185,6 +185,35 @@ pub struct NodeExecutionCommitResult {
     pub execution_state_root: String,
 }
 
+/// Local execution may wait for durable evidence after consensus has decided.
+/// Deferred does not revoke that decision or authorize a replacement proposal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NodeExecutionCommitOutcome {
+    Applied(NodeExecutionCommitResult),
+    Deferred,
+}
+
+/// Exact local decision continuation captured by the Node before guarded
+/// execution. This is local recovery material, never a network finality proof.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NodeLocalExecutionContinuation {
+    pub schema_version: u32,
+    pub context: NodeExecutionCommitContext,
+    pub predecessor_committed_height: u64,
+    pub predecessor_node_block_hash: Option<String>,
+    pub predecessor_execution_height: u64,
+    pub predecessor_execution_block_hash: Option<String>,
+    pub predecessor_execution_state_root: Option<String>,
+    pub next_height: u64,
+    pub next_slot: u64,
+    pub reserved_action_bytes: usize,
+    pub approved_stake: u64,
+    pub rejected_stake: u64,
+    pub required_stake: u64,
+    pub total_stake: u64,
+}
+
 /// A durable execution boundary established by an explicit local bootstrap.
 ///
 /// The boundary is derived from the persisted runtime world and is not a
@@ -256,6 +285,49 @@ pub trait NodeExecutionHook: Send {
         _expected_execution_state_root: Option<&str>,
     ) -> Result<NodeExecutionCommitResult, String> {
         self.on_commit(context)
+    }
+
+    /// Opt-in engineering seam. Its captured local decision must be durable
+    /// before candidate execution begins. Ordinary/network hooks do not opt in.
+    fn guarded_local_execution(&self) -> bool {
+        false
+    }
+
+    fn prepare_local_continuation(
+        &mut self,
+        _continuation: &NodeLocalExecutionContinuation,
+    ) -> Result<(), String> {
+        Err("guarded local execution continuation is unsupported".into())
+    }
+
+    fn pending_local_continuation(
+        &mut self,
+    ) -> Result<Option<NodeLocalExecutionContinuation>, String> {
+        Ok(None)
+    }
+
+    /// Called only after the original decision has been locally applied.
+    fn complete_local_continuation(
+        &mut self,
+        _context: &NodeExecutionCommitContext,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Ordinary hooks remain synchronous. Guarded engineering hooks override
+    /// this seam and retain the exact original candidate while waiting.
+    fn on_commit_outcome_with_expected(
+        &mut self,
+        context: NodeExecutionCommitContext,
+        expected_execution_block_hash: Option<&str>,
+        expected_execution_state_root: Option<&str>,
+    ) -> Result<NodeExecutionCommitOutcome, String> {
+        self.on_commit_with_expected(
+            context,
+            expected_execution_block_hash,
+            expected_execution_state_root,
+        )
+        .map(NodeExecutionCommitOutcome::Applied)
     }
 
     fn restore_to_height(&mut self, _world_id: &str, _height: u64) -> Result<bool, String> {
