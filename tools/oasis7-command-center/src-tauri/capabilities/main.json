@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Local main window can use only the Command Center bridge. No filesystem, shell, remote-origin, or Codex control permission.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-open-project", "allow-query-view", "allow-search-rules",
+    "allow-save-decision-draft", "allow-save-preference", "allow-read-source",
+    "allow-refresh-source", "allow-rebuild-cache", "allow-refresh-github",
+    "allow-get-github-snapshot", "allow-open-source-target", "allow-choose-project",
+    "allow-associate-work", "allow-read-version"
+  ]
+}

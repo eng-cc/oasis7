@@ -1,0 +1,17 @@
+[package]
+name = "oasis7-command-center"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.1", features = [] }
+
+[dependencies]
+oasis7-command-center-core = { path = "../core" }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "=2.12.2", features = ["tray-icon"] }
+tauri-plugin-dialog = "=2.8.1"
+tokio = { version = "1", features = ["sync"] }
+url = "2"

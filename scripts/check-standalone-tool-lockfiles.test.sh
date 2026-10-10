@@ -98,11 +98,28 @@ if grep -q "checking standalone lockfile: tools/workspace_member/Cargo.toml" "$v
 fi
 test "$(grep -c "^git ls-files " "$tmp_dir/git-calls.log")" -eq 1
 
+# A nested independent workspace owns one lockfile for all its members.
+mkdir -p tools/nested/core/src tools/nested/host/src
+cat >tools/nested/Cargo.toml <<'TOML'
+[workspace]
+members = ["core", "host"]
+resolver = "2"
+TOML
+for member in core host; do
+  printf '[package]\nname = "nested_%s"\nversion = "0.1.0"\nedition = "2021"\n' "$member" >"tools/nested/$member/Cargo.toml"
+  echo 'pub fn ready() {}' >"tools/nested/$member/src/lib.rs"
+done
+env -u RUSTC_WRAPPER cargo generate-lockfile --manifest-path tools/nested/Cargo.toml
+git add tools/nested
+git commit -q -m "nested independent workspace"
+OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" "$script_path" >"$tmp_dir/nested.out"
+grep -q "ok: standalone lockfiles are locked and manifest-consistent (5 manifests)" "$tmp_dir/nested.out"
+
 cargo_call_log="$tmp_dir/cargo-calls.log"
 cat >"$fake_bin/cargo" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ " $* " != *" --no-deps "* ]]; then
+if [[ "${1:-}" != "locate-project" && " $* " != *" --no-deps "* ]]; then
   echo "unexpected standalone Cargo metadata invocation with Rust baseline disabled: $*" >&2
   exit 1
 fi
@@ -124,8 +141,8 @@ if ! OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" \
   cat "$structural_out" >&2
   exit 1
 fi
-grep -q "ok: standalone lockfiles are locked and manifest-consistent (2 manifests)" "$structural_out"
-if [[ "$(wc -l <"$cargo_call_log")" -ne 1 ]] || ! grep -q -- "--no-deps" "$cargo_call_log"; then
+grep -q "ok: standalone lockfiles are locked and manifest-consistent (5 manifests)" "$structural_out"
+if [[ "$(grep -c -- "--no-deps" "$cargo_call_log")" -ne 1 ]] || grep -q -- "--locked" "$cargo_call_log"; then
   echo "standalone lockfile structural checks invoked Cargo beyond root workspace membership discovery" >&2
   cat "$cargo_call_log" >&2
   exit 1

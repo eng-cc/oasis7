@@ -1,0 +1,46 @@
+name: Command Center
+on:
+  pull_request:
+    paths:
+      - 'tools/oasis7-command-center/**'
+      - '.github/workflows/command-center.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/oasis7-command-center/**'
+      - '.github/workflows/command-center.yml'
+permissions:
+  contents: read
+concurrency:
+  group: command-center-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install Rust
+        run: rustup toolchain install 1.96.0 --profile minimal --component rustfmt --component clippy
+      - name: Check core and host formatting
+        run: env -u RUSTC_WRAPPER cargo fmt --manifest-path tools/oasis7-command-center/Cargo.toml --all -- --check
+      - name: Core regressions
+        run: env -u RUSTC_WRAPPER cargo test --locked --manifest-path tools/oasis7-command-center/Cargo.toml -p oasis7-command-center-core
+      - name: Verify generated JSON contracts
+        run: |
+          env -u RUSTC_WRAPPER cargo run --locked --manifest-path tools/oasis7-command-center/Cargo.toml -p oasis7-command-center-core --example export_types
+          git diff --exit-code -- tools/oasis7-command-center/ui/src/generated/core.ts
+      - name: UI contracts and packaged resources
+        working-directory: tools/oasis7-command-center/ui
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Check desktop host
+        run: env -u RUSTC_WRAPPER cargo clippy --locked --manifest-path tools/oasis7-command-center/Cargo.toml --workspace --all-targets -- -D warnings
+      - name: Package development App
+        run: env -u RUSTC_WRAPPER npm --prefix tools/oasis7-command-center/ui run desktop:build -- --debug

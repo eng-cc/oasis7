@@ -1,0 +1,27 @@
+{
+  "name": "oasis7-command-center-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "desktop:dev": "cd .. && tauri dev",
+    "desktop:build": "cd .. && tauri build --bundles app"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "solid-js": "^1.9.9"
+  },
+  "devDependencies": {
+    "@solidjs/testing-library": "^0.8.10",
+    "@tauri-apps/cli": "^2.11.3",
+    "@testing-library/jest-dom": "^6.9.1",
+    "jsdom": "^27.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9",
+    "vite-plugin-solid": "^2.11.9",
+    "vitest": "^5.0.3"
+  }
+}
