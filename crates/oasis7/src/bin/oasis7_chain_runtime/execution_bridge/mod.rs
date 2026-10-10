@@ -851,7 +851,7 @@ pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_
 #[cfg(not(test))]
 pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;
 
-mod controlled_bootstrap_anchor;
+pub(crate) mod controlled_bootstrap_anchor;
 mod controlled_capture;
 
 pub(crate) mod controlled_history;

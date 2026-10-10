@@ -13,6 +13,10 @@ pub fn print_help() {
     println!(
         "Usage: oasis7_chain_runtime [options]\n\n\
 Starts standalone chain/node runtime with status HTTP endpoints.\n\n\
+Offline command (before Node/services):\n\
+  verify-controlled-bootstrap --trusted-config <external-json> --evidence <original-proof-json>\n\
+  verifies a certificate-bound checkpoint prerequisite; caller authenticates issuer policy independently.\n\
+\n\
 Options:\n\
   --node-id <id>                    node identifier (default: {DEFAULT_NODE_ID})\n\
   --world-id <id>                   technical runtime partition id for the unified persistent world (default: {DEFAULT_WORLD_ID})\n\

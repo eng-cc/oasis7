@@ -1,8 +1,5 @@
 //! Read-only, certificate-bound bootstrap validation. No startup or readiness consumer.
-#![allow(
-    dead_code,
-    reason = "Offline bootstrap prerequisite deliberately has no live activation consumer yet."
-)]
+
 use super::execution_hash::ExecutionHashPayload;
 use super::{ExecutionBridgeRecord, controlled_capture as capture, to_cbor};
 use oasis7::runtime::{
@@ -286,4 +283,4 @@ pub(crate) fn verify_bootstrap_anchor(
 
 #[cfg(test)]
 #[path = "tests/controlled_bootstrap_anchor.rs"]
-mod tests;
+pub(crate) mod tests;
