@@ -37,6 +37,8 @@ use signer_derivation::{
 };
 #[path = "oasis7_chain_runtime/cli.rs"]
 mod cli;
+#[path = "oasis7_chain_runtime/controlled_bootstrap_cli.rs"]
+mod controlled_bootstrap_cli;
 #[path = "oasis7_chain_runtime/controlled_history_cli.rs"]
 mod controlled_history_cli;
 #[path = "oasis7_chain_runtime/distfs_probe_runtime.rs"]

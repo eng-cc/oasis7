@@ -8,7 +8,8 @@ use oasis7_distfs::controlled_authority::{
         initial_activation_signing_bytes, verify_initial_activation,
     },
     replicated_protocol::{
-        EndpointRole, FileEndpoint, FixedTrust, ProtocolOutcome, ReplicatedCoordinator,
+        DurabilityEvidence, EndpointRole, FileEndpoint, FixedTrust, ProtocolOutcome,
+        ReplicatedCoordinator,
     },
 };
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -159,7 +160,14 @@ fn package(snapshot: &Snapshot, journal: &Journal, checkpoint_height: u64) -> Cl
     }
 }
 static SERIAL: AtomicU64 = AtomicU64::new(0);
-fn seal(mut record: ClosedRecord) -> (VerifiedInitialActivation, ClosedRecord) {
+fn seal_full(
+    mut record: ClosedRecord,
+) -> (
+    VerifiedInitialActivation,
+    ClosedRecord,
+    InitialActivationPolicy,
+    DurabilityEvidence,
+) {
     // Authorized fixture issuer and local endpoints; no formal-world claim.
     let t = trust();
     let genesis = t.genesis_anchor().unwrap();
@@ -243,6 +251,10 @@ fn seal(mut record: ClosedRecord) -> (VerifiedInitialActivation, ClosedRecord) {
     .unwrap();
     drop(coordinator);
     std::fs::remove_dir_all(root).unwrap();
+    (token, record, policy, *evidence)
+}
+fn seal(record: ClosedRecord) -> (VerifiedInitialActivation, ClosedRecord) {
+    let (token, record, _, _) = seal_full(record);
     (token, record)
 }
 #[test]
@@ -358,4 +370,35 @@ fn opaque_or_oversized_artifacts_and_unbound_objects_fail_closed() {
         alias.roots[&ArtifactRole::NonceIndex].clone(),
     );
     assert!(verify_bootstrap_anchor(&t, &alias, &ReleaseSecurityPolicy::default()).is_err());
+}
+
+/// Original bytes are sealed before the subprocess sees any configuration/input.
+pub(crate) fn original_cli_fixture() -> (Vec<u8>, Vec<u8>) {
+    cli_fixture(false)
+}
+pub(crate) fn absent_genesis_cli_fixture() -> (Vec<u8>, Vec<u8>) {
+    cli_fixture(true)
+}
+fn cli_fixture(absent_genesis: bool) -> (Vec<u8>, Vec<u8>) {
+    let (mut snapshot, journal) = snapshot();
+    if absent_genesis {
+        snapshot.chain_resource_manifest.genesis_ref = None;
+    }
+    let (_, _, policy, evidence) = seal_full(package(&snapshot, &journal, 41));
+    let config = serde_json::json!({
+        "schema_version": 1,
+        "issuer_policy": {
+            "trust": policy.trust,
+            "issuer_public_key": policy.issuer_public_key,
+            "initial_state_root": policy.initial_state_root,
+            "execution_manifest_root": policy.execution_manifest_root,
+            "activation_height": policy.activation_height
+        },
+        "minimum_head": trust().genesis_anchor().unwrap(),
+        "release_security_policy": ReleaseSecurityPolicy::default()
+    });
+    (
+        serde_json::to_vec(&config).unwrap(),
+        serde_json::to_vec(&evidence).unwrap(),
+    )
 }
