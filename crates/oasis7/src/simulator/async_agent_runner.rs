@@ -24,7 +24,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::runtime::{CognitionLeaseV1, RuntimeReceiptLineageV1};
-use oasis7_agent_api::CognitionLeaseConsumptionViewV1;
 
 use super::Observation;
 use super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
@@ -51,6 +50,9 @@ mod outcome;
 use self::outcome::{
     default_observation, outcome_from_completion, validate_cognition_lease_for_request,
 };
+#[path = "async_agent_runner_lease_view.rs"]
+mod lease_view;
+pub(crate) use self::lease_view::validated_cognition_lease_consumption_view;
 #[path = "async_agent_runner_actor_controls.rs"]
 mod actor_controls;
 #[path = "async_agent_runner_budget.rs"]
@@ -64,37 +66,6 @@ mod runtime_feedback;
 #[path = "async_agent_runner_test_support.rs"]
 mod test_support;
 use self::test_support::{BlockingProviderBehavior, BuiltinWaitBehavior};
-
-/// Runtime-to-Harness projection after complete lease validation. This is a
-/// correlation view only; the durable lease remains the only accounting and
-/// admission authority.
-///
-/// Produce the read-only API correlation view only after the same complete
-/// Runtime lease admission checks used by the provider-dispatch boundary.
-/// The view intentionally omits quote/accounting fields and cannot authorize
-/// reservation, settlement, or world effects.
-#[allow(dead_code)] // B3's Runner boundary consumes this after the typed switch.
-pub(crate) fn validated_cognition_lease_consumption_view(
-    agent_id: &str,
-    request_context: &ContinuousAgentRequestContextV1,
-    lease: &CognitionLeaseV1,
-    logical_tick: WorldTime,
-) -> Result<CognitionLeaseConsumptionViewV1, AsyncAgentRunnerError> {
-    validate_cognition_lease_for_request(agent_id, request_context, lease, logical_tick)?;
-    Ok(CognitionLeaseConsumptionViewV1 {
-        schema_version: CognitionLeaseConsumptionViewV1::SCHEMA_VERSION.to_string(),
-        lease_id: lease.lease_id.clone(),
-        idempotency_key: lease.idempotency_key.clone(),
-        agent_id: lease.agent_id.clone(),
-        agent_session_id: lease.agent_session_id.clone(),
-        agent_turn_id: lease.agent_turn_id.clone(),
-        decision_request_id: lease.decision_request_id.clone(),
-        request_digest: lease.request_digest.clone(),
-        status: lease.status,
-        reserved_amount: lease.reserved_amount,
-        reserved_at_tick: lease.reserved_at_tick,
-    })
-}
 
 const DEFAULT_MAILBOX_CAPACITY: usize = 16;
 /// Stable identifier for an actor turn.
