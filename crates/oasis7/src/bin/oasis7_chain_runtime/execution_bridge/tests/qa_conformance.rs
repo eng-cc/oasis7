@@ -2,6 +2,7 @@
 use super::*;
 mod application_admission;
 mod application_admission_boundaries;
+mod application_completion;
 mod application_fairness;
 mod application_feedback_ack_recovery;
 mod application_feedback_ack_write_failure;
@@ -346,6 +347,17 @@ impl Fixture {
         let worker_halt = halt.clone();
         let worker_node = node.clone();
         let worker_root = root.clone();
+        // QA-only causal probe: delay only a verified successful View response.
+        // Each delay remains below the client's transport timeout; cumulative
+        // protocol stages may exceed the former completion observation window.
+        let successful_view_delay = std::env::var("PRE2_CONFORMANCE_VIEW_DELAY_MS")
+            .ok()
+            .map(|value| Duration::from_millis(value.parse().expect("View delay milliseconds")))
+            .unwrap_or_default();
+        assert!(
+            successful_view_delay <= Duration::from_millis(1000),
+            "causal View delay must remain below the transport timeout"
+        );
         let trusted_service_public_key = signer.public_key_hex.clone();
         let worker = thread::spawn(move || {
             let concurrency_gate = worker_gate.clone();
@@ -569,6 +581,14 @@ impl Fixture {
                             }
                             _ => unreachable!("only authenticated read routes are captured"),
                         }
+                    }
+                    if verified_success && path == VIEW_PATH && !successful_view_delay.is_zero() {
+                        println!(
+                            "conformance_successful_view_delay_ms={} original_request_digest={} response_unchanged=true",
+                            successful_view_delay.as_millis(),
+                            blake3_hex(&bytes)
+                        );
+                        thread::sleep(successful_view_delay);
                     }
                     if let Err(error) = stream.write_all(&response) {
                         assert!(

@@ -45,11 +45,14 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
     let mut hello_acks = 0;
     let mut play_processed = false;
     let mut play_blocked = false;
+    let mut line = String::new();
     while Instant::now() < read_deadline {
-        let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) => break,
             Ok(_) => {
+                if !line.ends_with('\n') {
+                    continue;
+                }
                 if let Ok(ViewerResponse::ControlCompletionAck { ack }) =
                     serde_json::from_str::<ViewerResponse>(&line)
                     && ack.request_id == 701
@@ -63,9 +66,11 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
                     }
                     if hello_acks >= 2 && value["type"] == "snapshot" {
                         play_processed = true;
+                        line.clear();
                         break;
                     }
                 }
+                line.clear();
             }
             Err(e)
                 if matches!(
@@ -78,20 +83,56 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
     println!(
         "hosted_genuine_live_play_ordered_snapshot={play_processed} hello_acks={hello_acks} request701_blocked={play_blocked}"
     );
-    let eligibility = shared.lock().unwrap().test_agent_service_pump_status();
+    let drain_stop = Arc::new(AtomicBool::new(false));
+    let reader_stop = drain_stop.clone();
+    let draining = thread::spawn(move || {
+        while !reader_stop.load(Ordering::SeqCst) {
+            match reader.read_line(&mut line) {
+                Ok(0) => return Ok(()),
+                Ok(_) => {
+                    if line.ends_with('\n') {
+                        line.clear();
+                    }
+                }
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                    ) => {}
+                Err(error) => return Err(error.kind()),
+            }
+        }
+        Ok(())
+    });
+    let eligibility_deadline = application_completion::child_deadline();
+    let eligibility = loop {
+        if let Ok(server) = shared.try_lock() {
+            break server.test_agent_service_pump_status();
+        }
+        if Instant::now() >= eligibility_deadline {
+            break serde_json::Value::Null;
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
     println!("hosted_actual_eligibility={eligibility}");
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut completion = application_completion::CompletionWatch::new();
+    let mut summary = serde_json::Value::Null;
     let summary = loop {
-        let summary = shared.lock().unwrap().test_canonical_provider_summary();
-        if summary["terminal_states"]["agent-a"]["status"] == "committed"
-            || Instant::now() >= deadline
-        {
+        if let Ok(server) = shared.try_lock() {
+            summary = server.test_canonical_provider_summary();
+        }
+        if completion.finished(
+            &summary,
+            application_completion::canonical_complete(&summary),
+        ) {
             break summary;
         }
         thread::sleep(Duration::from_millis(20));
     };
     client_socket.shutdown(std::net::Shutdown::Both).unwrap();
     let joined = worker.join().unwrap();
+    drain_stop.store(true, Ordering::SeqCst);
+    let drained = draining.join().unwrap();
     println!(
         "hosted_serving_witness worker_ok={} terminal_status={} pending_actions={} pending_intents={} direct_poll_calls=0",
         joined.is_ok(),
@@ -127,10 +168,19 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
         "actual hosted eligibility prerequisite was not satisfied"
     );
     assert!(joined.is_ok(), "actual serving loop failed: {joined:?}");
+    assert!(
+        drained.is_ok(),
+        "actual hosted output drain failed: {drained:?}"
+    );
+    assert!(
+        !application_completion::has_failure(&summary),
+        "actual canonical completion error: {summary}"
+    );
     assert_eq!(
         summary["terminal_states"]["agent-a"]["status"], "committed",
         "eligible hosted serving loop must drive registered native provider to real receipt"
     );
+    application_completion::save_completion(&summary);
     println!("PRE2_HOSTED_NATIVE_PROVIDER_CANONICAL_RECEIPT_PASSED direct_poll_calls=0");
 }
 
