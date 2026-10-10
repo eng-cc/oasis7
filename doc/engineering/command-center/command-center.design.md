@@ -17,7 +17,7 @@
 
 采用 **Tauri 2 + 独立 Rust 核心 + SolidJS / TypeScript strict / Vite + SQLite**。Rust 拥有领域、来源、持久化、索引、操作与运行时；TypeScript 负责呈现、输入和界面状态。生产形态为 macOS App，静态界面随包发布，Core 驻留 App；不需要用户在终端启动看板服务。[Tauri 进程模型](https://v2.tauri.app/concept/process-model/)支持这种系统 WebView 与 Rust Core 分工。
 
-首版保留本地使用、可选 GitHub、支持版本的 Codex 与未来远端边界。完整 IDE、游戏 Viewer、游戏内 Agent 调度、公共网站、多租户平台、全机任务接管和无人值守执行宿主均不属于当前产品承诺。性能、系统版本范围和真实协议兼容性须由后续实现证据确认。
+首版保留本地使用、可选 GitHub、版本受控的可选实验 Codex 连接器与未来远端边界；基础桌面和四视图可独立发布。完整 IDE、游戏 Viewer、游戏内 Agent 调度、公共网站、多租户平台、全机任务接管和无人值守执行宿主均不属于当前产品承诺。性能、系统版本范围和真实协议兼容性须由后续实现证据确认。
 
 ## 2. 上游约束与相关角色
 
@@ -35,12 +35,12 @@
 | [REQ-CC-004](command-center.prd.md#REQ-CC-004) | 规范效力、历史理由、个人决定与正式回写可区分 | [DES-CC-004](#DES-CC-004) | 文档主责；显式替代与源版本 | 不另建通用决策登记系统 |
 | [REQ-CC-005](command-center.prd.md#REQ-CC-005) | 工作目的、PR/CI、持久会话与运行实例分别关联 | [DES-CC-005](#DES-CC-005) | agent_engineer；GitHub / Codex | 不将新连接当全机控制权 |
 | [REQ-CC-006](command-center.prd.md#REQ-CC-006) | 聚合真实问题，运行时请求使用原始身份 | [DES-CC-006](#DES-CC-006) | 真实请求方；已有授权 | 不将普通实现转为待批准 |
-| [REQ-CC-007](command-center.prd.md#REQ-CC-007) | 动作受实际能力、环境和目标约束，回执说明结果 | [DES-CC-007](#DES-CC-007) | agent_engineer；支持版本协议 | 读取历史不赋予控制能力 |
+| [REQ-CC-007](command-center.prd.md#REQ-CC-007) | 动作受实际能力、环境和目标约束，回执说明结果 | [DES-CC-007](#DES-CC-007) | agent_engineer；已核对版本协议 | 读取历史不赋予控制能力 |
 | [REQ-CC-008](command-center.prd.md#REQ-CC-008) | 不确定副作用持久保留，恢复不自动重发 | [DES-CC-008](#DES-CC-008) | runtime_engineer；源端可核实事实 | 不承诺上游幂等或完整事件重放 |
 | [REQ-CC-009](command-center.prd.md#REQ-CC-009) | 关窗留后台，完整退出明确处理自管活跃或未知工作 | [DES-CC-009](#DES-CC-009) | runtime_engineer；进程所有权 | 不保证崩溃、强退、重启后继续 |
 | [REQ-CC-010](command-center.prd.md#REQ-CC-010) | 中文短查询、IME、键盘、读屏和有界长列表可用 | [DES-CC-010](#DES-CC-010) | UI 实现 / qa_engineer；真实 macOS | 浏览器模拟不证明系统体验 |
 | [REQ-CC-011](command-center.prd.md#REQ-CC-011) | 缓存重建保留个人与未决数据，凭据和展示内容有边界 | [DES-CC-011](#DES-CC-011) | runtime_engineer；SQLite / Keychain | 不默认记录或上传完整会话 |
-| [REQ-CC-012](command-center.prd.md#REQ-CC-012) | 本地先行、连接独立降级，扩展按明确需求进行 | [DES-CC-012](#DES-CC-012) | 产品负责人；环境和协议能力 | 不预建第二 UI 或中心平台 |
+| [REQ-CC-012](command-center.prd.md#REQ-CC-012) | 本地先行，Codex 实验接入独立启停与降级，基础发布不依赖它 | [DES-CC-012](#DES-CC-012) | 产品负责人；环境和协议能力 | 不把 stdio 或非实验 API 当生产支持承诺 |
 
 ## 3. 当前状态、目标状态与差距
 
@@ -73,7 +73,7 @@ flowchart TB
   end
   REPO["文档与 Git"]
   GH["GitHub"]
-  OWNED["自管 Codex"]
+  OWNED["自管 Codex（可选实验）"]
   EXT["外部或远端运行时"]
   CORE -->|"读取与核对"| REPO
   CORE -->|"条件请求"| GH
@@ -144,7 +144,7 @@ GitHub 由共享 reqwest Client 按 host/account 访问 REST，遵循[条件请�
 
 ### 5.3 工作操作与待处理请求
 
-用户从目标或工作选择明确范围、依据版本、环境与连接能力，应用准备相应操作；真正启动、输入或中断由受支持的 Codex 接口执行，看板不复制 Agent 执行循环，也不自动分发所有未完成目标。
+用户从目标或工作选择明确范围、依据版本、环境与连接能力，应用准备相应操作；真正启动、输入或中断经核对版本与能力的 Codex 连接器执行，新工作准入和停用后的既有工作管理遵循 §6.4。看板不复制 Agent 执行循环，也不自动分发所有未完成目标。
 
 运行时反向请求按真实 runtime/request/thread/turn 身份登记，包含背景、可选输入及影响；重复投影同一问题可以聚合，多次独立请求不能因文字相同而合并。展示普通提醒与真实阻塞的区别；已授权实现继续按既有授权推进，不加看板总审批。处理结果由回执与来源确认，刷新不重复回复。
 
@@ -155,6 +155,7 @@ GitHub 由共享 reqwest Client 按 host/account 访问 REST，遵循[条件请�
 | 事件 | 本 App 自管运行时 | 外部运行时 |
 | --- | --- | --- |
 | 关闭主窗口 | 保留菜单栏入口和必要连接，任务继续；可降低只读轮询频率 | 只改变观察，不发送停止 |
+| 停用实验连接器 | 先拒绝新工作；活跃或未知时保留原实例管理与必要恢复，确认无活跃/未知后回收空闲服务 | 停止新接入；既有连接的退出不改变外部任务所有权 |
 | 完整退出且确认没有活跃工作 | 停止接收新动作，保存状态，结束空闲自管服务并回收子进程 | 断开本客户端连接 |
 | 完整退出且有活跃或未知工作 | 留后台、等待结束后退出、明确停止后退出；默认不停止 | 所有权仍在外部，不随退出发送停止 |
 | 明确停止目标 | 请求正确实例/目标，核对实际停止结果 | 仅在目标确实可控且已授权时执行 |
@@ -162,7 +163,7 @@ GitHub 由共享 reqwest Client 按 host/account 访问 REST，遵循[条件请�
 
 活跃范围含生成、等待输入/批准及可核实的后台命令；`turn/completed` 不证明所有后台工作结束。无法观察后台范围即保留未知；中断已接受也不证明结束。等待退出期间不再接收新副作用，仍处理既有协议控制与状态。停止失败或未知时恢复可操作说明，不显示“已安全结束”。
 
-退出协调属于 runtime/application，组件卸载、路由变化和取消订阅不能触发它。遵循 [Tokio 关闭协调](https://tokio.rs/tokio/topics/shutdown)，对子进程显式关闭并 wait/reap；[Child drop](https://docs.rs/tokio/latest/tokio/process/struct.Command.html) 不是任务持久性策略。App 更新重启使用同一退出机制。
+退出协调属于 runtime/application，组件卸载、路由变化和取消订阅不能触发它。若多个项目/环境共享自管进程，回收前核对该进程的全部工作和其他仍在使用的连接，不能只因一个项目停用就回收整个进程。遵循 [Tokio 关闭协调](https://tokio.rs/tokio/topics/shutdown)，对子进程显式关闭并 wait/reap；[Child drop](https://docs.rs/tokio/latest/tokio/process/struct.Command.html) 不是任务持久性策略。App 更新重启使用同一退出机制。
 
 ## 6. 接口与数据合同
 
@@ -200,7 +201,11 @@ PR source HEAD、实际测试 SHA、main 前进和验收分别关联：旧 SHA �
 
 连接分别声明历史可读、实时可观察、可控制及具体范围。新 app-server 的已加载状态不能证明其他 App/CLI/IDE 的运行状态；读取历史不自动 resume/fork 或获取控制。外部连接按实际支持复用，不以私有数据库/JSONL 解析作为默认协议。
 
-首版选实际支持版本的 [Codex app-server](https://learn.chatgpt.com/docs/app-server) stdio 与非实验 API。官方资料对 TCP WebSocket、远端 Code Mode host 的命令和传输有专门支持边界，不能据此承诺所有远端协议均为生产稳定能力。记录实际版本、初始化结果与 capability；开发时从支持版本生成 schema，用于契约回放，接口变更限制在 adapter。
+本客户端把 app-server adapter 定义为 **experimental、optional**，默认不为尚未启用的项目/环境建立连接或启动进程；用户明确启用后才按锁定版本试用。这个发布等级属于本客户端连接器，与协议的 `capabilities.experimentalApi` 开关分别管理。试用优先 stdio，并保持 `experimentalApi=false` 或省略该能力；需要实验方法时另行评估其具体用途，不能因连接器已启用就全量开启实验 API。
+
+2026-10-10 核对的[官方文档](https://learn.chatgpt.com/docs/app-server#connect-a-remote-code-mode-host)在远端 Code Mode host 一节同时说明 app-server 命令和 WebSocket 传输的实验性及生产使用限制；同页另有[非实验 API 范围](https://learn.chatgpt.com/docs/app-server#experimental-api-opt-in)。后者及 stdio 默认传输均不能证明本产品集成已获得生产支持，因此本设计不把限制推定为仅适用于远端，也不承诺该连接器已生产受支持。
+
+每个连接记录实际版本、传输、初始化结果、可用方法、支持范围来源及核对时间；从实际锁定版本生成 schema 用于契约回放，接口变化限制在 adapter。连通性、API capability、上游支持范围与本客户端发布等级分别判断；版本兼容测试通过不自动升级发布等级。稳定化条件见[重新决策条件](#CC-CODEX-PROMOTION)。
 
 Rust runtime 持有自管 child、stdin writer、stdout reader、限量 stderr 与 request map，正确处理双向请求/响应/通知。沿用所选环境已有官方登录态，缺失时走该版本支持的官方认证；客户端不另存 ChatGPT 密码。必要字段不兼容时局部报错，未知非关键字段可容忍，其他来源继续工作。
 
@@ -218,7 +223,7 @@ Rust runtime 持有自管 child、stdin writer、stdout reader、限量 stderr �
 | 个人数据 | `save_preference`、`save_decision_draft`、`confirm_link` | 保存用户明确动作；不改写源端交付状态 |
 | 导航 | `open_source_target` | Rust 校验项目范围、规范化路径和 URL 协议 |
 
-Rust 边界不能信任前端提供的“已授权”“可控制”布尔值，应核对已有授权事实、连接能力和目标。副作用与请求回复绑定原 runtime instance 及上游对象；重连先核实绑定，不因持久 thread ID 相同自动移交控制。
+Rust 边界不能信任前端提供的“已授权”“可控制”布尔值，应核对已有授权事实、连接能力和目标。新连接/新任务同时检查该项目/环境的实验启用状态；停用后的现有工作管理独立保留原目标核对、必要输入、明确中断和仅为收尾所需的恢复连接，不能用一个全局 enabled 判断把这些入口一并屏蔽。副作用与请求回复绑定原 runtime instance 及上游对象；重连先核实绑定，不因持久 thread ID 相同自动移交控制。
 
 查询使用 command，有序增量使用 Channel，Event 仅作少量失效/状态提示；[Tauri 文档](https://v2.tauri.app/develop/calling-frontend/)明确区分这些用途。先发带 revision 的快照，再发 subscription ID、本地序号与范围的批次；这些游标仅服务 UI，不是上游重放保证。
 
@@ -319,10 +324,12 @@ IME composition 期间 Enter 只用于候选操作，不能误提交搜索/发�
 | --- | --- | --- |
 | 桌面基础 | 打包启动、打开项目、真实文档/Git、中文搜索、位置恢复 | GitHub/Codex 可以未接入，不阻塞本地 |
 | 四视图闭环 | PR/CI、目标与证据、规范理由/历史、待处理、离线/部分读取 | 一个来源失败保留其他来源和最近成功事实 |
-| 开发执行闭环 | 受支持本地 Codex、双向请求、明确操作、未知恢复、退出 | 只开放核实能力，其他实例和环境范围明确 |
+| 开发执行闭环（可选实验） | 按项目/环境启用 app-server，双向请求、明确操作、未知恢复与退出 | 默认关闭；不作为基础看板发布前提，标明实验等级、实际版本及能力 |
 | 后续按需 | 个人云端、更新分发、其他桌面系统 | 产品承诺变化同步 PRD 与系统设计 |
 
-Codex 连接记录支持版本与 schema，兼容失败关闭受影响能力而不破坏全应用。UI/核心 DTO 随同一安装包升级，仍以契约检查避免命令漂移。旧安装包打开更新 schema 前检查可读范围，不自动执行破坏性降级迁移。
+按项目/环境保存明确的启用偏好，升级不把关闭设置改为开启；恢复已启用偏好可以重建必要观察，不会自动发模型任务。停用先阻止新工作，活跃或未知自管工作按 §5.4 保持管理与恢复，确认结束后再释放空闲连接；不能把“停止新接入”显示为“全部任务已停止”。兼容失败时拒绝不再可靠的能力并保留未知状态与处理入口，不伪装成任务结束。
+
+Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可展示 GitHub 工作事实并打开原工具入口。UI/核心 DTO 随同一安装包升级，仍以契约检查避免命令漂移。旧安装包打开更新 schema 前检查可读范围，不自动执行破坏性降级迁移。
 
 远端保留 EnvironmentId 与传输接口，优先复用既有 [OpenSSH](https://man.openbsd.org/ssh) 配置及独立托管运行时。转发只提供连接，直接 SSH 启动 stdio 也不保证跨断线持久。首版不自动安装/暴露公网 app-server。只有明确需要完整退出后继续、多客户端共享现场或重启后无人值守恢复时，再提取独立 Rust supervisor；本机可用 Unix socket，真正有网络 API 需求时再评估 axum。
 
@@ -351,7 +358,7 @@ Codex 连接记录支持版本与 schema，兼容失败关闭受影响能力而�
 | [REQ-CC-009](command-center.prd.md#REQ-CC-009) | [DES-CC-009](#DES-CC-009) | AC-CC-009；关窗、活跃/未知退出、外部所有权 | N/A: reason=本PR为目标设计且生命周期测试入口尚未实现；scope=DES-CC-009运行验收；owner_role=qa_engineer；evidence_ref=command-center.prd.md#AC-CC-009；re-evaluate=首次实现时补真实菜单栏和子进程退出的精确测试入口并执行 | 实现 PR 的进程树、事件与退出结果 | 未证明强退或重启后继续 |
 | [REQ-CC-010](command-center.prd.md#REQ-CC-010) | [DES-CC-010](#DES-CC-010) | AC-CC-010；两字搜索、IME、读屏、慢消费者有界 | N/A: reason=本PR为目标设计且系统体验测试入口尚未实现；scope=DES-CC-010运行验收；owner_role=qa_engineer；evidence_ref=command-center.prd.md#AC-CC-010；re-evaluate=首次实现时补真实macOS输入和负载的精确手册入口并执行 | 实现 PR 的机器、样本、交互与测量记录 | 未证明性能或辅助技术达标 |
 | [REQ-CC-011](command-center.prd.md#REQ-CC-011) | [DES-CC-011](#DES-CC-011) | AC-CC-011；清缓存保留个人/未决数据，凭据和内容隔离 | N/A: reason=本PR为目标设计且存储安全测试入口尚未实现；scope=DES-CC-011运行验收；owner_role=qa_engineer；evidence_ref=command-center.prd.md#AC-CC-011；re-evaluate=首次实现时补缓存重建和发布权限的精确测试入口并执行 | 实现 PR 的迁移、内容样本、生产配置核对 | 未证明完整安全审计 |
-| [REQ-CC-012](command-center.prd.md#REQ-CC-012) | [DES-CC-012](#DES-CC-012) | AC-CC-012；连接独立降级、跨环境身份不混同 | N/A: reason=本PR为目标设计且接入兼容测试入口尚未实现；scope=DES-CC-012运行验收；owner_role=qa_engineer；evidence_ref=command-center.prd.md#AC-CC-012；re-evaluate=首次实现时补缺失连接和环境切换的精确测试入口并执行 | 实现 PR 的连接范围与降级场景结果 | 未证明远端或跨平台能力 |
+| [REQ-CC-012](command-center.prd.md#REQ-CC-012) | [DES-CC-012](#DES-CC-012) | AC-CC-012；默认关闭、启用/停用、独立降级与环境隔离 | N/A: reason=本PR为目标设计且接入兼容测试入口尚未实现；scope=DES-CC-012运行验收；owner_role=qa_engineer；evidence_ref=command-center.prd.md#AC-CC-012；re-evaluate=首次实现时补默认关闭和活跃任务停用的精确测试入口并执行 | 实现 PR 的接入等级、启停与降级场景结果 | 未证明上游生产支持、远端或跨平台能力 |
 
 ### 11.2 实施时的验证层与关键反例
 
@@ -365,7 +372,7 @@ Codex 连接记录支持版本与 schema，兼容失败关闭受影响能力而�
 
 当前 [Tauri WebDriver 文档](https://v2.tauri.app/develop/tests/webdriver/)提供 macOS embedded provider 路径；传统直接 `tauri-driver` 路径仍受平台限制。[WDIO 测试插件](https://webdriver.io/docs/desktop-testing/tauri/plugin-setup)仅在专用测试 feature/config 启用，生产排除插件、capability 和监听端口。
 
-关键恢复场景同时注入 UI 慢、DB 队列满、存储失败、协议控制消息到达和 App 退出，观察有限资源、明确降级及未决记录；不能只验证 UI 顺畅或成功路径。fixture/replay 不消费模型额度；真实模型运行仅在任务已授权且该验证需要时进行。按实际改动与仓库现行 CI 检查，不把完整游戏栈作为客户端文档或局部验证的前提。
+关键恢复场景同时注入 UI 慢、DB 队列满、存储失败、协议控制消息到达和 App 退出，观察有限资源、明确降级及未决记录；不能只验证 UI 顺畅或成功路径。补充未启用时不 spawn app-server、已启用偏好恢复不发任务、活跃/未知工作停用后仍可管理的情形；默认关闭用例不能代替启用状态下的会话控制与恢复验收。fixture/replay 不消费模型额度；真实模型运行仅在任务已授权且该验证需要时进行。按实际改动与仓库现行 CI 检查，不把完整游戏栈作为客户端文档或局部验证的前提。
 
 ## 12. 决策、长期风险与未决问题
 
@@ -387,6 +394,8 @@ Codex 连接记录支持版本与 schema，兼容失败关闭受影响能力而�
 
 Rust 核心 + Solid满足本次“Rust 优先”偏好；UI 全 Rust 尚不是硬要求。React 仅在关键组件或维护者实际经验带来明确收益时替换 Solid，领域与来源不随之更换。默认 ts-rs 生成 DTO，只有类型工具的发布稳定性和维护收益已明确时才重评完整桥接生成方案。
 
+<a id="CC-CODEX-PROMOTION"></a>
+
 ### 12.2 重新决策条件与未决事项
 
 | 条件或尚待确认事项 | 处理与责任 | 需要的依据 |
@@ -396,8 +405,10 @@ Rust 核心 + Solid满足本次“Rust 优先”偏好；UI 全 Rust 尚不是�
 | 性能不达实际目标 | 先定位 I/O、DB、投递、渲染，再调整对应层 | 机器、负载、阶段耗时与整个进程树资源 |
 | 完整退出后持续执行或多客户端共享 | 产品同步新承诺后提取独立 Rust supervisor | 生命周期、认证、连接与恢复需求 |
 | 首版 macOS 最低版本与 CPU 范围 | 根据实际设备、Tauri/WebKit 和依赖验证锁定 | 可运行签名包与代表性系统体验 |
-| Codex 支持版本与会话覆盖 | agent_engineer 锁 schema 与能力；不兼容局部降级 | 双向请求、故障回放和真实环境记录 |
+| Codex 集成生产支持与稳定化 | 产品负责人和 agent_engineer 在上游明确支持目标用法，或选定具备该支持范围的替代集成后重评；此前保持可选实验等级 | 官方文档/发布说明覆盖的版本、传输与能力，加匹配 schema、双向请求、未知恢复与生命周期验证；连通或 fixture 通过不足以证明生产支持 |
 | 依赖版本、容量阈值、数据保留及备份策略 | 实施首个相关切片时确定，维护者可理解且可调整 | 兼容锁文件、资源测量、恢复演练 |
 | 分发账号、证书与自动更新时机 | 实际开始分发时沿现有授权配置 | 签名公证产物和更新退出/迁移验证 |
+
+若重选 Codex SDK、CLI 或其他集成，先核实历史读取、实时事件、反向请求与运行控制的能力差异，不把它们未经验证当作 app-server 的等价替换。升级连接器发布等级时同步 PRD 范围和对应验证；这只约束该产品能力，不增加仓库通用审批或交付门禁。
 
 本设计的外部事实均附官方或维护者链接；项目事实固定到基线提交。模块、命令、数据和状态属于本次设计决定。后续实现结果写回相应条款及真实 PR/CI 记录，Skill 只作为方法与导航入口，避免产生第二套架构主责。
