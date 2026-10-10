@@ -19,6 +19,7 @@ CONFIG = Path("/private/etc/oasis7/local-signer-installation.json")
 RELEASE_ROOT = Path("/usr/local/libexec/oasis7-local-signer")
 JOURNAL = Path("/private/var/db/oasis7-local-signer-install.json")
 JOBS_ROOT = Path("/private/var/db/oasis7-local-signer-jobs")
+LOCK = Path("/private/var/db/oasis7-local-signer-install.lock")
 SUDO = Path("/private/etc/sudoers.d/oasis7-local-signer")
 ENV = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C"}
 RUNTIME_PATH = Path("/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9")
@@ -78,6 +79,7 @@ class MacOSHost:
         uid = users.get(request["signer_user"], available[0] if available else 0)
         gid = groups.get(request["signer_user"], available[0] if available else 0)
         facts.update(caller_uid=caller.pw_uid, caller_gid=caller.pw_gid, signer_uid=uid, signer_gid=gid, identity_available=not existing)
+        self.inspect_path(LOCK.parent, protected=True)
         paths = [Path(request["store_dir"]), CONFIG, RELEASE_ROOT / release["manifest"]["release_id"], SUDO, JOURNAL]
         identities = []
         for path in paths:
@@ -188,7 +190,7 @@ class MacOSHost:
                 acl = self.run(["/bin/ls", "-lde", str(current)])
                 if not acl_safe(acl):
                     raise InstallError("INSTALLATION_DRIFT", "ACL present or unobservable")
-                observations.append(dict(path=str(current), dev=info.st_dev, ino=info.st_ino, uid=info.st_uid, gid=info.st_gid, mode=stat.S_IMODE(info.st_mode), acl_sha256=digest(acl.encode()), filesystem=filesystem))
+                observations.append(dict(path=str(current), dev=info.st_dev, ino=info.st_ino, uid=info.st_uid, gid=info.st_gid, mode=stat.S_IMODE(info.st_mode), acl_sha256=digest(canonical_bytes(dict(acl="absent"))), filesystem=filesystem))
             # Keep every ancestor open until pathname/descriptor identity and
             # filesystem checks are complete. Concurrent trusted-root mutation
             # remains outside the documented installation trust boundary.
@@ -210,13 +212,15 @@ class MacOSHost:
 
     @contextmanager
     def lock(self):
-        path = Path("/private/var/run/oasis7-local-signer-install.lock")
+        path = LOCK
         self.inspect_path(path.parent, protected=True)
-        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
         try:
             info = os.fstat(fd)
-            if info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1:
+            if (not stat.S_ISREG(info.st_mode) or (info.st_uid, info.st_gid) != (0, 0)
+                    or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1):
                 raise InstallError("INSTALLATION_DRIFT", "unsafe installer lock")
+            self.inspect_path(path, protected=True)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             yield
         finally:

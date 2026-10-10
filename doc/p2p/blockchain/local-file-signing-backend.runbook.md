@@ -86,3 +86,9 @@ On macOS, run fixture tests with `TMPDIR=/private/tmp python3 -m unittest discov
 BLOCKED with host_mutated false means apply did not begin effects. RECOVERY_REQUIRED means a durable journal identifies retained partial effects and remaining actions. Preserve account/directory/release/config artifacts; do not delete private data, regenerate installation identity, overwrite policy or widen sudo to resume. Return the exact approved plan/release digest and nonsecret report to Ops/Runtime/QA for an explicitly approved recovery action.
 
 An exact complete repeat revalidates live bytes, ownership/ACL, config/store/jobs identity and sudo, then returns VERIFIED_UNCHANGED. Unknown existing state, v2 binding, changed release identity, enabled policy or private data blocks first installation. Upgrades, migrations, rollback, backup/restore, Linux host installation and M1 remain deferred.
+
+### Installer lock and ACL observations
+
+The installer uses the fixed root-owned `/private/var/db/oasis7-local-signer-install.lock`; macOS `/private/var/run` can be group writable and is not an admitted protected parent. Plan checks the lock parent; apply opens a regular, single-link root:wheel0600 lock with nofollow/nonblocking flags and verifies ACL admission before locking. Preserve a retained lock file; it is preparation state, not an installation journal.
+
+ACL observation hashes bind the admitted absence of ACLs, rather than the entire `ls -lde` display (timestamps, directory sizes, link counts and extended-attribute markers). Descriptor inode/device, owner/group/mode and filesystem identity remain separately bound and rechecked. ACL entries remain rejected. Releases with the revised observation encoding require a fresh plan and exact approval; do not reuse older plans.

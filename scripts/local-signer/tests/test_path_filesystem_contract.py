@@ -85,6 +85,43 @@ class FilesystemContract(unittest.TestCase):
             with self.assertRaises(host.InstallError):
                 self.inspect(Path(root).resolve(), filesystem=changed)
 
+    def test_installer_lock_uses_protected_db_parent(self):
+        backend = host.MacOSHost(runtime_identity={"fixture": "identity"})
+        info = SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_uid=0, st_gid=0, st_nlink=1)
+        with patch.object(backend, "inspect_path"), patch.object(host.os, "open", return_value=42) as opened, patch.object(host.os, "fstat", return_value=info), patch.object(host.os, "close"), patch.object(host.fcntl, "flock"):
+            with backend.lock():
+                pass
+        self.assertEqual(opened.call_args.args[0], Path("/private/var/db/oasis7-local-signer-install.lock"))
+        self.assertTrue(opened.call_args.args[1] & host.os.O_NONBLOCK)
+
+    def test_unsafe_lock_type_group_and_mode_rejected_before_flock(self):
+        backend = host.MacOSHost(runtime_identity={"fixture": "identity"})
+        for kind, gid, mode, links in ((stat.S_IFIFO, 0, 0o600, 1), (stat.S_IFREG, 20, 0o600, 1), (stat.S_IFREG, 0, 0o660, 1), (stat.S_IFREG, 0, 0o600, 2)):
+            info = SimpleNamespace(st_mode=kind | mode, st_uid=0, st_gid=gid, st_nlink=links)
+            with patch.object(backend, "inspect_path"), patch.object(host.os, "open", return_value=42), patch.object(host.os, "fstat", return_value=info), patch.object(host.os, "close"), patch.object(host.fcntl, "flock") as flock:
+                with self.assertRaisesRegex(host.InstallError, "unsafe installer lock"):
+                    with backend.lock():
+                        self.fail("unsafe lock entered")
+                flock.assert_not_called()
+
+    def test_directory_listing_changes_do_not_change_acl_proof(self):
+        with tempfile.TemporaryDirectory() as root:
+            backend = host.MacOSHost(runtime_identity={"fixture": "identity"})
+            fs = {"type": "apfs", "flags": 0x1000, "fsid": [1, 2]}
+            with patch.object(host, "descriptor_filesystem", return_value=fs):
+                with patch.object(backend, "run", return_value="drwxr-xr-x  2 root wheel 64 Oct 9 23:59 /fixture\n"):
+                    before = backend.inspect_path(Path(root).resolve(), protected=False)
+                with patch.object(backend, "run", return_value="drwxr-xr-x@ 3 root wheel 96 Oct 10 00:00 /fixture\n"):
+                    after = backend.inspect_path(Path(root).resolve(), protected=False)
+            self.assertEqual(before, after)
+
+    def test_acl_entries_still_rejected(self):
+        with tempfile.TemporaryDirectory() as root:
+            backend = host.MacOSHost(runtime_identity={"fixture": "identity"})
+            with patch.object(host, "descriptor_filesystem", return_value={"type": "apfs", "flags": 0x1000, "fsid": [1, 2]}), patch.object(backend, "run", return_value="drwxr-xr-x+ 2 root wheel 64 fixture\n 0: user:caller allow write\n"):
+                with self.assertRaisesRegex(host.InstallError, "ACL present"):
+                    backend.inspect_path(Path(root).resolve(), protected=False)
+
     def test_local_apfs_and_hfs(self):
         for name in ("apfs", "hfs"):
             host.validate_filesystem({"type": name, "flags": 0x1000, "fsid": [1, 2]})
