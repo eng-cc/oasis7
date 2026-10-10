@@ -342,7 +342,8 @@ run_provider_bridge_live_gate() {
 }
 
 run_newapi_bridge_service_accounting_tests() {
-  run_cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture
+  prepare_local_cargo_target
+  run env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture
 }
 
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
