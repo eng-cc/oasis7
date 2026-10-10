@@ -93,10 +93,7 @@ impl RuntimeLlmSidecar {
             ));
         }
         let runtime_context =
-            match super::cognition_context::runtime_context_digests_for_continuation(
-                world,
-                runtime.continuation_id.as_str(),
-            ) {
+            match self.authority_continuation_context(world, runtime.continuation_id.as_str()) {
                 Ok(context) => context,
                 Err(error) => {
                     return Err(self.fence_runtime_continuation(agent_id, wake_id, error));

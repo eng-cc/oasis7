@@ -17,6 +17,7 @@ mod builtin_wasm_materializer;
 mod capability_authorization;
 mod cognition;
 mod cognition_feedback_contract;
+mod cognition_receipt_binding;
 mod cognition_recovery;
 mod cognition_retention;
 mod cognition_scheduler;

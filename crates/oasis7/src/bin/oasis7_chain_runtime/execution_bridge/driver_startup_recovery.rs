@@ -314,6 +314,10 @@ impl NodeRuntimeExecutionDriver {
             baseline.execution_block_hash.clone()
         } else if record.height == 1 {
             "genesis".to_string()
+        } else if self.world_dir.join("world-service-identity.json").exists()
+            && !execution_bridge_record_path(self.records_dir.as_path(), record.height - 1).exists()
+        {
+            super::service_bootstrap_boundary::predecessor(self, record)?
         } else {
             let predecessor_path =
                 execution_bridge_record_path(self.records_dir.as_path(), record.height - 1);

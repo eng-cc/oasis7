@@ -3,6 +3,8 @@ use crate::simulator::WorldEventKind;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[path = "chain_sync_recovery.rs"]
 mod chain_sync_recovery;
+#[path = "service_submission_admission.rs"]
+mod service_submission_admission;
 
 struct HostedLocalMockProviderEnvSnapshot {
     previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
@@ -1140,6 +1142,8 @@ fn chain_linked_runtime_sync_clears_stale_local_test_sidecar_binding() {
         .player_agent_bindings
         .insert("player-real".to_string(), "agent-real".to_string());
 
+    let published_time = execution_world.state().time;
+    let published_events = execution_world.journal().events.clone();
     let mut session = RuntimeLiveSession::new();
     let (mut writer, _peer) = test_writer_pair();
 
@@ -1148,9 +1152,20 @@ fn chain_linked_runtime_sync_clears_stale_local_test_sidecar_binding() {
         .expect("chain sync should succeed");
 
     assert!(
-        !progressed,
-        "empty chain world may not advance viewer state, but stale local binding should be pruned"
+        progressed,
+        "new commit advances identity while pruning stale bindings"
     );
+    assert_eq!(server.world.state().time, published_time);
+    assert_eq!(server.world.journal().events, published_events);
+    assert_eq!(server.last_chain_committed_height, 1);
+    assert!(
+        !server
+            .sync_chain_linked_runtime(&mut session, &mut writer)
+            .expect("same publication idle")
+    );
+    assert_eq!(server.world.state().time, published_time);
+    assert_eq!(server.world.journal().events, published_events);
+    assert_eq!(server.last_chain_committed_height, 1);
     assert_eq!(
         server
             .llm_sidecar

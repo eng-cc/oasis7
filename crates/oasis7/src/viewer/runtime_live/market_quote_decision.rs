@@ -27,7 +27,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn handle_market_quote_decision_request(
         &mut self,
         request: MarketQuoteDecisionRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         let response = self
             .handle_market_quote_decision(request)

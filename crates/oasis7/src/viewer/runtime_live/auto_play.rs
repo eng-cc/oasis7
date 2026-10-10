@@ -53,7 +53,7 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn emit_background_play_snapshot(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         if session.explicitly_subscribed_to(ViewerStream::Snapshot)
             && should_emit_runtime_advance_snapshot(session, "play", false)
@@ -77,8 +77,13 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn drive_auto_play(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        if self.config.world_service.is_some() {
+            // Periodic authenticated synchronization owns projection progress.
+            // Playback emits that projection and never runs local actions.
+            return self.emit_background_play_snapshot(session, writer);
+        }
         if self.auto_play_paused || !session.initial_snapshot_sent {
             return Ok(());
         }

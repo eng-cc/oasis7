@@ -38,6 +38,13 @@ impl ViewerRuntimeLiveServer {
         request: AgentChatRequest,
     ) -> Result<AgentChatAck, AgentChatError> {
         let agent_id = request.agent_id.clone();
+        if self.chain_link_enabled() {
+            return Err(AgentChatError {
+                code: "canonical_chat_unsupported".into(),
+                message: "world service has no registered Agent chat capability".into(),
+                agent_id: Some(agent_id),
+            });
+        }
         if !self.llm_sidecar.is_llm_mode() {
             return Err(AgentChatError {
                 code: "llm_mode_required".to_string(),

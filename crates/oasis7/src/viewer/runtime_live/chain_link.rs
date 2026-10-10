@@ -1,8 +1,18 @@
+#[path = "chain_link_observer.rs"]
+mod observer;
+#[path = "chain_link_snapshot_prime.rs"]
+mod snapshot_prime;
+use super::authoritative::compute_runtime_snapshot_hash;
+pub(super) use super::world_service_link::PreparedWorldServiceSubmission;
+use super::world_service_link::prepare_world_service_update;
 use super::*;
+pub(super) use observer::ObserverLoader;
+use observer::request_observer_update;
 
 use super::super::protocol::{CollectDataCommand, GameplayActionError, GameplayActionRequest};
 use crate::runtime::{CognitionProvisioningRequestV1, WorldEvent as RuntimeWorldEvent};
 use crate::simulator::RuntimeBindingV1;
+use crate::world_service::verified_view::VerifiedWorldView;
 use std::collections::BTreeSet;
 use std::net::ToSocketAddrs;
 
@@ -36,16 +46,20 @@ pub(super) struct ChainGameplaySubmitResponse {
     error: Option<String>,
 }
 
-struct PreparedChainLinkedRuntimeUpdate {
-    committed_height: u64,
-    source: (Option<String>, Option<PathBuf>),
-    source_epoch: u64,
-    world: RuntimeWorld,
+pub(super) struct PreparedChainLinkedRuntimeUpdate {
+    pub(super) committed_height: u64,
+    pub(super) world: RuntimeWorld,
+    pub(super) verified_view: Option<VerifiedWorldView>,
+    pub(super) service_events: Option<Vec<RuntimeWorldEvent>>,
+    pub(super) intent_results:
+        Vec<oasis7_client_api::world_service::IntentResponse<serde_json::Value>>,
+    pub(super) source: (Option<String>, Option<PathBuf>),
+    pub(super) source_epoch: u64,
 }
 
-struct ChainLinkedRuntimeDispatch {
-    advanced: bool,
-    responses: Vec<ViewerResponse>,
+pub(super) struct ChainLinkedRuntimeDispatch {
+    pub(super) advanced: bool,
+    pub(super) responses: Vec<ViewerResponse>,
 }
 
 /// Verify that a chain-linked execution snapshot already contains the exact
@@ -249,8 +263,21 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn sync_chain_linked_runtime(
         &mut self,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<bool, ViewerRuntimeLiveServerError> {
+        if let Some(config) = &self.config.world_service {
+            let prepared = prepare_world_service_update(
+                config.clone(),
+                self.verified_world_view.clone(),
+                self.pending_world_service_gameplay.clone(),
+                self.world_service_query_state.clone(),
+            )?;
+            let dispatch = self.apply_chain_linked_runtime_update(prepared, session)?;
+            for response in dispatch.responses {
+                send_response(writer, &response)?;
+            }
+            return Ok(dispatch.advanced);
+        }
         let Some(_chain_status_bind) = self
             .config
             .chain_status_bind
@@ -284,72 +311,31 @@ impl ViewerRuntimeLiveServer {
         Ok(dispatch.advanced)
     }
 
-    pub(super) fn prime_chain_linked_runtime_for_snapshot(
-        &mut self,
-    ) -> Result<bool, ViewerRuntimeLiveServerError> {
-        let Some(_chain_status_bind) = self
-            .config
-            .chain_status_bind
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
-            return Ok(false);
-        };
-
-        let Some(prepared) = request_observer_update(&self.chain_observer_loader, &self.config)?
-        else {
-            return Ok(false);
-        };
-        self.clear_chain_sync_failure_feedback();
-        let mut silent_session = RuntimeLiveSession::new_with_playing(false);
-        let dispatch = self.apply_chain_linked_runtime_update(prepared, &mut silent_session)?;
-        Ok(dispatch.advanced)
-    }
-
-    /// Prime the first chain-linked projection without holding the shared
-    /// Viewer mutex across the status/world read. HelloV2 and the initial
-    /// snapshot request are served by separate client threads; keeping the
-    /// network read outside the mutex prevents a slow chain-status response
-    /// from starving the launcher presence probe's HelloAck. The prepared
-    /// world is still applied under the mutex and passes the same authority
-    /// checks before it can become visible.
-    pub(super) fn prime_chain_linked_runtime_for_snapshot_minimized_lock(
-        shared: &Arc<Mutex<Self>>,
-    ) -> Result<bool, ViewerRuntimeLiveServerError> {
-        let (loader, config) = {
-            let server = lock_shared_server(shared)?;
-            (server.chain_observer_loader.clone(), server.config.clone())
-        };
-        let chain_status_bind = {
-            let server = lock_shared_server(shared)?;
-            server
-                .config
-                .chain_status_bind
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-        };
-        let Some(_chain_status_bind) = chain_status_bind else {
-            return Ok(false);
-        };
-
-        let Some(prepared) = request_observer_update(&loader, &config)? else {
-            return Ok(false);
-        };
-        let mut server = lock_shared_server(shared)?;
-        server.clear_chain_sync_failure_feedback();
-        let mut silent_session = RuntimeLiveSession::new_with_playing(false);
-        let dispatch = server.apply_chain_linked_runtime_update(prepared, &mut silent_session)?;
-        Ok(dispatch.advanced)
-    }
-
     pub(super) fn sync_chain_linked_runtime_minimized_lock(
         shared: &Arc<Mutex<Self>>,
         session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<bool, ViewerRuntimeLiveServerError> {
+        let remote = {
+            let server = lock_shared_server(shared)?;
+            server.config.world_service.clone().map(|config| {
+                (
+                    config,
+                    server.verified_world_view.clone(),
+                    server.pending_world_service_gameplay.clone(),
+                    server.world_service_query_state.clone(),
+                )
+            })
+        };
+        if let Some((config, previous, pending, query_state)) = remote {
+            let prepared = prepare_world_service_update(config, previous, pending, query_state)?;
+            let dispatch =
+                lock_shared_server(shared)?.apply_chain_linked_runtime_update(prepared, session)?;
+            for response in dispatch.responses {
+                send_response(writer, &response)?;
+            }
+            return Ok(dispatch.advanced);
+        }
         let (loader, config) = {
             let server = lock_shared_server(shared)?;
             (server.chain_observer_loader.clone(), server.config.clone())
@@ -400,27 +386,67 @@ impl ViewerRuntimeLiveServer {
         Ok(dispatch.advanced)
     }
 
-    fn apply_chain_linked_runtime_update(
+    pub(super) fn apply_chain_linked_runtime_update(
         &mut self,
         mut prepared: PreparedChainLinkedRuntimeUpdate,
         session: &mut RuntimeLiveSession,
     ) -> Result<ChainLinkedRuntimeDispatch, ViewerRuntimeLiveServerError> {
-        let active_epoch = self
-            .chain_observer_loader
-            .lock()
-            .map_err(|_| ViewerRuntimeLiveServerError::Init("observer loader poisoned".into()))?
-            .source_epoch;
-        if prepared.source_epoch != active_epoch
-            || prepared.source
-                != (
-                    self.config.chain_status_bind.clone(),
-                    self.config.chain_execution_world_dir.clone(),
-                )
-        {
-            return Ok(ChainLinkedRuntimeDispatch {
-                advanced: false,
-                responses: Vec::new(),
-            });
+        if prepared.verified_view.is_none() {
+            let active_epoch = self
+                .chain_observer_loader
+                .lock()
+                .map_err(|_| ViewerRuntimeLiveServerError::Init("observer loader poisoned".into()))?
+                .source_epoch;
+            if self.config.world_service.is_some()
+                || prepared.source_epoch != active_epoch
+                || prepared.source
+                    != (
+                        self.config.chain_status_bind.clone(),
+                        self.config.chain_execution_world_dir.clone(),
+                    )
+            {
+                return Ok(ChainLinkedRuntimeDispatch {
+                    advanced: false,
+                    responses: Vec::new(),
+                });
+            }
+        }
+        if let (Some(current), Some(next)) = (&self.verified_world_view, &prepared.verified_view) {
+            let caught_up = next
+                .version()
+                .commit
+                .satisfies_minimum(&current.version().commit)
+                .map_err(|e| ViewerRuntimeLiveServerError::Init(e.to_string()))?;
+            if !caught_up {
+                return Ok(ChainLinkedRuntimeDispatch {
+                    advanced: false,
+                    responses: Vec::new(),
+                });
+            }
+        }
+        for result in &prepared.intent_results {
+            use oasis7_client_api::world_service::IntentOutcome;
+            let stage = match &result.outcome {
+                IntentOutcome::Committed { .. } => Some("committed"),
+                IntentOutcome::Rejected { .. } => Some("rejected"),
+                IntentOutcome::Expired => Some("expired"),
+                _ => None,
+            };
+            if let Some(stage) = stage {
+                self.pending_world_service_gameplay
+                    .retain(|(correlation, _)| correlation != &result.correlation);
+                self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
+                    "world_service_intent",
+                    stage,
+                    "original signed request has an authenticated canonical disposition",
+                    None,
+                    None,
+                    None,
+                    Some("inspect the committed view and receipt for actual effects".into()),
+                    0,
+                    0,
+                ));
+            }
         }
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
@@ -428,18 +454,21 @@ impl ViewerRuntimeLiveServer {
         // authority and provisioning records in its committed world before
         // the viewer accepts that world; the viewer never mutates the loaded
         // execution directory and keeps retrying while publication is absent.
-        verify_provider_backed_bootstrap_authorities(
-            &prepared.world,
-            &self.config.provider_backed_bootstrap_authorities,
-        )
-        .map_err(ViewerRuntimeLiveServerError::Init)?;
+        if prepared.verified_view.is_none() {
+            verify_provider_backed_bootstrap_authorities(
+                &prepared.world,
+                &self.config.provider_backed_bootstrap_authorities,
+            )
+            .map_err(ViewerRuntimeLiveServerError::Init)?;
+        }
         if self.hosted_local_mock_test_lane_active && prepared.world.state().agents.is_empty() {
             return Err(ViewerRuntimeLiveServerError::Init(
                 "Hosted local-mock authoritative chain world requires a Runtime-seeded Agent"
                     .to_string(),
             ));
         }
-        if self.hosted_local_mock_test_lane_active
+        if prepared.verified_view.is_none()
+            && self.hosted_local_mock_test_lane_active
             && !prepared.world.state().agents.is_empty()
             && !control_plane::install_hosted_local_mock_test_capability_fixtures(
                 &mut prepared.world,
@@ -452,29 +481,38 @@ impl ViewerRuntimeLiveServer {
                         .to_string(),
                 ));
         }
-        let baseline_snapshot_hash = self
-            .world
-            .observer_authority_digest()
-            .map_err(ViewerRuntimeLiveServerError::Runtime)?;
-        let prepared_snapshot_hash = prepared
-            .world
-            .observer_authority_digest()
-            .map_err(ViewerRuntimeLiveServerError::Runtime)?;
+        let (baseline_snapshot_hash, prepared_snapshot_hash) = if prepared.verified_view.is_some() {
+            (
+                compute_runtime_snapshot_hash(&self.world.snapshot())?,
+                compute_runtime_snapshot_hash(&prepared.world.snapshot())?,
+            )
+        } else {
+            (
+                self.world
+                    .observer_authority_digest()
+                    .map_err(ViewerRuntimeLiveServerError::Runtime)?,
+                prepared
+                    .world
+                    .observer_authority_digest()
+                    .map_err(ViewerRuntimeLiveServerError::Runtime)?,
+            )
+        };
         let prepared_identity = (
             prepared.committed_height,
             prepared.world.state().time,
             latest_runtime_event_seq(&prepared.world),
             prepared_snapshot_hash.clone(),
         );
-        if self
-            .last_chain_observer_identity
-            .as_ref()
-            .is_some_and(|previous| {
-                previous.0 == prepared_identity.0
-                    && previous.1 == prepared_identity.1
-                    && previous.2 == prepared_identity.2
-                    && previous.3 != prepared_identity.3
-            })
+        if prepared.verified_view.is_none()
+            && self
+                .last_chain_observer_identity
+                .as_ref()
+                .is_some_and(|previous| {
+                    previous.0 == prepared_identity.0
+                        && previous.1 == prepared_identity.1
+                        && previous.2 == prepared_identity.2
+                        && previous.3 != prepared_identity.3
+                })
         {
             return Err(ViewerRuntimeLiveServerError::Init(
                 "IntegrityFailure: different observer authority at the same watermark".into(),
@@ -500,7 +538,8 @@ impl ViewerRuntimeLiveServer {
         let prepared_provider_lease_agents = self
             .llm_sidecar
             .provider_cognition_lease_agents_in_flight(&prepared.world);
-        let provider_lease_requires_continuity = !provider_lease_agents.is_empty()
+        let provider_lease_requires_continuity = prepared.verified_view.is_none()
+            && !provider_lease_agents.is_empty()
             && provider_lease_agents
                 .iter()
                 .any(|agent_id| !prepared_provider_lease_agents.contains(agent_id))
@@ -551,7 +590,11 @@ impl ViewerRuntimeLiveServer {
             .saturating_sub(baseline_logical_time);
         let delta_event_seq =
             latest_runtime_event_seq(&prepared.world).saturating_sub(baseline_event_seq);
-        if delta_logical_time == 0 && delta_event_seq == 0 && !materially_different_world {
+        if delta_logical_time == 0
+            && delta_event_seq == 0
+            && !materially_different_world
+            && prepared.committed_height == self.last_chain_committed_height
+        {
             return Ok(ChainLinkedRuntimeDispatch {
                 advanced: false,
                 responses: Vec::new(),
@@ -572,15 +615,24 @@ impl ViewerRuntimeLiveServer {
         // hide a completion behind a scalar ID comparison. If compaction or
         // a reorg removes the common tail, the helper falls back to the
         // era-aware journal cursor.
-        let runtime_events = runtime_events_after_baseline(
-            self.world.journal().events.as_slice(),
-            prepared.world.journal().events.as_slice(),
-            self.world.observer_last_event_era(),
-            prepared.world.observer_last_event_era(),
-        );
+        let runtime_events = prepared.service_events.take().unwrap_or_else(|| {
+            runtime_events_after_baseline(
+                self.world.journal().events.as_slice(),
+                prepared.world.journal().events.as_slice(),
+                self.world.observer_last_event_era(),
+                prepared.world.observer_last_event_era(),
+            )
+        });
+        if let Some(view) = prepared.verified_view.take() {
+            // The reconstructed world is a disposable quote/mapping projection.
+            // Canonical advancement/submission is fenced to the remote port.
+            self.verified_world_view = Some(view);
+        }
         self.world = prepared.world;
         self.last_chain_committed_height = prepared.committed_height;
-        self.last_chain_observer_identity = Some(prepared_identity);
+        if self.config.world_service.is_none() {
+            self.last_chain_observer_identity = Some(prepared_identity);
+        }
         self.confirm_player_gameplay_progress();
 
         let mapped_events: Vec<_> = runtime_events
@@ -605,8 +657,12 @@ impl ViewerRuntimeLiveServer {
             );
         }
         let pending_batch = self.register_authoritative_batch(mapped_events.as_slice())?;
-        let batch_finality_updates =
-            self.advance_authoritative_batch_finality(self.world.state().time)?;
+        let batch_finality_updates = if self.config.world_service.is_some() {
+            // Viewer time cannot establish service/consensus finality.
+            Vec::new()
+        } else {
+            self.advance_authoritative_batch_finality(self.world.state().time)?
+        };
 
         let mut responses = Vec::new();
         if session.explicitly_subscribed_to(ViewerStream::Events) {
@@ -762,137 +818,6 @@ pub(super) fn submit_chain_linked_collect_data(
     }
     let _ = response.submitted_at_unix_ms;
     Ok(response)
-}
-
-#[derive(Default)]
-pub(super) struct ObserverLoader {
-    running: bool,
-    cancellation: Option<Arc<std::sync::atomic::AtomicBool>>,
-    source_epoch: u64,
-    source: Option<(Option<String>, Option<PathBuf>)>,
-    latest_pending: Option<ViewerRuntimeLiveServerConfig>,
-    ready: Option<Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError>>,
-}
-
-impl Drop for ViewerRuntimeLiveServer {
-    fn drop(&mut self) {
-        if let Ok(mut loader) = self.chain_observer_loader.lock() {
-            loader.source_epoch = loader.source_epoch.wrapping_add(1);
-            loader.latest_pending = None;
-            loader.ready = None;
-            if let Some(cancel) = &loader.cancellation {
-                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
-            }
-        }
-    }
-}
-
-fn request_observer_update(
-    loader: &Arc<Mutex<ObserverLoader>>,
-    config: &ViewerRuntimeLiveServerConfig,
-) -> Result<Option<PreparedChainLinkedRuntimeUpdate>, ViewerRuntimeLiveServerError> {
-    let mut state = loader
-        .lock()
-        .map_err(|_| ViewerRuntimeLiveServerError::Init("observer loader poisoned".into()))?;
-    let source = (
-        config.chain_status_bind.clone(),
-        config.chain_execution_world_dir.clone(),
-    );
-    if state.source.as_ref() != Some(&source) {
-        if let Some(cancel) = &state.cancellation {
-            cancel.store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-        state.source_epoch = state.source_epoch.wrapping_add(1);
-        state.source = Some(source);
-        state.ready = None;
-    }
-    // A status hint only replaces the pending target. It never invalidates a
-    // captured, still-valid generation from the same source.
-    state.latest_pending = Some(config.clone());
-    let ready = state.ready.take();
-    if !state.running {
-        let pending = state.latest_pending.take().expect("queued target");
-        let epoch = state.source_epoch;
-        state.running = true;
-        let cancellation = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        state.cancellation = Some(cancellation.clone());
-        let loader_for_wait = loader.clone();
-        let loader = loader.clone();
-        let worker = std::thread::spawn(move || {
-            let mut result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                prepare_chain_linked_runtime_update(&pending, cancellation)
-            }))
-            .unwrap_or_else(|_| {
-                Err(ViewerRuntimeLiveServerError::Init(
-                    "observer worker failed".into(),
-                ))
-            });
-            if let Ok(candidate) = &mut result {
-                candidate.source_epoch = epoch;
-            }
-            if let Ok(mut state) = loader.lock() {
-                state.running = false;
-                if state.source_epoch == epoch {
-                    state.ready = Some(result);
-                }
-            }
-        });
-        // The owning caller waits outside the Viewer lock in the minimized
-        // entrypoints. Concurrent callers only update latest_pending.
-        drop(state);
-        if ready.is_some() {
-            return ready.transpose();
-        }
-        worker
-            .join()
-            .map_err(|_| ViewerRuntimeLiveServerError::Init("observer worker failed".into()))?;
-        let mut state = loader_for_wait
-            .lock()
-            .map_err(|_| ViewerRuntimeLiveServerError::Init("observer loader poisoned".into()))?;
-        return ready.or_else(|| state.ready.take()).transpose();
-    }
-    ready.transpose()
-}
-
-fn prepare_chain_linked_runtime_update(
-    config: &ViewerRuntimeLiveServerConfig,
-    cancellation: Arc<std::sync::atomic::AtomicBool>,
-) -> Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError> {
-    let bind = config.chain_status_bind.as_deref().ok_or_else(|| {
-        ViewerRuntimeLiveServerError::Init("chain status is not configured".into())
-    })?;
-    let root = config.chain_execution_world_dir.as_deref().ok_or_else(|| {
-        ViewerRuntimeLiveServerError::Init(
-            "--chain-execution-world-dir is required for a chain observer".into(),
-        )
-    })?;
-    let chain_status = fetch_chain_status_snapshot(bind)?;
-    let world = RuntimeWorld::load_observer_from_dir_cancellable(
-        root,
-        crate::runtime::ObserverReadLimits::default(),
-        cancellation,
-    )
-    .map_err(|error| {
-        ViewerRuntimeLiveServerError::Init(format!("observer load rejected: {error:?}"))
-    })?
-    .with_release_security_policy(chain_status.release_security_policy);
-    let sync_watermark =
-        chain_linked_runtime_sync_watermark(chain_status.consensus.committed_height, &world);
-    Ok(PreparedChainLinkedRuntimeUpdate {
-        committed_height: sync_watermark,
-        source_epoch: 0,
-        source: (
-            config.chain_status_bind.clone(),
-            config.chain_execution_world_dir.clone(),
-        ),
-        world,
-    })
-}
-
-fn chain_linked_runtime_sync_watermark(committed_height: u64, world: &RuntimeWorld) -> u64 {
-    committed_height
-        .max(world.state().time)
-        .max(latest_runtime_event_seq(world))
 }
 
 fn chain_runtime_authority_matches(

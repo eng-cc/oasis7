@@ -95,6 +95,10 @@ mod cognition_context;
 mod continuation_support;
 #[path = "llm_sidecar_decision.rs"]
 mod decision;
+#[path = "llm_sidecar_hosted_outcome.rs"]
+mod hosted_outcome;
+#[path = "llm_sidecar_initialization.rs"]
+mod initialization;
 #[path = "llm_sidecar_lease_continuity.rs"]
 mod lease_continuity;
 #[path = "llm_sidecar_lineage.rs"]
@@ -102,21 +106,29 @@ mod lineage;
 #[path = "llm_sidecar_lineage_generation_recovery.rs"]
 mod lineage_generation_recovery;
 #[path = "llm_sidecar_lineage_persistence.rs"]
-mod lineage_persistence;
+pub(in crate::viewer::runtime_live) mod lineage_persistence;
 #[path = "llm_sidecar_lineage_recovery.rs"]
 mod lineage_recovery;
 #[path = "llm_sidecar_lineage_settlement.rs"]
 mod lineage_settlement;
+#[path = "llm_sidecar_metadata_probe.rs"]
+mod metadata_probe;
 #[path = "llm_sidecar_payer.rs"]
 mod payer_support;
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
+#[path = "llm_sidecar_release_recovery.rs"]
+mod release_recovery;
+#[path = "llm_sidecar_restored_memory.rs"]
+mod restored_memory;
 #[path = "llm_sidecar_runner.rs"]
 mod runner_init;
 #[path = "llm_sidecar_runtime_feedback.rs"]
 mod runtime_feedback;
 #[path = "llm_sidecar_runtime_support.rs"]
 mod runtime_support;
+#[path = "llm_sidecar_scheduler_checkpoint.rs"]
+mod scheduler_checkpoint;
 #[path = "llm_sidecar_stale.rs"]
 mod stale_replan;
 #[path = "llm_sidecar_world_events.rs"]
@@ -257,12 +269,29 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     pending_actions: BTreeMap<u64, RuntimePendingAction>,
     pending_provider_agent_chats: VecDeque<RuntimePendingProviderAgentChat>,
     provider_check_snapshot: Option<RuntimeProviderCheckSnapshot>,
+    pub(in crate::viewer::runtime_live) hosted_service_phase:
+        Option<crate::viewer::runtime_live::agent_service_phase::HostedServicePhase>,
+    pub(in crate::viewer::runtime_live) hosted_service_inflight:
+        Option<crate::viewer::runtime_live::agent_service_io::AgentServiceIoToken>,
+    pub(in crate::viewer::runtime_live) hosted_service_generation: u64,
+    pub(in crate::viewer::runtime_live) hosted_service_config_binding: Option<String>,
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub(in crate::viewer::runtime_live) hosted_service_memory_failure: Option<&'static str>,
+    provider_metadata_generation: u64,
+    provider_metadata_inflight: Option<(String, u64)>,
     runtime_seed_locations: Vec<Location>,
     runtime_seed_model: Option<WorldModel>,
     pub(in crate::viewer::runtime_live) chunk_runtime: ChunkRuntimeConfig,
     provider_session_ids: BTreeMap<String, String>,
     provider_agent_ids: BTreeSet<String>,
     hosted_local_mock_test_lane: bool,
+    #[cfg(any(test, feature = "test_tier_required"))]
+    service_test_model_calls: BTreeMap<
+        String,
+        std::sync::Arc<std::sync::Mutex<crate::simulator::MockDecisionProviderState>>,
+    >,
+    #[cfg(any(test, feature = "test_tier_required"))]
+    service_test_actor_agents: BTreeSet<String>,
     provider_context_seq: BTreeMap<String, u64>,
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
@@ -284,16 +313,45 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     /// its authoritative lineage is repaired; it must not fall back to a new
     /// provider turn or mutate Runtime state.
     provider_continuation_recovery_pending: BTreeMap<String, String>,
-    /// An active marker without an exactly matching context is a recovery
-    /// fence, not an invitation to allocate a fresh provider turn.  Keeping
-    /// the marker durable prevents a restart from silently losing identity
-    /// evidence and issuing a duplicate provider call.
+    /// Durable active markers without matching contexts fence recovery and
+    /// prevent restart from allocating a duplicate provider turn.
     provider_recovery_pending: BTreeMap<String, lineage_persistence::ProviderRecoveryPending>,
     /// A Runtime wake handoff may fail after the provider action is terminal.
     /// Retain the exact context and disposition until Runtime accepts that
     /// wake so retry cannot allocate a duplicate provider turn.
     provider_wake_recovery_pending:
         BTreeMap<String, lineage_persistence::ProviderWakeRecoveryPending>,
+    pub(in crate::viewer::runtime_live) provider_service_pending:
+        BTreeMap<String, lineage_persistence::PendingProviderServiceIntent>,
+    pub(in crate::viewer::runtime_live) hosted_wait: Option<cognition_context::HostedWait>,
+    pub(in crate::viewer::runtime_live) hosted_restored_wait: Option<(
+        cognition_context::HostedWait,
+        Option<lineage_persistence::PendingProviderSchedulerIntent>,
+    )>,
+    pub(in crate::viewer::runtime_live) hosted_restored_wait_decisions:
+        BTreeMap<String, async_support::RuntimeLlmDecision>,
+    pub(in crate::viewer::runtime_live) hosted_resume: Option<cognition_context::HostedResume>,
+    pub(in crate::viewer::runtime_live) hosted_restored_resume: Option<(
+        cognition_context::HostedResume,
+        Option<lineage_persistence::PendingProviderSchedulerIntent>,
+    )>,
+    pub(in crate::viewer::runtime_live) hosted_fresh_view_ready: bool,
+    pub(in crate::viewer::runtime_live) hosted_admission:
+        Option<cognition_context::HostedAdmission>,
+    pub(in crate::viewer::runtime_live) provider_restored_service_checkpoints:
+        BTreeMap<String, lineage_persistence::PendingProviderServiceIntent>,
+    pub(in crate::viewer::runtime_live) provider_scheduler_pending:
+        BTreeMap<String, lineage_persistence::PendingProviderSchedulerIntent>,
+    pub(in crate::viewer::runtime_live) provider_service_config:
+        Option<crate::world_service::client::WorldServiceClientConfig>,
+    pub(in crate::viewer::runtime_live) provider_service_query_state:
+        crate::world_service::client::WorldServiceQueryState,
+    pub(in crate::viewer::runtime_live) provider_service_required: bool,
+    pub(in crate::viewer::runtime_live) provider_service_lineage_store_explicit: bool,
+    pub(in crate::viewer::runtime_live) provider_service_projection:
+        Option<crate::world_service::projection::WorldServiceProjection>,
+    pub(in crate::viewer::runtime_live) provider_service_signer:
+        Option<crate::world_service::client::WorldServiceAgentSignerConfig>,
     provider_wait_until: BTreeMap<String, u64>,
     provider_feedback_seq: BTreeMap<String, u64>,
     /// Compatibility feedback sequencing is partitioned by Agent session;
@@ -337,6 +395,107 @@ impl RuntimePlayerBindingPlan {
     }
 }
 impl RuntimeLlmSidecar {
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub(in crate::viewer::runtime_live) fn service_test_summary(&self) -> serde_json::Value {
+        #[cfg(not(target_arch = "wasm32"))]
+        let native_runner_present = self
+            .runner
+            .as_ref()
+            .and_then(RuntimeDecisionRunner::async_runner)
+            .is_some();
+        #[cfg(target_arch = "wasm32")]
+        let native_runner_present = false;
+        serde_json::json!({
+            "pending_intent_count": self.provider_service_pending.len(),
+            "native_runner_present": native_runner_present,
+            "native_model_call_count": self.service_test_model_calls.values().map(|state|state.lock().unwrap().recorded_requests.len()).sum::<usize>(),
+            "hosted_service_phase": self.hosted_service_phase.as_ref().map(|phase| phase.test_phase_label()),
+            "hosted_service_memory_failure": self.hosted_service_memory_failure,
+            "pending_action_count": self.pending_actions.len(),
+            "terminal_states": self.provider_terminal_states,
+            "memory_store": self.provider_memory_store,
+            "pending_wake_ids": self.pending_runtime_wakes.keys().collect::<Vec<_>>(),
+            "mirrored_lease_count": self.provider_cognition_leases.len(),
+            "mirrored_lease_identities": self.provider_cognition_leases.iter().take(16)
+                .map(|(agent_id, lease)| serde_json::json!({
+                    "agent_id": agent_id,
+                    "lease_id": lease.lease_id,
+                    "request_digest": lease.request_digest,
+                    "matches_terminal_request": self.provider_terminal_states.get(agent_id)
+                        .is_some_and(|terminal| terminal.request_digest == lease.request_digest),
+                })).collect::<Vec<_>>(),
+        })
+    }
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub(in crate::viewer::runtime_live) fn queue_service_test_response(
+        &mut self,
+        cognition: RuntimeProviderActionContext,
+        _action: crate::simulator::Action,
+    ) -> Result<(), String> {
+        self.ensure_canonical_agent_durable_admission()?;
+        let agent_id = cognition.request.request_context.agent_subject.clone();
+        let observation = self
+            .shadow_kernel
+            .as_mut()
+            .ok_or("test requires authenticated projection observation")?
+            .observe(&agent_id)
+            .map_err(|error| format!("{error:?}"))?;
+        let lease = cognition
+            .cognition_lease
+            .clone()
+            .ok_or("test requires committed canonical lease")?;
+        let provider = crate::simulator::MockDecisionProvider::with_scripted_responses(
+            "canonical-test-provider",
+            vec![Ok(cognition.response.base_decision_response.clone())],
+        );
+        let model_state = provider.shared_state();
+        let behavior = crate::simulator::ProviderBackedAgentBehavior::new(
+            agent_id.clone(),
+            provider,
+            provider_phase1_action_catalog(),
+        )
+        .require_continuous_request_context();
+        let registered = self.service_test_actor_agents.contains(&agent_id);
+        let mut runner = match self.runner.take() {
+            Some(RuntimeDecisionRunner::ProviderBacked(runner)) if registered => runner,
+            _ => crate::simulator::AsyncAgentRunner::with_default_capacity(),
+        };
+        if !registered {
+            self.service_test_model_calls
+                .insert(agent_id.clone(), model_state);
+            runner
+                .register(behavior)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+        runner.sync_logical_tick(cognition.request.request_context.runtime_binding.base_tick);
+        let started = runner
+            .start_turn_with_request_context_and_observation_and_lease(
+                &agent_id,
+                observation,
+                cognition.request.turn_context.clone(),
+                cognition.request.request_context.clone(),
+                lease.clone(),
+            )
+            .map_err(|error| format!("{error:?}"));
+        self.decision_mode = ViewerLiveDecisionMode::Llm;
+        self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+        started?;
+        self.service_test_actor_agents.insert(agent_id.clone());
+        self.provider_agent_ids.insert(agent_id.clone());
+        self.provider_active_turns
+            .insert(agent_id.clone(), cognition.request.clone());
+        self.provider_contexts
+            .insert(agent_id.clone(), cognition.request.clone());
+        self.provider_cognition_leases.insert(
+            agent_id.clone(),
+            cognition
+                .cognition_lease
+                .clone()
+                .expect("test reserved canonical lease"),
+        );
+        self.llm_decision_mailbox = 1;
+        Ok(())
+    }
     #[cfg(test)]
     pub(in crate::viewer::runtime_live) fn pending_actions_empty(&self) -> bool {
         self.pending_actions.is_empty()
@@ -385,59 +544,6 @@ impl RuntimeLlmSidecar {
         self.provider_cognition_leases.remove(agent_id);
     }
 
-    pub(in crate::viewer::runtime_live) fn new(decision_mode: ViewerLiveDecisionMode) -> Self {
-        Self {
-            decision_mode,
-            prompt_profiles: BTreeMap::new(),
-            prompt_profile_history: BTreeMap::new(),
-            agent_player_bindings: BTreeMap::new(),
-            player_agent_bindings: BTreeMap::new(),
-            agent_public_key_bindings: BTreeMap::new(),
-            player_auth_last_nonce: BTreeMap::new(),
-            player_chat_intent_acks: BTreeMap::new(),
-            primary_intents: BTreeMap::new(),
-            llm_decision_mailbox: 0,
-            runner: None,
-            shadow_kernel: None,
-            pending_actions: BTreeMap::new(),
-            pending_provider_agent_chats: VecDeque::new(),
-            provider_check_snapshot: None,
-            runtime_seed_locations: Vec::new(),
-            runtime_seed_model: None,
-            chunk_runtime: ChunkRuntimeConfig::default(),
-            provider_session_ids: BTreeMap::new(),
-            provider_agent_ids: BTreeSet::new(),
-            hosted_local_mock_test_lane: false,
-            provider_context_seq: BTreeMap::new(),
-            provider_contexts: BTreeMap::new(),
-            provider_retry_contexts: BTreeMap::new(),
-            provider_active_turns: BTreeMap::new(),
-            provider_cognition_leases: BTreeMap::new(),
-            provider_capability_identities: BTreeMap::new(),
-            provider_continuation_proposals: BTreeMap::new(),
-            provider_continuation_recovery_pending: BTreeMap::new(),
-            provider_recovery_pending: BTreeMap::new(),
-            provider_wake_recovery_pending: BTreeMap::new(),
-            provider_wait_until: BTreeMap::new(),
-            provider_feedback_seq: BTreeMap::new(),
-            provider_feedback_seq_by_session: BTreeMap::new(),
-            provider_memory_store: MemoryWriteStore::default(),
-            provider_completed_decisions: VecDeque::new(),
-            provider_stale_replans: BTreeMap::new(),
-            provider_transport_exhausted: BTreeSet::new(),
-            provider_terminal_states: BTreeMap::new(),
-            provider_late_response_diagnostics: VecDeque::new(),
-            provider_held_decisions: BTreeMap::new(),
-            pending_provider_world_events: BTreeMap::new(),
-            provider_world_event_quarantine: BTreeMap::new(),
-            provider_lineage_store: None,
-            provider_lineage_binding: None,
-            provider_lineage_restored: false,
-            provider_lineage_hydrated: false,
-            provider_lineage_recovery_pending: None,
-            pending_runtime_wakes: BTreeMap::new(),
-        }
-    }
     pub(in crate::viewer::runtime_live) fn with_runtime_seed_model(
         mut self,
         model: &WorldModel,
@@ -858,6 +964,23 @@ impl RuntimeLlmSidecar {
         &mut self,
         world: &RuntimeWorld,
     ) -> Result<(), String> {
+        if self.provider_service_required {
+            let view = self
+                .provider_service_projection
+                .as_ref()
+                .ok_or("authorized canonical wake view missing")?;
+            for wake in &view.scheduler_wakes {
+                wake.validate()
+                    .map_err(|error| format!("canonical wake invalid: {error:?}"))?;
+            }
+            self.pending_runtime_wakes = view
+                .scheduler_wakes
+                .iter()
+                .cloned()
+                .map(|wake| (wake.wake_id.clone(), wake))
+                .collect();
+            return self.persist_provider_lineage();
+        }
         let wakes = world
             .cognition_in_flight_wakes()
             .map_err(|error| format!("Runtime cognition wake read failed: {error:?}"))?;
@@ -1014,3 +1137,6 @@ mod budget_tests;
 #[cfg(test)]
 #[path = "llm_sidecar_tests.rs"]
 mod tests;
+
+#[path = "llm_sidecar_service_feedback_ack.rs"]
+pub(in crate::viewer::runtime_live) mod service_feedback_ack;

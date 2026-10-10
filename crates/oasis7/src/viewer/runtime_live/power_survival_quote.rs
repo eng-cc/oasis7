@@ -121,7 +121,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_power(
         &mut self,
         request: PowerSurvivalQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,

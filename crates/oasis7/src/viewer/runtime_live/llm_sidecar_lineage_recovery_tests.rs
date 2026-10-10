@@ -1,4 +1,66 @@
 use super::*;
+
+#[test]
+fn canonical_release_receipt_requires_original_identity_and_accounting() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let context = valid_test_provider_context(&world, "agent-a", "release-turn", "release-request");
+    let lease = reserve_test_provider_lease(&mut world, &context);
+    let receipt = world.release_cognition_lease(&lease.lease_id).unwrap();
+    RuntimeLlmSidecar::validate_service_release_receipt(
+        &context.request_context,
+        &lease,
+        serde_json::to_value(&receipt).unwrap(),
+    )
+    .unwrap();
+    let mut wrong_identity = receipt.clone();
+    wrong_identity.agent_turn_id = "different-turn".into();
+    wrong_identity.receipt_digest = wrong_identity.recompute_digest();
+    assert!(
+        RuntimeLlmSidecar::validate_service_release_receipt(
+            &context.request_context,
+            &lease,
+            serde_json::to_value(wrong_identity).unwrap()
+        )
+        .is_err()
+    );
+    let mut wrong_accounting = receipt;
+    wrong_accounting.released_amount = 0;
+    wrong_accounting.receipt_digest = wrong_accounting.recompute_digest();
+    assert!(
+        RuntimeLlmSidecar::validate_service_release_receipt(
+            &context.request_context,
+            &lease,
+            serde_json::to_value(wrong_accounting).unwrap()
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn settled_service_lease_cleanup_preserves_a_newer_mirror() {
+    let mut world = bound_provider_lease_test_world(&["agent-a"]);
+    let original_context =
+        valid_test_provider_context(&world, "agent-a", "turn-old", "request-old");
+    let original = reserve_test_provider_lease(&mut world, &original_context);
+    let newer_context = valid_test_provider_context(&world, "agent-a", "turn-new", "request-new");
+    let newer = reserve_test_provider_lease(&mut world, &newer_context);
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.bind_provider_cognition_lease("agent-a", newer.clone());
+    assert!(
+        sidecar
+            .clear_settled_service_lease(&original_context.request_context, &original)
+            .is_err()
+    );
+    assert_eq!(sidecar.provider_cognition_lease("agent-a"), Some(newer));
+    sidecar.bind_provider_cognition_lease("agent-a", original.clone());
+    sidecar
+        .clear_settled_service_lease(&original_context.request_context, &original)
+        .unwrap();
+    assert!(sidecar.provider_cognition_lease("agent-a").is_none());
+    sidecar
+        .clear_settled_service_lease(&original_context.request_context, &original)
+        .unwrap();
+}
 use crate::viewer::runtime_live::{
     ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig, WorldScenario,
 };
@@ -6,7 +68,7 @@ use crate::viewer::runtime_live::{
 #[path = "llm_sidecar_lineage_generation_recovery_tests.rs"]
 mod generation_recovery_tests;
 
-fn bound_provider_lease_test_world(agent_ids: &[&str]) -> RuntimeWorld {
+pub(super) fn bound_provider_lease_test_world(agent_ids: &[&str]) -> RuntimeWorld {
     bound_provider_lease_test_world_with_binding(agent_ids, "pending", None)
 }
 
@@ -59,7 +121,7 @@ fn reserve_test_provider_lease(
     .expect("reserve Runtime cognition lease")
 }
 
-fn valid_test_provider_context(
+pub(super) fn valid_test_provider_context(
     world: &RuntimeWorld,
     agent_id: &str,
     agent_turn_id: &str,

@@ -132,6 +132,14 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn current_recovery_cursor(
         &self,
     ) -> Result<RuntimeRecoveryCursor, ViewerRuntimeLiveServerError> {
+        if let Some(view) = &self.verified_world_view {
+            return Ok(RuntimeRecoveryCursor {
+                snapshot_hash: view.version().commit.state_root_ref.clone(),
+                snapshot_height: view.version().commit.position,
+                log_cursor: view.continuation().sequence,
+                stable_batch_id: None,
+            });
+        }
         let snapshot_hash = compute_runtime_snapshot_hash(&self.world.snapshot())?;
         Ok(RuntimeRecoveryCursor {
             snapshot_hash,

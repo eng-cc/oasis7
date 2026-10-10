@@ -43,7 +43,7 @@ impl Drop for ProviderEnvSnapshot {
     }
 }
 
-fn test_provider_context(
+pub(super) fn test_provider_context(
     agent_id: &str,
     agent_turn_id: &str,
     decision_request_id: &str,

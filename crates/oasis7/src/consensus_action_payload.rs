@@ -66,6 +66,10 @@ impl std::error::Error for MainTokenActionAuthError {}
 )]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum ConsensusActionPayloadBody {
+    WorldServiceIntent {
+        request:
+            crate::world_service::SubmitIntentRequest<crate::world_service::WorldServicePayloadV1>,
+    },
     RuntimeAction {
         action: runtime::Action,
     },

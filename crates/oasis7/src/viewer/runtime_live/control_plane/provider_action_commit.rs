@@ -10,6 +10,32 @@ use crate::simulator::{Action as SimulatorAction, h_v1};
 impl ViewerRuntimeLiveServer {
     /// Retry sidecar finalization from the committed Runtime receipt.
     pub(super) fn retry_committed_provider_action(&mut self) -> Result<(), String> {
+        if self.chain_link_enabled() {
+            if self.config.world_service.is_none() {
+                return Err("canonical Agent receipt lookup requires service configuration".into());
+            }
+            let pending = self
+                .llm_sidecar
+                .provider_service_pending
+                .values()
+                .next()
+                .cloned();
+            let Some(pending) = pending else {
+                return Ok(());
+            };
+            let crate::world_service::wire::WorldServicePayloadV1::Cognition(signed) =
+                &pending.payload
+            else {
+                return Err("pending Agent recovery has wrong operation".into());
+            };
+            return self
+                .submit_provider_service_action(
+                    &signed.request.action,
+                    &pending.cognition,
+                    pending.action.clone(),
+                )
+                .map_err(|error| format!("{error:?}"));
+        }
         let Some((action_id, _agent_id, cognition)) =
             self.llm_sidecar.pending_provider_action_for_recovery()
         else {
@@ -139,6 +165,13 @@ impl ViewerRuntimeLiveServer {
         cognition: &RuntimeProviderActionContext,
         simulator_action: SimulatorAction,
     ) -> Result<(), ProviderRuntimeActionCommitError> {
+        if self.chain_link_enabled() {
+            return self.submit_provider_service_action(
+                runtime_action,
+                cognition,
+                simulator_action,
+            );
+        }
         if self.world.pending_actions_len() != 0 {
             return Err(ProviderRuntimeActionCommitError::Message(
                 "Runtime has pending actions; provider cognition action rejected".to_string(),
@@ -367,9 +400,394 @@ impl ViewerRuntimeLiveServer {
         }
         Ok(())
     }
+
+    pub(in crate::viewer::runtime_live) fn prepare_provider_service_action_checkpoint(
+        &mut self,
+        runtime_action: &crate::runtime::Action,
+        cognition: &RuntimeProviderActionContext,
+        simulator_action: SimulatorAction,
+    ) -> Result<
+        (
+            super::llm_sidecar::lineage_persistence::PendingProviderServiceIntent,
+            bool,
+        ),
+        ProviderRuntimeActionCommitError,
+    > {
+        let client = self
+            .world_service_client()
+            .map_err(|error| ProviderRuntimeActionCommitError::Message(format!("{error:?}")))?
+            .ok_or_else(|| {
+                ProviderRuntimeActionCommitError::Message(
+                    "canonical Agent service is not configured".into(),
+                )
+            })?;
+        let agent_id = cognition.request.request_context.agent_subject.clone();
+        let existing = self
+            .llm_sidecar
+            .provider_service_pending
+            .get(&agent_id)
+            .cloned();
+        let pending = if let Some(pending) = existing.as_ref() {
+            let crate::world_service::wire::WorldServicePayloadV1::Cognition(signed) =
+                &pending.payload
+            else {
+                return Err(ProviderRuntimeActionCommitError::Message(
+                    "pending cognition operation mismatch".into(),
+                ));
+            };
+            let signer = self
+                .config
+                .world_service_agent_signer
+                .as_ref()
+                .ok_or_else(|| {
+                    ProviderRuntimeActionCommitError::Message(
+                        "explicit Agent signer is required for recovery".into(),
+                    )
+                })?;
+            let key_bytes: [u8; 32] = hex::decode(&signer.private_key_hex)
+                .map_err(|_| {
+                    ProviderRuntimeActionCommitError::Message("Agent signer key is invalid".into())
+                })?
+                .try_into()
+                .map_err(|_| {
+                    ProviderRuntimeActionCommitError::Message("Agent signer key is invalid".into())
+                })?;
+            let public_key = hex::encode(
+                ed25519_dalek::SigningKey::from_bytes(&key_bytes)
+                    .verifying_key()
+                    .to_bytes(),
+            );
+            if signed.request.delegation_generation != signer.delegation_generation
+                || signed.subject_public_key != public_key
+            {
+                return Err(ProviderRuntimeActionCommitError::Message(
+                    "pending Agent signer or delegation generation changed; original intent fenced"
+                        .into(),
+                ));
+            }
+            if pending.cognition.request.request_context != cognition.request.request_context {
+                return Err(ProviderRuntimeActionCommitError::Message(
+                    "an earlier canonical Agent intent remains pending".into(),
+                ));
+            }
+            pending.clone()
+        } else {
+            self.config
+                .ensure_service_agent_lineage_store()
+                .map_err(ProviderRuntimeActionCommitError::Message)?;
+            let signer = self
+                .config
+                .world_service_agent_signer
+                .as_ref()
+                .ok_or_else(|| {
+                    ProviderRuntimeActionCommitError::Message(
+                        "explicit Agent signer/delegation is required".into(),
+                    )
+                })?;
+            let authority = self
+                .verified_world_view
+                .as_ref()
+                .and_then(|view| view.projection().agent_context.as_ref())
+                .ok_or_else(|| {
+                    ProviderRuntimeActionCommitError::Message(
+                        "authorized canonical Agent view context missing".into(),
+                    )
+                })?;
+            let payload = provider_service_cognition_payload(
+                &self.world,
+                runtime_action,
+                cognition,
+                signer,
+                authority,
+                self.llm_sidecar.correction_refs_for_decision(
+                    &cognition.request.request_context.agent_subject,
+                    &cognition.request.request_context.decision_request_id,
+                ),
+            )
+            .map_err(ProviderRuntimeActionCommitError::Message)?;
+            let correlation = crate::world_service::derive_correlation(
+                client.config().expected_world.clone(),
+                &payload,
+            )
+            .map_err(ProviderRuntimeActionCommitError::Message)?;
+            let pending = super::llm_sidecar::lineage_persistence::PendingProviderServiceIntent {
+                correlation,
+                payload,
+                cognition: cognition.clone(),
+                action: simulator_action,
+                feedback_ack: None,
+            };
+            self.llm_sidecar
+                .provider_service_pending
+                .insert(agent_id, pending.clone());
+            // Persist before crossing the network, including the original signature.
+            self.llm_sidecar
+                .persist_provider_lineage()
+                .map_err(ProviderRuntimeActionCommitError::Message)?;
+            pending
+        };
+        Ok((pending, existing.is_some()))
+    }
+
+    fn submit_provider_service_action(
+        &mut self,
+        runtime_action: &crate::runtime::Action,
+        cognition: &RuntimeProviderActionContext,
+        simulator_action: SimulatorAction,
+    ) -> Result<(), ProviderRuntimeActionCommitError> {
+        use crate::world_service::client::WorldServicePort;
+        use oasis7_client_api::world_service::*;
+        let client = self
+            .world_service_client()
+            .map_err(|error| ProviderRuntimeActionCommitError::Message(format!("{error:?}")))?
+            .ok_or_else(|| {
+                ProviderRuntimeActionCommitError::Message(
+                    "canonical Agent service is not configured".into(),
+                )
+            })?;
+        let (pending, existed) = self.prepare_provider_service_action_checkpoint(
+            runtime_action,
+            cognition,
+            simulator_action,
+        )?;
+        let mut response = if existed {
+            client
+                .lookup(
+                    LookupIntentRequest {
+                        contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                        key: pending.correlation.key.clone(),
+                    },
+                    pending.payload.clone(),
+                )
+                .map_err(|error| ProviderRuntimeActionCommitError::Message(error.to_string()))?
+        } else {
+            match client
+                .submit(SubmitIntentRequest {
+                    contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                    correlation: pending.correlation.clone(),
+                    deadline_unix_ms: None,
+                    signed_payload: pending.payload.clone(),
+                })
+                .map_err(|error| ProviderRuntimeActionCommitError::Message(error.to_string()))?
+            {
+                SubmitObservation::Response(response) => *response,
+                SubmitObservation::OutcomeUnknown(_) => {
+                    return Err(ProviderRuntimeActionCommitError::Message(
+                        "canonical Agent outcome unknown; original intent retained for Lookup"
+                            .into(),
+                    ));
+                }
+            }
+        };
+        if super::super::agent_service_phase::original_act_requires_replay(
+            &response,
+            &pending.correlation,
+        )
+        .map_err(ProviderRuntimeActionCommitError::Message)?
+        {
+            // Unknown describes the published index, not the admission queue.
+            // Reconcile only the immutable original request; canonical dedup
+            // prevents a second effect if the first admission is still queued.
+            response = match client
+                .submit(SubmitIntentRequest {
+                    contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                    correlation: pending.correlation.clone(),
+                    deadline_unix_ms: None,
+                    signed_payload: pending.payload.clone(),
+                })
+                .map_err(|error| ProviderRuntimeActionCommitError::Message(error.to_string()))?
+            {
+                SubmitObservation::Response(response) => *response,
+                SubmitObservation::OutcomeUnknown(_) => {
+                    return Err(ProviderRuntimeActionCommitError::Message(
+                        "canonical Agent outcome unknown; original intent retained for Lookup"
+                            .into(),
+                    ));
+                }
+            };
+        }
+        response
+            .validate(&pending.correlation)
+            .map_err(|error| ProviderRuntimeActionCommitError::Message(error.to_string()))?;
+        match response.outcome {
+            IntentOutcome::Committed { commit, receipt } => {
+                let receipt: ProviderServiceCognitionReceipt = serde_json::from_value(receipt)
+                    .map_err(|error| {
+                        ProviderRuntimeActionCommitError::PostCommit(format!(
+                            "canonical cognition receipt decode failed: {error}"
+                        ))
+                    })?;
+                validate_provider_service_receipt(&pending, &receipt)
+                    .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
+                // Read-after-write assurance precedes every sidecar effect.
+                let view = client
+                    .read_view(ReadWorldViewRequest {
+                        contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                        world: pending.correlation.key.world.clone(),
+                        scope_id: client.config().scope_id.clone(),
+                        min_commit: Some(*commit),
+                        fixed_commit: None,
+                        deadline_unix_ms: None,
+                    })
+                    .map_err(|error| {
+                        ProviderRuntimeActionCommitError::PostCommit(error.to_string())
+                    })?;
+                self.llm_sidecar.provider_service_projection = Some(view.projection().clone());
+                self.verified_world_view = Some(view);
+                self.llm_sidecar
+                    .sync_shadow_kernel(&self.world, &self.snapshot_config)
+                    .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
+                let request = &pending.cognition.request.request_context;
+                let action_id = receipt
+                    .commit_record
+                    .action_id
+                    .strip_prefix("action:")
+                    .and_then(|id| id.parse::<u64>().ok())
+                    .ok_or_else(|| {
+                        ProviderRuntimeActionCommitError::PostCommit(
+                            "canonical action ID is not numeric".into(),
+                        )
+                    })?;
+                self.llm_sidecar.track_action(
+                    action_id,
+                    request.agent_subject.clone(),
+                    pending.action.clone(),
+                    Some(pending.cognition.clone()),
+                );
+                self.settle_provider_cognition_lease_for_request(
+                    &request.agent_subject,
+                    pending.cognition.cognition_lease.clone(),
+                    Some(request),
+                )
+                .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
+                if let Some(lease) = pending.cognition.cognition_lease.as_ref() {
+                    self.llm_sidecar
+                        .clear_settled_service_lease(request, lease)
+                        .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
+                }
+                self.llm_sidecar
+                    .handoff_committed_service_wake(&pending.cognition)
+                    .map_err(ProviderRuntimeActionCommitError::WakeHandoff)?;
+                self.llm_sidecar
+                    .consume_provider_memory_after_receipt(
+                        &request.agent_subject,
+                        receipt.feedback.clone(),
+                        &receipt.lineage,
+                        &pending.cognition.memory_write_intents,
+                    )
+                    .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
+                self.llm_sidecar
+                    .finalize_provider_action_with_feedback_checked(action_id, receipt.feedback)
+                    .map_err(ProviderRuntimeActionCommitError::PostCommit)?;
+                self.llm_sidecar
+                    .provider_service_pending
+                    .remove(&request.agent_subject);
+                if let Err(error) = self.llm_sidecar.persist_provider_lineage() {
+                    self.llm_sidecar
+                        .provider_service_pending
+                        .insert(request.agent_subject.clone(), pending);
+                    return Err(ProviderRuntimeActionCommitError::PostCommit(error));
+                }
+                Ok(())
+            }
+            IntentOutcome::Rejected { reason } => Err(ProviderRuntimeActionCommitError::Message(
+                format!("canonical Agent rejected: {reason:?}"),
+            )),
+            _ => Err(ProviderRuntimeActionCommitError::Message(
+                "canonical Agent intent remains pending; original request retained".into(),
+            )),
+        }
+    }
 }
 
-fn provider_cognition_commit_inputs(
+#[derive(Clone, serde::Deserialize)]
+pub(in crate::viewer::runtime_live) struct ProviderServiceCognitionReceipt {
+    pub(in crate::viewer::runtime_live) commit_record: crate::runtime::WorldCommitRecordV1,
+    pub(in crate::viewer::runtime_live) lineage: crate::runtime::RuntimeReceiptLineageV1,
+    pub(in crate::viewer::runtime_live) feedback: crate::simulator::FeedbackEnvelopeV1,
+    #[serde(default)]
+    pub(in crate::viewer::runtime_live) raw_feedback: serde_json::Value,
+}
+pub(in crate::viewer::runtime_live) fn decode_provider_service_receipt(
+    value: serde_json::Value,
+) -> Result<ProviderServiceCognitionReceipt, String> {
+    let raw = value
+        .get("feedback")
+        .cloned()
+        .ok_or("canonical feedback payload missing")?;
+    let mut receipt: ProviderServiceCognitionReceipt =
+        serde_json::from_value(value).map_err(|e| e.to_string())?;
+    receipt.raw_feedback = raw;
+    Ok(receipt)
+}
+
+pub(in crate::viewer::runtime_live) fn validate_provider_service_receipt(
+    pending: &super::llm_sidecar::lineage_persistence::PendingProviderServiceIntent,
+    receipt: &ProviderServiceCognitionReceipt,
+) -> Result<(), String> {
+    let crate::world_service::wire::WorldServicePayloadV1::Cognition(signed) = &pending.payload
+    else {
+        return Err("canonical cognition receipt has wrong pending operation".into());
+    };
+    let request = &signed.request.request;
+    let marker = &receipt.commit_record;
+    let lineage = &receipt.lineage;
+    lineage
+        .validate()
+        .map_err(|error| format!("canonical receipt lineage invalid: {error:?}"))?;
+    if marker.status != "committed"
+        || marker.world_id != request.captured_base_binding.world_id
+        || marker.branch_id != request.captured_base_binding.branch_id
+        || marker.finality_epoch != request.captured_base_binding.finality_epoch
+        || marker.finality_block_hash != request.captured_base_binding.finality_block_hash
+        || marker.finality_status != request.captured_base_binding.finality_status
+        || marker.reorg_epoch != request.captured_base_binding.reorg_epoch
+        || marker.parent_tick != request.captured_base_binding.base_tick
+        || marker.normalized_base_binding() != request.captured_base_binding
+        || marker.agent_id != request.agent_id
+        || marker.agent_session_id != request.agent_session_id
+        || marker.agent_turn_id != request.agent_turn_id
+        || marker.decision_request_id != request.decision_request_id
+        || marker.request_digest != request.request_digest
+        || lineage
+            != &crate::runtime::RuntimeReceiptLineageV1::from_commit_record(
+                marker,
+                request.agent_id.clone(),
+                request.agent_session_id.clone(),
+                request.agent_turn_id.clone(),
+                request.decision_request_id.clone(),
+                request.request_digest.clone(),
+                marker.feedback_id.clone(),
+            )
+    {
+        let mut fields = Vec::new();
+        if marker.normalized_base_binding() != request.captured_base_binding {
+            fields.push("normalized_base_binding");
+        }
+        if fields.is_empty() {
+            fields.push("other_request_world_or_lineage_fields");
+        }
+        return Err(format!(
+            "canonical cognition receipt request/world/lineage mismatch: fields={}",
+            fields.join(",")
+        ));
+    }
+    let feedback = &receipt.feedback;
+    if feedback.status != "committed"
+        || feedback.runtime_receipt_id.as_deref() != Some(lineage.receipt_id.as_str())
+        || feedback.feedback_id != lineage.feedback_id
+        || feedback.agent_subject != request.agent_id
+        || feedback.agent_session_id != request.agent_session_id
+        || feedback.agent_turn_id != request.agent_turn_id
+        || feedback.decision_request_id != request.decision_request_id
+        || feedback.request_digest.to_string() != request.request_digest
+    {
+        return Err("canonical cognition feedback identity mismatch".into());
+    }
+    Ok(())
+}
+
+pub(in crate::viewer::runtime_live) fn provider_cognition_commit_inputs(
     world: &RuntimeWorld,
     cognition: &RuntimeProviderActionContext,
 ) -> Result<
@@ -434,7 +852,62 @@ fn provider_cognition_commit_inputs(
     ))
 }
 
-pub(super) enum ProviderRuntimeActionCommitError {
+/// Sign the actual provider cognition artifact with an explicitly configured
+/// delegate. The service resolves that delegate against canonical authority;
+/// a local provider key binding is never used to authorize this payload.
+fn provider_service_cognition_payload(
+    world: &RuntimeWorld,
+    runtime_action: &crate::runtime::Action,
+    cognition: &RuntimeProviderActionContext,
+    signer: &crate::world_service::client::WorldServiceAgentSignerConfig,
+    authority: &crate::world_service::projection::WorldServiceAgentContext,
+    correction_refs: Vec<String>,
+) -> Result<crate::world_service::WorldServicePayloadV1, String> {
+    let (mut request, response_artifact) = provider_cognition_commit_inputs(world, cognition)?;
+    if authority.agent_id != request.agent_id {
+        return Err("canonical Agent view subject mismatch".into());
+    }
+    request.capability_snapshot_hash = authority.capability_snapshot_hash.clone();
+    request.authority_context_hash = authority.authority_context_hash.clone();
+    let explanation = cognition
+        .response
+        .base_decision_response
+        .public_agency_explanation();
+    let causal_proposal = crate::world_service::CognitionCausalProposalV1 {
+        expected_consequence: serde_json::json!({"status": explanation.status, "provenance": explanation.provenance, "prediction": explanation.expected_consequence}),
+        stakes: serde_json::json!({"provenance": "agent_explanation_unverified", "summary": explanation.stakes}),
+        alternative: serde_json::json!({"provenance": "agent_explanation_unverified", "alternatives": explanation.alternatives}),
+        evidence_refs: vec![
+            request.observation_digest.clone(),
+            cognition
+                .request
+                .request_context
+                .memory_snapshot_digest
+                .to_string(),
+        ],
+        correction_refs,
+        reason: explanation.reason,
+        dissent: explanation.dissent,
+    };
+    let intent = crate::world_service::CognitionIntentV1 {
+        request,
+        action: runtime_action.clone(),
+        response_artifact,
+        delegation_generation: signer.delegation_generation,
+        causal_proposal: Some(causal_proposal),
+    };
+    let signed = crate::world_service::authority::sign_read_request(
+        "cognition",
+        intent,
+        &signer.private_key_hex,
+    )?;
+    Ok(crate::world_service::WorldServicePayloadV1::Cognition(
+        signed,
+    ))
+}
+
+#[derive(Debug)]
+pub(in crate::viewer::runtime_live) enum ProviderRuntimeActionCommitError {
     StaleBase,
     WakeHandoff(String),
     PostCommit(String),

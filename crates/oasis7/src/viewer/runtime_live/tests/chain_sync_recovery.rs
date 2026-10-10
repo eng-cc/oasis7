@@ -1,5 +1,228 @@
 use super::*;
 
+#[test]
+fn world_service_submission_does_not_hold_shared_viewer_mutex_and_preserves_unknown_identity() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let service_key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .unwrap();
+    server.config.world_service = Some(crate::world_service::client::WorldServiceClientConfig {
+        endpoint,
+        trusted_service_public_key: hex::encode(service_key.verifying_key().to_bytes()),
+        expected_world: oasis7_client_api::world_service::WorldIdentity {
+            world_id: "test-world".into(),
+            genesis_digest: "genesis".into(),
+        },
+        scope_id: "public".into(),
+        read_private_key_hex: hex::encode([7; 32]),
+        timeout: Duration::from_secs(2),
+        max_response_bytes: 4096,
+    });
+    let signer = ed25519_dalek::SigningKey::from_bytes(&[5; 32]);
+    let request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: crate::viewer::ACTION_CLAIM_FIRST_AGENT.into(),
+            target_agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.into(),
+            actor_agent_id: None,
+            player_id: "player-service".into(),
+            public_key: None,
+            auth: None,
+        },
+        19,
+        &hex::encode(signer.verifying_key().to_bytes()),
+        &hex::encode([5; 32]),
+    );
+    let baseline = serde_json::to_value(server.world.state()).unwrap();
+    server
+        .session_policy
+        .register_session(
+            "player-service",
+            &hex::encode(signer.verifying_key().to_bytes()),
+        )
+        .unwrap();
+    let shared = Arc::new(Mutex::new(server));
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let http = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut bytes = [0; 4096];
+        assert!(stream.read(&mut bytes).unwrap() > 0);
+        started_tx.send(()).unwrap();
+        release_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        // Lost response: the accepted signed intent may still commit remotely.
+    });
+    let worker_shared = shared.clone();
+    let worker_request = request.clone();
+    let worker = thread::spawn(move || {
+        ViewerRuntimeLiveServer::prepare_shared_world_service_submission(
+            &worker_shared,
+            &ViewerRequest::GameplayAction {
+                request: worker_request,
+            },
+        )
+        .unwrap()
+        .unwrap()
+    });
+    started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(
+        shared.try_lock().is_ok(),
+        "network wait must not hold Viewer mutex"
+    );
+    release_tx.send(()).unwrap();
+    http.join().unwrap();
+    let prepared = worker.join().unwrap();
+    let expected = prepared.correlation.clone();
+    let mut server = shared.lock().unwrap();
+    server.prepared_world_service_submission = Some(prepared);
+    let error = server.submit_world_service_gameplay(&request).unwrap_err();
+    assert_eq!(error.code, "world_service_outcome_unknown");
+    assert_eq!(server.pending_world_service_gameplay.len(), 1);
+    assert_eq!(server.pending_world_service_gameplay[0].0, expected);
+    assert_eq!(
+        serde_json::to_value(server.world.state()).unwrap(),
+        baseline
+    );
+    assert!(server.runtime_action_players.is_empty());
+    server.prepared_world_service_submission = Some(
+        super::super::super::world_service_link::PreparedWorldServiceSubmission {
+            correlation: expected,
+            outcome: Err("must not be consumed as another request".into()),
+            admission_error: None,
+        },
+    );
+    let mut different = request;
+    different.target_agent_id = "different-agent".into();
+    different = signed_gameplay_action_request(
+        different,
+        20,
+        &hex::encode(signer.verifying_key().to_bytes()),
+        &hex::encode([5; 32]),
+    );
+    assert_eq!(
+        server
+            .submit_world_service_gameplay(&different)
+            .unwrap_err()
+            .code,
+        "world_service_invalid_request"
+    );
+}
+
+/// A canonical publication height is not the runtime clock or event position.
+/// Exercise the real status HTTP + persisted-world synchronization path rather
+/// than the watermark helper so projection admission is covered as well.
+#[test]
+fn chain_linked_runtime_preserves_commit_height_separately_from_tick_and_events() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_distinct_version_axes");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "version-axis-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    for _ in 0..5 {
+        execution_world
+            .step()
+            .expect("advance execution world clock");
+    }
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist execution world");
+    let chain_status = TestChainStatusServer::start_with_release_security_policy(
+        execution_world_dir.clone(),
+        ReleaseSecurityPolicy::default(),
+    );
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    let (mut writer, _peer) = test_writer_pair();
+    assert!(
+        server
+            .sync_chain_linked_runtime(&mut session, &mut writer)
+            .expect("sync publication")
+    );
+    assert_eq!(
+        server.world.state().time,
+        5,
+        "the published runtime clock must remain intact"
+    );
+    assert!(
+        server
+            .world
+            .state()
+            .agents
+            .contains_key("version-axis-agent")
+    );
+    assert_eq!(
+        server.last_chain_committed_height, 1,
+        "publication identity must retain the server commit height instead of max(height, tick, event position)"
+    );
+}
+
+#[test]
+fn chain_linked_runtime_observes_new_commit_without_advancing_runtime_clock() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_commit_only_publication");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "commit-only-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    for _ in 0..5 {
+        execution_world
+            .step()
+            .expect("advance execution world clock");
+    }
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist execution world");
+    let chain_status = TestChainStatusServer::start_with_release_security_policy(
+        execution_world_dir.clone(),
+        ReleaseSecurityPolicy::default(),
+    );
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_execution_world_dir(execution_world_dir.clone()),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    let (mut writer, _peer) = test_writer_pair();
+    server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("first publication");
+    let original_tick = server.world.state().time;
+    let original_events = server.world.journal().events.clone();
+    chain_status.committed_height.store(2, Ordering::SeqCst);
+    server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("commit-only publication");
+    assert_eq!(
+        server.world.state().time,
+        original_tick,
+        "a commit is not a gameplay tick"
+    );
+    assert_eq!(
+        server.world.journal().events,
+        original_events,
+        "a commit must not invent world events"
+    );
+    assert_eq!(
+        server.last_chain_committed_height, 2,
+        "a newer canonical publication must be observable even when tick and event position are unchanged"
+    );
+}
+
 fn read_raw_chain_sync_responses(
     peer: &std::net::TcpStream,
     timeout: Duration,
@@ -90,7 +313,7 @@ fn chain_linked_runtime_empty_poll_does_not_advance_world() {
 }
 
 #[test]
-fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
+fn chain_linked_runtime_zero_delta_accepts_commit_without_advancing_clock_or_events() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_delta_height");
     let execution_world = crate::runtime::World::new_production_hardened();
     execution_world
@@ -111,7 +334,8 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
     session.playing = false;
     session.subscribed.insert(ViewerStream::Events);
     session.subscribed.insert(ViewerStream::Snapshot);
-    let initial_time = server.world.state().time;
+    let published_time = execution_world.state().time;
+    let published_events = execution_world.journal().events.clone();
     let (mut writer, peer) = test_writer_pair();
 
     let progressed = server
@@ -119,11 +343,21 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
         .expect("chain sync should succeed");
 
     assert!(
-        !progressed,
-        "zero-delta chain poll should not report progress"
+        progressed,
+        "a new verified commit advances publication identity"
     );
-    assert_eq!(server.world.state().time, initial_time);
-    assert_eq!(server.last_chain_committed_height, 0);
+    assert_eq!(server.world.state().time, published_time);
+    assert_eq!(server.world.journal().events, published_events);
+    assert_eq!(server.last_chain_committed_height, 1);
+    let _ = read_raw_chain_sync_responses(&peer, Duration::from_millis(100));
+    assert!(
+        !server
+            .sync_chain_linked_runtime(&mut session, &mut writer)
+            .expect("same publication idle")
+    );
+    assert_eq!(server.world.state().time, published_time);
+    assert_eq!(server.world.journal().events, published_events);
+    assert_eq!(server.last_chain_committed_height, 1);
     assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
 }
 
@@ -180,8 +414,8 @@ fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world
     assert_eq!(server.world.state().time, execution_world.state().time);
     assert_ne!(server.world.state().time, initial_time);
     assert_eq!(
-        server.last_chain_committed_height,
-        execution_world.state().time.max(1)
+        server.last_chain_committed_height, 0,
+        "zero committed height must not be fabricated from gameplay time"
     );
     assert!(server.latest_player_gameplay_feedback.is_none());
     let line = read_response_line(&peer, Duration::from_millis(200))
@@ -425,7 +659,7 @@ fn chain_linked_runtime_revalidates_initial_snapshot_after_previous_session() {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
-fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_head() {
+fn legacy_operator_observer_blocks_hosted_prompt_and_reconnects_exact_head() {
     let _env_guard = runtime_provider_env_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -628,6 +862,11 @@ fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_h
         player_private_key.as_str(),
     );
     preview_request.strong_auth_grant = Some(strong_auth_grant("prompt_control_preview"));
+    // The directory-backed operator observer is read-only. It has no
+    // authenticated Agent service projection and cannot open a Hosted model lane.
+    let before_prompt_world = serde_json::to_value(first_viewer.world.snapshot()).unwrap();
+    let before_prompt_journal = first_viewer.world.journal().events.clone();
+    let before_prompt_summary = first_viewer.test_canonical_provider_summary();
     let preview = first_viewer
         .handle_prompt_control_for_protocol(
             crate::viewer::PromptControlCommand::Preview {
@@ -635,12 +874,26 @@ fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_h
             },
             &negotiated,
         )
-        .expect("Hosted local-mock Preview must be authoritative");
+        .expect_err("operator observer cannot supply canonical Hosted prompt context");
+    assert_eq!(preview.code, "prompt_control_runtime_context_unavailable");
+    assert!(
+        preview
+            .message
+            .contains("canonical Agent observation unavailable")
+    );
     assert_eq!(
         preview.status,
-        Some(crate::viewer::protocol::PromptControlResultStatus::Accepted)
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
     );
-    assert_eq!(preview.mutation_count, Some(0));
+    assert_eq!(
+        serde_json::to_value(first_viewer.world.snapshot()).unwrap(),
+        before_prompt_world
+    );
+    assert_eq!(first_viewer.world.journal().events, before_prompt_journal);
+    assert_eq!(
+        first_viewer.test_canonical_provider_summary(),
+        before_prompt_summary
+    );
 
     let mut apply_request = signed_prompt_control_apply_request(
         crate::viewer::PromptControlApplyRequest {
@@ -669,12 +922,26 @@ fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_h
             },
             &negotiated,
         )
-        .expect("Hosted local-mock Apply must be authoritative");
+        .expect_err("operator observer must also refuse Hosted prompt mutation");
+    assert_eq!(apply.code, "prompt_control_runtime_context_unavailable");
+    assert!(
+        apply
+            .message
+            .contains("canonical Agent observation unavailable")
+    );
     assert_eq!(
         apply.status,
-        Some(crate::viewer::protocol::PromptControlResultStatus::Applied)
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
     );
-    assert_eq!(apply.mutation_count, Some(1));
+    assert_eq!(
+        serde_json::to_value(first_viewer.world.snapshot()).unwrap(),
+        before_prompt_world
+    );
+    assert_eq!(first_viewer.world.journal().events, before_prompt_journal);
+    assert_eq!(
+        first_viewer.test_canonical_provider_summary(),
+        before_prompt_summary
+    );
 
     let mut cold_viewer =
         ViewerRuntimeLiveServer::new(viewer_config()).expect("cold-start second chain viewer");

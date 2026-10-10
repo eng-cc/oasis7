@@ -937,7 +937,7 @@ fn committed_recipe_origin_preserves_exact_consensus_context_and_runtime_id_allo
         committed_actions: vec![committed.clone()],
         committed_at_unix_ms: 1000,
     };
-    let (mut decoded, _, _) =
+    let (mut decoded, _, _, _) =
         super::super::driver_replicated_input::decode_committed_actions(&context).unwrap();
     let (action, origin) = decoded.pop().unwrap();
     let origin = origin.expect("new verified metadata");
@@ -982,7 +982,7 @@ fn committed_recipe_origin_preserves_exact_consensus_context_and_runtime_id_allo
     legacy_context.action_root =
         compute_consensus_action_root(std::slice::from_ref(&legacy)).unwrap();
     legacy_context.committed_actions = vec![legacy];
-    let (decoded, _, _) =
+    let (decoded, _, _, _) =
         super::super::driver_replicated_input::decode_committed_actions(&legacy_context).unwrap();
     assert!(
         decoded[0].1.is_none(),

@@ -14,7 +14,6 @@ use super::{
 /// so provider failures cross the actor boundary in the decision trace.
 fn provider_error_code(trace: &AgentDecisionTrace) -> Option<String> {
     let error = trace.llm_error.as_deref()?;
-
     let structured_code = trace
         .llm_output
         .as_deref()
@@ -24,6 +23,12 @@ fn provider_error_code(trace: &AgentDecisionTrace) -> Option<String> {
         .and_then(|code| code.as_str().map(str::to_owned));
     if structured_code.is_some() {
         return structured_code;
+    }
+    // Trace normalization is diagnostic only and retains the candidate
+    // decision separately. Match the viewer's narrow overflow contract,
+    // while retaining an explicit structured provider failure above.
+    if error.trim() == "trace_payload_too_large" {
+        return None;
     }
 
     error
@@ -189,4 +194,47 @@ pub(super) fn validate_cognition_lease_for_request(
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod trace_error_tests {
+    use super::*;
+
+    fn trace(error: &str) -> AgentDecisionTrace {
+        AgentDecisionTrace {
+            agent_id: "agent-a".into(),
+            time: 0,
+            decision: AgentDecision::Wait,
+            llm_input: None,
+            llm_output: None,
+            llm_error: Some(error.into()),
+            parse_error: None,
+            llm_diagnostics: None,
+            llm_effect_intents: vec![],
+            llm_effect_receipts: vec![],
+            llm_step_trace: vec![],
+            llm_prompt_section_trace: vec![],
+            llm_chat_messages: vec![],
+        }
+    }
+
+    #[test]
+    fn diagnostic_overflow_is_not_a_provider_failure() {
+        assert_eq!(provider_error_code(&trace("trace_payload_too_large")), None);
+        assert_eq!(
+            provider_error_code(&trace("trace_payload_too_large: provider_timeout")),
+            Some("trace_payload_too_large".into())
+        );
+        assert_eq!(
+            provider_error_code(&trace("provider_timeout: unavailable")),
+            Some("provider_timeout".into())
+        );
+        let mut failure = trace("trace_payload_too_large");
+        failure.llm_output =
+            Some(serde_json::json!({"provider_error": {"code": "provider_timeout"}}).to_string());
+        assert_eq!(
+            provider_error_code(&failure),
+            Some("provider_timeout".into())
+        );
+    }
 }

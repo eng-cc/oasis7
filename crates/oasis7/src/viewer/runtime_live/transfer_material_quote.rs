@@ -136,7 +136,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn transfer_quote(
         &mut self,
         request: TransferMaterialQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,

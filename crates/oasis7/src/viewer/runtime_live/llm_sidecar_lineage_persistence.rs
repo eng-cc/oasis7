@@ -1,3 +1,6 @@
+#[path = "llm_sidecar_lineage_checkpoint_write.rs"]
+mod checkpoint_write;
+
 use super::*;
 use crate::runtime::{World as RuntimeWorld, WorldCommitRecordV1};
 #[cfg(not(target_arch = "wasm32"))]
@@ -10,6 +13,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const LEGACY_PROVIDER_LINEAGE_SCHEMA_VERSION: u16 = 1;
 const PROVIDER_LINEAGE_SCHEMA_VERSION: u16 = 2;
+
+pub(in crate::viewer::runtime_live) use service_checkpoint::{
+    PendingProviderSchedulerIntent, PendingProviderServiceIntent,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(super) struct ProviderTerminalState {
@@ -99,6 +106,16 @@ struct PersistedProviderLineageV1 {
     provider_recovery_pending: BTreeMap<String, ProviderRecoveryPending>,
     #[serde(default)]
     provider_wake_recovery_pending: BTreeMap<String, ProviderWakeRecoveryPending>,
+    #[serde(default)]
+    provider_service_pending: BTreeMap<String, PendingProviderServiceIntent>,
+    #[serde(default)]
+    provider_scheduler_pending: BTreeMap<String, PendingProviderSchedulerIntent>,
+    #[serde(default)]
+    hosted_admission: Option<cognition_context::HostedAdmission>,
+    #[serde(default)]
+    hosted_wait: Option<cognition_context::HostedWait>,
+    #[serde(default)]
+    hosted_resume: Option<cognition_context::HostedResume>,
     provider_wait_until: BTreeMap<String, u64>,
     provider_feedback_seq: BTreeMap<String, u64>,
     #[serde(default)]
@@ -227,34 +244,9 @@ fn validate_persisted_provider_cognition_leases(
     Ok(())
 }
 
-fn decode_provider_lineage_checkpoint(
-    bytes: &[u8],
-) -> Result<(PersistedProviderLineageV1, bool), String> {
-    let mut value: Value = serde_json::from_slice(bytes)
-        .map_err(|error| format!("provider lineage checkpoint decode failed: {error}"))?;
-    let schema_version = value
-        .get("schema_version")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| {
-            "provider lineage checkpoint decode failed: missing schema_version".to_string()
-        })?;
-    let migrated = match u16::try_from(schema_version).unwrap_or(u16::MAX) {
-        PROVIDER_LINEAGE_SCHEMA_VERSION => false,
-        LEGACY_PROVIDER_LINEAGE_SCHEMA_VERSION => {
-            lineage_recovery::migrate_legacy_budget_contracts(&mut value)?;
-            value["schema_version"] = json!(PROVIDER_LINEAGE_SCHEMA_VERSION);
-            true
-        }
-        other => {
-            return Err(format!(
-                "unsupported provider lineage checkpoint schema {other}"
-            ));
-        }
-    };
-    let checkpoint = serde_json::from_value(value)
-        .map_err(|error| format!("provider lineage checkpoint decode failed: {error}"))?;
-    Ok((checkpoint, migrated))
-}
+#[path = "llm_sidecar_service_checkpoint.rs"]
+mod service_checkpoint;
+use service_checkpoint::decode_provider_lineage_checkpoint;
 
 pub(super) fn committed_runtime_record_for_request(
     world: &RuntimeWorld,
@@ -337,7 +329,7 @@ impl RuntimeLlmSidecar {
         context: &cognition_context::ProviderContextState,
         lease: &crate::runtime::CognitionLeaseV1,
     ) -> Result<(), String> {
-        match world.release_cognition_lease(lease.lease_id.as_str()) {
+        match self.release_provider_lease_at_authority(world, &context.request_context, lease) {
             Ok(_) => {
                 self.clear_provider_cognition_lease(agent_id);
                 Ok(())
@@ -351,19 +343,6 @@ impl RuntimeLlmSidecar {
                 Err(message)
             }
         }
-    }
-
-    pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_request(
-        &self,
-        world: &RuntimeWorld,
-        agent_id: &str,
-        request: &crate::simulator::ContinuousAgentRequestContextV1,
-        lease: &crate::runtime::CognitionLeaseV1,
-        operation: &str,
-    ) -> Result<(), String> {
-        lineage_generation_recovery::validate_provider_lease_binding(
-            world, agent_id, request, lease, operation,
-        )
     }
 
     pub(in crate::viewer::runtime_live) fn validate_provider_cognition_lease_for_agent(
@@ -491,7 +470,9 @@ impl RuntimeLlmSidecar {
                 return Err(error);
             }
         };
-        validate_persisted_provider_cognition_leases(world, &checkpoint)?;
+        if !self.provider_service_required {
+            validate_persisted_provider_cognition_leases(world, &checkpoint)?;
+        }
         for (proposal_id, proposal) in &checkpoint.provider_continuation_proposals {
             if proposal_id != &proposal.continuation_proposal_id {
                 return Err(format!(
@@ -504,15 +485,21 @@ impl RuntimeLlmSidecar {
                 )
             })?;
         }
-        let current_binding = checkpoint
-            .runtime_binding
-            .as_ref()
-            .map(|_| {
-                world
-                    .current_cognition_runtime_binding()
-                    .map_err(|error| format!("Runtime cognition binding unavailable: {error:?}"))
-            })
-            .transpose()?;
+        let current_binding = if self.provider_service_required {
+            self.provider_service_projection
+                .as_ref()
+                .and_then(|view| view.runtime_binding.clone())
+        } else {
+            checkpoint
+                .runtime_binding
+                .as_ref()
+                .map(|_| {
+                    world.current_cognition_runtime_binding().map_err(|error| {
+                        format!("Runtime cognition binding unavailable: {error:?}")
+                    })
+                })
+                .transpose()?
+        };
         let binding_changed = current_binding
             .as_ref()
             .zip(checkpoint.runtime_binding.as_ref())
@@ -538,6 +525,15 @@ impl RuntimeLlmSidecar {
             checkpoint.provider_continuation_recovery_pending;
         self.provider_recovery_pending = checkpoint.provider_recovery_pending;
         self.provider_wake_recovery_pending = checkpoint.provider_wake_recovery_pending;
+        self.provider_service_pending = checkpoint.provider_service_pending;
+        self.provider_restored_service_checkpoints = self.provider_service_pending.clone();
+        self.provider_scheduler_pending = checkpoint.provider_scheduler_pending;
+        self.hosted_admission = checkpoint.hosted_admission;
+        self.hosted_wait = checkpoint.hosted_wait;
+        self.hosted_resume = checkpoint.hosted_resume;
+        self.restore_hosted_wait_original()?;
+        self.restore_hosted_resume_original()?;
+        self.restore_hosted_admission_original()?;
         self.provider_wait_until = checkpoint.provider_wait_until;
         self.provider_feedback_seq = checkpoint.provider_feedback_seq;
         self.provider_feedback_seq_by_session = checkpoint.provider_feedback_seq_by_session;
@@ -549,6 +545,7 @@ impl RuntimeLlmSidecar {
             .into_iter()
             .filter(|decision| !self.provider_decision_is_terminalized(decision))
             .collect();
+        self.restore_queued_wait_originals()?;
         // A retry context is an interrupted logical request whose actor-local
         // budget ledger is absent after restart.  Do not carry it into the
         // normal retry selector: fence the identity for terminal feedback and
@@ -607,6 +604,14 @@ impl RuntimeLlmSidecar {
             .into_values()
             .map(|wake| (wake.wake_id.clone(), wake))
             .collect();
+        if self.provider_service_required {
+            self.pending_runtime_wakes = pending_runtime_wakes;
+            self.provider_lineage_binding = checkpoint.runtime_binding;
+            self.provider_lineage_restored = true;
+            // Signed pending intents are validated before installation. Only
+            // canonical Lookup/read-view may reconcile them after restart.
+            return Ok(());
+        }
         let runtime_wakes = world.cognition_in_flight_wakes().map_err(|error| {
             format!("Runtime cognition wake read failed during provider lineage restore: {error:?}")
         })?;
@@ -1049,73 +1054,6 @@ impl RuntimeLlmSidecar {
             // so a legacy zero-deny migration is durable before the next
             // process restart.
             self.persist_provider_lineage_best_effort();
-        }
-        Ok(())
-    }
-
-    pub(in crate::viewer::runtime_live) fn persist_provider_lineage(&self) -> Result<(), String> {
-        let Some(path) = self.provider_lineage_store.as_deref() else {
-            return Ok(());
-        };
-        let checkpoint = PersistedProviderLineageV1 {
-            schema_version: PROVIDER_LINEAGE_SCHEMA_VERSION,
-            provider_session_ids: self.provider_session_ids.clone(),
-            provider_agent_ids: self.provider_agent_ids.clone(),
-            provider_context_seq: self.provider_context_seq.clone(),
-            provider_contexts: self.provider_contexts.clone(),
-            provider_retry_contexts: self.provider_retry_contexts.clone(),
-            provider_active_turns: self.provider_active_turns.clone(),
-            provider_cognition_leases: self.provider_cognition_leases.clone(),
-            provider_capability_identities: self.provider_capability_identities.clone(),
-            provider_continuation_proposals: self.provider_continuation_proposals.clone(),
-            provider_continuation_recovery_pending: self
-                .provider_continuation_recovery_pending
-                .clone(),
-            provider_recovery_pending: self.provider_recovery_pending.clone(),
-            provider_wake_recovery_pending: self.provider_wake_recovery_pending.clone(),
-            provider_wait_until: self.provider_wait_until.clone(),
-            provider_feedback_seq: self.provider_feedback_seq.clone(),
-            provider_feedback_seq_by_session: self.provider_feedback_seq_by_session.clone(),
-            provider_memory_store: self.provider_memory_store.clone(),
-            provider_completed_decisions: self.provider_completed_decisions.clone(),
-            provider_held_decisions: self.provider_held_decisions.clone(),
-            provider_stale_replans: self.provider_stale_replans.clone(),
-            provider_transport_exhausted: self.provider_transport_exhausted.clone(),
-            provider_terminal_states: self.provider_terminal_states.clone(),
-            provider_late_response_diagnostics: self.provider_late_response_diagnostics.clone(),
-            pending_actions: self.pending_actions.clone(),
-            pending_provider_world_events: self.pending_provider_world_events.clone(),
-            provider_world_event_quarantine: self.provider_world_event_quarantine.clone(),
-            provider_lineage_recovery_pending: self.provider_lineage_recovery_pending.clone(),
-            runtime_binding: self.provider_lineage_binding.clone(),
-            pending_runtime_wakes: self.pending_runtime_wakes.clone(),
-        };
-        let encoded = serde_json::to_vec_pretty(&checkpoint)
-            .map_err(|error| format!("provider lineage checkpoint encode failed: {error}"))?;
-        let parent = path.parent().unwrap_or_else(|| Path::new("."));
-        fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "provider lineage checkpoint directory creation failed ({}): {error}",
-                parent.display()
-            )
-        })?;
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or_default();
-        let temp_path = path.with_extension(format!("tmp-{}-{nonce}", std::process::id()));
-        fs::write(&temp_path, encoded).map_err(|error| {
-            format!(
-                "provider lineage checkpoint temporary write failed ({}): {error}",
-                temp_path.display()
-            )
-        })?;
-        if let Err(error) = fs::rename(&temp_path, path) {
-            let _ = fs::remove_file(&temp_path);
-            return Err(format!(
-                "provider lineage checkpoint commit failed ({}): {error}",
-                path.display()
-            ));
         }
         Ok(())
     }

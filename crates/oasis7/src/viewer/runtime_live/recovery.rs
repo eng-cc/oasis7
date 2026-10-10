@@ -23,6 +23,24 @@ impl ViewerRuntimeLiveServer {
         command: AuthoritativeRecoveryCommand,
         negotiated: &crate::viewer::protocol::NegotiatedViewerProtocol,
     ) -> Result<(AuthoritativeRecoveryAck<u64>, bool), AuthoritativeRecoveryError> {
+        if self.config.world_service.is_some()
+            && matches!(
+                &command,
+                AuthoritativeRecoveryCommand::Rollback { .. }
+                    | AuthoritativeRecoveryCommand::RollbackV2 { .. }
+                    | AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness { .. }
+                    | AuthoritativeRecoveryCommand::TransitionRollbackCompensation { .. }
+                    | AuthoritativeRecoveryCommand::ResolveRollbackAttribution { .. }
+            )
+        {
+            return Err(recovery_error(
+                "world_service_control_unsupported",
+                "canonical rollback must be authorized by the world service",
+                None,
+                None,
+                None,
+            ));
+        }
         if matches!(
             command,
             AuthoritativeRecoveryCommand::Rollback { .. }

@@ -568,7 +568,7 @@ impl ViewerRuntimeLiveServer {
 
     pub(super) fn emit_authoritative_batch_snapshot(
         &self,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         for batch in &self.authoritative_batches {
             send_response(
@@ -583,7 +583,7 @@ impl ViewerRuntimeLiveServer {
 
     pub(super) fn emit_authoritative_challenge_snapshot(
         &self,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         for challenge in &self.authoritative_challenges {
             send_response(

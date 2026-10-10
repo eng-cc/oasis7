@@ -29,7 +29,7 @@ mod agent_chat_intent;
 mod agent_memory_correction;
 #[path = "control_plane/auth_helpers.rs"]
 mod auth_helpers;
-mod llm_sidecar;
+pub(in crate::viewer::runtime_live) mod llm_sidecar;
 #[path = "control_plane/prompt_control_enhanced.rs"]
 mod prompt_control_enhanced;
 #[path = "control_plane/prompt_control_legacy.rs"]
@@ -44,7 +44,7 @@ use super::prompt_control_result::{
     PromptControlLedgerInsertError, PromptControlLedgerLookup, PromptControlLedgerReceipt,
 };
 #[path = "control_plane/provider_action_commit.rs"]
-mod provider_action_commit;
+pub(in crate::viewer::runtime_live) mod provider_action_commit;
 pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use auth_helpers::map_auth_verify_error_code;
@@ -208,7 +208,7 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn enqueue_agent_chat_echo_event_if_enabled(&mut self, agent_id: &str, message: &str) {
-        if !self.config.agent_chat_echo_enabled {
+        if self.chain_link_enabled() || !self.config.agent_chat_echo_enabled {
             return;
         }
         let Some(agent) = self.world.state().agents.get(agent_id) else {
@@ -225,6 +225,9 @@ impl ViewerRuntimeLiveServer {
     }
 
     fn enqueue_agent_chat_reply_event(&mut self, agent_id: &str, message: &str) {
+        if self.chain_link_enabled() {
+            return;
+        }
         let Some(agent) = self.world.state().agents.get(agent_id) else {
             return;
         };
@@ -246,6 +249,9 @@ impl ViewerRuntimeLiveServer {
         intent_id: &str,
         request_digest: &str,
     ) {
+        if self.chain_link_enabled() {
+            return;
+        }
         let effect_intent_id = self
             .world
             .state()
@@ -288,6 +294,13 @@ impl ViewerRuntimeLiveServer {
     }
 
     pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) -> Vec<AgentChatError> {
+        if self.chain_link_enabled() {
+            return vec![AgentChatError {
+                code: "canonical_chat_unsupported".into(),
+                message: "world service has no registered Agent chat capability".into(),
+                agent_id: None,
+            }];
+        }
         let (replies, failures) = self
             .llm_sidecar
             .drain_provider_agent_chat_replies_with_identity(&self.world);

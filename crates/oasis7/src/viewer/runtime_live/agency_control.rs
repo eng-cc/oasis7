@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::io::BufWriter;
 use std::io::Write;
-use std::net::TcpStream;
 
 pub(super) const AGENCY_CONTROL_REQUEST_TYPE: &str = "agency_control_request";
 pub(super) const AGENCY_CONTROL_RESPONSE_TYPE: &str = "agency_control_response";
@@ -141,7 +139,7 @@ pub(super) fn parse_agency_control_frame(raw: &str) -> ParsedAgencyControlFrame 
 }
 
 pub(super) fn write_agency_control_response(
-    writer: &mut BufWriter<TcpStream>,
+    writer: &mut impl Write,
     response: &AgencyControlResponse,
 ) -> std::io::Result<()> {
     serde_json::to_writer(&mut *writer, response).map_err(std::io::Error::other)?;

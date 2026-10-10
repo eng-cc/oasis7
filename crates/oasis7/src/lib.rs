@@ -18,6 +18,8 @@ pub mod observability;
 pub mod runtime;
 pub mod simulator;
 pub mod viewer;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod world_service;
 
 pub use geometry::{
     DEFAULT_CLOUD_DEPTH_CM, DEFAULT_CLOUD_DEPTH_KM, DEFAULT_CLOUD_HEIGHT_CM,

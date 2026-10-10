@@ -149,6 +149,7 @@ mod tick_consensus_state_root;
 #[cfg(test)]
 mod tick_consensus_test_support;
 mod transition;
+mod world_service;
 pub use cognition_economy::{
     COGNITION_ECONOMY_SCHEMA_VERSION, COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
     COGNITION_LEASE_SCHEMA_VERSION, COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION,

@@ -35,27 +35,61 @@ pub(super) fn validate_provider_lease_identity(
         ));
     }
     let expected_invocation_key = request.provider_invocation_key().to_string();
-    if lease.agent_id != agent_id
-        || request.agent_subject != agent_id
-        || lease.account_id != expected_account
-        || lease.idempotency_key != expected_invocation_key
-        || lease.agent_session_id != request.agent_session_id
-        || lease.agent_turn_id != request.agent_turn_id
-        || lease.decision_request_id != request.decision_request_id
-        || lease.request_digest != request.request_digest.to_string()
-        || lease.quote.resource != "cognition_units"
-        || lease.reserved_amount != 1
-        || lease.quote.payer_id != lease.account_id
-        || lease.quote.resource_version != crate::runtime::COGNITION_RESOURCE_VERSION_V1
-        || lease.quote.purpose != "provider_cognition"
-        || lease.quote.scope != "agent_turn"
-        || lease.quote.policy_revision
-            != crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION
-        || lease.quote.authority_context != request.capability_invocation_context_digest.to_string()
-        || lease.quote.world_binding != request.runtime_binding.base_world_hash.to_string()
-    {
+    let mismatches = [
+        ("agent_id", lease.agent_id != agent_id),
+        ("agent_subject", request.agent_subject != agent_id),
+        ("account_id", lease.account_id != expected_account),
+        (
+            "idempotency_key",
+            lease.idempotency_key != expected_invocation_key,
+        ),
+        (
+            "agent_session_id",
+            lease.agent_session_id != request.agent_session_id,
+        ),
+        (
+            "agent_turn_id",
+            lease.agent_turn_id != request.agent_turn_id,
+        ),
+        (
+            "decision_request_id",
+            lease.decision_request_id != request.decision_request_id,
+        ),
+        (
+            "request_digest",
+            lease.request_digest != request.request_digest.to_string(),
+        ),
+        ("quote.resource", lease.quote.resource != "cognition_units"),
+        ("reserved_amount", lease.reserved_amount != 1),
+        ("quote.payer_id", lease.quote.payer_id != lease.account_id),
+        (
+            "quote.resource_version",
+            lease.quote.resource_version != crate::runtime::COGNITION_RESOURCE_VERSION_V1,
+        ),
+        ("quote.purpose", lease.quote.purpose != "provider_cognition"),
+        ("quote.scope", lease.quote.scope != "agent_turn"),
+        (
+            "quote.policy_revision",
+            lease.quote.policy_revision
+                != crate::runtime::COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION,
+        ),
+        (
+            "quote.authority_context",
+            lease.quote.authority_context
+                != request.capability_invocation_context_digest.to_string(),
+        ),
+        (
+            "quote.world_binding",
+            lease.quote.world_binding != request.runtime_binding.base_world_hash.to_string(),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(field, mismatched)| mismatched.then_some(field))
+    .collect::<Vec<_>>();
+    if !mismatches.is_empty() {
         return Err(format!(
-            "provider cognition lease identity mismatch for {agent_id}"
+            "provider cognition lease identity mismatch for {agent_id}: fields={}",
+            mismatches.join(",")
         ));
     }
     Ok(())

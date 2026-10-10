@@ -31,6 +31,89 @@ impl AsyncAgentRunner {
             .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
     }
 
+    /// Caller must have authenticated the Agent-scoped Runtime View.
+    pub(crate) fn restore_preverified_scoped_feedback_history(
+        &mut self,
+        records: &[(FeedbackEnvelopeV1, String, String)],
+    ) -> Result<(), AsyncAgentRunnerError> {
+        self.feedback_store
+            .restore_preverified_scoped_feedback_history(records)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
+    }
+
+    /// Roll back native verifier/turn ledgers and private memory if the sole
+    /// durable consumption checkpoint fails. No actor I/O occurs here.
+    pub(crate) fn with_committed_feedback_memory_transaction<F>(
+        &mut self,
+        agent: &str,
+        feedback: FeedbackEnvelopeV1,
+        receipt: &RuntimeReceiptLineageV1,
+        memory: &mut MemoryWriteStore,
+        persist: F,
+    ) -> Result<(), AsyncAgentRunnerError>
+    where
+        F: FnOnce(&mut MemoryWriteStore) -> Result<(), String>,
+    {
+        let before = (
+            self.feedback_store.clone(),
+            self.awaiting_runtime.clone(),
+            self.awaiting_outcomes.clone(),
+            self.continuations.clone(),
+            self.continuation_harness.clone(),
+            memory.clone(),
+        );
+        #[cfg(any(test, feature = "test_tier_required"))]
+        let native_before = self.rejected_wait_test_ledger_digests();
+        let result = self
+            .consume_runtime_feedback_with_lineage(agent, feedback, Some(receipt), memory)
+            .and_then(|()| {
+                #[cfg(any(test, feature = "test_tier_required"))]
+                if std::env::var("PRE2_APP_ADMISSION").ok().as_deref()
+                    == Some("memory-ack-write-failure")
+                {
+                    let root = std::env::var_os("PRE2_METADATA_DIR")
+                        .map(std::path::PathBuf::from)
+                        .ok_or_else(|| {
+                            AsyncAgentRunnerError::Cognition("native ACK probe root missing".into())
+                        })?;
+                    if !root.join("feedback-ack-before-persist").exists() {
+                        for (name, value) in [
+                            ("feedback-ack-native-before.json", native_before),
+                            (
+                                "feedback-ack-native-staged.json",
+                                self.rejected_wait_test_ledger_digests(),
+                            ),
+                        ] {
+                            let path = root.join(name);
+                            std::fs::write(&path, serde_json::to_vec(&value).unwrap())
+                                .map_err(|e| AsyncAgentRunnerError::Cognition(e.to_string()))?;
+                            #[cfg(unix)]
+                            {
+                                use std::os::unix::fs::PermissionsExt;
+                                std::fs::set_permissions(
+                                    path,
+                                    std::fs::Permissions::from_mode(0o600),
+                                )
+                                .map_err(|e| AsyncAgentRunnerError::Cognition(e.to_string()))?;
+                            }
+                        }
+                    }
+                }
+                persist(memory).map_err(AsyncAgentRunnerError::Cognition)
+            });
+        if result.is_err() {
+            (
+                self.feedback_store,
+                self.awaiting_runtime,
+                self.awaiting_outcomes,
+                self.continuations,
+                self.continuation_harness,
+                *memory,
+            ) = before;
+        }
+        result
+    }
+
     pub fn consume_runtime_feedback(
         &mut self,
         agent_id: &str,

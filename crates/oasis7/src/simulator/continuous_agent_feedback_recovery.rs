@@ -37,11 +37,7 @@ impl AgentCognitionStore {
         &mut self,
         records: &[RuntimeFeedbackOutboxRecordV1],
     ) -> Result<(), CognitionError> {
-        let mut groups = BTreeMap::<
-            (String, String),
-            Vec<(RuntimeFeedbackOutboxRecordV1, FeedbackEnvelopeV1)>,
-        >::new();
-        let mut id_partitions = BTreeMap::<String, BTreeSet<(String, String)>>::new();
+        let mut metadata = Vec::new();
         for record in records {
             record.validate().map_err(|error| {
                 CognitionError::new("feedback_recovery_record_invalid", error.to_string())
@@ -50,19 +46,50 @@ impl AgentCognitionStore {
                 .map_err(|error| {
                     CognitionError::new("feedback_recovery_record_invalid", error.to_string())
                 })?;
-            validate_feedback_contract(&feedback)?;
+            metadata.push((
+                feedback,
+                record.envelope_digest.clone(),
+                record.state.clone(),
+            ));
+        }
+        self.restore_preverified_scoped_feedback_history(&metadata)
+    }
+
+    /// Metadata from an authenticated scoped View, whose original durable
+    /// records and receipt lineage were validated by Runtime. The original
+    /// digest is retained; private projections are never reconstructed.
+    pub(crate) fn restore_preverified_scoped_feedback_history(
+        &mut self,
+        records: &[(FeedbackEnvelopeV1, String, String)],
+    ) -> Result<(), CognitionError> {
+        let mut groups = BTreeMap::<(String, String), Vec<(String, FeedbackEnvelopeV1)>>::new();
+        let mut id_partitions = BTreeMap::<String, BTreeSet<(String, String)>>::new();
+        for (feedback, original_digest, state) in records {
+            validate_feedback_contract(feedback)?;
+            let digest = original_digest.strip_prefix("blake3:").unwrap_or_default();
+            if digest.len() != 64
+                || !digest
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                || !matches!(state.as_str(), "pending" | "in_flight" | "acked")
+            {
+                return Err(CognitionError::new(
+                    "feedback_recovery_record_invalid",
+                    "invalid scoped replay metadata",
+                ));
+            }
             let key = (
-                record.agent_subject.clone(),
-                record.agent_session_id.clone(),
+                feedback.agent_subject.clone(),
+                feedback.agent_session_id.clone(),
             );
             id_partitions
-                .entry(record.feedback_id.clone())
+                .entry(feedback.feedback_id.clone())
                 .or_default()
                 .insert(key.clone());
             groups
                 .entry(key)
                 .or_default()
-                .push((record.clone(), feedback));
+                .push((state.clone(), feedback.clone()));
         }
 
         let colliding_partitions = id_partitions
@@ -78,7 +105,7 @@ impl AgentCognitionStore {
             });
             let mut seqs = BTreeSet::new();
             let mut ids = BTreeSet::new();
-            for (index, (record, feedback)) in entries.iter().enumerate() {
+            for (index, (state, feedback)) in entries.iter().enumerate() {
                 if !seqs.insert(feedback.feedback_seq) || !ids.insert(feedback.feedback_id.as_str())
                 {
                     reason = Some(
@@ -94,7 +121,7 @@ impl AgentCognitionStore {
                     ));
                     break;
                 }
-                if record.state != "acked" {
+                if state != "acked" {
                     reason = Some(format!(
                         "Runtime feedback {} is not acknowledged yet",
                         feedback.feedback_id

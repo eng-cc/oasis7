@@ -32,7 +32,17 @@ impl RuntimeLlmSidecar {
                     "native provider runner is unavailable for feedback recovery".to_string(),
                 ));
             };
-            if runner.needs_runtime_feedback_recovery()
+            if self.provider_service_required {
+                // A redacted local World is not canonical feedback history.
+                // Missing history leaves recovery uninitialized; fresh admission
+                // fails closed separately so issued cleanup can still progress.
+                if let Some(view) = self.provider_service_projection.as_ref()
+                    && let Some(authority) = view.agent_context.as_ref()
+                    && let Some(history) = view.feedback_history.as_ref()
+                    && let Err(message) = history.restore_preverified(&authority.agent_id, runner) {
+                        tracing::warn!(%message, "authenticated feedback recovery fenced");
+                    }
+            } else if runner.needs_runtime_feedback_recovery()
                 && let Err(message) = crate::viewer::runtime_live::llm_sidecar_feedback_recovery::
                     restore_agent_feedback_history(world, runner)
             {
@@ -108,7 +118,7 @@ impl RuntimeLlmSidecar {
                         }
                     }
                     let cognition_lease =
-                        match async_support::reserve_provider_cognition_lease(world, &context) {
+                        match self.reserve_provider_lease_at_authority(world, &context) {
                             Ok(lease) => lease,
                             Err(error) => {
                                 self.shadow_kernel = Some(kernel);
@@ -118,7 +128,7 @@ impl RuntimeLlmSidecar {
                             }
                         };
                     self.bind_provider_cognition_lease(agent_id.clone(), cognition_lease.clone());
-                    if let Err(error) = async_support::runtime_provider_prefix(world, &context) {
+                    if let Err(error) = self.provider_prefix_at_authority(world, &context) {
                         let release_error = self
                             .release_provider_lease_before_io_or_fence(
                                 world,

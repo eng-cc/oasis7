@@ -26,6 +26,10 @@ pub(crate) const FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID: &str = "starter-agen
 impl ViewerRuntimeLiveServerConfig {
     pub fn new(scenario: WorldScenario) -> Self {
         Self {
+            response_frame_max_bytes: 16 * 1024 * 1024,
+            response_turn_max_bytes: 64 * 1024 * 1024,
+            response_turn_max_frames: 256,
+            response_write_timeout: Duration::from_secs(2),
             bind_addr: "127.0.0.1:5010".to_string(),
             world_id: format!("live-runtime-{}", scenario.as_str()),
             scenario: Some(scenario),
@@ -37,6 +41,8 @@ impl ViewerRuntimeLiveServerConfig {
             chain_status_bind: None,
             chain_execution_world_dir: None,
             chain_submit_bind: None,
+            world_service: None,
+            world_service_agent_signer: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
@@ -52,6 +58,10 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn formal_release_default() -> Self {
         Self {
+            response_frame_max_bytes: 16 * 1024 * 1024,
+            response_turn_max_bytes: 64 * 1024 * 1024,
+            response_turn_max_frames: 256,
+            response_write_timeout: Duration::from_secs(2),
             bind_addr: "127.0.0.1:5010".to_string(),
             world_id: FORMAL_RELEASE_DEFAULT_WORLD_ID.to_string(),
             scenario: None,
@@ -63,6 +73,8 @@ impl ViewerRuntimeLiveServerConfig {
             chain_status_bind: None,
             chain_execution_world_dir: None,
             chain_submit_bind: None,
+            world_service: None,
+            world_service_agent_signer: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
             major_world_event_visibility: MajorWorldEventVisibilityPermission::Unknown,
@@ -348,6 +360,14 @@ pub(super) fn bootstrap_runtime_live_world(
     ),
     String,
 > {
+    if config.world_service.is_some() {
+        return Ok((
+            RuntimeWorld::new_production_hardened(),
+            WorldConfig::default(),
+            None,
+            ChunkRuntimeConfig::default(),
+        ));
+    }
     if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
         let (world, snapshot_config, seed_model, chunk_runtime) =
             bootstrap_generated_sidecar_runtime_world_with_chunk_runtime(generated_world_dir)?;
@@ -360,7 +380,7 @@ pub(super) fn bootstrap_runtime_live_world(
                 bootstrap_runtime_world_with_chunk_runtime(scenario)?;
             Ok((world, snapshot_config, None, chunk_runtime))
         }
-        None if config.chain_status_bind.is_some() => Ok((
+        None if config.world_service.is_some() || config.chain_status_bind.is_some() => Ok((
             RuntimeWorld::new_production_hardened(),
             WorldConfig::default(),
             None,
@@ -814,12 +834,11 @@ pub(super) fn latest_runtime_event_seq(world: &RuntimeWorld) -> u64 {
 }
 
 pub(super) fn send_response(
-    writer: &mut BufWriter<TcpStream>,
+    writer: &mut dyn Write,
     response: &ViewerResponse,
 ) -> Result<(), ViewerRuntimeLiveServerError> {
-    let payload = serde_json::to_string(response)
+    serde_json::to_writer(&mut *writer, response)
         .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
-    writer.write_all(payload.as_bytes())?;
     writer.write_all(b"\n")?;
     writer.flush()?;
     Ok(())

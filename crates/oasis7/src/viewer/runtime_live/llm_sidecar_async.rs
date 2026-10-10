@@ -57,14 +57,33 @@ pub(super) fn reserve_provider_cognition_lease(
     world: &mut RuntimeWorld,
     context: &cognition_context::ProviderContextState,
 ) -> Result<crate::runtime::CognitionLeaseV1, String> {
+    let request = provider_cognition_lease_request(world, context, false)?;
+    world
+        .reserve_cognition_lease(request)
+        .map_err(|error| format!("cognition lease admission rejected: {error:?}"))
+}
+
+pub(in crate::viewer::runtime_live) fn provider_cognition_lease_request(
+    world: &RuntimeWorld,
+    context: &cognition_context::ProviderContextState,
+    canonical_service: bool,
+) -> Result<crate::runtime::CognitionLeaseRequestV1, String> {
     let request = &context.request_context;
-    let runtime_binding = world
-        .current_cognition_runtime_binding()
-        .map_err(|error| format!("provider cognition Runtime binding unavailable: {error:?}"))?;
+    let runtime_binding = if canonical_service {
+        request.runtime_binding.clone()
+    } else {
+        world
+            .current_cognition_runtime_binding()
+            .map_err(|error| format!("provider cognition Runtime binding unavailable: {error:?}"))?
+    };
     if runtime_binding != request.runtime_binding {
         return Err("provider cognition Runtime binding changed before lease reserve".to_string());
     }
-    let payer_id = payer_support::runtime_authorized_provider_payer_id(world, request)?;
+    let payer_id = if canonical_service {
+        payer_support::provider_payer_id(request)?
+    } else {
+        payer_support::runtime_authorized_provider_payer_id(world, request)?
+    };
     let invocation_key = request.provider_invocation_key().to_string();
     let quote = crate::runtime::CognitionLeaseQuoteV1::new(
         format!("cognition-quote:{invocation_key}"),
@@ -80,18 +99,225 @@ pub(super) fn reserve_provider_cognition_lease(
         request.capability_invocation_context_digest.to_string(),
         runtime_binding.base_world_hash.to_string(),
     );
-    world
-        .reserve_cognition_lease(crate::runtime::CognitionLeaseRequestV1::new(
-            invocation_key,
-            payer_id,
-            request.agent_subject.clone(),
-            request.agent_session_id.clone(),
-            request.agent_turn_id.clone(),
-            request.decision_request_id.clone(),
-            request.request_digest.to_string(),
-            quote,
-        ))
-        .map_err(|error| format!("cognition lease admission rejected: {error:?}"))
+    Ok(crate::runtime::CognitionLeaseRequestV1::new(
+        invocation_key,
+        payer_id,
+        request.agent_subject.clone(),
+        request.agent_session_id.clone(),
+        request.agent_turn_id.clone(),
+        request.decision_request_id.clone(),
+        request.request_digest.to_string(),
+        quote,
+    ))
+}
+
+impl RuntimeLlmSidecar {
+    fn provider_failure_at_authority(
+        &mut self,
+        world: &mut RuntimeWorld,
+        context: &cognition_context::ProviderContextState,
+        reason: &str,
+    ) -> Result<(), String> {
+        if self.provider_service_config.is_none() {
+            if self.provider_service_required {
+                return Err("chain-linked provider failure requires canonical service".into());
+            }
+            return runtime_provider_failure(world, context, reason);
+        }
+        self.provider_scheduler_operation(
+            &context.request_context,
+            &format!("failure:{}", context.request_context.transport_attempt),
+            crate::world_service::wire::SchedulerOperationV1::ProviderFailure {
+                request: context.request_context.clone(),
+                reason: reason.into(),
+            },
+        )
+        .map(|_| ())
+    }
+    pub(in crate::viewer::runtime_live) fn release_provider_lease_at_authority(
+        &mut self,
+        world: &mut RuntimeWorld,
+        request: &crate::simulator::ContinuousAgentRequestContextV1,
+        lease: &crate::runtime::CognitionLeaseV1,
+    ) -> Result<(), String> {
+        if self.provider_service_config.is_none() {
+            if self.provider_service_required {
+                return Err("chain-linked lease release requires canonical service".into());
+            }
+            return world
+                .release_cognition_lease(&lease.lease_id)
+                .map(|_| ())
+                .map_err(|error| format!("{error:?}"));
+        }
+        let receipt = self.provider_scheduler_operation(
+            request,
+            "release",
+            crate::world_service::wire::SchedulerOperationV1::ReleaseLease {
+                lease_id: lease.lease_id.clone(),
+            },
+        )?;
+        Self::validate_service_release_receipt(request, lease, receipt)
+    }
+
+    pub(in crate::viewer::runtime_live) fn settle_provider_lease_at_authority(
+        &mut self,
+        world: &mut RuntimeWorld,
+        request: &crate::simulator::ContinuousAgentRequestContextV1,
+        lease: &crate::runtime::CognitionLeaseV1,
+    ) -> Result<(), String> {
+        if self.provider_service_config.is_none() {
+            if self.provider_service_required {
+                return Err("chain-linked lease settlement requires canonical service".into());
+            }
+            return world
+                .settle_cognition_lease(&lease.lease_id, lease.reserved_amount)
+                .map(|_| ())
+                .map_err(|error| format!("{error:?}"));
+        }
+        self.provider_scheduler_operation(
+            request,
+            "settle",
+            crate::world_service::wire::SchedulerOperationV1::SettleLease {
+                lease_id: lease.lease_id.clone(),
+                consumed_amount: lease.reserved_amount,
+            },
+        )
+        .map(|_| ())
+    }
+
+    pub(in crate::viewer::runtime_live) fn reserve_provider_lease_at_authority(
+        &mut self,
+        world: &mut RuntimeWorld,
+        context: &cognition_context::ProviderContextState,
+    ) -> Result<crate::runtime::CognitionLeaseV1, String> {
+        if self.provider_service_config.is_none() {
+            if self.provider_service_required {
+                return Err(
+                    "chain-linked cognition lease requires canonical service configuration".into(),
+                );
+            }
+            return reserve_provider_cognition_lease(world, context);
+        }
+        let request = provider_cognition_lease_request(world, context, true)?;
+        let receipt = self.provider_scheduler_operation(
+            &context.request_context,
+            "reserve",
+            crate::world_service::wire::SchedulerOperationV1::ReserveLease(request),
+        )?;
+        serde_json::from_value(receipt)
+            .map_err(|error| format!("canonical cognition lease receipt invalid: {error}"))
+    }
+
+    pub(in crate::viewer::runtime_live) fn provider_prefix_at_authority(
+        &mut self,
+        world: &mut RuntimeWorld,
+        context: &cognition_context::ProviderContextState,
+    ) -> Result<(), String> {
+        if self.provider_service_config.is_none() {
+            if self.provider_service_required {
+                return Err(
+                    "chain-linked cognition prefix requires canonical service configuration".into(),
+                );
+            }
+            return runtime_provider_prefix(world, context);
+        }
+        self.provider_scheduler_operation(
+            &context.request_context,
+            &format!("prefix:{}", context.request_context.transport_attempt),
+            crate::world_service::wire::SchedulerOperationV1::ProviderPrefix {
+                request: context.request_context.clone(),
+                context_digest: runtime_provider_context_digest(&context.request_context),
+            },
+        )
+        .map(|_| ())
+    }
+
+    pub(super) fn provider_scheduler_operation(
+        &mut self,
+        request: &crate::simulator::ContinuousAgentRequestContextV1,
+        phase: &str,
+        operation: crate::world_service::wire::SchedulerOperationV1,
+    ) -> Result<serde_json::Value, String> {
+        self.provider_scheduler_operation_with_resume_context(request, phase, operation, None)
+    }
+
+    pub(super) fn provider_scheduler_operation_with_resume_context(
+        &mut self,
+        request: &crate::simulator::ContinuousAgentRequestContextV1,
+        phase: &str,
+        operation: crate::world_service::wire::SchedulerOperationV1,
+        prepared: Option<(
+            cognition_context::ProviderContextState,
+            crate::simulator::ContinuationCurrentContextV1,
+        )>,
+    ) -> Result<serde_json::Value, String> {
+        use crate::world_service::client::{RemoteWorldServiceClient, WorldServicePort};
+        use oasis7_client_api::world_service::*;
+        let config = self
+            .provider_service_config
+            .clone()
+            .ok_or("canonical provider service missing")?;
+        let (pending, existed) =
+            self.prepare_service_scheduler_checkpoint(request, phase, operation, prepared)?;
+        let client = RemoteWorldServiceClient::new(config)
+            .map_err(|error| error.to_string())?
+            .with_query_state(self.provider_service_query_state.clone());
+        let lookup = if existed {
+            let response = client
+                .lookup(
+                    LookupIntentRequest {
+                        contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                        key: pending.correlation.key.clone(),
+                    },
+                    pending.payload.clone(),
+                )
+                .map_err(|error| error.to_string())?;
+            // The checkpoint is written before its first Submit. A verified
+            // absence may therefore mean that transport never started. Only
+            // that exact absence permits replaying the immutable original;
+            // Pending/Received retain their existing execution without Submit.
+            response
+                .validate(&pending.correlation)
+                .map_err(|error| error.to_string())?;
+            Some(response)
+        } else {
+            None
+        };
+        let response = match lookup {
+            Some(response) if !matches!(&response.outcome, IntentOutcome::Unknown) => response,
+            _ => match client
+                .submit(SubmitIntentRequest {
+                    contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                    correlation: pending.correlation.clone(),
+                    deadline_unix_ms: None,
+                    signed_payload: pending.payload.clone(),
+                })
+                .map_err(|error| error.to_string())?
+            {
+                SubmitObservation::Response(response) => *response,
+                SubmitObservation::OutcomeUnknown(_) => {
+                    return Err(
+                        "canonical scheduler outcome unknown; original request retained".into(),
+                    );
+                }
+            },
+        };
+        response
+            .validate(&pending.correlation)
+            .map_err(|error| error.to_string())?;
+        match response.outcome {
+            IntentOutcome::Committed { receipt, .. } => Ok(receipt),
+            state @ (IntentOutcome::Received { .. } | IntentOutcome::Pending) => {
+                Err(format!("canonical scheduler remains unresolved: {state:?}"))
+            }
+            IntentOutcome::Rejected { reason } => {
+                Err(format!("canonical scheduler rejected: {reason:?}"))
+            }
+            other => Err(format!(
+                "canonical scheduler cannot complete original request: {other:?}"
+            )),
+        }
+    }
 }
 
 impl RuntimeLlmDecision {
@@ -267,6 +493,9 @@ impl RuntimeLlmSidecar {
                 self.fence_provider_cognition_lease(agent_id.as_str(), &context, error.clone());
                 return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
             }
+            if let Err(error) = self.ensure_canonical_agent_durable_admission() {
+                return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
+            }
             let observation = match kernel.observe(agent_id.as_str()) {
                 Ok(observation) => observation,
                 Err(error) => {
@@ -277,14 +506,14 @@ impl RuntimeLlmSidecar {
                     ));
                 }
             };
-            let cognition_lease = match reserve_provider_cognition_lease(world, &context) {
+            let cognition_lease = match self.reserve_provider_lease_at_authority(world, &context) {
                 Ok(lease) => lease,
                 Err(error) => {
                     return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
                 }
             };
             self.bind_provider_cognition_lease(agent_id.clone(), cognition_lease.clone());
-            if let Err(error) = runtime_provider_prefix(world, &context) {
+            if let Err(error) = self.provider_prefix_at_authority(world, &context) {
                 let release_error = self
                     .release_provider_lease_before_io_or_fence(
                         world,
@@ -321,7 +550,7 @@ impl RuntimeLlmSidecar {
                     )
                     .err()
                     .map(|error| format!("; {error}"));
-                let _ = runtime_provider_failure(world, &context, "persistence_failure");
+                let _ = self.provider_failure_at_authority(world, &context, "persistence_failure");
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
                     agent_id,
@@ -346,7 +575,7 @@ impl RuntimeLlmSidecar {
                     .err()
                     .map(|error| format!("; {error}"))
                     .unwrap_or_default();
-                let _ = runtime_provider_failure(world, &context, "provider_failure");
+                let _ = self.provider_failure_at_authority(world, &context, "provider_failure");
                 return Some(RuntimeLlmDecision::from_error(
                     world,
                     format!(
@@ -377,7 +606,7 @@ impl RuntimeLlmSidecar {
                 // marker is the safe outcome: restart recovery will fence the
                 // identity rather than risk a duplicate provider call.
                 self.persist_provider_lineage_best_effort();
-                let _ = runtime_provider_failure(world, &context, "provider_failure");
+                let _ = self.provider_failure_at_authority(world, &context, "provider_failure");
                 return Some(RuntimeLlmDecision::from_agent_error(
                     world,
                     agent_id,
@@ -511,11 +740,13 @@ impl RuntimeLlmSidecar {
                                         error = error.as_str(),
                                         "provider Wait continuation admission failed"
                                     );
-                                    let _ = runtime_provider_failure(
-                                        world,
-                                        &cognition.request,
-                                        "continuation_admission_failed",
-                                    );
+                                    if !self.provider_service_required {
+                                        let _ = self.provider_failure_at_authority(
+                                            world,
+                                            &cognition.request,
+                                            "continuation_admission_failed",
+                                        );
+                                    }
                                     let mut trace = decision_trace.clone().unwrap_or_else(|| {
                                         AgentDecisionTrace {
                                             agent_id: agent_id.clone(),
@@ -540,7 +771,41 @@ impl RuntimeLlmSidecar {
                             };
                     }
                     AgentDecision::WaitTicks(ticks) => {
-                        self.schedule_provider_wait(agent_id.as_str(), world.state().time, *ticks);
+                        if self.provider_service_required {
+                            match self.admit_provider_wait_continuation(world, kernel, cognition) {
+                                Ok(()) => continuation_admitted = true,
+                                Err(error) => {
+                                    let mut trace = AgentDecisionTrace {
+                                        agent_id: agent_id.clone(),
+                                        time: world.state().time,
+                                        decision: decision.clone(),
+                                        llm_input: None,
+                                        llm_output: None,
+                                        llm_error: Some(error),
+                                        parse_error: None,
+                                        llm_diagnostics: None,
+                                        llm_effect_intents: Vec::new(),
+                                        llm_effect_receipts: Vec::new(),
+                                        llm_step_trace: Vec::new(),
+                                        llm_prompt_section_trace: Vec::new(),
+                                        llm_chat_messages: Vec::new(),
+                                    };
+                                    if let Some(existing) = decision_trace.take() {
+                                        trace = existing;
+                                        trace.llm_error = Some(
+                                            "canonical timed Wait admission remains pending".into(),
+                                        );
+                                    }
+                                    decision_trace = Some(trace);
+                                }
+                            }
+                        } else {
+                            self.schedule_provider_wait(
+                                agent_id.as_str(),
+                                world.state().time,
+                                *ticks,
+                            );
+                        }
                     }
                     AgentDecision::Act(_)
                     | AgentDecision::Query(_)
@@ -556,13 +821,23 @@ impl RuntimeLlmSidecar {
                     let mut retry_context = context.request_context.clone();
                     retry_context.transport_attempt =
                         retry_context.transport_attempt.saturating_add(1);
-                    if let Err(error) = runtime_provider_dispatch(world, &retry_context) {
+                    let retry_provider_context = cognition_context::ProviderContextState {
+                        request_context: retry_context.clone(),
+                        turn_context: context.turn_context.clone(),
+                    };
+                    if let Err(error) =
+                        self.provider_prefix_at_authority(world, &retry_provider_context)
+                    {
                         tracing::warn!(
                             agent_id,
                             error,
                             "Runtime cognition retry dispatch rejected"
                         );
-                        let _ = runtime_provider_failure(world, &context, "persistence_failure");
+                        let _ = self.provider_failure_at_authority(
+                            world,
+                            &context,
+                            "persistence_failure",
+                        );
                         self.mark_provider_transport_exhausted(agent_id.clone());
                         self.persist_provider_lineage_best_effort();
                         return RuntimeLlmDecision {
@@ -612,7 +887,7 @@ impl RuntimeLlmSidecar {
                             turn_context: context.turn_context.clone(),
                             request_context: retry_context,
                         };
-                        let _ = runtime_provider_failure(
+                        let _ = self.provider_failure_at_authority(
                             world,
                             &retry_runtime_context,
                             "failed_provider",
@@ -626,13 +901,13 @@ impl RuntimeLlmSidecar {
                     // context remains reusable and every later world tick can
                     // redispatch the same exhausted transport attempt.
                     self.mark_provider_transport_exhausted(agent_id.clone());
-                    let _ = runtime_provider_failure(world, &context, "failed_provider");
+                    let _ = self.provider_failure_at_authority(world, &context, "failed_provider");
                 }
             }
         } else if let Some(context) = context {
             // A provider/actor failure that is not retryable must be closed
             // durably before the control plane observes the typed error.
-            let _ = runtime_provider_failure(world, &context, "provider_failure");
+            let _ = self.provider_failure_at_authority(world, &context, "provider_failure");
         }
         self.persist_provider_lineage_best_effort();
         RuntimeLlmDecision {
@@ -761,254 +1036,5 @@ pub(super) fn runtime_provider_failure(
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
-mod feedback_recovery_admission_tests {
-    use super::*;
-    use crate::runtime::{RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1};
-    use crate::simulator::{AsyncAgentRunner, Digest32, FeedbackEnvelopeV1};
-    use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-    struct ProviderEnvSnapshot(Vec<(&'static str, Option<std::ffi::OsString>)>);
-
-    impl ProviderEnvSnapshot {
-        fn clear() -> Self {
-            let keys = [
-                VIEWER_AGENT_DECISION_SOURCE_ENV,
-                VIEWER_AGENT_PROVIDER_BACKEND_ENV,
-                VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
-                VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
-                VIEWER_AGENT_PROVIDER_URL_ENV,
-                VIEWER_AGENT_PROVIDER_AUTH_TOKEN_ENV,
-                VIEWER_AGENT_PROVIDER_CONNECT_TIMEOUT_MS_ENV,
-                VIEWER_AGENT_PROVIDER_DECISION_TIMEOUT_MS_ENV,
-                VIEWER_AGENT_PROVIDER_PROFILE_ENV,
-                VIEWER_AGENT_EXECUTION_LANE_ENV,
-                VIEWER_AGENT_PROVIDER_MODE_ENV,
-            ];
-            let previous = keys
-                .iter()
-                .map(|key| (*key, std::env::var_os(key)))
-                .collect();
-            for key in keys {
-                // SAFETY: The caller holds the canonical provider environment lock.
-                unsafe { oasis7::env_mut::remove_var(key) };
-            }
-            Self(previous)
-        }
-    }
-
-    impl Drop for ProviderEnvSnapshot {
-        fn drop(&mut self) {
-            for (key, value) in self.0.drain(..) {
-                // SAFETY: The canonical provider environment lock remains held through drop.
-                unsafe {
-                    match value {
-                        Some(value) => oasis7::env_mut::set_var(key, value),
-                        None => oasis7::env_mut::remove_var(key),
-                    }
-                }
-            }
-        }
-    }
-
-    fn recovery_feedback(
-        agent: &str,
-        session: &str,
-        seq: u64,
-        id: &str,
-    ) -> RuntimeFeedbackOutboxRecordV1 {
-        let feedback = FeedbackEnvelopeV1 {
-            feedback_id: id.to_string(),
-            feedback_seq: seq,
-            agent_subject: agent.to_string(),
-            agent_session_id: session.to_string(),
-            agent_turn_id: format!("terminal-turn-{seq}"),
-            decision_request_id: format!("terminal-request-{seq}"),
-            candidate_action_id: None,
-            runtime_receipt_id: None,
-            status: "rejected".to_string(),
-            request_digest: Digest32(format!("blake3:{}", "a".repeat(64))),
-            reject_reason: Some("stale_base".to_string()),
-            provenance: "runtime_authoritative".to_string(),
-        };
-        let mut record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
-            &feedback,
-            RuntimeFeedbackProjectionV1::default(),
-        )
-        .expect("terminal feedback fixture is valid");
-        record.state = "acked".to_string();
-        record.validate().expect("acknowledged feedback is valid");
-        record
-    }
-
-    fn register_mock_provider(
-        runner: &mut AsyncAgentRunner,
-        agent: &str,
-    ) -> Arc<Mutex<crate::simulator::MockDecisionProviderState>> {
-        let provider = crate::simulator::MockDecisionProvider::new(format!("{agent}-provider"));
-        let state = provider.shared_state();
-        let behavior = ProviderBackedAgentBehavior::new_legacy_compatibility(
-            agent,
-            provider,
-            vec![ActionCatalogEntry::new("wait", "wait")],
-        );
-        runner.register(behavior).expect("register provider actor");
-        state
-    }
-
-    #[test]
-    fn async_poll_delivers_completed_result_then_skips_only_fenced_session() {
-        let _env_lock = crate::viewer::runtime_live::canonical_runtime_provider_env_lock()
-            .lock()
-            .expect("provider env lock");
-        let _env_snapshot = ProviderEnvSnapshot::clear();
-        // SAFETY: The test owns the canonical provider environment lock.
-        unsafe {
-            oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-            oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
-            oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
-            oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
-        }
-
-        let blocked_agent = "agent-a-blocked";
-        let allowed_agent = "agent-z-allowed";
-        let world_id = "feedback-admission-fence-world";
-        let mut world = RuntimeWorld::new();
-        world
-            .bind_cognition_runtime(
-                world_id,
-                "feedback-admission-fence-branch",
-                0,
-                None,
-                "pending",
-                0,
-            )
-            .expect("bind Runtime cognition");
-        for agent in [blocked_agent, allowed_agent] {
-            world.submit_action(RuntimeAction::RegisterAgent {
-                agent_id: agent.to_string(),
-                pos: GeoPos::new(0, 0, 0),
-            });
-        }
-        world.step().expect("register test agents");
-        for agent in [blocked_agent, allowed_agent] {
-            world
-                .install_test_provider_capability_fixture(agent)
-                .expect("install native candidate capability");
-        }
-
-        let mut runner = AsyncAgentRunner::with_default_capacity();
-        let blocked_state = register_mock_provider(&mut runner, blocked_agent);
-        let allowed_state = register_mock_provider(&mut runner, allowed_agent);
-        runner
-            .start_turn(blocked_agent)
-            .expect("start real legacy provider turn to exercise completion polling");
-        let completion_deadline = Instant::now() + Duration::from_secs(2);
-        while blocked_state
-            .lock()
-            .expect("blocked provider state lock")
-            .recorded_requests
-            .is_empty()
-            && Instant::now() < completion_deadline
-        {
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        assert_eq!(
-            blocked_state
-                .lock()
-                .expect("blocked provider state lock")
-                .recorded_requests
-                .len(),
-            1,
-            "the fixture must create an actual provider completion to poll"
-        );
-        std::thread::sleep(Duration::from_millis(20));
-
-        let checkpoint_path = std::env::temp_dir().join(format!(
-            "oasis7-feedback-admission-fence-{}-{}.json",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("clock")
-                .as_nanos()
-        ));
-        let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
-        sidecar.configure_provider_lineage_store(checkpoint_path.clone());
-        sidecar.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
-        sidecar.provider_agent_ids.insert(blocked_agent.to_string());
-        sidecar.provider_agent_ids.insert(allowed_agent.to_string());
-        sidecar
-            .sync_shadow_kernel(&world, &WorldConfig::default())
-            .expect("sync provider shadow kernel");
-        let mut kernel = sidecar
-            .shadow_kernel
-            .take()
-            .expect("provider shadow kernel");
-        sidecar
-            .prepare_provider_request_contexts(&mut world, &mut kernel, world_id)
-            .expect("prepare current Agent/session identities");
-        let blocked_session = sidecar
-            .provider_contexts
-            .get(blocked_agent)
-            .expect("blocked Agent request context")
-            .request_context
-            .agent_session_id
-            .clone();
-        sidecar.provider_contexts.remove(blocked_agent);
-        let records = vec![
-            recovery_feedback(blocked_agent, &blocked_session, 1, "blocked-feedback-1"),
-            recovery_feedback(blocked_agent, &blocked_session, 3, "blocked-feedback-3"),
-        ];
-        sidecar
-            .runner
-            .as_mut()
-            .and_then(RuntimeDecisionRunner::async_runner_mut)
-            .expect("native provider runner")
-            .restore_runtime_feedback_outbox(&records)
-            .expect("retain the exact blocked session fence");
-
-        let completed = sidecar
-            .next_async_provider_decision(&mut world, &mut kernel, world_id)
-            .expect("native poll should deliver the completed blocked Agent turn");
-        assert_eq!(
-            completed.agent_id, blocked_agent,
-            "recovery admission must not discard an already completed actor result"
-        );
-
-        assert!(
-            sidecar
-                .next_async_provider_decision(&mut world, &mut kernel, world_id)
-                .is_none(),
-            "the allowed Agent should start asynchronously after the blocked candidate is skipped"
-        );
-        let allowed_deadline = Instant::now() + Duration::from_secs(2);
-        while allowed_state
-            .lock()
-            .expect("allowed provider state lock")
-            .recorded_requests
-            .is_empty()
-            && Instant::now() < allowed_deadline
-        {
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        assert_eq!(
-            allowed_state
-                .lock()
-                .expect("allowed provider state lock")
-                .recorded_requests
-                .len(),
-            1,
-            "the healthy sibling Agent must dispatch through the native candidate loop"
-        );
-        assert_eq!(
-            blocked_state
-                .lock()
-                .expect("blocked provider state lock")
-                .recorded_requests
-                .len(),
-            1,
-            "the exact blocked Agent/session must issue no fresh provider request"
-        );
-        let _ = std::fs::remove_file(checkpoint_path);
-    }
-}
+#[path = "llm_sidecar_async_feedback_recovery_tests.rs"]
+mod feedback_recovery_admission_tests;

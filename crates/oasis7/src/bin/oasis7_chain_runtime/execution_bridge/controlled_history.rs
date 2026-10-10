@@ -315,9 +315,9 @@ fn reexecute(
         .map_err(|e| format!("world restore: {e:?}"))?
         .with_release_security_policy(preparation.release_security_policy.clone());
     let context = &preparation.context;
-    let (actions, simulator, bootstrap) =
+    let (actions, simulator, bootstrap, service_intents) =
         super::driver_replicated_input::decode_committed_actions(context)?;
-    if !simulator.is_empty() || bootstrap.is_some() {
+    if !simulator.is_empty() || bootstrap.is_some() || !service_intents.is_empty() {
         return Err("unsupported replay operation".into());
     }
     for (action, origin) in actions {

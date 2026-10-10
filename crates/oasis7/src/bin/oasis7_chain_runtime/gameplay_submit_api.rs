@@ -27,6 +27,8 @@ static GAMEPLAY_NONCE_LEDGER_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 struct GameplayNonceLedger {
     #[serde(default)]
     last_nonce_by_player_key: BTreeMap<String, BTreeMap<String, u64>>,
+    #[serde(default)]
+    accepted_requests: BTreeMap<String, serde_json::Value>,
 }
 
 enum LegacyNonceError {
@@ -111,6 +113,10 @@ pub(super) fn maybe_handle_gameplay_submit_request(
     path: &str,
     execution_world_dir: &Path,
 ) -> Result<bool, String> {
+    if path == "/internal/world/v1/outcomes/query" {
+        legacy_query(stream, request_bytes, runtime, method, execution_world_dir)?;
+        return Ok(true);
+    }
     if path != GAMEPLAY_SUBMIT_PATH {
         return Ok(false);
     }
@@ -196,7 +202,31 @@ fn handle_gameplay_submit(
         }),
         _ => None,
     };
-    let payload = match build_gameplay_submit_action_payload(runtime_action, submission_origin) {
+    let world_id = runtime
+        .lock()
+        .map_err(|_| "node runtime lock poisoned")?
+        .snapshot()
+        .world_id;
+    let payload = match if execution_world_dir
+        .join("world-service-identity.json")
+        .exists()
+    {
+        let identity =
+            super::execution_bridge::world_service_read::identity(execution_world_dir, &world_id)?;
+        let signed_payload =
+            oasis7::world_service::WorldServicePayloadV1::GameplayJson(body.to_vec());
+        let correlation = oasis7::world_service::derive_correlation(identity, &signed_payload)?;
+        oasis7::world_service::correlation::encode_consensus_intent(
+            &oasis7::world_service::SubmitIntentRequest {
+                contract_version: 1,
+                correlation,
+                deadline_unix_ms: None,
+                signed_payload,
+            },
+        )
+    } else {
+        build_gameplay_submit_action_payload(runtime_action, submission_origin)
+    } {
         Ok(payload) => payload,
         Err(err) => {
             write_gameplay_submit_error(stream, 502, GAMEPLAY_SUBMIT_ERROR_INTERNAL, err.as_str())?;
@@ -226,6 +256,7 @@ fn handle_gameplay_submit(
         )?;
         return Ok(());
     }
+    record_accepted_request(execution_world_dir, &world_id, body, action_id)?;
 
     let mut response = ChainGameplaySubmitResponse::success(action_id, super::now_unix_ms());
     response.consensus_action_payload_hash = Some(payload_hash);
@@ -388,6 +419,107 @@ fn record_legacy_gameplay_nonce(
 #[cfg(test)]
 pub(super) fn reset_gameplay_submit_state_for_tests() {
     NEXT_GAMEPLAY_ACTION_ID.store(1, Ordering::Relaxed);
+}
+
+fn original_digest(bytes: &[u8]) -> Result<String, String> {
+    let request: GameplayActionRequest =
+        serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
+    let proof = request
+        .auth
+        .as_ref()
+        .ok_or("original query requires signature")?;
+    verify_gameplay_action_auth_proof(&request, proof)?;
+    oasis7::world_service::request_digest("legacy-gameplay", &request)
+}
+
+fn record_accepted_request(
+    dir: &Path,
+    world_id: &str,
+    body: &[u8],
+    action_id: u64,
+) -> Result<(), String> {
+    // CollectData has its own canonical nonce domain; the legacy compatibility
+    // query currently applies only to GameplayActionRequest.
+    let Ok(digest) = original_digest(body) else {
+        return Ok(());
+    };
+    let _guard = GAMEPLAY_NONCE_LEDGER_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "nonce ledger lock poisoned")?;
+    let path = dir.join(GAMEPLAY_NONCE_LEDGER_FILE);
+    let mut ledger: GameplayNonceLedger =
+        serde_json::from_slice(&std::fs::read(&path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+    ledger.accepted_requests.insert(
+        digest,
+        serde_json::json!({"world_id":world_id,"action_id":action_id,
+        "outcome":{"status":"received","durability":"durable"}}),
+    );
+    super::write_bytes_atomic(
+        &path,
+        &serde_json::to_vec(&ledger).map_err(|e| e.to_string())?,
+    )
+}
+
+fn legacy_query(
+    stream: &mut TcpStream,
+    bytes: &[u8],
+    runtime: &Arc<Mutex<NodeRuntime>>,
+    method: &str,
+    dir: &Path,
+) -> Result<(), String> {
+    let result = (|| {
+        if method != "POST" {
+            return Err("query requires POST".to_owned());
+        }
+        let body = super::feedback_submit_api::extract_http_json_body(bytes)?;
+        let value: serde_json::Value = serde_json::from_slice(body).map_err(|e| e.to_string())?;
+        let world = runtime
+            .lock()
+            .map_err(|_| "node runtime lock poisoned")?
+            .snapshot()
+            .world_id;
+        if value["world_id"].as_str() != Some(&world)
+            || value["operation_domain"].as_str() != Some("gameplay")
+        {
+            return Err("query world or domain mismatch".into());
+        }
+        let digest = original_digest(
+            &serde_json::to_vec(&value["original_signed_request"]).map_err(|e| e.to_string())?,
+        )?;
+        let _guard = GAMEPLAY_NONCE_LEDGER_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .map_err(|_| "nonce ledger lock poisoned")?;
+        let ledger: GameplayNonceLedger = serde_json::from_slice(
+            &std::fs::read(dir.join(GAMEPLAY_NONCE_LEDGER_FILE)).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        let outcome = ledger
+            .accepted_requests
+            .get(&digest)
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({"outcome":{"status":"unknown"}}));
+        if outcome
+            .get("world_id")
+            .is_some_and(|id| id.as_str() != Some(&world))
+        {
+            return Err("accepted query world mismatch".into());
+        }
+        Ok(outcome)
+    })();
+    let (status, body) = match result {
+        Ok(value) => (200, value),
+        Err(reason) => (401, serde_json::json!({"error":reason})),
+    };
+    super::write_json_response(
+        stream,
+        status,
+        &serde_json::to_vec(&body).map_err(|e| e.to_string())?,
+        false,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

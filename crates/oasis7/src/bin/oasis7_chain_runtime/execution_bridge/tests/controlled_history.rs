@@ -70,6 +70,90 @@ fn context(height: u64, nonce: u64) -> NodeExecutionCommitContext {
         committed_at_unix_ms: height as i64 * 1000,
     }
 }
+#[test]
+fn controlled_history_rejects_decodable_service_envelopes_without_dropping_them() {
+    use oasis7::world_service::*;
+    let legacy = context(1, 1);
+    let original = capture::supported_origin(&legacy).unwrap();
+    assert_eq!(original.submission.auth_nonce, 1);
+    let world = RuntimeWorld::new();
+    capture::prepare(&world, &legacy).unwrap();
+    let signed = sign_read_request(
+        "scheduler",
+        SchedulerIntentV1 {
+            agent_id: "agent-0".into(),
+            request_id: "service-history-boundary".into(),
+            delegation_generation: 0,
+            captured_base_binding: oasis7::runtime::RuntimeCognitionBaseBindingV1 {
+                world_id: "w1".into(),
+                branch_id: "main".into(),
+                finality_epoch: 0,
+                finality_block_hash: None,
+                finality_status: "pending".into(),
+                base_tick: 0,
+                base_world_hash: "0".repeat(64),
+                reorg_epoch: 0,
+                runtime_manifest_hash: "0".repeat(64),
+            },
+            operation: SchedulerOperationV1::ReleaseLease {
+                lease_id: "original-lease".into(),
+            },
+        },
+        &hex::encode(key(1).to_bytes()),
+    )
+    .unwrap();
+    verify_read_request("scheduler", &signed).unwrap();
+    let payload = WorldServicePayloadV1::Scheduler(signed);
+    let request = SubmitIntentRequest {
+        contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+        correlation: derive_correlation(
+            WorldIdentity {
+                world_id: "w1".into(),
+                genesis_digest: "a".repeat(64),
+            },
+            &payload,
+        )
+        .unwrap(),
+        deadline_unix_ms: None,
+        signed_payload: payload,
+    };
+    request.validate().unwrap();
+    // Both service encodings accepted by the shared execution decoder stay
+    // outside the single legacy origin-bearing ScheduleRecipe history scope.
+    for envelope in [
+        correlation::encode_consensus_intent(&request).unwrap(),
+        encode_consensus_action_payload(&ConsensusActionPayloadEnvelope {
+            version: 1,
+            auth: None,
+            gameplay_submission_origin: None,
+            body:
+                oasis7::consensus_action_payload::ConsensusActionPayloadBody::WorldServiceIntent {
+                    request: request.clone(),
+                },
+        })
+        .unwrap(),
+    ] {
+        let action =
+            oasis7_node::NodeConsensusAction::from_payload(2, "node-transport", envelope).unwrap();
+        let mut service = legacy.clone();
+        service.committed_actions = vec![action];
+        service.action_root = compute_consensus_action_root(&service.committed_actions).unwrap();
+        let (actions, simulator, bootstrap, intents) =
+            super::super::driver_replicated_input::decode_committed_actions(&service).unwrap();
+        assert!(actions.is_empty() && simulator.is_empty() && bootstrap.is_none());
+        assert_eq!(intents, vec![(2, request.clone())]);
+        assert_eq!(
+            capture::supported_origin(&service).unwrap_err(),
+            "unsupported capture operation"
+        );
+        assert_eq!(
+            capture::prepare(&world, &service).unwrap_err(),
+            "unsupported capture operation"
+        );
+    }
+    assert_eq!(capture::supported_origin(&legacy).unwrap(), original);
+}
+
 fn leb(mut n: u64) -> Vec<u8> {
     let mut out = vec![];
     loop {

@@ -6,6 +6,22 @@ pub(super) fn build_oasis7_viewer_live_command(
     parent_has_llm_timeout_ms: bool,
     repo_has_node_config_file: bool,
 ) -> Command {
+    build_viewer_live_command_with_service_mode(
+        path,
+        options,
+        parent_has_llm_timeout_ms,
+        repo_has_node_config_file,
+        std::env::var_os("OASIS7_WORLD_SERVICE_ENDPOINT").is_some(),
+    )
+}
+
+fn build_viewer_live_command_with_service_mode(
+    path: &Path,
+    options: &CliOptions,
+    parent_has_llm_timeout_ms: bool,
+    repo_has_node_config_file: bool,
+    service_mode: bool,
+) -> Command {
     let mut command = Command::new(path);
     if !options.scenario.trim().is_empty() {
         command.arg(options.scenario.as_str());
@@ -21,7 +37,7 @@ pub(super) fn build_oasis7_viewer_live_command(
         .arg(major_world_event_visibility_as_str(
             options.major_world_event_visibility,
         ));
-    if !options.generated_world_dir.trim().is_empty() {
+    if !service_mode && !options.generated_world_dir.trim().is_empty() {
         command
             .arg("--generated-world-dir")
             .arg(options.generated_world_dir.as_str());
@@ -41,7 +57,7 @@ pub(super) fn build_oasis7_viewer_live_command(
     // the operator explicitly supplied an external status endpoint. Passing the
     // launcher's default here makes a chain-disabled stack try an absent service
     // during the first snapshot and close the client after ConnectionRefused.
-    if options.chain_enabled || options.chain_status_bind_explicit {
+    if !service_mode && (options.chain_enabled || options.chain_status_bind_explicit) {
         command
             .arg("--chain-status-bind")
             .arg(options.chain_status_bind.as_str())
@@ -163,5 +179,77 @@ pub(super) fn apply_viewer_live_env_overrides(
             LLM_TIMEOUT_MS_ENV,
             DEFAULT_INTERACTIVE_LLM_TIMEOUT_MS.to_string(),
         );
+    }
+}
+
+#[cfg(test)]
+mod service_assembly_tests {
+    use super::*;
+
+    #[test]
+    fn service_viewer_omits_node_source_and_legacy_endpoint_without_changing_operator_options() {
+        let options = CliOptions {
+            generated_world_dir: "operator-generated-world".into(),
+            chain_enabled: true,
+            chain_status_bind_explicit: true,
+            chain_status_bind: "127.0.0.1:5399".into(),
+            ..CliOptions::default()
+        };
+        let command = build_viewer_live_command_with_service_mode(
+            Path::new("viewer"),
+            &options,
+            false,
+            false,
+            true,
+        );
+        let args: Vec<_> = command
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect();
+        assert!(!args.iter().any(|value| value == "--generated-world-dir"
+            || value == "operator-generated-world"
+            || value == "--chain-status-bind"
+            || value == "--chain-link-policy"));
+        assert_eq!(options.generated_world_dir, "operator-generated-world");
+        assert!(options.chain_enabled);
+        for key in [
+            "OASIS7_WORLD_SERVICE_ENDPOINT",
+            "OASIS7_WORLD_SERVICE_PUBLIC_KEY",
+            "OASIS7_WORLD_SERVICE_WORLD_ID",
+            "OASIS7_WORLD_SERVICE_GENESIS_DIGEST",
+            "OASIS7_WORLD_SERVICE_SCOPE",
+            "OASIS7_WORLD_SERVICE_READ_PRIVATE_KEY",
+            "OASIS7_WORLD_SERVICE_AGENT_PRIVATE_KEY",
+            "OASIS7_WORLD_SERVICE_AGENT_DELEGATION_GENERATION",
+        ] {
+            assert!(
+                !command
+                    .get_envs()
+                    .any(|(name, value)| name == key && value.is_none()),
+                "service identity must remain inherited: {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn offline_viewer_keeps_explicit_local_source_and_legacy_fixture_endpoint() {
+        let options = CliOptions {
+            generated_world_dir: "offline-generated-world".into(),
+            chain_enabled: true,
+            ..CliOptions::default()
+        };
+        let command = build_viewer_live_command_with_service_mode(
+            Path::new("viewer"),
+            &options,
+            false,
+            false,
+            false,
+        );
+        let args: Vec<_> = command
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect();
+        assert!(args.iter().any(|value| value == "--generated-world-dir"));
+        assert!(args.iter().any(|value| value == "--chain-status-bind"));
     }
 }

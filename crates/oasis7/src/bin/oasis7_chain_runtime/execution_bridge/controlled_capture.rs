@@ -89,9 +89,13 @@ pub(super) fn supported_origin(
     {
         return Err("capture action root mismatch".into());
     }
-    let (actions, simulator, bootstrap) =
+    let (actions, simulator, bootstrap, service_intents) =
         super::driver_replicated_input::decode_committed_actions(context)?;
-    if actions.len() != 1 || !simulator.is_empty() || bootstrap.is_some() {
+    if actions.len() != 1
+        || !simulator.is_empty()
+        || bootstrap.is_some()
+        || !service_intents.is_empty()
+    {
         return Err("unsupported capture operation".into());
     }
     actions

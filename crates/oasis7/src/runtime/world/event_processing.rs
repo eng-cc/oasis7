@@ -376,6 +376,9 @@ impl World {
             }));
         }
         match &envelope.action {
+            Action::WorldServiceIntent { .. } => Err(WorldError::DistributedValidationFailed {
+                reason: "world-service intent requires canonical driver admission".into(),
+            }),
             Action::RegisterAgent { .. }
             | Action::MoveAgent { .. }
             | Action::QueryObservation { .. }

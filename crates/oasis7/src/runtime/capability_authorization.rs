@@ -183,6 +183,12 @@ pub struct CapabilityRevocationState {
     /// Live agent id -> owner/generation binding used by capability subjects.
     #[serde(default)]
     pub agent_identities: BTreeMap<String, CapabilityAgentIdentity>,
+    /// Canonical owner-signed service delegation, retained in snapshots.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub agent_signer_delegations:
+        BTreeMap<String, crate::world_service::AgentSignerDelegationChangeV1>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub world_service_results: BTreeMap<String, serde_json::Value>,
     /// Runtime-bound system id -> current authorization epoch.  System
     /// subjects are not inferred from an enum value; the trusted host must
     /// journal a binding before the subject can execute.

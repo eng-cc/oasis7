@@ -10,6 +10,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const PLAYER_ID: &str = "agency-owner";
 
+#[path = "agent_memory_correction_control_service_mode.rs"]
+mod service_mode;
+
 fn owner_server(seed: u8) -> (ViewerRuntimeLiveServer, String, String, String) {
     owner_server_with_config(
         seed,
@@ -119,6 +122,16 @@ pub(super) fn drive_provider_action(
         match server.enqueue_llm_action_from_sidecar() {
             Ok(Some(_trace)) if !expect_failure => return Ok(None),
             Err(trace) if expect_failure => {
+                // Recovery/settlement failures are not the requested provider
+                // disposition. Preserve their full trace instead of letting a
+                // later correction-state assertion hide the first failure.
+                if super::super::decision_trace::decision_trace_provider_error_retryable(&trace)
+                    != Some(false)
+                {
+                    return Err(format!(
+                        "provider did not return a typed nonretryable error: {trace:?}"
+                    ));
+                }
                 return Ok(Some(
                     trace.llm_error.unwrap_or_else(|| "provider failed".into()),
                 ));
@@ -197,6 +210,7 @@ fn current_intent(server: &ViewerRuntimeLiveServer, agent_id: &str) -> (String, 
 
 #[test]
 fn owner_interrupt_cancels_only_exact_pending_intent_and_replay_is_read_only() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(91);
     let (intent_id, request_digest) = current_intent(&server, agent_id.as_str());
     let command = AgencyControlOperation::InterruptPendingIntent {
@@ -269,6 +283,7 @@ fn owner_interrupt_cancels_only_exact_pending_intent_and_replay_is_read_only() {
 
 #[test]
 fn agency_control_owner_auth_is_bound_to_every_signed_field_and_never_mutates_on_denial() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(92);
     let before = server.world.current_state_root_hash().expect("before root");
     let (intent_id, request_digest) = current_intent(&server, agent_id.as_str());
@@ -391,6 +406,7 @@ fn agency_control_owner_auth_is_bound_to_every_signed_field_and_never_mutates_on
 
 #[test]
 fn inspection_and_player_snapshot_share_owner_projection_but_unauthenticated_snapshots_do_not() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(94);
     let owner_snapshot = server.compat_snapshot(Some(PLAYER_ID));
     let owner_model = owner_snapshot
@@ -605,6 +621,7 @@ fn inspection_and_player_snapshot_share_owner_projection_but_unauthenticated_sna
 
 #[test]
 fn inaccessible_or_stale_memory_correction_does_not_consume_nonce_or_change_runtime() {
+    let _provider_lock = lock_test_llm_env();
     let (mut server, agent_id, public_key, private_key) = owner_server(95);
     let before = server.world.current_state_root_hash().expect("before root");
     let correction = signed_agency_request(
@@ -1034,6 +1051,7 @@ fn owner_signed_memory_correction_applies_to_matching_provider_receipt_and_reloa
     );
     let failed = drive_provider_action(&mut server, true)
         .expect("nonretryable provider error terminalizes the correction");
+    println!("nonretryable_provider_failure_actual={failed:?}");
     assert!(failed
         .as_deref()
         .is_some_and(|message| message.contains("unauthorized") || message.contains("provider")));

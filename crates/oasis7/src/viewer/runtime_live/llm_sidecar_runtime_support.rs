@@ -7,30 +7,38 @@ use crate::simulator::{
 impl RuntimeLlmSidecar {
     /// Rebuild the simulator shadow from the authoritative Runtime snapshot
     /// before provider-backed cognition reads or queues any decision.
-    pub(super) fn sync_shadow_kernel(
+    pub(in crate::viewer::runtime_live) fn sync_shadow_kernel(
         &mut self,
         world: &RuntimeWorld,
         config: &WorldConfig,
     ) -> Result<(), String> {
-        let runtime_snapshot = world.snapshot();
+        let runtime_snapshot = (!self.provider_service_required).then(|| world.snapshot());
+        let state = if self.provider_service_required {
+            &self
+                .provider_service_projection
+                .as_ref()
+                .ok_or("canonical Agent observation unavailable")?
+                .state
+        } else {
+            world.state()
+        };
         let snapshot = WorldSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
-            time: world.state().time,
+            time: state.time,
             config: config.clone(),
-            model: runtime_state_to_simulator_model(
-                world.state(),
-                self,
-                self.runtime_seed_model.as_ref(),
-            ),
-            runtime_snapshot: Some(runtime_snapshot.clone()),
+            model: runtime_state_to_simulator_model(state, self, self.runtime_seed_model.as_ref()),
+            runtime_snapshot: runtime_snapshot.clone(),
             player_gameplay: None,
             chain_resource_manifest: Default::default(),
             latest_chain_resource_delta: Default::default(),
             chunk_runtime: ChunkRuntimeConfig::default(),
             intel_ttl_ticks: 0,
             next_event_id: 0,
-            next_action_id: runtime_snapshot.next_action_id.max(1),
+            next_action_id: runtime_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.next_action_id.max(1))
+                .unwrap_or(1),
             pending_actions: Vec::new(),
             journal_len: 0,
         };
@@ -52,15 +60,8 @@ pub(super) fn runtime_provider_check_now_unix_ms() -> u64 {
 }
 
 pub(super) fn runtime_provider_check_cache_key(settings: &ProviderDecisionSettings) -> String {
-    format!(
-        "{}|{}|{}|{}|{}|{}",
-        settings.provider_transport,
-        settings.base_url,
-        settings.connect_timeout_ms,
-        settings.decision_timeout_ms,
-        settings.agent_profile,
-        settings.auth_token.as_deref().unwrap_or("")
-    )
+    // Private exact settings fence, including execution mode and fallback selection.
+    format!("{settings:?}")
 }
 
 pub(in crate::viewer::runtime_live) fn normalize_optional_public_key(

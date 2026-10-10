@@ -412,7 +412,11 @@ fn restore_reconciles_committed_runtime_record_without_sidecar_terminal_marker()
         .provider_completed_decisions
         .push_back(async_support::RuntimeLlmDecision {
             agent_id: "agent-committed-recovery-sibling".to_string(),
-            decision: AgentDecision::Wait,
+            // This placeholder protects queue identity preservation, not Wait admission.
+            decision: AgentDecision::Act(crate::simulator::Action::MoveAgent {
+                agent_id: "agent-committed-recovery-sibling".into(),
+                to: "loc-recovery".into(),
+            }),
             decision_trace: None,
             cognition: None,
             memory_write_intents: Vec::new(),
@@ -420,7 +424,10 @@ fn restore_reconciles_committed_runtime_record_without_sidecar_terminal_marker()
         });
     let queued = async_support::RuntimeLlmDecision {
         agent_id: agent_id.to_string(),
-        decision: AgentDecision::Wait,
+        decision: AgentDecision::Act(crate::simulator::Action::MoveAgent {
+            agent_id: agent_id.into(),
+            to: "loc-recovery".into(),
+        }),
         decision_trace: None,
         cognition: None,
         memory_write_intents: Vec::new(),
@@ -1094,6 +1101,12 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
         pos: GeoPos::new(0, 0, 0),
     });
     server.world.step().expect("register wake recovery sibling");
+    server
+        .world
+        .install_test_provider_capability_fixture("agent-wake-sibling")
+        .expect("install sibling Runtime capability and cognition provision");
+    let sibling_cognition =
+        super::lineage_tests::queued_wait_cognition(&mut server.world, "agent-wake-sibling");
     let fenced_provider = crate::simulator::MockDecisionProvider::new("wake-recovery-fenced");
     let fenced_behavior = crate::simulator::ProviderBackedAgentBehavior::new_legacy_compatibility(
         "agent-wake-recovery",
@@ -1125,7 +1138,7 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
             agent_id: "agent-wake-sibling".to_string(),
             decision: AgentDecision::Wait,
             decision_trace: None,
-            cognition: None,
+            cognition: Some(sibling_cognition),
             memory_write_intents: Vec::new(),
             continuation_admitted: false,
         });

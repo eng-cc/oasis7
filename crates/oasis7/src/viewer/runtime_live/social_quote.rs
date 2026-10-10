@@ -18,14 +18,12 @@ use crate::viewer::protocol::{
     SocialContactQuotePreflight, SocialContactQuoteRequest,
 };
 use std::collections::HashMap;
-use std::io::BufWriter;
-use std::net::TcpStream;
 
 impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn handle_social_quote_request(
         &mut self,
         request: ViewerRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         match request {
             ViewerRequest::QuoteDeclareSocialEdge { request } => {
@@ -601,7 +599,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_declare_social_edge(
         &mut self,
         request: DeclareSocialEdgeQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,
@@ -615,7 +613,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_publish_social_fact(
         &mut self,
         request: PublishSocialFactQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,
@@ -629,7 +627,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_adjudicate_social_fact(
         &mut self,
         request: AdjudicateSocialFactQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,
@@ -643,7 +641,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_revoke_social_fact(
         &mut self,
         request: RevokeSocialFactQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,
@@ -657,7 +655,7 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn quote_social_contact(
         &mut self,
         request: SocialContactQuoteRequest,
-        writer: &mut BufWriter<TcpStream>,
+        writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         send_response(
             writer,

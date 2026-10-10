@@ -1,7 +1,20 @@
+#[path = "provider_action_feedback_diagnostics.rs"]
+mod feedback_diagnostics;
+use feedback_diagnostics::{
+    canonical_feedback_reason, stale_replan_exhausted_trace, wake_handoff_error_trace,
+};
+
 use super::super::decision_trace::{is_budget_exhausted_wait, is_trace_only_overflow};
 use super::*;
 use crate::runtime::{RuntimeFeedbackProjectionV1, RuntimeFeedbackRequestV1};
 use crate::simulator::AgentDecision;
+
+#[cfg(test)]
+#[path = "provider_action_service_tests.rs"]
+mod canonical_service_fencing_tests;
+
+#[path = "provider_action_service.rs"]
+mod service_provider;
 
 impl ViewerRuntimeLiveServer {
     /// Report a stale parent only if a bounded replacement was actually queued.
@@ -29,6 +42,22 @@ impl ViewerRuntimeLiveServer {
     pub(in crate::viewer::runtime_live) fn enqueue_llm_action_from_sidecar(
         &mut self,
     ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
+        self.configure_service_provider();
+        // A chain-linked World is an observation projection. In particular,
+        // recovery and request preparation below can settle leases and advance
+        // wakes before a decision is returned. Fence the entire pass until the
+        // canonical cognition service adapter owns those transitions.
+        if self.chain_link_enabled() {
+            if self.config.world_service.is_some() {
+                return self.enqueue_service_provider_action();
+            }
+            return Err(wake_handoff_error_trace(
+                "world_service",
+                self.world.state().time,
+                "canonical Agent cognition service is unavailable; provider turn remains pending"
+                    .to_string(),
+            ));
+        }
         self.recover_checkpoint_terminal_feedback()
             .map_err(|error| {
                 wake_handoff_error_trace("runtime-feedback", self.world.state().time, error)
@@ -844,6 +873,24 @@ impl ViewerRuntimeLiveServer {
         let Some(lease) = lease else {
             return Ok(());
         };
+        if self.chain_link_enabled() {
+            let request = request.ok_or("canonical lease release requires the original request")?;
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "release",
+                )?;
+            self.llm_sidecar.release_provider_lease_at_authority(
+                &mut self.world,
+                request,
+                &lease,
+            )?;
+            self.llm_sidecar.clear_provider_cognition_lease(agent_id);
+            return Ok(());
+        }
         if let Some(runtime_lease) = self
             .world
             .cognition_economy()
@@ -916,6 +963,23 @@ impl ViewerRuntimeLiveServer {
         let Some(lease) = lease else {
             return Ok(());
         };
+        if self.chain_link_enabled() {
+            let request =
+                request.ok_or("canonical lease settlement requires the original request")?;
+            self.llm_sidecar
+                .validate_provider_cognition_lease_for_request(
+                    &self.world,
+                    agent_id,
+                    request,
+                    &lease,
+                    "settle",
+                )?;
+            return self.llm_sidecar.settle_provider_lease_at_authority(
+                &mut self.world,
+                request,
+                &lease,
+            );
+        }
         if let Some(request) = request {
             self.llm_sidecar
                 .validate_provider_cognition_lease_for_request(
@@ -1114,84 +1178,5 @@ impl ViewerRuntimeLiveServer {
                 "Runtime feedback outbox retry transition failed"
             );
         }
-    }
-}
-
-fn canonical_feedback_reason(status: &str, reason: Option<&str>) -> Option<String> {
-    match status {
-        "committed" => None,
-        "pending" => Some("retry_scheduled".to_string()),
-        "failed" => Some(
-            matches!(
-                reason,
-                Some("failed_provider")
-                    | Some("failed_persist")
-                    | Some("cognition_failed")
-                    | Some("provider_unavailable")
-            )
-            .then_some(reason.unwrap_or("provider_unavailable"))
-            .unwrap_or("provider_unavailable")
-            .to_string(),
-        ),
-        "rejected" => Some(
-            matches!(
-                reason,
-                Some("stale_base")
-                    | Some("expired")
-                    | Some("stale_capability_snapshot")
-                    | Some("authority_denied")
-                    | Some("intent_conflict")
-                    | Some("reorg_invalidated")
-                    | Some("finality_anchor_mismatch")
-                    | Some("precondition_failed")
-                    | Some("action_rejected")
-                    | Some("idempotency_conflict")
-                    | Some("no_effect")
-                    | Some("cancelled")
-                    | Some("late_response_after_cancel")
-                    | Some("legacy_no_cognition_proof")
-                    | Some("cognition_context_mismatch")
-            )
-            .then_some(reason.unwrap_or("action_rejected"))
-            .unwrap_or("action_rejected")
-            .to_string(),
-        ),
-        _ => reason.map(ToOwned::to_owned),
-    }
-}
-
-fn wake_handoff_error_trace(agent_id: &str, time: u64, error: String) -> AgentDecisionTrace {
-    AgentDecisionTrace {
-        agent_id: agent_id.to_string(),
-        time,
-        decision: AgentDecision::Wait,
-        llm_input: None,
-        llm_output: None,
-        llm_error: Some(error),
-        parse_error: None,
-        llm_diagnostics: None,
-        llm_effect_intents: Vec::new(),
-        llm_effect_receipts: Vec::new(),
-        llm_step_trace: Vec::new(),
-        llm_prompt_section_trace: Vec::new(),
-        llm_chat_messages: Vec::new(),
-    }
-}
-
-fn stale_replan_exhausted_trace(world: &RuntimeWorld, agent_id: &str) -> AgentDecisionTrace {
-    AgentDecisionTrace {
-        agent_id: agent_id.to_string(),
-        time: world.state().time,
-        decision: AgentDecision::Wait,
-        llm_input: None,
-        llm_output: None,
-        llm_error: Some("stale_base replan budget exhausted".to_string()),
-        parse_error: None,
-        llm_diagnostics: None,
-        llm_effect_intents: Vec::new(),
-        llm_effect_receipts: Vec::new(),
-        llm_step_trace: Vec::new(),
-        llm_prompt_section_trace: Vec::new(),
-        llm_chat_messages: Vec::new(),
     }
 }
