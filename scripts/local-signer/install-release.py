@@ -528,6 +528,14 @@ def parser():
     recovery.add_argument("--binding-repair-apply")
     recovery.add_argument("--binding-repair-check")
     recovery.add_argument("--binding-repair-quarantine")
+    recovery.add_argument("--binding-repair-recovery-plan-out")
+    recovery.add_argument("--binding-repair-recovery-apply")
+    recovery.add_argument("--binding-repair-recovery-check")
+    apply.add_argument("--failed-repair-plan")
+    apply.add_argument("--expected-failed-repair-plan-sha256")
+    apply.add_argument("--failed-release-dir")
+    apply.add_argument("--expected-failed-manifest-sha256")
+    apply.add_argument("--expected-recovery-plan-sha256")
     apply.add_argument("--expected-repair-receipt-sha256")
     apply.add_argument("--expected-repair-plan-sha256")
     apply.add_argument("--installed-release-dir")
@@ -647,7 +655,57 @@ def main():
             output = {"status": "PLANNED", "plan_sha256": api.digest(api.canonical_bytes(plan)), "host_mutated": False, "signing_enabled": False}
         else:
             plan = api.parse_json(api.read_file(args.plan, 1024 * 1024))
-            if args.binding_repair_plan_out or args.binding_repair_apply or args.binding_repair_check or args.binding_repair_quarantine:
+            recovery_mode = args.binding_repair_recovery_plan_out or args.binding_repair_recovery_apply or args.binding_repair_recovery_check
+            recovery_inputs = (args.failed_repair_plan, args.expected_failed_repair_plan_sha256, args.failed_release_dir, args.expected_failed_manifest_sha256, args.expected_recovery_plan_sha256)
+            if any(recovery_inputs) and not recovery_mode:
+                raise api.InstallError("INSTALLATION_DRIFT", "binding recovery inputs require explicit mode")
+            if recovery_mode:
+                if args.expected_journal_sha256 or args.expected_repair_plan_sha256 or args.expected_repair_receipt_sha256:
+                    raise api.InstallError("INSTALLATION_DRIFT", "foreign inputs in binding recovery")
+                original = original_repair_inputs(args, api, host_module, host, plan, target)
+                if api.digest(api.canonical_bytes(plan)) != args.expected_plan_sha256:
+                    raise api.InstallError("INSTALLATION_DRIFT", "original plan digest changed")
+                if not all(recovery_inputs[:4]):
+                    raise api.InstallError("INSTALLATION_DRIFT", "complete failed repair inputs required")
+                protected_plan(Path(args.failed_repair_plan), host, api)
+                failed = api.parse_json(api.read_file(args.failed_repair_plan, 1024 * 1024))
+                if (api.digest(api.canonical_bytes(failed)) != args.expected_failed_repair_plan_sha256
+                        or failed["original_plan_sha256"] != args.expected_plan_sha256
+                        or failed["original_manifest_sha256"] != original["manifest_sha256"]):
+                    raise api.InstallError("INSTALLATION_DRIFT", "failed repair original bindings mismatch")
+                failed_root = host_module.RELEASE_ROOT / failed["new_release_id"]
+                if Path(args.failed_release_dir) != failed_root:
+                    raise api.InstallError("INSTALLATION_DRIFT", "fixed failed installed release path required")
+                for name in (*api.FILES, "manifest.json"):
+                    host.inspect_path(failed_root / name, protected=True)
+                    info = (failed_root / name).lstat()
+                    mode = 0o444 if name.endswith(".py") or name == "manifest.json" else 0o555
+                    if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, mode, 1):
+                        raise api.InstallError("INSTALLATION_DRIFT", "unsafe failed installed release")
+                failed_release = api.validate_release(failed_root, args.expected_failed_manifest_sha256, target)
+                if args.binding_repair_recovery_plan_out:
+                    if args.expected_recovery_plan_sha256:
+                        raise api.InstallError("INSTALLATION_DRIFT", "recovery apply digest in planning")
+                    recovery = api.plan_binding_repair_recovery(failed_release, failed, args.expected_failed_repair_plan_sha256, release, host)
+                    destination = Path(args.binding_repair_recovery_plan_out)
+                    if destination.parent != Path(args.plan).parent:
+                        raise api.InstallError("INSTALLATION_DRIFT", "recovery plan requires protected original directory")
+                    host.inspect_path(destination.parent, protected=True)
+                    api.write_new(destination, api.canonical_bytes(recovery), 0o600)
+                    output = dict(status="BINDING_RECOVERY_PLANNED", code="OK", host_mutated=False, signing_enabled=False,
+                                  recovery_plan_sha256=api.digest(api.canonical_bytes(recovery)),
+                                  failed_receipt_sha256=recovery["failed_receipt_sha256"], manifest_sha256=release["manifest_sha256"])
+                else:
+                    path = Path(args.binding_repair_recovery_apply or args.binding_repair_recovery_check)
+                    protected_plan(path, host, api)
+                    recovery = api.parse_json(api.read_file(path, 1024 * 1024))
+                    if recovery["failed_repair_plan"] != failed:
+                        raise api.InstallError("INSTALLATION_DRIFT", "recovery failed plan changed")
+                    if args.binding_repair_recovery_check:
+                        output = api.verify_binding_repair_recovery(release, recovery, args.expected_recovery_plan_sha256, host)
+                    else:
+                        output = api.apply_binding_repair_recovery(failed_release, failed, release, recovery, args.expected_recovery_plan_sha256, host)
+            elif args.binding_repair_plan_out or args.binding_repair_apply or args.binding_repair_check or args.binding_repair_quarantine:
                 if args.expected_journal_sha256:
                     raise api.InstallError("INSTALLATION_DRIFT", "completion input in binding repair")
                 original = original_repair_inputs(args, api, host_module, host, plan, target)

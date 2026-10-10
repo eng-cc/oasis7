@@ -6,7 +6,9 @@ use nix::unistd::{getegid, geteuid, getuid};
 
 use crate::error::SignerError;
 use crate::identity::sha256_hex;
-use crate::local_fs::{directory_identity, read_protected, reject_symlink_components};
+use crate::local_fs::{
+    directory_identity, read_protected, reject_symlink_components, validate_system_sudo_metadata,
+};
 use crate::types::{INSTALLATION_SCHEMA, InstallationConfig};
 
 #[cfg(target_os = "macos")]
@@ -98,8 +100,7 @@ fn trusted_sudo_caller_for(
 
 pub fn validate_fixed_sudo() -> Result<PathBuf, SignerError> {
     let path = fixed_sudo_path();
-    read_protected(path, 128 * 1024 * 1024, true)
-        .map_err(|_| SignerError::UnsupportedPlatformOrFs)?;
+    validate_system_sudo_metadata(path).map_err(|_| SignerError::UnsupportedPlatformOrFs)?;
     reject_symlink_components(path)?;
     let metadata = fs::symlink_metadata(path).map_err(|_| SignerError::UnsupportedPlatformOrFs)?;
     if !metadata.is_file() || metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
@@ -152,6 +153,12 @@ pub fn worker_sudo_args(config: &InstallationConfig) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::types::CallerBinding;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn fixed_system_sudo_accepts_execute_only_permissions() {
+        assert_eq!(validate_fixed_sudo().unwrap(), Path::new("/usr/bin/sudo"));
+    }
 
     fn test_installation() -> InstallationConfig {
         InstallationConfig {

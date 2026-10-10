@@ -312,12 +312,93 @@ pub(crate) fn read_protected(
     read_open_candidate(file, max)
 }
 
+/// Validate an OS executable which may permit execution but not content reads.
+/// Restricted to the fixed system sudo caller; release binaries still use read_protected.
+pub(crate) fn validate_system_sudo_metadata(path: &Path) -> Result<(), SignerError> {
+    use nix::fcntl::AtFlags;
+    use nix::sys::stat::{FileStat, fstatat};
+    if path != Path::new("/usr/bin/sudo") {
+        return Err(SignerError::InstallationDrift);
+    }
+    let parent_path = path.parent().ok_or(SignerError::InstallationDrift)?;
+    let parent = Directory::open(parent_path, true)?;
+    let name = path.file_name().ok_or(SignerError::InstallationDrift)?;
+    let observe =
+        || fstatat(parent.0.as_fd(), name, AtFlags::AT_SYMLINK_NOFOLLOW).map_err(map_openat_error);
+    let before = observe()?;
+    let valid = |facts: &FileStat| {
+        protected_facts(
+            facts.st_uid,
+            facts.st_mode as u32,
+            false,
+            facts.st_mode as u32 & libc::S_IFMT as u32 == libc::S_IFREG as u32,
+            facts.st_nlink as u64,
+            true,
+        )
+    };
+    if !valid(&before) {
+        return Err(SignerError::InstallationDrift);
+    }
+    reject_path_extended_acl(path)?;
+    let after = observe()?;
+    let identity = |facts: &FileStat| {
+        (
+            facts.st_dev,
+            facts.st_ino,
+            facts.st_mode,
+            facts.st_nlink,
+            facts.st_uid,
+            facts.st_gid,
+            facts.st_ctime,
+            facts.st_ctime_nsec,
+        )
+    };
+    let retained = parent.metadata()?;
+    let current = Directory::open(parent_path, true)?.metadata()?;
+    if !valid(&after)
+        || identity(&before) != identity(&after)
+        || (retained.dev(), retained.ino()) != (current.dev(), current.ino())
+    {
+        return Err(SignerError::InstallationDrift);
+    }
+    // Execution uses the fixed pathname. Protected root-owned ancestry prevents
+    // caller replacement; concurrent trusted-root changes remain outside this boundary.
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)] // Darwin no-follow ACL query, never opens executable contents.
+fn reject_path_extended_acl(path: &Path) -> Result<(), SignerError> {
+    use std::os::unix::ffi::OsStrExt;
+    unsafe extern "C" {
+        fn acl_get_link_np(path: *const libc::c_char, kind: libc::c_int) -> *mut libc::c_void;
+    }
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| SignerError::InstallationDrift)?;
+    let acl = unsafe { acl_get_link_np(path.as_ptr(), 0x100) };
+    validate_empty_acl(acl)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reject_path_extended_acl(_path: &Path) -> Result<(), SignerError> {
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 #[allow(unsafe_code)] // Darwin libc ACL API; retained fd only, owned ACL freed exactly once.
 fn reject_extended_acl(file: &File) -> Result<(), SignerError> {
     use std::os::fd::AsRawFd;
     unsafe extern "C" {
         fn acl_get_fd_np(fd: libc::c_int, kind: libc::c_int) -> *mut libc::c_void;
+    }
+    let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), 0x100) };
+    validate_empty_acl(acl)
+}
+
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)] // Consumes one Darwin ACL allocation and frees it exactly once.
+fn validate_empty_acl(acl: *mut libc::c_void) -> Result<(), SignerError> {
+    unsafe extern "C" {
         fn acl_get_entry(
             acl: *mut libc::c_void,
             entry_id: libc::c_int,
@@ -327,8 +408,6 @@ fn reject_extended_acl(file: &File) -> Result<(), SignerError> {
         fn acl_valid(value: *mut libc::c_void) -> libc::c_int;
     }
     // Darwin ACL_TYPE_EXTENDED = 0x100, ACL_FIRST_ENTRY = 0.
-    // Query only the retained descriptor; no pathname or privileged subprocess.
-    let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), 0x100) };
     if acl.is_null() {
         // Darwin reports ENOENT for absence of an extended ACL on an open fd.
         // The fd metadata was validated already; other retrieval failures deny.
@@ -905,6 +984,7 @@ mod candidate_tests {
         fs::write(&path, b"public fixture").unwrap();
         let file = File::open(&path).unwrap();
         reject_extended_acl(&file).unwrap();
+        reject_path_extended_acl(&path).unwrap();
         let user = std::process::Command::new("/usr/bin/id")
             .arg("-un")
             .output()
@@ -918,6 +998,13 @@ mod candidate_tests {
             .unwrap();
         assert!(status.success());
         assert!(reject_extended_acl(&file).is_err());
+        assert!(reject_path_extended_acl(&path).is_err());
+    }
+
+    #[test]
+    fn system_sudo_metadata_cannot_validate_alternate_executables() {
+        assert!(validate_system_sudo_metadata(Path::new("/bin/sh")).is_err());
+        assert!(validate_system_sudo_metadata(Path::new("/usr/bin/../bin/sudo")).is_err());
     }
 
     #[test]

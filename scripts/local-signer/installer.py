@@ -440,6 +440,142 @@ def _repair_report(plan, sha, completed, status):
         remaining_actions=[kind for kind in BINDING_REPAIR_ACTIONS if kind not in completed])
 
 
+BINDING_RECOVERY_SCHEMA = "oasis7.local_signer_binding_repair_recovery_plan.v1"
+BINDING_RECOVERY_REASON = "execute-only-system-sudo-open"
+BINDING_RECOVERY_RECEIPT_SCHEMA = "oasis7.local_signer_binding_repair_recovery_receipt.v1"
+BINDING_RECOVERY_PLAN_FIELDS = {"schema_version", "reason", "failed_repair_plan", "failed_repair_plan_sha256", "failed_receipt", "failed_receipt_sha256", "original_journal_sha256", "runtime_identity", "config_sha256", "sudo_sha256", "sudo_policy_sha256", "new_release_id", "new_manifest_sha256", "new_installation_plan", "new_installation_config", "actions", "signing_enabled"}
+
+
+def _binding_recovery_baseline(failed_release, failed_plan, failed_plan_sha256, new_release, backend):
+    if (not isinstance(failed_plan, dict) or set(failed_plan) != BINDING_REPAIR_PLAN_FIELDS
+            or not valid_hash(failed_plan_sha256) or digest(canonical_bytes(failed_plan)) != failed_plan_sha256
+            or failed_plan["schema_version"] != BINDING_REPAIR_SCHEMA or failed_plan["reason"] != BINDING_REPAIR_REASON
+            or failed_plan["signing_enabled"] is not False or failed_plan["actions"] != list(BINDING_REPAIR_ACTIONS)
+            or failed_release["manifest_sha256"] != failed_plan["new_manifest_sha256"]
+            or failed_release["manifest"]["release_id"] != failed_plan["new_release_id"]
+            or new_release["manifest"]["target"] != failed_release["manifest"]["target"]
+            or new_release["manifest"]["release_id"] in (failed_plan["new_release_id"], failed_plan["original_journal"]["installation_config"]["release_id"])):
+        raise InstallError("INSTALLATION_DRIFT", "failed repair scope mismatch")
+    check_id(new_release["manifest"]["release_id"], "INSTALLATION_DRIFT")
+    _repair_environment(failed_plan, backend)
+    receipt, receipt_sha = backend.repair_snapshot()
+    fields = {"schema_version", "repair_plan_sha256", "original_journal_sha256", "original_manifest_sha256", "new_manifest_sha256", "installation_id", "deployment_id", "stage", "completed_actions"}
+    if (set(receipt) != fields or receipt["schema_version"] != "oasis7.local_signer_binding_repair_receipt.v1"
+            or receipt["stage"] != "recovery" or receipt["completed_actions"] != list(BINDING_REPAIR_ACTIONS[:6])
+            or receipt["repair_plan_sha256"] != failed_plan_sha256 or not valid_hash(receipt_sha)
+            or any(receipt[k] != failed_plan[k] for k in ("original_journal_sha256", "original_manifest_sha256", "new_manifest_sha256", "installation_id", "deployment_id"))):
+        raise InstallError("INSTALLATION_DRIFT", "failed repair receipt is not exact sudo-completed recovery")
+    original, journal_sha = backend.recovery_snapshot()
+    if original != failed_plan["original_journal"] or journal_sha != failed_plan["original_journal_sha256"]:
+        raise InstallError("INSTALLATION_DRIFT", "original historical journal changed")
+    facts = backend.binding_recovery_preflight(failed_plan, failed_release, new_release)
+    fields = {"safe", "new_release_absent", "recovery_absent", "config_sha256", "sudo_sha256", "sudo_policy_sha256"}
+    if (set(facts) != fields or any(facts[k] is not True for k in ("safe", "new_release_absent", "recovery_absent"))
+            or any(not valid_hash(facts[k]) for k in ("config_sha256", "sudo_sha256", "sudo_policy_sha256"))
+            or facts["config_sha256"] != digest(canonical_bytes(failed_plan["new_installation_config"]))):
+        raise InstallError("INSTALLATION_DRIFT", "failed repair installed preimage drift")
+    new_id = new_release["manifest"]["release_id"]
+    config = dict(failed_plan["new_installation_config"], release_id=new_id,
+        worker_executable="/usr/local/libexec/oasis7-local-signer/"+new_id+"/oasis7_local_signer_worker",
+        worker_sha256=digest(new_release["verified_bytes"]["oasis7_local_signer_worker"]))
+    plan = dict(failed_plan["new_installation_plan"], release_id=new_id, manifest_sha256=new_release["manifest_sha256"])
+    return dict(schema_version=BINDING_RECOVERY_SCHEMA, reason=BINDING_RECOVERY_REASON,
+        failed_repair_plan=failed_plan, failed_repair_plan_sha256=failed_plan_sha256,
+        failed_receipt=receipt, failed_receipt_sha256=receipt_sha, original_journal_sha256=journal_sha,
+        runtime_identity=failed_plan["runtime_identity"], config_sha256=facts["config_sha256"],
+        sudo_sha256=facts["sudo_sha256"], sudo_policy_sha256=facts["sudo_policy_sha256"],
+        new_release_id=new_id,new_manifest_sha256=new_release["manifest_sha256"],
+        new_installation_config=config,new_installation_plan=plan,actions=list(BINDING_REPAIR_ACTIONS),signing_enabled=False)
+
+
+def plan_binding_repair_recovery(failed_release, failed_plan, failed_plan_sha256, new_release, backend):
+    with backend.lock():
+        return _binding_recovery_baseline(failed_release, failed_plan, failed_plan_sha256, new_release, backend)
+
+
+def _binding_recovery_report(plan, sha, completed, status, mutated):
+    return dict(schema_version="oasis7.local_signer_binding_repair_recovery_report.v1",status=status,
+        code="RECOVERY_REQUIRED" if status=="RECOVERY_REQUIRED" else "OK",host_mutated=mutated,signing_enabled=False,
+        installation_id=plan["new_installation_plan"]["installation_id"],deployment_id=plan["new_installation_plan"]["deployment_id"],
+        release_id=plan["new_release_id"],manifest_sha256=plan["new_manifest_sha256"],recovery_plan_sha256=sha,
+        failed_receipt_sha256=plan["failed_receipt_sha256"],original_journal_sha256=plan["original_journal_sha256"],
+        completed_actions=list(completed),remaining_actions=[k for k in BINDING_REPAIR_ACTIONS if k not in completed])
+
+
+def apply_binding_repair_recovery(failed_release, failed_plan, new_release, recovery_plan, expected_recovery_plan_sha256, backend):
+    if (not valid_hash(expected_recovery_plan_sha256) or digest(canonical_bytes(recovery_plan)) != expected_recovery_plan_sha256):
+        raise InstallError("INSTALLATION_DRIFT", "recovery plan approval mismatch")
+    with backend.lock():
+        current = _binding_recovery_baseline(failed_release, failed_plan, digest(canonical_bytes(failed_plan)), new_release, backend)
+        if current != recovery_plan:
+            raise InstallError("INSTALLATION_DRIFT", "approved recovery preimages changed")
+        completed=[]
+        receipt=dict(schema_version=BINDING_RECOVERY_RECEIPT_SCHEMA,recovery_plan_sha256=expected_recovery_plan_sha256,
+            failed_receipt_sha256=current["failed_receipt_sha256"],original_journal_sha256=current["original_journal_sha256"],
+            new_manifest_sha256=current["new_manifest_sha256"],stage="intent",completed_actions=[])
+        plan=current["new_installation_plan"]; oldconfig=failed_plan["original_journal"]["installation_config"]
+        def progress(kind):
+            completed.append(kind)
+            backend.binding_recovery_receipt(dict(receipt,completed_actions=list(completed)))
+        try:
+            backend.binding_recovery_receipt(receipt);progress("intent")
+            backend.disable_sudo(plan);progress("sudo_disabled")
+            backend.publish_release({"plan":plan,"release":new_release});progress("release")
+            backend.repair_binding(plan,new_release,current["new_installation_config"]);progress("binding")
+            if not backend.validate_repaired(plan,new_release,oldconfig,check_sudo=False):
+                raise InstallError("INSTALLATION_DRIFT","recovery disabled validation failed")
+            progress("validated")
+            backend.repair_publish_sudo({"plan":plan,"release":new_release});progress("sudo")
+            if not backend.validate_repaired(plan,new_release,oldconfig,check_sudo=True):
+                raise InstallError("INSTALLATION_DRIFT","recovery granted validation failed")
+            doctor=backend.verify_caller_doctor(plan)
+            if not _valid_doctor_result(doctor): raise InstallError("INSTALLATION_DRIFT","recovery caller proof failed")
+            receipt["doctor_result"]=doctor;progress("doctor")
+            backend.binding_recovery_receipt(dict(receipt,stage="complete",completed_actions=list(BINDING_REPAIR_ACTIONS)))
+            completed.append("complete")
+        except Exception:
+            try: backend.disable_sudo(plan)
+            except Exception: pass
+            try: backend.binding_recovery_receipt(dict(receipt,stage="recovery",completed_actions=list(completed)))
+            except Exception: pass
+            return _binding_recovery_report(current,expected_recovery_plan_sha256,completed,"RECOVERY_REQUIRED",True)
+        return _binding_recovery_report(current,expected_recovery_plan_sha256,completed,"BOUND_RECOVERED_UNREADY",True)
+
+
+def verify_binding_repair_recovery(new_release, recovery_plan, expected_recovery_plan_sha256, backend):
+    if (set(recovery_plan)!=BINDING_RECOVERY_PLAN_FIELDS or not valid_hash(expected_recovery_plan_sha256)
+            or digest(canonical_bytes(recovery_plan))!=expected_recovery_plan_sha256
+            or recovery_plan["schema_version"]!=BINDING_RECOVERY_SCHEMA or recovery_plan["reason"]!=BINDING_RECOVERY_REASON
+            or recovery_plan["signing_enabled"] is not False or recovery_plan["actions"]!=list(BINDING_REPAIR_ACTIONS)
+            or new_release["manifest_sha256"]!=recovery_plan["new_manifest_sha256"]
+            or new_release["manifest"]["release_id"]!=recovery_plan["new_release_id"]):
+        raise InstallError("INSTALLATION_DRIFT","recovery verification approval mismatch")
+    with backend.lock():
+        _repair_environment(recovery_plan,backend)
+        failed,sha=backend.repair_snapshot()
+        if failed!=recovery_plan["failed_receipt"] or sha!=recovery_plan["failed_receipt_sha256"]:
+            raise InstallError("INSTALLATION_DRIFT","historical failed receipt changed")
+        original,sha=backend.recovery_snapshot()
+        if original!=recovery_plan["failed_repair_plan"]["original_journal"] or sha!=recovery_plan["original_journal_sha256"]:
+            raise InstallError("INSTALLATION_DRIFT","historical installation changed")
+        receipt,sha=backend.binding_recovery_snapshot()
+        fields={"schema_version","recovery_plan_sha256","failed_receipt_sha256","original_journal_sha256","new_manifest_sha256","stage","completed_actions","doctor_result"}
+        if (set(receipt)!=fields or receipt["schema_version"]!=BINDING_RECOVERY_RECEIPT_SCHEMA or not valid_hash(sha)
+                or receipt["stage"]!="complete" or receipt["completed_actions"]!=list(BINDING_REPAIR_ACTIONS)
+                or receipt["recovery_plan_sha256"]!=expected_recovery_plan_sha256
+                or any(receipt[k]!=recovery_plan[k] for k in ("failed_receipt_sha256","original_journal_sha256","new_manifest_sha256"))
+                or not _valid_doctor_result(receipt["doctor_result"])):
+            raise InstallError("INSTALLATION_DRIFT","recovery completion receipt mismatch")
+        plan=recovery_plan["new_installation_plan"]
+        if not backend.validate_repaired(plan,new_release,original["installation_config"],check_sudo=True):
+            raise InstallError("INSTALLATION_DRIFT","recovered current host drift")
+        if backend.verify_caller_doctor(plan)!=receipt["doctor_result"]:
+            raise InstallError("INSTALLATION_DRIFT","recovered caller evidence drift")
+        result=_binding_recovery_report(recovery_plan,expected_recovery_plan_sha256,list(BINDING_REPAIR_ACTIONS),"RECOVERED_VERIFIED_UNREADY",False)
+        result["recovery_receipt_sha256"]=sha
+        return result
+
+
 TARGETS = ("aarch64-apple-darwin", "x86_64-apple-darwin")
 
 

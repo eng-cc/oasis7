@@ -22,6 +22,7 @@ JOURNAL = Path("/private/var/db/oasis7-local-signer-install.json")
 JOBS_ROOT = Path("/private/var/db/oasis7-local-signer-jobs")
 LOCK = Path("/private/var/db/oasis7-local-signer-install.lock")
 REPAIR = Path("/private/var/db/oasis7-local-signer-binding-repair.json")
+BINDING_RECOVERY = Path("/private/var/db/oasis7-local-signer-binding-recovery.json")
 SUDO = Path("/private/etc/sudoers.d/oasis7-local-signer")
 ENV = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C"}
 RUNTIME_PATH = Path("/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9")
@@ -451,6 +452,40 @@ class MacOSHost:
         if raw != canonical_bytes(value):
             raise InstallError("INSTALLATION_DRIFT", "noncanonical repair receipt")
         return value, digest(raw)
+
+    def binding_recovery_preflight(self, failed_plan, failed_release, new_release):
+        self.inspect_path(BINDING_RECOVERY.parent, protected=True)
+        if os.path.lexists(BINDING_RECOVERY) or os.path.lexists(RELEASE_ROOT / new_release["manifest"]["release_id"]):
+            raise InstallError("INSTALLATION_DRIFT", "existing recovery receipt or fresh release")
+        plan = failed_plan["new_installation_plan"]
+        if self.installed_config() != failed_plan["new_installation_config"]:
+            raise InstallError("INSTALLATION_DRIFT", "failed repair configuration changed")
+        self.quarantine_preflight(failed_plan)
+        if not self.validate_repaired(plan, failed_release, failed_plan["original_journal"]["installation_config"], check_sudo=False):
+            raise InstallError("INSTALLATION_DRIFT", "failed installed release invalid")
+        disabled = b"# oasis7 local signer binding repair: worker authorization disabled\n"
+        policy = self.read_sudo_policy(plan["caller"]["name"])
+        if read_file(SUDO, 65536) != disabled or not policy.no_grants:
+            raise InstallError("INSTALLATION_DRIFT", "recovery requires disabled own sudo and no effective grants")
+        return dict(safe=True, new_release_absent=True, recovery_absent=True,
+                    config_sha256=digest(read_file(CONFIG, 65536)), sudo_sha256=digest(disabled),
+                    sudo_policy_sha256=digest(policy.encode()))
+
+    def binding_recovery_snapshot(self):
+        self.inspect_path(BINDING_RECOVERY, protected=True)
+        info = BINDING_RECOVERY.lstat()
+        if (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink) != (0, 0, 0o600, 1):
+            raise InstallError("INSTALLATION_DRIFT", "unsafe binding recovery receipt")
+        raw = read_file(BINDING_RECOVERY, 1024 * 1024)
+        record = parse_json(raw)
+        if raw != canonical_bytes(record):
+            raise InstallError("INSTALLATION_DRIFT", "noncanonical binding recovery receipt")
+        return record, digest(raw)
+
+    def binding_recovery_receipt(self, record):
+        if os.path.lexists(BINDING_RECOVERY):
+            self.binding_recovery_snapshot()
+        self.atomic_root_file(BINDING_RECOVERY, canonical_bytes(record), 0o600, replace=os.path.lexists(BINDING_RECOVERY))
 
     def quarantine_preflight(self, repair):
         """Quarantine never runs either release or replays installation effects."""
