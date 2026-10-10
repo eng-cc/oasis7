@@ -551,6 +551,8 @@ pub struct PlayerGameplaySnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary_intent: Option<PlayerGameplayPrimaryIntent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_agent_chat: Option<oasis7_proto::viewer::CanonicalAgentChatViewV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait_resolution_quote: Option<PlayerGameplayWaitResolutionQuote>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_claim: Option<PlayerAgentClaimSnapshot>,
@@ -736,6 +738,8 @@ struct PlayerGameplaySnapshotSerde {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     primary_intent: Option<PlayerGameplayPrimaryIntent>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    canonical_agent_chat: Option<oasis7_proto::viewer::CanonicalAgentChatViewV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     wait_resolution_quote: Option<PlayerGameplayWaitResolutionQuote>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_claim: Option<PlayerAgentClaimSnapshot>,
@@ -847,6 +851,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,
             primary_intent: legacy.primary_intent,
+            canonical_agent_chat: legacy.canonical_agent_chat,
             wait_resolution_quote: legacy.wait_resolution_quote,
             agent_claim: legacy.agent_claim,
             micro_depot_facilities: legacy.micro_depot_facilities,

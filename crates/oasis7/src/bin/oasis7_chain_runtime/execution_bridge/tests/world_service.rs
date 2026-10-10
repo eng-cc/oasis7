@@ -342,6 +342,8 @@ fn world_service_driver_admin_commit_pin_restart_and_stale_fence() {
     let _ = fs::remove_dir_all(dir);
 }
 
+#[path = "world_service_agent_chat.rs"]
+mod canonical_agent_chat;
 #[test]
 fn service_recipe_preserves_authenticated_origin_consensus_context_and_replay() {
     let private = hex::encode([41u8; 32]);

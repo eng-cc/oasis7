@@ -270,6 +270,22 @@ impl RemoteWorldServiceClient {
         .map_err(WorldServiceClientError::Assurance)?;
         Ok(signed.payload)
     }
+    /// Forward the original browser proof without replacing its signer.
+    pub fn read_owner_view(
+        &self,
+        signed: SignedReadRequest<ReadWorldViewRequest>,
+    ) -> Result<VerifiedWorldView, WorldServiceClientError> {
+        authority::verify_read_request(VIEW_PATH, &signed)
+            .map_err(WorldServiceClientError::Assurance)?;
+        if signed.request.world != self.config.expected_world {
+            return Err(WorldServiceClientError::Assurance(
+                "owner read world mismatch".into(),
+            ));
+        }
+        let response = self.call(VIEW_PATH, &signed)?;
+        VerifiedWorldView::new(response, &signed.request)
+            .map_err(WorldServiceClientError::Assurance)
+    }
     fn signed_call<Q: Serialize, R: Serialize + DeserializeOwned>(
         &self,
         path: &str,

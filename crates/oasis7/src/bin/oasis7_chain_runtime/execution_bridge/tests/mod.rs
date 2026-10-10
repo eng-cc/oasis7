@@ -115,11 +115,41 @@ fn sha256_bytes(bytes: &[u8]) -> [u8; 32] {
 }
 
 fn temp_dir(prefix: &str) -> std::path::PathBuf {
+    static NEXT_PATH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let sequence = NEXT_PATH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("duration")
         .as_nanos();
-    std::env::temp_dir().join(format!("oasis7-execution-{prefix}-{unique}"))
+    std::env::temp_dir().join(format!(
+        "oasis7-execution-{prefix}-{}-{unique}-{sequence}",
+        std::process::id()
+    ))
+}
+
+#[test]
+fn concurrent_same_prefix_temp_paths_are_unique_without_creating_directories() {
+    const WORKERS: usize = 8;
+    const PATHS_PER_WORKER: usize = 1024;
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(WORKERS));
+    let workers: Vec<_> = (0..WORKERS)
+        .map(|_| {
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                (0..PATHS_PER_WORKER)
+                    .map(|_| temp_dir("concurrent-path-uniqueness"))
+                    .collect::<Vec<_>>()
+            })
+        })
+        .collect();
+    let paths: Vec<_> = workers
+        .into_iter()
+        .flat_map(|worker| worker.join().expect("path allocation worker"))
+        .collect();
+    let unique: std::collections::BTreeSet<_> = paths.iter().collect();
+    assert_eq!(unique.len(), WORKERS * PATHS_PER_WORKER);
+    assert!(paths.iter().all(|path| !path.exists()));
 }
 
 fn sample_snapshot(committed_height: u64, block_hash: Option<&str>) -> NodeSnapshot {

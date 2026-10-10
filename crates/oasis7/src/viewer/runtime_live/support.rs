@@ -250,6 +250,9 @@ pub(super) fn apply_provider_backed_bootstrap_authorities(
 }
 
 pub(super) struct RuntimeLiveSession {
+    pub(super) owner_read_context: Option<super::owner_read::OwnerReadContext>,
+    pub(super) owner_read_commit: Option<oasis7_client_api::world_service::CommitRef>,
+    pub(super) owner_read_view: Option<oasis7_proto::viewer::CanonicalAgentChatViewV1>,
     pub(super) subscribed: HashSet<ViewerStream>,
     pub(super) event_filters: Option<HashSet<ViewerEventKind>>,
     pub(super) current_player_id: Option<String>,
@@ -275,6 +278,9 @@ impl RuntimeLiveSession {
 
     pub(super) fn new_with_playing(playing: bool) -> Self {
         Self {
+            owner_read_context: None,
+            owner_read_view: None,
+            owner_read_commit: None,
             subscribed: HashSet::new(),
             event_filters: None,
             current_player_id: None,

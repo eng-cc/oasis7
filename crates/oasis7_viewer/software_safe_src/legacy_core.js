@@ -1,3 +1,4 @@
+import { createCanonicalOwnerReadModule } from "./viewer_canonical_owner_read_module.js";
 import { createViewerHostedAccountLoginIssuer } from "./viewer_hosted_account_login_issuer.js";
 import { invalidateAuthConnection, authConnectionGeneration, authCredentials, installSession, clearSession, hasSigningIdentity, updateRegistrationGrant, captureSessionContext, isSessionContextCurrent } from "./viewer_auth_session_module.js";
 import { viewerRuntimeConfig, resolveViewerEndpoint } from "./viewer_runtime_config_module.js";
@@ -6,6 +7,7 @@ import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
 import { createViewerHostedTestLoginModule } from "./viewer_hosted_test_login_module.js";
+import { scheduleCanonicalGoalPending, canonicalGoalMarkup, applyCommittedChatAck, canonicalAckMatches } from "./viewer_canonical_goal_module.js";
 import { createViewerHostedLoginRegistrationBridge } from "./viewer_hosted_login_registration_bridge.js";
 import { createViewerAgentChatAuthModule } from "./viewer_agent_chat_auth_module.js";
 import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
@@ -421,9 +423,10 @@ function nextAuthNonce() {
   return Date.now() + authNonceCounter;
 }
 
+const canonicalOwnerRead = createCanonicalOwnerReadModule({ state, sendJson, signAuthPayload, render, getSocket: () => socket });
 const viewerAgentChatAuthModule = createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, signAuthPayload, state });
 
-function resetViewerProtocolForConnection() { viewerPromptControlModule?.resetForConnection(); }
+function resetViewerProtocolForConnection() { canonicalOwnerRead.reset(); viewerPromptControlModule?.resetForConnection(); }
 function promptControlCapabilitySelected() { return viewerPromptControlModule?.capabilitySelected() === true; }
 function promptControlResultSelected() { return viewerPromptControlModule?.resultSelected() === true; }
 function promptControlReadinessError(agentId) { return viewerPromptControlModule?.readinessError(agentId) || null; }
@@ -892,7 +895,7 @@ function expireHostedRuntimeSyncTimeoutForTest() {
 }
 
 function agentChatFeedbackInFlight(feedback) {
-  return feedback && ["queued", "registering", "signing", "sent"].includes(String(feedback.stage || ""));
+  return feedback && ["queued", "registering", "signing", "sent", "pending"].includes(String(feedback.stage || ""));
 }
 
 function semanticFeedbackInFlight(feedback) {
@@ -933,11 +936,11 @@ function markAgentChatFeedbackError(feedback, reason, effect = "agent_chat faile
   if (!feedback) {
     return;
   }
-  feedback.stage = "error";
+  feedback.stage = feedback.canonicalRequest ? "unknown" : "error";
   feedback.ok = false;
   feedback.accepted = false;
   feedback.reason = reason;
-  feedback.effect = effect;
+  feedback.effect = feedback.canonicalRequest ? "canonical goal result unknown; refresh current world state" : effect;
   state.lastChatFeedback = feedback;
 }
 
@@ -1022,7 +1025,7 @@ function scheduleAgentChatAckTimeout(feedback) {
   clearPendingAgentChatAckTimer();
   pendingAgentChatAckTimer = window.setTimeout(() => {
     pendingAgentChatAckTimer = null;
-    if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || state.lastChatFeedback.stage !== "sent") {
+    if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || !["sent", "pending"].includes(state.lastChatFeedback.stage)) {
       return;
     }
     clearPendingAgentChatOverallTimer();
@@ -1397,7 +1400,7 @@ function handleSnapshot(snapshot) {
   }
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(reconcilePendingPromptAuthoritativeRefresh(snapshot));
-  syncEmptyEntitySnapshotRefreshLoop(); if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) { clearFirstAgentClaimAutoAdvanceTimers(); } worldFeedTransport.refreshAfterSnapshot();
+  void canonicalOwnerRead.refresh().catch(() => {}); syncEmptyEntitySnapshotRefreshLoop(); if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) { clearFirstAgentClaimAutoAdvanceTimers(); } worldFeedTransport.refreshAfterSnapshot();
 }
 
 function normalizedGameplayActions(snapshot = state.snapshot) {
@@ -2642,6 +2645,7 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
       assertSemanticCapability("agent_chat");
       await ensureRegisteredPlayerSession(agentId);
       assertAgentChatFeedbackActive(feedback);
+      await canonicalOwnerRead.refresh(agentId);
       feedback.stage = "signing";
       feedback.effect = "building auth proof";
       render();
@@ -2653,6 +2657,8 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
       };
       request.auth = await buildAgentChatAuthProof(request, state.auth);
       assertAgentChatFeedbackActive(feedback);
+      if (request.auth.player_id !== state.auth.playerId || request.auth.public_key !== state.auth.publicKey) throw new Error("agent_chat identity changed during signing");
+      feedback.canonicalRequest = request.canonical_authority ? request : null; feedback.canonicalRetryCount = 0;
       feedback.stage = "sent";
       feedback.effect = "agent_chat request sent; waiting for ack";
       state.lastChatFeedback = feedback;
@@ -3093,25 +3099,17 @@ function handleAgentChatAck(ack) {
   if (!acceptRuntimeAckIdentity(ack)) return;
   const feedback = state.lastChatFeedback;
   if (!agentChatFeedbackInFlight(feedback) || ack?.agent_id !== feedback.agentId) return;
-  clearPendingAgentChatAckTimer(); clearPendingAgentChatOverallTimer();
-  feedback.stage = "ack";
-  feedback.ok = true;
-  feedback.accepted = true;
-  feedback.reason = null;
-  feedback.effect = `chat accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
-  feedback.response = clone(ack);
-  state.lastChatFeedback = feedback;
-  pushChatHistory({
-    id: `chat-ack-${feedback.id}`,
-    source: "player",
-    agentId: ack?.agent_id || feedback.agentId || null,
-    message: feedback.pendingMessage || "",
-    tick: Number(ack?.accepted_at_tick || state.logicalTime || 0),
-    speaker: feedback.pendingPlayerId || state.auth.playerId || null,
-    playerId: feedback.pendingPlayerId || state.auth.playerId || null,
-    targetAgentId: ack?.agent_id || feedback.agentId || null,
-    intentSeq: ack?.intent_seq || null,
-  });
+  if (feedback.canonicalRequest && !canonicalAckMatches(ack, feedback.canonicalRequest)) return;
+  clearPendingAgentChatAckTimer();
+  if (feedback.canonicalRequest && ack?.status === "pending") {
+    pendingAgentChatAckTimer = scheduleCanonicalGoalPending({ ack, feedback, state, clone, requestSnapshotSafe, sameAgentChatFeedback, failPendingAgentChatAck, sendJson, scheduleAgentChatAckTimeout, getSocket: () => socket });
+    return;
+  }
+  if (feedback.canonicalRequest && (ack?.status !== "accepted" || !ack?.intent_id)) {
+    failPendingAgentChatAck("canonical goal commit was not confirmed"); return;
+  }
+  clearPendingAgentChatOverallTimer();
+  applyCommittedChatAck({ ack, feedback, state, clone, pushChatHistory });
 }
 
 function handleAgentChatError(error) {
@@ -3404,6 +3402,8 @@ function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket &&
     case "prompt_control_error":
       handlePromptControlError(message.error);
       break;
+    case "canonical_agent_owner_read_context": void canonicalOwnerRead.handleContext(message.context); break;
+    case "canonical_agent_owner_view": canonicalOwnerRead.handleView(message); break;
     case "agent_chat_ack":
       handleAgentChatAck(message.ack);
       break;
@@ -3941,7 +3941,7 @@ function renderInteractionPanel() {
         <div class="panel__header"><div class="panel__title">Agent Chat</div></div>
         <div class="panel__body stack">
           <div class="field">
-            <label for="agent-chat-message">Message</label>
+            <label for="agent-chat-message">Message</label>${canonicalGoalMarkup(state, selectedAgentId(), escapeHtml)}
             <textarea id="agent-chat-message" rows="4" placeholder="Send a message to the selected agent" ${chatCapability.enabled ? "" : "disabled"}>${escapeHtml(state.chatDraft.message)}</textarea>
           </div>
           <div class="toolbar">

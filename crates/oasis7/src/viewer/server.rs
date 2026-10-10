@@ -177,6 +177,16 @@ impl<'a> ViewerSession<'a> {
         world_id: &str,
     ) -> Result<bool, ViewerServerError> {
         match request {
+            ViewerRequest::RequestCanonicalAgentOwnerReadContext { .. }
+            | ViewerRequest::CanonicalAgentOwnerRead { .. } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::Error {
+                        message: "canonical owner read requires configured WorldService runtime"
+                            .into(),
+                    },
+                )?;
+            }
             ViewerRequest::Hello { .. } | ViewerRequest::HelloV2 { .. } => {
                 let response = ViewerResponse::HelloAck {
                     server: "oasis7".to_string(),

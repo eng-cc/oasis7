@@ -348,6 +348,13 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
         crate::world_service::client::WorldServiceQueryState,
     pub(in crate::viewer::runtime_live) provider_service_required: bool,
     pub(in crate::viewer::runtime_live) provider_service_lineage_store_explicit: bool,
+    pub(in crate::viewer::runtime_live) canonical_owner_goal_commit:
+        Option<oasis7_client_api::world_service::CommitRef>,
+    // Execution-only authenticated owner goal; never serialized into a Viewer frame.
+    pub(in crate::viewer::runtime_live) canonical_owner_goal:
+        Option<oasis7_proto::viewer::CanonicalAgentChatViewV1>,
+    pub(in crate::viewer::runtime_live) canonical_goal_prompt_applied:
+        Option<(String, Option<String>)>,
     pub(in crate::viewer::runtime_live) provider_service_projection:
         Option<crate::world_service::projection::WorldServiceProjection>,
     pub(in crate::viewer::runtime_live) provider_service_signer:
