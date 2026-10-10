@@ -16,6 +16,27 @@ pub(super) struct MockHttpResponse {
     pub(super) body: String,
 }
 
+pub(super) struct RuntimeLiveMockHttpServer {
+    base_url: String,
+    shutdown: std::sync::mpsc::Sender<()>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl RuntimeLiveMockHttpServer {
+    pub(super) fn base_url(&self) -> &str {
+        self.base_url.as_str()
+    }
+}
+
+impl Drop for RuntimeLiveMockHttpServer {
+    fn drop(&mut self) {
+        let _ = self.shutdown.send(());
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
 pub(super) fn provider_context_response(
     context: &crate::simulator::ContinuousAgentRequestContextV1,
     response: crate::simulator::DecisionResponse,
@@ -59,6 +80,65 @@ where
     F: Fn(RecordedHttpRequest) -> MockHttpResponse + Send + Sync + 'static,
 {
     spawn_runtime_live_mock_http_server_inner(expected_connections, handler, true)
+}
+
+/// Spawn a mock server whose listener remains available until its owner drops.
+/// Multi-phase runtime tests use this when their provider interaction count is
+/// not a stable contract of the scenario itself.
+pub(super) fn spawn_runtime_live_mock_http_server_until_drop<F>(
+    handler: F,
+) -> RuntimeLiveMockHttpServer
+where
+    F: Fn(RecordedHttpRequest) -> MockHttpResponse + Send + Sync + 'static,
+{
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind mock http server");
+    listener
+        .set_nonblocking(true)
+        .expect("set mock http listener nonblocking");
+    let bind = listener.local_addr().expect("listener addr");
+    let handler = Arc::new(handler);
+    let (shutdown, shutdown_rx) = std::sync::mpsc::channel();
+    let thread = std::thread::spawn(move || {
+        loop {
+            match shutdown_rx.try_recv() {
+                Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+            }
+            let (mut stream, _) = match listener.accept() {
+                Ok(connection) => connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    continue;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) => panic!("accept mock request: {error}"),
+            };
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+            let Some(request) = read_runtime_live_http_request(&mut stream) else {
+                continue;
+            };
+            if request.method == "GET" {
+                write_runtime_live_json_response(
+                    &mut stream,
+                    404,
+                    r#"{"ok":false,"error":"mock route unavailable"}"#,
+                );
+                continue;
+            }
+            let response = handler(request);
+            write_runtime_live_json_response(
+                &mut stream,
+                response.status_code,
+                response.body.as_str(),
+            );
+        }
+    });
+
+    RuntimeLiveMockHttpServer {
+        base_url: format!("http://{bind}"),
+        shutdown,
+        thread: Some(thread),
+    }
 }
 
 fn spawn_runtime_live_mock_http_server_inner<F>(
@@ -192,4 +272,51 @@ fn write_runtime_live_json_response(
         body
     );
     let _ = stream.write_all(response.as_bytes());
+}
+
+#[test]
+fn owned_runtime_live_mock_http_server_serves_beyond_eight_requests_until_drop() {
+    let handled_requests = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server = spawn_runtime_live_mock_http_server_until_drop({
+        let handled_requests = std::sync::Arc::clone(&handled_requests);
+        move |_| {
+            handled_requests.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            MockHttpResponse {
+                status_code: 200,
+                body: "{}".to_string(),
+            }
+        }
+    });
+    let address = server
+        .base_url()
+        .strip_prefix("http://")
+        .expect("loopback URL")
+        .to_string();
+
+    for request_number in 0..9 {
+        let mut stream = std::net::TcpStream::connect(address.as_str())
+            .unwrap_or_else(|error| panic!("connect request {request_number}: {error}"));
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .expect("set mock client read timeout");
+        stream
+            .write_all(
+                b"POST /fixture HTTP/1.1\r\nHost: localhost\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            )
+            .expect("write mock request");
+        let mut response = Vec::new();
+        stream
+            .read_to_end(&mut response)
+            .expect("read mock response");
+        assert!(
+            response.starts_with(b"HTTP/1.1 200 OK"),
+            "request {request_number} received {}",
+            String::from_utf8_lossy(response.as_slice())
+        );
+    }
+
+    assert_eq!(
+        handled_requests.load(std::sync::atomic::Ordering::SeqCst),
+        9
+    );
 }
