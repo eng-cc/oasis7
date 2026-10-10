@@ -80,12 +80,13 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
     );
     let eligibility = shared.lock().unwrap().test_agent_service_pump_status();
     println!("hosted_actual_eligibility={eligibility}");
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut completion = application_completion::CompletionWatch::new();
     let summary = loop {
         let summary = shared.lock().unwrap().test_canonical_provider_summary();
-        if summary["terminal_states"]["agent-a"]["status"] == "committed"
-            || Instant::now() >= deadline
-        {
+        if completion.finished(
+            &summary,
+            application_completion::canonical_complete(&summary),
+        ) {
             break summary;
         }
         thread::sleep(Duration::from_millis(20));
@@ -127,10 +128,15 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
         "actual hosted eligibility prerequisite was not satisfied"
     );
     assert!(joined.is_ok(), "actual serving loop failed: {joined:?}");
+    assert!(
+        !application_completion::has_failure(&summary),
+        "actual canonical completion error: {summary}"
+    );
     assert_eq!(
         summary["terminal_states"]["agent-a"]["status"], "committed",
         "eligible hosted serving loop must drive registered native provider to real receipt"
     );
+    application_completion::save_completion(&summary);
     println!("PRE2_HOSTED_NATIVE_PROVIDER_CANONICAL_RECEIPT_PASSED direct_poll_calls=0");
 }
 

@@ -297,17 +297,25 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     // Cover the full observation window rather than consuming every bounded
     // request before a failed metadata probe can recover after its cache TTL.
     let mut last_snapshot_request = Instant::now();
+    // Paused negative admission remains a bounded observation. Eligible work
+    // waits for its canonical completion evidence under the parent budget.
     let terminal_deadline = Instant::now() + Duration::from_secs(4);
+    let mut completion = application_completion::CompletionWatch::new();
     let mut summary = serde_json::Value::Null;
     loop {
         if let Ok(server) = shared.try_lock() {
             summary = server.test_canonical_provider_summary();
         }
-        if compatible.load(Ordering::SeqCst)
-            && (mode == "fresh-paused"
-                || summary["terminal_states"]["agent-a"]["status"] == "committed")
-            || Instant::now() >= terminal_deadline
-        {
+        let ready = compatible.load(Ordering::SeqCst);
+        let finished = if mode == "fresh-paused" {
+            ready || Instant::now() >= terminal_deadline
+        } else {
+            completion.finished(
+                &summary,
+                ready && application_completion::canonical_complete(&summary),
+            )
+        };
+        if finished {
             break;
         }
         let completed = snapshot_completions.load(Ordering::SeqCst);
@@ -384,8 +392,13 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
                 })
             );
         }
+        assert!(
+            !application_completion::has_failure(&summary),
+            "actual canonical completion error: {summary}"
+        );
         assert_eq!(summary["terminal_states"]["agent-a"]["status"], "committed");
         assert!(after.unwrap()["model_decisions"].as_u64().unwrap() > 0);
+        application_completion::save_completion(&summary);
         println!("PRE2_FRESH_METADATA_BEFORE_ADMISSION_PASSED");
     }
 }

@@ -28,6 +28,12 @@
 - 不引入新的测试框架或新的业务代码。
 - 不做覆盖率百分比硬门槛治理（如行覆盖率 >= N%）。
 
+## TCP conformance 完成条件
+
+Hosted fresh admission、metadata release 和 ordinary cadence 的功能验证等待原 canonical receipt、settled lease，以及有 memory intent 的双 turn 对应 memory，不把原来的三、四、八秒观察窗口当作产品 SLA。这三个用例的 isolated child 分别使用其父进程设置的同一个 60 秒单调硬截止；父进程并发读取输出，超时只终止自有 child。真实 pump、memory 或 terminal rejection 提前失败；metadata-held 的零提交断言、协议顺序和双 turn identity/nonce 验证仍保留。
+
+因果延迟探针只在已验证成功的 View 响应上等待，响应字节保持原样。串行运行目标用例时，可设置 `PRE2_CONFORMANCE_VIEW_DELAY_MS=600`（低于 transport timeout），分别过滤 `real_tcp_hosted_fresh_admission_observes_reserves_and_invokes_provider`、`real_tcp_fresh_admission_waits_for_successful_metadata` 和 `real_tcp_hosted_ordinary_cadence_commits_two_distinct_turns`。日志记录原请求和阶段推进；通过仍须获得同一原请求的 canonical result、唯一结算；双 turn 还须保留各自 memory。该探针验证多阶段累计延迟，不是吞吐或性能验收。
+
 ## 开发态缓存约定
 - 若当前是在同一 repo family 的多个 git worktree 之间做本地迭代，开发态 `cargo check/test/run/build` 默认优先使用 `./scripts/cargo-dev.sh <cargo-args...>`。每个 worktree 按自身 source identity 使用稳定、隔离的 target namespace；同一 worktree 内可复用缓存，divergent worktree 不得互选 artifacts。通过 `./scripts/new-task-worktree.sh` 创建的新 task worktree 会把 git-ignored `target` 链接到该 worktree 的 namespace，使直接 cargo 与 wrapper 在同一 worktree 内复用同一开发态缓存。
 - 本地 smoke / playtest / prewarm / regression / drill / longrun 脚本若只是为了开发反馈，应优先 source `scripts/cargo-dev-lib.sh` 并调用 `oasis7_cargo_dev ...` / `oasis7_cargo_dev_debug_bin_dir`，从而与手工 `cargo-dev.sh` 使用同一个当前-worktree target；`CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 会回退到原始 cargo target 解析。

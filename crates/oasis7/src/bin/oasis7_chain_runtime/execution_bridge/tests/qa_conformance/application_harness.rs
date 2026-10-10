@@ -436,7 +436,14 @@ pub(super) fn run_isolated_application_mode(
     let ack_external_models_before = metadata
         .as_ref()
         .map(|m| m.decision_count.load(Ordering::SeqCst));
-    let mut output = command.output().unwrap();
+    let mut output = if matches!(
+        admission_mode,
+        "fresh-admission" | "fresh-metadata" | "repeated-turns"
+    ) {
+        application_completion::run_child(&mut command)
+    } else {
+        command.output().unwrap()
+    };
     if hosted
         && (metadata_probe
             || matches!(
@@ -983,6 +990,9 @@ pub(super) fn run_isolated_application_mode(
             stdout.contains(marker),
             "hosted child selected no required proof"
         );
+        if matches!(admission_mode, "fresh-admission" | "fresh-metadata") {
+            application_completion::verify_canonical_completion(&fixture, &app_dir);
+        }
         if service_probe {
             application_fairness::validate_canonical_identity(&fixture);
         }

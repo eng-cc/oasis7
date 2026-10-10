@@ -373,13 +373,18 @@ fn repeated(shared: Arc<Mutex<ViewerRuntimeLiveServer>>, root: &std::path::Path)
     let mut reader = session.reader;
     let mut socket = reader.get_ref().try_clone().unwrap();
     let worker = session.worker;
+    let drain_stop = Arc::new(AtomicBool::new(false));
+    let reader_stop = drain_stop.clone();
     let draining = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(9);
-        while Instant::now() < deadline {
-            let mut line = String::new();
+        let mut line = String::new();
+        while !reader_stop.load(Ordering::SeqCst) {
             match reader.read_line(&mut line) {
                 Ok(0) => return Ok(()),
-                Ok(_) => {}
+                Ok(_) => {
+                    if line.ends_with('\n') {
+                        line.clear();
+                    }
+                }
                 Err(e)
                     if matches!(
                         e.kind(),
@@ -390,25 +395,25 @@ fn repeated(shared: Arc<Mutex<ViewerRuntimeLiveServer>>, root: &std::path::Path)
         }
         Ok(())
     });
-    let deadline = Instant::now() + Duration::from_secs(8);
+    let mut completion = application_completion::CompletionWatch::new();
     let mut summary = serde_json::Value::Null;
     let mut first_terminal = false;
     let mut eligible = false;
-    while Instant::now() < deadline {
+    loop {
         if let Ok(server) = shared.try_lock() {
             eligible = server.test_agent_service_pump_status()["eligible"] == true;
             summary = server.test_canonical_provider_summary();
             first_terminal |= summary["terminal_states"]["agent-a"]["status"] == "committed";
         }
-        if requests(root).len() >= 2
+        let complete = requests(root).len() >= 2
             && requests(root).iter().all(|identity| {
                 summary["memory_store"]
                     .to_string()
                     .contains(identity["request_digest"].as_str().unwrap())
             })
             && summary["pending_intent_count"] == 0
-            && summary["pending_action_count"] == 0
-        {
+            && summary["pending_action_count"] == 0;
+        if completion.finished(&summary, complete) {
             break;
         }
         thread::sleep(Duration::from_millis(10));
@@ -427,7 +432,7 @@ fn repeated(shared: Arc<Mutex<ViewerRuntimeLiveServer>>, root: &std::path::Path)
         .unwrap();
         bytes.push(b'\n');
         socket.write_all(&bytes).unwrap();
-        let pause_deadline = Instant::now() + Duration::from_millis(500);
+        let pause_deadline = application_completion::child_deadline();
         while Instant::now() < pause_deadline {
             if let Ok(server) = shared.try_lock()
                 && server.test_agent_service_pump_status()["play_enabled"] == false
@@ -440,8 +445,13 @@ fn repeated(shared: Arc<Mutex<ViewerRuntimeLiveServer>>, root: &std::path::Path)
     }
     socket.shutdown(std::net::Shutdown::Both).unwrap();
     let served = worker.join().unwrap();
+    drain_stop.store(true, Ordering::SeqCst);
     let drained = draining.join().unwrap();
     let identities = requests(root);
+    assert!(
+        !application_completion::has_failure(&summary),
+        "actual canonical completion error: {summary}"
+    );
     println!(
         "repeated_turn_actual primed={primed} ordered={ordered} eligible={eligible} first_terminal={first_terminal} model_identities={identities:?} worker={served:?} drain={drained:?} memory={}",
         summary["memory_store"]
