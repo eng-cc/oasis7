@@ -180,4 +180,21 @@ if [[ "$(<"$EXTERNAL_CACHE/sentinel.txt")" != external ]]; then
   exit 1
 fi
 
+# Simulate Windows privilege failure against the actual embedded link code.
+"$PYTHON_BIN" - "$ROOT_DIR/scripts/cargo-dev.sh" <<'WINTEST'
+import contextlib, io, pathlib, sys
+from unittest.mock import patch
+source = pathlib.Path(sys.argv[1]).read_text().split("<<'LINK'\n", 1)[1].split("\nLINK", 1)[0]
+error = OSError("A required privilege is not held by the client")
+error.winerror = 1314
+for command in ("build", "--prepare-target"):
+    with patch("os.name", "nt"), patch("os.symlink", side_effect=error), patch.object(sys, "argv", ["-", "cache", "target", command]), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            exec(compile(source, "cargo-dev-link", "exec"), {})
+        except SystemExit:
+            assert command == "--prepare-target"
+        else:
+            assert command == "build"
+WINTEST
+
 echo "cargo-dev-worktree-isolation.test: OK"

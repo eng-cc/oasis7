@@ -164,13 +164,18 @@ esac
 if [[ "${CI:-}" != "1" && "${CI:-}" != "true" && -z "${OASIS7_CARGO_SHARED_TARGET_DIR:-}" ]]; then
   if [[ ! -e "$REPO_ROOT/target" && ! -L "$REPO_ROOT/target" ]]; then
     mkdir -p "$TARGET_DIR"
-    "$PYTHON_BIN" - "$TARGET_DIR" "$REPO_ROOT/target" <<'LINK'
+    "$PYTHON_BIN" - "$TARGET_DIR" "$REPO_ROOT/target" "$1" <<'LINK'
 import os, sys
 try:
     os.symlink(sys.argv[1], sys.argv[2], target_is_directory=True)
 except FileExistsError:
     if not os.path.islink(sys.argv[2]):
         raise SystemExit("error: target appeared during cache preparation; preserved")
+except OSError as exc:
+    if os.name == "nt" and getattr(exc, "winerror", None) in (5, 1314) and sys.argv[3] != "--prepare-target":
+        print("warning: target link needs Windows symlink privileges; Cargo will use the shared target directly", file=sys.stderr)
+    else:
+        raise SystemExit(f"error: cannot prepare target link: {exc}")
 LINK
   elif [[ ! -L "$REPO_ROOT/target" && "${1:-}" == "--prepare-target" ]]; then
     echo "error: existing target directory must be reviewed and cleaned before preparing the shared link" >&2
