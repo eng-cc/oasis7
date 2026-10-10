@@ -372,6 +372,60 @@ fn actual_node_unknown_restart_preserves_original_signed_request_and_private_pre
 
 #[test]
 #[cfg(all(unix, feature = "wasmtime"))]
+fn guarded_read_capture_barrier_never_returns_unpublished_successor() {
+    let fixture = Fixture::new();
+    let authority = GuardedAuthority::load(&fixture.config).unwrap();
+    let initial = history::load_head(&authority, &fixture.records, None).unwrap();
+    let captured_fence = crate::controlled_live_config::GuardedReadAuthority::from_verified(
+        initial.head.clone(),
+        authority.configuration_digest.clone(),
+    );
+    let driver = fixture.driver();
+    let request = fixture.request();
+    let mut node = fixture.node(driver);
+    node.submit_consensus_action_payload(
+        42,
+        correlation::encode_consensus_intent(&request).unwrap(),
+    )
+    .unwrap();
+    node.start().unwrap();
+    wait_until(|| node.snapshot().consensus.committed_height == 42);
+    node.stop().unwrap();
+    drop(node);
+    let successor = history::load_head(&authority, &fixture.records, None).unwrap();
+    let successor_commit = successor.commit(&authority).unwrap();
+    let path = history::evidence_path(&fixture.records, 2);
+    let bytes = fs::read(&path).unwrap();
+    for (fixed, height) in [
+        (None, None),
+        (Some(&successor_commit), None),
+        (None, Some(42)),
+    ] {
+        fs::remove_file(&path).unwrap();
+        // Deterministically stage the real Node-qualified successor after the
+        // reader captures its predecessor, before advancing publication fence.
+        // No fabricated record, wall-clock race or executor replay is involved.
+        let result = super::super::world_service_read::pin_guarded_with_capture_barrier(
+            &fixture.records,
+            &fixture.config,
+            &captured_fence,
+            fixed,
+            height,
+            || durable_transaction::write_file_durable(&path, &bytes).unwrap(),
+        );
+        if fixed.is_none() && height.is_none() {
+            assert_eq!(result.unwrap().record.height, 41);
+        } else {
+            assert!(
+                result.is_err(),
+                "explicit pin crossed captured publication fence"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(all(unix, feature = "wasmtime"))]
 fn guarded_inputs_fail_closed_before_creating_private_records() {
     use crate::controlled_live_config::{read_existing_signing_key, require_private_owned};
     use std::os::unix::fs::{PermissionsExt, symlink};
