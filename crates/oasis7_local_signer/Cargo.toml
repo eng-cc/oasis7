@@ -17,6 +17,8 @@ name = "oasis7_local_signer_runtime_gate"
 path = "src/bin/oasis7_local_signer_runtime_gate.rs"
 
 [dependencies]
+argon2 = { version = "0.5", features = ["zeroize"] }
+chacha20poly1305 = "0.10"
 base64 = "0.22"
 ed25519-dalek = "3"
 getrandom = "0.4"
