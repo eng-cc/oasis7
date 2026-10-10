@@ -19,6 +19,24 @@ evaluation requirements for that outcome. Their original low-frequency NPC P0
 smoke and technical milestones remain scoped evidence. They do not replace the
 product's representative production, recovery and return-session acceptance.
 
+## External-runtime product direction
+
+The product-owned target is **an official Skill plus an independently callable,
+authorized Game API**: an OpenClaw/Codex client actively reads observations,
+discovers permitted capabilities, submits intents and retrieves authoritative
+receipts/events. See [external Runtime product scope](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#external-runtime-canonical-interface)
+and its paired design. This is a *target*, not evidence of a shipped endpoint
+or published OpenClaw/Codex integration.
+
+The provider contracts listed below describe existing/specialized callback
+mechanics where the **game calls a provider for a candidate decision**. They
+may be reused or retired without requiring legacy wire compatibility for the
+new, externally initiated Game API. Do not conflate the launcher/operator
+control API, the `oasis7_agent_api` shared DTO crate, NewAPI model-quota
+routing, or the local HTTP provider callback with an authenticated world
+play API. Removal requires checking actual independent consumers and preserving
+world execution authority, durable results and active player permissions.
+
 ## Authority map
 
 - `decision-provider-contract.prd.md` and `.design.md` define the provider-

@@ -9,7 +9,7 @@
 - 专业域权威：[Decision Provider](../../world-simulator/llm/decision-provider-contract.prd.md)、[Continuous Agent Harness](../../world-simulator/llm/continuous-agent-harness.prd.md)、[双轨执行](../../world-simulator/llm/provider-agent-dual-mode.prd.md)、[Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md)
 - Last reviewed：2026-10-10
 
-本设计组织配对 PRD 的用户经历、信息层级和恢复解释。所有行为义务和首期范围由配对 PRD 拥有；以下状态是体验表达，不新增协议枚举、CLI 参数、组件布局或实现状态机，也不表示当前已支持 OpenClaw/Codex。
+本设计组织配对 PRD 的用户经历、信息层级和恢复解释。首期**推荐**外部 Runtime 通过官方 Skill 学会并主动调用标准 Game API；Provider Bridge 只是可以弃用的既有实验适配，并非新的产品接口权威。所有行为义务和首期范围由配对 PRD 拥有；以下状态是体验表达，不新增协议枚举、CLI 参数、组件布局或实现状态机，也不表示当前已支持 OpenClaw/Codex。
 
 ## 1. 设计命题
 
@@ -23,7 +23,7 @@
 
 ### 2.1 首次接入与委托
 
-玩家选择 OpenClaw 或 Codex 的推荐接入说明。入口明确区分“目标 Runtime”“已验证组合”“不适用版本或缺失能力”，并给出连接目标、凭据归属、运行前置和成本范围。仅检测到程序存在或模型能回答时，仍保留尚未完成的连接/会话步骤。
+玩家从可信发布入口为 OpenClaw 或 Codex 获取官方 oasis7 Skill，核对版本兼容和网络 Game API 地址与权限范围，而不是先研究旧桥接工具。入口明确区分“目标 Runtime”“已验证组合”“不适用版本或缺失能力”，并给出连接目标、凭据归属、运行前置和成本范围。仅检测到程序存在或模型能回答时，仍保留尚未完成的连接/会话步骤。
 
 连接就绪后展示当前身份、合法可控制 Agent 和其既有义务。玩家确认生产目标及有效委托；如果没有可控制 Agent，转到既有认领或观察路径。认领与维护条件消费[所有权主责](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#1-产品承诺)，连接软件本身不授予实体或资源。
 
@@ -42,6 +42,14 @@
 玩家可以保持委托、调整高层目标或停止后续委托。目标调整沿用[Prompt 主责](agent-conversation-and-prompt-control.prd.md#23-agent-prompt-与目标调整)：草稿、已接受和已应用分别呈现。只有应用后的新决策使用有效新目标；已有待决行动独立显示，不能借调整目标暗示其已经取消。
 
 离开 Viewer 时，执行方仍在线且委托有效，任务可以继续。回访先恢复当前目标、最新可信成果、主要阻塞和安全下一步，再提供离开期间的详细记录。关闭 Runtime 时如实说明其执行停止；世界继续推进，已受理行动仍按原合同产生结果。
+
+### 2.4 以 Skill + Game API 主动游玩的真实体验
+
+玩家向已有 Runtime 表达“使用 oasis7 Skill，连接我获授权的世界 Agent，开始首项工业目标”。Skill 先说明自己的来源和适配范围，Runtime 使用已有的工具调用能力验证游戏 API 版本、认证/委托、当前目标和能力目录；任何需授权的步骤由有权玩家确认。Skill 不是能修改世界的实体，不复制模型密钥，也不依赖向 Prompt 贴长期 token。
+
+当 Runtime 得到合法授权后，自己进行“观察 → 确定下一动作 → 向 Game API 提交 → 读取 pending/committed/rejected/failed 或增量事件 → 更新自身计划”的循环。用户不需要知道 `provider_loopback_http` 的启动参数，也不需要为了玩游戏跑一套模型 Provider 回调服务。世界并不替 Runtime 运行它的私有多 Agent 工作流；外部推理停止时，世界继续但不会凭空有新外部认知。
+
+在首次访问中，默认只呈现“连接目标/有效身份、受控 Agent、当前目标、关键世界反馈、阻塞/恢复”。只有用户需要排错时才展开 Skill 版本、Game API 协议状态、网络/认证错误和诊断；不把 HTTPS 连上、Skill 文档已下载或 MCP 已识别某个工具当作已进入可玩的 Agent 会话。
 
 ## 3. 状态与恢复
 
@@ -87,11 +95,29 @@
 
 窄屏、语言变化和回访的信息保留消费[玩家可读表面连续性](player-readable-surface-continuity.prd.md)；布局调整不能藏起当前 Agent、资格阻塞、待核对结果或主要恢复动作。
 
+### 4.3 Skill、Game API 和可选适配层
+
+| 接口层 | 对外产品含义 | 应保留的边界 | 不应承诺 |
+| --- | --- | --- | --- |
+| 官方 Skill | 说明游戏任务和如何用受授权 API，自助引导 OpenClaw/Codex | 可确认来源、适用版本、能力变动时重新查询；不保存秘密或静默执行高权操作 | Skill 文字本身不授权、执行或确认世界成果 |
+| 标准 Game API | 真正的外部游戏能力入口，可由普通网络客户端直接访问 | 同一 Agent/世界权限下的观察、查询、合法动作、待决/回执和增量读取；本地与远程授权语义相同 | API 受理不等于世界结算；网络连接不等于委托 |
+| MCP / CLI / SDK（按需） | 为某类 Runtime 提供熟悉的调用手感 | 从同一能力目录和认证上下文转译，并返回同一权威结果 | 不产生新世界动作或另造版本/权限合同 |
+| 旧 Provider Bridge（可退役） | 游戏向外部 Provider 索取下一决策的旧适配方向 | 存量实际依赖可单独评估，世界权威历史不可丢失 | 不作为 Skill + Game API 的首期必需依赖 |
+
+典型的客户端可调用语义不冻结 URL、字段或语言框架，但必须保留四段：
+
+1. **发现与读取**：协商版本/范围；读取仅限当前合法身份和 Agent 的世界状态、主目标、新鲜度、可用能力及参数要求。
+2. **建议与提交**：外部 Runtime 在自己一侧决定行动，使用明确的 Agent 委托和原请求身份提交；读请求不带副作用，提交不直接承诺结算。
+3. **结果与继续**：按原意图关联查询权威回执或从可恢复游标读取增量变化；没有流式推送也能以有界轮询完成首局。
+4. **错误与恢复**：认证、委托、能力过期、超时未知、资源不足、限流和预算不可混淆；绝不因为错误而静默重签、切其他费用路由或提交第二次世界作用。
+
+远程入口须使用有保护的传输与可信身份绑定；本地入口也不能只凭公开路由字符串授予世界写权。高风险模型凭据与游戏认证材料分离，Skill 的来源核对不能替代 API 每次授权。客户端优先以网络结果而非输出文字判断完成；自助连接失败时可以安全停止并恢复玩家决策权。
+
 ## 5. 资源、取舍与验证
 
 世界维护和工业消耗遵循玩法与 Runtime 主责；外部模型/工具成本单独说明。开始前让用户理解“已知会消耗什么、哪些仅是估计、哪层能阻止新增开销”；执行中让用户根据实际进展决定继续、缩小目标、调整预算或停止后续委托。停止不回滚世界，也不保证已发出的推理立即停止计费。
 
-首期优先一条完整首局和两个真实 Runtime 的独立适配。更多工具、长期记忆迁移和多 Agent 协作可以扩展，但不能用扩大功能目录替代现有路径的反馈、目标生效和恢复完整性。
+首期优先官方 Skill、独立可调用的 Game API、一条完整首局和两个真实 Runtime 的分别验收。更多工具、长期记忆迁移和多 Agent 协作可以扩展，但不能用扩大功能目录替代现有路径的反馈、目标生效和恢复完整性。
 
 产品评审观察用户能否独立接入、辨认所用 Runtime、理解有效目标与权威结果、处理一次阻塞并回访继续。专业验证核对实际 Runtime 会话、能力执行、反馈、权限、预算和恢复。未经改变的 builtin 基线、额外脚本辅助和 Runtime 的局部成功应按专业 parity 如实记录；该设计不规定统一模型策略或新的分数阈值。
 
@@ -109,3 +135,7 @@
 | [REQ-EXT-008](external-agent-runtime-play.prd.md#req-ext-008) | [AC-EXT-008](external-agent-runtime-play.prd.md#ac-ext-008) | §3.2 故障恢复与原世界历史。 |
 | [REQ-EXT-009](external-agent-runtime-play.prd.md#req-ext-009) | [AC-EXT-009](external-agent-runtime-play.prd.md#ac-ext-009) | §3.2 预算限制；§5 两类成本与继续选择。 |
 | [REQ-EXT-010](external-agent-runtime-play.prd.md#req-ext-010) | [AC-EXT-010](external-agent-runtime-play.prd.md#ac-ext-010) | §2 完整首局经历；§5 两个 Runtime 分别验证。 |
+| [REQ-EXT-011](external-agent-runtime-play.prd.md#req-ext-011) | [AC-EXT-011](external-agent-runtime-play.prd.md#ac-ext-011) | §2.1 与 §2.4 官方 Skill 可信分发、适配引导与失败修复。 |
+| [REQ-EXT-012](external-agent-runtime-play.prd.md#req-ext-012) | [AC-EXT-012](external-agent-runtime-play.prd.md#ac-ext-012) | §2.4 与 §4.3 标准 API 的主动调用、回执及增量结果。 |
+| [REQ-EXT-013](external-agent-runtime-play.prd.md#req-ext-013) | [AC-EXT-013](external-agent-runtime-play.prd.md#ac-ext-013) | §3.2 与 §4.3 身份授权、错误和安全恢复。 |
+| [REQ-EXT-014](external-agent-runtime-play.prd.md#req-ext-014) | [AC-EXT-014](external-agent-runtime-play.prd.md#ac-ext-014) | §4.3 旧 Bridge 的非默认地位与替换条件。 |
