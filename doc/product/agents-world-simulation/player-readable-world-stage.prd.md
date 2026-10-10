@@ -170,6 +170,20 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - Agent 可以基于不确定性提出待核验建议，但不能把推断、冲突中的某一来源或最近已知缓存表述为已确认事实，也不能据此自动提交高后果行动。玩家必须能看到系统是在使用当前确认、最近已知、冲突待核验还是未知，并知道下一步会刷新、等待、改道、停止或重新确认。
 - 该降级不是隐藏失败：反馈至少说明冲突/过期/范围不足的原因、当前仍可依赖的事实、被阻断的行动类别和恢复入口。专业 authority 应能用同一条观察/行动 trace 证明显示的来源分类、提交时重新校验结果及最终接受或拒绝原因；产品层不冻结 trace 字段、排序算法或 TTL。
 
+### 3.2 可探索的大世界与网页/桌面客户端
+
+<a id="world-exploration-surfaces"></a>
+**长期产品目标**是让玩家在真正的大世界舞台中从世界总览进入区域/Fragment、已知地点及相关 Agent/设施/路线，浏览其活动和权威后果，而非只能查看单一 Agent 面板或日志。长期视觉方向保持已有的 2D top-down / orthographic 像素工业指挥舞台；本节不宣称其当前已交付。
+
+- 世界和已知区域可平移、缩放或以等价方式切换尺度，能够返回总览及当前任务；用户不需要靠无边界拖动才能寻找目标。
+- 在受授权、真实数据支持的范围内，可搜索、定位、选择和检查 Agent、地点、设施、路线与事件，查看位置/关系来源、时效、相关目标、活动、主要 blocker 与世界回执；合法时可以跟随并退出跟随 Agent。
+- 未侦察、权限外、加载失败、缓存过期或仅有关系位置的区域和对象必须表达未知/最近已知/抽象，不因为绘出了世界或点击了对象就获得实时位置、精确坐标、控制权或新的情报。
+- 交互浏览、选择、聚焦和图层过滤只是观察；玩家可从自己合法控制的 Agent 进入现有高层目标、Prompt 或委托入口，但点击工厂/地形/其他 Agent 不能直接采集、建造、移动或绕过世界规则。
+- **正式浏览器 Web 和受支持的桌面原生客户端必须分别可交互地观察世界**；原生客户端可以内嵌复用同一 Web 世界舞台，但仅打开系统浏览器、展示静态图或提供 Launcher 按钮不构成客户端内可视化能力。
+- 网络断连、Renderer 不可用或局部未加载时必须保留真实已确认结果、当前目标、选中上下文（可恢复时）、可访问文本反馈与安全返回/刷新路径；不把空画布或渲染动画当作权威世界事实。
+
+本目标保留现有 P1-A Agent Context Lite → P1-B World Semantic Presentation → P1-C Major World Event 的事实/授权依赖，不越过 P1-B/P1-C 的专业前置假装全图或事件锚点已实现；具体空间渲染、LOD、平台和性能由 Viewer/Launcher/QA 专业权威验证。
+
 ## 4. 玩家因果与诊断边界
 
 - 只有已接受的玩家意图及其可归因世界后果，才能被表达为玩家影响；环境变化、Agent 自主活动或渲染更新不能代签。
@@ -206,6 +220,48 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - 场景与结果：旧响应晚到、刷新竞态或提交前信息失效时，surface 保留冲突/来源/时效语义；低后果动作最多是带不确定性预览，高后果动作重新取得当前权威确认或明确阻断。
 - 证据边界：动态观察来源、时效、提交校验和最终结果由 Agent/runtime/Viewer/QA authority 定义；产品层不定义 DTO、TTL 或排序。
 
+<a id="req-agent-stage-003"></a>
+### REQ-AGENT-STAGE-003：大世界必须可多尺度探索
+
+- 要求：玩家在有权观察的范围内能从世界总览逐级浏览区域/Fragment 与对象，平移/缩放、搜索定位、选择对象/事件并返回主目标；未知、过期或抽象位置不冒充权威即时坐标。
+- 验收：[AC-AGENT-STAGE-003](#ac-agent-stage-003)。
+
+<a id="ac-agent-stage-003"></a>
+### AC-AGENT-STAGE-003：世界概览至对象再回到当前任务
+
+- 覆盖要求：[REQ-AGENT-STAGE-003](#req-agent-stage-003)。
+- 给定：多个区域/Fragment、可见 Agent/设施/路线与未加载或仅最近已知的对象。
+- 当：玩家平移/缩放、定位选中 Agent、查看对象或世界事件并回到目标。
+- 则：空间层级、对象来源、任务上下文、主 blocker 与返回入口连续；未知/无权对象不提供虚假实时事实。
+
+<a id="req-agent-stage-004"></a>
+### REQ-AGENT-STAGE-004：网页和原生桌面客户端都要能实际探索世界
+
+- 要求：被声明支持的 Web 浏览器与桌面原生客户端必须分别完成交互式世界浏览、定位、对象检查与重连恢复；可嵌入 Web 实现，但单纯唤起外部浏览器或静态截图不算客户端拥有世界舞台。
+- 验收：[AC-AGENT-STAGE-004](#ac-agent-stage-004)。
+
+<a id="ac-agent-stage-004"></a>
+### AC-AGENT-STAGE-004：两个 surface 分别有可交互世界证据
+
+- 覆盖要求：[REQ-AGENT-STAGE-004](#req-agent-stage-004)。
+- 给定：同一真实世界、Agent 生产结果、浏览器候选及受支持桌面客户端发行资产。
+- 当：在两个表面分别缩放浏览、定位 Agent、选择对象、检查结果并断连回访。
+- 则：两者均在各自界面完成交互并读取同一权威结果；Web 通过不代签原生客户端，观察/权限也不因入口而扩大。
+
+<a id="req-agent-stage-005"></a>
+### REQ-AGENT-STAGE-005：地图只能进入合法间接指导
+
+- 要求：选中自己合法控制的 Agent 后，地图须能关联其高层目标、活动、pending/committed 后果和既有 Prompt/委托入口；选中其他 Agent、点击地形或缩放不得直接生成世界行动。
+- 验收：[AC-AGENT-STAGE-005](#ac-agent-stage-005)。
+
+<a id="ac-agent-stage-005"></a>
+### AC-AGENT-STAGE-005：选中对象不授予世界控制
+
+- 覆盖要求：[REQ-AGENT-STAGE-005](#req-agent-stage-005)。
+- 给定：有权 Agent、可见但无权的其他 Agent，以及 pending 与 committed 行动。
+- 当：玩家在地图上查看两者，并对合法 Agent 修改高层目标、点击设施或切换图层。
+- 则：合法目标接受与应用可区分；世界结果只从权威回执确认，地图点击不直接采集/建造/移动、不制造第二次世界效果。
+
 ## 5.1 叶级 owner、authority、evidence 与 test tier 追踪
 
 本表把每个新叶级产品关系导航到专业 owner、权威文档和未来验证证据；它不把舞台方向、历史交付或局部截图提升为当前 Viewer readiness。
@@ -214,6 +270,10 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 | --- | --- | --- | --- | --- | --- |
 | [REQ-AGENT-STAGE-001](#req-agent-stage-001) / [AC-AGENT-STAGE-001](#ac-agent-stage-001) | `producer_system_designer`：primary read、事实来源和非直接编辑边界；`game_visual_interaction_designer`：层级、可读性和交互边界；`viewer_engineer`：正式 surface 的位置/LOD/控件实现；`gameplay_designer`：玩家目的与因果语义；`runtime_engineer`：接受结果与权威世界后果；`qa_engineer`：跨 surface 验收证据；专业实现不由产品表格代签 readiness。 | `PRD-WORLD_SIMULATOR-039/041/046` / `PRD-WORLD_RUNTIME-001` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md#目标); [`semantic positioning`](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md); [`fragment LOD`](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md); [`player-readable rendering`](../../world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md); [`testing PRD`](../../testing/prd.md) | 未来 required-tier 正式 surface 证据覆盖目标、相关对象/路线、blocker、下一步和已接受结果在密度变化下的 primary read；验证环境活动、视觉邻近和诊断不代签玩家因果，并保留受支持 command path。 | `test_tier_required` |
 | [REQ-AGENT-STAGE-002](#req-agent-stage-002) / [AC-AGENT-STAGE-002](#ac-agent-stage-002) | `producer_system_designer`：观察来源、时效和未知边界；`agent_engineer`：观察与推断的 Agent 语义；`runtime_engineer`：提交前权威校验与结果；`viewer_engineer`：来源/时效/冲突状态的可读表达；`qa_engineer`：刷新竞态、过期和高后果阻断证据；产品层不定义 DTO、TTL、排序或 renderer。 | `PRD-WORLD_SIMULATOR-016/039/041/046` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`world-simulator PRD`](../../world-simulator/prd.md#目标); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 覆盖范围外/未知、过期缓存、冲突观察、旧刷新响应晚到和提交前失效；验证公共事实、当前确认、最近已知和未知/冲突保持区分，高后果动作重新校验或阻断，并能对账最终接受/拒绝原因。 | `test_tier_full` |
+
+| [REQ-AGENT-STAGE-003](#req-agent-stage-003) / [AC-AGENT-STAGE-003](#ac-agent-stage-003) | game_visual_interaction_designer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-039/041/046 / PRD-TESTING-003 | [Semantic positioning](../../world-simulator/viewer/viewer-pixel-world-semantic-positioning.prd.md); [Fragment LOD](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md) | 总览、区域/Fragment、缩放、定位、选中与来源/权限/未知负例 | test_tier_full |
+| [REQ-AGENT-STAGE-004](#req-agent-stage-004) / [AC-AGENT-STAGE-004](#ac-agent-stage-004) | viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-039/041/046 / PRD-TESTING-003 | [Viewer](../../world-simulator/viewer/README.md); [Launcher](../../world-simulator/launcher/README.md) | 真实 Web 与原生客户端分别交互、回访、读取同一权威结果；排除外部浏览器代签 | test_tier_full |
+| [REQ-AGENT-STAGE-005](#req-agent-stage-005) / [AC-AGENT-STAGE-005](#ac-agent-stage-005) | agent_engineer / viewer_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016/039/041/046 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | [Prompt](agent-conversation-and-prompt-control.prd.md); [Agent 委托](agent-authority-ownership-and-accountability.prd.md); [Runtime](../../world-runtime/prd.md) | 地图选中、合法目标应用、pending/committed 区分、无权对象和非直接操作负例 | test_tier_full |
 
 ## 5.2 组合验收
 
@@ -226,6 +286,10 @@ Agent Context Lite 只允许组合以下已经发布且适用于该 Agent 的语
 - RW-7：长期密度变化样例证明 semantic zoom 先退次级 labels/细节，持续保留目标、相关行动者或路线、blocker 和下一步；terrain/blocks 只解释语境，不表达直接 edit/harvest/build affordance。
 - RW-8：代表性动态信息场景证明正式玩家表面能区分公共已结算事实、当前确认、最近已知和未知/失效观察；范围外或缓存对象不会被表现为当前精确事实，且影响行动的非当前信息提供刷新、等待、改道或停止路径。
 - RW-9：同一动态对象出现互相矛盾的观察、刷新竞态（旧响应晚到）或提交前时效失效时，surface 保留冲突/来源/时效语义，不以客户端“最新响应”代签真值；低后果动作至多提供带不确定性标注的预览，高后果动作必须重新取得当前权威确认或明确阻断，并能读到冲突原因与下一步。
+
+- RW-10：从有权的大世界概览可浏览/缩放/定位到区域、Fragment、Agent、设施及事件，并能返回主目标；过期、无权和未知不伪装实时事实。
+- RW-11：Web 浏览器和受支持桌面原生客户端各自可实际操作世界；仅打开浏览器、截图或 Launcher 通过不代签原生体验。
+- RW-12：地图对象选择衔接有权 Agent 的高层指导与真实因果回执，不能直接操控世界。以上是目标性验收，不构成当前 2D/Zoom/native 已实现声明。
 
 ### 5.2.1 验收权威与证据边界
 
