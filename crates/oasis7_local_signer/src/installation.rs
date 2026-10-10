@@ -6,7 +6,7 @@ use nix::unistd::{getegid, geteuid, getuid};
 
 use crate::error::SignerError;
 use crate::identity::sha256_hex;
-use crate::local_fs::{Directory, read_protected, reject_symlink_components};
+use crate::local_fs::{directory_identity, read_protected, reject_symlink_components};
 use crate::types::{INSTALLATION_SCHEMA, InstallationConfig};
 
 #[cfg(target_os = "macos")]
@@ -117,8 +117,7 @@ pub fn validate_fixed_sudo() -> Result<PathBuf, SignerError> {
 
 fn validate_store_identity(config: &InstallationConfig) -> Result<(), SignerError> {
     let store = Path::new(&config.store_dir);
-    let directory = Directory::open(store, true)?;
-    let metadata = directory.metadata()?;
+    let metadata = directory_identity(store)?;
     if !metadata.is_dir()
         || metadata.dev() != config.store_device_id
         || metadata.ino() != config.store_inode

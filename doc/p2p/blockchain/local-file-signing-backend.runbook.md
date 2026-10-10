@@ -59,6 +59,8 @@ The shell verifies both externally approved digests before the gate launch. `/us
 
 The approved work parent must already exist and belong to the caller; the installer creates only the selected leaf and does not create or change HOME/Documents/keys ancestors. Unknown sudo-policy output, any effective ACL entry, a mounted unsupported/network filesystem, or an existing foreign installation blocks this first delivery. Keep the protected approved staging bundle for exact repeated verification.
 
+Caller-side custody identity checks use a search-only directory descriptor on macOS (`O_SEARCH`), with nofollow traversal, protected owner/mode and descriptor ACL validation. They compare device/inode without requiring directory listing permission; the custody root remains 0711. Content operations retain their separate readable-directory contract.
+
 Successful installation reports INSTALLED_UNREADY with signing_enabled false. It creates no key, policy or grant. Existing doctor reports AUTHORIZATION_DENIED with ready false for missing policy, the intended initial unready state. Installation does not admit any blockchain/governance signer. Key creation, policy, grant and enabling require separate content-specific authorization through existing root admin commands.
 
 ## acceptance-checklist
