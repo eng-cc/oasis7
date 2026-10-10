@@ -209,6 +209,31 @@ impl RemoteWorldServiceClient {
         &self.config
     }
 
+    /// Relay a device-signed read unchanged. The configured local reader key is
+    /// never used here; the service checks the device's current scope authority.
+    pub fn read_actor_view(
+        &self,
+        signed: SignedReadRequest<ReadWorldViewRequest>,
+    ) -> Result<VerifiedWorldView, WorldServiceClientError> {
+        signed
+            .request
+            .validate()
+            .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
+        if signed.request.world != self.config.expected_world
+            || signed.request.scope_id != self.config.scope_id
+        {
+            return Err(WorldServiceClientError::Assurance(
+                "actor read scope/world differs from configuration".into(),
+            ));
+        }
+        authority::verify_read_request(VIEW_PATH, &signed)
+            .map_err(WorldServiceClientError::Assurance)?;
+        let response: ReadWorldViewResponse<WorldServiceProjection> =
+            self.call(VIEW_PATH, &signed)?;
+        VerifiedWorldView::new(response, &signed.request)
+            .map_err(WorldServiceClientError::Assurance)
+    }
+
     fn call<Q: Serialize, R: Serialize + DeserializeOwned>(
         &self,
         path: &str,
