@@ -79,6 +79,19 @@ impl std::fmt::Debug for WorldServiceClientConfig {
     }
 }
 impl WorldServiceClientConfig {
+    pub(crate) fn read_authority_identity(&self) -> Result<String, String> {
+        authority::request_digest(
+            "local-read-authority",
+            &(
+                &self.endpoint,
+                &self.trusted_service_public_key,
+                &self.expected_world,
+                &self.scope_id,
+                &self.read_private_key_hex,
+            ),
+        )
+    }
+
     pub fn from_env() -> Result<Option<Self>, String> {
         let Ok(endpoint) = std::env::var("OASIS7_WORLD_SERVICE_ENDPOINT") else {
             return Ok(None);
@@ -348,7 +361,13 @@ impl WorldServicePort for RemoteWorldServiceClient {
         }
         let response: ReadWorldViewResponse<WorldServiceProjection> =
             self.signed_call(VIEW_PATH, request.clone())?;
-        VerifiedWorldView::new(response, &request).map_err(WorldServiceClientError::Assurance)
+        let identity = self
+            .config
+            .read_authority_identity()
+            .map_err(WorldServiceClientError::Assurance)?;
+        VerifiedWorldView::new(response, &request)
+            .map(|view| view.bind_read_authority(identity))
+            .map_err(WorldServiceClientError::Assurance)
     }
     fn read_changes(
         &self,

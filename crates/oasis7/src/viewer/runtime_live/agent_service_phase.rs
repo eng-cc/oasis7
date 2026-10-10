@@ -432,9 +432,13 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 let Some(response) = original_response(response)? else {
                     return Ok(AgentServiceProgress::Advanced);
                 };
-                response
-                    .validate(&pending.correlation)
-                    .map_err(|error| error.to_string())?;
+                if original_act_requires_replay(&response, &pending.correlation)? {
+                    self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::Act {
+                        pending,
+                        submit: true,
+                    });
+                    return Ok(AgentServiceProgress::Advanced);
+                }
                 match response.outcome {
                     IntentOutcome::Committed { commit, receipt } => {
                         let receipt: ProviderServiceCognitionReceipt =
@@ -451,10 +455,11 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     IntentOutcome::Rejected { reason } => {
                         return Err(format!("canonical Agent rejected: {reason:?}"));
                     }
-                    _ => {
-                        return Err(
-                            "canonical Agent outcome cannot complete original intent".into()
-                        );
+                    state => {
+                        return Err(format!(
+                            "canonical Agent outcome cannot complete original intent: {state:?}; original_key={:?}",
+                            pending.correlation.key
+                        ));
                     }
                 }
             }
@@ -823,5 +828,51 @@ pub(super) fn original_response(
         }
         AgentServiceIoResponse::Submit(SubmitObservation::OutcomeUnknown(_)) => Ok(None),
         _ => Err("hosted service response operation mismatch".into()),
+    }
+}
+
+/// An authenticated Unknown reports no published receipt, not an empty Node
+/// admission queue. Replay only the original key and signed bytes; canonical
+/// admission/execution deduplication owns any already received effect.
+pub(super) fn original_act_requires_replay(
+    response: &IntentResponse<serde_json::Value>,
+    original: &RequestCorrelation,
+) -> Result<bool, String> {
+    response
+        .validate(original)
+        .map_err(|error| error.to_string())?;
+    Ok(matches!(response.outcome, IntentOutcome::Unknown))
+}
+
+#[cfg(any(test, feature = "test_tier_required"))]
+impl crate::viewer::ViewerRuntimeLiveServer {
+    /// Required-tier drive of the production Act reconciliation decision and
+    /// original operation builder with genuine signed service responses.
+    pub fn test_replay_original_hosted_act(
+        client: crate::world_service::client::RemoteWorldServiceClient,
+        original: SubmitIntentRequest<crate::world_service::WorldServicePayloadV1>,
+    ) -> Result<SubmitObservation<serde_json::Value>, String> {
+        use crate::world_service::client::WorldServicePort;
+        original.validate().map_err(|error| error.to_string())?;
+        let response = client
+            .lookup(
+                LookupIntentRequest {
+                    contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                    key: original.correlation.key.clone(),
+                },
+                original.signed_payload.clone(),
+            )
+            .map_err(|error| error.to_string())?;
+        if !original_act_requires_replay(&response, &original.correlation)? {
+            return Err("test drive requires genuine unpublished original outcome".into());
+        }
+        let AgentServiceIoOperation::Submit(replay) =
+            original_intent_io(&original.correlation, &original.signed_payload, true)
+        else {
+            unreachable!()
+        };
+        assert_eq!(replay.correlation, original.correlation);
+        assert_eq!(replay.signed_payload, original.signed_payload);
+        client.submit(replay).map_err(|error| error.to_string())
     }
 }

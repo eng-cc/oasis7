@@ -408,3 +408,25 @@ replay. The Reserve rejection regression covers wrong correlation, conflicting
 effects, turn/continuation tampering, actual persistence failure and restart.
 These regressions do not replace ordinary required CI or fresh Linux no-mount
 and pressure acceptance on the final source and compiled artifacts.
+
+### Known-version observer snapshots
+
+A new Viewer snapshot may reuse the shared server's already authenticated world
+view. It reports that exact certified version, rather than claiming to have
+refreshed the remote head. The cached view is bound to endpoint, trusted service
+key, world, visibility scope and read credential; a changed configuration or
+pending gameplay outcome still requires the original remote read path. Cache
+reuse neither observes a new Changes cursor nor produces events or receipts.
+Cold startup, LiveControl, authoritative recovery and periodic refresh retain
+their fresh authenticated service reads and existing coherence fences.
+
+The slow-metadata concurrent Viewer regression retains its original 150ms bound.
+Admission probes preserve partial newline-delimited frames across socket polling
+timeouts, without extending their deadlines or relaxing compatibility checks.
+
+
+### Original Act reconciliation of an unpublished canonical result
+
+The real controlled-TCP regression `real_tcp_hosted_act_unpublished_original_replays_exactly_once_canonically` first failed on the authenticated original Lookup Unknown (0/1, 0.67s; `/tmp/pre2-act-original-red-20261010.log`). Unknown means the published result is absent, including a request already received into the admission queue. Act recovery now validates the original correlation and replays only its immutable signed payload/key. Received/Pending and terminal states retain their prior handling. The same exact test passed (1/1, 1.40s; `/tmp/pre2-act-original-green-20261010.log`): both initially unsubmitted and volatile-received originals reconcile; genuine canonical publication produces one causal receipt/effect, and subsequent original submission returns the same committed receipt. The runner now includes this additional parent and proof marker; a fresh aggregate is still required. Historical Full70 evidence above is unchanged.
+
+The candidate recovery changes passed the three default-feature Fresh admission parents (`/tmp/pre2-admission-repair-20261010.log`, 3/3, 23.47s). The broader Hosted run passed 20 and exposed two obsolete transport/version oracles (`/tmp/pre2-hosted-repair-20261010.log`, 20/22): both metadata snapshots arrived before gate release in 6ms against the unchanged 150ms budget, and all five parents failed by Rust run38014383647 passed. The periodic baseline now independently authenticates the exact full commit actually known by the server using a fixed public View. Reconnect now validates every actual Cognition HTTP replay against the unique canonical original correlation and complete signed bytes, retaining canonical one-effect, Move, Settle and Lookup assertions; Volatile admission is not a permanent replay suppression fence because the Node may restart independently of the Viewer. Both corrected fairness parents passed (`/tmp/pre2-fairness-repair-20261010.log`, 2/2, 17.23s). These focused working-tree results do not replace current-head required CI or final Linux A/B acceptance.

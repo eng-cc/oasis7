@@ -51,6 +51,39 @@ impl ViewerRuntimeLiveServer {
         shared: &Arc<Mutex<Self>>,
         request_kind: &'static str,
     ) -> Result<bool, ViewerRuntimeLiveServerError> {
+        // Snapshots report an authenticated version already known by this
+        // shared server. New observers need not refresh that immutable version
+        // synchronously. Controls, recovery and periodic Changes still refresh.
+        if request_kind == "request_snapshot" {
+            let mut server = lock_shared_server(shared)?;
+            if let (Some(config), Some(view)) =
+                (&server.config.world_service, &server.verified_world_view)
+                && server.pending_world_service_gameplay.is_empty()
+                && view.version().commit.world == config.expected_world
+                && view.version().visibility_scope == config.scope_id
+                && view.read_authority_matches(
+                    &config
+                        .read_authority_identity()
+                        .map_err(ViewerRuntimeLiveServerError::Init)?,
+                )
+            {
+                let view = view.clone();
+                let prepared = PreparedChainLinkedRuntimeUpdate {
+                    committed_height: view.version().commit.position,
+                    source: (None, None),
+                    source_epoch: 0,
+                    world: RuntimeWorld::new_with_state(view.projection().state.clone()),
+                    verified_view: Some(view),
+                    // No new cursor, event or intent disposition is observed.
+                    service_events: Some(Vec::new()),
+                    intent_results: Vec::new(),
+                };
+                let mut silent_session = RuntimeLiveSession::new_with_playing(false);
+                return Ok(server
+                    .apply_chain_linked_runtime_update(prepared, &mut silent_session)?
+                    .advanced);
+            }
+        }
         let remote = {
             let server = lock_shared_server(shared)?;
             server.config.world_service.clone().map(|config| {

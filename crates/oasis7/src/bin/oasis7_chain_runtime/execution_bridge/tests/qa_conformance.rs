@@ -1170,3 +1170,5 @@ fn real_tcp_live_writer_lock_excludes_second_writer() {
 }
 
 mod application_periodic_late_completion;
+
+mod application_act_recovery;

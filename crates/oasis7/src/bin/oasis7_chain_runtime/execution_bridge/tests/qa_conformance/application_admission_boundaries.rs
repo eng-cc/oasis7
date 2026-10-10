@@ -98,11 +98,16 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     let initial_deadline = Instant::now() + Duration::from_secs(1);
     let (mut initial_snapshot, mut initial_recovery, mut initial_acks) = (false, false, 0);
     let mut recovery_observed = serde_json::Value::Null;
+    // read_line may append an incomplete frame before a socket timeout.
+    // Retain it across polling and reader handoff until its newline arrives.
+    let mut line = String::new();
     while Instant::now() < initial_deadline && !(initial_snapshot && initial_recovery) {
-        let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) => break,
             Ok(_) => {
+                if !line.ends_with('\n') {
+                    continue;
+                }
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                     if value["type"] == "hello_ack" {
                         initial_acks += 1;
@@ -126,6 +131,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
                                 == serde_json::json!(canonical.continuation().sequence);
                     }
                 }
+                line.clear();
             }
             Err(e)
                 if matches!(
@@ -170,10 +176,12 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     let (mut acks, mut ordered, mut blocked) = (initial_acks, false, false);
     let control_witness = Arc::new(Mutex::new(serde_json::Value::Null));
     while Instant::now() < deadline {
-        let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) => break,
             Ok(_) => {
+                if !line.ends_with('\n') {
+                    continue;
+                }
                 if let Ok(ViewerResponse::ControlCompletionAck { ack }) =
                     serde_json::from_str(&line)
                     && ack.request_id == 1001
@@ -188,9 +196,11 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
                     }
                     if acks >= 2 && v["type"] == "snapshot" {
                         ordered = true;
+                        line.clear();
                         break;
                     }
                 }
+                line.clear();
             }
             Err(e)
                 if matches!(
@@ -212,10 +222,12 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     let drain = thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(7);
         while !draining.load(Ordering::SeqCst) && Instant::now() < deadline {
-            let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
+                    if !line.ends_with('\n') {
+                        continue;
+                    }
                     if let Ok(ViewerResponse::ControlCompletionAck { ack }) =
                         serde_json::from_str::<ViewerResponse>(&line)
                         && ack.request_id == 1001
@@ -233,6 +245,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
                             ready_flag.store(true, Ordering::SeqCst);
                         }
                     }
+                    line.clear();
                 }
                 Err(e)
                     if matches!(

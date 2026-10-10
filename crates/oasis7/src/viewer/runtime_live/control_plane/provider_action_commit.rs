@@ -550,7 +550,7 @@ impl ViewerRuntimeLiveServer {
             cognition,
             simulator_action,
         )?;
-        let response = if existed {
+        let mut response = if existed {
             client
                 .lookup(
                     LookupIntentRequest {
@@ -579,6 +579,33 @@ impl ViewerRuntimeLiveServer {
                 }
             }
         };
+        if super::super::agent_service_phase::original_act_requires_replay(
+            &response,
+            &pending.correlation,
+        )
+        .map_err(ProviderRuntimeActionCommitError::Message)?
+        {
+            // Unknown describes the published index, not the admission queue.
+            // Reconcile only the immutable original request; canonical dedup
+            // prevents a second effect if the first admission is still queued.
+            response = match client
+                .submit(SubmitIntentRequest {
+                    contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                    correlation: pending.correlation.clone(),
+                    deadline_unix_ms: None,
+                    signed_payload: pending.payload.clone(),
+                })
+                .map_err(|error| ProviderRuntimeActionCommitError::Message(error.to_string()))?
+            {
+                SubmitObservation::Response(response) => *response,
+                SubmitObservation::OutcomeUnknown(_) => {
+                    return Err(ProviderRuntimeActionCommitError::Message(
+                        "canonical Agent outcome unknown; original intent retained for Lookup"
+                            .into(),
+                    ));
+                }
+            };
+        }
         response
             .validate(&pending.correlation)
             .map_err(|error| ProviderRuntimeActionCommitError::Message(error.to_string()))?;

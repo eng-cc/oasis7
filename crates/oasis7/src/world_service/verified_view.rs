@@ -9,6 +9,7 @@ use oasis7_client_api::world_service::{
 #[derive(Debug, Clone)]
 pub struct VerifiedWorldView {
     response: ReadWorldViewResponse<WorldServiceProjection>,
+    read_authority_identity: Option<String>,
 }
 
 impl VerifiedWorldView {
@@ -64,7 +65,17 @@ impl VerifiedWorldView {
         {
             return Err("Agent observation differs from authorized visibility scope".into());
         }
-        Ok(Self { response })
+        Ok(Self {
+            response,
+            read_authority_identity: None,
+        })
+    }
+    pub(crate) fn bind_read_authority(mut self, identity: String) -> Self {
+        self.read_authority_identity = Some(identity);
+        self
+    }
+    pub(crate) fn read_authority_matches(&self, identity: &str) -> bool {
+        self.read_authority_identity.as_deref() == Some(identity)
     }
     pub fn version(&self) -> &ProjectionVersion {
         &self.response.version

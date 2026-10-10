@@ -60,6 +60,7 @@ impl ViewerRuntimeLiveServer {
             "fenced": self.authoritative_recovery_write_fence.is_some(),
             "pump_started": self.agent_service_pump_started,
             "eligible": self.agent_service_eligible(),
+            "known_service_commit": self.verified_world_view.as_ref().map(|view| &view.version().commit),
         })
     }
 
