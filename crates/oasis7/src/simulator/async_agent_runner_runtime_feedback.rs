@@ -3,18 +3,130 @@ use super::*;
 use crate::runtime::RuntimeFeedbackOutboxRecordV1;
 
 impl AsyncAgentRunner {
+    /// Restore only the bounded replay/collision verifier from an Oasis-owned
+    /// Runtime authority projection. The Harness receives validated history,
+    /// never the Runtime World or authority itself.
+    pub(crate) fn restore_host_validated_feedback_history<H: RuntimeAuthority>(
+        &mut self,
+        authority: &H,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        if !self.needs_runtime_feedback_recovery() {
+            return Ok(());
+        }
+        self.harness
+            .restore_feedback_history(authority)
+            .map_err(map_harness_error)
+    }
+
+    /// Release exactly the completed production turn around a host durability
+    /// boundary. The Harness keeps an identity-bound handoff capability until
+    /// persistence succeeds; on failure both the actor replay fence and the
+    /// local Runtime-awaiting maps are restored before the caller can retry.
+    ///
+    /// The callback receives only an immutable runner view, so it cannot
+    /// enqueue a successor provider turn while the release is provisional.
+    pub(crate) fn with_runtime_turn_release_for_continuation<F>(
+        &mut self,
+        agent_id: &str,
+        agent_session_id: &str,
+        agent_turn_id: &str,
+        decision_request_id: &str,
+        request_digest: &str,
+        persist: F,
+    ) -> Result<(), AsyncAgentRunnerError>
+    where
+        F: FnOnce(&Self) -> Result<(), String>,
+    {
+        let mut matches = self.awaiting_outcomes.iter().filter(|(_, outcome)| {
+            outcome.agent_id == agent_id
+                && outcome.prepared_context.as_ref().is_some_and(|context| {
+                    context.agent_session_id == agent_session_id
+                        && context.agent_turn_id == agent_turn_id
+                        && context.decision_request_id == decision_request_id
+                        && context.request_digest.to_string() == request_digest
+                })
+                && outcome
+                    .prepared_request_context
+                    .as_ref()
+                    .is_some_and(|request| {
+                        request.agent_subject == agent_id
+                            && request.agent_session_id == agent_session_id
+                            && request.agent_turn_id == agent_turn_id
+                            && request.decision_request_id == decision_request_id
+                            && request.request_digest.to_string() == request_digest
+                    })
+        });
+        let Some((&turn_id, outcome)) = matches.next() else {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "unknown pending Runtime turn".into(),
+            ));
+        };
+        if matches.next().is_some()
+            || self.awaiting_runtime.get(agent_id) != Some(&turn_id)
+            || self
+                .awaiting_outcomes
+                .values()
+                .filter(|outcome| outcome.agent_id == agent_id)
+                .count()
+                != 1
+        {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "pending Runtime turn identity or actor lane conflicts".into(),
+            ));
+        }
+        let outcome = outcome.clone();
+        let harness_turn = *self.harness_turns.get(&turn_id).ok_or_else(|| {
+            AsyncAgentRunnerError::Cognition("Harness turn identity is unavailable".into())
+        })?;
+        let handoff = self
+            .harness
+            .prepare_turn_release(harness_turn)
+            .map_err(map_harness_error)?;
+
+        // Staging removes only this Runtime turn. The authenticated replay
+        // fence and turn record remain owned by the Harness capability until
+        // commit or rollback below.
+        self.awaiting_runtime.remove(agent_id);
+        self.awaiting_outcomes.remove(&turn_id);
+        match persist(self) {
+            Ok(()) => self
+                .harness
+                .commit_turn_release(handoff)
+                .map_err(map_harness_error),
+            Err(persist_error) => {
+                self.awaiting_runtime.insert(agent_id.to_string(), turn_id);
+                self.awaiting_outcomes.insert(turn_id, outcome);
+                self.harness
+                    .rollback_turn_release(handoff)
+                    .map_err(|rollback_error| {
+                        AsyncAgentRunnerError::Cognition(format!(
+                            "Runtime turn release persistence failed ({persist_error}); exact-turn rollback failed: {rollback_error}"
+                        ))
+                    })?;
+                Err(AsyncAgentRunnerError::Cognition(persist_error))
+            }
+        }
+    }
+
     pub(crate) fn needs_runtime_feedback_recovery(&self) -> bool {
-        !self.feedback_store.feedback_recovery_initialized()
+        self.harness.needs_feedback_history_refresh()
+    }
+
+    /// True after the Harness has received a complete host-validated history
+    /// projection. A loaded projection may still fence individual damaged
+    /// Agent/session partitions; that must not be confused with having no
+    /// history at all when deciding whether unrelated Agents may dispatch.
+    pub(crate) fn runtime_feedback_history_loaded(&self) -> bool {
+        self.harness.feedback_recovery_loaded()
     }
 
     pub(crate) fn feedback_recovery_blocked(&self, agent: &str, session: &str) -> bool {
-        self.feedback_store
-            .feedback_recovery_blocked(agent, session)
+        self.harness.feedback_recovery_blocked(agent, session)
     }
 
     #[cfg(test)]
     pub(crate) fn agent_feedback_recovery_blocked(&self, agent: &str) -> bool {
-        self.feedback_store.agent_feedback_recovery_blocked(agent)
+        self.harness.agent_feedback_recovery_blocked(agent)
     }
 
     /// Restore only the bounded replay/collision verifier from Runtime's
@@ -26,19 +138,47 @@ impl AsyncAgentRunner {
         if !self.needs_runtime_feedback_recovery() {
             return Ok(());
         }
-        self.feedback_store
-            .restore_runtime_feedback_outbox(records)
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
+        let projections = records
+            .iter()
+            .map(|record| {
+                record.validate().map_err(|error| {
+                    AsyncAgentRunnerError::Cognition(format!("invalid feedback record: {error}"))
+                })?;
+                let feedback = serde_json::from_value::<FeedbackEnvelopeV1>(record.payload.clone())
+                    .map_err(|error| {
+                        AsyncAgentRunnerError::Cognition(format!(
+                            "invalid feedback payload: {error}"
+                        ))
+                    })?;
+                if feedback.status == "committed" {
+                    return Err(AsyncAgentRunnerError::Cognition(
+                        "committed feedback history requires Runtime receipt authority".into(),
+                    ));
+                }
+                Ok(oasis7_agent_harness::FeedbackHistoryProjection {
+                    feedback: super::super::agent_api_compat::feedback_to_api(&feedback),
+                    acknowledged: record.state == "acked",
+                    lineage: Some(oasis7_agent_harness::FeedbackHistoryLineage {
+                        original_envelope_digest: record.envelope_digest.clone(),
+                        delivery_state: record.state.clone(),
+                        receipt_lineage: None,
+                    }),
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let authority =
+            super::agent_harness_adapter::ScopedFeedbackHistoryAuthority::new(projections);
+        self.restore_host_validated_feedback_history(&authority)
     }
 
     /// Caller must have authenticated the Agent-scoped Runtime View.
     pub(crate) fn restore_preverified_scoped_feedback_history(
         &mut self,
-        records: &[(FeedbackEnvelopeV1, String, String)],
+        records: &[oasis7_agent_harness::FeedbackHistoryProjection],
     ) -> Result<(), AsyncAgentRunnerError> {
-        self.feedback_store
-            .restore_preverified_scoped_feedback_history(records)
-            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))
+        let authority =
+            super::agent_harness_adapter::ScopedFeedbackHistoryAuthority::new(records.to_vec());
+        self.restore_host_validated_feedback_history(&authority)
     }
 
     /// Roll back native verifier/turn ledgers and private memory if the sole
@@ -54,39 +194,59 @@ impl AsyncAgentRunner {
     where
         F: FnOnce(&mut MemoryWriteStore) -> Result<(), String>,
     {
-        let before = (
-            self.feedback_store.clone(),
-            self.awaiting_runtime.clone(),
-            self.awaiting_outcomes.clone(),
-            self.continuations.clone(),
-            self.continuation_harness.clone(),
-            memory.clone(),
-        );
+        let outcome = self
+            .find_feedback_outcome(agent, &feedback)
+            .ok_or_else(|| AsyncAgentRunnerError::Cognition("unknown actor outcome".into()))?;
+        let context = outcome.prepared_context.as_ref().ok_or_else(|| {
+            AsyncAgentRunnerError::Cognition("committed feedback requires a host context".into())
+        })?;
+        if outcome.prepared_request_context.is_none() {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "committed feedback requires a production Runtime request".into(),
+            ));
+        }
+        validate_feedback(context, agent, &feedback)?;
+        validate_runtime_receipt_lineage(context, &feedback, receipt)?;
+        let mut staged_memory = memory.clone();
+        project_receipt_memory(
+            context,
+            &feedback,
+            receipt,
+            &outcome.memory_write_intents,
+            &mut staged_memory,
+        )?;
+        let original_memory = memory.clone();
+        let harness_turn = *self.harness_turns.get(&outcome.turn_id).ok_or_else(|| {
+            AsyncAgentRunnerError::Cognition("Harness turn identity is unavailable".into())
+        })?;
         #[cfg(any(test, feature = "test_tier_required"))]
         let native_before = self.rejected_wait_test_ledger_digests();
-        let result = self
-            .consume_runtime_feedback_with_lineage(agent, feedback, Some(receipt), memory)
-            .and_then(|()| {
+        let result = self.harness.accept_feedback_with_persistence_observed(
+            harness_turn,
+            super::super::agent_api_compat::feedback_to_api(&feedback),
+            |harness_cognition_digest| {
+                *memory = staged_memory.clone();
                 #[cfg(any(test, feature = "test_tier_required"))]
                 if std::env::var("PRE2_APP_ADMISSION").ok().as_deref()
                     == Some("memory-ack-write-failure")
                 {
                     let root = std::env::var_os("PRE2_METADATA_DIR")
                         .map(std::path::PathBuf::from)
-                        .ok_or_else(|| {
-                            AsyncAgentRunnerError::Cognition("native ACK probe root missing".into())
-                        })?;
+                        .ok_or_else(|| "native ACK probe root missing".to_string())?;
                     if !root.join("feedback-ack-before-persist").exists() {
+                        let mut staged = native_before.clone();
+                        let mut hash = blake3::Hasher::new();
+                        hash.update(b"oasis7.rejected-wait.local-test-ledger.v1\0");
+                        hash.update(b"feedback-store\0");
+                        hash.update(harness_cognition_digest.as_bytes());
+                        staged[4] = hash.finalize().to_hex().to_string();
                         for (name, value) in [
                             ("feedback-ack-native-before.json", native_before),
-                            (
-                                "feedback-ack-native-staged.json",
-                                self.rejected_wait_test_ledger_digests(),
-                            ),
+                            ("feedback-ack-native-staged.json", staged),
                         ] {
                             let path = root.join(name);
                             std::fs::write(&path, serde_json::to_vec(&value).unwrap())
-                                .map_err(|e| AsyncAgentRunnerError::Cognition(e.to_string()))?;
+                                .map_err(|error| error.to_string())?;
                             #[cfg(unix)]
                             {
                                 use std::os::unix::fs::PermissionsExt;
@@ -94,24 +254,23 @@ impl AsyncAgentRunner {
                                     path,
                                     std::fs::Permissions::from_mode(0o600),
                                 )
-                                .map_err(|e| AsyncAgentRunnerError::Cognition(e.to_string()))?;
+                                .map_err(|error| error.to_string())?;
                             }
                         }
                     }
                 }
-                persist(memory).map_err(AsyncAgentRunnerError::Cognition)
-            });
+                persist(memory).map_err(|error| {
+                    *memory = original_memory.clone();
+                    error
+                })
+            },
+        );
         if result.is_err() {
-            (
-                self.feedback_store,
-                self.awaiting_runtime,
-                self.awaiting_outcomes,
-                self.continuations,
-                self.continuation_harness,
-                *memory,
-            ) = before;
+            *memory = original_memory;
+            return result.map_err(map_harness_error);
         }
-        result
+        self.release_runtime_turn(agent, outcome.turn_id);
+        Ok(())
     }
 
     pub fn consume_runtime_feedback(
@@ -219,7 +378,6 @@ impl AsyncAgentRunner {
             super::ContinuationInvalidationReason::Timeout,
         );
         self.release_runtime_turn(agent_id, turn_id);
-        self.feedback_store.clear_agent(agent_id);
         Ok(())
     }
 
@@ -254,7 +412,6 @@ impl AsyncAgentRunner {
         // has admitted its continuation. Clear the single-flight marker so
         // the fresh wake/resume request can enter the actor; request replay
         // protection remains in digest_by_request_id.
-        self.feedback_store.clear_agent(agent_id);
         Ok(())
     }
 }

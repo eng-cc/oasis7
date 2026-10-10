@@ -40,7 +40,6 @@ pub(crate) fn request_context_to_api(
     }
 }
 
-#[cfg(test)]
 pub(crate) fn request_context_from_api(
     context: oasis7_agent_api::ContinuousAgentRequestContextV1,
 ) -> ContinuousAgentRequestContextV1 {
@@ -85,7 +84,6 @@ pub(crate) fn response_context_to_api(
     }
 }
 
-#[cfg(test)]
 pub(crate) fn response_context_from_api(
     context: oasis7_agent_api::ContinuousAgentResponseContextV1<Action, AgentQuery>,
 ) -> ContinuousAgentResponseContextV1 {
@@ -122,6 +120,25 @@ pub(crate) fn feedback_to_api(
     }
 }
 
+pub(crate) fn feedback_from_api(
+    feedback: oasis7_agent_api::FeedbackEnvelopeV1,
+) -> FeedbackEnvelopeV1 {
+    FeedbackEnvelopeV1 {
+        feedback_id: feedback.feedback_id,
+        feedback_seq: feedback.feedback_seq,
+        agent_subject: feedback.agent_subject,
+        agent_session_id: feedback.agent_session_id,
+        agent_turn_id: feedback.agent_turn_id,
+        decision_request_id: feedback.decision_request_id,
+        candidate_action_id: feedback.candidate_action_id,
+        runtime_receipt_id: feedback.runtime_receipt_id,
+        status: feedback.status,
+        request_digest: feedback.request_digest,
+        reject_reason: feedback.reject_reason,
+        provenance: feedback.provenance,
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn memory_write_intent_to_api(
     intent: &MemoryWriteIntentV1,
@@ -148,7 +165,6 @@ fn decision_request_to_api(request: &DecisionRequest) -> oasis7_agent_api::Decis
     }
 }
 
-#[cfg(test)]
 fn decision_request_from_api(request: oasis7_agent_api::DecisionRequest) -> DecisionRequest {
     DecisionRequest {
         observation: request.observation,
@@ -162,7 +178,7 @@ fn decision_request_from_api(request: oasis7_agent_api::DecisionRequest) -> Deci
     }
 }
 
-fn decision_response_to_api(
+pub(crate) fn decision_response_to_api(
     response: &DecisionResponse,
 ) -> oasis7_agent_api::DecisionResponse<Action, AgentQuery> {
     oasis7_agent_api::DecisionResponse {
@@ -175,7 +191,6 @@ fn decision_response_to_api(
     }
 }
 
-#[cfg(test)]
 fn decision_response_from_api(
     response: oasis7_agent_api::DecisionResponse<Action, AgentQuery>,
 ) -> DecisionResponse {

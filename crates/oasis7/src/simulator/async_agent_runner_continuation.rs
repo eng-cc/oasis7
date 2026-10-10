@@ -30,7 +30,10 @@ impl AsyncAgentRunner {
             digest("continuations", &self.continuations),
             digest("awaiting-runtime", &self.awaiting_runtime),
             digest("awaiting-outcomes", &self.awaiting_outcomes),
-            digest("feedback-store", &self.feedback_store),
+            digest(
+                "feedback-store",
+                &self.harness.cognition_state_digest_for_test(),
+            ),
         ]
     }
 
@@ -102,11 +105,12 @@ impl AsyncAgentRunner {
                 "rejected Resume absence identity mismatch".into(),
             ));
         }
-        let actor = self
-            .actors
-            .get(agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        Ok(!actor.active_turn.load(std::sync::atomic::Ordering::SeqCst)
+        if !self.actors.contains_key(agent_id) {
+            return Err(AsyncAgentRunnerError::AgentNotRegistered(
+                agent_id.to_string(),
+            ));
+        }
+        Ok(!self.harness.provider_is_still_in_flight(agent_id)
             && !self.continuations.contains_key(agent_id)
             && !self.awaiting_runtime.contains_key(agent_id)
             && !self.awaiting_outcomes.values().any(|outcome| {
@@ -252,26 +256,23 @@ impl AsyncAgentRunner {
             self.continuations.clone(),
             self.awaiting_runtime.clone(),
             self.awaiting_outcomes.clone(),
-            self.feedback_store.clone(),
         );
         self.continuation_harness = staged;
         self.continuations.remove(agent_id);
-        let result = self
-            .release_runtime_turn_for_continuation(
-                agent_id,
-                &original.agent_session_id,
-                &original.agent_turn_id,
-                &original.decision_request_id,
-                original.request_digest.as_str(),
-            )
-            .and_then(|()| persist(self, &rejected).map_err(AsyncAgentRunnerError::Cognition));
+        let result = self.with_runtime_turn_release_for_continuation(
+            agent_id,
+            &original.agent_session_id,
+            &original.agent_turn_id,
+            &original.decision_request_id,
+            original.request_digest.as_str(),
+            |runner| persist(runner, &rejected),
+        );
         if let Err(error) = result {
             (
                 self.continuation_harness,
                 self.continuations,
                 self.awaiting_runtime,
                 self.awaiting_outcomes,
-                self.feedback_store,
             ) = snapshot;
             return Err(error);
         }
@@ -584,11 +585,12 @@ impl AsyncAgentRunner {
                 "rejected cleanup requires Runtime rejection".into(),
             ));
         }
-        let actor = self
-            .actors
-            .get(agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        if actor.active_turn.load(std::sync::atomic::Ordering::SeqCst) {
+        if !self.actors.contains_key(agent_id) {
+            return Err(AsyncAgentRunnerError::AgentNotRegistered(
+                agent_id.to_string(),
+            ));
+        }
+        if self.harness.provider_is_still_in_flight(agent_id) {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
         }
         let existing = self.continuations.get(agent_id).ok_or_else(|| {
@@ -623,7 +625,6 @@ impl AsyncAgentRunner {
             self.continuations.clone(),
             self.awaiting_runtime.clone(),
             self.awaiting_outcomes.clone(),
-            self.feedback_store.clone(),
         );
         let result = (|| {
             let handle = self.apply_runtime_terminal_continuation_projection(
@@ -633,21 +634,18 @@ impl AsyncAgentRunner {
             )?;
             // A committed Wait can already have released its original turn.
             // Any remaining turn must still match the exact predecessor identity.
-            if self.awaiting_runtime.contains_key(agent_id)
-                || self
-                    .awaiting_outcomes
-                    .values()
-                    .any(|outcome| outcome.agent_id == agent_id)
-            {
-                self.release_runtime_turn_for_continuation(
+            if self.awaiting_runtime.contains_key(agent_id) {
+                self.with_runtime_turn_release_for_continuation(
                     agent_id,
                     &runtime.agent_session_id,
                     &runtime.agent_turn_id,
                     &runtime.decision_request_id,
                     &runtime.origin_request_digest,
+                    persist,
                 )?;
+            } else {
+                persist(self).map_err(AsyncAgentRunnerError::Cognition)?;
             }
-            persist(self).map_err(AsyncAgentRunnerError::Cognition)?;
             Ok(handle)
         })();
         if result.is_err() {
@@ -656,7 +654,6 @@ impl AsyncAgentRunner {
                 self.continuations,
                 self.awaiting_runtime,
                 self.awaiting_outcomes,
-                self.feedback_store,
             ) = snapshot;
         }
         result
@@ -778,7 +775,6 @@ impl AsyncAgentRunner {
     {
         let previous_harness = self.continuation_harness.clone();
         let previous_continuations = self.continuations.clone();
-        let previous_feedback_store = self.feedback_store.clone();
         let previous_next_turn_id = self.next_turn_id;
         let previous_active_turns = self.active_turns;
         let result = (|| {
@@ -794,7 +790,6 @@ impl AsyncAgentRunner {
             Err(error) => {
                 self.continuation_harness = previous_harness;
                 self.continuations = previous_continuations;
-                self.feedback_store = previous_feedback_store;
                 self.next_turn_id = previous_next_turn_id;
                 self.active_turns = previous_active_turns;
                 Err(error)

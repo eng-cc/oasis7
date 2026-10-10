@@ -628,6 +628,11 @@ fn provider_dispatch_persistence_failure_does_not_start_actor() {
     );
     let mut runner = crate::simulator::AsyncAgentRunner::with_default_capacity();
     runner.register(behavior).expect("register provider actor");
+    crate::viewer::runtime_live::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &world,
+        &mut runner,
+    )
+    .expect("empty Runtime history is still a host-validated recovery projection");
 
     let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
     sidecar.configure_provider_lineage_store(path);

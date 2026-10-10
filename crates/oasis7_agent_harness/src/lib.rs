@@ -17,10 +17,11 @@ mod turn_engine;
 
 pub use actor::{
     AsyncAgentRunner, AsyncAgentRunnerError, AsyncAgentTurnOutcome, AsyncTurnFeedback, AsyncTurnId,
-    AsyncTurnLifecycle, AsyncWorldEffect,
+    AsyncTurnLifecycle, AsyncWorldEffect, CompatibilityDecisionProvider, CompatibilityTurnOutcome,
+    CompatibilityTurnRequest, TurnHandoff, TurnHandoffDispatch,
 };
 pub use authority::RuntimeAuthority;
-pub use cognition::{AgentCognitionStore, FeedbackHistoryProjection};
+pub use cognition::{AgentCognitionStore, FeedbackHistoryLineage, FeedbackHistoryProjection};
 pub use continuation::{
     ContinuationAuthorityContextV1, ContinuationBudgetProgressV1, ContinuationHandle,
     ContinuationHarness, ContinuationHostProjection, ContinuationInvalidationReason,
@@ -36,7 +37,7 @@ pub use model_provider::{
     ModelProviderTool, ModelProviderTrace, ModelProviderTraceEntry, ModelProviderTurn,
     ModelProviderUsage,
 };
-pub use provider::{DecisionProvider, DecisionProviderError};
+pub use provider::{DecisionProvider, DecisionProviderError, cognition_response_digest};
 pub use turn_engine::{
     MemoryProjectionReport, RuntimeReadbackProof, TurnEngine, TurnEngineError, TurnEngineEvent,
     TurnEnginePhase, TurnRequest,

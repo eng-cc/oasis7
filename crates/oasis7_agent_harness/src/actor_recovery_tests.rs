@@ -1,7 +1,10 @@
 use super::tests::{WaitProvider, request};
 use crate::authority::test_support::FixtureAuthority;
-use crate::{AsyncAgentRunner, FeedbackHistoryProjection};
-use oasis7_agent_api::{CognitionError, Digest32, FeedbackEnvelopeV1};
+use crate::{AsyncAgentRunner, DecisionProvider, DecisionProviderError, FeedbackHistoryProjection};
+use oasis7_agent_api::{
+    CognitionError, ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, Digest32,
+    FeedbackEnvelopeV1,
+};
 use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -51,6 +54,7 @@ fn restored_feedback_history_fences_reused_sequence_on_runner() {
     authority.feedback_history.push(FeedbackHistoryProjection {
         feedback: feedback("agent-a", "session-agent-a", 1, "restored-feedback"),
         acknowledged: true,
+        lineage: None,
     });
     let calls = Arc::new(AtomicUsize::new(0));
     let mut runner = AsyncAgentRunner::<Value, Value>::with_default_capacity();
@@ -116,6 +120,7 @@ fn runner_refresh_rejects_active_turn_without_mutating_recovered_fences() {
         .push(FeedbackHistoryProjection {
             feedback: pending.clone(),
             acknowledged: false,
+            lineage: None,
         });
     let calls = Arc::new(AtomicUsize::new(0));
     let mut runner = AsyncAgentRunner::<Value, Value>::with_default_capacity();
@@ -168,6 +173,7 @@ fn failed_refresh_fences_runner_until_a_new_snapshot_is_validated() {
     authority.feedback_history.push(FeedbackHistoryProjection {
         feedback: feedback("agent-blocked", "session-agent-blocked", 1, "pending"),
         acknowledged: false,
+        lineage: None,
     });
     let calls = Arc::new(AtomicUsize::new(0));
     let mut runner = AsyncAgentRunner::<Value, Value>::with_default_capacity();
@@ -258,4 +264,108 @@ fn failed_history_read_keeps_runner_fenced_until_retry_succeeds() {
         .start_turn(request("agent-a", "request-a", "turn-a"))
         .expect("dispatch follows a successful recovery");
     assert_eq!(authority.history_reads.load(Ordering::SeqCst), 2);
+}
+
+struct FeedbackTrackingProvider {
+    inner: WaitProvider,
+    feedback_calls: Arc<AtomicUsize>,
+}
+
+impl DecisionProvider<Value, Value> for FeedbackTrackingProvider {
+    fn provider_id(&self) -> &str {
+        self.inner.provider_id()
+    }
+
+    fn decide(
+        &mut self,
+        request: &ContinuousAgentRequestContextV1,
+    ) -> Result<ContinuousAgentResponseContextV1<Value, Value>, DecisionProviderError> {
+        self.inner.decide(request)
+    }
+
+    fn push_feedback(
+        &mut self,
+        _feedback: &FeedbackEnvelopeV1,
+    ) -> Result<(), DecisionProviderError> {
+        self.feedback_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[test]
+fn failed_feedback_persistence_keeps_turn_live_and_exact_retry_commits_once() {
+    let provider_calls = Arc::new(AtomicUsize::new(0));
+    let feedback_calls = Arc::new(AtomicUsize::new(0));
+    let persisted = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut runner = AsyncAgentRunner::<Value, Value>::with_default_capacity();
+    runner
+        .restore_feedback_history(&FixtureAuthority::default())
+        .unwrap();
+    runner
+        .register(
+            "agent-a",
+            FeedbackTrackingProvider {
+                inner: WaitProvider {
+                    calls: provider_calls,
+                    delay: Duration::ZERO,
+                },
+                feedback_calls: Arc::clone(&feedback_calls),
+            },
+        )
+        .unwrap();
+    let request = request("agent-a", "request-a", "turn-a");
+    let turn = runner.start_turn(request.clone()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while runner.awaiting_outcome(turn).is_none() {
+        runner.poll_completed().unwrap();
+        assert!(Instant::now() < deadline, "provider result should arrive");
+        thread::yield_now();
+    }
+
+    let mut terminal = feedback("agent-a", &request.agent_session_id, 1, "feedback-a");
+    terminal.agent_turn_id = request.agent_turn_id.clone();
+    terminal.decision_request_id = request.decision_request_id.clone();
+    terminal.request_digest = request.request_digest.clone();
+    assert!(
+        runner
+            .accept_feedback_with_persistence(turn, terminal.clone(), || {
+                Err("durable feedback checkpoint unavailable".into())
+            })
+            .is_err()
+    );
+    assert!(runner.awaiting_request(turn).is_some());
+    assert!(!runner.cognition.contains_feedback(
+        "agent-a",
+        &request.agent_session_id,
+        "feedback-a"
+    ));
+    assert_eq!(feedback_calls.load(Ordering::SeqCst), 0);
+    assert!(!persisted.load(Ordering::SeqCst));
+
+    let persisted_on_retry = Arc::clone(&persisted);
+    runner
+        .accept_feedback_with_persistence(turn, terminal.clone(), || {
+            persisted_on_retry.store(true, Ordering::SeqCst);
+            Ok(())
+        })
+        .expect("the exact feedback can be retried after persistence failure");
+    assert!(runner.awaiting_request(turn).is_none());
+    assert!(
+        runner
+            .cognition
+            .contains_feedback("agent-a", &request.agent_session_id, "feedback-a")
+    );
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while feedback_calls.load(Ordering::SeqCst) == 0 {
+        assert!(Instant::now() < deadline, "provider feedback should arrive");
+        thread::yield_now();
+    }
+    assert_eq!(feedback_calls.load(Ordering::SeqCst), 1);
+    assert!(persisted.load(Ordering::SeqCst));
+    runner
+        .accept_feedback_with_persistence(turn, terminal, || {
+            panic!("exact replay must not re-run persistence")
+        })
+        .expect("the exact terminal replay is idempotent after turn release");
+    assert_eq!(feedback_calls.load(Ordering::SeqCst), 1);
 }

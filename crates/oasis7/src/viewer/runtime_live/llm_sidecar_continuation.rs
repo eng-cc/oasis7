@@ -31,6 +31,43 @@ pub(super) fn provider_actor_exists(sidecar: &RuntimeLlmSidecar, agent_id: &str)
 }
 
 impl RuntimeLlmSidecar {
+    /// Keep the detached actor runner unavailable to dispatch while its exact
+    /// completed Runtime turn is provisionally released around a host write.
+    /// Persistence failure restores the Harness turn before the runner is
+    /// made visible again.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn with_runtime_turn_release_for_continuation<F>(
+        &mut self,
+        agent_id: &str,
+        agent_session_id: &str,
+        agent_turn_id: &str,
+        decision_request_id: &str,
+        request_digest: &str,
+        persist: F,
+    ) -> Result<(), String>
+    where
+        F: FnOnce(&mut Self) -> Result<(), String>,
+    {
+        let Some(mut runtime_runner) = self.runner.take() else {
+            return Err("continuation release runner is unavailable".into());
+        };
+        let result = match &mut runtime_runner {
+            RuntimeDecisionRunner::Builtin(runner)
+            | RuntimeDecisionRunner::ProviderBacked(runner) => runner
+                .with_runtime_turn_release_for_continuation(
+                    agent_id,
+                    agent_session_id,
+                    agent_turn_id,
+                    decision_request_id,
+                    request_digest,
+                    |_| persist(self),
+                )
+                .map_err(|error| error.to_string()),
+        };
+        self.runner = Some(runtime_runner);
+        result
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn fence_runtime_continuation(
         &mut self,
