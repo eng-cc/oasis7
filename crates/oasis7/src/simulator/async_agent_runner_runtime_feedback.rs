@@ -1,5 +1,6 @@
 use super::feedback::RuntimeReceiptReadbackVerifier;
 use super::*;
+#[cfg(test)]
 use crate::runtime::RuntimeFeedbackOutboxRecordV1;
 
 impl AsyncAgentRunner {
@@ -10,7 +11,10 @@ impl AsyncAgentRunner {
         &mut self,
         authority: &H,
     ) -> Result<(), AsyncAgentRunnerError> {
-        if !self.needs_runtime_feedback_recovery() {
+        // Never refresh shared replay state while any actor turn is active.
+        // The authenticated scoped-view caller still checks that Agent/session
+        // against its projection and the already-loaded verifier below.
+        if self.harness.active_turn_count() > 0 && self.harness.feedback_recovery_loaded() {
             return Ok(());
         }
         self.harness
@@ -131,6 +135,7 @@ impl AsyncAgentRunner {
 
     /// Restore only the bounded replay/collision verifier from Runtime's
     /// durable outbox. Feedback is not consumed again and memory is untouched.
+    #[cfg(test)]
     pub(crate) fn restore_runtime_feedback_outbox(
         &mut self,
         records: &[RuntimeFeedbackOutboxRecordV1],
@@ -259,9 +264,8 @@ impl AsyncAgentRunner {
                         }
                     }
                 }
-                persist(memory).map_err(|error| {
+                persist(memory).inspect_err(|_error| {
                     *memory = original_memory.clone();
-                    error
                 })
             },
         );
@@ -270,6 +274,118 @@ impl AsyncAgentRunner {
             return result.map_err(map_harness_error);
         }
         self.release_runtime_turn(agent, outcome.turn_id);
+        Ok(())
+    }
+
+    /// Consume feedback accompanied by a Runtime-issued receipt lineage.
+    /// Caller-signed feedback remains useful for diagnostics, but cannot
+    /// promote provider memory intents without this projection.
+    pub fn consume_runtime_feedback_with_lineage(
+        &mut self,
+        agent_id: &str,
+        feedback: FeedbackEnvelopeV1,
+        runtime_receipt: Option<&RuntimeReceiptLineageV1>,
+        store: &mut MemoryWriteStore,
+    ) -> Result<(), AsyncAgentRunnerError> {
+        let harness_feedback = super::super::agent_api_compat::feedback_to_api(&feedback);
+        if self
+            .harness
+            .replay_feedback(&harness_feedback)
+            .map_err(map_harness_error)?
+        {
+            let replay_key = (
+                feedback.agent_subject.clone(),
+                feedback.agent_session_id.clone(),
+                feedback.feedback_id.clone(),
+            );
+            if self
+                .runtime_feedback_replays
+                .get(&replay_key)
+                .is_some_and(|accepted| accepted.receipt_lineage.as_ref() != runtime_receipt)
+            {
+                return Err(AsyncAgentRunnerError::Cognition(
+                    "Runtime feedback replay receipt lineage mismatch".into(),
+                ));
+            }
+            return Ok(());
+        }
+        let Some(outcome) = self.find_feedback_outcome(agent_id, &feedback) else {
+            return Err(AsyncAgentRunnerError::Cognition(
+                "unknown actor outcome".to_string(),
+            ));
+        };
+        let context = outcome.prepared_context.as_ref().ok_or_else(|| {
+            AsyncAgentRunnerError::Cognition("runtime feedback requires a host context".to_string())
+        })?;
+        validate_feedback(context, agent_id, &feedback)?;
+        let harness_turn = *self.harness_turns.get(&outcome.turn_id).ok_or_else(|| {
+            AsyncAgentRunnerError::Cognition("Harness turn identity is unavailable".into())
+        })?;
+
+        let mut staged_memory = None;
+        if feedback.status == "committed" {
+            let runtime_receipt = runtime_receipt.ok_or_else(|| {
+                AsyncAgentRunnerError::Cognition(
+                    "committed feedback requires a Runtime-issued receipt lineage".to_string(),
+                )
+            })?;
+            validate_runtime_receipt_lineage(context, &feedback, runtime_receipt)?;
+            let mut staged = store.clone();
+            project_receipt_memory(
+                context,
+                &feedback,
+                runtime_receipt,
+                &outcome.memory_write_intents,
+                &mut staged,
+            )?;
+            staged_memory = Some(staged);
+        }
+
+        let production_lane = outcome.prepared_request_context.is_some();
+        if production_lane {
+            self.harness
+                .accept_feedback_with_persistence(
+                    harness_turn,
+                    super::super::agent_api_compat::feedback_to_api(&feedback),
+                    || Ok(()),
+                )
+                .map_err(map_harness_error)?;
+            if let Some(staged) = staged_memory {
+                *store = staged;
+            }
+        } else {
+            self.harness
+                .accept_compatibility_feedback(
+                    harness_turn,
+                    super::super::agent_api_compat::feedback_to_api(&feedback),
+                )
+                .map_err(map_harness_error)?;
+            if let Some(staged) = staged_memory {
+                *store = staged;
+            }
+        }
+
+        self.remember_runtime_feedback_replay(
+            &feedback,
+            runtime_receipt
+                .filter(|_| feedback.status == "committed")
+                .cloned(),
+        );
+
+        // Runtime `pending` is an in-flight disposition, not a terminal
+        // outcome. Keep the prepared turn occupied until Runtime resolves it.
+        if matches!(feedback.status.as_str(), "rejected" | "failed") {
+            self.invalidate_continuation_for_turn(
+                agent_id,
+                &feedback.agent_session_id,
+                &feedback.agent_turn_id,
+                &feedback.decision_request_id,
+                ContinuationInvalidationReason::Rejected,
+            );
+            self.release_runtime_turn(agent_id, outcome.turn_id);
+        } else if feedback.status == "committed" {
+            self.release_runtime_turn(agent_id, outcome.turn_id);
+        }
         Ok(())
     }
 

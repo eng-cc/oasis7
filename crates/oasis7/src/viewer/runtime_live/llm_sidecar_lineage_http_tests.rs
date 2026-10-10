@@ -237,6 +237,15 @@ fn provider_dispatch_http_restart_fence_issues_one_request() {
         .shadow_kernel
         .take()
         .expect("provider HTTP shadow kernel");
+    crate::viewer::runtime_live::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &world,
+        first
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("native provider runner"),
+    )
+    .expect("restore Runtime feedback history before first HTTP dispatch");
     assert!(
         first
             .next_async_provider_decision(&mut world, &mut kernel, world_id)
@@ -263,6 +272,15 @@ fn provider_dispatch_http_restart_fence_issues_one_request() {
     restarted
         .sync_shadow_kernel(&world, &WorldConfig::default())
         .expect("sync restarted provider HTTP shadow kernel");
+    crate::viewer::runtime_live::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &world,
+        restarted
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("restarted native provider runner"),
+    )
+    .expect("restore Runtime feedback history before restarted HTTP dispatch");
     let mut restarted_kernel = restarted
         .shadow_kernel
         .take()

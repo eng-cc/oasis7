@@ -15,21 +15,35 @@ use crate::RuntimeAuthority;
 
 const MAX_FEEDBACK_REPLAY_ENTRIES: usize = 8;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FeedbackLane {
+    Production,
+    Compatibility,
+}
+
 #[derive(Debug, Clone)]
 struct ActiveCognitionRequest {
     session_id: String,
     turn_id: String,
     request_id: String,
     request_digest: Digest32,
+    lane: FeedbackLane,
 }
 
 #[derive(Debug, Clone, Default)]
 struct FeedbackPartition {
     next_seq: u64,
     digest_by_id: BTreeMap<String, Digest32>,
+    lane_by_id: BTreeMap<String, FeedbackLane>,
     digest_by_seq: BTreeMap<u64, (String, Digest32)>,
     replay_order: VecDeque<String>,
-    held: BTreeMap<u64, FeedbackEnvelopeV1>,
+    held: BTreeMap<u64, HeldFeedback>,
+}
+
+#[derive(Debug, Clone)]
+struct HeldFeedback {
+    feedback: FeedbackEnvelopeV1,
+    lane: FeedbackLane,
 }
 
 /// Non-serialized Runtime outbox projection. The host must first validate the
@@ -62,6 +76,7 @@ pub struct AgentCognitionStore {
     active_by_agent: BTreeMap<String, ActiveCognitionRequest>,
     digest_by_request_id: BTreeMap<String, Digest32>,
     subject_by_request_id: BTreeMap<String, String>,
+    lane_by_request_id: BTreeMap<String, FeedbackLane>,
     feedback_partitions: BTreeMap<(String, String), FeedbackPartition>,
     feedback_recovery_blocked: BTreeMap<(String, String), String>,
     feedback_recovery_loaded: bool,
@@ -243,6 +258,7 @@ impl AgentCognitionStore {
             let partition = self.feedback_partitions.entry(key.clone()).or_default();
             partition.next_seq = maximum_seq;
             partition.digest_by_id.clear();
+            partition.lane_by_id.clear();
             partition.digest_by_seq.clear();
             partition.replay_order.clear();
             for record in entries.iter().rev().take(MAX_FEEDBACK_REPLAY_ENTRIES).rev() {
@@ -255,6 +271,9 @@ impl AgentCognitionStore {
                 partition
                     .digest_by_id
                     .insert(feedback.feedback_id.clone(), digest);
+                partition
+                    .lane_by_id
+                    .insert(feedback.feedback_id.clone(), FeedbackLane::Production);
                 partition
                     .replay_order
                     .push_back(feedback.feedback_id.clone());
@@ -313,8 +332,19 @@ impl AgentCognitionStore {
                 && active.turn_id == turn.agent_turn_id
                 && active.request_id == turn.decision_request_id
                 && active.request_digest == turn.request_digest
+                && active.lane == FeedbackLane::Compatibility
             {
                 return Ok(());
+            }
+            if active.session_id == turn.agent_session_id
+                && active.turn_id == turn.agent_turn_id
+                && active.request_id == turn.decision_request_id
+                && active.request_digest == turn.request_digest
+            {
+                return Err(CognitionError::new(
+                    "feedback_lane_mismatch",
+                    "active request was admitted through a different lane",
+                ));
             }
             return Err(CognitionError::new(
                 "agent_busy",
@@ -344,6 +374,10 @@ impl AgentCognitionStore {
             turn.decision_request_id.clone(),
             turn.request_digest.clone(),
         );
+        self.lane_by_request_id.insert(
+            turn.decision_request_id.clone(),
+            FeedbackLane::Compatibility,
+        );
         self.subject_by_request_id
             .insert(turn.decision_request_id.clone(), turn.agent_id.clone());
         self.active_by_agent.insert(
@@ -353,6 +387,7 @@ impl AgentCognitionStore {
                 turn_id: turn.agent_turn_id.clone(),
                 request_id: turn.decision_request_id.clone(),
                 request_digest: turn.request_digest.clone(),
+                lane: FeedbackLane::Compatibility,
             },
         );
         Ok(())
@@ -370,6 +405,7 @@ impl AgentCognitionStore {
                     && active.turn_id == turn.agent_turn_id
                     && active.request_id == turn.decision_request_id
                     && active.request_digest == turn.request_digest
+                    && active.lane == FeedbackLane::Compatibility
             })
         {
             self.active_by_agent.remove(&turn.agent_id);
@@ -379,6 +415,7 @@ impl AgentCognitionStore {
         {
             self.digest_by_request_id.remove(&turn.decision_request_id);
             self.subject_by_request_id.remove(&turn.decision_request_id);
+            self.lane_by_request_id.remove(&turn.decision_request_id);
         }
     }
 
@@ -392,6 +429,7 @@ impl AgentCognitionStore {
                     && active.turn_id == request.agent_turn_id
                     && active.request_id == request.decision_request_id
                     && active.request_digest == digest
+                    && active.lane == FeedbackLane::Production
             })
         {
             self.active_by_agent.remove(&request.agent_subject);
@@ -404,6 +442,7 @@ impl AgentCognitionStore {
                 .remove(&request.decision_request_id);
             self.subject_by_request_id
                 .remove(&request.decision_request_id);
+            self.lane_by_request_id.remove(&request.decision_request_id);
         }
     }
 
@@ -423,6 +462,8 @@ impl AgentCognitionStore {
         }
         if self.digest_by_request_id.get(&turn.decision_request_id) != Some(&turn.request_digest)
             || self.subject_by_request_id.get(&turn.decision_request_id) != Some(&turn.agent_id)
+            || self.lane_by_request_id.get(&turn.decision_request_id)
+                != Some(&FeedbackLane::Compatibility)
         {
             return Err(CognitionError::new(
                 "handoff_identity_stale",
@@ -445,6 +486,7 @@ impl AgentCognitionStore {
                 turn_id: turn.agent_turn_id.clone(),
                 request_id: turn.decision_request_id.clone(),
                 request_digest: turn.request_digest.clone(),
+                lane: FeedbackLane::Compatibility,
             },
         );
         Ok(())
@@ -465,6 +507,8 @@ impl AgentCognitionStore {
         if self.digest_by_request_id.get(&request.decision_request_id) != Some(&digest)
             || self.subject_by_request_id.get(&request.decision_request_id)
                 != Some(&request.agent_subject)
+            || self.lane_by_request_id.get(&request.decision_request_id)
+                != Some(&FeedbackLane::Production)
         {
             return Err(CognitionError::new(
                 "handoff_identity_stale",
@@ -487,6 +531,7 @@ impl AgentCognitionStore {
                 turn_id: request.agent_turn_id.clone(),
                 request_id: request.decision_request_id.clone(),
                 request_digest: digest,
+                lane: FeedbackLane::Production,
             },
         );
         Ok(())
@@ -531,7 +576,18 @@ impl AgentCognitionStore {
             if self.active_by_agent.values().any(|active| {
                 active.request_id == request.decision_request_id && active.request_digest == digest
             }) {
-                return Ok(());
+                return if self.active_by_agent.values().any(|active| {
+                    active.request_id == request.decision_request_id
+                        && active.request_digest == digest
+                        && active.lane == FeedbackLane::Production
+                }) {
+                    Ok(())
+                } else {
+                    Err(CognitionError::new(
+                        "feedback_lane_mismatch",
+                        "active request was admitted through a different lane",
+                    ))
+                };
             }
             return Err(CognitionError::new(
                 "request_replay",
@@ -546,6 +602,10 @@ impl AgentCognitionStore {
         }
         self.digest_by_request_id
             .insert(request.decision_request_id.clone(), digest.clone());
+        self.lane_by_request_id.insert(
+            request.decision_request_id.clone(),
+            FeedbackLane::Production,
+        );
         self.subject_by_request_id.insert(
             request.decision_request_id.clone(),
             request.agent_subject.clone(),
@@ -557,12 +617,56 @@ impl AgentCognitionStore {
                 turn_id: request.agent_turn_id,
                 request_id: request.decision_request_id,
                 request_digest: digest,
+                lane: FeedbackLane::Production,
             },
         );
         Ok(())
     }
 
     pub fn accept_feedback(&mut self, feedback: FeedbackEnvelopeV1) -> Result<(), CognitionError> {
+        self.accept_feedback_in_lane(feedback, FeedbackLane::Production)
+    }
+
+    pub(crate) fn accept_compatibility_feedback(
+        &mut self,
+        feedback: FeedbackEnvelopeV1,
+    ) -> Result<(), CognitionError> {
+        self.accept_feedback_in_lane(feedback, FeedbackLane::Compatibility)
+    }
+
+    /// Check a terminal replay without reapplying its effects. The accepted
+    /// lane and complete envelope digest are retained together in the bounded
+    /// replay partition.
+    pub(crate) fn replay_feedback(
+        &self,
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Result<bool, CognitionError> {
+        feedback.validate()?;
+        let partition_key = (
+            feedback.agent_subject.clone(),
+            feedback.agent_session_id.clone(),
+        );
+        let Some(partition) = self.feedback_partitions.get(&partition_key) else {
+            return Ok(false);
+        };
+        let Some(previous) = partition.digest_by_id.get(&feedback.feedback_id) else {
+            return Ok(false);
+        };
+        if !partition.lane_by_id.contains_key(&feedback.feedback_id) {
+            return Err(CognitionError::new(
+                "feedback_replay_invalid",
+                "feedback replay lane metadata is unavailable",
+            ));
+        }
+        Self::replay_or_reject_feedback(previous, feedback_digest(feedback))?;
+        Ok(true)
+    }
+
+    fn accept_feedback_in_lane(
+        &mut self,
+        feedback: FeedbackEnvelopeV1,
+        lane: FeedbackLane,
+    ) -> Result<(), CognitionError> {
         if !self.active_by_agent.contains_key(&feedback.agent_subject)
             && self
                 .active_by_agent
@@ -580,30 +684,41 @@ impl AgentCognitionStore {
             feedback.agent_session_id.clone(),
         );
         let current_digest = feedback_digest(&feedback);
+        if let Some(partition) = self.feedback_partitions.get(&partition_key)
+            && let Some(previous) = partition.digest_by_id.get(&feedback.feedback_id)
+        {
+            Self::replay_or_reject_feedback(previous, current_digest)?;
+            if partition.lane_by_id.get(&feedback.feedback_id) != Some(&lane) {
+                return Err(CognitionError::new(
+                    "feedback_lane_mismatch",
+                    "feedback replay belongs to a different admission lane",
+                ));
+            }
+            return Ok(());
+        }
         let Some(active) = self.active_by_agent.get(&feedback.agent_subject) else {
-            if let Some(partition) = self.feedback_partitions.get(&partition_key) {
-                if let Some(previous) = partition.digest_by_id.get(&feedback.feedback_id) {
-                    return Self::replay_or_reject_feedback(previous, current_digest);
-                }
-                if let Some((previous_id, previous_digest)) =
+            if let Some(partition) = self.feedback_partitions.get(&partition_key)
+                && let Some((previous_id, previous_digest)) =
                     partition.digest_by_seq.get(&feedback.feedback_seq)
-                    && (previous_id != &feedback.feedback_id || previous_digest != &current_digest)
-                {
-                    return Err(CognitionError::new(
-                        "feedback_identity_collision",
-                        "feedback_seq was reused with a different envelope",
-                    ));
-                }
+                && (previous_id != &feedback.feedback_id || previous_digest != &current_digest)
+            {
+                return Err(CognitionError::new(
+                    "feedback_identity_collision",
+                    "feedback_seq was reused with a different envelope",
+                ));
             }
             return Err(CognitionError::new(
                 "unknown_feedback",
                 "feedback does not match an active cognition request",
             ));
         };
-        let partition = self.feedback_partitions.entry(partition_key).or_default();
-        if let Some(previous) = partition.digest_by_id.get(&feedback.feedback_id) {
-            return Self::replay_or_reject_feedback(previous, current_digest);
+        if active.lane != lane {
+            return Err(CognitionError::new(
+                "feedback_lane_mismatch",
+                "feedback lane does not match the active cognition request",
+            ));
         }
+        let partition = self.feedback_partitions.entry(partition_key).or_default();
         if active.session_id != feedback.agent_session_id
             || active.turn_id != feedback.agent_turn_id
             || active.request_id != feedback.decision_request_id
@@ -622,7 +737,13 @@ impl AgentCognitionStore {
         let expected = partition.next_seq.saturating_add(1);
         if feedback.feedback_seq > expected {
             if let Some(previous) = partition.held.get(&feedback.feedback_seq) {
-                if feedback_digest(previous) != current_digest {
+                if previous.lane != lane {
+                    return Err(CognitionError::new(
+                        "feedback_lane_mismatch",
+                        "held feedback belongs to a different admission lane",
+                    ));
+                }
+                if feedback_digest(&previous.feedback) != current_digest {
                     return Err(CognitionError::new(
                         "feedback_identity_collision",
                         "feedback_seq was reused with a different held envelope",
@@ -636,9 +757,15 @@ impl AgentCognitionStore {
             if let Some(previous) = partition
                 .held
                 .values()
-                .find(|previous| previous.feedback_id == feedback.feedback_id)
+                .find(|previous| previous.feedback.feedback_id == feedback.feedback_id)
             {
-                if feedback_digest(previous) != current_digest {
+                if previous.lane != lane {
+                    return Err(CognitionError::new(
+                        "feedback_lane_mismatch",
+                        "held feedback belongs to a different admission lane",
+                    ));
+                }
+                if feedback_digest(&previous.feedback) != current_digest {
                     return Err(CognitionError::new(
                         "feedback_id_conflict",
                         "feedback_id was reused with a different held envelope",
@@ -655,7 +782,9 @@ impl AgentCognitionStore {
                     "feedback sequence gap exceeds the bounded replay window",
                 ));
             }
-            partition.held.insert(feedback.feedback_seq, feedback);
+            partition
+                .held
+                .insert(feedback.feedback_seq, HeldFeedback { feedback, lane });
             return Err(CognitionError::new(
                 "feedback_sequence_gap",
                 format!("expected feedback sequence {expected}"),
@@ -681,17 +810,27 @@ impl AgentCognitionStore {
                 ),
             ));
         }
-        Self::remember_feedback(partition, feedback.feedback_id.clone(), current_digest);
+        Self::remember_feedback(
+            partition,
+            feedback.feedback_id.clone(),
+            current_digest,
+            lane,
+        );
         partition.next_seq = feedback.feedback_seq;
         if is_terminal_status(feedback.status.as_str()) {
             self.active_by_agent.remove(&feedback.agent_subject);
         }
         while let Some(next) = partition.held.remove(&partition.next_seq.saturating_add(1)) {
-            let digest = feedback_digest(&next);
-            Self::remember_feedback(partition, next.feedback_id.clone(), digest);
-            partition.next_seq = next.feedback_seq;
-            if is_terminal_status(next.status.as_str()) {
-                self.active_by_agent.remove(&next.agent_subject);
+            let digest = feedback_digest(&next.feedback);
+            Self::remember_feedback(
+                partition,
+                next.feedback.feedback_id.clone(),
+                digest,
+                next.lane,
+            );
+            partition.next_seq = next.feedback.feedback_seq;
+            if is_terminal_status(next.feedback.status.as_str()) {
+                self.active_by_agent.remove(&next.feedback.agent_subject);
             }
         }
         Ok(())
@@ -701,17 +840,6 @@ impl AgentCognitionStore {
     /// transaction. Rollback is intentionally limited to this feedback's
     /// active request and `(agent, session)` replay partition; authenticated
     /// history, request replay fences, and other sessions are never replaced.
-    pub(crate) fn accept_feedback_with_persistence<F>(
-        &mut self,
-        feedback: FeedbackEnvelopeV1,
-        persist: F,
-    ) -> Result<(), CognitionError>
-    where
-        F: FnOnce() -> Result<(), String>,
-    {
-        self.accept_feedback_with_persistence_observed(feedback, |_| persist())
-    }
-
     pub(crate) fn accept_feedback_with_persistence_observed<F>(
         &mut self,
         feedback: FeedbackEnvelopeV1,
@@ -770,18 +898,25 @@ impl AgentCognitionStore {
         ))
     }
 
-    fn remember_feedback(partition: &mut FeedbackPartition, feedback_id: String, digest: Digest32) {
+    fn remember_feedback(
+        partition: &mut FeedbackPartition,
+        feedback_id: String,
+        digest: Digest32,
+        lane: FeedbackLane,
+    ) {
         let sequence = partition.next_seq.saturating_add(1);
         partition
             .digest_by_seq
             .insert(sequence, (feedback_id.clone(), digest.clone()));
         partition.digest_by_id.insert(feedback_id.clone(), digest);
+        partition.lane_by_id.insert(feedback_id.clone(), lane);
         partition.replay_order.push_back(feedback_id);
         while partition.replay_order.len() > MAX_FEEDBACK_REPLAY_ENTRIES {
             let Some(expired_id) = partition.replay_order.pop_front() else {
                 break;
             };
             partition.digest_by_id.remove(&expired_id);
+            partition.lane_by_id.remove(&expired_id);
             if let Some(sequence) = partition
                 .digest_by_seq
                 .iter()
@@ -872,7 +1007,7 @@ mod tests {
             "agent_busy"
         );
         store
-            .accept_feedback(feedback("agent-1", 1, "feedback-1", "committed"))
+            .accept_compatibility_feedback(feedback("agent-1", 1, "feedback-1", "committed"))
             .unwrap();
         assert!(store.contains_feedback("agent-1", "session-1", "feedback-1"));
         assert_eq!(
@@ -890,13 +1025,13 @@ mod tests {
         store.begin_turn(&turn("agent-1", "request-1")).unwrap();
         assert_eq!(
             store
-                .accept_feedback(feedback("agent-1", 2, "feedback-2", "pending"))
+                .accept_compatibility_feedback(feedback("agent-1", 2, "feedback-2", "pending"))
                 .unwrap_err()
                 .code(),
             "feedback_sequence_gap"
         );
         store
-            .accept_feedback(feedback("agent-1", 1, "feedback-1", "pending"))
+            .accept_compatibility_feedback(feedback("agent-1", 1, "feedback-1", "pending"))
             .unwrap();
         assert!(store.contains_feedback("agent-1", "session-1", "feedback-2"));
     }
@@ -907,7 +1042,7 @@ mod tests {
         store.begin_turn(&turn("agent-1", "request-1")).unwrap();
         assert_eq!(
             store
-                .accept_feedback(feedback("agent-2", 1, "forged", "failed"))
+                .accept_compatibility_feedback(feedback("agent-2", 1, "forged", "failed"))
                 .unwrap_err()
                 .code(),
             "cross_agent_feedback"

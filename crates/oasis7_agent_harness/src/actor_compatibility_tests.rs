@@ -140,6 +140,95 @@ fn compatibility_admission_does_not_authorize_production_dispatch() {
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
+#[test]
+fn feedback_replay_is_exact_and_completion_cannot_cross_actor_lanes() {
+    let decisions = Arc::new(AtomicUsize::new(0));
+    let callbacks = Arc::new(AtomicUsize::new(0));
+    let mut runner = AsyncAgentRunner::<Value, Value, String, String, String>::new(1).unwrap();
+    runner
+        .register_compatibility(
+            "agent-a",
+            HandoffProvider {
+                decisions: Arc::clone(&decisions),
+                callbacks: Arc::clone(&callbacks),
+            },
+        )
+        .unwrap();
+    let context = reduced_context("agent-a", "session-a", "turn-a", "request-a");
+    let turn = runner
+        .start_compatibility_turn(CompatibilityTurnRequest {
+            agent_subject: "agent-a".into(),
+            turn_context: Some(context),
+            input: "replay test".into(),
+        })
+        .unwrap();
+    completed_compatibility_turn(&mut runner, turn);
+    let feedback = history_feedback("agent-a", "session-a", "turn-a", "request-a");
+
+    assert_eq!(
+        runner
+            .accept_feedback_with_persistence(turn, feedback.clone(), || Ok(()))
+            .expect_err("production completion cannot close an active compatibility turn")
+            .code(),
+        "feedback_lane_mismatch"
+    );
+    runner
+        .accept_compatibility_feedback(turn, feedback.clone())
+        .expect("the reduced compatibility feedback remains accepted");
+    runner.release_compatibility_turn(turn).unwrap();
+    assert!(runner.replay_feedback(&feedback).unwrap());
+    let mut changed = feedback.clone();
+    changed.reject_reason = Some("changed after acceptance".into());
+    assert_eq!(
+        runner
+            .replay_feedback(&changed)
+            .expect_err("released replay must compare the complete canonical envelope")
+            .code(),
+        "feedback_id_conflict"
+    );
+    assert_eq!(decisions.load(Ordering::SeqCst), 1);
+    assert_eq!(callbacks.load(Ordering::SeqCst), 0);
+
+    let mut production = AsyncAgentRunner::<Value, Value, String, String, String>::new(1).unwrap();
+    production
+        .register("agent-a", ProductionOnlyProvider)
+        .unwrap();
+    production
+        .restore_feedback_history(&FixtureAuthority::default())
+        .unwrap();
+    let request = request("agent-a", "production-request", "production-turn");
+    let production_turn = production.start_turn(request.clone()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while !production
+        .poll_completed()
+        .unwrap()
+        .iter()
+        .any(|outcome| outcome.turn_id == production_turn)
+    {
+        assert!(Instant::now() < deadline, "production provider completes");
+        thread::yield_now();
+    }
+    let mut production_feedback = history_feedback(
+        "agent-a",
+        request.agent_session_id.as_str(),
+        request.agent_turn_id.as_str(),
+        request.decision_request_id.as_str(),
+    );
+    production_feedback.request_digest = request.request_digest.clone();
+    assert_eq!(
+        production
+            .cognition
+            .accept_compatibility_feedback(production_feedback.clone())
+            .expect_err("compatibility completion cannot close an active production turn")
+            .code(),
+        "feedback_lane_mismatch"
+    );
+    production
+        .cognition
+        .accept_feedback(production_feedback)
+        .expect("the active production lane still accepts its own completion");
+}
+
 fn poll_cross_lane_batch(
     runner: &mut AsyncAgentRunner<Value, Value, String, String, String>,
     compatibility_first: bool,

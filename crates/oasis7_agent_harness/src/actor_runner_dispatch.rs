@@ -132,7 +132,10 @@ where
         })?;
         let turn_context = request.turn_context.clone();
         if let Err(error) = actor.try_send(
-            ActorCommand::DecideCompatibility { turn_id, request },
+            ActorCommand::DecideCompatibility {
+                turn_id,
+                request: Box::new(request),
+            },
             &agent_id,
         ) {
             if turn_context.is_some() {
@@ -214,6 +217,7 @@ where
                     let (lifecycle, feedback, world_effect, response_context, provider_error) =
                         match result {
                             Ok(response) => {
+                                let response = *response;
                                 let (feedback, effect) =
                                     classify_decision(&response.base_decision_response.decision);
                                 (

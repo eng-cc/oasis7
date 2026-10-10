@@ -303,15 +303,19 @@ impl Drop for AgentActor {
 
 struct CompatibilityTurnRecord {
     harness_turn_id: HarnessTurnId,
-    agent_id: String,
-    context: Option<ContinuousAgentTurnContextV1>,
 }
 
 #[derive(Clone)]
 struct TurnMetadata {
-    agent_id: String,
     context: Option<ContinuousAgentTurnContextV1>,
     request_context: Option<ContinuousAgentRequestContextV1>,
+}
+
+const MAX_RUNTIME_FEEDBACK_REPLAY_ENTRIES: usize = 8;
+
+#[derive(Clone)]
+struct RuntimeFeedbackReplayMetadata {
+    receipt_lineage: Option<RuntimeReceiptLineageV1>,
 }
 
 type SharedHarnessRunner = HarnessRunner<
@@ -341,6 +345,10 @@ pub struct AsyncAgentRunner {
     /// Leases are staged by turn until the actor returns. They are moved into
     /// the outcome before it is exposed to the world-facing queue.
     cognition_leases: BTreeMap<AsyncTurnId, CognitionLeaseV1>,
+    /// Host receipt metadata for the same bounded envelope replay window the
+    /// Harness retains. This is correlation state only, never proof creation.
+    runtime_feedback_replays: BTreeMap<(String, String, String), RuntimeFeedbackReplayMetadata>,
+    runtime_feedback_replay_order: BTreeMap<(String, String), VecDeque<String>>,
     continuation_harness: ContinuationHarness,
     continuations: BTreeMap<String, ContinuationHandle>,
 }
@@ -364,6 +372,8 @@ impl AsyncAgentRunner {
             awaiting_runtime: BTreeMap::new(),
             awaiting_outcomes: BTreeMap::new(),
             cognition_leases: BTreeMap::new(),
+            runtime_feedback_replays: BTreeMap::new(),
+            runtime_feedback_replay_order: BTreeMap::new(),
             continuation_harness: ContinuationHarness::default(),
             continuations: BTreeMap::new(),
         })
@@ -700,20 +710,13 @@ impl AsyncAgentRunner {
         self.turn_metadata.insert(
             turn_id,
             TurnMetadata {
-                agent_id: agent_id.to_string(),
                 context: context.clone(),
                 request_context: request_context.clone(),
             },
         );
         if request_context.is_none() {
-            self.compatibility_turns.insert(
-                turn_id,
-                CompatibilityTurnRecord {
-                    harness_turn_id,
-                    agent_id: agent_id.to_string(),
-                    context: context.clone(),
-                },
-            );
+            self.compatibility_turns
+                .insert(turn_id, CompatibilityTurnRecord { harness_turn_id });
         }
         if let Some(lease) = cognition_lease {
             self.cognition_leases.insert(turn_id, lease);
@@ -791,11 +794,18 @@ impl AsyncAgentRunner {
                     .take_production_result(&production_key_from_context(&request_context))
             });
             let lease = self.cognition_leases.remove(&main_turn_id);
-            let metadata = self.turn_metadata.remove(&main_turn_id).ok_or_else(|| {
-                AsyncAgentRunnerError::Cognition(
-                    "Harness completed a production turn without host metadata".to_string(),
-                )
-            })?;
+            // Runtime may request a transport-only retry while this outcome is
+            // awaiting terminal feedback. Keep the host context with that
+            // lease so the retry completion can be projected identically.
+            let metadata = self
+                .turn_metadata
+                .get(&main_turn_id)
+                .cloned()
+                .ok_or_else(|| {
+                    AsyncAgentRunnerError::Cognition(
+                        "Harness completed a production turn without host metadata".to_string(),
+                    )
+                })?;
             let outcome = production_outcome_from_harness(
                 main_turn_id,
                 completion,
@@ -885,7 +895,7 @@ impl AsyncAgentRunner {
             ));
         }
         self.harness
-            .notify_behavior_callback(agent_id, BehaviorCallback::ActionResult(result))
+            .notify_behavior_callback(agent_id, BehaviorCallback::ActionResult(Box::new(result)))
             .map_err(map_harness_error)
             .map_err(|error| error.with_feedback_agent(agent_id))
     }
@@ -901,100 +911,49 @@ impl AsyncAgentRunner {
             ));
         }
         self.harness
-            .notify_behavior_callback(agent_id, BehaviorCallback::Event(event))
+            .notify_behavior_callback(agent_id, BehaviorCallback::Event(Box::new(event)))
             .map_err(map_harness_error)
             .map_err(|error| error.with_feedback_agent(agent_id))
     }
 
-    /// Consume feedback accompanied by a Runtime-issued receipt lineage.
-    /// Caller-signed feedback remains useful for diagnostics, but cannot
-    /// promote provider memory intents without this projection.
-    pub fn consume_runtime_feedback_with_lineage(
+    fn remember_runtime_feedback_replay(
         &mut self,
-        agent_id: &str,
-        feedback: FeedbackEnvelopeV1,
-        runtime_receipt: Option<&RuntimeReceiptLineageV1>,
-        store: &mut MemoryWriteStore,
-    ) -> Result<(), AsyncAgentRunnerError> {
-        let Some(outcome) = self.find_feedback_outcome(agent_id, &feedback) else {
-            return if self.harness.contains_feedback(
-                agent_id,
-                feedback.agent_session_id.as_str(),
-                feedback.feedback_id.as_str(),
-            ) {
-                Ok(())
-            } else {
-                Err(AsyncAgentRunnerError::Cognition(
-                    "unknown actor outcome".to_string(),
-                ))
+        feedback: &FeedbackEnvelopeV1,
+        receipt_lineage: Option<RuntimeReceiptLineageV1>,
+    ) {
+        let partition = (
+            feedback.agent_subject.clone(),
+            feedback.agent_session_id.clone(),
+        );
+        let replay_key = (
+            partition.0.clone(),
+            partition.1.clone(),
+            feedback.feedback_id.clone(),
+        );
+        let order = self
+            .runtime_feedback_replay_order
+            .entry(partition.clone())
+            .or_default();
+        if !order
+            .iter()
+            .any(|feedback_id| feedback_id == &feedback.feedback_id)
+        {
+            order.push_back(feedback.feedback_id.clone());
+        }
+        self.runtime_feedback_replays.insert(
+            replay_key,
+            RuntimeFeedbackReplayMetadata { receipt_lineage },
+        );
+        while order.len() > MAX_RUNTIME_FEEDBACK_REPLAY_ENTRIES {
+            let Some(expired_id) = order.pop_front() else {
+                break;
             };
-        };
-        let context = outcome.prepared_context.as_ref().ok_or_else(|| {
-            AsyncAgentRunnerError::Cognition("runtime feedback requires a host context".to_string())
-        })?;
-        validate_feedback(context, agent_id, &feedback)?;
-        let harness_turn = *self.harness_turns.get(&outcome.turn_id).ok_or_else(|| {
-            AsyncAgentRunnerError::Cognition("Harness turn identity is unavailable".into())
-        })?;
-
-        if outcome.prepared_request_context.is_some() {
-            let mut staged_memory = None;
-            if feedback.status == "committed" {
-                let runtime_receipt = runtime_receipt.ok_or_else(|| {
-                    AsyncAgentRunnerError::Cognition(
-                        "committed feedback requires a Runtime-issued receipt lineage".to_string(),
-                    )
-                })?;
-                validate_runtime_receipt_lineage(context, &feedback, runtime_receipt)?;
-                let mut staged = store.clone();
-                project_receipt_memory(
-                    context,
-                    &feedback,
-                    runtime_receipt,
-                    &outcome.memory_write_intents,
-                    &mut staged,
-                )?;
-                staged_memory = Some(staged);
-            }
-            self.harness
-                .accept_feedback_with_persistence(
-                    harness_turn,
-                    super::agent_api_compat::feedback_to_api(&feedback),
-                    || Ok(()),
-                )
-                .map_err(map_harness_error)?;
-            if let Some(staged) = staged_memory {
-                *store = staged;
-            }
-        } else {
-            if feedback.status == "committed" {
-                return Err(AsyncAgentRunnerError::Cognition(
-                    "committed feedback requires a production Runtime request".into(),
-                ));
-            }
-            self.harness
-                .accept_compatibility_feedback(
-                    harness_turn,
-                    super::agent_api_compat::feedback_to_api(&feedback),
-                )
-                .map_err(map_harness_error)?;
+            self.runtime_feedback_replays.remove(&(
+                partition.0.clone(),
+                partition.1.clone(),
+                expired_id,
+            ));
         }
-
-        // Runtime `pending` is an in-flight disposition, not a terminal
-        // outcome. Keep the prepared turn occupied until Runtime resolves it.
-        if matches!(feedback.status.as_str(), "rejected" | "failed") {
-            self.invalidate_continuation_for_turn(
-                agent_id,
-                &feedback.agent_session_id,
-                &feedback.agent_turn_id,
-                &feedback.decision_request_id,
-                ContinuationInvalidationReason::Rejected,
-            );
-            self.release_runtime_turn(agent_id, outcome.turn_id);
-        } else if feedback.status == "committed" {
-            self.release_runtime_turn(agent_id, outcome.turn_id);
-        }
-        Ok(())
     }
 
     fn find_feedback_outcome(
@@ -1030,6 +989,7 @@ impl AsyncAgentRunner {
     }
 
     fn release_runtime_turn(&mut self, agent_id: &str, turn_id: AsyncTurnId) {
+        self.turn_metadata.remove(&turn_id);
         if let Some(record) = self.compatibility_turns.remove(&turn_id) {
             let _ = self
                 .harness

@@ -371,7 +371,7 @@ enum ActorCommand<I, F> {
     },
     DecideCompatibility {
         turn_id: AsyncTurnId,
-        request: CompatibilityTurnRequest<I>,
+        request: Box<CompatibilityTurnRequest<I>>,
     },
     ProductionFeedback(Box<FeedbackEnvelopeV1>),
     ProductionFeedbackTransaction(Arc<FeedbackDeliveryGate>),
@@ -381,7 +381,7 @@ enum ActorCommand<I, F> {
 }
 
 enum ActorCompletionResult<A, Q, O> {
-    Production(Result<ContinuousAgentResponseContextV1<A, Q>, DecisionProviderError>),
+    Production(Result<Box<ContinuousAgentResponseContextV1<A, Q>>, DecisionProviderError>),
     Compatibility(Result<O, DecisionProviderError>),
 }
 
@@ -431,7 +431,10 @@ where
                                 provider.decide_production(&request)
                             }));
                             let result = match result {
-                                Ok(result) => ActorCompletionResult::Production(result),
+                                Ok(Ok(response)) => {
+                                    ActorCompletionResult::Production(Ok(Box::new(response)))
+                                }
+                                Ok(Err(error)) => ActorCompletionResult::Production(Err(error)),
                                 Err(_) => ActorCompletionResult::Production(Err(
                                     DecisionProviderError::new(
                                         "actor_panicked",
@@ -449,7 +452,7 @@ where
                         }
                         ActorCommand::DecideCompatibility { turn_id, request } => {
                             let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                                provider.decide_compatibility(request)
+                                provider.decide_compatibility(*request)
                             }));
                             let result = match result {
                                 Ok(result) => ActorCompletionResult::Compatibility(result),
@@ -604,6 +607,9 @@ pub struct TurnHandoff {
 
 /// The successor dispatch is typed by lane so a reduced compatibility handoff
 /// cannot be mistaken for a production Runtime request (or vice versa).
+// Keep the established public enum constructors source-compatible. Boxing
+// these variants would be a breaking API change solely to optimize stack size.
+#[allow(clippy::large_enum_variant)]
 pub enum TurnHandoffDispatch<I> {
     Production(ContinuousAgentRequestContextV1),
     Compatibility(CompatibilityTurnRequest<I>),
@@ -611,8 +617,8 @@ pub enum TurnHandoffDispatch<I> {
 
 #[derive(Clone)]
 enum HandoffPredecessor {
-    Production(ContinuousAgentRequestContextV1),
-    Compatibility(ContinuousAgentTurnContextV1),
+    Production(Box<ContinuousAgentRequestContextV1>),
+    Compatibility(Box<ContinuousAgentTurnContextV1>),
 }
 
 fn handoff_stale() -> AsyncAgentRunnerError {
@@ -740,17 +746,14 @@ where
 
     /// Restore replay and collision metadata from the host's validated durable
     /// feedback history before the runner dispatches its first provider turn.
-    /// A complete restore is idempotent. A fenced partition can be refreshed
-    /// while idle, but never while a provider turn or Runtime handoff is active.
+    /// A complete restore is idempotent, but a newer authenticated snapshot
+    /// must still be compared with the live replay verifier. A fenced partition
+    /// can be refreshed while idle, but never while a provider turn or Runtime
+    /// handoff is active.
     pub fn restore_feedback_history<H: RuntimeAuthority>(
         &mut self,
         authority: &H,
     ) -> Result<(), AsyncAgentRunnerError> {
-        if self.cognition.feedback_recovery_loaded()
-            && self.cognition.feedback_recovery_initialized()
-        {
-            return Ok(());
-        }
         if self.active_turn_count() > 0 {
             return Err(AsyncAgentRunnerError::Cognition(CognitionError::new(
                 "feedback_recovery_active_turn",

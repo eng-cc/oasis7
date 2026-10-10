@@ -88,12 +88,12 @@ where
             HandoffPredecessor::Production(request) => self
                 .turns
                 .get(&turn_id)
-                .is_some_and(|turn| turn.awaiting_runtime && turn.request == *request),
+                .is_some_and(|turn| turn.awaiting_runtime && &turn.request == request.as_ref()),
             HandoffPredecessor::Compatibility(context) => self
                 .compatibility_turns
                 .get(&turn_id)
                 .and_then(|turn| turn.turn_context.as_ref())
-                .is_some_and(|current| current == context),
+                .is_some_and(|current| current == context.as_ref()),
         };
         if !still_same {
             self.restore_handoff_predecessor(&handoff, predecessor)?;
@@ -133,11 +133,12 @@ where
                 .turns
                 .get(&handoff.turn_id)
                 .filter(|turn| turn.awaiting_runtime)
-                .map(|turn| HandoffPredecessor::Production(turn.request.clone())),
+                .map(|turn| HandoffPredecessor::Production(Box::new(turn.request.clone()))),
             ActorLane::Compatibility => self
                 .compatibility_turns
                 .get(&handoff.turn_id)
                 .and_then(|turn| turn.turn_context.clone())
+                .map(Box::new)
                 .map(HandoffPredecessor::Compatibility),
         }
         .ok_or_else(handoff_stale)?;
@@ -161,7 +162,7 @@ where
                     && turn.request.decision_request_id == handoff.request_id
                     && turn.request.request_digest == handoff.request_digest
                     && !self.awaiting_runtime.contains_key(&handoff.agent_id)
-                    && self.actor_lanes.get(&handoff.agent_id).is_none()
+                    && !self.actor_lanes.contains_key(&handoff.agent_id)
             }),
             ActorLane::Compatibility => self
                 .compatibility_turns
@@ -175,7 +176,7 @@ where
                             && context.decision_request_id == handoff.request_id
                             && context.request_digest == handoff.request_digest
                             && !self.awaiting_compatibility.contains_key(&handoff.agent_id)
-                            && self.actor_lanes.get(&handoff.agent_id).is_none(),
+                            && !self.actor_lanes.contains_key(&handoff.agent_id),
                     )
                 })
                 .unwrap_or(false),
@@ -272,7 +273,7 @@ where
                     && turn.request.request_digest == handoff.request_digest
                     && self.awaiting_runtime.get(&handoff.agent_id) == Some(&handoff.turn_id)
                     && self.actor_lanes.get(&handoff.agent_id) == Some(&ActorLane::Production))
-                .then(|| HandoffPredecessor::Production(turn.request.clone()))
+                .then(|| HandoffPredecessor::Production(Box::new(turn.request.clone())))
             }),
             ActorLane::Compatibility => {
                 self.compatibility_turns
@@ -288,7 +289,7 @@ where
                                 == Some(&handoff.turn_id)
                             && self.actor_lanes.get(&handoff.agent_id)
                                 == Some(&ActorLane::Compatibility))
-                        .then(|| HandoffPredecessor::Compatibility(context.clone()))
+                        .then(|| HandoffPredecessor::Compatibility(Box::new(context.clone())))
                     })
             }
         };

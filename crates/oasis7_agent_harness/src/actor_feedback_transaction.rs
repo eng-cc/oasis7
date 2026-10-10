@@ -4,7 +4,7 @@ use oasis7_agent_api::FeedbackEnvelopeV1;
 
 enum FeedbackDeliveryState {
     Pending,
-    Commit(FeedbackEnvelopeV1),
+    Commit(Box<FeedbackEnvelopeV1>),
     Abort,
 }
 
@@ -26,7 +26,7 @@ impl FeedbackDeliveryGate {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        *state = FeedbackDeliveryState::Commit(feedback);
+        *state = FeedbackDeliveryState::Commit(Box::new(feedback));
         self.ready.notify_one();
     }
 
@@ -58,7 +58,7 @@ impl FeedbackDeliveryGate {
                     else {
                         unreachable!();
                     };
-                    return Some(feedback);
+                    return Some(*feedback);
                 }
                 FeedbackDeliveryState::Abort => return None,
             }

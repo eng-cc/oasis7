@@ -84,6 +84,7 @@ pub(crate) fn response_context_to_api(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn response_context_from_api(
     context: oasis7_agent_api::ContinuousAgentResponseContextV1<Action, AgentQuery>,
 ) -> ContinuousAgentResponseContextV1 {
@@ -191,6 +192,7 @@ pub(crate) fn decision_response_to_api(
     }
 }
 
+#[cfg(test)]
 fn decision_response_from_api(
     response: oasis7_agent_api::DecisionResponse<Action, AgentQuery>,
 ) -> DecisionResponse {

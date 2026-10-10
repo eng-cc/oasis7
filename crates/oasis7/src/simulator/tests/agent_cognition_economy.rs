@@ -1,5 +1,6 @@
 //! Focused Agent-side admission tests for Runtime-owned cognition leases.
 
+use super::restore_runner_feedback_history;
 use crate::runtime::{
     CognitionLeaseQuoteV1, CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1, World,
 };
@@ -123,6 +124,7 @@ fn valid_runtime_lease_is_required_before_provider_dispatch_and_carried_to_outco
         authority_quote(&request, "lease-admission-quote", 1),
     );
     let (mut runner, state) = runner_with_state();
+    restore_runner_feedback_history(&mut runner, &world);
 
     let turn_id = runner
         .start_turn_with_request_context_and_observation_and_lease(

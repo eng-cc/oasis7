@@ -21,9 +21,7 @@ use oasis7_agent_harness::{
     cognition_response_digest,
 };
 
-use super::super::agent::{
-    ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace, AgentQueryResult,
-};
+use super::super::agent::{ActionResult, AgentBehavior, AgentDecision, AgentDecisionTrace};
 use super::super::continuous_agent_harness::{
     ContinuousAgentRequestContextV1, ContinuousAgentResponseContextV1, ContinuousAgentTurnContextV1,
 };
@@ -45,9 +43,8 @@ pub(super) struct BehaviorTurnResult {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum BehaviorCallback {
-    ActionResult(ActionResult),
-    QueryResult(AgentQueryResult),
-    Event(WorldEvent),
+    ActionResult(Box<ActionResult>),
+    Event(Box<WorldEvent>),
     PromptOverrides {
         system_prompt: Option<String>,
         short_term_goal: Option<String>,
@@ -166,14 +163,13 @@ impl AdapterControl {
     }
 
     pub fn clear_production_input(&self, key: &ProductionKey) {
-        if let Ok(mut state) = self.0.lock() {
-            if state
+        if let Ok(mut state) = self.0.lock()
+            && state
                 .pending_production
                 .as_ref()
                 .is_some_and(|pending| &pending.key == key)
-            {
-                state.pending_production = None;
-            }
+        {
+            state.pending_production = None;
         }
     }
 
@@ -214,7 +210,6 @@ impl OasisBehaviorProvider {
     fn callback(&mut self, callback: BehaviorCallback) {
         match callback {
             BehaviorCallback::ActionResult(result) => self.behavior.on_action_result(&result),
-            BehaviorCallback::QueryResult(result) => self.behavior.on_query_result(&result),
             BehaviorCallback::Event(event) => self.behavior.on_event(&event),
             BehaviorCallback::PromptOverrides {
                 system_prompt,

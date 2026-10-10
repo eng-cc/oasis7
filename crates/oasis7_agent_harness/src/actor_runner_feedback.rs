@@ -180,7 +180,7 @@ where
         }
         feedback.validate()?;
         self.cognition
-            .accept_feedback(feedback)
+            .accept_compatibility_feedback(feedback)
             .map_err(AsyncAgentRunnerError::Cognition)
     }
 
@@ -189,6 +189,18 @@ where
     pub fn contains_feedback(&self, agent: &str, session: &str, feedback_id: &str) -> bool {
         self.cognition
             .contains_feedback(agent, session, feedback_id)
+    }
+
+    /// Validate a no-op feedback replay after its turn handle has been
+    /// released. This checks the full canonical envelope digest against the
+    /// bounded accepted ledger and never republishes callbacks or effects.
+    pub fn replay_feedback(
+        &self,
+        feedback: &FeedbackEnvelopeV1,
+    ) -> Result<bool, AsyncAgentRunnerError> {
+        self.cognition
+            .replay_feedback(feedback)
+            .map_err(AsyncAgentRunnerError::Cognition)
     }
 
     /// Clear only an idle actor's local feedback/replay partition after the
@@ -341,7 +353,8 @@ where
                 let mut hash = blake3::Hasher::new();
                 hash.update(b"oasis7.agent-harness.cognition-test-state.v1\0");
                 hash.update(format!("{cognition:?}").as_bytes());
-                persist(&hash.finalize().to_hex().to_string())
+                let digest = hash.finalize().to_hex();
+                persist(digest.as_ref())
             })
             .map_err(AsyncAgentRunnerError::Cognition)?;
         reservation.commit(feedback.clone());
