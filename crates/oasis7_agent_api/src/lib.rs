@@ -9,6 +9,7 @@
 //! proof of a durable world readback.
 
 mod cognition;
+pub mod game;
 mod provider;
 mod runtime;
 
