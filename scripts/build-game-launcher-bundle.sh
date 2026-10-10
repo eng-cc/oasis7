@@ -290,28 +290,32 @@ BUNDLE_NATIVE_BUILD_ARGS=(
   --bin oasis7_web_launcher
   --bin oasis7_viewer_live
   --bin oasis7_chain_runtime
-  --bin oasis7_world_repair_rebuild
-  --bin oasis7_governance_registry_import
-  --bin oasis7_governance_registry_audit
   --bin oasis7_client_launcher
 )
+if [[ -n "$OPS_OUT_DIR" ]]; then
+  BUNDLE_NATIVE_BUILD_ARGS+=(--bin oasis7_world_repair_rebuild
+    --bin oasis7_governance_registry_import --bin oasis7_governance_registry_audit)
+fi
 if (( ${#CARGO_TARGET_ARGS[@]} > 0 )); then
   BUNDLE_NATIVE_BUILD_ARGS=("${CARGO_TARGET_ARGS[@]}" "${BUNDLE_NATIVE_BUILD_ARGS[@]}")
 fi
+NATIVE_TARGET_DIR="$ROOT_DIR/target"
 if [[ "$PROFILE" == "dev" ]]; then
-  run env -u RUSTC_WRAPPER cargo build "${BUNDLE_NATIVE_BUILD_ARGS[@]}"
+  source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
+  NATIVE_TARGET_DIR="$(oasis7_cargo_dev_target_dir "$ROOT_DIR")"
+  run oasis7_cargo_dev build "${BUNDLE_NATIVE_BUILD_ARGS[@]}"
 else
   run env -u RUSTC_WRAPPER cargo build --profile "$PROFILE" "${BUNDLE_NATIVE_BUILD_ARGS[@]}"
 fi
 
-LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$LAUNCHER_BIN_NAME"
-WEB_LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$WEB_LAUNCHER_BIN_NAME"
-LIVE_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$LIVE_BIN_NAME"
-CHAIN_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$CHAIN_BIN_NAME"
-WORLD_REPAIR_REBUILD_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
-GOVERNANCE_REGISTRY_IMPORT_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
-GOVERNANCE_REGISTRY_AUDIT_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
-CLIENT_LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$CLIENT_LAUNCHER_BIN_NAME"
+LAUNCHER_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$LAUNCHER_BIN_NAME"
+WEB_LAUNCHER_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$WEB_LAUNCHER_BIN_NAME"
+LIVE_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$LIVE_BIN_NAME"
+CHAIN_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$CHAIN_BIN_NAME"
+WORLD_REPAIR_REBUILD_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
+GOVERNANCE_REGISTRY_IMPORT_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
+GOVERNANCE_REGISTRY_AUDIT_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
+CLIENT_LAUNCHER_SRC="$NATIVE_TARGET_DIR/$TARGET_OUTPUT_SUBDIR/$CLIENT_LAUNCHER_BIN_NAME"
 SERVICE_READBACK_SRC="$ROOT_DIR/scripts/service-readback"
 
 if [[ "$DRY_RUN" != "1" ]]; then
@@ -319,9 +323,11 @@ if [[ "$DRY_RUN" != "1" ]]; then
   [[ -f "$WEB_LAUNCHER_SRC" ]] || { echo "error: web launcher binary not found: $WEB_LAUNCHER_SRC" >&2; exit 1; }
   [[ -f "$LIVE_SRC" ]] || { echo "error: oasis7_viewer_live binary not found: $LIVE_SRC" >&2; exit 1; }
   [[ -f "$CHAIN_SRC" ]] || { echo "error: oasis7_chain_runtime binary not found: $CHAIN_SRC" >&2; exit 1; }
-  [[ -f "$WORLD_REPAIR_REBUILD_SRC" ]] || { echo "error: oasis7_world_repair_rebuild binary not found: $WORLD_REPAIR_REBUILD_SRC" >&2; exit 1; }
-  [[ -f "$GOVERNANCE_REGISTRY_IMPORT_SRC" ]] || { echo "error: oasis7_governance_registry_import binary not found: $GOVERNANCE_REGISTRY_IMPORT_SRC" >&2; exit 1; }
-  [[ -f "$GOVERNANCE_REGISTRY_AUDIT_SRC" ]] || { echo "error: oasis7_governance_registry_audit binary not found: $GOVERNANCE_REGISTRY_AUDIT_SRC" >&2; exit 1; }
+  if [[ -n "$OPS_OUT_DIR" ]]; then
+    [[ -f "$WORLD_REPAIR_REBUILD_SRC" ]] || { echo "error: oasis7_world_repair_rebuild binary not found: $WORLD_REPAIR_REBUILD_SRC" >&2; exit 1; }
+    [[ -f "$GOVERNANCE_REGISTRY_IMPORT_SRC" ]] || { echo "error: oasis7_governance_registry_import binary not found: $GOVERNANCE_REGISTRY_IMPORT_SRC" >&2; exit 1; }
+    [[ -f "$GOVERNANCE_REGISTRY_AUDIT_SRC" ]] || { echo "error: oasis7_governance_registry_audit binary not found: $GOVERNANCE_REGISTRY_AUDIT_SRC" >&2; exit 1; }
+  fi
   [[ -f "$CLIENT_LAUNCHER_SRC" ]] || { echo "error: client launcher binary not found: $CLIENT_LAUNCHER_SRC" >&2; exit 1; }
 fi
 

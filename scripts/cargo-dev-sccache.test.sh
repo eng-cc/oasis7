@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix="oasis7-sccache-proof-") as directory:
             (repo / "src/lib.rs").write_text(
                 'pub fn format(n: u64) -> String { itoa::Buffer::new().format(n).to_owned() }\n')
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            for filename in ("cargo-dev.sh", "find-python-with-module.sh"):
+            for filename in ("cargo-dev.sh", "cargo-cache.py", "find-python-with-module.sh"):
                 shutil.copy2(root / "scripts" / filename, repo / "scripts" / filename)
             subprocess.run([str(repo / "scripts/cargo-dev.sh"), "build", "--offline"],
                            cwd=repo, env=env, check=True)
@@ -53,7 +53,7 @@ fi
 FIXTURE="$(mktemp -d)"
 trap 'rm -rf "$FIXTURE"' EXIT
 mkdir -p "$FIXTURE/repo/scripts" "$FIXTURE/bin"
-cp "$ROOT_DIR/scripts/cargo-dev.sh" "$ROOT_DIR/scripts/find-python-with-module.sh" "$FIXTURE/repo/scripts/"
+cp "$ROOT_DIR/scripts/cargo-dev.sh" "$ROOT_DIR/scripts/find-python-with-module.sh" "$ROOT_DIR/scripts/cargo-cache.py" "$FIXTURE/repo/scripts/"
 git -C "$FIXTURE/repo" init -q
 cat >"$FIXTURE/bin/sccache" <<'EOF'
 #!/usr/bin/env bash
@@ -61,7 +61,7 @@ exit 0
 EOF
 cat >"$FIXTURE/bin/cargo" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "wrapper=${RUSTC_WRAPPER:-unset}" "incremental=${CARGO_INCREMENTAL:-unset}" "target=${CARGO_TARGET_DIR:-unset}" "$@"
+printf '%s\n' "wrapper=${RUSTC_WRAPPER:-unset}" "incremental=${CARGO_INCREMENTAL:-unset}" "target=${CARGO_TARGET_DIR:-unset}" "dev-debug=${CARGO_PROFILE_DEV_DEBUG:-unset}" "test-debug=${CARGO_PROFILE_TEST_DEBUG:-unset}" "$@"
 EOF
 chmod +x "$FIXTURE/bin/"*
 cd "$FIXTURE/repo"
@@ -74,13 +74,16 @@ result="$(./scripts/cargo-dev.sh run --bin example -- --target-dir application-a
 [[ "$result" == *"target=unset"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 [[ "$result" == *$'run\n--target-dir\n'* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 [[ "$result" == *$'--\n--target-dir\napplication-argument' ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
+[[ "$result" == *"dev-debug=0"* && "$result" == *"test-debug=0"* ]] || exit 1
 for mode in check clippy; do
   result="$(./scripts/cargo-dev.sh "$mode")"
-  [[ "$result" == *"wrapper=unset"* && "$result" == *"incremental=1"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
+  [[ "$result" == *"wrapper=unset"* && "$result" == *"incremental=0"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 done
+result="$(OASIS7_CARGO_DEV_MODE=debug ./scripts/cargo-dev.sh build)"
+[[ "$result" == *"wrapper=unset"* && "$result" == *"incremental=1"* && "$result" == *"dev-debug=2"* && "$result" == *"test-debug=2"* ]] || exit 1
 for setting in 'CI=1' 'CI=true' 'OASIS7_CARGO_SCCACHE=0'; do
   result="$(env "$setting" ./scripts/cargo-dev.sh build)"
-  [[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* && "$result" == *"incremental=1"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
+  [[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* && "$result" == *"incremental=$([[ "$setting" == CI=* ]] && echo 1 || echo 0)"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 done
 # Simulate a missing installation even when the host has sccache.
 command() {
@@ -89,6 +92,6 @@ command() {
 }
 export -f command
 result="$(./scripts/cargo-dev.sh build)"
-[[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* && "$result" == *"incremental=1"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
+[[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* && "$result" == *"incremental=0"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 unset -f command
 echo "cargo-dev-sccache.test: OK"

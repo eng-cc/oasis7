@@ -21,6 +21,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$REPO/scripts" "$FAKE_BIN"
+cp "$ROOT_DIR/scripts/cargo-cache.py" "$REPO/scripts/cargo-cache.py"
 cp "$ROOT_DIR/scripts/cargo-dev.sh" "$REPO/scripts/cargo-dev.sh"
 cp "$ROOT_DIR/scripts/find-python-with-module.sh" "$REPO/scripts/find-python-with-module.sh"
 chmod +x "$REPO/scripts/cargo-dev.sh" "$REPO/scripts/find-python-with-module.sh"

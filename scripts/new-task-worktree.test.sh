@@ -5,7 +5,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 REPO="$TMP/repo"
 mkdir -p "$REPO/scripts"
-cp "$ROOT/scripts/"{new-task-worktree.sh,worktree-harness-lib.sh,cargo-dev.sh,find-python-with-module.sh} "$REPO/scripts/"
+cp "$ROOT/scripts/"{new-task-worktree.sh,worktree-harness-lib.sh,cargo-dev.sh,cargo-cache.py,find-python-with-module.sh} "$REPO/scripts/"
 git -C "$REPO" init -q
 git -C "$REPO" config user.email test@example.com
 git -C "$REPO" config user.name test

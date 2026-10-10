@@ -24,7 +24,7 @@ player_output="$TMP_DIR/player-output"
 player_log="$TMP_DIR/player.log"
 run_dry_bundle "$player_output" >"$player_log"
 for tool in oasis7_world_repair_rebuild oasis7_governance_registry_import oasis7_governance_registry_audit; do
-  if grep -Fq "$player_output/bin/$tool" "$player_log"; then
+  if grep -Fq "$player_output/bin/$tool" "$player_log" || grep -Fq -- "--bin $tool" "$player_log"; then
     echo "default player bundle dry-run routed operator tool into player output: $tool" >&2
     exit 1
   fi
