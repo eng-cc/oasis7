@@ -59,6 +59,9 @@ export function applyCommittedChatAck({ ack, feedback, state, clone, pushChatHis
 export function authenticatedCanonicalGoal(state, agentId) {
   const canonical = canonicalAgentChatView(state);
   if (!canonical?.goal || typeof canonical.goal.message !== "string"
+    || !["accepted", "blocked"].includes(canonical.goal.status)
+    || typeof canonical.goal.intent_id !== "string" || !canonical.goal.intent_id
+    || canonical.current_intent_id !== canonical.goal.intent_id
     || state.worldFeed?.stale === true || canonical.world_id !== state.worldFeed?.worldId
     || canonical.reorg_epoch !== state.worldFeed?.reorgEpoch || canonical.agent_id !== agentId || canonical.player_id !== state.auth.playerId
     || canonical.public_key !== state.auth.publicKey) return null;

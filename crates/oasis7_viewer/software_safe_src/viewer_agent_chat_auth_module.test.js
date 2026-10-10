@@ -302,7 +302,7 @@ describe("viewer agent chat auth", () => {
     expect(core.state.lastChatFeedback).toMatchObject({ stage: "pending", accepted: false, ok: false });
     expect(core.state.chatHistory.some((entry) => entry.message === "Persist this owner goal.")).toBe(false);
     canonical.current_intent_id = "canonical-intent-1";
-    canonical.goal = { intent_id: "canonical-intent-1", message: "Persist this owner goal.", status: "active", event_seq: 1, logical_time: 12 };
+    canonical.goal = { intent_id: "canonical-intent-1", message: "Persist this owner goal.", status: "accepted", event_seq: 1, logical_time: 12 };
     core.state.canonicalAgentOwnerView = { ...canonical };
     expect((await import("./viewer_canonical_goal_module.js")).authenticatedCanonicalGoal(core.state, "agent-0")?.message).toBe("Persist this owner goal.");
     sockets[0].receive({ type: "agent_chat_ack", ack: { agent_id: "agent-0", player_id: "player-1", auth_nonce: canonicalMessage.request.auth.nonce, intent_seq: canonicalMessage.request.intent_seq, intent_tick: canonicalMessage.request.intent_tick, status: "accepted", intent_id: "canonical-intent-1", accepted_at_tick: 12 } });

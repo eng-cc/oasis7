@@ -34,10 +34,10 @@ describe("canonical goal receipts", () => {
     expect(failPendingAgentChatAck).toHaveBeenCalledWith(expect.stringContaining("identity"));
   });
   it("restores only the current owner's authenticated goal and never reads local chat history", () => {
-    const goal = { intent_id: "goal-1", message: "private" };
+    const goal = { intent_id: "goal-1", status: "accepted", message: "private" };
     const state = { auth: { playerId: "p", publicKey: "k" }, chatHistory: [{ message: "sidecar-only" }],
       worldFeed: { worldId: "w", reorgEpoch: 1 },
-      snapshot: { player_gameplay: { canonical_agent_chat: { world_id: "w", reorg_epoch: 1, agent_id: "a", player_id: "p", public_key: "k", goal } } } };
+      snapshot: { player_gameplay: { canonical_agent_chat: { world_id: "w", reorg_epoch: 1, agent_id: "a", player_id: "p", public_key: "k", current_intent_id: "goal-1", goal } } } };
     expect(authenticatedCanonicalGoal(state, "a")).toBe(goal);
     expect(authenticatedCanonicalGoal(state, "other")).toBeNull();
     state.snapshot.player_gameplay.canonical_agent_chat = null;
