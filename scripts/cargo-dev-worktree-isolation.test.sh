@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Contract: divergent git worktrees must not share development Cargo artifacts.
 set -euo pipefail
+# Exercise local storage behavior even when the regression itself runs in CI.
+export CI=
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
