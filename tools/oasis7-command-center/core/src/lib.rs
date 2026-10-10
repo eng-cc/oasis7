@@ -173,14 +173,20 @@ impl CommandCenter {
                 "INSERT INTO search_fts(id,body) VALUES (?1,?2)",
                 params![
                     section.id,
-                    format!("{} {} {}", section.path, section.title, section.content)
+                    format!(
+                        "{} {} {} {}",
+                        section.id, section.path, section.title, section.content
+                    )
                 ],
             )?;
             tx.execute(
                 "INSERT INTO search(id,body,value) VALUES (?1,?2,?3)",
                 params![
                     section.id,
-                    format!("{} {} {}", section.path, section.title, section.content),
+                    format!(
+                        "{} {} {} {}",
+                        section.id, section.path, section.title, section.content
+                    ),
                     value
                 ],
             )?;
