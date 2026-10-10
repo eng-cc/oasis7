@@ -23,7 +23,7 @@
 
 ### 1.1 目标与代表性情境
 
-用户可以把自己使用的 OpenClaw、Codex 等 Agent Runtime 接入 oasis7，在高层目标、有效委托和已说明的预算范围内，驱动合法绑定的游戏 Agent 自主、持续地推进游戏任务。oasis7 提供受约束的世界观察、可理解的合法能力、权威行动结果和继续游玩的依据。**首期默认体验是：为外部 Runtime 提供可验证来源的游戏 Skill，并由 Runtime 主动通过标准游戏网络 API 获取观察、发现能力、提交意图和追读权威结果**；不要求世界反过来轮询某个专有 Provider Bridge 才能让 Agent 玩游戏。
+用户可以把自己使用的 OpenClaw、Codex 等 Agent Runtime 接入 oasis7，在高层目标、有效委托和已说明的预算范围内，驱动合法绑定的游戏 Agent 自主、持续地推进游戏任务。玩家还需能通过**网页和桌面客户端可交互地看大世界**：浏览缩放、搜索定位 Agent/设施、查看活动与权威成果，并在现场合法地指导自己的 Agent。oasis7 提供受约束的世界观察、可理解的合法能力、权威行动结果和继续游玩的依据。**首期默认体验是：为外部 Runtime 提供可验证来源的游戏 Skill，并由 Runtime 主动通过标准游戏网络 API 获取观察、发现能力、提交意图和追读权威结果**；不要求世界反过来轮询某个专有 Provider Bridge 才能让 Agent 玩游戏。
 
 代表性情境：玩家已有一个 Runtime，希望让自己的 Agent 建立第一项工业成果。他确认连接目标、Agent 资格、可玩范围与开销，给出生产目标并开始委托；Runtime 自行理解处境、规划和执行。玩家能看到已经发生的世界成果、主要阻塞和下一步，可以调整高层目标，也可以离开观战界面后再回来继续。
 
@@ -62,7 +62,7 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 | 阶段 | 要证明的结果 | 适用边界 |
 | --- | --- | --- |
 | 契约与适配验证 | 官方 Skill 可被目标 Runtime 消费，标准游戏 API 完成受权观察、能力发现、提交、回执与错误恢复 | 既有 P0 低频 NPC profile、mock、loopback 与 smoke 仅保留其协议及局部行为证据；不作为新首期产品默认接入路径。 |
-| 外部 Runtime 首局闭环 | OpenClaw、Codex 各自驱动一个合法绑定 Agent，完成代表性首产物、一次真实阻塞后的继续、目标调整及断连/重启后的续接 | 本文首期产品验收；以同一 Agent、同一世界历史连续取证，见 [AC-EXT-010](#ac-ext-010)。 |
+| 外部 Runtime 首局与大世界可视化 | 两个真实 Runtime 分别完成首产物、目标更新与恢复；玩家另在网页和受支持桌面客户端各自可浏览大世界、定位 Agent、查看世界结果并合法指导 | 组合验收：Runtime 任务与可视化两入口分别留证，见 [AC-EXT-010](#ac-ext-010)、[AC-EXT-015](#ac-ext-015)–[AC-EXT-017](#ac-ext-017)。 |
 | 持续游玩与扩面 | 更长任务、多 Agent、更多受治理玩法、更多 Runtime 及经声明的切换组合 | 按能力逐项取证；模型训练、认证制度和情报机制沿用[长期专题](provider-learning-intelligence-and-cadence.prd.md#2-范围与玩家边界)。 |
 
 首期复用玩法主责当前选定的 `starter-industrial-smelter-to-assembler-v1` / `production_only` 代表链，成果边界消费[首局主责](../world-rules-core-gameplay/first-session-and-continuation.prd.md)与[工业结算合同](../../game/gameplay/gameplay-industrial-starter-completion-contract.prd.md)。适配需要覆盖这条链实际所需的合法能力；具体资源、配方、建造条件、结算和后续候选均不在本文另行定义。首产物、经营恢复、Runtime 恢复和玩家回访分别判定，首产物不自动证明稳定生产、交付或需求满足。
@@ -71,7 +71,7 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 本清单是 §1 产品目标与 §4 产品要求之间的**稳定功能范围索引**，按[产品文档功能清单维护原则](../../engineering/doc-governance/product-documentation-standard.design.md#41-功能清单feature-catalog的编写与维护原则)更新。**阶段不是实现状态**：标为“首期闭环”的功能是本文承诺要验收的组成部分，不代表当前已交付；每项由链接的 REQ/AC 判定，版本、支持矩阵和实际进度沿专业 authority 与 GitHub 记录查询。当前仅列用户或外部 Runtime 能实际感知的能力，不将 HTTP/MCP/CLI、API 字段、辅助脚本或测试步骤定为产品功能。
 
-首期范围共 **53 项，分成十组**（原有 36 项 + 新增 Skill 6 项与游戏网络 API 11 项）。不同条目可共同满足一组 REQ/AC；单个 REQ/AC 下的负例和恢复边界仍由其完整正文约束，不能只检查功能名称。
+首期范围共 **62 项，分成十一组**（原有 53 项 + 新增大世界可视化/操作 9 项）。不同条目可共同满足一组 REQ/AC；单个 REQ/AC 下的负例和恢复边界仍由其完整正文约束，不能只检查功能名称。
 
 #### 接入与 Runtime 身份
 
@@ -176,6 +176,20 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 | EXT-F-058 | 结构化错误、限流及预算反馈 | 无权、过期、未发现能力、配额、过载和未知结算可判别，并给出安全重试/恢复建议 | 首期闭环 | [REQ-EXT-013](#req-ext-013) / [AC-EXT-013](#ac-ext-013) |
 | EXT-F-059 | 本地和远程网络接入语义一致 | 按部署选择本地或受保护远程通道；均不能借 public identifier、路由标签或模型 Token 冒充游戏身份 | 首期闭环 | [REQ-EXT-013](#req-ext-013) / [AC-EXT-013](#ac-ext-013) |
 
+#### 网页与桌面客户端大世界可视化
+
+| 功能 ID | 功能项 | 玩家或外部 Runtime 可观察的结果 | 阶段 | 验收主责 |
+| --- | --- | --- | --- | --- |
+| EXT-F-062 | 网页世界舞台 | 浏览器内可交互地浏览真实大世界而不只是日志 | 首期闭环 | [REQ-EXT-015](#req-ext-015) / [AC-EXT-015](#ac-ext-015) |
+| EXT-F-063 | 桌面客户端世界舞台 | 原生程序内可操作世界，可嵌入 Web 但不能只打开系统浏览器 | 首期闭环 | [REQ-EXT-015](#req-ext-015) / [AC-EXT-015](#ac-ext-015) |
+| EXT-F-064 | 世界/区域概览 | 了解世界/区域/Fragment、当前活动和未知/未加载范围 | 首期闭环 | [REQ-EXT-016](#req-ext-016) / [AC-EXT-016](#ac-ext-016) |
+| EXT-F-065 | 平移缩放与层级导航 | 从世界浏览至局部，返回选中 Agent 和主目标 | 首期闭环 | [REQ-EXT-016](#req-ext-016) / [AC-EXT-016](#ac-ext-016) |
+| EXT-F-066 | Agent、地点与路线定位 | 搜索、定位或适用时跟随合法可见的 Agent/设施/路线 | 首期闭环 | [REQ-EXT-016](#req-ext-016) / [AC-EXT-016](#ac-ext-016) |
+| EXT-F-067 | 对象选择与详情 | 查看有权对象的身份、位置/关系、状态和信息时效 | 首期闭环 | [REQ-EXT-016](#req-ext-016) / [AC-EXT-016](#ac-ext-016) |
+| EXT-F-068 | 事件与工业活动观察 | 结合空间关系理解生产、Agent 活动与世界事件，不以动画代签成功 | 首期闭环 | [REQ-EXT-016](#req-ext-016) / [AC-EXT-016](#ac-ext-016) |
+| EXT-F-069 | Agent 目标/回执与现场联动 | 选中 Agent 可读任务、blocker、pending/committed 与下一步 | 首期闭环 | [REQ-EXT-017](#req-ext-017) / [AC-EXT-017](#ac-ext-017) |
+| EXT-F-070 | 地图中的合法高层指导 | 从自己 Agent 上下文进入目标/Prompt/委托，选择地图不直接执行行动 | 首期闭环 | [REQ-EXT-017](#req-ext-017) / [AC-EXT-017](#ac-ext-017) |
+
 #### 后续扩面与长期候选（非首期承诺）
 
 以下六项是方向性功能候选，不等于已确定的交付承诺、兼容性或支持声明；升入确定范围时必须按维护原则补足适用条件、正式 REQ/AC 与相应专业验证范围。
@@ -195,7 +209,7 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 ### 2.3 入口与运行边界
 
-正式玩家访问模式沿用[玩家接入与发行](../player-entry-distribution/prd.md#玩家访问模式与证据边界)的 `viewer` / `pure_api`。`headless_agent` / `player_parity` 是执行或观察 lane；Runtime 类型、部署位置和连接方式不增加玩家访问模式。各 lane 的信息可见性沿用[双轨执行合同](../../world-simulator/llm/provider-agent-dual-mode.prd.md)。
+正式玩家访问模式沿用[玩家接入与发行](../player-entry-distribution/prd.md#玩家访问模式与证据边界)的 `viewer` / `pure_api`。网页与原生桌面客户端都是 `viewer` 的视觉使用表面，并非新玩家模式；各自需要实际交互证据。空间世界的产品主责是[玩家可读世界舞台](player-readable-world-stage.prd.md#world-exploration-surfaces)。`headless_agent` / `player_parity` 是执行或观察 lane；Runtime 类型、部署位置和连接方式不增加玩家访问模式。各 lane 的信息可见性沿用[双轨执行合同](../../world-simulator/llm/provider-agent-dual-mode.prd.md)。
 
 无 GUI 是首期执行能力。关闭 Viewer 后能否继续，取决于实际运行的 Runtime、连接和独立委托仍有效；世界在玩家离开或 Runtime 停止后仍按自身规则推进。远程托管 Runtime 是一种部署选择，本目标不承诺替已关闭的本机 Runtime 提供后台推理服务。
 
@@ -230,6 +244,7 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 | 绑定与委托 | 当前身份、可控制 Agent、目标及授权范围 | 绑定已取得的 Agent，按既有规则认领，或先观察 | 认领/维护由玩法主责；执行预算和委托范围分别说明 | 目标 Agent 与有效委托明确，才能开始对应任务。 |
 | 自主推进 | 当前高层目标、阶段进展和主要阻塞 | 在有效授权内让 Runtime 自主推进；需要时调整高层策略 | 已发生与预计开销分开 | Runtime 持续读取观察、调用能力、接收结果并规划下一步。 |
 | 阅读后果 | 哪些行动已结算、仍待决、被拒绝或没有进展 | 等待、补足条件、调整目标或使用受支持恢复路径 | 世界资源变化与推理费用分别归因 | 首局成果由权威结果确认，失败有适用下一步。 |
+| 浏览大世界 | 当前已知世界、Agent、工厂与事件 | 通过 Web 或桌面客户端缩放、定位、选中检查、返回目标 | 观察不自动取得控制权 | 把 Agent 自主行动、位置和世界结果关联成可理解的体验。 |
 | 调整与离开 | 新目标是否已应用；观战和执行是否分别在线 | 修改目标、停止后续委托，或保持授权离开 Viewer | 已提交行动按原权威规则处理 | 新决策消费有效目标；离开观战界面不被误报为停止执行。 |
 | 恢复与继续 | 原世界成果、未完成义务、当前权限和恢复缺项 | 核对待决结果、恢复受支持会话、重新规划或结束 | 不重复结算旧动作，不复活失效委托 | 在同一世界历史上继续，或明确说明不能继续的原因。 |
 
@@ -361,6 +376,27 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)。专业权威：[旧 Local Provider 专题](../../world-simulator/llm/provider-loopback-http-contract.prd.md)、[Continuous Harness](../../world-simulator/llm/continuous-agent-harness.prd.md)和 [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md)。
 - 验收：[AC-EXT-014](#ac-ext-014)。
 
+<a id="req-ext-015"></a>
+### REQ-EXT-015：网页和桌面客户端必须真实可视化大世界
+
+- 要求：外部 Runtime 首期必须有 Web 浏览器和受支持桌面客户端各自可交互的世界视图；客户端可嵌入 Web 技术，但只有 API/日志、静态截图或外部浏览器跳转不能替代客户端内世界体验。
+- 上位承诺：[根 SC-13/14](prd.md)。消费主责：[世界舞台双表面](player-readable-world-stage.prd.md#req-agent-stage-004)。
+- 验收：[AC-EXT-015](#ac-ext-015)。
+
+<a id="req-ext-016"></a>
+### REQ-EXT-016：用户可在大世界中浏览定位和检查
+
+- 要求：用户应能从有权观看的世界总览进入区域/Fragment，平移/缩放、搜索定位 Agent/设施/路线，选中对象或事件并查看身份、来源时效及下一步；未知/权限外的世界不能伪装全图实时情报。
+- 上位承诺：[根 SC-13/14](prd.md)。消费主责：[世界探索](player-readable-world-stage.prd.md#req-agent-stage-003)。
+- 验收：[AC-EXT-016](#ac-ext-016)。
+
+<a id="req-ext-017"></a>
+### REQ-EXT-017：可视化关联 Agent 指导和权威结果
+
+- 要求：选中自己有权的 Agent 可查看目标、行为、主要 blocker、pending/committed 并进入合法高层 Prompt/目标/委托；选中其他 Agent、点击工厂/地形或拖移地图不直接执行世界动作。Renderer 失败时提供可信文本与安全恢复。
+- 上位承诺：[根 SC-9/11/14](prd.md)。消费主责：[世界舞台间接指导](player-readable-world-stage.prd.md#req-agent-stage-005)。
+- 验收：[AC-EXT-017](#ac-ext-017)。
+
 ## 5. 验收与证据
 
 ### 5.1 可独立判定的场景
@@ -478,6 +514,30 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 - 当：用户按新推荐路径完成 [AC-EXT-010](#ac-ext-010) 的代表性首局与恢复样例，并评估旧通道剩余真实使用者。
 - 则：新首局、合法世界提交、权限、回执与恢复不依赖旧桥；可以在完成独立依赖与公开口径核查后退役不必要的兼容脚本/协议，不丢失世界历史或破坏内置 Agent。若新路径未通过，不因宣称弃用就视作已交付。本 AC 是目标性淘汰判据，本 PR 不执行部署/代码删除。
 
+<a id="ac-ext-015"></a>
+### AC-EXT-015：真实 Web 与桌面客户端分别能看和操作世界
+
+- 覆盖要求：[REQ-EXT-015](#req-ext-015)。
+- 给定：真实世界、合法 Agent 及权威工业结果、一个浏览器和一个受支持原生客户端。
+- 当：在各自界面进入世界、缩放定位、选择查看并离开回访。
+- 则：两者都实际交互同一世界并读到同义结果；Web、API、Launcher 或外部浏览器跳转不代签客户端内可视化。
+
+<a id="ac-ext-016"></a>
+### AC-EXT-016：世界总览到局部再回到任务
+
+- 覆盖要求：[REQ-EXT-016](#req-ext-016)。
+- 给定：跨区域/Fragment 的世界、若干合法可见对象与未知/最近已知对象。
+- 当：玩家缩放平移、搜索 Agent、选中工厂/事件并返回主任务。
+- 则：对象身份、来源时效、空间层级与 blocker/下一步连续，未知/无权位置不变成精确实时事实。
+
+<a id="ac-ext-017"></a>
+### AC-EXT-017：地图选择不成为直接世界行动
+
+- 覆盖要求：[REQ-EXT-017](#req-ext-017)。
+- 给定：自己与其他人的可见 Agent、pending 与 committed 行动及一次视图故障。
+- 当：玩家选择对象、对自己 Agent 更新目标、点击地形/设施。
+- 则：合法目标的 accepted/applied 与权威回执分开，越权 Agent 与地图点击不产生移动/采集/建造，故障能安全恢复可信信息。
+
 ### 5.2 叶级追踪
 
 | REQ / AC 关系 | 专业 owner | 专业权威 | 验证证据（应提供） | 测试层级 |
@@ -497,6 +557,10 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 | [REQ-EXT-012](#req-ext-012) / [AC-EXT-012](#ac-ext-012) | agent_engineer / runtime_engineer / qa_engineer | [Decision Provider](../../world-simulator/llm/decision-provider-contract.prd.md); [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md) | 不依赖桥的普通 HTTP(S)/JSON 客户端观察、查询、提交、回执与增量恢复契约 | test_tier_required + test_tier_full |
 | [REQ-EXT-013](#req-ext-013) / [AC-EXT-013](#ac-ext-013) | runtime_engineer / agent_engineer / qa_engineer | [Agent 委托](agent-authority-ownership-and-accountability.prd.md); [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md); [玩家接入](../player-entry-distribution/prd.md) | 本地/远程认证与授权、路由冒用、幂等、预算限流、重连和世界单次效果负例 | test_tier_full |
 | [REQ-EXT-014](#req-ext-014) / [AC-EXT-014](#ac-ext-014) | producer_system_designer / agent_engineer / runtime_engineer / qa_engineer | [Local Provider 专题](../../world-simulator/llm/provider-loopback-http-contract.prd.md); [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md) | 新路径在无旧桥时完成首局和恢复、仍用旧实现的独立依赖清点、旧公开指引切换核查 | test_tier_full |
+
+| [REQ-EXT-015](#req-ext-015) / [AC-EXT-015](#ac-ext-015) | producer_system_designer / viewer_engineer / game_visual_interaction_designer / qa_engineer | [Web/native 世界舞台](player-readable-world-stage.prd.md#req-agent-stage-004); [Viewer](../../world-simulator/viewer/README.md); [Launcher](../../world-simulator/launcher/README.md) | 浏览器与原生客户端分别操作、回访真实世界，无外部浏览器代签 | test_tier_full |
+| [REQ-EXT-016](#req-ext-016) / [AC-EXT-016](#ac-ext-016) | viewer_engineer / game_visual_interaction_designer / qa_engineer | [世界探索](player-readable-world-stage.prd.md#req-agent-stage-003); [Fragment LOD](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md) | 总览、区域、缩放、对象搜索选择、来源/权限负例 | test_tier_full |
+| [REQ-EXT-017](#req-ext-017) / [AC-EXT-017](#ac-ext-017) | agent_engineer / viewer_engineer / runtime_engineer / qa_engineer | [间接指导](player-readable-world-stage.prd.md#req-agent-stage-005); [Prompt](agent-conversation-and-prompt-control.prd.md) | 地图选中、目标应用、权威结果、无权直接动作与故障恢复 | test_tier_full |
 
 ### 5.3 证据范围与判定
 
