@@ -61,6 +61,7 @@ if [[ "${1:-}" == "--version" ]]; then
   printf '%s\n' 'cargo 1.0.0-fixture'
   exit 0
 fi
+if [[ "${2:-}" == "--target-dir" ]]; then CARGO_TARGET_DIR="$3"; fi
 mkdir -p "${CARGO_TARGET_DIR:?}/fixture-artifacts"
 printf '%s\n' "${FAKE_SOURCE_ID:?}" >"$CARGO_TARGET_DIR/fixture-artifacts/oasis7_proto-source.txt"
 EOF

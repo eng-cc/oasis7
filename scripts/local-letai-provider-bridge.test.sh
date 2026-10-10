@@ -59,6 +59,25 @@ OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="$fake_bridge" \
   exit 1
 }
 
+mkdir -p "$tmp_dir/bin"
+cat >"$tmp_dir/bin/cargo" <<'EOF'
+#!/usr/bin/env bash
+printf 'cargo-target=%s\n' "${CARGO_TARGET_DIR:-unset}"
+printf 'cargo-arg=%s\n' "$@"
+EOF
+chmod +x "$tmp_dir/bin/cargo"
+forced_output="$tmp_dir/forced-output.txt"
+CI= OASIS7_CARGO_DEV_SHARED=1 OASIS7_FORCE_RAW_CARGO=0 OASIS7_CARGO_SCCACHE=0 \
+  PATH="$tmp_dir/bin:$PATH" OASIS7_LOCAL_LETAI_PROVIDER_FORCE_CARGO_RUN=1 \
+  OASIS7_LOCAL_LETAI_PROVIDER_BRIDGE_BIN="$fake_bridge" \
+  ./scripts/run-local-letai-provider-bridge.sh \
+  --config "$config_path" --model test-model --base-url https://api.example.test/v1 \
+  >"$forced_output"
+expected_target="$(./scripts/cargo-dev.sh --print-target-dir)"
+rg -Fqx "cargo-target=$expected_target" "$forced_output"
+rg -Fqx 'cargo-arg=oasis7_provider_local_bridge' "$forced_output"
+rg -Fqx 'cargo-arg=--bind' "$forced_output"
+
 python3 - "$check_config" "$bridge_config" "$legacy_bridge_config" <<'PY'
 from __future__ import annotations
 
