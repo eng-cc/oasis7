@@ -13,6 +13,8 @@ pub(crate) fn canonical_runtime_provider_env_lock() -> &'static std::sync::Mutex
     runtime_live::canonical_runtime_provider_env_lock()
 }
 #[cfg(not(target_arch = "wasm32"))]
+mod game_read_api;
+#[cfg(not(target_arch = "wasm32"))]
 mod server;
 #[cfg(not(target_arch = "wasm32"))]
 mod web_bridge;
