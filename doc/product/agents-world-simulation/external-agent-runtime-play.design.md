@@ -13,7 +13,7 @@
 
 ## 1. 设计命题
 
-目标体验是让玩家把已经使用的 Runtime 委托给自己的游戏 Agent，能够放心离开观战界面，并在回来后理解进展、损失、阻塞和下一步。玩家主要决定目标、策略约束、委托范围与是否继续投入；Runtime 自主决定授权内的具体行动。
+目标体验是让玩家把已有 Runtime 委托给游戏 Agent，同时能通过网页和受支持桌面客户端**真实浏览同一个大世界、定位 Agent 和工厂、查看事件与权威结果**，再放心离开观战并在回来后理解进展、损失、阻塞和下一步。玩家主要决定目标、策略约束、委托范围与是否继续投入；Runtime 自主决定授权内的具体行动。
 
 接入阶段优先回答“连接的是谁、替哪个 Agent 做什么、需要什么条件和开销”；开始后优先回答“目标有何进展、世界确认了什么、下一步为何这样做”。版本、适配器、连接诊断和详细调用记录按需展开，不能挤占游戏目标与后果。
 
@@ -50,6 +50,19 @@
 当 Runtime 得到合法授权后，自己进行“观察 → 确定下一动作 → 向 Game API 提交 → 读取 pending/committed/rejected/failed 或增量事件 → 更新自身计划”的循环。用户不需要知道 `provider_loopback_http` 的启动参数，也不需要为了玩游戏跑一套模型 Provider 回调服务。世界并不替 Runtime 运行它的私有多 Agent 工作流；外部推理停止时，世界继续但不会凭空有新外部认知。
 
 在首次访问中，默认只呈现“连接目标/有效身份、受控 Agent、当前目标、关键世界反馈、阻塞/恢复”。只有用户需要排错时才展开 Skill 版本、Game API 协议状态、网络/认证错误和诊断；不把 HTTPS 连上、Skill 文档已下载或 MCP 已识别某个工具当作已进入可玩的 Agent 会话。
+
+### 2.5 大世界 Web/客户端可视化体验
+
+大世界是理解外部 Runtime 自主行动的**玩家主要观察面**。玩家从世界总览进入区域/Fragment，平移缩放、搜索定位自己的 Agent、工厂或路线，选中查看有来源时效的对象状态、工业活动、世界事件、当前目标及权威回执，再从合法 Agent 的上下文打开高层 Prompt/目标/委托入口。地图点击本身不直接移动、采集或建造。
+
+| 场景 | 交互结果 | 必须保留 |
+| --- | --- | --- |
+| 世界/区域/Fragment | 平移、缩放、下钻、返回总览或当前目标 | 观察范围、真实位置与抽象关系位置不同 |
+| Agent/工厂/事件 | 搜索、定位、选中检查，适用时跟随/退出 | 任务、blocker、来源时效、ambient 活动与 committed receipt 分离 |
+| 高层指导 | 从合法 Agent 详情修改 Prompt/目标/委托 | accepted/applied、pending/committed 与控制资格独立 |
+| 断线或 Renderer 错误 | 可访问文本的最新可信结果、刷新或安全返回 | 不把空舞台或旧缓存冒充实时世界 |
+
+正式桌面客户端可以内嵌 Web 舞台，但必须在客户端内部操作世界；仅跳转系统浏览器不算满足客户端体验。世界浏览、空间数据和 P1-A/B/C 前置由[世界舞台单一主责](player-readable-world-stage.prd.md#world-exploration-surfaces)及其配对设计定义。本设计只是外部 Runtime 游戏闭环的组合，不声明旧 2D overview 或 native viewer 已交付。
 
 ## 3. 状态与恢复
 
@@ -139,3 +152,6 @@
 | [REQ-EXT-012](external-agent-runtime-play.prd.md#req-ext-012) | [AC-EXT-012](external-agent-runtime-play.prd.md#ac-ext-012) | §2.4 与 §4.3 标准 API 的主动调用、回执及增量结果。 |
 | [REQ-EXT-013](external-agent-runtime-play.prd.md#req-ext-013) | [AC-EXT-013](external-agent-runtime-play.prd.md#ac-ext-013) | §3.2 与 §4.3 身份授权、错误和安全恢复。 |
 | [REQ-EXT-014](external-agent-runtime-play.prd.md#req-ext-014) | [AC-EXT-014](external-agent-runtime-play.prd.md#ac-ext-014) | §4.3 旧 Bridge 的非默认地位与替换条件。 |
+| [REQ-EXT-015](external-agent-runtime-play.prd.md#req-ext-015) | [AC-EXT-015](external-agent-runtime-play.prd.md#ac-ext-015) | §2.5 Web/native 大世界分别可用。 |
+| [REQ-EXT-016](external-agent-runtime-play.prd.md#req-ext-016) | [AC-EXT-016](external-agent-runtime-play.prd.md#ac-ext-016) | §2.5 世界概览、缩放、搜索与对象选择。 |
+| [REQ-EXT-017](external-agent-runtime-play.prd.md#req-ext-017) | [AC-EXT-017](external-agent-runtime-play.prd.md#ac-ext-017) | §2.5 世界现场、合法指导和回执。 |
