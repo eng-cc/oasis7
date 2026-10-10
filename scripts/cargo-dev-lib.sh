@@ -22,7 +22,7 @@ oasis7_cargo_dev_use_shared_target() {
 oasis7_cargo_dev_target_dir() {
   local repo_root="${1:-$(oasis7_cargo_dev_repo_root)}"
   if oasis7_cargo_dev_use_shared_target; then
-    "$repo_root/scripts/cargo-dev.sh" --print-target-dir
+    (cd "$repo_root" && ./scripts/cargo-dev.sh --print-target-dir)
     return 0
   fi
 
@@ -45,7 +45,7 @@ oasis7_cargo_dev_debug_bin_dir() {
 oasis7_cargo_dev() {
   local repo_root="${OASIS7_CARGO_DEV_REPO_ROOT:-$(oasis7_cargo_dev_repo_root)}"
   if oasis7_cargo_dev_use_shared_target; then
-    "$repo_root/scripts/cargo-dev.sh" "$@"
+    (cd "$repo_root" && ./scripts/cargo-dev.sh "$@")
   else
     env -u RUSTC_WRAPPER cargo "$@"
   fi
