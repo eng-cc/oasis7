@@ -87,6 +87,12 @@ pub enum ViewerRequest {
         event_kinds: Vec<ViewerEventKind>,
     },
     RequestSnapshot,
+    RequestCanonicalAgentOwnerReadContext {
+        agent_id: String,
+    },
+    CanonicalAgentOwnerRead {
+        request: serde_json::Value,
+    },
     RequestWorldFeed {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cursor: Option<String>,
@@ -285,7 +291,13 @@ pub struct AgentChatRequest {
     /// Explicit causal replacement target.  Ordinary retries leave this empty.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaces_intent_id: Option<String>,
+    /// Signed canonical branch and Agent identity fence; absent on legacy requests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_authority: Option<CanonicalAgentChatAuthorityV1>,
 }
+#[path = "canonical_agent_chat.rs"]
+mod canonical_agent_chat;
+pub use canonical_agent_chat::*;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GameplayActionRequest {
     pub action_id: String,
@@ -535,6 +547,15 @@ pub enum ViewerControl {
     reason = "ViewerResponse is a public wire/API enum; boxing a response branch would break existing Rust pattern matches even though serde could preserve its bytes."
 )]
 pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
+    CanonicalAgentOwnerReadContext {
+        context: serde_json::Value,
+    },
+    CanonicalAgentOwnerView {
+        version: serde_json::Value,
+        request_digest: String,
+        request: serde_json::Value,
+        view: CanonicalAgentChatViewV1,
+    },
     HelloAck {
         server: String,
         version: u32,

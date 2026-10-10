@@ -41,6 +41,8 @@ mod governance_vote_quote_debug;
 mod industrial_progression;
 mod module_visual_runtime;
 pub(super) use industrial_progression::setup_industrial_gameplay_with_completed_jobs;
+#[path = "tests/canonical_goal_snapshot_privacy.rs"]
+mod canonical_goal_snapshot_privacy;
 mod industrial_progression_grind;
 mod industrial_progression_preview;
 mod industrial_progression_readiness;

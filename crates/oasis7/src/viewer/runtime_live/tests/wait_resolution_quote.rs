@@ -269,6 +269,7 @@ fn compat_snapshot_omits_wait_quote_after_accepted_agent_chat() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         225,
         public_key.as_str(),

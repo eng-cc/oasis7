@@ -107,6 +107,9 @@ pub(super) fn submit(
     service.check_payload(&pinned, &request.signed_payload)?;
     let existing = outcome(service, &pinned, &correlation)?;
     let status = if matches!(existing, IntentOutcome::Unknown) {
+        if let WorldServicePayloadV1::AgentChat(chat) = &request.signed_payload {
+            agent_chat::validate_fresh(&pinned.world, chat)?;
+        }
         if matches!(&request.signed_payload, WorldServicePayloadV1::GameplayJson(bytes)
             if gameplay::consumed_collect_data_nonce(&pinned.world, bytes)?)
         {
@@ -230,8 +233,11 @@ pub(super) fn view(
         &request.request.scope_id,
         &request.subject_public_key,
     )?;
-    let mut projection =
-        projection::WorldServiceProjection::from_world(&pinned.world, agent.as_deref())?;
+    let mut projection = projection::WorldServiceProjection::from_authenticated_world(
+        &pinned.world,
+        agent.as_deref(),
+        &request.subject_public_key,
+    )?;
     if let Some(agent) = agent.as_deref() {
         projection.agent_context = Some(
             oasis7::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(

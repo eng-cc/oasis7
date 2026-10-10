@@ -98,6 +98,25 @@ export function cborEncode(value) {
   throw new Error(`unsupported CBOR type: ${typeof value}`);
 }
 
+// WorldService uses canonical CBOR; legacy Viewer envelopes retain their original ordering.
+export function cborCanonicalEncode(value) {
+  if (Array.isArray(value)) return concatBytes(cborHeader(4, value.length), ...value.map(cborCanonicalEncode));
+  if (value && typeof value === "object" && !(value instanceof Uint8Array)) {
+    const entries = Object.entries(value).map(([key, entryValue]) => {
+      if (entryValue === undefined) throw new Error("canonical CBOR cannot omit undefined fields");
+      return [cborEncode(key), cborCanonicalEncode(entryValue)];
+    }).sort(([left], [right]) => {
+      if (left.length !== right.length) return left.length - right.length;
+      for (let index = 0; index < left.length; index += 1) {
+        if (left[index] !== right[index]) return left[index] - right[index];
+      }
+      return 0;
+    });
+    return concatBytes(cborHeader(5, entries.length), ...entries.flat());
+  }
+  return cborEncode(value);
+}
+
 function hexToBytes(raw) {
   const value = String(raw || "").trim().toLowerCase();
   if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) {

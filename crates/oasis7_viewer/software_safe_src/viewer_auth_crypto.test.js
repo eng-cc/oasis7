@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildAuthEnvelope,
+  cborCanonicalEncode,
   buildPromptControlSigningPayload,
   generateEphemeralEd25519Keypair,
   promptFieldPatchV1,
@@ -22,6 +23,11 @@ afterEach(() => {
 });
 
 describe("viewer auth crypto", () => {
+  it("matches the Rust WorldService canonical CBOR signing golden without changing legacy envelope order", () => {
+    const request = {contract_version:1,world:{world_id:"world",genesis_digest:"genesis"},scope_id:"agent:owner-agent",min_commit:null,fixed_commit:null,deadline_unix_ms:null};
+    const bytes = cborCanonicalEncode(["oasis7.world-service.v1","/v1/world/view",request]);
+    expect(Array.from(bytes,x=>x.toString(16).padStart(2,"0")).join("")).toBe("83776f61736973372e776f726c642d736572766963652e76316e2f76312f776f726c642f76696577a665776f726c64a268776f726c645f696465776f726c646e67656e657369735f6469676573746767656e657369736873636f70655f6964716167656e743a6f776e65722d6167656e746a6d696e5f636f6d6d6974f66c66697865645f636f6d6d6974f670636f6e74726163745f76657273696f6e0170646561646c696e655f756e69785f6d73f6");
+  });
   it("serializes generated Ed25519 key bytes as zero-padded lowercase hex", async () => {
     const privateKey = new Uint8Array(32);
     const publicKey = new Uint8Array(32);

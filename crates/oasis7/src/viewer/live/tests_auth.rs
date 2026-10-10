@@ -365,6 +365,7 @@ fn agent_chat_requires_player_id() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         })
         .expect_err("missing player_id should be rejected");
 
@@ -391,6 +392,7 @@ fn agent_chat_rejects_replayed_nonce() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         9,
         public_key.as_str(),
@@ -437,6 +439,7 @@ fn agent_chat_upgrades_compat_player_binding_with_public_key() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+                canonical_authority: None,
             },
             6,
             public_key.as_str(),

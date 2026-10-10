@@ -132,6 +132,16 @@
   - 不定义 gameplay/p2p/runtime 业务规则。
   - 不替代模块内部测试策略。
 
+<a id="PRD-ENGINEERING-034"></a>
+
+### PRD-ENGINEERING-034：项目开发指挥客户端
+
+为项目负责人提供 macOS 优先的独立桌面入口，关联短期与长期目标、当前适用规范及其理由、Git/PR/CI 交付事实和开发会话，帮助用户定位下一项交付与真正需要处理的问题。
+
+- 产品范围、四视图、主要失败恢复和验收条件由 [指挥客户端产品设计](command-center/command-center.prd.md) 主责；技术选型、组件、数据和连接合同由 [系统设计](command-center/command-center.design.md) 承接。
+- 该客户端属于 engineering 开发工具，沿用现有文档、Git 与运行来源的事实边界；不扩展游戏产品模块，不新增通用任务登记或开发审批。
+- 当前是待实施设计；文档采纳、应用实现、运行验证和发布分别判断，实际交付事实见 PR、实际 CI 与评审记录。
+
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 文档治理脚本、CI 测试脚本、静态检查脚本。
 - Evaluation Strategy: 通过 required/full gate 成功率、违规项统计、回归修复时长衡量工程治理有效性。

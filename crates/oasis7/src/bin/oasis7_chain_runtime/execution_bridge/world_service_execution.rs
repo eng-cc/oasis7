@@ -104,6 +104,21 @@ pub(super) fn apply_intents(
                     },
                 )
             }
+            WorldServicePayloadV1::AgentChat(request) => {
+                let proof = request
+                    .auth
+                    .as_ref()
+                    .ok_or("canonical chat proof required")?;
+                let staged_nonce_consumed = staged.iter().any(|entry: &StagedResult| {
+                    matches!(&entry.result.request.signed_payload, WorldServicePayloadV1::AgentChat(previous)
+                        if previous.auth.as_ref().is_some_and(|old| old.public_key == proof.public_key && old.nonce >= proof.nonce))
+                });
+                if staged_nonce_consumed {
+                    Err("canonical chat nonce did not advance within block".into())
+                } else {
+                    candidate.apply_authenticated_agent_chat(&request)
+                }
+            }
             WorldServicePayloadV1::Cognition(signed) => {
                 candidate.commit_authenticated_cognition(signed)
             }

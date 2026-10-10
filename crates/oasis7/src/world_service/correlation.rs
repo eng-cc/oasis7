@@ -55,6 +55,19 @@ pub fn derive_correlation(
                 )
             }
         }
+        WorldServicePayloadV1::AgentChat(request) => {
+            let proof = request
+                .auth
+                .as_ref()
+                .ok_or("missing canonical chat proof")?;
+            let verified = crate::viewer::verify_agent_chat_auth_proof(request, proof)?;
+            (
+                verified.public_key,
+                "agent_chat",
+                "canonical_owner_chat",
+                verified.nonce.to_string(),
+            )
+        }
         WorldServicePayloadV1::Cognition(signed) => {
             verify_read_request("cognition", signed)?;
             let request = &signed.request.request;

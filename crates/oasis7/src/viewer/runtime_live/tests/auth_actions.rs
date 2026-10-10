@@ -2,8 +2,9 @@ use super::*;
 use std::sync::{Arc, Mutex};
 
 pub(super) use super::mock_http::{
-    MockHttpResponse, RecordedHttpRequest, provider_context_response,
-    spawn_runtime_live_mock_http_server, spawn_runtime_live_mock_http_server_with_provider_probes,
+    MockHttpResponse, RecordedHttpRequest, RuntimeLiveMockHttpServer, provider_context_response,
+    spawn_runtime_live_mock_http_server, spawn_runtime_live_mock_http_server_until_drop,
+    spawn_runtime_live_mock_http_server_with_provider_probes,
 };
 
 #[path = "auth_actions_agent_chat.rs"]
@@ -41,6 +42,7 @@ fn runtime_agent_chat_script_mode_requires_llm_mode() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         })
         .expect_err("script mode should reject chat");
     assert_eq!(err.code, "llm_mode_required");
@@ -728,6 +730,7 @@ fn runtime_agent_chat_requires_explicit_session_registration() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         1,
         public_key.as_str(),

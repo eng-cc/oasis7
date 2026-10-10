@@ -1,5 +1,6 @@
 use super::auth_actions::{
-    MockHttpResponse, provider_context_response, spawn_runtime_live_mock_http_server,
+    MockHttpResponse, RuntimeLiveMockHttpServer, provider_context_response,
+    spawn_runtime_live_mock_http_server_until_drop,
 };
 use super::*;
 use crate::viewer::runtime_live::agency_control::{
@@ -743,7 +744,7 @@ fn owner_signed_memory_correction_applies_to_matching_provider_receipt_and_reloa
     let _provider_env_cleanup = ProviderEnvironmentCleanup;
     let decision_count = std::sync::Arc::new(AtomicUsize::new(0));
     let feedback_statuses = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-    let base_url = spawn_runtime_live_mock_http_server(8, {
+    let mock_server: RuntimeLiveMockHttpServer = spawn_runtime_live_mock_http_server_until_drop({
         let decision_count = std::sync::Arc::clone(&decision_count);
         let feedback_statuses = std::sync::Arc::clone(&feedback_statuses);
         move |request| match request.path.as_str() {
@@ -820,7 +821,7 @@ fn owner_signed_memory_correction_applies_to_matching_provider_receipt_and_reloa
     // SAFETY: the shared provider environment lock serializes this test lane.
     unsafe {
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
-        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, mock_server.base_url());
         oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
         oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
     }

@@ -372,6 +372,7 @@ pub(super) fn build_player_gameplay_snapshot(
         let disabled_reason = gameplay_disabled_reason
             .unwrap_or("gameplay requires runtime live server running with --llm");
         return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
             stage_id: PlayerGameplayStageId::FirstSessionLoop,
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
@@ -494,6 +495,7 @@ pub(super) fn build_player_gameplay_snapshot(
             action.disabled_reason = Some(disabled_reason.clone());
         }
         return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
                 stage_id: PlayerGameplayStageId::FirstSessionLoop,
                 stage_status: PlayerGameplayStageStatus::Blocked,
                 execution_state: PlayerGameplayExecutionState::Executing,
@@ -568,6 +570,7 @@ pub(super) fn build_player_gameplay_snapshot(
             action.label = "Advance 1 step to create the first world feedback".to_string();
         }
         return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
             stage_id: PlayerGameplayStageId::FirstSessionLoop,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
@@ -649,6 +652,7 @@ pub(super) fn build_player_gameplay_snapshot(
             )
         };
         return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Blocked,
             execution_state: PlayerGameplayExecutionState::Executing,
@@ -739,6 +743,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     )
                 };
                 return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::Active,
                     execution_state: PlayerGameplayExecutionState::Executing,
@@ -799,6 +804,7 @@ pub(super) fn build_player_gameplay_snapshot(
             }
             IndustryStage::ScaleOut => {
                 return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
@@ -862,6 +868,7 @@ pub(super) fn build_player_gameplay_snapshot(
             }
             IndustryStage::Governance => {
                 return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
                     stage_id: PlayerGameplayStageId::PostOnboarding,
                     stage_status: PlayerGameplayStageStatus::BranchReady,
                     execution_state: PlayerGameplayExecutionState::Executing,
@@ -927,6 +934,7 @@ pub(super) fn build_player_gameplay_snapshot(
     }
     if has_recipe_running {
         return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
@@ -987,6 +995,7 @@ pub(super) fn build_player_gameplay_snapshot(
     }
     if has_factory_ready {
         return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
@@ -1047,6 +1056,7 @@ pub(super) fn build_player_gameplay_snapshot(
     }
     if has_material_flow {
         return finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
             stage_id: PlayerGameplayStageId::PostOnboarding,
             stage_status: PlayerGameplayStageStatus::Active,
             execution_state: PlayerGameplayExecutionState::Executing,
@@ -1106,6 +1116,7 @@ pub(super) fn build_player_gameplay_snapshot(
         });
     }
     finalize(PlayerGameplaySnapshot {
+            canonical_agent_chat: None,
         stage_id: PlayerGameplayStageId::PostOnboarding,
         stage_status: PlayerGameplayStageStatus::Active,
         execution_state: PlayerGameplayExecutionState::Executing,

@@ -12,6 +12,7 @@
 
 | 专题 PRD | 专题设计文档 | 任务与证据入口 |
 | --- | --- | --- |
+| [指挥客户端产品设计](command-center/command-center.prd.md)（PRD-ENGINEERING-034） | [指挥客户端系统设计](command-center/command-center.design.md) | PR、实际 CI 与评审记录（Issue 按需） |
 | `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md`；`documentation-governance.manual.md`（how-to） | PR、实际 CI 与评审记录（Issue 按需） |
 | `doc/engineering/doc-governance/product-documentation-standard.prd.md` | `doc/engineering/doc-governance/product-documentation-standard.design.md`；`product-documentation-standard.templates.md` | PR、实际 CI 与评审记录（Issue 按需） |
 | 产品文档全量治理（standalone execution design） | `doc/engineering/doc-governance/product-documentation-full-corpus-governance.design.md` | PR、实际 CI 与评审记录（Issue 按需） |

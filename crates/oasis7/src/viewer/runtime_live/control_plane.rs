@@ -29,6 +29,8 @@ mod agent_chat_intent;
 mod agent_memory_correction;
 #[path = "control_plane/auth_helpers.rs"]
 mod auth_helpers;
+#[path = "control_plane/canonical_agent_chat.rs"]
+mod canonical_agent_chat;
 pub(in crate::viewer::runtime_live) mod llm_sidecar;
 #[path = "control_plane/prompt_control_enhanced.rs"]
 mod prompt_control_enhanced;
