@@ -35,6 +35,9 @@ Current library entries:
 - [`oasis7-command-center`](oasis7-command-center/SKILL.md): project goals,
   current rules and decisions, Git/PR/CI delivery facts, and Codex development
   sessions for the oasis7 command dashboard.
+- [`oasis7-dev-playtest`](oasis7-dev-playtest/SKILL.md): opt-in development
+  self-testing with an independent player-Skill subagent, isolated game
+  candidates, authoritative evidence, and bounded regression-driven repair.
 - `optimization-performance`: profiling, frame rate, CPU/GPU, loading, and
   scalability optimization.
 - `particle-systems`: particle effects and VFX tuning reference.

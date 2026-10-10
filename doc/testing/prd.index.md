@@ -41,6 +41,8 @@
 | `chaos-plans/` | 专项 chaos plan 入口 |
 
 ## 活跃补充文档
+- [外部 Runtime 自主试玩与开发自测设计](governance/agent-runtime-self-playtest.design.md)：承接现有 L4B、真实 subagent、玩家 Skill、自主游玩、权威验真及修复回归，不新增通用门禁。
+- [开发 Agent 自测手册](manual/agent-runtime-self-playtest.manual.md)：预检、冷启动/准备态、七组自测场景和反馈收口；显式使用 `skills/oasis7-dev-playtest/`。
 - `doc/testing/governance/README.md`：`governance/` 热点子域 landing page，按质量门禁、playability 证据、L4 分层、role review 与 persona 问题分流读者。
 - `doc/testing/evidence/README.md`：`evidence/` 热点子域 landing page，按 release gate、hosted access、legacy p2p network rehearsal、governance drill 与 claim/audit 分流读者。
 - `testing-manual.md`：仓库级系统测试手册，不并入下方模块 PRD 三件套长表。
