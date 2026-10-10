@@ -310,6 +310,11 @@ impl RemoteWorldServiceClient {
         &self,
         signed: SignedReadRequest<ReadWorldViewRequest>,
     ) -> Result<VerifiedWorldView, WorldServiceClientError> {
+        if self.evidence_policy != ReadEvidencePolicy::Ordinary {
+            return Err(WorldServiceClientError::Assurance(
+                "owner read helper is unavailable for engineering evidence policy".into(),
+            ));
+        }
         authority::verify_read_request(VIEW_PATH, &signed)
             .map_err(WorldServiceClientError::Assurance)?;
         if signed.request.world != self.config.expected_world {
@@ -536,6 +541,43 @@ mod tests {
         });
         (endpoint, task)
     }
+    #[test]
+    fn engineering_owner_read_rejects_before_transport_preserving_original_proof() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let config = config(format!("http://{}", listener.local_addr().unwrap()));
+        let signed = authority::sign_read_request(
+            VIEW_PATH,
+            ReadWorldViewRequest {
+                contract_version: 1,
+                world: config.expected_world.clone(),
+                scope_id: config.scope_id.clone(),
+                min_commit: None,
+                fixed_commit: None,
+                deadline_unix_ms: None,
+            },
+            &config.read_private_key_hex,
+        )
+        .unwrap();
+        let original = serde_json::to_vec(&signed).unwrap();
+        let client = RemoteWorldServiceClient::new_with_evidence_policy(
+            config,
+            ReadEvidencePolicy::AllowControlledPrerequisite,
+        )
+        .unwrap();
+        for _ in 0..2 {
+            assert!(matches!(
+                client.read_owner_view(signed.clone()),
+                Err(WorldServiceClientError::Assurance(_))
+            ));
+            assert_eq!(serde_json::to_vec(&signed).unwrap(), original);
+            assert_eq!(
+                listener.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock
+            );
+        }
+    }
+
     #[test]
     fn signed_http_scope_rejects_unknown_downgrade_and_unsigned_tamper() {
         let payload = serde_json::json!({

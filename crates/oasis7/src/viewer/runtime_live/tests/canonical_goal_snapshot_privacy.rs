@@ -276,6 +276,7 @@ fn canonical_goal_owner_browser_read_forwards_original_proof_and_isolates_sessio
     let mut projection = projection::WorldServiceProjection::from_world(&world, None).unwrap();
     projection.runtime_binding = None;
     let response = ReadWorldViewResponse {
+        execution_evidence_scope: None,
         contract_version: 1,
         version: ProjectionVersion {
             commit: commit.clone(),
