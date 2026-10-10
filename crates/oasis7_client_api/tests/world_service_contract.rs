@@ -143,7 +143,7 @@ fn missing_terminal_material_and_unknown_status_fail_deserialization() {
         contract_version: 1,
         correlation: correlation(),
         outcome: IntentOutcome::Committed {
-            commit: commit(7),
+            commit: commit(7).into(),
             receipt: json!({"result":"done"}),
         },
     };
@@ -174,7 +174,7 @@ fn correlation_digest_conflict_and_wrong_world_are_rejected() {
     let mut wrong = commit(7);
     wrong.world.world_id = "world-b".into();
     response.outcome = IntentOutcome::Committed {
-        commit: wrong,
+        commit: wrong.into(),
         receipt: json!({}),
     };
     assert!(response.validate(&correlation()).is_err());
@@ -363,7 +363,7 @@ fn describe_and_lookup_full_wire_samples_are_pinned() {
         contract_version: 1,
         correlation: correlation(),
         outcome: IntentOutcome::Committed {
-            commit: commit(7),
+            commit: commit(7).into(),
             receipt: json!({"receipt_id":"receipt-a"}),
         },
     };

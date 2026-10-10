@@ -23,7 +23,14 @@ impl Drop for Clock {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
         if let Some(worker) = self.worker.take() {
-            worker.join().unwrap();
+            let joined = worker.join();
+            if joined.is_err() {
+                if thread::panicking() {
+                    eprintln!("final-budget clock worker also failed during parent unwinding");
+                } else {
+                    panic!("final-budget clock worker failed");
+                }
+            }
         }
     }
 }
@@ -43,8 +50,10 @@ pub(super) fn start_clock(fixture: &Fixture, root: std::path::PathBuf) -> Clock 
                     "hosted-final-budget-selected.json",
                 ),
             ] {
-                let Ok(bytes) = fs::read(root.join(file)) else {
-                    continue;
+                let bytes = match fs::read(root.join(file)) {
+                    Ok(bytes) => bytes,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(error) => panic!("final-budget clock marker read failed: {error}"),
                 };
                 let request: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
                 let digest = request["request_digest"].as_str().unwrap();
@@ -85,7 +94,7 @@ pub(super) fn start_clock(fixture: &Fixture, root: std::path::PathBuf) -> Clock 
                     .into_iter()
                     .find(|wake| wake.continuation_id == continuation.continuation_id);
                 if let Some(wake) = wake {
-                    fs::write(root.join(marker), serde_json::to_vec(&serde_json::json!({
+                    application_hosted_wait::publish_marker(&root.join(marker), &serde_json::to_vec(&serde_json::json!({
                         "continuation_id":continuation.continuation_id,"wake_id":wake.wake_id,
                         "origin_request_digest":digest,"remaining_budget":continuation.remaining_budget.value,
                         "settled_before_clock":true})).unwrap()).unwrap();

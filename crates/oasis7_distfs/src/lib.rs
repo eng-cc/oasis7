@@ -26,6 +26,7 @@ pub use local_blob_codec::{BlobReadReceipt, decode_local_blob_into};
 mod challenge;
 mod challenge_scheduler;
 mod compressed_range_cache;
+pub mod controlled_authority;
 mod feedback;
 mod feedback_p2p;
 mod manifest;

@@ -66,6 +66,7 @@ fn full_node_restart(stale_cache: bool) {
     let mut config = fixture.client.config().clone();
     let owner = fixture.owner.clone();
     fixture.preserve_root = true;
+    let _scenario_permit = fixture.scenario_permit.clone();
     drop(fixture);
     let old_cache = root.join("older-distfs-cache-generation");
     if stale_cache {
@@ -134,7 +135,7 @@ fn full_node_restart(stale_cache: bool) {
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),
-            min_commit: Some(original_commit.clone()),
+            min_commit: Some(original_commit.as_ref().clone()),
             fixed_commit: None,
             deadline_unix_ms: None,
         })
@@ -188,7 +189,7 @@ fn full_node_restart(stale_cache: bool) {
             contract_version: 1,
             world: switched.config().expected_world.clone(),
             scope_id: switched.config().scope_id.clone(),
-            min_commit: Some(commit),
+            min_commit: Some(*commit),
             fixed_commit: None,
             deadline_unix_ms: None,
         })
@@ -358,6 +359,7 @@ fn reject_invalid_setup_boundary(tamper: bool) {
     )
     .unwrap();
     fixture.preserve_root = true;
+    let _scenario_permit = fixture.scenario_permit.clone();
     drop(fixture);
     let path = root.join("records/local-execution-bootstrap.json");
     assert!(

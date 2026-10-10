@@ -178,6 +178,7 @@ fn product_validation_intent_marker_first_crash_window_reconciles_predecessor() 
         journal_len: 1,
         pre_step_execution_state_root: execution_world_snapshot_root(&world)
             .expect("predecessor root"),
+        controlled_preparation_ref: None,
         pre_step_external_effect: Some(effect.clone()),
         staged_execution_state_root: String::new(),
         previous_staged_execution_state_root: None,
@@ -232,6 +233,7 @@ fn product_validation_intent_roundtrip_preserves_external_effect_cas_bytes() {
         action_root: context.action_root.clone(),
         journal_len: 1,
         pre_step_execution_state_root: uninterrupted.pre_step_execution_state_root.clone(),
+        controlled_preparation_ref: None,
         pre_step_external_effect: Some(uninterrupted.clone()),
         staged_execution_state_root: String::new(),
         previous_staged_execution_state_root: None,
@@ -278,6 +280,7 @@ fn product_validation_intent_recognizes_previous_same_height_generation() {
         journal_len: previous_generation.journal().len().saturating_add(1),
         pre_step_execution_state_root: execution_world_snapshot_root(&predecessor)
             .expect("predecessor root"),
+        controlled_preparation_ref: None,
         pre_step_external_effect: None,
         staged_execution_state_root: "newer-generation-root".to_string(),
         previous_staged_execution_state_root: Some(previous_root),
@@ -747,3 +750,5 @@ fn persist_test_external_effect(
     persist_execution_external_effect_materialization(store, &materialization)
         .expect("persist test external effect")
 }
+
+mod controlled_history;

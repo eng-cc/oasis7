@@ -74,7 +74,7 @@ pub(super) fn observation(
             panic!("incoming model callback needs actual signed Prefix Lookup commit");
         };
         let mut minimum_read = read.clone();
-        minimum_read.min_commit = Some(commit);
+        minimum_read.min_commit = Some(*commit);
         let view = client.read_view(minimum_read).unwrap();
         let lease = view
             .projection()
@@ -116,14 +116,14 @@ pub(super) fn observation(
                 oasis7::runtime::ContinuationStatusV1::Scheduled
             );
             assert_ne!(next.continuation_id, receipt.continuation.continuation_id);
-            fs::write(root.join("hosted-resumed-model.json"), serde_json::to_vec(&serde_json::json!({
+            publish_marker(&root.join("hosted-resumed-model.json"), &serde_json::to_vec(&serde_json::json!({
                 "request_digest":digest,"lease_id":lease.lease_id,"resume_height":resume_result.committed_height,
                 "original_continuation_id":receipt.continuation.continuation_id,"successor_id":next.continuation_id,
                 "resume_exact_context":true,"new_reserve_prefix_before_model":true})).unwrap()).unwrap();
         } else {
-            fs::write(
-                root.join("hosted-wait-origin.json"),
-                serde_json::to_vec(&evidence).unwrap(),
+            publish_marker(
+                &root.join("hosted-wait-origin.json"),
+                &serde_json::to_vec(&evidence).unwrap(),
             )
             .unwrap();
         }
@@ -470,4 +470,75 @@ pub(super) fn report(fixture: &Fixture, root: &std::path::Path, models: usize) {
     println!(
         "hosted_wait_canonical_positive original_consumed=true exact_successor_scheduled=true resumed_act_once=true exact_wait_and_act_leases_settled=true memory_exact_receipt=true future_work_preserved=true"
     );
+}
+
+// Provider/clock markers are read concurrently by genuine process watchers.
+pub(super) fn publish_marker(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    publish_marker_with_pause(path, bytes, |_| {})
+}
+fn publish_marker_with_pause(
+    path: &std::path::Path,
+    bytes: &[u8],
+    after_create: impl FnOnce(&std::path::Path),
+) -> std::io::Result<()> {
+    use std::io::Write;
+    // Publish only complete JSON; watchers never observe the staging inode.
+    let stage = path.with_extension(format!(
+        "staging-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    // Failed exclusive creation never authorizes removing another writer's file.
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&stage)?;
+    let result = (|| {
+        after_create(&stage);
+        file.write_all(bytes)?;
+        drop(file);
+        fs::rename(&stage, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&stage);
+    }
+    result
+}
+
+#[test]
+fn provider_clock_marker_is_not_visible_during_partial_publication() {
+    let root = temp_dir("pre2-atomic-provider-clock-marker");
+    fs::create_dir_all(&root).unwrap();
+    let target = root.join("marker.json");
+    let worker_target = target.clone();
+    let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let bytes =
+        br#"{"request_digest":"actual-marker-publication","successor_id":"actual-successor"}"#;
+    let worker = thread::spawn(move || {
+        publish_marker_with_pause(&worker_target, bytes, |stage| {
+            fs::write(stage, b"{").unwrap();
+            ready_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+        })
+    });
+    ready_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let observed = fs::read(&target);
+    release_tx.send(()).unwrap();
+    worker.join().unwrap().unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&fs::read(&target).unwrap()).unwrap();
+    assert_eq!(parsed["request_digest"], "actual-marker-publication");
+    assert!(
+        matches!(observed, Err(error) if error.kind() == std::io::ErrorKind::NotFound),
+        "published marker must remain absent while staging is partial"
+    );
+    fs::write(&target, b"{").unwrap();
+    assert!(
+        serde_json::from_slice::<serde_json::Value>(&fs::read(&target).unwrap()).is_err(),
+        "actually malformed published JSON remains an error"
+    );
+    fs::remove_dir_all(root).unwrap();
 }

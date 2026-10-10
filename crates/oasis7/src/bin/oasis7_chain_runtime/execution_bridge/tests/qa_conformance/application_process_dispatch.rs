@@ -221,7 +221,7 @@ fn run_inner() {
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: "public".into(),
-            min_commit: Some(commit),
+            min_commit: Some(*commit),
             fixed_commit: None,
             deadline_unix_ms: None,
         })
@@ -306,7 +306,7 @@ fn run_inner() {
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: "public".into(),
-            min_commit: Some(gameplay_commit.clone()),
+            min_commit: Some(gameplay_commit.as_ref().clone()),
             fixed_commit: None,
             deadline_unix_ms: None,
         })
@@ -383,7 +383,7 @@ fn run_inner() {
             contract_version: 1,
             world: protected.config().expected_world.clone(),
             scope_id: protected.config().scope_id.clone(),
-            min_commit: Some(gameplay_commit),
+            min_commit: Some(*gameplay_commit),
             fixed_commit: None,
             deadline_unix_ms: None,
         })

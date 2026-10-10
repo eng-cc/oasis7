@@ -11,6 +11,7 @@
 //! - `power`: Power system (M4 social system)
 
 mod agent;
+mod agent_api_compat;
 mod agent_intent_summary;
 mod asteroid_fragment;
 #[cfg(not(target_arch = "wasm32"))]
@@ -71,6 +72,9 @@ pub use agent_intent_summary::{
 pub use asteroid_fragment::generate_fragments;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use async_agent_runner::project_receipt_memory;
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(unused_imports)] // Retained for the B3 Harness adapter boundary.
+pub(crate) use async_agent_runner::validated_cognition_lease_consumption_view;
 #[cfg(not(target_arch = "wasm32"))]
 pub use async_agent_runner::{
     AsyncAgentRunner, AsyncAgentRunnerError, AsyncAgentTurnOutcome, AsyncTurnFeedback, AsyncTurnId,

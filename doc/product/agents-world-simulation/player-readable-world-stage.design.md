@@ -118,6 +118,20 @@ Location、Facility、Territory、Organization、Depot 和 Module 不得复用 A
 - 高密度时优先保留当前目标、选中对象和关键 blocker；次级标签可以渐进隐藏，但不得通过无差别缩小使首读对象不可辨认。
 - overview 与 detail 可以使用不同密度、尺度和标注，但切换后仍保持目的、选中对象、关键 blocker 和下一步连续；这项原则不要求存在专用地图模式、自动缩放或历史 Viewer 控件。
 
+### 3.1 大世界可操作视觉体验与两端同义
+
+玩家的默认旅程是“世界概览 → 区域/Fragment → 搜索定位自己的 Agent/设施/路线 → 选择检查 → 阅读权威结果 → 合法指导 → 返回总览/当前目标”。原有 2D 俯视像素工业舞台是长期视觉方向，不为本产品合同冻结地图组件、缩放值或渲染技术。
+
+| 玩家操作 | 最小产品反馈 | 必须保留的界限 |
+| --- | --- | --- |
+| 平移/缩放、区域下钻与返回 | 世界范围、选中身份、主目标、当前尺度与主要 blocker | 不将未知区域表现为全知地图 |
+| 搜索、定位、选择或跟随 Agent | 当前可见/最近已知的位置或关系、活动、合法退出跟随 | 地图选择不改变世界位置或取得控制权 |
+| 检查工厂/路线/世界事件 | 可追踪的身份、状态、来源、工业与回执 | 环境活动/动画不代签 committed |
+| 打开合法 Agent 的指导上下文 | 目标/Prompt/委托提交与 accepted/applied，后续世界结果 | 地图点击不直接移动/采集/建造 |
+| Renderer 失败或连接中断 | 已确认结果、可访问文本、返回/刷新/等待 | 不用空白或本地缓存改写真值 |
+
+浏览器和受支持原生桌面客户端需分别在自己界面完成上述最小交互；桌面内嵌 Web 舞台可复用代码，但唤起外部浏览器不能代签客户端。逐项验收由 [REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003)、[REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004)、[REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005) 承担，配对 AC 和专业证据在对应 PRD 中。本设计不声称地图/原生端或 Event spatial marker 当前已交付。
+
 ## 4. 支持文本与诊断
 
 - 玩家目标、blocker、回执和恢复路径应能以可访问文本或等价语义读取。
@@ -133,7 +147,7 @@ Location、Facility、Territory、Organization、Depot 和 Module 不得复用 A
 
 ## 6. 非承诺
 
-- 不承诺 `Locate Agent`、尺寸检查面板、复制面板、2D/3D 切换或 overview-map 控件存在。
+- 不将 `Locate Agent`、overview-map、专用缩放控件、原生大世界客户端或空间事件标记当作当前已实现能力；本次新增的是未来可验收目标。
 - 不定义 centimetre 字段、比例/clamp、marker 几何、箭头、LOD 阈值、标签容量或截图基线。
 - 不把历史完成状态、EGUI/Bevy 组件、测试命令或截图提升为当前产品能力。
 ## PRD REQ/AC fragment mapping
@@ -144,3 +158,6 @@ This design delegates product requirements and acceptance semantics to its paire
 | --- | --- |
 | [REQ-AGENT-STAGE-001](player-readable-world-stage.prd.md#req-agent-stage-001) | [AC-AGENT-STAGE-001](player-readable-world-stage.prd.md#ac-agent-stage-001) |
 | [REQ-AGENT-STAGE-002](player-readable-world-stage.prd.md#req-agent-stage-002) | [AC-AGENT-STAGE-002](player-readable-world-stage.prd.md#ac-agent-stage-002) |
+| [REQ-AGENT-STAGE-003](player-readable-world-stage.prd.md#req-agent-stage-003) | [AC-AGENT-STAGE-003](player-readable-world-stage.prd.md#ac-agent-stage-003) |
+| [REQ-AGENT-STAGE-004](player-readable-world-stage.prd.md#req-agent-stage-004) | [AC-AGENT-STAGE-004](player-readable-world-stage.prd.md#ac-agent-stage-004) |
+| [REQ-AGENT-STAGE-005](player-readable-world-stage.prd.md#req-agent-stage-005) | [AC-AGENT-STAGE-005](player-readable-world-stage.prd.md#ac-agent-stage-005) |

@@ -384,3 +384,74 @@ Same-head serial no-mount still failed its Hosted proof (`/tmp/pre2-linux-nomoun
 New-artifact `f0a39390b4c7fc1942ea35f1c12bdc91f30d9344` no-mount ran serially and failed after22.72s when the control observer unwrapped actual production Cooldown429/Retry-After1s (`/tmp/pre2-linux-nomount-f0a39390b-20261009`); the real provider decision had begun. Control now retries only read-only View Cooldown within the original35s remaining budget and polls at250ms instead of50ms. All other errors fail, all successful Views retain authentication/CAS checks, and production limits remain unchanged. No-mutating retry was added; final Linux rerun remains required.
 
 Immutable `9afbdcb600cf18e4b3376a30f3341f4caf7aac2c` Linux main no-mount parent passed all shipped gameplay/Agent five-operation and private Memory/ACK proofs in4.33s (`/tmp/pre2-linux-nomount-9afbdcb60-20261009/control-result.log`). The endpoint-switch supplement failed because the restarted Viewer had no local authenticated player session. It now reuses the identical real signed registration protocol before replaying the exact original CollectData551; no new gameplay identity or canonical effect is introduced. Original Lookup/result/effect uniqueness checks remain. Whole-script A/B remains incomplete until the supplement and final report pass. Linux4GB cold-library retry was SIGKILL; bounded8GB build succeeded, then Docker was restored and actual4GB memory verified before runtime acceptance.
+
+## Fresh Reserve rejection and Prefix binding
+
+An authenticated canonical rejection of the exact original fresh Reserve can
+terminalize its prepared turn only before any lease, commit or dispatched work.
+The signed Reserve checkpoint remains unchanged. The full turn identity and
+rejection are persisted together with removal of the admission; a failed write
+restores the prior local state. Restart must retain the original checkpoint and
+terminal without restoring an admission. A later attempt requires a new verified
+View and a genuinely new prepared turn. Continuation-bearing requests, including
+requests whose continuation field was removed while retaining its original
+digest, cannot use this fresh-turn recovery path.
+
+A newly created Prefix checkpoint uses the verified post-Reserve View binding
+for its outer scheduler intent. Its original provider request and context digest
+remain unchanged; an already issued Prefix is replayed with exactly its original
+signed bytes. Later-phase rejection remains explicit and retains the original
+request rather than silently treating rejection as Pending.
+
+The scheduler checkpoint regressions cover current-binding creation and immutable
+replay. The Reserve rejection regression covers wrong correlation, conflicting
+effects, turn/continuation tampering, actual persistence failure and restart.
+These regressions do not replace ordinary required CI or fresh Linux no-mount
+and pressure acceptance on the final source and compiled artifacts.
+
+### Known-version observer snapshots
+
+A new Viewer snapshot may reuse the shared server's already authenticated world
+view. It reports that exact certified version, rather than claiming to have
+refreshed the remote head. The cached view is bound to endpoint, trusted service
+key, world, visibility scope and read credential; a changed configuration or
+pending gameplay outcome still requires the original remote read path. Cache
+reuse neither observes a new Changes cursor nor produces events or receipts.
+Cold startup, LiveControl, authoritative recovery and periodic refresh retain
+their fresh authenticated service reads and existing coherence fences.
+
+The slow-metadata concurrent Viewer regression retains its original 150ms bound.
+Admission probes preserve partial newline-delimited frames across socket polling
+timeouts, without extending their deadlines or relaxing compatibility checks.
+
+
+### Original Act reconciliation of an unpublished canonical result
+
+The real controlled-TCP regression `real_tcp_hosted_act_unpublished_original_replays_exactly_once_canonically` first failed on the authenticated original Lookup Unknown (0/1, 0.67s; `/tmp/pre2-act-original-red-20261010.log`). Unknown means the published result is absent, including a request already received into the admission queue. Act recovery now validates the original correlation and replays only its immutable signed payload/key. Received/Pending and terminal states retain their prior handling. The same exact test passed (1/1, 1.40s; `/tmp/pre2-act-original-green-20261010.log`): both initially unsubmitted and volatile-received originals reconcile; genuine canonical publication produces one causal receipt/effect, and subsequent original submission returns the same committed receipt. The runner now includes this additional parent and proof marker; a fresh aggregate is still required. Historical Full70 evidence above is unchanged.
+
+The candidate recovery changes passed the three default-feature Fresh admission parents (`/tmp/pre2-admission-repair-20261010.log`, 3/3, 23.47s). The broader Hosted run passed 20 and exposed two obsolete transport/version oracles (`/tmp/pre2-hosted-repair-20261010.log`, 20/22): both metadata snapshots arrived before gate release in 6ms against the unchanged 150ms budget, and all five parents failed by Rust run38014383647 passed. The periodic baseline now independently authenticates the exact full commit actually known by the server using a fixed public View. Reconnect now validates every actual Cognition HTTP replay against the unique canonical original correlation and complete signed bytes, retaining canonical one-effect, Move, Settle and Lookup assertions; Volatile admission is not a permanent replay suppression fence because the Node may restart independently of the Viewer. Both corrected fairness parents passed (`/tmp/pre2-fairness-repair-20261010.log`, 2/2, 17.23s). These focused working-tree results do not replace current-head required CI or final Linux A/B acceptance.
+
+
+### Original Settle reconciliation of an unpublished canonical result
+
+The genuine signed Reserve→Settle TCP parent `real_tcp_hosted_settlement_unpublished_original_replays_exactly_once_canonically` failed on authenticated original Lookup Unknown (0/1, 0.66s; `/tmp/pre2-settlement-original-red-20261010.log`). Settle recovery now preserves the original checkpoint and replays its exact signed bytes/key on verified Unknown; checkpoint existence cannot suppress this authorized replay. Dispatch reservation still resets Submit to Lookup, so Received/Pending do not themselves resubmit; rejected/expired/unavailable states remain failures. The same parent passed (1/1,1.15s; `/tmp/pre2-settlement-original-green-20261010.log`) with a genuine canonical Reserve, both unsubmitted and volatile-received Settle reconciliation, and exactly one canonical settlement journal effect preserved by completed replay. This is core reconciliation proof, not full cadence acceptance; the original cadence/Pause and Hosted parents require rerun. Runner coverage now includes72 parents; prior aggregate evidence remains historical.
+
+The preceding published source `be006b8c78e30c1d3c4cb4901a223c13b36d2d93` failed required Rust run38020108407 (497 passed, 4 failed, 11 ignored) and independently built nonroot Linux full runtime (497 passed, 2 failed, 11 ignored; `/tmp/pre2-failed-be006b8c78-network-20261010/full71.log`). All 71 registered parents actually ran. Those failures remain historical failures, not acceptance. The Pause observer exhausted its 16 Snapshot requests before recovered metadata could appear; subsequent requests are now spaced at least250ms after the preceding complete Ack while preserving the original4s deadline and16-request cap. The other failed parents reached real metadata/model execution but lacked completed canonical terminal/Memory outcomes; original Settle reconciliation addresses one reproduced recovery gap. Final source still requires actual focused/full regression and same-artifact Linux no-mount/pressure acceptance.
+
+After the scoped repairs, the default-feature required-tier Fresh admission group passed3/3 in25.85s (`/tmp/pre2-ci-fresh-repair-final-20261010.log`), the Hosted fresh provider parent passed1/1 in7.49s (`/tmp/pre2-ci-hosted-fresh-final-20261010.log`), and the unchanged ordinary cadence parent passed1/1 in11.02s (`/tmp/pre2-ci-cadence-final-20261010.log`). The final Settle parent, including complete cognition-economy equality after duplicate submission, passed1/1 in0.84s (`/tmp/pre2-settlement-final-green-20261010.log`). All four previously failing CI parents have focused current-working-tree passes. This does not yet establish fresh published-head CI or final Linux A/B acceptance.
+
+### Existing settlement checkpoint restart boundary
+
+Published source `69f0f9e056a57ee12f4ce390cd6d81cb6d34f72f` failed Rust run38022850917 (499 passed,3 failed,11 ignored): both strict private-memory ACK restart parents and Hosted fresh admission. The independent nonroot Linux runtime failed498 passed,2 failed,11 ignored in279.97s, reproducing both ACK failures (`/tmp/pre2-69f-full-failure-20261010.log`). Existing settlement checkpoints were submitted directly after ActView without first obtaining authenticated Unknown. The recovery phase now distinguishes initial reconciliation from authorized replay: an existing checkpoint initially uses Lookup; only verified Unknown authorizes its original signed Submit. New checkpoints retain their first Submit, and dispatch consumption retains Lookup on subsequent Received/Pending handling. The original strict ACK-only restart assertions are unchanged. Hosted fresh failure diagnostics preserve its original3s terminal window and expose only phase, error and counts when no committed terminal result exists. Final focused verification, current-source CI and Linux A/B remain pending.
+
+The repaired working tree passed the original strict ACK pre-submit parent1/1 in7.54s (`/tmp/pre2-settle-ack-pre-submit-green-20261010.log`) and committed-response-loss parent1/1 in7.56s (`/tmp/pre2-settle-ack-response-loss-green-20261010.log`). Settle reconciliation passed1/1 in0.87s (`/tmp/pre2-settlement-lookup-boundary-green-20261010.log`), and Hosted fresh passed1/1 in6.86s (`/tmp/pre2-settle-hosted-fresh-green-20261010.log`), with its original3s terminal condition intact. These focused passes do not replace current-source required CI or final Linux A/B.
+
+### Bounded local phase advancement
+
+Source957016af4771368a4f175849326aab26c50b369c failed required Rust run38024571716 with499 passed,3 failed,11 ignored. Both strict ACK recovery regressions passed; the failures were fresh metadata terminal completion, Hosted fresh terminal completion and ordinary cadence. Hosted failure diagnostics showed phasefeedback without in-flight work or pump error. Cadence had only the first receipt-memory; it never sent Pause, so the test now asserts two real memories before its Pause assertion. All original deadlines remain. Temporary phase timing on unchanged local tests passed Hosted fresh1/1 in7.05s and cadence1/1 in10.11s; it confirmed mandatory50ms sleeps between purely local phases, but did not reproduce all CI failures. The pump now advances existing local phases in bounded bursts, releasing the mutex after each step, stopping on I/O, Idle, error, terminal phase removal or fresh admission. At most8 immediate advances precede the normal50ms wait; no new model turn is started within a burst. Temporary timing instrumentation was removed. Actual final-source regression and CI remain required.
+
+The final bounded-pump working tree passed its condition unit1/1 and all five unchanged real TCP parents1/1 each: metadata7.26s, Hosted fresh6.86s, cadence10.35s, strict ACK pre-submit7.81s and strict ACK response-loss7.27s (`/tmp/pre2-bounded-pump-{metadata,fresh,cadence,ack-pre-submit,ack-response-loss}-green-20261010.log`). Independent review found no blocking issue in single-job dispatch, lock release, error handling or turn boundaries. These focused passes establish the scheduling change and regression behavior; current published-head CI and final Linux A/B remain required.
+
+The immutable0517d5187979561fbe3d1650b521de7c2d6eb887 Linux artifact pair completed nonroot full runtime500 passed,0 failed,11 ignored in304.46s (`/tmp/pre2-ci-linux-source-20261009/.pre2-linux-artifacts-0517d51879-cached-offline/full71.log`). This is before the actual main merge and does not replace final-head acceptance. The merged29a4ce3e360f8aedb6363a3051ea7e2082204154 failed required Rust run38031379439: metadata and Hosted fresh parents failed before final-budget crash recovery encountered EOF reading a concurrently written marker. Clock cleanup then panicked while already unwinding, causingSIGABRT and losing the libtest failure summary. The exact first-two diagnostics are therefore unavailable; their causes are not inferred from prior-source failures. Atomic same-directory marker publication and cleanup behavior require deterministic regression plus the unchanged real parent tests, followed by current-source CI.
+
+The atomic-marker regression genuinely failed on partial publication (0/1, exit101; `/tmp/pre2-marker-partial-publication-red2-20261010.log`) and passed on the final fixture (1/1; `/tmp/pre2-marker-final-green-20261010.log`). The unchanged real final-budget crash recovery, slow-provider metadata isolation and registered-provider serving parents each passed1/1 in9.05s,5.88s and6.77s respectively (`/tmp/pre2-atomic-marker-final-budget-crash-final-20261010.log`, `/tmp/pre2-atomic-marker-metadata-20261010.log`, `/tmp/pre2-atomic-marker-hosted-fresh-20261010.log`). Independent review found no issue with atomic publication, staging ownership or retained worker/invalid-JSON failure behavior. These focused results do not establish the masked earlier CI failures causes or replace current-head full CI and Linux A/B.

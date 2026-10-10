@@ -374,54 +374,32 @@ fn center_pos(space: &SpaceConfig) -> GeoPos {
 
 fn scenario_spec_json(scenario: WorldScenario) -> &'static str {
     match scenario {
-        WorldScenario::Minimal => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/minimal.json"
-        )),
-        WorldScenario::TwoBases => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/two_bases.json"
-        )),
-        WorldScenario::LlmBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/llm_bootstrap.json"
-        )),
-        WorldScenario::PowerBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/power_bootstrap.json"
-        )),
-        WorldScenario::ResourceBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/resource_bootstrap.json"
-        )),
-        WorldScenario::TwinRegionBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/twin_region_bootstrap.json"
-        )),
-        WorldScenario::TriadRegionBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/triad_region_bootstrap.json"
-        )),
-        WorldScenario::TriadP2pBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/triad_p2p_bootstrap.json"
-        )),
-        WorldScenario::AsteroidFragmentBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/asteroid_fragment_bootstrap.json"
-        )),
-        WorldScenario::AsteroidFragmentDetailBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/asteroid_fragment_detail_bootstrap.json"
-        )),
-        WorldScenario::AsteroidFragmentTwinRegionBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/asteroid_fragment_twin_region_bootstrap.json"
-        )),
-        WorldScenario::AsteroidFragmentTriadRegionBootstrap => include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/scenarios/asteroid_fragment_triad_region_bootstrap.json"
-        )),
+        WorldScenario::Minimal => include_str!("../../scenarios/minimal.json"),
+        WorldScenario::TwoBases => include_str!("../../scenarios/two_bases.json"),
+        WorldScenario::LlmBootstrap => include_str!("../../scenarios/llm_bootstrap.json"),
+        WorldScenario::PowerBootstrap => include_str!("../../scenarios/power_bootstrap.json"),
+        WorldScenario::ResourceBootstrap => include_str!("../../scenarios/resource_bootstrap.json"),
+        WorldScenario::TwinRegionBootstrap => {
+            include_str!("../../scenarios/twin_region_bootstrap.json")
+        }
+        WorldScenario::TriadRegionBootstrap => {
+            include_str!("../../scenarios/triad_region_bootstrap.json")
+        }
+        WorldScenario::TriadP2pBootstrap => {
+            include_str!("../../scenarios/triad_p2p_bootstrap.json")
+        }
+        WorldScenario::AsteroidFragmentBootstrap => {
+            include_str!("../../scenarios/asteroid_fragment_bootstrap.json")
+        }
+        WorldScenario::AsteroidFragmentDetailBootstrap => {
+            include_str!("../../scenarios/asteroid_fragment_detail_bootstrap.json")
+        }
+        WorldScenario::AsteroidFragmentTwinRegionBootstrap => {
+            include_str!("../../scenarios/asteroid_fragment_twin_region_bootstrap.json")
+        }
+        WorldScenario::AsteroidFragmentTriadRegionBootstrap => {
+            include_str!("../../scenarios/asteroid_fragment_triad_region_bootstrap.json")
+        }
     }
 }
 

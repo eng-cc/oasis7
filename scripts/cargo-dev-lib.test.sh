@@ -6,8 +6,9 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
 
+cd "${TMPDIR:-/tmp}"
 shared_dir="$(CI= oasis7_cargo_dev_target_dir "$ROOT_DIR")"
-expected_shared="$("$ROOT_DIR/scripts/cargo-dev.sh" --print-target-dir)"
+expected_shared="$(cd "$ROOT_DIR" && ./scripts/cargo-dev.sh --print-target-dir)"
 if [[ "$shared_dir" != "$expected_shared" ]]; then
   echo "unexpected shared target dir: $shared_dir != $expected_shared" >&2
   exit 1
@@ -38,4 +39,5 @@ if [[ "$default_raw" != "$ROOT_DIR/target" ]]; then
   exit 1
 fi
 
+bash "$ROOT_DIR/scripts/cargo-dev-sccache.test.sh"
 echo "cargo-dev-lib.test: OK"

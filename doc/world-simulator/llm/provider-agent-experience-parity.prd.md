@@ -2,6 +2,7 @@
 
 - 对应设计文档: `doc/world-simulator/llm/provider-agent-experience-parity.design.md`
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
+- 上游产品目标: [外部 Agent Runtime 自主游戏](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)
 
 审计轮次: 2
 
@@ -16,6 +17,12 @@
   - SC-5: 若行为等价已达标但 `latency_class` 仅达到 `B (experimental)`，则该 provider 只允许保留在 `experimental` 或受限试点，不得默认启用。
   - SC-6: 首期 `P0` parity 样本必须使用固定的 Local Provider 玩法 profile（当前默认 `oasis7_p0_low_freq_npc`；旧别名 `legacy_p0_low_freq_npc` 已移除），并在 summary / scorecard 中保留该 profile 标识，避免“同场景不同 skill”造成假性通过。
   - SC-7: 只有当行为等价硬门禁通过且 `latency_class` 达到 `A (default-candidate)` 时，才允许把该 provider 作为默认体验或推进更大范围扩面。
+
+### 产品目标与场景适用边界
+
+本专题拥有体验可比性、场景指标和扩面条件；“用户带着已有 Runtime 持续自主玩游戏”的完整旅程、首期 Runtime 范围和支持声明由[上游产品 PRD](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)定义。本文 P0/P1/P2 是 parity 场景分层，不等于产品首期的范围划分。原 `oasis7_p0_low_freq_npc` 六动作 smoke 只证明该 profile 的结果，不能代替代表性首局的生产、恢复、回访或高层指导验收。
+
+OpenClaw 与 Codex 分别保留真实 Runtime/version、model、adapter、profile、primary access mode 和 observation lane 的证据；一个 Runtime、mock 或 builtin 的通过不能为另一个 Runtime 代签。比较以声明场景的权威结果与恢复体验为准，不要求两者使用相同内部规划、私有记忆或工具实现。若基线或候选使用动作修正、脚本辅助等额外干预，必须标明并保持比较条件可核对，不能把辅助后的结果写成未经辅助的原生能力。本节不改动下文既有 SC、阈值或技术状态，也不将已有 smoke 结果升格为产品可用性。
 
 ### 当前验收边界（S7 bounded scope）
 
@@ -67,7 +74,7 @@
   - AC-8: 文档明确 benchmark 的 simulator-world authority、`runtime_certification_status=not_certified`、WASM compile-only 边界、deferred unified interaction surface，以及真实 remote paired/restart/reconnect 与 QA/producer scorecard 均是独立证据条件；缺任一时不得声明 release/default。
 - Non-Goals:
   - 不要求 `Local Provider` 与内置 agent 在内部 prompt、工具栈或 memory backend 上实现完全一致。
-  - 不把高频战斗、经济关键路径在首轮 parity 中纳入必须通过范围。
+  - 原低频 NPC P0 parity 不涵盖高频战斗或完整经济关键路径；该范围不免除上游产品代表性首局的生产结果要求。
   - 不在本专题直接定义 `Local Provider` 的安装包分发与商业化方案。
 
 ## 3. AI System Requirements (If Applicable)

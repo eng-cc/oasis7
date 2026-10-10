@@ -65,6 +65,7 @@ fn no_mount_prepare_service() {
     let source_root = fixture.root.clone();
     // Process ownership is not durable world data. Stop the actual Node and
     // release its guard before copying, so no live PID lock crosses namespaces.
+    let _scenario_permit = fixture.scenario_permit.clone();
     drop(fixture);
     assert!(
         !source_root.join("world.lock").exists(),
@@ -350,7 +351,7 @@ fn no_mount_application_acceptance() {
     };
     fs::write("/app-private/endpoint-original.json",serde_json::to_vec(&serde_json::json!({"payload":payload,"correlation":correlation,"result":original_result,"command":command})).unwrap()).unwrap();
     let current = client
-        .read_view(view_request(&client, Some(committed.clone())))
+        .read_view(view_request(&client, Some(committed.as_ref().clone())))
         .unwrap();
     let changes = client
         .read_changes(ReadWorldChangesRequest {
@@ -453,7 +454,7 @@ fn no_mount_application_acceptance() {
             .unwrap();
         if let IntentOutcome::Committed { commit, .. } = result.outcome {
             client
-                .read_view(view_request(&client, Some(commit)))
+                .read_view(view_request(&client, Some(*commit)))
                 .unwrap();
             committed_agent_operations += 1;
         }
@@ -566,7 +567,7 @@ fn no_mount_endpoint_switch_acceptance() {
         panic!("original result lost after endpoint change")
     };
     let before = second
-        .read_view(view_request(&second, Some(commit.clone())))
+        .read_view(view_request(&second, Some(commit.as_ref().clone())))
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(30);
     let socket = loop {
@@ -627,7 +628,7 @@ fn no_mount_endpoint_switch_acceptance() {
     };
     assert_eq!(serde_json::to_value(duplicate).unwrap(), original["result"]);
     second
-        .read_view(view_request(&second, Some(commit.clone())))
+        .read_view(view_request(&second, Some(commit.as_ref().clone())))
         .unwrap();
     let changes = second
         .read_changes(ReadWorldChangesRequest {

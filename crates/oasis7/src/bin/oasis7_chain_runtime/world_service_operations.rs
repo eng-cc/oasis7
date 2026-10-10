@@ -90,7 +90,7 @@ fn outcome(
         return Err("historical snapshot does not bind canonical result".into());
     }
     Ok(IntentOutcome::Committed {
-        commit: historical.commit,
+        commit: Box::new(historical.commit),
         receipt: result.receipt,
     })
 }

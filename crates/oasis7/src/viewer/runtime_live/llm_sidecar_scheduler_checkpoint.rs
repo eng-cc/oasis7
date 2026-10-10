@@ -1,7 +1,7 @@
 use super::*;
 
 impl RuntimeLlmSidecar {
-    fn validate_scheduler_checkpoint_integrity(
+    pub(in crate::viewer::runtime_live) fn validate_scheduler_checkpoint_integrity(
         world: &oasis7_client_api::world_service::WorldIdentity,
         request_id: &str,
         pending: &lineage_persistence::PendingProviderSchedulerIntent,
@@ -85,7 +85,7 @@ impl RuntimeLlmSidecar {
             if phase == "reserve" || phase.starts_with("prefix:") || phase.starts_with("resume:") {
                 self.ensure_canonical_agent_durable_admission()?;
             }
-            let b = if phase == "reserve" || phase.starts_with("prefix:") {
+            let b = if phase == "reserve" {
                 &request.runtime_binding
             } else {
                 self.provider_service_projection

@@ -233,6 +233,13 @@ struct PublicCursor {
 }
 
 fn read_public_cursor(client: &RemoteWorldServiceClient) -> PublicCursor {
+    read_public_cursor_at(client, None)
+}
+
+fn read_public_cursor_at(
+    client: &RemoteWorldServiceClient,
+    fixed_commit: Option<CommitRef>,
+) -> PublicCursor {
     let config = client.config();
     assert_eq!(
         config.scope_id, "public",
@@ -244,7 +251,7 @@ fn read_public_cursor(client: &RemoteWorldServiceClient) -> PublicCursor {
             world: config.expected_world.clone(),
             scope_id: config.scope_id.clone(),
             min_commit: None,
-            fixed_commit: None,
+            fixed_commit,
             deadline_unix_ms: None,
         })
         .unwrap();
@@ -264,9 +271,15 @@ fn read_public_cursor(client: &RemoteWorldServiceClient) -> PublicCursor {
 pub(crate) fn verify_periodic_view_gate(client: &RemoteWorldServiceClient) {
     let server =
         application_hosted::prepare_server_for_policy(client, false, Duration::from_millis(250));
-    // Native-provider setup above performs real Reserve and Prefix commits.
-    // Capture the verified public baseline after those setup effects.
-    let baseline = read_public_cursor(client);
+    // Snapshot priming may reuse the exact certified version already known by
+    // this server. Independently authenticate that full setup commit, rather
+    // than assuming a new observer must synchronously fetch the remote latest.
+    let known_commit: CommitRef = serde_json::from_value(
+        server.test_agent_service_pump_status()["known_service_commit"].clone(),
+    )
+    .unwrap();
+    let baseline = read_public_cursor_at(client, Some(known_commit.clone()));
+    assert_eq!(baseline.commit, known_commit);
     let shared = Arc::new(Mutex::new(server));
     let root = std::path::PathBuf::from(std::env::var("PRE2_METADATA_DIR").unwrap());
     fs::write(root.join("world-concurrent-ready"), b"ready").unwrap();
@@ -741,7 +754,33 @@ pub(super) fn validate_canonical_identity(fixture: &Fixture) {
         .filter(|entry| **entry == format!("submit:{key}"))
         .count();
     let lookup_count = trace.iter().filter(|entry| *entry == &key).count();
-    assert_eq!(submit_count, 1, "reconnect must not replay Submit");
+    assert!(
+        submit_count > 0,
+        "original Cognition requires actual Submit"
+    );
+    let cognition_submits = trace
+        .iter()
+        .filter_map(|entry| entry.strip_prefix("cognition_submit:"))
+        .map(|bytes| {
+            serde_json::from_str::<SubmitIntentRequest<WorldServicePayloadV1>>(bytes)
+                .expect("complete typed HTTP Cognition witness")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        cognition_submits.len(),
+        submit_count,
+        "every Cognition HTTP Submit must use the sole original key"
+    );
+    for observed in cognition_submits {
+        observed.validate().expect("captured Submit contract");
+        assert_eq!(observed.correlation, result.request.correlation);
+        assert_eq!(observed.signed_payload, result.request.signed_payload);
+        assert_eq!(
+            serde_json::to_vec(&observed.signed_payload).unwrap(),
+            serde_json::to_vec(&result.request.signed_payload).unwrap(),
+            "every replay must retain complete original signed bytes"
+        );
+    }
     assert!(
         lookup_count > 0,
         "original canonical operation needs actualLookup"

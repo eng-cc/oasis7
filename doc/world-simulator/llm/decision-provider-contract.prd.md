@@ -4,6 +4,7 @@
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 - 连续认知上层合同: `doc/world-simulator/llm/continuous-agent-harness.prd.md`
 - 异步调度、MVCC 与恢复合同: `doc/world-runtime/runtime/agent-cognition-lifecycle.prd.md`
+- 上游产品目标: [外部 Agent Runtime 自主游戏](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)
 
 审计轮次: 1
 
@@ -17,6 +18,12 @@
   - SC-4: 形成阶段化落地路线：`MockProvider -> Local Provider PoC -> 低频 NPC 试点 -> 扩面评估`。
   - SC-5: 外部 provider 的非法输出、超时、格式错或 schema 漂移均有统一失败策略，并可映射到 `Wait` 或 `ActionRejected`。
   - SC-6: provider 输出可回写为 `AgentDecisionTrace`，保持 viewer / QA / replay 诊断链路连续。
+
+### 产品目标与标准层责任
+
+本标准层服务于“用户带着已有的外部 Agent Runtime，绑定依法获得或授权的游戏 Agent，持续完成观察、行动、权威反馈和下一轮决策”的产品目标。首期 Runtime 范围、玩家完整旅程、代表性首局与对外支持声明以[上游产品 PRD](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)为准；OpenClaw 与 Codex 分别验收，通用 DTO 或某一个 adapter 通过不代表两者均已支持。
+
+本专题负责世界交互边界、能力发现、结构化候选和失败语义。`provider-agnostic` 统一的是世界输入、权限与结果合同，允许外部 Runtime 在授权和预算内保留自身规划、私有记忆与工具编排；外部推断或工具输出仍不能替代权威世界结果。下文低频 NPC PoC、Mock 和最小动作集属于标准层的分阶段验证，不构成完整首局可玩性，也不限制上游产品已纳入范围的生产与恢复目标。
 
 ### 1.1 能力状态与证明边界
 
@@ -112,7 +119,7 @@
   - AC-1: 建立 `Decision Provider` 标准层专题文档，明确数据契约、边界、风险与验证口径。
   - AC-2: 明确 `Local Provider` 的角色定位为“外部 provider / adapter”，而非 runtime / kernel 替代物。
   - AC-3: 文档中定义至少一条可执行 PoC 路线，要求先通过 `MockProvider` 与 fixture 验证，再进入 `Local Provider` 试点。
-  - AC-4: 文档中冻结最小动作映射策略：只允许先在低频、低破坏性动作集上试点（例如 `wait`、`move`、`chat`、有限查询）。
+  - AC-4: 文档中冻结低频 NPC PoC 的最小动作映射策略：先在低频、低破坏性动作集上试点（例如 `wait`、`move`、`chat`、有限查询）；该试点的动作范围不能代替上游产品首局验收。
   - AC-5: 文档中定义统一失败策略与 trace 回写规范，保持与 `AgentDecisionTrace`、`ActionRejected`、viewer 调试面一致。
   - AC-6: 文档中定义 required/full 验证矩阵，并可追溯到本专题项目任务。
   - AC-7: capability discovery 必须以安全 core/kernel surface 为稳定基线，并仅从当前 active module manifest/ABI projection 生成动态 capability；每个 projection 都绑定 namespace、version、schema ref、manifest/artifact/interface hash、caps 与 runtime cost quote。
@@ -128,7 +135,7 @@
   - 不在本轮直接把 `Local Provider` 接入主线模拟代码。
   - 不在本轮重写现有 `LlmAgentBehavior`、memory 系统或 runtime kernel。
   - 不在本轮把 `Moltbook` 等社交层能力引入 world-simulator。
-  - 不在本轮把外部 provider 用于高频战斗/经济核心 actor。
+  - 本专题的低频 NPC PoC 不承担高频战斗或完整经济核心 actor 的验收；产品首局所需生产能力由上游产品与玩法合同确定。
   - capability discovery 不承诺任意 module 上传、source compile、安装或激活；这些仍由受治理的 runtime/WASM 生命周期决定。
 
 ## 3. AI System Requirements (If Applicable)

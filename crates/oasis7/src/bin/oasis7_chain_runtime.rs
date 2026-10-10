@@ -9,7 +9,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use ed25519_dalek::SigningKey;
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::observability::{emit_stderr_or_event, init_tracing};
 use oasis7::runtime::{
@@ -25,14 +24,21 @@ use oasis7_proto::distributed_dht::{PeerDiscoverySource, PeerRecord};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use runtime_status_util::now_unix_ms;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 use tracing::{Level, error, info};
 #[path = "oasis7_chain_runtime/agent_claim_api.rs"]
 mod agent_claim_api;
 #[path = "oasis7_chain_runtime/balances_api.rs"]
 mod balances_api;
+#[path = "oasis7_chain_runtime/signer_derivation.rs"]
+mod signer_derivation;
+use signer_derivation::{
+    build_feedback_submit_signer, build_validator_signer_public_keys,
+    derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
+};
 #[path = "oasis7_chain_runtime/cli.rs"]
 mod cli;
+#[path = "oasis7_chain_runtime/controlled_history_cli.rs"]
+mod controlled_history_cli;
 #[path = "oasis7_chain_runtime/distfs_probe_runtime.rs"]
 mod distfs_probe_runtime;
 #[cfg(not(test))]
@@ -179,6 +185,16 @@ mod execution_bridge {
 
     #[allow(dead_code)]
     impl NodeRuntimeExecutionDriver {
+        pub(super) fn set_controlled_capture_enabled(
+            &mut self,
+            enabled: bool,
+        ) -> Result<(), String> {
+            if enabled {
+                Err("test stub cannot produce historical capture".into())
+            } else {
+                Ok(())
+            }
+        }
         pub(super) fn new(
             _state_path: std::path::PathBuf,
             _world_dir: std::path::PathBuf,
@@ -422,6 +438,9 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         .with_allow_local_proposals(matches!(options.node_role, NodeRole::Sequencer));
     let require_execution = node_role_requires_execution_commit(options.node_role);
     let materialize_execution = node_role_materializes_execution_state(options.node_role);
+    if options.capture_schedule_recipe_history && !materialize_execution {
+        return Err("history capture requires an actual execution driver".into());
+    }
     config = config
         .with_require_execution_on_commit(require_execution)
         .with_require_peer_execution_hashes(require_execution);
@@ -559,7 +578,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         runtime = runtime.with_local_execution_bootstrap(baseline.clone());
     }
     if materialize_execution {
-        let execution_driver = if let Some(baseline) = local_execution_bootstrap {
+        let mut execution_driver = if let Some(baseline) = local_execution_bootstrap {
             #[cfg(not(test))]
             {
                 NodeRuntimeExecutionDriver::new_with_local_bootstrap(
@@ -607,6 +626,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             paths.execution_world_dir.as_path(),
             provider_bootstrap_authority_paths.as_slice(),
         )?;
+        execution_driver.set_controlled_capture_enabled(options.capture_schedule_recipe_history)?;
         runtime = runtime.with_execution_hook(execution_driver);
     }
     let (mut runtime, replication_network) =
@@ -1055,105 +1075,6 @@ fn build_default_peer_record(options: &CliOptions) -> PeerRecord {
         published_at_ms: 0,
         ttl_ms: 60 * 60 * 1000,
     }
-}
-
-fn build_feedback_submit_signer(
-    node_id: &str,
-    root_keypair: &node_keypair_config::NodeKeypairConfig,
-) -> Result<FeedbackSubmitSigner, String> {
-    let feedback_signer_id = format!("{node_id}-feedback-submit");
-    let signer = derive_node_consensus_signer_keypair(feedback_signer_id.as_str(), root_keypair)?;
-    Ok(FeedbackSubmitSigner {
-        private_key_hex: signer.private_key_hex,
-        public_key_hex: signer.public_key_hex,
-    })
-}
-
-fn derive_node_consensus_signer_keypair(
-    node_id: &str,
-    root_keypair: &node_keypair_config::NodeKeypairConfig,
-) -> Result<node_keypair_config::NodeKeypairConfig, String> {
-    derive_node_scoped_keypair(
-        node_id,
-        root_keypair,
-        b"oasis7-node-consensus-signer-v1",
-        "node consensus signer",
-    )
-}
-
-fn derive_node_libp2p_identity_keypair_config(
-    node_id: &str,
-    root_keypair: &node_keypair_config::NodeKeypairConfig,
-) -> Result<node_keypair_config::NodeKeypairConfig, String> {
-    derive_node_scoped_keypair(
-        node_id,
-        root_keypair,
-        b"oasis7-node-libp2p-identity-v1",
-        "node libp2p identity",
-    )
-}
-
-fn derive_node_scoped_keypair(
-    node_id: &str,
-    root_keypair: &node_keypair_config::NodeKeypairConfig,
-    namespace: &[u8],
-    label: &str,
-) -> Result<node_keypair_config::NodeKeypairConfig, String> {
-    let node_id = node_id.trim();
-    if node_id.is_empty() {
-        return Err(format!("{label} derivation requires non-empty node_id"));
-    }
-    let root_private_bytes = hex::decode(root_keypair.private_key_hex.as_str())
-        .map_err(|_| "root node.private_key must be valid hex".to_string())?;
-    let root_private: [u8; 32] = root_private_bytes
-        .try_into()
-        .map_err(|_| "root node.private_key must be 32-byte hex".to_string())?;
-
-    let mut hasher = Sha256::new();
-    hasher.update(namespace);
-    hasher.update(root_private);
-    hasher.update(b"|");
-    hasher.update(node_id.as_bytes());
-    let digest = hasher.finalize();
-
-    let mut derived_private = [0_u8; 32];
-    derived_private.copy_from_slice(&digest[..32]);
-    let signing_key = SigningKey::from_bytes(&derived_private);
-    Ok(node_keypair_config::NodeKeypairConfig {
-        private_key_hex: hex::encode(signing_key.to_bytes()),
-        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
-    })
-}
-
-fn build_validator_signer_public_keys(
-    validators: &[PosValidator],
-    root_keypair: &node_keypair_config::NodeKeypairConfig,
-    explicit_bindings: &BTreeMap<String, String>,
-) -> Result<BTreeMap<String, String>, String> {
-    let mut bindings = BTreeMap::new();
-    for validator in validators {
-        let validator_id = validator.validator_id.trim();
-        if validator_id.is_empty() {
-            return Err("validator_id cannot be empty when deriving signer bindings".to_string());
-        }
-        if let Some(public_key_hex) = explicit_bindings.get(validator_id) {
-            bindings.insert(validator_id.to_string(), public_key_hex.clone());
-            continue;
-        }
-        let keypair = derive_node_consensus_signer_keypair(validator_id, root_keypair)?;
-        bindings.insert(validator_id.to_string(), keypair.public_key_hex);
-    }
-    for validator_id in explicit_bindings.keys() {
-        if !validators
-            .iter()
-            .any(|validator| validator.validator_id.trim() == validator_id)
-        {
-            return Err(format!(
-                "validator signer override references unknown validator: {validator_id}"
-            ));
-        }
-    }
-    Ok(bindings)
 }
 
 #[cfg(test)]

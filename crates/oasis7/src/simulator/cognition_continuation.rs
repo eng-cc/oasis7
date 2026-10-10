@@ -1,18 +1,17 @@
 //! Simulator continuation policy and Runtime projection seams.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::super::Observation;
 use super::super::continuous_agent_harness::{CognitionError, Digest32, h_v1};
 use super::GoalSnapshotV1;
 
-const CONTINUATION_PROPOSAL_DOMAIN: &str = "oasis7.cognition.continuation-proposal.v1";
-const MAX_WAKE_CONDITIONS: usize = 16;
-const MAX_WAKE_ITEM_BYTES: usize = 768;
-const MAX_WAKE_LIST_BYTES: usize = 4096;
+pub use oasis7_agent_api::{
+    ContinuationBudgetV1, ContinuationProposalV1, WakeConditionSubjectV1, WakeConditionV1,
+};
 
 fn error(code: &'static str, message: impl Into<String>) -> CognitionError {
     CognitionError::new(code, message)
@@ -21,12 +20,6 @@ fn error(code: &'static str, message: impl Into<String>) -> CognitionError {
 // ---------------------------------------------------------------------------
 // Harness continuation proposal and Runtime status projection
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContinuationBudgetV1 {
-    pub unit: String,
-    pub value: u64,
-}
 
 /// The current authoritative cognition snapshot used when admitting or
 /// waking a continuation.  A proposal carries the snapshot it was derived
@@ -165,271 +158,6 @@ pub struct ContinuationBudgetProgressV1 {
     pub duplicate: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_disposition: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WakeConditionSubjectV1 {
-    pub kind: String,
-    pub id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WakeConditionV1 {
-    pub schema_version: String,
-    pub kind: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub logical_tick: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event_digest: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub receipt_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subject: Option<WakeConditionSubjectV1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub path_or_rule: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub operator: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expected_value_bytes: Option<Vec<u8>>,
-}
-
-impl WakeConditionV1 {
-    fn canonical_bytes(&self) -> Vec<u8> {
-        oasis7_wasm_abi::encode_canonical_cbor(self).expect("wake condition is canonicalizable")
-    }
-}
-
-fn validate_wake_conditions(conditions: &[WakeConditionV1]) -> Result<(), CognitionError> {
-    if conditions.is_empty() {
-        return Err(error(
-            "wake_conditions_empty",
-            "continuation requires a bounded non-empty wake condition list",
-        ));
-    }
-    if conditions.len() > MAX_WAKE_CONDITIONS {
-        return Err(error(
-            "continuation_wake_invalid",
-            "continuation wake condition list exceeds its bound",
-        ));
-    }
-    let mut seen = BTreeSet::new();
-    let mut total = 0usize;
-    let mut previous: Option<Vec<u8>> = None;
-    for condition in conditions {
-        let valid = match condition.kind.as_str() {
-            "at_or_after_tick" => {
-                condition.logical_tick.is_some()
-                    && condition.event_digest.is_none()
-                    && condition.receipt_id.is_none()
-                    && condition.subject.is_none()
-                    && condition.path_or_rule.is_none()
-                    && condition.operator.is_none()
-                    && condition.expected_value_bytes.is_none()
-            }
-            "world_event_committed" => {
-                condition
-                    .event_digest
-                    .as_ref()
-                    .is_some_and(|v| !v.is_empty())
-                    && condition.logical_tick.is_none()
-                    && condition.receipt_id.is_none()
-                    && condition.subject.is_none()
-                    && condition.path_or_rule.is_none()
-                    && condition.operator.is_none()
-                    && condition.expected_value_bytes.is_none()
-            }
-            "receipt_linked" => {
-                condition.receipt_id.as_ref().is_some_and(|v| !v.is_empty())
-                    && condition.logical_tick.is_none()
-                    && condition.event_digest.is_none()
-                    && condition.subject.is_none()
-                    && condition.path_or_rule.is_none()
-                    && condition.operator.is_none()
-                    && condition.expected_value_bytes.is_none()
-            }
-            "state_predicate" => {
-                condition.logical_tick.is_none()
-                    && condition.event_digest.is_none()
-                    && condition.receipt_id.is_none()
-                    && condition.subject.is_some()
-                    && condition
-                        .path_or_rule
-                        .as_ref()
-                        .is_some_and(|v| !v.is_empty())
-                    && condition.operator.as_ref().is_some_and(|v| !v.is_empty())
-                    && condition
-                        .expected_value_bytes
-                        .as_ref()
-                        .is_some_and(|v| v.len() <= 512)
-            }
-            _ => false,
-        };
-        if condition.schema_version != "wake-condition.v1" || !valid {
-            return Err(error("continuation_wake_invalid", "invalid wake condition"));
-        }
-        let bytes = condition.canonical_bytes();
-        if bytes.len() > MAX_WAKE_ITEM_BYTES || !seen.insert(bytes.clone()) {
-            return Err(error(
-                "continuation_wake_invalid",
-                "duplicate or oversized wake condition",
-            ));
-        }
-        if previous.as_ref().is_some_and(|prior| prior > &bytes) {
-            return Err(error(
-                "continuation_wake_invalid",
-                "wake conditions must be sorted by canonical bytes",
-            ));
-        }
-        previous = Some(bytes.clone());
-        total += bytes.len();
-        if total > MAX_WAKE_LIST_BYTES {
-            return Err(error(
-                "continuation_wake_invalid",
-                "wake condition list is oversized",
-            ));
-        }
-    }
-    Ok(())
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ContinuationProposalV1 {
-    pub schema_version: u16,
-    pub continuation_proposal_id: String,
-    pub world_id: String,
-    pub agent_id: String,
-    pub agent_session_id: String,
-    pub agent_turn_id: String,
-    pub decision_request_id: String,
-    pub origin_turn_id: String,
-    pub origin_request_digest: String,
-    pub action_or_plan_kind: String,
-    #[serde(default)]
-    pub action_or_envelope_digest: Option<String>,
-    pub remaining_budget: ContinuationBudgetV1,
-    pub baseline_observation_digest: String,
-    pub goal_digest: String,
-    pub policy_digest: String,
-    pub policy_revision: u64,
-    pub precondition_summary: String,
-    pub precondition_digest: String,
-    pub wake_conditions: Vec<WakeConditionV1>,
-    #[serde(default)]
-    pub valid_until_tick: Option<u64>,
-    pub source: String,
-    pub proposal_digest: String,
-}
-
-impl ContinuationProposalV1 {
-    /// Return the complete simulator-owned wire payload Runtime must admit.
-    /// Keeping this projection here prevents callers from silently dropping
-    /// policy, observation, budget, or wake bindings while adapting to a
-    /// Runtime persistence type.
-    pub fn runtime_admission_payload(&self) -> Result<Value, CognitionError> {
-        self.validate()?;
-        serde_json::to_value(self)
-            .map_err(|e| error("continuation_admission_encoding_failed", e.to_string()))
-    }
-
-    /// Canonical bytes for the Runtime admission seam. Runtime may persist
-    /// these bytes or derive its own admission digest without trusting a
-    /// provider-supplied serialization.
-    pub fn runtime_admission_bytes(&self) -> Result<Vec<u8>, CognitionError> {
-        let payload = self.runtime_admission_payload()?;
-        oasis7_wasm_abi::encode_canonical_cbor(&payload)
-            .map_err(|e| error("continuation_admission_encoding_failed", e.to_string()))
-    }
-
-    pub fn runtime_admission_digest(&self) -> Result<Digest32, CognitionError> {
-        self.proposal_digest()
-    }
-
-    pub fn proposal_digest(&self) -> Result<Digest32, CognitionError> {
-        let mut value = serde_json::to_value(self)
-            .map_err(|e| error("continuation_canonical_encoding_failed", e.to_string()))?;
-        let object = value
-            .as_object_mut()
-            .expect("continuation proposal is an object");
-        object.remove("proposal_digest");
-        // Runtime's paired digest input keeps every optional member of a
-        // wake condition explicit (null included). The simulator wire type
-        // omits those members for compactness, so restore the Runtime shape
-        // only inside the cross-boundary digest domain.
-        if let Some(wakes) = object
-            .get_mut("wake_conditions")
-            .and_then(Value::as_array_mut)
-        {
-            for wake in wakes {
-                if let Some(wake) = wake.as_object_mut() {
-                    for field in [
-                        "logical_tick",
-                        "event_digest",
-                        "receipt_id",
-                        "subject",
-                        "path_or_rule",
-                        "operator",
-                        "expected_value_bytes",
-                    ] {
-                        wake.entry(field).or_insert(Value::Null);
-                    }
-                }
-            }
-        }
-        Ok(h_v1(CONTINUATION_PROPOSAL_DOMAIN, &value))
-    }
-
-    pub fn validate(&self) -> Result<(), CognitionError> {
-        if self.schema_version != 1 {
-            return Err(error(
-                "continuation_schema_invalid",
-                "unsupported proposal version",
-            ));
-        }
-        for (name, value) in [
-            ("continuation_proposal_id", &self.continuation_proposal_id),
-            ("world_id", &self.world_id),
-            ("agent_id", &self.agent_id),
-            ("agent_session_id", &self.agent_session_id),
-            ("agent_turn_id", &self.agent_turn_id),
-            ("decision_request_id", &self.decision_request_id),
-            ("origin_turn_id", &self.origin_turn_id),
-            ("origin_request_digest", &self.origin_request_digest),
-            ("action_or_plan_kind", &self.action_or_plan_kind),
-            (
-                "baseline_observation_digest",
-                &self.baseline_observation_digest,
-            ),
-            ("goal_digest", &self.goal_digest),
-            ("policy_digest", &self.policy_digest),
-            ("precondition_digest", &self.precondition_digest),
-            ("source", &self.source),
-            ("proposal_digest", &self.proposal_digest),
-        ] {
-            if value.trim().is_empty() {
-                return Err(error(
-                    "continuation_binding_invalid",
-                    format!("{name} is required"),
-                ));
-            }
-        }
-        if !matches!(self.remaining_budget.unit.as_str(), "steps" | "ticks")
-            || self.remaining_budget.value == 0
-        {
-            return Err(error(
-                "continuation_budget_invalid",
-                "continuation budget must be a positive steps or ticks value",
-            ));
-        }
-        validate_wake_conditions(&self.wake_conditions)?;
-        let expected = self.proposal_digest()?;
-        if expected.as_str() != self.proposal_digest {
-            return Err(error(
-                "continuation_digest_mismatch",
-                "continuation proposal digest does not match canonical fields",
-            ));
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

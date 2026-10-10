@@ -199,7 +199,7 @@ pub(super) fn assert_original_terminal(fixture: &Fixture, root: &Path) {
             contract_version: 1,
             world: client.config().expected_world.clone(),
             scope_id: client.config().scope_id.clone(),
-            min_commit: Some(commit),
+            min_commit: Some(*commit),
             fixed_commit: None,
             deadline_unix_ms: None,
         })

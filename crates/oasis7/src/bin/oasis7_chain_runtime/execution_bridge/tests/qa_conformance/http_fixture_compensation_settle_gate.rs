@@ -121,7 +121,7 @@ impl WorldGate {
             .clone()
             .ok_or("gate root absent")?;
         write_new_json(&root.join("world-compensation-settle-selector.json"),&serde_json::json!({"world":world,"scope_id":format!("agent:{agent}"),"min_commit":commit,"correlation_digest":correlation::key_digest(&original.correlation.key)?,"payload_digest":oasis7::world_service::authority::request_digest("compensation-payload-v1",&original.signed_payload)?,"receipt_digest":oasis7::world_service::authority::request_digest("compensation-receipt-v1",&receipt)?})).map_err(|e|e.to_string())?;
-        state.commit = Some(commit);
+        state.commit = Some(*commit);
         self.compensation_changed.notify_all();
         Ok(original)
     }

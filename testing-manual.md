@@ -32,7 +32,26 @@
 - 若当前是在同一 repo family 的多个 git worktree 之间做本地迭代，开发态 `cargo check/test/run/build` 默认优先使用 `./scripts/cargo-dev.sh <cargo-args...>`。每个 worktree 按自身 source identity 使用稳定、隔离的 target namespace；同一 worktree 内可复用缓存，divergent worktree 不得互选 artifacts。通过 `./scripts/new-task-worktree.sh` 创建的新 task worktree 会把 git-ignored `target` 链接到该 worktree 的 namespace，使直接 cargo 与 wrapper 在同一 worktree 内复用同一开发态缓存。
 - 本地 smoke / playtest / prewarm / regression / drill / longrun 脚本若只是为了开发反馈，应优先 source `scripts/cargo-dev-lib.sh` 并调用 `oasis7_cargo_dev ...` / `oasis7_cargo_dev_debug_bin_dir`，从而与手工 `cargo-dev.sh` 使用同一个当前-worktree target；`CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 会回退到原始 cargo target 解析。
 - 该入口只服务开发态缓存复用，不替代本手册中的正式验收命令；手册里的 canonical 验收命令仍显式写原始 `env -u RUSTC_WRAPPER cargo ...`。
+- 跨 worktree 的 registry 依赖编译结果复用由 sccache 提供，不共用 target artifacts。安装 `sccache`（macOS: `brew install sccache`）后，`cargo-dev.sh build/test/run` 自动启用它、通过参数传递 target（避免 `CARGO_TARGET_DIR` 污染缓存键）并关闭该调用的 Rust incremental；所有本地开发调用（含 `check/clippy`，以及没有 sccache 时）统一设置 dev/test debug=0、incremental=0。`OASIS7_CARGO_DEV_MODE=debug` 显式启用 debug=2、incremental=1 并关闭 sccache；不要在同一轮日常迭代反复切换模式，以免重编译。CI 保留原有配置。`OASIS7_CARGO_SCCACHE=0` 或 CI 可禁用，未安装时沿用 Cargo。用 `sccache --show-stats` 查看命中；首次编译填充缓存，workspace/path crates 的源码路径仍进入 Rust cache key，最终链接、proc-macro 和 check 不保证命中。统一使用 wrapper，避免普通目录 `target` 与开发缓存重复构建；不要为此搬移或删除已有 target。
+- 磁盘有限时保留少量固定路径开发 worktree，串行任务在确认干净、独占且已保留未推送工作的工作区用 `git switch -c codex/<task> <base>` 切换独立分支；仅并行任务新建 worktree。不要编辑 main 或主工作区。`new-task-worktree.sh --with-harness` 是完整预热的显式选项，普通后端或文档任务不需要它。
+- 最小开发反馈示例：`./scripts/cargo-dev.sh check -p oasis7_proto`；`./scripts/cargo-dev.sh test -p oasis7_proto <test-filter>`；需要完整交互时才运行 `./scripts/worktree-harness.sh up`。不要用跳过必要验收来节省空间；正式范围仍由本手册与 CI 决定。
+- `build-game-launcher-bundle.sh --profile dev` 的 native 编译与读取目录使用相同开发缓存；默认玩家 bundle 不编译 operator binaries，只有显式 `--ops-out-dir` 才编译它们。packaging 和 wasm 构建保留原入口。
 - deterministic wasm / release 链路继续保持 `CARGO_TARGET_DIR` 为空；涉及 `scripts/build-wasm-module.sh`、release evidence 或 hash/receipt 对账时，不要改用 `scripts/cargo-dev.sh`。
+
+### 本地 Cargo 缓存盘点与回收
+
+先执行 `python3 scripts/cargo-cache.py report --json`。报告从外部缓存反向扫描，包含没有 `target` 链接的工作区缓存；`worktree-gc-report.sh --footprint` 同时提供该缓存清单。按物理目录去重，工作区本地 target 与外部缓存分别报告，不把链接再次相加。容量预算是回收目标，不是通过删除活跃缓存强制达到的限额。体积与剩余预算按盘点快照估算，其他并行构建可能改变实际占用；需要时重新盘点。
+
+回收先预览，再显式执行。`--apply` 仅支持 Linux/macOS（Unix）；Windows 支持盘点、预览与编译锁，但拒绝实际回收，避免无法保证子进程继承锁时删除使用中的产物：
+
+```bash
+python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7
+python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
+```
+
+仅回收具有当前 wrapper 管理标记、所属工作区已不在 Git 注册表、没有其他 target 链接引用、超过保留期且能取得排他使用锁的缓存。仍注册（包括路径已缺失）、正在编译/运行、标记异常、身份未知和 legacy 缓存均保留。wrapper 更新最后使用时间并在 Cargo 及其运行子进程生命周期内持锁；`new-task-worktree.sh` 的 Git 注册与回收的重新检查/删除窗口使用同一仓库锁，避免固定路径重新挂接时被删除；手工 `git worktree add` 若与回收并发，应通过 `python3 scripts/cargo-cache.py attach -- git worktree add ...` 执行。worktree 清理后再次执行缓存回收，工作区清理本身不递归清空外部缓存。显式 target override 不纳入自动管理。首次报告中的历史缓存不因名称相似而自动取得删除资格。
+
+低调试配置不会清除已有大体积产物；本地普通 `target` 也不会被自动搬移或删除。报告预算无法满足时列出剩余占用与保护原因，不把未知目录视为可释放空间。
 
 ## 当前实现分布（2026-02-18 基线）
 
@@ -119,6 +138,8 @@
   - 控制逻辑或共享输入变化、未知影响及依赖解析失败扩大普通 required；迁移 PR 使用完整保留组，不由候选选择器缩小覆盖。
   - CI 和评审结果使用真实 HEAD、测试对象、Actions 运行和 review 记录，不依赖 Task、Project 或通用 receipt。
   - `full` 可显式本地运行；nightly full 保留广覆盖回归，专项环境仅在普通 CI 存在具体不足时使用。
+  - 候选全量回归：`gh workflow run rust.yml --ref <candidate-branch-or-tag> -f run_mode=full`。所选 ref 必须包含该入口；非 main 手动运行执行 `candidate-full-regression`，缓存只读、不写 trusted sentinel，普通 PR 默认选择不变。main 手动 full 和 nightly 仍由原 trusted writer 执行。
+  - 候选运行 summary 记录实际 commit 和 tree，并核对 checkout 与 event SHA 相等；它验证所选源版本，不自动代表最新 main 合并组合。检查该 job 实际成功，不能将其他跳过的 job 或旧运行算作全量通过。
 - 入口 C：`.github/workflows/wasm-determinism-gate.yml`（构建 hash / receipt evidence 独立 gate）
   - GitHub-hosted runner 矩阵：`(m1|m4|m5) x (ubuntu-24.04/linux-x86_64)`
   - planner 先执行：`./scripts/plan-wasm-determinism-scope.sh --event-name <push|pull_request|workflow_dispatch> --base-ref <base> --head-ref <head>`
@@ -241,6 +262,8 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 ./scripts/doc-governance-check.sh
 ./scripts/check-script-executable-bits.sh
 ./scripts/cargo-dev-lib.test.sh
+# 可选真实跨路径缓存验证（需要 sccache 和本地已下载的 itoa）
+./scripts/cargo-dev-sccache.test.sh --real
 ./scripts/check-rust-file-size.sh
 env -u RUSTC_WRAPPER cargo fmt --all -- --check
 ```

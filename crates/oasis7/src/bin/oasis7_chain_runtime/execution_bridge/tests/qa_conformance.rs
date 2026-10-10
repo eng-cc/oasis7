@@ -31,6 +31,7 @@ mod application_sandbox;
 mod application_stream_boundaries;
 mod hosted_wait_clock;
 mod provider_metadata;
+mod scenario_resource;
 use application_harness::run_isolated_application;
 mod application_process_dispatch;
 mod application_provider;
@@ -107,6 +108,8 @@ struct Fixture {
     lookup_digests: Arc<Mutex<Vec<String>>>,
     outage: Arc<http_fixture::Outage>,
     tamper_next_describe: Arc<AtomicBool>,
+    // Last field: release after the fixture worker/node/storage fields drop.
+    scenario_permit: Arc<scenario_resource::ScenarioResourcePermit>,
 }
 impl Fixture {
     fn new() -> Self {
@@ -119,6 +122,7 @@ impl Fixture {
         Self::with_clock_options(controlled, scheduler, false)
     }
     fn with_clock_options(controlled: bool, scheduler: bool, quiet_clock: bool) -> Self {
+        let scenario_permit = scenario_resource::ScenarioResourcePermit::acquire();
         let root = temp_dir("qa-world-service-tcp");
         let writer_lock =
             crate::world_writer_lock::acquire_live_world_writer_lock(&root.join("world")).unwrap();
@@ -400,8 +404,30 @@ impl Fixture {
                 } else {
                     None
                 };
+                // Drain authenticated read responses concurrently so the real dispatcher completes
+                // before a client teardown can interrupt the response relay.
+                let capture_read =
+                    method == "POST" && matches!(path, VIEW_PATH | CHANGES_PATH | LOOKUP_PATH);
+                let mut read_reader = None;
                 let mut capture_peer = None;
-                let mut output_stream = if tamper || capture_ack || gated_ack.is_some() {
+                let mut output_stream = if capture_read {
+                    let capture = TcpListener::bind("127.0.0.1:0").unwrap();
+                    let mut peer = TcpStream::connect(capture.local_addr().unwrap()).unwrap();
+                    peer.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                    read_reader = Some(thread::spawn(move || {
+                        let mut response = Vec::new();
+                        (&mut peer)
+                            .take(16 * 1024 * 1024 + 1)
+                            .read_to_end(&mut response)
+                            .unwrap();
+                        assert!(
+                            response.len() <= 16 * 1024 * 1024,
+                            "Read response capture exceeds bound"
+                        );
+                        response
+                    }));
+                    capture.accept().unwrap().0
+                } else if tamper || capture_ack || gated_ack.is_some() {
                     let capture = TcpListener::bind("127.0.0.1:0").unwrap();
                     capture_peer = Some(TcpStream::connect(capture.local_addr().unwrap()).unwrap());
                     capture.accept().unwrap().0
@@ -460,6 +486,104 @@ impl Fixture {
                     commit_request(&mut driver, height, Some(request));
                 }
                 drop(output_stream);
+                if let Some(reader) = read_reader {
+                    let response = reader.join().expect("Read response capture reader failed");
+                    let verified_success = response.starts_with(b"HTTP/1.1 200 ");
+                    if verified_success {
+                        let body =
+                            crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
+                        let offset = response
+                            .windows(4)
+                            .position(|window| window == b"\r\n\r\n")
+                            .unwrap()
+                            + 4;
+                        match path {
+                            VIEW_PATH => {
+                                let request: SignedReadRequest<ReadWorldViewRequest> =
+                                    serde_json::from_slice(body).unwrap();
+                                let signed: SignedServiceResponse<
+                                    ReadWorldViewResponse<
+                                        oasis7::world_service::projection::WorldServiceProjection,
+                                    >,
+                                > = serde_json::from_slice(&response[offset..]).unwrap();
+                                oasis7::world_service::authority::verify_service_response(
+                                    path,
+                                    &oasis7::world_service::authority::request_digest(
+                                        path, &request,
+                                    )
+                                    .unwrap(),
+                                    &signed,
+                                    &signer.public_key_hex,
+                                )
+                                .unwrap();
+                                signed.payload.validate(&request.request).unwrap();
+                            }
+                            CHANGES_PATH => {
+                                let request: SignedReadRequest<ReadWorldChangesRequest> =
+                                    serde_json::from_slice(body).unwrap();
+                                let signed: SignedServiceResponse<
+                                    ReadWorldChangesResponse<serde_json::Value>,
+                                > = serde_json::from_slice(&response[offset..]).unwrap();
+                                oasis7::world_service::authority::verify_service_response(
+                                    path,
+                                    &oasis7::world_service::authority::request_digest(
+                                        path, &request,
+                                    )
+                                    .unwrap(),
+                                    &signed,
+                                    &signer.public_key_hex,
+                                )
+                                .unwrap();
+                                signed.payload.validate(&request.request).unwrap();
+                                assert!(
+                                    serde_json::to_vec(&signed.payload).unwrap().len() as u64
+                                        <= request.request.max_bytes
+                                );
+                            }
+                            LOOKUP_PATH => {
+                                // Lookup authenticates the original signed payload rather
+                                // than wrapping the lookup in a SignedReadRequest.
+                                let request: wire::AuthenticatedLookup =
+                                    serde_json::from_slice(body).unwrap();
+                                let signed: SignedServiceResponse<
+                                    IntentResponse<serde_json::Value>,
+                                > = serde_json::from_slice(&response[offset..]).unwrap();
+                                oasis7::world_service::authority::verify_service_response(
+                                    path,
+                                    &oasis7::world_service::authority::request_digest(
+                                        path, &request,
+                                    )
+                                    .unwrap(),
+                                    &signed,
+                                    &signer.public_key_hex,
+                                )
+                                .unwrap();
+                                request.request.validate().unwrap();
+                                let expected = derive_correlation(
+                                    request.request.key.world.clone(),
+                                    &request.original,
+                                )
+                                .unwrap();
+                                assert_eq!(expected.key, request.request.key);
+                                signed.payload.validate(&expected).unwrap();
+                            }
+                            _ => unreachable!("only authenticated read routes are captured"),
+                        }
+                    }
+                    if let Err(error) = stream.write_all(&response) {
+                        assert!(
+                            verified_success
+                                && matches!(
+                                    error.raw_os_error(),
+                                    Some(libc::EPIPE) | Some(libc::ECONNRESET)
+                                ),
+                            "Read response relay failed without a verified successful read: {error}"
+                        );
+                        println!(
+                            "PRE2_VERIFIED_READ_RESPONSE_CANCELLED route={path} dispatcher_completed=true signed_response_verified=true unchanged_response_relay_attempted=true"
+                        );
+                    }
+                }
                 if let Some(mut peer) = capture_peer {
                     let mut response = Vec::new();
                     peer.read_to_end(&mut response).unwrap();
@@ -582,6 +706,7 @@ impl Fixture {
             lookup_digests,
             outage,
             tamper_next_describe,
+            scenario_permit,
         }
     }
     fn request(
@@ -632,7 +757,7 @@ impl Fixture {
                 )
                 .unwrap();
             match result.outcome {
-                IntentOutcome::Committed { commit, .. } => return commit,
+                IntentOutcome::Committed { commit, .. } => return *commit,
                 IntentOutcome::Unknown
                 | IntentOutcome::Received { .. }
                 | IntentOutcome::Pending => {}
@@ -718,10 +843,8 @@ fn real_tcp_five_operations_delegation_and_minimum_commit() {
     let replay = fixture.client.submit(original.clone()).unwrap();
     assert!(matches!(
         replay,
-        SubmitObservation::Response(IntentResponse {
-            outcome: IntentOutcome::Committed { .. },
-            ..
-        })
+        SubmitObservation::Response(response)
+            if matches!(response.outcome, IntentOutcome::Committed { .. })
     ));
     let mut future = commit;
     future.position = u64::MAX;
@@ -820,7 +943,7 @@ fn real_tcp_lost_response_signed_gameplay_and_driver_restart() {
         )
         .unwrap();
     assert!(
-        matches!(outcome.outcome,IntentOutcome::Committed { commit: recovered,.. } if recovered==commit)
+        matches!(outcome.outcome,IntentOutcome::Committed { commit: recovered,.. } if *recovered==commit)
     );
     // The restarted driver and immutable persisted service read agree on the exact receipt.
     let key = correlation::key_digest(&original.correlation.key).unwrap();
@@ -1047,3 +1170,5 @@ fn real_tcp_live_writer_lock_excludes_second_writer() {
 }
 
 mod application_periodic_late_completion;
+
+mod application_act_recovery;

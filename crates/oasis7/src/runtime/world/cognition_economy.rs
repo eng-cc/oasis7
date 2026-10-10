@@ -364,18 +364,9 @@ impl CognitionLeaseRequestV1 {
     }
 }
 
-/// Terminal state of a lease. `Reserved` is the only state that can be settled,
-/// released, expired, or compensated. Expired and all other terminal states
-/// reject late responses.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CognitionLeaseStatusV1 {
-    Reserved,
-    Settled,
-    Released,
-    Expired,
-    Refunded,
-}
+/// Shared labels for the Runtime-owned lease state machine. The shared DTO
+/// carries no transition authority; all accounting remains in this module.
+pub use oasis7_agent_api::CognitionLeaseStatusV1;
 
 /// Durable lease identity and its immutable quote.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

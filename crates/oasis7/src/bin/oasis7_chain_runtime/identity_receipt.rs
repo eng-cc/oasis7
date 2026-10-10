@@ -13,6 +13,7 @@ pub(super) fn dispatch<'a>(mut args: impl Iterator<Item = &'a str>) -> Option<Re
         "provision-identity" => Some(super::identity_provision::run(args)),
         "identity-receipt" => Some(run(args)),
         "verify-rebuild-proof" => Some(super::rebuild_status::run_verify(args)),
+        "verify-controlled-history" => Some(super::controlled_history_cli::run(args)),
         _ => None,
     }
 }

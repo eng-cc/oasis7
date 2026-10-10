@@ -13,7 +13,7 @@ Report read-only Git and filesystem facts about registered worktrees.
 
 Options:
   --json           Print machine-readable JSON with all discovered worktrees
-  --footprint      Include per-worktree target/node_modules disk usage
+  --footprint      Include worktree usage and reverse-scanned external Cargo caches
   -h, --help       Show this help
 
 Examples:
@@ -55,7 +55,7 @@ COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
 CANONICAL_REPO_ROOT="$(cd "$COMMON_GIT_DIR/.." && pwd -P)"
 CURRENT_WORKTREE="$(pwd -P)"
 
-python3 - "$COMMON_GIT_DIR" "$CANONICAL_REPO_ROOT" "$CURRENT_WORKTREE" "$OUTPUT_JSON" "$INCLUDE_FOOTPRINT" <<'PY'
+python3 - "$COMMON_GIT_DIR" "$CANONICAL_REPO_ROOT" "$CURRENT_WORKTREE" "$OUTPUT_JSON" "$INCLUDE_FOOTPRINT" "$ROOT_DIR/scripts/cargo-cache.py" <<'PY'
 from __future__ import annotations
 
 import json
@@ -305,6 +305,13 @@ if include_footprint:
         }
     )
 
+if include_footprint:
+    # Reverse inventory also finds wrapper targets without a source-side symlink
+    # and orphan namespaces. Its total is separate; never add symlinks twice.
+    payload["cargo_cache"] = json.loads(subprocess.check_output(
+        [sys.executable, sys.argv[6],
+         "report", "--repo-root", str(repo_root), "--json"], text=True))
+
 if output_json:
     print(json.dumps(payload, ensure_ascii=True, indent=2))
     raise SystemExit(0)
@@ -327,6 +334,9 @@ if not shown:
     print("- details: none")
     raise SystemExit(0)
 
+if include_footprint:
+    print("- external_cargo_cache_inventory:")
+    print(json.dumps(payload["cargo_cache"], ensure_ascii=True, indent=2))
 print("- details:")
 for entry in shown:
     label_parts = []

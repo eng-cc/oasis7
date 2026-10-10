@@ -287,3 +287,106 @@ fn lease_identity_mismatch_and_expiry_fence_provider_without_world_effect() {
         "identity and expiry denial must not call provider"
     );
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn api_lease_view_requires_the_complete_runtime_admission_validator() {
+    let request = request_context();
+    let mut world = World::new();
+    let lease = reserve_lease(
+        &mut world,
+        &request,
+        &request.provider_invocation_key().to_string(),
+        authority_quote(&request, "lease-api-view", 1),
+    );
+
+    let view = crate::simulator::validated_cognition_lease_consumption_view(
+        "agent-1", &request, &lease, 42,
+    )
+    .expect("valid Runtime lease projects to read-only API view");
+    assert_eq!(view.schema_version, "cognition-lease-consumption-view.v1");
+    assert_eq!(view.lease_id, lease.lease_id);
+    assert_eq!(
+        view.status,
+        crate::runtime::CognitionLeaseStatusV1::Reserved
+    );
+    let wire = serde_json::to_value(view).expect("encode correlation view");
+    for authority_field in [
+        "account_id",
+        "quote",
+        "settled_amount",
+        "released_amount",
+        "refunded_amount",
+        "compensated_amount",
+        "net_amount",
+        "receipt_id",
+    ] {
+        assert!(
+            wire.get(authority_field).is_none(),
+            "leaked {authority_field}"
+        );
+    }
+
+    let mut mismatched_world = World::new();
+    mismatched_world
+        .set_cognition_resource_balance(ACCOUNT_ID, RESOURCE, 4)
+        .expect("seed Runtime cognition balance for mismatched lease");
+    let wrong_identity = mismatched_world
+        .reserve_cognition_lease(CognitionLeaseRequestV1::new(
+            request.provider_invocation_key().to_string(),
+            ACCOUNT_ID,
+            "agent-1",
+            request.agent_session_id.clone(),
+            request.agent_turn_id.clone(),
+            request.decision_request_id.clone(),
+            "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            authority_quote(&request, "lease-api-view-mismatch", 1),
+        ))
+        .expect("reserve valid Runtime lease with a mismatched request digest");
+    assert!(
+        crate::simulator::validated_cognition_lease_consumption_view(
+            "agent-1",
+            &request,
+            &wrong_identity,
+            42,
+        )
+        .expect_err("a nonmatching idempotency key is not projectable")
+        .to_string()
+        .contains("cognition_lease_identity_mismatch")
+    );
+
+    let mut expired_world = World::new();
+    let expired = reserve_lease(
+        &mut expired_world,
+        &request,
+        &request.provider_invocation_key().to_string(),
+        authority_quote(&request, "lease-api-view-expired", 1).with_valid_until_tick(41),
+    );
+    assert!(
+        crate::simulator::validated_cognition_lease_consumption_view(
+            "agent-1", &request, &expired, 42,
+        )
+        .expect_err("expired quote is not projectable")
+        .to_string()
+        .contains("cognition_lease_expired")
+    );
+
+    world
+        .release_cognition_lease(&lease.lease_id)
+        .expect("Runtime closes the reserved lease");
+    let closed = world
+        .cognition_economy()
+        .expect("read Runtime lease economy")
+        .leases
+        .get(&lease.lease_id)
+        .cloned()
+        .expect("closed Runtime lease remains durable");
+    assert!(
+        crate::simulator::validated_cognition_lease_consumption_view(
+            "agent-1", &request, &closed, 42,
+        )
+        .expect_err("closed lease is not projectable")
+        .to_string()
+        .contains("cognition_lease_not_reserved")
+    );
+}

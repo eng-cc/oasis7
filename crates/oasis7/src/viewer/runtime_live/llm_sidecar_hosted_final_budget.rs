@@ -695,7 +695,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         return Err("final budget authenticated receipt conflict".into());
                     }
                     resume.budget_receipt = Some(actual);
-                    resume.commit = Some(commit);
+                    resume.commit = Some(*commit);
                     resume.stage = "budget_committed_view".into();
                 }
                 IntentOutcome::Received { .. }

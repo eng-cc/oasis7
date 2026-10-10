@@ -277,6 +277,8 @@ pub(super) struct ExecutionBridgeRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_head_proof_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controlled_capture_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
     pub timestamp_ms: i64,
 }
@@ -314,6 +316,8 @@ struct ExecutionBridgeRecordWire {
     pub world_head_proof_ref: Option<String>,
     #[serde(default)]
     pub world_head_proof_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controlled_capture_ref: Option<String>,
     #[serde(default)]
     pub simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
     pub timestamp_ms: i64,
@@ -342,6 +346,7 @@ impl From<ExecutionBridgeRecordWire> for ExecutionBridgeRecord {
             external_effect_ref: record.external_effect_ref,
             world_head_proof_ref: record.world_head_proof_ref,
             world_head_proof_hash: record.world_head_proof_hash,
+            controlled_capture_ref: record.controlled_capture_ref,
             simulator_mirror: record.simulator_mirror,
             timestamp_ms: record.timestamp_ms,
         }
@@ -401,6 +406,7 @@ impl ExecutionBridgeRecord {
             external_effect_ref,
             world_head_proof_ref: None,
             world_head_proof_hash: None,
+            controlled_capture_ref: None,
             simulator_mirror,
             timestamp_ms,
         }
@@ -445,6 +451,7 @@ impl ExecutionBridgeRecord {
             external_effect_ref,
             world_head_proof_ref: None,
             world_head_proof_hash: None,
+            controlled_capture_ref: None,
             simulator_mirror,
             timestamp_ms,
         }
@@ -843,3 +850,8 @@ pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_
 
 #[cfg(not(test))]
 pub(crate) use self::local_bootstrap::derive_service_execution_bootstrap;
+
+mod controlled_bootstrap_anchor;
+mod controlled_capture;
+
+pub(crate) mod controlled_history;

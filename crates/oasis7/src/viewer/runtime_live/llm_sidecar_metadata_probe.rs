@@ -106,6 +106,19 @@ impl RuntimeLlmSidecar {
             Err(_) => snapshot.error = Some("provider metadata probe failed".into()),
         }
         self.provider_check_snapshot = Some(snapshot);
+        #[cfg(any(test, feature = "test_tier_required"))]
+        if std::env::var("PRE2_WORLD_COHERENCE_TRACE").is_ok_and(|value| value == "1") {
+            eprintln!(
+                "PRE2_METADATA_PROBE phase=applied generation={} status={} failed={}",
+                token.generation,
+                self.provider_check_snapshot.as_ref().unwrap().status,
+                self.provider_check_snapshot
+                    .as_ref()
+                    .unwrap()
+                    .error
+                    .is_some()
+            );
+        }
         Ok(())
     }
 }

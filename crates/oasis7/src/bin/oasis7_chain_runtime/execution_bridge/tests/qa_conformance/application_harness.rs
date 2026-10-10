@@ -366,6 +366,19 @@ pub(super) fn run_isolated_application_mode(
             observer_stop.clone(),
         )
     });
+    // Keep private phase diagnostics scoped to the isolated Hosted probes whose
+    // terminal and repeated-receipt assertions need the original child failure.
+    if hosted
+        && (metadata_probe
+            || matches!(
+                admission_mode,
+                "fresh-admission" | "fresh-metadata" | "fresh-paused" | "repeated-turns"
+            ))
+    {
+        command
+            .env("PRE2_RESUME_REJECTION_RECOVERY_TRACE", "1")
+            .env("PRE2_WORLD_COHERENCE_TRACE", "1");
+    }
     if admission_mode == "slow-consumer" {
         command.env("RUST_LOG", "oasis7::viewer::stream_stage=debug");
     }
@@ -424,6 +437,19 @@ pub(super) fn run_isolated_application_mode(
         .as_ref()
         .map(|m| m.decision_count.load(Ordering::SeqCst));
     let mut output = command.output().unwrap();
+    if hosted
+        && (metadata_probe
+            || matches!(
+                admission_mode,
+                "fresh-admission" | "fresh-metadata" | "fresh-paused" | "repeated-turns"
+            ))
+    {
+        println!(
+            "hosted_probe_child_exit={}\nchild_stderr:\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     if admission_mode.starts_with("memory-ack-") {
         assert_eq!(
             metadata
@@ -866,6 +892,14 @@ pub(super) fn run_isolated_application_mode(
             );
         }
         if admission_mode == "repeated-turns" {
+            // A partial durable artifact can fail the parent receipt oracle;
+            // emit the actual child result first so it cannot hide its cause.
+            println!(
+                "repeated_turns_child_exit={}\nchild_stdout:\n{}\nchild_stderr:\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
             application_stream_boundaries::validate_repeated_receipts(&fixture, &app_dir);
         }
         if admission_mode == "fresh-admission" {

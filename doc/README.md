@@ -27,6 +27,7 @@
 | 想先知道项目当前公开状态与技术预览边界 | `README.md` | `site/index.html` | 先确认“现在能看什么”，再决定是否深入仓库文档 |
 | 想确认本地 / test / 正式三套环境边界 | `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` | `testing-manual.md` + `doc/p2p/prd.md` | 先看项目三环境总览，再按 hosted-login / network tier / launcher lane 下钻 |
 | 想参与功能开发或治理任务 | `doc/core/prd.md` | `doc/<module>/prd.md` + PR、实际 CI 与评审记录（Issue 按需） | 先看全局目标，再进入目标模块 |
+| 想明确 OpenClaw、Codex 等外部 Runtime 如何持续玩游戏 | [智能体产品目标](product/agents-world-simulation/prd.md#external-runtime-play) | [外部 Runtime 产品分册](product/agents-world-simulation/external-agent-runtime-play.prd.md) + [LLM/provider 专业合同](world-simulator/llm/README.md) | 先读目标、首期流程与验收，再看协议、适配和实际能力证据 |
 | 想做本地验证、回归或验收 | `testing-manual.md` | `doc/testing/prd.md` | 手册负责 suite 选择，testing 模块负责测试体系建模 |
 | 想调试 Viewer / Web 链路 | `doc/world-simulator/viewer/viewer-manual.manual.md` | `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` | 前者是专项操作手册，后者是 Web 闭环步骤 |
 | 想补过程上下文或追溯具体任务决策 | PR、实际 CI 与评审记录（Issue 按需） | PR、实际 CI 与评审记录（Issue 按需） | 先靠正式追踪定位任务，再看 task-scoped evidence |

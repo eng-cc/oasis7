@@ -346,6 +346,21 @@ pub(super) fn record_submit_digest(bytes: &[u8], trace: &Arc<Mutex<Vec<String>>>
         "bounded conformance operation trace exhausted"
     );
     observed.push(format!("submit:{digest}"));
+    if matches!(&request.signed_payload, WorldServicePayloadV1::Cognition(_)) {
+        request
+            .validate()
+            .expect("captured Cognition Submit contract");
+        // Retain the complete typed request privately, never in stdout. This
+        // catches alternate correlations or signed bytes, not only key reuse.
+        assert!(
+            observed.len() < 4096,
+            "bounded typed Submit trace exhausted"
+        );
+        observed.push(format!(
+            "cognition_submit:{}",
+            serde_json::to_string(&request).unwrap()
+        ));
+    }
     matches!(request.signed_payload,WorldServicePayloadV1::Scheduler(signed) if matches!(signed.request.operation,SchedulerOperationV1::ReleaseLease {..}))
 }
 
@@ -453,7 +468,7 @@ impl WorldGate {
             if commit.world != candidate.world {
                 return Err("ResumeWake CommitRef world differs from candidate".into());
             }
-            Ok(commit)
+            Ok(*commit)
         })();
 
         let commit = match lookup_result {

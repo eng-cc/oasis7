@@ -12,13 +12,13 @@ use unicode_normalization::UnicodeNormalization;
 
 use super::continuous_agent_harness::{CognitionError, Digest32, MemoryWriteIntentV1, h_v1};
 
+pub use oasis7_agent_api::{GoalSnapshotV1, MemoryContextEntryV1, MemoryContextSnapshotV1};
+
 #[path = "cognition_continuation.rs"]
 mod cognition_continuation;
 pub use cognition_continuation::*;
 
-const MEMORY_SNAPSHOT_DOMAIN: &str = "oasis7.cognition.memory-context.v1";
 const MEMORY_INTENT_DOMAIN: &str = "oasis7.cognition.memory-write-intent.v1";
-const GOAL_SNAPSHOT_DOMAIN: &str = "oasis7.cognition.goal-snapshot.v1";
 const MAX_MEMORY_INTENTS: usize = 8;
 const MAX_MEMORY_SUMMARY_BYTES: usize = 512;
 const MAX_MEMORY_TAGS: usize = 8;
@@ -53,66 +53,9 @@ fn normalized_text(
     Ok(normalized)
 }
 
-fn digest_for_value(domain: &str, value: &Value) -> String {
-    h_v1(domain, value).0
-}
-
 // ---------------------------------------------------------------------------
 // Memory retrieval and write policy
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MemoryContextEntryV1 {
-    pub id: String,
-    pub summary: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MemoryContextSnapshotV1 {
-    pub revision: u64,
-    pub entries: Vec<MemoryContextEntryV1>,
-    pub scope: String,
-    pub digest: String,
-}
-
-impl MemoryContextSnapshotV1 {
-    pub fn empty(scope: impl Into<String>) -> Self {
-        let mut snapshot = Self {
-            revision: 0,
-            entries: Vec::new(),
-            scope: scope.into(),
-            digest: String::new(),
-        };
-        snapshot.digest = snapshot.computed_digest();
-        snapshot
-    }
-
-    pub fn from_value(value: Value) -> Result<Self, CognitionError> {
-        let snapshot: Self = serde_json::from_value(value)
-            .map_err(|e| error("memory_snapshot_invalid", e.to_string()))?;
-        if snapshot.scope.trim().is_empty() {
-            return Err(error("memory_snapshot_invalid", "memory scope is required"));
-        }
-        if snapshot.digest != snapshot.computed_digest() {
-            return Err(error(
-                "memory_snapshot_digest_mismatch",
-                "memory snapshot digest does not match canonical entries",
-            ));
-        }
-        Ok(snapshot)
-    }
-
-    pub fn computed_digest(&self) -> String {
-        let mut value = serde_json::to_value(self).expect("memory snapshot is serializable");
-        value
-            .as_object_mut()
-            .expect("memory snapshot is an object")
-            .remove("digest");
-        digest_for_value(MEMORY_SNAPSHOT_DOMAIN, &value)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryWritePolicyContextV1 {
@@ -875,53 +818,6 @@ pub struct GoalSnapshotInputV1 {
     #[serde(default)]
     pub blocked_reason: Option<String>,
     pub provenance: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GoalSnapshotV1 {
-    pub revision: u64,
-    pub short_term_summary: String,
-    pub long_term_summary: String,
-    #[serde(default)]
-    pub blocked_reason: Option<String>,
-    pub provenance: String,
-    pub digest: String,
-}
-
-impl GoalSnapshotV1 {
-    pub fn empty() -> Self {
-        let mut snapshot = Self {
-            revision: 0,
-            short_term_summary: String::new(),
-            long_term_summary: String::new(),
-            blocked_reason: None,
-            provenance: "harness_projection".to_string(),
-            digest: String::new(),
-        };
-        snapshot.digest = snapshot.computed_digest();
-        snapshot
-    }
-
-    pub fn from_value(value: Value) -> Result<Self, CognitionError> {
-        let snapshot: Self = serde_json::from_value(value)
-            .map_err(|e| error("goal_snapshot_invalid", e.to_string()))?;
-        if snapshot.digest != snapshot.computed_digest() {
-            return Err(error(
-                "goal_snapshot_digest_mismatch",
-                "goal snapshot digest does not match canonical projection",
-            ));
-        }
-        Ok(snapshot)
-    }
-
-    pub fn computed_digest(&self) -> String {
-        let mut value = serde_json::to_value(self).expect("goal snapshot is serializable");
-        value
-            .as_object_mut()
-            .expect("goal snapshot is an object")
-            .remove("digest");
-        digest_for_value(GOAL_SNAPSHOT_DOMAIN, &value)
-    }
 }
 
 pub struct GoalSnapshotProjector;

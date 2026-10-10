@@ -231,6 +231,7 @@ run_cargo_tooling_baseline_contract_tests() {
 
 run_cargo_tooling_contract_tests() {
   run_cargo_tooling_baseline_contract_tests
+  run python3 ./scripts/cargo-cache.test.py
   run bash ./scripts/cargo-dev-lib.test.sh
   run bash ./scripts/check-standalone-tool-lockfiles.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
@@ -294,6 +295,7 @@ run_operational_node_contract_tests() {
   run ./scripts/s10-five-node-game-soak-summary.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
   run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
+  run bash ./scripts/build-game-launcher-bundle-dev-cache.test.sh
   run bash ./scripts/build-game-launcher-bundle-ops-default.test.sh
   run bash ./scripts/build-game-launcher-bundle-macos-bash3.test.sh
   run bash ./scripts/testnet-packages-linux-bundle-bootstrap-contract.test.sh

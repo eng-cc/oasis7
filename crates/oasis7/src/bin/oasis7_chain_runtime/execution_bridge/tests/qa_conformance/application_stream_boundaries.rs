@@ -476,6 +476,26 @@ fn repeated(shared: Arc<Mutex<ViewerRuntimeLiveServer>>, root: &std::path::Path)
         identities[0]["request_digest"],
         identities[1]["request_digest"]
     );
+    if !two_memories || !paused_after_two {
+        println!(
+            "repeated_turn_failed_diagnostic={}",
+            serde_json::json!({
+                "hosted_service_phase": summary["hosted_service_phase"],
+                "hosted_service_inflight": summary["hosted_service_inflight"],
+                "hosted_service_memory_failure": summary["hosted_service_memory_failure"],
+                "agent_service_pump_error": summary["agent_service_pump_error"],
+                "pending_intent_count": summary["pending_intent_count"],
+                "pending_action_count": summary["pending_action_count"],
+                "two_memories": two_memories,
+                "pause_sent": two_memories,
+                "pause_observed": paused_after_two,
+            })
+        );
+    }
+    assert!(
+        two_memories,
+        "both actual receipt memories must complete before issuing genuine Pause"
+    );
     assert!(
         paused_after_two,
         "genuine Pause must stop fresh admission after two actual memories"

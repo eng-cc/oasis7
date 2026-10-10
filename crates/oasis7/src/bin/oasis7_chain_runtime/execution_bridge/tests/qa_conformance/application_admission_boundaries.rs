@@ -98,11 +98,16 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     let initial_deadline = Instant::now() + Duration::from_secs(1);
     let (mut initial_snapshot, mut initial_recovery, mut initial_acks) = (false, false, 0);
     let mut recovery_observed = serde_json::Value::Null;
+    // read_line may append an incomplete frame before a socket timeout.
+    // Retain it across polling and reader handoff until its newline arrives.
+    let mut line = String::new();
     while Instant::now() < initial_deadline && !(initial_snapshot && initial_recovery) {
-        let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) => break,
             Ok(_) => {
+                if !line.ends_with('\n') {
+                    continue;
+                }
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                     if value["type"] == "hello_ack" {
                         initial_acks += 1;
@@ -126,6 +131,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
                                 == serde_json::json!(canonical.continuation().sequence);
                     }
                 }
+                line.clear();
             }
             Err(e)
                 if matches!(
@@ -170,10 +176,12 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     let (mut acks, mut ordered, mut blocked) = (initial_acks, false, false);
     let control_witness = Arc::new(Mutex::new(serde_json::Value::Null));
     while Instant::now() < deadline {
-        let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) => break,
             Ok(_) => {
+                if !line.ends_with('\n') {
+                    continue;
+                }
                 if let Ok(ViewerResponse::ControlCompletionAck { ack }) =
                     serde_json::from_str(&line)
                     && ack.request_id == 1001
@@ -188,9 +196,11 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
                     }
                     if acks >= 2 && v["type"] == "snapshot" {
                         ordered = true;
+                        line.clear();
                         break;
                     }
                 }
+                line.clear();
             }
             Err(e)
                 if matches!(
@@ -212,10 +222,12 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
     let drain = thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(7);
         while !draining.load(Ordering::SeqCst) && Instant::now() < deadline {
-            let mut line = String::new();
             match reader.read_line(&mut line) {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
+                    if !line.ends_with('\n') {
+                        continue;
+                    }
                     if let Ok(ViewerResponse::ControlCompletionAck { ack }) =
                         serde_json::from_str::<ViewerResponse>(&line)
                         && ack.request_id == 1001
@@ -233,6 +245,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
                             ready_flag.store(true, Ordering::SeqCst);
                         }
                     }
+                    line.clear();
                 }
                 Err(e)
                     if matches!(
@@ -281,6 +294,9 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
         send(&mut socket, serde_json::json!({"type":"request_snapshot"}));
     }
     let mut snapshot_requests = usize::from(initial_request_complete);
+    // Cover the full observation window rather than consuming every bounded
+    // request before a failed metadata probe can recover after its cache TTL.
+    let mut last_snapshot_request = Instant::now();
     let terminal_deadline = Instant::now() + Duration::from_secs(4);
     let mut summary = serde_json::Value::Null;
     loop {
@@ -295,10 +311,15 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
             break;
         }
         let completed = snapshot_completions.load(Ordering::SeqCst);
-        if initial_request_complete && completed > observed_completions && snapshot_requests < 16 {
+        if initial_request_complete
+            && completed > observed_completions
+            && snapshot_requests < 16
+            && last_snapshot_request.elapsed() >= Duration::from_millis(250)
+        {
             observed_completions = completed;
             send(&mut socket, serde_json::json!({"type":"request_snapshot"}));
             snapshot_requests += 1;
+            last_snapshot_request = Instant::now();
         }
         thread::sleep(Duration::from_millis(10));
     }
@@ -348,6 +369,21 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, mode: &str) {
         assert_ne!(summary["terminal_states"]["agent-a"]["status"], "committed");
         println!("PRE2_FRESH_PAUSE_METADATA_NO_ADMISSION_PASSED");
     } else {
+        if summary["terminal_states"]["agent-a"]["status"] != "committed" {
+            println!(
+                "fresh_metadata_failed_terminal_diagnostic={}",
+                serde_json::json!({
+                    "hosted_service_phase": summary["hosted_service_phase"],
+                    "hosted_service_inflight": summary["hosted_service_inflight"],
+                    "hosted_service_memory_failure": summary["hosted_service_memory_failure"],
+                    "agent_service_pump_error": summary["agent_service_pump_error"],
+                    "pending_intent_count": summary["pending_intent_count"],
+                    "pending_action_count": summary["pending_action_count"],
+                    "native_model_call_count": summary["native_model_call_count"],
+                    "metadata_ready": metadata_ready,
+                })
+            );
+        }
         assert_eq!(summary["terminal_states"]["agent-a"]["status"], "committed");
         assert!(after.unwrap()["model_decisions"].as_u64().unwrap() > 0);
         println!("PRE2_FRESH_METADATA_BEFORE_ADMISSION_PASSED");
