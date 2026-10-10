@@ -44,7 +44,7 @@ description: 为 eng-cc/oasis7 构建、修改或刷新项目开发指挥看板�
 ## 构建或修改看板
 
 1. 先读 [客户端形态与首版范围](references/desktop-client.md)。默认交付 macOS 优先的独立桌面客户端，由应用管理本地服务；浏览器界面用于开发预览。检查现有看板、用户指定宿主和目录说明，复用适合的实现并明确代码落点；沿用用户明确指定的交付形态。不要把开发会话自动放进公共站点或玩家 Viewer。
-2. 根据当前源码选择技术。此项目有纯静态 `site/` 和 Solid.js Viewer；不假定已有 React 应用，不为看板改造世界运行时。UI 设计 Skill（如 `interface-design`）已可用且适合时按需使用，缺失时按本 Skill 的信息层级与状态要求继续。
+2. 读取 [技术选型决策](references/technology-decision.md) 和 [客户端架构](references/client-architecture.md)。当前推荐基线是 Tauri 2 + Rust 核心 + SolidJS/TypeScript；核对当前源码、依赖与用户约束后沿用，出现分册列明的变化再重评。此项目有纯静态 `site/` 和 Solid.js Viewer；不为看板改造世界运行时。UI 设计 Skill 已可用且适合时按需使用，缺失时按本 Skill 的信息层级与状态要求继续。
 3. 先贯通“真实来源 → 规范化展示对象 → 页面”：接入文档与 GitHub，完成四视图、来源下钻和缺失状态。未接入的 Agent 区明确显示未连接；演示数据仅放在标明的演示入口。
 4. 再按用户范围接入开发会话，读取 [Codex 接入边界](references/codex-integration.md)。复用现有可用接口；需要新适配器时仅实现必要范围。页面刷新不触发新的模型运行。
 5. 在真实适配器可用且用户要求时加入操作。对不可用动作显示原因；不制作点击后伪造成功的按钮，不通过改本地缓存宣称远端任务或会话已改变。
@@ -73,4 +73,6 @@ description: 为 eng-cc/oasis7 构建、修改或刷新项目开发指挥看板�
 - [项目入口地图](references/project-map.md)：首次定位项目，或入口、规范、技术栈发生变化时读取。
 - [视图与数据约定](references/view-model.md)：设计页面、关联任务、解释进度或记录决策时读取。
 - [客户端形态与首版范围](references/desktop-client.md)：确定桌面交付、本地与远端分工或首版范围时读取。
+- [技术选型决策](references/technology-decision.md)：确定 Rust 桌面技术栈、比较备选或评估重选条件时读取。
+- [客户端架构](references/client-architecture.md)：落实代码结构、数据与 IPC、Codex 生命周期、验证及发布时读取。
 - [Codex 接入边界](references/codex-integration.md)：接入开发会话、事件或执行按钮时读取。
