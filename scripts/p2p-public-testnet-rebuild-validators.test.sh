@@ -7,9 +7,13 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 help_output="$("$ROOT_DIR"/scripts/p2p-public-testnet-rebuild-validators.sh --help)"
 if ! grep -Fq \
-  'preflight both -> reset both -> stage both -> sequencer liveness -> storage' \
+  'storage reset/stage/start/readback while sequencer remains live' \
   <<<"$help_output"; then
-  echo "expected --help to describe the safe validator rebuild order" >&2
+  echo "expected --help to describe the staggered validator rebuild order" >&2
+  exit 1
+fi
+if ! grep -Fq 'At most one existing validator is stopped at any point' <<<"$help_output"; then
+  echo "expected --help to state the pair-preservation safety invariant" >&2
   exit 1
 fi
 if ! grep -Fq -- '--consumer-impact-record <path>' <<<"$help_output"; then
@@ -644,14 +648,16 @@ if [[ -n "${TEST_EVENT_LOG:-}" ]]; then
 fi
 case "$url" in
   http://sequencer/status)
-    if [[ -n "${TEST_SEQUENCER_STATUS_OVERRIDE:-}" ]]; then
+    if [[ -n "${TEST_SEQUENCER_STATUS_OVERRIDE:-}" ]] \
+      && { [[ "${TEST_SEQUENCER_STATUS_OVERRIDE_AFTER_START:-0}" != 1 ]] || [[ -f "${TEST_REMOTE_ROOT:?}/started-root_sequencer" ]]; }; then
       cp "$TEST_SEQUENCER_STATUS_OVERRIDE" "$out"
     else
       cp "${TEST_STATUS_ROOT:?}/sequencer.json" "$out"
     fi
     ;;
   http://storage/status)
-    if [[ -n "${TEST_STORAGE_STATUS_OVERRIDE:-}" ]]; then
+    if [[ -n "${TEST_STORAGE_STATUS_OVERRIDE:-}" ]] \
+      && { [[ "${TEST_STORAGE_STATUS_OVERRIDE_AFTER_START:-0}" != 1 ]] || [[ -f "${TEST_REMOTE_ROOT:?}/started-root_storage" ]]; }; then
       cp "$TEST_STORAGE_STATUS_OVERRIDE" "$out"
     else
       cp "${TEST_STATUS_ROOT:?}/storage.json" "$out"
@@ -828,19 +834,48 @@ import sys
 
 lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 
-def first_index(needle: str) -> int:
-    for index, line in enumerate(lines):
-        if needle in line:
+def first_index(needle: str, start: int = 0) -> int:
+    for index in range(start, len(lines)):
+        if needle in lines[index]:
             return index
     raise SystemExit(f"missing event: {needle}")
 
-first_curl_index = first_index("curl\t")
-sequencer_start_index = first_index("systemctl start 'oasis7-triad-sequencer.service'")
-storage_start_index = first_index("systemctl start 'oasis7-triad-storage.service'")
-if not sequencer_start_index < first_curl_index:
-    raise SystemExit("sequencer was not started before first status poll")
-if not first_curl_index < storage_start_index:
-    raise SystemExit("storage was started before sequencer liveness was confirmed")
+def status_index(url: str, start: int) -> int:
+    return first_index(f"curl\t{url}", start)
+
+storage_cleanup = first_index("ssh\troot@storage\tSERVICE_NAME=")
+storage_reset = next(
+    index for index in range(storage_cleanup, len(lines))
+    if lines[index].startswith("ssh\troot@storage\t")
+    and "data/execution-records" in lines[index]
+)
+storage_stage = first_index("ssh\troot@storage\tmkdir -p '/opt/oasis7/p2p-testnet/config/doc/testing/evidence'")
+storage_start = first_index("systemctl start 'oasis7-triad-storage.service'")
+storage_readback = status_index("http://storage/status", storage_start)
+sequencer_cleanup = first_index("ssh\troot@sequencer\tSERVICE_NAME=", storage_readback)
+sequencer_reset = next(
+    index for index in range(sequencer_cleanup, len(lines))
+    if lines[index].startswith("ssh\troot@sequencer\t")
+    and "data/execution-records" in lines[index]
+)
+sequencer_stage = first_index("ssh\troot@sequencer\tmkdir -p '/opt/oasis7/p2p-testnet/config/doc/testing/evidence'")
+sequencer_start = first_index("systemctl start 'oasis7-triad-sequencer.service'")
+sequencer_readback = status_index("http://sequencer/status", sequencer_start)
+
+if not storage_cleanup < storage_reset < storage_stage < storage_start < storage_readback:
+    raise SystemExit("storage cutover order is not reset -> stage -> start -> readback")
+if not storage_readback < sequencer_cleanup < sequencer_reset < sequencer_stage < sequencer_start < sequencer_readback:
+    raise SystemExit("sequencer cutover did not wait for storage readback")
+if not any(
+    line.startswith("curl\thttp://sequencer/status")
+    for line in lines[:storage_cleanup]
+):
+    raise SystemExit("missing sequencer live baseline before storage reset")
+if not any(
+    line.startswith("curl\thttp://storage/status")
+    for line in lines[:storage_cleanup]
+):
+    raise SystemExit("missing storage live baseline before storage reset")
 PY
 
 python3 - "$TEST_SSH_ARGS_LOG" <<'PY'
@@ -933,20 +968,12 @@ def first_index(host: str, needle: str) -> int:
             return index
     raise SystemExit(f"missing event for {host}: {needle}")
 
-cleanup_indexes = [
-    first_index(host, "SERVICE_NAME=")
-    for host in ("root@sequencer", "root@storage")
-]
-reset_indexes = [
-    first_index(host, "data/execution-records")
-    for host in ("root@sequencer", "root@storage")
-]
-stage_indexes = [
-    first_index(host, "mkdir -p '/opt/oasis7/p2p-testnet/config/doc/testing/evidence'")
-    for host in ("root@sequencer", "root@storage")
-]
-if not max(cleanup_indexes + reset_indexes) < min(stage_indexes):
-    raise SystemExit("staging began before both hosts were quiesced and destructively reset")
+for host in ("root@sequencer", "root@storage"):
+    cleanup = first_index(host, "SERVICE_NAME=")
+    reset = first_index(host, "data/execution-records")
+    stage = first_index(host, "mkdir -p '/opt/oasis7/p2p-testnet/config/doc/testing/evidence'")
+    if not cleanup < reset < stage:
+        raise SystemExit(f"{host} staging did not follow its own cleanup and reset")
 PY
 
 jq -e '
@@ -955,6 +982,27 @@ jq -e '
   and .storage.running == true
   and .storage.last_execution_height == 1
 ' <<<"$json" >/dev/null
+
+jq -e '
+  .execution_mode == "staggered"
+  and .staggered_member_order == ["storage", "sequencer"]
+  and .pair_preservation.max_simultaneously_stopped_validators == 1
+  and .pair_preservation.live_peer_readback_before_each_reset == true
+  and .pair_preservation.rebuilt_member_readback_before_next_reset == true
+  and .rollback_boundary.restore_deleted_chain_state == false
+  and .rollback_boundary.restore_old_node_state == false
+  and .rollback_boundary.failure_action == "target_only_cleanup_and_preserve_live_peer"
+' "$TMP_DIR/out/rebuild-summary.json" >/dev/null
+for readback in \
+  staggered-preflight-sequencer.json \
+  staggered-preflight-storage.json \
+  staggered-sequencer-before-storage.json \
+  staggered-storage-before-sequencer.json \
+  staggered-storage-liveness.json \
+  staggered-sequencer-liveness.json; do
+  test -s "$TMP_DIR/out/$readback"
+done
+test ! -e "$TMP_DIR/out/staggered-recovery.json"
 
 test -f "$TMP_DIR/out/rebuild-summary.json"
 test -f "$TMP_DIR/out/sequencer-repair-rebuild.log"
@@ -1082,6 +1130,7 @@ JSON
 : >"$TEST_EVENT_LOG"
 rm -f "$TEST_REMOTE_ROOT"/started-*
 if TEST_SEQUENCER_STATUS_OVERRIDE="$TMP_DIR/status/sequencer-not-live.json" \
+  TEST_SEQUENCER_STATUS_OVERRIDE_AFTER_START=1 \
   "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
@@ -1101,14 +1150,38 @@ if TEST_SEQUENCER_STATUS_OVERRIDE="$TMP_DIR/status/sequencer-not-live.json" \
   echo "expected rebuild to fail when sequencer liveness check fails" >&2
   exit 1
 fi
-grep -q "sequencer liveness failed checks after restart" "$TMP_DIR/sequencer-liveness-fail.stderr"
+grep -q "sequencer readiness readback failed" "$TMP_DIR/sequencer-liveness-fail.stderr"
 grep -q "systemctl start 'oasis7-triad-sequencer.service'" "$TEST_EVENT_LOG"
-if grep -q "systemctl start 'oasis7-triad-storage.service'" "$TEST_EVENT_LOG"; then
-  echo "storage started despite failed sequencer liveness" >&2
-  exit 1
-fi
+grep -q "systemctl start 'oasis7-triad-storage.service'" "$TEST_EVENT_LOG"
+jq -e '
+  .schema_version == "oasis7.validator_pair_staggered_recovery.v1"
+  and .failed_role == "sequencer"
+  and .preserved_live_peer == "storage"
+  and .rollback.action == "target_only_cleanup_and_preserve_live_peer"
+  and .rollback.restore_deleted_chain_state == false
+  and .max_simultaneously_stopped_validators == 1
+' "$TMP_DIR/out-sequencer-liveness-fail/staggered-recovery.json" >/dev/null
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+storage_cleanup = [
+    line for line in lines
+    if line.startswith("root@storage\t") and "SERVICE_NAME='oasis7-triad-storage.service'" in line
+]
+sequencer_cleanup = [
+    line for line in lines
+    if line.startswith("root@sequencer\t") and "SERVICE_NAME='oasis7-triad-sequencer.service'" in line
+]
+if len(storage_cleanup) != 1:
+    raise SystemExit(f"storage peer was not preserved live; cleanup count={len(storage_cleanup)}")
+if len(sequencer_cleanup) < 2:
+    raise SystemExit("failed sequencer target was not cleaned after liveness failure")
+PY
 
 start_count_before=$(grep -c "systemctl start '" "$TEST_EVENT_LOG" || true)
+sequencer_start_count_before=$(grep -c "systemctl start 'oasis7-triad-sequencer.service'" "$TEST_EVENT_LOG" || true)
 if TEST_REPAIR_WORLD_TIME_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
@@ -1133,10 +1206,21 @@ grep -Fx 'world_time=2' "$TMP_DIR/out-repair-time-drift/sequencer-repair-rebuild
 grep -q 'sequencer repair rebuild produced world_time=2, expected 0' \
   "$TMP_DIR/out-repair-time-drift.stderr"
 start_count_after=$(grep -c "systemctl start '" "$TEST_EVENT_LOG" || true)
-if [[ "$start_count_before" != "$start_count_after" ]]; then
-  echo "repair time drift failure must stop before starting services" >&2
+if [[ "$start_count_after" != "$((start_count_before + 1))" ]]; then
+  echo "repair time drift failure must preserve the already-live storage member" >&2
   exit 1
 fi
+grep -q "systemctl start 'oasis7-triad-storage.service'" "$TEST_EVENT_LOG"
+sequencer_start_count_after=$(grep -c "systemctl start 'oasis7-triad-sequencer.service'" "$TEST_EVENT_LOG" || true)
+if [[ "$sequencer_start_count_before" != "$sequencer_start_count_after" ]]; then
+  echo "sequencer started despite repair time drift failure" >&2
+  exit 1
+fi
+jq -e '
+  .failed_role == "sequencer"
+  and .preserved_live_peer == "storage"
+  and .rollback.restore_deleted_chain_state == false
+' "$TMP_DIR/out-repair-time-drift/staggered-recovery.json" >/dev/null
 
 cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
 {
@@ -1218,8 +1302,15 @@ if "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   exit 1
 fi
 
-grep -q "sequencer readiness failed checks after restart" \
+grep -q "storage readiness readback failed; sequencer was preserved live" \
   /tmp/oasis7-rebuild-validators-clean-genesis.out
+jq -e '
+  .failed_role == "storage"
+  and .preserved_live_peer == "sequencer"
+  and .failed_phase == "readiness_readback"
+  and .rollback.action == "target_only_cleanup_and_preserve_live_peer"
+  and .rollback.restore_deleted_chain_state == false
+' "$TMP_DIR/out-clean-genesis/staggered-recovery.json" >/dev/null
 
 python3 - "$TEST_SSH_LOG" <<'PY'
 import pathlib
@@ -1245,11 +1336,45 @@ for host, service in (
         and "oasis7_chain_runtime" in command
         and "start-node.sh" in command
     ]
-    if not start_indexes:
-        raise SystemExit(f"missing {host} start command for clean-genesis path")
-    if not any(index > start_indexes[-1] for index in cleanup_indexes):
-        raise SystemExit(f"missing post-start cleanup for clean-genesis failure {host}")
+    if host == "root@storage":
+        if not start_indexes:
+            raise SystemExit("missing storage start command for clean-genesis path")
+        if not any(index > start_indexes[-1] for index in cleanup_indexes):
+            raise SystemExit("missing target-only storage cleanup after readiness failure")
+    elif start_indexes:
+        raise SystemExit("sequencer was started despite storage readiness failure")
 PY
+
+cat >"$TMP_DIR/status/storage.json" <<'JSON'
+{
+  "running": true,
+  "last_error": null,
+  "readiness": {
+    "status": "ready"
+  },
+  "observability": {
+    "storage_challenge_network_degraded": false
+  },
+  "consensus": {
+    "committed_height": 1,
+    "last_execution_height": 1,
+    "last_execution_block_hash": "storage-execution-block",
+    "last_execution_state_root": "storage-execution-root",
+    "storage_challenge_network_degraded_height": null,
+    "network_head": {
+      "height": 1
+    }
+  },
+  "world_resource": {
+    "readiness_status": "ready",
+    "failed_gates": []
+  },
+  "replication": {
+    "local_peer_id": "12D3KooWStorage",
+    "connected_peers": ["12D3KooWSequencer"]
+  }
+}
+JSON
 
 cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
 {
@@ -1588,8 +1713,14 @@ if TEST_FAIL_CLEANUP_AFTER_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-publ
   exit 1
 fi
 
-grep -q "sequencer readiness failed checks after restart and cleanup failed" \
+grep -q "sequencer readiness readback failed; target-only cleanup failed" \
   /tmp/oasis7-rebuild-validators-cleanup-fail.out
+jq -e '
+  .failed_role == "sequencer"
+  and .preserved_live_peer == "storage"
+  and .rollback.action == "target_only_cleanup_and_preserve_live_peer"
+  and .rollback.restore_deleted_chain_state == false
+' "$TMP_DIR/out-cleanup-fail/staggered-recovery.json" >/dev/null
 
 cat >"$TMP_DIR/status/storage-not-ready.json" <<'JSON'
 {
@@ -1617,7 +1748,9 @@ JSON
 
 : >"$TEST_SSH_LOG"
 rm -f "$TEST_REMOTE_ROOT"/started-*
-if TEST_STORAGE_STATUS_OVERRIDE="$TMP_DIR/status/storage-not-ready.json" "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+if TEST_STORAGE_STATUS_OVERRIDE="$TMP_DIR/status/storage-not-ready.json" \
+  TEST_STORAGE_STATUS_OVERRIDE_AFTER_START=1 \
+  "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
   --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
@@ -1669,8 +1802,11 @@ for host, service in (
         and "oasis7_chain_runtime" in command
         and "start-node.sh" in command
     ]
-    if not start_indexes:
-        raise SystemExit(f"missing {host} start command for storage-failure path")
-    if not any(index > start_indexes[-1] for index in cleanup_indexes):
-        raise SystemExit(f"missing post-start cleanup for {host} after storage readiness failure")
+    if host == "root@storage":
+        if not start_indexes:
+            raise SystemExit("missing storage start command for storage-failure path")
+        if not any(index > start_indexes[-1] for index in cleanup_indexes):
+            raise SystemExit("missing target-only storage cleanup after liveness failure")
+    elif start_indexes:
+        raise SystemExit("sequencer was started despite storage liveness failure")
 PY

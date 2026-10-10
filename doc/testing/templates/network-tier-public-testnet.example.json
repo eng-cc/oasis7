@@ -27,8 +27,8 @@
   },
   "deployment_validator_registry": {
     "ref": "public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
-    "sha256": "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f",
-    "semantic_sha256": "aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d"
+    "sha256": "1296accdac21371a017797b29503aa6658ed600f71049db0599ae3d12c651510",
+    "semantic_sha256": "82b3b705cc72173b34fc738f9cff00cba2f4cab0f05ca32ca58bf4dfd5ea7228"
   },
   "token_policy": {
     "symbol": "OC",

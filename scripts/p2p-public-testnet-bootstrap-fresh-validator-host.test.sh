@@ -349,7 +349,7 @@ chmod 0600 "$validator47_public_receipt"
 validator47_key_sha256="$(shasum -a 256 "$validator47_key" | awk '{print $1}')"
 validator47_receipt_sha256="$(shasum -a 256 "$validator47_public_receipt" | awk '{print $1}')"
 cat >"$validator47_config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" <<EOF
-{"network_id":"oasis7-public-testnet-governed-20260606","chain_id":"oasis7-public-testnet-governed-20260606","tier":"public_testnet","deployment_inventory":{"ref":"scripts/public-testnet-validator-triad-inventory.v1.json","sha256":"$triad_inventory_sha256"},"bootstrap_peer_authority":{"ref":"public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt","sha256":"c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6"},"deployment_validator_registry":{"ref":"config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json","sha256":"8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78","semantic_sha256":"aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d"}}
+{"network_id":"oasis7-public-testnet-governed-20260606","chain_id":"oasis7-public-testnet-governed-20260606","tier":"public_testnet","deployment_inventory":{"ref":"scripts/public-testnet-validator-triad-inventory.v1.json","sha256":"$triad_inventory_sha256"},"bootstrap_peer_authority":{"ref":"public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt","sha256":"5e62e5b132fe083c18c637213baefebad161c675e2243b2e02dc8bcd5f70401c"},"deployment_validator_registry":{"ref":"config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json","sha256":"1290818e16b4d5f6fa1929a18e0d6c73295d0ff86e8c7ee8ee58e670874199fd","semantic_sha256":"82b3b705cc72173b34fc738f9cff00cba2f4cab0f05ca32ca58bf4dfd5ea7228"}}
 EOF
 cat >"$validator47_config/node.env" <<EOF
 NODE_ID=triad-testnet-validator-47
@@ -363,13 +363,13 @@ FULL_STORAGE_PROVIDER=1
 WORLD_ID=oasis7-public-testnet-governed-20260606
 NETWORK_TIER_MANIFEST_PATH=config/public-testnet-governed-bootstrap-manifest-2026-06-06.json
 GENESIS_VALIDATOR_REGISTRY_PATH=config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
-GENESIS_VALIDATOR_REGISTRY_SHA256=8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78
-GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256=aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d
+GENESIS_VALIDATOR_REGISTRY_SHA256=1290818e16b4d5f6fa1929a18e0d6c73295d0ff86e8c7ee8ee58e670874199fd
+GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256=82b3b705cc72173b34fc738f9cff00cba2f4cab0f05ca32ca58bf4dfd5ea7228
 EXECUTION_WORLD_DIR=staged-world
 DEPLOYMENT_INVENTORY_PATH=config/public-testnet-validator-triad-inventory.v1.json
 DEPLOYMENT_INVENTORY_SHA256=$triad_inventory_sha256
 BOOTSTRAP_PEER_PATH=config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
-BOOTSTRAP_PEER_SHA256=c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6
+BOOTSTRAP_PEER_SHA256=5e62e5b132fe083c18c637213baefebad161c675e2243b2e02dc8bcd5f70401c
 IDENTITY_KEY_PATH=config/node-keypair.toml
 IDENTITY_RECEIPT_PATH=config/identity-receipt.json
 IDENTITY_KEY_SHA256=$validator47_key_sha256
