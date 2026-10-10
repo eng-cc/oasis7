@@ -2,8 +2,9 @@ use super::*;
 use std::sync::{Arc, Mutex};
 
 pub(super) use super::mock_http::{
-    MockHttpResponse, RecordedHttpRequest, provider_context_response,
-    spawn_runtime_live_mock_http_server, spawn_runtime_live_mock_http_server_with_provider_probes,
+    MockHttpResponse, RecordedHttpRequest, RuntimeLiveMockHttpServer, provider_context_response,
+    spawn_runtime_live_mock_http_server, spawn_runtime_live_mock_http_server_until_drop,
+    spawn_runtime_live_mock_http_server_with_provider_probes,
 };
 
 #[path = "auth_actions_agent_chat.rs"]
