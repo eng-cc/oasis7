@@ -276,7 +276,7 @@ pub enum AdmissionDurability {
 pub enum IntentOutcome<T> {
     Received { durability: AdmissionDurability },
     Pending,
-    Committed { commit: CommitRef, receipt: T },
+    Committed { commit: Box<CommitRef>, receipt: T },
     Rejected { reason: WorldServiceErrorKind },
     Expired,
     Unknown,
@@ -314,7 +314,7 @@ impl<T> IntentResponse<T> {
     reason = "Keep submit observations allocation-free and preserve the published response API"
 )]
 pub enum SubmitObservation<T> {
-    Response(IntentResponse<T>),
+    Response(Box<IntentResponse<T>>),
     OutcomeUnknown(RequestCorrelation),
 }
 

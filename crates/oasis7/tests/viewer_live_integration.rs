@@ -57,6 +57,10 @@ fn live_server_accepts_client_and_emits_snapshot_and_event() {
                 request: PromptControlApplyRequest {
                     agent_id: "agent-0".to_string(),
                     player_id: "integration-player".to_string(),
+                    request_id: None,
+                    session_epoch: None,
+                    binding_epoch: None,
+                    expected_authority_epoch: None,
                     public_key: None,
                     auth: None,
                     strong_auth_grant: None,

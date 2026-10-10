@@ -6190,6 +6190,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_agent_api"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "oasis7_wasm_abi",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "oasis7_client_api"
 version = "0.1.0"
 dependencies = [
@@ -6209,8 +6219,10 @@ dependencies = [
  "hex",
  "js-sys",
  "libc",
- "oasis7",
+ "multiaddr 0.18.2",
+ "oasis7_client_api",
  "oasis7_launcher_ui",
+ "reqwest 0.13.5",
  "serde",
  "serde_json",
  "toml 0.9.12+spec-1.1.0",

@@ -356,7 +356,7 @@ impl ClientLauncherApp {
     }
 
     fn apply_demo_mode_safe_defaults(&mut self) {
-        let pos_defaults = oasis7::chain_pos_defaults::defaults();
+        let pos_defaults = chain_pos_defaults::defaults();
         self.config.scenario = DEFAULT_SCENARIO.to_string();
         self.config.live_bind = DEFAULT_LIVE_BIND.to_string();
         self.config.web_bind = DEFAULT_WEB_BIND.to_string();

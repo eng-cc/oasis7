@@ -1,3 +1,4 @@
+use super::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peers;
 use super::platform_ops::viewer_dev_dist_candidates;
 use super::{
     ChainRuntimeStatus, ClientLauncherApp, ConfigIssue, DEFAULT_CLIENT_LAUNCHER_CONTROL_BIND,
@@ -30,9 +31,7 @@ use super::{
     },
 };
 use eframe::egui;
-use oasis7::launcher_bootstrap_peers::{
-    default_chain_replication_bootstrap_peers_csv, parse_chain_replication_bootstrap_peers,
-};
+use oasis7_client_api::default_chain_replication_bootstrap_peers_csv;
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
@@ -64,7 +63,7 @@ fn clear_hosted_strong_auth_env() {
     ] {
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {
-            oasis7::env_mut::remove_var(name);
+            std::env::remove_var(name);
         }
     }
 }
@@ -72,15 +71,15 @@ fn clear_hosted_strong_auth_env() {
 fn set_hosted_strong_auth_env() {
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-        oasis7::env_mut::set_var("OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY", "public-key");
+        std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY", "public-key");
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-        oasis7::env_mut::set_var("OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY", "private-key");
+        std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY", "private-key");
     }
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
-        oasis7::env_mut::set_var("OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE", "approval");
+        std::env::set_var("OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE", "approval");
     }
 }
 #[test]
