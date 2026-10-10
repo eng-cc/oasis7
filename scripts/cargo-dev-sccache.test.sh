@@ -67,7 +67,7 @@ chmod +x "$FIXTURE/bin/"*
 cd "$FIXTURE/repo"
 export PATH="$FIXTURE/bin:$PATH"
 export CI= OASIS7_CARGO_SCCACHE=1
-export RUSTC_WRAPPER=hostile-wrapper CARGO_TARGET_DIR=hostile-target
+export RUSTC_WRAPPER=hostile-wrapper CARGO_TARGET_DIR=hostile-target CARGO_INCREMENTAL=1
 result="$(./scripts/cargo-dev.sh run --bin example -- --target-dir application-argument)"
 [[ "$result" == *"wrapper=$FIXTURE/bin/sccache"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 [[ "$result" == *"incremental=0"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
@@ -76,11 +76,11 @@ result="$(./scripts/cargo-dev.sh run --bin example -- --target-dir application-a
 [[ "$result" == *$'--\n--target-dir\napplication-argument' ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 for mode in check clippy; do
   result="$(./scripts/cargo-dev.sh "$mode")"
-  [[ "$result" == *"wrapper=unset"* && "$result" == *"incremental=unset"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
+  [[ "$result" == *"wrapper=unset"* && "$result" == *"incremental=1"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 done
 for setting in 'CI=1' 'CI=true' 'OASIS7_CARGO_SCCACHE=0'; do
   result="$(env "$setting" ./scripts/cargo-dev.sh build)"
-  [[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
+  [[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* && "$result" == *"incremental=1"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 done
 # Simulate a missing installation even when the host has sccache.
 command() {
@@ -89,6 +89,6 @@ command() {
 }
 export -f command
 result="$(./scripts/cargo-dev.sh build)"
-[[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
+[[ "$result" == *"wrapper=unset"* && "$result" != *"target=unset"* && "$result" == *"incremental=1"* ]] || { echo "unexpected cargo environment or arguments: $result" >&2; exit 1; }
 unset -f command
 echo "cargo-dev-sccache.test: OK"
