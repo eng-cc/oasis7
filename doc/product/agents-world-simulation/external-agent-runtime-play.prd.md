@@ -69,7 +69,7 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 
 ### 2.2.1 产品功能清单（Feature Catalog）
 
-本清单是 §1 产品目标与 §4 产品要求之间的**稳定功能范围索引**，按[产品文档功能清单维护原则](../../engineering/doc-governance/product-documentation-standard.design.md#41-功能清单feature-catalog的编写与维护原则)更新。**阶段不是实现状态**：标为“首期闭环”的功能是本文承诺要验收的组成部分，不代表当前已交付；每项由链接的 REQ/AC 判定，版本、支持矩阵和实际进度沿专业 authority 与 GitHub 记录查询。当前仅列用户或外部 Runtime 能实际感知的能力，不将 HTTP/MCP/CLI、API 字段、辅助脚本或测试步骤定为产品功能。
+本清单是 §1 产品目标与 §4 产品要求之间的**稳定功能范围索引**，按[产品文档功能清单维护原则](../../engineering/doc-governance/product-documentation-standard.design.md#product-feature-catalog-principles)更新。**阶段不是实现状态**：标为“首期闭环”的功能是本文承诺要验收的组成部分，不代表当前已交付；每项由链接的 REQ/AC 判定，版本、支持矩阵和实际进度沿专业 authority 与 GitHub 记录查询。当前仅列用户或外部 Runtime 能实际感知的能力，不将 HTTP/MCP/CLI、API 字段、辅助脚本或测试步骤定为产品功能。
 
 首期范围共 **62 项，分成十一组**（原有 53 项 + 新增大世界可视化/操作 9 项）。不同条目可共同满足一组 REQ/AC；单个 REQ/AC 下的负例和恢复边界仍由其完整正文约束，不能只检查功能名称。
 
@@ -371,7 +371,7 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 <a id="req-ext-014"></a>
 ### REQ-EXT-014：外部 Runtime 产品完成不得依赖旧 Provider Bridge 的兼容
 
-- 要求：首期默认体验和 [AC-EXT-010](#ac-ext-010) 的实际运行证据必须由 Skill 引导并经独立 Game API 完成；旧 Provider callback、mock/直接模型调用、旧 CLI 兼容名或共享 DTO 存在不能替代。若新路径满足功能与权威前置，可废弃旧 Bridge 的非必要业务/文档/脚本，不把兼容负担强加给新产品；必须保留仍有真实依赖的世界历史、委托与其他主责能力。
+- 要求：首期默认体验和代表性首局的实际运行证据必须由 Skill 引导并经独立 Game API 完成；旧 Provider callback、mock/直接模型调用、旧 CLI 兼容名或共享 DTO 存在不能替代。若新路径满足功能与权威前置，可废弃旧 Bridge 的非必要业务/文档/脚本，不把兼容负担强加给新产品；必须保留仍有真实依赖的世界历史、委托与其他主责能力。
 - 理由：目标是让外部 Runtime 自己玩游戏，不是永久维护多套难理解的代理通道。
 - 上位承诺：[根 SC-14](prd.md#external-runtime-play)。专业权威：[旧 Local Provider 专题](../../world-simulator/llm/provider-loopback-http-contract.prd.md)、[Continuous Harness](../../world-simulator/llm/continuous-agent-harness.prd.md)和 [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md)。
 - 验收：[AC-EXT-014](#ac-ext-014)。
@@ -552,12 +552,10 @@ OpenClaw 和 Codex 分别作为首批目标验收。每个支持结论都绑定 
 | [REQ-EXT-008](#req-ext-008) / [AC-EXT-008](#ac-ext-008) | agent_engineer / runtime_engineer / qa_engineer | [Runtime 恢复](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#42-recovery-rules) | 连接与进程故障、旧结果不重做和权限重验 | test_tier_full |
 | [REQ-EXT-009](#req-ext-009) / [AC-EXT-009](#ac-ext-009) | agent_engineer / runtime_engineer / qa_engineer | [有界调用预算](../../world-simulator/llm/continuous-agent-harness.prd.md#request-bound-call-budget) | 限制生效、未知开销及两类成本归因 | test_tier_required |
 | [REQ-EXT-010](#req-ext-010) / [AC-EXT-010](#ac-ext-010) | producer_system_designer / agent_engineer / gameplay_designer / qa_engineer | [parity 证据范围](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary) | 两个 Runtime 各自的代表性首局与恢复完整记录 | test_tier_full |
-
 | [REQ-EXT-011](#req-ext-011) / [AC-EXT-011](#ac-ext-011) | agent_engineer / qa_engineer / liveops_community | [Local Provider 现行操作文档](../../world-simulator/llm/provider-loopback-http-contract.prd.md); [公开 Skill](../../../site/skills/oasis7.md) | OpenClaw/Codex 分别安装加载、可信来源与真实 Game API 初次使用及失败修复 | test_tier_full |
 | [REQ-EXT-012](#req-ext-012) / [AC-EXT-012](#ac-ext-012) | agent_engineer / runtime_engineer / qa_engineer | [Decision Provider](../../world-simulator/llm/decision-provider-contract.prd.md); [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md) | 不依赖桥的普通 HTTP(S)/JSON 客户端观察、查询、提交、回执与增量恢复契约 | test_tier_required + test_tier_full |
 | [REQ-EXT-013](#req-ext-013) / [AC-EXT-013](#ac-ext-013) | runtime_engineer / agent_engineer / qa_engineer | [Agent 委托](agent-authority-ownership-and-accountability.prd.md); [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md); [玩家接入](../player-entry-distribution/prd.md) | 本地/远程认证与授权、路由冒用、幂等、预算限流、重连和世界单次效果负例 | test_tier_full |
 | [REQ-EXT-014](#req-ext-014) / [AC-EXT-014](#ac-ext-014) | producer_system_designer / agent_engineer / runtime_engineer / qa_engineer | [Local Provider 专题](../../world-simulator/llm/provider-loopback-http-contract.prd.md); [Runtime lifecycle](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md) | 新路径在无旧桥时完成首局和恢复、仍用旧实现的独立依赖清点、旧公开指引切换核查 | test_tier_full |
-
 | [REQ-EXT-015](#req-ext-015) / [AC-EXT-015](#ac-ext-015) | producer_system_designer / viewer_engineer / game_visual_interaction_designer / qa_engineer | [Web/native 世界舞台](player-readable-world-stage.prd.md#req-agent-stage-004); [Viewer](../../world-simulator/viewer/README.md); [Launcher](../../world-simulator/launcher/README.md) | 浏览器与原生客户端分别操作、回访真实世界，无外部浏览器代签 | test_tier_full |
 | [REQ-EXT-016](#req-ext-016) / [AC-EXT-016](#ac-ext-016) | viewer_engineer / game_visual_interaction_designer / qa_engineer | [世界探索](player-readable-world-stage.prd.md#req-agent-stage-003); [Fragment LOD](../../world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md) | 总览、区域、缩放、对象搜索选择、来源/权限负例 | test_tier_full |
 | [REQ-EXT-017](#req-ext-017) / [AC-EXT-017](#ac-ext-017) | agent_engineer / viewer_engineer / runtime_engineer / qa_engineer | [间接指导](player-readable-world-stage.prd.md#req-agent-stage-005); [Prompt](agent-conversation-and-prompt-control.prd.md) | 地图选中、目标应用、权威结果、无权直接动作与故障恢复 | test_tier_full |
