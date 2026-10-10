@@ -2,7 +2,6 @@ use std::error::Error;
 use std::fmt;
 
 use oasis7_wasm_abi::{AgentCommandResponse, CapabilityCatalogSnapshot};
-use serde::{Deserialize, Serialize};
 
 use crate::capability_invocation_context::CapabilityInvocationContext;
 
@@ -10,20 +9,6 @@ use super::{
     DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION,
     DecisionProviderError, DecisionRequest,
 };
-
-/// A provider-produced module command. This stays separate from the closed
-/// core `Action` enum so an LLM cannot smuggle a module command through a core
-/// action parser. The runtime remains the only trusted executor.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderModuleCommand {
-    pub module_id: String,
-    pub module_version: String,
-    pub namespace: String,
-    pub name: String,
-    pub schema_version: u32,
-    pub schema_hash: String,
-    pub payload: Vec<u8>,
-}
 
 /// The immutable transport context attached to one provider decision turn.
 /// The host creates this value and the provider can only echo it in an
@@ -165,8 +150,22 @@ impl DecisionRequest {
             .validate()
             .map_err(|error| DecisionRequestContractError::new(error.code, error.message))?;
         }
-        self.observation
+        if matches!(
+            self.observation.mode,
+            oasis7_agent_api::ProviderExecutionMode::PlayerParity
+        ) && (!self
             .observation
-            .validate_for_mode(self.observation.mode)
+            .observation
+            .local_navigation_graph
+            .is_empty()
+            || !self.observation.observation.hazard_summary.is_empty()
+            || !self.observation.observation.interaction_targets.is_empty())
+        {
+            return Err(DecisionRequestContractError::new(
+                "mode_observation_mismatch",
+                "player_parity observation cannot include headless-only navigation, hazard, or interaction target helpers",
+            ));
+        }
+        Ok(())
     }
 }

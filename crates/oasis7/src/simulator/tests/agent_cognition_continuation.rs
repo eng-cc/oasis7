@@ -168,6 +168,10 @@ fn runtime_projection(
 #[test]
 fn proposal_canonical_digest_covers_full_identity_binding_policy_and_budget() {
     let first = proposal();
+    assert_eq!(
+        first.proposal_digest,
+        "blake3:a2390a5908bd4568a1ebd77d3e82c876556d8e93697ea60890ba3137d9adb8ea"
+    );
     first.validate().expect("valid continuation proposal");
     let first_digest = first.proposal_digest().expect("proposal digest");
     assert!(first_digest.as_str().starts_with("blake3:"));

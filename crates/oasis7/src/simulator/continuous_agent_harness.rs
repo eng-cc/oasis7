@@ -8,13 +8,16 @@
 //! values but remain runtime-owned.
 
 use std::collections::{BTreeMap, VecDeque};
-use std::fmt;
 
 use oasis7_wasm_abi::CapabilitySubject;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::cognition_policy::{ContinuationProposalV1, GoalSnapshotV1, MemoryContextSnapshotV1};
+pub use oasis7_agent_api::{
+    CognitionError, ContinuousAgentTurnContextV1, Digest32, ResponseArtifactIdentityV1,
+    RuntimeBindingV1, h_v1,
+};
+
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -30,98 +33,7 @@ pub const COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN: &str =
 pub const COGNITION_CAPABILITY_CATALOG_DOMAIN: &str = "oasis7.cognition.capability-catalog.v1";
 pub const COGNITION_CAPABILITY_INVOCATION_CONTEXT_DOMAIN: &str =
     "oasis7.cognition.capability-invocation-context.v1";
-const COGNITION_FEEDBACK_DIGEST_DOMAIN: &str = "oasis7.cognition.feedback.v1";
 const MAX_FEEDBACK_REPLAY_ENTRIES: usize = 8;
-
-/// A wire digest.  The newtype keeps the wire representation as the familiar
-/// `blake3:<64 lowercase hex>` string while preventing accidental mixing with
-/// ordinary provider identifiers in typed APIs.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-#[serde(transparent)]
-pub struct Digest32(pub String);
-
-impl Digest32 {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    /// Compatibility convenience for early callers that treated digest
-    /// construction as fallible.  Digest construction now validates the
-    /// protocol value before returning and is therefore infallible.
-    pub fn expect(self, _message: &str) -> Self {
-        self
-    }
-
-    /// Return whether this value is the canonical wire rendering of a
-    /// BLAKE3-256 digest.  Callers at replay and receipt seams must validate
-    /// the shape instead of treating an arbitrary provider string as proof.
-    pub fn is_canonical_blake3(&self) -> bool {
-        valid_blake3_digest(self.as_str())
-    }
-}
-
-impl fmt::Display for Digest32 {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.0.as_str())
-    }
-}
-
-impl From<String> for Digest32 {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for Digest32 {
-    fn from(value: &str) -> Self {
-        Self(value.to_string())
-    }
-}
-
-/// Stable, domain-separated BLAKE3-256 over canonical CBOR `[domain,payload]`.
-///
-/// The supported payloads are all serde values owned by the protocol.  The
-/// canonical encoder can only fail for a value that is not representable by
-/// the ABI's CBOR value model; keeping this function infallible makes it safe
-/// to use in identity construction while retaining one implementation of the
-/// encoding rules.
-pub fn h_v1<T: Serialize>(domain: &str, payload: &T) -> Digest32 {
-    let bytes = oasis7_wasm_abi::encode_canonical_cbor(&(domain, payload))
-        .expect("cognition payload must be encodable as canonical CBOR");
-    let hash = blake3::hash(bytes.as_slice());
-    Digest32(format!("blake3:{hash}"))
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CognitionError {
-    code: String,
-    message: String,
-}
-
-impl CognitionError {
-    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-        }
-    }
-
-    pub fn code(&self) -> &str {
-        self.code.as_str()
-    }
-
-    pub fn message(&self) -> &str {
-        self.message.as_str()
-    }
-}
-
-impl fmt::Display for CognitionError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}: {}", self.code, self.message)
-    }
-}
-
-impl std::error::Error for CognitionError {}
 
 /// Shared branch/finality binding.  Runtime is authoritative for its values;
 /// the Harness only carries and hashes the verified projection.
@@ -172,47 +84,6 @@ impl FinalityBindingV1 {
 
     pub fn digest(&self) -> Digest32 {
         h_v1("oasis7.runtime.finality-binding.v1", self)
-    }
-}
-
-/// Runtime snapshot binding consumed by cognition identity.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RuntimeBindingV1 {
-    pub world_id: String,
-    pub branch_id: String,
-    pub finality_epoch: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub finality_block_hash: Option<Digest32>,
-    pub finality_status: String,
-    pub base_tick: u64,
-    pub base_world_hash: Digest32,
-    pub reorg_epoch: u64,
-    pub runtime_manifest_hash: Digest32,
-}
-
-impl RuntimeBindingV1 {
-    pub fn validate(&self) -> Result<(), CognitionError> {
-        FinalityBindingV1 {
-            schema_version: 1,
-            branch_id: self.branch_id.clone(),
-            finality_epoch: self.finality_epoch,
-            finality_block_hash: self.finality_block_hash.clone(),
-            finality_status: self.finality_status.clone(),
-            reorg_epoch: self.reorg_epoch,
-        }
-        .validate()
-        .and_then(|_| {
-            if self.base_world_hash.is_canonical_blake3()
-                && self.runtime_manifest_hash.is_canonical_blake3()
-            {
-                Ok(())
-            } else {
-                Err(CognitionError::new(
-                    "invalid_runtime_binding_digest",
-                    "Runtime binding hashes must be canonical BLAKE3-256 values",
-                ))
-            }
-        })
     }
 }
 
@@ -457,38 +328,7 @@ impl ContinuousAgentRequestContextV1 {
     /// transport attempt, and both legacy timeout-only transport fields.
     pub fn canonical_request_bytes(&self) -> Result<Vec<u8>, CognitionError> {
         self.validate_structure()?;
-        let mut value = serde_json::to_value(self)
-            .map_err(|error| CognitionError::new("canonical_encoding_failed", error.to_string()))?;
-        let object = value.as_object_mut().ok_or_else(|| {
-            CognitionError::new(
-                "canonical_encoding_failed",
-                "request context is not an object",
-            )
-        })?;
-        object.remove("request_digest");
-        object.remove("transport_attempt");
-        if let Some(base) = object
-            .get_mut("base_decision_request")
-            .and_then(Value::as_object_mut)
-        {
-            base.remove("timeout_budget_ms");
-            if let Some(observation) = base.get_mut("observation").and_then(Value::as_object_mut) {
-                observation.remove("timeout_budget_ms");
-            }
-        }
-        // Keep the optional finality hash's presence explicit in the identity
-        // payload.  The wire serializer omits `None`, while the canonical
-        // contract hashes optional values with an explicit null/presence tag.
-        if let Some(runtime_binding) = object
-            .get_mut("runtime_binding")
-            .and_then(Value::as_object_mut)
-        {
-            runtime_binding
-                .entry("finality_block_hash")
-                .or_insert(Value::Null);
-        }
-        oasis7_wasm_abi::encode_canonical_cbor(&value)
-            .map_err(|error| CognitionError::new("canonical_encoding_failed", error.to_string()))
+        super::agent_api_compat::request_context_to_api(self).canonical_request_bytes()
     }
 
     pub fn request_digest(&self) -> Digest32 {
@@ -523,65 +363,6 @@ pub struct ContinuousAgentResponseContextV1 {
     pub response_digest: Digest32,
 }
 
-/// Identity payload for the response/artifact replay seam. The response
-/// digest proves provider content; this additional digest binds that content
-/// to the complete outer turn lineage before Runtime stores an artifact.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ResponseArtifactIdentityV1 {
-    pub schema_version: u16,
-    pub context_discriminator: String,
-    pub context_version: u16,
-    pub agent_session_id: String,
-    pub agent_turn_id: String,
-    pub decision_request_id: String,
-    pub retry_seq: u64,
-    pub transport_attempt: u64,
-    pub request_digest: Digest32,
-    pub response_digest: Digest32,
-    pub artifact_digest: Digest32,
-}
-
-impl ResponseArtifactIdentityV1 {
-    fn canonical_payload(&self) -> Value {
-        let mut payload = serde_json::to_value(self).expect("response identity is serializable");
-        payload
-            .as_object_mut()
-            .expect("response identity is an object")
-            .remove("artifact_digest");
-        payload
-    }
-
-    pub fn validate(&self) -> Result<(), CognitionError> {
-        if self.schema_version != 1
-            || self.context_discriminator != CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR
-            || self.context_version != CONTINUOUS_AGENT_CONTEXT_VERSION
-            || self.agent_session_id.trim().is_empty()
-            || self.agent_turn_id.trim().is_empty()
-            || self.decision_request_id.trim().is_empty()
-            || !self.request_digest.is_canonical_blake3()
-            || !self.response_digest.is_canonical_blake3()
-            || !self.artifact_digest.is_canonical_blake3()
-        {
-            return Err(CognitionError::new(
-                "response_artifact_identity_invalid",
-                "response artifact identity is incomplete or not canonical",
-            ));
-        }
-        if self.artifact_digest
-            != h_v1(
-                COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN,
-                &self.canonical_payload(),
-            )
-        {
-            return Err(CognitionError::new(
-                "response_artifact_identity_mismatch",
-                "response artifact identity digest does not match its lineage",
-            ));
-        }
-        Ok(())
-    }
-}
-
 impl ContinuousAgentResponseContextV1 {
     pub fn validate_value(value: &Value) -> Result<(), CognitionError> {
         validate_outer_fields(
@@ -605,77 +386,17 @@ impl ContinuousAgentResponseContextV1 {
     }
 
     pub fn response_artifact_identity(&self) -> ResponseArtifactIdentityV1 {
-        let mut identity = ResponseArtifactIdentityV1 {
-            schema_version: 1,
-            context_discriminator: self.context_discriminator.clone(),
-            context_version: self.context_version,
-            agent_session_id: self.agent_session_id.clone(),
-            agent_turn_id: self.agent_turn_id.clone(),
-            decision_request_id: self.decision_request_id.clone(),
-            retry_seq: self.retry_seq,
-            transport_attempt: self.transport_attempt,
-            request_digest: self.request_digest.clone(),
-            response_digest: self.response_digest.clone(),
-            artifact_digest: Digest32::default(),
-        };
-        identity.artifact_digest = h_v1(
-            COGNITION_RESPONSE_ARTIFACT_IDENTITY_DOMAIN,
-            &identity.canonical_payload(),
-        );
-        identity
+        super::agent_api_compat::response_context_to_api(self).response_artifact_identity()
     }
 
     pub fn response_artifact_identity_payload(&self) -> Result<Value, CognitionError> {
-        serde_json::to_value(self.response_artifact_identity()).map_err(|e| {
-            CognitionError::new("response_artifact_identity_encoding_failed", e.to_string())
-        })
+        super::agent_api_compat::response_context_to_api(self).response_artifact_identity_payload()
     }
 }
 
-/// Host projection shared by Builtin and ProviderBacked simulator actors for
-/// one turn.  Memory is retrieval context only; GoalSnapshot is the sole
-/// mission projection.  Runtime owns continuation status and receipts.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ContinuousAgentTurnContextV1 {
-    pub agent_id: String,
-    pub agent_session_id: String,
-    pub agent_turn_id: String,
-    pub decision_request_id: String,
-    pub request_digest: Digest32,
-    pub memory_snapshot: MemoryContextSnapshotV1,
-    pub goal_snapshot: GoalSnapshotV1,
-    #[serde(default)]
-    pub continuation: Option<ContinuationProposalV1>,
-}
-
-impl ContinuousAgentTurnContextV1 {
-    pub fn validate_for_agent(&self, agent_id: &str) -> Result<(), CognitionError> {
-        if self.agent_id != agent_id
-            || self.agent_session_id.trim().is_empty()
-            || self.agent_turn_id.trim().is_empty()
-            || self.decision_request_id.trim().is_empty()
-            || self.request_digest.as_str().trim().is_empty()
-        {
-            return Err(CognitionError::new(
-                "cognition_context_identity_mismatch",
-                "turn context identity does not match the actor",
-            ));
-        }
-        if self.memory_snapshot.digest != self.memory_snapshot.computed_digest()
-            || self.goal_snapshot.digest != self.goal_snapshot.computed_digest()
-        {
-            return Err(CognitionError::new(
-                "cognition_context_digest_mismatch",
-                "host cognition context contains an invalid projection digest",
-            ));
-        }
-        if let Some(continuation) = &self.continuation {
-            continuation.validate()?;
-        }
-        Ok(())
-    }
-}
-
+/// Oasis7-owned policy wrapper retained to preserve the existing public
+/// `From<NormalizedMemoryWriteIntentV1>` conversion. The wire fields match
+/// the portable API DTO; conversion is explicit at the Harness boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryWriteIntentV1 {
     #[serde(default = "default_schema_version")]
@@ -1141,41 +862,11 @@ fn validate_outer_fields(value: &Value, allowed: &[&str]) -> Result<(), Cognitio
 }
 
 fn feedback_digest(feedback: &FeedbackEnvelopeV1) -> Digest32 {
-    h_v1(COGNITION_FEEDBACK_DIGEST_DOMAIN, feedback)
+    oasis7_agent_api::feedback_digest(&super::agent_api_compat::feedback_to_api(feedback))
 }
 
 fn validate_feedback_contract(feedback: &FeedbackEnvelopeV1) -> Result<(), CognitionError> {
-    if feedback.feedback_id.trim().is_empty()
-        || feedback.feedback_seq == 0
-        || feedback.agent_subject.trim().is_empty()
-        || feedback.agent_session_id.trim().is_empty()
-        || feedback.agent_turn_id.trim().is_empty()
-        || feedback.decision_request_id.trim().is_empty()
-        || !feedback.request_digest.is_canonical_blake3()
-        || feedback.provenance != "runtime_authoritative"
-        || !matches!(
-            feedback.status.as_str(),
-            "pending" | "committed" | "rejected" | "failed"
-        )
-    {
-        return Err(CognitionError::new(
-            "feedback_contract_invalid",
-            "feedback requires canonical identity, Runtime provenance, sequence, and status",
-        ));
-    }
-    if feedback.status == "committed"
-        && (feedback.candidate_action_id.is_none()
-            || feedback
-                .runtime_receipt_id
-                .as_deref()
-                .is_none_or(|value| value.trim().is_empty()))
-    {
-        return Err(CognitionError::new(
-            "feedback_contract_invalid",
-            "committed feedback requires action and Runtime receipt identity",
-        ));
-    }
-    Ok(())
+    super::agent_api_compat::feedback_to_api(feedback).validate()
 }
 
 fn valid_blake3_digest(value: &str) -> bool {

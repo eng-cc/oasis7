@@ -1654,6 +1654,7 @@ dependencies = [
  "lettre",
  "libc",
  "multiaddr",
+ "oasis7_agent_api",
  "oasis7_client_api",
  "oasis7_distfs",
  "oasis7_launcher_ui",
@@ -1677,6 +1678,16 @@ dependencies = [
  "tungstenite",
  "unicode-normalization",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "oasis7_agent_api"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "oasis7_wasm_abi",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
