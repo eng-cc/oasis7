@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/cargo-dev.sh [--print-target-dir] <cargo-args...>
+Usage: ./scripts/cargo-dev.sh [--print-target-dir|--prepare-target] <cargo-args...>
 
 Run cargo with a worktree-scoped shared development target dir so one worktree
 can reuse build artifacts without selecting artifacts from a divergent source.
@@ -19,6 +19,7 @@ Default behavior:
 - Keeps each worktree target isolated while sccache shares compiler results
 
 Options:
+  --prepare-target    Prepare the local target link without compiling
   --print-target-dir   Print the resolved shared target dir and exit
   -h, --help           Show this help
 
@@ -60,6 +61,11 @@ case "${1:-}" in
     exit 0
     ;;
 esac
+
+if [[ "${1:-}" == "--prepare-target" && $# -ne 1 ]]; then
+  echo "error: --prepare-target does not accept cargo arguments" >&2
+  exit 2
+fi
 
 COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -153,6 +159,25 @@ case "${1:-}" in
     ;;
 esac
 
+# Raw Cargo entrypoints can reuse this namespace without changing build flags.
+# Never replace a real directory or affect CI checkouts.
+if [[ "${CI:-}" != "1" && "${CI:-}" != "true" && -z "${OASIS7_CARGO_SHARED_TARGET_DIR:-}" ]]; then
+  if [[ ! -e "$REPO_ROOT/target" && ! -L "$REPO_ROOT/target" ]]; then
+    mkdir -p "$TARGET_DIR"
+    "$PYTHON_BIN" - "$TARGET_DIR" "$REPO_ROOT/target" <<'LINK'
+import os, sys
+try:
+    os.symlink(sys.argv[1], sys.argv[2], target_is_directory=True)
+except FileExistsError:
+    if not os.path.islink(sys.argv[2]):
+        raise SystemExit("error: target appeared during cache preparation; preserved")
+LINK
+  elif [[ ! -L "$REPO_ROOT/target" && "${1:-}" == "--prepare-target" ]]; then
+    echo "error: existing target directory must be reviewed and cleaned before preparing the shared link" >&2
+    exit 1
+  fi
+fi
+
 if [[ -L "$REPO_ROOT/target" && -z "${OASIS7_CARGO_SHARED_TARGET_DIR:-}" ]]; then
   CURRENT_TARGET="$("$PYTHON_BIN" - "$REPO_ROOT/target" <<'PY'
 import os
@@ -202,6 +227,11 @@ PY
     fi
     rmdir "$MIGRATION_DIR" >/dev/null 2>&1 || true
   fi
+fi
+
+if [[ "${1:-}" == "--prepare-target" ]]; then
+  exec "$PYTHON_BIN" "$REPO_ROOT/scripts/cargo-cache.py" lease \
+    --target "$TARGET_DIR" --repo-root "$REPO_ROOT" --common-dir "$COMMON_GIT_DIR" -- true
 fi
 
 MODE="${OASIS7_CARGO_DEV_MODE:-lean}"
