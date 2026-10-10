@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
 use std::time::Instant;
 
-use oasis7_wasm_abi::{AgentCommandResponse, CapabilityCatalogSnapshot, ModuleCommandCatalogEntry};
+use oasis7_wasm_abi::{CapabilityCatalogSnapshot, ModuleCommandCatalogEntry};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -23,6 +23,16 @@ use super::{
     AgentQueryResult, Observation, WorldEvent, WorldTime,
 };
 
+pub use oasis7_agent_api::{
+    ActionCatalogEntry, DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION,
+    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, MemoryWriteIntent, ObservationEnvelope,
+    ProviderDiagnostics, ProviderErrorEnvelope, ProviderExecutionMode, ProviderInteractionTarget,
+    ProviderMissionContext, ProviderModuleCommand, ProviderNavigationNode, ProviderNearbyEntity,
+    ProviderObservation, ProviderRecentEvent, ProviderSelfState, ProviderTokenUsage,
+    ProviderTraceEnvelope, ProviderTranscriptEntry,
+};
+pub type ProviderDecision = oasis7_agent_api::ProviderDecision<Action, AgentQuery>;
+
 #[path = "decision_provider_capability.rs"]
 mod decision_provider_capability;
 #[path = "decision_provider_cognition.rs"]
@@ -40,179 +50,11 @@ use self::decision_provider_observation::{
 
 const DEFAULT_PROVIDER_TIMEOUT_BUDGET_MS: u64 = 3_000;
 const MAX_RECENT_EVENT_SUMMARIES: usize = 8;
-pub const DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION: &str = "oc_dual_obs_v1";
-pub const DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION: &str = "oc_dual_act_v1";
-
-pub use decision_provider_capability::{
-    DecisionRequestContractError, ProviderCapabilityContext, ProviderModuleCommand,
-};
+pub use decision_provider_capability::{DecisionRequestContractError, ProviderCapabilityContext};
 pub use decision_provider_support::{
     GoldenDecisionFixture, MockDecisionProvider, MockDecisionProviderState,
     golden_decision_provider_fixtures,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub enum ProviderExecutionMode {
-    PlayerParity,
-    #[default]
-    HeadlessAgent,
-}
-
-impl ProviderExecutionMode {
-    pub fn parse(raw: &str) -> Option<Self> {
-        match raw.trim().to_ascii_lowercase().as_str() {
-            "player_parity" | "player-parity" | "player" => Some(Self::PlayerParity),
-            "headless_agent" | "headless-agent" | "headless" => Some(Self::HeadlessAgent),
-            _ => None,
-        }
-    }
-
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::PlayerParity => "player_parity",
-            Self::HeadlessAgent => "headless_agent",
-        }
-    }
-}
-
-fn default_provider_execution_mode() -> ProviderExecutionMode {
-    ProviderExecutionMode::HeadlessAgent
-}
-
-fn default_observation_schema_version() -> String {
-    DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION.to_string()
-}
-
-fn default_action_schema_version() -> String {
-    DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION.to_string()
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ActionCatalogEntry {
-    pub action_ref: String,
-    pub summary: String,
-}
-
-impl ActionCatalogEntry {
-    pub fn new(action_ref: impl Into<String>, summary: impl Into<String>) -> Self {
-        Self {
-            action_ref: action_ref.into(),
-            summary: summary.into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct ProviderSelfState {
-    pub location_ref: String,
-    pub pose_hint: String,
-    #[serde(default)]
-    pub status_flags: Vec<String>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub resource_summary: BTreeMap<String, i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct ProviderMissionContext {
-    pub goal_summary: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blocked_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderNearbyEntity {
-    pub entity_ref: String,
-    pub kind: String,
-    pub relation: String,
-    pub relative_hint: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub interaction_hint: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderRecentEvent {
-    pub event_ref: String,
-    pub kind: String,
-    pub summary: String,
-    pub age_ticks: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderNavigationNode {
-    pub node_ref: String,
-    pub relation: String,
-    pub relative_hint: String,
-    pub traversable: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderInteractionTarget {
-    pub target_ref: String,
-    pub target_kind: String,
-    pub interaction_hint: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct ProviderObservation {
-    pub self_state: ProviderSelfState,
-    pub mission_context: ProviderMissionContext,
-    #[serde(default)]
-    pub nearby_entities: Vec<ProviderNearbyEntity>,
-    #[serde(default)]
-    pub recent_events: Vec<ProviderRecentEvent>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub local_navigation_graph: Vec<ProviderNavigationNode>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hazard_summary: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub interaction_targets: Vec<ProviderInteractionTarget>,
-}
-
-impl ProviderObservation {
-    fn validate_for_mode(
-        &self,
-        mode: ProviderExecutionMode,
-    ) -> Result<(), DecisionRequestContractError> {
-        if matches!(mode, ProviderExecutionMode::PlayerParity)
-            && (!self.local_navigation_graph.is_empty()
-                || !self.hazard_summary.is_empty()
-                || !self.interaction_targets.is_empty())
-        {
-            return Err(DecisionRequestContractError::new(
-                "mode_observation_mismatch",
-                "player_parity observation cannot include headless-only navigation, hazard, or interaction target helpers",
-            ));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ObservationEnvelope {
-    pub agent_id: String,
-    pub world_time: WorldTime,
-    #[serde(default = "default_provider_execution_mode")]
-    pub mode: ProviderExecutionMode,
-    #[serde(default = "default_observation_schema_version")]
-    pub observation_schema_version: String,
-    #[serde(default = "default_action_schema_version")]
-    pub action_schema_version: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub environment_class: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fallback_reason: Option<String>,
-    pub observation: ProviderObservation,
-    #[serde(default)]
-    pub recent_event_summary: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub memory_summary: Option<String>,
-    #[serde(default)]
-    pub action_catalog: Vec<ActionCatalogEntry>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub module_command_catalog: Vec<ModuleCommandCatalogEntry>,
-    pub timeout_budget_ms: u64,
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DecisionRequest {
@@ -236,103 +78,6 @@ pub struct DecisionRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capability_invocation_context: Option<CapabilityInvocationContext>,
     pub timeout_budget_ms: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "decision", rename_all = "snake_case")]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "Stable provider decision wire enum preserves direct command payloads."
-)]
-pub enum ProviderDecision {
-    Wait,
-    WaitTicks {
-        ticks: u64,
-    },
-    Act {
-        action_ref: String,
-        action: Action,
-    },
-    Query {
-        query_ref: String,
-        query: AgentQuery,
-    },
-    ModuleCommand {
-        module_command: ProviderModuleCommand,
-    },
-    /// A complete v2 response.  The host must validate it against its bound
-    /// catalog/context before invoking the runtime executor.
-    ModuleCommandResponse {
-        response: AgentCommandResponse,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderErrorEnvelope {
-    pub code: String,
-    pub message: String,
-    #[serde(default)]
-    pub retryable: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct ProviderTokenUsage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prompt_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub completion_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub total_tokens: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProviderTranscriptEntry {
-    pub role: String,
-    pub content: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ProviderTraceEnvelope {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input_summary: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub output_summary: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub latency_ms: Option<u64>,
-    #[serde(default)]
-    pub transcript: Vec<ProviderTranscriptEntry>,
-    #[serde(default)]
-    pub tool_trace: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub token_usage: Option<ProviderTokenUsage>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cost_cents: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub upstream_trace: Option<serde_json::Value>,
-    #[serde(default)]
-    pub schema_repair_count: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub struct ProviderDiagnostics {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider_version: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub latency_ms: Option<u64>,
-    #[serde(default)]
-    pub retry_count: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MemoryWriteIntent {
-    pub scope: String,
-    pub summary: String,
-    #[serde(default)]
-    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -50,6 +50,9 @@ mod outcome;
 use self::outcome::{
     default_observation, outcome_from_completion, validate_cognition_lease_for_request,
 };
+#[path = "async_agent_runner_lease_view.rs"]
+mod lease_view;
+pub(crate) use self::lease_view::validated_cognition_lease_consumption_view;
 #[path = "async_agent_runner_actor_controls.rs"]
 mod actor_controls;
 #[path = "async_agent_runner_budget.rs"]

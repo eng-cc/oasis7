@@ -302,6 +302,27 @@ fn canonical_blake3(value: &str) -> bool {
 impl RuntimeReceiptLineageV1 {
     pub const SCHEMA_VERSION: &'static str = "runtime-receipt-lineage.v1";
 
+    /// Convert this Runtime-owned receipt correlation into the portable API
+    /// projection. Callers must still use Runtime's durable readback verifier;
+    /// the returned DTO is not a proof of commit or world state.
+    #[allow(dead_code)] // Harness adopts the projection in the later adapter slice.
+    pub(crate) fn agent_api_projection(&self) -> oasis7_agent_api::RuntimeReceiptLineageV1 {
+        oasis7_agent_api::RuntimeReceiptLineageV1 {
+            schema_version: self.schema_version.clone(),
+            status: self.status.clone(),
+            receipt_id: self.receipt_id.clone(),
+            receipt_digest: self.receipt_digest.clone(),
+            envelope_digest: self.envelope_digest.clone(),
+            action_id: self.action_id.clone(),
+            agent_id: self.agent_id.clone(),
+            agent_session_id: self.agent_session_id.clone(),
+            agent_turn_id: self.agent_turn_id.clone(),
+            decision_request_id: self.decision_request_id.clone(),
+            request_digest: self.request_digest.clone(),
+            feedback_id: self.feedback_id.clone(),
+        }
+    }
+
     /// Construct a projection from an already durable committed Runtime
     /// marker.  Receipt and action IDs are never accepted as caller-only
     /// inputs at this boundary.

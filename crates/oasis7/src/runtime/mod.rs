@@ -57,6 +57,7 @@ mod world_event;
 mod tests;
 
 // Re-export all public types
+pub use oasis7_agent_api::CognitionLeaseConsumptionViewV1;
 
 // Types
 pub use types::{
