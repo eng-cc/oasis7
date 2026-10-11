@@ -61,7 +61,7 @@ impl HostedServicePhase {
             Self::Finalize { .. } => "finalize",
         }
     }
-    fn identity(&self) -> String {
+    pub(super) fn identity(&self) -> String {
         let pending = match self {
             Self::Act { pending, .. }
             | Self::ActView { pending, .. }

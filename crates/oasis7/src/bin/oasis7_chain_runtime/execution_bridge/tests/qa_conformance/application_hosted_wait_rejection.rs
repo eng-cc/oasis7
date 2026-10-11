@@ -67,7 +67,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     while Instant::now() < deadline {
         session.snapshot(Duration::from_millis(25));
         if let Ok(guard) = shared.try_lock() {
-            summary = guard.test_canonical_provider_summary();
+            summary = guard.test_canonical_provider_diagnostic_summary();
         }
         if root.join("wait-admit-actual-rejected.json").exists() {
             if isolated {
@@ -89,7 +89,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
             while Instant::now() < observe_until {
                 session.snapshot(Duration::from_millis(25));
                 if let Ok(guard) = shared.try_lock() {
-                    summary = guard.test_canonical_provider_summary();
+                    summary = guard.test_canonical_provider_diagnostic_summary();
                 }
                 if isolated
                     && summary["terminal_states"]["agent-a"]["status"] == "rejected"
