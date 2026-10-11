@@ -6,6 +6,7 @@ import time
 import tempfile
 import json
 import os
+import shutil
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -84,6 +85,51 @@ class StartupTests(unittest.TestCase):
         result = subprocess.run(['bash', str(ROOT / 'scripts/viewer-primary-web-entry-regression.sh'), '--scenario', 'llm_bootstrap'], capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn('unknown option: --scenario', result.stderr)
+
+    def test_default_artifact_build_failure_prevents_process_start(self):
+        self.check_primary_artifact_build(custom=False)
+
+    def test_explicit_artifact_directory_is_preserved(self):
+        self.check_primary_artifact_build(custom=True)
+
+    def check_primary_artifact_build(self, custom):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = pathlib.Path(directory)
+            scripts = repo / 'scripts'
+            scripts.mkdir()
+            for name in ('viewer-primary-web-entry-regression.sh', 'release-web-fixture-lib.sh'):
+                shutil.copyfile(ROOT / 'scripts' / name, scripts / name)
+            (scripts / 'agent-browser-lib.sh').write_text('ab_require() { :; }\nab_cmd() { :; }\nresolve_viewer_static_dir_for_web_closure() { printf "%s\\n" "$2"; }\n')
+            (scripts / 'cargo-dev-lib.sh').write_text('oasis7_cargo_dev() { echo cargo >> "$TEST_TRACE_PATH"; return 42; }\n')
+            (scripts / 'hosted-login-gate-env-lib.sh').write_text('oasis7_hosted_login_gate_env_defaults() { :; }\n')
+            (scripts / 'viewer-dependency-preflight.sh').write_text('viewer_dependency_preflight() { echo preflight >> "$TEST_TRACE_PATH"; }\n')
+            ensure = scripts / 'ensure-wasm-bindgen-cli.sh'
+            ensure.write_text('#!/bin/sh\necho ensure >> "$TEST_TRACE_PATH"\necho /fixture/wasm-bindgen\n')
+            ensure.chmod(0o700)
+            bin_dir = repo / 'bin'
+            bin_dir.mkdir()
+            npm = bin_dir / 'npm'
+            npm.write_text('#!/bin/sh\necho "npm $*" >> "$TEST_TRACE_PATH"\necho "controlled real-builder command failure" >&2\nexit 42\n')
+            npm.chmod(0o700)
+            trace = repo / 'trace'
+            output = repo / 'evidence'
+            command = ['bash', str(scripts / 'viewer-primary-web-entry-regression.sh'), '--out-dir', str(output)]
+            if custom:
+                artifact = repo / 'caller-artifacts'
+                artifact.mkdir()
+                command += ['--viewer-static-dir', str(artifact)]
+            env = dict(os.environ, TEST_TRACE_PATH=str(trace), PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=8)
+            self.assertNotEqual(result.returncode, 0)
+            commands = trace.read_text().splitlines()
+            if custom:
+                self.assertEqual(commands, ['cargo'], 'caller artifacts unexpectedly rebuilt or replaced')
+            else:
+                self.assertEqual(commands[:2], ['preflight', 'ensure'])
+                self.assertIn('run build:viewer:visual-test', commands[2])
+                self.assertNotIn('cargo', commands, 'artifact build failure reached runtime prebuild/start')
+                self.assertIn('visual-test artifact build failed', result.stderr)
+            self.assertEqual(list(output.glob('*/signed-world-service-fixture.log')), [])
 
 if __name__ == "__main__":
     unittest.main()
