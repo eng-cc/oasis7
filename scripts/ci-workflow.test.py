@@ -336,6 +336,7 @@ class Workflow(unittest.TestCase):
         function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
         script = """set -euo pipefail
 run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
+run_cargo_clippy() { printf '%s|clippy %s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
 """ + function + "\nrun_oasis7_workspace_support_crate_tests\nprintf 'after|%s\\n' \"$OASIS7_WASM_BUILD_STD\"\n"
         result = subprocess.run(['bash', '-c', script], text=True, capture_output=True,
                                 env=dict(os.environ, OASIS7_WASM_BUILD_STD='1'))
@@ -344,6 +345,23 @@ run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
         self.assertEqual(calls[-2], '0|test -p wasm_build_suite -p wasm_module_observe')
         self.assertTrue(all(call.startswith('1|') for call in calls[:-2]))
         self.assertEqual(calls[-1], 'after|1')
+
+    def test_agent_contract_and_harness_checks_are_in_workspace_support(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+        script = """set -euo pipefail
+run_cargo() { printf 'test|%s\\n' "$*"; }
+run_cargo_clippy() { printf 'clippy|%s\\n' "$*"; }
+""" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
+        result = subprocess.run(['bash', '-c', script], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = result.stdout.splitlines()
+        self.assertIn('clippy|-p oasis7_agent_api --all-targets', commands)
+        self.assertIn('clippy|-p oasis7_agent_harness --all-targets', commands)
+        self.assertIn('test|test -p oasis7_agent_api', commands)
+        self.assertIn('test|test -p oasis7_agent_harness --lib', commands)
+        self.assertLess(commands.index('clippy|-p oasis7_agent_harness --all-targets'),
+                        commands.index('test|test -p oasis7_agent_harness --lib'))
 
     def test_invalid_selected_group_cannot_silently_skip_command(self):
         driver = (ROOT / 'scripts/ci-tests.sh').read_text()
