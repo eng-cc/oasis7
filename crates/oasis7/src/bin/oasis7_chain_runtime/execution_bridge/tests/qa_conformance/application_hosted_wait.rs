@@ -164,7 +164,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     while Instant::now() < deadline {
         session.snapshot(Duration::from_millis(25)); // Continuous bounded drain, no repeated queued requests.
         if let Ok(guard) = shared.try_lock() {
-            summary = guard.test_canonical_provider_summary();
+            summary = guard.test_canonical_provider_diagnostic_summary();
             if let Ok(bytes) = fs::read(root.join("hosted-resumed-model.json")) {
                 let resumed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
                 let digest = resumed["request_digest"].as_str().unwrap();
@@ -205,7 +205,8 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     );
     assert!(
         completed,
-        "ordinary Wait/Resume/Act must reach exact committed memory"
+        "ordinary Wait/Resume/Act must reach exact committed memory; diagnostic={}",
+        application_completion::hosted_failure_diagnostic(&summary)
     );
     println!("PRE2_HOSTED_WAIT_RESUME_ACT_PASSED");
 }

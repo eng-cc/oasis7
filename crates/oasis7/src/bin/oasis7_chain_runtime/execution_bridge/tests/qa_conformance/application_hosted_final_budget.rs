@@ -170,7 +170,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     while Instant::now() < deadline {
         session.snapshot(Duration::from_millis(25));
         if let Ok(guard) = shared.try_lock() {
-            summary = guard.test_canonical_provider_summary();
+            summary = guard.test_canonical_provider_diagnostic_summary();
             completed = summary["terminal_states"]["agent-a"]["status"] == "completed";
             if completed {
                 break;
@@ -195,11 +195,13 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     );
     assert!(
         warmed && ordered && drained && joined.is_ok(),
-        "actual Viewer prerequisites and complete worker join"
+        "actual Viewer prerequisites and complete worker join; diagnostic={}",
+        application_completion::hosted_failure_diagnostic(&summary)
     );
     assert!(
         completed,
-        "second ordinary Wait must preserve remaining unit and finish canonical Completed zero"
+        "second ordinary Wait must preserve remaining unit and finish canonical Completed zero; diagnostic={}",
+        application_completion::hosted_failure_diagnostic(&summary)
     );
     println!("PRE2_HOSTED_FINAL_BUDGET_PASSED");
 }

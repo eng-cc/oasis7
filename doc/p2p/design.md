@@ -331,3 +331,9 @@ runtime/P2P负责缺失技术/实现；ops负责环境事实；QA负责计划覆
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
 - 若 legacy redirect 未明确标注为兼容跳转，读者可能误判历史入口为当前执行入口。
+
+## Ordinary WorldService restore reuse
+
+Ordinary immutable-record reads may reuse a successful detached `World::from_snapshot` result for exactly the same verified Snapshot and complete Journal bytes. The process-local key contains domain-separated BLAKE3 digests and both byte lengths. The retained original has no persistence directory or receipt signer; consumers receive independent World clones. Failed restores are never retained. The FIFO keeps at most two entries, with an 8 MiB source-byte limit per entry and 16 MiB total retained-input-byte weight. These serialized input lengths are a retention proxy, not an exact heap cap; World clones also allocate transient memory. Oversized inputs and a poisoned cache use the original restore path.
+
+The cache does not select or authenticate a head. Every request still loads its actual record, reads and hashes all three CAS artifacts, decodes Snapshot/Journal/proof, checks their complete root/boundary/record/proof bindings, and derives the current runtime binding and exact requested CommitRef. Deleted or corrupt records/CAS objects, GC, conflicting fixed references, and changed heads cannot be satisfied by an earlier cache entry. Authorization and projection run after pinning under their existing checks. Guarded prerequisite reads retain their separate complete history verification and captured publication fence; they do not use this cache. No wire, assurance scope, startup gate or deployment behavior changes.
