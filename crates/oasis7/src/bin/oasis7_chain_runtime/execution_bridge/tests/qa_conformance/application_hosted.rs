@@ -122,7 +122,7 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
     let mut pending_observation = None;
     let summary = loop {
         if let Ok(server) = shared.try_lock() {
-            summary = server.test_canonical_provider_summary();
+            summary = server.test_canonical_provider_diagnostic_summary();
         }
         application_hosted_unpublished_cadence::observe_child(&summary, &mut pending_observation);
         if completion.finished(

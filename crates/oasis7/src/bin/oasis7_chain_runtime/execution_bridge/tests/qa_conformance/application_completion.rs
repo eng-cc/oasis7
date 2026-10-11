@@ -237,7 +237,8 @@ pub(super) fn hosted_failure_diagnostic(summary: &serde_json::Value) -> serde_js
     let terminal = &summary["terminal_states"]["agent-a"];
     let status = match terminal["status"].as_str() {
         Some(
-            value @ ("committed" | "completed" | "rejected" | "check_pending" | "check_failed"),
+            value @ ("committed" | "completed" | "rejected" | "failed" | "check_pending"
+            | "check_failed"),
         ) => value,
         None => "absent",
         Some(_) => "unknown",
@@ -307,7 +308,7 @@ pub(super) fn hosted_failure_diagnostic(summary: &serde_json::Value) -> serde_js
 #[test]
 fn hosted_failure_diagnostic_does_not_echo_private_summary() {
     let secret = "PRIVATE_KEY_NONCE_GOAL_MEMORY_PROVIDER_PAYLOAD";
-    let summary = serde_json::json!({
+    let mut summary = serde_json::json!({
         "hosted_service_phase": secret, "agent_service_pump_error": secret,
         "terminal_states": {"agent-a": {"status": secret, "reject_reason": secret}},
         "hosted_service_memory_failure": secret, "hosted_service_inflight": secret,
@@ -330,4 +331,11 @@ fn hosted_failure_diagnostic_does_not_echo_private_summary() {
     assert!(!message.contains(secret));
     assert!(!message.contains("memory_store"));
     assert!(!message.contains("private_key"));
+    summary["terminal_states"]["agent-a"]["status"] = serde_json::json!("failed");
+    let failed_diagnostic = hosted_failure_diagnostic(&summary);
+    assert_eq!(failed_diagnostic["terminal_status"], "failed");
+    let failed_message = failed_diagnostic.to_string();
+    assert!(!failed_message.contains(secret));
+    assert!(!failed_message.contains("memory_store"));
+    assert!(!failed_message.contains("private_key"));
 }

@@ -174,7 +174,6 @@ impl IoDiagnostics {
             "same_phase_launch_count": self.same_phase_launches.load(Ordering::Relaxed),
             "execute_error_count": self.execute_errors.load(Ordering::Relaxed),
             "apply_error_count": self.apply_errors.load(Ordering::Relaxed),
-            "current_age_us": self.now_us().saturating_sub(self.started_us.load(Ordering::Relaxed)),
             "last_execute_us": self.elapsed_us.load(Ordering::Relaxed),
             "max_execute_us": self.max_execute_us.load(Ordering::Relaxed),
             "total_execute_us": self.total_execute_us.load(Ordering::Relaxed),
@@ -182,6 +181,16 @@ impl IoDiagnostics {
             "max_return_to_consume_us": self.max_return_to_consume_us.load(Ordering::Relaxed),
             "max_same_phase_launch_count": self.max_same_phase_launches.load(Ordering::Relaxed),
         })
+    }
+    /// Live age is observational, not canonical state. Only unfinished I/O has an age.
+    pub(super) fn diagnostic_snapshot(&self) -> serde_json::Value {
+        let mut snapshot = self.snapshot();
+        let state = self.state.load(Ordering::Acquire);
+        snapshot["current_age_us"] = serde_json::json!((1..=4).contains(&state).then(|| {
+            self.now_us()
+                .saturating_sub(self.started_us.load(Ordering::Relaxed))
+        }));
+        snapshot
     }
 }
 
@@ -281,6 +290,18 @@ mod tests {
         observation.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(diagnostics.snapshot()["state"], "executing");
         assert_eq!(diagnostics.snapshot()["returned_count"], 0);
+        let stable = diagnostics.snapshot();
+        let age = diagnostics.diagnostic_snapshot()["current_age_us"]
+            .as_u64()
+            .unwrap();
+        thread::sleep(Duration::from_millis(10));
+        assert_eq!(diagnostics.snapshot(), stable);
+        assert!(
+            diagnostics.diagnostic_snapshot()["current_age_us"]
+                .as_u64()
+                .unwrap()
+                > age
+        );
         release.send(()).unwrap();
         let result = awakened.recv_timeout(Duration::from_secs(5)).expect(
             "real HTTP completion must wake the idle result wait, without waiting its 30s budget",
@@ -317,6 +338,7 @@ mod tests {
         );
         let snapshot = diagnostics.snapshot();
         assert_eq!(snapshot["state"], "applied");
+        assert!(diagnostics.diagnostic_snapshot()["current_age_us"].is_null());
         for field in [
             "queued_count",
             "executing_count",
