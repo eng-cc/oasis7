@@ -101,6 +101,22 @@ pub(super) fn parse_cli(args: &mut ArgCursor) -> Result<CliConfig, String> {
             include_events: parse_bool_flag(args, "--events")?,
             include_metrics: parse_bool_flag(args, "--metrics")?,
         },
+        "chat-retry" => {
+            let mut path = None;
+            while let Some(flag) = args.peek() {
+                match flag {
+                    "--signed-request-file" => {
+                        args.next();
+                        path = Some(args.value("--signed-request-file")?);
+                    }
+                    "-h" | "--help" => return Err(usage()),
+                    _ => return Err(format!("unknown chat-retry flag `{flag}`")),
+                }
+            }
+            Command::ChatRetry {
+                signed_request_file: required_flag(path, "--signed-request-file")?,
+            }
+        }
         "chat" => {
             let mut agent_id = None;
             let mut player_id = None;
