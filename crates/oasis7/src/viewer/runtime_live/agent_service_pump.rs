@@ -1,12 +1,43 @@
-use super::agent_service_io::{AgentServiceIoJob, AgentServiceIoResult, AgentServiceProgress};
+use super::agent_service_io::{
+    AgentServiceIoJob, AgentServiceIoResponse, AgentServiceIoResult, AgentServiceProgress,
+};
 use super::*;
+use oasis7_client_api::world_service::{IntentOutcome, SubmitObservation};
 use std::sync::{Weak, mpsc};
 
 const PUMP_INTERVAL: Duration = Duration::from_millis(50);
 const MAX_LOCAL_ADVANCES: usize = 8;
 
+pub(super) fn wait_for_result(
+    results: &mpsc::Receiver<AgentServiceIoResult>,
+    interval: Duration,
+) -> Option<Result<AgentServiceIoResult, mpsc::TryRecvError>> {
+    match results.recv_timeout(interval) {
+        Ok(result) => Some(Ok(result)),
+        Err(mpsc::RecvTimeoutError::Timeout) => None,
+        Err(mpsc::RecvTimeoutError::Disconnected) => Some(Err(mpsc::TryRecvError::Disconnected)),
+    }
+}
+
 fn continue_local_advance(advanced: bool, had_phase: bool, has_phase: bool, count: usize) -> bool {
     advanced && had_phase && has_phase && count < MAX_LOCAL_ADVANCES
+}
+
+fn unpublished_response(result: &AgentServiceIoResult) -> bool {
+    let outcome = match &result.response {
+        Err(_) | Ok(AgentServiceIoResponse::Submit(SubmitObservation::OutcomeUnknown(_))) => {
+            return true;
+        }
+        Ok(AgentServiceIoResponse::Intent(response)) => &response.outcome,
+        Ok(AgentServiceIoResponse::Submit(SubmitObservation::Response(response))) => {
+            &response.outcome
+        }
+        _ => return false,
+    };
+    matches!(
+        outcome,
+        IntentOutcome::Pending | IntentOutcome::Received { .. } | IntentOutcome::Unknown
+    )
 }
 
 /// Connection presence is independent of playback: Pause is shared server policy.
@@ -139,6 +170,8 @@ impl ViewerRuntimeLiveServer {
         thread::spawn(move || {
             let mut in_flight = false;
             let mut local_advances = 0;
+            let mut returned_result = None;
+            let mut last_dispatch = None;
             loop {
                 let Some(shared) = weak.upgrade() else {
                     break;
@@ -148,14 +181,24 @@ impl ViewerRuntimeLiveServer {
                 };
                 let had_phase = server.llm_sidecar.hosted_service_phase.is_some();
                 let mut progress = None;
+                let mut retry_without_progress = false;
                 if in_flight {
-                    match results.try_recv() {
+                    match returned_result.take().unwrap_or_else(|| results.try_recv()) {
                         Ok(result) => {
                             in_flight = false;
+                            let original_phase = result.token.phase_digest.clone();
+                            let unpublished_response = unpublished_response(&result);
                             #[cfg(any(test, feature = "test_tier_required"))]
                             let applied = diagnostics.apply(&mut server, result);
                             #[cfg(not(any(test, feature = "test_tier_required")))]
                             let applied = server.apply_agent_service_io(result);
+                            retry_without_progress = unpublished_response
+                                || applied.is_err()
+                                || server
+                                    .llm_sidecar
+                                    .hosted_service_phase
+                                    .as_ref()
+                                    .is_some_and(|phase| phase.identity() == original_phase);
                             match applied {
                                 Ok(value) => {
                                     server.observe_agent_pump_progress(&value);
@@ -180,7 +223,7 @@ impl ViewerRuntimeLiveServer {
                         Err(mpsc::TryRecvError::Empty) => {}
                     }
                 }
-                if !in_flight {
+                if !in_flight && !retry_without_progress {
                     let eligible = server.agent_service_eligible();
                     if progress.is_none()
                         || matches!(
@@ -213,7 +256,10 @@ impl ViewerRuntimeLiveServer {
                         #[cfg(any(test, feature = "test_tier_required"))]
                         diagnostics.queued(&job);
                         match jobs.try_send(*job) {
-                            Ok(()) => in_flight = true,
+                            Ok(()) => {
+                                in_flight = true;
+                                last_dispatch = Some(std::time::Instant::now());
+                            }
                             Err(_) => {
                                 server.agent_pump_worker_failed();
                                 break;
@@ -222,7 +268,8 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
                 let advance_without_sleep = continue_local_advance(
-                    matches!(progress, Some(AgentServiceProgress::Advanced)),
+                    !retry_without_progress
+                        && matches!(progress, Some(AgentServiceProgress::Advanced)),
                     had_phase,
                     server.llm_sidecar.hosted_service_phase.is_some(),
                     local_advances + 1,
@@ -237,7 +284,19 @@ impl ViewerRuntimeLiveServer {
                     continue;
                 }
                 local_advances = 0;
-                thread::sleep(PUMP_INTERVAL);
+                if retry_without_progress {
+                    // Preserve the dispatch cadence without adding another full
+                    // interval after a slow transport or delayed result collection.
+                    thread::sleep(last_dispatch.map_or(PUMP_INTERVAL, |started| {
+                        PUMP_INTERVAL.saturating_sub(started.elapsed())
+                    }));
+                } else if in_flight {
+                    // Wake on completion without holding the Viewer mutex. Timeout
+                    // preserves periodic policy checks and weak-reference shutdown.
+                    returned_result = wait_for_result(&results, PUMP_INTERVAL);
+                } else {
+                    thread::sleep(PUMP_INTERVAL);
+                }
             }
         });
         Ok(())
@@ -247,6 +306,16 @@ impl ViewerRuntimeLiveServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn result_wait_preserves_periodic_timeout_and_disconnect() {
+        let (sender, receiver) = mpsc::channel();
+        assert!(wait_for_result(&receiver, Duration::from_millis(1)).is_none());
+        drop(sender);
+        assert!(matches!(
+            wait_for_result(&receiver, Duration::from_secs(30)),
+            Some(Err(mpsc::TryRecvError::Disconnected))
+        ));
+    }
     #[test]
     fn local_advance_burst_requires_existing_phase_and_is_bounded() {
         assert!(continue_local_advance(true, true, true, 0));

@@ -263,12 +263,30 @@ mod tests {
         let diagnostics = held.agent_service_io_diagnostics.clone();
         diagnostics.queued(&job);
         let executor = diagnostics.clone();
-        let worker = thread::spawn(move || executor.execute(job));
+        let (completed, results) = mpsc::channel();
+        let worker = thread::spawn(move || completed.send(executor.execute(job)).unwrap());
+        let (waiting_result, result_waiting) = mpsc::channel();
+        let (awoken, awakened) = mpsc::channel();
+        let waiter = thread::spawn(move || {
+            waiting_result.send(()).unwrap();
+            let result = super::super::agent_service_pump::wait_for_result(
+                &results,
+                Duration::from_secs(30),
+            )
+            .unwrap()
+            .unwrap();
+            awoken.send(result).unwrap();
+        });
+        result_waiting.recv_timeout(Duration::from_secs(2)).unwrap();
         observation.recv_timeout(Duration::from_secs(2)).unwrap();
         assert_eq!(diagnostics.snapshot()["state"], "executing");
         assert_eq!(diagnostics.snapshot()["returned_count"], 0);
         release.send(()).unwrap();
-        let result = worker.join().unwrap();
+        let result = awakened.recv_timeout(Duration::from_secs(5)).expect(
+            "real HTTP completion must wake the idle result wait, without waiting its 30s budget",
+        );
+        worker.join().unwrap();
+        waiter.join().unwrap();
         transport.join().unwrap();
         assert!(
             result.response.is_err(),
