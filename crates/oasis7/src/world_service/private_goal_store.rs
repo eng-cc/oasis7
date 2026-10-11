@@ -130,12 +130,14 @@ impl PrivateGoalStore {
         content: &GoalContentV1,
     ) -> Result<PrivateGoalRef, String> {
         binding.validate()?;
+        let goal_digest =
+            game_goal_version_digest(&binding.task_id, binding.goal_revision, content)
+                .map_err(str::to_owned)?;
         let goal = StoredGoalV1 {
             schema_revision: 1,
             binding: binding.clone(),
             content: content.clone(),
-            goal_digest: game_goal_version_digest(&binding.task_id, binding.goal_revision, content)
-                .map_err(str::to_owned)?,
+            goal_digest,
         };
         let plaintext =
             Zeroizing::new(serde_cbor::to_vec(&goal).map_err(|_| "private goal encoding failed")?);
