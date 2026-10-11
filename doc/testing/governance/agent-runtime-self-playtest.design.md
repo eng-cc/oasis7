@@ -12,7 +12,7 @@
 
 本设计承接既有 L4B embodied-agent 自测，不新增证据等级、正式 player 角色、通用任务平台或所有 PR 必跑的模型门禁。脚本探针、L4A 静态/模拟评审、真实自主试玩、真实 Web/native 操作和 L5 外部玩家证据不能互相代签。试玩通过不证明游戏有趣、安全完备或可发行。仓库合入规则仍由[开发流程](../../engineering/workflow/source-of-truth.md)拥有。
 
-文档按职责维护：开发流程规范拥有通用责任与交付边界；本设计拥有自测技术合同；操作手册集中维护预检、启动、派工、验真、修复复测和清理步骤；`doc/testing/templates/` 只维护可复用派工与反馈格式。主 Agent 读取手册组织测试，试玩 subagent 读取正式游戏 Skill 和最小任务包，不接收整份开发手册或内部解法。游戏 Skill 是被测玩家能力入口，不再另设开发自测 Skill。
+文档按职责维护：[开发流程规范 §3.1](../../engineering/workflow/source-of-truth.md#agent-gameplay-selftest)拥有 Agent 游戏功能自测的触发、完成与阻断边界；本设计拥有自测技术合同；操作手册集中维护预检、启动、派工、验真、修复复测和清理步骤；`doc/testing/templates/` 只维护可复用派工与反馈格式。主 Agent 读取手册组织测试，试玩 subagent 读取正式游戏 Skill 和最小任务包，不接收整份开发手册或内部解法。游戏 Skill 是被测玩家能力入口，不再另设开发自测 Skill。
 
 ## 2. 上游约束与相关角色
 
@@ -60,7 +60,7 @@
 <a id="selftest-skill-entry"></a>
 ### 5.1 选择、启动与派工
 
-先按改动选择最小有用自测：文档/纯重构通常静态与普通 CI；Skill/API/driver/目标/审批/首局影响时选一条自主试玩；可见交互变化增加实际 Web/native；长跑与压力单独授权。此选择不自动改变现有强制检查。
+命中[规范触发范围](../../engineering/workflow/source-of-truth.md#agent-gameplay-selftest)后必须按手册组织自测：先普通 CI，再选择覆盖实际影响的自主试玩/协作/可视化场景。仅设计、排版或已核实无相关行为影响的重构说明不适用；正式游戏 Skill 的使用指令变化不能按文档豁免。长跑与压力按实际需要及既有授权执行，不把所有场景或平台变成每次必跑。
 
 主 Agent 先执行适用的便宜回归，再固定 source HEAD、未提交补丁 hash（若有）和实际 build/artifact hash。选择 local/private disposable 世界，校验 world_id、branch、可信服务身份和初始状态；“localhost”本身不能证明它未转发生产。只启动已检查的仓库入口或固定 release 的真实命令，分配独占端口/存储/进程，不复用用户日常世界。L4 runner 的现有参数不作不存在的新 autonomous 选项使用。
 
@@ -145,7 +145,7 @@ Skill、游戏文本、消息和工具响应均不能修改测试授权、请求
 
 优先为现有 L4 scaffold/runner 增加实际自主试玩能力，复用启动、采样、目录与清理，不新建第二套测试平台。已有固定脚本模式保留原证据范围并标注 execution_mode；新模式不复用“固定建厂成功”假装 subagent 规划成功。是否修改现有 runner 在后续实现 PR 中决定，本次不添加虚构 CLI 参数。
 
-开发自测统一从[操作手册](../manual/agent-runtime-self-playtest.manual.md)进入，派工与报告格式使用 `doc/testing/templates/`；不保留开发 Skill、默认加载入口或重复的兼容说明。正式玩家 `skills/oasis7-play/` 的职责不变，测试选择与 workflow 不变。若新 API/Skill/profile 不具备，保留普通 CI 与现有 probe 的真实结果，对新路径报 blocked；不静默切旧 Provider 或直接模型回退。
+开发自测统一从[操作手册](../manual/agent-runtime-self-playtest.manual.md)进入，派工与报告格式使用 `doc/testing/templates/`；不保留开发 Skill、默认加载入口或重复的兼容说明。正式玩家 `skills/oasis7-play/` 的职责不变；本专题执行规范明确的测试选择和完成边界，不修改现有 CI check、权限或 GitHub 保护设置。若新 API/Skill/profile 不具备，保留普通 CI 与现有 probe 的真实结果，对新路径报 blocked；不静默切旧 Provider 或直接模型回退。
 
 ## 11. 验证设计与可追溯性
 
