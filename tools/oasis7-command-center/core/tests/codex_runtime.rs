@@ -34,7 +34,7 @@ impl Fixture {
 import sys,json,subprocess,time
 TRACE=__TRACE__
 if '--version' in sys.argv: print('codex-cli 0.137.0');sys.exit(0)
-threads={};n=0
+threads={};n=0;resumed=False
 
 def send(v): print(json.dumps(v),flush=True)
 def reply(m,v): send({'id':m['id'],'result':v})
@@ -52,7 +52,7 @@ for line in sys.stdin:
   n+=1;t='t'+str(n);threads[t]='idle'
   if n==1:subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],start_new_session=True)
   reply(m,thread(t))
- elif method=='thread/resume':reply(m,thread(p['threadId']))
+ elif method=='thread/resume':resumed=True;reply(m,thread(p['threadId']))
  elif method=='thread/read':reply(m,thread(p['threadId']))
  elif method=='turn/start':
   t=p['threadId'];turn='turn-'+t;mode=p['input'][0]['text'];threads[t]='active'
@@ -68,7 +68,9 @@ for line in sys.stdin:
   elif mode=='overflow':
    for i in range(150):send({'id':'q'+str(i),'method':'item/commandExecution/requestApproval','params':{'itemId':'i'+str(i),'startedAtMs':1,'threadId':t,'turnId':turn,'command':'echo x'}})
   elif mode=='failed':completed(t,turn,'failed')
-  elif mode=='complete':completed(t,turn)
+  elif mode=='complete':
+   if resumed:time.sleep(0.25)
+   completed(t,turn)
  elif method=='turn/interrupt':reply(m,{});completed(p['threadId'],p['turnId'],'interrupted')
  elif method=='turn/steer':reply(m,{'turnId':p['expectedTurnId']})
 "##.replace("__TRACE__",&serde_json::to_string(&trace).unwrap()).replace("__ROOT__",&serde_json::to_string(&root).unwrap());
@@ -380,6 +382,11 @@ fn clean_history_requires_explicit_resume_and_future_database_clock_is_preserved
     assert!(r.start_turn(&f.project, &t, "complete").is_err());
     r.continue_session(&f.project, &t).unwrap();
     r.start_turn(&f.project, &t, "complete").unwrap();
-    tick();
-    assert!(r.shutdown_if_idle().unwrap().safe);
+    // A receipt confirms turn creation, not asynchronous completion or background-idle proof.
+    wait_idle(&mut r);
+    let status = r.shutdown_if_idle().unwrap();
+    assert!(
+        status.safe,
+        "resumed turn never reached verified idle: {status:?}"
+    );
 }
