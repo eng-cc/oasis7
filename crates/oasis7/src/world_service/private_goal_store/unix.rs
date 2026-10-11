@@ -104,6 +104,7 @@ pub(super) fn put_with_reference(
     mut next_reference: impl FnMut() -> Result<PrivateGoalRef, String>,
 ) -> Result<PrivateGoalRef, String> {
     private_directory(dir)?;
+    verify_key(dir, key)?;
     for _ in 0..8 {
         let reference = next_reference()?;
         let nonce = random::<24>()?;
@@ -123,6 +124,66 @@ pub(super) fn put_with_reference(
         if envelope.len() > MAX_PRIVATE_GOAL_FILE_BYTES {
             return Err("private goal file exceeds byte limit".into());
         }
+        if publish_immutable(dir, reference.as_str(), &envelope)? {
+            return Ok(reference);
+        }
+    }
+    Err("private goal reference collision retry budget exhausted".into())
+}
+pub(super) fn get(
+    dir: &Dir,
+    key: &[u8; 32],
+    reference: &PrivateGoalRef,
+    binding: &PrivateGoalBindingV1,
+) -> Result<Zeroizing<Vec<u8>>, String> {
+    private_directory(dir)?;
+    verify_key(dir, key)?;
+    let bytes = read_private(dir, reference.as_str(), MAX_PRIVATE_GOAL_FILE_BYTES)?;
+    if bytes.len() > MAX_PRIVATE_GOAL_FILE_BYTES || bytes.len() < 48 || &bytes[..8] != MAGIC {
+        return Err("invalid private goal encrypted envelope".into());
+    }
+    XChaCha20Poly1305::new(key.into())
+        .decrypt(
+            XNonce::from_slice(&bytes[8..32]),
+            Payload {
+                msg: &bytes[32..],
+                aad: &aad(binding, reference)?,
+            },
+        )
+        .map(Zeroizing::new)
+        .map_err(|_| "private goal authentication failed".into())
+}
+
+const KEY_MARKER: &str = ".key-verifier-v1";
+const KEY_MAGIC: &[u8; 8] = b"O7KEY001";
+const KEY_AAD: &[u8] = b"oasis7/private-goal-key-verifier/v1";
+const KEY_BODY: &[u8] = b"oasis7 private goal namespace key v1";
+
+fn read_private(dir: &Dir, name: &str, limit: usize) -> Result<Vec<u8>, String> {
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .follow(FollowSymlinks::No)
+        .custom_flags(libc::O_NONBLOCK);
+    let file = dir.open_with(name, &options).map_err(io_error)?;
+    let metadata = file.metadata().map_err(io_error)?;
+    private_file(&metadata)?;
+    if metadata.len() > limit as u64 {
+        return Err("private goal file exceeds byte limit".into());
+    }
+    let mut bytes = Vec::new();
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() > limit {
+        return Err("private goal file exceeds byte limit".into());
+    }
+    Ok(bytes)
+}
+
+// Shared durable, immutable publication. A collision never replaces the winner.
+fn publish_immutable(dir: &Dir, name: &str, bytes: &[u8]) -> Result<bool, String> {
+    for _ in 0..8 {
         let temp = format!(".{}.tmp", hex::encode(random::<32>()?));
         let mut options = OpenOptions::new();
         options
@@ -144,21 +205,21 @@ pub(super) fn put_with_reference(
             return Err(error);
         }
         let publication = (|| {
-            file.write_all(&envelope)?;
+            file.write_all(bytes)?;
             file.sync_all()?;
-            // link is atomic and never overwrites an existing immutable record.
-            dir.hard_link(&temp, dir, reference.as_str())
+            dir.hard_link(&temp, dir, name)
         })();
         let cleanup = dir.remove_file(&temp);
         match publication {
             Ok(()) => {
                 cleanup.map_err(io_error)?;
                 sync(dir)?;
-                return Ok(reference);
+                return Ok(true);
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 cleanup.map_err(io_error)?;
                 sync(dir)?;
+                return Ok(false);
             }
             Err(e) => {
                 let _ = cleanup;
@@ -166,43 +227,66 @@ pub(super) fn put_with_reference(
             }
         }
     }
-    Err("private goal reference collision retry budget exhausted".into())
+    Err("private goal temporary collision retry budget exhausted".into())
 }
-pub(super) fn get(
-    dir: &Dir,
-    key: &[u8; 32],
-    reference: &PrivateGoalRef,
-    binding: &PrivateGoalBindingV1,
-) -> Result<Zeroizing<Vec<u8>>, String> {
-    private_directory(dir)?;
-    let mut options = OpenOptions::new();
-    options
-        .read(true)
-        .follow(FollowSymlinks::No)
-        .custom_flags(libc::O_NONBLOCK);
-    let file = dir
-        .open_with(reference.as_str(), &options)
-        .map_err(io_error)?;
-    let metadata = file.metadata().map_err(io_error)?;
-    private_file(&metadata)?;
-    if metadata.len() > MAX_PRIVATE_GOAL_FILE_BYTES as u64 {
-        return Err("private goal file exceeds byte limit".into());
+
+fn verify_key(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
+    let bytes = read_private(dir, KEY_MARKER, 256)?;
+    if bytes.len() < 48 || &bytes[..8] != KEY_MAGIC {
+        return Err("invalid private goal key verifier".into());
     }
-    let mut bytes = Vec::new();
-    file.take(MAX_PRIVATE_GOAL_FILE_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)
-        .map_err(io_error)?;
-    if bytes.len() > MAX_PRIVATE_GOAL_FILE_BYTES || bytes.len() < 48 || &bytes[..8] != MAGIC {
-        return Err("invalid private goal encrypted envelope".into());
-    }
-    XChaCha20Poly1305::new(key.into())
+    let plaintext = XChaCha20Poly1305::new(key.into())
         .decrypt(
             XNonce::from_slice(&bytes[8..32]),
             Payload {
                 msg: &bytes[32..],
-                aad: &aad(binding, reference)?,
+                aad: KEY_AAD,
             },
         )
-        .map(Zeroizing::new)
-        .map_err(|_| "private goal authentication failed".into())
+        .map_err(|_| "private goal namespace key mismatch or corruption")?;
+    if plaintext.len() != KEY_BODY.len() + 32 || !plaintext.starts_with(KEY_BODY) {
+        return Err("invalid private goal key verifier body".into());
+    }
+    Ok(())
+}
+
+fn verify_key_durable(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
+    verify_key(dir, key)?;
+    // A racing initializer may have linked and removed its temporary without
+    // yet syncing the directory. Every successful open completes publication.
+    sync(dir)
+}
+
+/// A marker-less nonempty namespace is never repaired or re-keyed. This includes
+/// interrupted initialization temporaries: operator inspection is required.
+pub(super) fn initialize_key(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
+    match dir.symlink_metadata(KEY_MARKER) {
+        Ok(_) => return verify_key_durable(dir, key),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+        Err(e) => return Err(io_error(e)),
+    }
+    if dir.entries().map_err(io_error)?.next().is_some() {
+        // A concurrent initializer may have published while we inspected.
+        // Verify it if present; never adopt any other nonempty namespace.
+        return verify_key_durable(dir, key);
+    }
+    let nonce = random::<24>()?;
+    let mut challenge = KEY_BODY.to_vec();
+    challenge.extend_from_slice(&random::<32>()?);
+    let encrypted = XChaCha20Poly1305::new(key.into())
+        .encrypt(
+            XNonce::from_slice(&nonce),
+            Payload {
+                msg: &challenge,
+                aad: KEY_AAD,
+            },
+        )
+        .map_err(|_| "private goal key initialization failed")?;
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(KEY_MAGIC);
+    bytes.extend_from_slice(&nonce);
+    bytes.extend_from_slice(&encrypted);
+    publish_immutable(dir, KEY_MARKER, &bytes)?;
+    // The collision winner is authoritative, including its fsynced key marker.
+    verify_key_durable(dir, key)
 }

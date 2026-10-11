@@ -112,10 +112,9 @@ impl PrivateGoalStore {
         let key = Zeroizing::new(key);
         #[cfg(unix)]
         {
-            Ok(Self {
-                directory: unix::open_root(root)?,
-                key,
-            })
+            let directory = unix::open_root(root)?;
+            unix::initialize_key(&directory, &key)?;
+            Ok(Self { directory, key })
         }
         #[cfg(not(unix))]
         {

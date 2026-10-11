@@ -88,7 +88,7 @@ fn private_goal_store_restart_random_refs_encrypted_complete_content() {
     assert_eq!(goal.content, c);
     assert_eq!(goal.goal_digest, digest);
     assert_eq!(fs::read(f.store().join(first.as_str())).unwrap(), bytes);
-    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 2);
+    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 3);
 }
 #[test]
 fn private_goal_store_wrong_key_all_identity_fences_and_corruption_rejected() {
@@ -96,12 +96,7 @@ fn private_goal_store_wrong_key_all_identity_fences_and_corruption_rejected() {
     let b = binding();
     let store = PrivateGoalStore::open(&f.store(), [7; 32]).unwrap();
     let r = store.put(&b, &content()).unwrap();
-    assert!(
-        PrivateGoalStore::open(&f.store(), [8; 32])
-            .unwrap()
-            .get(&r, &b)
-            .is_err()
-    );
+    assert!(PrivateGoalStore::open(&f.store(), [8; 32]).is_err());
     let mut variants = Vec::new();
     for field in 0..10 {
         let mut changed = b.clone();
@@ -204,7 +199,7 @@ fn private_goal_store_collision_never_overwrites_and_decoded_digest_is_checked()
         ))
         .is_err()
     );
-    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 2);
+    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 3);
 }
 
 #[test]
@@ -244,5 +239,99 @@ fn private_goal_store_restrictive_umask_fails_before_publication() {
     let result = store.put(&binding(), &content());
     unsafe { libc::umask(previous) };
     assert!(result.is_err());
-    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 0);
+    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 1);
+}
+
+#[test]
+fn private_goal_store_key_marker_corruption_deletion_and_orphans_fail_closed() {
+    let f = Fixture::new();
+    let store = PrivateGoalStore::open(&f.store(), [7; 32]).unwrap();
+    let goal = store.put(&binding(), &content()).unwrap();
+    let marker = f.store().join(".key-verifier-v1");
+    let original = fs::read(&marker).unwrap();
+    for offset in [0, 8, 32, original.len() - 1] {
+        let mut bytes = original.clone();
+        bytes[offset] ^= 1;
+        fs::write(&marker, bytes).unwrap();
+        assert!(PrivateGoalStore::open(&f.store(), [7; 32]).is_err());
+        assert!(store.put(&binding(), &content()).is_err());
+        assert!(store.get(&goal, &binding()).is_err());
+    }
+    fs::write(&marker, vec![0; 257]).unwrap();
+    assert!(PrivateGoalStore::open(&f.store(), [7; 32]).is_err());
+    fs::write(&marker, &original).unwrap();
+    fs::set_permissions(&marker, fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(PrivateGoalStore::open(&f.store(), [7; 32]).is_err());
+    fs::set_permissions(&marker, fs::Permissions::from_mode(0o600)).unwrap();
+    fs::remove_file(&marker).unwrap();
+    assert!(PrivateGoalStore::open(&f.store(), [7; 32]).is_err());
+    assert!(PrivateGoalStore::open(&f.store(), [8; 32]).is_err());
+    assert!(store.put(&binding(), &content()).is_err());
+    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 1);
+    let orphan = f.0.join("orphan");
+    fs::create_dir(&orphan).unwrap();
+    fs::set_permissions(&orphan, fs::Permissions::from_mode(0o700)).unwrap();
+    fs::write(orphan.join(".interrupted.tmp"), b"orphan").unwrap();
+    assert!(PrivateGoalStore::open(&orphan, [7; 32]).is_err());
+    assert_eq!(fs::read_dir(&orphan).unwrap().count(), 1);
+}
+#[test]
+fn private_goal_store_key_marker_links_fifo_and_wrong_key_open_rejected() {
+    let f = Fixture::new();
+    let store = PrivateGoalStore::open(&f.store(), [7; 32]).unwrap();
+    let marker = f.store().join(".key-verifier-v1");
+    let original = fs::read(&marker).unwrap();
+    assert!(PrivateGoalStore::open(&f.store(), [8; 32]).is_err());
+    assert_eq!(fs::read(&marker).unwrap(), original);
+    let backup = f.0.join("marker-backup");
+    fs::rename(&marker, &backup).unwrap();
+    symlink(&backup, &marker).unwrap();
+    assert!(PrivateGoalStore::open(&f.store(), [7; 32]).is_err());
+    fs::remove_file(&marker).unwrap();
+    fs::hard_link(&backup, &marker).unwrap();
+    assert!(PrivateGoalStore::open(&f.store(), [7; 32]).is_err());
+    fs::remove_file(&marker).unwrap();
+    use std::os::unix::ffi::OsStrExt;
+    let cpath = std::ffi::CString::new(marker.as_os_str().as_bytes()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(cpath.as_ptr(), 0o600) }, 0);
+    let start = std::time::Instant::now();
+    assert!(PrivateGoalStore::open(&f.store(), [7; 32]).is_err());
+    assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    assert!(store.put(&binding(), &content()).is_err());
+}
+#[test]
+fn private_goal_store_concurrent_initialization_binds_one_external_key() {
+    let f = Fixture::new();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let handles = [7u8, 8]
+        .into_iter()
+        .map(|byte| {
+            let root = f.store();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                (byte, PrivateGoalStore::open(&root, [byte; 32]))
+            })
+        })
+        .collect::<Vec<_>>();
+    let results = handles
+        .into_iter()
+        .map(|thread| thread.join().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(results.iter().filter(|(_, store)| store.is_ok()).count(), 1);
+    let (winner, store) = results
+        .into_iter()
+        .find(|(_, store)| store.is_ok())
+        .unwrap();
+    let store = store.unwrap();
+    let r = store.put(&binding(), &content()).unwrap();
+    assert!(
+        PrivateGoalStore::open(&f.store(), [winner; 32])
+            .unwrap()
+            .get(&r, &binding())
+            .is_ok()
+    );
+    let loser = if winner == 7 { 8 } else { 7 };
+    assert!(PrivateGoalStore::open(&f.store(), [loser; 32]).is_err());
+    assert_eq!(fs::read_dir(f.store()).unwrap().count(), 2);
 }
