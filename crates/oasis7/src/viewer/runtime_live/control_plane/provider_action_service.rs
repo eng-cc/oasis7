@@ -33,6 +33,7 @@ impl ViewerRuntimeLiveServer {
             })
             .unwrap_or(serde_json::Value::Null);
         summary["agent_service_pump_error"] = serde_json::json!(self.agent_service_pump_error);
+        summary["io_lifecycle"] = self.agent_service_io_diagnostics.snapshot();
         summary
     }
     #[cfg(any(test, feature = "test_tier_required"))]

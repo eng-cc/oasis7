@@ -106,19 +106,31 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn start_agent_service_pump(
         shared: &Arc<Mutex<Self>>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        #[cfg(any(test, feature = "test_tier_required"))]
+        let diagnostics;
         {
             let mut server = lock_shared_server(shared)?;
             if server.agent_service_pump_started || server.config.world_service.is_none() {
                 return Ok(());
             }
             server.agent_service_pump_started = true;
+            #[cfg(any(test, feature = "test_tier_required"))]
+            {
+                diagnostics = server.agent_service_io_diagnostics.clone();
+            }
         }
         let (jobs, incoming) = mpsc::sync_channel::<AgentServiceIoJob>(1);
         let (completed, results) = mpsc::sync_channel::<AgentServiceIoResult>(1);
+        #[cfg(any(test, feature = "test_tier_required"))]
+        let executor_diagnostics = diagnostics.clone();
         // The executor owns only immutable jobs. It never accesses the Viewer mutex.
         thread::spawn(move || {
             while let Ok(job) = incoming.recv() {
-                if completed.send(job.execute()).is_err() {
+                #[cfg(any(test, feature = "test_tier_required"))]
+                let result = executor_diagnostics.execute(job);
+                #[cfg(not(any(test, feature = "test_tier_required")))]
+                let result = job.execute();
+                if completed.send(result).is_err() {
                     break;
                 }
             }
@@ -140,7 +152,11 @@ impl ViewerRuntimeLiveServer {
                     match results.try_recv() {
                         Ok(result) => {
                             in_flight = false;
-                            match server.apply_agent_service_io(result) {
+                            #[cfg(any(test, feature = "test_tier_required"))]
+                            let applied = diagnostics.apply(&mut server, result);
+                            #[cfg(not(any(test, feature = "test_tier_required")))]
+                            let applied = server.apply_agent_service_io(result);
+                            match applied {
                                 Ok(value) => {
                                     server.observe_agent_pump_progress(&value);
                                     progress = Some(value);
@@ -194,6 +210,8 @@ impl ViewerRuntimeLiveServer {
                             unreachable!()
                         };
                         // One owned in-flight job guarantees capacity; never wait under the mutex.
+                        #[cfg(any(test, feature = "test_tier_required"))]
+                        diagnostics.queued(&job);
                         match jobs.try_send(*job) {
                             Ok(()) => in_flight = true,
                             Err(_) => {

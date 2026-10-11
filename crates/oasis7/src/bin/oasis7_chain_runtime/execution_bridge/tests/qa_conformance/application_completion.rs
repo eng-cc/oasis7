@@ -242,7 +242,53 @@ pub(super) fn hosted_failure_diagnostic(summary: &serde_json::Value) -> serde_js
         None => "absent",
         Some(_) => "unknown",
     };
+    let io = &summary["io_lifecycle"];
+    let mut lifecycle = serde_json::Map::new();
+    for field in [
+        "queued_count",
+        "executing_count",
+        "returned_count",
+        "consumed_count",
+        "applied_count",
+        "execute_error_count",
+        "apply_error_count",
+        "same_phase_launch_count",
+        "current_age_us",
+        "last_execute_us",
+        "max_execute_us",
+        "total_execute_us",
+        "total_return_to_consume_us",
+        "max_return_to_consume_us",
+        "max_same_phase_launch_count",
+    ] {
+        lifecycle.insert(field.into(), serde_json::json!(io[field].as_u64()));
+    }
+    lifecycle.insert(
+        "state".into(),
+        serde_json::json!(
+            io["state"]
+                .as_str()
+                .filter(|value| matches!(
+                    *value,
+                    "queued" | "executing" | "returned" | "consumed" | "applied" | "absent"
+                ))
+                .unwrap_or("unknown")
+        ),
+    );
+    lifecycle.insert(
+        "operation".into(),
+        serde_json::json!(
+            io["operation"]
+                .as_str()
+                .filter(|value| matches!(
+                    *value,
+                    "submit" | "lookup" | "view" | "feedback" | "metadata" | "absent"
+                ))
+                .unwrap_or("unknown")
+        ),
+    );
     serde_json::json!({
+        "io_lifecycle": lifecycle,
         "phase": phase,
         "pump_error_class": pump_error,
         "terminal_status": status,
@@ -269,6 +315,7 @@ fn hosted_failure_diagnostic_does_not_echo_private_summary() {
         "pending_intent_count": secret, "pending_action_count": 3,
         "pending_wake_ids": [secret], "mirrored_lease_count": secret,
         "memory_store": secret, "private_key": secret,
+        "io_lifecycle": {"state": secret, "operation": secret, "queued_count": secret, "private_payload": secret},
     });
     let diagnostic = hosted_failure_diagnostic(&summary);
     assert_eq!(diagnostic["phase"], "unknown");
