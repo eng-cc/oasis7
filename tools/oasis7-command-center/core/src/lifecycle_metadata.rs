@@ -71,6 +71,22 @@ pub fn parse(path: &str, content: &str) -> Option<DocumentLifecycle> {
             _ => None,
         })
         .collect();
+    let mut list_depth = 0;
+    let mut nested_lists = Vec::new();
+    let mut items = Vec::new();
+    for (event, range) in &events {
+        match event {
+            Event::Start(Tag::List(_)) => {
+                list_depth += 1;
+                if list_depth > 1 {
+                    nested_lists.push(range.clone());
+                }
+            }
+            Event::End(TagEnd::List(_)) => list_depth -= 1,
+            Event::Start(Tag::Item) => items.push(range.clone()),
+            _ => {}
+        }
+    }
     let mut statuses = Vec::new();
     let mut successors = Vec::new();
     let mut reasons = Vec::new();
@@ -82,9 +98,20 @@ pub fn parse(path: &str, content: &str) -> Option<DocumentLifecycle> {
         if position < start || position >= end || blocked.iter().any(|r| r.contains(&position)) {
             continue;
         }
-        // Identity rows are top-level source declarations; nested example lists
-        // cannot supply lifecycle authority.
-        if line.starts_with([' ', '\t']) {
+        // A parsed heading may begin after CommonMark's 1–3 leading spaces.
+        // Apply its boundary before filtering list indentation.
+        if headings.iter().any(|(level, range)| {
+            *level != HeadingLevel::H1 && range.start >= position && range.start < offset
+        }) {
+            break;
+        }
+        if nested_lists
+            .iter()
+            .any(|r| r.start < offset && r.end > position)
+            || items.iter().any(|r| r.start < position && r.end > position)
+            || line.starts_with('\t')
+            || line.bytes().take_while(|b| *b == b' ').count() > 3
+        {
             continue;
         }
         let line = line.trim();

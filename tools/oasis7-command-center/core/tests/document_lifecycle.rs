@@ -162,3 +162,27 @@ fn real_product_identity_and_self_declaration_are_source_facts_only() {
     );
     assert!(meta.issue.is_none());
 }
+
+#[test]
+fn commonmark_indentation_preserves_top_level_identity_and_example_boundaries() {
+    for indent in [" ", "  ", "   "] {
+        let (_, core) = fixture(&format!(
+            "# Source\n## 文档身份\n{indent}- 状态：retired\n{indent}- 后继文档：`doc/next.md`\n## Rules\n"
+        ));
+        let metadata = section(&core).lifecycle.unwrap();
+        assert_eq!(metadata.status.as_deref(), Some("retired"));
+        assert_eq!(metadata.successor_targets, ["doc/next.md"]);
+        let (_, core) = fixture(&format!(
+            "# Source\n## 文档身份\n{indent}### 示例\n状态：retired\n后继文档：`doc/next.md`\n"
+        ));
+        assert!(section(&core).lifecycle.is_none());
+    }
+    for nested in [
+        "- Container\n  - 状态：retired\n  - 后继文档：`doc/next.md`",
+        " - Container\n   - 状态：retired\n   - 后继文档：`doc/next.md`",
+        "- Container\n  状态：retired\n  后继文档：`doc/next.md`",
+    ] {
+        let (_, core) = fixture(&format!("# Source\n## 文档身份\n{nested}\n## Rules\n"));
+        assert!(section(&core).lifecycle.is_none(), "{nested}");
+    }
+}
