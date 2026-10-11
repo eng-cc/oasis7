@@ -84,6 +84,9 @@ enum Command {
 }
 
 fn execute(args: &[String]) -> Result<serde_json::Value, CliError> {
+    if let Some(result) = oasis7_local_signer::manager_cli::dispatch(args) {
+        return result.map_err(CliError::signer);
+    }
     let command = parse_command(args)?;
     match command {
         Command::InstallDryRun => Err(CliError::unavailable(
@@ -430,9 +433,7 @@ fn blocked(code: &str, reason: &str, exit_code: i32) -> serde_json::Value {
         "status": "BLOCKED",
         "code": code,
         "reason": reason,
-        "exit_code": exit_code,
-        "host_mutated": false,
-        "signing_enabled": false
+        "exit_code": exit_code
     })
 }
 
@@ -660,8 +661,8 @@ mod tests {
         let result = blocked(error.code, error.reason, error.exit_code);
         assert_eq!(result["status"], "BLOCKED");
         assert_eq!(result["code"], "UNSUPPORTED_PLATFORM_OR_FS");
-        assert_eq!(result["host_mutated"], false);
-        assert_eq!(result["signing_enabled"], false);
+        assert!(result.get("host_mutated").is_none());
+        assert!(result.get("signing_enabled").is_none());
     }
 
     #[test]

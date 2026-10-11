@@ -20,7 +20,7 @@ Create or attach a standardized git worktree for one task slice.
 
 Default conventions:
 - branch: codex/<module>-<task>
-- worktrees root: <repo-parent>/worktrees
+- worktrees root: oasis7.task-worktrees-root Git config; fallback <repo-parent>/worktrees
 - worktree path: <worktrees root>/<repo-name>-<module>-<task>
 - cargo target: ignored `target` symlink to the worktree-scoped shared dev cache
 - base ref: HEAD

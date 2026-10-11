@@ -5,6 +5,9 @@ use oasis7::runtime::{Journal, LocalCasStore, Snapshot, World, blake3_hex};
 use oasis7::world_service::*;
 use std::path::Path;
 
+#[path = "world_service_restore_cache.rs"]
+mod restore_cache;
+
 pub(crate) struct PinnedWorld {
     pub world: World,
     pub(super) record: ExecutionBridgeRecord,
@@ -52,6 +55,24 @@ fn load(
     identity: &WorldIdentity,
     height: Option<u64>,
     fixed: Option<&CommitRef>,
+) -> Result<PinnedWorld, String> {
+    load_with_cache(
+        records,
+        storage,
+        identity,
+        height,
+        fixed,
+        restore_cache::shared(),
+    )
+}
+
+fn load_with_cache(
+    records: &Path,
+    storage: &Path,
+    identity: &WorldIdentity,
+    height: Option<u64>,
+    fixed: Option<&CommitRef>,
+    cache: &std::sync::Mutex<restore_cache::RestoreCache>,
 ) -> Result<PinnedWorld, String> {
     if let Some(commit) = fixed
         && &commit.world != identity
@@ -119,8 +140,8 @@ fn load(
     {
         return Err("pinned proof does not bind execution record and CAS refs".into());
     }
-    let world =
-        World::from_snapshot(snapshot, journal).map_err(|e| format!("pinned world: {e:?}"))?;
+    let world = restore_cache::restore(cache, &snapshot_bytes, &journal_bytes, snapshot, journal)
+        .map_err(|e| format!("pinned world: {e:?}"))?;
     let binding = world
         .current_cognition_runtime_binding()
         .map_err(|e| format!("binding unavailable: {e:?}"))?;
@@ -165,3 +186,64 @@ fn load(
         commit,
     })
 }
+
+/// Engineering reader uses the writer's verified publication fence. A missing
+/// tail cannot turn an older valid prefix into current read authority.
+pub(crate) fn pin_guarded(
+    records: &Path,
+    config: &Path,
+    authority: &crate::controlled_live_config::GuardedReadAuthority,
+    fixed: Option<&CommitRef>,
+    height: Option<u64>,
+) -> Result<PinnedWorld, String> {
+    pin_guarded_with_capture_barrier(records, config, authority, fixed, height, || {})
+}
+
+pub(super) fn pin_guarded_with_capture_barrier(
+    records: &Path,
+    config: &Path,
+    authority: &crate::controlled_live_config::GuardedReadAuthority,
+    fixed: Option<&CommitRef>,
+    height: Option<u64>,
+    after_capture: impl FnOnce(),
+) -> Result<PinnedWorld, String> {
+    let trusted = crate::controlled_live_config::GuardedAuthority::load(config)?;
+    authority.check_configuration(&trusted.configuration_digest)?;
+    if records != trusted.config.records_directory {
+        return Err("guarded read private directory changed".into());
+    }
+    let captured_fence = authority.current()?;
+    let current = super::controlled_live_history::load_head(&trusted, records, None)?;
+    if current.head != captured_fence {
+        return Err("guarded current publication tail is missing or changed".into());
+    }
+    after_capture();
+    let head = match (height, fixed) {
+        (None, None) => current,
+        (Some(height), _) => {
+            super::controlled_live_history::load_at_height(&trusted, records, height)?
+        }
+        (None, Some(fixed)) => {
+            super::controlled_live_history::load_head(&trusted, records, Some(fixed))?
+        }
+    };
+    if head.head.position > captured_fence.position
+        || (head.head.position == captured_fence.position && head.head != captured_fence)
+    {
+        return Err("guarded pin exceeds or conflicts with captured publication fence".into());
+    }
+    let commit = head.commit(&trusted)?;
+    if fixed.is_some_and(|fixed| fixed != &commit) {
+        return Err("guarded fixed commit reference conflict".into());
+    }
+    let world = head.world(&trusted.release_policy)?;
+    Ok(PinnedWorld {
+        world,
+        record: head.record,
+        commit,
+    })
+}
+
+#[cfg(test)]
+#[path = "tests/world_service_read_cache.rs"]
+mod cache_tests;

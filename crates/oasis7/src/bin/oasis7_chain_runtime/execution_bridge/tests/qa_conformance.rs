@@ -16,6 +16,7 @@ mod application_hosted_resume_rejection;
 mod application_hosted_resume_rejection_recovery;
 mod application_hosted_resume_rejection_write_failure;
 mod application_hosted_resume_write_failure;
+mod application_hosted_unpublished_cadence;
 mod application_hosted_wait;
 mod application_hosted_wait_capture_crash;
 mod application_hosted_wait_crash;
@@ -30,7 +31,10 @@ mod application_memory_tamper;
 mod application_metadata;
 mod application_sandbox;
 mod application_stream_boundaries;
+mod controlled_admission;
+mod fixture_stage_diagnostics;
 mod hosted_wait_clock;
+use fixture_stage_diagnostics::Stage;
 mod provider_metadata;
 mod scenario_resource;
 use application_harness::run_isolated_application;
@@ -47,6 +51,7 @@ mod privacy_identity;
 mod process_restart;
 mod production_pressure;
 mod publication_pin;
+mod release_web_fixture;
 mod response_privacy;
 mod strict_http;
 mod topology_no_mount;
@@ -109,6 +114,8 @@ struct Fixture {
     lookup_digests: Arc<Mutex<Vec<String>>>,
     outage: Arc<http_fixture::Outage>,
     tamper_next_describe: Arc<AtomicBool>,
+    stage_diagnostics: Arc<fixture_stage_diagnostics::Diagnostics>,
+    controlled_completion: Arc<controlled_admission::Completion>,
     // Last field: release after the fixture worker/node/storage fields drop.
     scenario_permit: Arc<scenario_resource::ScenarioResourcePermit>,
 }
@@ -347,6 +354,10 @@ impl Fixture {
         let worker_halt = halt.clone();
         let worker_node = node.clone();
         let worker_root = root.clone();
+        let stage_diagnostics = Arc::new(fixture_stage_diagnostics::Diagnostics::default());
+        let worker_diagnostics = stage_diagnostics.clone();
+        let controlled_completion = Arc::new(controlled_admission::Completion::default());
+        let worker_completion = controlled_completion.clone();
         // QA-only causal probe: delay only a verified successful View response.
         // Each delay remains below the client's transport timeout; cumulative
         // protocol stages may exceed the former completion observation window.
@@ -418,8 +429,10 @@ impl Fixture {
                 };
                 // Drain authenticated read responses concurrently so the real dispatcher completes
                 // before a client teardown can interrupt the response relay.
-                let capture_read =
-                    method == "POST" && matches!(path, VIEW_PATH | CHANGES_PATH | LOOKUP_PATH);
+                let capture_read = method == "POST"
+                    && (matches!(path, VIEW_PATH | CHANGES_PATH | LOOKUP_PATH)
+                        || (path == SUBMIT_PATH
+                            && application_hosted_unpublished_cadence::active(&worker_gate)));
                 let mut read_reader = None;
                 let mut capture_peer = None;
                 let mut output_stream = if capture_read {
@@ -446,6 +459,7 @@ impl Fixture {
                 } else {
                     stream.try_clone().unwrap()
                 };
+                let dispatch_started = Instant::now();
                 let result = crate::world_service_api::maybe_handle(
                     &mut output_stream,
                     &bytes,
@@ -458,6 +472,7 @@ impl Fixture {
                     &worker_root.join("store"),
                     &signer,
                 );
+                worker_diagnostics.record(Stage::Dispatcher, dispatch_started.elapsed());
                 eprintln!("fixture_dispatch method={method} path={path} result={result:?}");
                 // A verified whole-process exit at the intentional Settle gate may
                 // close its response socket. Admission and canonical execution must
@@ -493,10 +508,16 @@ impl Fixture {
                 if gated_ack.is_some() && worker_controlled.load(Ordering::SeqCst) {
                     let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
                     let request = serde_json::from_slice(body).unwrap();
-                    let mut driver = worker_driver.lock().unwrap();
-                    let height = driver.state.last_applied_committed_height + 1;
-                    commit_request(&mut driver, height, Some(request));
+                    controlled_admission::execute(
+                        &worker_driver,
+                        &worker_root.join("store"),
+                        request,
+                        &worker_diagnostics,
+                        &worker_completion,
+                    )
+                    .expect("controlled admission must retain the original published result");
                 }
+                let relay_started = Instant::now();
                 drop(output_stream);
                 if let Some(reader) = read_reader {
                     let response = reader.join().expect("Read response capture reader failed");
@@ -509,78 +530,13 @@ impl Fixture {
                             .position(|window| window == b"\r\n\r\n")
                             .unwrap()
                             + 4;
-                        match path {
-                            VIEW_PATH => {
-                                let request: SignedReadRequest<ReadWorldViewRequest> =
-                                    serde_json::from_slice(body).unwrap();
-                                let signed: SignedServiceResponse<
-                                    ReadWorldViewResponse<
-                                        oasis7::world_service::projection::WorldServiceProjection,
-                                    >,
-                                > = serde_json::from_slice(&response[offset..]).unwrap();
-                                oasis7::world_service::authority::verify_service_response(
-                                    path,
-                                    &oasis7::world_service::authority::request_digest(
-                                        path, &request,
-                                    )
-                                    .unwrap(),
-                                    &signed,
-                                    &signer.public_key_hex,
-                                )
-                                .unwrap();
-                                signed.payload.validate(&request.request).unwrap();
-                            }
-                            CHANGES_PATH => {
-                                let request: SignedReadRequest<ReadWorldChangesRequest> =
-                                    serde_json::from_slice(body).unwrap();
-                                let signed: SignedServiceResponse<
-                                    ReadWorldChangesResponse<serde_json::Value>,
-                                > = serde_json::from_slice(&response[offset..]).unwrap();
-                                oasis7::world_service::authority::verify_service_response(
-                                    path,
-                                    &oasis7::world_service::authority::request_digest(
-                                        path, &request,
-                                    )
-                                    .unwrap(),
-                                    &signed,
-                                    &signer.public_key_hex,
-                                )
-                                .unwrap();
-                                signed.payload.validate(&request.request).unwrap();
-                                assert!(
-                                    serde_json::to_vec(&signed.payload).unwrap().len() as u64
-                                        <= request.request.max_bytes
-                                );
-                            }
-                            LOOKUP_PATH => {
-                                // Lookup authenticates the original signed payload rather
-                                // than wrapping the lookup in a SignedReadRequest.
-                                let request: wire::AuthenticatedLookup =
-                                    serde_json::from_slice(body).unwrap();
-                                let signed: SignedServiceResponse<
-                                    IntentResponse<serde_json::Value>,
-                                > = serde_json::from_slice(&response[offset..]).unwrap();
-                                oasis7::world_service::authority::verify_service_response(
-                                    path,
-                                    &oasis7::world_service::authority::request_digest(
-                                        path, &request,
-                                    )
-                                    .unwrap(),
-                                    &signed,
-                                    &signer.public_key_hex,
-                                )
-                                .unwrap();
-                                request.request.validate().unwrap();
-                                let expected = derive_correlation(
-                                    request.request.key.world.clone(),
-                                    &request.original,
-                                )
-                                .unwrap();
-                                assert_eq!(expected.key, request.request.key);
-                                signed.payload.validate(&expected).unwrap();
-                            }
-                            _ => unreachable!("only authenticated read routes are captured"),
-                        }
+                        application_hosted_unpublished_cadence::verify_captured_response(
+                            path,
+                            body,
+                            &response[offset..],
+                            &signer.public_key_hex,
+                            &worker_gate,
+                        );
                     }
                     if verified_success && path == VIEW_PATH && !successful_view_delay.is_zero() {
                         println!(
@@ -673,15 +629,22 @@ impl Fixture {
                         );
                     }
                 }
+                worker_diagnostics.record(Stage::ResponseCaptureRelay, relay_started.elapsed());
                 if path == SUBMIT_PATH
                     && gated_ack.is_none()
                     && worker_controlled.load(Ordering::SeqCst)
                 {
+                    application_hosted_unpublished_cadence::hold_original_commit(&worker_gate);
                     let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
                     let request = serde_json::from_slice(body).unwrap();
-                    let mut driver = worker_driver.lock().unwrap();
-                    let height = driver.state.last_applied_committed_height + 1;
-                    commit_request(&mut driver, height, Some(request));
+                    controlled_admission::execute(
+                        &worker_driver,
+                        &worker_root.join("store"),
+                        request,
+                        &worker_diagnostics,
+                        &worker_completion,
+                    )
+                    .expect("controlled admission must retain the original published result");
                 }
                 if capture_ack {
                     worker_gate.hold_feedback_ack_after_commit(path, &bytes);
@@ -726,6 +689,8 @@ impl Fixture {
             lookup_digests,
             outage,
             tamper_next_describe,
+            stage_diagnostics,
+            controlled_completion,
             scenario_permit,
         }
     }
@@ -1192,3 +1157,6 @@ fn real_tcp_live_writer_lock_excludes_second_writer() {
 mod application_periodic_late_completion;
 
 mod application_act_recovery;
+
+#[path = "qa_conformance/game_task.rs"]
+mod game_task_bootstrap;

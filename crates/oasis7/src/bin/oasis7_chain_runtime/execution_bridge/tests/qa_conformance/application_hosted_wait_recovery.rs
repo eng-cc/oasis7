@@ -161,7 +161,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
             std::process::exit(73);
         }
         if let Ok(guard) = shared.try_lock() {
-            summary = guard.test_canonical_provider_summary();
+            summary = guard.test_canonical_provider_diagnostic_summary();
             if let Ok(bytes) = fs::read(root.join("hosted-resumed-model.json")) {
                 let resumed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
                 completed = summary["terminal_states"]["agent-a"]["status"] == "committed"

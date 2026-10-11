@@ -8,6 +8,29 @@
 
 本文中的新组件、路由、记录和测试场景均为后续实施输入。`accepted` 只表示所属权威已受理，世界效果必须读取既有权威回执；文档合入不代表这些接口已经上线。
 
+### 已实施切片：本机签名读取与持久任务控制 bootstrap
+
+`oasis7_viewer_live --game-api-read` 在现有 `--web-bind` 端口启用普通 HTTP GET，同时保留 WebSocket；默认关闭，只允许 loopback IP 绑定。需要既有 `OASIS7_WORLD_SERVICE_*` 配置及 `agent:<id>` scope，后端仅允许 HTTPS 或 loopback IP。入口不读取世界目录，不使用 Viewer 的读私钥替调用者签名；底层 `RemoteWorldServiceClient::read_actor_view` 将设备签名原样转发，核对服务签名、请求关联、scope、commit 与 projection 一致性。服务断连、拒绝或不可信回复不返回本地缓存。
+
+- `GET /v1/game/info` 公布 `signed_read_bootstrap`、可路由资源、实际读取时检查可用性、`writes_available=false`、`schema_revision`、`openapi_url` 与实际执行的 `limits`。
+- `GET /v1/game/openapi.json` 无需主体证明，发布同版本 OpenAPI 3.1 bootstrap 合同；只列上述 discovery 与三个已实施签名读资源，不把目标 context/action/operation 宣称为可用。合同包含签名 header 的 decoded World Service schema、签名 domain、数值编码差异、错误与重试语义、实际大小/深度/并发限制；路径相对当前服务，不发布配置、公私钥或可信世界信息。
+- `GET /v1/game/worlds/{world}/agents/{agent}/observation` 返回已授权 AgentCell 的 `data`、`logical_tick` 和 committed projection version `world_binding`；这里是自身状态投影，尚不是完整首局观察。
+- 同路径 `capabilities` 只返回权威 projection 中该 Agent 的 capability catalog；实际 World Service 的 agent read 处理器调用 `canonical_agent_service_context` 填充此 context，没有 context 时为 `503 capability_unavailable`，不合成或使用旧 Provider 目录。
+- 三个读取资源使用 `X-Oasis7-World-Read-Proof` header：值为 `hex(UTF8 JSON SignedReadRequest<ReadWorldViewRequest>)`。调用者在设备端以现有 `authority::sign_read_request` codec 和 `/v1/world/view` domain 签署配置匹配的 world/scope。没有证明返回 428；重复 header/key、未知字段、篡改、错误 scope、带 token 的 query 或 Origin 均拒绝。固定历史 commit 不支持，避免旧快照代替当前权限检查。
+- header 最多 8192 bytes、整个 HTTP header 最多 16384 bytes；JSON 同时消费共享严格解析器；最多 8 个后端读取、响应最多 2 MiB。bootstrap `data` 和 `world_binding` 中整数统一为十进制字符串，顶层 API revision 保持整数。服务签名认证不代签共识最终性。
+
+这是设备签名 bootstrap 实施中间阶段；未实现 opaque token/配对、proof prepare、上下文/行动/持久 Game operation、完整任务协作、普通 Viewer/browser 授权、worker 或首局验收。正式 token 接入仍须在入口验证会话后保留此主体证明和世界授权链路。共享 `oasis7_agent_api::game` 已定义 action request、decimal u64 和操作状态 registry，但 DTO 不授予权限。对应测试为 `game_wire`、`viewer::game_read_api` 和 `world_service::client`；测试通过不表示上述未实施能力已交付。
+
+### 持久任务控制前置
+
+Game Task 创建复用既有签名 World Service submit/lookup 与 Runtime 共识执行链路；Game HTTP bootstrap 继续只开放 GET，`writes_available=false` 不表示底层 World Service 没有任务控制提交能力。创建使用 `game_task_create` 签名 domain（`WorldServicePayloadV1::GameTaskCreate` / JSON kind `game_task_create`），绑定完整世界身份、branch/reorg、Agent、owner binding/generation 和稳定 client operation ID。当前 owner 校验在提交和实际执行时分别完成，queued 请求不能沿用失效 owner 或旧世界 fence。
+
+创建 body 使用 `GameTaskCreateV1`，`api_rev=1`；`owner_generation` 与 `reorg_epoch` 使用 canonical decimal string。调用者使用 `authority::sign_read_request(GAME_TASK_CREATE_DOMAIN, request, owner_private_key)`，以 `correlation::derive_correlation(expected_world, &payload)` 构造 `SubmitIntentRequest`，经 `WorldServicePort::submit` 发送到 `/v1/world/submit`。查询使用同一原 payload 与原 RequestKey 发送到 `/v1/world/lookup`；两条原生路径返回既有签名 World Service 合同，不混用 Game action 的 actor challenge。
+
+任务控制的唯一权威是已提交的 `world_service_results` canonical receipt，沿用现有日志与快照恢复边界。没有第二套 gateway 内存任务表；相同操作标识重放复用原回执，同键不同内容发生关联冲突，同一 Agent 当前 owner/world fence 下的重复创建被拒绝，包括同块多个创建。服务返回 volatile Received 时尚不构成任务持久化或 Game pending；响应丢失后保留原签名 payload/correlation 查询，只有 committed canonical receipt 才能证明任务创建。
+
+`GET /v1/game/worlds/{world}/agents/{agent}/task-control` 通过原设备读签名返回当前 owner 的控制记录及 committed `world_binding`，没有可见任务时返回 `404 task_control_unavailable`。普通 delegate 的 Agent 观察权限不授予任务读取权限。控制记录初始 `suspended`，目标 revision 为零、executor epoch 为零且没有执行方；此记录不是完整 TaskSnapshot 或可行动 context，也不把已有 owner chat goal 当作任务目标。目标内容、执行方绑定与行动权限仍需要后续实施。
+
 ## 1. 问题、目标与非目标
 
 把“游戏向 Provider 索取决策”与“外部 Runtime 主动玩游戏”分开。后者必须有可独立调用的观察、能力、行动、任务和结果接口，而不是把旧 `/v1/provider/*` 换个名字。首期复用既有 Runtime 行动校验与持久回执，不让 Viewer、模型或 API 服务器成为新的世界写入者。

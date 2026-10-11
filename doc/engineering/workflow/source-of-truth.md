@@ -22,6 +22,8 @@ Git、PR、实际 CI 结果和评审记录承载代码交付事实。Issue 和 P
 
 本地编译优先复用少量固定路径的开发 worktree：串行任务在干净、未被其他执行者占用的开发工作区切换独立分支；并行任务才新增隔离工作区，不在 main 或主工作区修改。切换前保留未提交和未推送工作；不强制重置或替他人切换分支。固定路径复用该工作区的 Cargo target，跨工作区由 sccache 复用支持的编译结果。日常命令按受影响 crate、测试或 binary 执行，完整 launcher/playtest 和预热仅按需启动。操作及磁盘回收见 [testing-manual.md](../../../testing-manual.md)。
 
+工作区入口统一使用仓库脚本和 Git 配置：先用 `git worktree list --porcelain` 检查已有工作区、分支和使用情况；当前聊天的附件列表不能代替仓库工作区清单。确需新增时使用 `./scripts/new-task-worktree.sh <module> <task> --base <ref>`，根目录取 `git config --local --get oasis7.task-worktrees-root`，未配置时按脚本默认值解析。Agent 不用 Codex App 的 `create_worktree`、worktree fork 或 handoff 代替该入口；用户明确指定时遵从用户要求，并在首次本地编译前执行 `./scripts/cargo-dev.sh --prepare-target`。复用或外部创建的工作区也先准备 target；已有普通 target 不自动删除，保留占用中和身份不明确的资源。日常反馈使用开发 wrapper，正式验收保留 canonical 命令和参数。
+
 一个 PR 围绕一个清楚的交付目的，可以同时修改多个 crate、测试、配置和相关文档。原子修复不按包数量强行拆分；确有独立目的或独立交付价值时再拆 PR。
 
 负责人可连续完成复现、实现和局部验证，无需逐步发布计划字段或等待机械状态转换。可稳定自动复现的行为缺陷，应有能检出该缺陷的回归测试；已有测试能够检出时直接复用，覆盖不足时增加或修正。机械修改不强制增加与实现重复的测试。

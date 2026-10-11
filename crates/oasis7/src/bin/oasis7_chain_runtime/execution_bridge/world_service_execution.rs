@@ -62,6 +62,13 @@ pub(super) fn apply_intents(
         let mut candidate = world.clone();
         let mut runtime_action_id = None;
         let applied = match request.signed_payload.clone() {
+            WorldServicePayloadV1::GameTaskCreate(_) => {
+                oasis7::world_service::game_task::prepare_create(
+                    &candidate,
+                    &request,
+                    staged.iter().map(|entry: &StagedResult| &entry.result),
+                )
+            }
             WorldServicePayloadV1::GameplayJson(bytes) => {
                 gameplay::authenticated_action_with_origin(&candidate, &bytes).and_then(
                     |(action, submission)| {

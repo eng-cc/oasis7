@@ -7,6 +7,10 @@ pub(super) fn validate_output(
     drift: bool,
 ) {
     if !output.status.success() {
+        eprintln!(
+            "fixture_failure_stages={}",
+            fixture.stage_diagnostics.snapshot()
+        );
         application_wake::report_canonical_resume_failure(fixture);
     }
     assert!(
@@ -357,6 +361,8 @@ pub(super) fn run_isolated_application_mode(
         )
         .env("PRE2_DENIED_NODE_ROOT", &denied);
     let observer_stop = Arc::new(AtomicBool::new(false));
+    let pending_observer = (admission_mode == "pending-cadence")
+        .then(|| application_hosted_unpublished_cadence::observe_parent(&fixture, &app_dir));
     let observer = boundary_mode.then(|| {
         application_admission_boundaries::observe_parent(
             &fixture,
@@ -444,6 +450,12 @@ pub(super) fn run_isolated_application_mode(
     } else {
         command.output().unwrap()
     };
+    if !output.status.success() {
+        eprintln!(
+            "fixture_failure_stages={}",
+            fixture.stage_diagnostics.snapshot()
+        );
+    }
     if hosted
         && (metadata_probe
             || matches!(
@@ -803,6 +815,9 @@ pub(super) fn run_isolated_application_mode(
         println!("{}", String::from_utf8_lossy(&output.stderr));
     }
     drop(hosted_wait_clock);
+    if let Some(observer) = pending_observer {
+        observer.join().unwrap();
+    }
     observer_stop.store(true, Ordering::SeqCst);
     if let Some(observer) = observer {
         observer.join().unwrap();

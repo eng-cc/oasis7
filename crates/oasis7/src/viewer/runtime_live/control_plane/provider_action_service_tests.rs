@@ -1,6 +1,21 @@
 use super::*;
 
 #[test]
+fn canonical_provider_summary_is_stable_without_io_events() {
+    let server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .unwrap();
+    let before = server.test_canonical_provider_summary();
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    assert_eq!(server.test_canonical_provider_summary(), before);
+    assert!(before["io_lifecycle"].get("current_age_us").is_none());
+    assert!(
+        server.test_canonical_provider_diagnostic_summary()["io_lifecycle"]["current_age_us"]
+            .is_null()
+    );
+}
+
+#[test]
 fn canonical_wait_notification_without_harness_preserves_world_and_sends_no_http() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();

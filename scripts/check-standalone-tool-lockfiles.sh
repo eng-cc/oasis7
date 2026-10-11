@@ -3,6 +3,7 @@ set -euo pipefail
 
 repo_root="${OASIS7_STANDALONE_TOOL_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$repo_root"
+repo_root="$(pwd -P)"
 
 rust_baseline_selector="${OASIS7_CI_RUN_RUST_BASELINE:-true}"
 case "$rust_baseline_selector" in
@@ -35,7 +36,7 @@ root_workspace_member_manifest_set=$'\n'"$root_workspace_member_manifest_paths"$
 is_root_workspace_member_manifest() {
   local manifest="$1"
   local manifest_path
-  manifest_path="$(cd "$(dirname "$manifest")" && pwd)/$(basename "$manifest")"
+  manifest_path="$(cd "$(dirname "$manifest")" && pwd -P)/$(basename "$manifest")"
   [[ "$root_workspace_member_manifest_set" == *$'\n'"$manifest_path"$'\n'* ]]
 }
 
@@ -70,7 +71,17 @@ fi
 
 checked=0
 for manifest in "${manifests[@]}"; do
-  lockfile="$(dirname "$manifest")/Cargo.lock"
+  # A standalone workspace has one lockfile shared by its members.
+  # Ask Cargo for identity without resolving dependencies or downloading crates.
+  workspace_manifest="$(env -u RUSTC_WRAPPER cargo locate-project \
+    --manifest-path "$manifest" --workspace --message-format plain 2>/dev/null || printf '%s\n' "$repo_root/$manifest")"
+  workspace_dir="$(cd "$(dirname "$workspace_manifest")" && pwd -P)"
+  if [[ "$workspace_dir" == "$repo_root" ]]; then
+    # Unlisted nested packages are not allowed to borrow the root lockfile.
+    lockfile="$(dirname "$manifest")/Cargo.lock"
+  else
+    lockfile="${workspace_dir#"$repo_root"/}/Cargo.lock"
+  fi
   if [[ ! -f "$lockfile" ]]; then
     echo "error: standalone tool lockfile missing: $lockfile" >&2
     exit 1

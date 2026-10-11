@@ -60,167 +60,199 @@ impl PosNodeEngine {
             incoming_actions_already_reserved,
         )?;
 
+        let mut continuation = with_execution_hook(&mut execution_hook, |hook| match hook {
+            Some(hook) if hook.guarded_local_execution() => hook
+                .pending_local_continuation()
+                .map_err(|reason| NodeError::Execution { reason }),
+            _ => Ok(None),
+        })?;
+        if let Some(saved) = continuation.as_ref()
+            && self.committed_height == saved.context.height
+            && self.last_execution_height == saved.context.height
+            && self.last_committed_block_hash.as_deref()
+                == Some(saved.context.node_block_hash.as_str())
+        {
+            with_execution_hook(&mut execution_hook, |hook| {
+                hook.ok_or_else(|| NodeError::Execution {
+                    reason: "guarded hook unavailable".into(),
+                })?
+                .complete_local_continuation(&saved.context)
+                .map_err(|reason| NodeError::Execution { reason })
+            })?;
+            continuation = None;
+        }
+        let decision_time = continuation
+            .as_ref()
+            .map_or(now_ms, |saved| saved.context.committed_at_unix_ms);
+        let resuming_local = continuation.is_some();
         let observed_tick = self.observe_wall_clock_tick(now_ms)?;
         let current_slot = observed_tick.slot;
-        if let Some(endpoint) = gossip.as_ref() {
-            self.seed_reverse_gossip_path(endpoint, node_id, world_id, now_ms)?;
-        }
-        if let Some(endpoint) = gossip.as_ref() {
-            self.ingest_peer_messages(
-                endpoint,
-                node_id,
-                world_id,
-                replication.as_deref_mut(),
-                current_slot,
-            )?;
-        }
-        if let Some(endpoint) = consensus_network.as_ref() {
-            self.ingest_consensus_network_messages(
-                endpoint,
-                node_id,
-                world_id,
-                current_slot,
-                replication.as_deref_mut(),
-            )?;
-        }
-        if let Some(endpoint) = replication_network.as_ref() {
-            let record_peer_heads_from_gap_sync = gossip.is_some() || consensus_network.is_some();
-            match (&mut execution_hook, &mut progress_callback) {
-                (Some(hook), Some(callback)) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        Some(&mut **hook),
-                        Some(&mut **callback),
-                    )?;
-                    self.sync_missing_replication_commits_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        Some(&mut **hook),
-                        Some(&mut **callback),
-                        record_peer_heads_from_gap_sync,
-                    )?;
-                }
-                (Some(hook), None) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        Some(&mut **hook),
-                        None,
-                    )?;
-                    self.sync_missing_replication_commits_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        Some(&mut **hook),
-                        None,
-                        record_peer_heads_from_gap_sync,
-                    )?;
-                }
-                (None, Some(callback)) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        None,
-                        Some(&mut **callback),
-                    )?;
-                    self.sync_missing_replication_commits_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        None,
-                        Some(&mut **callback),
-                        record_peer_heads_from_gap_sync,
-                    )?;
-                }
-                (None, None) => {
-                    self.ingest_network_replications_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        None,
-                        None,
-                    )?;
-                    self.sync_missing_replication_commits_with_progress(
-                        endpoint,
-                        node_id,
-                        world_id,
-                        replication.as_deref_mut(),
-                        None,
-                        None,
-                        record_peer_heads_from_gap_sync,
-                    )?;
-                }
+        let decision = if let Some(saved) = continuation.as_ref() {
+            self.restore_guarded_local_decision(saved, node_id, world_id)?
+        } else {
+            if let Some(endpoint) = gossip.as_ref() {
+                self.seed_reverse_gossip_path(endpoint, node_id, world_id, now_ms)?;
             }
-        }
-        self.maybe_publish_local_checkpoint_lineage_vote(
-            consensus_network.as_deref(),
-            gossip,
-            node_id,
-            world_id,
-            replication.as_deref_mut(),
-        )?;
-        if let Some(callback) = progress_callback.as_deref_mut() {
-            let observed = self.idle_pending_decision()?;
-            callback(self.snapshot_from_decision(&observed))?;
-        }
-        self.rebroadcast_replicated_commit_head(
-            consensus_network.as_deref(),
-            gossip,
-            node_id,
-            world_id,
-            now_ms,
-            replication.as_deref(),
-        )?;
-        let hold_for_replication_probe = if let Some(endpoint) = replication_network.as_ref() {
-            with_execution_hook(&mut execution_hook, |hook| {
-                self.maybe_hold_proposal_for_replication_successor_probe(
+            if let Some(endpoint) = gossip.as_ref() {
+                self.ingest_peer_messages(
                     endpoint,
                     node_id,
                     world_id,
-                    now_ms,
                     replication.as_deref_mut(),
-                    hook,
-                )
-            })?
-        } else {
-            false
+                    current_slot,
+                )?;
+            }
+            if let Some(endpoint) = consensus_network.as_ref() {
+                self.ingest_consensus_network_messages(
+                    endpoint,
+                    node_id,
+                    world_id,
+                    current_slot,
+                    replication.as_deref_mut(),
+                )?;
+            }
+            if let Some(endpoint) = replication_network.as_ref() {
+                let record_peer_heads_from_gap_sync =
+                    gossip.is_some() || consensus_network.is_some();
+                match (&mut execution_hook, &mut progress_callback) {
+                    (Some(hook), Some(callback)) => {
+                        self.ingest_network_replications_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            Some(&mut **hook),
+                            Some(&mut **callback),
+                        )?;
+                        self.sync_missing_replication_commits_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            Some(&mut **hook),
+                            Some(&mut **callback),
+                            record_peer_heads_from_gap_sync,
+                        )?;
+                    }
+                    (Some(hook), None) => {
+                        self.ingest_network_replications_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            Some(&mut **hook),
+                            None,
+                        )?;
+                        self.sync_missing_replication_commits_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            Some(&mut **hook),
+                            None,
+                            record_peer_heads_from_gap_sync,
+                        )?;
+                    }
+                    (None, Some(callback)) => {
+                        self.ingest_network_replications_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            None,
+                            Some(&mut **callback),
+                        )?;
+                        self.sync_missing_replication_commits_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            None,
+                            Some(&mut **callback),
+                            record_peer_heads_from_gap_sync,
+                        )?;
+                    }
+                    (None, None) => {
+                        self.ingest_network_replications_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            None,
+                            None,
+                        )?;
+                        self.sync_missing_replication_commits_with_progress(
+                            endpoint,
+                            node_id,
+                            world_id,
+                            replication.as_deref_mut(),
+                            None,
+                            None,
+                            record_peer_heads_from_gap_sync,
+                        )?;
+                    }
+                }
+            }
+            self.maybe_publish_local_checkpoint_lineage_vote(
+                consensus_network.as_deref(),
+                gossip,
+                node_id,
+                world_id,
+                replication.as_deref_mut(),
+            )?;
+            if let Some(callback) = progress_callback.as_deref_mut() {
+                let observed = self.idle_pending_decision()?;
+                callback(self.snapshot_from_decision(&observed))?;
+            }
+            self.rebroadcast_replicated_commit_head(
+                consensus_network.as_deref(),
+                gossip,
+                node_id,
+                world_id,
+                now_ms,
+                replication.as_deref(),
+            )?;
+            let hold_for_replication_probe = if let Some(endpoint) = replication_network.as_ref() {
+                with_execution_hook(&mut execution_hook, |hook| {
+                    self.maybe_hold_proposal_for_replication_successor_probe(
+                        endpoint,
+                        node_id,
+                        world_id,
+                        now_ms,
+                        replication.as_deref_mut(),
+                        hook,
+                    )
+                })?
+            } else {
+                false
+            };
+            let recovered_from_skipped_slots = self.align_next_slot_to_wall_clock(current_slot)?;
+            let consensus_participation_safe = self.consensus_participation_safe();
+
+            let mut decision = if self.pending.is_some() {
+                self.advance_pending_attestations(now_ms)?
+            } else if hold_for_replication_probe
+                || !consensus_participation_safe
+                || !self.allow_local_proposals
+            {
+                self.idle_pending_decision()?
+            } else if self.next_slot <= current_slot
+                && (observed_tick.tick_phase == self.proposal_tick_phase
+                    || recovered_from_skipped_slots)
+            {
+                self.propose_next_head(node_id, world_id, now_ms)?
+            } else {
+                self.idle_pending_decision()?
+            };
+
+            if matches!(decision.status, PosConsensusStatus::Pending) && self.pending.is_some() {
+                decision = self.advance_pending_attestations(now_ms)?;
+            }
+
+            decision
         };
-        let recovered_from_skipped_slots = self.align_next_slot_to_wall_clock(current_slot)?;
         let consensus_participation_safe = self.consensus_participation_safe();
-
-        let mut decision = if self.pending.is_some() {
-            self.advance_pending_attestations(now_ms)?
-        } else if hold_for_replication_probe
-            || !consensus_participation_safe
-            || !self.allow_local_proposals
-        {
-            self.idle_pending_decision()?
-        } else if self.next_slot <= current_slot
-            && (observed_tick.tick_phase == self.proposal_tick_phase
-                || recovered_from_skipped_slots)
-        {
-            self.propose_next_head(node_id, world_id, now_ms)?
-        } else {
-            self.idle_pending_decision()?
-        };
-
-        if matches!(decision.status, PosConsensusStatus::Pending) && self.pending.is_some() {
-            decision = self.advance_pending_attestations(now_ms)?;
-        }
-
-        if !consensus_participation_safe {
+        if resuming_local || !consensus_participation_safe {
             // Continue ingesting/repairing state, but do not advertise local
             // consensus votes while this node is outside the verified sync boundary.
         } else if let Some(endpoint) = consensus_network.as_ref() {
@@ -270,9 +302,15 @@ impl PosNodeEngine {
         let previous_execution_height = self.last_execution_height;
         let previous_execution_block_hash = self.last_execution_block_hash.clone();
         let previous_execution_state_root = self.last_execution_state_root.clone();
-        with_execution_hook(&mut execution_hook, |hook| {
-            self.apply_committed_execution(node_id, world_id, now_ms, &decision, hook)
+        let execution_complete = with_execution_hook(&mut execution_hook, |hook| {
+            self.apply_committed_execution(node_id, world_id, decision_time, &decision, hook)
         })?;
+        if !execution_complete {
+            return Ok(NodeEngineTickResult {
+                consensus_snapshot: self.snapshot_from_decision(&decision),
+                committed_action_batch: None,
+            });
+        }
         let local_execution_applied = matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > previous_execution_height
             && self.last_execution_height >= decision.height;
@@ -282,7 +320,7 @@ impl PosNodeEngine {
                 replication_network.as_deref(),
                 node_id,
                 world_id,
-                now_ms,
+                decision_time,
                 &decision,
                 replication.as_deref_mut(),
                 hook,
@@ -323,7 +361,28 @@ impl PosNodeEngine {
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
         {
-            self.last_committed_at_ms = Some(now_ms);
+            self.last_committed_at_ms = Some(decision_time);
+            with_execution_hook(&mut execution_hook, |hook| {
+                if let Some(hook) = hook
+                    && hook.guarded_local_execution()
+                {
+                    let context = NodeExecutionCommitContext {
+                        world_id: world_id.into(),
+                        node_id: node_id.into(),
+                        proposer_id: decision.proposer_id.clone(),
+                        height: decision.height,
+                        slot: decision.slot,
+                        epoch: decision.epoch,
+                        node_block_hash: decision.block_hash.clone(),
+                        action_root: decision.action_root.clone(),
+                        committed_actions: decision.committed_actions.clone(),
+                        committed_at_unix_ms: decision_time,
+                    };
+                    hook.complete_local_continuation(&context)
+                        .map_err(|reason| NodeError::Execution { reason })?;
+                }
+                Ok(())
+            })?;
         }
         if let Some(endpoint) = consensus_network.as_ref() {
             self.broadcast_local_commit_network(endpoint, node_id, world_id, now_ms, &decision)?;
@@ -359,13 +418,7 @@ impl PosNodeEngine {
         }
         if let Some(endpoint) = replication_network.as_ref() {
             with_execution_hook(&mut execution_hook, |hook| {
-                self.ingest_network_replications(
-                    endpoint,
-                    node_id,
-                    world_id,
-                    replication,
-                    hook,
-                )
+                self.ingest_network_replications(endpoint, node_id, world_id, replication, hook)
             })?;
         }
         if local_execution_applied
@@ -401,7 +454,7 @@ impl PosNodeEngine {
                 epoch: decision.epoch,
                 block_hash: decision.block_hash.clone(),
                 action_root: decision.action_root.clone(),
-                committed_at_unix_ms: now_ms,
+                committed_at_unix_ms: decision_time,
                 actions: decision.committed_actions.clone(),
             })
         } else {
@@ -462,6 +515,15 @@ impl PosNodeEngine {
         execution_hook: Option<&mut (dyn NodeExecutionHook + '_)>,
         err: &NodeError,
     ) -> Result<(), NodeError> {
+        // A guarded Applied result already means independently verified dual
+        // durability. Local dissemination failure cannot revoke that history.
+        // Keep the original continuation and qualified execution for retry.
+        if execution_hook
+            .as_ref()
+            .is_some_and(|hook| hook.guarded_local_execution())
+        {
+            return Ok(());
+        }
         if decision_height <= previous_execution_height {
             return Ok(());
         }

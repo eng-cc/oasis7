@@ -52,7 +52,16 @@ struct WorkerOutcome {
 }
 
 fn run() -> Result<(), CliError> {
-    let mut args = std::env::args().skip(1);
+    let all_args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(result) = oasis7_local_signer::file_cli::dispatch(&all_args) {
+        return print_json(&result.map_err(CliError::signer)?);
+    }
+    if all_args.as_slice() == ["--help"] {
+        return print_json(
+            &serde_json::json!({"usage":["doctor", "prepare|submit|inspect --job-id ID", "file-payload --context ABSOLUTE --expected-context-sha256 SHA256 --file ABSOLUTE --expected-file-sha256 SHA256 --output ABSOLUTE"], "file_payload":"No worker or installation access. Output is create-only in caller-owned 0700 directory; verify signatures over the exact envelope, not raw file bytes."}),
+        );
+    }
+    let mut args = all_args.into_iter();
     let command = args
         .next()
         .ok_or_else(|| CliError::new("INVALID_INPUT", 2))?;
