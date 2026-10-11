@@ -35,6 +35,11 @@ records. Production-only first output does not require delivery or demand progre
 Options:
   --tier <required|live>       Validation tier (default: required)
   --out-dir <path>             Artifact root (default: output/playwright/gameplay-attraction-automation)
+  --completion-profile <production_and_delivery|production_only>
+                              Fixture completion type (default: writer default)
+  --candidate <identity>      Caller-provided candidate note; not verified authority
+  --fixture-samples-json <path> JSON array of caller-provided fixture snapshots
+  --human-observations-json <path> JSON array of caller-provided human records
   --skip-bevy                  Skip Bevy visual probe and mark Bevy-only visual checks as unverified
   --skip-runtime-unit          Skip Rust runtime unit regressions and mark runtime-only checks as unverified
   --startup-timeout <secs>     Passed to live stack scripts (default: 240)
@@ -53,6 +58,10 @@ skip_bevy=0
 skip_runtime_unit=0
 startup_timeout_secs=240
 launcher_args=()
+completion_profile=""
+candidate=""
+fixture_samples_json=""
+human_observations_json=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -62,6 +71,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     --out-dir)
       out_root="${2:-}"
+      shift 2
+      ;;
+    --completion-profile|--candidate|--fixture-samples-json|--human-observations-json)
+      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] || { echo "error: $1 requires a value" >&2; exit 2; }
+      case "$1" in
+        --completion-profile) completion_profile=$2 ;;
+        --candidate) candidate=$2 ;;
+        --fixture-samples-json) fixture_samples_json=$2 ;;
+        --human-observations-json) human_observations_json=$2 ;;
+      esac
       shift 2
       ;;
     --skip-bevy)
@@ -97,8 +116,6 @@ done
   exit 2
 }
 
-viewer_dependency_preflight "$repo_root" test
-
 stamp=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
 run_id="task-game-076-${tier}-${stamp}"
 out_dir="$out_root/$run_id"
@@ -107,6 +124,42 @@ summary_json="$out_dir/gameplay-attraction-automation-summary.json"
 summary_md="$out_dir/gameplay-attraction-automation-summary.md"
 summary_input="$out_dir/gameplay-attraction-automation-input.json"
 mkdir -p "$commands_dir"
+
+# Snapshot supplied report inputs before any gate; never infer human/live evidence.
+python3 - "$summary_input" "$completion_profile" "$candidate" "$fixture_samples_json" "$human_observations_json" <<'PYINPUT'
+import json
+import sys
+from pathlib import Path
+
+output, profile, candidate, samples, observations = sys.argv[1:]
+inputs = {}
+if profile:
+    if profile not in ("production_and_delivery", "production_only"):
+        raise SystemExit("error: --completion-profile must be production_and_delivery or production_only")
+    inputs["completionProfile"] = profile
+if candidate:
+    if not candidate.strip():
+        raise SystemExit("error: --candidate must contain a non-whitespace identity note")
+    inputs["candidate"] = candidate
+for option, path, field in (
+    ("--fixture-samples-json", samples, "fixtureSamples"),
+    ("--human-observations-json", observations, "humanObservations"),
+):
+    if not path:
+        continue
+    try:
+        def reject_non_json_constant(_value):
+            raise ValueError("non-JSON numeric constant")
+        value = json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=reject_non_json_constant)
+    except (OSError, ValueError):
+        raise SystemExit(f"error: {option} must name a readable valid JSON file")
+    if not isinstance(value, list) or any(not isinstance(record, dict) for record in value):
+        raise SystemExit(f"error: {option} must contain a JSON array of objects")
+    inputs[field] = value
+Path(output).write_text(json.dumps(inputs, indent=2) + "\n", encoding="utf-8")
+PYINPUT
+
+viewer_dependency_preflight "$repo_root" test
 
 COMMAND_KEYS=()
 
@@ -366,14 +419,16 @@ for key in keys:
     else:
         status = "unknown"
     commands[key] = {"status": status, "log": str(log)}
-summary_input.write_text(json.dumps({
+inputs = json.loads(summary_input.read_text(encoding="utf-8"))
+inputs.update({
     "tier": tier,
     "overallStatus": overall_status,
     "outDir": str(out_dir),
     "commands": commands,
     "skipBevy": skip_bevy,
     "skipRuntimeUnit": skip_runtime_unit,
-}, indent=2) + "\n", encoding="utf-8")
+})
+summary_input.write_text(json.dumps(inputs, indent=2) + "\n", encoding="utf-8")
 PY
 
 node crates/oasis7_viewer/scripts/write-gameplay-attraction-automation-summary.mjs \

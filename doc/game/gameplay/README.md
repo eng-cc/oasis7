@@ -57,6 +57,10 @@
   - `TASK-GAME-076` 沿用 `scripts/verify-gameplay-attraction-automation.sh` 的 required/live 入口：fixture 卡片只核验体验结构，live 命令日志只证明对应候选的操作链，真人理解、有效决策与自发回访分别由真人记录判断。操作量、动作族、内容量、时长及等待比例保留为诊断目标，不能作为通用最低通关量；blocked 且无恢复仍阻断结构通过。
   - 汇总中的 `meaningful_decision_count` 标明快照选择机会代理计数；真人决策以 participant/decision（decision_id 跨会话稳定，新的实际决策使用新 ID） 去重并保留选择及后果。没有真人记录时保持未验证。`production_only` 首产物不要求交付，完整交付样例继续单独检查 local demand 变化；首次实际生产结算、稳定能力和交付分别验收。
 
+报告可使用 `--completion-profile production_only`（默认 `production_and_delivery`）、`--candidate '<候选身份注记>'`、`--fixture-samples-json '<快照数组.json>'` 和 `--human-observations-json '<观察记录数组.json>'`。两个文件必须是有效 JSON 对象数组，路径支持空格；输入在运行验证前读取并保存到报告 input，错误输入不会启动验证 gates。快照对象沿用 writer 的 fixture schema；真人记录沿用 `participant_id`、`session_id` 及 `observation`/`outcome`/`choice`，具体有效决策还需 `decision_id`、`choice`、`consequence`。不完整对象继续由 writer 排除并计数。
+
+`--candidate` 是调用者提供的字面注记，不验证世界、提交或 authority。提供 fixture、候选身份或真人记录不会把 required tier 升为 live，也不证明正式运行、真人验收或回访；未提供记录仍保持未验证。
+
 ### 3. Agency、间接控制与物理尺度
 - 首读入口:
   - `gameplay-indirect-control-agency-contract.prd.md`
