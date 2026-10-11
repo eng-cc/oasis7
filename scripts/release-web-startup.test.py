@@ -7,6 +7,8 @@ import tempfile
 import json
 import os
 import shutil
+import http.server
+import threading
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -92,12 +94,15 @@ class StartupTests(unittest.TestCase):
     def test_explicit_artifact_directory_is_preserved(self):
         self.check_primary_artifact_build(custom=True)
 
-    def check_primary_artifact_build(self, custom):
+    def test_canonical_index_alias_preserves_built_visual_test_bundle(self):
+        self.check_primary_artifact_build(custom=False, succeed=True)
+
+    def check_primary_artifact_build(self, custom, succeed=False):
         with tempfile.TemporaryDirectory() as directory:
             repo = pathlib.Path(directory)
             scripts = repo / 'scripts'
             scripts.mkdir()
-            for name in ('viewer-primary-web-entry-regression.sh', 'release-web-fixture-lib.sh'):
+            for name in ('viewer-primary-web-entry-regression.sh', 'release-web-fixture-lib.sh', 'viewer-web-dist-contract.sh'):
                 shutil.copyfile(ROOT / 'scripts' / name, scripts / name)
             (scripts / 'agent-browser-lib.sh').write_text('ab_require() { :; }\nab_cmd() { :; }\nresolve_viewer_static_dir_for_web_closure() { printf "%s\\n" "$2"; }\n')
             (scripts / 'cargo-dev-lib.sh').write_text('oasis7_cargo_dev() { echo cargo >> "$TEST_TRACE_PATH"; return 42; }\n')
@@ -110,6 +115,8 @@ class StartupTests(unittest.TestCase):
             bin_dir.mkdir()
             npm = bin_dir / 'npm'
             npm.write_text('#!/bin/sh\necho "npm $*" >> "$TEST_TRACE_PATH"\necho "controlled real-builder command failure" >&2\nexit 42\n')
+            if succeed:
+                npm.write_text('#!/bin/sh\necho "npm $*" >> "$TEST_TRACE_PATH"\nmkdir -p "$FAKE_VIEWER_OUTPUT"\nprintf "canonical HTML" > "$FAKE_VIEWER_OUTPUT/viewer.html"\nprintf "compiled visual-test JS" > "$FAKE_VIEWER_OUTPUT/viewer.js"\n')
             npm.chmod(0o700)
             trace = repo / 'trace'
             output = repo / 'evidence'
@@ -118,7 +125,7 @@ class StartupTests(unittest.TestCase):
                 artifact = repo / 'caller-artifacts'
                 artifact.mkdir()
                 command += ['--viewer-static-dir', str(artifact)]
-            env = dict(os.environ, TEST_TRACE_PATH=str(trace), PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])
+            env = dict(os.environ, TEST_TRACE_PATH=str(trace), FAKE_VIEWER_OUTPUT=str(repo / 'crates/oasis7_viewer/.viewer-test-dist'), PATH=str(bin_dir) + os.pathsep + os.environ['PATH'])
             result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=8)
             self.assertNotEqual(result.returncode, 0)
             commands = trace.read_text().splitlines()
@@ -127,9 +134,39 @@ class StartupTests(unittest.TestCase):
             else:
                 self.assertEqual(commands[:2], ['preflight', 'ensure'])
                 self.assertIn('run build:viewer:visual-test', commands[2])
-                self.assertNotIn('cargo', commands, 'artifact build failure reached runtime prebuild/start')
-                self.assertIn('visual-test artifact build failed', result.stderr)
+                if succeed:
+                    self.assertEqual(commands[-1], 'cargo')
+                    output_dist = repo / 'crates/oasis7_viewer/.viewer-test-dist'
+                    self.assertEqual((output_dist / 'index.html').read_bytes(), (output_dist / 'viewer.html').read_bytes())
+                    self.assertEqual((output_dist / 'viewer.js').read_text(), 'compiled visual-test JS')
+                else:
+                    self.assertNotIn('cargo', commands, 'artifact build failure reached runtime prebuild/start')
+                    self.assertIn('visual-test artifact build failed', result.stderr)
             self.assertEqual(list(output.glob('*/signed-world-service-fixture.log')), [])
+
+    def test_owned_http_404_interrupts_readiness_deadline(self):
+        class NotFound(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(404)
+                self.end_headers()
+            def log_message(self, *args):
+                pass
+        server = http.server.HTTPServer(('127.0.0.1', 0), NotFound)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            source = (ROOT / 'scripts/viewer-primary-web-entry-regression.sh').read_text()
+            functions = source[source.index('wait_for_http() {'):source.index('print_launcher_failure_context() {')]
+            script = f'source {ROOT / "scripts/release-web-fixture-lib.sh"};\n' + functions + '\nwait_for_http "$1" 5'
+            started = time.monotonic()
+            result = subprocess.run(['bash', '-c', script, 'bash', f'http://127.0.0.1:{server.server_port}/'], capture_output=True, text=True, timeout=8)
+            self.assertLess(time.monotonic() - started, 3)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('HTTP 404', result.stderr)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
 
 if __name__ == "__main__":
     unittest.main()

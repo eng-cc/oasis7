@@ -24,7 +24,15 @@ release_web_fixture_build_viewer() {
   if ! (
     viewer_dependency_preflight "$repo_root" build || exit 1
     wasm_bindgen_bin=$("$repo_root/scripts/ensure-wasm-bindgen-cli.sh" --print-bin) || exit 1
-    WASM_BINDGEN_BIN="$wasm_bindgen_bin" npm --prefix "$repo_root/crates/oasis7_viewer" run build:viewer:visual-test
+    WASM_BINDGEN_BIN="$wasm_bindgen_bin" npm --prefix "$repo_root/crates/oasis7_viewer" run build:viewer:visual-test || exit 1
+    source "$repo_root/scripts/viewer-web-dist-contract.sh"
+    local test_dist="$repo_root/crates/oasis7_viewer/.viewer-test-dist" source_path destination_path
+    while read -r source_path destination_path; do
+      if [[ "$destination_path" == "index.html" ]]; then
+        cp "$test_dist/$source_path" "$test_dist/$destination_path" || exit 1
+      fi
+    done < <(viewer_web_dist_contract_pairs)
+    [[ -f "$test_dist/index.html" ]] || exit 1
   ) >"$log" 2>&1; then
     echo 'error: release Web visual-test artifact build failed' >&2
     tail -n 120 "$log" >&2

@@ -78,9 +78,15 @@ wait_for_http() {
   local step
   for step in $(seq 1 "$timeout_secs"); do
     release_web_check_startup || return 1
-    if curl -fsS "$url" >/dev/null 2>&1; then
-      return 0
-    fi
+    local status
+    status=$(curl --max-time 3 --silent --output /dev/null --write-out '%{http_code}' "$url") || status=000
+    case "$status" in
+      2*|3*) return 0 ;;
+      404)
+        echo "error: owned viewer entry returned HTTP 404: $url" >&2
+        return 1
+        ;;
+    esac
     sleep 1
   done
   return 1
