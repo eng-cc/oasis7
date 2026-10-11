@@ -1,17 +1,32 @@
-# 开发 Agent 派出试玩 subagent：自测手册
+# 开发 Agent 自测操作手册：独立试玩与修复闭环
 
 - Owner role：qa_engineer；固定设计基线：`eng-cc/oasis7@e524debf4584e5e6f2ae5baf9d877e78c9d7bf7d`。
 - 合同：[自主试玩系统设计](../governance/agent-runtime-self-playtest.design.md)；策略：[testing PRD](../prd.md)、[总测试手册](../../../testing-manual.md)。
-- 使用入口：[oasis7-dev-playtest Skill](../../../skills/oasis7-dev-playtest/SKILL.md)；产品玩法仍使用实际交付的玩家 Skill。
+- 本手册是开发自测的唯一操作入口；配套格式：[试玩任务模板](../templates/agent-runtime-playtester-task.template.md)、[报告模板](../templates/agent-runtime-playtest-report.template.md)。试玩 subagent 仍使用实际交付的正式游戏 Skill。
 
 这是实施后执行的手册，不是一次已运行记录。当前 PR 不增加 CLI runner、启动游戏或执行付费模型；缺失玩家 Skill、API、隔离环境、真实子任务/GUI 能力或授权时，应保存 blocked 及原因，不伪造测试结果。
+
+## 职责、阅读范围与执行前确认
+
+开发主 Agent 先读仓库 `AGENTS.md`、[开发流程规范](../../engineering/workflow/source-of-truth.md)、总测试手册和本手册，再结合当前任务、diff、候选及已有授权选择测试。不重复询问已明确的信息，不因读取本手册新增审批或必跑模型门禁；只读规划和预检可以先做，实际模型、服务及测试世界操作仍须处于既有环境、账户、资源和预算授权内。
+
+| 使用者 | 阅读与职责 | 不应获得的内容或权限 |
+| --- | --- | --- |
+| 开发主 Agent / setup | 本手册和系统设计；固定候选、准备环境、派工、核验、修复与清理 | 不能用内部解法帮助黑盒试玩过关后仍称无提示通过 |
+| 试玩 subagent | 本候选正式游戏 Skill、公开帮助、已填写的最小试玩任务及报告字段 | 不传整份开发手册、父对话、源码/diff、隐藏判据、owner/model secrets；不批准自己或递归派工 |
+| owner/observer（按需） | 独立的有界观察/协作任务、测试账号及适用 Web/native 操作说明 | 不与 executor 共用 owner 凭据，不用 action API 代替图形界面操作 |
+
+默认一名试玩者；UI/协作需要时至多增加一名独立 owner/observer。全部 subagent、受测 Runtime、视觉评估和重试共享总许可；最多两轮修复后试玩，同类阻断反复出现、预算/deadline 到限或权限/操作结果未知时停止新增调用并收口。不得自动充值、提高预算或无限重跑。
+
+`attached_codex_subagent` 仅在候选已验证该 profile 时由子会话自身担任游戏执行方，不再无条件套一层付费 Codex。测试 `supervised_runtime` 时实际启动获准的 OpenClaw/Codex worker/profile，试玩子任务作为玩家/观察者且不接管 executor；不能用 Codex 模仿 OpenClaw。一个游戏 Agent 只有一个当前执行方。
 
 ## 最小使用方式
 
 在开发 Codex 中显式给出：
 
 ```text
-读取 skills/oasis7-dev-playtest/SKILL.md，为当前修改做一轮有界自测。
+按 doc/testing/manual/agent-runtime-self-playtest.manual.md，
+为当前修改做一轮有界自测。
 先跑适用的普通回归；使用已批准的私有测试环境和本轮预算。
 创建一个独立试玩 subagent，让它读取本候选真正交付的玩家 Skill，
 自行启动/接入、规划和玩游戏，不读实现代码或使用调试世界写入。
@@ -25,15 +40,15 @@
 ## 执行顺序
 
 1. **范围**：读 diff 和相关 AC，选用下面的最小场景；沿用当前开发任务/PR 的授权，不创建通用流程登记。选择 `attached_codex_subagent` 或 `supervised_runtime`，记录真正受测 Runtime，避免双重启动 Codex。
-2. **便宜前置**：按现有 `testing-manual.md` 执行受影响包的单元/合同测试；不跳过普通 CI，也不为了文档变更跑模型。候选准备可用当前仓库真实的 bundle/playtest 入口，必须先读其说明和实现，确认可指向本轮私有 fixture。
+2. **便宜前置**：按现有 `testing-manual.md` 执行受影响包的单元/合同测试；不跳过普通 CI，也不为了文档变更跑模型。候选准备可用当前仓库真实的 bundle/playtest 入口，必须先读其说明和实现，确认可指向本轮私有 fixture。不发明通用 spawn 命令或未实现的 autonomous runner 参数。
 3. **固定候选和许可**：保留 source HEAD、未提交 patch hash（有则必记）、实际 build/Skill hash、API/driver 版本、世界信任/branch/初始条件、执行模式、总预算和 deadline；报告不能只写 main/latest。测试期间源码或 build 改变则结束当前尝试并新建 attempt。
-4. **预检与环境**：确认玩家 Skill 是被测版本交付的同一份；旧 `site/skills/oasis7.md` 不自动替代新路径。验证真实 API/权限、world identity、独占进程/端口/存储、有效 executor 和最小测试账号；测试目录不是生产目录的 symlink。所有模型、GUI 与下游工具均已获准。
+4. **预检与环境**：确认玩家 Skill 是被测版本交付的同一份；旧 `site/skills/oasis7.md` 不自动替代新路径。验证真实 API/权限、world identity、独占进程/端口/存储、有效 executor 和最小测试账号；测试目录不是生产目录的 symlink。所有模型、GUI 与下游工具均已获准。localhost 可能转发远程生产，须验证实际世界身份；不复用用户日常世界，先记录本轮自有进程/会话。
 5. **启动场景**：`cold_entry` 由 subagent 按玩家 Skill 使用受限、预批准入口自己启动/连接；`prepared_world` 由主 Agent/setup 启动再交接。记录由谁完成每个步骤及 ready 的依据。准备好的世界不得代签冷启动体验。
-6. **真实派工**：使用宿主实际派工工具创建独立子会话；按[试玩任务模板](../../../skills/oasis7-dev-playtest/references/playtester-task.md)发送最小输入，不附开发对话、答案或服务日志。验证子会话实际读取了指定 Skill。仅有独立聊天但仍能读源码时，报告隔离降级。
+6. **真实派工**：使用宿主实际派工工具创建独立子会话；按[试玩任务模板](../templates/agent-runtime-playtester-task.template.md)发送最小输入，不附开发对话、答案或服务日志。验证子会话实际读取了指定 Skill。源码隔离应由环境权限实现；仅靠指令或仍能读源码时，记录 `isolation=instruction_only/source_visible`，不声称 source-blind。
 7. **游玩和观察**：子任务只走合法 Skill/API。主 Agent 不边看边给通关提示；需要提示时标为 assisted。UI 场景用独立 owner/observer 身份；故障注入由 setup 执行，不能赋予玩家原始存储写权限。
 8. **验真**：核对原 operation、authority binding、生产/授权回执和初始/最终状态；回查 unknown/recovery_required。不信任模型的成功标签。收集已知、估计与未知费用，汇总所有子任务和受测 Runtime 的消耗。
-9. **反馈与修复**：按[报告合同](../../../skills/oasis7-dev-playtest/references/report-format.md)分诊。主 Agent 复现确认缺陷，添加能在旧版本检出问题的最小普通回归，修复后新 build、新 attempt、必要时新试玩子会话；保持原失败。不能为绿色结论改判据或无限重跑。
-10. **退出**：停止新调用、撤销测试委托、核对 pending、关闭自有 worker/browser/subagent、核查清理。保留脱敏 artifact，不提交私钥/模型原始思维/用户消息到 PR。最后报告执行了什么、发现什么、修了什么和哪些未证明。
+9. **反馈与修复**：按[报告模板](../templates/agent-runtime-playtest-report.template.md)分诊。主 Agent 复现确认缺陷，添加能在旧版本检出问题的最小普通回归，修复后新 build、新 attempt、必要时新试玩子会话；保持原失败。不能为绿色结论改判据或无限重跑。
+10. **退出**：停止新调用、撤销测试委托、核对 pending、关闭自有 worker/browser/subagent、核查清理。保留脱敏 artifact，不提交私钥/模型原始思维/用户消息到 PR。关闭子会话不代表 worker 已退出，须实际核对；不杀其他进程、删除未知工作区或改变线上世界，清理失败明确报告。最后报告执行了什么、发现什么、修了什么和哪些未证明。没有真实 subagent/执行就如实说明；不自动建 Issue、push、合入或发布，仅在原任务已授权时由主 Agent 执行。
 
 ## 按改动选场景
 

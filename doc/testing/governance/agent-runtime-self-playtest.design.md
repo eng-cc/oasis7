@@ -1,16 +1,18 @@
 # 外部 Runtime 自主试玩与开发自测闭环
 
-- 状态：target execution contract；本次交付设计、手册和显式调用的编排 Skill，不宣称自动 runner 或真实试玩已完成。
+- 状态：target execution contract；本次交付系统设计、操作手册和可复用测试模板，不宣称自动 runner 或真实试玩已完成。
 - Owner role：qa_engineer；协作：agent_engineer、runtime_engineer、viewer_engineer；日期：2026-10-10。
 - 固定审读基线：`eng-cc/oasis7@e524debf4584e5e6f2ae5baf9d877e78c9d7bf7d`；产品 #4493、系统设计 #4521 已合入。
 - 上游：[testing PRD](../prd.md#1-executive-summary)、[外部 Runtime 产品](../../product/agents-world-simulation/external-agent-runtime-play.prd.md)、[协作产品](../../product/agents-world-simulation/player-runtime-collaboration.prd.md)。
-- 入口：[testing/governance](README.md)；操作：[自测手册](../manual/agent-runtime-self-playtest.manual.md)；方法：[开发自测 Skill](../../../skills/oasis7-dev-playtest/SKILL.md)。
+- 入口：[testing/governance](README.md)；唯一操作入口：[自测手册](../manual/agent-runtime-self-playtest.manual.md)；配套格式：[试玩任务模板](../templates/agent-runtime-playtester-task.template.md)、[报告模板](../templates/agent-runtime-playtest-report.template.md)。
 
 ## 1. 问题、目标与非目标
 
 开发 Codex 不能只读源码和跑固定请求就宣称“Agent 可以玩”。目标是在游戏 Skill/API 及受支持 Runtime 可用后，由开发主 Agent 派出独立试玩 subagent，读取同一份玩家 Skill，启动或连接隔离候选、实际自主玩游戏、记录失败与体验反馈，主 Agent 再复现、修复、增加普通回归并针对新候选复测。
 
 本设计承接既有 L4B embodied-agent 自测，不新增证据等级、正式 player 角色、通用任务平台或所有 PR 必跑的模型门禁。脚本探针、L4A 静态/模拟评审、真实自主试玩、真实 Web/native 操作和 L5 外部玩家证据不能互相代签。试玩通过不证明游戏有趣、安全完备或可发行。仓库合入规则仍由[开发流程](../../engineering/workflow/source-of-truth.md)拥有。
+
+文档按职责维护：开发流程规范拥有通用责任与交付边界；本设计拥有自测技术合同；操作手册集中维护预检、启动、派工、验真、修复复测和清理步骤；`doc/testing/templates/` 只维护可复用派工与反馈格式。主 Agent 读取手册组织测试，试玩 subagent 读取正式游戏 Skill 和最小任务包，不接收整份开发手册或内部解法。游戏 Skill 是被测玩家能力入口，不再另设开发自测 Skill。
 
 ## 2. 上游约束与相关角色
 
@@ -64,7 +66,7 @@
 
 两种启动测试须分开：`cold_entry` 让试玩者仅按已交付玩家 Skill，经预批准的受限启动/连接工具自行进入；`prepared_world` 由 setup 先准备世界再交给试玩者。后者可以证明游戏行为，不能代签自助启动。如果玩家发行入口不能安全选择测试世界，cold_entry 保持 blocked，不能给 subagent 任意 shell 权限解决。
 
-派工前固定场景、目标、预算、角色/权限、证据路径和停止条件；使用实际 Codex 提供的 subagent 能力创建任务，记录真实子会话引用。不能把脚本、另一段主 Agent 文本或没有返回记录的“已派工”当作独立子任务。采用[试玩任务模板](../../../skills/oasis7-dev-playtest/references/playtester-task.md)，显式让子任务先读取玩家 Skill。
+派工前固定场景、目标、预算、角色/权限、证据路径和停止条件；使用实际 Codex 提供的 subagent 能力创建任务，记录真实子会话引用。不能把脚本、另一段主 Agent 文本或没有返回记录的“已派工”当作独立子任务。采用[试玩任务模板](../templates/agent-runtime-playtester-task.template.md)，显式让子任务先读取玩家 Skill。
 
 <a id="selftest-gameplay"></a>
 ### 5.2 自主游玩与可信判定
@@ -108,7 +110,7 @@ API 自主试玩与视觉自测是两个维度。Web 按现有 S6/agent-browser 
 
 `TesterInput` 是 RunInput 的最小投影：目标、普通玩家 Skill、公开帮助、受限连接/启动工具句柄、本轮角色、允许操作、预算和输出位置。隐藏 oracle、源码/diff、内部答案、原始 token/私钥与生产 endpoint 不交给试玩者。
 
-`RunResult`：候选与子会话引用、实际读到的 Skill、ready 证据、已执行/未执行场景、每项 verdict、证据引用、问题列表、已知/估计/未知消耗、停止原因、清理结果和复测关联。详见[报告字段](../../../skills/oasis7-dev-playtest/references/report-format.md)。
+`RunResult`：候选与子会话引用、实际读到的 Skill、ready 证据、已执行/未执行场景、每项 verdict、证据引用、问题列表、已知/估计/未知消耗、停止原因、清理结果和复测关联。详见[报告字段](../templates/agent-runtime-playtest-report.template.md)。
 
 每项 verdict 为 `pass / fail / blocked / inconclusive / not_applicable`；缺授权、缺依赖不写 pass，未执行不写 fail。pass 要有适用 oracle；fail 要有“已执行且违反约定”的观察。若所有选中项均已验真通过且无缺失证据，才汇总 scope pass；不同 Runtime/surface 的未知保留，不能被平均分抹去。
 
@@ -143,7 +145,7 @@ Skill、游戏文本、消息和工具响应均不能修改测试授权、请求
 
 优先为现有 L4 scaffold/runner 增加实际自主试玩能力，复用启动、采样、目录与清理，不新建第二套测试平台。已有固定脚本模式保留原证据范围并标注 execution_mode；新模式不复用“固定建厂成功”假装 subagent 规划成功。是否修改现有 runner 在后续实现 PR 中决定，本次不添加虚构 CLI 参数。
 
-本次 Skill 放在 `skills/oasis7-dev-playtest/`，显式读取，不自动提升为 `.agents/skills/` 默认入口，也不替换玩家 `skills/oasis7-play/`。测试选择与 workflow 不变。若新 API/Skill/profile 不具备，保留普通 CI 与现有 probe 的真实结果，对新路径报 blocked；不静默切旧 Provider 或直接模型回退。
+开发自测统一从[操作手册](../manual/agent-runtime-self-playtest.manual.md)进入，派工与报告格式使用 `doc/testing/templates/`；不保留开发 Skill、默认加载入口或重复的兼容说明。正式玩家 `skills/oasis7-play/` 的职责不变，测试选择与 workflow 不变。若新 API/Skill/profile 不具备，保留普通 CI 与现有 probe 的真实结果，对新路径报 blocked；不静默切旧 Provider 或直接模型回退。
 
 ## 11. 验证设计与可追溯性
 
@@ -163,7 +165,7 @@ Skill、游戏文本、消息和工具响应均不能修改测试授权、请求
 
 ## 12. 决策、长期风险与未决问题
 
-选择“现有测试体系 + 显式编排 Skill + 真实玩家 Skill + 受权验真”，拒绝仅让模型读日志评价，也拒绝每次改文档都跑多模型长局。首期优先一条小闭环，再按实际缺陷增加测试；不为追求 Agent 数量建立复杂角色审批链。
+选择“现有测试体系 + 自测操作手册与模板 + 真实玩家 Skill + 受权验真”，拒绝仅让模型读日志评价，也拒绝每次改文档都跑多模型长局。首期优先一条小闭环，再按实际缺陷增加测试；不为追求 Agent 数量建立复杂角色审批链。
 
 agent/qa owner 负责在实现中锁定可用的 Codex subagent 与 attached/supervised profile、隔离能力及受限启动工具；Runtime owner 负责可靠结果读回；Viewer owner 负责真实 Web/native 驱动。任一缺失明确影响哪些场景；不能默认偷偷安装软件、改用户配置或调用付费模型。
 

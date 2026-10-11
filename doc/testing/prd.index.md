@@ -37,12 +37,13 @@
 | `governance/` | 质量趋势、release-gate 指标、审计检查与 playability 证据治理；先读 `doc/testing/governance/README.md` 再按问题下钻 |
 | `templates/` | 证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入 |
 | `performance/` | runtime / viewer 性能观测与方法学 |
-| `manual/` | 系统测试手册分册、Web UI / Playwright / public-testnet attach 与模型视觉评审；先读 `doc/testing/manual/README.md` |
+| `manual/` | 系统测试手册分册、Web UI / Playwright / public-testnet attach 与模型视觉评审分流；先读 `doc/testing/manual/README.md` |
 | `chaos-plans/` | 专项 chaos plan 入口 |
 
 ## 活跃补充文档
 - [外部 Runtime 自主试玩与开发自测设计](governance/agent-runtime-self-playtest.design.md)：承接现有 L4B、真实 subagent、玩家 Skill、自主游玩、权威验真及修复回归，不新增通用门禁。
-- [开发 Agent 自测手册](manual/agent-runtime-self-playtest.manual.md)：预检、冷启动/准备态、七组自测场景和反馈收口；显式使用 `skills/oasis7-dev-playtest/`。
+- [开发 Agent 自测操作手册](manual/agent-runtime-self-playtest.manual.md)：唯一操作入口，集中维护预检、启动、派工、七组场景、反馈与清理；试玩者读取正式游戏 Skill。
+- [独立试玩任务模板](templates/agent-runtime-playtester-task.template.md)与[自测报告模板](templates/agent-runtime-playtest-report.template.md)：由手册引用的可复用格式，不是独立流程入口或已执行证据。
 - `doc/testing/governance/README.md`：`governance/` 热点子域 landing page，按质量门禁、playability 证据、L4 分层、role review 与 persona 问题分流读者。
 - `doc/testing/evidence/README.md`：`evidence/` 热点子域 landing page，按 release gate、hosted access、legacy p2p network rehearsal、governance drill 与 claim/audit 分流读者。
 - `testing-manual.md`：仓库级系统测试手册，不并入下方模块 PRD 三件套长表。

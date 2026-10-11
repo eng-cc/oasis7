@@ -1,5 +1,7 @@
 # 自测报告：事实、判定和修复分开
 
+- 使用入口：[开发自测操作手册](../manual/agent-runtime-self-playtest.manual.md)；配套派工：[试玩任务模板](agent-runtime-playtester-task.template.md)。
+
 这是本轮测试 artifact 的字段约定，不是仓库任务准入、进度数据库或新的 PR 放行证书。复用已有 L4 输出目录及当前 PR，格式可用 JSON 或 Markdown；必须包含相同事实，不强制为普通任务另建报告文件链。
 
 ## 运行身份与覆盖

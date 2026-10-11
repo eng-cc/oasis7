@@ -1,5 +1,8 @@
 # 独立试玩子任务模板
 
+- 使用入口：[开发自测操作手册](../manual/agent-runtime-self-playtest.manual.md)；输出格式：[报告模板](agent-runtime-playtest-report.template.md)。
+- 主 Agent 只发送填好的最小任务与适用报告字段，不把整份开发手册交给试玩者；模板不替代正式游戏 Skill。
+
 主 Agent 填好再发，不把本模板的占位值当真实已准备环境。不得粘贴父会话全文、源码 diff、服务日志、世界隐藏状态或通关答案。实际隔离能力、受限工具和角色先核对，缺项不得虚构。
 
 ```text
