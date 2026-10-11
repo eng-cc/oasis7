@@ -110,3 +110,56 @@ fn action_structure_cannot_claim_a_future_revision_or_scalar_arguments() {
     request.client_operation_id.clear();
     assert!(request.validate().is_err());
 }
+
+#[test]
+fn bootstrap_discovery_has_resolvable_schemas_and_enforced_limits() {
+    use oasis7_agent_api::game::*;
+    let document = read_bootstrap_openapi();
+    assert_eq!(document["openapi"], "3.1.0");
+    assert_eq!(document["x-oasis7-api-revision"], API_REVISION);
+    assert_eq!(document["x-oasis7-schema-revision"], READ_SCHEMA_REVISION);
+    assert_eq!(document["x-oasis7-limits"], read_bootstrap_limits());
+    assert!(document["paths"].get(READ_OPENAPI_PATH).is_some());
+    fn check_refs(value: &serde_json::Value, root: &serde_json::Value) {
+        match value {
+            serde_json::Value::Object(fields) => {
+                if let Some(reference) = fields.get("$ref") {
+                    let reference = reference.as_str().unwrap();
+                    let pointer = reference.strip_prefix('#').expect("only local schemas");
+                    assert!(
+                        root.pointer(pointer).is_some(),
+                        "unresolved schema: {reference}"
+                    );
+                }
+                for value in fields.values() {
+                    check_refs(value, root);
+                }
+            }
+            serde_json::Value::Array(values) => {
+                for value in values {
+                    check_refs(value, root);
+                }
+            }
+            _ => {}
+        }
+    }
+    check_refs(&document, &document);
+    let info = &document["components"]["schemas"]["ReadInfo"]["properties"];
+    assert_eq!(info["openapi_url"]["const"], READ_OPENAPI_PATH);
+    assert_eq!(info["schema_revision"]["const"], READ_SCHEMA_REVISION);
+    assert_eq!(info["writes_available"]["const"], false);
+    for (limit, bound) in read_bootstrap_limits().as_object().unwrap() {
+        assert_eq!(&info["limits"]["properties"][limit]["const"], bound);
+    }
+    assert_eq!(
+        document["components"]["schemas"]["ReadWorldViewRequest"]["properties"]["fixed_commit"]["type"],
+        "null"
+    );
+    assert_eq!(document["paths"].as_object().unwrap().len(), 4);
+    for path in document["paths"].as_object().unwrap().values() {
+        assert_eq!(
+            path.as_object().unwrap().keys().collect::<Vec<_>>(),
+            vec!["get"]
+        );
+    }
+}
