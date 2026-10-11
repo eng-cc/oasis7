@@ -1,3 +1,4 @@
+pub mod codex;
 pub mod domain;
 pub mod github;
 mod index;
@@ -32,13 +33,7 @@ pub struct CommandCenter {
 impl CommandCenter {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let db = Connection::open(path)?;
-        let version: u32 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if version > 1 {
-            return Err(Error::Invalid(
-                "database belongs to a newer application version".into(),
-            ));
-        }
-        db.execute_batch("PRAGMA user_version=1; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS personal(key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cache(key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS history(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS search(id TEXT PRIMARY KEY, body TEXT NOT NULL,value TEXT NOT NULL); CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(id UNINDEXED,body,tokenize='trigram');")?;
+        codex::migrate(&db)?;
         let preferences = load(&db, "personal", "preferences")?.unwrap_or_default();
         let current = Snapshot {
             project: None,
@@ -78,6 +73,9 @@ impl CommandCenter {
         self.current.reading_positions =
             load(&self.db, "personal", &self.personal_key("reading"))?.unwrap_or_default();
         Ok(())
+    }
+    pub fn current_project(&self) -> Option<Project> {
+        self.current.project.clone()
     }
     pub fn snapshot(&self) -> Snapshot {
         self.current.clone()
