@@ -18,6 +18,20 @@ release_web_check_startup() {
   release_web_check_process "$release_web_fixture_pid" fixture "${release_web_fixture_log:-/dev/null}"
 }
 
+release_web_fixture_build_viewer() {
+  local log=$1 wasm_bindgen_bin
+  source "$repo_root/scripts/viewer-dependency-preflight.sh"
+  if ! (
+    viewer_dependency_preflight "$repo_root" build || exit 1
+    wasm_bindgen_bin=$("$repo_root/scripts/ensure-wasm-bindgen-cli.sh" --print-bin) || exit 1
+    WASM_BINDGEN_BIN="$wasm_bindgen_bin" npm --prefix "$repo_root/crates/oasis7_viewer" run build:viewer:visual-test
+  ) >"$log" 2>&1; then
+    echo 'error: release Web visual-test artifact build failed' >&2
+    tail -n 120 "$log" >&2
+    return 1
+  fi
+}
+
 release_web_fixture_build() {
   local manifest=$1
   oasis7_cargo_dev test -p oasis7 --bin oasis7_chain_runtime --features test_tier_required --no-run --message-format=json >"$manifest" 2>"$manifest.log" || {

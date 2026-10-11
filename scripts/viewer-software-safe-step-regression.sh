@@ -420,6 +420,7 @@ trap cleanup EXIT INT TERM
 
 if [[ -z "$GAME_URL" ]]; then
   if [[ "$RELEASE_WEB_FIXTURE" -eq 1 ]]; then
+    release_web_fixture_build_viewer "$out_dir/viewer-build.log"
     release_web_fixture_build "$out_dir/fixture-build.json"
     release_web_fixture_start "$out_dir"
     STACK_ARGS+=(--chain-disable)

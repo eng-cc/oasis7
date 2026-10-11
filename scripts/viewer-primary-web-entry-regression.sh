@@ -372,6 +372,10 @@ launcher_env_defaults+=(
   "OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH=$out_dir/hosted-registration-replay.json"
 )
 
+if [[ "$viewer_static_dir" == "$repo_root/crates/oasis7_viewer/.viewer-test-dist" || "$viewer_static_dir" == "crates/oasis7_viewer/.viewer-test-dist" ]]; then
+  release_web_fixture_build_viewer "$out_dir/viewer-build.log"
+fi
+
 resolved_viewer_static_dir=$(resolve_viewer_static_dir_for_web_closure \
   "$repo_root" \
   "$viewer_static_dir" \
