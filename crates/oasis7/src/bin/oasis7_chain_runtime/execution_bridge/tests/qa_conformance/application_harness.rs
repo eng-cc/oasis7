@@ -137,6 +137,34 @@ pub(super) fn run_isolated_application_mode(
     service_probe: bool,
     admission_mode: &str,
 ) {
+    run_isolated_application_mode_with_provider_closure(
+        wake,
+        drift,
+        release,
+        hosted,
+        metadata_probe,
+        service_probe,
+        admission_mode,
+        false,
+    );
+}
+
+pub(super) fn run_isolated_application_provider_closure() {
+    run_isolated_application_mode_with_provider_closure(
+        false, false, false, false, false, false, "", true,
+    );
+}
+
+fn run_isolated_application_mode_with_provider_closure(
+    wake: bool,
+    drift: bool,
+    release: bool,
+    hosted: bool,
+    metadata_probe: bool,
+    service_probe: bool,
+    admission_mode: &str,
+    provider_closure: bool,
+) {
     let resume_rejection_fs = admission_mode == "resume-rejection-write-failure";
     let resume_rejection_crash = admission_mode == "resume-rejection-crash";
     let resume_rejected = matches!(
@@ -303,7 +331,7 @@ pub(super) fn run_isolated_application_mode(
             application_hosted_wait::observation(&fixture, app_dir.clone())
         }
     });
-    let metadata = hosted.then(|| {
+    let metadata = (hosted || provider_closure).then(|| {
         provider_metadata::MetadataServer::start(
             (metadata_probe || metadata_held).then(|| app_dir.clone()),
             app_dir.clone(),
@@ -806,6 +834,12 @@ pub(super) fn run_isolated_application_mode(
     observer_stop.store(true, Ordering::SeqCst);
     if let Some(observer) = observer {
         observer.join().unwrap();
+    }
+    if provider_closure {
+        metadata
+            .as_ref()
+            .expect("provider closure requires its own provider endpoint")
+            .assert_canonical_feedback_delivery(&fixture, true);
     }
     if matches!(admission_mode, "memory-ack-before" | "memory-ack-after") {
         application_feedback_ack_recovery::verify(

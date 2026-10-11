@@ -33,7 +33,7 @@ mod application_stream_boundaries;
 mod hosted_wait_clock;
 mod provider_metadata;
 mod scenario_resource;
-use application_harness::run_isolated_application;
+use application_harness::{run_isolated_application, run_isolated_application_provider_closure};
 mod application_process_dispatch;
 mod application_provider;
 mod application_release;
@@ -978,7 +978,7 @@ fn real_tcp_lost_response_signed_gameplay_and_driver_restart() {
 
 #[test]
 fn real_tcp_application_artifact_with_os_denied_node_directory() {
-    run_isolated_application(false, false, false, false, false, false);
+    run_isolated_application_provider_closure();
 }
 
 #[test]
