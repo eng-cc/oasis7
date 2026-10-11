@@ -529,7 +529,7 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
   - canonical chat 只把匹配原 nonce、agent、player、intent sequence/tick 的 committed ACK 当作完成；pending、unknown、provider 回复和无关后台错误都不是 chain commit。legacy 非 chain chat 继续等待 AgentSpoke 或请求错误。
   - canonical 请求发送前保存在独立私密目录（0700）中的 pending 文件（0600，fsync，不含私钥）；断连、超时或拒绝会输出文件路径。沿用原 `--addr`，使用 `chat-retry --signed-request-file <path>` 恢复同一请求。它校验原签名和保存的 endpoint/full WorldIdentity，并只查询 context 以核对原 genesis，不刷新或重签 authority/nonce；committed 后删除 pending 文件。旧 fence 被撤销或 reorg 后拒绝时，保留文件供核查，由 owner 明确选择新 intent，不能自动重签绕过。
   - pending 文件和 owner read 输出含私密目标文字，请只由 owner 保存/读取。CLI 信任所配置的 Viewer TCP endpoint，由 Viewer 验证 WorldService 服务签名；这不是传输加密保证。私密 pending 文件权限验证目前支持 Unix；其他平台 canonical 路径拒绝发送，legacy 路径保持可用。
-  - 若要覆盖 `agent_chat` / `prompt_control`，需先 `keygen`，再携带 `--player-id` 与 `--private-key-hex` 走签名请求；当前产品设定下，只要 LLM 不可用，`gameplay_action / agent_chat / prompt_control` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，而 `step / play` 会返回 `ControlCompletionAck { status: Blocked, error_code, error_message }`。
+  - 若要覆盖 legacy 非 chain runtime 的 `agent_chat` / `prompt_control`，需先 `keygen`，再携带 `--player-id` 与 `--private-key-hex` 走签名请求；在这些非 chain runtime 路径中，只要 LLM 不可用，`gameplay_action / agent_chat / prompt_control` 会直接返回 `llm_mode_required` 或 `llm_init_failed`，而 `step / play` 会返回 `ControlCompletionAck { status: Blocked, error_code, error_message }`。
 - 若需要执行 pure API required/full 回归，优先运行 `./scripts/oasis7-pure-api-parity-smoke.sh`。
   - 该回归验证的是 `pure_api` 玩家访问模式在 active LLM access 下的正式可玩性，不等同于 Local Provider `headless_agent` 回归。
   - required-tier 推荐 bundle 口径：
