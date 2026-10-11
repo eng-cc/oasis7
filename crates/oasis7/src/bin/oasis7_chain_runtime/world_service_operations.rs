@@ -228,29 +228,17 @@ pub(super) fn view(
     {
         return Err("read not caught up".into());
     }
-    #[cfg(test)]
-    let scope_timer = crate::read_profile::Timer::start(crate::read_profile::Stage::ViewScope);
     let agent = service.scope(
         &pinned,
         &request.request.scope_id,
         &request.subject_public_key,
     )?;
-    #[cfg(test)]
-    drop(scope_timer);
-    #[cfg(test)]
-    let projection_timer =
-        crate::read_profile::Timer::start(crate::read_profile::Stage::ViewProjection);
     let mut projection = projection::WorldServiceProjection::from_authenticated_world(
         &pinned.world,
         agent.as_deref(),
         &request.subject_public_key,
     )?;
-    #[cfg(test)]
-    drop(projection_timer);
     if let Some(agent) = agent.as_deref() {
-        #[cfg(test)]
-        let _agent_projection_timer =
-            crate::read_profile::Timer::start(crate::read_profile::Stage::AgentProjection);
         projection.agent_context = Some(
             oasis7::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
                 &pinned.world,
