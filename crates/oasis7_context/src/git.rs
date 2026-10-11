@@ -58,6 +58,24 @@ pub struct HistoricalEntry {
     pub config_bytes: Vec<u8>,
     pub entry_bytes: Vec<u8>,
 }
+fn read_output(mut input: impl Read, exceeded: &AtomicBool) -> Result<Vec<u8>, GitError> {
+    let mut bytes = Vec::new();
+    let mut buf = [0; 8192];
+    loop {
+        match input.read(&mut buf) {
+            Ok(0) => return Ok(bytes),
+            Ok(n) => {
+                if bytes.len() + n > OUTPUT_LIMIT {
+                    exceeded.store(true, Ordering::Relaxed);
+                    return Err(error("HISTORY_INCOMPLETE", "Git output exceeds limit"));
+                }
+                bytes.extend_from_slice(&buf[..n]);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return Err(error("HISTORY_INCOMPLETE", "Git output read failed")),
+        }
+    }
+}
 fn run(root: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, GitError> {
     let mut command = Command::new("/usr/bin/git");
     for (key, _) in std::env::vars_os() {
@@ -101,24 +119,7 @@ fn run(root: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, GitError> {
     let stdout = child.stdout.take().unwrap();
     let exceeded = Arc::new(AtomicBool::new(false));
     let flag = exceeded.clone();
-    let reader = thread::spawn(move || {
-        let mut bytes = Vec::new();
-        let mut input = stdout;
-        let mut buf = [0; 8192];
-        loop {
-            match input.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    if bytes.len() + n > OUTPUT_LIMIT {
-                        flag.store(true, Ordering::Relaxed);
-                        break;
-                    }
-                    bytes.extend_from_slice(&buf[..n]);
-                }
-            }
-        }
-        bytes
-    });
+    let reader = thread::spawn(move || read_output(stdout, &flag));
     let started = Instant::now();
     let result = loop {
         if exceeded.load(Ordering::Relaxed) || started.elapsed() > Duration::from_secs(10) {
@@ -155,7 +156,7 @@ fn run(root: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, GitError> {
     if exceeded.load(Ordering::Relaxed) {
         return Err(error("HISTORY_INCOMPLETE", "Git output exceeds limit"));
     }
-    Ok(bytes)
+    bytes
 }
 fn text(bytes: Vec<u8>) -> Result<String, GitError> {
     String::from_utf8(bytes).map_err(|_| error("HISTORY_INCOMPLETE", "Git metadata is not UTF-8"))
@@ -464,6 +465,48 @@ mod tests {
         git(root, &["add", "."]);
         git(root, &["commit", "-m", "First"]);
         dir
+    }
+    #[test]
+    fn interrupted_output_read_retries_but_io_failure_rejects_partial_bytes() {
+        struct InjectedReader {
+            call: usize,
+            kind: std::io::ErrorKind,
+        }
+        impl Read for InjectedReader {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.call += 1;
+                match self.call {
+                    1 | 3 => {
+                        buf[0] = b'x';
+                        Ok(1)
+                    }
+                    2 => Err(std::io::Error::from(self.kind)),
+                    _ => Ok(0),
+                }
+            }
+        }
+        let flag = AtomicBool::new(false);
+        assert_eq!(
+            read_output(
+                InjectedReader {
+                    call: 0,
+                    kind: std::io::ErrorKind::Interrupted
+                },
+                &flag
+            )
+            .unwrap(),
+            b"xx"
+        );
+        let failure = read_output(
+            InjectedReader {
+                call: 0,
+                kind: std::io::ErrorKind::BrokenPipe,
+            },
+            &flag,
+        )
+        .unwrap_err();
+        assert_eq!(failure.code, "HISTORY_INCOMPLETE");
+        assert_eq!(failure.message, "Git output read failed");
     }
     #[test]
     fn status_compares_raw_head_and_index_and_ignores_other_files() {
