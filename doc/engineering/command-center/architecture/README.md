@@ -60,9 +60,9 @@
 
 | 主题 | 关键边界 | 需人关注时机 | 权威入口 |
 | --- | --- | --- | --- |
-| ARCH-04 · 单权威到 BFT | 首次开放采用受控单权威持久世界；BFT 并行研发，后续在同世界 H/H+1 交接激活写权 | 决定首次开放、切换 signer/epoch、扩展权威集合或改变保留承诺 | [当前阶段](../../../product/world-infrastructure/prd.md#当前阶段：持久单权威到同世界多节点)、[权威 profiles](../../../p2p/design.md#des-p2p-authority-profiles) |
+| ARCH-04 · 单权威到 BFT | 首次开放采用受控单权威持久世界；BFT 并行研发，后续在同世界 H/H+1 交接激活写权 | 决定首次开放、切换 signer/epoch、扩展权威集合或改变保留承诺 | [当前阶段](../../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[权威 profiles](../../../p2p/design.md#des-p2p-authority-profiles) |
 | ARCH-05 · 服务分工 | P2P 维护合法提交证明，runtime 确定性执行，game/Agent/Viewer 提交意图和消费已提交状态；Web Viewer 不承担完整节点职责 | 拆服务/进程、加网关、改模块归属或引入第二条执行路径 | [执行分层](../../../world-runtime/design.md#3-目标设计结构)、[P2P 边界](../../../p2p/design.md#4-边界与结构)、[高层架构](../../../../README.md#高层架构) |
-| ARCH-06 · 写入与持久 | accepted、prepare、committed 分开；正式确认依赖完整记录和决定跨独立故障域持久，未知提交先查原请求 | 改存储、超时重试、写者隔离，或决定故障期间是否继续写入 | [双端持久前置](../../../p2p/design.md#des-p2p-replicated-durability-prerequisite)、[runtime 提交与恢复](../../../world-runtime/design.md#authority-profile-commit-and-recovery-seam（目标）) |
+| ARCH-06 · 写入与持久 | accepted、prepare、committed 分开；正式确认依赖完整记录和决定跨独立故障域持久，未知提交先查原请求 | 改存储、超时重试、写者隔离，或决定故障期间是否继续写入 | [双端持久前置](../../../p2p/design.md#des-p2p-replicated-durability-prerequisite)、[runtime 提交与恢复](../../../world-runtime/design.md#runtime-authority-commit-recovery-target) |
 | ARCH-07 · 保留与恢复 | replay log、checkpoint、snapshot 分工；GC 不破坏保留范围的重建，同世界只读恢复不自动恢复写服务 | 调保留/磁盘预算、清理迁移数据、选择归档方案或灾备切换 | [存储层次](../../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#4-technical-specifications)、[重新服务边界](../../../product/world-infrastructure/prd.md#恢复后的重新服务闸门) |
 
 **设计状态：** 本组是当前主责文档声明的路线与目标合同；正式 profile、完整事务和灾备目标不能因为已有前置切片而标为已验收。
@@ -86,7 +86,7 @@
 
 | 主题 | 关键边界 | 需人关注时机 | 权威入口 |
 | --- | --- | --- | --- |
-| ARCH-08 · 网络与权限 | URL/登录只提供接入；玩家 session、Agent 委托和 operator 权限分开，恢复不能复活旧授权 | 暴露公网 API、接账号/模型端点、改认证或委托、增加远程控制 | [Hosted 进入](../../../product/player-entry-distribution/prd.md#hosted-玩家进入与会话边界)、[会话与授权连续性](../../../product/player-entry-distribution/prd.md#会话失效、待决-intent-与-agent-授权连续性)、[headless 鉴权](../../../headless-runtime/design.md#6-鉴权与恢复边界) |
+| ARCH-08 · 网络与权限 | URL/登录只提供接入；玩家 session、Agent 委托和 operator 权限分开，恢复不能复活旧授权 | 暴露公网 API、接账号/模型端点、改认证或委托、增加远程控制 | [Hosted 进入](../../../product/player-entry-distribution/prd.md#hosted-玩家进入与会话边界)、[会话与授权连续性](../../../product/player-entry-distribution/prd.md#player-session-authorization-continuity)、[headless 鉴权](../../../headless-runtime/design.md#6-鉴权与恢复边界) |
 | ARCH-09 · 两类 Runtime | 游戏侧目标是 OpenClaw/Codex 通过官方游戏 Skill 和受授权游戏 API 持续游玩；开发指挥客户端管理代码开发会话 | 声明 Runtime 支持、管理多 Agent、改预算/停止行为或连接游戏 Viewer 与开发看板 | [游戏角色](../../../product/agents-world-simulation/external-agent-runtime-play.prd.md#12-角色与职责)、[首批 Runtime 目标](../../../product/agents-world-simulation/external-agent-runtime-play.prd.md#21-首批-runtime-与支持单位)、[开发会话](../command-center.design.md#1101-可选实验执行实现) |
 
 **设计状态：** 接入、委托和角色边界由各自主责合同拥有。外部 Runtime 的首期功能清单是承诺范围，阶段标签不等于实现状态。

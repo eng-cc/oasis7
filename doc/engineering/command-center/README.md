@@ -66,7 +66,7 @@ Smelter 合法建成 → 铁锭生产 cycle → owner-bound output ledger 实际
 已有 manifest、journal/replica、离线 activation verifier、受保护本地工程执行等前置交付。
 正式 initial activation 与普通消费者接线、不完整候选崩溃恢复、独立故障域保留/恢复、旧写者隔离和人工交接仍待完成。
 下一步先在已有代码与验证范围内收口缺口；实际部署暂缓，不能把本地双目录当成独立硬件故障域。
-来源：[基础设施当前阶段](../../product/world-infrastructure/prd.md#当前阶段：持久单权威到同世界多节点)、[#4363 当前剩余条件](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+来源：[基础设施当前阶段](../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[#4363 当前剩余条件](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
 ### 2. 真实首产物、阻塞恢复与回访
 
