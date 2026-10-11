@@ -16,6 +16,7 @@ mod application_hosted_resume_rejection;
 mod application_hosted_resume_rejection_recovery;
 mod application_hosted_resume_rejection_write_failure;
 mod application_hosted_resume_write_failure;
+mod application_hosted_unpublished_cadence;
 mod application_hosted_wait;
 mod application_hosted_wait_capture_crash;
 mod application_hosted_wait_crash;
@@ -419,8 +420,10 @@ impl Fixture {
                 };
                 // Drain authenticated read responses concurrently so the real dispatcher completes
                 // before a client teardown can interrupt the response relay.
-                let capture_read =
-                    method == "POST" && matches!(path, VIEW_PATH | CHANGES_PATH | LOOKUP_PATH);
+                let capture_read = method == "POST"
+                    && (matches!(path, VIEW_PATH | CHANGES_PATH | LOOKUP_PATH)
+                        || (path == SUBMIT_PATH
+                            && application_hosted_unpublished_cadence::active(&worker_gate)));
                 let mut read_reader = None;
                 let mut capture_peer = None;
                 let mut output_stream = if capture_read {
@@ -510,78 +513,13 @@ impl Fixture {
                             .position(|window| window == b"\r\n\r\n")
                             .unwrap()
                             + 4;
-                        match path {
-                            VIEW_PATH => {
-                                let request: SignedReadRequest<ReadWorldViewRequest> =
-                                    serde_json::from_slice(body).unwrap();
-                                let signed: SignedServiceResponse<
-                                    ReadWorldViewResponse<
-                                        oasis7::world_service::projection::WorldServiceProjection,
-                                    >,
-                                > = serde_json::from_slice(&response[offset..]).unwrap();
-                                oasis7::world_service::authority::verify_service_response(
-                                    path,
-                                    &oasis7::world_service::authority::request_digest(
-                                        path, &request,
-                                    )
-                                    .unwrap(),
-                                    &signed,
-                                    &signer.public_key_hex,
-                                )
-                                .unwrap();
-                                signed.payload.validate(&request.request).unwrap();
-                            }
-                            CHANGES_PATH => {
-                                let request: SignedReadRequest<ReadWorldChangesRequest> =
-                                    serde_json::from_slice(body).unwrap();
-                                let signed: SignedServiceResponse<
-                                    ReadWorldChangesResponse<serde_json::Value>,
-                                > = serde_json::from_slice(&response[offset..]).unwrap();
-                                oasis7::world_service::authority::verify_service_response(
-                                    path,
-                                    &oasis7::world_service::authority::request_digest(
-                                        path, &request,
-                                    )
-                                    .unwrap(),
-                                    &signed,
-                                    &signer.public_key_hex,
-                                )
-                                .unwrap();
-                                signed.payload.validate(&request.request).unwrap();
-                                assert!(
-                                    serde_json::to_vec(&signed.payload).unwrap().len() as u64
-                                        <= request.request.max_bytes
-                                );
-                            }
-                            LOOKUP_PATH => {
-                                // Lookup authenticates the original signed payload rather
-                                // than wrapping the lookup in a SignedReadRequest.
-                                let request: wire::AuthenticatedLookup =
-                                    serde_json::from_slice(body).unwrap();
-                                let signed: SignedServiceResponse<
-                                    IntentResponse<serde_json::Value>,
-                                > = serde_json::from_slice(&response[offset..]).unwrap();
-                                oasis7::world_service::authority::verify_service_response(
-                                    path,
-                                    &oasis7::world_service::authority::request_digest(
-                                        path, &request,
-                                    )
-                                    .unwrap(),
-                                    &signed,
-                                    &signer.public_key_hex,
-                                )
-                                .unwrap();
-                                request.request.validate().unwrap();
-                                let expected = derive_correlation(
-                                    request.request.key.world.clone(),
-                                    &request.original,
-                                )
-                                .unwrap();
-                                assert_eq!(expected.key, request.request.key);
-                                signed.payload.validate(&expected).unwrap();
-                            }
-                            _ => unreachable!("only authenticated read routes are captured"),
-                        }
+                        application_hosted_unpublished_cadence::verify_captured_response(
+                            path,
+                            body,
+                            &response[offset..],
+                            &signer.public_key_hex,
+                            &worker_gate,
+                        );
                     }
                     if verified_success && path == VIEW_PATH && !successful_view_delay.is_zero() {
                         println!(
@@ -678,6 +616,7 @@ impl Fixture {
                     && gated_ack.is_none()
                     && worker_controlled.load(Ordering::SeqCst)
                 {
+                    application_hosted_unpublished_cadence::hold_original_commit(&worker_gate);
                     let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
                     let request = serde_json::from_slice(body).unwrap();
                     let mut driver = worker_driver.lock().unwrap();

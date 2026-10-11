@@ -14,7 +14,9 @@ fn real_tcp_hosted_serving_loop_drives_registered_provider_to_canonical_receipt(
 }
 
 pub(super) fn verify_hosted(client: &RemoteWorldServiceClient) {
-    verify_hosted_server(prepare_server(client));
+    let server = prepare_server(client);
+    application_hosted_unpublished_cadence::child_ready();
+    verify_hosted_server(server);
 }
 
 pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
@@ -117,10 +119,12 @@ pub(super) fn verify_hosted_server(server: ViewerRuntimeLiveServer) {
     println!("hosted_actual_eligibility={eligibility}");
     let mut completion = application_completion::CompletionWatch::new();
     let mut summary = serde_json::Value::Null;
+    let mut pending_observation = None;
     let summary = loop {
         if let Ok(server) = shared.try_lock() {
             summary = server.test_canonical_provider_summary();
         }
+        application_hosted_unpublished_cadence::observe_child(&summary, &mut pending_observation);
         if completion.finished(
             &summary,
             application_completion::canonical_complete(&summary),
