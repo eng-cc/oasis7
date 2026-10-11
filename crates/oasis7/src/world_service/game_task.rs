@@ -151,13 +151,12 @@ pub fn prepare_create<'a>(
     }
     for result in staged {
         validate_result(result)?;
-        if let WorldServicePayloadV1::GameTaskCreate(previous) = &result.request.signed_payload {
-            if result.rejected.is_none()
-                && previous.request.agent_id == signed.request.agent_id
-                && validate_owner(world, previous).is_ok()
-            {
-                return Err("Game task already exists within block".into());
-            }
+        if let WorldServicePayloadV1::GameTaskCreate(previous) = &result.request.signed_payload
+            && result.rejected.is_none()
+            && previous.request.agent_id == signed.request.agent_id
+            && validate_owner(world, previous).is_ok()
+        {
+            return Err("Game task already exists within block".into());
         }
     }
     serde_json::to_value(control(request)?).map_err(|e| e.to_string())
