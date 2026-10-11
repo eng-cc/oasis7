@@ -1477,7 +1477,7 @@
     },
     {
       "path": "doc/p2p/design.md",
-      "content_sha256": "be5d0579536acc044e478b2da3cfca1f2c99a1771bf574786bba7fac933ffbe3",
+      "content_sha256": "64771a8a5834eb7536e6c089f2b83751d07336848ada9e49cdbadaa5996f839f",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
