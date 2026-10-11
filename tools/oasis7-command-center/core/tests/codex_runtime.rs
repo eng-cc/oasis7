@@ -60,7 +60,10 @@ for line in sys.stdin:
   if mode=='malformed':reply(m,{});continue
   if mode=='lost':threads[t]='idle';continue
   reply(m,{'turn':{'id':turn,'status':'inProgress','items':[],'error':None}})
-  if mode=='request':
+  if mode in ['request','burst']:
+   if mode=='burst':
+    time.sleep(0.15)
+    for i in range(100):send({'method':'item/started','params':{'threadId':t,'turnId':turn,'item':{'id':'event'+str(i),'type':'commandExecution'}}})
    req={'id':9007199254740993,'method':'item/tool/requestUserInput','params':{'itemId':'q1','threadId':t,'turnId':turn,'questions':[{'id':'choice','header':'Choice','question':'Choose','isSecret':True,'options':[{'label':'A','description':'A'}]}]}}
    send(req);send(req)
   elif mode=='old':send({'method':'turn/completed','params':{'threadId':t,'turn':{'id':'OLD','status':'completed','items':[],'error':None}}})
@@ -388,5 +391,50 @@ fn clean_history_requires_explicit_resume_and_future_database_clock_is_preserved
     assert!(
         status.safe,
         "resumed turn never reached verified idle: {status:?}"
+    );
+}
+
+#[test]
+fn slow_event_store_coalesces_burst_without_losing_original_pending_request() {
+    let f = Fixture::new();
+    let mut r = f.runtime();
+    let t = f.session(&mut r);
+    r.start_turn(&f.project, &t, "burst").unwrap();
+    let db = rusqlite::Connection::open(&f.db).unwrap();
+    db.execute_batch("BEGIN IMMEDIATE").unwrap();
+    std::thread::sleep(Duration::from_millis(500));
+    db.execute_batch("COMMIT").unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        let source: String = db
+            .query_row("SELECT value FROM cc_runtime_state", [], |row| row.get(0))
+            .unwrap();
+        if source.contains("9007199254740993") {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "reader request never persisted independently"
+        );
+        tick();
+    }
+    let snapshot = r.snapshot(&f.project).unwrap();
+    assert_eq!(snapshot.state, "ready");
+    assert_eq!(snapshot.requests.len(), 1);
+    assert_eq!(snapshot.requests[0].request_id, "9007199254740993");
+    assert_eq!(snapshot.requests[0].state, "pending");
+    assert!(!r.quit_status().safe);
+}
+#[test]
+fn event_writer_must_be_ready_before_app_server_process_starts() {
+    let f = Fixture::new();
+    let mut r = Runtime::open(&f.db).unwrap();
+    r.set_enabled(&f.project, true).unwrap();
+    let db = rusqlite::Connection::open(&f.db).unwrap();
+    db.execute_batch("PRAGMA user_version=1").unwrap();
+    assert!(r.connect(&f.project, f.binary.to_str().unwrap()).is_err());
+    assert!(
+        !f.trace.exists(),
+        "failed writer readiness must not initialize owned process"
     );
 }

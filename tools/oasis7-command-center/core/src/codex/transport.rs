@@ -17,6 +17,11 @@ pub struct Shared {
     pub raw_requests: HashMap<String, Value>,
     pub seen_requests: HashSet<String>,
 }
+#[derive(Clone)]
+struct EventMailbox {
+    pending: Arc<Mutex<Option<(RuntimeSnapshot, i64)>>>,
+    wake: mpsc::SyncSender<()>,
+}
 pub struct Transport {
     pub shared: Arc<Mutex<Shared>>,
     pub writer: mpsc::SyncSender<Vec<u8>>,
@@ -40,6 +45,8 @@ impl Transport {
                 "experimental connector requires exact Codex 0.137.0".into(),
             ));
         }
+        // Writer readiness precedes spawning any owned process; no migration races in reader.
+        let event_store = super::store::Store::writer(database)?;
         let mut cmd = Command::new(binary);
         cmd.arg("app-server")
             .current_dir(root)
@@ -75,25 +82,33 @@ impl Transport {
                 }
             }
         });
-        let (events, event_rx) = mpsc::sync_channel::<(RuntimeSnapshot, i64)>(8);
+        // Persist state, not every intermediate duplicate snapshot. The latest complete bounded
+        // state retains pending requests and identities while a slow disk writes the prior state.
+        let (wake, event_rx) = mpsc::sync_channel::<()>(1);
+        let pending = Arc::new(Mutex::new(None::<(RuntimeSnapshot, i64)>));
+        let events = EventMailbox {
+            pending: pending.clone(),
+            wake,
+        };
         let event_state = shared.clone();
-        let database = database.to_path_buf();
         std::thread::spawn(move || {
-            let store = match super::store::Store::writer(&database) {
-                Ok(s) => s,
-                Err(_) => {
-                    degrade(&event_state, "event storage unavailable");
-                    return;
-                }
-            };
-            while let Ok((snapshot, sequence)) = event_rx.recv() {
-                let scope = format!("{}:{}", snapshot.project_id, snapshot.environment);
-                if store.save_at(&scope, &snapshot, sequence, true).is_err() {
-                    degrade(
-                        &event_state,
-                        "critical event persistence failed; new operations disabled",
-                    );
-                    break;
+            while event_rx.recv().is_ok() {
+                loop {
+                    let next = pending.lock().unwrap().take();
+                    let Some((snapshot, sequence)) = next else {
+                        break;
+                    };
+                    let scope = format!("{}:{}", snapshot.project_id, snapshot.environment);
+                    if event_store
+                        .save_at(&scope, &snapshot, sequence, true)
+                        .is_err()
+                    {
+                        degrade(
+                            &event_state,
+                            "critical event persistence failed; new operations disabled",
+                        );
+                        return;
+                    }
                 }
             }
         });
@@ -246,7 +261,7 @@ fn read_loop(
     output: impl Read,
     shared: Arc<Mutex<Shared>>,
     writer: mpsc::SyncSender<Vec<u8>>,
-    events: mpsc::SyncSender<(RuntimeSnapshot, i64)>,
+    events: EventMailbox,
 ) {
     let mut reader = BufReader::new(output);
     loop {
@@ -398,17 +413,20 @@ fn read_loop(
     }
 }
 
-fn persist_event(state: &mut Shared, events: &mpsc::SyncSender<(RuntimeSnapshot, i64)>) {
-    if events
-        .try_send((state.snapshot.clone(), super::store::sequence()))
-        .is_err()
-    {
-        state.snapshot.state = "degraded".into();
-        state.snapshot.error =
-            Some("critical event persistence queue overflow; new effects disabled".into());
-        for session in &mut state.snapshot.sessions {
-            session.state = "unknown".into();
-            session.background_state = "unknown".into();
+fn persist_event(state: &mut Shared, events: &EventMailbox) {
+    *events.pending.lock().unwrap() = Some((state.snapshot.clone(), super::store::sequence()));
+    match events.wake.try_send(()) {
+        Ok(()) | Err(mpsc::TrySendError::Full(())) => {} // An existing wake drains the latest state.
+        Err(mpsc::TrySendError::Disconnected(())) => {
+            state.snapshot.state = "degraded".into();
+            if state.snapshot.error.is_none() {
+                state.snapshot.error =
+                    Some("critical event writer disconnected; new effects disabled".into());
+            }
+            for session in &mut state.snapshot.sessions {
+                session.state = "unknown".into();
+                session.background_state = "unknown".into();
+            }
         }
     }
 }

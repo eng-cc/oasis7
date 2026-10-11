@@ -55,7 +55,13 @@ impl Store {
     }
     pub fn writer(path: &std::path::Path) -> Result<Self> {
         let db = Connection::open(path)?;
-        migrate(&db)?;
+        db.busy_timeout(std::time::Duration::from_secs(2))?;
+        let version: u32 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        if version != 2 {
+            return Err(Error::Invalid(
+                "event writer requires initialized schema 2".into(),
+            ));
+        }
         let floor: i64 = db.query_row(
             "SELECT COALESCE(MAX(sequence),0) FROM cc_runtime_state",
             [],
