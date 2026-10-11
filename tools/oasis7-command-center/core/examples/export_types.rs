@@ -6,6 +6,7 @@ fn main() {
     let declarations = [
         Project::decl(),
         SourceStatus::decl(),
+        DocumentLifecycle::decl(),
         DocumentSection::decl(),
         Preferences::decl(),
         DecisionDraft::decl(),
