@@ -82,6 +82,9 @@ mod p2p_status;
 mod publication_lifecycle;
 #[path = "oasis7_chain_runtime/publication_proof.rs"]
 mod publication_proof;
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/execution_bridge/tests/qa_conformance/read_profile.rs"]
+mod read_profile;
 #[path = "oasis7_chain_runtime/rebuild_status.rs"]
 mod rebuild_status;
 #[cfg(test)]

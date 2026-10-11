@@ -26,7 +26,7 @@ struct Measurements {
 
 #[derive(Default)]
 pub(super) struct Diagnostics {
-    stages: [Measurements; 5],
+    stages: [Measurements; 11],
     fresh_commits: AtomicU64,
     exact_replay_commits: AtomicU64,
     invalid_existing_commits: AtomicU64,
@@ -56,6 +56,21 @@ impl Diagnostics {
         measurements.max_us.fetch_max(value, Ordering::Relaxed);
     }
 
+    pub(super) fn absorb_read_profile(&self, samples: [crate::read_profile::Sample; 6]) {
+        for (index, sample) in samples.into_iter().enumerate() {
+            let measurements = &self.stages[index + 5];
+            measurements
+                .count
+                .fetch_add(sample.count, Ordering::Relaxed);
+            measurements
+                .total_us
+                .fetch_add(sample.total_us, Ordering::Relaxed);
+            measurements
+                .max_us
+                .fetch_max(sample.max_us, Ordering::Relaxed);
+        }
+    }
+
     /// Concurrent fields are observational, not a transactional snapshot.
     pub(super) fn snapshot(&self) -> serde_json::Value {
         let mut stages = serde_json::Map::new();
@@ -65,6 +80,12 @@ impl Diagnostics {
             "controlled_driver_lock_wait",
             "controlled_commit",
             "replay_verification",
+            "pin_whole",
+            "pin_decode_proof",
+            "world_restore",
+            "view_scope",
+            "view_projection",
+            "agent_projection",
         ]
         .into_iter()
         .enumerate()
@@ -96,12 +117,22 @@ fn fixture_stage_diagnostics_are_event_updated_numbers_only() {
     let diagnostics = Diagnostics::default();
     diagnostics.record(Stage::ControlledCommit, Duration::from_micros(7));
     diagnostics.record(Stage::ControlledCommit, Duration::from_micros(11));
+    let mut profile = [crate::read_profile::Sample::default(); 6];
+    profile[2] = crate::read_profile::Sample {
+        count: 3,
+        total_us: 20,
+        max_us: 9,
+    };
+    diagnostics.absorb_read_profile(profile);
     let snapshot = diagnostics.snapshot();
     assert_eq!(snapshot, diagnostics.snapshot());
     assert_eq!(snapshot["controlled_commit"]["count"], 2);
     assert_eq!(snapshot["controlled_commit"]["total_us"], 18);
     assert_eq!(snapshot["controlled_commit"]["max_us"], 11);
     assert_eq!(snapshot["dispatcher_including_pin"]["count"], 0);
+    assert_eq!(snapshot["world_restore"]["count"], 3);
+    assert_eq!(snapshot["world_restore"]["total_us"], 20);
+    assert_eq!(snapshot["world_restore"]["max_us"], 9);
     for stage in snapshot.as_object().unwrap().values() {
         assert_eq!(stage.as_object().unwrap().len(), 3);
         assert!(

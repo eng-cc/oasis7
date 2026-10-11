@@ -53,6 +53,11 @@ fn load(
     height: Option<u64>,
     fixed: Option<&CommitRef>,
 ) -> Result<PinnedWorld, String> {
+    #[cfg(test)]
+    let _pin_timer = crate::read_profile::Timer::start(crate::read_profile::Stage::PinWhole);
+    #[cfg(test)]
+    let decode_timer =
+        crate::read_profile::Timer::start(crate::read_profile::Stage::PinDecodeProof);
     if let Some(commit) = fixed
         && &commit.world != identity
     {
@@ -119,8 +124,14 @@ fn load(
     {
         return Err("pinned proof does not bind execution record and CAS refs".into());
     }
+    #[cfg(test)]
+    drop(decode_timer);
+    #[cfg(test)]
+    let restore_timer = crate::read_profile::Timer::start(crate::read_profile::Stage::WorldRestore);
     let world =
         World::from_snapshot(snapshot, journal).map_err(|e| format!("pinned world: {e:?}"))?;
+    #[cfg(test)]
+    drop(restore_timer);
     let binding = world
         .current_cognition_runtime_binding()
         .map_err(|e| format!("binding unavailable: {e:?}"))?;

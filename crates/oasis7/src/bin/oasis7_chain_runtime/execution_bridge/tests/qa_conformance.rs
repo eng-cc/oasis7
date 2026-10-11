@@ -459,6 +459,7 @@ impl Fixture {
                 } else {
                     stream.try_clone().unwrap()
                 };
+                crate::read_profile::reset();
                 let dispatch_started = Instant::now();
                 let result = crate::world_service_api::maybe_handle(
                     &mut output_stream,
@@ -473,6 +474,7 @@ impl Fixture {
                     &signer,
                 );
                 worker_diagnostics.record(Stage::Dispatcher, dispatch_started.elapsed());
+                worker_diagnostics.absorb_read_profile(crate::read_profile::take());
                 eprintln!("fixture_dispatch method={method} path={path} result={result:?}");
                 // A verified whole-process exit at the intentional Settle gate may
                 // close its response socket. Admission and canonical execution must
