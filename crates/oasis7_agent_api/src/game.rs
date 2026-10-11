@@ -22,6 +22,30 @@ pub const API_REVISION: u32 = 1;
 pub const MAX_REQUEST_BYTES: usize = 256 * 1024;
 pub const MAX_JSON_DEPTH: usize = 16;
 
+pub const READ_SCHEMA_REVISION: u32 = 1;
+pub const READ_OPENAPI_PATH: &str = "/v1/game/openapi.json";
+pub const MAX_READ_PROOF_HEADER_BYTES: usize = 8192;
+pub const MAX_READ_HTTP_HEADER_BYTES: usize = 16384;
+pub const MAX_ACTIVE_READS: usize = 8;
+pub const MAX_READ_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+
+/// Machine-readable contract for the implemented signed-read bootstrap only.
+/// Publishing this document grants no authority or action capability.
+pub fn read_bootstrap_openapi() -> serde_json::Value {
+    serde_json::from_str(include_str!("game/read_bootstrap.openapi.json"))
+        .expect("bundled Game API OpenAPI document must be valid JSON")
+}
+
+pub fn read_bootstrap_limits() -> serde_json::Value {
+    serde_json::json!({
+        "max_proof_header_bytes": MAX_READ_PROOF_HEADER_BYTES,
+        "max_http_header_bytes": MAX_READ_HTTP_HEADER_BYTES,
+        "max_json_depth": MAX_JSON_DEPTH,
+        "max_active_reads": MAX_ACTIVE_READS,
+        "max_response_bytes": MAX_READ_RESPONSE_BYTES,
+    })
+}
+
 /// Wire state registry. Unknown states fail deserialization and cannot be
 /// mistaken for success by an executor. This value alone proves no settlement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

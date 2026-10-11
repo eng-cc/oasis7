@@ -4,7 +4,11 @@ use crate::world_service::{
     SignedReadRequest, VIEW_PATH, authority,
     client::{RemoteWorldServiceClient, WorldServiceClientError},
 };
-use oasis7_agent_api::game::{API_REVISION, parse_request};
+use oasis7_agent_api::game::{
+    API_REVISION, MAX_ACTIVE_READS, MAX_READ_HTTP_HEADER_BYTES, MAX_READ_PROOF_HEADER_BYTES,
+    MAX_READ_RESPONSE_BYTES, READ_OPENAPI_PATH, READ_SCHEMA_REVISION, parse_request,
+    read_bootstrap_limits, read_bootstrap_openapi,
+};
 use oasis7_client_api::world_service::ReadWorldViewRequest;
 use serde::de::IntoDeserializer;
 use serde_json::{Value, json};
@@ -22,7 +26,7 @@ impl ReadPermit {
     fn acquire() -> Result<Self, (u16, &'static str)> {
         ACTIVE_READS
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                (n < 8).then_some(n + 1)
+                (n < MAX_ACTIVE_READS).then_some(n + 1)
             })
             .map(|_| Self)
             .map_err(|_| (429, "read_limit_exceeded"))
@@ -39,7 +43,7 @@ pub(super) fn serve_if_game_request(
     client: Option<&RemoteWorldServiceClient>,
 ) -> io::Result<bool> {
     let deadline = Instant::now() + Duration::from_secs(10);
-    let mut buffer = vec![0; 16384];
+    let mut buffer = vec![0; MAX_READ_HTTP_HEADER_BYTES];
     let (header_len, request) = loop {
         let read = stream.peek(&mut buffer)?;
         if read == 0 {
@@ -87,7 +91,7 @@ fn render_response(result: Result<Value, (u16, &'static str)>) -> ErrorResponse 
             json!({"code":code, "retryable":matches!(status, 429 | 503)}),
         ),
     };
-    if body.to_string().len() > 2 * 1024 * 1024 {
+    if body.to_string().len() > MAX_READ_RESPONSE_BYTES {
         status = 503;
         body = json!({"code":"response_limit_exceeded", "retryable":false});
     }
@@ -115,13 +119,18 @@ fn route(
     {
         return Err((400, "invalid_request"));
     }
+    if request.uri().path() == READ_OPENAPI_PATH {
+        return Ok(read_bootstrap_openapi());
+    }
     if request.uri().path() == "/v1/game/info" {
         return Ok(
             json!({"api_revision":API_REVISION, "mode":"signed_read_bootstrap",
             "supported_routes": if client.is_some() { vec!["agent:observation", "agent:capabilities"] } else {vec![]},
             "availability":"checked_against_each_authorized_world_read",
             "actor_proof_header":"X-Oasis7-World-Read-Proof", "actor_proof_encoding":"hex_json",
-            "operation_domain":VIEW_PATH, "max_proof_header_bytes":8192,
+            "operation_domain":VIEW_PATH, "max_proof_header_bytes":MAX_READ_PROOF_HEADER_BYTES,
+            "schema_revision":READ_SCHEMA_REVISION, "openapi_url":READ_OPENAPI_PATH,
+            "limits":read_bootstrap_limits(),
             "writes_available":false}),
         );
     }
@@ -152,7 +161,7 @@ fn route(
         .get_all("X-Oasis7-World-Read-Proof")
         .iter();
     let proof = headers.next().ok_or((428, "actor_proof_required"))?;
-    if headers.next().is_some() || proof.as_bytes().len() > 8192 {
+    if headers.next().is_some() || proof.as_bytes().len() > MAX_READ_PROOF_HEADER_BYTES {
         return Err((400, "invalid_actor_proof"));
     }
     let bytes = hex::decode(proof.as_bytes()).map_err(|_| (400, "invalid_actor_proof"))?;

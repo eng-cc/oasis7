@@ -12,7 +12,8 @@
 
 `oasis7_viewer_live --game-api-read` 在现有 `--web-bind` 端口启用普通 HTTP GET，同时保留 WebSocket；默认关闭，只允许 loopback IP 绑定。需要既有 `OASIS7_WORLD_SERVICE_*` 配置及 `agent:<id>` scope，后端仅允许 HTTPS 或 loopback IP。入口不读取世界目录，不使用 Viewer 的读私钥替调用者签名；底层 `RemoteWorldServiceClient::read_actor_view` 将设备签名原样转发，核对服务签名、请求关联、scope、commit 与 projection 一致性。服务断连、拒绝或不可信回复不返回本地缓存。
 
-- `GET /v1/game/info` 公布 `signed_read_bootstrap`、可路由资源、实际读取时检查可用性和 `writes_available=false`。
+- `GET /v1/game/info` 公布 `signed_read_bootstrap`、可路由资源、实际读取时检查可用性、`writes_available=false`、`schema_revision`、`openapi_url` 与实际执行的 `limits`。
+- `GET /v1/game/openapi.json` 无需主体证明，发布同版本 OpenAPI 3.1 bootstrap 合同；只列上述 discovery 与两个已实施签名读资源，不把目标 context/action/operation 宣称为可用。合同包含签名 header 的 decoded World Service schema、签名 domain、数值编码差异、错误与重试语义、实际大小/深度/并发限制；路径相对当前服务，不发布配置、公私钥或可信世界信息。
 - `GET /v1/game/worlds/{world}/agents/{agent}/observation` 返回已授权 AgentCell 的 `data`、`logical_tick` 和 committed projection version `world_binding`；这里是自身状态投影，尚不是完整首局观察。
 - 同路径 `capabilities` 只返回权威 projection 中该 Agent 的 capability catalog；实际 World Service 的 agent read 处理器调用 `canonical_agent_service_context` 填充此 context，没有 context 时为 `503 capability_unavailable`，不合成或使用旧 Provider 目录。
 - 两个读取资源使用 `X-Oasis7-World-Read-Proof` header：值为 `hex(UTF8 JSON SignedReadRequest<ReadWorldViewRequest>)`。调用者在设备端以现有 `authority::sign_read_request` codec 和 `/v1/world/view` domain 签署配置匹配的 world/scope。没有证明返回 428；重复 header/key、未知字段、篡改、错误 scope、带 token 的 query 或 Origin 均拒绝。固定历史 commit 不支持，避免旧快照代替当前权限检查。

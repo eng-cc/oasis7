@@ -303,3 +303,67 @@ fn read_errors_distinguish_transient_limits_from_invalid_requests() {
     assert_eq!(body["code"], "invalid_actor_proof");
     assert_eq!(body["retryable"], false);
 }
+
+#[test]
+fn machine_discovery_is_public_and_matches_real_read_transport() {
+    let info = handle(
+        &Request::builder().uri("/v1/game/info").body(()).unwrap(),
+        None,
+    );
+    let info: Value = serde_json::from_str(info.body().as_ref().unwrap()).unwrap();
+    assert_eq!(info["openapi_url"], READ_OPENAPI_PATH);
+    assert_eq!(info["limits"], read_bootstrap_limits());
+    assert_eq!(info["supported_routes"], json!([]));
+    assert_eq!(info["writes_available"], false);
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let worker = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        assert!(serve_if_game_request(&mut stream, None).unwrap());
+    });
+    let mut stream = TcpStream::connect(addr).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .unwrap();
+    write!(
+        stream,
+        "GET {READ_OPENAPI_PATH} HTTP/1.1\r\nHost: localhost\r\n\r\n"
+    )
+    .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200"));
+    assert!(response.contains("Cache-Control: no-store"));
+    let (_, body) = response.split_once("\r\n\r\n").unwrap();
+    let document: Value = serde_json::from_str(body).unwrap();
+    assert_eq!(document, read_bootstrap_openapi());
+    assert_eq!(
+        document["components"]["securitySchemes"]["DeviceReadProof"]["x-oasis7-operation-domain"],
+        VIEW_PATH
+    );
+    assert_eq!(
+        document["components"]["securitySchemes"]["DeviceReadProof"]["name"],
+        "X-Oasis7-World-Read-Proof"
+    );
+    worker.join().unwrap();
+
+    for req in [
+        Request::builder()
+            .method("POST")
+            .uri(READ_OPENAPI_PATH)
+            .body(())
+            .unwrap(),
+        Request::builder()
+            .uri(format!("{READ_OPENAPI_PATH}?token=secret"))
+            .body(())
+            .unwrap(),
+        Request::builder()
+            .uri(READ_OPENAPI_PATH)
+            .header("Content-Length", "1")
+            .body(())
+            .unwrap(),
+    ] {
+        assert_eq!(handle(&req, None).status(), 400);
+    }
+}
