@@ -8,6 +8,18 @@
 
 本文中的新组件、路由、记录和测试场景均为后续实施输入。`accepted` 只表示所属权威已受理，世界效果必须读取既有权威回执；文档合入不代表这些接口已经上线。
 
+### 首个实施切片：本机签名只读 bootstrap
+
+`oasis7_viewer_live --game-api-read` 在现有 `--web-bind` 端口启用普通 HTTP GET，同时保留 WebSocket；默认关闭，只允许 loopback IP 绑定。需要既有 `OASIS7_WORLD_SERVICE_*` 配置及 `agent:<id>` scope，后端仅允许 HTTPS 或 loopback IP。入口不读取世界目录，不使用 Viewer 的读私钥替调用者签名；底层 `RemoteWorldServiceClient::read_actor_view` 将设备签名原样转发，核对服务签名、请求关联、scope、commit 与 projection 一致性。服务断连、拒绝或不可信回复不返回本地缓存。
+
+- `GET /v1/game/info` 公布 `signed_read_bootstrap`、可路由资源、实际读取时检查可用性和 `writes_available=false`。
+- `GET /v1/game/worlds/{world}/agents/{agent}/observation` 返回已授权 AgentCell 的 `data`、`logical_tick` 和 committed projection version `world_binding`；这里是自身状态投影，尚不是完整首局观察。
+- 同路径 `capabilities` 只返回权威 projection 中该 Agent 的 capability catalog；实际 World Service 的 agent read 处理器调用 `canonical_agent_service_context` 填充此 context，没有 context 时为 `503 capability_unavailable`，不合成或使用旧 Provider 目录。
+- 两个读取资源使用 `X-Oasis7-World-Read-Proof` header：值为 `hex(UTF8 JSON SignedReadRequest<ReadWorldViewRequest>)`。调用者在设备端以现有 `authority::sign_read_request` codec 和 `/v1/world/view` domain 签署配置匹配的 world/scope。没有证明返回 428；重复 header/key、未知字段、篡改、错误 scope、带 token 的 query 或 Origin 均拒绝。固定历史 commit 不支持，避免旧快照代替当前权限检查。
+- header 最多 8192 bytes、整个 HTTP header 最多 16384 bytes；JSON 同时消费共享严格解析器；最多 8 个后端读取、响应最多 2 MiB。bootstrap `data` 和 `world_binding` 中整数统一为十进制字符串，顶层 API revision 保持整数。服务签名认证不代签共识最终性。
+
+这是设备签名只读实施中间阶段；未实现 opaque token/配对、proof prepare、上下文/行动/持久 operation、任务协作、普通 Viewer/browser 授权、worker 或首局验收。正式 token 接入仍须在入口验证会话后保留此主体证明和世界授权链路。共享 `oasis7_agent_api::game` 已定义 action request、decimal u64 和操作状态 registry，但 DTO 不授予权限。对应测试为 `game_wire`、`viewer::game_read_api` 和 `world_service::client`；测试通过不表示上述未实施能力已交付。
+
 ## 1. 问题、目标与非目标
 
 把“游戏向 Provider 索取决策”与“外部 Runtime 主动玩游戏”分开。后者必须有可独立调用的观察、能力、行动、任务和结果接口，而不是把旧 `/v1/provider/*` 换个名字。首期复用既有 Runtime 行动校验与持久回执，不让 Viewer、模型或 API 服务器成为新的世界写入者。

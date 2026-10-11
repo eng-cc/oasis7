@@ -408,6 +408,7 @@ fn agent_chat_auth_verify_rejects_player_mismatch() {
         reorg_epoch: None,
         authority_scope: None,
         replaces_intent_id: None,
+        canonical_authority: None,
     };
     let mut proof =
         sign_agent_chat_auth_proof(&request, 15, public_key.as_str(), private_key.as_str())
@@ -432,6 +433,7 @@ fn agent_chat_auth_verify_rejects_invalid_signature_prefix() {
         reorg_epoch: None,
         authority_scope: None,
         replaces_intent_id: None,
+        canonical_authority: None,
     };
     let mut proof =
         sign_agent_chat_auth_proof(&request, 16, public_key.as_str(), private_key.as_str())
@@ -456,6 +458,7 @@ fn agent_chat_auth_verify_rejects_zero_intent_seq() {
         reorg_epoch: None,
         authority_scope: None,
         replaces_intent_id: None,
+        canonical_authority: None,
     };
     let err = sign_agent_chat_auth_proof(&request, 17, public_key.as_str(), private_key.as_str())
         .expect_err("zero intent_seq should fail");
@@ -478,6 +481,7 @@ fn signed_v2_agent_chat_request(
         reorg_epoch: Some(3),
         authority_scope: Some(AGENT_CHAT_AUTHORITY_SCOPE.to_string()),
         replaces_intent_id: Some("agent-intent-v2:previous".to_string()),
+        canonical_authority: None,
     };
     let proof = sign_agent_chat_auth_proof(&request, 19, public_key, private_key)
         .expect("sign V2 Agent Chat proof");

@@ -1,6 +1,7 @@
 [workspace]
 members = ["crates/oasis7_client_api",
     "crates/oasis7_agent_api",
+    "crates/oasis7_agent_harness",
     "crates/oasis7",
     "crates/oasis7_client_launcher",
     "crates/oasis7_launcher_ui",
@@ -20,6 +21,7 @@ members = ["crates/oasis7_client_api",
     "tools/wasm_build_suite",
     "tools/wasm_module_observe",
 ]
+exclude = ["tools/oasis7-command-center"]
 resolver = "2"
 
 [workspace.dependencies]

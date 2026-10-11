@@ -463,6 +463,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
     let journal_before_translation_roundtrip = kernel.journal_snapshot();
     let mut snapshot = kernel.snapshot();
     snapshot.player_gameplay = Some(PlayerGameplaySnapshot {
+        canonical_agent_chat: None,
         stage_id: PlayerGameplayStageId::PostOnboarding,
         stage_status: PlayerGameplayStageStatus::Blocked,
         execution_state: PlayerGameplayExecutionState::Blocked,

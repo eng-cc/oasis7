@@ -18,6 +18,9 @@ pub(super) fn describe(
         DESCRIBE_PATH,
         &request,
         DescribeWorldResponse {
+            execution_evidence_scope: service.guarded.map(|_| {
+                oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
+            }),
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             world: service.identity.clone(),
             binding: pinned.commit.binding.clone(),
@@ -67,19 +70,15 @@ fn outcome(
         });
     }
     // Recover the actual immutable record of execution, never current Tick.
-    if !service
-        .records
-        .join(format!("{:020}.json", result.committed_height))
-        .exists()
+    if service.guarded.is_none()
+        && !service
+            .records
+            .join(format!("{:020}.json", result.committed_height))
+            .exists()
     {
         return Ok(IntentOutcome::HistoryUnavailable);
     }
-    let historical = world_service_read::pin_at_height(
-        service.records,
-        service.storage,
-        &service.identity,
-        result.committed_height,
-    )?;
+    let historical = service.pin_at_height(result.committed_height)?;
     if historical
         .world
         .capability_revocation_state()
@@ -108,6 +107,9 @@ pub(super) fn submit(
     service.check_payload(&pinned, &request.signed_payload)?;
     let existing = outcome(service, &pinned, &correlation)?;
     let status = if matches!(existing, IntentOutcome::Unknown) {
+        if let WorldServicePayloadV1::AgentChat(chat) = &request.signed_payload {
+            agent_chat::validate_fresh(&pinned.world, chat)?;
+        }
         if matches!(&request.signed_payload, WorldServicePayloadV1::GameplayJson(bytes)
             if gameplay::consumed_collect_data_nonce(&pinned.world, bytes)?)
         {
@@ -141,6 +143,9 @@ pub(super) fn submit(
         SUBMIT_PATH,
         &request,
         IntentResponse {
+            execution_evidence_scope: service.guarded.map(|_| {
+                oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
+            }),
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             correlation,
             outcome: status,
@@ -160,6 +165,9 @@ pub(super) fn lookup(service: &Service<'_>, request: AuthenticatedLookup) -> Res
         LOOKUP_PATH,
         &request,
         IntentResponse {
+            execution_evidence_scope: service.guarded.map(|_| {
+                oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
+            }),
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             outcome: outcome(service, &pinned, &correlation)?,
             correlation,
@@ -225,8 +233,11 @@ pub(super) fn view(
         &request.request.scope_id,
         &request.subject_public_key,
     )?;
-    let mut projection =
-        projection::WorldServiceProjection::from_world(&pinned.world, agent.as_deref())?;
+    let mut projection = projection::WorldServiceProjection::from_authenticated_world(
+        &pinned.world,
+        agent.as_deref(),
+        &request.subject_public_key,
+    )?;
     if let Some(agent) = agent.as_deref() {
         projection.agent_context = Some(
             oasis7::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
@@ -272,6 +283,9 @@ pub(super) fn view(
     let events = scoped_events(&pinned, agent.as_deref());
     projection.events = events.iter().map(|event| (*event).clone()).collect();
     let response = ReadWorldViewResponse {
+        execution_evidence_scope: service.guarded.map(|_| {
+            oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
+        }),
         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
         version: version(&pinned, &request.request.scope_id, &projection)?,
         logical_tick: pinned.world.state().time,
@@ -328,6 +342,9 @@ pub(super) fn changes(
         return Err("cursor beyond pinned history".into());
     }
     let mut response = ReadWorldChangesResponse {
+        execution_evidence_scope: service.guarded.map(|_| {
+            oasis7::world_service::verified_view::CONTROLLED_PREREQUISITE_READ_SCOPE.into()
+        }),
         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
         changes: Vec::new(),
         next_cursor: request.request.cursor.clone(),

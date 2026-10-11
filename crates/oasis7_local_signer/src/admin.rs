@@ -26,7 +26,6 @@ use crate::store::{
 use crate::types::{BatchGrant, InstallationConfig, Policy};
 
 const MAX_CONTROL_BYTES: usize = 1024 * 1024;
-const ROLLBACK_PURPOSE: &str = "rollback_strict_audit_v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 // The `After` prefix records fault-injection timing at each durability boundary.
@@ -44,12 +43,12 @@ pub(crate) enum AdminFaultPoint {
 /// installer and are deliberately outside this API.
 #[derive(Debug)]
 pub struct AdminStore {
-    installation: InstallationConfig,
-    root: PathBuf,
-    signer_uid: u32,
-    signer_gid: u32,
-    control_owner_uid: u32,
-    control_group_gid: u32,
+    pub(crate) installation: InstallationConfig,
+    pub(crate) root: PathBuf,
+    pub(crate) signer_uid: u32,
+    pub(crate) signer_gid: u32,
+    pub(crate) control_owner_uid: u32,
+    pub(crate) control_group_gid: u32,
     #[cfg(test)]
     allow_nonroot_test_fixture: bool,
     #[cfg(test)]
@@ -96,12 +95,13 @@ impl AdminStore {
     pub fn create_key(&self, signer_id: &str, purpose: &str) -> Result<[u8; 32], SignerError> {
         self.ensure_root_admin()?;
         self.validate_signer_id(signer_id)?;
-        if purpose != ROLLBACK_PURPOSE {
+        if purpose != "rollback_strict_audit_v1" {
             return Err(SignerError::InvalidInput(
                 "unsupported key purpose for M0".to_owned(),
             ));
         }
         let _lock = self.acquire_lock()?;
+        crate::key_management::reject_catalog_id(self, signer_id)?;
         let keys_dir = self.root.join("keys");
         let key_dir = keys_dir.join(signer_id);
         let target_path = self.target_relative(&key_dir)?;
@@ -380,11 +380,11 @@ impl AdminStore {
         self.mutate_control_file(&action, &path, &bytes, false, None)
     }
 
-    fn acquire_lock(&self) -> Result<CustodyLock, SignerError> {
+    pub(crate) fn acquire_lock(&self) -> Result<CustodyLock, SignerError> {
         CustodyLock::acquire(&self.root.join(LOCK_FILE), self.signer_uid, self.signer_gid)
     }
 
-    fn ensure_root_admin(&self) -> Result<(), SignerError> {
+    pub(crate) fn ensure_root_admin(&self) -> Result<(), SignerError> {
         #[cfg(test)]
         if self.allow_nonroot_test_fixture {
             return Ok(());
@@ -392,7 +392,7 @@ impl AdminStore {
         require_root_admin()
     }
 
-    fn validate_signer_id(&self, signer_id: &str) -> Result<(), SignerError> {
+    pub(crate) fn validate_signer_id(&self, signer_id: &str) -> Result<(), SignerError> {
         validate_id(signer_id).map_err(|error| SignerError::InvalidInput(error.to_string()))
     }
 
@@ -409,12 +409,12 @@ impl AdminStore {
         )
     }
 
-    fn validate_key_files(&self, signer_id: &str) -> Result<(), SignerError> {
+    pub(crate) fn validate_key_files(&self, signer_id: &str) -> Result<(), SignerError> {
         self.validate_key_directory(&self.root.join("keys").join(signer_id))?;
         Ok(())
     }
 
-    fn validate_key_directory(&self, key_dir: &Path) -> Result<[u8; 32], SignerError> {
+    pub(crate) fn validate_key_directory(&self, key_dir: &Path) -> Result<[u8; 32], SignerError> {
         reject_symlink_components(key_dir)?;
         validate_owned_directory(key_dir, self.signer_uid, self.signer_gid, 0o700)
             .map_err(|_| SignerError::KeyOrAuthorityUnavailable)?;
@@ -491,12 +491,12 @@ impl AdminStore {
         Ok(())
     }
 
-    fn action_key(&self, arguments: &[&str]) -> Result<String, SignerError> {
+    pub(crate) fn action_key(&self, arguments: &[&str]) -> Result<String, SignerError> {
         let arguments: Vec<String> = arguments.iter().map(|value| (*value).to_owned()).collect();
         Ok(sha256_hex(&canonical_json(&arguments)?))
     }
 
-    fn target_relative(&self, path: &Path) -> Result<String, SignerError> {
+    pub(crate) fn target_relative(&self, path: &Path) -> Result<String, SignerError> {
         path.strip_prefix(&self.root)
             .ok()
             .and_then(Path::to_str)
@@ -504,7 +504,7 @@ impl AdminStore {
             .ok_or(SignerError::InstallationDrift)
     }
 
-    fn pending_intent(
+    pub(crate) fn pending_intent(
         &self,
         operation_key: &str,
         target_path: &str,
@@ -542,7 +542,7 @@ impl AdminStore {
         Ok(())
     }
 
-    fn begin_intent(
+    pub(crate) fn begin_intent(
         &self,
         operation_key: String,
         target_path: String,
@@ -617,7 +617,7 @@ impl AdminStore {
         )
     }
 
-    fn mutate_control_file(
+    pub(crate) fn mutate_control_file(
         &self,
         action_arguments: &[&str],
         target: &Path,
@@ -636,7 +636,7 @@ impl AdminStore {
         self.commit_intent(&record)
     }
 
-    fn read_maintenance(&self) -> Result<Option<MaintenanceRecord>, SignerError> {
+    pub(crate) fn read_maintenance(&self) -> Result<Option<MaintenanceRecord>, SignerError> {
         let path = self.root.join(MAINTENANCE_FILE);
         if !path_exists(&path)? {
             return Ok(None);
@@ -667,7 +667,10 @@ impl AdminStore {
             })
             .collect();
         let permitted = match components.as_slice() {
-            ["control", "policy.json"] => true,
+            [
+                "control",
+                "policy.json" | "key-catalog.json" | "restore.json",
+            ] => true,
             ["control", "grants" | "revoked-grants", file] => file
                 .strip_suffix(".json")
                 .is_some_and(|id| validate_id(id).is_ok()),
@@ -800,7 +803,7 @@ impl AdminStore {
         sync_dir(parent)
     }
 
-    fn commit_intent(&self, record: &MaintenanceRecord) -> Result<(), SignerError> {
+    pub(crate) fn commit_intent(&self, record: &MaintenanceRecord) -> Result<(), SignerError> {
         let mut committed = record.clone();
         "committed".clone_into(&mut committed.phase);
         let bytes = canonical_json(&committed)?;
@@ -827,6 +830,20 @@ impl AdminStore {
         #[cfg(not(test))]
         let _ = point;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_config_fixture(installation: InstallationConfig) -> Self {
+        Self {
+            root: PathBuf::from(&installation.store_dir),
+            signer_uid: installation.signer_uid,
+            signer_gid: installation.signer_gid,
+            control_owner_uid: installation.signer_uid,
+            control_group_gid: installation.signer_gid,
+            installation,
+            allow_nonroot_test_fixture: true,
+            test_fault: std::cell::Cell::new(None),
+        }
     }
 
     #[cfg(test)]

@@ -221,6 +221,8 @@ struct AgentChatSigningPayload<'a> {
     authority_scope: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     replaces_intent_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canonical_authority: Option<&'a oasis7_proto::viewer::CanonicalAgentChatAuthorityV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -777,6 +779,7 @@ fn build_agent_chat_signing_payload(
             .as_ref()
             .map(|(_, _, authority_scope)| authority_scope.as_str()),
         replaces_intent_id: replaces_intent_id.as_deref(),
+        canonical_authority: request.canonical_authority.as_ref(),
     };
     encode_signing_payload(payload)
 }

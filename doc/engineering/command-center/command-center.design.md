@@ -343,6 +343,17 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 
 当前提交是两份设计和入口收敛，验证文档结构、链接、需求关系与 corpus 派生记录。下表运行验收均为尚待实现的义务；N/A 表示本次没有可执行客户端及精确测试入口，不表示需求不适用或已经通过。首次实现对应行为时，将该行替换为真实 repository-owned test/manual 来源，记录适用构建、环境与实际结果。
 
+### 11.0 首个基础实现切片
+
+实现落点为 [tools/oasis7-command-center](../../../tools/oasis7-command-center/README.md)，包含独立 Rust workspace、SQLite、Solid/TypeScript 和 Tauri 宿主；基础版本不提供 Codex 执行连接器。四视图读取本地来源、显式连接 GitHub、保存决定与多目标关联，不把未接入会话解释为空任务或允许控制。
+
+- Rust 自动化入口：`env -u RUSTC_WRAPPER cargo test --locked --manifest-path tools/oasis7-command-center/Cargo.toml -p oasis7-command-center-core`，覆盖中文短查询、FTS5、dirty 内容、缓存重建、阅读历史、已确认决定、项目隔离、未来 schema 拒绝、路径边界及 GitHub 故障保留。
+- UI 入口：`npm --prefix tools/oasis7-command-center/ui test` 与 `run build`，覆盖状态、来源和中文组合输入的提交边界；Rust DTO 由 `export_types` example 生成，CI 核对漂移。
+- 桌面与权限入口：[独立 macOS CI](../../../.github/workflows/command-center.yml) 和 [打包/验收步骤](../../../tools/oasis7-command-center/README.md#verification)。配置限定打包资源和主窗口的有限命令，不提供通用 shell/SQL/文件代理。
+- 基础 GitHub adapter 复用已有 gh 登录，并以固定只读参数调用 gh；当前仅支持 github.com 的最近最多 100 个 PR。账号和仓库绑定到同一主机，完整度明确为部分窗口。此次没有新增长期 token 输入，故不安装另一份凭据 provider；原有凭据仍由 gh 存储。直接 HTTP 的条件请求、全量分页与节流并未实现，后续扩展不能把当前窗口当完整快照。
+
+下表的完整 AC 仍包含尚未验证的系统体验、生产分发与可选执行能力；上述局部自动化覆盖不将整条验收标为通过。真实桌面结果和限制由实现 PR 记录。
+
 ### 11.1 验证映射表
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |

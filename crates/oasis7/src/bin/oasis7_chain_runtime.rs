@@ -41,6 +41,10 @@ mod cli;
 mod controlled_bootstrap_cli;
 #[path = "oasis7_chain_runtime/controlled_history_cli.rs"]
 mod controlled_history_cli;
+#[path = "oasis7_chain_runtime/controlled_live_config.rs"]
+mod controlled_live_config;
+#[path = "oasis7_chain_runtime/controlled_live_runtime.rs"]
+mod controlled_live_runtime;
 #[path = "oasis7_chain_runtime/distfs_probe_runtime.rs"]
 mod distfs_probe_runtime;
 #[cfg(not(test))]
@@ -160,6 +164,7 @@ use wasm_status::build_chain_wasm_status;
 
 #[cfg(test)]
 mod execution_bridge {
+    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::controlled_live;
     pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::world_service_read;
     use std::path::Path;
 
@@ -376,6 +381,9 @@ fn main() {
 }
 
 fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
+    if options.guarded_initial_config.is_some() {
+        return controlled_live_runtime::run(options);
+    }
     let mut options = options;
     apply_network_tier_manifest_defaults(&mut options);
     let trace_session_id = oasis7::observability::resolve_trace_session_id("oasis7_chain_runtime");

@@ -33,7 +33,7 @@ fn canonical_wait_notification_without_harness_preserves_world_and_sends_no_http
 }
 
 #[test]
-fn canonical_chat_refusal_precedes_auth_binding_and_world_mutation() {
+fn canonical_chat_unsigned_refusal_precedes_binding_and_world_mutation() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .unwrap();
@@ -49,13 +49,14 @@ fn canonical_chat_refusal_precedes_auth_binding_and_world_mutation() {
         reorg_epoch: None,
         authority_scope: None,
         replaces_intent_id: None,
+        canonical_authority: None,
     };
     server.config.chain_status_bind = Some("127.0.0.1:1".into());
     let before = serde_json::to_value(server.world.snapshot()).unwrap();
     let before_sidecar = server.test_canonical_provider_summary();
     assert_eq!(
         server.handle_agent_chat(request.clone()).unwrap_err().code,
-        "canonical_chat_unsupported"
+        "auth_proof_required"
     );
     server.complete_agent_chat_if_receipt_bound("agent-a", "intent", "digest");
     assert_eq!(

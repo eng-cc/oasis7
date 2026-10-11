@@ -163,6 +163,7 @@ pub(super) fn build_signed_agent_chat_request(
         reorg_epoch: None,
         authority_scope: None,
         replaces_intent_id: None,
+        canonical_authority: None,
     };
     let proof = sign_agent_chat_auth_proof(&request, nonce, public_key.as_str(), private_key_hex)?;
     Ok(AgentChatRequest {

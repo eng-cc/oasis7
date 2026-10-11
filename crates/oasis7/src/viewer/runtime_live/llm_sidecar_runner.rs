@@ -122,6 +122,41 @@ impl RuntimeLlmSidecar {
         self.provider_lineage_binding.clone()
     }
 
+    /// Deliver only an owner-authenticated committed goal to the existing
+    /// runner. Failed delivery blocks the turn and is retried, never cached as
+    /// success; local non-chain prompt profiles remain unchanged.
+    pub(in crate::viewer::runtime_live) fn sync_canonical_goal_prompt(
+        &mut self,
+    ) -> Result<(), String> {
+        let current = self
+            .provider_service_projection
+            .as_ref()
+            .and_then(|view| view.canonical_agent_chat.as_ref())
+            .and_then(|chat| {
+                chat.goal
+                    .as_ref()
+                    .filter(|goal| matches!(goal.status.as_str(), "accepted" | "blocked"))
+                    .map(|goal| (chat.agent_id.clone(), Some(goal.intent_id.clone())))
+            });
+        if current == self.canonical_goal_prompt_applied {
+            return Ok(());
+        }
+        let agent = current
+            .as_ref()
+            .or(self.canonical_goal_prompt_applied.as_ref())
+            .map(|(agent, _)| agent.clone());
+        if let Some(agent) = agent {
+            let profile = self
+                .prompt_profiles
+                .get(&agent)
+                .cloned()
+                .unwrap_or_else(|| AgentPromptProfile::for_agent(agent));
+            self.apply_prompt_profile_to_driver(&profile)?;
+        }
+        self.canonical_goal_prompt_applied = current;
+        Ok(())
+    }
+
     pub(in crate::viewer::runtime_live) fn apply_prompt_profile_to_driver(
         &mut self,
         profile: &AgentPromptProfile,

@@ -46,6 +46,10 @@ pub(super) struct RuntimeSessionPolicy {
 }
 
 impl RuntimeSessionPolicy {
+    pub(super) fn active_session_public_key(&self, player: &str) -> Option<&str> {
+        self.active_pubkey_by_player.get(player).map(String::as_str)
+    }
+
     #[cfg(test)]
     pub(super) fn register_session(
         &mut self,

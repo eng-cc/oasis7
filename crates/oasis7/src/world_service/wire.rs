@@ -49,6 +49,7 @@ pub struct CanonicalIntentResultV1 {
 )]
 pub enum WorldServicePayloadV1 {
     GameplayJson(Vec<u8>),
+    AgentChat(crate::viewer::AgentChatRequest),
     Cognition(SignedReadRequest<CognitionIntentV1>),
     FeedbackAck(SignedReadRequest<FeedbackAckIntentV1>),
     Delegation(SignedReadRequest<AgentSignerDelegationChangeV1>),

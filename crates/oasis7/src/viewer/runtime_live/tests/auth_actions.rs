@@ -42,6 +42,7 @@ fn runtime_agent_chat_script_mode_requires_llm_mode() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         })
         .expect_err("script mode should reject chat");
     assert_eq!(err.code, "llm_mode_required");
@@ -729,6 +730,7 @@ fn runtime_agent_chat_requires_explicit_session_registration() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         1,
         public_key.as_str(),

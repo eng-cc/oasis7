@@ -812,7 +812,11 @@ impl WorldGate {
         {
             return GateDisposition::Continue;
         }
-        fs::write(root.join(format!("world-{kind}-started")), started_record).unwrap();
+        super::application_hosted_wait::publish_marker(
+            &root.join(format!("world-{kind}-started")),
+            &started_record,
+        )
+        .unwrap();
         let gate_budget = if kind == "periodic-view" {
             Duration::from_millis(1_500)
         } else {

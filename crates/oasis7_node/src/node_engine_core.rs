@@ -656,125 +656,6 @@ impl PosNodeEngine {
         self.recent_finality_latency_ms.push_back(latency_ms.max(0));
     }
 
-    pub(super) fn apply_committed_execution(
-        &mut self,
-        node_id: &str,
-        world_id: &str,
-        now_ms: i64,
-        decision: &PosDecision,
-        execution_hook: Option<&mut dyn NodeExecutionHook>,
-    ) -> Result<(), NodeError> {
-        self.apply_committed_execution_with_expected(
-            node_id,
-            world_id,
-            now_ms,
-            decision,
-            execution_hook,
-            None,
-            None,
-        )
-    }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Stable commit execution seam keeps expected peer bindings explicit for recovery validation"
-    )]
-    pub(super) fn apply_committed_execution_with_expected(
-        &mut self,
-        node_id: &str,
-        world_id: &str,
-        now_ms: i64,
-        decision: &PosDecision,
-        execution_hook: Option<&mut dyn NodeExecutionHook>,
-        expected_execution_block_hash: Option<&str>,
-        expected_execution_state_root: Option<&str>,
-    ) -> Result<(), NodeError> {
-        if !matches!(decision.status, PosConsensusStatus::Committed) {
-            return Ok(());
-        }
-        if decision.height <= self.last_execution_height {
-            return Ok(());
-        }
-        let Some(execution_hook) = execution_hook else {
-            if self.require_execution_on_commit {
-                return Err(NodeError::Execution {
-                    reason: format!(
-                        "execution hook is required before committing height {}",
-                        decision.height
-                    ),
-                });
-            }
-            return Ok(());
-        };
-
-        let result = match execution_hook.on_commit_with_expected(
-            NodeExecutionCommitContext {
-                world_id: world_id.to_string(),
-                node_id: node_id.to_string(),
-                proposer_id: decision.proposer_id.clone(),
-                height: decision.height,
-                slot: decision.slot,
-                epoch: decision.epoch,
-                node_block_hash: decision.block_hash.clone(),
-                action_root: decision.action_root.clone(),
-                committed_actions: decision.committed_actions.clone(),
-                committed_at_unix_ms: now_ms,
-            },
-            expected_execution_block_hash,
-            expected_execution_state_root,
-        ) {
-            Ok(result) => result,
-            Err(reason)
-                if execution_error_waits_for_gap_sync(reason.as_str())
-                    && !self.require_execution_on_commit =>
-            {
-                return Ok(());
-            }
-            Err(reason) => return Err(NodeError::Execution { reason }),
-        };
-
-        if result.execution_height != decision.height {
-            return Err(NodeError::Execution {
-                reason: format!(
-                    "execution hook returned mismatched height: expected {}, got {}",
-                    decision.height, result.execution_height
-                ),
-            });
-        }
-        if result.execution_block_hash.trim().is_empty() {
-            return Err(NodeError::Execution {
-                reason: "execution hook returned empty execution_block_hash".to_string(),
-            });
-        }
-        if result.execution_state_root.trim().is_empty() {
-            return Err(NodeError::Execution {
-                reason: "execution hook returned empty execution_state_root".to_string(),
-            });
-        }
-        if let (Some(expected_block), Some(expected_state)) =
-            (expected_execution_block_hash, expected_execution_state_root)
-            && (result.execution_block_hash != expected_block
-                || result.execution_state_root != expected_state)
-        {
-            return Err(NodeError::Execution {
-                reason: format!(
-                    "execution hook returned peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
-                    decision.height,
-                    result.execution_block_hash,
-                    expected_block,
-                    result.execution_state_root,
-                    expected_state
-                ),
-            });
-        }
-
-        self.last_execution_height = result.execution_height;
-        self.last_execution_block_hash = Some(result.execution_block_hash);
-        self.last_execution_state_root = Some(result.execution_state_root);
-        self.remember_execution_binding_for_height(decision.height);
-        Ok(())
-    }
-
     pub(super) fn snapshot_from_decision(&self, decision: &PosDecision) -> NodeConsensusSnapshot {
         let pending_proposal = self.pending.as_ref().map(|proposal| {
             let action_payload_bytes =
@@ -1113,10 +994,6 @@ impl PosNodeEngine {
         }
         Ok(())
     }
-}
-
-fn execution_error_waits_for_gap_sync(reason: &str) -> bool {
-    reason.starts_with(EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE)
 }
 
 fn total_action_payload_bytes<'a>(actions: impl Iterator<Item = &'a NodeConsensusAction>) -> usize {

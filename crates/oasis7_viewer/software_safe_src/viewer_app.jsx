@@ -1,3 +1,4 @@
+import { CanonicalAgentGoal } from "./canonical_agent_goal.jsx";
 import { IndustrialStarterOutcomeCard } from "./industrial_starter_outcome_card.jsx";
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
@@ -3431,6 +3432,7 @@ function InteractionPanel() {
         meta={tr(locale(), "向当前目标发消息并读回复。", "Message the current target and read replies.")}
       >
         <div class="field">
+          <CanonicalAgentGoal state={core.state} agentId={agentId()} locale={locale()} />
           <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
               <textarea
                 id="agent-chat-message"

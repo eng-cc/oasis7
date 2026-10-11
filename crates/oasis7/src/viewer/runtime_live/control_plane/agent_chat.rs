@@ -17,6 +17,7 @@ fn durable_agent_chat_ack(
     replaced_by: Option<String>,
 ) -> AgentChatAck {
     AgentChatAck {
+        auth_nonce: None,
         agent_id: agent_id.to_string(),
         accepted_at_tick: logical_time,
         message_len,
@@ -39,11 +40,7 @@ impl ViewerRuntimeLiveServer {
     ) -> Result<AgentChatAck, AgentChatError> {
         let agent_id = request.agent_id.clone();
         if self.chain_link_enabled() {
-            return Err(AgentChatError {
-                code: "canonical_chat_unsupported".into(),
-                message: "world service has no registered Agent chat capability".into(),
-                agent_id: Some(agent_id),
-            });
+            return self.handle_canonical_agent_chat(request);
         }
         if !self.llm_sidecar.is_llm_mode() {
             return Err(AgentChatError {
@@ -327,6 +324,7 @@ impl ViewerRuntimeLiveServer {
             delta_event_seq: 0,
         });
         let ack = AgentChatAck {
+            auth_nonce: None,
             agent_id: agent_id.clone(),
             accepted_at_tick: accepted_intent.logical_time,
             message_len: message.chars().count(),

@@ -294,6 +294,7 @@ impl LiveWorld {
             });
         }
         Ok(AgentChatAck {
+        auth_nonce: None,
             agent_id: request.agent_id,
             accepted_at_tick: self.kernel.time(),
             message_len: message.chars().count(),

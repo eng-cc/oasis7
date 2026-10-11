@@ -1,5 +1,6 @@
 //! Authenticated topology-independent service wire and adapters.
 pub mod agent_authority;
+pub mod agent_chat;
 pub mod authority;
 pub mod client;
 pub mod correlation;

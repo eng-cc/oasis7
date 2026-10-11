@@ -1,0 +1,4 @@
+{
+  "compilerOptions": { "target": "ES2022", "lib": ["ES2022", "DOM"], "module": "ESNext", "moduleResolution": "Bundler", "jsx": "preserve", "jsxImportSource": "solid-js", "strict": true, "noEmit": true, "isolatedModules": true, "types": ["vite/client", "vitest/globals"], "skipLibCheck": true },
+  "include": ["src", "vite.config.ts"]
+}

@@ -166,7 +166,8 @@ impl ViewerRuntimeLiveServer {
     }
 
     pub(super) fn compat_snapshot(&mut self, current_player_id: Option<&str>) -> WorldSnapshot {
-        let runtime_snapshot = self.world.snapshot();
+        let mut runtime_snapshot = self.world.snapshot();
+        super::snapshot_privacy::omit_private_canonical_chat(&mut runtime_snapshot);
         let runtime_state = &runtime_snapshot.state;
         let runtime_journal_len = runtime_snapshot.journal_len;
         let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
@@ -184,8 +185,23 @@ impl ViewerRuntimeLiveServer {
         let snapshot_player_id = current_player_id
             .map(str::trim)
             .filter(|player_id| !player_id.is_empty());
-        let snapshot_bound_agent_id = snapshot_player_id
-            .and_then(|player_id| self.llm_sidecar.bound_agent_for_player(player_id));
+        let canonical_chat = self
+            .verified_world_view
+            .as_ref()
+            .and_then(|view| view.projection().canonical_agent_chat.as_ref())
+            .filter(|chat| {
+                snapshot_player_id == Some(chat.player_id.as_str())
+                    && self
+                        .session_policy
+                        .validate_known_session_key(&chat.player_id, &chat.public_key)
+                        .is_ok()
+            });
+        let snapshot_bound_agent_id = if self.chain_link_enabled() {
+            canonical_chat.map(|chat| chat.agent_id.as_str())
+        } else {
+            snapshot_player_id
+                .and_then(|player_id| self.llm_sidecar.bound_agent_for_player(player_id))
+        };
         let primary_agent_claim = snapshot_bound_agent_id.and_then(|agent_id| {
             build_player_agent_claim_snapshot(
                 runtime_state,
@@ -277,6 +293,8 @@ impl ViewerRuntimeLiveServer {
                         agency_read_model: None,
                     }
                 })
+            } else if self.chain_link_enabled() {
+                None
             } else {
                 // Prompt-control predates AgentIntentV2. Keep that handoff
                 // visible for compatibility, but mark it explicitly as a
@@ -314,11 +332,17 @@ impl ViewerRuntimeLiveServer {
                     )
             }
         });
-        let model = runtime_state_to_simulator_model(
+        let mut model = runtime_state_to_simulator_model(
             runtime_state,
             &self.llm_sidecar,
             self.seed_model.as_ref(),
         );
+        if self.config.world_service.is_some() {
+            for profile in model.agent_prompt_profiles.values_mut() {
+                profile.short_term_goal_override = None;
+            }
+        }
+
         let micro_depot_facilities =
             WorldKernel::micro_depot_player_facility_snapshots_from_model(&model);
         let mut player_gameplay = build_player_gameplay_snapshot(
@@ -334,6 +358,7 @@ impl ViewerRuntimeLiveServer {
             first_agent_claim_target_available,
             primary_agent_claim,
         );
+        player_gameplay.canonical_agent_chat = canonical_chat.cloned();
         if let (Some(player_id), Some(agent_id)) = (snapshot_player_id, snapshot_bound_agent_id)
             && self
                 .llm_sidecar

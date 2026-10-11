@@ -838,6 +838,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             IntentOutcome::Rejected { reason } => {
                 if stage == "reserve" {
                     self.llm_sidecar.retire_rejected_reserve(&IntentResponse {
+                        execution_evidence_scope: None,
                         contract_version: response.contract_version,
                         correlation: response.correlation,
                         outcome: IntentOutcome::Rejected { reason },

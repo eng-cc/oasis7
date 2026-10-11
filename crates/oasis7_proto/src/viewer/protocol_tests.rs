@@ -107,6 +107,7 @@ fn viewer_agent_chat_request_round_trip() {
             reorg_epoch: Some(2),
             authority_scope: Some("player_agent_chat".to_string()),
             replaces_intent_id: Some("agent-intent-v2:prior".to_string()),
+            canonical_authority: None,
         },
     };
     let json = serde_json::to_string(&request).expect("serialize request");
@@ -392,6 +393,7 @@ fn viewer_response_round_trip_agent_chat_ack() {
         u64,
     >::AgentChatAck {
         ack: AgentChatAck {
+            auth_nonce: None,
             agent_id: "agent-0".to_string(),
             accepted_at_tick: 42,
             message_len: 11,

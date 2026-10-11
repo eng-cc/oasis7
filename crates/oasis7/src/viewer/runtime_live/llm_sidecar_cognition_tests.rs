@@ -109,6 +109,8 @@ fn fresh_resume_leaves_past_schedule_tick_for_runtime_derivation() {
         "pending_reason": "capacity_available"
     })).unwrap();
     let mut projection = crate::world_service::projection::WorldServiceProjection {
+        canonical_agent_owner: None,
+        canonical_agent_chat: None,
         state: world.state().clone(),
         events: vec![],
         runtime_binding: None,

@@ -28,6 +28,7 @@ fn persist_session_side_effect_projection(
         .expect("agent");
     let player_id = "player-session-projection".to_string();
     let cached_ack = crate::viewer::AgentChatAck {
+        auth_nonce: None,
         agent_id: agent_id.clone(),
         accepted_at_tick: server.world.state().time,
         message_len: "persisted chat".len(),
@@ -321,6 +322,7 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
         old_private.as_str(),
     );
     let cached_ack = crate::viewer::AgentChatAck {
+        auth_nonce: None,
         agent_id: agent_id.clone(),
         accepted_at_tick: server.world.state().time,
         message_len: "persist me".len(),
@@ -872,6 +874,7 @@ fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         6,
         public_key.as_str(),
@@ -906,6 +909,7 @@ fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         6,
         public_key.as_str(),
@@ -946,6 +950,7 @@ fn runtime_agent_chat_rejects_intent_seq_nonce_mismatch() {
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         9,
         public_key.as_str(),
@@ -1002,6 +1007,7 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         2,
         public_key_v1.as_str(),
@@ -1062,6 +1068,7 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         2,
         public_key_v1.as_str(),
@@ -1081,6 +1088,7 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
         .map(|intent| intent.intent_id.clone());
     let rotated_request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
+            canonical_authority: None,
             agent_id: agent_id.clone(),
             player_id: Some("player-a".to_string()),
             public_key: None,
@@ -1174,6 +1182,7 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
             reorg_epoch: None,
             authority_scope: None,
             replaces_intent_id: None,
+            canonical_authority: None,
         },
         2,
         public_key_v2.as_str(),

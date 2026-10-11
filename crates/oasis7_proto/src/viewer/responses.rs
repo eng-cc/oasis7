@@ -243,6 +243,9 @@ pub struct AgentChatAck<Time> {
     pub receipt_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaced_by: Option<String>,
+    /// Original signed canonical owner nonce, never a Runtime acceptance claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_nonce: Option<u64>,
 }
 
 fn is_false(value: &bool) -> bool {
