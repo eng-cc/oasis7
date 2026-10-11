@@ -32,7 +32,7 @@
 | [REQ-CC-001](command-center.prd.md#REQ-CC-001) | App 独立启动，打开正确项目和工作树，恢复个人上下文 | [DES-CC-001](#DES-CC-001) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；runtime_engineer；Tauri / 系统 Git | 不以游戏栈或终端后端为前提 |
 | [REQ-CC-002](command-center.prd.md#REQ-CC-002) | 来源、版本、覆盖与失败分别保留；局部可用 | [DES-CC-002](#DES-CC-002) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；各 adapter；上游查询能力 | 不推定完整全局快照 |
 | [REQ-CC-003](command-center.prd.md#REQ-CC-003) | 当前与长期目标关联到适用验收，进度有可核实分母 | [DES-CC-003](#DES-CC-003) | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs)；producer_system_designer；core PRD / 交付事实 | 不按提交数或活动量计算完成率 |
-| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | 规范效力、历史理由、个人决定与正式回写可区分 | [DES-CC-004](#DES-CC-004) | [tests/section_identity.rs](../../../tools/oasis7-command-center/core/tests/section_identity.rs)；文档主责；显式替代与源版本 | 不另建通用决策登记系统 |
+| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | 规范效力、历史理由、个人决定与正式回写可区分 | [DES-CC-004](#DES-CC-004) | [tests/document_lifecycle.rs](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs)；文档主责；显式替代与源版本 | 不另建通用决策登记系统 |
 | [REQ-CC-005](command-center.prd.md#REQ-CC-005) | 工作目的、PR/CI、持久会话与运行实例分别关联 | [DES-CC-005](#DES-CC-005) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；agent_engineer；GitHub / Codex | 不将新连接当全机控制权 |
 | [REQ-CC-006](command-center.prd.md#REQ-CC-006) | 聚合真实问题，运行时请求使用原始身份 | [DES-CC-006](#DES-CC-006) | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs)；真实请求方；已有授权 | 不将普通实现转为待批准 |
 | [REQ-CC-007](command-center.prd.md#REQ-CC-007) | 动作受实际能力、环境和目标约束，回执说明结果 | [DES-CC-007](#DES-CC-007) | [src/RuntimePanel.test.tsx](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx)；agent_engineer；已核对版本协议 | 读取历史不赋予控制能力 |
@@ -364,6 +364,12 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 
 停用只拒绝新工作，已有活跃/未知自管工作继续保留管理。所有完整退出入口核对所有项目的自管范围；一轮完成、停止请求接受或 UI 取消观察都不能单独成为后台工作已结束的证据。无法核实时保留未知和处理入口，外部工作不随客户端退出停止。公共分发、公证、其他 CLI 版本、外部实时接管和跨崩溃持续执行不在本次证明范围内。
 
+### 11.0.2 显式规范后继读取
+
+文档索引保留文档身份块显式声明的生命周期、后继目标与理由，并将其作为来源事实显示。声明不等于规范效力、实现同步或验收通过；没有声明、声明冲突、超过读取界限或目标未进入当前索引时保留未知，不用时间或标题相似度推导替代关系。
+
+历史阅读版本保留当时的正文与元数据。界面另行标识当前文档声明的来源版本和提交基线，再按当前索引中的完整路径和明确章节身份定位后继；历史声明不能冒充当前声明，当前来源缺失也不自动采用历史声明作为现行规则。读取不修改正式规范、不访问外部链接或启动任务。此切片补齐显式后继的可读入口，不宣称所有规范冲突已经自动消解。
+
 ### 11.1 验证映射表
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |
@@ -371,7 +377,7 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 | [REQ-CC-001](command-center.prd.md#REQ-CC-001) | [DES-CC-001](#DES-CC-001) | AC-CC-001；真实 App 打开与恢复正确仓库 | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs) 项目打开/隔离与 `ui/src/App.test.tsx`；macOS 打包和原生恢复见 README verification | 实现 PR 的构建、机器与恢复结果 | 未证明安装、平台与路径行为 |
 | [REQ-CC-002](command-center.prd.md#REQ-CC-002) | [DES-CC-002](#DES-CC-002) | AC-CC-002；错误、部分页、空结果和慢刷新不混同 | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs) GitHub 故障保留；当前仅最近 100 PR 的部分窗口，非全量分页 | 实现 PR 的故障样本、源 revision 与投影断言 | 未证明真实 API 覆盖 |
 | [REQ-CC-003](command-center.prd.md#REQ-CC-003) | [DES-CC-003](#DES-CC-003) | AC-CC-003；PR无Issue、多目标、未知分母不伪造进度 | [tests/foundation.rs](../../../tools/oasis7-command-center/core/tests/foundation.rs) 与 `ui/src/association.test.tsx` 多目标关联；不从局部窗口推导整体完成度 | 实现 PR 的真实来源样本与关联结果 | 未证明项目实际完成度 |
-| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | [DES-CC-004](#DES-CC-004) | AC-CC-004；替代、历史、草稿和正式回写分别解释 | [tests/section_identity.rs](../../../tools/oasis7-command-center/core/tests/section_identity.rs) dirty/条款身份；`core/tests/foundation.rs` 决定与缓存隔离 | 实现 PR 的条款定位、后继与写入事实 | 未证明规范实现已符合 |
+| [REQ-CC-004](command-center.prd.md#REQ-CC-004) | [DES-CC-004](#DES-CC-004) | AC-CC-004；替代、历史、草稿和正式回写分别解释 | [tests/document_lifecycle.rs](../../../tools/oasis7-command-center/core/tests/document_lifecycle.rs) 声明解析、历史保留与旧缓存兼容；`core/tests/section_identity.rs` 条款身份；`core/tests/foundation.rs` 决定与缓存隔离 | 实现 PR 的条款定位、后继与写入事实 | 未证明规范实现已符合 |
 | [REQ-CC-005](command-center.prd.md#REQ-CC-005) | [DES-CC-005](#DES-CC-005) | AC-CC-005；同分支多会话与同会话多实例不覆盖 | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) fake stdio 契约/身份隔离回放；`ui/src/RuntimePanel.test.tsx` 原实例控制边界 | 实现 PR 的环境、schema 与绑定回放 | 未证明全机会话可观察 |
 | [REQ-CC-006](command-center.prd.md#REQ-CC-006) | [DES-CC-006](#DES-CC-006) | AC-CC-006；真实请求身份、已处理恢复与授权边界 | [tests/codex_runtime.rs](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 原请求身份、秘密回复与失回执回放；`ui/src/RuntimePanel.test.tsx` 请求表单与重复提交边界 | 实现 PR 的请求身份与回复回执 | 未证明外部运行时所有请求可用 |
 | [REQ-CC-007](command-center.prd.md#REQ-CC-007) | [DES-CC-007](#DES-CC-007) | AC-CC-007；只读不控制，刷新不运行，动作绑定原环境 | `src-tauri/src/runtime_commands.rs` 有限 IPC/admission 测试；[src/RuntimePanel.test.tsx](../../../tools/oasis7-command-center/ui/src/RuntimePanel.test.tsx) 默认无动作和身份门控 | 实现 PR 的能力矩阵与命令契约结果 | 未证明模型任务成功 |

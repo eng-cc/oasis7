@@ -34,6 +34,17 @@ pub struct DocumentSection {
     pub committed_revision: String,
     pub dirty: bool,
     pub fact_kind: String,
+    #[serde(default)]
+    pub lifecycle: Option<DocumentLifecycle>,
+}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentLifecycle {
+    pub status: Option<String>,
+    pub successor_declaration: Option<String>,
+    pub successor_targets: Vec<String>,
+    pub successor_reason: Option<String>,
+    pub issue: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS, Default)]
 #[serde(rename_all = "camelCase")]
