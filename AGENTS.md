@@ -5,6 +5,8 @@
 通用规则见 [开发流程规范](doc/engineering/workflow/source-of-truth.md)。主执行者可直接分析、实现、自测；专业协作按复杂度与风险使用。
 
 - 在独立分支修改；不在 main 或主 worktree 编辑。保留用户和其他执行者的工作。
+- 工作区先检查 `git worktree list --porcelain` 并优先复用干净、未占用的固定路径；确需新增使用 `./scripts/new-task-worktree.sh <module> <task> --base <ref>`，遵循 `oasis7.task-worktrees-root` 配置。除用户明确指定外，不用 App `create_worktree`、worktree fork 或 handoff 绕过仓库入口。
+- 首次本地编译前执行 `./scripts/cargo-dev.sh --prepare-target`；已有普通 target 不自动删除。日常反馈用开发 wrapper，正式验收保留 canonical 命令和参数。
 - `third_party/` 只读；Rust 工作参考 `third_party/rust-skills/AGENTS.md`。
 - 一个 PR 对应一个清楚目的，可原子修改多个 crate；Issue 和 Project 按需使用。
 - CI 控制、安全和兼容边界变化需要独立评审。专业关注点见 `.agents/roles/`，方法见 `.agents/skills/README.md`。
