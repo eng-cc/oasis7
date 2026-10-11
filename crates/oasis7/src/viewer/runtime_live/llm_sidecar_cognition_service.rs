@@ -1,25 +1,5 @@
 use super::*;
 
-fn cognition_base_binding(
-    request: &crate::simulator::ContinuousAgentRequestContextV1,
-) -> crate::runtime::RuntimeCognitionBaseBindingV1 {
-    let binding = &request.runtime_binding;
-    crate::runtime::RuntimeCognitionBaseBindingV1 {
-        world_id: binding.world_id.clone(),
-        branch_id: binding.branch_id.clone(),
-        finality_epoch: binding.finality_epoch,
-        finality_block_hash: binding
-            .finality_block_hash
-            .as_ref()
-            .map(ToString::to_string),
-        finality_status: binding.finality_status.clone(),
-        base_tick: binding.base_tick,
-        base_world_hash: binding.base_world_hash.to_string(),
-        reorg_epoch: binding.reorg_epoch,
-        runtime_manifest_hash: binding.runtime_manifest_hash.to_string(),
-    }
-}
-
 pub(super) fn runtime_continuation_for_wake_with_identity(
     world: &RuntimeWorld,
     projection: Option<&crate::world_service::projection::WorldServiceProjection>,
@@ -811,8 +791,15 @@ impl RuntimeLlmSidecar {
             .provider_service_projection
             .as_ref()
             .ok_or("canonical wake projection missing")?;
-        if projection.runtime_binding.as_ref() != Some(binding) {
-            return Err("canonical wake projection/runtime binding mismatch; fenced".into());
+        let current_binding = projection
+            .runtime_binding
+            .as_ref()
+            .ok_or("canonical wake projection runtime binding missing; fenced")?;
+        if !lineage_persistence::runtime_binding_advances_same_lineage(binding, current_binding) {
+            return Err(
+                "canonical wake projection/runtime binding changed lineage or regressed; fenced"
+                    .into(),
+            );
         }
         let wake_matches_request = |wake: &&crate::runtime::SchedulerWakeV1| {
             lineage_persistence::provider_context_matches_wake(&cognition.request, wake)
@@ -902,17 +889,31 @@ impl RuntimeLlmSidecar {
             else {
                 return Err("canonical wake handoff checkpoint operation mismatch".into());
             };
+            let signer = self
+                .provider_service_signer
+                .as_ref()
+                .ok_or("explicit canonical Agent signer missing")?;
+            let signer_key: [u8; 32] = hex::decode(&signer.private_key_hex)
+                .map_err(|_| "invalid canonical Agent signer key")?
+                .try_into()
+                .map_err(|_| "invalid canonical Agent signer key")?;
+            let signer_public_key = hex::encode(
+                ed25519_dalek::SigningKey::from_bytes(&signer_key)
+                    .verifying_key()
+                    .to_bytes(),
+            );
             if saved_wake_id != &wake.wake_id
                 || *status != crate::runtime::ContinuationStatusV1::Completed
                 || reason != "provider_action_committed"
                 || signed.request.agent_id != request.agent_subject
-                || signed.request.captured_base_binding != cognition_base_binding(request)
-                || signed.request.delegation_generation
-                    != self
-                        .provider_service_signer
-                        .as_ref()
-                        .ok_or("explicit canonical Agent signer missing")?
-                        .delegation_generation
+                || signed.subject_public_key != signer_public_key
+                || !lineage_persistence::handoff_checkpoint_matches_verified_binding(
+                    binding,
+                    wake,
+                    &signed.request.captured_base_binding,
+                    current_binding,
+                )
+                || signed.request.delegation_generation != signer.delegation_generation
             {
                 return Err("canonical wake handoff checkpoint identity conflict; fenced".into());
             }
@@ -992,11 +993,39 @@ impl RuntimeLlmSidecar {
         else {
             return Err("canonical handoff checkpoint operation mismatch".into());
         };
+        let pending_wake = self.pending_runtime_wakes.get(wake_id);
+        let current_binding = self
+            .provider_service_projection
+            .as_ref()
+            .and_then(|projection| projection.runtime_binding.as_ref())
+            .ok_or("canonical handoff cleanup lacks verified runtime binding; fenced")?;
+        let signer = self
+            .provider_service_signer
+            .as_ref()
+            .ok_or("explicit canonical Agent signer missing")?;
+        let signer_key: [u8; 32] = hex::decode(&signer.private_key_hex)
+            .map_err(|_| "invalid canonical Agent signer key")?
+            .try_into()
+            .map_err(|_| "invalid canonical Agent signer key")?;
+        let signer_public_key = hex::encode(
+            ed25519_dalek::SigningKey::from_bytes(&signer_key)
+                .verifying_key()
+                .to_bytes(),
+        );
         if saved_wake_id != wake_id
             || *status != crate::runtime::ContinuationStatusV1::Completed
             || reason != "provider_action_committed"
             || signed.request.agent_id != request.agent_subject
-            || signed.request.captured_base_binding != cognition_base_binding(request)
+            || signed.subject_public_key != signer_public_key
+            || !pending_wake.is_some_and(|wake| {
+                lineage_persistence::handoff_checkpoint_matches_verified_binding(
+                    &request.runtime_binding,
+                    wake,
+                    &signed.request.captured_base_binding,
+                    current_binding,
+                )
+            })
+            || signed.request.delegation_generation != signer.delegation_generation
         {
             return Err(
                 "canonical handoff checkpoint identity conflict before cleanup; fenced".into(),

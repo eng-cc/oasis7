@@ -149,7 +149,7 @@ use self::runtime_support::{
     runtime_provider_check_cache_key, runtime_provider_check_now_unix_ms,
 };
 pub(in crate::viewer::runtime_live) use self::runtime_support::{
-    simulator_action_label, simulator_action_to_runtime,
+    resolve_runtime_live_llm_timeout_ms, simulator_action_label, simulator_action_to_runtime,
 };
 use self::stale_replan::{
     MAX_PROVIDER_STALE_REPLANS, ProviderStaleReplanCause, ProviderStaleReplanState,
@@ -179,18 +179,6 @@ pub(in crate::viewer::runtime_live) struct RuntimeProviderCheckSnapshot {
     pub(in crate::viewer::runtime_live) error: Option<String>,
     checked_at_unix_ms: u64,
     cache_key: String,
-}
-
-pub(in crate::viewer::runtime_live) fn resolve_runtime_live_llm_timeout_ms(
-    configured_timeout_ms: u64,
-) -> u64 {
-    let configured_timeout_ms = configured_timeout_ms.max(1);
-    let runtime_timeout_ceiling_ms = std::env::var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .map(|value| value.max(1))
-        .unwrap_or(DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-    configured_timeout_ms.min(runtime_timeout_ceiling_ms)
 }
 
 enum RuntimeDecisionRunner {
@@ -1037,12 +1025,8 @@ impl RuntimeLlmSidecar {
                 wake.validate()
                     .map_err(|error| format!("canonical wake invalid: {error:?}"))?;
             }
-            self.pending_runtime_wakes = view
-                .scheduler_wakes
-                .iter()
-                .cloned()
-                .map(|wake| (wake.wake_id.clone(), wake))
-                .collect();
+            self.pending_runtime_wakes =
+                self.reconcile_projected_service_wakes(view.scheduler_wakes.clone())?;
             return self.persist_provider_lineage();
         }
         let wakes = world

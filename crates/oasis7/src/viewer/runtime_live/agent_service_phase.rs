@@ -63,6 +63,43 @@ pub(super) enum HostedServicePhase {
         feedback_acked: bool,
     },
 }
+
+impl super::control_plane::llm_sidecar::RuntimeLlmSidecar {
+    pub(in crate::viewer::runtime_live) fn persist_feedback_ack_issued(
+        &mut self,
+        agent: &str,
+        phase_pending: &mut PendingProviderServiceIntent,
+    ) -> Result<(), String> {
+        let durable = self
+            .provider_service_pending
+            .get(agent)
+            .ok_or("ACK original missing")?;
+        if serde_json::to_value(durable).map_err(|error| error.to_string())?
+            != serde_json::to_value(&*phase_pending).map_err(|error| error.to_string())?
+        {
+            return Err("ACK phase differs from durable original action; fenced".into());
+        }
+
+        let previous = self.provider_service_pending.clone();
+        self.provider_service_pending
+            .get_mut(agent)
+            .and_then(|pending| pending.feedback_ack.as_mut())
+            .ok_or("ACK checkpoint missing")?
+            .issued = true;
+        if let Err(error) = self.persist_provider_lineage() {
+            self.provider_service_pending = previous;
+            return Err(error);
+        }
+
+        phase_pending
+            .feedback_ack
+            .as_mut()
+            .ok_or("ACK checkpoint missing")?
+            .issued = true;
+        Ok(())
+    }
+}
+
 impl crate::viewer::ViewerRuntimeLiveServer {
     pub(super) fn hosted_service_config_digest(&self) -> Result<String, String> {
         let config = self
@@ -193,7 +230,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 }
             }
         }
-        let Some(phase) = self.llm_sidecar.hosted_service_phase.clone() else {
+        let Some(mut phase) = self.llm_sidecar.hosted_service_phase.clone() else {
             return Ok(AgentServiceProgress::Idle);
         };
         self.llm_sidecar
@@ -373,20 +410,22 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             ..
         } = &phase
         {
-            let agent = &pending.cognition.request.request_context.agent_subject;
-            let previous = self.llm_sidecar.provider_service_pending.clone();
+            let agent = pending
+                .cognition
+                .request
+                .request_context
+                .agent_subject
+                .clone();
+            // The durable ACK checkpoint is the same owned phase, with its
+            // issuance bit advanced before network I/O. Keep the in-memory
+            // phase identity in lockstep so direct recovery does not compare
+            // stale unsigned bookkeeping against the persisted signed intent.
+            let HostedServicePhase::FeedbackAck { pending, .. } = &mut phase else {
+                unreachable!("the guarded phase is FeedbackAck")
+            };
             self.llm_sidecar
-                .provider_service_pending
-                .get_mut(agent)
-                .ok_or("ACK original missing")?
-                .feedback_ack
-                .as_mut()
-                .ok_or("ACK checkpoint missing")?
-                .issued = true;
-            if let Err(error) = self.llm_sidecar.persist_provider_lineage() {
-                self.llm_sidecar.provider_service_pending = previous;
-                return Err(error);
-            }
+                .persist_feedback_ack_issued(&agent, pending)?;
+            self.llm_sidecar.hosted_service_phase = Some(phase.clone());
         }
         self.llm_sidecar.hosted_service_generation =
             self.llm_sidecar.hosted_service_generation.saturating_add(1);

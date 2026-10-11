@@ -583,10 +583,22 @@ pub(in crate::viewer::runtime_live) fn validate_provider_service_receipt(
     let request = &signed.request.request;
     let marker = &receipt.commit_record;
     let lineage = &receipt.lineage;
-    let exact_response_artifact_digest = crate::runtime::response_artifact_digest(
-        &serde_json::to_value(&signed.request.response_artifact)
-            .map_err(|error| format!("canonical response artifact encoding failed: {error}"))?,
-    );
+    let mut response_artifact = serde_json::to_value(&signed.request.response_artifact)
+        .map_err(|error| format!("canonical response artifact encoding failed: {error}"))?;
+    response_artifact["outer_lineage"] = serde_json::json!({
+        "agent_id": request.agent_id,
+        "world_id": request.captured_base_binding.world_id,
+        "branch_id": request.captured_base_binding.branch_id,
+        "finality_epoch": request.captured_base_binding.finality_epoch,
+        "finality_block_hash": request.captured_base_binding.finality_block_hash,
+        "finality_status": request.captured_base_binding.finality_status,
+        "base_tick": request.captured_base_binding.base_tick,
+        "base_world_hash": request.captured_base_binding.base_world_hash,
+        "reorg_epoch": request.captured_base_binding.reorg_epoch,
+        "runtime_manifest_hash": request.captured_base_binding.runtime_manifest_hash,
+    });
+    let exact_response_artifact_digest =
+        crate::runtime::response_artifact_digest(&response_artifact);
     if marker.response_artifact_digest.is_empty()
         || marker.response_artifact_digest != exact_response_artifact_digest
     {

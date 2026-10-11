@@ -281,6 +281,140 @@ impl RuntimeLlmSidecar {
             .or_else(|| self.provider_active_turns.get(agent_id).cloned())
     }
 
+    /// Validate the signed handoff intent before preserving a terminal wake
+    /// that a fresh canonical projection no longer exposes. The projection
+    /// stays authoritative; this exception only lets an already checkpointed
+    /// request finish its exact post-commit readback/cleanup sequence.
+    pub(super) fn validate_preserved_service_wake_checkpoint(
+        &self,
+        wake: &crate::runtime::SchedulerWakeV1,
+    ) -> Result<bool, String> {
+        wake.validate()
+            .map_err(|error| format!("canonical wake invalid during recovery: {error:?}"))?;
+        let context = self
+            .provider_wake_recovery_pending
+            .get(&wake.agent_id)
+            .map(|pending| pending.active.clone())
+            .or_else(|| {
+                self.provider_service_pending
+                    .get(&wake.agent_id)
+                    .map(|pending| pending.cognition.request.clone())
+            })
+            .or_else(|| self.provider_recovery_context(&wake.agent_id));
+        let Some(context) = context else {
+            return Ok(false);
+        };
+        if !lineage_persistence::provider_context_matches_wake(&context, wake) {
+            return Ok(false);
+        }
+
+        let request = &context.request_context;
+        let current_binding = self
+            .provider_service_projection
+            .as_ref()
+            .and_then(|projection| projection.runtime_binding.as_ref())
+            .ok_or("canonical wake recovery lacks verified runtime binding; fenced")?;
+        let checkpoint_id = format!(
+            "{}:handoff:{}",
+            request.provider_invocation_key(),
+            wake.wake_id
+        );
+        let checkpoint = self
+            .provider_scheduler_pending
+            .get(&checkpoint_id)
+            .ok_or("canonical exact wake mirror lacks its signed handoff checkpoint; fenced")?;
+        let expected_world = self
+            .provider_service_config
+            .as_ref()
+            .ok_or("canonical provider service missing while recovering wake; fenced")?
+            .expected_world
+            .clone();
+        Self::validate_scheduler_checkpoint_integrity(&expected_world, &checkpoint_id, checkpoint)?;
+        let signer = self
+            .provider_service_signer
+            .as_ref()
+            .ok_or("explicit canonical Agent signer missing while recovering wake; fenced")?;
+        let crate::world_service::wire::WorldServicePayloadV1::Scheduler(signed) =
+            &checkpoint.payload
+        else {
+            return Err("canonical wake handoff checkpoint codec mismatch; fenced".into());
+        };
+        let signer_key: [u8; 32] = hex::decode(&signer.private_key_hex)
+            .map_err(|_| "invalid canonical Agent signer key while recovering wake; fenced")?
+            .try_into()
+            .map_err(|_| "invalid canonical Agent signer key while recovering wake; fenced")?;
+        let signer_public_key = hex::encode(
+            ed25519_dalek::SigningKey::from_bytes(&signer_key)
+                .verifying_key()
+                .to_bytes(),
+        );
+        let crate::world_service::wire::SchedulerOperationV1::HandoffWake {
+            wake_id,
+            disposition: crate::runtime::CognitionWakeDispositionV1::Terminal { status, reason },
+            ..
+        } = &signed.request.operation
+        else {
+            return Err("canonical wake handoff checkpoint operation mismatch; fenced".into());
+        };
+        if wake_id != &wake.wake_id
+            || *status != crate::runtime::ContinuationStatusV1::Completed
+            || reason != "provider_action_committed"
+            || signed.request.agent_id != request.agent_subject
+            || signed.subject_public_key != signer_public_key
+            || !lineage_persistence::handoff_checkpoint_matches_verified_binding(
+                &request.runtime_binding,
+                wake,
+                &signed.request.captured_base_binding,
+                current_binding,
+            )
+            || signed.request.delegation_generation != signer.delegation_generation
+        {
+            return Err("canonical wake handoff checkpoint identity mismatch; fenced".into());
+        }
+        if let Some(recovery) = self.provider_wake_recovery_pending.get(&wake.agent_id)
+            && (!lineage_persistence::provider_context_matches_wake(&recovery.active, wake)
+                || recovery.status != *status
+                || recovery.reason != *reason)
+        {
+            return Err(
+                "canonical wake recovery marker conflicts with signed handoff; fenced".into(),
+            );
+        }
+        Ok(true)
+    }
+
+    /// Preserve an old sidecar wake only when the exact terminal handoff is
+    /// already signed and durable. The verified Runtime projection remains
+    /// authoritative for every other wake identity.
+    pub(super) fn reconcile_projected_service_wakes(
+        &self,
+        projected_wakes: Vec<crate::runtime::SchedulerWakeV1>,
+    ) -> Result<BTreeMap<String, crate::runtime::SchedulerWakeV1>, String> {
+        let mut reconciled = BTreeMap::new();
+        for wake in projected_wakes {
+            if let Some(existing) = reconciled.insert(wake.wake_id.clone(), wake.clone())
+                && existing != wake
+            {
+                return Err("canonical wake projection contains conflicting identities".into());
+            }
+        }
+        for (wake_id, wake) in &self.pending_runtime_wakes {
+            if let Some(projected) = reconciled.get(wake_id) {
+                if projected != wake {
+                    return Err(
+                        "canonical wake projection and sidecar mirror identity conflict; fenced"
+                            .into(),
+                    );
+                }
+                continue;
+            }
+            if self.validate_preserved_service_wake_checkpoint(wake)? {
+                reconciled.insert(wake_id.clone(), wake.clone());
+            }
+        }
+        Ok(reconciled)
+    }
+
     pub(in crate::viewer::runtime_live) fn provider_wake_recovery_pending_agent(
         &self,
     ) -> Option<String> {

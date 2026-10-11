@@ -2,6 +2,29 @@
 use super::*;
 use oasis7::viewer::ViewerRuntimeLiveServer;
 
+fn response_artifact_digest_for_other_lineage(pending: &serde_json::Value) -> String {
+    let signed = &pending["payload"]["payload"];
+    let request = &signed["request"];
+    let binding = &request["captured_base_binding"];
+    let mut artifact = signed["response_artifact"].clone();
+    artifact["outer_lineage"] = serde_json::json!({
+        "agent_id": request["agent_id"].clone(),
+        "world_id": binding["world_id"].clone(),
+        "branch_id": "other-branch",
+        "finality_epoch": binding["finality_epoch"].clone(),
+        "finality_block_hash": binding["finality_block_hash"].clone(),
+        "finality_status": binding["finality_status"].clone(),
+        "base_tick": binding["base_tick"].clone(),
+        "base_world_hash": binding["base_world_hash"].clone(),
+        "reorg_epoch": binding["reorg_epoch"].clone(),
+        "runtime_manifest_hash": binding["runtime_manifest_hash"].clone(),
+    });
+    let canonical =
+        oasis7_wasm_abi::encode_canonical_cbor(&("oasis7.cognition.response.v1", &artifact))
+            .expect("other-lineage response artifact remains canonically encodable");
+    format!("blake3:{}", blake3::hash(&canonical))
+}
+
 #[test]
 fn real_tcp_captured_native_memory_gate_rejects_checkpoint_and_receipt_tampering() {
     application_harness::run_isolated_application_mode(
@@ -61,6 +84,9 @@ pub(super) fn verify_actual_checkpoint_gate(fixture: &Fixture, bytes: &[u8]) {
         "captured_intents",
         "receipt_request_digest",
         "receipt_feedback_id",
+        "response_artifact_digest_missing",
+        "response_artifact_digest_wrong",
+        "response_artifact_digest_other_lineage",
     ] {
         let mut changed_pending = pending.clone();
         let mut changed_receipt = receipt.clone();
@@ -84,6 +110,17 @@ pub(super) fn verify_actual_checkpoint_gate(fixture: &Fixture, bytes: &[u8]) {
             "receipt_feedback_id" => {
                 changed_receipt["feedback"]["feedback_id"] =
                     serde_json::json!("tampered-canonical-feedback-id")
+            }
+            "response_artifact_digest_missing" => {
+                changed_receipt["commit_record"]["response_artifact_digest"] = serde_json::json!("")
+            }
+            "response_artifact_digest_wrong" => {
+                changed_receipt["commit_record"]["response_artifact_digest"] =
+                    serde_json::json!(format!("blake3:{}", "f".repeat(64)))
+            }
+            "response_artifact_digest_other_lineage" => {
+                changed_receipt["commit_record"]["response_artifact_digest"] =
+                    serde_json::json!(response_artifact_digest_for_other_lineage(&pending))
             }
             _ => unreachable!(),
         }
