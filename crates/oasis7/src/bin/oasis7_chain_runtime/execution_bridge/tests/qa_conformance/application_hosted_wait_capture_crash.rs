@@ -112,7 +112,7 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
             let actual = {
                 let guard = readout_server.lock().unwrap();
                 {
-                    let mut actual = guard.test_canonical_provider_summary();
+                    let mut actual = guard.test_canonical_provider_diagnostic_summary();
                     actual["pump_status"] = guard.test_agent_service_pump_status();
                     actual
                 }
