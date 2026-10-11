@@ -36,7 +36,7 @@
 
 ## 持久化与并发
 
-根、entries 和本机状态目录通过目录句柄限定路径，拒绝 symlink、hardlink、特殊文件与越界 ID。只读查询不创建锁或状态文件。写入在 store 协调锁下核对容量、当前 revision 与身份，然后在同目录完整 staging、文件同步、原子发布和目录同步。新目录 0700、文件 0600，不递归改写已有目录权限。effect 区分 none、applied、unknown。
+根、entries 和本机状态目录通过目录句柄限定路径。root 只解析祖先目录别名（如 macOS 的 `/var`），末端目录由持有的父目录 fd 以 O_NOFOLLOW 单次打开；末端 symlink 即使带尾斜杠仍拒绝，含 `.` 或 `..` 的路径也拒绝。拒绝 hardlink、特殊文件与越界 ID。目录枚举显式区分 EOF 与 errno 错误；枚举错误阻断扫描和快照，不作为完整空结果。只读查询不创建锁或状态文件。写入在 store 协调锁下核对容量、当前 revision 与身份，然后在同目录完整 staging、文件同步、原子发布和目录同步。新目录 0700、文件 0600，不递归改写已有目录权限。effect 区分 none、applied、unknown。
 
 新库在同父目录私有 staging 构建，再 no-replace 发布；已有合法空 Git checkout 可继续初始化，context.json 最后发布。已有合法配置保持 store 身份。保留已有 Git 辅助规则，只补缺失行；未知文件不删除。失败返回 INIT_INCOMPLETE 和实际效果。
 
@@ -52,7 +52,7 @@ revision 是实际文件字节的 `sha256:` 摘要。verification subject 对规
 
 ## 离线 Git
 
-Git checkout 根必须等于资料根，支持 linked worktree。Git 能力检查先在不访问库的命令上验证 `--no-lazy-fetch` 与 `--no-replace-objects`；不支持返回 GIT_CAPABILITY_UNSUPPORTED。清除继承 GIT 路径、trace 与自定义程序覆盖，固定程序与参数数组，禁用 pager、optional locks、fsmonitor、hooks。命令输出 2 MiB 上限、10 秒超时，退出回收子进程，不展示 remote URL。
+Git checkout 根必须等于资料根，支持 linked worktree。Git 能力检查先在不访问库的命令上验证 `--no-lazy-fetch` 与 `--no-replace-objects`；不支持返回 GIT_CAPABILITY_UNSUPPORTED。程序只从固定绝对安装位置按序选择：macOS 为 `/usr/bin/git`、`/opt/homebrew/bin/git`、`/usr/local/bin/git`；Linux 为 `/usr/bin/git`、`/usr/local/bin/git`。每个候选都以相同必需选项执行不访问仓库的 `--version`，旧系统 Git 不支持时尝试下一个；全部缺失或不支持返回 GIT_CAPABILITY_UNSUPPORTED。选择结果在进程内缓存，不搜索 PATH、不接收环境或调用者的可执行程序覆盖。清除继承 GIT 路径、trace 与自定义程序覆盖，固定参数数组，禁用 pager、optional locks、fsmonitor、hooks。命令输出 2 MiB 上限、10 秒超时，退出回收子进程，不展示 remote URL。
 
 只允许受约束 rev-parse、ls-tree、ls-files --stage、cat-file、log。读取 raw blob，不运行内容过滤器、textconv、外部 diff 或工作区 porcelain。status 自己比对当前 context.json 与 entries 字节、HEAD blob 与 index blob，标记 comparison=raw_bytes、remote_contacted=false。working_tree_dirty 仅表示资料范围。换行与 clean/smudge 转换可能使结果区别于用户 porcelain。
 

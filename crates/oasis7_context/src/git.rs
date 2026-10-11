@@ -6,7 +6,7 @@ use std::{
     path::Path,
     process::{Command, Stdio},
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -76,8 +76,45 @@ fn read_output(mut input: impl Read, exceeded: &AtomicBool) -> Result<Vec<u8>, G
         }
     }
 }
+// Prefer the OS binary when capable. These are fixed installation locations;
+// neither PATH nor a caller/environment override participates in selection.
+#[cfg(target_os = "macos")]
+const GIT_PROGRAMS: &[&str] = &[
+    "/usr/bin/git",
+    "/opt/homebrew/bin/git",
+    "/usr/local/bin/git",
+];
+#[cfg(not(target_os = "macos"))]
+const GIT_PROGRAMS: &[&str] = &["/usr/bin/git", "/usr/local/bin/git"];
+fn select_program<'a>(
+    candidates: &[&'a str],
+    mut probe: impl FnMut(&str) -> Result<(), GitError>,
+) -> Result<&'a str, GitError> {
+    for &program in candidates {
+        if probe(program).is_ok() {
+            return Ok(program);
+        }
+    }
+    Err(error(
+        "GIT_CAPABILITY_UNSUPPORTED",
+        "No Git at the fixed installation paths accepts the required offline options",
+    ))
+}
+fn selected_program() -> Result<&'static str, GitError> {
+    static SELECTED: OnceLock<Result<&'static str, GitError>> = OnceLock::new();
+    SELECTED
+        .get_or_init(|| {
+            select_program(GIT_PROGRAMS, |program| {
+                run_program(program, None, &["--version"]).map(|_| ())
+            })
+        })
+        .clone()
+}
 fn run(root: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, GitError> {
-    let mut command = Command::new("/usr/bin/git");
+    run_program(selected_program()?, root, args)
+}
+fn run_program(program: &str, root: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, GitError> {
+    let mut command = Command::new(program);
     for (key, _) in std::env::vars_os() {
         if key.to_string_lossy().starts_with("GIT_") {
             command.env_remove(key);
@@ -162,12 +199,7 @@ fn text(bytes: Vec<u8>) -> Result<String, GitError> {
     String::from_utf8(bytes).map_err(|_| error("HISTORY_INCOMPLETE", "Git metadata is not UTF-8"))
 }
 fn probe(root: &Path) -> Result<(), GitError> {
-    run(None, &["--version"]).map_err(|_| {
-        error(
-            "GIT_CAPABILITY_UNSUPPORTED",
-            "Git lacks the required offline command options",
-        )
-    })?;
+    selected_program()?;
     let top = text(
         run(Some(root), &["rev-parse", "--show-toplevel"])
             .map_err(|_| error("HISTORY_UNAVAILABLE", "The store is not a Git checkout"))?,
@@ -465,6 +497,54 @@ mod tests {
         git(root, &["add", "."]);
         git(root, &["commit", "-m", "First"]);
         dir
+    }
+    #[test]
+    fn selection_falls_back_only_to_a_capable_fixed_candidate() {
+        let candidates = ["/fixed/old-git", "/fixed/current-git", "/fixed/unused-git"];
+        let mut attempted = Vec::new();
+        let chosen = select_program(&candidates, |program| {
+            attempted.push(program.to_owned());
+            if program == candidates[1] {
+                Ok(())
+            } else {
+                Err(error("HISTORY_INCOMPLETE", "unsupported option"))
+            }
+        })
+        .unwrap();
+        assert_eq!(chosen, candidates[1]);
+        assert_eq!(attempted, candidates[..2]);
+        let mut attempted = Vec::new();
+        let failure = select_program(&candidates, |program| {
+            attempted.push(program.to_owned());
+            Err(error("HISTORY_UNAVAILABLE", "missing executable"))
+        })
+        .unwrap_err();
+        assert_eq!(failure.code, "GIT_CAPABILITY_UNSUPPORTED");
+        assert_eq!(attempted, candidates);
+    }
+    #[test]
+    fn selection_probes_all_required_flags_without_repository_arguments() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new().unwrap();
+        let incapable = dir.path().join("incapable");
+        let capable = dir.path().join("capable");
+        std::fs::write(&incapable, "#!/bin/sh\nexit 129\n").unwrap();
+        // The fixture accepts only the exact policy switches and a version query.
+        std::fs::write(&capable, "#!/bin/sh\n[ \"$1\" = --no-lazy-fetch ] || exit 81\n[ \"$2\" = --no-replace-objects ] || exit 82\n[ \"$3\" = --no-pager ] || exit 83\n[ \"$4\" = --no-optional-locks ] || exit 84\nfor last; do :; done\n[ \"$last\" = --version ] || exit 85\nexit 0\n").unwrap();
+        for path in [&incapable, &capable] {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let programs = [incapable.to_str().unwrap(), capable.to_str().unwrap()];
+        let chosen = select_program(&programs, |program| {
+            run_program(program, None, &["--version"]).map(|_| ())
+        })
+        .unwrap();
+        assert_eq!(chosen, programs[1]);
+        let failure = select_program(&programs[..1], |program| {
+            run_program(program, None, &["--version"]).map(|_| ())
+        })
+        .unwrap_err();
+        assert_eq!(failure.code, "GIT_CAPABILITY_UNSUPPORTED");
     }
     #[test]
     fn interrupted_output_read_retries_but_io_failure_rejects_partial_bytes() {

@@ -45,41 +45,87 @@ fn checked_file(fd: i32) -> Result<File> {
     }
     Ok(f)
 }
+// fdopendir transfers ownership; this guard closes on EOF and every error path.
+struct DirectoryStream<F: FnOnce(libc::c_int)> {
+    pointer: *mut libc::DIR,
+    on_close: Option<F>,
+}
+impl<F: FnOnce(libc::c_int)> Drop for DirectoryStream<F> {
+    fn drop(&mut self) {
+        let status = unsafe { libc::closedir(self.pointer) };
+        if let Some(observer) = self.on_close.take() {
+            observer(status);
+        }
+    }
+}
+#[cfg(target_os = "macos")]
+fn errno_pointer() -> *mut libc::c_int {
+    unsafe { libc::__error() }
+}
+#[cfg(target_os = "linux")]
+fn errno_pointer() -> *mut libc::c_int {
+    unsafe { libc::__errno_location() }
+}
+fn set_errno(value: libc::c_int) {
+    unsafe { *errno_pointer() = value };
+}
+fn errno() -> libc::c_int {
+    unsafe { *errno_pointer() }
+}
 pub struct Directory {
     file: File,
 }
 impl Directory {
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_with(path, || {})
+    }
+    fn open_with(path: &Path, before_leaf: impl FnOnce()) -> Result<Self> {
         if !path.is_absolute() {
             return Err(ContextError::new("UNSAFE_PATH", "root must be absolute"));
         }
-        let resolved = std::fs::canonicalize(path)?;
-        let path = resolved.as_path();
+        let mut components = Vec::new();
+        for component in path.components() {
+            match component {
+                std::path::Component::RootDir | std::path::Component::CurDir => (),
+                std::path::Component::Normal(s) => components.push(s),
+                _ => return Err(ContextError::new("UNSAFE_PATH", "invalid root path")),
+            }
+        }
+        let mut parent = std::path::PathBuf::from("/");
+        for component in components.iter().take(components.len().saturating_sub(1)) {
+            parent.push(component);
+        }
+        // Resolve ancestor aliases such as macOS /var, but never resolve the
+        // caller-selected final component. Open that leaf once with O_NOFOLLOW.
+        let resolved = std::fs::canonicalize(parent)?;
         let fd = unsafe {
             libc::open(
                 c"/".as_ptr(),
-                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
+                libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
             )
         };
         if fd < 0 {
             return Err(last());
         }
-        let mut d = Self {
+        let mut directory = Self {
             file: unsafe { File::from_raw_fd(fd) },
         };
-        for c in path.components() {
-            match c {
-                std::path::Component::RootDir => (),
-                std::path::Component::Normal(s) => {
-                    let s = s
-                        .to_str()
-                        .ok_or_else(|| ContextError::new("UNSAFE_PATH", "path must be UTF-8"))?;
-                    d = d.child(s)?
-                }
-                _ => return Err(ContextError::new("UNSAFE_PATH", "invalid root path")),
+        for component in resolved.components() {
+            if let std::path::Component::Normal(s) = component {
+                directory = directory.child(
+                    s.to_str()
+                        .ok_or_else(|| ContextError::new("UNSAFE_PATH", "path must be UTF-8"))?,
+                )?;
             }
         }
-        Ok(d)
+        before_leaf();
+        if let Some(leaf) = components.last() {
+            directory = directory.child(
+                leaf.to_str()
+                    .ok_or_else(|| ContextError::new("UNSAFE_PATH", "path must be UTF-8"))?,
+            )?;
+        }
+        Ok(directory)
     }
     pub fn child(&self, n: &str) -> Result<Self> {
         let n = name(n)?;
@@ -201,50 +247,58 @@ impl Directory {
         Ok(bytes)
     }
     pub fn names(&self) -> Result<Vec<String>> {
-        let dup = unsafe {
+        self.names_with(|dir| unsafe { libc::readdir(dir) }, |_| {})
+    }
+    fn names_with(
+        &self,
+        mut read_next: impl FnMut(*mut libc::DIR) -> *mut libc::dirent,
+        on_close: impl FnOnce(libc::c_int),
+    ) -> Result<Vec<String>> {
+        let fd = unsafe {
             libc::openat(
                 self.file.as_raw_fd(),
                 c".".as_ptr(),
                 libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
             )
         };
-        if dup < 0 {
+        if fd < 0 {
             return Err(last());
         }
-        let dir = unsafe { libc::fdopendir(dup) };
-        if dir.is_null() {
-            unsafe { libc::close(dup) };
-            return Err(last());
+        let pointer = unsafe { libc::fdopendir(fd) };
+        if pointer.is_null() {
+            let error = last();
+            unsafe { libc::close(fd) };
+            return Err(error);
         }
+        let stream = DirectoryStream {
+            pointer,
+            on_close: Some(on_close),
+        };
         let mut names = Vec::new();
         loop {
-            let e = unsafe { libc::readdir(dir) };
-            if e.is_null() {
+            // POSIX readdir distinguishes EOF from failure only via errno.
+            set_errno(0);
+            let entry = read_next(stream.pointer);
+            if entry.is_null() {
+                if errno() != 0 {
+                    return Err(last());
+                }
                 break;
             }
-            let b = unsafe { std::ffi::CStr::from_ptr((*e).d_name.as_ptr()) };
-            let s = b
+            let bytes = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
+            let value = bytes
                 .to_str()
-                .map_err(|_| ContextError::new("UNSAFE_PATH", "invalid filename"));
-            match s {
-                Ok(s) if s != "." && s != ".." => {
-                    if names.len() >= 10002 {
-                        unsafe { libc::closedir(dir) };
-                        return Err(ContextError::new(
-                            "LIMIT_EXCEEDED",
-                            "directory object count exceeds scan limit",
-                        ));
-                    }
-                    names.push(s.into())
+                .map_err(|_| ContextError::new("UNSAFE_PATH", "invalid filename"))?;
+            if value != "." && value != ".." {
+                if names.len() >= 10002 {
+                    return Err(ContextError::new(
+                        "LIMIT_EXCEEDED",
+                        "directory object count exceeds scan limit",
+                    ));
                 }
-                Ok(_) => (),
-                Err(e) => {
-                    unsafe { libc::closedir(dir) };
-                    return Err(e);
-                }
+                names.push(value.into());
             }
         }
-        unsafe { libc::closedir(dir) };
         names.sort();
         Ok(names)
     }
@@ -396,6 +450,91 @@ pub fn publish_new_directory(parent: &Path, stage: &str, target: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn enumeration_distinguishes_eof_and_error_and_always_closes_stream() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = Directory::open(temp.path()).unwrap();
+        dir.write_atomic("fixture", b"fixture", false).unwrap();
+        let closed = std::cell::Cell::new(0);
+        let observe = |status| {
+            assert_eq!(status, 0);
+            closed.set(closed.get() + 1);
+        };
+        let mut emitted = false;
+        let error = dir
+            .names_with(
+                |stream| {
+                    if emitted {
+                        set_errno(libc::EIO);
+                        return std::ptr::null_mut();
+                    }
+                    loop {
+                        let entry = unsafe { libc::readdir(stream) };
+                        assert!(!entry.is_null());
+                        let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) };
+                        if name.to_bytes() == b"fixture" {
+                            emitted = true;
+                            return entry;
+                        }
+                    }
+                },
+                observe,
+            )
+            .unwrap_err();
+        assert_eq!(error.code, "IO_ERROR");
+        assert!(emitted);
+        assert_eq!(closed.get(), 1);
+        set_errno(libc::EIO);
+        let names = dir
+            .names_with(
+                |_| {
+                    assert_eq!(errno(), 0);
+                    std::ptr::null_mut()
+                },
+                observe,
+            )
+            .unwrap();
+        assert!(names.is_empty());
+        assert_eq!(closed.get(), 2);
+        assert_eq!(dir.names().unwrap(), vec!["fixture"]);
+    }
+    #[test]
+    fn final_root_symlink_is_rejected_even_with_normalization_suffixes() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let actual = temp.path().join("actual");
+        std::fs::create_dir(&actual).unwrap();
+        let alias = temp.path().join("alias");
+        symlink(&actual, &alias).unwrap();
+        for path in [
+            alias.clone(),
+            std::path::PathBuf::from(format!("{}/", alias.display())),
+            alias.join("."),
+            alias.join(".."),
+        ] {
+            assert_eq!(Directory::open(&path).err().unwrap().code, "UNSAFE_PATH");
+        }
+        // An ancestor alias remains valid, including macOS system aliases.
+        std::fs::create_dir(actual.join("nested")).unwrap();
+        assert!(Directory::open(&alias.join("nested")).is_ok());
+    }
+    #[test]
+    fn leaf_replacement_cannot_redirect_held_root_open() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("root");
+        let other = temp.path().join("other");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::create_dir(&other).unwrap();
+        let err = Directory::open_with(&root, || {
+            std::fs::rename(&root, temp.path().join("original")).unwrap();
+            symlink(&other, &root).unwrap();
+        })
+        .err()
+        .unwrap();
+        assert_eq!(err.code, "UNSAFE_PATH");
+        assert!(Directory::open(&temp.path().join("original")).is_ok());
+    }
     #[test]
     fn interruption_before_publication_preserves_original() {
         for boundary in [0, 1] {
