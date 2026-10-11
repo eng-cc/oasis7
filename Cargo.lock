@@ -2370,6 +2370,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -6280,6 +6281,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_context"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "getrandom 0.4.3",
+ "hex",
+ "libc",
+ "oasis7_secure_envelope",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
 name = "oasis7_distfs"
 version = "0.1.0"
 dependencies = [
@@ -6314,9 +6332,12 @@ dependencies = [
  "hex",
  "libc",
  "nix 0.30.1",
+ "oasis7_context",
+ "oasis7_secure_envelope",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "tempfile",
  "zeroize",
 ]
 
@@ -6366,6 +6387,19 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+]
+
+[[package]]
+name = "oasis7_secure_envelope"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "getrandom 0.4.3",
+ "serde",
+ "serde_json",
+ "zeroize",
 ]
 
 [[package]]

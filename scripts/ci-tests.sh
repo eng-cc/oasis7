@@ -198,6 +198,8 @@ run_oasis7_workspace_support_crate_tests() {
     -p pixel_world_bridge \
     --lib
   run_cargo test -p oasis7_wasm_executor --features wasmtime --lib
+  run_cargo test -p oasis7_secure_envelope -p oasis7_context --all-targets --locked
+  run_cargo test -p oasis7_local_signer --test context_cli --locked
   run_cargo test -p oasis7_client_launcher --bin oasis7_client_launcher
   # Native tool tests build the real template with the installed stable WASM target.
   OASIS7_WASM_BUILD_STD=0 run_cargo test -p wasm_build_suite -p wasm_module_observe
