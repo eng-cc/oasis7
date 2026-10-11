@@ -124,6 +124,10 @@ ApprovalRequestV1 = {approval_id, request_revision, task_id,
 
 投影的 task_id、goal_revision、goal_digest 和 activation_commit_ref 必须与同一切点 S 的 TaskControl、world_binding 一致；正文按版本化 GoalVersion codec 重算并匹配所引用 digest。该私有正文 digest 与 Harness 的 GoalSnapshot/context digest 各有原合同，不得混为一个哈希。goal_text 非空，完整正文继续受 4 KiB 上限约束，任何超限/截断不得伪装成功。latest_goal_revision 可大于 active_goal_revision，但未激活内容不得作为 executor 当前目标。
 
+已实施 SDK 合同位于 `oasis7_agent_api::game`：`GoalContentV1` 的 4 KiB 上限按完整紧凑 JSON 编码的 UTF-8 字节数计算，包含字段名、软约束与转义开销；不裁剪、不重排、不规范化原文。`game_goal_version_digest` 复用 canonical CBOR/BLAKE3，将 `["game_goal_version/v1", {schema_revision: 1, task_id, goal_revision, content}]` 编码后取 `blake3:<lowercase-hex>`，其中 goal_revision 是规范十进制字符串。activation_commit_ref 不进入正文摘要，由 `GoalVersionProjectionV1::validate_against` 与同切点权威控制记录单独比对。调用者必须从可信 TaskControl 取得 expected task/revision/digest/activation，继续验证 WorldBinding 和当前 audience；仅解析或自洽摘要不证明激活或读权。
+
+此 SDK 合同尚未接入私有持久 namespace、目标发布、TaskSnapshot 或 Context。现有 World Service canonical intent 会保留完整请求，不能直接承载私有目标正文或可枚举的正文 digest；这些值不得进入公共 CAS、P2P 或公开世界流。后续持久化接入必须先满足私有存储和受权解引用边界。
+
 解密/投影前及响应交付前按当前 owner/audience 和 executor fence 验证读取资格；切点 S 或旧 token 不保留已撤销的读权。无权请求不返回正文、正文指纹或新 owner 的差异。元数据引用的正文缺失、损坏或无法验证时，返回 `503 ErrorV1(code=recovery_required, refresh=task_snapshot)`，不返回伪完整 TaskSnapshot、空目标或公开内容 URL，相关新 context 保持阻塞。客户端只能在授权仍有效后重新读取 snapshot，不挂载私有存储或依赖历史事件取回正文。
 
 端点不接受客户端填写的“世界结果 status=committed”来写回权威任务成果。`goal-receipts` 只允许 received/adoption_reported；context/decision/admission 的证据由各自受信边界记录。对没有外部观测能力的纯 Runtime 自报，保留 reported 等级，不伪造硬件或模型证明。
