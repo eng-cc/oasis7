@@ -2,7 +2,7 @@
 
 # Oasis7 Agent Entry Point
 
-通用规则见 [开发流程规范](doc/engineering/workflow/source-of-truth.md)。主执行者可直接分析、实现、自测；专业协作按复杂度与风险使用。
+通用规则见 [开发流程规范](doc/engineering/workflow/source-of-truth.md)。主执行者负责分析、实现、自测和组织适用评审，并在满足规范、必要检查及用户授权后推进合入和交付；专业协作按复杂度与风险使用。
 
 - 在独立分支修改；不在 main 或主 worktree 编辑。保留用户和其他执行者的工作。
 - `third_party/` 只读；Rust 工作参考 `third_party/rust-skills/AGENTS.md`。
@@ -18,6 +18,6 @@
 - Agent 游戏功能验证须按[规范触发范围](doc/engineering/workflow/source-of-truth.md#agent-gameplay-selftest)执行[自测操作手册](doc/testing/manual/agent-runtime-self-playtest.manual.md)：主 Agent 组织独立试玩、读取正式游戏 Skill、核对世界结果并修复复测；缺前置如实报告，普通 CI 不代签实玩。
 - 快捷检查：`./scripts/pre-commit.sh`；文档：`./scripts/doc-governance-check.sh`。
 - PR：`gh pr create`、`gh pr checks <pr> --required`。
-- 满足适用评审、检查及用户限制后：`gh pr merge <pr> --squash --match-head-commit <expected-head>`。
+- 合入：满足适用评审、检查及用户限制后，执行 `gh pr merge <pr> --squash --match-head-commit <expected-head>`。
 
 PR 标题和 commit message 使用英文。
