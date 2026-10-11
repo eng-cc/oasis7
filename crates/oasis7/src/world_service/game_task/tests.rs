@@ -5,7 +5,21 @@ fn fixture() -> (World, String) {
     let public = sign_read_request("fixture", (), &private)
         .unwrap()
         .subject_public_key;
-    let mut world = World::new_with_state(WorldState::default());
+    let mut world = World::new_with_state(WorldState::default())
+        .try_with_cognition_scheduler(
+            crate::runtime::SchedulerPolicyV1 {
+                schema_version: crate::runtime::SchedulerPolicyV1::SCHEMA_VERSION.into(),
+                max_total_wakes_per_tick: 1,
+                max_wakes_per_agent_per_tick: 1,
+                aging_after_ticks: 1,
+                max_starvation_ticks: 1,
+                initial_priority: 0,
+                comparator: crate::runtime::SchedulerPolicyV1::COMPARATOR.into(),
+                service_order: crate::runtime::SchedulerPolicyV1::SERVICE_ORDER.into(),
+            },
+            1,
+        )
+        .unwrap();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent".into(),
         pos: crate::GeoPos::new(0, 0, 0),
