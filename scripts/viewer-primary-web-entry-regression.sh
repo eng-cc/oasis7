@@ -367,6 +367,10 @@ launcher_env_defaults=()
 while IFS= read -r env_default; do
   launcher_env_defaults+=("$env_default")
 done < <(oasis7_hosted_login_gate_env_defaults "$hosted_account_store_path")
+launcher_env_defaults+=(
+  "OASIS7_HOSTED_PLAYER_SESSION_LEDGER_PATH=$out_dir/hosted-player-sessions.json"
+  "OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH=$out_dir/hosted-registration-replay.json"
+)
 
 resolved_viewer_static_dir=$(resolve_viewer_static_dir_for_web_closure \
   "$repo_root" \
