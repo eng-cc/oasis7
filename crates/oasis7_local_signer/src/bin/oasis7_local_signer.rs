@@ -17,6 +17,13 @@ const WORKER_TIMEOUT: Duration = Duration::from_secs(20);
 const MAX_STDERR_BYTES: usize = 64 * 1024;
 
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "context") {
+        std::process::exit(oasis7_context::cli::run(
+            &args[1..],
+            "oasis7_local_signer context",
+        ));
+    }
     if let Err(error) = run() {
         eprintln!("{}: operation failed", error.code);
         std::process::exit(error.exit_code);
@@ -58,7 +65,7 @@ fn run() -> Result<(), CliError> {
     }
     if all_args.as_slice() == ["--help"] {
         return print_json(
-            &serde_json::json!({"usage":["doctor", "prepare|submit|inspect --job-id ID", "file-payload --context ABSOLUTE --expected-context-sha256 SHA256 --file ABSOLUTE --expected-file-sha256 SHA256 --output ABSOLUTE"], "file_payload":"No worker or installation access. Output is create-only in caller-owned 0700 directory; verify signatures over the exact envelope, not raw file bytes."}),
+            &serde_json::json!({"usage":["doctor", "prepare|submit|inspect --job-id ID", "file-payload --context ABSOLUTE --expected-context-sha256 SHA256 --file ABSOLUTE --expected-file-sha256 SHA256 --output ABSOLUTE", "context --help"], "file_payload":"No worker or installation access. Output is create-only in caller-owned 0700 directory; verify signatures over the exact envelope, not raw file bytes."}),
         );
     }
     let mut args = all_args.into_iter();

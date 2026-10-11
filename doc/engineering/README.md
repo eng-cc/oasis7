@@ -17,6 +17,7 @@
 - 承接 engineering 治理趋势、季度审查与模板化流程沉淀。
 
 ## 按主题进入
+- 私有机器、环境与操作资料工具：从 [产品需求](private-context/private-context.prd.md) 进入，格式、离线历史与恢复见 [系统设计](private-context/private-context.design.md)
 - 想看项目方向、规范决定和开发执行的桌面入口：从 [指挥客户端产品设计](command-center/command-center.prd.md) 进入，组件、接入和恢复合同见 [系统设计](command-center/command-center.design.md)
 - 文档治理、入口减重、存量维护成本、目录职责与 redirect 规则：统一从 `doc/engineering/doc-governance/README.md` 分流
 - 环境分层、云上清单、仓库健康巡检与季度复核：统一从 `doc/engineering/governance/README.md` 分流

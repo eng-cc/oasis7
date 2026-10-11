@@ -98,7 +98,8 @@
       "python"
     ],
     "fleet_health": [
-      "python"
+      "python",
+      "rust_toolchain"
     ],
     "viewer_performance_report": [
       "rust_toolchain",
@@ -170,6 +171,12 @@
       "workspace_support"
     ],
     "wasm_module_observe": [
+      "workspace_support"
+    ],
+    "oasis7_context": [
+      "workspace_support"
+    ],
+    "oasis7_secure_envelope": [
       "workspace_support"
     ]
   },
@@ -382,7 +389,9 @@
       "match": [
         "scripts/local-signer/tests/**",
         "doc/p2p/blockchain/local-file-signing-backend.runbook.md",
-        "crates/oasis7_local_signer/**"
+        "crates/oasis7_local_signer/**",
+        "crates/oasis7_context/**",
+        "crates/oasis7_secure_envelope/**"
       ],
       "groups": [
         "packaging_contracts",
