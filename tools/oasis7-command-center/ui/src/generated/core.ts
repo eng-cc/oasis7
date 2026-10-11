@@ -1,7 +1,8 @@
 // Generated from Rust DTOs by cargo run -p oasis7-command-center-core --example export_types
 export type Project = { id: string, path: string, gitCommonDir: string, branch: string | null, head: string, environment: string, };
 export type SourceStatus = { kind: string, state: string, lastAttempt: string | null, lastSuccess: string | null, sourceRevision: string | null, generation: string, coverage: string, error: string | null, };
-export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, };
+export type DocumentLifecycle = { status: string | null, successorDeclaration: string | null, successorTargets: Array<string>, successorReason: string | null, issue: string | null, };
+export type DocumentSection = { id: string, path: string, title: string, content: string, line: number, revision: string, committedRevision: string, dirty: boolean, factKind: string, lifecycle: DocumentLifecycle | null, };
 export type Preferences = { projectPath: string | null, view: string, query: string, };
 export type DecisionDraft = { id: string | null, content: string, reason: string, scope: string, relatedSection: string | null, confirmed: boolean, };
 export type DecisionRecord = { id: string, content: string, reason: string, scope: string, relatedSection: string | null, state: string, confirmedAt: string | null, formalUpdate: string, implementationSync: string, };
