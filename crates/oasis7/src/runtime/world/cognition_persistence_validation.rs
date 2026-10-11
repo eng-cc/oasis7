@@ -451,7 +451,24 @@ fn validate_lifecycle_event(
     let state = states.get(&key).copied();
     let next = match kind {
         "TurnStarted" if state.is_none() => LifecycleState::Started,
-        "DecisionRejected" if state.is_none() => LifecycleState::Cancelled,
+        // A stale-base rejection can be persisted after provider dispatch (or
+        // response validation) when the captured World head moved. It is a
+        // terminal branch before any receipt is linked, not a new turn.
+        "DecisionRejected"
+            if matches!(
+                state,
+                None | Some(
+                    LifecycleState::Started
+                        | LifecycleState::ContextCaptured
+                        | LifecycleState::Dispatched
+                        | LifecycleState::ResponseRecorded
+                        | LifecycleState::Submitted
+                        | LifecycleState::Validated
+                )
+            ) =>
+        {
+            LifecycleState::Cancelled
+        }
         "ContextCaptured" if matches!(state, Some(LifecycleState::Started)) => {
             LifecycleState::ContextCaptured
         }
@@ -858,5 +875,66 @@ fn is_canonical_digest(value: &str) -> bool {
 fn validation(code: &str) -> WorldError {
     WorldError::DistributedValidationFailed {
         reason: format!("cognition validation failed: {code}"),
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_validation_tests {
+    use super::*;
+
+    fn event(kind: &str, attempt: Option<u64>) -> serde_json::Map<String, JsonValue> {
+        let mut event = json!({
+            "event_kind": kind,
+            "agent_id": "agent-a",
+            "agent_session_id": "session-a",
+            "agent_turn_id": "turn-a",
+            "decision_request_id": "request-a",
+            "request_digest": "blake3:request",
+        })
+        .as_object()
+        .unwrap()
+        .clone();
+        if let Some(attempt) = attempt {
+            event.insert("transport_attempt".to_string(), json!(attempt));
+        }
+        event
+    }
+
+    fn apply(events: &[(&str, Option<u64>)]) -> Result<(), WorldError> {
+        let mut states = BTreeMap::new();
+        let mut attempts = BTreeMap::new();
+        for (kind, attempt) in events {
+            validate_lifecycle_event(&event(kind, *attempt), &mut states, &mut attempts)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn stale_rejection_closes_dispatched_turn_but_not_receipt_linked_turn() {
+        apply(&[
+            ("TurnStarted", None),
+            ("ContextCaptured", None),
+            ("RequestDispatched", Some(1)),
+            ("DecisionRejected", None),
+            ("CognitionTurnCompleted", None),
+        ])
+        .expect("a stale-base rejection after dispatch is a valid terminal branch");
+
+        let error = apply(&[
+            ("TurnStarted", None),
+            ("ContextCaptured", None),
+            ("RequestDispatched", Some(1)),
+            ("ResponseRecorded", None),
+            ("DecisionEnvelopeSubmitted", None),
+            ("DecisionValidated", None),
+            ("WorldReceiptLinked", None),
+            ("DecisionRejected", None),
+        ])
+        .expect_err("a linked World receipt cannot later become a stale rejection");
+        assert!(matches!(
+            error,
+            WorldError::DistributedValidationFailed { ref reason }
+                if reason == "cognition validation failed: cognition_lifecycle_order_invalid"
+        ));
     }
 }

@@ -70,18 +70,20 @@ fn restored_feedback_history_fences_reused_sequence_on_runner() {
     runner
         .restore_feedback_history(&authority)
         .expect("host-validated history restores into runner's private store");
+    // The replay state is unchanged by an identical restore, but the host
+    // snapshot is deliberately re-read to detect World advancement.
     runner
         .restore_feedback_history(&authority)
-        .expect("a fully initialized history restore is idempotent");
-    assert_eq!(authority.history_reads.load(Ordering::SeqCst), 1);
+        .expect("an identical validated history preserves local replay state");
+    assert_eq!(authority.history_reads.load(Ordering::SeqCst), 2);
     assert!(
         runner
             .cognition
             .contains_feedback("agent-a", "session-agent-a", "restored-feedback")
     );
 
-    let request = request("agent-a", "request-live", "turn-live");
-    let turn_id = runner.start_turn(request.clone()).unwrap();
+    let live_request = request("agent-a", "request-live", "turn-live");
+    let turn_id = runner.start_turn(live_request.clone()).unwrap();
     let deadline = Instant::now() + Duration::from_secs(2);
     while runner.awaiting_outcome(turn_id).is_none() {
         runner.poll_completed().unwrap();
@@ -94,19 +96,84 @@ fn restored_feedback_history_fences_reused_sequence_on_runner() {
 
     let mut reused_sequence = feedback(
         "agent-a",
-        request.agent_session_id.as_str(),
+        live_request.agent_session_id.as_str(),
         1,
         "different-feedback",
     );
-    reused_sequence.agent_turn_id = request.agent_turn_id.clone();
-    reused_sequence.decision_request_id = request.decision_request_id.clone();
-    reused_sequence.request_digest = request.request_digest.clone();
+    reused_sequence.agent_turn_id = live_request.agent_turn_id.clone();
+    reused_sequence.decision_request_id = live_request.decision_request_id.clone();
+    reused_sequence.request_digest = live_request.request_digest.clone();
     assert_eq!(
         runner
             .accept_feedback(turn_id, reused_sequence)
             .expect_err("restored sequence identity must fence a colliding feedback")
             .code(),
         "feedback_identity_collision"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn repeated_restore_revalidates_authority_without_erasing_ahead_live_fence() {
+    let mut authority = FixtureAuthority::default();
+    authority.feedback_history.push(FeedbackHistoryProjection {
+        feedback: feedback("agent-a", "session-agent-a", 1, "host-feedback-1"),
+        acknowledged: true,
+        lineage: None,
+    });
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut runner = AsyncAgentRunner::<Value, Value>::with_default_capacity();
+    runner
+        .register(
+            "agent-a",
+            WaitProvider {
+                calls: Arc::clone(&calls),
+                delay: Duration::ZERO,
+            },
+        )
+        .unwrap();
+    runner.restore_feedback_history(&authority).unwrap();
+
+    let live_request = request("agent-a", "request-live", "turn-live");
+    let turn_id = runner.start_turn(live_request.clone()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while runner.awaiting_outcome(turn_id).is_none() {
+        runner.poll_completed().unwrap();
+        assert!(
+            Instant::now() < deadline,
+            "provider result must become pollable"
+        );
+        thread::yield_now();
+    }
+    let mut newer = feedback(
+        "agent-a",
+        live_request.agent_session_id.as_str(),
+        2,
+        "live-feedback-2",
+    );
+    newer.agent_turn_id = live_request.agent_turn_id.clone();
+    newer.decision_request_id = live_request.decision_request_id.clone();
+    newer.request_digest = live_request.request_digest.clone();
+    runner.accept_feedback(turn_id, newer).unwrap();
+    assert!(runner.awaiting_request(turn_id).is_none());
+    assert!(runner.cognition.contains_feedback(
+        "agent-a",
+        live_request.agent_session_id.as_str(),
+        "live-feedback-2"
+    ));
+
+    // The old authenticated view must be compared against the live verifier;
+    // it cannot replace the newer local replay fence.
+    runner.restore_feedback_history(&authority).unwrap();
+    assert_eq!(authority.history_reads.load(Ordering::SeqCst), 2);
+    assert!(!runner.cognition.feedback_recovery_initialized());
+    assert!(runner.feedback_recovery_blocked("agent-a", "session-agent-a"));
+    assert_eq!(
+        runner
+            .start_turn(request("agent-a", "request-after-stale-view", "turn-next"))
+            .expect_err("stale World history cannot reopen the ahead partition")
+            .code(),
+        "feedback_recovery_blocked"
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
