@@ -52,8 +52,50 @@ pub(super) fn state_base(
 }
 
 #[cfg(unix)]
+fn validate_ancestors(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let absolute;
+    let path = if path.is_absolute() {
+        path
+    } else {
+        absolute = std::env::current_dir()
+            .map_err(|e| e.to_string())?
+            .join(path);
+        absolute.as_path()
+    };
+    let owner = unsafe { libc::geteuid() };
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::RootDir | std::path::Component::Normal(_) => {
+                current.push(component.as_os_str())
+            }
+            _ => return Err("pending state path must use absolute normal components".into()),
+        }
+        let metadata = match fs::symlink_metadata(&current) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.to_string()),
+        };
+        // Root-owned sticky temporary parents protect our owned private entry.
+        // This component check is not a directory-descriptor race guarantee.
+        let trusted_sticky = metadata.uid() == 0 && metadata.mode() & 0o1000 != 0;
+        if !metadata.is_dir()
+            || (metadata.uid() != owner && metadata.uid() != 0)
+            || (metadata.mode() & 0o022 != 0 && !trusted_sticky)
+        {
+            return Err(
+                "pending state ancestor must be a trusted non-symlink safe directory".into(),
+            );
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
 fn ensure_directory(path: &Path, private: bool) -> Result<(), String> {
     use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    validate_ancestors(path)?;
     if !path.exists() {
         let parent = path.parent().ok_or("state directory parent missing")?;
         ensure_directory(parent, false)?;
@@ -148,6 +190,7 @@ pub(super) fn save(
 pub(super) fn load(path: &Path) -> Result<Original, String> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     let parent = path.parent().ok_or("pending artifact parent missing")?;
+    validate_ancestors(parent)?;
     let directory = fs::symlink_metadata(parent).map_err(|e| e.to_string())?;
     // The signed goal is private caller data, even though it contains no private key.
     let owner = unsafe { libc::geteuid() };

@@ -363,3 +363,55 @@ fn durable_state_selection_and_private_root_fail_closed() {
     assert!(pending::save_at(&chat, &world, "fixture", &state).is_err());
     std::fs::remove_dir_all(state).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn durable_state_rejects_existing_ancestor_symlink_and_writable_parent() {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt, symlink};
+    let root = private_state_dir();
+    let actual = root.join("actual");
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&actual)
+        .unwrap();
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(actual.join("state"))
+        .unwrap();
+    symlink(&actual, root.join("alias")).unwrap();
+    let writable = root.join("writable");
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&writable)
+        .unwrap();
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(writable.join("state"))
+        .unwrap();
+    std::fs::set_permissions(&writable, std::fs::Permissions::from_mode(0o777)).unwrap();
+    let (_, private, world, _) = world_fixture();
+    let chat = build_signed_agent_chat_request(
+        "agent-0",
+        "owner",
+        "fixturegoal",
+        &private,
+        None,
+        Some(2),
+        Some(next_u64_id()),
+    )
+    .unwrap();
+    let linked = pending::save_at(&chat, &world, "fixture", &root.join("alias/state"));
+    let unsafe_parent = pending::save_at(&chat, &world, "fixture", &writable.join("state"));
+    for path in [&linked, &unsafe_parent].into_iter().flatten() {
+        pending::complete(path).unwrap();
+    }
+    std::fs::remove_dir_all(root).unwrap();
+    assert!(
+        linked.is_err(),
+        "existing owned base must not bypass ancestor symlink rejection"
+    );
+    assert!(
+        unsafe_parent.is_err(),
+        "existing owned base must not bypass writable ancestor rejection"
+    );
+}

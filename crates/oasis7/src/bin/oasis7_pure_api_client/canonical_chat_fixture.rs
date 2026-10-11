@@ -502,7 +502,7 @@ pub(super) fn canonical_fixture(recover_after_timeout: bool, key_format: Option<
 pub(super) fn private_state_dir() -> std::path::PathBuf {
     use std::os::unix::fs::DirBuilderExt;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let root = std::env::temp_dir().join(format!(
+    let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "oasis7-cli-state-fixture-{}-{}-{}",
         std::process::id(),
         next_u64_id(),
