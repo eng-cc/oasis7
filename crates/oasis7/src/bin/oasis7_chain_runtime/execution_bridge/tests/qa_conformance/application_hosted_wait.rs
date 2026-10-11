@@ -205,7 +205,8 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     );
     assert!(
         completed,
-        "ordinary Wait/Resume/Act must reach exact committed memory"
+        "ordinary Wait/Resume/Act must reach exact committed memory; diagnostic={}",
+        application_completion::hosted_failure_diagnostic(&summary)
     );
     println!("PRE2_HOSTED_WAIT_RESUME_ACT_PASSED");
 }
