@@ -956,16 +956,11 @@ fn restored_missing_active_identity_terminalizes_runtime_and_feedback() {
     let _ = std::fs::remove_file(path);
 }
 
-#[test]
-fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
-    let lineage_path = std::env::temp_dir().join(format!(
-        "oasis7-provider-wake-recovery-{}-{}.json",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos()
-    ));
+// Keep full server construction and restore temporaries off the assertion frame.
+#[inline(never)]
+fn setup_wake_handoff_recovery_fixture(
+    lineage_path: &std::path::Path,
+) -> Box<ViewerRuntimeLiveServer> {
     let mut world = RuntimeWorld::new();
     world
         .bind_cognition_runtime("world", "recovery-wake-branch", 0, None, "pending", 0)
@@ -1001,7 +996,7 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
     let mut server = ViewerRuntimeLiveServer::new(
         ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
             .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_provider_lineage_store(lineage_path.clone()),
+            .with_provider_lineage_store(lineage_path.to_path_buf()),
     )
     .expect("Runtime live server");
     server.world = world;
@@ -1057,6 +1052,40 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
     // control pass; avoid reloading the pre-fault checkpoint over the
     // in-memory wake/error transition while exercising sibling progress.
     server.llm_sidecar.provider_lineage_hydrated = true;
+
+    Box::new(server)
+}
+
+#[inline(never)]
+fn restart_wake_handoff_recovery_fixture(
+    server: &ViewerRuntimeLiveServer,
+    lineage_path: &std::path::Path,
+) -> Box<ViewerRuntimeLiveServer> {
+    let mut restarted = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_provider_lineage_store(lineage_path.to_path_buf()),
+    )
+    .expect("restarted Runtime live server");
+    restarted.world = server.world.clone();
+    restarted
+        .llm_sidecar
+        .restore_provider_lineage(&restarted.world)
+        .expect("restore wake recovery marker");
+    Box::new(restarted)
+}
+
+#[test]
+fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
+    let lineage_path = std::env::temp_dir().join(format!(
+        "oasis7-provider-wake-recovery-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    let mut server = setup_wake_handoff_recovery_fixture(&lineage_path);
 
     let trace = server
         .enqueue_llm_action_from_sidecar()
@@ -1156,17 +1185,7 @@ fn provider_wake_handoff_failure_retains_terminal_identity_for_recovery() {
         "healthy sibling B must be delivered while Agent A wake recovery remains pending"
     );
 
-    let mut restarted = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_decision_mode(ViewerLiveDecisionMode::Llm)
-            .with_provider_lineage_store(lineage_path.clone()),
-    )
-    .expect("restarted Runtime live server");
-    restarted.world = server.world.clone();
-    restarted
-        .llm_sidecar
-        .restore_provider_lineage(&restarted.world)
-        .expect("restore wake recovery marker");
+    let mut restarted = restart_wake_handoff_recovery_fixture(&server, &lineage_path);
     assert!(
         restarted
             .llm_sidecar
