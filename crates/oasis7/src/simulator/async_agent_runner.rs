@@ -480,6 +480,24 @@ impl AsyncAgentRunner {
         self.start_turn_with_context_and_observation(agent_id, observation, Some(context))
     }
 
+    /// Start an explicitly reduced, non-production turn while preserving the
+    /// caller's simulator observation. This is the host adapter used by the
+    /// legacy native `TurnEngine` facade; it does not bind the outer request,
+    /// admit a Runtime lease, or imply that durable feedback history has been
+    /// restored. Committed memory feedback still requires the strict Runtime
+    /// readback path.
+    pub(crate) fn start_compatibility_turn_with_context_and_observation(
+        &mut self,
+        agent_id: &str,
+        observation: Observation,
+        context: ContinuousAgentTurnContextV1,
+    ) -> Result<AsyncTurnId, AsyncAgentRunnerError> {
+        context
+            .validate_for_agent(agent_id)
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        self.start_turn_with_context_and_observation(agent_id, observation, Some(context))
+    }
+
     /// Start a production-target provider turn with the complete trusted
     /// outer request. The reduced context remains present for behavior APIs,
     /// while the outer request carries retry, transport, and Runtime binding.
