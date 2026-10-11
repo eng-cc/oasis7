@@ -7,6 +7,10 @@ pub(super) fn validate_output(
     drift: bool,
 ) {
     if !output.status.success() {
+        eprintln!(
+            "fixture_failure_stages={}",
+            fixture.stage_diagnostics.snapshot()
+        );
         application_wake::report_canonical_resume_failure(fixture);
     }
     assert!(
@@ -446,6 +450,12 @@ pub(super) fn run_isolated_application_mode(
     } else {
         command.output().unwrap()
     };
+    if !output.status.success() {
+        eprintln!(
+            "fixture_failure_stages={}",
+            fixture.stage_diagnostics.snapshot()
+        );
+    }
     if hosted
         && (metadata_probe
             || matches!(

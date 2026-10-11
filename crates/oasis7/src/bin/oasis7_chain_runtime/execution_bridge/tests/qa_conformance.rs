@@ -31,7 +31,10 @@ mod application_memory_tamper;
 mod application_metadata;
 mod application_sandbox;
 mod application_stream_boundaries;
+mod controlled_admission;
+mod fixture_stage_diagnostics;
 mod hosted_wait_clock;
+use fixture_stage_diagnostics::Stage;
 mod provider_metadata;
 mod scenario_resource;
 use application_harness::run_isolated_application;
@@ -111,6 +114,8 @@ struct Fixture {
     lookup_digests: Arc<Mutex<Vec<String>>>,
     outage: Arc<http_fixture::Outage>,
     tamper_next_describe: Arc<AtomicBool>,
+    stage_diagnostics: Arc<fixture_stage_diagnostics::Diagnostics>,
+    controlled_completion: Arc<controlled_admission::Completion>,
     // Last field: release after the fixture worker/node/storage fields drop.
     scenario_permit: Arc<scenario_resource::ScenarioResourcePermit>,
 }
@@ -349,6 +354,10 @@ impl Fixture {
         let worker_halt = halt.clone();
         let worker_node = node.clone();
         let worker_root = root.clone();
+        let stage_diagnostics = Arc::new(fixture_stage_diagnostics::Diagnostics::default());
+        let worker_diagnostics = stage_diagnostics.clone();
+        let controlled_completion = Arc::new(controlled_admission::Completion::default());
+        let worker_completion = controlled_completion.clone();
         // QA-only causal probe: delay only a verified successful View response.
         // Each delay remains below the client's transport timeout; cumulative
         // protocol stages may exceed the former completion observation window.
@@ -450,6 +459,7 @@ impl Fixture {
                 } else {
                     stream.try_clone().unwrap()
                 };
+                let dispatch_started = Instant::now();
                 let result = crate::world_service_api::maybe_handle(
                     &mut output_stream,
                     &bytes,
@@ -462,6 +472,7 @@ impl Fixture {
                     &worker_root.join("store"),
                     &signer,
                 );
+                worker_diagnostics.record(Stage::Dispatcher, dispatch_started.elapsed());
                 eprintln!("fixture_dispatch method={method} path={path} result={result:?}");
                 // A verified whole-process exit at the intentional Settle gate may
                 // close its response socket. Admission and canonical execution must
@@ -497,10 +508,16 @@ impl Fixture {
                 if gated_ack.is_some() && worker_controlled.load(Ordering::SeqCst) {
                     let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
                     let request = serde_json::from_slice(body).unwrap();
-                    let mut driver = worker_driver.lock().unwrap();
-                    let height = driver.state.last_applied_committed_height + 1;
-                    commit_request(&mut driver, height, Some(request));
+                    controlled_admission::execute(
+                        &worker_driver,
+                        &worker_root.join("store"),
+                        request,
+                        &worker_diagnostics,
+                        &worker_completion,
+                    )
+                    .expect("controlled admission must retain the original published result");
                 }
+                let relay_started = Instant::now();
                 drop(output_stream);
                 if let Some(reader) = read_reader {
                     let response = reader.join().expect("Read response capture reader failed");
@@ -612,6 +629,7 @@ impl Fixture {
                         );
                     }
                 }
+                worker_diagnostics.record(Stage::ResponseCaptureRelay, relay_started.elapsed());
                 if path == SUBMIT_PATH
                     && gated_ack.is_none()
                     && worker_controlled.load(Ordering::SeqCst)
@@ -619,9 +637,14 @@ impl Fixture {
                     application_hosted_unpublished_cadence::hold_original_commit(&worker_gate);
                     let body = crate::feedback_submit_api::extract_http_json_body(&bytes).unwrap();
                     let request = serde_json::from_slice(body).unwrap();
-                    let mut driver = worker_driver.lock().unwrap();
-                    let height = driver.state.last_applied_committed_height + 1;
-                    commit_request(&mut driver, height, Some(request));
+                    controlled_admission::execute(
+                        &worker_driver,
+                        &worker_root.join("store"),
+                        request,
+                        &worker_diagnostics,
+                        &worker_completion,
+                    )
+                    .expect("controlled admission must retain the original published result");
                 }
                 if capture_ack {
                     worker_gate.hold_feedback_ack_after_commit(path, &bytes);
@@ -666,6 +689,8 @@ impl Fixture {
             lookup_digests,
             outage,
             tamper_next_describe,
+            stage_diagnostics,
+            controlled_completion,
             scenario_permit,
         }
     }
