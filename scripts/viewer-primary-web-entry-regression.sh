@@ -466,9 +466,9 @@ default_url_final=$(normalize_eval_token "$(ab_cmd "$default_session" get url)")
 [[ "$(state_render_mode "$default_state")" == "viewer" ]] || { echo "error: default route did not land in viewer" >&2; exit 1; }
 [[ "$(state_reason "$default_state")" == "direct_viewer_entry" ]] || { echo "error: default route reason mismatch: $(state_reason "$default_state")" >&2; exit 1; }
 [[ "$default_url_final" == "http://${viewer_host}:${viewer_port}/"* ]] || { echo "error: default route escaped viewer host: $default_url_final" >&2; exit 1; }
-assert_body_contains "$default_body_path" "WORLD COMMAND BOARD" "default route"
-assert_body_contains "$default_body_path" "SITUATION" "default route"
-assert_body_contains "$default_body_path" "CURRENT IDENTITY" "default route"
+assert_body_contains "$default_body_path" "STANDARD USER FLOW" "default route"
+assert_body_contains "$default_body_path" "NEXT MOVE" "default route"
+assert_body_contains "$default_body_path" "PLAYER LEVERAGE" "default route"
 assert_body_contains "$default_body_path" "OBJECTIVE" "default route"
 assert_body_contains "$default_body_path" "ACTION RECEIPT" "default route"
 
