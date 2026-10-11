@@ -36,7 +36,7 @@ sudo "$RELEASE/oasis7_local_signer_admin" enable --purpose rollback_strict_audit
 
 ### Policy 和 grant 的内容
 
-精确字段与校验规则见 [types.rs](../../../crates/oasis7_local_signer/src/types.rs)。JSON 不接受未知字段；所有 SHA-256 使用 64 位小写 hex。
+精确字段与校验规则见 [types.rs](../../../crates/oasis7_local_signer/src/types.rs)。JSON 不接受未知字段；所有 SHA-256 使用 64 位小写 hex。`policy-install` 与 `approve-batch` 的候选文件必须逐字节等于 `canonical_json` 对已解析类型的输出：先转为 `serde_json::Value`，再用 `serde_json::to_vec` 编码为紧凑 UTF-8 JSON；对象键按字典序排列，没有缩进、额外空格、BOM 或末尾换行，字符串转义也必须与该序列化器一致。可选字段按类型序列化规则输出（包括显式 null）。先生成最终 canonical 字节，再计算其 SHA-256；仅摘要正确并不能使普通格式化 JSON 被接受。
 
 | 候选 | 必须绑定的内容 |
 | --- | --- |
@@ -84,7 +84,7 @@ sudo "$RELEASE/oasis7_local_signer_admin" enable --purpose rollback_strict_audit
 }
 ```
 
-ID 一般为 2–128 字节 ASCII，首字符为字母或数字，其余允许字母、数字、点、下划线、连字符。不要修改已准备 job 的 input、payload 或生成元数据；内容变化会触发 `ID_CONFLICT`。新业务请求使用新 job，但不能通过新 job 绕过 grant 的请求额度。
+ID 一般为 2–128 字节 ASCII，首字符为字母或数字，其余允许字母、数字、点、下划线、连字符。不要修改已准备 job 的 input、payload 或生成元数据；input 派生字段与已准备请求不一致或 payload 变化会触发 `ID_CONFLICT`。工具不保证检测生成元数据的所有修改：改变合法的 request_id 会成为独立请求并消耗另一个额度，仅重新格式化 request.json 也不一定报错；必须由操作者保留原始生成文件和 request_id，不能把此检查视为元数据完整性保护。新业务请求使用新 job，但不能通过新 job 绕过 grant 的请求额度。
 
 ## 查询、停用和撤销
 
