@@ -366,10 +366,12 @@ run_cargo_clippy() { printf 'clippy|%s\\n' "$*"; }
     def test_private_context_all_targets_and_caller_are_executed(self):
         driver = (ROOT / 'scripts/ci-tests.sh').read_text()
         function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
-        script = "set -euo pipefail\nrun_cargo() { printf '%s\\n' \"$*\"; }\n" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
+        script = "set -euo pipefail\nrun_cargo() { printf '%s\\n' \"$*\"; }\nrun_cargo_clippy() { printf 'clippy %s\\n' \"$*\"; }\n" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
         result = subprocess.run(['bash', '-c', script], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [line.split() for line in result.stdout.splitlines()]
+        self.assertIn(['clippy', '-p', 'oasis7_agent_api', '--all-targets'], calls)
+        self.assertIn(['clippy', '-p', 'oasis7_agent_harness', '--all-targets'], calls)
         for package in ('oasis7_context', 'oasis7_secure_envelope'):
             selected = [call for call in calls if package in call]
             self.assertTrue(selected, package)
