@@ -22,9 +22,85 @@ pub(super) fn save(
     world: &oasis7::world_service::WorldIdentity,
     endpoint: &str,
 ) -> Result<PathBuf, String> {
+    let base = state_base(
+        std::env::var_os("XDG_STATE_HOME").as_deref(),
+        std::env::var_os("HOME").as_deref(),
+    )?;
+    save_at(chat, world, endpoint, &base)
+}
+
+#[cfg(unix)]
+pub(super) fn state_base(
+    xdg: Option<&std::ffi::OsStr>,
+    home: Option<&std::ffi::OsStr>,
+) -> Result<PathBuf, String> {
+    let base = if let Some(xdg) = xdg {
+        PathBuf::from(xdg)
+    } else if let Some(home) = home {
+        let home = PathBuf::from(home);
+        if !home.is_absolute() {
+            return Err("HOME must be absolute for durable pending state".into());
+        }
+        home.join(".local/state")
+    } else {
+        return Err("durable pending state requires absolute XDG_STATE_HOME or HOME".into());
+    };
+    if !base.is_absolute() {
+        return Err("XDG_STATE_HOME must be absolute for durable pending state".into());
+    }
+    Ok(base)
+}
+
+#[cfg(unix)]
+fn ensure_directory(path: &Path, private: bool) -> Result<(), String> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    if !path.exists() {
+        let parent = path.parent().ok_or("state directory parent missing")?;
+        ensure_directory(parent, false)?;
+        fs::DirBuilder::new()
+            .mode(0o700)
+            .create(path)
+            .or_else(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    Ok(())
+                } else {
+                    Err(e)
+                }
+            })
+            .map_err(|e| e.to_string())?;
+        fs::File::open(parent)
+            .and_then(|f| f.sync_all())
+            .map_err(|e| e.to_string())?;
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !metadata.is_dir()
+        || metadata.uid() != unsafe { libc::geteuid() }
+        || metadata.mode() & 0o022 != 0
+        || (private && metadata.mode() & 0o777 != 0o700)
+    {
+        return Err("pending state requires owned safe directories; private application directories must be 0700".into());
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+pub(super) fn save_at(
+    chat: &AgentChatRequest,
+    world: &oasis7::world_service::WorldIdentity,
+    endpoint: &str,
+    base: &Path,
+) -> Result<PathBuf, String> {
     use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+    if !base.is_absolute() {
+        return Err("pending state base must be absolute".into());
+    }
+    ensure_directory(base, false)?;
+    let app = base.join("oasis7");
+    ensure_directory(&app, true)?;
+    let root = app.join("canonical-chat");
+    ensure_directory(&root, true)?;
     let nonce = chat.auth.as_ref().ok_or("owner proof missing")?.nonce;
-    let dir = std::env::temp_dir().join(format!(
+    let dir = root.join(format!(
         "oasis7-canonical-chat-{}-{nonce}",
         std::process::id()
     ));

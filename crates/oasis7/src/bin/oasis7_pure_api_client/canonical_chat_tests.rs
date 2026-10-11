@@ -1,436 +1,13 @@
 use super::*;
-use oasis7::runtime::{Action, World};
-use oasis7::world_service::projection::WorldServiceProjection;
 use oasis7::world_service::*;
-use oasis7_client_api::world_service::{
-    CommitRef, EventCursor, ExecutionBinding, IntentOutcome, IntentResponse, ProjectionVersion,
-    ReadWorldViewResponse,
-};
 #[cfg(unix)]
 use std::io::Read;
-#[cfg(unix)]
-use std::net::Shutdown;
 use std::net::TcpListener;
+#[path = "canonical_chat_fixture.rs"]
+mod fixture;
+use fixture::world_fixture;
 #[cfg(unix)]
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
-#[cfg(unix)]
-use std::thread;
-
-fn world_fixture() -> (World, String, WorldIdentity, CommitRef) {
-    let private = hex::encode([73; 32]);
-    let key = authority::sign_read_request("fixture", (), &private)
-        .unwrap()
-        .subject_public_key;
-    let mut world = World::new();
-    world.submit_action(Action::RegisterAgent {
-        agent_id: "agent-0".into(),
-        pos: oasis7::GeoPos::new(0, 0, 0),
-    });
-    world.step().unwrap();
-    world.submit_action(Action::ClaimStarterOc {
-        agent_id: "agent-0".into(),
-        player_id: "owner".into(),
-        public_key: Some(key),
-    });
-    world.step().unwrap();
-    world
-        .install_capability_agent_identity("agent-0", "owner", 1)
-        .unwrap();
-    world
-        .bind_cognition_runtime("canonical-cli-fixture", "main", 0, None, "pending", 0)
-        .unwrap();
-    let identity = WorldIdentity {
-        world_id: "canonical-cli-fixture".into(),
-        genesis_digest: "fixture".into(),
-    };
-    let commit = CommitRef {
-        world: identity.clone(),
-        binding: ExecutionBinding {
-            provider_world_id: identity.world_id.clone(),
-            branch_id: "main".into(),
-            finality_ref: "fixture".into(),
-            reorg_generation: 0,
-            governing_manifest_ref: "fixture".into(),
-            authority_generation: 1,
-            permission_generation: 1,
-        },
-        position: 2,
-        execution_block_hash: "fixture".into(),
-        state_root_ref: "fixture".into(),
-    };
-    (world, private, identity, commit)
-}
-#[cfg(unix)]
-fn read_http(socket: &mut std::net::TcpStream) -> (String, Value, Vec<u8>) {
-    socket.set_nonblocking(false).unwrap();
-    socket
-        .set_read_timeout(Some(Duration::from_secs(4)))
-        .unwrap();
-    let mut bytes = Vec::new();
-    loop {
-        let mut part = [0; 4096];
-        let n = socket.read(&mut part).unwrap();
-        assert!(n > 0);
-        bytes.extend_from_slice(&part[..n]);
-        if let Some(i) = bytes.windows(4).position(|v| v == b"\r\n\r\n") {
-            let headers = String::from_utf8_lossy(&bytes[..i]);
-            let length: usize = headers
-                .lines()
-                .find_map(|v| {
-                    v.to_lowercase()
-                        .strip_prefix("content-length:")
-                        .map(|v| v.trim().parse().unwrap())
-                })
-                .unwrap();
-            if bytes.len() >= i + 4 + length {
-                let path = headers
-                    .lines()
-                    .next()
-                    .unwrap()
-                    .split_whitespace()
-                    .nth(1)
-                    .unwrap()
-                    .to_string();
-                return (
-                    path,
-                    serde_json::from_slice(&bytes[i + 4..i + 4 + length]).unwrap(),
-                    bytes[i + 4..i + 4 + length].to_vec(),
-                );
-            }
-        }
-    }
-}
-#[cfg(unix)]
-fn reply(socket: &mut std::net::TcpStream, body: Value) {
-    let bytes = serde_json::to_vec(&body).unwrap();
-    write!(
-        socket,
-        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        bytes.len()
-    )
-    .unwrap();
-    socket.write_all(&bytes).unwrap();
-}
-
-#[cfg(unix)]
-fn canonical_fixture(recover_after_timeout: bool, key_format: Option<&str>) {
-    let (world, private, identity, commit) = world_fixture();
-    let canonical = Arc::new(Mutex::new(world));
-    let received = Arc::new(Mutex::new(Vec::<Value>::new()));
-    let service_private = hex::encode([9; 32]);
-    let service_key = authority::sign_read_request("fixture", (), &service_private)
-        .unwrap()
-        .subject_public_key;
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let endpoint = format!("http://{}", listener.local_addr().unwrap());
-    let stop = Arc::new(AtomicBool::new(false));
-    let stopped = stop.clone();
-    let service_world = canonical.clone();
-    let submitted = received.clone();
-    let retry_enabled = Arc::new(AtomicBool::new(!recover_after_timeout));
-    let service_retry_enabled = retry_enabled.clone();
-    let (submit_observed, observed_submit) = std::sync::mpsc::channel();
-    let service = thread::spawn(move || {
-        let mut committed: Option<Value> = None;
-        let mut first_submit_bytes = None;
-        while !stopped.load(Ordering::Relaxed) {
-            let (mut socket, _) = match listener.accept() {
-                Ok(v) => v,
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(2));
-                    continue;
-                }
-                Err(e) => panic!("{e}"),
-            };
-            let (path, body, original_bytes) = read_http(&mut socket);
-            let digest = authority::request_digest(&path, &body).unwrap();
-            let payload = if path == VIEW_PATH {
-                let signed: SignedReadRequest<ReadWorldViewRequest> =
-                    serde_json::from_value(body).unwrap();
-                authority::verify_read_request(VIEW_PATH, &signed).unwrap();
-                let world = service_world.lock().unwrap();
-                let owner = signed.request.scope_id.strip_prefix("agent:");
-                if owner.is_some() {
-                    assert_eq!(
-                        signed.subject_public_key,
-                        authority::sign_read_request("fixture", (), &hex::encode([73; 32]))
-                            .unwrap()
-                            .subject_public_key
-                    );
-                }
-                let mut projection = WorldServiceProjection::from_authenticated_world(
-                    &world,
-                    owner,
-                    &signed.subject_public_key,
-                )
-                .unwrap();
-                projection.runtime_binding = None;
-                serde_json::to_value(ReadWorldViewResponse {
-                    execution_evidence_scope: None,
-                    contract_version: 1,
-                    version: ProjectionVersion {
-                        commit: commit.clone(),
-                        projection_revision: "fixture".into(),
-                        visibility_scope: signed.request.scope_id.clone(),
-                    },
-                    logical_tick: world.state().time,
-                    continuation: EventCursor {
-                        stream_id: "fixture".into(),
-                        scope_id: signed.request.scope_id,
-                        era: 0,
-                        sequence: 0,
-                        commit: commit.clone(),
-                    },
-                    view: projection,
-                })
-                .unwrap()
-            } else if path == CHANGES_PATH {
-                let signed: SignedReadRequest<ReadWorldChangesRequest> =
-                    serde_json::from_value(body).unwrap();
-                authority::verify_read_request(CHANGES_PATH, &signed).unwrap();
-                serde_json::to_value(ReadWorldChangesResponse::<Value> {
-                    execution_evidence_scope: None,
-                    contract_version: 1,
-                    changes: Vec::new(),
-                    next_cursor: signed.request.cursor,
-                })
-                .unwrap()
-            } else if path == LOOKUP_PATH {
-                let originals = submitted.lock().unwrap();
-                assert_eq!(body["original"], originals[0]["signed_payload"]);
-                assert_eq!(body["request"]["key"], originals[0]["correlation"]["key"]);
-                let mut pending = committed.as_ref().unwrap().clone();
-                pending["outcome"] = json!({"status":"pending"});
-                pending
-            } else if path == SUBMIT_PATH {
-                submitted.lock().unwrap().push(body.clone());
-                submit_observed.send(()).unwrap();
-                if let Some(result) = &committed {
-                    let originals = submitted.lock().unwrap();
-                    assert_eq!(originals[0], originals[1]);
-                    assert_eq!(first_submit_bytes.as_ref().unwrap(), &original_bytes);
-                    if service_retry_enabled.load(Ordering::Acquire) {
-                        result.clone()
-                    } else {
-                        let mut pending = result.clone();
-                        pending["outcome"] = json!({"status":"pending"});
-                        pending
-                    }
-                } else {
-                    first_submit_bytes = Some(original_bytes);
-                    let request: SubmitIntentRequest<WorldServicePayloadV1> =
-                        serde_json::from_value(body).unwrap();
-                    let WorldServicePayloadV1::AgentChat(chat) = &request.signed_payload else {
-                        panic!("unexpected payload")
-                    };
-                    assert_eq!(chat.world_id.as_deref(), Some("canonical-cli-fixture"));
-                    assert_eq!(
-                        chat.canonical_authority
-                            .as_ref()
-                            .unwrap()
-                            .agent_identity_generation,
-                        1
-                    );
-                    let mut world = service_world.lock().unwrap();
-                    let receipt = world.apply_authenticated_agent_chat(chat).unwrap();
-                    world
-                        .record_world_service_result(CanonicalIntentResultV1 {
-                            request: request.clone(),
-                            action_id: 1,
-                            committed_height: 2,
-                            receipt: receipt.clone(),
-                            rejected: None,
-                        })
-                        .unwrap();
-                    committed = Some(
-                        serde_json::to_value(IntentResponse {
-                            execution_evidence_scope: None,
-                            contract_version: 1,
-                            correlation: request.correlation.clone(),
-                            outcome: IntentOutcome::Committed {
-                                commit: Box::new(commit.clone()),
-                                receipt,
-                            },
-                        })
-                        .unwrap(),
-                    );
-                    serde_json::to_value(IntentResponse::<Value> {
-                        execution_evidence_scope: None,
-                        contract_version: 1,
-                        correlation: request.correlation,
-                        outcome: IntentOutcome::Pending,
-                    })
-                    .unwrap()
-                }
-            } else {
-                panic!("unexpected service path {path}")
-            };
-            reply(
-                &mut socket,
-                serde_json::to_value(
-                    authority::sign_service_response(&path, digest, payload, &service_private)
-                        .unwrap(),
-                )
-                .unwrap(),
-            );
-        }
-    });
-    let mut config = oasis7::viewer::ViewerRuntimeLiveServerConfig::new(
-        oasis7::simulator::WorldScenario::Minimal,
-    );
-    config.world_id = identity.world_id.clone();
-    config.world_service = Some(client::WorldServiceClientConfig {
-        endpoint,
-        trusted_service_public_key: service_key,
-        expected_world: identity,
-        scope_id: "public".into(),
-        read_private_key_hex: hex::encode([7; 32]),
-        timeout: Duration::from_secs(3),
-        max_response_bytes: 1024 * 1024,
-    });
-    let server = Arc::new(Mutex::new(
-        oasis7::viewer::ViewerRuntimeLiveServer::new(config).unwrap(),
-    ));
-    let tcp = TcpListener::bind("127.0.0.1:0").unwrap();
-    let addr = tcp.local_addr().unwrap().to_string();
-    let serving = thread::spawn(move || {
-        for _ in 0..if recover_after_timeout { 3 } else { 2 } {
-            let (socket, _) = tcp.accept().unwrap();
-            oasis7::viewer::ViewerRuntimeLiveServer::test_serve_shared_stream(
-                server.clone(),
-                socket,
-            )
-            .unwrap();
-        }
-    });
-    let timeout = Duration::from_secs(10);
-    let mut registration =
-        ViewerConnection::connect(&addr, "fixture-registration", timeout).unwrap();
-    registration.send(&ViewerRequest::RequestSnapshot).unwrap();
-    registration
-        .collect_until(timeout, terminal_snapshot, "prime")
-        .unwrap();
-    let request = build_signed_session_register_request(
-        "owner",
-        &private,
-        None,
-        Some("agent-0".into()),
-        None,
-    )
-    .unwrap();
-    registration
-        .send(&ViewerRequest::AuthoritativeRecovery {
-            command: AuthoritativeRecoveryCommand::RegisterSession { request },
-        })
-        .unwrap();
-    let registered = registration
-        .collect_until(timeout, terminal_recovery, "register")
-        .unwrap();
-    assert!(
-        matches!(
-            registered.last().unwrap().response,
-            ViewerResponse::AuthoritativeRecoveryAck { .. }
-        ),
-        "{:?}",
-        registered.last().unwrap().raw
-    );
-    registration
-        .writer
-        .get_ref()
-        .shutdown(Shutdown::Both)
-        .unwrap();
-    drop(registration);
-    let mut conn = ViewerConnection::connect(&addr, "fixture-chat", timeout).unwrap();
-    subscribe_for_control(&mut conn, true, false).unwrap();
-    let canonical_key = oasis7_pure_api_client_support::derive_public_key_hex(&private).unwrap();
-    let supplied_key = key_format.map(|format| match format {
-        "uppercase" => canonical_key.to_uppercase(),
-        "whitespace" => format!("  {canonical_key}\n"),
-        _ => panic!("unknown key format"),
-    });
-    let input = ChatInput {
-        agent_id: "agent-0",
-        player_id: "owner",
-        message: "private canonical fixture goal",
-        private_key_hex: &private,
-        public_key_hex: supplied_key.as_deref(),
-        intent_tick: None,
-        intent_seq: None,
-    };
-    let first = if recover_after_timeout {
-        let (chat, responses, artifact) =
-            prepare_canonical(&mut conn, Instant::now() + timeout, input).unwrap();
-        conn.send(&ViewerRequest::AgentChat {
-            request: chat.clone(),
-        })
-        .unwrap();
-        observed_submit
-            .recv_timeout(timeout)
-            .expect("service must receive original canonical Submit before timeout phase");
-        submit_original(
-            &mut conn,
-            Instant::now() + Duration::from_millis(300),
-            chat,
-            responses,
-            &artifact,
-        )
-    } else {
-        exchange(&mut conn, timeout, input)
-    };
-    let responses = if recover_after_timeout {
-        let error = match first {
-            Err(error) => error,
-            Ok(_) => panic!("pending is not committed success"),
-        };
-        let path = std::path::PathBuf::from(
-            error
-                .split("retained at ")
-                .nth(1)
-                .unwrap_or_else(|| {
-                    panic!("timeout must retain persisted original request: {error}")
-                })
-                .split(". Retry with")
-                .next()
-                .unwrap(),
-        );
-        let saved = pending::load(&path).unwrap();
-        assert_eq!(saved.endpoint, addr);
-        let WorldServicePayloadV1::AgentChat(original) =
-            serde_json::from_value::<WorldServicePayloadV1>(
-                received.lock().unwrap()[0]["signed_payload"].clone(),
-            )
-            .unwrap()
-        else {
-            panic!("chat")
-        };
-        assert_eq!(saved.request, original);
-        conn.writer.get_ref().shutdown(Shutdown::Both).unwrap();
-        drop(conn);
-        conn = ViewerConnection::connect(&addr, "fixture-retry", timeout).unwrap();
-        retry_enabled.store(true, Ordering::Release);
-        let result = retry(&mut conn, timeout, &path).unwrap();
-        assert!(!path.exists(), "committed receipt removes pending artifact");
-        result
-    } else {
-        first.unwrap()
-    };
-    assert!(
-        matches!(&responses.last().unwrap().response,ViewerResponse::AgentChatAck{ack}if ack.intent_id.is_some()&&ack.auth_nonce.is_some())
-    );
-    assert_eq!(
-        received.lock().unwrap().len(),
-        if recover_after_timeout { 3 } else { 2 }
-    );
-    conn.writer.get_ref().shutdown(Shutdown::Both).unwrap();
-    drop(conn);
-    serving.join().unwrap();
-    stop.store(true, Ordering::Relaxed);
-    service.join().unwrap();
-}
+use fixture::{canonical_fixture, private_state_dir};
 
 #[test]
 fn owner_context_and_response_reject_foreign_stale_and_changed_authority() {
@@ -598,7 +175,8 @@ fn pending_artifact_is_private_bounded_and_rejects_symlink_or_unknown_fields() {
         Some(next_u64_id()),
     )
     .unwrap();
-    let path = pending::save(&chat, &world, "fixture").unwrap();
+    let state = private_state_dir();
+    let path = pending::save_at(&chat, &world, "fixture", &state).unwrap();
     assert_eq!(
         std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
         0o600
@@ -625,6 +203,7 @@ fn pending_artifact_is_private_bounded_and_rejects_symlink_or_unknown_fields() {
     assert!(pending::load(&path).is_err());
     std::fs::write(&path, before).unwrap();
     pending::complete(&path).unwrap();
+    std::fs::remove_dir_all(state).unwrap();
 }
 
 #[cfg(unix)]
@@ -651,7 +230,8 @@ fn retry_rejects_changed_endpoint_or_foreign_world_before_transport() {
     let proof = chat.auth.as_ref().unwrap();
     chat.auth =
         Some(sign_agent_chat_auth_proof(&chat, proof.nonce, &proof.public_key, &private).unwrap());
-    let path = pending::save(&chat, &world, "original-endpoint").unwrap();
+    let state = private_state_dir();
+    let path = pending::save_at(&chat, &world, "original-endpoint", &state).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
     let (mut peer, _) = listener.accept().unwrap();
@@ -681,6 +261,7 @@ fn retry_rejects_changed_endpoint_or_foreign_world_before_transport() {
     assert!(peer.read(&mut [0; 1]).is_err());
     assert!(path.exists());
     pending::complete(&path).unwrap();
+    std::fs::remove_dir_all(state).unwrap();
 }
 
 #[test]
@@ -694,4 +275,91 @@ fn canonical_owner_key_still_rejects_malformed_and_foreign_keys() {
     ] {
         assert!(owner_public_key(&private, Some(&key)).is_err());
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn canonical_committed_request_survives_followup_failure() {
+    canonical_fixture(false, Some("post_commit_failure"));
+}
+
+#[cfg(unix)]
+#[test]
+fn canonical_committed_request_survives_output_write_failure() {
+    canonical_fixture(false, Some("write_failure"));
+}
+#[cfg(unix)]
+#[test]
+fn canonical_committed_request_survives_output_flush_failure() {
+    canonical_fixture(false, Some("flush_failure"));
+}
+
+#[cfg(unix)]
+#[test]
+fn durable_state_selection_and_private_root_fail_closed() {
+    use std::ffi::OsStr;
+    use std::os::unix::fs::PermissionsExt;
+    assert_eq!(
+        pending::state_base(
+            Some(OsStr::new("/isolated/state")),
+            Some(OsStr::new("/home/owner"))
+        )
+        .unwrap(),
+        std::path::PathBuf::from("/isolated/state")
+    );
+    assert_eq!(
+        pending::state_base(None, Some(OsStr::new("/home/owner"))).unwrap(),
+        std::path::PathBuf::from("/home/owner/.local/state")
+    );
+    assert!(pending::state_base(None, None).is_err());
+    assert!(
+        pending::state_base(
+            Some(OsStr::new("relative")),
+            Some(OsStr::new("/home/owner"))
+        )
+        .is_err()
+    );
+    assert!(pending::state_base(None, Some(OsStr::new("relative"))).is_err());
+    let state = private_state_dir();
+    std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let (_, private, world, _) = world_fixture();
+    let chat = build_signed_agent_chat_request(
+        "agent-0",
+        "owner",
+        "privategoal",
+        &private,
+        None,
+        Some(2),
+        Some(next_u64_id()),
+    )
+    .unwrap();
+    let path = pending::save_at(&chat, &world, "fixture", &state).unwrap();
+    assert!(path.starts_with(state.join("oasis7/canonical-chat")));
+    assert_eq!(
+        std::fs::metadata(&state).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert_eq!(
+        std::fs::metadata(state.join("oasis7"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    assert!(
+        pending::save_at(&chat, &world, "fixture", &state).is_err(),
+        "exclusive original path must not overwrite"
+    );
+    pending::load(&path).unwrap();
+    pending::complete(&path).unwrap();
+    std::fs::set_permissions(state.join("oasis7"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(
+        pending::save_at(&chat, &world, "fixture", &state).is_err(),
+        "unsafe private app root must be rejected, not chmodded"
+    );
+    std::fs::remove_dir_all(state.join("oasis7")).unwrap();
+    std::os::unix::fs::symlink("/tmp", state.join("oasis7")).unwrap();
+    assert!(pending::save_at(&chat, &world, "fixture", &state).is_err());
+    std::fs::remove_dir_all(state).unwrap();
 }

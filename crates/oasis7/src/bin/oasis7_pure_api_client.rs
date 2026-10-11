@@ -164,7 +164,7 @@ fn run() -> Result<(), String> {
         } => {
             let mut conn = ViewerConnection::connect(addr.as_str(), client.as_str(), timeout)?;
             subscribe_for_control(&mut conn, true, false)?;
-            let mut responses = canonical_chat::exchange(
+            let outcome = canonical_chat::exchange(
                 &mut conn,
                 timeout,
                 canonical_chat::ChatInput {
@@ -177,20 +177,30 @@ fn run() -> Result<(), String> {
                     intent_seq,
                 },
             )?;
-            maybe_request_snapshot(&mut conn, with_snapshot, &mut responses, timeout)?;
-            print_json(&command_output(&conn.hello_ack, &responses))?;
-            Ok(())
+            canonical_chat::finish_report(
+                &mut conn,
+                outcome,
+                with_snapshot,
+                timeout,
+                &mut std::io::stdout().lock(),
+            )
         }
         Command::ChatRetry {
             signed_request_file,
         } => {
             let mut conn = ViewerConnection::connect(&addr, &client, timeout)?;
-            let responses = canonical_chat::retry(
+            let outcome = canonical_chat::retry(
                 &mut conn,
                 timeout,
                 std::path::Path::new(&signed_request_file),
             )?;
-            print_json(&command_output(&conn.hello_ack, &responses))
+            canonical_chat::finish_report(
+                &mut conn,
+                outcome,
+                false,
+                timeout,
+                &mut std::io::stdout().lock(),
+            )
         }
         Command::GameplayAction {
             action_id,

@@ -32,11 +32,63 @@ struct ExpectedOwner {
     reorg_epoch: u64,
 }
 
+pub(super) struct ChatOutcome {
+    pub responses: Vec<CollectedResponse>,
+    pub artifact: Option<std::path::PathBuf>,
+}
+
+pub(super) fn finish_report(
+    conn: &mut ViewerConnection,
+    mut outcome: ChatOutcome,
+    with_snapshot: bool,
+    timeout: Duration,
+    output: &mut impl Write,
+) -> Result<(), String> {
+    let result = (|| {
+        maybe_request_snapshot(conn, with_snapshot, &mut outcome.responses, timeout)?;
+        let bytes = serde_json::to_vec_pretty(&command_output(&conn.hello_ack, &outcome.responses))
+            .map_err(|e| format!("serialize output failed: {e}"))?;
+        output
+            .write_all(&bytes)
+            .map_err(|e| format!("write output failed: {e}"))?;
+        output
+            .write_all(b"\n")
+            .map_err(|e| format!("write output failed: {e}"))?;
+        output
+            .flush()
+            .map_err(|e| format!("flush output failed: {e}"))?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        return Err(match outcome.artifact {
+            Some(path) => retained_error(&path, &format!("canonical chat committed; {error}")),
+            None => error,
+        });
+    }
+    if let Some(path) = outcome.artifact {
+        pending::complete(&path).map_err(|error| {
+            if path.exists() {
+                retained_error(&path, &format!("canonical chat committed; {error}"))
+            } else {
+                format!("canonical chat committed; {error}; pending artifact already removed")
+            }
+        })?;
+    }
+    Ok(())
+}
+
+fn retained_error(path: &std::path::Path, error: &str) -> String {
+    format!(
+        "{error}; original signed request retained at {}. Retry with chat-retry --signed-request-file <that path>; do not create a new chat nonce",
+        path.display()
+    )
+}
+
 pub(super) fn exchange(
     conn: &mut ViewerConnection,
     timeout: Duration,
     input: ChatInput<'_>,
-) -> Result<Vec<CollectedResponse>, String> {
+) -> Result<ChatOutcome, String> {
     let canonical = conn.hello_ack["capabilities"]
         .as_array()
         .is_some_and(|values| values.iter().any(|v| v == "canonical_agent_chat_v1"));
@@ -51,11 +103,16 @@ pub(super) fn exchange(
             input.intent_seq,
         )?;
         conn.send(&ViewerRequest::AgentChat { request })?;
-        return conn.collect_until(
-            timeout,
-            terminal_agent_chat,
-            "waiting for agent_chat reply/error",
-        );
+        return conn
+            .collect_until(
+                timeout,
+                terminal_agent_chat,
+                "waiting for agent_chat reply/error",
+            )
+            .map(|responses| ChatOutcome {
+                responses,
+                artifact: None,
+            });
     }
     let deadline = Instant::now() + timeout;
     let (chat, responses, artifact) = prepare_canonical(conn, deadline, input)?;
@@ -206,19 +263,14 @@ fn submit_original(
     chat: AgentChatRequest,
     mut responses: Vec<CollectedResponse>,
     artifact: &std::path::Path,
-) -> Result<Vec<CollectedResponse>, String> {
+) -> Result<ChatOutcome, String> {
     let result = wait_committed(conn, deadline, chat, &mut responses);
     match result {
-        Ok(()) => {
-            pending::complete(artifact).map_err(|error| {
-                format!("canonical chat committed; pending artifact cleanup failed: {error}")
-            })?;
-            Ok(responses)
-        }
-        Err(error) => Err(format!(
-            "{error}; original signed request retained at {}. Retry with chat-retry --signed-request-file <that path>; do not create a new chat nonce",
-            artifact.display()
-        )),
+        Ok(()) => Ok(ChatOutcome {
+            responses,
+            artifact: Some(artifact.to_path_buf()),
+        }),
+        Err(error) => Err(retained_error(artifact, &error)),
     }
 }
 fn wait_committed(
@@ -377,7 +429,7 @@ pub(super) fn retry(
     conn: &mut ViewerConnection,
     timeout: Duration,
     path: &std::path::Path,
-) -> Result<Vec<CollectedResponse>, String> {
+) -> Result<ChatOutcome, String> {
     if !conn.hello_ack["capabilities"]
         .as_array()
         .is_some_and(|values| values.iter().any(|v| v == "canonical_agent_chat_v1"))
