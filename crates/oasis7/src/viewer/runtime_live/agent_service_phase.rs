@@ -9,6 +9,9 @@ use super::control_plane::simulator_action_to_runtime;
 use crate::world_service::{verified_view::VerifiedWorldView, wire::SchedulerOperationV1};
 use oasis7_client_api::world_service::*;
 
+#[path = "agent_service_phase_direct.rs"]
+mod direct;
+
 #[derive(Clone)]
 pub(super) enum HostedServicePhase {
     Act {
@@ -26,6 +29,19 @@ pub(super) enum HostedServicePhase {
         receipt: ProviderServiceCognitionReceipt,
         submit: bool,
         replay_authorized: bool,
+    },
+    HandoffWake {
+        pending: PendingProviderServiceIntent,
+        receipt: ProviderServiceCognitionReceipt,
+        target_wake: Box<crate::runtime::SchedulerWakeV1>,
+        submit: bool,
+        replay_authorized: bool,
+    },
+    HandoffView {
+        pending: PendingProviderServiceIntent,
+        receipt: ProviderServiceCognitionReceipt,
+        target_wake: Box<crate::runtime::SchedulerWakeV1>,
+        commit: CommitRef,
     },
     Feedback {
         pending: PendingProviderServiceIntent,
@@ -46,50 +62,6 @@ pub(super) enum HostedServicePhase {
         receipt: ProviderServiceCognitionReceipt,
         feedback_acked: bool,
     },
-}
-impl HostedServicePhase {
-    #[cfg(any(test, feature = "test_tier_required"))]
-    pub(super) fn test_phase_label(&self) -> &'static str {
-        match self {
-            Self::Act { .. } => "act",
-            Self::ActView { settled: false, .. } => "act_view",
-            Self::ActView { settled: true, .. } => "act_settled_view",
-            Self::ActSettle { .. } => "act_settle",
-            Self::Feedback { .. } => "feedback",
-            Self::FeedbackAck { .. } => "feedback_ack",
-            Self::FeedbackAckView { .. } => "feedback_ack_view",
-            Self::Finalize { .. } => "finalize",
-        }
-    }
-    fn identity(&self) -> String {
-        let pending = match self {
-            Self::Act { pending, .. }
-            | Self::ActView { pending, .. }
-            | Self::ActSettle { pending, .. }
-            | Self::Feedback { pending, .. }
-            | Self::FeedbackAck { pending, .. }
-            | Self::FeedbackAckView { pending, .. }
-            | Self::Finalize { pending, .. } => pending,
-        };
-        let phase = match self {
-            Self::Act { .. } => "act",
-            Self::ActView { settled: true, .. } => "act_settled_view",
-            Self::ActView { .. } => "act_view",
-            Self::ActSettle { .. } => "act_settle",
-            Self::Feedback { .. } => "feedback",
-            Self::FeedbackAck { .. } => "feedback_ack",
-            Self::FeedbackAckView { .. } => "feedback_ack_view",
-            Self::Finalize { .. } => "finalize",
-        };
-        format!(
-            "{phase}:{}",
-            pending
-                .cognition
-                .request
-                .request_context
-                .provider_invocation_key()
-        )
-    }
 }
 impl crate::viewer::ViewerRuntimeLiveServer {
     pub(super) fn hosted_service_config_digest(&self) -> Result<String, String> {
@@ -118,6 +90,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         );
         Ok(blake3::hash(material.as_bytes()).to_hex().to_string())
     }
+
     pub(super) fn prepare_hosted_service_io(
         &mut self,
         _eligible: bool,
@@ -325,6 +298,37 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     *replay_authorized,
                 )
             }
+            HostedServicePhase::HandoffWake {
+                pending,
+                target_wake,
+                submit,
+                ..
+            } => {
+                let request = &pending.cognition.request.request_context;
+                let (_, operation) = self
+                    .llm_sidecar
+                    .committed_service_wake_handoff(&pending.cognition)?
+                    .filter(|(current_wake, _)| current_wake == target_wake.as_ref())
+                    .ok_or("canonical wake disappeared before terminal handoff; fenced")?;
+                let wake_id = &target_wake.wake_id;
+                let (checkpoint, _) = self.llm_sidecar.prepare_service_scheduler_checkpoint(
+                    request,
+                    &format!("handoff:{wake_id}"),
+                    operation,
+                    None,
+                )?;
+                original_intent_io(&checkpoint.correlation, &checkpoint.payload, *submit)
+            }
+            HostedServicePhase::HandoffView {
+                pending, commit, ..
+            } => AgentServiceIoOperation::View(ReadWorldViewRequest {
+                contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                world: pending.correlation.key.world.clone(),
+                scope_id: client.config().scope_id.clone(),
+                min_commit: Some(commit.clone()),
+                fixed_commit: None,
+                deadline_unix_ms: None,
+            }),
             HostedServicePhase::Feedback {
                 pending,
                 receipt: _,
@@ -389,13 +393,14 @@ impl crate::viewer::ViewerRuntimeLiveServer {
         let token = AgentServiceIoToken {
             generation: self.llm_sidecar.hosted_service_generation,
             config_digest: self.hosted_service_config_digest()?,
-            phase_digest: phase.identity(),
+            phase_digest: phase.identity()?,
         };
         self.llm_sidecar.hosted_service_inflight = Some(token.clone());
         // After dispatch reservation any worker failure must recover by Lookup.
         match self.llm_sidecar.hosted_service_phase.as_mut() {
             Some(HostedServicePhase::Act { submit, .. })
             | Some(HostedServicePhase::ActSettle { submit, .. })
+            | Some(HostedServicePhase::HandoffWake { submit, .. })
             | Some(HostedServicePhase::FeedbackAck { submit, .. }) => *submit = false,
             _ => {}
         }
@@ -429,7 +434,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             .hosted_service_phase
             .clone()
             .ok_or("hosted service completion lacks original phase")?;
-        if result.token.phase_digest != phase.identity() {
+        if result.token.phase_digest != phase.identity()? {
             return Err("hosted service phase identity mismatch".into());
         }
         let response = result.response?;
@@ -487,20 +492,26 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                     return Err("hosted service view precedes committed Act".into());
                 }
                 self.apply_hosted_verified_view(*view)?;
-                self.llm_sidecar.hosted_service_phase = Some(if settled {
-                    HostedServicePhase::Finalize {
-                        pending,
-                        receipt,
-                        feedback_acked: false,
+                self.llm_sidecar.hosted_service_phase = if settled {
+                    if let Some(handoff) =
+                        self.prepare_hosted_service_wake_handoff(pending.clone(), receipt.clone())?
+                    {
+                        Some(handoff)
+                    } else {
+                        Some(HostedServicePhase::Finalize {
+                            pending,
+                            receipt,
+                            feedback_acked: false,
+                        })
                     }
                 } else {
-                    HostedServicePhase::ActSettle {
+                    Some(HostedServicePhase::ActSettle {
                         pending,
                         receipt,
                         submit: true,
                         replay_authorized: false,
-                    }
-                });
+                    })
+                };
             }
             HostedServicePhase::ActSettle {
                 pending, receipt, ..
@@ -547,6 +558,141 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                         ));
                     }
                 }
+            }
+            HostedServicePhase::HandoffWake {
+                pending,
+                receipt,
+                target_wake,
+                replay_authorized,
+                ..
+            } => {
+                let Some(response) = original_response(response)? else {
+                    return Ok(AgentServiceProgress::Advanced);
+                };
+                response
+                    .validate(
+                        &self
+                            .llm_sidecar
+                            .provider_scheduler_pending
+                            .get(&format!(
+                                "{}:handoff:{}",
+                                pending
+                                    .cognition
+                                    .request
+                                    .request_context
+                                    .provider_invocation_key(),
+                                target_wake.wake_id
+                            ))
+                            .ok_or("wake handoff checkpoint missing")?
+                            .correlation,
+                    )
+                    .map_err(|error| error.to_string())?;
+                match response.outcome {
+                    IntentOutcome::Committed {
+                        commit,
+                        receipt: value,
+                    } => {
+                        let handoff: crate::runtime::CognitionWakeHandoffResultV1 =
+                            serde_json::from_value(value).map_err(|error| {
+                                format!("wake handoff receipt invalid: {error}")
+                            })?;
+                        let request = &pending.cognition.request.request_context;
+                        if handoff.wake != *target_wake
+                            || handoff.continuation.wake_id != target_wake.wake_id
+                            || handoff.continuation.continuation_id != target_wake.continuation_id
+                            || handoff.continuation.world_id != target_wake.world_id
+                            || handoff.continuation.branch_id != target_wake.branch_id
+                            || handoff.continuation.finality_epoch != target_wake.finality_epoch
+                            || handoff.continuation.finality_block_hash
+                                != target_wake.finality_block_hash
+                            || handoff.continuation.finality_status != target_wake.finality_status
+                            || handoff.continuation.reorg_epoch != target_wake.reorg_epoch
+                            || handoff.continuation.runtime_manifest_hash
+                                != target_wake.runtime_manifest_hash
+                            || handoff.continuation.agent_id != request.agent_subject
+                            || handoff.continuation.agent_session_id != request.agent_session_id
+                            || handoff.continuation.agent_turn_id != request.agent_turn_id
+                            || handoff.continuation.decision_request_id
+                                != request.decision_request_id
+                            || handoff.continuation.origin_request_digest
+                                != request.request_digest.to_string()
+                            || handoff.replanned_continuation.is_some()
+                            || handoff.continuation.status
+                                != crate::runtime::ContinuationStatusV1::Completed
+                            || handoff.continuation.terminal_disposition.as_deref()
+                                != Some("provider_action_committed")
+                        {
+                            return Err("canonical wake handoff receipt identity mismatch".into());
+                        }
+                        self.llm_sidecar.hosted_service_phase =
+                            Some(HostedServicePhase::HandoffView {
+                                pending,
+                                receipt,
+                                target_wake,
+                                commit: *commit,
+                            });
+                    }
+                    IntentOutcome::Unknown if !replay_authorized => {
+                        self.llm_sidecar.hosted_service_phase =
+                            Some(HostedServicePhase::HandoffWake {
+                                pending,
+                                receipt,
+                                target_wake,
+                                submit: true,
+                                replay_authorized: true,
+                            });
+                    }
+                    IntentOutcome::Received { .. }
+                    | IntentOutcome::Pending
+                    | IntentOutcome::Unknown => {}
+                    IntentOutcome::Expired | IntentOutcome::HistoryUnavailable => {
+                        return Err(
+                            "canonical wake handoff history unavailable; exact checkpoint retained"
+                                .into(),
+                        );
+                    }
+                    IntentOutcome::Rejected { reason } => {
+                        return Err(format!("canonical wake handoff rejected: {reason:?}"));
+                    }
+                }
+            }
+            HostedServicePhase::HandoffView {
+                pending,
+                receipt,
+                target_wake,
+                commit,
+            } => {
+                let AgentServiceIoResponse::View(view) = response else {
+                    return Err("hosted wake handoff minimum View missing".into());
+                };
+                if !view
+                    .version()
+                    .commit
+                    .satisfies_minimum(&commit)
+                    .map_err(|error| error.to_string())?
+                {
+                    return Err("hosted wake handoff View precedes committed handoff".into());
+                }
+                if view
+                    .projection()
+                    .scheduler_wakes
+                    .iter()
+                    .any(|wake| wake.wake_id == target_wake.wake_id)
+                {
+                    return Err(
+                        "hosted wake handoff remains visible after committed readback".into(),
+                    );
+                }
+                self.apply_hosted_verified_view(*view)?;
+                self.llm_sidecar.complete_committed_service_wake_handoff(
+                    &pending.cognition,
+                    &target_wake.wake_id,
+                )?;
+                self.llm_sidecar.hosted_service_phase = Some(HostedServicePhase::Finalize {
+                    pending,
+                    receipt,
+                    feedback_acked: false,
+                });
             }
             HostedServicePhase::Feedback { pending, .. } => {
                 if !matches!(response, AgentServiceIoResponse::Feedback) {
