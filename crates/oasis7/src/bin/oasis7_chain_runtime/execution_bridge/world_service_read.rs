@@ -5,6 +5,9 @@ use oasis7::runtime::{Journal, LocalCasStore, Snapshot, World, blake3_hex};
 use oasis7::world_service::*;
 use std::path::Path;
 
+#[path = "world_service_restore_cache.rs"]
+mod restore_cache;
+
 pub(crate) struct PinnedWorld {
     pub world: World,
     pub(super) record: ExecutionBridgeRecord,
@@ -52,6 +55,24 @@ fn load(
     identity: &WorldIdentity,
     height: Option<u64>,
     fixed: Option<&CommitRef>,
+) -> Result<PinnedWorld, String> {
+    load_with_cache(
+        records,
+        storage,
+        identity,
+        height,
+        fixed,
+        restore_cache::shared(),
+    )
+}
+
+fn load_with_cache(
+    records: &Path,
+    storage: &Path,
+    identity: &WorldIdentity,
+    height: Option<u64>,
+    fixed: Option<&CommitRef>,
+    cache: &std::sync::Mutex<restore_cache::RestoreCache>,
 ) -> Result<PinnedWorld, String> {
     if let Some(commit) = fixed
         && &commit.world != identity
@@ -119,8 +140,8 @@ fn load(
     {
         return Err("pinned proof does not bind execution record and CAS refs".into());
     }
-    let world =
-        World::from_snapshot(snapshot, journal).map_err(|e| format!("pinned world: {e:?}"))?;
+    let world = restore_cache::restore(cache, &snapshot_bytes, &journal_bytes, snapshot, journal)
+        .map_err(|e| format!("pinned world: {e:?}"))?;
     let binding = world
         .current_cognition_runtime_binding()
         .map_err(|e| format!("binding unavailable: {e:?}"))?;
@@ -222,3 +243,7 @@ pub(super) fn pin_guarded_with_capture_barrier(
         commit,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/world_service_read_cache.rs"]
+mod cache_tests;
