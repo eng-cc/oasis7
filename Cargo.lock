@@ -6175,6 +6175,7 @@ dependencies = [
  "blake3",
  "cap-fs-ext",
  "cap-std",
+ "chacha20poly1305",
  "ctrlc",
  "ed25519-dalek",
  "eventsource-stream",
@@ -6209,6 +6210,7 @@ dependencies = [
  "tungstenite",
  "unicode-normalization",
  "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
