@@ -484,15 +484,6 @@ impl RuntimeLlmSidecar {
                 ));
             }
         };
-        if !registered {
-            if let Err(error) = runner.register(behavior) {
-                self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
-                return Err(format!("{error:?}"));
-            }
-            self.service_test_model_calls
-                .insert(agent_id.clone(), model_state);
-            self.service_test_actor_agents.insert(agent_id.clone());
-        }
         // Keep this exact Runner on the host side while validating its durable
         // history, before either lease reservation or provider dispatch. Idle
         // runners are revalidated even when already loaded; active runners
@@ -510,6 +501,27 @@ impl RuntimeLlmSidecar {
             return Err(format!(
                 "active provider runner has no host-validated feedback history for {agent_id}"
             ));
+        }
+        let session_id = cognition.request.request_context.agent_session_id.as_str();
+        if crate::viewer::runtime_live::llm_sidecar_feedback_recovery::
+            feedback_history_blocks_dispatch(&runner, &agent_id, session_id)
+        {
+            self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+            return Err(format!(
+                "Runtime feedback history fences provider test dispatch for {agent_id}/{session_id}"
+            ));
+        }
+        // A successfully restored history can still fence this exact Agent
+        // session. Do not register the test actor or publish its bookkeeping
+        // until that recovery fence has been checked.
+        if !registered {
+            if let Err(error) = runner.register(behavior) {
+                self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+                return Err(format!("{error:?}"));
+            }
+            self.service_test_model_calls
+                .insert(agent_id.clone(), model_state);
+            self.service_test_actor_agents.insert(agent_id.clone());
         }
         self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
         let lease = self.reserve_provider_lease_at_authority(world, &cognition.request)?;
