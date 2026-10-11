@@ -25,6 +25,9 @@ const DEFAULT_TIMEOUT_MS: u64 = 20_000;
 mod oasis7_pure_api_client_cli;
 use self::oasis7_pure_api_client_cli::parse_cli;
 
+#[path = "oasis7_pure_api_client/canonical_chat.rs"]
+mod canonical_chat;
+
 #[path = "oasis7_pure_api_client/support.rs"]
 mod oasis7_pure_api_client_support;
 #[cfg(test)]
@@ -161,24 +164,33 @@ fn run() -> Result<(), String> {
         } => {
             let mut conn = ViewerConnection::connect(addr.as_str(), client.as_str(), timeout)?;
             subscribe_for_control(&mut conn, true, false)?;
-            let signed = build_signed_agent_chat_request(
-                agent_id.as_str(),
-                player_id.as_str(),
-                message.as_str(),
-                private_key_hex.as_str(),
-                public_key_hex.as_deref(),
-                intent_tick,
-                intent_seq,
-            )?;
-            conn.send(&ViewerRequest::AgentChat { request: signed })?;
-            let mut responses = conn.collect_until(
+            let mut responses = canonical_chat::exchange(
+                &mut conn,
                 timeout,
-                terminal_agent_chat,
-                "waiting for agent_chat ack/error",
+                canonical_chat::ChatInput {
+                    agent_id: &agent_id,
+                    player_id: &player_id,
+                    message: &message,
+                    private_key_hex: &private_key_hex,
+                    public_key_hex: public_key_hex.as_deref(),
+                    intent_tick,
+                    intent_seq,
+                },
             )?;
             maybe_request_snapshot(&mut conn, with_snapshot, &mut responses, timeout)?;
             print_json(&command_output(&conn.hello_ack, &responses))?;
             Ok(())
+        }
+        Command::ChatRetry {
+            signed_request_file,
+        } => {
+            let mut conn = ViewerConnection::connect(&addr, &client, timeout)?;
+            let responses = canonical_chat::retry(
+                &mut conn,
+                timeout,
+                std::path::Path::new(&signed_request_file),
+            )?;
+            print_json(&command_output(&conn.hello_ack, &responses))
         }
         Command::GameplayAction {
             action_id,
@@ -413,6 +425,9 @@ impl CliConfig {
 
 #[derive(Debug, Clone)]
 enum Command {
+    ChatRetry {
+        signed_request_file: String,
+    },
     Keygen,
     AgencyControl {
         request_json: String,
@@ -507,6 +522,8 @@ struct ViewerConnection {
     reader: BufReader<TcpStream>,
     writer: BufWriter<TcpStream>,
     hello_ack: Value,
+    pending_line: String,
+    endpoint: String,
 }
 
 #[expect(
@@ -536,10 +553,13 @@ impl ViewerConnection {
             reader,
             writer,
             hello_ack: Value::Null,
+            pending_line: String::new(),
+            endpoint: addr.into(),
         };
-        conn.send(&ViewerRequest::Hello {
+        conn.send(&ViewerRequest::HelloV2 {
             client: client.to_string(),
             version: VIEWER_PROTOCOL_VERSION,
+            capabilities: vec!["canonical_agent_chat_v1".into()],
         })?;
         let hello = conn.collect_until(timeout, terminal_hello, "waiting for hello ack")?;
         let hello_ack = hello
@@ -619,10 +639,11 @@ impl ViewerConnection {
             .get_mut()
             .set_read_timeout(Some(timeout))
             .map_err(|err| format!("set_read_timeout failed: {err}"))?;
-        let mut line = String::new();
-        match self.reader.read_line(&mut line) {
+        match self.reader.read_line(&mut self.pending_line) {
             Ok(0) => Ok(ReadResponseOutcome::Closed),
+            Ok(_) if !self.pending_line.ends_with('\n') => Ok(ReadResponseOutcome::TimedOut),
             Ok(_) => {
+                let line = std::mem::take(&mut self.pending_line);
                 let raw: Value = serde_json::from_str(line.trim_end())
                     .map_err(|err| format!("parse response json failed: {err}"))?;
                 let response = decode_viewer_response(&raw)
@@ -688,6 +709,8 @@ Commands:\n\
   chat --agent-id <id> --player-id <id> --private-key-hex <hex> --message <text>\n\
        [--public-key-hex <hex>] [--intent-tick <n>] [--intent-seq <n>] [--with-snapshot]\n\
     Send one signed agent_chat request.\n\n\
+  chat-retry --signed-request-file <private-pending-file>\n\
+    Retry the exact original canonical owner request without re-signing.\n\n\
   gameplay-action --action-id <id> --target-agent-id <id> --player-id <id>\n\
        --private-key-hex <hex> [--public-key-hex <hex>] [--with-snapshot]\n\
     Send one signed canonical gameplay_action request.\n\n\
