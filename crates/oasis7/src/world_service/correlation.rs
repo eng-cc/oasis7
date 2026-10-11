@@ -17,6 +17,7 @@ pub fn validate_result(key: &str, value: &serde_json::Value) -> Result<(), Strin
     {
         return Err("invalid canonical intent result identity".into());
     }
+    super::game_task::validate_result(&result)?;
     Ok(())
 }
 
@@ -26,7 +27,29 @@ pub fn derive_correlation(
     world: WorldIdentity,
     payload: &WorldServicePayloadV1,
 ) -> Result<RequestCorrelation, String> {
+    if let WorldServicePayloadV1::GameTaskCreate(signed) = payload {
+        verify_read_request(oasis7_agent_api::game::GAME_TASK_CREATE_DOMAIN, signed)?;
+        signed.request.validate()?;
+        if signed.request.world_id != world.world_id
+            || signed.request.genesis_digest != world.genesis_digest
+        {
+            return Err("Game task world identity mismatch".into());
+        }
+        let correlation = RequestCorrelation {
+            key: RequestKey {
+                world,
+                verified_subject: signed.subject_public_key.clone(),
+                operation_domain: oasis7_agent_api::game::GAME_TASK_CREATE_DOMAIN.into(),
+                nonce_scope: format!("agent:{}", signed.request.agent_id),
+                request_id_or_nonce: signed.request.client_operation_id.clone(),
+            },
+            payload_digest: request_digest("intent", payload)?,
+        };
+        correlation.validate().map_err(|e| e.to_string())?;
+        return Ok(correlation);
+    }
     let (subject, domain, scope, id) = match payload {
+        WorldServicePayloadV1::GameTaskCreate(_) => unreachable!("handled above"),
         WorldServicePayloadV1::GameplayJson(bytes) => {
             if let Ok(request) =
                 serde_json::from_slice::<crate::viewer::GameplayActionRequest>(bytes)

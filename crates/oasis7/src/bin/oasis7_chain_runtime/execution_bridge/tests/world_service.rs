@@ -455,3 +455,6 @@ fn service_recipe_preserves_authenticated_origin_consensus_context_and_replay() 
     assert_eq!(serde_json::to_value(world.snapshot()).unwrap(), before);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[path = "world_service_game_task.rs"]
+mod game_task_tests;

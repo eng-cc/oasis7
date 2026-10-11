@@ -54,6 +54,7 @@ pub enum WorldServicePayloadV1 {
     FeedbackAck(SignedReadRequest<FeedbackAckIntentV1>),
     Delegation(SignedReadRequest<AgentSignerDelegationChangeV1>),
     Scheduler(SignedReadRequest<SchedulerIntentV1>),
+    GameTaskCreate(SignedReadRequest<oasis7_agent_api::game::GameTaskCreateV1>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

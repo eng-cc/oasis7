@@ -105,6 +105,13 @@ fn response(request: &ReadWorldViewRequest) -> ReadWorldViewResponse<WorldServic
     }
 }
 fn service(tamper: bool, rejection: bool) -> (RemoteWorldServiceClient, thread::JoinHandle<()>) {
+    task_service(tamper, rejection, None)
+}
+fn task_service(
+    tamper: bool,
+    rejection: bool,
+    control: Option<Value>,
+) -> (RemoteWorldServiceClient, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let client = client(format!("http://{}", listener.local_addr().unwrap()));
     let expected = proof(&client);
@@ -135,10 +142,13 @@ fn service(tamper: bool, rejection: bool) -> (RemoteWorldServiceClient, thread::
             "device proof must not be replaced by the configured local reader"
         );
         authority::verify_read_request(VIEW_PATH, &actual).unwrap();
+        let mut payload = response(&actual.request);
+        payload.view.game_task_control =
+            control.map(|value| serde_json::from_value(value).unwrap());
         let mut signed = authority::sign_service_response(
             VIEW_PATH,
             authority::request_digest(VIEW_PATH, &actual).unwrap(),
-            response(&actual.request),
+            payload,
             &hex::encode([9; 32]),
         )
         .unwrap();
@@ -365,5 +375,66 @@ fn machine_discovery_is_public_and_matches_real_read_transport() {
             .unwrap(),
     ] {
         assert_eq!(handle(&req, None).status(), 400);
+    }
+}
+
+#[test]
+fn absent_task_control_never_becomes_an_executor_context() {
+    let (client, worker) = service(false, false);
+    let mut req = request(Some(&proof(&client)));
+    *req.uri_mut() = "/v1/game/worlds/world/agents/a/task-control"
+        .parse()
+        .unwrap();
+    let response = handle(&req, Some(&client));
+    assert_eq!(response.status(), 404);
+    let body: Value = serde_json::from_str(response.body().as_ref().unwrap()).unwrap();
+    assert_eq!(body["code"], "task_control_unavailable");
+    assert_eq!(body["retryable"], false);
+    worker.join().unwrap();
+}
+
+#[test]
+fn task_control_read_binds_owner_agent_and_committed_world_fence() {
+    use oasis7_agent_api::game::DecimalU64;
+    let caller = authority::sign_read_request("key", (), &hex::encode([8; 32])).unwrap();
+    let control = json!({
+        "schema_revision":1,"task_id":"task-a","world_id":"world","genesis_digest":"genesis",
+        "branch_id":"branch","reorg_epoch":DecimalU64(0),"agent_id":"a",
+        "owner_binding":"owner","owner_generation":DecimalU64(1),"owner_public_key":caller.subject_public_key,
+        "task_revision":DecimalU64(1),"task_status":"suspended","latest_goal_revision":DecimalU64(0),
+        "active_goal_revision":DecimalU64(0),"executor_epoch":DecimalU64(0),"executor_id":null,
+        "created_operation_id":"create-a"
+    });
+    for field in [
+        None,
+        Some("agent_id"),
+        Some("owner_public_key"),
+        Some("branch_id"),
+        Some("world_id"),
+        Some("genesis_digest"),
+        Some("reorg_epoch"),
+    ] {
+        let mut value = control.clone();
+        if let Some(field) = field {
+            value[field] = json!(if field == "reorg_epoch" {
+                "1"
+            } else {
+                "different"
+            });
+        }
+        let (client, worker) = task_service(false, false, Some(value));
+        let mut req = request(Some(&proof(&client)));
+        *req.uri_mut() = "/v1/game/worlds/world/agents/a/task-control"
+            .parse()
+            .unwrap();
+        let response = handle(&req, Some(&client));
+        assert_eq!(response.status(), if field.is_none() { 200 } else { 503 });
+        if field.is_none() {
+            let value: Value = serde_json::from_str(response.body().as_ref().unwrap()).unwrap();
+            assert_eq!(value["data"]["task_status"], "suspended");
+            assert_eq!(value["data"]["executor_epoch"], "0");
+            assert_eq!(value["data"]["executor_id"], Value::Null);
+        }
+        worker.join().unwrap();
     }
 }

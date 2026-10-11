@@ -155,11 +155,49 @@ fn bootstrap_discovery_has_resolvable_schemas_and_enforced_limits() {
         document["components"]["schemas"]["ReadWorldViewRequest"]["properties"]["fixed_commit"]["type"],
         "null"
     );
-    assert_eq!(document["paths"].as_object().unwrap().len(), 4);
+    assert_eq!(document["paths"].as_object().unwrap().len(), 5);
     for path in document["paths"].as_object().unwrap().values() {
         assert_eq!(
             path.as_object().unwrap().keys().collect::<Vec<_>>(),
             vec!["get"]
         );
     }
+}
+
+#[test]
+fn task_create_codec_binds_owner_and_history_without_granting_execution() {
+    use oasis7_agent_api::game::*;
+    let request = GameTaskCreateV1 {
+        api_rev: API_REVISION,
+        client_operation_id: "create-first".into(),
+        world_id: "world".into(),
+        genesis_digest: "genesis".into(),
+        branch_id: "main".into(),
+        reorg_epoch: DecimalU64(u64::MAX),
+        agent_id: "agent".into(),
+        owner_binding: "owner".into(),
+        owner_generation: DecimalU64(u64::MAX),
+    };
+    request.validate().unwrap();
+    let value = serde_json::to_value(&request).unwrap();
+    assert_eq!(value["owner_generation"], u64::MAX.to_string());
+    assert_eq!(
+        serde_json::from_value::<GameTaskCreateV1>(value.clone()).unwrap(),
+        request
+    );
+    for (field, invalid) in [
+        ("owner_generation", serde_json::json!(1)),
+        ("reorg_epoch", serde_json::json!("01")),
+        ("executor_id", serde_json::json!("pretend-executor")),
+    ] {
+        let mut altered = value.clone();
+        altered[field] = invalid;
+        assert!(serde_json::from_value::<GameTaskCreateV1>(altered).is_err());
+    }
+    let mut altered = request.clone();
+    altered.owner_generation = DecimalU64(0);
+    assert!(altered.validate().is_err());
+    let mut altered = request;
+    altered.api_rev += 1;
+    assert!(altered.validate().is_err());
 }

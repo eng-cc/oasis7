@@ -4,6 +4,7 @@ pub mod agent_chat;
 pub mod authority;
 pub mod client;
 pub mod correlation;
+pub mod game_task;
 pub mod gameplay;
 pub mod projection;
 pub mod verified_view;

@@ -1,6 +1,6 @@
 use super::*;
 use std::path::PathBuf;
-fn driver_fixture() -> (
+pub(super) fn driver_fixture() -> (
     PathBuf,
     NodeRuntimeExecutionDriver,
     WorldIdentity,

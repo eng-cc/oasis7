@@ -87,6 +87,9 @@ impl Service<'_> {
         payload: &WorldServicePayloadV1,
     ) -> Result<(), String> {
         match payload {
+            WorldServicePayloadV1::GameTaskCreate(signed) => {
+                oasis7::world_service::game_task::validate_owner(&pinned.world, signed)?;
+            }
             WorldServicePayloadV1::GameplayJson(bytes) => {
                 gameplay::authenticated_action(&pinned.world, bytes)?;
             }
