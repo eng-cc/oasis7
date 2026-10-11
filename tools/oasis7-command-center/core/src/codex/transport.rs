@@ -246,8 +246,9 @@ pub fn degrade(shared: &Arc<Mutex<Shared>>, reason: &str) {
     if let Ok(mut state) = shared.lock() {
         state.snapshot.state = "degraded".into();
         state.snapshot.error = Some(reason.into());
+        let instance = state.snapshot.instance_id.clone();
         for session in &mut state.snapshot.sessions {
-            if session.owned {
+            if session.owned && Some(&session.instance_id) == instance.as_ref() {
                 session.state = "unknown".into();
                 session.background_state = "unknown".into();
             }
@@ -423,9 +424,12 @@ fn persist_event(state: &mut Shared, events: &EventMailbox) {
                 state.snapshot.error =
                     Some("critical event writer disconnected; new effects disabled".into());
             }
+            let instance = state.snapshot.instance_id.clone();
             for session in &mut state.snapshot.sessions {
-                session.state = "unknown".into();
-                session.background_state = "unknown".into();
+                if session.owned && Some(&session.instance_id) == instance.as_ref() {
+                    session.state = "unknown".into();
+                    session.background_state = "unknown".into();
+                }
             }
         }
     }

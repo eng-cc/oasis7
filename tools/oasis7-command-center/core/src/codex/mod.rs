@@ -39,7 +39,22 @@ fn identity() -> String {
     )
 }
 fn empty(project: &Project) -> RuntimeSnapshot {
-    RuntimeSnapshot{project_id:project.id.clone(),environment:project.environment.clone(),enabled:false,experimental:true,state:"disabled".into(),version:None,instance_id:None,capabilities:vec![],coverage:"Only explicitly created local threads; pinned stable schema, connector experimental; no global discovery/control; bounded event summaries, no transcript persistence".into(),error:None,sessions:vec![],requests:vec![],operations:vec![],logs:vec![],logs_truncated:false,exit_waiting:false}
+    RuntimeSnapshot{project_id:project.id.clone(),environment:project.environment.clone(),enabled:false,experimental:true,state:"disabled".into(),version:None,instance_id:None,capabilities:vec![],coverage:"Only explicitly created local threads; pinned stable schema, connector experimental; no global discovery/control; bounded recent session summaries; durable operation history retained; no transcript persistence".into(),error:None,sessions:vec![],requests:vec![],operations:vec![],logs:vec![],logs_truncated:false,exit_waiting:false}
+}
+fn older_instance_uncertainty(snapshot: &RuntimeSnapshot, operations: &[RuntimeOperation]) -> bool {
+    let older = |instance: &str| Some(instance) != snapshot.instance_id.as_deref();
+    let unresolved = |state: &str| ["pending", "awaiting", "unknown"].contains(&state);
+    snapshot
+        .sessions
+        .iter()
+        .any(|s| older(&s.instance_id) && (s.state == "unknown" || s.background_state != "clear"))
+        || snapshot
+            .requests
+            .iter()
+            .any(|r| older(&r.instance_id) && unresolved(&r.state))
+        || operations
+            .iter()
+            .any(|o| older(&o.instance_id) && unresolved(&o.state))
 }
 impl Runtime {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -109,8 +124,52 @@ impl Runtime {
         )?;
         Ok(())
     }
+    fn retire_empty_dead(&mut self, scope: &str) -> Result<bool> {
+        let Some(connection) = self.connections.get_mut(scope) else {
+            return Ok(false);
+        };
+        if connection.child.try_wait()?.is_none() {
+            return Ok(false);
+        }
+        let mut saved = connection.snapshot();
+        let instance = saved.instance_id.as_deref();
+        let has_work = saved
+            .sessions
+            .iter()
+            .any(|s| Some(s.instance_id.as_str()) == instance)
+            || saved
+                .requests
+                .iter()
+                .any(|r| Some(r.instance_id.as_str()) == instance)
+            || self
+                .store
+                .operations(scope)?
+                .iter()
+                .any(|o| Some(o.instance_id.as_str()) == instance);
+        if has_work || !lifecycle::survivors(&connection.baseline)?.is_empty() {
+            let mut shared = connection.shared.lock().unwrap();
+            shared.snapshot.state = "degraded".into();
+            shared.snapshot.error=Some("Exited instance retains owned work or unverified background scope; no automatic recovery or retirement".into());
+            return Ok(false);
+        }
+        saved.state = if saved.enabled {
+            "disconnected"
+        } else {
+            "disabled"
+        }
+        .into();
+        saved.capabilities.clear();
+        saved.error = Some(
+            "Verified empty exited instance retired; reconnect requires explicit action".into(),
+        );
+        self.store.save(scope, &saved)?;
+        self.contexts.insert(scope.to_owned(), saved);
+        self.connections.remove(scope);
+        Ok(true)
+    }
     pub fn snapshot(&mut self, project: &Project) -> Result<RuntimeSnapshot> {
         let scope = self.context(project)?;
+        self.retire_empty_dead(&scope)?;
         self.observe(&scope);
         let (mut snapshot, observed_sequence) = self
             .connections
@@ -145,7 +204,11 @@ impl Runtime {
                 "answerRequest".into(),
                 "reconcileOperation".into(),
             ];
-            if snapshot.enabled && !self.exit_waiting && snapshot.state == "ready" {
+            if snapshot.enabled
+                && !self.exit_waiting
+                && snapshot.state == "ready"
+                && !older_instance_uncertainty(&snapshot, &snapshot.operations)
+            {
                 list.extend(
                     ["createSession", "continueSession", "startTurn", "steerTurn"]
                         .map(str::to_string),
@@ -182,9 +245,10 @@ impl Runtime {
                 "enable the experimental connector before connecting".into(),
             ));
         }
+        self.retire_empty_dead(&scope)?;
         if self.connections.contains_key(&scope) {
             return Err(Error::Invalid(
-                "existing instance must remain managed; reconnect is not automatic".into(),
+                "existing live or uncertain instance must remain managed; reconnect is not automatic".into(),
             ));
         }
         if !Path::new(binary_path).is_absolute() || !Path::new(binary_path).is_file() {
@@ -239,6 +303,9 @@ impl Runtime {
             ));
         }
         let snap = connection.snapshot();
+        if new_work && older_instance_uncertainty(&snap, &self.store.operations(&scope)?) {
+            return Err(Error::Invalid("Original instance uncertainty remains; explicit connection does not resolve prior work".into()));
+        }
         if (new_work && snap.state != "ready")
             || (!new_work && !["ready", "degraded"].contains(&snap.state.as_str()))
         {
@@ -353,6 +420,7 @@ impl Runtime {
                 && snapshot
                     .sessions
                     .iter()
+                    .filter(|s| Some(&s.instance_id) == snapshot.instance_id.as_ref())
                     .all(|s| s.turn_id.is_none() && s.state == "idle")
                 && operations.as_ref().is_ok_and(|ops| {
                     ops.iter()
@@ -371,7 +439,11 @@ impl Runtime {
                     .all(|id| connection.baseline.iter().any(|old| old.same_birth(id)))
             });
         let requests = shared.snapshot.requests.clone();
+        let instance = shared.snapshot.instance_id.clone();
         for session in &mut shared.snapshot.sessions {
+            if Some(&session.instance_id) != instance.as_ref() {
+                continue;
+            }
             if ["idle", "completed", "failed", "interrupted"].contains(&session.state.as_str()) {
                 let unresolved = requests.iter().any(|r| {
                     r.thread_id == session.thread_id
@@ -395,6 +467,9 @@ impl Runtime {
         let mut unknown = 0;
         let mut pending = 0;
         for scope in scopes {
+            if self.retire_empty_dead(&scope).is_err() {
+                unknown += 1;
+            }
             self.observe(&scope);
             let snap = self
                 .connections

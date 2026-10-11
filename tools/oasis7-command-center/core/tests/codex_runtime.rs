@@ -31,10 +31,10 @@ impl Fixture {
         let binary = tmp.path().join("fake-codex");
         let trace = tmp.path().join("trace");
         let script=r##"#!/usr/bin/env python3
-import sys,json,subprocess,time
+import sys,json,subprocess,time,os
 TRACE=__TRACE__
 if '--version' in sys.argv: print('codex-cli 0.137.0');sys.exit(0)
-threads={};n=0;resumed=False
+threads={};n=0;resumed=False;helper=None
 
 def send(v): print(json.dumps(v),flush=True)
 def reply(m,v): send({'id':m['id'],'result':v})
@@ -50,10 +50,12 @@ for line in sys.stdin:
  if method=='initialize':reply(m,{'userAgent':'codex/0.137.0'})
  elif method=='thread/start':
   n+=1;t='t'+str(n);threads[t]='idle'
-  if n==1:subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],start_new_session=True)
+  if n==1:helper=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],start_new_session=True)
   reply(m,thread(t))
  elif method=='thread/resume':resumed=True;reply(m,thread(p['threadId']))
- elif method=='thread/read':reply(m,thread(p['threadId']))
+ elif method=='thread/read':
+  reply(m,thread(p['threadId']))
+  if os.path.exists(TRACE+'.exit'):sys.exit(0)
  elif method=='turn/start':
   t=p['threadId'];turn='turn-'+t;mode=p['input'][0]['text'];threads[t]='active'
   send({'method':'turn/started','params':{'threadId':t,'turn':{'id':turn,'status':'inProgress','items':[],'error':None}}})
@@ -66,6 +68,9 @@ for line in sys.stdin:
     for i in range(100):send({'method':'item/started','params':{'threadId':t,'turnId':turn,'item':{'id':'event'+str(i),'type':'commandExecution'}}})
    req={'id':9007199254740993,'method':'item/tool/requestUserInput','params':{'itemId':'q1','threadId':t,'turnId':turn,'questions':[{'id':'choice','header':'Choice','question':'Choose','isSecret':True,'options':[{'label':'A','description':'A'}]}]}}
    send(req);send(req)
+  elif mode=='exit':
+   if helper:helper.terminate();helper.wait()
+   sys.exit(0)
   elif mode=='old':send({'method':'turn/completed','params':{'threadId':t,'turn':{'id':'OLD','status':'completed','items':[],'error':None}}})
   elif mode=='background':subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']);completed(t,turn)
   elif mode=='overflow':
@@ -437,4 +442,130 @@ fn event_writer_must_be_ready_before_app_server_process_starts() {
         !f.trace.exists(),
         "failed writer readiness must not initialize owned process"
     );
+}
+
+#[test]
+fn empty_exited_instance_retires_without_automatic_reconnect_but_work_stays_unknown() {
+    let f = Fixture::new();
+    seed_history(&f, false);
+    std::fs::write(format!("{}.exit", f.trace.display()), "").unwrap();
+    let mut r = Runtime::open(&f.db).unwrap();
+    r.connect(&f.project, f.binary.to_str().unwrap()).unwrap();
+    r.read_thread(&f.project, "old-1").unwrap();
+    let end = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        let snapshot = r.snapshot(&f.project).unwrap();
+        if snapshot.state == "disconnected" {
+            break;
+        }
+        assert!(std::time::Instant::now() < end);
+        tick();
+    }
+    let historical = r.snapshot(&f.project).unwrap();
+    assert_eq!(historical.sessions.len(), 128);
+    assert!(
+        historical.sessions.iter().all(|s| s.state == "completed"
+            && s.background_state == "clear"
+            && s.restorable_history)
+    );
+    let before = std::fs::read_to_string(&f.trace).unwrap();
+    assert!(r.quit_status().safe);
+    assert_eq!(std::fs::read_to_string(&f.trace).unwrap(), before);
+    std::fs::remove_file(format!("{}.exit", f.trace.display())).unwrap();
+    assert_eq!(
+        r.connect(&f.project, f.binary.to_str().unwrap())
+            .unwrap()
+            .state,
+        "ready"
+    );
+    let thread = f.session(&mut r);
+    let snapshot = r.start_turn(&f.project, &thread, "exit").unwrap();
+    let original = snapshot.instance_id.clone();
+    tick();
+    let snapshot = r.snapshot(&f.project).unwrap();
+    assert_eq!(snapshot.state, "degraded");
+    assert!(!r.quit_status().safe);
+    assert!(r.connect(&f.project, f.binary.to_str().unwrap()).is_err());
+    assert_eq!(r.snapshot(&f.project).unwrap().instance_id, original);
+    assert!(
+        snapshot
+            .operations
+            .iter()
+            .any(|o| o.thread_id.as_deref() == Some(&thread))
+    );
+}
+fn seed_history(f: &Fixture, protected: bool) {
+    let mut r = f.runtime();
+    let mut saved = r.snapshot(&f.project).unwrap();
+    assert!(r.shutdown_if_idle().unwrap().safe);
+    drop(r);
+    saved.state = "disconnected".into();
+    saved.sessions = (0..128)
+        .map(|i| oasis7_command_center_core::codex::RuntimeSession {
+            purpose: "old purpose".into(),
+            scope: "old scope".into(),
+            model: None,
+            basis_revision: f.project.head.clone(),
+            thread_id: format!("old-{i}"),
+            instance_id: "historic".into(),
+            turn_id: Some(format!("past-{i}")),
+            state: if protected { "unknown" } else { "completed" }.into(),
+            owned: true,
+            background_state: if protected { "unknown" } else { "clear" }.into(),
+            restorable_history: !protected,
+        })
+        .collect();
+    let db = rusqlite::Connection::open(&f.db).unwrap();
+    db.execute(
+        "UPDATE cc_runtime_state SET value=?1",
+        [serde_json::to_string(&saved).unwrap()],
+    )
+    .unwrap();
+    let op = serde_json::json!({"id":"durable-old","instanceId":"historic","threadId":"old-0","turnId":"past-0","method":"turn/start","state":"confirmed","fingerprint":"old","createdAt":"old","error":null});
+    db.execute("INSERT INTO cc_runtime_operations(id,scope,target,state,value) VALUES('durable-old',?1,'old-0','confirmed',?2)",rusqlite::params![format!("{}:local",f.project.id),op.to_string()]).unwrap();
+}
+#[test]
+fn session_window_prunes_only_clean_terminal_summaries_and_retains_operation_history() {
+    let f = Fixture::new();
+    seed_history(&f, false);
+    let mut r = Runtime::open(&f.db).unwrap();
+    r.connect(&f.project, f.binary.to_str().unwrap()).unwrap();
+    let thread = f.session(&mut r);
+    let snapshot = r.snapshot(&f.project).unwrap();
+    assert_eq!(snapshot.sessions.len(), 128);
+    assert!(!snapshot.sessions.iter().any(|s| s.thread_id == "old-0"));
+    assert!(snapshot.sessions.iter().any(|s| s.thread_id == thread));
+    let db = rusqlite::Connection::open(&f.db).unwrap();
+    assert_eq!(
+        db.query_row(
+            "SELECT COUNT(*) FROM cc_runtime_operations WHERE id='durable-old'",
+            [],
+            |row| row.get::<_, u32>(0)
+        )
+        .unwrap(),
+        1
+    );
+    let f = Fixture::new();
+    seed_history(&f, true);
+    let mut r = Runtime::open(&f.db).unwrap();
+    r.connect(&f.project, f.binary.to_str().unwrap()).unwrap();
+    assert!(
+        r.create_session(
+            &f.project,
+            SessionConfig {
+                purpose: "new".into(),
+                scope: "new".into(),
+                model: None,
+                basis_revision: f.project.head.clone()
+            }
+        )
+        .is_err()
+    );
+    let trace = std::fs::read_to_string(&f.trace).unwrap();
+    assert!(
+        !trace.contains("thread/start"),
+        "historical unknown must block new side effects"
+    );
+    assert_eq!(r.snapshot(&f.project).unwrap().sessions.len(), 128);
+    assert!(!r.quit_status().safe);
 }

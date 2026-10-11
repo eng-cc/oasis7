@@ -17,14 +17,24 @@ impl Runtime {
                 "explicit bounded purpose/scope and current basis revision required".into(),
             ));
         }
-        if self.connections[&scope].snapshot().sessions.len() >= 128 {
-            return Err(Error::Invalid("session window exhausted".into()));
-        }
+        self.prune_terminal_session(&scope)?;
         if let Some(value)=self.perform(&scope,"thread/start",None,None,json!({"cwd":project.path,"model":config.model,"approvalPolicy":"on-request","sandbox":"workspace-write","ephemeral":false}),false)?{
         let thread=value["thread"]["id"].as_str().filter(|id|!id.is_empty()).ok_or_else(||Error::Invalid("thread/start response lacks identity".into()))?.to_string();
         let connection=&self.connections[&scope];let mut shared=connection.shared.lock().unwrap();let instance=shared.snapshot.instance_id.clone().unwrap();
         shared.snapshot.sessions.push(RuntimeSession{purpose:config.purpose,scope:config.scope,model:value["model"].as_str().map(str::to_owned),basis_revision:config.basis_revision,thread_id:thread,instance_id:instance,turn_id:None,state:"idle".into(),owned:true,background_state:"clear".into(),restorable_history:false});}
         self.snapshot(project)
+    }
+    fn prune_terminal_session(&mut self, scope: &str) -> Result<()> {
+        let operations = self.store.operations(scope)?;
+        let mut shared = self.connections[scope].shared.lock().unwrap();
+        if shared.snapshot.sessions.len() < 128 {
+            return Ok(());
+        }
+        let eligible=shared.snapshot.sessions.iter().position(|session|terminal_summary_removable(session,&shared.snapshot.requests,&operations))
+            .ok_or_else(||Error::Invalid("session window contains protected active/unknown work; no safe terminal summary to prune".into()))?;
+        shared.snapshot.sessions.remove(eligible);
+        // Only bounded terminal summaries are discarded. Source threads and operation ledger remain.
+        Ok(())
     }
     pub fn continue_session(
         &mut self,
@@ -346,5 +356,90 @@ impl Runtime {
             }
         }
         self.snapshot(project)
+    }
+}
+
+fn terminal_summary_removable(
+    session: &RuntimeSession,
+    requests: &[RuntimeRequest],
+    operations: &[RuntimeOperation],
+) -> bool {
+    session.background_state == "clear"
+        && (["completed", "failed", "interrupted"].contains(&session.state.as_str())
+            || (session.restorable_history && session.state == "idle"))
+        && !operations.iter().any(|o| {
+            o.thread_id.as_deref() == Some(session.thread_id.as_str())
+                && ["pending", "awaiting", "unknown"].contains(&o.state.as_str())
+        })
+        && !requests.iter().any(|r| {
+            r.thread_id == session.thread_id
+                && ["pending", "awaiting", "unknown"].contains(&r.state.as_str())
+        })
+}
+#[cfg(test)]
+mod capacity_tests {
+    use super::*;
+    #[test]
+    fn active_unknown_and_original_unresolved_identities_are_never_prunable() {
+        let mut session = RuntimeSession {
+            purpose: "p".into(),
+            scope: "s".into(),
+            model: None,
+            basis_revision: "h".into(),
+            thread_id: "thread".into(),
+            instance_id: "current".into(),
+            turn_id: Some("turn".into()),
+            state: "completed".into(),
+            owned: true,
+            background_state: "clear".into(),
+            restorable_history: true,
+        };
+        assert!(terminal_summary_removable(&session, &[], &[]));
+        for state in ["active", "waiting", "unknown"] {
+            session.state = state.into();
+            assert!(!terminal_summary_removable(&session, &[], &[]));
+        }
+        session.state = "completed".into();
+        session.background_state = "unknown".into();
+        assert!(!terminal_summary_removable(&session, &[], &[]));
+        session.background_state = "clear".into();
+        let mut operation = RuntimeOperation {
+            id: "op".into(),
+            instance_id: "original".into(),
+            thread_id: Some("thread".into()),
+            turn_id: Some("oldturn".into()),
+            method: "turn/steer".into(),
+            state: "unknown".into(),
+            fingerprint: "hash".into(),
+            created_at: "time".into(),
+            error: None,
+        };
+        for state in ["pending", "awaiting", "unknown"] {
+            operation.state = state.into();
+            assert!(!terminal_summary_removable(
+                &session,
+                &[],
+                std::slice::from_ref(&operation)
+            ));
+        }
+        let mut request = RuntimeRequest {
+            request_id: "1".into(),
+            instance_id: "original".into(),
+            thread_id: "thread".into(),
+            turn_id: "oldturn".into(),
+            method: "item/tool/requestUserInput".into(),
+            state: "unknown".into(),
+            summary: "s".into(),
+            questions: vec![],
+            allowed_decisions: vec![],
+        };
+        for state in ["pending", "awaiting", "unknown"] {
+            request.state = state.into();
+            assert!(!terminal_summary_removable(
+                &session,
+                std::slice::from_ref(&request),
+                &[]
+            ));
+        }
     }
 }
