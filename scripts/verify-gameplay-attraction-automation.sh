@@ -126,13 +126,14 @@ summary_input="$out_dir/gameplay-attraction-automation-input.json"
 mkdir -p "$commands_dir"
 
 # Snapshot supplied report inputs before any gate; never infer human/live evidence.
-python3 - "$summary_input" "$completion_profile" "$candidate" "$fixture_samples_json" "$human_observations_json" <<'PYINPUT'
+python3 - "$summary_input" "$completion_profile" "$candidate" "$fixture_samples_json" "$human_observations_json" "$tier" "$out_dir" "$skip_bevy" "$skip_runtime_unit" <<'PYINPUT'
 import json
 import sys
 from pathlib import Path
 
-output, profile, candidate, samples, observations = sys.argv[1:]
-inputs = {}
+output, profile, candidate, samples, observations, tier, out_dir, skip_bevy, skip_runtime = sys.argv[1:]
+inputs = {"tier": tier, "commands": {}, "outDir": out_dir, "overallStatus": "unverified",
+          "skipBevy": skip_bevy == "1", "skipRuntimeUnit": skip_runtime == "1"}
 if profile:
     if profile not in ("production_and_delivery", "production_only"):
         raise SystemExit("error: --completion-profile must be production_and_delivery or production_only")
@@ -162,6 +163,19 @@ except ValueError:
     raise SystemExit("error: report input JSON must contain finite numbers")
 Path(output).write_text(serialized + "\n", encoding="utf-8")
 PYINPUT
+
+# Run the real writer against frozen inputs; weak evidence is valid input.
+# Preview reports stay private and are discarded, never published as gate results.
+preview_dir=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-gameplay-report-preview.XXXXXX")
+trap 'rm -rf "$preview_dir"' EXIT
+if ! node crates/oasis7_viewer/scripts/write-gameplay-attraction-automation-summary.mjs \
+  "$summary_input" "$preview_dir/summary.json" "$preview_dir/summary.md" \
+  >"$preview_dir/validation.log" 2>&1; then
+  echo "error: supplied report inputs cannot be consumed by the summary writer" >&2
+  exit 2
+fi
+rm -rf "$preview_dir"
+trap - EXIT
 
 viewer_dependency_preflight "$repo_root" test
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -146,6 +146,8 @@ writeFileSync(join(wrapperRoot, "scripts/verify-gameplay-attraction-automation.s
 writeFileSync(join(wrapperRoot, "scripts/cargo-dev-lib.sh"), "oasis7_cargo_dev() { exit 99; }\n");
 writeFileSync(join(wrapperRoot, "scripts/viewer-dependency-preflight.sh"), 'viewer_dependency_preflight() { printf preflight >> "$WRAPPER_GATE_MARKER"; }\n');
 symlinkSync(join(process.cwd(), "crates/oasis7_viewer"), join(wrapperRoot, "crates/oasis7_viewer"));
+const previewRoot = join(tempDir, "private preview scratch");
+mkdirSync(previewRoot);
 const realNode = process.execPath;
 for (const [command, body] of Object.entries({
   npm: "#!/bin/sh\nexit 0\n",
@@ -171,8 +173,9 @@ function runWrapper(name, extra = []) {
   const out = join(tempDir, name);
   const gateMarker = join(tempDir, `${name}-gates`);
   const result = spawnSync("bash", [join(wrapperRoot, "scripts/verify-gameplay-attraction-automation.sh"), "--out-dir", out, "--skip-bevy", "--skip-runtime-unit", ...extra], {
-    env: { ...process.env, WRAPPER_GATE_MARKER: gateMarker, WRAPPER_REAL_NODE: realNode, PATH: `${join(wrapperRoot, "bin")}:${process.env.PATH}` }, encoding: "utf8",
+    env: { ...process.env, WRAPPER_GATE_MARKER: gateMarker, WRAPPER_REAL_NODE: realNode, TMPDIR: previewRoot, PATH: `${join(wrapperRoot, "bin")}:${process.env.PATH}` }, encoding: "utf8",
   });
+  assert.deepEqual(readdirSync(previewRoot), [], "preview scratch must be cleaned on success and rejection");
   return { result, out, gateMarker };
 }
 function wrapperSummary(run) {
@@ -199,16 +202,26 @@ assert.equal(defaults.attraction_evidence.completion_profile, "production_and_de
 assert.equal(defaults.evidence_sources.fixture_structure.source, "default_scenario_fixture");
 assert.equal(defaults.evidence_sources.live_operations.candidate, null);
 assert.equal(defaults.evidence_sources.human_observation.status, "unverified");
+const weakSamplesPath = join(tempDir, "weak-samples.json");
+writeFileSync(weakSamplesPath, "[{}]");
+const weak = wrapperSummary(runWrapper("valid weak report", ["--fixture-samples-json", weakSamplesPath]));
+assert.equal(weak.attraction_sufficiency_status, "attraction_weak", "weak metrics must remain reportable, not shape-invalid");
 const malformedPath = join(tempDir, "malformed.json");
 const objectPath = join(tempDir, "object.json");
 const nullRecordPath = join(tempDir, "null-record.json");
 const nonJsonNumberPath = join(tempDir, "non-json-number.json");
 const overflowNumberPath = join(tempDir, "overflow-number.json");
+const nestedShapePath = join(tempDir, "nested-shape.json");
+const nullActionPath = join(tempDir, "null-action.json");
+const numericObjectPath = join(tempDir, "numeric-object.json");
 writeFileSync(malformedPath, "{bad JSON");
 writeFileSync(objectPath, "{}");
 writeFileSync(nullRecordPath, "[null]");
 writeFileSync(nonJsonNumberPath, '[{"value": NaN}]');
 writeFileSync(overflowNumberPath, '[{"nested": {"values": [1e999]}}]');
+writeFileSync(nestedShapePath, '[{"player_gameplay":{"available_actions":1}}]');
+writeFileSync(nullActionPath, '[{"player_gameplay":{"available_actions":[null]}}]');
+writeFileSync(numericObjectPath, '[{"task_game_076_scenario":{"content_profile":{"effective_play_minutes":{"toString":null,"valueOf":null}}}}]');
 for (const [index, args] of [
   ["--completion-profile", "unknown"], ["--candidate"], ["--candidate", "  "],
   ["--fixture-samples-json", join(tempDir, "missing.json")],
@@ -216,11 +229,14 @@ for (const [index, args] of [
   ["--human-observations-json", nullRecordPath],
   ["--fixture-samples-json", nonJsonNumberPath],
   ["--human-observations-json", overflowNumberPath],
+  ["--fixture-samples-json", nestedShapePath],
+  ["--fixture-samples-json", nullActionPath],
+  ["--fixture-samples-json", numericObjectPath],
 ].entries()) {
   const rejected = runWrapper(`rejected-${index}`, args);
   assert.notEqual(rejected.result.status, 0, JSON.stringify(args));
-  assert.match(rejected.result.stderr, /error:/);
   assert.throws(() => readFileSync(rejected.gateMarker), /ENOENT/, "invalid input must fail before dependency preflight or gates");
+  assert.match(rejected.result.stderr, /error:/);
 }
 rmSync(tempDir, { recursive: true, force: true });
 console.log("TASK-GAME-076 wrapper report inputs passed");
