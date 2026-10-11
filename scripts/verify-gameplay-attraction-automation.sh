@@ -128,8 +128,30 @@ mkdir -p "$commands_dir"
 # Snapshot supplied report inputs before any gate; never infer human/live evidence.
 python3 - "$summary_input" "$completion_profile" "$candidate" "$fixture_samples_json" "$human_observations_json" "$tier" "$out_dir" "$skip_bevy" "$skip_runtime_unit" <<'PYINPUT'
 import json
+import math
 import sys
+from decimal import Decimal
 from pathlib import Path
+
+MAX_SAFE_NUMBER = 9007199254740991
+
+def parse_writer_float(literal):
+    # Check the original decimal before binary64 rounding can hide an overflow.
+    value = Decimal(literal)
+    if not value.is_finite() or value.copy_abs() > MAX_SAFE_NUMBER:
+        raise ValueError("number outside JavaScript safe numeric range")
+    return float(value)
+
+def validate_writer_numbers(value):
+    if isinstance(value, dict):
+        for item in value.values():
+            validate_writer_numbers(item)
+    elif isinstance(value, list):
+        for item in value:
+            validate_writer_numbers(item)
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        if abs(value) > MAX_SAFE_NUMBER or not math.isfinite(value):
+            raise ValueError("number outside JavaScript safe numeric range")
 
 output, profile, candidate, samples, observations, tier, out_dir, skip_bevy, skip_runtime = sys.argv[1:]
 inputs = {"tier": tier, "commands": {}, "outDir": out_dir, "overallStatus": "unverified",
@@ -151,7 +173,8 @@ for option, path, field in (
     try:
         def reject_non_json_constant(_value):
             raise ValueError("non-JSON numeric constant")
-        value = json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=reject_non_json_constant)
+        value = json.loads(Path(path).read_text(encoding="utf-8"), parse_constant=reject_non_json_constant, parse_float=parse_writer_float)
+        validate_writer_numbers(value)
     except (OSError, ValueError):
         raise SystemExit(f"error: {option} must name a readable valid JSON file")
     if not isinstance(value, list) or any(not isinstance(record, dict) for record in value):
@@ -413,7 +436,9 @@ fi
 
 python3 - "$summary_input" "$tier" "$overall_status" "$skip_bevy" "$skip_runtime_unit" "$out_dir" "${COMMAND_KEYS[@]}" <<'PY'
 import json
+import math
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 summary_input = Path(sys.argv[1])

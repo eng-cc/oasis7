@@ -206,6 +206,20 @@ const weakSamplesPath = join(tempDir, "weak-samples.json");
 writeFileSync(weakSamplesPath, "[{}]");
 const weak = wrapperSummary(runWrapper("valid weak report", ["--fixture-samples-json", weakSamplesPath]));
 assert.equal(weak.attraction_sufficiency_status, "attraction_weak", "weak metrics must remain reportable, not shape-invalid");
+const safeNumericPath = join(tempDir, "safe-numeric.json");
+const safeNumeric = { integers: [9007199254740991, -9007199254740991], fractions: [0.125, -1.5], flag: true };
+writeFileSync(safeNumericPath, JSON.stringify([{ ...suppliedHumanRecords[0], extra: safeNumeric }]));
+const safeNumericReport = wrapperSummary(runWrapper("safe numeric boundaries", ["--human-observations-json", safeNumericPath]));
+assert.deepEqual(safeNumericReport.evidence_sources.human_observation.records[0].extra, safeNumeric);
+for (const [index, literal] of ["9007199254740993", "-9007199254740993", "9".repeat(400), `-${"9".repeat(400)}`, "9.007199254740992e15", "-9007199254740992.0", "9007199254740991.00000000000000000001"].entries()) {
+  const path = join(tempDir, `unsafe-numeric-${index}.json`);
+  const option = index % 2 ? "--fixture-samples-json" : "--human-observations-json";
+  writeFileSync(path, `[{"nested":{"values":[${literal}]}}]`);
+  const rejected = runWrapper(`unsafe numeric ${index}`, [option, path]);
+  assert.notEqual(rejected.result.status, 0, `unsafe number ${literal} must be rejected`);
+  assert.throws(() => readFileSync(rejected.gateMarker), /ENOENT/, "unsafe numbers must fail before gates");
+  assert.match(rejected.result.stderr, /error:/);
+}
 const malformedPath = join(tempDir, "malformed.json");
 const objectPath = join(tempDir, "object.json");
 const nullRecordPath = join(tempDir, "null-record.json");
