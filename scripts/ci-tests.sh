@@ -71,7 +71,14 @@ run() {
   "$@"
 }
 
+prepare_local_cargo_target() {
+  if [[ "${CI:-}" != "1" && "${CI:-}" != "true" && -z "${CARGO_TARGET_DIR:-}" ]]; then
+    (cd "$repo_root" && "$driver_dir/cargo-dev.sh" --prepare-target)
+  fi
+}
+
 run_cargo() {
+  prepare_local_cargo_target
   if [[ "${CI_VERBOSE:-}" == "1" ]]; then
     run env -u RUSTC_WRAPPER cargo "$@" --verbose
   else
@@ -80,6 +87,7 @@ run_cargo() {
 }
 
 run_cargo_clippy() {
+  prepare_local_cargo_target
   local lint_flags=(
     -D warnings
     -D clippy::correctness
@@ -298,6 +306,7 @@ run_operational_node_contract_tests() {
   run ./scripts/state-sync-closure-evidence-template.test.sh
   run ./scripts/s10-five-node-game-soak-summary.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
+  run python3 ./scripts/release-web-startup.test.py
   run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
   run bash ./scripts/build-game-launcher-bundle-dev-cache.test.sh
   run bash ./scripts/build-game-launcher-bundle-ops-default.test.sh
@@ -338,6 +347,7 @@ run_provider_bridge_live_gate() {
 }
 
 run_newapi_bridge_service_accounting_tests() {
+  prepare_local_cargo_target
   run env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service -- --nocapture
 }
 

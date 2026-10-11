@@ -33,6 +33,14 @@ impl ViewerRuntimeLiveServer {
             })
             .unwrap_or(serde_json::Value::Null);
         summary["agent_service_pump_error"] = serde_json::json!(self.agent_service_pump_error);
+        summary["io_lifecycle"] = self.agent_service_io_diagnostics.snapshot();
+        summary
+    }
+    /// Explicit live diagnostics; unlike canonical summary, active age changes with wall time.
+    #[cfg(any(test, feature = "test_tier_required"))]
+    pub fn test_canonical_provider_diagnostic_summary(&self) -> serde_json::Value {
+        let mut summary = self.test_canonical_provider_summary();
+        summary["io_lifecycle"] = self.agent_service_io_diagnostics.diagnostic_snapshot();
         summary
     }
     #[cfg(any(test, feature = "test_tier_required"))]

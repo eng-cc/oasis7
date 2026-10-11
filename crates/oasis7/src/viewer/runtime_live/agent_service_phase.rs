@@ -79,7 +79,6 @@ impl super::control_plane::llm_sidecar::RuntimeLlmSidecar {
         {
             return Err("ACK phase differs from durable original action; fenced".into());
         }
-
         let previous = self.provider_service_pending.clone();
         self.provider_service_pending
             .get_mut(agent)

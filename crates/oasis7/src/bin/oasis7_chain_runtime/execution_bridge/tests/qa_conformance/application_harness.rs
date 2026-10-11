@@ -7,6 +7,10 @@ pub(super) fn validate_output(
     drift: bool,
 ) {
     if !output.status.success() {
+        eprintln!(
+            "fixture_failure_stages={}",
+            fixture.stage_diagnostics.snapshot()
+        );
         application_wake::report_canonical_resume_failure(fixture);
     }
     assert!(
@@ -128,6 +132,17 @@ pub(super) fn run_isolated_application(
     );
 }
 
+struct IsolatedApplicationMode<'a> {
+    wake: bool,
+    drift: bool,
+    release: bool,
+    hosted: bool,
+    metadata_probe: bool,
+    service_probe: bool,
+    admission_mode: &'a str,
+    provider_closure: bool,
+}
+
 pub(super) fn run_isolated_application_mode(
     wake: bool,
     drift: bool,
@@ -137,7 +152,7 @@ pub(super) fn run_isolated_application_mode(
     service_probe: bool,
     admission_mode: &str,
 ) {
-    run_isolated_application_mode_with_provider_closure(
+    run_isolated_application_mode_with_options(IsolatedApplicationMode {
         wake,
         drift,
         release,
@@ -145,26 +160,34 @@ pub(super) fn run_isolated_application_mode(
         metadata_probe,
         service_probe,
         admission_mode,
-        false,
-    );
+        provider_closure: false,
+    });
 }
 
 pub(super) fn run_isolated_application_provider_closure() {
-    run_isolated_application_mode_with_provider_closure(
-        false, false, false, false, false, false, "", true,
-    );
+    run_isolated_application_mode_with_options(IsolatedApplicationMode {
+        wake: false,
+        drift: false,
+        release: false,
+        hosted: false,
+        metadata_probe: false,
+        service_probe: false,
+        admission_mode: "",
+        provider_closure: true,
+    });
 }
 
-fn run_isolated_application_mode_with_provider_closure(
-    wake: bool,
-    drift: bool,
-    release: bool,
-    hosted: bool,
-    metadata_probe: bool,
-    service_probe: bool,
-    admission_mode: &str,
-    provider_closure: bool,
-) {
+fn run_isolated_application_mode_with_options(mode: IsolatedApplicationMode<'_>) {
+    let IsolatedApplicationMode {
+        wake,
+        drift,
+        release,
+        hosted,
+        metadata_probe,
+        service_probe,
+        admission_mode,
+        provider_closure,
+    } = mode;
     let resume_rejection_fs = admission_mode == "resume-rejection-write-failure";
     let resume_rejection_crash = admission_mode == "resume-rejection-crash";
     let resume_rejected = matches!(
@@ -385,6 +408,8 @@ fn run_isolated_application_mode_with_provider_closure(
         )
         .env("PRE2_DENIED_NODE_ROOT", &denied);
     let observer_stop = Arc::new(AtomicBool::new(false));
+    let pending_observer = (admission_mode == "pending-cadence")
+        .then(|| application_hosted_unpublished_cadence::observe_parent(&fixture, &app_dir));
     let observer = boundary_mode.then(|| {
         application_admission_boundaries::observe_parent(
             &fixture,
@@ -472,6 +497,12 @@ fn run_isolated_application_mode_with_provider_closure(
     } else {
         command.output().unwrap()
     };
+    if !output.status.success() {
+        eprintln!(
+            "fixture_failure_stages={}",
+            fixture.stage_diagnostics.snapshot()
+        );
+    }
     if hosted
         && (metadata_probe
             || matches!(
@@ -831,6 +862,9 @@ fn run_isolated_application_mode_with_provider_closure(
         println!("{}", String::from_utf8_lossy(&output.stderr));
     }
     drop(hosted_wait_clock);
+    if let Some(observer) = pending_observer {
+        observer.join().unwrap();
+    }
     observer_stop.store(true, Ordering::SeqCst);
     if let Some(observer) = observer {
         observer.join().unwrap();

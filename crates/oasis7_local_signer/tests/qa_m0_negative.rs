@@ -381,3 +381,58 @@ fn empty_malformed_and_noncanonical_payload_encodings_are_rejected() {
     assert!(decode_payload("YQ").is_err());
     assert!(decode_payload("YR==").is_err());
 }
+
+#[test]
+fn detached_file_authorization_requires_exact_grant_hash_context_and_purpose() {
+    use base64::Engine;
+    use oasis7_local_signer::identity::{operation_key, sha256};
+    let (installation, mut policy, mut grant, mut request) =
+        auth_fixture(Path::new("/tmp/qa-signer-store"));
+    policy.enabled_purposes = vec!["file_ed25519_v1".into()];
+    policy.key_bindings[0].purpose = "file_ed25519_v1".into();
+    let IpcRequest::Sign {
+        purpose,
+        context,
+        payload_base64,
+        ..
+    } = &mut request
+    else {
+        unreachable!()
+    };
+    *purpose = "file_ed25519_v1".into();
+    let payload =
+        oasis7_local_signer::detached::signing_payload(context, b"file contents").unwrap();
+    *payload_base64 = base64::engine::general_purpose::STANDARD.encode(&payload);
+    grant.items[0].purpose = purpose.clone();
+    grant.items[0].payload_sha256 = hex::encode(sha256(&payload));
+    grant.items[0].operation_key = operation_key(
+        &installation.installation_id,
+        &installation.deployment_id,
+        &context.network_id,
+        purpose,
+        "rollback-audit-r1",
+        &sha256(&payload),
+    )
+    .unwrap();
+    let authorized = authorize_sign(&installation, &policy, &grant, 100, &request, 1500).unwrap();
+    assert!(authorized.rollback.is_none());
+    assert_eq!(
+        (authorized.not_before_ms, authorized.expires_at_ms),
+        (1000, 2000)
+    );
+    let mut wrong_hash = grant.clone();
+    wrong_hash.items[0].payload_sha256 = "55".repeat(32);
+    assert!(authorize_sign(&installation, &policy, &wrong_hash, 100, &request, 1500).is_err());
+    let mut changed_request = request.clone();
+    let IpcRequest::Sign { context, .. } = &mut changed_request else {
+        unreachable!()
+    };
+    context.protocol_context.nonce = "other-nonce".into();
+    assert!(authorize_sign(&installation, &policy, &grant, 100, &changed_request, 1500).is_err());
+    let IpcRequest::Sign { purpose, .. } = &mut changed_request else {
+        unreachable!()
+    };
+    *purpose = "rollback_strict_audit_v1".into();
+    assert!(authorize_sign(&installation, &policy, &grant, 100, &changed_request, 1500).is_err());
+    assert!(authorize_sign(&installation, &policy, &grant, 100, &request, 2000).is_err());
+}

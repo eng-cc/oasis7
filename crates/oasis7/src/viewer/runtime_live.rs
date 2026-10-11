@@ -38,6 +38,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 mod agent_service_io;
+#[cfg(any(test, feature = "test_tier_required"))]
+mod agent_service_io_diagnostics;
 mod agent_service_phase;
 mod agent_service_pump;
 mod periodic_service_io;
@@ -192,6 +194,8 @@ pub struct ViewerRuntimeLiveServer {
     script: RuntimeLiveScript,
     llm_sidecar: RuntimeLlmSidecar,
     agent_service_pump_started: bool,
+    #[cfg(any(test, feature = "test_tier_required"))]
+    agent_service_io_diagnostics: std::sync::Arc<agent_service_io_diagnostics::IoDiagnostics>,
     agent_service_session_count: usize,
     agent_service_pump_error: Option<&'static str>,
     pending_virtual_events: VecDeque<WorldEvent>,
@@ -411,6 +415,8 @@ impl ViewerRuntimeLiveServer {
             script: RuntimeLiveScript::default(),
             llm_sidecar,
             agent_service_pump_started: false,
+            #[cfg(any(test, feature = "test_tier_required"))]
+            agent_service_io_diagnostics: std::sync::Arc::default(),
             agent_service_session_count: 0,
             agent_service_pump_error: None,
             pending_virtual_events: recovered_generation

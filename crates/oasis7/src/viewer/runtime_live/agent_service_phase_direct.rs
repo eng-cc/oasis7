@@ -25,7 +25,7 @@ impl HostedServicePhase {
         }
     }
 
-    pub(super) fn identity(&self) -> Result<String, String> {
+    pub(in crate::viewer::runtime_live) fn identity(&self) -> Result<String, String> {
         let (label, pending, receipt, details) = match self {
             Self::Act { pending, .. } => ("act", pending, None, serde_json::Value::Null),
             Self::ActView {

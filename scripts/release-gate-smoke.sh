@@ -67,15 +67,15 @@ if rg -q -- "--scenario llm_bootstrap" "$pass_summary"; then
   exit 1
 fi
 
-diagnostic_root="$smoke_root/diagnostic"
-run ./scripts/release-gate.sh --dry-run --web-scenario llm_bootstrap --skip-ci-full --skip-ci-full-reason diagnostic-smoke --skip-sync --skip-sync-reason diagnostic-smoke --skip-s9 --skip-s9-reason diagnostic-smoke --skip-s10 --skip-s10-reason diagnostic-smoke --out-dir "$diagnostic_root"
-diagnostic_summary=$(latest_summary "$diagnostic_root")
-if [[ -z "$diagnostic_summary" ]]; then
-  echo "error: diagnostic summary not found under $diagnostic_root" >&2
+retired_option_log="$smoke_root/retired-web-scenario.log"
+if ./scripts/release-gate.sh --dry-run --web-scenario llm_bootstrap >"$retired_option_log" 2>&1; then
+  echo "error: retired Web scenario option was accepted" >&2
   exit 1
+else
+  retired_option_status=$?
 fi
-ensure_file_contains "$diagnostic_summary" "--scenario llm_bootstrap"
-ensure_file_contains "$diagnostic_summary" "--allow-debug-scenario"
+[[ "$retired_option_status" -eq 2 ]] || { echo "error: retired option exit status=$retired_option_status" >&2; exit 1; }
+ensure_file_contains "$retired_option_log" "unknown option: --web-scenario"
 
 p2p_dry_root="$smoke_root/p2p-auto-attest"
 run ./scripts/p2p-longrun-soak.sh \

@@ -81,6 +81,8 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) pending_product_validation_intent: Option<ProductValidationIntentMarkerV1>,
     pub(super) local_execution_bootstrap: Option<NodeExecutionBootstrap>,
     pub(super) controlled_capture_enabled: bool,
+    pub(super) guarded_trust:
+        Option<oasis7_distfs::controlled_authority::replicated_protocol::FixedTrust>,
 }
 
 #[path = "driver_construction.rs"]
@@ -239,6 +241,7 @@ impl NodeRuntimeExecutionDriver {
             pending_product_validation_intent: None,
             local_execution_bootstrap: None,
             controlled_capture_enabled: false,
+            guarded_trust: None,
         }
     }
 
@@ -763,8 +766,14 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             execution_resource_commit_hash(&context.world_id, context.height);
         let runtime_resource_context = ChainResourceDerivationContext {
             world_id: context.world_id.as_str(),
-            chain_id: context.world_id.as_str(),
-            genesis_ref: None,
+            chain_id: self
+                .guarded_trust
+                .as_ref()
+                .map_or(context.world_id.as_str(), |t| t.chain_id.as_str()),
+            genesis_ref: self
+                .guarded_trust
+                .as_ref()
+                .map(|t| t.genesis_digest.as_str()),
             created_at_height: execution_resource_created_at_height(context.height),
             manifest_height: context.height,
             commit_block_hash: Some(runtime_resource_commit_hash.as_str()),

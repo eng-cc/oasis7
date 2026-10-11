@@ -3,6 +3,8 @@
 Status: source implementation under verification; host staging, installation and acceptance pending.
 Owner: `blockchain_ops_engineer`. Authority: [release/installation design](local-file-signing-backend.design.md). Professional entrance: [P2P design](../design.md).
 
+Installed-tool usage: [用户手册](local-file-signing-backend.user-guide.md), covering key creation, policy/grant administration, caller jobs, inspection and revocation.
+
 ## Release preparation and approval
 
 Build the three `oasis7_local_signer` Rust executables in release mode using the repository Cargo contract. `scripts/local-signer/package-release.py` packages existing binaries and reviewed installer modules into a new version directory. It records target, full source OID, schema versions, exact file sizes and SHA256 values. Review source/binary provenance and independently approve the exact manifest digest. A digest printed by the untrusted package is not approval by itself.

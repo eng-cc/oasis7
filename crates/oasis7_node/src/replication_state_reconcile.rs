@@ -57,6 +57,16 @@ pub(super) fn reconcile_engine_with_persisted_replication(
     world_id: &str,
     mut execution_hook: Option<&mut dyn NodeExecutionHook>,
 ) -> Result<(), NodeError> {
+    if execution_hook
+        .as_ref()
+        .is_some_and(|hook| hook.guarded_local_execution())
+    {
+        return Err(NodeError::Execution {
+            reason:
+                "guarded engineering execution rejects legacy replication startup reconciliation"
+                    .into(),
+        });
+    }
     let latest_persisted_height = replication.latest_persisted_commit_height(world_id)?;
     if latest_persisted_height < engine.committed_height {
         if latest_persisted_height == 0 {
@@ -138,6 +148,14 @@ fn replay_persisted_replication_commits(
     latest_persisted_height: u64,
     execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
 ) -> Result<(), NodeError> {
+    if execution_hook
+        .as_ref()
+        .is_some_and(|hook| hook.guarded_local_execution())
+    {
+        return Err(NodeError::Execution {
+            reason: "guarded engineering execution rejects legacy replicated checkpoints".into(),
+        });
+    }
     let mut height = start_height;
     while height <= latest_persisted_height {
         let message = load_validated_persisted_commit(replication, world_id, height)?;

@@ -232,7 +232,10 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     let mut terminal_completed = false;
     while Instant::now() < until {
         session.snapshot(Duration::from_millis(25));
-        let summary = shared.lock().unwrap().test_canonical_provider_summary();
+        let summary = shared
+            .lock()
+            .unwrap()
+            .test_canonical_provider_diagnostic_summary();
         if summary["terminal_states"]["agent-a"]["status"] == "rejected" {
             terminal_completed = true;
             break;
@@ -242,7 +245,10 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     println!(
         "resume_rejection_terminal_wait completed={terminal_completed} pump_status={pump_status}"
     );
-    let summary = shared.lock().unwrap().test_canonical_provider_summary();
+    let summary = shared
+        .lock()
+        .unwrap()
+        .test_canonical_provider_diagnostic_summary();
     application_hosted_wait_rejection::private_write(
         &root.join("resume-rejected-summary.json"),
         &serde_json::to_vec(&summary).unwrap(),
