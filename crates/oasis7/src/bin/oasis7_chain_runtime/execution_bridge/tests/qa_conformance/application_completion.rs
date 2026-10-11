@@ -212,3 +212,75 @@ pub(super) fn verify_canonical_completion(fixture: &Fixture, root: &std::path::P
         serde_json::to_string(&result.request.correlation).unwrap()
     );
 }
+
+/// Failure-only diagnostics deliberately exclude identities, credentials and memory.
+/// Unknown strings stay classified; the complete private summary is never logged.
+pub(super) fn hosted_failure_diagnostic(summary: &serde_json::Value) -> serde_json::Value {
+    let phase = match summary["hosted_service_phase"].as_str() {
+        Some(
+            value @ ("act" | "act_view" | "act_settled_view" | "act_settle" | "feedback"
+            | "feedback_ack" | "feedback_ack_view" | "finalize"),
+        ) => value,
+        None => "absent",
+        Some(_) => "unknown",
+    };
+    let pump_error = match summary["agent_service_pump_error"].as_str() {
+        Some("Agent service result could not be applied; original work remains pending") => {
+            "apply_blocked"
+        }
+        Some("Agent service preparation is blocked; original work remains pending") => {
+            "prepare_blocked"
+        }
+        None => "absent",
+        Some(_) => "other",
+    };
+    let terminal = &summary["terminal_states"]["agent-a"];
+    let status = match terminal["status"].as_str() {
+        Some(
+            value @ ("committed" | "completed" | "rejected" | "check_pending" | "check_failed"),
+        ) => value,
+        None => "absent",
+        Some(_) => "unknown",
+    };
+    serde_json::json!({
+        "phase": phase,
+        "pump_error_class": pump_error,
+        "terminal_status": status,
+        "terminal_rejection_present": !terminal["reject_reason"].is_null(),
+        "memory_failure_present": !summary["hosted_service_memory_failure"].is_null(),
+        "io_inflight": !summary["hosted_service_inflight"].is_null(),
+        "native_runner_present": summary["native_runner_present"].as_bool(),
+        "native_model_call_count": summary["native_model_call_count"].as_u64(),
+        "pending_intent_count": summary["pending_intent_count"].as_u64(),
+        "pending_action_count": summary["pending_action_count"].as_u64(),
+        "pending_wake_count": summary["pending_wake_ids"].as_array().map(Vec::len),
+        "mirrored_lease_count": summary["mirrored_lease_count"].as_u64(),
+    })
+}
+
+#[test]
+fn hosted_failure_diagnostic_does_not_echo_private_summary() {
+    let secret = "PRIVATE_KEY_NONCE_GOAL_MEMORY_PROVIDER_PAYLOAD";
+    let summary = serde_json::json!({
+        "hosted_service_phase": secret, "agent_service_pump_error": secret,
+        "terminal_states": {"agent-a": {"status": secret, "reject_reason": secret}},
+        "hosted_service_memory_failure": secret, "hosted_service_inflight": secret,
+        "native_runner_present": secret, "native_model_call_count": secret,
+        "pending_intent_count": secret, "pending_action_count": 3,
+        "pending_wake_ids": [secret], "mirrored_lease_count": secret,
+        "memory_store": secret, "private_key": secret,
+    });
+    let diagnostic = hosted_failure_diagnostic(&summary);
+    assert_eq!(diagnostic["phase"], "unknown");
+    assert_eq!(diagnostic["pump_error_class"], "other");
+    assert_eq!(diagnostic["terminal_status"], "unknown");
+    assert_eq!(diagnostic["pending_action_count"], 3);
+    assert_eq!(diagnostic["pending_wake_count"], 1);
+    assert!(diagnostic["pending_intent_count"].is_null());
+    let panic = std::panic::catch_unwind(|| panic!("Hosted completion failed: {diagnostic}"))
+        .expect_err("exercise the actual assertion diagnostic format");
+    let message = panic.downcast_ref::<String>().unwrap();
+    assert!(!message.contains(secret));
+    assert!(!message.contains("memory_store"));
+    assert!(!message.contains("private_key"));
+}

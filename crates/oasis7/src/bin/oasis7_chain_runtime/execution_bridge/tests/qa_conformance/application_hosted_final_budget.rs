@@ -195,11 +195,13 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
     );
     assert!(
         warmed && ordered && drained && joined.is_ok(),
-        "actual Viewer prerequisites and complete worker join"
+        "actual Viewer prerequisites and complete worker join; diagnostic={}",
+        application_completion::hosted_failure_diagnostic(&summary)
     );
     assert!(
         completed,
-        "second ordinary Wait must preserve remaining unit and finish canonical Completed zero"
+        "second ordinary Wait must preserve remaining unit and finish canonical Completed zero; diagnostic={}",
+        application_completion::hosted_failure_diagnostic(&summary)
     );
     println!("PRE2_HOSTED_FINAL_BUDGET_PASSED");
 }

@@ -249,7 +249,8 @@ pub(super) fn verify(client: &RemoteWorldServiceClient, crash: bool) {
     );
     assert!(
         completed,
-        "original Wait Admit process recovery must settle and resume to exact Act memory"
+        "original Wait Admit process recovery must settle and resume to exact Act memory; diagnostic={}",
+        application_completion::hosted_failure_diagnostic(&summary)
     );
     println!("PRE2_HOSTED_WAIT_RESUME_ACT_PASSED");
     println!("PRE2_HOSTED_WAIT_CAPTURE_PROCESS_RECOVERY_PASSED");
