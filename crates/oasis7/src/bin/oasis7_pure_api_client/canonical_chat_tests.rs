@@ -131,6 +131,9 @@ fn canonical_fixture(recover_after_timeout: bool) {
     let stopped = stop.clone();
     let service_world = canonical.clone();
     let submitted = received.clone();
+    let retry_enabled = Arc::new(AtomicBool::new(!recover_after_timeout));
+    let service_retry_enabled = retry_enabled.clone();
+    let (submit_observed, observed_submit) = std::sync::mpsc::channel();
     let service = thread::spawn(move || {
         let mut committed: Option<Value> = None;
         let mut first_submit_bytes = None;
@@ -205,11 +208,18 @@ fn canonical_fixture(recover_after_timeout: bool) {
                 pending
             } else if path == SUBMIT_PATH {
                 submitted.lock().unwrap().push(body.clone());
+                submit_observed.send(()).unwrap();
                 if let Some(result) = &committed {
                     let originals = submitted.lock().unwrap();
                     assert_eq!(originals[0], originals[1]);
                     assert_eq!(first_submit_bytes.as_ref().unwrap(), &original_bytes);
-                    result.clone()
+                    if service_retry_enabled.load(Ordering::Acquire) {
+                        result.clone()
+                    } else {
+                        let mut pending = result.clone();
+                        pending["outcome"] = json!({"status":"pending"});
+                        pending
+                    }
                 } else {
                     first_submit_bytes = Some(original_bytes);
                     let request: SubmitIntentRequest<WorldServicePayloadV1> =
@@ -336,23 +346,35 @@ fn canonical_fixture(recover_after_timeout: bool) {
     drop(registration);
     let mut conn = ViewerConnection::connect(&addr, "fixture-chat", timeout).unwrap();
     subscribe_for_control(&mut conn, true, false).unwrap();
-    let first = exchange(
-        &mut conn,
-        if recover_after_timeout {
-            Duration::from_millis(300)
-        } else {
-            timeout
-        },
-        ChatInput {
-            agent_id: "agent-0",
-            player_id: "owner",
-            message: "private canonical fixture goal",
-            private_key_hex: &private,
-            public_key_hex: None,
-            intent_tick: None,
-            intent_seq: None,
-        },
-    );
+    let input = ChatInput {
+        agent_id: "agent-0",
+        player_id: "owner",
+        message: "private canonical fixture goal",
+        private_key_hex: &private,
+        public_key_hex: None,
+        intent_tick: None,
+        intent_seq: None,
+    };
+    let first = if recover_after_timeout {
+        let (chat, responses, artifact) =
+            prepare_canonical(&mut conn, Instant::now() + timeout, input).unwrap();
+        conn.send(&ViewerRequest::AgentChat {
+            request: chat.clone(),
+        })
+        .unwrap();
+        observed_submit
+            .recv_timeout(timeout)
+            .expect("service must receive original canonical Submit before timeout phase");
+        submit_original(
+            &mut conn,
+            Instant::now() + Duration::from_millis(300),
+            chat,
+            responses,
+            &artifact,
+        )
+    } else {
+        exchange(&mut conn, timeout, input)
+    };
     let responses = if recover_after_timeout {
         let error = match first {
             Err(error) => error,
@@ -362,7 +384,9 @@ fn canonical_fixture(recover_after_timeout: bool) {
             error
                 .split("retained at ")
                 .nth(1)
-                .unwrap()
+                .unwrap_or_else(|| {
+                    panic!("timeout must retain persisted original request: {error}")
+                })
                 .split(". Retry with")
                 .next()
                 .unwrap(),
@@ -381,6 +405,7 @@ fn canonical_fixture(recover_after_timeout: bool) {
         conn.writer.get_ref().shutdown(Shutdown::Both).unwrap();
         drop(conn);
         conn = ViewerConnection::connect(&addr, "fixture-retry", timeout).unwrap();
+        retry_enabled.store(true, Ordering::Release);
         let result = retry(&mut conn, timeout, &path).unwrap();
         assert!(!path.exists(), "committed receipt removes pending artifact");
         result
@@ -390,7 +415,10 @@ fn canonical_fixture(recover_after_timeout: bool) {
     assert!(
         matches!(&responses.last().unwrap().response,ViewerResponse::AgentChatAck{ack}if ack.intent_id.is_some()&&ack.auth_nonce.is_some())
     );
-    assert_eq!(received.lock().unwrap().len(), 2);
+    assert_eq!(
+        received.lock().unwrap().len(),
+        if recover_after_timeout { 3 } else { 2 }
+    );
     conn.writer.get_ref().shutdown(Shutdown::Both).unwrap();
     drop(conn);
     serving.join().unwrap();

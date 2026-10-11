@@ -58,6 +58,15 @@ pub(super) fn exchange(
         );
     }
     let deadline = Instant::now() + timeout;
+    let (chat, responses, artifact) = prepare_canonical(conn, deadline, input)?;
+    submit_original(conn, deadline, chat, responses, &artifact)
+}
+
+fn prepare_canonical(
+    conn: &mut ViewerConnection,
+    deadline: Instant,
+    input: ChatInput<'_>,
+) -> Result<(AgentChatRequest, Vec<CollectedResponse>, std::path::PathBuf), String> {
     let key = oasis7_pure_api_client_support::resolve_public_key_hex(
         input.private_key_hex,
         input.public_key_hex,
@@ -180,7 +189,7 @@ pub(super) fn exchange(
         input.private_key_hex,
     )?);
     let artifact = pending::save(&chat, &context.request.world, &conn.endpoint)?;
-    submit_original(conn, deadline, chat, responses, &artifact)
+    Ok((chat, responses, artifact))
 }
 
 fn submit_original(
