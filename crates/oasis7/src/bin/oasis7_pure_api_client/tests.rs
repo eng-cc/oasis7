@@ -150,6 +150,8 @@ fn agency_control_pure_client_sends_and_reads_matching_json_line() {
         reader: BufReader::new(client_stream.try_clone().expect("clone client stream")),
         writer: BufWriter::new(client_stream),
         hello_ack: Value::Null,
+        pending_line: String::new(),
+        endpoint: "fixture".into(),
     };
     let server = thread::spawn(move || {
         let server_reader = server_stream.try_clone().expect("clone server stream");
@@ -361,4 +363,49 @@ fn collect_until_reports_timeout_when_peer_stays_open() {
         .send(())
         .expect("release server after timeout assertion");
     server.join().expect("server join");
+}
+
+#[test]
+fn pure_api_negotiates_canonical_chat_with_shipped_viewer() {
+    use oasis7::viewer::{ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig};
+    use oasis7::world_service::{WorldIdentity, client::WorldServiceClientConfig};
+    use std::sync::{Arc, Mutex};
+    let private = fixed_private_key_hex(73);
+    let mut config = ViewerRuntimeLiveServerConfig::new(oasis7::simulator::WorldScenario::Minimal);
+    config.world_id = "canonical-cli-fixture".into();
+    config.world_service = Some(WorldServiceClientConfig {
+        endpoint: "http://127.0.0.1:9".into(),
+        trusted_service_public_key: derive_public_key_hex(&private).unwrap(),
+        expected_world: WorldIdentity {
+            world_id: config.world_id.clone(),
+            genesis_digest: "fixture".into(),
+        },
+        scope_id: "public".into(),
+        read_private_key_hex: private,
+        timeout: Duration::from_millis(50),
+        max_response_bytes: 1024 * 1024,
+    });
+    let server = Arc::new(Mutex::new(ViewerRuntimeLiveServer::new(config).unwrap()));
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let serving = thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        ViewerRuntimeLiveServer::test_serve_shared_stream(server, socket)
+    });
+    let conn = ViewerConnection::connect(
+        &addr.to_string(),
+        "pure-api-canonical-qa",
+        Duration::from_secs(2),
+    )
+    .unwrap();
+    let capabilities = conn.hello_ack["capabilities"].as_array().unwrap().clone();
+    conn.writer
+        .get_ref()
+        .shutdown(std::net::Shutdown::Both)
+        .unwrap();
+    assert!(serving.join().unwrap().is_ok());
+    assert!(
+        capabilities.iter().any(|v| v == "canonical_agent_chat_v1"),
+        "pure API must negotiate the actual canonical chat contract: {capabilities:?}"
+    );
 }

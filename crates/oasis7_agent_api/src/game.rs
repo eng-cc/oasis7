@@ -13,8 +13,10 @@
 //! durable operation admission are not implemented by this module. In
 //! particular, an operation status is a wire value, never a finality proof.
 
+mod goal;
 mod json;
 mod task;
+pub use goal::*;
 pub use json::parse_request;
 pub use task::*;
 

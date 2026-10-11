@@ -124,6 +124,14 @@ ApprovalRequestV1 = {approval_id, request_revision, task_id,
 
 投影的 task_id、goal_revision、goal_digest 和 activation_commit_ref 必须与同一切点 S 的 TaskControl、world_binding 一致；正文按版本化 GoalVersion codec 重算并匹配所引用 digest。该私有正文 digest 与 Harness 的 GoalSnapshot/context digest 各有原合同，不得混为一个哈希。goal_text 非空，完整正文继续受 4 KiB 上限约束，任何超限/截断不得伪装成功。latest_goal_revision 可大于 active_goal_revision，但未激活内容不得作为 executor 当前目标。
 
+已实施 SDK 合同位于 `oasis7_agent_api::game`：`GoalContentV1` 的 4 KiB 上限按完整紧凑 JSON 编码的 UTF-8 字节数计算，包含字段名、软约束与转义开销；不裁剪、不重排、不规范化原文。`game_goal_version_digest` 复用 canonical CBOR/BLAKE3，将 `["game_goal_version/v1", {schema_revision: 1, task_id, goal_revision, content}]` 编码后取 `blake3:<lowercase-hex>`，其中 goal_revision 是规范十进制字符串。activation_commit_ref 不进入正文摘要，由 `GoalVersionProjectionV1::validate_against` 与同切点权威控制记录单独比对。调用者必须从可信 TaskControl 取得 expected task/revision/digest/activation，继续验证 WorldBinding 和当前 audience；仅解析或自洽摘要不证明激活或读权。
+
+Runtime 的 native library 提供独立私有目标存储基础 `world_service::private_goal_store`：operator 显式传入专用目录和 32 字节密钥，完整正文及重算 digest 仅存于 XChaCha20Poly1305 密文；公开可引用值为独立随机的不透明引用。关联数据绑定 world/genesis、task/Agent、owner identity/generation、branch/reorg 与 goal revision。namespace 以随机 challenge 的加密密钥验证记录固定当前密钥；打开及读写时重验该记录，错误密钥、篡改或缺失记录均拒绝。初始化只允许严格空目录，原子发布且不覆盖并发胜者；没有验证记录却存在目标或暂存文件时不自动接管，operator 须核查初始化残留并恢复原验证记录。该存储版本不填写尚未发生的 activation_commit_ref，存储成功不等于目标激活。
+
+存储只在支持 Unix 私有权限的系统可用；目录与文件权限、所有权、符号链接及普通文件类型检查均须通过，有界读取后解密并重新验证完整正文。文件和目录同步完成后才返回引用；对象不可覆盖，不自动回收被引用的版本。operator 必须把 namespace 和密钥放在公共 CAS、P2P、公开备份/快照之外，确保祖先目录和同一系统账号受信；目录句柄与禁止链接访问不防御拥有该账号权限的恶意进程，也不自动证明目录已排除在公开存储之外。独立保留密文与密钥才能恢复；公共世界 checkpoint 不包含这些正文，也不证明跨节点私有副本已恢复。
+
+该底层存储尚未接入目标发布、TaskSnapshot 或 Context；调用者提供的存储绑定不证明当前 owner/audience 授权，后续服务接入仍须在解密前及交付前重验权威控制。现有 World Service canonical intent 会保留完整请求，不能直接承载私有目标正文或可枚举的正文 digest；这些值不得进入公共 CAS、P2P 或公开世界流。
+
 解密/投影前及响应交付前按当前 owner/audience 和 executor fence 验证读取资格；切点 S 或旧 token 不保留已撤销的读权。无权请求不返回正文、正文指纹或新 owner 的差异。元数据引用的正文缺失、损坏或无法验证时，返回 `503 ErrorV1(code=recovery_required, refresh=task_snapshot)`，不返回伪完整 TaskSnapshot、空目标或公开内容 URL，相关新 context 保持阻塞。客户端只能在授权仍有效后重新读取 snapshot，不挂载私有存储或依赖历史事件取回正文。
 
 端点不接受客户端填写的“世界结果 status=committed”来写回权威任务成果。`goal-receipts` 只允许 received/adoption_reported；context/decision/admission 的证据由各自受信边界记录。对没有外部观测能力的纯 Runtime 自报，保留 reported 等级，不伪造硬件或模型证明。

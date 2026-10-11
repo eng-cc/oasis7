@@ -6,6 +6,8 @@ pub mod client;
 pub mod correlation;
 pub mod game_task;
 pub mod gameplay;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod private_goal_store;
 pub mod projection;
 pub mod verified_view;
 pub mod wire;
