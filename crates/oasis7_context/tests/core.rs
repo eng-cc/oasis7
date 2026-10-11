@@ -330,7 +330,8 @@ fn concurrent_distinct_entries_cannot_exceed_store_count_capacity() {
             .iter()
             .filter(|r| r.as_ref().is_err_and(|e| e.code == "LIMIT_EXCEEDED"))
             .count(),
-        1
+        1,
+        "{results:?}"
     );
     assert_eq!(store.read_all().unwrap().len(), MAX_ENTRIES);
 }

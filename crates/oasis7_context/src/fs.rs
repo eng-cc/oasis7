@@ -377,18 +377,30 @@ impl Directory {
         }
         let local = self.create_dir(".context-local")?;
         let c = name("write.lock")?;
-        let fd = unsafe {
+        // Separate atomic creation from opening the persistent lock inode.
+        // Concurrent non-exclusive O_CREAT opens can return ENOENT on macOS.
+        let mut fd = unsafe {
             libc::openat(
                 local.file.as_raw_fd(),
                 c.as_ptr(),
                 libc::O_RDWR
                     | libc::O_CREAT
+                    | libc::O_EXCL
                     | libc::O_NOFOLLOW
                     | libc::O_NONBLOCK
                     | libc::O_CLOEXEC,
                 0o600,
             )
         };
+        if fd < 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST) {
+            fd = unsafe {
+                libc::openat(
+                    local.file.as_raw_fd(),
+                    c.as_ptr(),
+                    libc::O_RDWR | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC,
+                )
+            };
+        }
         let f = checked_file(fd)?;
         let start = Instant::now();
         loop {
@@ -450,6 +462,36 @@ pub fn publish_new_directory(parent: &Path, stage: &str, target: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lock_reuses_one_inode_and_preserves_contention() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = Directory::open(temp.path()).unwrap();
+        let first = dir.lock(0).unwrap();
+        let path = temp.path().join(".context-local/write.lock");
+        let inode = std::fs::metadata(&path).unwrap().ino();
+        assert_eq!(dir.lock(0).err().unwrap().code, "LOCK_BUSY");
+        drop(first);
+        let _second = dir.lock(0).unwrap();
+        assert_eq!(std::fs::metadata(path).unwrap().ino(), inode);
+    }
+    #[test]
+    fn existing_lock_rejects_symlinks_and_hardlinks() {
+        for hardlink in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let dir = Directory::open(temp.path()).unwrap();
+            dir.create_dir(".context-local").unwrap();
+            let target = temp.path().join("target");
+            std::fs::write(&target, b"unchanged").unwrap();
+            let lock = temp.path().join(".context-local/write.lock");
+            if hardlink {
+                std::fs::hard_link(&target, lock).unwrap();
+            } else {
+                std::os::unix::fs::symlink(&target, lock).unwrap();
+            }
+            assert_eq!(dir.lock(0).err().unwrap().code, "UNSAFE_PATH");
+            assert_eq!(std::fs::read(target).unwrap(), b"unchanged");
+        }
+    }
     #[test]
     fn enumeration_distinguishes_eof_and_error_and_always_closes_stream() {
         let temp = tempfile::tempdir().unwrap();
