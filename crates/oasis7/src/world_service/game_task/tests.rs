@@ -186,8 +186,9 @@ fn game_task_owner_history_and_receipt_integrity_fail_closed() {
     );
     let accepted = result(&world, original);
     world.record_world_service_result(accepted).unwrap();
+    world.invalidate_cognition_for_reorg(1).unwrap();
     world
-        .bind_cognition_runtime("world", "fork", 1, None, "pending", 0)
+        .bind_cognition_runtime("world", "fork", 1, None, "pending", 1)
         .unwrap();
     assert!(current_control(&world, "agent").unwrap().is_none());
     let mut fresh = request(&private, "after-fork");
