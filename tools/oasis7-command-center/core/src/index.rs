@@ -1,3 +1,5 @@
+#[path = "lifecycle_metadata.rs"]
+mod lifecycle_metadata;
 use crate::{Error, Result, domain::*, process::run};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -59,6 +61,7 @@ pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
     let changed = run("git", &["diff", "HEAD", "--name-only", "-z", "--"], root)?;
     let changed: std::collections::HashSet<&[u8]> = changed.split(|b| *b == 0).collect();
     let mut sections = Vec::new();
+    let mut metadata = std::collections::HashMap::new();
     let mut total = 0;
     let mut names: Vec<&[u8]> = files
         .split(|b| *b == 0)
@@ -100,7 +103,16 @@ pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
         }
         let dirty = changed.contains(name.as_bytes());
         let revision = digest(content.as_bytes());
+        metadata.insert(name.to_owned(), lifecycle_metadata::parse(name, &content));
         sections.extend(document_sections(name, &content, &revision, dirty, project));
+    }
+    let indexed: std::collections::HashSet<String> =
+        sections.iter().map(|s| s.path.clone()).collect();
+    for value in metadata.values_mut().flatten() {
+        lifecycle_metadata::validate_indexed(value, &indexed);
+    }
+    for section in &mut sections {
+        section.lifecycle = metadata.get(&section.path).cloned().flatten();
     }
     let current_head = git(root, &["rev-parse", "HEAD"])?;
     if current_head != project.head {
@@ -261,5 +273,6 @@ fn make_section(
         committed_revision: project.head.clone(),
         dirty,
         fact_kind: "sourceFact".into(),
+        lifecycle: None,
     }
 }
