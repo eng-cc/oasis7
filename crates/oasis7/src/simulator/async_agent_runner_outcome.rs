@@ -6,7 +6,7 @@ use super::super::types::WorldTime;
 use super::budget;
 use super::{
     ActorCompletion, AsyncAgentRunnerError, AsyncAgentTurnOutcome, AsyncTurnFeedback,
-    AsyncTurnLifecycle, AsyncWorldEffect, Observation,
+    AsyncTurnLifecycle, AsyncWorldEffect, BehaviorTurnResult, Observation, TurnMetadata,
 };
 
 /// Recover the structured provider error emitted by the provider-backed
@@ -119,6 +119,49 @@ pub(super) fn outcome_from_completion(completion: ActorCompletion) -> AsyncAgent
         cognition_lease: None,
         memory_write_intents: completion.memory_write_intents,
     }
+}
+
+pub(super) fn compatibility_outcome_from_harness(
+    turn_id: super::AsyncTurnId,
+    completion: oasis7_agent_harness::CompatibilityTurnOutcome<BehaviorTurnResult>,
+    metadata: TurnMetadata,
+) -> AsyncAgentTurnOutcome {
+    let (result, provider_error) = match completion.result {
+        Ok(result) => (Some(result), None),
+        Err(error) => (None, Some(error)),
+    };
+    let result = result.unwrap_or(BehaviorTurnResult {
+        decision: super::super::agent::AgentDecision::Wait,
+        decision_trace: None,
+        prepared_context: metadata.context.clone(),
+        prepared_response_context: None,
+        memory_write_intents: Vec::new(),
+    });
+    let mut outcome = outcome_from_completion(ActorCompletion {
+        turn_id,
+        agent_id: completion.agent_id,
+        decision: Some(result.decision),
+        decision_trace: result.decision_trace,
+        prepared_context: result.prepared_context.or(metadata.context),
+        prepared_request_context: None,
+        prepared_response_context: result.prepared_response_context,
+        memory_write_intents: result.memory_write_intents,
+        panicked: provider_error
+            .as_ref()
+            .is_some_and(|error| error.code == "actor_panicked"),
+    });
+    if let Some(error) = provider_error {
+        outcome.lifecycle = AsyncTurnLifecycle::Failed;
+        outcome.feedback = if error.code == "actor_panicked" {
+            AsyncTurnFeedback::ActorPanicked
+        } else {
+            AsyncTurnFeedback::ProviderError { code: error.code }
+        };
+        outcome.world_effect = AsyncWorldEffect::NoEffect;
+        outcome.decision = None;
+    }
+    outcome.cognition_lease = None;
+    outcome
 }
 
 pub(super) fn default_observation(agent_id: &str, time: WorldTime) -> Observation {

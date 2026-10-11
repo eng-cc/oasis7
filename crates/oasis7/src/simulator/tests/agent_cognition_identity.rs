@@ -871,7 +871,7 @@ fn production_outer_context_preserves_retry_transport_and_runtime_binding() {
         goal_snapshot: GoalSnapshotV1::empty(),
         continuation: None,
     };
-    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let mut runner = provider_backed_runner_with_empty_runtime_history("agent-1");
     let turn_id = runner
         .start_turn_with_request_context("agent-1", turn_context, request_context.clone())
         .expect("production outer request accepted");
@@ -922,7 +922,7 @@ fn retry_awaiting_turn_preserves_identity_and_increments_only_transport_attempt(
         fixture
     });
     let turn_context = production_turn_context(&request_context);
-    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let mut runner = provider_backed_runner_with_empty_runtime_history("agent-1");
     let turn_id = runner
         .start_turn_with_request_context_and_observation(
             "agent-1",
@@ -1000,7 +1000,7 @@ fn retry_awaiting_turn_rejects_mismatched_identity_and_digest() {
         fixture
     });
     let turn_context = production_turn_context(&request_context);
-    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let mut runner = provider_backed_runner_with_empty_runtime_history("agent-1");
     let turn_id = runner
         .start_turn_with_request_context_and_observation(
             "agent-1",
@@ -1055,7 +1055,7 @@ fn retry_awaiting_turn_rejects_after_terminal_feedback() {
         fixture
     });
     let turn_context = production_turn_context(&request_context);
-    let mut runner = AsyncAgentRunner::provider_backed_fixture("agent-1");
+    let mut runner = provider_backed_runner_with_empty_runtime_history("agent-1");
     let turn_id = runner
         .start_turn_with_request_context_and_observation(
             "agent-1",

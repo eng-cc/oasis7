@@ -185,6 +185,10 @@ run_oasis7_net_libp2p_clippy() {
 }
 
 run_oasis7_workspace_support_crate_tests() {
+  run_cargo_clippy -p oasis7_agent_api --all-targets
+  run_cargo_clippy -p oasis7_agent_harness --all-targets
+  run_cargo test -p oasis7_agent_api
+  run_cargo test -p oasis7_agent_harness --lib
   run_cargo test \
     -p oasis7_client_api \
     -p oasis7_local_signer \

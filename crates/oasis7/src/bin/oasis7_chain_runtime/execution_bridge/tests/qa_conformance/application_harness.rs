@@ -132,6 +132,17 @@ pub(super) fn run_isolated_application(
     );
 }
 
+struct IsolatedApplicationMode<'a> {
+    wake: bool,
+    drift: bool,
+    release: bool,
+    hosted: bool,
+    metadata_probe: bool,
+    service_probe: bool,
+    admission_mode: &'a str,
+    provider_closure: bool,
+}
+
 pub(super) fn run_isolated_application_mode(
     wake: bool,
     drift: bool,
@@ -141,6 +152,42 @@ pub(super) fn run_isolated_application_mode(
     service_probe: bool,
     admission_mode: &str,
 ) {
+    run_isolated_application_mode_with_options(IsolatedApplicationMode {
+        wake,
+        drift,
+        release,
+        hosted,
+        metadata_probe,
+        service_probe,
+        admission_mode,
+        provider_closure: false,
+    });
+}
+
+pub(super) fn run_isolated_application_provider_closure() {
+    run_isolated_application_mode_with_options(IsolatedApplicationMode {
+        wake: false,
+        drift: false,
+        release: false,
+        hosted: false,
+        metadata_probe: false,
+        service_probe: false,
+        admission_mode: "",
+        provider_closure: true,
+    });
+}
+
+fn run_isolated_application_mode_with_options(mode: IsolatedApplicationMode<'_>) {
+    let IsolatedApplicationMode {
+        wake,
+        drift,
+        release,
+        hosted,
+        metadata_probe,
+        service_probe,
+        admission_mode,
+        provider_closure,
+    } = mode;
     let resume_rejection_fs = admission_mode == "resume-rejection-write-failure";
     let resume_rejection_crash = admission_mode == "resume-rejection-crash";
     let resume_rejected = matches!(
@@ -307,7 +354,7 @@ pub(super) fn run_isolated_application_mode(
             application_hosted_wait::observation(&fixture, app_dir.clone())
         }
     });
-    let metadata = hosted.then(|| {
+    let metadata = (hosted || provider_closure || wake).then(|| {
         provider_metadata::MetadataServer::start(
             (metadata_probe || metadata_held).then(|| app_dir.clone()),
             app_dir.clone(),
@@ -822,6 +869,12 @@ pub(super) fn run_isolated_application_mode(
     if let Some(observer) = observer {
         observer.join().unwrap();
     }
+    if provider_closure {
+        metadata
+            .as_ref()
+            .expect("provider closure requires its own provider endpoint")
+            .assert_canonical_feedback_delivery(&fixture, true);
+    }
     if matches!(admission_mode, "memory-ack-before" | "memory-ack-after") {
         application_feedback_ack_recovery::verify(
             &fixture,
@@ -1016,6 +1069,17 @@ pub(super) fn run_isolated_application_mode(
         application_release::validate_output(&fixture, &output);
     } else {
         application_harness::validate_output(&fixture, &output, wake, drift);
+        if wake && !drift {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let terminal_feedback_id = stdout
+                .lines()
+                .find_map(|line| line.strip_prefix("provider_terminal_feedback_id="))
+                .expect("canonical terminal feedback evidence missing");
+            metadata
+                .as_ref()
+                .expect("genuine Wait/wake requires a separate provider endpoint")
+                .assert_canonical_terminal_feedback_delivery(&fixture, terminal_feedback_id);
+        }
     }
     fs::remove_dir_all(app_dir).unwrap();
 }

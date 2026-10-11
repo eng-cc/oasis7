@@ -20,6 +20,8 @@ pub(super) struct RuntimeLiveMockHttpServer {
     base_url: String,
     shutdown: std::sync::mpsc::Sender<()>,
     thread: Option<std::thread::JoinHandle<()>>,
+    diagnostic_tx: std::sync::mpsc::Sender<String>,
+    diagnostic_rx: std::sync::mpsc::Receiver<String>,
 }
 
 impl RuntimeLiveMockHttpServer {
@@ -30,10 +32,40 @@ impl RuntimeLiveMockHttpServer {
 
 impl Drop for RuntimeLiveMockHttpServer {
     fn drop(&mut self) {
+        let dropping_during_unwind = std::thread::panicking();
+        let _ = self.diagnostic_tx.send(format!(
+            "owner_drop during_unwind={dropping_during_unwind} base_url={}",
+            self.base_url
+        ));
         let _ = self.shutdown.send(());
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+        let thread_panic = self
+            .thread
+            .take()
+            .and_then(|thread| thread.join().err())
+            .map(mock_http_thread_panic_message);
+        if dropping_during_unwind || thread_panic.is_some() {
+            let events = self.diagnostic_rx.try_iter().collect::<Vec<_>>();
+            eprintln!(
+                "runtime live mock HTTP server diagnostic: base_url={} thread_panic={thread_panic:?} events={events:?}",
+                self.base_url
+            );
         }
+    }
+}
+
+fn mock_http_thread_panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = payload.downcast_ref::<String>() {
+        return message.clone();
+    }
+    if let Some(message) = payload.downcast_ref::<&'static str>() {
+        return (*message).to_string();
+    }
+    "non-string panic payload".to_string()
+}
+
+impl RuntimeLiveMockHttpServer {
+    pub(super) fn drain_diagnostics(&self) -> Vec<String> {
+        self.diagnostic_rx.try_iter().collect()
     }
 }
 
@@ -98,10 +130,23 @@ where
     let bind = listener.local_addr().expect("listener addr");
     let handler = Arc::new(handler);
     let (shutdown, shutdown_rx) = std::sync::mpsc::channel();
+    let (diagnostic_tx, diagnostic_rx) = std::sync::mpsc::channel();
+    let thread_diagnostic_tx = diagnostic_tx.clone();
     let thread = std::thread::spawn(move || {
+        let record = |event: String| {
+            let _ = thread_diagnostic_tx.send(event);
+        };
+        record(format!("listener_bound={bind}"));
         loop {
             match shutdown_rx.try_recv() {
-                Ok(()) | Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+                Ok(()) => {
+                    record("listener_exit=shutdown".to_string());
+                    break;
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    record("listener_exit=owner_disconnected".to_string());
+                    break;
+                }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {}
             }
             let (mut stream, _) = match listener.accept() {
@@ -111,21 +156,44 @@ where
                     continue;
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(error) => panic!("accept mock request: {error}"),
+                Err(error) => {
+                    record(format!("accept_error={error}"));
+                    panic!("accept mock request: {error}");
+                }
             };
+            stream
+                .set_nonblocking(false)
+                .expect("set accepted mock stream blocking");
             let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
-            let Some(request) = read_runtime_live_http_request(&mut stream) else {
-                continue;
+            let request = match read_runtime_live_http_request(&mut stream) {
+                Ok(request) => request,
+                Err(error_kind) => {
+                    record("request_incomplete_or_closed=true".to_string());
+                    record(format!("request_read_error={error_kind:?}"));
+                    continue;
+                }
             };
+            record(format!(
+                "request method={} path={} body_bytes={}",
+                request.method,
+                request.path,
+                request.body.len()
+            ));
             if request.method == "GET" {
                 write_runtime_live_json_response(
                     &mut stream,
                     404,
                     r#"{"ok":false,"error":"mock route unavailable"}"#,
                 );
+                record(format!("response status=404 path={}", request.path));
                 continue;
             }
+            let request_path = request.path.clone();
             let response = handler(request);
+            record(format!(
+                "response status={} path={request_path}",
+                response.status_code
+            ));
             write_runtime_live_json_response(
                 &mut stream,
                 response.status_code,
@@ -138,6 +206,8 @@ where
         base_url: format!("http://{bind}"),
         shutdown,
         thread: Some(thread),
+        diagnostic_tx,
+        diagnostic_rx,
     }
 }
 
@@ -157,8 +227,9 @@ where
         while handled_connections < expected_connections {
             let (mut stream, _) = listener.accept().expect("accept mock request");
             let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
-            let Some(request) = read_runtime_live_http_request(&mut stream) else {
-                continue;
+            let request = match read_runtime_live_http_request(&mut stream) {
+                Ok(request) => request,
+                Err(_) => continue,
             };
             if request.method == "GET" && !pass_provider_probes_to_handler {
                 write_runtime_live_json_response(
@@ -180,7 +251,9 @@ where
     format!("http://{}", bind)
 }
 
-fn read_runtime_live_http_request(stream: &mut std::net::TcpStream) -> Option<RecordedHttpRequest> {
+fn read_runtime_live_http_request(
+    stream: &mut std::net::TcpStream,
+) -> Result<RecordedHttpRequest, std::io::ErrorKind> {
     let mut buffer = Vec::new();
     let mut chunk = [0_u8; 1024];
     let mut header_end = None;
@@ -189,26 +262,18 @@ fn read_runtime_live_http_request(stream: &mut std::net::TcpStream) -> Option<Re
     loop {
         let bytes = match stream.read(&mut chunk) {
             Ok(bytes) => bytes,
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::Interrupted
-                        | std::io::ErrorKind::TimedOut
-                        | std::io::ErrorKind::WouldBlock
-                ) =>
-            {
-                return None;
-            }
-            Err(_) => return None,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.kind()),
         };
         if bytes == 0 {
-            return None;
+            return Err(std::io::ErrorKind::UnexpectedEof);
         }
         buffer.extend_from_slice(&chunk[..bytes]);
         if header_end.is_none() {
             header_end = find_runtime_live_header_terminator(buffer.as_slice());
             if let Some(boundary) = header_end {
-                let header = std::str::from_utf8(&buffer[..boundary]).ok()?;
+                let header = std::str::from_utf8(&buffer[..boundary])
+                    .map_err(|_| std::io::ErrorKind::InvalidData)?;
                 content_length = header
                     .lines()
                     .find_map(|line| {
@@ -229,13 +294,20 @@ fn read_runtime_live_http_request(stream: &mut std::net::TcpStream) -> Option<Re
         }
     }
 
-    let boundary = header_end?;
-    let header = std::str::from_utf8(&buffer[..boundary]).ok()?;
+    let boundary = header_end.ok_or(std::io::ErrorKind::InvalidData)?;
+    let header =
+        std::str::from_utf8(&buffer[..boundary]).map_err(|_| std::io::ErrorKind::InvalidData)?;
     let mut lines = header.lines();
-    let request_line = lines.next()?;
+    let request_line = lines.next().ok_or(std::io::ErrorKind::InvalidData)?;
     let mut request_line_parts = request_line.split_whitespace();
-    let method = request_line_parts.next()?.to_string();
-    let path = request_line_parts.next()?.to_string();
+    let method = request_line_parts
+        .next()
+        .ok_or(std::io::ErrorKind::InvalidData)?
+        .to_string();
+    let path = request_line_parts
+        .next()
+        .ok_or(std::io::ErrorKind::InvalidData)?
+        .to_string();
     let mut headers = BTreeMap::new();
     for line in lines {
         if let Some((name, value)) = line.split_once(':') {
@@ -244,7 +316,7 @@ fn read_runtime_live_http_request(stream: &mut std::net::TcpStream) -> Option<Re
     }
     let body = buffer[(boundary + 4)..(boundary + 4 + content_length)].to_vec();
 
-    Some(RecordedHttpRequest {
+    Ok(RecordedHttpRequest {
         method,
         path,
         headers,
@@ -318,5 +390,28 @@ fn owned_runtime_live_mock_http_server_serves_beyond_eight_requests_until_drop()
     assert_eq!(
         handled_requests.load(std::sync::atomic::Ordering::SeqCst),
         9
+    );
+    let diagnostics = server.drain_diagnostics();
+    assert_eq!(
+        diagnostics
+            .iter()
+            .filter(|event| event.starts_with("request method=POST path=/fixture"))
+            .count(),
+        9,
+        "the owned server records each accepted multi-phase request"
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .all(|event| !event.starts_with("request_read_error=")),
+        "the owned server must not drop complete fixture requests"
+    );
+    assert_eq!(
+        diagnostics
+            .iter()
+            .filter(|event| event.starts_with("response status=200 path=/fixture"))
+            .count(),
+        9,
+        "the owned server records each response before the client observes it"
     );
 }

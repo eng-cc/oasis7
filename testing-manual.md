@@ -123,6 +123,7 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - `npm --prefix crates/oasis7_viewer run build:software-safe`
+  - 变更 `oasis7_agent_api` 或 `oasis7_agent_harness` 时，planner 选择 `workspace_support`：API wire-contract 集成测试、Harness 单元测试及两 crate 的 strict Clippy；Cargo 依赖图也会保留 `oasis7` 消费者组。
   - planner 始终声明 `required_gate_baseline`：这是 required-gate 的普适治理/契约 authority，不等同于每个 Rust、Node、provider 或 P2P 套件都对所有路径执行。
   - 触达场景定义、场景 integration test 或场景 PRD 时，planner 追加 `scenario_regression`，运行窄命令：`env -u RUSTC_WRAPPER cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_`；不追加 test-harness 参数，保证 `CI_VERBOSE=1` 的 Cargo verbosity 仍由 wrapper 正确处理。
   - provider remote-HTTPS、P2P/testnet、state-sync、S10 与 release-preflight contract 只在 planner 选择 `operational_contracts` 时运行；对应跨平台 workflow jobs 未命中时直接 skip，保留 stable context 的同时避免 docs-only 或不相关 PR 分配 runner 执行跨域 operational work。
@@ -314,7 +315,7 @@ env -u RUSTC_WRAPPER cargo fmt --all -- --check
   - viewer offline integration
   - 分布式基础子系统（轻量）：`oasis7_consensus`、`oasis7_distfs`
   - release 关键脚本执行位前置校验，避免只在 `release-gate-web` / `package-native` runner 上才暴露 `Permission denied`
-  - full support-crate shard 覆盖 `pixel_world_bridge` lib tests；目标特定 wasm/build 检查仍按 S5 scoped required 触发
+  - full support-crate shard 覆盖 `pixel_world_bridge` lib tests；受影响时，`workspace_support` 还运行 agent API wire-contract 集成测试、agent harness 单元测试及两 crate 的 strict Clippy。目标特定 wasm/build 检查仍按 S5 scoped required 触发。
   - 适用场景：PR/CI required gate，以及本地 landing 前需要显式补跑 `oasis7 --tests` required shard 的改动
 
 ### S2：核心 full 套件（L1 + L2）

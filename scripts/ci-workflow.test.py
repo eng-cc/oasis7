@@ -336,6 +336,7 @@ class Workflow(unittest.TestCase):
         function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
         script = """set -euo pipefail
 run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
+run_cargo_clippy() { printf '%s|clippy %s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
 """ + function + "\nrun_oasis7_workspace_support_crate_tests\nprintf 'after|%s\\n' \"$OASIS7_WASM_BUILD_STD\"\n"
         result = subprocess.run(['bash', '-c', script], text=True, capture_output=True,
                                 env=dict(os.environ, OASIS7_WASM_BUILD_STD='1'))
@@ -345,13 +346,32 @@ run_cargo() { printf '%s|%s\\n' "$OASIS7_WASM_BUILD_STD" "$*"; }
         self.assertTrue(all(call.startswith('1|') for call in calls[:-2]))
         self.assertEqual(calls[-1], 'after|1')
 
+    def test_agent_contract_and_harness_checks_are_in_workspace_support(self):
+        driver = (ROOT / 'scripts/ci-tests.sh').read_text()
+        function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
+        script = """set -euo pipefail
+run_cargo() { printf 'test|%s\\n' "$*"; }
+run_cargo_clippy() { printf 'clippy|%s\\n' "$*"; }
+""" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
+        result = subprocess.run(['bash', '-c', script], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = result.stdout.splitlines()
+        self.assertIn('clippy|-p oasis7_agent_api --all-targets', commands)
+        self.assertIn('clippy|-p oasis7_agent_harness --all-targets', commands)
+        self.assertIn('test|test -p oasis7_agent_api', commands)
+        self.assertIn('test|test -p oasis7_agent_harness --lib', commands)
+        self.assertLess(commands.index('clippy|-p oasis7_agent_harness --all-targets'),
+                        commands.index('test|test -p oasis7_agent_harness --lib'))
+
     def test_private_context_all_targets_and_caller_are_executed(self):
         driver = (ROOT / 'scripts/ci-tests.sh').read_text()
         function = re.search(r'^run_oasis7_workspace_support_crate_tests\(\) \{\n.*?^\}', driver, re.M | re.S).group()
-        script = "set -euo pipefail\nrun_cargo() { printf '%s\\n' \"$*\"; }\n" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
+        script = "set -euo pipefail\nrun_cargo() { printf '%s\\n' \"$*\"; }\nrun_cargo_clippy() { printf 'clippy %s\\n' \"$*\"; }\n" + function + "\nrun_oasis7_workspace_support_crate_tests\n"
         result = subprocess.run(['bash', '-c', script], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [line.split() for line in result.stdout.splitlines()]
+        self.assertIn(['clippy', '-p', 'oasis7_agent_api', '--all-targets'], calls)
+        self.assertIn(['clippy', '-p', 'oasis7_agent_harness', '--all-targets'], calls)
         for package in ('oasis7_context', 'oasis7_secure_envelope'):
             selected = [call for call in calls if package in call]
             self.assertTrue(selected, package)

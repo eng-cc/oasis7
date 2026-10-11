@@ -218,8 +218,9 @@ pub(super) fn verify_canonical_completion(fixture: &Fixture, root: &std::path::P
 pub(super) fn hosted_failure_diagnostic(summary: &serde_json::Value) -> serde_json::Value {
     let phase = match summary["hosted_service_phase"].as_str() {
         Some(
-            value @ ("act" | "act_view" | "act_settled_view" | "act_settle" | "feedback"
-            | "feedback_ack" | "feedback_ack_view" | "finalize"),
+            value @ ("act" | "act_view" | "act_settled_view" | "act_settle" | "handoff_wake"
+            | "handoff_view" | "feedback" | "feedback_ack" | "feedback_ack_view"
+            | "finalize"),
         ) => value,
         None => "absent",
         Some(_) => "unknown",
@@ -338,4 +339,9 @@ fn hosted_failure_diagnostic_does_not_echo_private_summary() {
     assert!(!failed_message.contains(secret));
     assert!(!failed_message.contains("memory_store"));
     assert!(!failed_message.contains("private_key"));
+
+    summary["hosted_service_phase"] = serde_json::json!("handoff_wake");
+    assert_eq!(hosted_failure_diagnostic(&summary)["phase"], "handoff_wake");
+    summary["hosted_service_phase"] = serde_json::json!("handoff_view");
+    assert_eq!(hosted_failure_diagnostic(&summary)["phase"], "handoff_view");
 }

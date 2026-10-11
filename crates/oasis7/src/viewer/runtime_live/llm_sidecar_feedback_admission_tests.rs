@@ -132,6 +132,76 @@ fn actual_world_gap_blocks_capture_and_dispatch_before_model_or_economic_checkpo
     assert!(sidecar.provider_active_turns.is_empty());
     assert!(sidecar.provider_cognition_leases.is_empty());
 }
+
+#[test]
+fn service_test_queue_blocks_restored_session_fence_before_actor_or_lease_registration() {
+    let (mut world, projection, session) = actual_world_history(&[1, 3]);
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.provider_service_projection = Some(projection);
+    sidecar
+        .sync_shadow_kernel(&world, &WorldConfig::default())
+        .expect("sync authoritative test observation");
+    let action = SimulatorAction::MoveAgent {
+        agent_id: "agent-a".into(),
+        to: "fixture-location".into(),
+    };
+    let mut request =
+        super::super::super::tests::test_provider_context("agent-a", "turn-4", "request-4", 1);
+    request.request_context.agent_session_id = session.clone();
+    request.turn_context.agent_session_id = session.clone();
+    let base_decision_response =
+        crate::simulator::DecisionResponse::wait("canonical-test-provider");
+    let response = ContinuousAgentResponseContextV1 {
+        response_digest: crate::simulator::cognition_response_digest(&base_decision_response),
+        base_decision_response,
+        context_discriminator: CONTINUOUS_AGENT_CONTEXT_DISCRIMINATOR.into(),
+        context_version: CONTINUOUS_AGENT_CONTEXT_VERSION,
+        agent_session_id: session.clone(),
+        agent_turn_id: request.request_context.agent_turn_id.clone(),
+        decision_request_id: request.request_context.decision_request_id.clone(),
+        retry_seq: request.request_context.retry_seq,
+        transport_attempt: request.request_context.transport_attempt,
+        request_digest: request.request_context.request_digest.clone(),
+    };
+    let cognition = RuntimeProviderActionContext {
+        request,
+        response,
+        cognition_lease: None,
+        memory_write_intents: Vec::new(),
+    };
+    assert_eq!(
+        cognition.request.request_context.agent_session_id, session,
+        "the request must target the identity-bearing fenced session"
+    );
+
+    let error = sidecar
+        .queue_service_test_response(&mut world, cognition, action)
+        .expect_err("a successfully restored history can still fence this session");
+    assert!(error.contains("feedback history fences"), "{error}");
+
+    let runner = sidecar
+        .runner
+        .as_ref()
+        .and_then(RuntimeDecisionRunner::async_runner)
+        .expect("retain the restored verifier and its fence");
+    assert!(runner.runtime_feedback_history_loaded());
+    assert!(crate::viewer::runtime_live::llm_sidecar_feedback_recovery::
+        feedback_history_blocks_dispatch(runner, "agent-a", &session));
+    assert!(
+        !runner.has_agent("agent-a"),
+        "the fenced service test actor must not be registered"
+    );
+    assert!(!sidecar.service_test_actor_agents.contains("agent-a"));
+    assert!(!sidecar.service_test_model_calls.contains_key("agent-a"));
+    assert!(sidecar.provider_agent_ids.is_empty());
+    assert!(sidecar.provider_active_turns.is_empty());
+    assert!(sidecar.provider_contexts.is_empty());
+    assert!(sidecar.provider_cognition_leases.is_empty());
+    assert!(sidecar.provider_scheduler_pending.is_empty());
+    assert_eq!(sidecar.llm_decision_mailbox, 0);
+    assert!(world.cognition_economy().unwrap().leases.is_empty());
+}
+
 #[test]
 fn authenticated_history_cannot_reset_initialized_native_verifier_ahead_of_runtime() {
     let (world, projection, session) = actual_world_history(&[1, 2]);

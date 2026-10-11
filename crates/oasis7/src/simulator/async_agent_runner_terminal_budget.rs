@@ -137,11 +137,10 @@ impl AsyncAgentRunner {
         {
             return Err(error("final budget full signed proposal identity mismatch"));
         }
-        let actor = self
-            .actors
+        self.actors
             .get(agent)
             .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent.into()))?;
-        if actor.active_turn.load(std::sync::atomic::Ordering::SeqCst)
+        if self.harness.provider_is_still_in_flight(agent)
             || self.awaiting_runtime.contains_key(agent)
             || self
                 .awaiting_outcomes
@@ -156,7 +155,6 @@ impl AsyncAgentRunner {
         let continuations = self.continuations.clone();
         let awaiting = self.awaiting_runtime.clone();
         let outcomes = self.awaiting_outcomes.clone();
-        let feedback = self.feedback_store.clone();
         let result = (|| {
             if !self.continuations.contains_key(agent) {
                 if !restored {
@@ -192,7 +190,6 @@ impl AsyncAgentRunner {
             self.continuations = continuations;
             self.awaiting_runtime = awaiting;
             self.awaiting_outcomes = outcomes;
-            self.feedback_store = feedback;
         }
         result
     }

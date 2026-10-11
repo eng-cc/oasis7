@@ -19,16 +19,21 @@ impl AsyncAgentRunner {
         short_term_goal: Option<String>,
         long_term_goal: Option<String>,
     ) -> Result<(), AsyncAgentRunnerError> {
-        let actor = self
-            .actors
-            .get(agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        actor
-            .try_send(ActorCommand::PromptOverrides {
-                system_prompt,
-                short_term_goal,
-                long_term_goal,
-            })
+        if !self.actors.contains_key(agent_id) {
+            return Err(AsyncAgentRunnerError::AgentNotRegistered(
+                agent_id.to_string(),
+            ));
+        }
+        self.harness
+            .notify_behavior_callback(
+                agent_id,
+                BehaviorCallback::PromptOverrides {
+                    system_prompt,
+                    short_term_goal,
+                    long_term_goal,
+                },
+            )
+            .map_err(map_harness_error)
             .map_err(|error| error.with_agent(agent_id))
     }
 
@@ -41,15 +46,20 @@ impl AsyncAgentRunner {
         world_time: WorldTime,
         message: impl Into<String>,
     ) -> Result<(), AsyncAgentRunnerError> {
-        let actor = self
-            .actors
-            .get(agent_id)
-            .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        actor
-            .try_send(ActorCommand::PlayerMessage {
-                world_time,
-                message: message.into(),
-            })
+        if !self.actors.contains_key(agent_id) {
+            return Err(AsyncAgentRunnerError::AgentNotRegistered(
+                agent_id.to_string(),
+            ));
+        }
+        self.harness
+            .notify_behavior_callback(
+                agent_id,
+                BehaviorCallback::PlayerMessage {
+                    world_time,
+                    message: message.into(),
+                },
+            )
+            .map_err(map_harness_error)
             .map_err(|error| error.with_feedback_agent(agent_id))
     }
 }

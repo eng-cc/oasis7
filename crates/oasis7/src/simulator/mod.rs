@@ -11,7 +11,7 @@
 //! - `power`: Power system (M4 social system)
 
 mod agent;
-mod agent_api_compat;
+pub(crate) mod agent_api_compat;
 mod agent_intent_summary;
 mod asteroid_fragment;
 #[cfg(not(target_arch = "wasm32"))]

@@ -30,6 +30,20 @@ class Results(unittest.TestCase):
         with self.assertRaises(ValueError):
             result.validate(self.plan, self.needs, self.jobs)
 
+    def test_selected_workspace_support_failure_or_missing_result_fails_gate(self):
+        jobs = {'baseline': 'baseline', 'workspace_support': 'workspace-support'}
+        plan = {'groups': ['baseline', 'workspace_support']}
+        needs = {'select': {'result': 'success'}, 'baseline': {'result': 'success'},
+                 'workspace-support': {'result': 'success'}}
+        self.assertTrue(result.validate(plan, needs, jobs))
+        for value in ('failure', 'cancelled', 'skipped', 'unknown', None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                needs['workspace-support'] = {'result': value}
+                result.validate(plan, needs, jobs)
+        del needs['workspace-support']
+        with self.assertRaises(ValueError):
+            result.validate(plan, needs, jobs)
+
     def test_select_failure_or_skip(self):
         for value in ['failure', 'cancelled', 'skipped', None]:
             self.needs['select'] = {'result': value}

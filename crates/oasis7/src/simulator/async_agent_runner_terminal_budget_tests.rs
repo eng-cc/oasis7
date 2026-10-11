@@ -7,7 +7,7 @@ fn final_fixture() -> (
     RuntimeAgentContinuation,
     ContinuationAuthorityContextV1,
 ) {
-    let (mut r, mut p, c, original) = fixture();
+    let (mut r, mut p, c, original, _) = fixture();
     r.with_rejected_unprojected_wait_cleanup("agent-1", &p, &c, &original, |_| Ok(()))
         .unwrap();
     p.continuation_proposal_id.push_str(":final");

@@ -59,6 +59,18 @@ pub(super) fn runtime_provider_check_now_unix_ms() -> u64 {
         .unwrap_or(u64::MAX)
 }
 
+pub(in crate::viewer::runtime_live) fn resolve_runtime_live_llm_timeout_ms(
+    configured_timeout_ms: u64,
+) -> u64 {
+    let configured_timeout_ms = configured_timeout_ms.max(1);
+    let runtime_timeout_ceiling_ms = std::env::var(super::ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(|value| value.max(1))
+        .unwrap_or(super::DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS);
+    configured_timeout_ms.min(runtime_timeout_ceiling_ms)
+}
+
 pub(super) fn runtime_provider_check_cache_key(settings: &ProviderDecisionSettings) -> String {
     // Private exact settings fence, including execution mode and fallback selection.
     format!("{settings:?}")

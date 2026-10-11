@@ -101,16 +101,10 @@ impl ViewerRuntimeLiveServer {
             .map_err(|error| error.to_string())?;
         self.verified_world_view = Some(view);
         self.configure_service_provider();
-        let mut cognition: super::llm_sidecar::RuntimeProviderActionContext =
+        let cognition: super::llm_sidecar::RuntimeProviderActionContext =
             serde_json::from_value(cognition).map_err(|error| error.to_string())?;
-        let lease = self
-            .llm_sidecar
-            .reserve_provider_lease_at_authority(&mut self.world, &cognition.request)?;
         self.llm_sidecar
-            .provider_prefix_at_authority(&mut self.world, &cognition.request)?;
-        cognition.cognition_lease = Some(lease);
-        self.llm_sidecar
-            .queue_service_test_response(cognition, action)?;
+            .queue_service_test_response(&mut self.world, cognition, action)?;
         Ok(())
     }
 

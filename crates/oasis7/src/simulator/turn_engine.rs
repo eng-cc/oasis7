@@ -1,8 +1,14 @@
-//! Provider-neutral logical turn lifecycle over the native async actor seam.
+//! Legacy native facade for the extracted Harness compatibility lane.
 //!
-//! TurnEngine owns correlation and candidate lifecycle. Runtime still owns
-//! action semantics, MVCC, journal, lease settlement, and authoritative
-//! receipt production.
+//! The public request shape remains source-compatible, including its simulator
+//! observation and both cognition contexts. `start_turn` is explicitly a
+//! non-production compatibility admission: the reduced turn context and exact
+//! observation cross the shared Harness actor boundary, while the outer
+//! request remains host-side correlation data. This facade has no
+//! `RuntimeAuthority`, cannot admit a cognition lease, and does not restore
+//! durable feedback history. Production admission and recovery use the
+//! Harness `TurnEngine` with a real Runtime authority. Committed feedback here
+//! still requires a successful Runtime world-readback proof.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -127,10 +133,8 @@ pub struct RuntimeReadbackProof<'a> {
 #[derive(Debug, Clone)]
 struct TurnRecord {
     agent_id: String,
-    session_id: String,
-    turn_id: String,
-    request_id: String,
-    request_digest: super::Digest32,
+    turn_context: ContinuousAgentTurnContextV1,
+    request_context: ContinuousAgentRequestContextV1,
     phase: TurnEnginePhase,
 }
 
@@ -161,45 +165,56 @@ impl TurnEngine {
         self.runner.register(behavior).map_err(Into::into)
     }
 
+    /// Admit a reduced legacy turn through Harness' explicit compatibility
+    /// lane. The complete outer request is validated and retained locally for
+    /// feedback correlation, but is not presented to the provider as a
+    /// production request. Requests carrying a Runtime lease must use a
+    /// Runtime-authorized admission path instead.
     pub fn start_turn(&mut self, request: TurnRequest) -> Result<AsyncTurnId, TurnEngineError> {
+        if request.cognition_lease.is_some() {
+            return Err(TurnEngineError::Runner(AsyncAgentRunnerError::Cognition(
+                "legacy TurnEngine compatibility admission cannot accept a Runtime cognition lease"
+                    .to_string(),
+            )));
+        }
         let TurnRequest {
             agent_id,
             observation,
             turn_context,
             request_context,
-            cognition_lease,
+            cognition_lease: _,
         } = request;
-        let session_id = request_context.agent_session_id.clone();
-        let request_turn_id = request_context.agent_turn_id.clone();
-        let request_id = request_context.decision_request_id.clone();
-        let request_digest = request_context.request_digest.clone();
-        let turn_id = match cognition_lease {
-            Some(lease) => self
-                .runner
-                .start_turn_with_request_context_and_observation_and_lease(
-                    agent_id.as_str(),
-                    observation,
-                    turn_context,
-                    request_context,
-                    lease,
-                )?,
-            None => self
-                .runner
-                .start_turn_with_request_context_and_observation(
-                    agent_id.as_str(),
-                    observation,
-                    turn_context,
-                    request_context,
-                )?,
-        };
+        turn_context
+            .validate_for_agent(agent_id.as_str())
+            .map_err(|error| {
+                TurnEngineError::Runner(AsyncAgentRunnerError::Cognition(error.to_string()))
+            })?;
+        request_context.validate().map_err(|error| {
+            TurnEngineError::Runner(AsyncAgentRunnerError::Cognition(error.to_string()))
+        })?;
+        if request_context.agent_subject != agent_id
+            || request_context.agent_session_id != turn_context.agent_session_id
+            || request_context.agent_turn_id != turn_context.agent_turn_id
+            || request_context.decision_request_id != turn_context.decision_request_id
+            || request_context.request_digest != turn_context.request_digest
+        {
+            return Err(TurnEngineError::Runner(AsyncAgentRunnerError::Cognition(
+                "outer and reduced cognition contexts do not correlate".to_string(),
+            )));
+        }
+        let turn_id = self
+            .runner
+            .start_compatibility_turn_with_context_and_observation(
+                agent_id.as_str(),
+                observation,
+                turn_context.clone(),
+            )?;
         self.turns.insert(
             turn_id,
             TurnRecord {
                 agent_id,
-                session_id,
-                turn_id: request_turn_id,
-                request_id,
-                request_digest,
+                turn_context,
+                request_context,
                 phase: TurnEnginePhase::InFlight,
             },
         );
@@ -237,10 +252,15 @@ impl TurnEngine {
             .turns
             .get(&turn_id)
             .ok_or(TurnEngineError::UnknownTurn(turn_id))?;
-        if record.session_id != feedback.agent_session_id
-            || record.turn_id != feedback.agent_turn_id
-            || record.request_id != feedback.decision_request_id
-            || record.request_digest != feedback.request_digest
+        if record.turn_context.agent_session_id != feedback.agent_session_id
+            || record.turn_context.agent_turn_id != feedback.agent_turn_id
+            || record.turn_context.decision_request_id != feedback.decision_request_id
+            || record.turn_context.request_digest != feedback.request_digest
+            || record.request_context.agent_subject != feedback.agent_subject
+            || record.request_context.agent_session_id != feedback.agent_session_id
+            || record.request_context.agent_turn_id != feedback.agent_turn_id
+            || record.request_context.decision_request_id != feedback.decision_request_id
+            || record.request_context.request_digest != feedback.request_digest
         {
             return Err(TurnEngineError::FeedbackTurnMismatch(turn_id));
         }
