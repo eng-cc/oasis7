@@ -5,6 +5,9 @@ use oasis7::runtime::{Journal, LocalCasStore, Snapshot, World, blake3_hex};
 use oasis7::world_service::*;
 use std::path::Path;
 
+#[path = "world_service_restore_cache.rs"]
+mod restore_cache;
+
 pub(crate) struct PinnedWorld {
     pub world: World,
     pub(super) record: ExecutionBridgeRecord,
@@ -55,6 +58,24 @@ fn load(
 ) -> Result<PinnedWorld, String> {
     #[cfg(test)]
     let _pin_timer = crate::read_profile::Timer::start(crate::read_profile::Stage::PinWhole);
+    load_with_cache(
+        records,
+        storage,
+        identity,
+        height,
+        fixed,
+        restore_cache::shared(),
+    )
+}
+
+fn load_with_cache(
+    records: &Path,
+    storage: &Path,
+    identity: &WorldIdentity,
+    height: Option<u64>,
+    fixed: Option<&CommitRef>,
+    cache: &std::sync::Mutex<restore_cache::RestoreCache>,
+) -> Result<PinnedWorld, String> {
     #[cfg(test)]
     let decode_timer =
         crate::read_profile::Timer::start(crate::read_profile::Stage::PinDecodeProof);
@@ -128,8 +149,8 @@ fn load(
     drop(decode_timer);
     #[cfg(test)]
     let restore_timer = crate::read_profile::Timer::start(crate::read_profile::Stage::WorldRestore);
-    let world =
-        World::from_snapshot(snapshot, journal).map_err(|e| format!("pinned world: {e:?}"))?;
+    let world = restore_cache::restore(cache, &snapshot_bytes, &journal_bytes, snapshot, journal)
+        .map_err(|e| format!("pinned world: {e:?}"))?;
     #[cfg(test)]
     drop(restore_timer);
     let binding = world
@@ -233,3 +254,7 @@ pub(super) fn pin_guarded_with_capture_barrier(
         commit,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/world_service_read_cache.rs"]
+mod cache_tests;
