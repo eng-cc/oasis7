@@ -354,7 +354,7 @@ fn run_isolated_application_mode_with_options(mode: IsolatedApplicationMode<'_>)
             application_hosted_wait::observation(&fixture, app_dir.clone())
         }
     });
-    let metadata = (hosted || provider_closure).then(|| {
+    let metadata = (hosted || provider_closure || wake).then(|| {
         provider_metadata::MetadataServer::start(
             (metadata_probe || metadata_held).then(|| app_dir.clone()),
             app_dir.clone(),
@@ -1069,6 +1069,17 @@ fn run_isolated_application_mode_with_options(mode: IsolatedApplicationMode<'_>)
         application_release::validate_output(&fixture, &output);
     } else {
         application_harness::validate_output(&fixture, &output, wake, drift);
+        if wake && !drift {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let terminal_feedback_id = stdout
+                .lines()
+                .find_map(|line| line.strip_prefix("provider_terminal_feedback_id="))
+                .expect("canonical terminal feedback evidence missing");
+            metadata
+                .as_ref()
+                .expect("genuine Wait/wake requires a separate provider endpoint")
+                .assert_canonical_terminal_feedback_delivery(&fixture, terminal_feedback_id);
+        }
     }
     fs::remove_dir_all(app_dir).unwrap();
 }
