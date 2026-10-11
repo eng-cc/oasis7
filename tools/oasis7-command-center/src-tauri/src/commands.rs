@@ -20,6 +20,7 @@ struct Application {
 pub struct Host {
     application: Arc<Mutex<Application>>,
     slots: Arc<Semaphore>,
+    pub(crate) project: Arc<Mutex<Option<Project>>>,
 }
 
 impl Host {
@@ -36,6 +37,7 @@ impl Host {
                 validated: false,
             })),
             slots: Arc::new(Semaphore::new(4)),
+            project: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -50,12 +52,20 @@ impl Host {
             .try_acquire_owned()
             .map_err(|_| "客户端正在处理请求，请稍后重试".to_string())?;
         let application = self.application.clone();
+        let project = self.project.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let _permit = permit;
             let mut application = application
                 .lock()
                 .map_err(|_| "应用状态不可用".to_string())?;
-            work(&mut application)
+            let result = work(&mut application);
+            // Keep a fast Rust-owned identity mirror for runtime operations. It
+            // never requires the indexing/database mutex on the protocol reader.
+            if application.validated {
+                *project.lock().map_err(|_| "项目身份不可用".to_string())? =
+                    application.core.current_project();
+            }
+            result
         })
         .await
         .map_err(|_| "后台请求未能完成".to_string())?
@@ -68,9 +78,14 @@ fn error(error: oasis7_command_center_core::Error) -> String {
 
 #[tauri::command]
 pub async fn open_project(host: State<'_, Host>, path: String) -> Result<Snapshot, String> {
+    let identity = host.project.clone();
     host.run(move |app| {
+        *identity.lock().map_err(|_| "项目身份不可用".to_string())? = None;
         let previous = app.core.snapshot().project.map(|p| (p.id, p.path));
         let result = app.core.open_project(path).map_err(error);
+        if result.is_ok() {
+            app.validated = true;
+        }
         let current = app.core.snapshot().project.map(|p| (p.id, p.path));
         if previous != current {
             app.github.reset();
@@ -177,6 +192,7 @@ pub async fn choose_project(
     host: State<'_, Host>,
     handle: tauri::AppHandle,
 ) -> Result<Option<Snapshot>, String> {
+    let identity = host.project.clone();
     host.run(move |app| {
         let Some(folder) = handle
             .dialog()
@@ -187,8 +203,12 @@ pub async fn choose_project(
             return Ok(None);
         };
         let path = folder.into_path().map_err(|e| e.to_string())?;
+        *identity.lock().map_err(|_| "项目身份不可用".to_string())? = None;
         let previous = app.core.snapshot().project.map(|p| (p.id, p.path));
         let result = app.core.open_project(path).map_err(error);
+        if result.is_ok() {
+            app.validated = true;
+        }
         let current = app.core.snapshot().project.map(|p| (p.id, p.path));
         if previous != current {
             app.github.reset();

@@ -302,6 +302,7 @@ run_operational_node_contract_tests() {
   run ./scripts/state-sync-closure-evidence-template.test.sh
   run ./scripts/s10-five-node-game-soak-summary.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
+  run python3 ./scripts/release-web-startup.test.py
   run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
   run bash ./scripts/build-game-launcher-bundle-dev-cache.test.sh
   run bash ./scripts/build-game-launcher-bundle-ops-default.test.sh

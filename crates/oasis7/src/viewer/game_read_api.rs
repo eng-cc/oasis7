@@ -125,7 +125,7 @@ fn route(
     if request.uri().path() == "/v1/game/info" {
         return Ok(
             json!({"api_revision":API_REVISION, "mode":"signed_read_bootstrap",
-            "supported_routes": if client.is_some() { vec!["agent:observation", "agent:capabilities"] } else {vec![]},
+            "supported_routes": if client.is_some() { vec!["agent:observation", "agent:capabilities", "agent:task-control"] } else {vec![]},
             "availability":"checked_against_each_authorized_world_read",
             "actor_proof_header":"X-Oasis7-World-Read-Proof", "actor_proof_encoding":"hex_json",
             "operation_domain":VIEW_PATH, "max_proof_header_bytes":MAX_READ_PROOF_HEADER_BYTES,
@@ -153,7 +153,7 @@ fn route(
         .path()
         .strip_prefix(&prefix)
         .ok_or((403, "access_denied"))?;
-    if !matches!(resource, "observation" | "capabilities") {
+    if !matches!(resource, "observation" | "capabilities" | "task-control") {
         return Err((404, "capability_unavailable"));
     }
     let mut headers = request
@@ -186,6 +186,7 @@ fn route(
         .request
         .validate()
         .map_err(|_| (400, "invalid_actor_proof"))?;
+    let caller_public_key = signed.subject_public_key.clone();
     let _permit = ReadPermit::acquire()?;
     let view = client
         .read_actor_view(signed)
@@ -196,7 +197,21 @@ fn route(
             } => (403, "access_denied"),
             _ => (503, "world_read_unavailable"),
         })?;
-    let observation = if resource == "capabilities" {
+    let observation = if resource == "task-control" {
+        let control = view.projection().game_task_control.as_ref()
+            .ok_or((404, "task_control_unavailable"))?;
+        let commit = &view.version().commit;
+        if control.agent_id != scope_agent
+            || control.owner_public_key != caller_public_key
+            || control.world_id != commit.world.world_id
+            || control.genesis_digest != commit.world.genesis_digest
+            || control.branch_id != commit.binding.branch_id
+            || control.reorg_epoch.0 != commit.binding.reorg_generation
+        {
+            return Err((503, "world_read_unavailable"));
+        }
+        serde_json::to_value(control)
+    } else if resource == "capabilities" {
         let catalog = &view
                 .projection()
                 .agent_context

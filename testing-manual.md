@@ -1072,6 +1072,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
 ./scripts/release-gate.sh --dry-run
 ```
 - 默认串行执行：`ci-tests full`、`sync-m1/m4/m5 --check`、Web strict、S9/S10。
+- `release-gate-web-strict.sh` 的两个 Web 阶段使用隔离的签名 WorldService QA 后端：先执行现有 `build:viewer:visual-test` 生成真实 WebGL2 bridge 与 `.viewer-test-dist`（不改写 tracked `viewer.js`），再显式编译 `test_tier_required` 的 ignored helper，启动真实 loopback HTTP handler，并将六项普通 `public` read 配置通过临时 `0700` 目录中的 `0600` 文件交给默认生产 launcher/Viewer。后端按真实 Node tick 推进；这验证 Hosted Web 消费者入口和 realtime UI，不代表正式世界部署、玩家所有权激活或 provider 自治验收。测试不传外部链状态 bind、世界目录或工程 scope，结束时删除私配置并有界停止自有进程组。
+- `viewer-primary-web-entry-regression.sh` 专用于该隔离后端；`viewer-software-safe-step-regression.sh --release-web-fixture` 才启用同一路径，通用 `--url` / stack 参数仍使用调用者的原有运行源。primary/strict 的 `--scenario` 与 release 总入口的 `--web-scenario` 已移除；显式 release fixture 也会拒绝 step 的 debug scenario 参数；不得将它报告为指定 scenario 的验证。启动等待会立即报告 launcher/fixture 退出码和日志。
 - `--quick` 用于缩短 S9/S10 时长并关闭 Web visual baseline。
 - `--skip-*` 只用于已知外部约束或分片排障；必须在 summary 中保留 skip reason 与 claim boundary。跳过 `ci_full`、sync、Web strict、S9 或 S10 后，不得把本次结果写成完整 release coverage。
 

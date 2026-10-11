@@ -6,21 +6,19 @@ cd "$repo_root"
 source "$repo_root/scripts/agent-browser-lib.sh"
 source "$repo_root/scripts/cargo-dev-lib.sh"
 source "$repo_root/scripts/hosted-login-gate-env-lib.sh"
+source "$repo_root/scripts/release-web-fixture-lib.sh"
 
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/viewer-primary-web-entry-regression.sh [options]
 
-Run a browser QA regression for the formal Web entry contract:
+Run the shipped Hosted Web entry against an isolated signed WorldService QA fixture:
 - default browser entry (`/`) must land in `viewer`
 - `render_mode=auto` must still land in `viewer`
 
 Options:
-  --scenario <name>          optional debug scenario; default omits --scenario and uses the formal launcher world
-  --allow-debug-scenario     allow seeded debug scenarios such as llm_bootstrap when --scenario is explicit
   --live-bind <host:port>    live tcp bind (default: 127.0.0.1:5023)
   --web-bind <host:port>     web bridge bind (default: 127.0.0.1:5011)
-  --chain-status-bind <a:p>  chain status HTTP bind (default: web-bind port + 110)
   --viewer-host <host>       web viewer host (default: 127.0.0.1)
   --viewer-port <port>       web viewer port (default: 4173)
   --viewer-static-dir <dir>  viewer test artifact dir (default: crates/oasis7_viewer/.viewer-test-dist)
@@ -53,6 +51,7 @@ wait_for_port() {
   local timeout_secs=${3:-120}
   local step
   for step in $(seq 1 "$timeout_secs"); do
+    release_web_check_startup || return 1
     if python3 - "$host" "$port" <<'PY'
 import socket
 import sys
@@ -78,9 +77,16 @@ wait_for_http() {
   local timeout_secs=${2:-120}
   local step
   for step in $(seq 1 "$timeout_secs"); do
-    if curl -fsS "$url" >/dev/null 2>&1; then
-      return 0
-    fi
+    release_web_check_startup || return 1
+    local status
+    status=$(curl --max-time 3 --silent --output /dev/null --write-out '%{http_code}' "$url") || status=000
+    case "$status" in
+      2*|3*) return 0 ;;
+      404)
+        echo "error: owned viewer entry returned HTTP 404: $url" >&2
+        return 1
+        ;;
+    esac
     sleep 1
   done
   return 1
@@ -277,11 +283,8 @@ capture_screenshot_best_effort() {
   fi
 }
 
-scenario=""
-allow_debug_scenario=0
 live_bind="127.0.0.1:5023"
 web_bind="127.0.0.1:5011"
-chain_status_bind=""
 viewer_host="127.0.0.1"
 viewer_port="4173"
 viewer_static_dir="$repo_root/crates/oasis7_viewer/.viewer-test-dist"
@@ -290,24 +293,12 @@ headed=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --scenario)
-      scenario=${2:-}
-      shift 2
-      ;;
-    --allow-debug-scenario)
-      allow_debug_scenario=1
-      shift
-      ;;
     --live-bind)
       live_bind=${2:-}
       shift 2
       ;;
     --web-bind)
       web_bind=${2:-}
-      shift 2
-      ;;
-    --chain-status-bind)
-      chain_status_bind=${2:-}
       shift 2
       ;;
     --viewer-host)
@@ -360,20 +351,6 @@ if [[ -z "$web_bind_host" || -z "$web_bind_port" || ! "$web_bind_port" =~ ^[0-9]
   exit 2
 fi
 
-if [[ -n "$chain_status_bind" ]]; then
-  if [[ "$chain_status_bind" != *:* ]]; then
-    echo "error: --chain-status-bind must be in <host:port> format" >&2
-    exit 2
-  fi
-else
-  derived_chain_status_port=$((web_bind_port + 110))
-  if (( derived_chain_status_port > 65535 )); then
-    echo "error: derived chain status port exceeds 65535" >&2
-    exit 2
-  fi
-  chain_status_bind="${web_bind_host}:${derived_chain_status_port}"
-fi
-
 mkdir -p "$out_root"
 stamp=$(date '+%Y%m%d-%H%M%S')
 run_id="viewer-primary-web-entry-${stamp}"
@@ -396,6 +373,14 @@ launcher_env_defaults=()
 while IFS= read -r env_default; do
   launcher_env_defaults+=("$env_default")
 done < <(oasis7_hosted_login_gate_env_defaults "$hosted_account_store_path")
+launcher_env_defaults+=(
+  "OASIS7_HOSTED_PLAYER_SESSION_LEDGER_PATH=$out_dir/hosted-player-sessions.json"
+  "OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH=$out_dir/hosted-registration-replay.json"
+)
+
+if [[ "$viewer_static_dir" == "$repo_root/crates/oasis7_viewer/.viewer-test-dist" || "$viewer_static_dir" == "crates/oasis7_viewer/.viewer-test-dist" ]]; then
+  release_web_fixture_build_viewer "$out_dir/viewer-build.log"
+fi
 
 resolved_viewer_static_dir=$(resolve_viewer_static_dir_for_web_closure \
   "$repo_root" \
@@ -406,19 +391,11 @@ viewer_static_dir="$resolved_viewer_static_dir"
 live_args=(
   "--live-bind" "$live_bind"
   "--web-bind" "$web_bind"
-  "--chain-status-bind" "$chain_status_bind"
   "--viewer-host" "$viewer_host"
   "--viewer-port" "$viewer_port"
   "--viewer-static-dir" "$viewer_static_dir"
   "--no-open-browser"
 )
-if [[ -n "$scenario" ]]; then
-  live_args+=("--scenario" "$scenario")
-fi
-if [[ "$allow_debug_scenario" -eq 1 ]]; then
-  live_args+=("--allow-debug-scenario")
-fi
-
 root_config_path="$repo_root/config.toml"
 root_config_existed=0
 if [[ -f "$root_config_path" ]]; then
@@ -435,16 +412,21 @@ cleanup() {
   if [[ "$root_config_existed" -eq 0 && -f "$root_config_path" ]]; then
     rm -f "$root_config_path" >/dev/null 2>&1 || true
   fi
+  release_web_fixture_stop
   ab_cmd "${run_id}-default" close >/dev/null 2>&1 || true
   ab_cmd "${run_id}-auto" close >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
-echo "+ oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime --bin oasis7_game_launcher"
-if ! OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_chain_runtime --bin oasis7_game_launcher >>"$launcher_log" 2>&1; then
+release_web_fixture_build "$out_dir/fixture-build.json"
+
+echo "+ oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_game_launcher"
+if ! OASIS7_CARGO_DEV_REPO_ROOT="$repo_root" oasis7_cargo_dev build -p oasis7 --bin oasis7_viewer_live --bin oasis7_game_launcher >>"$launcher_log" 2>&1; then
   print_launcher_failure_context "launcher prebuild failed"
   exit 1
 fi
+
+release_web_fixture_start "$out_dir"
 
 echo "+ oasis7_cargo_dev run -p oasis7 --bin oasis7_game_launcher -- ${live_args[*]}"
 {
@@ -484,9 +466,9 @@ default_url_final=$(normalize_eval_token "$(ab_cmd "$default_session" get url)")
 [[ "$(state_render_mode "$default_state")" == "viewer" ]] || { echo "error: default route did not land in viewer" >&2; exit 1; }
 [[ "$(state_reason "$default_state")" == "direct_viewer_entry" ]] || { echo "error: default route reason mismatch: $(state_reason "$default_state")" >&2; exit 1; }
 [[ "$default_url_final" == "http://${viewer_host}:${viewer_port}/"* ]] || { echo "error: default route escaped viewer host: $default_url_final" >&2; exit 1; }
-assert_body_contains "$default_body_path" "WORLD COMMAND BOARD" "default route"
-assert_body_contains "$default_body_path" "SITUATION" "default route"
-assert_body_contains "$default_body_path" "CURRENT IDENTITY" "default route"
+assert_body_contains "$default_body_path" "STANDARD USER FLOW" "default route"
+assert_body_contains "$default_body_path" "NEXT MOVE" "default route"
+assert_body_contains "$default_body_path" "PLAYER LEVERAGE" "default route"
 assert_body_contains "$default_body_path" "OBJECTIVE" "default route"
 assert_body_contains "$default_body_path" "ACTION RECEIPT" "default route"
 

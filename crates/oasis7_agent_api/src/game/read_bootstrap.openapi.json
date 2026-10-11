@@ -3,11 +3,11 @@
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
     "title": "Oasis7 signed-read Game API bootstrap",
-    "version": "1",
+    "version": "2",
     "description": "Implemented opt-in loopback HTTP read contract. Disabled by default. No pairing, tokens, contexts, actions or operations are available."
   },
   "x-oasis7-api-revision": 1,
-  "x-oasis7-schema-revision": 1,
+  "x-oasis7-schema-revision": 2,
   "x-oasis7-limits": {
     "max_proof_header_bytes": 8192,
     "max_http_header_bytes": 16384,
@@ -257,6 +257,123 @@
           }
         }
       }
+    },
+    "/v1/game/worlds/{world}/agents/{agent}/task-control": {
+      "get": {
+        "operationId": "getAgentTaskControl",
+        "description": "Only the current canonical owner can read task control. Delegated Agent reads do not grant task access. Returns the initial suspended control record from durable Runtime intent receipts, not a goal snapshot, executor context or action permission. Uses the same device-signed /v1/world/view proof; no query, body, browser Origin or historical read.",
+        "security": [
+          {
+            "DeviceReadProof": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "world",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified current projection; integer fields are decimal strings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ReadProjection"
+                    },
+                    {
+                      "properties": {
+                        "resource": {
+                          "const": "task-control"
+                        },
+                        "data": {
+                          "$ref": "#/components/schemas/TaskControlBootstrap"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request/proof, unsupported signed contract or historical read; not retryable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Actor signature, current world authority, scope or browser Origin denied; not retryable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "Device-signed actor proof required; not retryable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Eight backend reads are already active; retryable after an active read completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authoritative read unavailable or untrusted; retryable except response_limit_exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No current owner-visible task control is available; not retryable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -484,12 +601,13 @@
             "type": "string",
             "enum": [
               "observation",
-              "capabilities"
+              "capabilities",
+              "task-control"
             ]
           },
           "data": {
             "type": "object",
-            "description": "Authorized AgentCell or CapabilityCatalogSnapshot projection. All integer values recursively use decimal strings; non-integer numbers keep their JSON numeric representation. This is not a complete first-session observation or an action schema."
+            "description": "Authorized AgentCell or CapabilityCatalogSnapshot projection. All integer values recursively use decimal strings; non-integer numbers keep their JSON numeric representation. This is not a complete first-session observation or an action schema. Task-control data is current owner-only, initially suspended with no active goal or executor; it is not a complete task snapshot."
           }
         },
         "required": [
@@ -518,7 +636,8 @@
             "items": {
               "enum": [
                 "agent:observation",
-                "agent:capabilities"
+                "agent:capabilities",
+                "agent:task-control"
               ]
             }
           },
@@ -541,7 +660,7 @@
             "const": false
           },
           "schema_revision": {
-            "const": 1
+            "const": 2
           },
           "openapi_url": {
             "const": "/v1/game/openapi.json"
@@ -595,6 +714,97 @@
           "limits"
         ],
         "additionalProperties": true
+      },
+      "TaskControlBootstrap": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "world_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "genesis_digest": {
+            "type": "string",
+            "minLength": 1
+          },
+          "branch_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "agent_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner_binding": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner_public_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "created_operation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reorg_epoch": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "owner_generation": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "task_revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "latest_goal_revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "active_goal_revision": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "executor_epoch": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "schema_revision": {
+            "const": "1"
+          },
+          "task_status": {
+            "const": "suspended"
+          },
+          "executor_id": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "task_id",
+          "world_id",
+          "genesis_digest",
+          "branch_id",
+          "agent_id",
+          "owner_binding",
+          "owner_public_key",
+          "created_operation_id",
+          "reorg_epoch",
+          "owner_generation",
+          "task_revision",
+          "latest_goal_revision",
+          "active_goal_revision",
+          "executor_epoch",
+          "schema_revision",
+          "task_status",
+          "executor_id"
+        ],
+        "description": "Current canonical owner-only initial task control; no goal content, executor authority or action permission."
       }
     }
   }

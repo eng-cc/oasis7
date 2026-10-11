@@ -12,6 +12,8 @@ pub struct WorldServiceProjection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_agent_chat: Option<oasis7_proto::viewer::CanonicalAgentChatViewV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_task_control: Option<oasis7_agent_api::game::GameTaskControlV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback_history: Option<WorldServiceFeedbackHistory>,
     pub state: WorldState,
     pub events: Vec<WorldEvent>,
@@ -58,6 +60,7 @@ impl WorldServiceProjection {
             && super::agent_authority::owner_public_key(world, agent)? == caller_public_key
         {
             projection.canonical_agent_chat = super::agent_chat::owner_view(world, agent)?;
+            projection.game_task_control = super::game_task::current_control(world, agent)?;
         }
         Ok(projection)
     }
@@ -118,6 +121,7 @@ impl WorldServiceProjection {
                 .as_ref()
                 .map(Into::into),
             canonical_agent_chat: None,
+            game_task_control: None,
             feedback_history: authorized_agent
                 .map(|agent| WorldServiceFeedbackHistory::from_world(world, agent))
                 .transpose()?,

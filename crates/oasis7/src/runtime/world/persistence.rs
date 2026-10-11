@@ -752,6 +752,12 @@ impl World {
         world.capabilities = snapshot.capabilities;
         world.capability_grants_v2 = snapshot.capability_grants_v2;
         world.capability_revocation_state = snapshot.capability_revocation_state;
+        // Result receipts are excluded from the authorization root; validate
+        // their immutable signed identities before accepting a checkpoint.
+        for (key, result) in &world.capability_revocation_state.world_service_results {
+            crate::world_service::correlation::validate_result(key, result)
+                .map_err(|reason| super::capability_authorization::deny(&reason))?;
+        }
         world.capability_nonce_records = snapshot.capability_nonce_records;
         world.capability_authorization_receipts = snapshot.capability_authorization_receipts;
         world.capability_invocation_contexts = snapshot.capability_invocation_contexts;

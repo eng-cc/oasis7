@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod runtime_commands;
 
 use commands::Host;
 use tauri::{
@@ -23,6 +24,9 @@ fn main() {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
             app.manage(Host::open(directory.join("command-center.sqlite"))?);
+            app.manage(runtime_commands::RuntimeHost::open(
+                directory.join("command-center-runtime.sqlite"),
+            )?);
             let show = MenuItem::with_id(app, "show", "打开指挥中心", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出指挥中心", true, Some("CmdOrCtrl+Q"))?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -52,9 +56,9 @@ fn main() {
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => show_main(app),
-                    // This foundation owns no external processes or model tasks.
-                    // Core has no unresolved runtime operations to coordinate.
-                    "quit" => app.exit(0),
+                    "quit" => app
+                        .state::<runtime_commands::RuntimeHost>()
+                        .request_exit(app.clone()),
                     _ => {}
                 })
                 .build(app)?;
@@ -62,7 +66,9 @@ fn main() {
         })
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main(app),
-            "quit" => app.exit(0),
+            "quit" => app
+                .state::<runtime_commands::RuntimeHost>()
+                .request_exit(app.clone()),
             _ => {}
         })
         .on_window_event(|window, event| {
@@ -86,12 +92,33 @@ fn main() {
             commands::choose_project,
             commands::associate_work,
             commands::read_version,
+            runtime_commands::get_runtime,
+            runtime_commands::reconcile_runtime_operation,
+            runtime_commands::set_runtime_enabled,
+            runtime_commands::connect_runtime,
+            runtime_commands::create_runtime_session,
+            runtime_commands::continue_runtime_session,
+            runtime_commands::start_runtime_turn,
+            runtime_commands::steer_runtime_turn,
+            runtime_commands::interrupt_runtime_turn,
+            runtime_commands::answer_runtime_request,
+            runtime_commands::get_exit_status,
+            runtime_commands::request_exit_wait,
+            runtime_commands::request_exit_stop,
+            runtime_commands::cancel_exit_wait,
         ])
         .build(tauri::generate_context!())
         .expect("initialize Command Center desktop")
         .run(|app, event| {
             if let tauri::RunEvent::Reopen { .. } = event {
                 show_main(app);
+            }
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let runtime = app.state::<runtime_commands::RuntimeHost>();
+                if !runtime.exit_is_approved() {
+                    api.prevent_exit();
+                    runtime.request_exit(app.clone());
+                }
             }
         });
 }
