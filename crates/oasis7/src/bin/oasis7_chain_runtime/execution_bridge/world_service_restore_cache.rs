@@ -1,7 +1,8 @@
 //! Successful detached restores only. This is never a record, CAS or authority cache.
+use oasis7::runtime::WorldError;
 use oasis7::runtime::{Journal, Snapshot, World};
 use std::collections::VecDeque;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 
 const MAX_ENTRIES: usize = 2;
 const MAX_ENTRY_INPUT_BYTES: usize = 8 * 1024 * 1024;
@@ -29,13 +30,15 @@ impl Key {
 }
 struct Entry {
     key: Key,
-    world: World,
+    world: Arc<Mutex<World>>,
 }
 #[derive(Default)]
 pub(super) struct RestoreCache {
     entries: VecDeque<Entry>,
     // Serialized source lengths are a retention proxy, not the World heap size.
     retained_input_bytes: usize,
+    flights: Vec<(Key, Arc<Flight>)>,
+    active_input_bytes: usize,
 }
 static CACHE: OnceLock<Mutex<RestoreCache>> = OnceLock::new();
 pub(super) fn shared() -> &'static Mutex<RestoreCache> {
@@ -56,44 +59,189 @@ pub(super) fn restore(
     )
 }
 
+type Restored = Arc<Mutex<World>>;
+enum FlightState {
+    Running,
+    Finished(Result<Restored, WorldError>),
+    Abandoned,
+}
+struct Flight {
+    state: Mutex<FlightState>,
+    ready: Condvar,
+    #[cfg(test)]
+    joined: std::sync::atomic::AtomicUsize,
+}
+impl Flight {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(FlightState::Running),
+            ready: Condvar::new(),
+            #[cfg(test)]
+            joined: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+}
+struct Leader<'a> {
+    cache: &'a Mutex<RestoreCache>,
+    key: Key,
+    flight: Arc<Flight>,
+}
+impl Drop for Leader<'_> {
+    fn drop(&mut self) {
+        // Even a panicking restore must release all predicate waiters.
+        let mut state = self
+            .flight
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if matches!(*state, FlightState::Running) {
+            *state = FlightState::Abandoned;
+        }
+        drop(state);
+        let mut cache = self.cache.lock().unwrap_or_else(|error| error.into_inner());
+        if let Some(index) = cache
+            .flights
+            .iter()
+            .position(|(_, flight)| Arc::ptr_eq(flight, &self.flight))
+        {
+            cache.flights.swap_remove(index);
+            cache.active_input_bytes -= self.key.input_bytes().unwrap_or(0);
+        }
+        drop(cache);
+        self.flight.ready.notify_all();
+    }
+}
+enum Selection<'a> {
+    Hit(Restored),
+    Join(Arc<Flight>),
+    Lead(Leader<'a>),
+    Bypass,
+}
+fn select<'a>(cache: &'a Mutex<RestoreCache>, key: &Key) -> Selection<'a> {
+    let Some(bytes) = key
+        .input_bytes()
+        .filter(|bytes| *bytes <= MAX_ENTRY_INPUT_BYTES)
+    else {
+        return Selection::Bypass;
+    };
+    let Ok(mut state) = cache.lock() else {
+        return Selection::Bypass;
+    };
+    if let Some(entry) = state.entries.iter().find(|entry| entry.key == *key) {
+        return Selection::Hit(Arc::clone(&entry.world));
+    }
+    // Joining an admitted key still works when all admission slots are occupied.
+    if let Some((_, flight)) = state.flights.iter().find(|(active, _)| active == key) {
+        return Selection::Join(Arc::clone(flight));
+    }
+    if state.flights.len() >= MAX_ENTRIES
+        || state.active_input_bytes.saturating_add(bytes) > MAX_RETAINED_INPUT_BYTES
+    {
+        return Selection::Bypass;
+    }
+    let flight = Arc::new(Flight::new());
+    state.active_input_bytes += bytes;
+    state.flights.push((key.clone(), Arc::clone(&flight)));
+    Selection::Lead(Leader {
+        cache,
+        key: key.clone(),
+        flight,
+    })
+}
+fn retain(cache: &Mutex<RestoreCache>, key: Key, world: &Restored) {
+    let Some(bytes) = key
+        .input_bytes()
+        .filter(|bytes| *bytes <= MAX_ENTRY_INPUT_BYTES)
+    else {
+        return;
+    };
+    let Ok(mut cache) = cache.lock() else { return };
+    if cache.entries.iter().any(|entry| entry.key == key) {
+        return;
+    }
+    while cache.entries.len() >= MAX_ENTRIES
+        || cache.retained_input_bytes.saturating_add(bytes) > MAX_RETAINED_INPUT_BYTES
+    {
+        let Some(evicted) = cache.entries.pop_front() else {
+            break;
+        };
+        cache.retained_input_bytes -= evicted.key.input_bytes().unwrap_or(0);
+    }
+    cache.retained_input_bytes += bytes;
+    cache.entries.push_back(Entry {
+        key,
+        world: Arc::clone(world),
+    });
+}
+
 fn restore_with(
     cache: &Mutex<RestoreCache>,
     key: Key,
-    restore: impl FnOnce() -> Result<World, oasis7::runtime::WorldError>,
-) -> Result<World, oasis7::runtime::WorldError> {
-    let eligible = key
-        .input_bytes()
-        .filter(|bytes| *bytes <= MAX_ENTRY_INPUT_BYTES);
-    if eligible.is_some()
-        && let Ok(cache) = cache.lock()
-        && let Some(entry) = cache.entries.iter().find(|entry| entry.key == key)
-    {
-        // The retained original is never handed to a consumer or mutated.
-        return Ok(entry.world.clone());
-    }
-    // Expensive validation never holds the process-wide cache mutex.
-    let world = restore()?;
-    if let Some(input_bytes) = eligible
-        && let Ok(mut cache) = cache.lock()
-        && !cache.entries.iter().any(|entry| entry.key == key)
-    {
-        while cache.entries.len() >= MAX_ENTRIES
-            || cache.retained_input_bytes.saturating_add(input_bytes) > MAX_RETAINED_INPUT_BYTES
-        {
-            let Some(evicted) = cache.entries.pop_front() else {
-                break;
+    restore: impl FnOnce() -> Result<World, WorldError>,
+) -> Result<World, WorldError> {
+    let mut restore = Some(restore);
+    loop {
+        let completed = match select(cache, &key) {
+            Selection::Hit(world) => Some(Ok(world)),
+            Selection::Join(flight) => {
+                let Ok(mut state) = flight.state.lock() else {
+                    return restore.take().unwrap()();
+                };
+                #[cfg(test)]
+                {
+                    flight
+                        .joined
+                        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    flight.ready.notify_all();
+                }
+                while matches!(*state, FlightState::Running) {
+                    state = match flight.ready.wait(state) {
+                        Ok(state) => state,
+                        Err(_) => return restore.take().unwrap()(),
+                    };
+                }
+                match &*state {
+                    FlightState::Finished(result) => Some(result.clone()),
+                    FlightState::Abandoned => None,
+                    FlightState::Running => unreachable!("predicate wait completed"),
+                }
+            }
+            Selection::Lead(leader) => {
+                // No global or per-flight mutex is held during expensive restore.
+                let result = restore.take().unwrap()();
+                let shared = result
+                    .as_ref()
+                    .map(|world| Arc::new(Mutex::new(world.clone())))
+                    .map_err(Clone::clone);
+                if let Ok(world) = &shared {
+                    retain(cache, key.clone(), world);
+                }
+                *leader
+                    .flight
+                    .state
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner()) = FlightState::Finished(shared);
+                drop(leader); // Publishes the terminal state, notifies and removes this marker.
+                return result;
+            }
+            Selection::Bypass => return restore.take().unwrap()(),
+        };
+        if let Some(result) = completed {
+            let world = result?;
+            // The retained original remains immutable and no global lock covers cloning.
+            return match world.lock() {
+                Ok(world) => Ok(world.clone()),
+                Err(_) => restore.take().unwrap()(),
             };
-            cache.retained_input_bytes -= evicted.key.input_bytes().unwrap_or(0);
         }
-        cache.retained_input_bytes += input_bytes;
-        cache.entries.push_back(Entry {
-            key,
-            world: world.clone(),
-        });
+        // A leader unwound. Retry admission without recursive stack growth.
     }
-    Ok(world)
 }
 
 #[cfg(test)]
 #[path = "tests/world_service_restore_cache.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/world_service_restore_flights.rs"]
+mod flight_tests;
