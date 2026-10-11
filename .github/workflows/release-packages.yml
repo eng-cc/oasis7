@@ -504,9 +504,13 @@ jobs:
           choco install $missing -y --no-progress
       - name: Resolve release version
         id: release_version
+        shell: bash
         env:
           PACKAGE_VERSION: ${{ needs.plan.outputs.version }}
-        run: printf 'value=%s\n' "$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          : "${PACKAGE_VERSION:?release package version is required}"
+          printf 'value=%s\n' "$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
       - name: Build launcher bundle
         shell: bash
         run: |

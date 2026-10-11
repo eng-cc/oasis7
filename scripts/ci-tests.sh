@@ -276,6 +276,7 @@ run_workflow_governance_contract_tests() {
 
 run_packaging_artifact_contract_tests() {
   run python3 ./scripts/package-source-plan.test.py
+  run python3 ./scripts/package-release-version.test.py
   run python3 ./scripts/safe-git-archive.test.py
   run bash ./scripts/native-packaging-contract.test.sh
   run bash ./scripts/packaging-artifact-size-contract.test.sh
