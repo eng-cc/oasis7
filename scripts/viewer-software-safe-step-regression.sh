@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 source "$repo_root/scripts/cargo-dev-lib.sh"
+source "$repo_root/scripts/release-web-fixture-lib.sh"
 source "$repo_root/scripts/agent-browser-lib.sh"
 
 usage() {
@@ -22,6 +23,7 @@ Options:
   --url <url>               Use an existing viewer URL; skip stack bootstrap
   --out-dir <path>          Artifact root (default: output/playwright/viewer-software-safe-step)
   --startup-timeout <secs>  Wait timeout for stack URL (default: 240)
+  --release-web-fixture     Use isolated signed public-scope QA backend (release gate only)
   --agent-id <id>           Target agent id (default: starter-agent-0)
   --progress-timeout-ms <ms> Wait timeout for natural live progress (default: 15000)
   --headed                  Open browser in headed mode
@@ -88,6 +90,7 @@ wait_for_tcp_listener() {
   local timeout_secs=${3:-20}
   local step
   for step in $(seq 1 "$timeout_secs"); do
+    release_web_check_startup || return 1
     if python3 - "$host" "$port" <<'PY'
 import socket
 import sys
@@ -295,6 +298,7 @@ PY
 GAME_URL=""
 OUT_ROOT="output/playwright/viewer-software-safe-step"
 STARTUP_TIMEOUT_SECS=240
+RELEASE_WEB_FIXTURE=0
 AGENT_ID="starter-agent-0"
 PROGRESS_TIMEOUT_MS=15000
 HEADED=0
@@ -315,6 +319,10 @@ while [[ $# -gt 0 ]]; do
     --startup-timeout)
       STARTUP_TIMEOUT_SECS="${2:-}"
       shift 2
+      ;;
+    --release-web-fixture)
+      RELEASE_WEB_FIXTURE=1
+      shift
       ;;
     --agent-id)
       AGENT_ID="${2:-}"
@@ -351,6 +359,22 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$RELEASE_WEB_FIXTURE" -eq 1 && -n "$GAME_URL" ]]; then
+  echo "error: --release-web-fixture cannot be used with --url" >&2
+  exit 2
+fi
+
+if [[ "$RELEASE_WEB_FIXTURE" -eq 1 ]]; then
+    for stack_arg in "${STACK_ARGS[@]}"; do
+      case "$stack_arg" in
+        --chain-enable|--chain-status-bind|--chain-execution-world-dir|--chain-local-standalone-test|--scenario|--allow-debug-scenario)
+          echo "error: $stack_arg is incompatible with the isolated signed Web QA fixture" >&2
+          exit 2
+          ;;
+      esac
+    done
+fi
 
 [[ -n "$OUT_ROOT" ]] || { echo "error: --out-dir cannot be empty" >&2; exit 2; }
 [[ "$STARTUP_TIMEOUT_SECS" =~ ^[0-9]+$ ]] && [[ "$STARTUP_TIMEOUT_SECS" -gt 0 ]] || { echo "error: --startup-timeout must be positive" >&2; exit 2; }
@@ -389,11 +413,18 @@ cleanup() {
   trap - EXIT INT TERM
   ab_cmd "$session" close >/dev/null 2>&1 || true
   stop_stack
+  release_web_fixture_stop
   exit "$exit_code"
 }
 trap cleanup EXIT INT TERM
 
 if [[ -z "$GAME_URL" ]]; then
+  if [[ "$RELEASE_WEB_FIXTURE" -eq 1 ]]; then
+    release_web_fixture_build "$out_dir/fixture-build.json"
+    release_web_fixture_start "$out_dir"
+    STACK_ARGS+=(--chain-disable)
+    if [[ "$AGENT_ID" == "starter-agent-0" ]]; then AGENT_ID="agent-a"; fi
+  fi
   {
     echo "### [bootstrap_stack] $(date '+%H:%M:%S')"
     if [[ "${#STACK_ARGS[@]}" -gt 0 ]]; then
@@ -425,6 +456,7 @@ if [[ -z "$GAME_URL" ]]; then
   stack_pid=$!
 
   for ((i = 0; i < STARTUP_TIMEOUT_SECS; i++)); do
+    release_web_check_startup || exit 1
     if ! kill -0 "$stack_pid" >/dev/null 2>&1; then
       echo "error: launcher stack exited unexpectedly" >&2
       tail -n 120 "$run_game_test_log" >&2 || true
