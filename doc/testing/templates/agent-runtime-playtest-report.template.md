@@ -12,17 +12,43 @@
 - 获准 world/branch/Agent/task、初始条件和信任来源、目标与范围、有效授权引用；不要保存 secret。
 - 实际表面 `game_api / web / native`、平台/build、选中和未选中的场景、开始/结束/停止原因。
 
+<a id="report-source-scene"></a>
+## 来源到场景记录（主 Agent / 核验器维护）
+
+承接 [SC-15](../prd.md#qa-infrastructure-source-scene-method) 与[系统设计字段](../governance/agent-runtime-self-playtest.design.md#selftest-source-scene)。按每个选中条款 × scene/check_kind/cell/specimen/phase × Runtime/profile/入口 × tier 填写，公共字段可引用同一候选记录。试玩者仅收到其观察/操作字段；不将隐藏 oracle、完整开发报告或源码交给黑盒子任务。
+
+| 字段组 | 必填内容 |
+| --- | --- |
+| source_clause | repository/path/fragment/clause_id、不可变 source_oid、blob_oid、content_sha256（对应原文件字节）；禁止用 main/latest 替代固定来源 |
+| candidate | source_head/base_oid/execution_target/tested_tree_oid、适用 event_commit_oid、dirty_patch_digest（有则必填）、实际 build/Skill digest；source commit 与被测 tree 不混用 |
+| selection | scope=targeted/ac_ext_010_full、scenario_id、check_kind=contract/live、obligation_id、cell/specimen_id、phase、applicability、applicability_owner/basis；未选范围仍保留 gap |
+| execution | execution_state=planned/located/implemented/executed、access_mode、execution_lane、surface、平台；原 world/branch/Agent/task、root/revision/window/配置、基线与有序 phase observations |
+| environment | dependency/topology、Runtime/driver/profile、provider kind/model/脱敏 endpoint route、预检来源；不同 profile 和真实/fake 分开 |
+| tier_result | 单一 test_tier_required 或 test_tier_full、独立 evidence_level、tier_verdict、failure_signature/blocking_reason、retained_gap/gap_owner/next_step |
+| artifacts | 受控原始证据 locator、byte_length、digest_algorithm/digest、collector/collected_at、integrity_check；脱敏副本单独记其真实字节身份 |
+| oracle_results | 实际命令/返回或用户可见操作；结构、canonical、领域、信任、身份、join 断言与结果，不适用的断言附 owner/basis |
+
+字段未知写明确缺口，不能伪造摘要或默填通过。执行状态和 verdict 正交；本报告 pass/fail 对应 QA passed/failed，inconclusive 对应 unverified，blocked 保持 blocked；not_applicable 需 owner/basis 且不计成功。只有结构证据时被测产品最多 shape_verified，不是 executed/passed；文件哈希不是世界回执或最终性证明。该方法本身不产生 L5。
+
+<a id="report-first-session"></a>
+## AC-EXT-010 生命周期覆盖
+
+按[联合验收清单](../manual/agent-runtime-self-playtest.manual.md#first-session-lifecycle)逐 Runtime/profile/声明入口保留 entry、first_product、blocked_continue、goal_applied、leave_revisit、disconnect_resume、runtime_restart_resume。每项包含 phase/specimen、实际操作、world/Agent/task lineage、goal/fence、operation/receipt、ArtifactRef、oracle 和结果；恢复后的 root 可以变化但须可追踪，同一次完整组合不可混合候选/世界/任务。
+
+`ac_ext_010_full` 须分别收齐 OpenClaw、Codex 的全部项；`targeted` 仅报告所选子项，显式保留整条 AC 未验证。只首产物、少一个 Runtime、把断连当重启、拼接不同任务或以另一个入口代签均不得报告整条 AC passed。scope pass 不能替代 parent AC 的全量判定；原失败不能被局部复测覆盖。
+
 ## 每个场景
 
 | 字段 | 要求 |
 | --- | --- |
-| case_id / requirement | 复用已有场景与对应产品/专业要求 |
+| case_id / requirement | 复用已有场景、obligation/phase 与固定 SourceClauseRef；不只保存可变链接 |
+| execution_state / tier | planned/located/implemented/executed 与 verdict 独立；每项单独标 test_tier 和 evidence_level |
 | verdict | pass、fail、blocked、inconclusive、not_applicable |
 | expected / observed | 预先确定的目标和实际发现；不临时降低判据 |
 | steps | 按真实发生的顺序记录，区分玩家操作、Agent 提案和 setup 故障注入 |
-| evidence | 本轮脱敏文件或受权回执引用，记录采集者/时刻/对象身份；没有证据不写通过 |
+| evidence | 关联 ArtifactRef 的实际 locator/byte_length/digest、采集者/时间和对象身份，回读后判完整性；没有证据不写通过 |
 | oracle | 谁用哪个权威结果判定；Tester 自报只能是 reported |
-| unmet / next | 未完成的范围、原因与下一步，不用“暂无问题”代替未测试 |
+| unmet / next | retained_gap/gap_owner/next_step 与失败签名或阻断原因；未覆盖条款/阶段不删除，不用“暂无问题”代替未测试 |
 
 只有已执行且 oracle 证明要求满足才是 pass；已执行且违反要求是 fail；前置缺失是 blocked；预算到限/模型策略未成功/证据不足通常是 inconclusive。合法拒绝若正是负例目标，可以是该负例通过，不代表正常首局已通过。
 
@@ -47,7 +73,10 @@ category 使用 confirmed_bug、suspected_bug、agent_strategy_failure、expecte
 ```text
 候选和受测 Runtime/profile：
 实际派工、隔离与启动模式：
-本轮真实执行及范围内 verdict：
+所选条款及 source/base/tested-tree：
+本轮真实执行、test tier/evidence level 与范围内 verdict：
+AC-EXT-010 各 Runtime 生命周期项及保留缺口：
+证据字节回读与分项 oracle：
 已确认问题与证据：
 策略/环境/框架问题及体验观察：
 修复、普通回归和独立复测：

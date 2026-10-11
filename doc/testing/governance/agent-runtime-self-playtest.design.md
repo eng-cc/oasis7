@@ -24,11 +24,12 @@
 | --- | --- | --- | --- | --- |
 | [testing SC-12/13](../prd.md#1-executive-summary) | 将已有 L4 执行/采样承诺落实为开发主 Agent 派工、真实试玩和回收结果 | [编排](#selftest-orchestration) | qa_engineer；现有 L4 scaffold/runner | 不改变 required-gate，不把脚本探针改标成自主试玩 |
 | [AC-EXT-011](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) | 试玩者读取真实玩家 Skill，在缺少源码答案的情况下接入 | [Skill 接入](#selftest-skill-entry) | agent_engineer；已实现的 Skill/API/driver | 缺依赖记 blocked，不用旧 Bridge 替代新路径 |
-| [AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | 自主推进工业首局并用权威成果验证而非数动作 | [真实游玩](#selftest-gameplay) | gameplay/runtime owner；首局 completion contract | 不把首产物等同稳定生产，不证明其他 Runtime |
+| [AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | 两个真实 Runtime 各自保留同一任务的首产物、真实阻塞及继续、目标应用、回访、断连和进程重启续接 | [真实游玩](#selftest-gameplay) | gameplay/runtime/agent owner；首局与恢复合同 | 局部首产物不满足整条 AC；不证明稳定生产、另一 profile 或入口 |
 | [AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) | 分别验证目标更新、问答、明确授权、离线和执行器恢复 | [协作](#selftest-collaboration) | agent/runtime owner；隔离 owner 与 executor | 测试 owner 预授权不代替真实用户审批体验 |
 | [AC-EXT-015](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-015) | Web 与原生客户端各自实际交互并关联游戏结果 | [视觉表面](#selftest-surfaces) | viewer_engineer；实际 GUI/浏览器工具和候选资产 | API pass、截图存在不代签完整 UI/native |
 | [AC-EXT-009](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-009) | 全轮共用有限预算，隔离数据并说明未知费用 | [隔离与预算](#selftest-isolation-budget) | qa/agent owner；受控私有测试世界和模型许可 | 不自动充值，不保证无法计量的下游硬上限 |
-| [testing SC-1/2/15](../prd.md#1-executive-summary) | 将有证据的失败转成重现、普通 CI 回归和新候选复测 | [反馈闭环](#selftest-feedback-loop) | 开发负责人；现有测试入口和 PR | 不以一次模型成功覆盖此前失败或独立评审 |
+| [testing SC-1/2](../prd.md#1-executive-summary) | 将有证据的失败转成重现、普通 CI 回归和新候选复测 | [反馈闭环](#selftest-feedback-loop) | 开发负责人；现有测试入口和 PR | 不以一次模型成功覆盖此前失败或独立评审 |
+| [testing SC-15：source-to-scene](../prd.md#qa-infrastructure-source-scene-method) | 每项所选条款绑定固定来源、被测树、适用性/执行状态、tier、可回读完整证据和保留缺口 | [来源到场景](#selftest-source-scene) | qa_engineer；既有 QA receiver 与领域 oracle | 只承接本轮选择范围；不宣称覆盖完整基础设施场景库存或以格式正确代签执行 |
 
 ## 3. 当前状态、目标状态与差距
 
@@ -79,6 +80,10 @@
 
 结果核验器复用首局 completion evaluator 与原 operation/receipt 关系，证明候选版本、角色、任务、资源和因果一致。模型宣布完成、世界自然推进、一次 build/schedule accepted 或 inventory 巧合变化均不够。原操作 `recovery_required` 时保留关联、查询原结果并冻结关联新副作用；不将未知写成 failed 再重做。
 
+**AC-EXT-010 是组合义务，不等于 ST-03 首产物单项通过。** 完整声明必须按[首局生命周期清单](../manual/agent-runtime-self-playtest.manual.md#first-session-lifecycle)联合 ST-02 的接入、ST-03 的生产/真实阻塞及继续、ST-04 的目标应用/回访/断连/进程重启证据。OpenClaw、Codex 各自固定实际 profile、候选和一个连续的 world/Agent/task 历史；不同 Runtime 使用同一玩法版本及可比较初始条件，不能互相代签或拼接不同世界/任务的阶段。重启可更换私有 session 或合法 executor epoch，但必须延续原世界任务且不重复已结算效果。
+
+只有局部改动时可选择 `scope=targeted`，但仅报告所选 obligation 的结果，未覆盖阶段及 Runtime 保留为整条 AC 的 gap，不能将整条 AC 标为通过。选择 `scope=ac_ext_010_full` 时两 Runtime 和所有生命周期项均为必需；预算/依赖不足保持 blocked/inconclusive，不在测试后缩小分母。图形探索的 ST-05 独立按实际影响触发；纯 API 的观察断开/重新读取不能证明 Web/native 交互。
+
 <a id="selftest-collaboration"></a>
 ### 5.3 协作、故障与恢复
 
@@ -106,15 +111,33 @@ API 自主试玩与视觉自测是两个维度。Web 按现有 S6/agent-browser 
 
 所有记录复用现有 L4 artifact 目录；以下是本轮测试数据，不是新的任务准入 schema、服务数据库或必交放行回执。字段完整时可自然语言或 JSON 保存，普通开发不必先创建新任务标识。
 
-`RunInput`：run_id、source_head、dirty_patch_digest?、build_digest、游戏/Runtime/driver/Skill 版本和 hash、实际 profile、目标世界/信任/初始状态、选中场景、启动模式、表面、隔离等级、总预算、有效授权引用、deadline、预声明停止条件和 artifact root。
+`RunInput`：run_id、[CandidateIdentity 与所选 SourceSceneRecord](#selftest-source-scene)、build_digest、游戏/Runtime/driver/Skill 版本和 hash、实际 profile、目标世界/信任/初始状态、`scope=targeted/ac_ext_010_full`、选中条款及必需阶段、启动模式、访问模式/执行 lane/表面、隔离等级、总预算、有效授权引用、deadline、预声明停止条件和 artifact root。
 
 `TesterInput` 是 RunInput 的最小投影：目标、普通玩家 Skill、公开帮助、受限连接/启动工具句柄、本轮角色、允许操作、预算和输出位置。隐藏 oracle、源码/diff、内部答案、原始 token/私钥与生产 endpoint 不交给试玩者。
 
-`RunResult`：候选与子会话引用、实际读到的 Skill、ready 证据、已执行/未执行场景、每项 verdict、证据引用、问题列表、已知/估计/未知消耗、停止原因、清理结果和复测关联。详见[报告字段](../templates/agent-runtime-playtest-report.template.md)。
+`RunResult`：候选与子会话引用、实际读到的 Skill、ready 证据、逐条 SourceSceneRecord 的 execution_state/test_tier/evidence_level/tier_verdict、生命周期项结果、完整 ArtifactRef 及 oracle 检查、保留 gap、问题列表、已知/估计/未知消耗、停止原因、清理结果和复测关联。详见[报告字段](../templates/agent-runtime-playtest-report.template.md)。
 
 每项 verdict 为 `pass / fail / blocked / inconclusive / not_applicable`；缺授权、缺依赖不写 pass，未执行不写 fail。pass 要有适用 oracle；fail 要有“已执行且违反约定”的观察。若所有选中项均已验真通过且无缺失证据，才汇总 scope pass；不同 Runtime/surface 的未知保留，不能被平均分抹去。
 
 证据引用指向本轮保存的脱敏 action/operation/receipt、受权快照、截图/交互或服务记录，带采集方和时间；验真器重新校验来源与权限。任意 URL、模型粘贴的哈希或自制成功 JSON 不算证据。相同 run/case/event 标识异内容是冲突；单个 artifact 路径不能越出根目录或沿 symlink 逃逸。
+
+<a id="selftest-source-scene"></a>
+### 6.1 来源、场景、执行和证据的同一记录
+
+复用 [testing SC-15 的 QA receiver](../prd.md#qa-infrastructure-source-scene-method)，每个选中条款 × 场景/子项/阶段样本 × Runtime/profile/入口 × test tier 保留一条记录；共享来源和候选可按引用复用，不强迫另建报告文件或服务。主 Agent/核验器维护下列字段，给试玩者的最小输入不含隐藏 oracle 或内部源码答案。
+
+| 字段组 | 必须保留的值和判定 |
+| --- | --- |
+| SourceClauseRef | repository、path、fragment、clause_id、不可变 source_oid、blob_oid、content_sha256；digest 对应该 OID 的原文件字节，fragment/条款标识定位具体原文，不能用 main/latest 或当前工作区内容替代已采纳来源 |
+| CandidateIdentity | source_head、base_oid、execution_target（source_head/merge_tree/dirty_worktree）、实际 tested_tree_oid、event_commit_oid（适用时）、dirty_patch_digest（有则必记）、build_digest；记录真正构建/执行的源树，不能用 source commit OID 冒充 tree OID，也不能声称测过未执行的合并组合 |
+| 场景与适用性 | scenario_id、check_kind（contract/live）、obligation_id、cell/specimen_id、phase、applicability、applicability_owner 与 basis；不适用需领域 owner 的依据，缺依赖是 blocked 而非不适用；未选范围仍保留 gap |
+| 执行与环境 | execution_state=planned/located/implemented/executed；world/branch/root/revision/window 与配置、基线和有序阶段观察、依赖/拓扑、Runtime/driver/provider kind/model/脱敏 endpoint route 与预检来源；access_mode、execution_lane、surface 分开 |
+| 层级与结果 | test_tier_required 或 test_tier_full、独立的 evidence_level（沿用 L1/L2/L3/L4A/L4B）、tier_verdict、failure_signature/blocking_reason、retained_gap、gap_owner、next_step；缺失执行证据不能标 passed，本方法不产生 L5 |
+| ArtifactRef 与 oracle | 原始采集证据的受控 locator、实际 byte_length、digest_algorithm/digest、collector/collected_at、integrity_check；命令/结果或实际用户操作；结构、canonical、领域、信任、身份、关联 join 各项断言及结果，不适用的 oracle 说明依据 |
+
+执行顺序是固定来源/候选 → 枚举义务和样本 → 保存未变基线与真实依赖 → 执行 → 回读 artifact 字节校验 → 分项 oracle → 对比基线、阻塞/中断、fresh-read、恢复、retry/replay → 逐 tier 判定并保留缺口。恢复会改变 root/revision，但必须有同一世界历史的顺序和 lineage，不能要求各阶段 root 相等或从另一任务补证据。正文、截图、回执导出等分别校验；原始记录含秘密时仅保存在获准受限位置或停止采集，对外脱敏副本单独标识和校验，不能假称与原始字节相同。文件 digest 仅证明字节完整，不证明世界最终性。
+
+execution_state 与 verdict 正交：fixture 存在只是 located/implemented，命令确实运行才是 executed；只完成结构检查，对被测产品仅能 shape_verified。操作报告 pass/fail 对应 QA passed/failed，blocked 保持 blocked，inconclusive 对应 unverified；not_applicable 要保留 owner/basis 且不计成功。不满足当前 tier 的环境、来源一致性或证据完整性，整条所选 obligation 保留 blocked/unverified。确定性记录检查通过，只证明记录检查自身，不把样例升级为真实试玩证据。
 
 ## 7. 状态、事务与持久化
 
@@ -151,17 +174,20 @@ Skill、游戏文本、消息和工具响应均不能修改测试授权、请求
 
 确定性的输入裁剪、预算、证据引用、去重、报告状态和清理由普通 CI fake driver/临时持久 fixture 验证；实际 subagent 自主行为、Skill 上手和 GUI 再按授权实测。不能仅因使用 subagent 就强制“严格集成”，也不能把缺普通测试的合同丢给模型试玩代测。
 
+各 ST 场景的 `contract` 与 `live` 子项分别归 `test_tier_required` 与 `test_tier_full`，具体范围见[手册分层矩阵](../manual/agent-runtime-self-playtest.manual.md#selftest-test-tiers)。同一报告不能以一项双层标签模糊已跑范围；每条 SourceSceneRecord 只归一个 tier。标注 tier 不新增 GitHub check，也不授权模型消费，实际选择仍服从开发规范及更严格的上游合同。
+
 ### 11.1 验证映射表
 
 | 上游条款 | 本设计条款 | 独立 obligation 与适用条件 | 准确验证方法与场景 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [testing SC-12/13](../prd.md#1-executive-summary) | [编排](#selftest-orchestration) | 可重复地派出真实试玩者并回收结果 | [ST-01](../manual/agent-runtime-self-playtest.manual.md#st-01)；测试工具缺失、真实子会话、候选变化和派工隔离 | source/build 对应的子会话及本轮记录 | 静态工具探测不证明已试玩 |
-| [AC-EXT-011](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) | [Skill 接入](#selftest-skill-entry) | 同一正式 Skill 自助入局与失败可解释 | [ST-02](../manual/agent-runtime-self-playtest.manual.md#st-02)；cold/prepared、缺失/过期 Skill、普通权限 | Skill hash、读取/启动/连接轨迹 | prepared_world 不代签 cold_entry |
-| [AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | [真实游玩](#selftest-gameplay) | 自主完成首局且能核对原世界成果 | [ST-03](../manual/agent-runtime-self-playtest.manual.md#st-03)；attached/supervised 分别运行，注入伪成功报告 | 原 operation、生产回执与 verifier 结论 | 不证明另一 Runtime 或稳定经营 |
-| [AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) | [协作](#selftest-collaboration) | 跨角色目标/问答/审批及断连恢复 | [ST-04](../manual/agent-runtime-self-playtest.manual.md#st-04)；复用既有协作场景和预算负例 | 目标/fence/审批版本、消息和回执 | scripted owner 不等于真人体验 |
-| [AC-EXT-015](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-015) | [视觉表面](#selftest-surfaces) | 网页和客户端各自实际操作 | [ST-05](../manual/agent-runtime-self-playtest.manual.md#st-05)；S6 与 native 窗口分开；无 GUI 负例 | build、截图、真实输入与同世界结果 | API/浏览器不代签 native |
-| [AC-EXT-009](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-009) | [隔离与预算](#selftest-isolation-budget) | 无越权和无限付费，清理自有资源 | [ST-06](../manual/agent-runtime-self-playtest.manual.md#st-06)；fake 费用、停止、孤儿 worker 与误选世界 | 有效授权、预算分账、清理回读 | 不证明 provider 未报告的费用 |
-| [testing SC-1/2/15](../prd.md#1-executive-summary) | [反馈闭环](#selftest-feedback-loop) | 失败转回归、修复与新候选复测 | [ST-07](../manual/agent-runtime-self-playtest.manual.md#st-07)；旧失败、新回归、新 build 和未复现样本 | regression test/PR 与新 attempt | 不证明全部回归或 L5 |
+| [testing SC-12/13](../prd.md#1-executive-summary) | [编排](#selftest-orchestration) | 可重复地派出真实试玩者并回收结果 | `test_tier_required`：对应 contract 子项；`test_tier_full`：对应 live 子项。[ST-01](../manual/agent-runtime-self-playtest.manual.md#st-01)；测试工具缺失、真实子会话、候选变化和派工隔离 | source/build 对应的子会话及本轮记录 | 静态工具探测不证明已试玩 |
+| [AC-EXT-011](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-011) | [Skill 接入](#selftest-skill-entry) | 同一正式 Skill 自助入局与失败可解释 | `test_tier_required`：对应 contract 子项；`test_tier_full`：对应 live 子项。[ST-02](../manual/agent-runtime-self-playtest.manual.md#st-02)；cold/prepared、缺失/过期 Skill、普通权限 | Skill hash、读取/启动/连接轨迹 | prepared_world 不代签 cold_entry |
+| [AC-EXT-010](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-010) | [真实游玩](#selftest-gameplay) | 两 Runtime 各自连续任务上的首产物、真实阻塞及继续、目标应用、回访、断连和重启 | `test_tier_full`：[ST-02](../manual/agent-runtime-self-playtest.manual.md#st-02) + [ST-03](../manual/agent-runtime-self-playtest.manual.md#st-03) + [ST-04](../manual/agent-runtime-self-playtest.manual.md#st-04)，逐项核对[生命周期](../manual/agent-runtime-self-playtest.manual.md#first-session-lifecycle)；`test_tier_required` 仅做 oracle/身份关联负例 | 每 Runtime/profile/声明入口的同候选 world/Agent/task lineage、全阶段 operation/receipt 与判定 | 任一阶段/Runtime 缺失不通过整条 AC；局部 targeted pass 不代签完整首局或稳定生产 |
+| [AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) | [协作](#selftest-collaboration) | 跨角色目标/问答/审批及断连恢复 | `test_tier_required`：对应 contract 子项；`test_tier_full`：对应 live 子项。[ST-04](../manual/agent-runtime-self-playtest.manual.md#st-04)；复用既有协作场景和预算负例 | 目标/fence/审批版本、消息和回执 | scripted owner 不等于真人体验 |
+| [AC-EXT-015](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-015) | [视觉表面](#selftest-surfaces) | 网页和客户端各自实际操作 | `test_tier_required`：对应 contract 子项；`test_tier_full`：对应 live 子项。[ST-05](../manual/agent-runtime-self-playtest.manual.md#st-05)；S6 与 native 窗口分开；无 GUI 负例 | build、截图、真实输入与同世界结果 | API/浏览器不代签 native |
+| [AC-EXT-009](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-009) | [隔离与预算](#selftest-isolation-budget) | 无越权和无限付费，清理自有资源 | `test_tier_required`：对应 contract 子项；`test_tier_full`：对应 live 子项。[ST-06](../manual/agent-runtime-self-playtest.manual.md#st-06)；fake 费用、停止、孤儿 worker 与误选世界 | 有效授权、预算分账、清理回读 | 不证明 provider 未报告的费用 |
+| [testing SC-1/2](../prd.md#1-executive-summary) | [反馈闭环](#selftest-feedback-loop) | 失败转回归、修复与新候选复测 | `test_tier_required`：对应 contract 子项；`test_tier_full`：对应 live 子项。[ST-07](../manual/agent-runtime-self-playtest.manual.md#st-07)；旧失败、新回归、新 build 和未复现样本 | regression test/PR 与新 attempt | 不证明全部回归或 L5 |
+| [testing SC-15：source-to-scene](../prd.md#qa-infrastructure-source-scene-method) | [来源到场景](#selftest-source-scene) | 所选条款、实际树、适用性、执行状态、tier、artifact 与保留 gap 一致 | `test_tier_required`：[source-scene-check](../manual/agent-runtime-self-playtest.manual.md#source-scene-check)，旧来源/错树/缺字段/坏证据负例；`test_tier_full`：在所选 live 场景实际填充和核对 | 固定 SourceClauseRef、CandidateIdentity、逐样本记录和证据字节回读 | 格式通过不证明运行；不代签其他领域库存或另一 tier |
 
 ## 12. 决策、长期风险与未决问题
 
