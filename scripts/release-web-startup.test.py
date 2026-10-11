@@ -144,6 +144,20 @@ class StartupTests(unittest.TestCase):
                     self.assertIn('visual-test artifact build failed', result.stderr)
             self.assertEqual(list(output.glob('*/signed-world-service-fixture.log')), [])
 
+    def test_release_fixture_public_projection_rejects_wrong_identity_or_renderer(self):
+        source = (ROOT / 'scripts/viewer-software-safe-step-regression.sh').read_text()
+        predicate = source.split("# Hosted guests see", 1)[1].split('wait_for_js_true "', 1)[1].split('" 6000', 1)[0]
+        predicate = predicate.replace('${agent_id_json}', '"agent-a"')
+        import json
+        state = dict(selectedKind='agent', selectedId='agent-a', selectedAgentDebug=dict(environment_class='runtime_live', provider_config_ref='provider://loopback-http/runtime-live/agent-a'), pixelWorldRuntimeStatus='ready', pixelWorldRuntimeSource='wasm_bindgen_runtime')
+        for field, value in ((None, None), ('selectedId', 'foreign'), ('pixelWorldRuntimeStatus', 'unavailable'), ('pixelWorldRuntimeSource', 'fixture_mock')):
+            candidate = dict(state)
+            if field:
+                candidate[field] = value
+            script = 'global.window={__AW_TEST__:{getState:()=>('+json.dumps(candidate)+')}}; process.exit(('+predicate+') === '+str(field is None).lower()+' ? 0 : 1)'
+            result = subprocess.run(['node', '-e', script], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_owned_http_404_interrupts_readiness_deadline(self):
         class NotFound(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
