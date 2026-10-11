@@ -203,16 +203,19 @@ const malformedPath = join(tempDir, "malformed.json");
 const objectPath = join(tempDir, "object.json");
 const nullRecordPath = join(tempDir, "null-record.json");
 const nonJsonNumberPath = join(tempDir, "non-json-number.json");
+const overflowNumberPath = join(tempDir, "overflow-number.json");
 writeFileSync(malformedPath, "{bad JSON");
 writeFileSync(objectPath, "{}");
 writeFileSync(nullRecordPath, "[null]");
 writeFileSync(nonJsonNumberPath, '[{"value": NaN}]');
+writeFileSync(overflowNumberPath, '[{"nested": {"values": [1e999]}}]');
 for (const [index, args] of [
   ["--completion-profile", "unknown"], ["--candidate"], ["--candidate", "  "],
   ["--fixture-samples-json", join(tempDir, "missing.json")],
   ["--fixture-samples-json", malformedPath], ["--fixture-samples-json", objectPath],
   ["--human-observations-json", nullRecordPath],
   ["--fixture-samples-json", nonJsonNumberPath],
+  ["--human-observations-json", overflowNumberPath],
 ].entries()) {
   const rejected = runWrapper(`rejected-${index}`, args);
   assert.notEqual(rejected.result.status, 0, JSON.stringify(args));

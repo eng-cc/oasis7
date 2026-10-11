@@ -156,7 +156,11 @@ for option, path, field in (
     if not isinstance(value, list) or any(not isinstance(record, dict) for record in value):
         raise SystemExit(f"error: {option} must contain a JSON array of objects")
     inputs[field] = value
-Path(output).write_text(json.dumps(inputs, indent=2) + "\n", encoding="utf-8")
+try:
+    serialized = json.dumps(inputs, indent=2, allow_nan=False)
+except ValueError:
+    raise SystemExit("error: report input JSON must contain finite numbers")
+Path(output).write_text(serialized + "\n", encoding="utf-8")
 PYINPUT
 
 viewer_dependency_preflight "$repo_root" test
