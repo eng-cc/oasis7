@@ -47,6 +47,7 @@ mod privacy_identity;
 mod process_restart;
 mod production_pressure;
 mod publication_pin;
+mod release_web_fixture;
 mod response_privacy;
 mod strict_http;
 mod topology_no_mount;
