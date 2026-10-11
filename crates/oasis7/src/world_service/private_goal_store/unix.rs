@@ -16,9 +16,17 @@ fn io_error(_: std::io::Error) -> String {
     "private goal filesystem operation failed".into()
 }
 fn sync(dir: &Dir) -> Result<(), String> {
-    dir.try_clone()
+    // cap-std directory handles are O_PATH on Linux, which cannot fsync.
+    // Reopen the held directory itself, without resolving an ambient path,
+    // as a readable directory descriptor. Setting only the custom DIRECTORY
+    // flag avoids cap-primitives' dir_required -> O_PATH optimization.
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .follow(FollowSymlinks::No)
+        .custom_flags(libc::O_DIRECTORY);
+    dir.open_with(".", &options)
         .map_err(io_error)?
-        .into_std_file()
         .sync_all()
         .map_err(io_error)
 }
@@ -289,4 +297,26 @@ pub(super) fn initialize_key(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
     publish_immutable(dir, KEY_MARKER, &bytes)?;
     // The collision winner is authoritative, including its fsynced key marker.
     verify_key_durable(dir, key)
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+
+    #[test]
+    fn private_goal_directory_sync_uses_held_directory_after_rename() {
+        let root = std::env::temp_dir().join(format!(
+            "oasis7-private-goal-sync-{}",
+            hex::encode(random::<16>().unwrap())
+        ));
+        let moved = root.with_extension("moved");
+        std::fs::create_dir(&root).unwrap();
+        let directory = Dir::open_ambient_dir(&root, cap_std::ambient_authority()).unwrap();
+        std::fs::rename(&root, &moved).unwrap();
+        // Linux cap-std opened an O_PATH handle. The old into_std_file +
+        // sync_all implementation fails EBADF here; capability-relative reopen
+        // must sync the same directory even after its ambient path moved.
+        sync(&directory).expect("fsync held Linux directory through a readable descriptor");
+        std::fs::remove_dir(&moved).unwrap();
+    }
 }
