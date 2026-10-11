@@ -9,6 +9,8 @@ description: Use when implementing and finishing an authorized oasis7 change.
 
 明确问题、范围、验收和用户限制。简单修改写入 PR，复杂任务使用已有设计或 Issue checklist。同一授权范围内的实现取舍由负责人直接决定，必要时简要说明理由。
 
+修改前按开发规范检查 `git worktree list --porcelain`、工作区状态和使用情况，优先复用固定开发路径；聊天附件只用于识别附件，不能据此认定没有可复用工作区。需要新增时执行 `scripts/new-task-worktree.sh`，遵循仓库根目录配置，不以 App 创建、worktree fork 或 handoff 代替。用户明确要求其他入口时遵从用户要求；首次本地编译前执行 `./scripts/cargo-dev.sh --prepare-target`，日常反馈使用 wrapper，正式验收保留 canonical 命令。已有普通 target 不擅自删除。
+
 在独立分支连续分析、实现、局部验证和修复。subagent 按需使用，说明必要上下文、写入范围和期望结果，避免重叠编辑。保留他人改动。
 
 先读相关实现，沿调用和数据流确认受影响范围。最小完整修改以本次验收和适用契约为界，包含必要的消费者、测试、配置和文档；允许根因修复跨模块进行，不以文件数或行数省略必要修改。
