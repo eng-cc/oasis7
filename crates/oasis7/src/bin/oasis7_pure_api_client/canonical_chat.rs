@@ -67,13 +67,7 @@ fn prepare_canonical(
     deadline: Instant,
     input: ChatInput<'_>,
 ) -> Result<(AgentChatRequest, Vec<CollectedResponse>, std::path::PathBuf), String> {
-    let key = oasis7_pure_api_client_support::resolve_public_key_hex(
-        input.private_key_hex,
-        input.public_key_hex,
-    )?;
-    if key != oasis7_pure_api_client_support::derive_public_key_hex(input.private_key_hex)? {
-        return Err("owner public key does not match local private key".into());
-    }
+    let key = owner_public_key(input.private_key_hex, input.public_key_hex)?;
     conn.send(&ViewerRequest::AuthoritativeRecovery {
         command: AuthoritativeRecoveryCommand::ReconnectSync {
             request: AuthoritativeReconnectSyncRequest {
@@ -190,6 +184,20 @@ fn prepare_canonical(
     )?);
     let artifact = pending::save(&chat, &context.request.world, &conn.endpoint)?;
     Ok((chat, responses, artifact))
+}
+
+fn owner_public_key(private_key_hex: &str, public_key_hex: Option<&str>) -> Result<String, String> {
+    let supplied =
+        oasis7_pure_api_client_support::resolve_public_key_hex(private_key_hex, public_key_hex)?;
+    let bytes = hex::decode(supplied.trim()).map_err(|_| "owner public key must be valid hex")?;
+    if bytes.len() != 32 {
+        return Err("owner public key must be exactly 32 bytes".into());
+    }
+    let key = hex::encode(bytes);
+    if key != oasis7_pure_api_client_support::derive_public_key_hex(private_key_hex)? {
+        return Err("owner public key does not match local private key".into());
+    }
+    Ok(key)
 }
 
 fn submit_original(

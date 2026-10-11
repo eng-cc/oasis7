@@ -116,7 +116,7 @@ fn reply(socket: &mut std::net::TcpStream, body: Value) {
 }
 
 #[cfg(unix)]
-fn canonical_fixture(recover_after_timeout: bool) {
+fn canonical_fixture(recover_after_timeout: bool, key_format: Option<&str>) {
     let (world, private, identity, commit) = world_fixture();
     let canonical = Arc::new(Mutex::new(world));
     let received = Arc::new(Mutex::new(Vec::<Value>::new()));
@@ -346,12 +346,18 @@ fn canonical_fixture(recover_after_timeout: bool) {
     drop(registration);
     let mut conn = ViewerConnection::connect(&addr, "fixture-chat", timeout).unwrap();
     subscribe_for_control(&mut conn, true, false).unwrap();
+    let canonical_key = oasis7_pure_api_client_support::derive_public_key_hex(&private).unwrap();
+    let supplied_key = key_format.map(|format| match format {
+        "uppercase" => canonical_key.to_uppercase(),
+        "whitespace" => format!("  {canonical_key}\n"),
+        _ => panic!("unknown key format"),
+    });
     let input = ChatInput {
         agent_id: "agent-0",
         player_id: "owner",
         message: "private canonical fixture goal",
         private_key_hex: &private,
-        public_key_hex: None,
+        public_key_hex: supplied_key.as_deref(),
         intent_tick: None,
         intent_seq: None,
     };
@@ -558,12 +564,23 @@ fn canonical_outcomes_require_original_nonce_and_request_agent() {
 #[cfg(unix)]
 #[test]
 fn canonical_chat_uses_existing_session_and_actual_signed_world_service() {
-    canonical_fixture(false);
+    canonical_fixture(false, None);
 }
 #[cfg(unix)]
 #[test]
+fn canonical_chat_accepts_uppercase_owner_key_in_signed_workflow() {
+    canonical_fixture(false, Some("uppercase"));
+}
+#[cfg(unix)]
+#[test]
+fn canonical_chat_accepts_whitespace_owner_key_in_signed_workflow() {
+    canonical_fixture(false, Some("whitespace"));
+}
+
+#[cfg(unix)]
+#[test]
 fn canonical_timeout_recovers_original_request_on_new_connection() {
-    canonical_fixture(true);
+    canonical_fixture(true, None);
 }
 
 #[cfg(unix)]
@@ -664,4 +681,17 @@ fn retry_rejects_changed_endpoint_or_foreign_world_before_transport() {
     assert!(peer.read(&mut [0; 1]).is_err());
     assert!(path.exists());
     pending::complete(&path).unwrap();
+}
+
+#[test]
+fn canonical_owner_key_still_rejects_malformed_and_foreign_keys() {
+    let private = hex::encode([73; 32]);
+    for key in [
+        "zz".to_string(),
+        "00".repeat(31),
+        "00".repeat(33),
+        hex::encode([74; 32]),
+    ] {
+        assert!(owner_public_key(&private, Some(&key)).is_err());
+    }
 }
