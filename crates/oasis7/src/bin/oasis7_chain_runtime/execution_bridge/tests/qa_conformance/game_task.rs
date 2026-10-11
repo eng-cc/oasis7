@@ -42,7 +42,10 @@ fn game_task_real_tcp_create_lookup_replay_and_signed_owner_read() {
     );
     let mut read = fixture.view(Some(committed));
     read.scope_id = "agent:agent-a".into();
-    let view = fixture.client.read_view(read).unwrap();
+    let mut config = fixture.client.config().clone();
+    config.scope_id = read.scope_id.clone();
+    let owner_client = RemoteWorldServiceClient::new(config).unwrap();
+    let view = owner_client.read_view(read).unwrap();
     let control = view.projection().game_task_control.as_ref().unwrap();
     assert_eq!(control.created_operation_id, "native-task-create");
     assert_eq!(control.executor_epoch, DecimalU64(0));
