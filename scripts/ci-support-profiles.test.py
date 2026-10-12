@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Execute the real profile dispatcher with recording Cargo functions."""
 import json
+import re
 import subprocess
 import sys
 import unittest
@@ -70,6 +71,11 @@ run_oasis7_workspace_support_crate_tests() { echo full-inventory; }
         spec = importlib.util.spec_from_file_location('scope', ROOT / 'scripts/plan-rust-required-scope.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
+        legacy = DRIVER.split('run_oasis7_workspace_support_crate_tests() {', 1)[1].split('\n}', 1)[0]
+        # Independent old full entry is retained: profiles must cover every package
+        # in it, not merely agree with their own inventory constant.
+        self.assertEqual(set(module.SUPPORT_PROFILES),
+                         set(re.findall(r'-p\s+([a-zA-Z0-9_]+)', legacy)))
         plan = dict(groups=['workspace_support'], scope='full',
                     workspace_support_profile_version=1,
                     workspace_support_profiles=list(module.SUPPORT_PROFILES))
