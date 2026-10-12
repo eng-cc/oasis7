@@ -171,6 +171,20 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - 本地合同验证：`bash scripts/plan-wasm-determinism-scope.test.sh`、`bash scripts/ensure-wasm-bindgen-cli.test.sh`、`python3 scripts/ci-local-signer-tests.test.py`、`python3 scripts/plan-rust-required-scope.test.py`、`python3 scripts/ci-required-result.test.py`、`python3 scripts/ci-workflow.test.py`；前三项接入 workflow_governance。
 - net 的 libp2p/Python/WASM 检查、Viewer auth smoke 与 performance visual build 均通过 `ci-tests.sh --group` 执行一次；YAML 负责工具、浏览器和依赖准备。stable 安装使用 minimal 并显式安装 rustfmt/clippy，nightly、rust-src 与 WASM targets 保留。
 
+<a id="ci-dependency-installation-validation"></a>
+### CI 依赖安装与 Release 工具缓存核验
+
+要求与设计见 [CI 分级执行 PRD](doc/testing/ci/ci-tiered-execution.prd.md#ci-install-trunk)和[依赖准备设计](doc/testing/ci/ci-tiered-execution.design.md#ci-install-trunk-design)。本节给出验证方法；具体执行版本、结果和未覆盖范围记录在对应 PR 与 Actions 运行中。
+
+- 本地接线回归：`bash scripts/release-packages-trunk-cache-contract.test.sh`。检查 Release 使用计划源中的共享安装器、与 Rust CI/main writer 一致的归档身份、只恢复 action 和冷热均执行验证，必要失败不能变成成功。历史 tag 缺安装器时应在恢复前明确失败。
+- 安装器行为：`bash scripts/install-ci-trunk.test.sh` 覆盖冷下载、合法缓存、损坏缓存/下载、错误版本、错误 pin 及受支持宿主的真实 binary。此测试首次需要下载固定官方归档并核验摘要；缺网络时如实记录未执行，不能以离线接线测试代替。损坏归档不得先解压或执行。
+- hosted 功能：读取后续自然发生且已授权的 Release `build-web-dist`，确认工具验证后原有 Web 构建、source/BUILDINFO 与发布检查正常。不要为本节人为触发发布；未发生的发布保持待观察。
+- 真实跨 tag 缓存：关联 main `full-regression` 的实际归档保存记录和两个不同 tag 的 reader，记录 run/job URL、event/ref、请求/匹配 key、工具/安装器身份、路径及 cache version 兼容条件、恢复和摘要验证结果。同 tag rerun、仅配置相同或只有 cache-hit 输出均不足以确认 main seed 复用。
+- 冷暖量测：区分实际下载、跨 run 恢复、本地已有和恢复异常后下载；分别记录恢复、下载、验证安装、总准备及 writer 保存成本。日志只有 step 级时间时保持该粒度。附 runner image/OS/arch、source、Trunk 版本/摘要、helper 指纹、样本窗口与数量；失败和取消单列，排队和整个 Release 耗时另报。样本不足时报告原始观察，不预写提速百分比。
+- apt 先观察索引更新、下载、安装、锁等待和失败分布。本次没有新增 apt helper；后续确需预算治理时，使用假命令与临时进程 fixture 验证正常/瞬态/永久错误、总预算、挂起或忽略终止信号的子进程、父进程先退出、取消与无受控遗留进程。不得在真实 apt/dpkg 上故障注入；强制终止后的包状态不明确时应失败并使用新 runner。
+
+本地合同测试只证明其实际范围；main 合入、hosted 构建、跨 tag 恢复与性能收益分别核实，不新增通用 required check、预热工作流或验收回执。
+
 ### 当前 CI 未直接覆盖（需手册补齐）
 - Web UI agent-browser 闭环（现为手动/agent 流程，不在 CI 默认路径中）。
 - `m4/m5` builtin wasm hash 校验（`scripts/ci-tests.sh` 已移除 `sync-m4/m5 --check`）。
