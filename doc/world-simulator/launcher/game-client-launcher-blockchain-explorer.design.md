@@ -72,3 +72,32 @@ Txs 构造请求时同时保留有效的 `action_id`、`account_id`、`status` �
 | [组合过滤与分页](game-client-launcher-blockchain-explorer.prd.md#explorer-query-filters) | [条件与结果传递](#des-explorer-query-filters) | 组合参数不丢失，空结果、计数、排序、分页和回显一致 | [测试手册](../../../testing-manual.md) S6 Explorer/Transfer 条目；同候选 native/Web 分别覆盖账户错、状态错、全匹配、仅 action ID、清空和分页，采集实际 query 与返回并核呈现，planned | #4450 H4 与实现 PR 的参数矩阵和表面证据 | 本次未运行；单 status 测试或前端 fixture 不证明真实组合查询 |
 
 后端身份与可靠处置的 H1 不由本界面表验收；其五项独立义务和定向测试入口以[后端验证映射](../../p2p/blockchain/chain-http-submit-explorer-contract.design.md#http-validation)为准。发生实际视觉或交互代码改动时，继续按上文 S6 与适用设计角色要求取证。
+
+<a id="des-explorer-client-refresh-continuity"></a>
+## 客户端调度与详情保留
+
+本节承接[刷新与详情连续性](game-client-launcher-blockchain-explorer.prd.md#explorer-client-refresh-continuity)，针对 [#4406 E1–E3](https://github.com/eng-cc/oasis7/issues/4406) 的客户端消费，不替代 #4450 的后端一致性设计。
+
+### 调度状态
+
+每个查询保留“尚未加载、在途、已加载（可为空）、错误”的区分，不用列表长度代替加载历史。窗口每帧显示空态不会重新安排非活动列表；显式用户请求、筛选变化和既有当前 tab 周期刷新产生各自的待办。
+
+概览和当前 tab 的到期状态分别维护；发送/完成 overview 不能重置或吞掉当前 tab 的待办。继续使用有界 in-flight 约束，空闲时让已等待的当前操作推进，不允许刚重新到期的 overview 永久排在其前面。可以保留现有轮询周期；关键是响应消费和下一帧的调度顺序，不是扩大周期或并发。旧查询响应只更新对应请求的查询状态，不能因 tab/筛选已改变而把结果或错误套到新输入。
+
+### 详情状态
+
+列表缓存与已选 detail 分开维护。周期列表响应可更新同身份的选中对象；没有命中时保留该对象的独立详情，不把 `.find(...) == None` 当作权威删除。当前对象的直接 detail 查询明确返回 not_found、用户清空或选择其他对象时，才按相应路径改变详情。失败查询仍显示真实错误，不伪造 not_found。
+
+上述保留只针对未改变选择的周期刷新。用户主动重置或改变组合过滤时继续执行[条件与结果传递](#des-explorer-query-filters)的现有规则，避免把历史选中详情当作新筛选的命中；此设计不新定主动换页行为。
+
+### 源码接点与独立验证
+
+基准 `5e930face77dd284bbba6186fd997e7e63fa9164` 的 `crates/oasis7_client_launcher/src/explorer_window_view.rs` 每帧按 `blocks/txs.is_empty()` 安排请求；`explorer_window.rs::maybe_request_explorer_panel_data` 把到期 overview 放在各 tab 待办之前；列表结果处理又按本页 `.find(...)` 重写 selected detail。三处分别对应 E1、E2、E3，不以一处修复替代另外两处。
+
+| 独立义务 | 目标输入与完整消费链 | 需要观察的结果 |
+| --- | --- | --- |
+| E1 空态与调度 | 成功空 Blocks → Search/Address；非空 Blocks + 空 filtered Txs → Search/P1；接收、清 in-flight、下一帧并实际发出请求 | 当前目标请求发出；非活动空列表不逐帧重新请求；正常空态、显式刷新与当前 tab 周期刷新保留 |
+| E2 慢概览 | 已加载非空列表，连续约 1100ms 成功 overview；点击到下个空闲帧分别不足/超过一秒，另保留快响应 | 当前 tab 在有限轮次实际请求并刷新；不是只验证 pending，也不靠 E1 的空列表场景代替 |
+| E3 详情保留 | detail 响应 → 周期调度 → 多次快速非空头页响应；Search 页外旧 block、过滤外旧 tx、页内对象、明确换选/清空/真正 not_found | 页外详情保留、页内同对象更新、明确 detail 结果与用户选择分别生效 |
+
+回归接点为上述 launcher 模块及其测试，可用受控查询 transport；可见变更另按 S6 核 native/Web 实际表面。本次仅补合同，未执行这些行为场景，也不证明后端查询一致性或交易最终性。

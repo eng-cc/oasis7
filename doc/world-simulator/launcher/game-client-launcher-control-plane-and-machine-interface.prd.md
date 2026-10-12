@@ -34,6 +34,39 @@ native 与 Web 客户端消费同一份状态和动作合同。Web 入口可托�
 - Web 表面不得因初始化、浏览器环境、状态读取或控制面请求失败而把 launcher 显示为 ready。它应保留可见的 blocked/error 诊断及可恢复下一步，并继续以服务端状态快照为准；这条表现边界不声明浏览器 clock、轮询、WASM lifecycle 或 runtime session 的具体实现。
 - chain runtime、execution-world 输出、stale-session/recovery，以及浏览器/WASM 的运行时兼容细节，统一转至 `game-client-launcher-runtime-session-continuity.prd.md` 的 runtime 专业 authority；本控制面只保留请求、结果和状态的呈现合同。
 
+<a id="launcher-action-lifecycle"></a>
+### 控制动作的终态、异常与启动输入
+
+本节细化 [#4406](https://github.com/eng-cc/oasis7/issues/4406) L1–L4、L6–L8，沿用既有
+operator 路由与同步控制结果；用户启动/停止的本地结果不得由传输时长或旧快照猜测。
+
+- 停止请求的客户端预算必须覆盖服务端当前支持的完整有界生命周期，包括优雅等待和必要的
+  终止/等待回退。约 2 秒退出及约 4 秒优雅超时后回退不应在 1.5 秒被误报 QueryFailed。
+  尚无终态时保持停止中/结果未知；只有实际 stop/wait 确认才显示已停止。真无响应仍有界。
+- 控制服务的正常退出与不可恢复 accept 错误都须进入同一托管子进程 stop/wait 收尾路径；
+  连接上限或日志不能代替收尾。可恢复 accept 错误可有界退避，不能无限忙转；清理失败须与
+  原始错误一并保留，不宣称进程/端口已释放。
+- Start 的拒绝不替换仍在运行的 child/PID/配置，后续 Stop 仍能管理原进程；该先检查、后变更
+  的既有约束由[会话重新验证设计](game-client-launcher-runtime-session-continuity.design.md#session-revalidation)
+  拥有。GUI-agent 与普通控制路由消费同一结果，不因新请求 disabled/hosted/invalid-mode 丢失句柄。
+- `/api/start`、`/api/chain/start` 对坏 JSON、字段类型错误与未知 tier 返回完整可解码的
+  `ApiResponse`：`ok=false`、`error_code=invalid_request`、安全的具体原因及当前 `state`；
+  不 spawn、不修改原状态。不强制某个 HTTP 状态码；使用非 2xx 时客户端仍须读取结构化诊断。
+- 静态目录优先级按输入来源判断：显式 `--viewer-static-dir` 高于环境默认，即使值恰好是
+  `web`；省略 CLI 才消费非空环境默认和既有 fallback。显式有效目录不被错误环境路径阻断。
+  Windows wrapper 保留同一参数来源语义。
+- provider-backed 默认启动的 preflight 必须验证现有健康响应的必需字段和语义。
+  HTTP 200 但 `ok=false`/degraded、缺失或错类型的必需字段都不能写成功产物或继续启动。
+  显式 `--skip-llm-provider-preflight` 保留既有受控调试/负向用途且不产出健康通过结论；
+  HTTP 存活、provider 健康与真实 decision/tool-call 各是不同结论。
+- headed producer 与子 Launcher stack 对 `--meta-file` 使用同一规范化路径；相对、绝对、
+  含空格及重复参数有唯一解析结果。若入口不支持覆盖，须在启动 child 前拒绝，不能等错文件
+  直到超时。非 headed 直接 exec 与默认入口保留。
+
+验收按[配对动作生命周期设计](game-client-launcher-control-plane-and-machine-interface.design.md#launcher-action-lifecycle-design)
+分别使用真实可控 child、完整 HTTP、离线参数/健康响应 fixture；不要求真实付费 provider。
+Windows 活跃子进程停止须独立验证，Unix/mock/no-op 不代签。
+
 ### 机器接口
 
 - `GET /api/gui-agent/capabilities` 是机器客户端的 capability discovery 入口；响应中的版本、`actions[]` 与 `query_targets` 是当前动作清单和查询目标的真值，文档不维护永久且穷尽的动作清单。payload 约束不由该响应发现，而是在提交 action 时按当前实现校验。
