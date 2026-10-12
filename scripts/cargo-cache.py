@@ -115,6 +115,15 @@ def physical_size(path):
     return int(result.stdout.split()[0]) * 1024
 
 
+def breakdown(target):
+    result = {}
+    for profile in ("debug", "release", "packaging"):
+        directory = target / profile
+        if directory.is_dir() and not directory.is_symlink():
+            result[profile] = {name: physical_size(directory / name) if (directory / name).is_dir() and not (directory / name).is_symlink() else 0 for name in ("deps", "incremental", "build")}
+    return result
+
+
 def inventory(root, measure=True):
     common, base, family = layout(root)
     roots = [Path(line[9:]).resolve() for line in git(root, "worktree", "list", "--porcelain", "-z").split("\0") if line.startswith("worktree ")]
@@ -142,6 +151,9 @@ def inventory(root, measure=True):
                 referenced = [source for source, destination in refs if destination == target.resolve() or target.resolve() in destination.parents or destination in target.resolve().parents]
                 owner = owners.get(namespace.name)
                 rows.append(dict(target=str(target), bytes=physical_size(target) if safe and measure else None, owner=owner or (data or {}).get("owner"), registered=owner is not None, references=referenced, managed=data is not None, last_used=(data or {}).get("last_used"), status="registered" if owner else "referenced" if referenced else "orphan" if data else "unknown", safe=safe))
+    if measure:
+        for row in rows:
+            row["breakdown_bytes"] = breakdown(Path(row["target"])) if row["safe"] else {}
     return dict(common_dir=str(common), cache_root=str(base), family=str(family), targets=rows, total_bytes=sum(row["bytes"] or 0 for row in rows), unknown_size_count=sum(row["bytes"] is None for row in rows))
 
 

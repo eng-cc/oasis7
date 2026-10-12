@@ -444,6 +444,21 @@ def execute(repo, path, branch, expected, base_ref, pr, report):
     report['branch_removed'] = True
 
 
+def cargo_cache_followup(repo, worktree):
+    cache_script = pathlib.Path(__file__).with_name('cargo-cache.py')
+    command = [sys.executable, str(cache_script), 'gc', '--repo-root', str(repo), '--json']
+    result = {'preview_command': command, 'default_retention_days': 7}
+    try:
+        preview = _run(command, timeout=120)
+        data = json.loads(preview.stdout)
+        result['targets'] = [r for r in data['targets'] if r.get('owner') == str(worktree.resolve())]
+        targets = {r['target'] for r in result['targets']}
+        result['actions'] = [a for a in data['actions'] if a['target'] in targets]
+    except (CleanupError, ValueError, KeyError) as exc:
+        result['report_error'] = str(exc)
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, epilog='Process snapshots cover current-user processes and visible all-user target holders; invisible foreign use is outside this observation domain. Current-ABI pycache requires matching tracked source content. Unsupported cache ABI is retained. Stop known users and run outside the target. Never fetches, sudo, or forces removal. Exit: 0 eligible/success, 1 blocked/partial, 2 invalid arguments.')
     parser.add_argument('--repo-root', type=pathlib.Path, default=pathlib.Path.cwd())
@@ -482,6 +497,9 @@ def main():
     except CleanupError as exc:
         report['readback_error'] = str(exc)
         report['eligible'] = False
+    if report['worktree_removed']:
+        # Reporting is independent of Git deletion success; never delete external caches here.
+        report['cargo_cache_followup'] = cargo_cache_followup(args.repo_root, args.worktree)
     print(json.dumps(report))
     return 0 if report['eligible'] else 1
 

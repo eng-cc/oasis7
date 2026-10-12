@@ -246,6 +246,8 @@ run_cargo_tooling_baseline_contract_tests() {
 run_cargo_tooling_contract_tests() {
   run_cargo_tooling_baseline_contract_tests
   run python3 ./scripts/cargo-cache.test.py
+  run python3 ./scripts/cargo-incremental-clean.test.py
+  run python3 ./scripts/runtime-module-routing-perf-harness.test.py
   run bash ./scripts/cargo-dev-lib.test.sh
   run bash ./scripts/check-standalone-tool-lockfiles.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh

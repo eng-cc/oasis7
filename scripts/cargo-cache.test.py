@@ -43,6 +43,16 @@ class CacheTests(unittest.TestCase):
             (target / cache.MARKER).write_text(json.dumps(data))
         return target
 
+    def test_breakdown_reports_incremental_and_deps(self):
+        target = self.create(self.root)
+        for name in ("incremental", "deps", "build"):
+            path = target / "debug" / name
+            path.mkdir(parents=True)
+            (path / "fixture").write_bytes(b"x" * 8192)
+        row = cache.inventory(self.root)["targets"][0]
+        self.assertGreater(row["breakdown_bytes"]["debug"]["incremental"], 0)
+        self.assertGreater(row["breakdown_bytes"]["debug"]["deps"], 0)
+
     def test_wrapper_only_registered_target_discovered(self):
         target = self.create(self.root)
         self.assertFalse((self.root / "target").exists())
