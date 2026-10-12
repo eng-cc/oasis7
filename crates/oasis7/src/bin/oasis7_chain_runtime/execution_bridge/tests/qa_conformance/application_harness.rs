@@ -491,7 +491,12 @@ fn run_isolated_application_mode_with_options(mode: IsolatedApplicationMode<'_>)
         .map(|m| m.decision_count.load(Ordering::SeqCst));
     let mut output = if matches!(
         admission_mode,
-        "fresh-admission" | "fresh-metadata" | "repeated-turns"
+        "fresh-admission"
+            | "fresh-metadata"
+            | "repeated-turns"
+            | "hosted-wait"
+            | "hosted-wait-write-failure"
+            | "hosted-resume-write-failure"
     ) {
         application_completion::run_child(&mut command, &app_dir)
     } else {

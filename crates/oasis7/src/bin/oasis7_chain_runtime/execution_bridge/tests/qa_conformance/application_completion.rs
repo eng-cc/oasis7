@@ -121,6 +121,14 @@ impl CompletionWatch {
         }
     }
     pub(super) fn finished(&mut self, summary: &serde_json::Value, complete: bool) -> bool {
+        self.finished_after_injected_rollback(summary, complete, false)
+    }
+    pub(super) fn finished_after_injected_rollback(
+        &mut self,
+        summary: &serde_json::Value,
+        complete: bool,
+        rollback_observed: bool,
+    ) -> bool {
         let progress = serde_json::json!({
             "phase": summary["hosted_service_phase"], "inflight": summary["hosted_service_inflight"],
             "terminal": summary["terminal_states"], "pending_intents": summary["pending_intent_count"],
@@ -133,8 +141,42 @@ impl CompletionWatch {
             );
             self.previous = progress;
         }
-        complete || has_failure(summary) || Instant::now() >= self.deadline
+        complete
+            || unrecoverable_failure(summary, rollback_observed)
+            || Instant::now() >= self.deadline
     }
+}
+
+fn unrecoverable_failure(summary: &serde_json::Value, rollback_observed: bool) -> bool {
+    if rollback_observed
+        && summary["agent_service_pump_error"]
+            == "Agent service preparation is blocked; original work remains pending"
+    {
+        // Only the QA-injected, observed atomic-write rollback may retry this
+        // specific preparation error. Preserve terminal and memory failures.
+        let mut failure = summary.clone();
+        failure["agent_service_pump_error"] = serde_json::Value::Null;
+        has_failure(&failure)
+    } else {
+        has_failure(summary)
+    }
+}
+
+#[test]
+fn observed_injected_rollback_only_allows_its_preparation_error() {
+    let mut summary = serde_json::json!({
+        "agent_service_pump_error": "Agent service preparation is blocked; original work remains pending"
+    });
+    assert!(unrecoverable_failure(&summary, false));
+    assert!(!unrecoverable_failure(&summary, true));
+    summary["terminal_states"] = serde_json::json!({"agent-a": {"status": "rejected"}});
+    assert!(unrecoverable_failure(&summary, true));
+    summary["terminal_states"] = serde_json::Value::Null;
+    summary["hosted_service_memory_failure"] = serde_json::json!("memory failure");
+    assert!(unrecoverable_failure(&summary, true));
+    summary["hosted_service_memory_failure"] = serde_json::Value::Null;
+    summary["agent_service_pump_error"] = serde_json::json!("unexpected error");
+    assert!(unrecoverable_failure(&summary, true));
 }
 
 pub(super) fn canonical_complete(summary: &serde_json::Value) -> bool {
