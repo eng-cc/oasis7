@@ -24,8 +24,15 @@ pub(super) fn child_deadline() -> Instant {
 }
 
 pub(super) fn run_child(command: &mut Command, root: &std::path::Path) -> Output {
-    let deadline = Instant::now() + CHILD_BUDGET;
-    let unix_deadline = SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + CHILD_BUDGET;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let inherited = std::env::var(DEADLINE_ENV).ok().map(|value| {
+        value
+            .parse::<u128>()
+            .expect("inherited completion deadline")
+    });
+    let budget = launcher_budget(now.as_millis(), inherited);
+    let deadline = Instant::now() + budget;
+    let unix_deadline = now + budget;
     command.env(DEADLINE_ENV, unix_deadline.as_millis().to_string());
     let stdout_path = root.join("completion-child.stdout.log");
     let stderr_path = root.join("completion-child.stderr.log");
@@ -57,7 +64,7 @@ pub(super) fn run_child(command: &mut Command, root: &std::path::Path) -> Output
             eprintln!(
                 "conformance_parent_hard_deadline_exceeded owned_child={} budget_ms={}",
                 child.id(),
-                CHILD_BUDGET.as_millis()
+                budget.as_millis()
             );
             break status;
         }
@@ -78,6 +85,28 @@ pub(super) fn run_child(command: &mut Command, root: &std::path::Path) -> Output
         eprintln!("conformance_full_child_logs={}", destination.display());
     }
     output
+}
+
+fn launcher_budget(now_ms: u128, inherited_deadline_ms: Option<u128>) -> Duration {
+    // A nested QA launcher must stop its App child before its own parent can
+    // stop it. Keep ten seconds for Node, listeners and fixture-thread cleanup.
+    const PARENT_CLEANUP_RESERVE: Duration = Duration::from_secs(10);
+    inherited_deadline_ms
+        .map(|deadline| {
+            Duration::from_millis(deadline.saturating_sub(now_ms).min(u64::MAX as u128) as u64)
+                .saturating_sub(PARENT_CLEANUP_RESERVE)
+                .min(CHILD_BUDGET)
+        })
+        .unwrap_or(CHILD_BUDGET)
+}
+
+#[test]
+fn nested_completion_launcher_preserves_parent_cleanup_budget() {
+    assert_eq!(launcher_budget(1000, None), CHILD_BUDGET);
+    assert_eq!(launcher_budget(1000, Some(61000)), Duration::from_secs(50));
+    assert_eq!(launcher_budget(21000, Some(61000)), Duration::from_secs(30));
+    assert_eq!(launcher_budget(60000, Some(61000)), Duration::ZERO);
+    assert_eq!(launcher_budget(62000, Some(61000)), Duration::ZERO);
 }
 
 fn retained_output(mut file: fs::File) -> Vec<u8> {
@@ -121,6 +150,14 @@ impl CompletionWatch {
         }
     }
     pub(super) fn finished(&mut self, summary: &serde_json::Value, complete: bool) -> bool {
+        self.finished_after_injected_rollback(summary, complete, false)
+    }
+    pub(super) fn finished_after_injected_rollback(
+        &mut self,
+        summary: &serde_json::Value,
+        complete: bool,
+        rollback_observed: bool,
+    ) -> bool {
         let progress = serde_json::json!({
             "phase": summary["hosted_service_phase"], "inflight": summary["hosted_service_inflight"],
             "terminal": summary["terminal_states"], "pending_intents": summary["pending_intent_count"],
@@ -133,8 +170,42 @@ impl CompletionWatch {
             );
             self.previous = progress;
         }
-        complete || has_failure(summary) || Instant::now() >= self.deadline
+        complete
+            || unrecoverable_failure(summary, rollback_observed)
+            || Instant::now() >= self.deadline
     }
+}
+
+fn unrecoverable_failure(summary: &serde_json::Value, rollback_observed: bool) -> bool {
+    if rollback_observed
+        && summary["agent_service_pump_error"]
+            == "Agent service preparation is blocked; original work remains pending"
+    {
+        // Only the QA-injected, observed atomic-write rollback may retry this
+        // specific preparation error. Preserve terminal and memory failures.
+        let mut failure = summary.clone();
+        failure["agent_service_pump_error"] = serde_json::Value::Null;
+        has_failure(&failure)
+    } else {
+        has_failure(summary)
+    }
+}
+
+#[test]
+fn observed_injected_rollback_only_allows_its_preparation_error() {
+    let mut summary = serde_json::json!({
+        "agent_service_pump_error": "Agent service preparation is blocked; original work remains pending"
+    });
+    assert!(unrecoverable_failure(&summary, false));
+    assert!(!unrecoverable_failure(&summary, true));
+    summary["terminal_states"] = serde_json::json!({"agent-a": {"status": "rejected"}});
+    assert!(unrecoverable_failure(&summary, true));
+    summary["terminal_states"] = serde_json::Value::Null;
+    summary["hosted_service_memory_failure"] = serde_json::json!("memory failure");
+    assert!(unrecoverable_failure(&summary, true));
+    summary["hosted_service_memory_failure"] = serde_json::Value::Null;
+    summary["agent_service_pump_error"] = serde_json::json!("unexpected error");
+    assert!(unrecoverable_failure(&summary, true));
 }
 
 pub(super) fn canonical_complete(summary: &serde_json::Value) -> bool {

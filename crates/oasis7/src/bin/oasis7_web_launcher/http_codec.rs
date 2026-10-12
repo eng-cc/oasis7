@@ -5,6 +5,7 @@ use std::time::Duration;
 use serde::Serialize;
 
 const HTTP_READ_TIMEOUT_SECS: u64 = 3;
+const HTTP_WRITE_TIMEOUT_SECS: u64 = 3;
 const MAX_HTTP_HEADER_BYTES: usize = 32 * 1024;
 const MAX_HTTP_BODY_BYTES: usize = 1024 * 1024;
 
@@ -17,6 +18,15 @@ pub(super) struct HttpRequest {
 }
 
 pub(super) fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest, String> {
+    // Accepted sockets can inherit the listener's nonblocking mode on macOS.
+    // Each connection has its own worker, so use bounded blocking I/O instead
+    // of truncating large static responses when write_all encounters WouldBlock.
+    stream
+        .set_nonblocking(false)
+        .map_err(|err| format!("set connection blocking mode failed: {err}"))?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(HTTP_WRITE_TIMEOUT_SECS)))
+        .map_err(|err| format!("set write timeout failed: {err}"))?;
     stream
         .set_read_timeout(Some(Duration::from_secs(HTTP_READ_TIMEOUT_SECS)))
         .map_err(|err| format!("set read timeout failed: {err}"))?;
@@ -151,4 +161,44 @@ pub(super) fn write_http_response(
 
 fn find_header_end(bytes: &[u8]) -> Option<usize> {
     bytes.windows(4).position(|window| window == b"\r\n\r\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    #[test]
+    fn nonblocking_connection_delivers_complete_large_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let address = listener.local_addr().expect("address");
+        let worker = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            // Reproduce the accepted-socket mode inherited from a nonblocking
+            // listener on macOS; explicit mode also makes this portable.
+            stream.set_nonblocking(true).expect("nonblocking");
+            read_http_request(&mut stream)?;
+            write_http_response(
+                &mut stream,
+                200,
+                "application/wasm",
+                &vec![0x42; 32 * 1024 * 1024],
+                false,
+            )
+        });
+        let mut client = TcpStream::connect(address).expect("connect");
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("read deadline");
+        client
+            .write_all(b"GET /launcher.wasm HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .expect("request");
+        std::thread::sleep(Duration::from_millis(100));
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).expect("read response");
+        worker.join().expect("worker").expect("complete response");
+        let boundary = find_header_end(&response).expect("HTTP headers") + 4;
+        assert_eq!(response.len() - boundary, 32 * 1024 * 1024);
+        assert!(response[boundary..].iter().all(|byte| *byte == 0x42));
+    }
 }

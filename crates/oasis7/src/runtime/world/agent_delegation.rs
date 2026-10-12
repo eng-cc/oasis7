@@ -149,6 +149,16 @@ fn action_scope(action: &Action) -> Option<(&'static str, String)> {
 }
 
 impl World {
+    /// Test bootstrap only: retain the production source/object/budget validation.
+    /// This is not an owner-facing grant issuance API.
+    #[cfg(any(test, feature = "test_tier_required", feature = "test_tier_full"))]
+    pub fn install_test_native_delegation_grant(
+        &mut self,
+        grant: AgentDelegationGrantV1,
+    ) -> Result<(), WorldError> {
+        self.install_agent_delegation_grant(grant)
+    }
+
     fn delegation_ledger(&self) -> Result<Ledger, WorldError> {
         match self.cognition.get("agent_delegation") {
             None | Some(Value::Null) => Ok(Ledger::default()),

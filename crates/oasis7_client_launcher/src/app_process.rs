@@ -59,18 +59,28 @@ impl ClientLauncherApp {
         while let Ok(event) = self.web_api_rx.try_recv() {
             self.last_web_poll_at = Some(Instant::now());
             match event {
-                WebApiEvent::State(result) => {
+                WebApiEvent::State(generation, result) => {
                     self.set_web_request_inflight(WebRequestDomain::StatePoll, false);
+                    if generation != self.web_state_generation
+                        || self.web_request_inflight_for(WebRequestDomain::ControlAction)
+                    {
+                        continue;
+                    }
                     match result {
                         Ok(snapshot) => self.apply_web_snapshot(snapshot),
                         Err(err) => {
                             self.status = LauncherStatus::QueryFailed;
+                            self.invalidate_chain_session_evidence(err.as_str());
                             self.append_log(format!("web state refresh failed: {err}"));
                         }
                     }
                 }
-                WebApiEvent::Action(result) => {
+                WebApiEvent::Action(generation, result) => {
+                    let current = generation == self.web_state_generation;
                     self.set_web_request_inflight(WebRequestDomain::ControlAction, false);
+                    if !current {
+                        continue;
+                    }
                     match result {
                         Ok(response) => {
                             if !response.ok {
@@ -84,6 +94,7 @@ impl ClientLauncherApp {
                         }
                         Err(err) => {
                             self.status = LauncherStatus::QueryFailed;
+                            self.invalidate_chain_session_evidence(err.as_str());
                             self.append_log(format!("web action request failed: {err}"));
                         }
                     }
@@ -278,6 +289,7 @@ impl ClientLauncherApp {
         match running.child.try_wait() {
             Ok(Some(status)) => {
                 self.status = LauncherStatus::QueryFailed;
+                self.invalidate_chain_session_evidence("control plane exited");
                 self.append_log(format!("control plane exited: {status}"));
                 self.running = None;
             }
@@ -286,6 +298,7 @@ impl ClientLauncherApp {
             }
             Err(err) => {
                 self.status = LauncherStatus::QueryFailed;
+                self.invalidate_chain_session_evidence(&err.to_string());
                 self.append_log(format!("query control plane status failed: {err}"));
                 self.running = None;
             }
@@ -297,11 +310,13 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::StatePoll, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         let base_url = self.control_api_base.clone();
         thread::spawn(move || {
-            let _ = tx.send(WebApiEvent::State(fetch_web_state_blocking(
-                base_url.as_str(),
-            )));
+            let _ = tx.send(WebApiEvent::State(
+                generation,
+                fetch_web_state_blocking(base_url.as_str()),
+            ));
         });
     }
 
@@ -310,13 +325,14 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         let base_url = self.control_api_base.clone();
         let config = self.config.clone();
         thread::spawn(move || {
-            let _ = tx.send(WebApiEvent::Action(post_web_start_blocking(
-                base_url.as_str(),
-                config,
-            )));
+            let _ = tx.send(WebApiEvent::Action(
+                generation,
+                post_web_start_blocking(base_url.as_str(), config),
+            ));
         });
     }
 
@@ -325,11 +341,13 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         let base_url = self.control_api_base.clone();
         thread::spawn(move || {
-            let _ = tx.send(WebApiEvent::Action(post_web_stop_blocking(
-                base_url.as_str(),
-            )));
+            let _ = tx.send(WebApiEvent::Action(
+                generation,
+                post_web_stop_blocking(base_url.as_str()),
+            ));
         });
     }
 
@@ -338,13 +356,14 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         let base_url = self.control_api_base.clone();
         let config = self.config.clone();
         thread::spawn(move || {
-            let _ = tx.send(WebApiEvent::Action(post_web_chain_start_blocking(
-                base_url.as_str(),
-                config,
-            )));
+            let _ = tx.send(WebApiEvent::Action(
+                generation,
+                post_web_chain_start_blocking(base_url.as_str(), config),
+            ));
         });
     }
 
@@ -353,11 +372,13 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         let base_url = self.control_api_base.clone();
         thread::spawn(move || {
-            let _ = tx.send(WebApiEvent::Action(post_web_chain_stop_blocking(
-                base_url.as_str(),
-            )));
+            let _ = tx.send(WebApiEvent::Action(
+                generation,
+                post_web_chain_stop_blocking(base_url.as_str()),
+            ));
         });
     }
 

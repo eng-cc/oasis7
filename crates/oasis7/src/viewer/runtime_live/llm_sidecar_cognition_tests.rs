@@ -112,6 +112,7 @@ fn fresh_resume_leaves_past_schedule_tick_for_runtime_derivation() {
         canonical_agent_owner: None,
         canonical_agent_chat: None,
         game_task_control: None,
+        native_delegation_authorizations: Vec::new(),
         state: world.state().clone(),
         events: vec![],
         runtime_binding: None,

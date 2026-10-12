@@ -15,6 +15,40 @@ fn real_tcp_hosted_ordinary_wait_resume_act_preserves_canonical_identity() {
     );
 }
 
+/// Successful signed View responses remain valid while cumulative stages exceed
+/// the old twelve-second observation window. The child isolates the delay env.
+#[test]
+fn real_tcp_hosted_wait_delayed_success_preserves_completion_oracle() {
+    let root = temp_dir("qa-hosted-wait-delayed-completion");
+    fs::create_dir_all(&root).unwrap();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command.args([
+        "--exact",
+        "execution_bridge_real_tests::real_execution_bridge::tests::qa_conformance::application_hosted_wait::real_tcp_hosted_ordinary_wait_resume_act_preserves_canonical_identity",
+        "--nocapture",
+    ]);
+    command.env("PRE2_CONFORMANCE_VIEW_DELAY_MS", "1000");
+    let started = Instant::now();
+    let output = application_completion::run_child(&mut command, &root);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    println!(
+        "delayed_hosted_wait elapsed_ms={} exit={}\n{stdout}\n{stderr}",
+        started.elapsed().as_millis(),
+        output.status
+    );
+    fs::remove_dir_all(root).unwrap();
+    assert!(
+        output.status.success(),
+        "delayed valid HostedWait must pass original canonical oracle"
+    );
+    assert!(stdout.contains("PRE2_HOSTED_WAIT_RESUME_ACT_PASSED"));
+    assert!(
+        started.elapsed() > Duration::from_secs(12),
+        "causal delay must exceed former observation window"
+    );
+}
+
 pub(super) fn observation(
     fixture: &Fixture,
     root: std::path::PathBuf,
@@ -158,10 +192,10 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
         .unwrap();
     let ordered = session.snapshot_ordered(Duration::from_secs(3), true);
     let eligibility = shared.lock().unwrap().test_agent_service_pump_status();
-    let deadline = Instant::now() + Duration::from_secs(12);
+    let mut completion = application_completion::CompletionWatch::new();
     let mut completed = false;
     let mut summary = serde_json::Value::Null;
-    while Instant::now() < deadline {
+    loop {
         session.snapshot(Duration::from_millis(25)); // Continuous bounded drain, no repeated queued requests.
         if let Ok(guard) = shared.try_lock() {
             summary = guard.test_canonical_provider_diagnostic_summary();
@@ -172,10 +206,19 @@ pub(super) fn verify(client: &RemoteWorldServiceClient) {
                     && summary["pending_intent_count"] == 0
                     && summary["pending_action_count"] == 0
                     && summary["memory_store"].to_string().contains(digest);
-                if completed {
-                    break;
-                }
             }
+        }
+        let rollback_observed = [
+            ("PRE2_WAIT_CLEANUP_FS_ROOT", "wait-cleanup-rollback"),
+            ("PRE2_RESUME_HANDOFF_FS_ROOT", "resume-handoff-rollback"),
+        ]
+        .iter()
+        .any(|(env, marker)| {
+            std::env::var_os(env).as_deref() == Some(root.as_os_str())
+                && root.join(marker).is_file()
+        });
+        if completion.finished_after_injected_rollback(&summary, completed, rollback_observed) {
+            break;
         }
     }
     session

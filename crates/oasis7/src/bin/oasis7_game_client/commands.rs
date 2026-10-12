@@ -5,7 +5,7 @@ use oasis7::world_service::{
 };
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
-const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
+const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
 
 pub fn run(args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || args == ["--help"] {
@@ -17,7 +17,17 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
     }
     let command = &args[2];
     let allowed: &[&str] = match command.as_str() {
-        "describe" | "task" | "capabilities" => &[],
+        "describe" | "task" | "capabilities" | "industry" => &[],
+        "transfer" => &[
+            "--context",
+            "--from",
+            "--to",
+            "--material",
+            "--amount",
+            "--distance-km",
+            "--priority",
+            "--routes",
+        ],
         "context" => &["--operation"],
         "move" => &["--context", "--to"],
         "outcome" => &["--context", "--reason"],
@@ -50,12 +60,8 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
                 .map_err(|_| "signed service discovery unavailable")?,
         ),
         "task" => print(&client.task_fence()?),
-        "capabilities" => print(&json!({
-            "api_revision":1, "task_fence":client.task_fence()?,
-            "proposal_forms":[{"action_ref":"native.move_agent","arguments":{"to":"three signed i64 centimeter coordinates x_cm,y_cm,z_cm"},"has_side_effect":true,"admission_required":true}],
-            "outcomes":["executor_aborted","provider_failed","transport_exhausted"],
-            "scope":"native task-lane client; full Game HTTP action catalog is not delivered"
-        })),
+        "capabilities" => print(&client.capabilities()?),
+        "industry" => print(&client.industry()?),
         "context" => {
             let operation = required("--operation")?;
             let prefix = client.prefix(operation)?;
@@ -91,32 +97,12 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
                 agent_id: client.agent.clone(),
                 to: oasis7::GeoPos::new(*x, *y, *z),
             };
-            let request = if let Some(request) =
-                client.cached_intent(ClientStateKind::Action, operation)?
-            {
-                let WorldServicePayloadV1::Cognition(signed) = &request.signed_payload else {
-                    return Err("invalid cached action".into());
-                };
-                if signed.request.action != action {
-                    return Err(
-                        "context already has a different original action; query its result".into(),
-                    );
-                }
-                request
-            } else {
-                let captured = client.captured(operation)?;
-                let signed = authority::sign_read_request(
-                    "cognition",
-                    cognition_intent(&captured, action)?,
-                    &client.key_hex,
-                )?;
-                client.cache_intent(
-                    ClientStateKind::Action,
-                    operation,
-                    WorldServicePayloadV1::Cognition(signed),
-                )?
-            };
-            print(&client.submit_and_poll(&request)?)
+            print(&client.submit_action(operation, action)?)
+        }
+        "transfer" => {
+            let operation = required("--context")?;
+            let action = transfer_action(&client.agent, &options)?;
+            print(&client.submit_action(operation, action)?)
         }
         "outcome" => {
             let operation = required("--context")?;
@@ -168,5 +154,167 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
             print(&client.lookup(&request)?)
         }
         _ => unreachable!(),
+    }
+}
+
+fn transfer_action(
+    agent: &str,
+    options: &BTreeMap<&str, &str>,
+) -> Result<oasis7::runtime::Action, String> {
+    use oasis7::runtime::{Action, MaterialTransitPriority};
+    let required = |name| {
+        options
+            .get(name)
+            .copied()
+            .ok_or_else(|| format!("missing {name}"))
+    };
+    let ledger = |name| {
+        let value = required(name)?;
+        bounded_id(value)?;
+        oasis7::industry_types::MaterialLedgerId::try_from(value.to_owned())
+            .map_err(|_| "invalid material ledger".to_owned())
+    };
+    let from_ledger = ledger("--from")?;
+    let to_ledger = ledger("--to")?;
+    if from_ledger == to_ledger {
+        return Err("source and destination must differ".into());
+    }
+    let kind = required("--material")?;
+    bounded_id(kind)?;
+    let amount = required("--amount")?
+        .parse::<i64>()
+        .map_err(|_| "invalid amount")?;
+    let distance_km = required("--distance-km")?
+        .parse::<i64>()
+        .map_err(|_| "invalid distance")?;
+    if amount <= 0 || distance_km < 0 {
+        return Err("amount must be positive and distance nonnegative".into());
+    }
+    let priority = match required("--priority")? {
+        "standard" => MaterialTransitPriority::Standard,
+        "urgent" => MaterialTransitPriority::Urgent,
+        _ => return Err("invalid priority".into()),
+    };
+    let routes = required("--routes")?;
+    let route_ids = if routes == "direct" {
+        Vec::new()
+    } else {
+        let values: Vec<_> = routes.split(',').map(str::to_owned).collect();
+        if values.len() > 16 {
+            return Err("route path exceeds 16 hops".into());
+        }
+        for value in &values {
+            bounded_id(value)?;
+        }
+        let unique: std::collections::BTreeSet<_> = values.iter().collect();
+        if unique.len() != values.len() {
+            return Err("route path repeats a route".into());
+        }
+        values
+    };
+    Ok(Action::TransferMaterial {
+        requester_agent_id: agent.to_owned(),
+        from_ledger,
+        to_ledger,
+        kind: kind.to_owned(),
+        amount,
+        distance_km,
+        priority: Some(priority),
+        route_id: None,
+        route_ids,
+        auto_reroute: false,
+    })
+}
+fn bounded_id(value: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > 256
+        || value
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || c == ',')
+    {
+        return Err("invalid bounded identifier".into());
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn options() -> BTreeMap<&'static str, &'static str> {
+        BTreeMap::from([
+            ("--from", "agent:configured"),
+            ("--to", "factory:smelter"),
+            ("--material", "iron_ore"),
+            ("--amount", "2"),
+            ("--distance-km", "1"),
+            ("--priority", "standard"),
+            ("--routes", "route-a,route-b"),
+        ])
+    }
+    #[test]
+    fn transfer_is_typed_and_requester_is_configured_identity() {
+        let oasis7::runtime::Action::TransferMaterial {
+            requester_agent_id,
+            route_ids,
+            route_id,
+            auto_reroute,
+            ..
+        } = transfer_action("configured", &options()).unwrap()
+        else {
+            panic!("wrong action")
+        };
+        assert_eq!(requester_agent_id, "configured");
+        assert_eq!(route_ids, ["route-a", "route-b"]);
+        assert!(route_id.is_none());
+        assert!(!auto_reroute);
+    }
+    #[test]
+    fn transfer_cli_rejects_raw_action_and_authority_options_before_configuration() {
+        for option in [
+            "--action",
+            "--requester",
+            "--grant",
+            "--quote",
+            "--plan",
+            "--auto-reroute",
+        ] {
+            let error = run(vec![
+                "--config".into(),
+                "/unopened-config".into(),
+                "transfer".into(),
+                option.into(),
+                "{}".into(),
+            ])
+            .unwrap_err();
+            assert_eq!(error, "unsupported or duplicate option");
+        }
+        let error = run(vec![
+            "--config".into(),
+            "/unopened-config".into(),
+            "transfer".into(),
+            "--amount".into(),
+            "1".into(),
+            "--amount".into(),
+            "2".into(),
+        ])
+        .unwrap_err();
+        assert_eq!(error, "unsupported or duplicate option");
+    }
+    #[test]
+    fn transfer_rejects_invalid_business_arguments() {
+        for (key, value) in [
+            ("--amount", "0"),
+            ("--amount", "9223372036854775808"),
+            ("--distance-km", "-1"),
+            ("--priority", "admin"),
+            ("--from", "unknown:x"),
+            ("--to", "agent:configured"),
+            ("--routes", "a,a"),
+            ("--routes", "a,,b"),
+            ("--material", "iron ore"),
+        ] {
+            let mut input = options();
+            input.insert(key, value);
+            assert!(transfer_action("configured", &input).is_err(), "{key}");
+        }
     }
 }
