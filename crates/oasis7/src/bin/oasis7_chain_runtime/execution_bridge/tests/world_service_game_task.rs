@@ -1,6 +1,6 @@
 use super::*;
 use oasis7_agent_api::game::{DecimalU64, GAME_TASK_CREATE_DOMAIN, GameTaskCreateV1};
-fn create(
+pub(super) fn create(
     identity: &WorldIdentity,
     owner: &str,
     id: &str,
@@ -27,7 +27,7 @@ fn create(
         ),
     )
 }
-fn recorded(
+pub(super) fn recorded(
     driver: &NodeRuntimeExecutionDriver,
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
 ) -> CanonicalIntentResultV1 {
@@ -140,6 +140,92 @@ fn game_task_driver_same_block_uniqueness_and_queued_owner_fence() {
             .rejected
             .unwrap()
             .contains("fence mismatch")
+    );
+    fs::remove_dir_all(dir).unwrap();
+}
+
+fn publish(
+    identity: &WorldIdentity,
+    owner: &str,
+    control: &oasis7_agent_api::game::GameTaskControlV1,
+    id: &str,
+) -> SubmitIntentRequest<WorldServicePayloadV1> {
+    request(
+        identity,
+        WorldServicePayloadV1::GameGoalPublish(
+            sign_read_request(
+                oasis7_agent_api::game::GAME_GOAL_PUBLISH_DOMAIN,
+                oasis7_agent_api::game::GameGoalPublishV1 {
+                    api_rev: 1,
+                    world_id: identity.world_id.clone(),
+                    genesis_digest: identity.genesis_digest.clone(),
+                    task_id: control.task_id.clone(),
+                    agent_id: control.agent_id.clone(),
+                    owner_public_key: control.owner_public_key.clone(),
+                    owner_binding: control.owner_binding.clone(),
+                    owner_generation: control.owner_generation,
+                    branch_id: control.branch_id.clone(),
+                    reorg_epoch: control.reorg_epoch,
+                    expected_task_revision: control.task_revision,
+                    expected_latest_goal_revision: control.latest_goal_revision,
+                    goal_revision: DecimalU64(control.latest_goal_revision.0 + 1),
+                    client_operation_id: id.into(),
+                    prepare_operation_id: format!("prepared-{id}"),
+                    goal_ref: "ab".repeat(32),
+                },
+                owner,
+            )
+            .unwrap(),
+        ),
+    )
+}
+#[test]
+fn game_goal_publish_driver_activation_dedup_restart_and_stale_fence() {
+    let (dir, mut driver, identity, owner, _) = canonical_agent_chat::driver_fixture();
+    commit(&mut driver, 3, create(&identity, &owner, "task"));
+    let before = game_task::current_control(&driver.execution_world, "agent-a")
+        .unwrap()
+        .unwrap();
+    let first = publish(&identity, &owner, &before, "first");
+    commit(&mut driver, 4, first.clone());
+    let accepted = recorded(&driver, &first);
+    assert!(accepted.rejected.is_none());
+    let active = game_task::current_control(&driver.execution_world, "agent-a")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        active
+            .active_goal_reference
+            .as_ref()
+            .unwrap()
+            .activation_committed_height,
+        DecimalU64(4)
+    );
+    assert_eq!(active.executor_epoch, DecimalU64(0));
+    assert!(active.executor_id.is_none());
+    commit(&mut driver, 5, first.clone());
+    assert_eq!(recorded(&driver, &first), accepted);
+    let stale = publish(&identity, &owner, &before, "stale");
+    commit(&mut driver, 6, stale.clone());
+    assert!(recorded(&driver, &stale).rejected.is_some());
+    let restarted = NodeRuntimeExecutionDriver::new(
+        dir.join("state.json"),
+        dir.join("world"),
+        dir.join("records"),
+        dir.join("store"),
+    )
+    .unwrap();
+    assert_eq!(
+        game_task::current_control(&restarted.execution_world, "agent-a")
+            .unwrap()
+            .unwrap(),
+        active
+    );
+    assert_eq!(
+        game_task::active_publish(&restarted.execution_world, "agent-a")
+            .unwrap()
+            .unwrap(),
+        accepted
     );
     fs::remove_dir_all(dir).unwrap();
 }

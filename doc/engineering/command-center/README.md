@@ -58,7 +58,7 @@ Smelter 合法建成 → 铁锭生产 cycle → owner-bound output ledger 实际
 
 ## 当前主线与进展
 
-以下五项消费既有里程碑和实际交付记录，不在这里重新排序或建立一套任务状态。
+以下主线消费既有里程碑和实际交付记录，不在这里重新排序或建立一套任务状态。
 当前多里程碑剩余义务由 [#4363](https://github.com/eng-cc/oasis7/issues/4363) 承接；正文复选框与最新评论需一起读。
 “已有代码”“适用验证通过”“正式开放”“真人接受”分别表达，不用 PR 数量换算项目完成率。
 
@@ -94,6 +94,12 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 顶层合同允许 BFT 与受控单权威路径并行研发，先验证同一历史，再按 H/H+1 交接转移写权。
 独立验证者协议、持久证书与同世界交接尚未验收；它不自动成为已满足条件的受控单权威试玩前置。
 来源：[基础设施路线图](../../product/world-infrastructure/prd.md#4-路线图)、[#4363 当前记录](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+
+### 6. 外部游戏 Runtime 的 owner 目标控制前置
+
+本项局部核验于 2026-10-12：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 候选 `edae8d18` 已实现私有目标准备、单记录重试/重启、公开 canonical 发布和授权当前正文回读，尚在 PR 验证与合入流程，不计入 main 已交付能力。SDK 29、私有 library 22、任务链 8 项本地回归通过；journal tail 缺前驱的恢复缺口已观察失败并修复，修复后的原生回归与最终 CI 仍待完成。此段只刷新本项，不刷新前述全局或环境核验基线。
+
+目标控制仍保持 suspended、未绑定 executor；完整 TaskSnapshot/Context、正式 Skill、实际 Runtime 目标应用与自主首局仍未验收。下一步连接这些消费者，并按真实游戏自测合同验收，不能用 TCP 脚本代签自主游玩。来源：[Game API 当前切片](../../world-simulator/llm/external-agent-game-api.design.md#已实施切片owner-目标准备发布与当前正文回读)、[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。
 
 <a id="cc-status-changes"></a>
 

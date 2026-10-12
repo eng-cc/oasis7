@@ -44,26 +44,12 @@ impl SignedGoalPrepareV1 {
         {
             return Err("invalid private goal signature envelope".into());
         }
-        let public_key: [u8; 32] = hex::decode(&self.subject_public_key)
-            .map_err(|_| "invalid private goal owner key")?
-            .try_into()
-            .map_err(|_| "invalid private goal owner key")?;
-        let key =
-            VerifyingKey::from_bytes(&public_key).map_err(|_| "invalid private goal owner key")?;
-        if key.is_weak() {
-            return Err("weak private goal owner key".into());
-        }
-        let signature: [u8; 64] = hex::decode(&self.signature_hex)
-            .map_err(|_| "invalid private goal signature")?
-            .try_into()
-            .map_err(|_| "invalid private goal signature")?;
-        // This private owner boundary requires strict Ed25519 verification,
-        // including canonical scalar/point encodings and non-small-order R.
-        key.verify_strict(
-            &signing_bytes(GAME_GOAL_PREPARE_DOMAIN, &self.request)?,
-            &Signature::from_bytes(&signature),
+        verify_owner_signature_strict(
+            GAME_GOAL_PREPARE_DOMAIN,
+            &self.request,
+            &self.subject_public_key,
+            &self.signature_hex,
         )
-        .map_err(|_| "invalid private goal owner signature".into())
     }
 
     /// Caller must obtain this control from freshly authenticated canonical
@@ -93,3 +79,42 @@ impl SignedGoalPrepareV1 {
 
 #[cfg(test)]
 mod tests;
+
+/// Narrow shared cryptographic boundary for private goal proofs and public owner
+/// goal publications. This does not change generic World Service verification.
+pub(super) fn verify_owner_signature_strict<T: Serialize>(
+    domain: &str,
+    request: &T,
+    subject_public_key: &str,
+    signature_hex: &str,
+) -> Result<(), String> {
+    let canonical = |value: &str, length: usize| {
+        value.len() == length
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    };
+    if !canonical(subject_public_key, 64) || !canonical(signature_hex, 128) {
+        return Err("invalid owner signature encoding".into());
+    }
+    let public_key: [u8; 32] = hex::decode(subject_public_key)
+        .map_err(|_| "invalid private goal owner key")?
+        .try_into()
+        .map_err(|_| "invalid private goal owner key")?;
+    let key =
+        VerifyingKey::from_bytes(&public_key).map_err(|_| "invalid private goal owner key")?;
+    if key.is_weak() {
+        return Err("weak private goal owner key".into());
+    }
+    let signature: [u8; 64] = hex::decode(signature_hex)
+        .map_err(|_| "invalid private goal signature")?
+        .try_into()
+        .map_err(|_| "invalid private goal signature")?;
+    // This private owner boundary requires strict Ed25519 verification,
+    // including canonical scalar/point encodings and non-small-order R.
+    key.verify_strict(
+        &signing_bytes(domain, request)?,
+        &Signature::from_bytes(&signature),
+    )
+    .map_err(|_| "invalid private goal owner signature".into())
+}

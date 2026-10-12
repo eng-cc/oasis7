@@ -62,6 +62,14 @@ pub(super) fn apply_intents(
         let mut candidate = world.clone();
         let mut runtime_action_id = None;
         let applied = match request.signed_payload.clone() {
+            WorldServicePayloadV1::GameGoalPublish(_) => {
+                oasis7::world_service::game_task::prepare_publish(
+                    &candidate,
+                    &request,
+                    staged.iter().map(|entry: &StagedResult| &entry.result),
+                    context.height,
+                )
+            }
             WorldServicePayloadV1::GameTaskCreate(_) => {
                 oasis7::world_service::game_task::prepare_create(
                     &candidate,
