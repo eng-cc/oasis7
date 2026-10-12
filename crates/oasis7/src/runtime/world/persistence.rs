@@ -838,6 +838,11 @@ impl World {
             world.enforce_pending_effect_limit();
             world.enforce_inflight_effect_limit();
             world.replay_from(snapshot.journal_len)?;
+            // Individually valid tail receipts may still consume a missing or
+            // already-consumed task predecessor. Validate the replayed chain
+            // before publishing the recovered world or trimming its journal.
+            crate::world_service::game_task::validate_history(&world)
+                .map_err(|reason| super::capability_authorization::deny(&reason))?;
             world.enforce_journal_event_limit();
         }
         world.verify_tick_consensus_chain()?;

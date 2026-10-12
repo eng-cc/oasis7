@@ -437,6 +437,85 @@ fn game_goal_publish_restore_rejects_missing_predecessor_and_double_version() {
     assert!(format!("{error:?}").contains("goal publication predecessor"));
 }
 
+#[test]
+fn game_goal_publish_restore_rejects_invalid_journal_tail() {
+    for missing_predecessor in [true, false] {
+        let (mut world, private) = fixture();
+        let create = result(&world, request(&private, "task"));
+        let initial = create_control(&create.request).unwrap();
+        world.record_world_service_result(create).unwrap();
+        let mut predecessor = initial.clone();
+        if missing_predecessor {
+            predecessor.task_revision = DecimalU64(2);
+            predecessor.latest_goal_revision = DecimalU64(1);
+        } else {
+            let accepted =
+                goal_result(&world, goal_request(&private, &initial, "accepted"), &[], 2);
+            world.record_world_service_result(accepted).unwrap();
+        }
+        // The checkpoint is valid. Only the journal tail introduces an individually
+        // valid signed receipt with an absent or already-consumed predecessor.
+        validate_history(&world).unwrap();
+        let checkpoint = goal_snapshot(&world);
+        let signed = goal_request(&private, &predecessor, "invalid-tail");
+        let tail = CanonicalIntentResultV1 {
+            receipt: serde_json::to_value(publish_receipt(&signed, 3).unwrap()).unwrap(),
+            request: signed,
+            action_id: 3,
+            committed_height: 3,
+            rejected: None,
+        };
+        world.record_world_service_result(tail).unwrap();
+        assert!(world.journal().len() > checkpoint.journal_len);
+        let error = match World::from_snapshot(checkpoint, world.journal().clone()) {
+            Err(error) => error,
+            Ok(_) => panic!("invalid goal publication journal tail must fail restore"),
+        };
+        assert!(format!("{error:?}").contains("goal publication predecessor"));
+    }
+}
+
+#[test]
+fn game_goal_publish_restore_accepts_valid_create_publish_journal_tail() {
+    let (mut world, private) = fixture();
+    let checkpoint = goal_snapshot(&world);
+    let create = result(&world, request(&private, "task"));
+    let initial = create_control(&create.request).unwrap();
+    world.record_world_service_result(create).unwrap();
+    let accepted = goal_result(&world, goal_request(&private, &initial, "accepted"), &[], 2);
+    world.record_world_service_result(accepted.clone()).unwrap();
+    let recovered = World::from_snapshot(checkpoint, world.journal().clone()).unwrap();
+    assert_eq!(
+        current_control(&recovered, "agent").unwrap(),
+        current_control(&world, "agent").unwrap()
+    );
+    assert_eq!(active_publish(&recovered, "agent").unwrap(), Some(accepted));
+}
+
+#[test]
+fn game_goal_publish_restore_rejects_orphan_journal_tail() {
+    let (mut world, private) = fixture();
+    let checkpoint = goal_snapshot(&world);
+    let create = result(&world, request(&private, "task"));
+    let initial = create_control(&create.request).unwrap();
+    // No create receipt exists in either the checkpoint or the tail.
+    let signed = goal_request(&private, &initial, "orphan");
+    world
+        .record_world_service_result(CanonicalIntentResultV1 {
+            receipt: serde_json::to_value(publish_receipt(&signed, 2).unwrap()).unwrap(),
+            request: signed,
+            action_id: 2,
+            committed_height: 2,
+            rejected: None,
+        })
+        .unwrap();
+    let error = match World::from_snapshot(checkpoint, world.journal().clone()) {
+        Err(error) => error,
+        Ok(_) => panic!("orphan goal publication journal tail must fail restore"),
+    };
+    assert!(format!("{error:?}").contains("goal publication has no canonical task predecessor"));
+}
+
 fn goal_snapshot(world: &World) -> crate::runtime::Snapshot {
     world.snapshot_with_chain_resource_context(
         crate::runtime::ChainResourceDerivationContext {
