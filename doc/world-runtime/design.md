@@ -135,8 +135,10 @@ approval. The test is `proven` only when all of the following hold:
    actions. The module cannot write canonical `WorldState`, the canonical
    journal, or an external effect directly.
 3. Accepted state, event, receipt, and checkpoint commitments are consistent;
-   an invariant, budget, persistence, or artifact failure produces one stable
-   rejected/fault disposition with no partial business effect.
+   a confirmed precommit invariant, budget, persistence, or artifact failure
+   has no partial business effect and publishes a stable rejected/fault
+   disposition only when it can be committed. Unknown persistence status is
+   reconciled before retry; postcommit maintenance cannot revoke the result.
 4. Restart, snapshot restore, canonical journal replay, and adapter
    conformance reproduce the same state root/receipt for the same accepted
    input, while legacy shapes remain readable only through an explicit
@@ -181,9 +183,12 @@ sequence counters. Quote/resolve may run as a read-only preflight, but it must
 bind parent, manifest, input root, and freshness and cannot mutate world state.
 Module calls and Kernel/schema/capability validation operate only on the staged
 view. A successful transition publishes state, events, receipt, and execution
-commitment at one commit point. Any failed invariant, budget, artifact,
-serialization, or persistence check discards the staged view and publishes
-only a stable rejected/fault disposition. External non-rollbackable effects
+commitment at one commit point. A confirmed precommit invariant, budget,
+artifact, serialization, or persistence failure discards the staged business
+view; a rejected/fault disposition is published only if that disposition can
+itself be committed. Persistence errors whose commit status is uncertain must
+be resolved before rollback or retry; a postcommit maintenance error cannot
+revoke the committed result. External non-rollbackable effects
 are receipt-driven after commit through a durable outbox/effect ledger. Each
 record binds the canonical effect descriptor, execution receipt, roots, intent
 hash, dispatch/ack state, idempotency key, and observed external receipt. The
@@ -382,10 +387,16 @@ state, journal, sequence, queue/schedule, receipt, commitment, deterministic
 metric, idempotency, and outbox records. Rejected represents a deterministic
 input, authority, budget, resource, or freshness refusal and contains no
 accepted business effect. Faulted represents traps, schema/artifact mismatch,
-invariant failure, serialization/persistence failure, or commit uncertainty;
-it cannot be converted into a recoverable domain rejection. If no stable
-disposition can be committed, the API returns an infrastructure error and the
-canonical projection remains byte/semantically unchanged. An audit record for
+invariant failure, or confirmed precommit serialization/persistence failure
+for which a stable fault disposition can be committed; it cannot be converted
+into a recoverable domain rejection. Commit uncertainty is not itself a
+durable fault disposition. If no stable disposition can be committed and
+non-commit is confirmed, the API returns an infrastructure error and the old
+canonical projection remains byte/semantically unchanged. If commit status is
+unknown, publication stays fenced until the exact attempt is reconciled; if
+commit is confirmed, its result remains authoritative. Ordinary indexed saves
+follow the [generation outcome contract](#runtime-generation-persistence-design).
+An audit record for
 a rejection or fault, when required, is part of that same root commit and is
 never appended by a second best-effort transaction.
 
@@ -507,19 +518,25 @@ conflict.
 Replay uses the same typed reducers through a root transaction but may only
 consume existing canonical events. It validates event id/era, logical time,
 parent, commitment, and order; it never creates an event or calls a sandbox,
-LLM, effect adapter, or dispatcher. The complete journal suffix commits once,
-and any suffix failure discards every reconstructed delta. Effect events only
-rebuild ledger/outbox state.
+LLM, effect adapter, or dispatcher. The complete journal suffix commits once;
+validation or reconstruction failure before publication discards every reconstructed delta.
+Persistence outcomes follow the [generation contract](#runtime-generation-persistence-design).
+Effect events only rebuild ledger/outbox state.
 
 Persistence publishes an immutable generation containing the snapshot,
 journal, module store, sidecars, outbox, manifest, hashes, and completion
-metadata. All files are staged, synced, and cross-validated before an atomic
-latest-generation pointer switch. That pointer switch is the durable commit
-point: before it, the old generation remains authoritative; after it, recovery
-loads the complete new generation even if the process died before in-memory
-installation. Installation after the switch contains no fallible work, and
-generation garbage collection is outside the business commit seam. Missing,
-mixed, or hash-inconsistent generations fail closed rather than being spliced.
+metadata. All files are staged, synced, and cross-validated before the atomic
+latest-generation pointer/index replacement. Durable commit confirmation
+includes the required index-file and parent-directory sync; observing the new
+index after rename is not by itself durability evidence. Confirmed non-commit
+leaves the old generation authoritative; after durable commit is confirmed,
+recovery loads the complete new generation even if the process died before
+in-memory installation. An uncertain replacement fences publication and
+preserves the old and candidate recovery material until resolved. Installation
+after confirmed commit contains no fallible work, and generation garbage
+collection is outside the business commit seam. Missing, mixed, or
+hash-inconsistent candidates are rejected rather than spliced; selecting a
+healthy older candidate does not undo a newer commit or open serving.
 
 External dispatch begins only after the durable generation commit. The outbox
 uses at-least-once delivery with stable idempotency and independently atomic
@@ -551,12 +568,14 @@ The runtime owns the recovery projection and its installation. The two control r
 | J2 | Successful host tick outcome → one stable instance's final absolute wake tick or explicit clear, even with no new module state. | [Module tick journal replay](runtime/runtime-integration.md#module-tick-journal-replay). |
 
 Recovery validates the checkpoint, journal prefix/target binding, record version and required control-record coverage before it can expose a candidate.
+C and its suffix must belong to the selected candidate's explicitly bound complete recovery material. Verified `C<T` recovery does not require a complete T snapshot; [G3 candidate reads](runtime/runtime-storage-footprint-governance.design.md#storage-generation-g3-design) forbid assembling independently selected disk generations and remain detached and read-only.
 It stages C's business and control projections, consumes the suffix in canonical order, and validates each control transition with the same pure transition semantics used by its producer.
 Allocation provenance is applied once per allocation, not once per emitted event; a preallocated ID is checked against its original allocation boundary.
 Tick outcomes install their recorded final schedule, not a newly computed result from invoking the guest.
 Each control record publishes with the mutations owned by its declared transaction; incomplete or conflicting groups fail without partial installation.
 A prior allocation/enqueue transaction and later action consumption/fees remain separate boundaries, joined by provenance; a later step failure must not undo an already durable allocation.
-The entire suffix follows the existing single-commit replay target. Failure retains the original live world, checkpoint and journal for diagnosis.
+The entire suffix follows the existing single-commit replay target. Validation or reconstruction failure before publication retains the original live world, checkpoint and journal for diagnosis.
+If recovery also publishes a durable generation, [G1 outcome handling](#runtime-generation-persistence-design) governs confirmed commit and uncertainty; postcommit maintenance failure cannot restore the old World, and an unknown attempt stays fenced until reconciled.
 
 Matching the current WorldState/tick root alone does not establish control-state completeness: action cursors and module schedules live outside that projection.
 Recovery must also validate their provenance, transition continuity and target projection. This does not redefine the existing consensus state-root schema or assign serving authority to a new local digest.
@@ -583,6 +602,7 @@ An old reader must reject an unsupported required record rather than silently sk
 Old ModuleOutput omission means suspend only when decoding that actual output. Absence of a schedule record in an old journal is not evidence of suspend, no invocation or unchanged wake.
 Likewise, an absent allocator record does not prove no allocation; `serde(default)` for an era/map only supports decoding and must not fabricate recovery evidence.
 J1/J2 define their own record interpretation; one obligation passing never makes the other's legacy interval recoverable.
+An explicit legacy adapter or alternative checkpoint does not bypass G3's source/consumption error rules or release a G1 write fence.
 These changes preserve existing artifact/signature/finality checks, guest failure disposition and infrastructure-failure atomicity; they do not require a global ID ABI or consensus migration.
 
 <a id="runtime-journal-suffix-validation"></a>
@@ -599,9 +619,38 @@ Fixtures must retain the existing signed stable C→T rollback path where specif
 | J1-REPAIR | Rebuild from source journal, save, load again and submit a legal action; cursor and next outcome remain equal to control. | [Repair source-journal path](../../crates/oasis7/src/bin/oasis7_world_repair_rebuild.rs); no generated-bootstrap claim. |
 | J2-WAKE/CLEAR | Real WASM returns WakeAfterTicks, Suspend and omitted directive in separate runs; compare restored schedule and subsequent calls/state/fees. | [Tick regressions](../../crates/oasis7/src/runtime/tests/module_tick_routing_transaction_regressions.rs) and supported signed C→T fixture; retain post-route checkpoint rejection/roundtrip coverage. |
 | J2-INSTANCE | Cover Pure/no-new-state success and two instances with only one due; only the correct instance runs at the expected next tick. | [Host tick verification](runtime/runtime-integration.md#module-tick-journal-replay-validation); required targeted cases. |
-| J-COMPAT/ATOMIC | Exercise each compatibility-matrix row, incomplete groups and existing publication failures; replay guest/dispatcher invocation count is zero and no new charge is computed. | Existing persistence/rollback/tick negatives plus new record cases; preserve event/intent allocator and signature/artifact/finality rejection assertions. |
+| J-COMPAT/ATOMIC | Exercise each compatibility-matrix row, incomplete groups and existing precommit publication failures; replay guest/dispatcher invocation count is zero and no new charge is computed. Durable publication retains the G1 outcome classification. | Existing persistence/rollback/tick negatives plus new record cases; preserve event/intent allocator and signature/artifact/finality rejection assertions. |
 
 Actual candidate, commands, per-obligation outcomes and unexecuted cases belong in the PR/test results. Documentation checks establish these mappings only, not runtime recovery or release readiness.
+
+<a id="runtime-generation-persistence-design"></a>
+
+**普通 indexed generation 保存合同（目标）**
+
+本条承接 [Runtime 持久化要求](prd.md#runtime-generation-persistence-contract)，
+细化已有 generation 提交点在普通 `World` 保存及 reserve/settle/release、余额更新等
+附着持久化目录的事务中的含义。owner 为 runtime_engineer；审读基线为
+`eng-cc/oasis7@27db6f894bd106e9a4fee9ee3062cd8fd86e1056`，缺陷入口为
+[#4452](https://github.com/eng-cc/oasis7/issues/4452)。现有 staged command、authoritative
+recovery 和认知生命周期的局部合同不证明这些普通入口已经覆盖；总体仍按 §6.2.4 标为 partial。
+
+持久化调用必须把本次精确候选与原业务返回值一起保留，按
+[G1 提交判定与安装](runtime/runtime-storage-footprint-governance.design.md#storage-generation-g1-design)
+返回或传播 `NotCommitted`、`Committed`、`StatusUnknown` 的含义。只有确认未提交才允许
+丢弃候选并继续使用旧 World；确认提交后安装同一候选并返回原 lease/receipt，维护错误单独报告；
+未知时在普通持久化发布边界阻止旧 World 的后续写入，核对完成后才解除。沿用已有业务幂等 key，
+同 key 重试不得新增扣账、lease 或 receipt；generation identity 不替代业务幂等 identity。
+
+[G2 保留闭包](runtime/runtime-storage-footprint-governance.design.md#storage-generation-g2-design)
+保护替代 index 提交前旧 index 的全部恢复依赖；
+[G3 完整候选读取](runtime/runtime-storage-footprint-governance.design.md#storage-generation-g3-design)
+让 snapshot/journal 组装和同代 metadata 校验共同决定候选是否可用；涉及事件后缀时还须满足
+[J1/J2 控制状态完整性](#runtime-journal-suffix-recovery-design)，不能以材料可读代签重建，也不据此推断 G1 提交事实。
+[提交核对与回退选择](runtime/runtime-storage-footprint-governance.design.md#storage-generation-cross-boundary-design)
+分别回答是否提交、何者可读；后者不能代替前者，也不能绕过
+[同世界恢复服务闸门](#runtime-recovery-design)。这只细化本地 single-writer generation seam，
+复用既有格式、root 和 operation key，不新增正式 authority、业务 ledger 或网络持久性承诺。
+具体验证见 [G1/G2/G3 及交叉矩阵](runtime/runtime-storage-footprint-governance.design.md#storage-generation-validation-matrix)。
 
 #### 6.2.4 Incremental delivery and proof levels
 
@@ -809,7 +858,7 @@ while installation remains unrouted and replay shares the same raw reducer seman
 
 ## 基础设施设计承接与验证视图
 
-本视图补充既有 §§3–6/9，保留其全部边界、阶段、接口、错误优先级、兼容与原子/非原子区别。owner runtime_engineer；eng-cc/oasis7 输入审读基线 f9d5a552d9af04c1b1398262808198a58e560230。这里只固定目标设计和验证要求；现有实现仍由 §5/§6.2.4 的 partial 和具体入口限定。它不定义 BFT 算法、外部 DTO、工业 schema、成本/容量数值、UX 或 release authority。外部 P2P 的未合并草案不是本设计输入。
+本视图补充既有 §§3–6/9，保留其边界、阶段、接口、错误优先级、兼容与原子/非原子区别。owner runtime_engineer；原视图输入审读基线为 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230，本次普通 generation 增补与失败语义修订采用[保存合同](#runtime-generation-persistence-design)所列基线。这里只固定目标设计和验证要求；现有实现仍由 §5/§6.2.4 的 partial 和具体入口限定。它不定义 BFT 算法、外部 DTO、工业 schema、成本/容量数值、UX 或 release authority。外部 P2P 的未合并草案不是本设计输入。
 
 <a id="runtime-deterministic-design"></a>
 ### 确定性执行与证书绑定
@@ -907,10 +956,11 @@ admission 前验证 target world 身份，receipt 与 parent/history/result 保�
 
 ### 2.1 需求承接与分配表
 
-输入身份 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230；新增 local anchors 是本文技术接受关系，非机器 schema。每行范围独立，外部未决保留。
+原承接视图输入身份为 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230；本次普通 generation 增补按[保存合同](#runtime-generation-persistence-design)所列基线。local anchors 是本文技术接受关系，非机器 schema。每行范围独立，外部未决保留。
 
 | 上游 requirement / acceptance | 具体 obligation 与条件 | 本设计条款 | 外部 owner / dependency | 排除或未覆盖 |
 | --- | --- | --- | --- | --- |
+| [普通 generation 持久化](prd.md#runtime-generation-persistence-contract) | 普通保存按精确候选区分提交结果，提交前保留旧闭包、完整候选回退与服务资格分开 | [generation 合同](#runtime-generation-persistence-design) | runtime storage/cognition 现有操作 key；QA 本地故障 oracle | 目标合同；不证明全部 root transaction、正式 authority 或真实故障域恢复 |
 | [单权威提交](../p2p/prd.md#p2p-single-authority-durable-commit) | 固定原决定按精确输入恢复，与当前重审 pending 分开；正式证明先于发布 | [接收设计](#runtime-controlled-candidate-recovery-receiver) | P2P continuation/proof 与存储；WASM/native 工件；QA 故障 oracle | 新接收协议待实施，现有 guarded-local 拒绝边界不变 |
 | [事件后缀恢复](prd.md#runtime-journal-suffix-recovery) | 合法 finalized C<T 的非空事件后缀分别还原 J1/J2，并对同一未来输入正常续跑；旧历史缺记录显式处置 | [控制状态恢复](#runtime-journal-suffix-recovery-design) | runtime allocator/tick producer；WASM 输出；既有 rollback fixture；QA | 不代签 committed-input replay、完整 pending 产品或正式网络可服务 |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-001) | 同 version/ordered inputs/parent，全 active validator re-execute，missing/mismatch/越权零部分效果 | [设计](#runtime-deterministic-design) | P2P finality/集合/round；WASM artifact；QA 同候选 full | 单节点不代签 SC-1/4 |
@@ -930,6 +980,7 @@ admission 前验证 target world 身份，receipt 与 parent/history/result 保�
 
 | 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [普通 generation 持久化](prd.md#runtime-generation-persistence-contract) | [generation 合同](#runtime-generation-persistence-design) | G1/G2/G3 分项及提交核对与候选回退交叉场景按 [精确矩阵](runtime/runtime-storage-footprint-governance.design.md#storage-generation-validation-matrix) 各自成立 | [现有局部 persistence 测试](../../crates/oasis7/src/runtime/tests/persistence.rs)；目标为同候选单 writer 临时目录中对比返回值、活 World、重启 World、索引与完整引用闭包；现有测试不能代签目标组合 | PR 中实际运行的故障窗、命令、结果与对账；文档检查不代签 | 本次未实现/运行行为验证；不证明跨主机、真实掉电、provider 或正式 serving |
 | [单权威提交](../p2p/prd.md#p2p-single-authority-durable-commit) | [接收设计](#runtime-controlled-candidate-recovery-receiver) | 原决定恢复不重算 admission；正式 proof 才允许共同发布 | Planned CA-R1/R2/R3/CA-C1，承接 P2P 的原 candidate/普通消费者验证计划；现有基线 [execution transaction regressions](../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs) 不覆盖新协议；同候选比较 parent/版本/nonce/roots 与外部调用计数 | 未来 task evidence 中的原身份、故障 seam、恢复 disposition、proof 和一次发布结果 | 本次未实现/运行；不证明 live、BFT 或任意旧 native 可移植 |
 | [事件后缀恢复](prd.md#runtime-journal-suffix-recovery) | [控制状态恢复](#runtime-journal-suffix-recovery-design) | J1 allocator 与 J2 schedule 独立恢复、同输入续跑和缺证据拒绝 | [现有恢复测试](../../crates/oasis7/src/runtime/tests/persistence_recovery_tests.rs) 扩展本页 J1/J2 planned cases；required 局部确定性恢复，既有 signed C→T 路径按其测试层级；同候选对照 cursor/schedule/下一动作与费用 | PR 中分别记录每项真实命令、fixture、结果与未运行项 | 仅文档/完整 snapshot 往返不证明非空 suffix；不扩大共识或外部服务范围 |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-001) | [设计](#runtime-deterministic-design) | 同 version/ordered inputs/parent，全 active validator re-execute，missing/mismatch/越权零部分效果 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs)；required 局部 failed_step/committed_context/snapshot-replay 定义；target full 同候选全 validator+transport conformance，compare roots/receipt 与零副作用 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 单节点不代签 SC-1/4 |
