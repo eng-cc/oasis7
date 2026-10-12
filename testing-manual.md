@@ -123,7 +123,8 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - `npm --prefix crates/oasis7_viewer run build:software-safe`
-  - 变更 `oasis7_agent_api` 或 `oasis7_agent_harness` 时，planner 选择 `workspace_support`：API wire-contract 集成测试、Harness 单元测试及两 crate 的 strict Clippy；Cargo 依赖图也会保留 `oasis7` 消费者组。
+  - 变更 `oasis7_agent_api` 或 `oasis7_agent_harness` 时，planner 选择 `workspace_support` 内实际受影响的 package profiles：API wire-contract 集成测试、Harness 单元测试及对应 strict Clippy；Cargo 依赖图仍保留 `oasis7` 消费者组。Launcher 代码变更保留 native profile 与 `launcher_web`。支持包清单位于 `plan-rust-required-scope.py`；驱动以 `--support-plan` 接收 trusted selector 的完整 JSON，不将 JSON 插入 shell 源码。
+  - profile 计划版本为 1；空、未知、重复 profile、未知版本或 full 计划漏项均拒绝。旧 trusted planner 没有 profile 版本字段时仍执行完整支持包库存，不提前缩测；控制/manifest/lockfile/未知输入及非包规则继续保守全量。每个 profile 的命令成功后才输出完成标记，任何失败退出仍由原 `required-gate` 聚合。直接本地 `required --group workspace_support` 不传计划时保留原完整入口。
   - planner 始终声明 `required_gate_baseline`：这是 required-gate 的普适治理/契约 authority，不等同于每个 Rust、Node、provider 或 P2P 套件都对所有路径执行。
   - 触达场景定义、场景 integration test 或场景 PRD 时，planner 追加 `scenario_regression`，运行窄命令：`env -u RUSTC_WRAPPER cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_`；不追加 test-harness 参数，保证 `CI_VERBOSE=1` 的 Cargo verbosity 仍由 wrapper 正确处理。
   - provider remote-HTTPS、P2P/testnet、state-sync、S10 与 release-preflight contract 只在 planner 选择 `operational_contracts` 时运行；对应跨平台 workflow jobs 未命中时直接 skip，保留 stable context 的同时避免 docs-only 或不相关 PR 分配 runner 执行跨域 operational work。
