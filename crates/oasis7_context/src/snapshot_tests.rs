@@ -203,3 +203,85 @@ fn restore_writes_and_publication_follow_held_parent_not_replaced_path() {
     assert!(original.join("restored/entries/machine-test.md").is_file());
     assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
 }
+
+#[test]
+fn held_export_parent_and_source_ancestry_survive_path_replacement() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("store");
+    let store = crate::store::Store::init(&root, "test", "Test").unwrap();
+    store
+        .put(
+            "machine-test",
+            fixture().entries[0].content_utf8.as_bytes(),
+            crate::model::WriteCondition::Absent,
+            "test",
+        )
+        .unwrap();
+    let parent = base.join("output");
+    std::fs::create_dir(&parent).unwrap();
+    let held = crate::fs::Directory::open(&parent).unwrap();
+    let original = base.join("original-output");
+    std::fs::rename(&parent, &original).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    assert!(
+        export_to_directory(
+            &store,
+            &parent.join("backup.enc"),
+            &[],
+            b"held-boundary-password",
+            0,
+            None,
+            &held
+        )
+        .is_err()
+    );
+    assert!(original.join("backup.enc").is_file());
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+    let moved_store = base.join("original-store");
+    std::fs::rename(&root, &moved_store).unwrap();
+    std::fs::create_dir(&root).unwrap();
+    let inside = moved_store.join("inside");
+    std::fs::create_dir(&inside).unwrap();
+    let held_inside = crate::fs::Directory::open(&inside).unwrap();
+    assert!(
+        export_to_directory(
+            &store,
+            &inside.join("leak.enc"),
+            &[],
+            b"held-boundary-password",
+            0,
+            None,
+            &held_inside
+        )
+        .is_err()
+    );
+    assert!(!inside.join("leak.enc").exists());
+}
+#[test]
+fn initialized_store_is_returned_from_original_held_parent_and_root() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let parent = base.join("parent");
+    std::fs::create_dir(&parent).unwrap();
+    let held = crate::fs::Directory::open(&parent).unwrap();
+    let moved = base.join("original-parent");
+    std::fs::rename(&parent, &moved).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    let root = parent.join("created");
+    let store = crate::store::Store::init_in_parent(&root, &held, "test", "Original").unwrap();
+    assert!(!store.directory().matches_path(&root).unwrap_or(false));
+    assert_eq!(store.config.name, "Original");
+    assert!(moved.join("created/context.json").is_file());
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+    let existing = base.join("empty");
+    std::fs::create_dir(&existing).unwrap();
+    let held = crate::fs::Directory::open(&existing).unwrap();
+    let moved = base.join("original-empty");
+    std::fs::rename(&existing, &moved).unwrap();
+    std::fs::create_dir(&existing).unwrap();
+    let store = crate::store::Store::init_directory(&existing, held, "test", "Original").unwrap();
+    assert!(!store.directory().matches_path(&existing).unwrap());
+    assert!(moved.join("context.json").is_file());
+    assert_eq!(std::fs::read_dir(&existing).unwrap().count(), 0);
+}

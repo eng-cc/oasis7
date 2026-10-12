@@ -42,6 +42,8 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 后端只读取固定安装描述并核对普通 caller UID、受保护实际路径、release manifest 和 executable SHA-256。未知或不兼容安装保留原状；不经普通 App 读取 custody。
 
+绑定证据从同一个持有的资料目录读取库配置和目录身份；执行核对原身份，初始化、发布与绑定持续使用原对象，拒绝采用后来出现的不同库。恢复后的绑定直接读取已发布目录句柄，不再按路径重开。快照导出也固定原输出父目录；以目录句柄祖先身份排除资料库内部输出，目录别名或源目录改名不能绕过限制。
+
 CLI 包装只接受可核验的已提交源输入，构建前后检查 tracked、untracked、资料 CLI 源目录中被忽略的输入及 HEAD；清单查询失败禁止发布。CLI 安装和中断核对共用普通用户目录中的跨进程锁；原安装仍活跃则保留未知，无最终发布时解除原占位供明确新安装，残留暂存和其他版本不删除。
 
 文件签名要求明确 file、job、signer、grant 和完整合法 SignContext；不自动填示例值。只读准备校验明确确认无副作用时，表单保留草稿并允许修正；进入原 caller 准备边界、旧操作或结果未知时仍冻结原 Job，先核对，不能另建操作绕过未知结果。原 caller 第一次 prepare 前重新核对原准入的源文件摘要、大小、设备和 inode，禁止采用替换文件的新身份。第一次 prepare 建立私有 job，原 Rust 类型生成 context、file envelope 和 canonical JobInput，第二次 prepare 固定原请求。提交和 inspect 绑定原 job；准备响应丢失时核对原 operation ID、安装、源文件和冻结 envelope，成功后恢复原 prepared 身份及提交入口，表单仍冻结且不重放 prepare。提交把原 IPC 请求及安装发行身份摘要传入 caller；caller 在实际请求构成后、调用 worker 前核对，旧安装缺少 frozen_submit_v1 时禁止提交，不降级绕过。准备不等于 worker 已授权。独立验签重建相同 context 的 envelope，并核对用户明确的预期公钥。选中文件必须是有界普通文件，不接受 FIFO、符号链接或读取中变动。

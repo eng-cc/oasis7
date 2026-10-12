@@ -162,7 +162,7 @@ fn source_change_is_rejected_under_snapshot_collection_lock() {
                 binding.binding_version,
                 &output,
                 &[],
-                b"password",
+                b"held-boundary-password",
                 &digest
             )
             .is_err()
@@ -420,4 +420,136 @@ fn restore_rejects_replaced_prepared_parent_before_plaintext_or_binding() {
     assert_eq!(std::fs::read_dir(&original).unwrap().count(), 0);
     assert_eq!(service.bindings().unwrap().len(), before);
     assert_eq!(service.reconcile(&evidence, None).unwrap().state, "unknown");
+}
+
+#[test]
+fn binding_execution_rejects_replaced_existing_root_and_creation_parent() {
+    let temp = tempfile::tempdir().unwrap();
+    let service = ContextService::open(temp.path().join("host.db")).unwrap();
+    let root = temp.path().join("existing");
+    oasis7_context::store::Store::init(&root, "fixture", "original").unwrap();
+    let evidence = service.binding_evidence(&root, "fixture", false).unwrap();
+    let moved = temp.path().join("original");
+    std::fs::rename(&root, &moved).unwrap();
+    std::fs::create_dir(&root).unwrap();
+    std::fs::copy(moved.join("context.json"), root.join("context.json")).unwrap();
+    assert!(
+        service
+            .bind_evidenced(&root, "fixture", "", false, &evidence)
+            .is_err()
+    );
+    assert!(service.bindings().unwrap().is_empty());
+    let empty = temp.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let empty_evidence = service.binding_evidence(&empty, "fixture", true).unwrap();
+    let external =
+        oasis7_context::store::Store::init(&empty, "fixture", "external writer").unwrap();
+    assert!(
+        service
+            .bind_evidenced(&empty, "fixture", "requested", true, &empty_evidence)
+            .is_err()
+    );
+    assert_eq!(
+        oasis7_context::store::Store::open(&empty)
+            .unwrap()
+            .config
+            .store_id,
+        external.config.store_id
+    );
+    assert!(service.bindings().unwrap().is_empty());
+    let parent = temp.path().join("parent");
+    std::fs::create_dir(&parent).unwrap();
+    let new_root = parent.join("new");
+    let evidence = service
+        .binding_evidence(&new_root, "fixture", true)
+        .unwrap();
+    std::fs::rename(&parent, temp.path().join("original-parent")).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    assert!(
+        service
+            .bind_evidenced(&new_root, "fixture", "", true, &evidence)
+            .is_err()
+    );
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+    assert!(service.bindings().unwrap().is_empty());
+}
+#[test]
+fn export_rejects_parent_replacement_and_restore_binding_keeps_published_inode() {
+    let temp = tempfile::tempdir().unwrap();
+    let (service, binding, request) = fixture(&temp);
+    service.save(&request).unwrap();
+    let parent = temp.path().join("output");
+    std::fs::create_dir(&parent).unwrap();
+    let output = parent.join("backup.enc");
+    let evidence = service
+        .snapshot_export_evidence(&binding.id, binding.binding_version, &output, &[])
+        .unwrap();
+    let (digest, parent_identity) = match evidence {
+        ContextRecoveryEvidence::SnapshotExport {
+            source_digest,
+            parent_identity,
+            ..
+        } => (source_digest, parent_identity),
+        _ => unreachable!(),
+    };
+    let original = temp.path().join("original-output");
+    std::fs::rename(&parent, &original).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    assert!(
+        service
+            .snapshot_export_frozen_parent(
+                &binding.id,
+                binding.binding_version,
+                &output,
+                &[],
+                b"held-boundary-password",
+                &digest,
+                &parent_identity
+            )
+            .is_err()
+    );
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(&original).unwrap().count(), 0);
+    let encrypted = temp.path().join("good.enc");
+    service
+        .snapshot_export(
+            &binding.id,
+            binding.binding_version,
+            &encrypted,
+            &[],
+            b"held-boundary-password",
+        )
+        .unwrap();
+    let target = temp.path().join("restored");
+    let held_parent =
+        oasis7_context::fs::Directory::open(&temp.path().canonicalize().unwrap()).unwrap();
+    let (_, published) = oasis7_context::snapshot::restore_directory_in_parent(
+        &encrypted,
+        &target,
+        Some(&binding.project_id),
+        Some(&binding.store_id),
+        b"held-boundary-password",
+        None,
+        &held_parent,
+    )
+    .unwrap();
+    let store = oasis7_context::store::Store::open_directory(&target, published).unwrap();
+    std::fs::rename(&target, temp.path().join("original-restored")).unwrap();
+    std::fs::create_dir(&target).unwrap();
+    std::fs::copy(
+        temp.path().join("original-restored/context.json"),
+        target.join("context.json"),
+    )
+    .unwrap();
+    assert!(
+        service
+            .bind_held_store(&store, &binding.registered_project_id)
+            .is_err()
+    );
+    assert_eq!(service.bindings().unwrap().len(), 1);
+    assert!(
+        store.read_all().unwrap()[0]
+            .raw_bytes
+            .ends_with(b"secret body never persisted to job database\n")
+    );
 }

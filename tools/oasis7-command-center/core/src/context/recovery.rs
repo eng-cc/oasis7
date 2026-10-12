@@ -176,24 +176,46 @@ impl ContextService {
         create: bool,
     ) -> Result<ContextRecoveryEvidence> {
         let root = canonical_candidate(path)?;
-        let config = match application::open(Some(&root)) {
-            Ok(s) => Some(s.config),
-            Err(_) if create => None,
-            Err(e) => return Err(Error::Context(e)),
+        let parent = root
+            .parent()
+            .ok_or_else(|| failure("binding root needs parent"))?;
+        let parent_dir = oasis7_context::fs::Directory::open(parent).map_err(Error::Context)?;
+        let parent_identity = held_directory_identity(&parent_dir)?;
+        let (config, root_identity) = if root.exists() {
+            let dir = parent_dir
+                .child(
+                    root.file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| failure("invalid binding root"))?,
+                )
+                .map_err(Error::Context)?;
+            let identity = held_directory_identity(&dir)?;
+            let config = match dir.read("context.json", oasis7_context::model::MAX_METADATA_BYTES) {
+                Ok(bytes) => {
+                    let config: oasis7_context::model::StoreConfig =
+                        format::strict_json(&bytes).map_err(Error::Context)?;
+                    config.validate().map_err(Error::Context)?;
+                    Some(config)
+                }
+                Err(e) if create && e.code == "ENTRY_NOT_FOUND" => None,
+                Err(e) => return Err(Error::Context(e)),
+            };
+            if !dir.matches_path(&root).map_err(Error::Context)? {
+                return Err(failure("binding root changed during preparation"));
+            }
+            (config, Some(identity))
+        } else {
+            (None, None)
         };
+        if !parent_dir.matches_path(parent).map_err(Error::Context)? {
+            return Err(failure("binding parent changed during preparation"));
+        }
         Ok(ContextRecoveryEvidence::Binding {
             root: root.display().to_string(),
             registered_project_id: registered_project_id.into(),
             expected_store_id: config.as_ref().map(|c| c.store_id.clone()),
-            root_identity: if root.exists() {
-                Some(directory_identity(&root)?)
-            } else {
-                None
-            },
-            parent_identity: directory_identity(
-                root.parent()
-                    .ok_or_else(|| failure("binding root needs parent"))?,
-            )?,
+            root_identity,
+            parent_identity,
             expected_project_id: config
                 .map(|c| c.project_id)
                 .unwrap_or_else(|| registered_project_id.into()),
@@ -258,15 +280,50 @@ impl ContextService {
         passphrase: &[u8],
         expected_digest: &str,
     ) -> Result<serde_json::Value> {
+        let parent = output
+            .parent()
+            .ok_or_else(|| failure("output needs parent"))?;
+        let expected_parent = directory_identity(parent)?;
+        self.snapshot_export_frozen_parent(
+            id,
+            version,
+            output,
+            selection,
+            passphrase,
+            expected_digest,
+            &expected_parent,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn snapshot_export_frozen_parent(
+        &self,
+        id: &str,
+        version: u64,
+        output: &Path,
+        selection: &[String],
+        passphrase: &[u8],
+        expected_digest: &str,
+        expected_parent: &str,
+    ) -> Result<serde_json::Value> {
+        let parent = output
+            .parent()
+            .ok_or_else(|| failure("output needs parent"))?;
+        let dir = oasis7_context::fs::Directory::open(parent).map_err(Error::Context)?;
+        if held_directory_identity(&dir)? != expected_parent
+            || !dir.matches_path(parent).map_err(Error::Context)?
+        {
+            return Err(failure("snapshot output parent changed after preparation"));
+        }
         let store = self.store(id, version)?;
         Ok(serde_json::to_value(
-            oasis7_context::snapshot::export_from_store(
+            oasis7_context::snapshot::export_to_directory(
                 &store,
                 output,
                 selection,
                 passphrase,
                 0,
                 Some(expected_digest),
+                &dir,
             )
             .map_err(Error::Context)?,
         )?)

@@ -94,6 +94,7 @@ pub async fn context_choose_library(
         }
         _ => unreachable!(),
     };
+    let frozen_evidence = evidence.clone();
     tools
         .mutate_context(
             operation_id,
@@ -103,7 +104,7 @@ pub async fn context_choose_library(
             evidence,
             move || {
                 ContextService::open(path)?
-                    .bind(&selected, &project_id, &name, create)
+                    .bind_evidenced(&selected, &project_id, &name, create, &frozen_evidence)
                     .map(Some)
             },
         )
@@ -334,8 +335,12 @@ pub async fn context_snapshot_export(
                 .map_err(|e| e.to_string())
         })
         .await?;
-    let expected_digest = match &evidence {
-        ContextRecoveryEvidence::SnapshotExport { source_digest, .. } => source_digest.clone(),
+    let (expected_digest, expected_parent) = match &evidence {
+        ContextRecoveryEvidence::SnapshotExport {
+            source_digest,
+            parent_identity,
+            ..
+        } => (source_digest.clone(), parent_identity.clone()),
         _ => unreachable!(),
     };
     let fingerprint =
@@ -349,13 +354,14 @@ pub async fn context_snapshot_export(
             evidence,
             move || {
                 ContextService::open(path)?
-                    .snapshot_export_frozen(
+                    .snapshot_export_frozen_parent(
                         &binding_id,
                         binding_version,
                         &output,
                         &selection,
                         &password,
                         &expected_digest,
+                        &expected_parent,
                     )
                     .map(Some)
             },

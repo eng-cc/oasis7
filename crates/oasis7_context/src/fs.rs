@@ -185,6 +185,36 @@ impl Directory {
         let b = other.file.metadata()?;
         Ok(a.dev() == b.dev() && a.ino() == b.ino())
     }
+    /// Compare held ancestor identities without resolving mutable pathnames.
+    pub fn is_within(&self, ancestor: &Self) -> Result<bool> {
+        let expected = ancestor.identity()?;
+        let mut current = Self {
+            file: self.file.try_clone()?,
+        };
+        loop {
+            let identity = current.identity()?;
+            if identity == expected {
+                return Ok(true);
+            }
+            let fd = unsafe {
+                libc::openat(
+                    current.file.as_raw_fd(),
+                    c"..".as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if fd < 0 {
+                return Err(last());
+            }
+            let parent = Self {
+                file: unsafe { File::from_raw_fd(fd) },
+            };
+            if parent.identity()? == identity {
+                return Ok(false);
+            }
+            current = parent;
+        }
+    }
     /// Identity of the held directory, independent of later pathname replacement.
     pub fn identity(&self) -> Result<(u64, u64)> {
         let metadata = self.file.metadata()?;

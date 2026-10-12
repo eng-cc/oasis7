@@ -258,12 +258,29 @@ pub fn export_from_store(
     lock_timeout_ms: u64,
     expected_digest: Option<&str>,
 ) -> Result<SnapshotSummary> {
-    let root = &store.root;
-
     let output_parent_path = output.parent().ok_or_else(invalid)?;
     let output_directory = crate::fs::Directory::open(output_parent_path)?;
-    let output_parent = output_parent_path.canonicalize()?;
-    if output_parent.starts_with(root.canonicalize()?) {
+    export_to_directory(
+        store,
+        output,
+        selection,
+        passphrase,
+        lock_timeout_ms,
+        expected_digest,
+        &output_directory,
+    )
+}
+/// Encrypt and write into the original held output directory.
+pub fn export_to_directory(
+    store: &crate::store::Store,
+    output: &Path,
+    selection: &[String],
+    passphrase: &[u8],
+    lock_timeout_ms: u64,
+    expected_digest: Option<&str>,
+    output_directory: &crate::fs::Directory,
+) -> Result<SnapshotSummary> {
+    if output_directory.is_within(store.directory())? {
         return Err(ContextError::new(
             "INVALID_INPUT",
             "snapshot output must be outside store",
@@ -358,6 +375,14 @@ pub fn export_from_store(
         &envelope,
         false,
     )?;
+    if !output_directory.matches_path(output.parent().ok_or_else(invalid)?)? {
+        let mut error = ContextError::new(
+            "PERSISTENCE_UNCERTAIN",
+            "encrypted snapshot published in original held directory; output parent path changed",
+        );
+        error.effect = "applied".into();
+        return Err(error);
+    }
     Ok(summary)
 }
 pub fn restore(
@@ -407,6 +432,27 @@ pub fn restore_in_parent(
     expected_digest: Option<&str>,
     parent_dir: &crate::fs::Directory,
 ) -> Result<SnapshotSummary> {
+    restore_directory_in_parent(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        parent_dir,
+    )
+    .map(|(summary, _)| summary)
+}
+/// Return the published directory descriptor so callers never reopen the target.
+pub fn restore_directory_in_parent(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+) -> Result<(SnapshotSummary, crate::fs::Directory)> {
     if !target.is_absolute() {
         return Err(ContextError::new(
             "INVALID_INPUT",
@@ -473,7 +519,7 @@ pub fn restore_in_parent(
                     e
                 }
             })?;
-        Ok(summary)
+        Ok((summary, dir))
     })();
     // Leave private staging on failure: reopening its path could traverse a replaced parent.
     result

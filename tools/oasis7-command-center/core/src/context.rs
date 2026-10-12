@@ -171,6 +171,23 @@ fn directory_identity(path: &Path) -> Result<String> {
     let metadata = std::fs::metadata(path)?;
     Ok(format!("{}:{}", metadata.dev(), metadata.ino()))
 }
+fn held_directory_identity(dir: &oasis7_context::fs::Directory) -> Result<String> {
+    let (device, inode) = dir.identity().map_err(Error::Context)?;
+    Ok(format!("{device}:{inode}"))
+}
+fn check_ordinary_overlap(tx: &Transaction<'_>, root: &Path) -> Result<()> {
+    let mut statement = tx.prepare("SELECT path FROM ordinary_projects")?;
+    for value in statement.query_map([], |r| r.get::<_, String>(0))? {
+        let value = value?;
+        let registered = Path::new(&value);
+        if overlaps(root, registered) || overlaps(root, &exclusion_root(registered)?) {
+            return Err(failure(
+                "private library overlaps an ordinary project; choose an independent directory",
+            ));
+        }
+    }
+    Ok(())
+}
 impl ContextService {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let db = Connection::open(path)?;
@@ -188,36 +205,116 @@ impl ContextService {
         name: &str,
         create: bool,
     ) -> Result<ContextBinding> {
-        let root = canonical_candidate(path)?;
-        let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
-        let mut statement = tx.prepare("SELECT path FROM ordinary_projects")?;
-        for value in statement.query_map([], |r| r.get::<_, String>(0))? {
-            let value = value?;
-            let registered = Path::new(&value);
-            let current = exclusion_root(registered)?;
-            if overlaps(&root, registered) || overlaps(&root, &current) {
-                return Err(failure(
-                    "private library overlaps an ordinary project; choose an independent directory",
-                ));
-            }
+        let evidence = self.binding_evidence(path, project_id, create)?;
+        self.bind_evidenced(path, project_id, name, create, &evidence)
+    }
+    pub fn bind_evidenced(
+        &self,
+        path: &Path,
+        project_id: &str,
+        name: &str,
+        create: bool,
+        evidence: &ContextRecoveryEvidence,
+    ) -> Result<ContextBinding> {
+        let ContextRecoveryEvidence::Binding {
+            root,
+            registered_project_id,
+            expected_store_id,
+            root_identity,
+            parent_identity,
+            expected_project_id,
+        } = evidence
+        else {
+            return Err(failure("binding evidence required"));
+        };
+        let root = PathBuf::from(root);
+        if project_id != registered_project_id || canonical_candidate(path)? != root {
+            return Err(failure("binding target differs from preparation"));
         }
-        drop(statement);
+        let parent = root
+            .parent()
+            .ok_or_else(|| failure("binding root needs parent"))?;
+        let parent_dir = oasis7_context::fs::Directory::open(parent).map_err(Error::Context)?;
+        if held_directory_identity(&parent_dir)? != *parent_identity
+            || !parent_dir.matches_path(parent).map_err(Error::Context)?
+        {
+            return Err(failure("binding parent changed after preparation"));
+        }
+        let held_root = match root_identity {
+            Some(expected) => {
+                let name = root
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .ok_or_else(|| failure("invalid binding root"))?;
+                let dir = parent_dir.child(name).map_err(Error::Context)?;
+                if held_directory_identity(&dir)? != *expected {
+                    return Err(failure("binding root changed after preparation"));
+                }
+                Some(dir)
+            }
+            None => None,
+        };
+        self.reserve_private_root(&root)?;
         let store = if create {
-            Store::init(&root, project_id, name)
+            match held_root {
+                Some(dir) => Store::init_directory_frozen(
+                    &root,
+                    dir,
+                    project_id,
+                    name,
+                    expected_store_id.as_deref(),
+                ),
+                None => Store::init_in_parent(&root, &parent_dir, project_id, name),
+            }
         } else {
-            application::open(Some(&root))
+            Store::open_directory(
+                &root,
+                held_root.ok_or_else(|| failure("existing binding directory required"))?,
+            )
         }
         .map_err(Error::Context)?;
-        let actual = root.canonicalize()?;
+        if expected_store_id
+            .as_ref()
+            .is_some_and(|id| id != &store.config.store_id)
+            || store.config.project_id != *expected_project_id
+        {
+            return Err(failure("binding store identity differs from preparation"));
+        }
+        if !parent_dir.matches_path(parent).map_err(Error::Context)? {
+            return Err(failure("binding parent changed during publication"));
+        }
+        self.bind_held_store(&store, project_id)
+    }
+    fn reserve_private_root(&self, root: &Path) -> Result<()> {
+        let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
+        check_ordinary_overlap(&tx, root)?;
+        tx.execute(
+            "INSERT OR IGNORE INTO context_reserved_roots(path) VALUES (?1)",
+            [root.to_string_lossy()],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+    /// Publish only the identity and metadata of the held store. Path checks never adopt a reopened store.
+    pub fn bind_held_store(&self, store: &Store, project_id: &str) -> Result<ContextBinding> {
+        let actual = &store.root;
+        let lock = store.lock(0).map_err(Error::Context)?;
+        let current: oasis7_context::model::StoreConfig =
+            oasis7_context::format::strict_json(&store.config_raw().map_err(Error::Context)?)
+                .map_err(Error::Context)?;
+        if current != store.config {
+            return Err(failure("private library metadata changed while binding"));
+        }
+        let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
+        check_ordinary_overlap(&tx, actual)?;
         if !store
             .directory()
-            .matches_path(&actual)
+            .matches_path(actual)
             .map_err(Error::Context)?
         {
             return Err(failure("private library replaced while binding"));
         }
-        let (device, inode) = store.directory().identity().map_err(Error::Context)?;
-        let identity = format!("{device}:{inode}");
+        let identity = held_directory_identity(store.directory())?;
         let id = crate::index::digest(actual.to_string_lossy().as_bytes());
         let previous: Option<String> = tx
             .query_row(
@@ -235,13 +332,14 @@ impl ContextService {
             binding_version: version,
             root: actual.to_string_lossy().into(),
             directory_identity: identity,
-            store_id: store.config.store_id,
-            project_id: store.config.project_id,
+            store_id: store.config.store_id.clone(),
+            project_id: store.config.project_id.clone(),
             registered_project_id: project_id.into(),
-            name: store.config.name,
+            name: store.config.name.clone(),
         };
         tx.execute("INSERT INTO context_bindings(id,value) VALUES (?1,?2) ON CONFLICT(id) DO UPDATE SET value=excluded.value", params![binding.id, serde_json::to_string(&binding)?])?;
         tx.commit()?;
+        drop(lock);
         Ok(binding)
     }
     /// Recorded identity is enough to restore a lost source; it does not certify live health.
@@ -425,8 +523,10 @@ impl ContextService {
     ) -> Result<serde_json::Value> {
         let store = self.store(id, version)?;
         Ok(serde_json::to_value(
-            application::snapshot_export(&store.root, output, selection, passphrase, 0)
-                .map_err(Error::Context)?,
+            oasis7_context::snapshot::export_from_store(
+                &store, output, selection, passphrase, 0, None,
+            )
+            .map_err(Error::Context)?,
         )?)
     }
     pub fn snapshot_inspect(&self, input: &Path, passphrase: &[u8]) -> Result<serde_json::Value> {
@@ -541,7 +641,7 @@ impl ContextService {
             [root.to_string_lossy()],
         )?;
         tx.commit()?;
-        oasis7_context::snapshot::restore_in_parent(
+        let (_, published_dir) = oasis7_context::snapshot::restore_directory_in_parent(
             input,
             &root,
             Some(&identity.project_id),
@@ -556,7 +656,13 @@ impl ContextService {
                 "restore parent changed during publication; original held directory contains restore",
             ));
         }
-        self.bind(&root, &identity.registered_project_id, "", false)
+        let store = Store::open_directory(&root, published_dir).map_err(Error::Context)?;
+        if store.config.store_id != identity.store_id
+            || store.config.project_id != identity.project_id
+        {
+            return Err(failure("restored store identity changed before binding"));
+        }
+        self.bind_held_store(&store, &identity.registered_project_id)
     }
     pub fn doctor(&self, id: &str, version: u64) -> Result<serde_json::Value> {
         self.store(id, version)?.doctor().map_err(Error::Context)
