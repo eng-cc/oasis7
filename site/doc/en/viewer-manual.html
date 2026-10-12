@@ -84,10 +84,10 @@
         <p>For a manual capture pass:</p>
         <p>Verify <code>agent-browser 0.37.1</code> with <code>--version</code> and run <code>doctor --offline --quick --json</code> first. Create a worktree-scoped named session for each run, record diagnostics with <code>session info/list --json</code> when needed, and close only the session owned by that run.</p>
         <pre><code>set -euo pipefail
-command -v agent-browser &gt;/dev/null || { echo "missing agent-browser" &gt;&amp;2; exit 1; }
+command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 agent-browser --version
 agent-browser doctor --offline --quick --json
-AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer-manual)"
+AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"
 export AB_SESSION
 mkdir -p output/playwright/viewer
 VIEWER_EVIDENCE_DIR="$(mktemp -d "output/playwright/viewer/${AB_SESSION}.XXXXXX")"

@@ -84,10 +84,10 @@
         <p>若要手工采样，可执行：</p>
         <p>使用并通过 <code>agent-browser 0.37.1</code> 的 <code>--version</code> 验证，先运行 <code>doctor --offline --quick --json</code>；每轮创建 worktree-scoped named session，必要时用 <code>session info/list --json</code> 记录诊断，并只关闭本轮自有 session。</p>
         <pre><code>set -euo pipefail
-command -v agent-browser &gt;/dev/null || { echo "missing agent-browser" &gt;&amp;2; exit 1; }
+command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 agent-browser --version
 agent-browser doctor --offline --quick --json
-AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer-manual)"
+AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"
 export AB_SESSION
 mkdir -p output/playwright/viewer
 VIEWER_EVIDENCE_DIR="$(mktemp -d "output/playwright/viewer/${AB_SESSION}.XXXXXX")"
