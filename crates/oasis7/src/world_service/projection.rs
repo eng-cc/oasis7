@@ -13,6 +13,10 @@ pub struct WorldServiceProjection {
     pub canonical_agent_chat: Option<oasis7_proto::viewer::CanonicalAgentChatViewV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_task_control: Option<oasis7_agent_api::game::GameTaskControlV1>,
+    /// Native action/object electricity grants, distinct from WASM commands.
+    /// Only the authenticated Agent scope receives these read models.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub native_delegation_authorizations: Vec<crate::runtime::AgentDelegationAuthorizationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback_history: Option<WorldServiceFeedbackHistory>,
     pub state: WorldState,
@@ -57,6 +61,9 @@ impl WorldServiceProjection {
     ) -> Result<Self, String> {
         let mut projection = Self::from_world(world, authorized_agent)?;
         if let Some(agent) = authorized_agent {
+            projection.native_delegation_authorizations = world
+                .agent_delegation_authorizations(agent)
+                .map_err(|_| "native delegation read unavailable")?;
             if super::agent_authority::owner_public_key(world, agent)? == caller_public_key {
                 projection.canonical_agent_chat = super::agent_chat::owner_view(world, agent)?;
             }
@@ -128,6 +135,7 @@ impl WorldServiceProjection {
                 .map(Into::into),
             canonical_agent_chat: None,
             game_task_control: None,
+            native_delegation_authorizations: Vec::new(),
             feedback_history: authorized_agent
                 .map(|agent| WorldServiceFeedbackHistory::from_world(world, agent))
                 .transpose()?,
@@ -142,3 +150,7 @@ impl WorldServiceProjection {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "projection/native_delegation_tests.rs"]
+mod native_delegation_tests;

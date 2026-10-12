@@ -5,7 +5,7 @@ description: Execute an authorized Oasis7 native task through the signed game cl
 
 # Oasis7 native task play
 
-This profile uses the ordinary `oasis7_game_client` executable and an operator-provided device configuration. It supports task discovery, complete private goal/context capture, `native.move_agent`, original result lookup and terminal provider outcomes. It does not provide cold world entry, token pairing, social operations or the full Game HTTP write catalog.
+This profile uses the ordinary `oasis7_game_client` executable and an operator-provided device configuration. It supports task discovery, complete private goal/context capture, `native.move_agent`, `native.transfer_material`, authenticated industry observation, original result lookup and terminal provider outcomes. It does not provide cold world entry, token pairing, social operations or the full Game HTTP write catalog.
 
 Use only the supplied executable and device configuration. Do not inspect owner keys, server storage, fixture source or other players' state. Never print signer files or copy private goal content into public action reasons. Keep full goals and observations inside the authorized model context.
 
@@ -17,6 +17,7 @@ Run the supplied executable with `--help`, then:
 <client> --config <device.json> describe
 <client> --config <device.json> task
 <client> --config <device.json> capabilities
+<client> --config <device.json> industry
 <client> --config <device.json> context --operation <unique-stable-context-id>
 ```
 
@@ -28,7 +29,7 @@ A context is usable only after its prefix is canonically committed. Read the ret
 
 ## Decide and act
 
-The supported CLI proposal is movement of the configured Agent to three signed i64 centimeter coordinates:
+The movement CLI proposal is movement of the configured Agent to three signed i64 centimeter coordinates:
 
 ```sh
 <client> --config <device.json> move --context <context-id> --to <x_cm,y_cm,z_cm>
@@ -37,9 +38,19 @@ The supported CLI proposal is movement of the configured Agent to three signed i
 
 Choose coordinates yourself to satisfy the actual goal. The runtime still checks authority, capability admission, current task/goal/executor fences, base binding and available resources. A submitted or pending request is not a successful world effect. Inspect the canonical outcome and action receipt, and read a new context to check the resulting position when another decision is needed.
 
-Each context has one original action. Retry the same coordinates and context to recover that exact result. A changed action conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
+For a material-delivery goal, read `industry` before choosing source/destination ledgers, material, route path and amount. The authenticated read includes actual material ledgers, route availability/capacity, factories and pending transits; each collection is capped at 128 entries and reports truncation. Do not treat omitted entries as absent. This command is an observation, not a signed cost quote.
 
-If the original action is canonically rejected or expired, retain that result and use a fresh context for a new decision. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
+```sh
+<client> --config <device.json> transfer --context <context-id> --from <ledger-id> --to <ledger-id> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>
+```
+
+Ledger IDs are `world`, `agent:<id>`, `site:<id>` or `factory:<id>`. Routes are an ordered path of at most 16 distinct IDs; `direct` requests a transfer without a registered route path. Automatic rerouting is disabled. The requester is always the configured Agent. Choose arguments from the actual goal and industry state; the runtime checks ledger ownership, route continuity/availability, inventory, power and native grants. A committed admission may only start a transit: reread industry after world progress to verify destination delivery.
+
+`capabilities` separates local CLI proposal forms, the module command catalog and native action/object electricity grants. Inspect grant status, action kinds, object scope and remaining units. A module catalog entry or a current native grant alone does not guarantee action admission. Agent signer delegation is a separate identity boundary. ScheduleRecipe and generic module proposals are not supported by this CLI.
+
+Each context has one original action shared by movement and transfer. Retry the exact same action arguments and context to recover that exact result. Changing the action kind, route order, ledgers, amount or other arguments conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
+
+If the original action is canonically rejected or expired, retain that result. Rejection does not necessarily release its active context: obtain a committed terminal outcome or wait for the context's bounded lease to expire before capturing a new decision context. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
 
 ## Recover and finish
 
@@ -49,7 +60,7 @@ For a lost response, use `lookup --kind prefix|action|outcome` with the original
 <client> --config <device.json> outcome --context <context-id> --reason executor_aborted
 ```
 
-The other supported reasons are `provider_failed` and `transport_exhausted`. Do not place private explanation text in public reasons. Expired contexts cannot be decrypted through this CLI; a fresh context retires expired pending work when current grants permit it. Grant expiry requires owner renewal or Stop, not unauthorized reuse.
+The other supported reasons are `provider_failed` and `transport_exhausted`. Do not place private explanation text in public reasons. An outcome can itself be rejected when the world advances beyond its captured base. This CLI preserves that immutable original outcome; it does not automatically re-sign it with a fresh base. Query its original result and, after confirmed rejection, wait for the context lease to expire if it remains active. Expired contexts cannot be decrypted through this CLI; a fresh context retires expired pending work when current grants permit it. Grant expiry requires owner renewal or Stop, not unauthorized reuse.
 
 After goal publication, executor replacement, Stop or delegation revocation, old contexts cannot authorize new effects. Query original settled results, reread `task`, and capture a fresh context only while still authorized. On Stop or revoked authority, stop acting and report the boundary. Do not rebind yourself or alter the owner goal.
 
