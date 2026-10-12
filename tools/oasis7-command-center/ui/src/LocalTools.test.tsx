@@ -12,6 +12,48 @@ async function openEntry(){render(()=> <LocalTools/>);await waitFor(()=>expect(s
 describe('private library rendering and conflict handling',()=>{
   it('renders malicious titles and bodies as inert text',async()=>{await openEntry();expect(document.querySelector('img')).toBeNull();expect(document.querySelector('script')).toBeNull();expect(screen.getByLabelText('资料名称')).toHaveValue(metadata.title);});
   it('keeps draft, revision and undisplayed legal metadata after conflict',async()=>{await openEntry();fireEvent.input(screen.getByLabelText('资料正文'),{target:{value:'my unsaved edit'}});fireEvent.click(screen.getByRole('button',{name:'保存资料'}));await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('REVISION_CONFLICT'));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');const request=api.save.mock.calls[0][0];expect(request.expectedRevision).toBe('sha256:original');expect(request.rawText).toContain('opaque');expect(request.rawText).toContain('preserved');expect(request.rawText).toContain('my unsaved edit');api.get.mockResolvedValueOnce({id:'machine',revision:'sha256:new',rawText:raw.replace('evil()','new CLI edit'),metadataJson:JSON.stringify(metadata),verificationState:'unverified'});fireEvent.click(screen.getByRole('button',{name:'比较当前修订与草稿'}));await waitFor(()=>expect(screen.getByLabelText('资料冲突比较')).toHaveTextContent('sha256:new'));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');expect(screen.getByLabelText('资料冲突比较')).toHaveTextContent('opaque');fireEvent.click(screen.getByRole('button',{name:'关闭比较并保留草稿'}));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');});
+  it.each(['save', 'readback'])('retains typing during delayed %s and retries against the exact saved revision', async phase => {
+    await openEntry();
+    let finishSave!: (value: { revision: string; persistence: string; changed: boolean }) => void;
+    let finishRead!: (value: object) => void;
+    api.save.mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
+    api.get.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+    fireEvent.input(screen.getByLabelText('资料正文'), { target: { value: 'submitted draft' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存资料' }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(1));
+    if (phase === 'save') fireEvent.input(screen.getByLabelText('资料正文'), { target: { value: 'later draft' } });
+    finishSave({ revision: 'sha256:saved', persistence: 'saved', changed: true });
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    if (phase === 'readback') fireEvent.input(screen.getByLabelText('资料正文'), { target: { value: 'later draft' } });
+    // CLI writes after our save: readback is not an approved CAS baseline for the later draft.
+    finishRead({ id: 'machine', revision: 'sha256:external', rawText: raw, metadataJson: JSON.stringify(metadata), verificationState: 'unverified' });
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存资料' })).toBeEnabled());
+    expect(screen.getByLabelText('资料正文')).toHaveValue('later draft');
+    expect(screen.getByText(/保存期间的新草稿已保留/)).toBeInTheDocument();
+    expect(api.save).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '保存资料' }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledTimes(2));
+    expect(api.save.mock.calls[1][0].expectedRevision).toBe('sha256:saved');
+    expect(api.save.mock.calls[1][0].rawText).toContain('later draft');
+    expect(api.save.mock.calls[1][1]).not.toBe(api.save.mock.calls[0][1]);
+    await screen.findByText('REVISION_CONFLICT');
+    expect(screen.getByLabelText('资料正文')).toHaveValue('later draft');
+  });
+  it('keeps edits made while an explicit reload is awaiting the file', async () => {
+    await openEntry();
+    let finishRead!: (value: object) => void;
+    api.get.mockImplementationOnce(() => new Promise(resolve => { finishRead = resolve; }));
+    fireEvent.click(screen.getByRole('button', { name: '重新加载并放弃草稿' }));
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    fireEvent.input(screen.getByLabelText('资料名称'), { target: { value: 'new title while loading' } });
+    finishRead({ id: 'machine', revision: 'sha256:external', rawText: raw, metadataJson: JSON.stringify(metadata), verificationState: 'unverified' });
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存资料' })).toBeEnabled());
+    expect(screen.getByLabelText('资料名称')).toHaveValue('new title while loading');
+    expect(screen.getByRole('status')).toHaveTextContent('读取期间的新草稿已保留');
+    fireEvent.click(screen.getByRole('button', { name: '保存资料' }));
+    await waitFor(() => expect(api.save).toHaveBeenCalled());
+    expect(api.save.mock.calls[0][0].expectedRevision).toBe('sha256:original');
+  });
   it('retains selected library, draft and original binding version across CLI and overview refresh',async()=>{
     await openEntry();
     const refreshButton=screen.getByRole('button',{name:'检查本机事实'});

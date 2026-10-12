@@ -416,26 +416,8 @@ pub async fn context_snapshot_restore(
     secret_handle: String,
     directory_name: String,
 ) -> Result<Option<ContextBinding>, String> {
-    if directory_name.is_empty()
-        || directory_name == "."
-        || directory_name == ".."
-        || directory_name.contains('/')
-        || directory_name.contains('\\')
-    {
-        return Err("A new directory name is required".into());
-    }
-    let registered_project_id = project
-        .project
-        .lock()
-        .map_err(|_| "Project identity unavailable")?
-        .as_ref()
-        .map(|p| p.id.clone())
-        .ok_or("Select an ordinary project first")?;
-    let source = ContextSnapshotRestoreSource {
-        binding_id,
-        binding_version,
-        registered_project_id,
-    };
+    // Consume the correctly scoped handle before any input/project rejection.
+    // Zeroizing ownership then covers validation failures and dialog cancellation.
     let password = tools
         .secrets
         .take(
@@ -445,6 +427,21 @@ pub async fn context_snapshot_restore(
             "context_snapshot_restore",
         )
         .map_err(|e| e.to_string())?;
+    let (password, registered_project_id) =
+        validate_restore_input(password, &directory_name, || {
+            project
+                .project
+                .lock()
+                .map_err(|_| "Project identity unavailable".to_string())?
+                .as_ref()
+                .map(|p| p.id.clone())
+                .ok_or_else(|| "Select an ordinary project first".to_string())
+        })?;
+    let source = ContextSnapshotRestoreSource {
+        binding_id,
+        binding_version,
+        registered_project_id,
+    };
     let path = host.path.clone();
     let selected = tauri::async_runtime::spawn_blocking(move || {
         let Some(file) = handle
@@ -575,4 +572,88 @@ pub async fn context_reconcile(
         .map_err(|e| e.to_string())
     })
     .await
+}
+
+// Own the consumed secret while validating, so every early return drops it.
+fn validate_restore_input<P>(
+    password: P,
+    directory_name: &str,
+    project: impl FnOnce() -> Result<String, String>,
+) -> Result<(P, String), String> {
+    if directory_name.is_empty()
+        || directory_name == "."
+        || directory_name == ".."
+        || directory_name.contains('/')
+        || directory_name.contains('\\')
+    {
+        return Err("A new directory name is required".into());
+    }
+    Ok((password, project()?))
+}
+
+#[cfg(test)]
+mod secret_tests {
+    use super::*;
+    use oasis7_command_center_core::tools::secrets::SecretStore;
+    #[test]
+    fn restore_rejections_consume_secret_before_directory_or_project_validation() {
+        let store = SecretStore::default();
+        for (directory, missing_project) in [("..", false), ("new-library", true)] {
+            let token = store
+                .insert(
+                    "main",
+                    "op",
+                    "context_snapshot_restore",
+                    b"password".to_vec(),
+                )
+                .unwrap();
+            let password = store
+                .take(&token, "main", "op", "context_snapshot_restore")
+                .unwrap();
+            let result = validate_restore_input(password, directory, || {
+                assert!(
+                    missing_project,
+                    "invalid directory must not request project"
+                );
+                Err("Select an ordinary project first".into())
+            });
+            assert!(result.is_err());
+            assert!(
+                store
+                    .take(&token, "main", "op", "context_snapshot_restore")
+                    .is_err()
+            );
+        }
+    }
+    #[test]
+    fn wrong_scope_retains_owner_secret_and_cancelled_dialog_drops_consumed_secret() {
+        let store = SecretStore::default();
+        let token = store
+            .insert(
+                "main",
+                "op",
+                "context_snapshot_restore",
+                b"password".to_vec(),
+            )
+            .unwrap();
+        for (window, operation, purpose) in [
+            ("other", "op", "context_snapshot_restore"),
+            ("main", "other", "context_snapshot_restore"),
+            ("main", "op", "context_snapshot_export"),
+        ] {
+            assert!(store.take(&token, window, operation, purpose).is_err());
+        }
+        let password = store
+            .take(&token, "main", "op", "context_snapshot_restore")
+            .unwrap();
+        let (password, _) =
+            validate_restore_input(password, "new-library", || Ok("project".into())).unwrap();
+        // This is the same ownership drop as the production dialog's None return.
+        drop(password);
+        assert!(
+            store
+                .take(&token, "main", "op", "context_snapshot_restore")
+                .is_err()
+        );
+    }
 }
