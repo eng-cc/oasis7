@@ -2,7 +2,7 @@
 
 审计轮次: 10
 
-更新时间：2026-06-26
+更新时间：2026-10-12
 
 ## 入口
 - 模块 PRD：`doc/testing/prd.md`
@@ -11,6 +11,8 @@
 - 当前 QA 测试合同与覆盖边界：`doc/testing/prd.md`
 
 ## 首读分流
+
+- 想核对 Release Trunk 安装、可信缓存复用、冷暖耗时或 apt 安装预算：先读 [CI 分级执行 PRD](ci/ci-tiered-execution.prd.md#ci-install-trunk)与[配对设计](ci/ci-tiered-execution.design.md#ci-install-trunk-design)，操作见[依赖安装核验](../../testing-manual.md#ci-dependency-installation-validation)。
 - 想先回答 testing 模块覆盖哪些测试层级、证据与门禁边界：先读 `doc/testing/prd.md`
 - 想判断好玩性证据、`L4A/L4B/L5` 边界、角色 subagent review 或 simulated player persona 的 canonical topic：先读 `doc/testing/governance/README.md`
 - 想直接在一个 worktree 里准备完整 `L4A + L4B` 执行包：先经 `doc/testing/governance/README.md` 确认所需证据层，再读 `testing-manual.md` 的 `L4A/L4B/L5` 段落并执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 再由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
@@ -31,7 +33,7 @@
 | --- | --- |
 | `benchmarks/` | 测试成熟度对标、单实现栈等价要求、历史缺口矩阵与 claims denylist；不维护当前网络状态 |
 | `evidence/` | 发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口 |
-| `ci/` | CI、wasm determinism、tiering、required check 保护 |
+| `ci/` | CI、wasm determinism、tiering、required check 保护、依赖安装与工具缓存量测 |
 | `longrun/` | 长稳、chaos、soak、world state sync / commit closure 与在线稳定性 |
 | `launcher/` | 启动器链路测试、playtest 与配置自动接线 |
 | `governance/` | 质量趋势、release-gate 指标、审计检查与 playability 证据治理；先读 `doc/testing/governance/README.md` 再按问题下钻 |
