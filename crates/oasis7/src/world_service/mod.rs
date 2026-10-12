@@ -16,3 +16,6 @@ pub use authority::*;
 pub use correlation::derive_correlation;
 pub use oasis7_client_api::world_service::*;
 pub use wire::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod private_goal_read;

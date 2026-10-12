@@ -99,19 +99,7 @@ fn game_task_bootstrap_persists_suspended_and_rejects_conflicting_create() {
             .unwrap_err()
             .contains("already exists")
     );
-    let snapshot = world.snapshot_with_chain_resource_context(
-        crate::runtime::ChainResourceDerivationContext {
-            world_id: "world",
-            chain_id: "fixture-chain",
-            genesis_ref: None,
-            created_at_height: world.state().time,
-            manifest_height: world.state().time,
-            commit_block_hash: None,
-            tick: world.state().time,
-        },
-        "fixture",
-        "fixture",
-    );
+    let snapshot = goal_snapshot(&world);
     let key = correlation::key_digest(&request(&private, "first").correlation.key).unwrap();
     let mut corrupt_snapshot = serde_json::to_value(&snapshot).unwrap();
     fn corrupt(value: &mut serde_json::Value, key: &str) -> bool {
@@ -223,4 +211,323 @@ fn game_task_owner_history_and_receipt_integrity_fail_closed() {
             .created_operation_id,
         "after-fork"
     );
+}
+
+fn goal_request(
+    private: &str,
+    c: &GameTaskControlV1,
+    id: &str,
+) -> SubmitIntentRequest<WorldServicePayloadV1> {
+    let goal = GameGoalPublishV1 {
+        api_rev: 1,
+        world_id: c.world_id.clone(),
+        genesis_digest: c.genesis_digest.clone(),
+        task_id: c.task_id.clone(),
+        agent_id: c.agent_id.clone(),
+        owner_public_key: c.owner_public_key.clone(),
+        owner_binding: c.owner_binding.clone(),
+        owner_generation: c.owner_generation,
+        branch_id: c.branch_id.clone(),
+        reorg_epoch: c.reorg_epoch,
+        expected_task_revision: c.task_revision,
+        expected_latest_goal_revision: c.latest_goal_revision,
+        goal_revision: DecimalU64(c.latest_goal_revision.0 + 1),
+        client_operation_id: id.into(),
+        prepare_operation_id: format!("prepare-{id}"),
+        goal_ref: "ab".repeat(32),
+    };
+    let payload = WorldServicePayloadV1::GameGoalPublish(
+        sign_read_request(GAME_GOAL_PUBLISH_DOMAIN, goal, private).unwrap(),
+    );
+    SubmitIntentRequest {
+        contract_version: 1,
+        correlation: derive_correlation(
+            WorldIdentity {
+                world_id: c.world_id.clone(),
+                genesis_digest: c.genesis_digest.clone(),
+            },
+            &payload,
+        )
+        .unwrap(),
+        deadline_unix_ms: None,
+        signed_payload: payload,
+    }
+}
+fn goal_result(
+    world: &World,
+    request: SubmitIntentRequest<WorldServicePayloadV1>,
+    staged: &[&CanonicalIntentResultV1],
+    height: u64,
+) -> CanonicalIntentResultV1 {
+    CanonicalIntentResultV1 {
+        receipt: prepare_publish(world, &request, staged.iter().copied(), height).unwrap(),
+        request,
+        action_id: 2,
+        committed_height: height,
+        rejected: None,
+    }
+}
+#[test]
+fn game_goal_publish_staged_create_activation_restart_and_exact_receipt() {
+    let (mut world, private) = fixture();
+    let create = result(&world, request(&private, "goal-task"));
+    let initial = create_control(&create.request).unwrap();
+    assert!(
+        serde_json::to_value(&initial)
+            .unwrap()
+            .get("active_goal_reference")
+            .is_none()
+    );
+    let publication = goal_request(&private, &initial, "first-goal");
+    let first = goal_result(&world, publication.clone(), &[&create], 7);
+    assert!(
+        prepare_publish(
+            &world,
+            &goal_request(&private, &initial, "conflict"),
+            [&create, &first],
+            7
+        )
+        .is_err()
+    );
+    world.record_world_service_result(create).unwrap();
+    world.record_world_service_result(first.clone()).unwrap();
+    let control = current_control(&world, "agent").unwrap().unwrap();
+    assert_eq!(control.task_revision, DecimalU64(2));
+    assert_eq!(control.active_goal_revision, DecimalU64(1));
+    assert_eq!(control.latest_goal_revision, DecimalU64(1));
+    assert_eq!(control.task_status, GameTaskStatusV1::Suspended);
+    assert_eq!(control.executor_epoch, DecimalU64(0));
+    assert!(control.executor_id.is_none());
+    assert_eq!(active_publish(&world, "agent").unwrap().unwrap(), first);
+    let active = control.active_goal_reference.as_ref().unwrap();
+    assert_eq!(active.activation_committed_height, DecimalU64(7));
+    assert_eq!(active.prepare_operation_id, "prepare-first-goal");
+    assert_eq!(
+        derive_correlation(
+            publication.correlation.key.world.clone(),
+            &publication.signed_payload
+        )
+        .unwrap(),
+        publication.correlation
+    );
+    let second = goal_result(
+        &world,
+        goal_request(&private, &control, "second-goal"),
+        &[],
+        8,
+    );
+    world.record_world_service_result(second.clone()).unwrap();
+    let snapshot = goal_snapshot(&world);
+    let restored = World::from_snapshot(snapshot, world.journal().clone()).unwrap();
+    assert_eq!(
+        current_control(&restored, "agent")
+            .unwrap()
+            .unwrap()
+            .active_goal_revision,
+        DecimalU64(2)
+    );
+    assert_eq!(active_publish(&restored, "agent").unwrap().unwrap(), second);
+}
+#[test]
+fn game_goal_publish_signature_fences_and_body_independence() {
+    let (mut world, private) = fixture();
+    let create = result(&world, request(&private, "task"));
+    let initial = create_control(&create.request).unwrap();
+    world.record_world_service_result(create).unwrap();
+    let original = goal_request(&private, &initial, "goal");
+    let WorldServicePayloadV1::GameGoalPublish(signed) = &original.signed_payload else {
+        unreachable!()
+    };
+    for field in 0..13 {
+        let mut bad = signed.clone();
+        let r = &mut bad.request;
+        match field {
+            0 => r.world_id.push('x'),
+            1 => r.genesis_digest.push('x'),
+            2 => r.task_id.push('x'),
+            3 => r.agent_id.push('x'),
+            4 => r.owner_binding.push('x'),
+            5 => r.owner_generation.0 += 1,
+            6 => r.branch_id.push('x'),
+            7 => r.reorg_epoch.0 += 1,
+            8 => r.expected_task_revision.0 += 1,
+            9 => {
+                r.expected_latest_goal_revision.0 += 1;
+                r.goal_revision.0 += 1;
+            }
+            10 => r.prepare_operation_id.push('x'),
+            11 => r.goal_ref = "cd".repeat(32),
+            _ => r.client_operation_id.push('x'),
+        };
+        r.validate().unwrap();
+        let edited = r.clone();
+        assert!(verify_publish(&bad).is_err());
+        let valid_signature =
+            sign_read_request(GAME_GOAL_PUBLISH_DOMAIN, edited, &private).unwrap();
+        let payload = WorldServicePayloadV1::GameGoalPublish(valid_signature);
+        if let Ok(correlation) =
+            derive_correlation(original.correlation.key.world.clone(), &payload)
+        {
+            let changed = SubmitIntentRequest {
+                signed_payload: payload,
+                correlation,
+                ..original.clone()
+            };
+            if field < 10 {
+                assert!(prepare_publish(&world, &changed, [], 2).is_err());
+            }
+        }
+    }
+    // A correctly signed metadata reference can activate without a local body.
+    assert!(prepare_publish(&world, &original, [], 2).is_ok());
+    let mut weak = signed.clone();
+    weak.subject_public_key = "01".to_owned() + &"00".repeat(31);
+    weak.request.owner_public_key = weak.subject_public_key.clone();
+    weak.signature_hex = weak.subject_public_key.clone() + &"00".repeat(32);
+    assert!(verify_publish(&weak).is_err());
+    world
+        .install_capability_agent_identity("agent", "owner", 2)
+        .unwrap();
+    assert!(prepare_publish(&world, &original, [], 2).is_err());
+    assert!(current_control(&world, "agent").unwrap().is_none());
+}
+#[test]
+fn game_goal_publish_restore_rejects_missing_predecessor_and_double_version() {
+    let (mut world, private) = fixture();
+    let create = result(&world, request(&private, "task"));
+    let initial = create_control(&create.request).unwrap();
+    world.record_world_service_result(create).unwrap();
+    let mut gap = initial.clone();
+    gap.task_revision = DecimalU64(2);
+    gap.latest_goal_revision = DecimalU64(1);
+    let gap_request = goal_request(&private, &gap, "gap");
+    let broken = CanonicalIntentResultV1 {
+        receipt: serde_json::to_value(publish_receipt(&gap_request, 3).unwrap()).unwrap(),
+        request: gap_request,
+        action_id: 2,
+        committed_height: 3,
+        rejected: None,
+    };
+    world.record_world_service_result(broken).unwrap();
+    assert!(validate_history(&world).is_err());
+    let error = match World::from_snapshot(goal_snapshot(&world), world.journal().clone()) {
+        Err(error) => error,
+        Ok(_) => panic!("corrupted canonical history must fail restore"),
+    };
+    assert!(format!("{error:?}").contains("goal publication predecessor"));
+    let (mut world, private) = fixture();
+    let create = result(&world, request(&private, "task"));
+    let initial = create_control(&create.request).unwrap();
+    world.record_world_service_result(create).unwrap();
+    let a = goal_result(&world, goal_request(&private, &initial, "a"), &[], 2);
+    let b_request = goal_request(&private, &initial, "b");
+    let b = CanonicalIntentResultV1 {
+        receipt: serde_json::to_value(publish_receipt(&b_request, 2).unwrap()).unwrap(),
+        request: b_request,
+        action_id: 3,
+        committed_height: 2,
+        rejected: None,
+    };
+    world.record_world_service_result(a).unwrap();
+    world.record_world_service_result(b).unwrap();
+    let error = match World::from_snapshot(goal_snapshot(&world), world.journal().clone()) {
+        Err(error) => error,
+        Ok(_) => panic!("corrupted canonical history must fail restore"),
+    };
+    assert!(format!("{error:?}").contains("goal publication predecessor"));
+}
+
+#[test]
+fn game_goal_publish_restore_rejects_invalid_journal_tail() {
+    for missing_predecessor in [true, false] {
+        let (mut world, private) = fixture();
+        let create = result(&world, request(&private, "task"));
+        let initial = create_control(&create.request).unwrap();
+        world.record_world_service_result(create).unwrap();
+        let mut predecessor = initial.clone();
+        if missing_predecessor {
+            predecessor.task_revision = DecimalU64(2);
+            predecessor.latest_goal_revision = DecimalU64(1);
+        } else {
+            let accepted =
+                goal_result(&world, goal_request(&private, &initial, "accepted"), &[], 2);
+            world.record_world_service_result(accepted).unwrap();
+        }
+        // The checkpoint is valid. Only the journal tail introduces an individually
+        // valid signed receipt with an absent or already-consumed predecessor.
+        validate_history(&world).unwrap();
+        let checkpoint = goal_snapshot(&world);
+        let signed = goal_request(&private, &predecessor, "invalid-tail");
+        let tail = CanonicalIntentResultV1 {
+            receipt: serde_json::to_value(publish_receipt(&signed, 3).unwrap()).unwrap(),
+            request: signed,
+            action_id: 3,
+            committed_height: 3,
+            rejected: None,
+        };
+        world.record_world_service_result(tail).unwrap();
+        assert!(world.journal().len() > checkpoint.journal_len);
+        let error = match World::from_snapshot(checkpoint, world.journal().clone()) {
+            Err(error) => error,
+            Ok(_) => panic!("invalid goal publication journal tail must fail restore"),
+        };
+        assert!(format!("{error:?}").contains("goal publication predecessor"));
+    }
+}
+
+#[test]
+fn game_goal_publish_restore_accepts_valid_create_publish_journal_tail() {
+    let (mut world, private) = fixture();
+    let checkpoint = goal_snapshot(&world);
+    let create = result(&world, request(&private, "task"));
+    let initial = create_control(&create.request).unwrap();
+    world.record_world_service_result(create).unwrap();
+    let accepted = goal_result(&world, goal_request(&private, &initial, "accepted"), &[], 2);
+    world.record_world_service_result(accepted.clone()).unwrap();
+    let recovered = World::from_snapshot(checkpoint, world.journal().clone()).unwrap();
+    assert_eq!(
+        current_control(&recovered, "agent").unwrap(),
+        current_control(&world, "agent").unwrap()
+    );
+    assert_eq!(active_publish(&recovered, "agent").unwrap(), Some(accepted));
+}
+
+#[test]
+fn game_goal_publish_restore_rejects_orphan_journal_tail() {
+    let (mut world, private) = fixture();
+    let checkpoint = goal_snapshot(&world);
+    let create = result(&world, request(&private, "task"));
+    let initial = create_control(&create.request).unwrap();
+    // No create receipt exists in either the checkpoint or the tail.
+    let signed = goal_request(&private, &initial, "orphan");
+    world
+        .record_world_service_result(CanonicalIntentResultV1 {
+            receipt: serde_json::to_value(publish_receipt(&signed, 2).unwrap()).unwrap(),
+            request: signed,
+            action_id: 2,
+            committed_height: 2,
+            rejected: None,
+        })
+        .unwrap();
+    let error = match World::from_snapshot(checkpoint, world.journal().clone()) {
+        Err(error) => error,
+        Ok(_) => panic!("orphan goal publication journal tail must fail restore"),
+    };
+    assert!(format!("{error:?}").contains("goal publication has no canonical task predecessor"));
+}
+
+fn goal_snapshot(world: &World) -> crate::runtime::Snapshot {
+    world.snapshot_with_chain_resource_context(
+        crate::runtime::ChainResourceDerivationContext {
+            world_id: "world",
+            chain_id: "fixture-chain",
+            genesis_ref: None,
+            created_at_height: world.state().time,
+            manifest_height: world.state().time,
+            commit_block_hash: None,
+            tick: world.state().time,
+        },
+        "fixture",
+        "fixture",
+    )
 }

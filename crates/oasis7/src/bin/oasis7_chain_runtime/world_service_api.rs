@@ -14,6 +14,8 @@ use std::{
 
 #[path = "world_service_operations.rs"]
 mod operations;
+#[path = "world_service_private_goal.rs"]
+pub(super) mod private_goal;
 
 pub(super) struct Service<'a> {
     records: &'a Path,
@@ -89,6 +91,9 @@ impl Service<'_> {
         match payload {
             WorldServicePayloadV1::GameTaskCreate(signed) => {
                 oasis7::world_service::game_task::validate_owner(&pinned.world, signed)?;
+            }
+            WorldServicePayloadV1::GameGoalPublish(signed) => {
+                game_task::validate_publish_owner(&pinned.world, signed)?;
             }
             WorldServicePayloadV1::GameplayJson(bytes) => {
                 gameplay::authenticated_action(&pinned.world, bytes)?;

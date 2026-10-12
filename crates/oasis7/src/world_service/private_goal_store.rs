@@ -179,3 +179,6 @@ impl PrivateGoalStore {
 mod tests;
 #[cfg(unix)]
 mod unix;
+
+pub mod prepared;
+pub use prepared::{PreparedGoalError, PreparedGoalReceiptV1};
