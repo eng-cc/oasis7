@@ -65,7 +65,7 @@ impl RemoteWorldServiceClient {
                 WorldServiceClientError::Configuration("private transport unavailable".into())
             })
     }
-    fn private_scope(
+    pub(super) fn private_scope(
         &self,
         world: &WorldIdentity,
         agent: &str,
@@ -82,6 +82,14 @@ impl RemoteWorldServiceClient {
         &self,
         path: &str,
         request: &Q,
+    ) -> Result<SignedServiceResponse<R>, WorldServiceClientError> {
+        self.private_call_bounded(path, request, 64 * 1024)
+    }
+    pub(super) fn private_call_bounded<Q: Serialize, R: Serialize + DeserializeOwned>(
+        &self,
+        path: &str,
+        request: &Q,
+        maximum: usize,
     ) -> Result<SignedServiceResponse<R>, WorldServiceClientError> {
         let http = self.private_connection()?;
         self.query_state.check()?;
@@ -101,7 +109,10 @@ impl RemoteWorldServiceClient {
                 message: "private goal request rejected".into(),
             });
         }
-        let bound = self.config.max_response_bytes.min(64 * 1024);
+        let bound = self
+            .config
+            .max_response_bytes
+            .min(maximum.min(2 * 1024 * 1024));
         let mut bytes = zeroize::Zeroizing::new(Vec::new());
         response
             .by_ref()
@@ -116,7 +127,7 @@ impl RemoteWorldServiceClient {
             ));
         }
         // Reject duplicate keys/depth first, then ignored wrapper/commit fields.
-        let value: Value = oasis7_agent_api::game::parse_request(&bytes)
+        let value: Value = oasis7_agent_api::game::parse_bounded_json(&bytes, bound)
             .map_err(|_| WorldServiceClientError::Assurance("invalid private response".into()))?;
         use serde::de::IntoDeserializer;
         let mut ignored = false;

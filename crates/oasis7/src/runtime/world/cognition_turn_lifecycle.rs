@@ -117,6 +117,34 @@ fn append_turn_event(world: &mut World, kind: &str, details: JsonValue) -> Resul
 }
 
 impl World {
+    /// Read-only proof that the original context is dispatched and not terminal.
+    pub fn validate_active_cognition_context(
+        &self,
+        identity: (&str, &str, &str, &str, &str),
+        context: &str,
+        invocation: &str,
+    ) -> Result<(), WorldError> {
+        let (agent, session, turn, decision, request) = identity;
+        let events = ensure_not_terminal(self, agent, session, turn, decision, request)?;
+        let matching =
+            |event: &JsonValue| same_identity(event, agent, session, turn, decision, request);
+        if !events.iter().any(|event| {
+            matching(event)
+                && event.get("event_kind").and_then(JsonValue::as_str) == Some("ContextCaptured")
+                && event.get("context_digest").and_then(JsonValue::as_str) == Some(context)
+        }) || !events.iter().any(|event| {
+            matching(event)
+                && event.get("event_kind").and_then(JsonValue::as_str) == Some("RequestDispatched")
+                && event
+                    .get("provider_invocation_key")
+                    .and_then(JsonValue::as_str)
+                    == Some(invocation)
+        }) {
+            return Err(lifecycle_error("cognition_context_missing"));
+        }
+        Ok(())
+    }
+
     /// Persist the canonical context capture that precedes provider I/O.
     /// Repeating the exact capture is idempotent; changing its digest is a
     /// request identity conflict.
@@ -177,6 +205,78 @@ impl World {
                 "status": "running",
             }),
         )
+    }
+
+    /// Cancel an unfinished context only inside an authenticated task-control candidate.
+    /// Completed turn receipts are immutable; a prepared marker is aborted through
+    /// the existing recovery boundary before its context can be replaced.
+    pub fn retire_cognition_context_for_task(
+        &mut self,
+        identity: (&str, &str, &str, &str, &str),
+    ) -> Result<(), WorldError> {
+        let (agent, session, turn, decision, request) = identity;
+        let events = events_for(self);
+        let matching =
+            |event: &JsonValue| same_identity(event, agent, session, turn, decision, request);
+        if events.iter().any(|e| {
+            matching(e)
+                && matches!(
+                    e.get("event_kind").and_then(JsonValue::as_str),
+                    Some(
+                        "CognitionTurnFailed" | "CognitionTurnCancelled" | "CognitionTurnCompleted"
+                    )
+                )
+        }) {
+            return Ok(());
+        }
+        if !events.iter().any(|e| {
+            matching(e)
+                && e.get("event_kind").and_then(JsonValue::as_str) == Some("ContextCaptured")
+        }) {
+            return Err(lifecycle_error("cognition_context_missing"));
+        }
+        let prepared = self
+            .cognition
+            .get("commit_records")
+            .and_then(JsonValue::as_array)
+            .and_then(|records| {
+                records.iter().find(|record| {
+                    record.get("status").and_then(JsonValue::as_str) == Some("prepared")
+                        && record.get("agent_id").and_then(JsonValue::as_str) == Some(agent)
+                        && record.get("agent_session_id").and_then(JsonValue::as_str)
+                            == Some(session)
+                        && record.get("agent_turn_id").and_then(JsonValue::as_str) == Some(turn)
+                        && record
+                            .get("decision_request_id")
+                            .and_then(JsonValue::as_str)
+                            == Some(decision)
+                        && record.get("request_digest").and_then(JsonValue::as_str) == Some(request)
+                })
+            })
+            .and_then(|record| record.get("commit_id"))
+            .and_then(JsonValue::as_str)
+            .map(str::to_owned);
+        if let Some(marker) = prepared {
+            self.abort_cognition_commit(&marker, "cancelled")?;
+            return Ok(());
+        }
+        let mut transaction = self.clone();
+        let details = json!({"agent_id": agent, "agent_session_id": session, "agent_turn_id": turn,
+            "decision_request_id": decision, "request_digest": request,
+            "status": "rejected", "reject_reason": "task_control_changed", "logical_tick": self.state.time});
+        super::super::cognition_persistence_validation::append_cognition_event(
+            &mut transaction.cognition,
+            "CognitionTurnCancelled",
+            details.clone(),
+        )?;
+        super::super::cognition_persistence_validation::append_cognition_event(
+            &mut transaction.cognition,
+            "CognitionTurnCompleted",
+            details,
+        )?;
+        transaction.persist_runtime_transaction_if_configured()?;
+        *self = transaction;
+        Ok(())
     }
 
     /// Persist one provider delivery attempt. Transport retries reuse the

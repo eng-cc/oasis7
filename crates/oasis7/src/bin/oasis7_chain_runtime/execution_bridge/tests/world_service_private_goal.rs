@@ -11,7 +11,7 @@ use oasis7_agent_api::game::{
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 
-fn http(
+pub(super) fn http(
     dir: &Path,
     runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
     signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
@@ -26,7 +26,7 @@ fn http(
     clippy::too_many_arguments,
     reason = "Explicit fixture and deterministic delivery hook"
 )]
-fn http_with_hook(
+pub(super) fn http_with_hook(
     dir: &Path,
     runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
     signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
@@ -90,7 +90,7 @@ fn http_with_hook(
         serde_json::from_str(response.split("\r\n\r\n").nth(1).unwrap()).unwrap(),
     )
 }
-fn consumer<T>(
+pub(super) fn consumer<T>(
     dir: &Path,
     runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
     signer: &crate::feedback_submit_api::FeedbackSubmitSigner,

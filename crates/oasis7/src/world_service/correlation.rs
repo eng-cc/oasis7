@@ -27,6 +27,25 @@ pub fn derive_correlation(
     world: WorldIdentity,
     payload: &WorldServicePayloadV1,
 ) -> Result<RequestCorrelation, String> {
+    if let WorldServicePayloadV1::GameExecutorControl(signed) = payload {
+        game_task::verify_executor_control(signed)?;
+        let f = &signed.request.fence;
+        if f.world_id != world.world_id || f.genesis_digest != world.genesis_digest {
+            return Err("executor world identity mismatch".into());
+        }
+        let correlation = RequestCorrelation {
+            key: RequestKey {
+                world,
+                verified_subject: signed.subject_public_key.clone(),
+                operation_domain: oasis7_agent_api::game::GAME_EXECUTOR_CONTROL_DOMAIN.into(),
+                nonce_scope: format!("task:{}", f.task_id),
+                request_id_or_nonce: signed.request.client_operation_id.clone(),
+            },
+            payload_digest: request_digest("intent", payload)?,
+        };
+        correlation.validate().map_err(|e| e.to_string())?;
+        return Ok(correlation);
+    }
     if let WorldServicePayloadV1::GameGoalPublish(signed) = payload {
         game_task::verify_publish(signed)?;
         if signed.request.world_id != world.world_id
@@ -69,7 +88,9 @@ pub fn derive_correlation(
         return Ok(correlation);
     }
     let (subject, domain, scope, id) = match payload {
-        WorldServicePayloadV1::GameTaskCreate(_) | WorldServicePayloadV1::GameGoalPublish(_) => {
+        WorldServicePayloadV1::GameTaskCreate(_)
+        | WorldServicePayloadV1::GameGoalPublish(_)
+        | WorldServicePayloadV1::GameExecutorControl(_) => {
             unreachable!("handled above")
         }
         WorldServicePayloadV1::GameplayJson(bytes) => {
@@ -115,6 +136,18 @@ pub fn derive_correlation(
         }
         WorldServicePayloadV1::Cognition(signed) => {
             verify_read_request("cognition", signed)?;
+            if let Some(fence) = &signed.request.task_fence {
+                if signed.request.causal_proposal.is_some() {
+                    return Err("task cognition does not publish private reasoning".into());
+                }
+                fence.validate()?;
+                private_goal_prepare::verify_owner_signature_strict(
+                    "cognition",
+                    &signed.request,
+                    &signed.subject_public_key,
+                    &signed.signature_hex,
+                )?;
+            }
             let request = &signed.request.request;
             request.validate().map_err(|e| e.to_string())?;
             signed
@@ -150,6 +183,30 @@ pub fn derive_correlation(
         }
         WorldServicePayloadV1::Scheduler(signed) => {
             verify_read_request("scheduler", signed)?;
+            if let SchedulerOperationV1::TaskProviderPrefix { context }
+            | SchedulerOperationV1::TaskProviderFailure { context, .. } =
+                &signed.request.operation
+            {
+                context.validate()?;
+                if let SchedulerOperationV1::TaskProviderFailure { reason, .. } =
+                    &signed.request.operation
+                    && !matches!(
+                        reason.as_str(),
+                        "provider_failed"
+                            | "transport_exhausted"
+                            | "context_expired"
+                            | "executor_aborted"
+                    )
+                {
+                    return Err("task failure requires bounded public code".into());
+                }
+                private_goal_prepare::verify_owner_signature_strict(
+                    "scheduler",
+                    &signed.request,
+                    &signed.subject_public_key,
+                    &signed.signature_hex,
+                )?;
+            }
             if signed.request.request_id.trim().is_empty() {
                 return Err("missing scheduler request identity".into());
             }

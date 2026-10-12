@@ -6,6 +6,11 @@ use oasis7::world_service::{
 use oasis7_agent_api::game::GameTaskControlV1;
 use std::{io::Write, path::PathBuf};
 use zeroize::Zeroizing;
+#[path = "world_service_private_task_context.rs"]
+mod task_context;
+use oasis7::world_service::private_task_context::{
+    TASK_CONTEXT_PREPARE_PATH, TASK_CONTEXT_READ_PATH, TASK_SNAPSHOT_PATH,
+};
 
 use oasis7::world_service::private_goal_read::{
     CurrentGoalRequest, CurrentGoalResponse, GOAL_CURRENT_PATH as CURRENT_PATH,
@@ -69,61 +74,8 @@ fn open_configured_store(
         _ => Err("both private goal directory and key file must be configured".into()),
     }
 }
-#[cfg(unix)]
 fn read_key(path: &Path) -> Result<Zeroizing<[u8; 32]>, String> {
-    use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
-    use cap_std::fs::{Dir, MetadataExt, OpenOptions, OpenOptionsExt, PermissionsExt};
-    use std::io::Read;
-    let components = path.components().collect::<Vec<_>>();
-    if !path.is_absolute()
-        || components.len() < 2
-        || components
-            .iter()
-            .skip(1)
-            .any(|c| !matches!(c, std::path::Component::Normal(_)))
-    {
-        return Err("invalid private key path".into());
-    }
-    let mut parent = Dir::open_ambient_dir("/", cap_std::ambient_authority())
-        .map_err(|_| "private key unavailable")?;
-    for component in &components[1..components.len() - 1] {
-        parent = parent
-            .open_dir_nofollow(component.as_os_str())
-            .map_err(|_| "private key unavailable")?;
-    }
-    let mut options = OpenOptions::new();
-    options
-        .read(true)
-        .follow(FollowSymlinks::No)
-        .custom_flags(libc::O_NONBLOCK);
-    let mut file = parent
-        .open_with(components.last().unwrap().as_os_str(), &options)
-        .map_err(|_| "private key unavailable")?;
-    let metadata = file.metadata().map_err(|_| "private key unavailable")?;
-    if !metadata.is_file()
-        || metadata.uid() != unsafe { libc::geteuid() }
-        || metadata.nlink() != 1
-        || metadata.permissions().mode() & 0o7777 != 0o600
-        || metadata.len() != 32
-    {
-        return Err("private key requires operator-owned regular mode-0600 exact 32 bytes".into());
-    }
-    let mut key = Zeroizing::new([0; 32]);
-    file.read_exact(&mut *key)
-        .map_err(|_| "private key unavailable")?;
-    let mut extra = [0; 1];
-    if file
-        .read(&mut extra)
-        .map_err(|_| "private key unavailable")?
-        != 0
-    {
-        return Err("private key size changed".into());
-    }
-    Ok(key)
-}
-#[cfg(not(unix))]
-fn read_key(_: &Path) -> Result<Zeroizing<[u8; 32]>, String> {
-    Err("private goal key loading unsupported on this platform".into())
+    oasis7::world_service::private_key_file::read_private_key_file(path)
 }
 
 #[derive(Clone, Copy)]
@@ -419,7 +371,15 @@ pub(crate) fn maybe_handle_with_delivery_hook(
     before_delivery: impl FnOnce(),
 ) -> Result<bool, String> {
     let path = target.split('?').next().unwrap_or(target);
-    if ![PREPARE_PATH, CURRENT_PATH].contains(&path) {
+    if ![
+        PREPARE_PATH,
+        CURRENT_PATH,
+        TASK_SNAPSHOT_PATH,
+        TASK_CONTEXT_PREPARE_PATH,
+        TASK_CONTEXT_READ_PATH,
+    ]
+    .contains(&path)
+    {
         return Ok(false);
     }
     let result: Result<Value, PrivateError> = (|| {
@@ -449,6 +409,15 @@ pub(crate) fn maybe_handle_with_delivery_hook(
             runtime,
             guarded: None,
         };
+        if [
+            TASK_SNAPSHOT_PATH,
+            TASK_CONTEXT_PREPARE_PATH,
+            TASK_CONTEXT_READ_PATH,
+        ]
+        .contains(&path)
+        {
+            return task_context::process(&service, store, path, body, before_delivery);
+        }
         if path == PREPARE_PATH {
             prepare(
                 &service,

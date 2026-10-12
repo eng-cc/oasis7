@@ -29,7 +29,7 @@ Game Task 创建复用既有签名 World Service submit/lookup 与 Runtime 共�
 
 任务控制的唯一权威是已提交的 `world_service_results` canonical receipt，沿用现有日志与快照恢复边界。没有第二套 gateway 内存任务表；相同操作标识重放复用原回执，同键不同内容发生关联冲突，同一 Agent 当前 owner/world fence 下的重复创建被拒绝，包括同块多个创建。服务返回 volatile Received 时尚不构成任务持久化或 Game pending；响应丢失后保留原签名 payload/correlation 查询，只有 committed canonical receipt 才能证明任务创建。
 
-`GET /v1/game/worlds/{world}/agents/{agent}/task-control` 通过原设备读签名返回当前 owner 的控制记录及 committed `world_binding`，没有可见任务时返回 `404 task_control_unavailable`。普通 delegate 的 Agent 观察权限不授予任务读取权限。控制记录初始 `suspended`，目标 revision 为零、executor epoch 为零且没有执行方；发布目标后附带 public-only `active_goal_reference`（版本、不透明承诺、准备/发布操作标识和激活 committed height）。读取 bootstrap schema revision 3 描述该可选字段，旧初始记录仍省略它。任务保持 `suspended`；此记录不是完整 TaskSnapshot 或可行动 context，也不把已有 owner chat goal 当作任务目标。
+`GET /v1/game/worlds/{world}/agents/{agent}/task-control` 通过原设备读签名返回当前 owner 或当前绑定且真实 delegation 有效的 executor 的控制记录及 committed `world_binding`，没有可见任务时返回 `404 task_control_unavailable`。普通 delegate 的 Agent 观察权限不授予任务读取权限。控制记录初始 `suspended`，目标 revision 为零、executor epoch 为零且没有执行方；发布目标后附带 public-only `active_goal_reference`（版本、不透明承诺、准备/发布操作标识和激活 committed height）。读取 bootstrap schema revision 4 还描述可选 executor binding；旧初始记录仍省略这些字段。任务初始 `suspended`；此记录不是完整 TaskSnapshot 或可行动 context，也不把已有 owner chat goal 当作任务目标。
 
 ### 已实施切片：owner 目标准备、发布与当前正文回读
 
@@ -43,6 +43,20 @@ Game Task 创建复用既有签名 World Service submit/lookup 与 Runtime 共�
 `RemoteWorldServiceClient::prepare_goal` 与 `read_current_goal` 执行上述原证明、请求关联和配置服务签名校验，使用独立禁用代理和重定向的客户端；发送前拒绝弱或非规范服务公钥，只接受 HTTPS 或 literal loopback IP HTTP，响应上限为配置值与 64 KiB 的较小值。明文 loopback HTTP 仅支持所有可监听本机端口的进程均受信的 operator host，不支持不受信的其他本机用户；它不会在发送正文前认证对端，服务签名只验证回复。需要不受信多用户隔离时必须使用发送前验证服务端的 TLS 或等效传输，TLS 入口不得转发可公开访问的明文私有端点。
 
 私有服务在读取前及交付前重验当前控制和分支；owner 失效为 403，操作或版本竞态为 409，恢复问题为 503。query、Origin、Authorization 与转发 header 均拒绝，响应禁止缓存。私有存储需独立备份密钥、验证记录与密文；不声明跨节点私有恢复。该切片交付 owner 目标控制与回读，仍不提供完整 TaskSnapshot、executor/Context、采纳确认或目标驱动的实际决策，也不表示首局/真实 Runtime 实玩已经通过。
+
+### 当前实施候选：原生任务执行链
+
+本轮在同一 PR 实现 executor binding → 完整私有目标 Context → canonical 捕获 → task-fenced cognition → 原始结果恢复。合入和实际试玩证据须读取 PR 验证记录；本段描述当前实现边界，不代表部署或完整产品验收。
+
+Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 `/v1/world/submit` 提交 Bind/替换/Stop。Bind 必须指向真实当前 delegation，推进 task revision 与 executor epoch，使任务 Active；Stop 推进 fence、清空 binding 并 Suspended。目标发布推进目标/task revision，保留现有 executor binding。全部控制由既有 canonical receipt 链恢复；新变体启用前执行、验证及恢复节点必须同步升级，旧 binary 不能读取新历史。
+
+当前 executor 以当前完整 fence 签署 POST `/v1/world/private-task/context-prepare`；同操作原 nonce 可恢复，异 nonce 冲突。私有记录包含完整 GoalContent/proof、同 pin 的原始 `world-agent-state/v1` AgentState、实际授权目录、Runtime/base binding、随机盐和原准备证明。独立 AEAD 密文保存并 fsync，不截断到旧 Harness 的 512 字节目标摘要。一个 Context 的租期为 `min(catalog.valid_until_tick, checked(base_tick + 16))`；超过期限不能获得正文或授权新效果。
+
+准备不等于可用。客户端先提交 identity-only `SchedulerOperationV1::TaskProviderPrefix`，等待 canonical committed，再 POST `/v1/world/private-task/context-read`。回应包含原密文记录、实际捕获 CommitRef/receipt 及当前同 pin 的公共 base binding/观察/能力。客户端核对配置服务签名、原意图、完整目标 proof、盐承诺、捕获回执和新鲜 bundle。世界公开历史只存完整 fence、session/turn/request 标识及三项私有随机盐隔域承诺，不保存正文、原私有摘要、盐或完整 Provider request。受信服务签名证明所交付内容，不代替独立共识证书。
+
+`CognitionIntentV1.task_fence` 将行动绑定当前任务、目标版本和 executor epoch；实际裁决沿用既有能力、预算、MVCC 和 turn 生命周期。一 Agent 同时只有一个活动 turn。新目标、替换或 Stop 退役旧 pending context 并释放匹配 Reserved lease；首次 Bind 也退役旧 Hosted Provider pending work。已管理 Agent 的旧 unfenced cognition/旧 Provider prefix 不得恢复执行。精确已提交请求可找回原回执；它仍需真实当前读授权，不因此授予新行动。过期 Context 可通过固定公共 `context_expired` outcome 或新的当前 Context 清理，不能沿用过期 grant。
+
+普通 `oasis7_game_client` 使用 operator 提供的严格设备配置、mode-0600 原始签名文件与独立加密 operation cache。它在网络发送前保存原 prepare nonce/签名与公共 prefix/action/outcome，请求结果未知时只 lookup 或重投原请求；改变同一 Context 的 action 不覆盖原签名。正式游戏 Skill 为 [oasis7-play](../../../skills/oasis7-play/SKILL.md)，CLI 目前提供 `native.move_agent` 三个 i64 厘米坐标及固定 provider outcomes。完整 catalog 的任意 action CLI、配对/token、问答/审批/报告、完整协作 TaskSnapshot、Hosted 旧执行器目标接入，以及 Codex/OpenClaw 两 Runtime 完整自主首局仍在后续范围。Game HTTP bootstrap 仍 `writes_available=false`；原生私有路径不冒充 `/v1/game` 写路由。
 
 ## 1. 问题、目标与非目标
 

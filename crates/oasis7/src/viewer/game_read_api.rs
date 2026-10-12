@@ -198,11 +198,23 @@ fn route(
             _ => (503, "world_read_unavailable"),
         })?;
     let observation = if resource == "task-control" {
-        let control = view.projection().game_task_control.as_ref()
-            .ok_or((404, "task_control_unavailable"))?;
+        let control = view.projection().game_task_control.as_ref().ok_or_else(|| {
+            if view.projection().canonical_agent_owner.as_ref().is_some_and(|owner| {
+                owner.agent_id == scope_agent && owner.public_key != caller_public_key
+            }) {
+                (403, "access_denied")
+            } else {
+                (404, "task_control_unavailable")
+            }
+        })?;
         let commit = &view.version().commit;
         if control.agent_id != scope_agent
-            || control.owner_public_key != caller_public_key
+            || (control.owner_public_key != caller_public_key
+                && !control.executor_binding.as_ref().is_some_and(|b| {
+                    b.executor_public_key == caller_public_key
+                        && b.executor_epoch == control.executor_epoch
+                        && control.task_status == oasis7_agent_api::game::GameTaskStatusV1::Active
+                }))
             || control.world_id != commit.world.world_id
             || control.genesis_digest != commit.world.genesis_digest
             || control.branch_id != commit.binding.branch_id
