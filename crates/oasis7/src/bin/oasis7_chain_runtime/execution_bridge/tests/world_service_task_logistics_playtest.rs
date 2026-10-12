@@ -59,20 +59,6 @@ pub(super) fn fixture() -> (
         .provision_cognition_for_agent("agent-a", "provision-a", "owner-a", 100)
         .unwrap();
     world
-        .set_ledger_material_balance(
-            oasis7::runtime::MaterialLedgerId::agent("agent-a"),
-            "iron_ingot",
-            20,
-        )
-        .unwrap();
-    world
-        .set_ledger_material_balance(
-            oasis7::runtime::MaterialLedgerId::site("logistics-site"),
-            "iron_ingot",
-            0,
-        )
-        .unwrap();
-    world
         .install_test_native_delegation_grant(oasis7::runtime::AgentDelegationGrantV1 {
             grant_id: "logistics-transfer-budget".into(),
             source_id: format!(
@@ -159,6 +145,14 @@ pub(super) fn fixture() -> (
 }
 fn initial_state() -> WorldState {
     let mut state = WorldState::default();
+    state.material_ledgers.insert(
+        oasis7::runtime::MaterialLedgerId::agent("agent-a"),
+        [("iron_ingot".into(), 20)].into_iter().collect(),
+    );
+    state.material_ledgers.insert(
+        oasis7::runtime::MaterialLedgerId::site("logistics-site"),
+        [("iron_ingot".into(), 0)].into_iter().collect(),
+    );
     state.factories.insert(
         "logistics-factory".into(),
         oasis7::runtime::FactoryState {
@@ -380,9 +374,15 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
                 .unwrap(),
             ),
         );
-        assert!(
-            matches!(client.submit(changed.clone()).unwrap(), SubmitObservation::Response(response) if matches!(response.outcome,IntentOutcome::Rejected{..}))
-        );
+        assert!(matches!(
+            client.submit(changed.clone()),
+            Err(
+                oasis7::world_service::client::WorldServiceClientError::Rejected {
+                    status: 503,
+                    ..
+                }
+            )
+        ));
         assert!(
             client
                 .lookup(
