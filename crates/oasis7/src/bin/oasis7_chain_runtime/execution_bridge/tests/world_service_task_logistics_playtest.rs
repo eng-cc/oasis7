@@ -206,6 +206,7 @@ fn private_task_logistics_prepared_world_live_service() {
         false,
         Duration::from_secs(30),
         true,
+        Duration::ZERO,
     );
 }
 
@@ -220,16 +221,22 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
             .unwrap()
             .as_nanos()
     ));
+    // The former two-second cadence was shorter than CI durable commit work
+    // (canonical commit total up to 4.6 seconds, including retention/persistence).
+    // Match the live five-second cadence and bound the
+    // full retry/release chain to 24 ticks, retaining the eight-attempt cap.
+    let cadence = Duration::from_secs(5);
     std::thread::scope(|scope| {
         let host = scope.spawn(|| {
             super::run_prepared_world_service_scenario(
                 ready.clone(),
-                Duration::from_secs(2),
+                cadence,
                 false,
                 None,
                 false,
                 Duration::from_secs(30),
                 true,
+                Duration::ZERO,
             )
         });
         let until = Instant::now() + Duration::from_secs(15);
@@ -286,7 +293,7 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
             .unwrap()
             .unwrap();
         let mut categories = CleanupCategories::default();
-        let deadline = Instant::now() + Duration::from_secs(60);
+        let deadline = Instant::now() + cadence * 24;
         let action = Action::TransferMaterial {
             requester_agent_id: "agent-a".into(),
             from_ledger: oasis7::runtime::MaterialLedgerId::agent("agent-a"),

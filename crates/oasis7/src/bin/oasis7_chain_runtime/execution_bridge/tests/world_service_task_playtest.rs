@@ -162,8 +162,13 @@ fn run_prepared_world_service(
         drop_first_cleanup_submit,
         cleanup_budget,
         false,
+        Duration::ZERO,
     )
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Explicit isolated scenario and ordinary fault timing controls"
+)]
 fn run_prepared_world_service_scenario(
     ready: std::path::PathBuf,
     tick_interval: Duration,
@@ -172,6 +177,7 @@ fn run_prepared_world_service_scenario(
     drop_first_cleanup_submit: bool,
     cleanup_budget: Duration,
     logistics: bool,
+    cleanup_admission_delay: Duration,
 ) -> std::path::PathBuf {
     assert!(ready.is_absolute());
     assert!(!ready.exists());
@@ -355,6 +361,7 @@ fn run_prepared_world_service_scenario(
     .unwrap();
     let stop = AtomicBool::new(false);
     let first_cleanup_drop = AtomicBool::new(drop_first_cleanup_submit);
+    let first_cleanup_slow = AtomicBool::new(!cleanup_admission_delay.is_zero());
     std::thread::scope(|scope| {
         let _listener_stop = ListenerStopOnDrop(&stop);
         let server = scope.spawn(|| {
@@ -400,6 +407,10 @@ fn run_prepared_world_service_scenario(
                         }
                         let drop_original=path==SUBMIT_PATH&&serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(&body).is_ok_and(|request|matches!(request.signed_payload,WorldServicePayloadV1::GameExecutorControl(signed) if signed.request.client_operation_id=="playtest-cleanup-stop"));
                         if drop_original&&first_cleanup_drop.swap(false,Ordering::SeqCst){println!("TASK_CLEANUP_FAULT original Stop connection closed before admission");continue;}
+                        if drop_original && first_cleanup_slow.swap(false,Ordering::SeqCst) {
+                            println!("TASK_CLEANUP_SLOW_ADMISSION millis={}",cleanup_admission_delay.as_millis());
+                            std::thread::sleep(cleanup_admission_delay);
+                        }
                         bytes.extend(body);
                         let handled = crate::world_service_api::private_goal::maybe_handle(
                             &mut stream,
@@ -726,13 +737,20 @@ fn private_task_prepared_world_unknown_cleanup_retries_exact_original() {
             .as_nanos()
     ));
     println!("TASK_UNKNOWN_CLEANUP_READY {}", ready.display());
-    let root = run_prepared_world_service(
+    // One-second retained-original resend + four-second adverse admission +
+    // a five-second worker tick + CI canonical commit total up to 4.6 seconds
+    // (including retention/persistence).
+    // Four ticks provide a bounded 20-second per-original settlement budget.
+    let cadence = Duration::from_secs(5);
+    let root = run_prepared_world_service_scenario(
         ready.clone(),
-        Duration::from_millis(100),
+        cadence,
         true,
         None,
         true,
-        Duration::from_secs(3),
+        cadence * 4,
+        false,
+        Duration::from_secs(4),
     );
     let cleanup: serde_json::Value =
         serde_json::from_slice(&fs::read(root.join("task-playtest-cleanup.json")).unwrap())
