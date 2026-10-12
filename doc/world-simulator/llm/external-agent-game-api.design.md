@@ -60,13 +60,21 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 普通 `oasis7_game_client` 使用 operator 提供的严格设备配置、mode-0600 原始签名文件与独立加密 operation cache。它在网络发送前保存原 prepare nonce/签名与公共 prefix/action/outcome，请求结果未知时只 lookup 或重投原请求；改变同一 Context 的 action 不覆盖原签名。正式游戏 Skill 为 [oasis7-play](../../../skills/oasis7-play/SKILL.md)，CLI 目前提供 `native.move_agent` 三个 i64 厘米坐标及固定 provider outcomes。完整 catalog 的任意 action CLI、配对/token、问答/审批/报告、完整协作 TaskSnapshot、Hosted 旧执行器目标接入，以及 Codex/OpenClaw 两 Runtime 完整自主首局仍在后续范围。Game HTTP bootstrap 仍 `writes_available=false`；原生私有路径不冒充 `/v1/game` 写路由。
 
-### 当前实施候选：原生物流执行
+### 已实施切片：原生物流执行
 
 普通客户端增加 `industry` 授权观察与 `native.transfer_material`：只接收账本、材料、正 i64 数量、非负 i64 公里距离、标准/紧急优先级及有序线路参数；requester 固定为设备配置 Agent，不接收原始 Action、授权、报价或配方计划。转运和移动共用同一个 Context 的原签名缓存；同 Context 改变动作种类或任一业务字段必须冲突，未知原结果只能核对或重投原请求。
 
 `capabilities` 分开描述客户端支持的原生提案、实际模块命令 catalog 和当前 Agent 的 native action/object electricity grants。World Service 授权 Agent 投影返回该 Agent 的委托预算读模型；generic projection 和其他 Agent 的 grants 不进入该字段。revoked、expired、not_yet_valid、exhausted 与 current 是读取时状态，不代替 Runtime 的最终 admission。无 native grant 不表示已获权，signer delegation 也不替代业务预算授权。
 
-`industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。候选 `326189ecd` 的 library/client/native 回归为 66/6/35 通过，独立正式 Skill 试玩自主提交一次转运并核对真实到账、原 lookup 与匹配运输事件；严格 Clippy 和独立权限评审通过。详细来源与未覆盖范围见[物流证据](../../testing/evidence/native-task-logistics-2026-10-12/README.md)。当前 PR 尚待最终 CI 和合入；排产计划生成、配对、完整 Game HTTP 写路由及完整首局缺口继续保留。
+`industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。候选 `326189ecd` 的 library/client/native 回归为 66/6/35 通过，独立正式 Skill 试玩自主提交一次转运并核对真实到账、原 lookup 与匹配运输事件；严格 Clippy 和独立权限评审通过。详细来源与未覆盖范围见[物流证据](../../testing/evidence/native-task-logistics-2026-10-12/README.md)。物流 [PR #4634](https://github.com/eng-cc/oasis7/pull/4634) 已于 2026-10-13（Asia/Shanghai）通过必要 CI 并合入，squash 为 `5e930face77dd284bbba6186fd997e7e63fa9164`；既有试玩证据保留其原候选来源。配对、完整 Game HTTP 写路由及完整首局缺口继续保留。
+
+### 当前实施候选：原生权威配方报价与排产
+
+普通客户端的 `quote-schedule` / `schedule` 只接收当前 Context、工厂、规范 built-in recipe ID 和正 u32 批次。共享目录提供十一种内置配方的完整计划；native grant-backed `ScheduleRecipe` admission 按 ID 与批次重算并比较完整计划，预算使用规范电费。trusted 无 native grant 与模块生成的自定义计划保留既有路径，历史回执不按当前目录重算。
+
+签名 POST `/v1/world/private-task/recipe-quote` 同时绑定原 Context 读取证明、当前 fence、主体与预期 base。服务在当前 canonical pin 的私有 clone 上复用实际授权和生产准入，返回规范 action、电费扣除预览、有效输入/输出账本、材料、耗时或拒绝原因；交付前再验当前 pin 与授权。报价不步进世界、不预留库存、不扣预算，电费账本预览不表示电池续航变化。
+
+首次 `schedule` 使用已验证报价的 action 和同 pin 公共 context 保存签名原行动，再提交 cognition。已有 Action cache 时先核对工厂/配方/批次并查询原请求，Unknown 不重新报价或替换请求。`industry` 增加有界 pending recipe jobs 观察；`RecipeStarted` 仅证明排产，真实首产物须核对关联的 `RecipeCompleted` 和输出账本变化。该候选仍待完整原生闭环、独立正式 Skill 试玩、必要 CI 和合入，不代表完整 starter chain、稳定生产、交付、两 Runtime parity 或部署已完成。
 
 ## 1. 问题、目标与非目标
 

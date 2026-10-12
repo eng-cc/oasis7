@@ -5,7 +5,7 @@ description: Execute an authorized Oasis7 native task through the signed game cl
 
 # Oasis7 native task play
 
-This profile uses the ordinary `oasis7_game_client` executable and an operator-provided device configuration. It supports task discovery, complete private goal/context capture, `native.move_agent`, `native.transfer_material`, authenticated industry observation, original result lookup and terminal provider outcomes. It does not provide cold world entry, token pairing, social operations or the full Game HTTP write catalog.
+This profile uses the ordinary `oasis7_game_client` executable and an operator-provided device configuration. It supports task discovery, complete private goal/context capture, `native.move_agent`, `native.transfer_material`, built-in `native.schedule_recipe` with a signed quote, authenticated industry observation, original result lookup and terminal provider outcomes. It does not provide cold world entry, token pairing, social operations or the full Game HTTP write catalog.
 
 Use only the supplied executable and device configuration. Do not inspect owner keys, server storage, fixture source or other players' state. Never print signer files or copy private goal content into public action reasons. Keep full goals and observations inside the authorized model context.
 
@@ -38,7 +38,7 @@ The movement CLI proposal is movement of the configured Agent to three signed i6
 
 Choose coordinates yourself to satisfy the actual goal. The runtime still checks authority, capability admission, current task/goal/executor fences, base binding and available resources. A submitted or pending request is not a successful world effect. Inspect the canonical outcome and action receipt, and read a new context to check the resulting position when another decision is needed.
 
-For a material-delivery goal, read `industry` before choosing source/destination ledgers, material, route path and amount. The authenticated read includes actual material ledgers, route availability/capacity, factories and pending transits; each collection is capped at 128 entries and reports truncation. Do not treat omitted entries as absent. This command is an observation, not a signed cost quote.
+For a material-delivery goal, read `industry` before choosing source/destination ledgers, material, route path and amount. The authenticated read includes actual material ledgers, route availability/capacity, factories, pending transits and recipe jobs; each collection is capped at 128 entries and reports truncation. Do not treat omitted entries as absent. This command is an observation, not a signed cost quote.
 
 ```sh
 <client> --config <device.json> transfer --context <context-id> --from <ledger-id> --to <ledger-id> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>
@@ -46,9 +46,21 @@ For a material-delivery goal, read `industry` before choosing source/destination
 
 Ledger IDs are `world`, `agent:<id>`, `site:<id>` or `factory:<id>`. Routes are an ordered path of at most 16 distinct IDs; `direct` requests a transfer without a registered route path. Automatic rerouting is disabled. The requester is always the configured Agent. Choose arguments from the actual goal and industry state; the runtime checks ledger ownership, route continuity/availability, inventory, power and native grants. A committed admission may only start a transit: reread industry after world progress to verify destination delivery.
 
-`capabilities` separates local CLI proposal forms, the module command catalog and native action/object electricity grants. Inspect grant status, action kinds, object scope and remaining units. A module catalog entry or a current native grant alone does not guarantee action admission. Agent signer delegation is a separate identity boundary. ScheduleRecipe and generic module proposals are not supported by this CLI.
+`capabilities` separates local CLI proposal forms, the module command catalog and native action/object electricity grants. Inspect grant status, action kinds, object scope and remaining units. A module catalog entry or a current native grant alone does not guarantee action admission. Agent signer delegation is a separate identity boundary. Generic module proposals and custom recipe plans are not supported by this CLI.
 
-Each context has one original action shared by movement and transfer. Retry the exact same action arguments and context to recover that exact result. Changing the action kind, route order, ledgers, amount or other arguments conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
+For a production goal, select a factory owned by the configured Agent and an exact built-in recipe ID from the current goal and industry state. The eleven IDs are `recipe.smelter.iron_ingot`, `recipe.smelter.copper_wire`, `recipe.smelter.polymer_resin`, `recipe.smelter.alloy_plate`, `recipe.assembler.gear`, `recipe.assembler.control_chip`, `recipe.assembler.motor_mk1`, `recipe.assembler.logistics_drone`, `recipe.assembler.sensor_pack`, `recipe.assembler.module_rack` and `recipe.assembler.factory_core`.
+
+```sh
+<client> --config <device.json> quote-schedule --context <context-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>
+<client> --config <device.json> schedule --context <context-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>
+<client> --config <device.json> lookup --context <context-id> --kind action
+```
+
+Read the signed quote's rejection or start preview, input/output ledgers, materials, byproducts, electricity and duration. A quote checks current canonical production and grant admission without reserving materials, power or budget. It is conditional on its signed read binding; it does not guarantee later admission. `schedule` obtains a verified quote on the first submission and uses its authoritative plan and context. Do not supply a raw plan, costs or grant. A started recipe is not completed production: reread `industry` after world progress to verify finished output. Quotes require a usable captured context; if a quote reports changed state, preserve any original action and use the ordinary context recovery rules.
+
+If `schedule` or `quote-schedule` finds an original cached action, it checks the same factory, recipe and batches and queries that original result before reading another context or requesting another quote. Unknown or pending results keep the original operation; they do not create a replacement action. This lookup also works after a process restart. Use `lookup --kind action` to recover a lost submission response.
+
+Each context has one original action shared by movement, transfer and production. Retry the exact same action arguments and context to recover that exact result. Changing the action kind, route order, ledgers, amount or other arguments conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
 
 If the original action is canonically rejected or expired, retain that result. Rejection does not necessarily release its active context: obtain a committed terminal outcome or wait for the context's bounded lease to expire before capturing a new decision context. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
 

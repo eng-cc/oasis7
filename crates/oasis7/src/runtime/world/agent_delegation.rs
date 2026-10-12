@@ -435,7 +435,17 @@ impl World {
                 .map_err(|_| denied("domain_quote_unavailable"))?
                 .tariff_electricity_total
             }
-            Action::ScheduleRecipe { plan, .. } if plan.accepted_batches > 0 => plan.power_required,
+            Action::ScheduleRecipe {
+                recipe_id, plan, ..
+            } => {
+                let canonical =
+                    crate::runtime::builtin_recipe_plan(recipe_id, plan.accepted_batches)
+                        .ok_or_else(|| denied("domain_quote_unsupported"))?;
+                if *plan != canonical {
+                    return Err(denied("domain_quote_plan_mismatch"));
+                }
+                canonical.power_required
+            }
             // Module-produced plans require their actual native plan at the
             // execution seam. Never trust a desired-batch request as a quote.
             _ => return Err(denied("domain_quote_unsupported")),

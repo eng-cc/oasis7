@@ -19,6 +19,8 @@ mod body;
 mod bootstrap_economy;
 mod bootstrap_gameplay;
 mod bootstrap_power;
+mod builtin_recipe_quote;
+pub use builtin_recipe_quote::{BuiltinRecipeStartPreview, NativeBuiltinRecipeQuote};
 mod capability_authorization;
 mod capability_authorization_admin;
 mod capability_authorization_command;

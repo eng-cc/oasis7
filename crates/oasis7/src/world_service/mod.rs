@@ -25,3 +25,6 @@ pub mod private_task_context;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod private_key_file;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod task_recipe_quote;

@@ -7,6 +7,7 @@ use oasis7::world_service::{
     },
     private_key_file::read_private_key_file,
     private_task_context::*,
+    task_recipe_quote::{TASK_RECIPE_QUOTE_PATH, TaskRecipeQuoteRequestV1, TaskRecipeQuoteV1},
     *,
 };
 use oasis7_agent_api::game::GameTaskFenceV1;
@@ -135,6 +136,7 @@ impl Client {
                 "task_control":projection.game_task_control,
                 "proposal_forms":[
                     {"action_ref":"native.move_agent","arguments":{"to":"three signed i64 centimeter coordinates x,y,z"},"admission_required":true},
+                    {"action_ref":"native.schedule_recipe","arguments":{"factory":"factory ID","recipe":"exact built-in recipe ID","batches":"positive u32"},"signed_quote_required":true,"admission_required":true},
                     {"action_ref":"native.transfer_material","arguments":{"from":"ledger ID","to":"ledger ID","material":"kind","amount":"positive i64","distance_km":"nonnegative i64","priority":"standard|urgent","routes":"ordered route IDs or direct"},"admission_required":true}
                 ],
                 "module_capability_catalog":projection.agent_context.as_ref().map(|context| &context.capability_catalog),
@@ -161,6 +163,7 @@ impl Client {
             "factory_profiles",
             "product_profiles",
             "pending_material_transits",
+            "pending_recipe_jobs",
             "industry_progress",
         ] {
             fields.insert(
@@ -172,6 +175,88 @@ impl Client {
             json!({"api_revision":1,"read_version":view.version(),"logical_tick":view.logical_tick(),
             "industry":fields,"collection_limit":128,"scope":"authenticated public industry observation; no signed transfer quote is provided"}),
         )
+    }
+    pub fn quote_schedule(
+        &self,
+        operation: &str,
+        factory: &str,
+        recipe: &str,
+        batches: u32,
+    ) -> Result<Value, String> {
+        if let Some(original) = self.cached_intent(ClientStateKind::Action, operation)? {
+            validate_original_schedule(&original, &self.agent, factory, recipe, batches)?;
+            let response = self.lookup(&original)?;
+            return Ok(
+                json!({"original_operation":response,"quote":null,"next":"retain_original_action; capture a new context only after a settled result"}),
+            );
+        }
+        let captured = self.captured(operation)?;
+        serde_json::to_value(self.recipe_quote(operation, &captured, factory, recipe, batches)?)
+            .map_err(|_| "recipe quote encoding failed".into())
+    }
+    fn recipe_quote(
+        &self,
+        operation: &str,
+        captured: &CapturedTaskContextV1,
+        factory: &str,
+        recipe: &str,
+        batches: u32,
+    ) -> Result<TaskRecipeQuoteV1, String> {
+        let proof = self.context_read_proof(operation)?;
+        let request = authority::sign_read_request(
+            TASK_RECIPE_QUOTE_PATH,
+            TaskRecipeQuoteRequestV1 {
+                schema_revision: 1,
+                context_proof: proof,
+                expected_base_binding: captured
+                    .current_public_context
+                    .captured_base_binding
+                    .clone(),
+                factory_id: factory.to_owned(),
+                recipe_id: recipe.to_owned(),
+                batches,
+            },
+            &self.key_hex,
+        )?;
+        self.remote.quote_task_recipe(&request).map_err(|error| {
+            format!(
+                "recipe quote {}; no replacement action created",
+                failure_tag(&error)
+            )
+        })
+    }
+    pub fn schedule(
+        &self,
+        operation: &str,
+        factory: &str,
+        recipe: &str,
+        batches: u32,
+    ) -> Result<IntentResponse<Value>, String> {
+        // Recovery precedes context reads and quotes, including Unknown outcomes.
+        // Never replace an immutable original with a newly quoted plan.
+        if let Some(original) = self.cached_intent(ClientStateKind::Action, operation)? {
+            validate_original_schedule(&original, &self.agent, factory, recipe, batches)?;
+            return self.lookup(&original);
+        }
+        let mut captured = self.captured(operation)?;
+        let quoted = self.recipe_quote(operation, &captured, factory, recipe, batches)?;
+        if quoted.quote.rejection.is_some() {
+            return Err(
+                "recipe quote rejected; no action submitted; inspect quote-schedule".into(),
+            );
+        }
+        captured.current_public_context = quoted.current_public_context;
+        let signed = authority::sign_read_request(
+            "cognition",
+            cognition_intent(&captured, quoted.quote.action)?,
+            &self.key_hex,
+        )?;
+        let request = self.cache_intent(
+            ClientStateKind::Action,
+            operation,
+            WorldServicePayloadV1::Cognition(signed),
+        )?;
+        self.submit_and_poll(&request)
     }
     pub fn submit_action(
         &self,
@@ -384,7 +469,10 @@ impl Client {
             WorldServicePayloadV1::Scheduler(signed),
         )
     }
-    pub fn captured(&self, operation: &str) -> Result<CapturedTaskContextV1, String> {
+    fn context_read_proof(
+        &self,
+        operation: &str,
+    ) -> Result<SignedReadRequest<TaskContextGetV1>, String> {
         let prefix = self
             .cached_intent(ClientStateKind::Prefix, operation)?
             .ok_or("context has not been prepared")?;
@@ -394,7 +482,7 @@ impl Client {
         let SchedulerOperationV1::TaskProviderPrefix { context } = signed.request.operation else {
             return Err("invalid cached context prefix".into());
         };
-        let signed = authority::sign_read_request(
+        authority::sign_read_request(
             TASK_CONTEXT_READ_PATH,
             TaskContextGetV1 {
                 schema_revision: 1,
@@ -402,7 +490,10 @@ impl Client {
                 prepare_operation_id: operation.to_owned(),
             },
             &self.key_hex,
-        )?;
+        )
+    }
+    pub fn captured(&self, operation: &str) -> Result<CapturedTaskContextV1, String> {
+        let signed = self.context_read_proof(operation)?;
         self.remote.read_task_context(&signed).map_err(|error| {
             format!(
                 "private context {}; query original results and refresh",
@@ -467,6 +558,46 @@ mod recovery_tests {
     }
 }
 
+fn validate_original_schedule(
+    request: &SubmitIntentRequest<WorldServicePayloadV1>,
+    agent: &str,
+    factory: &str,
+    recipe: &str,
+    batches: u32,
+) -> Result<(), String> {
+    let WorldServicePayloadV1::Cognition(signed) = &request.signed_payload else {
+        return Err("invalid cached action".into());
+    };
+    validate_cached_schedule_action(&signed.request.action, agent, factory, recipe, batches)
+}
+fn validate_cached_schedule_action(
+    action: &crate_action::Action,
+    agent: &str,
+    factory: &str,
+    recipe: &str,
+    batches: u32,
+) -> Result<(), String> {
+    match action {
+        crate_action::Action::ScheduleRecipe {
+            requester_agent_id,
+            factory_id,
+            recipe_id,
+            plan,
+            logistics_route_ids,
+            logistics_path_ids,
+        } if requester_agent_id == agent
+            && factory_id == factory
+            && recipe_id == recipe
+            && plan.accepted_batches == batches
+            && logistics_route_ids.is_empty()
+            && logistics_path_ids.is_empty() =>
+        {
+            Ok(())
+        }
+        _ => Err("context already has a different original action; query its result".into()),
+    }
+}
+
 fn validate_original_action(
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
     action: &crate_action::Action,
@@ -504,6 +635,48 @@ fn bounded_collection(value: Value) -> Value {
 #[cfg(test)]
 mod action_tests {
     use super::*;
+    #[test]
+    fn cached_schedule_recovery_compares_selection_without_requoting_original() {
+        let recipe = "recipe.smelter.iron_ingot";
+        let original = crate_action::Action::ScheduleRecipe {
+            requester_agent_id: "configured".into(),
+            factory_id: "smelter".into(),
+            recipe_id: recipe.into(),
+            plan: crate_action::builtin_recipe_plan(recipe, 3).unwrap(),
+            logistics_route_ids: vec![],
+            logistics_path_ids: vec![],
+        };
+        assert!(
+            validate_cached_schedule_action(&original, "configured", "smelter", recipe, 3).is_ok()
+        );
+        for (agent, factory, recipe, batches) in [
+            ("other", "smelter", recipe, 3),
+            ("configured", "other", recipe, 3),
+            ("configured", "smelter", "recipe.assembler.gear", 3),
+            ("configured", "smelter", recipe, 4),
+        ] {
+            assert!(
+                validate_cached_schedule_action(&original, agent, factory, recipe, batches)
+                    .is_err()
+            );
+        }
+        let mut changed = original.clone();
+        let crate_action::Action::ScheduleRecipe {
+            logistics_route_ids,
+            ..
+        } = &mut changed
+        else {
+            unreachable!()
+        };
+        logistics_route_ids.push("injected".into());
+        assert!(
+            validate_cached_schedule_action(&changed, "configured", "smelter", recipe, 3).is_err()
+        );
+        assert!(
+            validate_cached_schedule_action(&transfer(), "configured", "smelter", recipe, 3)
+                .is_err()
+        );
+    }
     fn transfer() -> crate_action::Action {
         crate_action::Action::TransferMaterial {
             requester_agent_id: "configured".into(),

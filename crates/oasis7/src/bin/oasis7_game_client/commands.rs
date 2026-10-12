@@ -5,7 +5,7 @@ use oasis7::world_service::{
 };
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
-const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
+const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  quote-schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
 
 pub fn run(args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || args == ["--help"] {
@@ -18,6 +18,7 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
     let command = &args[2];
     let allowed: &[&str] = match command.as_str() {
         "describe" | "task" | "capabilities" | "industry" => &[],
+        "quote-schedule" | "schedule" => &["--context", "--factory", "--recipe", "--batches"],
         "transfer" => &[
             "--context",
             "--from",
@@ -104,6 +105,15 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
             let action = transfer_action(&client.agent, &options)?;
             print(&client.submit_action(operation, action)?)
         }
+        "quote-schedule" | "schedule" => {
+            let operation = required("--context")?;
+            let (factory, recipe, batches) = schedule_selection(&options)?;
+            if command == "quote-schedule" {
+                print(&client.quote_schedule(operation, factory, recipe, batches)?)
+            } else {
+                print(&client.schedule(operation, factory, recipe, batches)?)
+            }
+        }
         "outcome" => {
             let operation = required("--context")?;
             let reason = required("--reason")?;
@@ -155,6 +165,28 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
         }
         _ => unreachable!(),
     }
+}
+
+fn schedule_selection<'a>(
+    options: &BTreeMap<&str, &'a str>,
+) -> Result<(&'a str, &'a str, u32), String> {
+    let required = |key| {
+        options
+            .get(key)
+            .copied()
+            .ok_or_else(|| format!("missing {key}"))
+    };
+    let factory = required("--factory")?;
+    let recipe = required("--recipe")?;
+    bounded_id(factory)?;
+    bounded_id(recipe)?;
+    let batches = required("--batches")?
+        .parse::<u32>()
+        .map_err(|_| "invalid batches")?;
+    if oasis7::runtime::builtin_recipe_plan(recipe, batches).is_none() {
+        return Err("recipe requires an exact built-in ID and positive u32 batches".into());
+    }
+    Ok((factory, recipe, batches))
 }
 
 fn transfer_action(
@@ -238,6 +270,61 @@ fn bounded_id(value: &str) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn recipe_commands_reject_raw_plan_grant_and_cost_before_configuration() {
+        for command in ["quote-schedule", "schedule"] {
+            for option in [
+                "--plan",
+                "--grant",
+                "--cost",
+                "--action",
+                "--requester",
+                "--authorization",
+            ] {
+                let args = [
+                    "--config",
+                    "/nonexistent-config",
+                    command,
+                    option,
+                    "injected",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+                assert_eq!(
+                    super::run(args).unwrap_err(),
+                    "unsupported or duplicate option"
+                );
+            }
+        }
+    }
+    #[test]
+    fn recipe_selection_requires_exact_builtin_and_positive_u32_batches() {
+        let mut options = std::collections::BTreeMap::from([
+            ("--factory", "smelter"),
+            ("--recipe", "recipe.smelter.iron_ingot"),
+            ("--batches", "1"),
+        ]);
+        assert_eq!(
+            super::schedule_selection(&options).unwrap(),
+            ("smelter", "recipe.smelter.iron_ingot", 1)
+        );
+        for batches in ["0", "-1", "4294967296", "1.5", "unknown"] {
+            options.insert("--batches", batches);
+            assert!(super::schedule_selection(&options).is_err());
+        }
+        options.insert("--batches", "4294967295");
+        assert!(super::schedule_selection(&options).is_ok());
+        for recipe in [
+            "recipe.iron_ingot",
+            "recipe.custom",
+            "RECIPE.SMELTER.IRON_INGOT",
+        ] {
+            options.insert("--recipe", recipe);
+            assert!(super::schedule_selection(&options).is_err());
+        }
+    }
+
     use super::*;
     fn options() -> BTreeMap<&'static str, &'static str> {
         BTreeMap::from([

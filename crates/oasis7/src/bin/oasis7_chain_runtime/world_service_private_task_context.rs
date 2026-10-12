@@ -150,6 +150,71 @@ fn capture_result(
     }
     selected.ok_or(PrivateError::Conflict)
 }
+fn load_captured(
+    service: &Service<'_>,
+    store: &PrivateGoalStore,
+    proof: &SignedReadRequest<TaskContextGetV1>,
+    pinned: &PinnedWorld,
+) -> Result<CapturedTaskContextV1, PrivateError> {
+    verify_get(proof).map_err(|_| PrivateError::Invalid)?;
+    game_task::validate_task_context_capture(
+        &pinned.world,
+        &proof.request.context,
+        &proof.subject_public_key,
+    )
+    .map_err(|_| PrivateError::Conflict)?;
+    let result = capture_result(pinned, &proof.request.context, &proof.subject_public_key)?;
+    let historical = service
+        .pin_at_height(result.committed_height)
+        .map_err(|_| PrivateError::Recovery)?;
+    let key = correlation::key_digest(&result.request.correlation.key)?;
+    if historical
+        .world
+        .capability_revocation_state()
+        .world_service_results
+        .get(&key)
+        != Some(&serde_json::to_value(&result).map_err(|_| PrivateError::Recovery)?)
+    {
+        return Err(PrivateError::Recovery);
+    }
+    let record = store.get_task_context(proof).map_err(task_error)?;
+    check_record_live(pinned, &record)?;
+    let output = CapturedTaskContextV1 {
+        schema_revision: 1,
+        prepared: record,
+        capture_commit: historical.commit,
+        capture_proof: result,
+        current_public_context: TaskPublicContextV1 {
+            read_commit: pinned.commit.clone(),
+            captured_base_binding: pinned
+                .world
+                .current_cognition_base_binding()
+                .map_err(|_| PrivateError::Unavailable)?,
+            provider_authority:
+                oasis7::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
+                    &pinned.world,
+                    &proof.request.context.fence.agent_id,
+                )?,
+            actor_observation: serde_json::to_value(
+                pinned
+                    .world
+                    .state()
+                    .agents
+                    .get(&proof.request.context.fence.agent_id)
+                    .ok_or(PrivateError::Forbidden)?,
+            )
+            .map_err(|_| PrivateError::Unavailable)?,
+        },
+    };
+    output
+        .validate_against(proof)
+        .map_err(|_| PrivateError::Recovery)?;
+    Ok(output)
+}
+
+#[path = "world_service_private_recipe_quote.rs"]
+mod recipe_quote;
+
 pub(super) fn process(
     service: &Service<'_>,
     store: &PrivateGoalStore,
@@ -157,6 +222,9 @@ pub(super) fn process(
     body: &[u8],
     before_delivery: impl FnOnce(),
 ) -> Result<Value, PrivateError> {
+    if path == oasis7::world_service::task_recipe_quote::TASK_RECIPE_QUOTE_PATH {
+        return recipe_quote::process(service, store, body, before_delivery);
+    }
     match path {
         TASK_SNAPSHOT_PATH => {
             let proof: SignedReadRequest<TaskGoalSnapshotRequestV1> =
@@ -225,59 +293,7 @@ pub(super) fn process(
                 &proof.subject_public_key,
                 true,
             )?;
-            game_task::validate_task_context_capture(
-                &pinned.world,
-                &proof.request.context,
-                &proof.subject_public_key,
-            )
-            .map_err(|_| PrivateError::Conflict)?;
-            let result =
-                capture_result(&pinned, &proof.request.context, &proof.subject_public_key)?;
-            let historical = service
-                .pin_at_height(result.committed_height)
-                .map_err(|_| PrivateError::Recovery)?;
-            let key = correlation::key_digest(&result.request.correlation.key)?;
-            if historical
-                .world
-                .capability_revocation_state()
-                .world_service_results
-                .get(&key)
-                != Some(&serde_json::to_value(&result).map_err(|_| PrivateError::Recovery)?)
-            {
-                return Err(PrivateError::Recovery);
-            }
-            let record = store.get_task_context(&proof).map_err(task_error)?;
-            check_record_live(&pinned, &record)?;
-            let output = CapturedTaskContextV1 {
-                schema_revision: 1,
-                prepared: record,
-                capture_commit: historical.commit,
-                capture_proof: result,
-                current_public_context: TaskPublicContextV1 {
-                    read_commit: pinned.commit.clone(),
-                    captured_base_binding: pinned
-                        .world
-                        .current_cognition_base_binding()
-                        .map_err(|_| PrivateError::Unavailable)?,
-                    provider_authority:
-                        oasis7::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
-                            &pinned.world,
-                            &proof.request.context.fence.agent_id,
-                        )?,
-                    actor_observation: serde_json::to_value(
-                        pinned
-                            .world
-                            .state()
-                            .agents
-                            .get(&proof.request.context.fence.agent_id)
-                            .ok_or(PrivateError::Forbidden)?,
-                    )
-                    .map_err(|_| PrivateError::Unavailable)?,
-                },
-            };
-            output
-                .validate_against(&proof)
-                .map_err(|_| PrivateError::Recovery)?;
+            let output = load_captured(service, store, &proof, &pinned)?;
             before_delivery();
             let fresh = pinned_check(
                 service,
