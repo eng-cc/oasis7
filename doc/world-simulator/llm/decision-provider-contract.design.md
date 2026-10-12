@@ -252,6 +252,22 @@ retry/reconnect/restore/replay neither double-charge nor create replay credit.
 - Trace bridge 保存角色分离的 chat/tool trace、预算/latency/repair diagnostics、module-call intent/receipt 与 feedback。它裁剪和脱敏后供诊断使用；Viewer delivery、runtime event/replay 与玩家记忆纠正仍由各自专业 authority 负责。
 - receipt flow 是 `prompt module-call -> diagnostic intent/receipt -> journal/trace -> later reconciliation`。它保留上下文与兼容默认值，但并未证明 action-result 因果、重放不重调 provider 或恢复不重复外部副作用；这些 T4/T5 proof 必须由 runtime 设计与验证完成。
 
+<a id="des-builtin-default-system-prompt"></a>
+#### 默认配置到实际请求
+
+对应 [builtin 默认 prompt PRD](decision-provider-contract.prd.md#builtin-default-system-prompt)。本次选择保留现有策略，修正 PRD 把短样例误写成 fallback 的说法。默认值的两个现存位置为 `crates/oasis7/src/simulator/llm_defaults.rs` 与 `crates/oasis7/src/simulator/llm_agent.rs` 的 `DEFAULT_LLM_SYSTEM_PROMPT`；两者须与 PRD 独立文本一致。`LlmAgentConfig::from_env_with` 处理空值 fallback，TOML 读取沿原有效配置优先级，`effective_system_prompt` 再应用 runtime override，`PromptAssembler` 消费最终 `base_system_prompt`。
+
+检查默认值时分别捕获 env-only、合法 TOML 省略/空白字段且无其他有效配置来源的实际请求；检查覆盖时提供不同的 TOML/env/runtime 文本，并验证当前优先级及清除 runtime override 后回到解析配置。不能只测常量相等而绕开 assembler，也不能用 config.example 中显式短句证明默认值。复用离线 capture fixture 即可，不需要模型凭据或付费请求。这个文档决定不修改 prompt profile、ProviderBacked 配置或 local bridge 的独立 prompt，也不代签输入完整性和最终预算验收。
+
+<a id="des-builtin-concurrency-retry"></a>
+#### 结构化 concurrency-limit 分类
+
+对应 [builtin 有界恢复 PRD](decision-provider-contract.prd.md#builtin-concurrency-retry)。`openai_retry::is_concurrency_limit_error` 应解析已支持的 JSON error payload，在同一 error 对象内读取字符串 type/message；按既有文本匹配语义判断 `rate_limit_error` 与 `concurrency limit exceeded`，不依赖序列化空格、换行或 key order。不得从兄弟对象、其他 event 或普通文本凑齐两个条件；无法解析或字段不符时沿原 DecodeResponse/失败路径返回。
+
+重试仍受 `retry_attempts(max_model_calls)` 控制：None 最多额外一次，Some（含 0）不追加调用；原 250 ms 退避、上层预算及失败到 Wait/Rejected 映射不变。HTTP 状态码不是该 detector 的泛化条件，修复不启用所有 429 的额外 retry。
+
+离线 mock 经过真实 Responses/SSE 解析和 complete 路径，分别发送紧凑、含空格、合法多行的等价 error JSON：首错后成功断言恰好两次请求，重复错误断言最多两次；缺字段、其它 type、无关 message、坏 JSON、type/message 分处不同对象均不触发。budgeted Some 请求断言只有一次。对 native lane 检查一次 250 ms 退避边界，不通过增加预算或重试次数让格式样例通过；这些预期由独立 fixture 给出，不能只对 detector 自生成的紧凑 JSON 作自证。
+
 ### 6.1 验收证据分层
 
 | 证据层 | 能证明什么 | 不能证明什么 |
