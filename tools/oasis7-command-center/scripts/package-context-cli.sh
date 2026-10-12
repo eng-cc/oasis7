@@ -3,10 +3,21 @@ set -euo pipefail
 # Build from the same checkout as the App. No network download or PATH lookup at runtime.
 repo_root=$(git rev-parse --show-toplevel)
 app_root="$repo_root/tools/oasis7-command-center"
-if ! git -C "$repo_root" diff --quiet || ! git -C "$repo_root" diff --cached --quiet; then
-  echo "Package from a committed source tree so the CLI catalog identifies the actual build." >&2
-  exit 1
-fi
+require_committed_inputs() {
+  local untracked ignored_inputs
+  if ! untracked=$(git -C "$repo_root" ls-files --others --exclude-standard) \
+    || ! ignored_inputs=$(git -C "$repo_root" ls-files --others --ignored --exclude-standard -- \
+      crates/oasis7_context crates/oasis7_secure_envelope ':(exclude)**/target/**'); then
+    echo "Cannot verify the source inventory; no CLI catalog can be published." >&2
+    exit 1
+  fi
+  if ! git -C "$repo_root" diff --quiet || ! git -C "$repo_root" diff --cached --quiet \
+    || [[ -n "$untracked" || -n "$ignored_inputs" ]]; then
+    echo "Package from committed inputs only; tracked changes and untracked files cannot identify HEAD." >&2
+    exit 1
+  fi
+}
+require_committed_inputs
 head=$(git -C "$repo_root" rev-parse HEAD)
 target=$(rustc -vV | sed -n 's/^host: //p')
 release="context-$head"
@@ -29,6 +40,12 @@ if len(executables) != 1:
     raise SystemExit("Expected one Cargo executable artifact for oasis7_context")
 print(executables.pop())
 ')
+# Do not publish if the checkout changed while Cargo was reading its inputs.
+require_committed_inputs
+if [[ "$(git -C "$repo_root" rev-parse HEAD)" != "$head" ]]; then
+  echo "Source HEAD changed during the CLI build; no catalog published." >&2
+  exit 1
+fi
 out="$app_root/src-tauri/resources/context-cli"
 mkdir -p "$out"
 staging=$(mktemp "$out/.context-cli.XXXXXX")

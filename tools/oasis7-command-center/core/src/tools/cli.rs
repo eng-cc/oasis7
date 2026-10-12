@@ -27,6 +27,76 @@ pub struct CliInstallation {
     pub sha256: String,
     pub terminal_path_configured: bool,
 }
+const INSTALL_LOCK: &str = ".command-center-install.lock";
+/// Installation and absence reconciliation share this cross-process lock.
+fn installation_lock(user_root: &Path) -> Result<fs::File> {
+    if !user_root.is_absolute() {
+        return Err(Error::Invalid(
+            "Absolute per-user tool root required".into(),
+        ));
+    }
+    fs::create_dir_all(user_root)?;
+    if fs::canonicalize(user_root)? != user_root {
+        return Err(Error::Invalid("Tool root aliases are forbidden".into()));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::{
+            fd::AsRawFd,
+            unix::fs::{MetadataExt, OpenOptionsExt},
+        };
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+            .open(user_root.join(INSTALL_LOCK))?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file()
+            || metadata.uid() != unsafe { libc::geteuid() }
+            || metadata.mode() & 0o077 != 0
+        {
+            return Err(Error::Invalid("Unsafe CLI installation lock".into()));
+        }
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            return Err(Error::Invalid(
+                "Original CLI installer may still be active; retain unknown state and check again"
+                    .into(),
+            ));
+        }
+        Ok(file)
+    }
+    #[cfg(not(unix))]
+    {
+        Err(Error::Invalid(
+            "CLI installation locking unsupported".into(),
+        ))
+    }
+}
+
+fn validate_catalog(c: &CliCatalog) -> Result<()> {
+    if c.schema_version != 1
+        || c.tool_id != "oasis7_context"
+        || c.file != "oasis7_context"
+        || c.source_head_oid.len() != 40
+        || !c
+            .source_head_oid
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        || c.target != current_target()
+        || c.release_id.is_empty()
+        || !c
+            .release_id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        return Err(Error::Invalid("Invalid bundled CLI catalog".into()));
+    }
+    Ok(())
+}
+
 pub fn install_bundled(resource_root: &Path, user_root: &Path) -> Result<CliInstallation> {
     let c: CliCatalog = serde_json::from_slice(&fs::read(resource_root.join("catalog.json"))?)?;
     if c.schema_version != 1
@@ -67,6 +137,7 @@ pub fn install_bundled(resource_root: &Path, user_root: &Path) -> Result<CliInst
     if root != user_root {
         return Err(Error::Invalid("Tool root aliases are forbidden".into()));
     }
+    let _install_lock = installation_lock(&root)?;
     let version = root.join(&c.release_id);
     fs::create_dir_all(&version)?;
     if fs::canonicalize(&version)? != version {
@@ -82,7 +153,7 @@ pub fn install_bundled(resource_root: &Path, user_root: &Path) -> Result<CliInst
             ));
         }
     } else {
-        let staging = version.join(".installing");
+        let staging = version.join(format!(".installing-{}", oasis7_context::fs::random_id()));
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
@@ -118,6 +189,7 @@ fn current_target() -> String {
 pub fn bundle_identity(resource_root: &Path, user_root: &Path) -> Result<(String, String)> {
     let catalog = fs::read(resource_root.join("catalog.json"))?;
     let parsed: CliCatalog = serde_json::from_slice(&catalog)?;
+    validate_catalog(&parsed)?;
     let binary = fs::read(resource_root.join("oasis7_context"))?;
     if parsed.file != "oasis7_context"
         || oasis7_local_signer::identity::sha256_hex(&binary) != parsed.sha256
@@ -157,7 +229,16 @@ pub fn observe_installed(
     }
     let path = user_root.join(&parsed.release_id).join("oasis7_context");
     if !path.exists() {
-        if user_root.exists() && fs::read_dir(user_root)?.next().is_some() {
+        if user_root.exists()
+            && fs::read_dir(user_root)?.any(|entry| {
+                entry
+                    .map(|entry| {
+                        entry.file_name() != std::ffi::OsStr::new(&parsed.release_id)
+                            && entry.file_name() != std::ffi::OsStr::new(INSTALL_LOCK)
+                    })
+                    .unwrap_or(true)
+            })
+        {
             return Err(Error::Invalid(
                 "Other local versions exist; their compatibility is unknown to this App release"
                     .into(),
@@ -220,6 +301,43 @@ pub fn reconcile_cli_install(
             "Original CLI release identity differs; retain its unknown state".into(),
         ));
     }
+    if !matches!(job.state.as_str(), "unknown" | "succeeded" | "failed") {
+        return Err(Error::Invalid(
+            "Original CLI operation is still running; retain reservation".into(),
+        ));
+    }
+    let _install_lock = installation_lock(user_root)?;
+    // Absence is about this exact catalog's final publication, not another local
+    // release or the installer's residual staging. Never delete those files.
+    let catalog: CliCatalog =
+        serde_json::from_slice(&fs::read(resource_root.join("catalog.json"))?)?;
+    let version = user_root.join(&catalog.release_id);
+    for directory in [user_root, version.as_path()] {
+        match fs::symlink_metadata(directory) {
+            Ok(metadata)
+                if metadata.is_dir()
+                    && !metadata.file_type().is_symlink()
+                    && fs::canonicalize(directory)? == directory => {}
+            Ok(_) => {
+                return Err(Error::Invalid(
+                    "Original CLI directory identity changed; retain unknown".into(),
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    let final_path = version.join(&catalog.file);
+    match fs::symlink_metadata(&final_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if job.state == "unknown" {
+                jobs.finish(operation_id, "failed", Some("Original CLI release has no published binary; residual staging retained. Explicit new installation is allowed."))?;
+            }
+            return Ok(None);
+        }
+        Err(error) => return Err(error.into()),
+        Ok(_) => (),
+    }
     let installation = observe_installed(resource_root, user_root)?;
     if installation.is_some() && job.state == "unknown" {
         jobs.finish(
@@ -234,6 +352,72 @@ pub fn reconcile_cli_install(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn interrupted_unpublished_release_reconciles_without_deleting_staging_or_other_versions() {
+        for write_staging in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let base = fs::canonicalize(temp.path()).unwrap();
+            let resource = base.join("resource");
+            fs::create_dir(&resource).unwrap();
+            let bytes = b"synthetic CLI";
+            fs::write(resource.join("oasis7_context"), bytes).unwrap();
+            let catalog = CliCatalog {
+                schema_version: 1,
+                tool_id: "oasis7_context".into(),
+                source_head_oid: "a".repeat(40),
+                target: current_target(),
+                release_id: "release-one".into(),
+                file: "oasis7_context".into(),
+                sha256: oasis7_local_signer::identity::sha256_hex(bytes),
+                size_bytes: bytes.len() as u64,
+            };
+            fs::write(
+                resource.join("catalog.json"),
+                serde_json::to_vec(&catalog).unwrap(),
+            )
+            .unwrap();
+            let root = base.join("tools");
+            let version = root.join("release-one");
+            fs::create_dir_all(&version).unwrap(); // crash after mkdir
+            assert!(observe_installed(&resource, &root).unwrap().is_none());
+            if write_staging {
+                fs::write(version.join(".installing"), b"partial retained staging").unwrap();
+            }
+            let other = root.join("another-release");
+            fs::create_dir(&other).unwrap();
+            fs::write(other.join("user-file"), b"user maintained").unwrap();
+            let jobs = super::super::jobs::ToolJobs::open(":memory:").unwrap();
+            let (reservation, fingerprint) = bundle_identity(&resource, &root).unwrap();
+            jobs.admit("interrupted", &fingerprint, &reservation, "cli_install")
+                .unwrap();
+            jobs.finish("interrupted", "unknown", None).unwrap();
+            let active_installer = installation_lock(&root).unwrap();
+            assert!(reconcile_cli_install(&jobs, "interrupted", &resource, &root).is_err());
+            assert_eq!(jobs.list().unwrap()[0].state, "unknown");
+            drop(active_installer);
+
+            assert!(
+                reconcile_cli_install(&jobs, "interrupted", &resource, &root)
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(jobs.list().unwrap()[0].state, "failed");
+            jobs.admit("explicit-new", &fingerprint, &reservation, "cli_install")
+                .unwrap();
+            let installed = install_bundled(&resource, &root).unwrap();
+            assert_eq!(fs::read(&installed.path).unwrap(), bytes);
+            assert_eq!(
+                fs::read(other.join("user-file")).unwrap(),
+                b"user maintained"
+            );
+            if write_staging {
+                assert_eq!(
+                    fs::read(version.join(".installing")).unwrap(),
+                    b"partial retained staging"
+                );
+            }
+        }
+    }
     #[test]
     fn verified_bundle_installs_once_and_never_replaces_user_file() {
         let temp = tempfile::tempdir().unwrap();
@@ -263,6 +447,11 @@ mod tests {
         jobs.admit("cli-op", &fingerprint, &reservation, "cli_install")
             .unwrap();
         jobs.finish("cli-op", "unknown", None).unwrap();
+        let active_installer = installation_lock(&root).unwrap();
+        assert!(reconcile_cli_install(&jobs, "cli-op", &resource, &root).is_err());
+        assert_eq!(jobs.list().unwrap()[0].state, "unknown");
+        drop(active_installer);
+
         assert!(
             reconcile_cli_install(&jobs, "cli-op", &resource, &root)
                 .unwrap()
