@@ -4,6 +4,12 @@ macOS desktop implementation of [PR #4518](https://github.com/eng-cc/oasis7/pull
 
 This application implements the two foundation increments: local document/Git reading, Chinese search, durable decisions and reading history, manual work-to-goal associations, and an optional read-only GitHub PR/check window in four Chinese views. The optional Codex execution connector is experimental and separately enabled for each project/local environment. It manages only its own stdio process and explicitly created sessions; existing Codex work remains in its original tool. Missing runtime observation is displayed as unknown, never as an empty task inventory.
 
+## Project status and architecture
+
+Start with the [project status](../../doc/engineering/command-center/README.md) for long-term direction, current goals, verified progress, recent changes and human attention. Use the [architecture index](../../doc/engineering/command-center/architecture/README.md) to find deployment, authority, persistence, access and recovery boundaries. The [continuous maintenance workflow](../../doc/engineering/command-center/command-center.manual.md) explains who refreshes these documents and when.
+
+These are derived repository documents with explicit source and observation windows. A fresh file read does not refresh the deployment or acceptance facts inside it. Once the documents are tracked in the selected worktree and within index coverage, use their Chinese titles or paths in document search. Repository links remain usable when a document is outside the local index. Refresh reads existing content; it does not rewrite summaries, schedule background jobs, start a model or inspect deployed machines.
+
 ## Run and package
 
 Use the repository Rust toolchain, Node 22 or newer, and the macOS developer tools. From this directory:
