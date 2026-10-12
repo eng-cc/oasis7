@@ -737,10 +737,6 @@ fn private_http(endpoint: &str, body: &serde_json::Value) -> (u16, serde_json::V
         serde_json::from_str(body).unwrap(),
     )
 }
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Explicit authenticated quote and prepared world evidence"
-)]
 fn check_quote_read_contract(
     client: &RemoteWorldServiceClient,
     delegate: &str,
