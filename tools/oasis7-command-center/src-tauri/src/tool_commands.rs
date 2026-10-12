@@ -189,9 +189,8 @@ pub async fn tool_file_prepare(
     .map_err(tools::FilePrepareError::unknown)??;
     let jobs = host.jobs.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let (job, fresh) = jobs
-            .admit_once(&operation_id, &fingerprint, &resource, "file_prepare")
-            .map_err(tools::FilePrepareError::unknown)?;
+        let (job, fresh) =
+            jobs.admit_file_prepare(&operation_id, &fingerprint, &resource, &input)?;
         if !fresh {
             return Err(tools::FilePrepareError::unknown(format!(
                 "原操作 {} 状态为 {}；请核对原操作，不能自动重发",
@@ -425,4 +424,17 @@ pub async fn tool_cli_reconcile(
     })
     .await
     .map_err(|_| "CLI reconciliation did not complete".to_string())?
+}
+
+#[tauri::command]
+pub async fn tool_file_recover(
+    host: State<'_, ToolHost>,
+    operation_id: String,
+) -> Result<tools::FilePrepareRecovery, String> {
+    let jobs = host.jobs.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        tools::recover_file_prepare(&jobs, &operation_id).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|_| "Recovery inspection did not complete".to_string())?
 }

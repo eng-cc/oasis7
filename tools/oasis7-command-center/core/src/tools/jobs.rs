@@ -33,7 +33,7 @@ struct Inner {
 impl ToolJobs {
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let db = Connection::open(path)?;
-        db.execute_batch("CREATE TABLE IF NOT EXISTS tool_recovery_evidence(id TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_jobs(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,resource TEXT NOT NULL,kind TEXT NOT NULL,state TEXT NOT NULL,observed_at TEXT NOT NULL,result TEXT); UPDATE tool_jobs SET state='unknown' WHERE state='running';")?;
+        db.execute_batch("CREATE TABLE IF NOT EXISTS tool_file_inputs(id TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_recovery_evidence(id TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS tool_jobs(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,resource TEXT NOT NULL,kind TEXT NOT NULL,state TEXT NOT NULL,observed_at TEXT NOT NULL,result TEXT); UPDATE tool_jobs SET state='unknown' WHERE state='running';")?;
         Ok(Self {
             inner: Mutex::new(Inner { db }),
             admission: Mutex::new(false),
@@ -56,7 +56,7 @@ impl ToolJobs {
         resource: &str,
         kind: &str,
     ) -> Result<(ToolJob, bool)> {
-        self.admit_recorded(id, fingerprint, resource, kind, None)
+        self.admit_recorded(id, fingerprint, resource, kind, (None, None), None)
     }
     pub fn admit_once_with_evidence(
         &self,
@@ -67,7 +67,49 @@ impl ToolJobs {
         evidence: &crate::context::ContextRecoveryEvidence,
     ) -> Result<(ToolJob, bool)> {
         let value = serde_json::to_string(evidence)?;
-        self.admit_recorded(id, fingerprint, resource, kind, Some(&value))
+        self.admit_recorded(id, fingerprint, resource, kind, (Some(&value), None), None)
+    }
+    pub fn admit_file_prepare(
+        &self,
+        id: &str,
+        fingerprint: &str,
+        resource: &str,
+        input: &super::FileSignInput,
+    ) -> std::result::Result<(ToolJob, bool), super::FilePrepareError> {
+        let value = serde_json::to_string(input).map_err(super::FilePrepareError::unknown)?;
+        let mut frozen_without_operation = false;
+        self.admit_recorded(
+            id,
+            fingerprint,
+            resource,
+            "file_prepare",
+            (None, Some(&value)),
+            Some(&mut frozen_without_operation),
+        )
+        .map_err(|error| {
+            if frozen_without_operation {
+                super::FilePrepareError::no_effect(error)
+            } else {
+                super::FilePrepareError::unknown(error)
+            }
+        })
+    }
+    pub fn file_prepare_input(&self, id: &str) -> Result<Option<super::FileSignInput>> {
+        let inner = self
+            .inner
+            .lock()
+            .map_err(|_| Error::Invalid("tool jobs lock".into()))?;
+        let value: Option<String> = inner
+            .db
+            .query_row(
+                "SELECT value FROM tool_file_inputs WHERE id=?1",
+                [id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        value
+            .map(|value| serde_json::from_str(&value).map_err(Error::from))
+            .transpose()
     }
     fn admit_recorded(
         &self,
@@ -75,17 +117,14 @@ impl ToolJobs {
         fingerprint: &str,
         resource: &str,
         kind: &str,
-        evidence: Option<&str>,
+        record: (Option<&str>, Option<&str>),
+        frozen_without_operation: Option<&mut bool>,
     ) -> Result<(ToolJob, bool)> {
+        let (evidence, file_input) = record;
         let frozen = self
             .admission
             .lock()
             .map_err(|_| Error::Invalid("tool admission lock".into()))?;
-        if *frozen {
-            return Err(Error::Invalid(
-                "App exit has frozen new side effects".into(),
-            ));
-        }
         let mut inner = self
             .inner
             .lock()
@@ -94,6 +133,26 @@ impl ToolJobs {
             return Err(Error::Invalid("operation identity required".into()));
         }
         let tx = inner.db.transaction()?;
+        if *frozen {
+            // Read under both locks before any write: an existing ID can never
+            // acquire a proof of no effects, even if its input has changed.
+            let query = if resource.starts_with("signer:") {
+                "SELECT EXISTS(SELECT 1 FROM tool_jobs WHERE resource=?1 COLLATE NOCASE AND state IN ('running','unknown'))"
+            } else {
+                "SELECT EXISTS(SELECT 1 FROM tool_jobs WHERE resource=?1 AND state IN ('running','unknown'))"
+            };
+            let occupied: bool = tx.query_row(query, [resource], |r| r.get(0))?;
+            if get(&tx, id)?.is_none()
+                && !occupied
+                && let Some(proof) = frozen_without_operation
+            {
+                *proof = true;
+            }
+            return Err(Error::Invalid(
+                "App exit has frozen new side effects".into(),
+            ));
+        }
+
         if let Some(job) = get(&tx, id)? {
             if job.fingerprint != fingerprint || job.resource != resource || job.kind != kind {
                 return Err(Error::Invalid(
@@ -111,6 +170,20 @@ impl ToolJobs {
                 if previous.as_deref() != Some(value) {
                     return Err(Error::Invalid(
                         "Operation recovery target conflicts with original evidence".into(),
+                    ));
+                }
+            }
+            if let Some(value) = file_input {
+                let previous: Option<String> = tx
+                    .query_row(
+                        "SELECT value FROM tool_file_inputs WHERE id=?1",
+                        [id],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                if previous.as_deref() != Some(value) {
+                    return Err(Error::Invalid(
+                        "Original preparation input conflicts or is unavailable".into(),
                     ));
                 }
             }
@@ -154,6 +227,12 @@ impl ToolJobs {
         if let Some(value) = evidence {
             tx.execute(
                 "INSERT INTO tool_recovery_evidence(id,value) VALUES (?1,?2)",
+                params![id, value],
+            )?;
+        }
+        if let Some(value) = file_input {
+            tx.execute(
+                "INSERT INTO tool_file_inputs(id,value) VALUES (?1,?2)",
                 params![id, value],
             )?;
         }
@@ -284,115 +363,4 @@ fn get(db: &Connection, id: &str) -> Result<Option<ToolJob>> {
     Ok(db.query_row("SELECT id,fingerprint,resource,kind,state,observed_at,result FROM tool_jobs WHERE id=?1",[id],row).optional()?)
 }
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn signer_job_case_aliases_preserve_existing_running_and_unknown_reservations() {
-        let jobs = ToolJobs::open(":memory:").unwrap();
-        jobs.admit(
-            "original",
-            "original-input",
-            "signer:install:JobOne",
-            "file_prepare",
-        )
-        .unwrap();
-        assert!(
-            jobs.admit(
-                "another",
-                "other-input",
-                "signer:install:jobone",
-                "file_prepare"
-            )
-            .is_err()
-        );
-        jobs.finish("original", "unknown", None).unwrap();
-        assert!(
-            jobs.admit(
-                "another",
-                "other-input",
-                "signer:install:JOBONE",
-                "file_prepare"
-            )
-            .is_err()
-        );
-        assert!(
-            jobs.admit(
-                "original",
-                "original-input",
-                "signer:install:jobone",
-                "file_prepare"
-            )
-            .is_err()
-        );
-        jobs.finish("original", "succeeded", None).unwrap();
-        assert!(
-            jobs.admit(
-                "another",
-                "other-input",
-                "signer:install:jobone",
-                "file_prepare"
-            )
-            .is_ok()
-        );
-        // Only signer Jobs have this conservative filesystem-alias guard.
-        jobs.admit("cli-upper", "upper", "cli:Release", "install")
-            .unwrap();
-        assert!(
-            jobs.admit("cli-lower", "lower", "cli:release", "install")
-                .is_ok()
-        );
-    }
-    #[test]
-    fn runtime_admission_does_not_block_job_queries_or_receipts() {
-        let jobs = std::sync::Arc::new(ToolJobs::open(":memory:").unwrap());
-        jobs.admit("save", "hash", "store", "save").unwrap();
-        let (started_tx, started_rx) = std::sync::mpsc::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        let worker = jobs.clone();
-        let thread = std::thread::spawn(move || {
-            worker
-                .with_open(|| {
-                    started_tx.send(()).unwrap();
-                    release_rx.recv().unwrap();
-                    Ok(())
-                })
-                .unwrap()
-        });
-        started_rx.recv().unwrap();
-        assert_eq!(jobs.list().unwrap().len(), 1);
-        jobs.finish("save", "succeeded", None).unwrap();
-        let (frozen_tx, frozen_rx) = std::sync::mpsc::channel();
-        let freeze_jobs = jobs.clone();
-        let freeze = std::thread::spawn(move || {
-            freeze_jobs.freeze().unwrap();
-            frozen_tx.send(()).unwrap();
-        });
-        assert!(
-            frozen_rx
-                .recv_timeout(std::time::Duration::from_millis(50))
-                .is_err()
-        );
-        release_tx.send(()).unwrap();
-        thread.join().unwrap();
-        freeze.join().unwrap();
-        assert!(jobs.with_open(|| Ok(())).is_err());
-    }
-    #[test]
-    fn idempotent_admission_freeze_and_terminal_monotonicity() {
-        let jobs = ToolJobs::open(":memory:").unwrap();
-        jobs.admit("one", "hash", "root", "save").unwrap();
-        assert!(jobs.admit("one", "different", "root", "save").is_err());
-        assert!(jobs.admit("two", "hash", "root", "save").is_err());
-        jobs.finish("one", "succeeded", None).unwrap();
-        assert_eq!(
-            jobs.finish("one", "unknown", None).unwrap().state,
-            "succeeded"
-        );
-        jobs.freeze().unwrap();
-        assert!(jobs.admit("two", "hash", "other", "save").is_err());
-        jobs.unfreeze().unwrap();
-        jobs.admit("two", "hash", "other", "save").unwrap();
-        assert!(jobs.quit_pending().unwrap());
-    }
-}
+mod tests;

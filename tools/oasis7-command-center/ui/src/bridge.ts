@@ -104,6 +104,7 @@ export const toolsBridge = {
   cli: () => call<import('./generated/core').CliInstallation | null>('tool_cli_observe'),
   reconcileCli: (operationId: string) => call<unknown>('tool_cli_reconcile', { operationId }),
   reconcilePrepare: (input: FileSignInput, operationId: string) => call<FileSignPrepared>('tool_file_reconcile', { input, operationId }),
+  recoverPrepare: (operationId: string) => call<import('./generated/core').FilePrepareRecovery>('tool_file_recover', { operationId }),
   doctor: () => call<unknown>('tool_signer_doctor'),
   chooseFile: () => call<string | null>('tool_choose_file'),
   prepare: (input: FileSignInput, operationId: string) => call<FileSignPrepared>('tool_file_prepare', { input, operationId }),

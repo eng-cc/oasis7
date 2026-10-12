@@ -95,6 +95,21 @@ fn finish_committed_submissions(
     Ok(())
 }
 
+pub fn recover_file_prepare(
+    jobs: &jobs::ToolJobs,
+    operation_id: &str,
+) -> Result<FilePrepareRecovery> {
+    let input = jobs.file_prepare_input(operation_id)?.ok_or_else(|| {
+        invalid("Original preparation input unavailable; legacy operation cannot be recovered")
+    })?;
+    let prepared = reconcile_file_prepare(jobs, &input, operation_id)?;
+    Ok(FilePrepareRecovery {
+        operation_id: operation_id.into(),
+        input,
+        prepared,
+    })
+}
+
 pub fn reconcile_file_prepare(
     jobs: &jobs::ToolJobs,
     input: &FileSignInput,
@@ -137,7 +152,10 @@ pub fn reconcile_file_prepare(
     {
         return Err(invalid("Prepared files do not match original intent"));
     }
-    let prepared_fingerprint = frozen_job_identity(&input.job_id, true)?.1;
+    // Fingerprint the exact snapshot whose intent was verified above; reopening
+    // here could bind a replacement request to the original input.
+    let prepared_fingerprint =
+        prepared_identity(&input.job_id, &cfg, &prepared, &source_evidence)?.1;
     let payload_sha256 = identity::sha256_hex(&prepared.payload);
     let operation_key = identity::operation_key(
         &cfg.installation_id,

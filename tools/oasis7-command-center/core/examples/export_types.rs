@@ -17,6 +17,7 @@ fn main() {
         ToolObservation::decl(),
         FileSignInput::decl(),
         FileSignPrepared::decl(),
+        FilePrepareRecovery::decl(),
         FilePrepareEffect::decl(),
         FilePrepareError::decl(),
         ToolJob::decl(),

@@ -1,7 +1,7 @@
 mod recovery;
 mod submission;
 use super::*;
-pub use recovery::{reconcile_file_prepare, reconcile_signer_job};
+pub use recovery::{reconcile_file_prepare, reconcile_signer_job, recover_file_prepare};
 use submission::prepared_identity;
 pub use submission::{signer_submit_identity, submit_file_frozen};
 

@@ -5,8 +5,8 @@ mod signing;
 use signing::compatible_info;
 pub use signing::{
     file_prepare_identity, file_prepare_resource, prepare_file, prepare_file_frozen,
-    reconcile_file_prepare, reconcile_signer_job, selected_file_digest, signer_job_identity,
-    signer_submit_identity, submit_file_frozen, verify_file_signature,
+    reconcile_file_prepare, reconcile_signer_job, recover_file_prepare, selected_file_digest,
+    signer_job_identity, signer_submit_identity, submit_file_frozen, verify_file_signature,
 };
 pub mod secrets;
 use crate::{Error, Result};
@@ -35,6 +35,12 @@ pub struct FileSignInput {
     pub grant_id: String,
     #[ts(type = "unknown")]
     pub context: serde_json::Value,
+}
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+pub struct FilePrepareRecovery {
+    pub operation_id: String,
+    pub input: FileSignInput,
+    pub prepared: FileSignPrepared,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct FileSignPrepared {

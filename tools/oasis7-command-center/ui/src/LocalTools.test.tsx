@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalTools from './LocalTools';
-const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn(),reconcilePrepare:vi.fn(),submit:vi.fn(),inspect:vi.fn(),snapshot:vi.fn()}));
+const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn(),reconcilePrepare:vi.fn(),recoverPrepare:vi.fn(),submit:vi.fn(),inspect:vi.fn(),snapshot:vi.fn()}));
 vi.mock('./bridge',async importOriginal=>({...await importOriginal<typeof import('./bridge')>(),connected:()=>true,observedTime:(v:string)=>v,contextBridge:api,toolsBridge:api}));
 const binding={id:'bound',bindingVersion:1,root:'/private/context',storeId:'store',projectId:'oasis7',registeredProjectId:'project',name:'private',directoryIdentity:'identity'};
 const metadata={schema_version:'oasis7.context_entry.v1',project_id:'oasis7',id:'machine',kind:'machine',title:'<img src=x onerror=alert(1)>',environment:'local',owner:'human',tags:['preserved'],state:'active',updated_at:'2026-10-12T00:00:00Z',updated_by:'human',verification:null,credential_refs:[{id:'vault',provider:'native',locator:'opaque',usage:'secret reference'}],links:[]};
@@ -208,5 +208,69 @@ describe('new signing request after verified completion',()=>{
     await waitFor(()=>expect(screen.getByText(/无法确认本次准备是否产生副作用/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button',{name:'核对原 Job 结果'}));await waitFor(()=>expect(api.inspect).toHaveBeenCalled());
     expect(screen.getByRole('button',{name:'开始新的签名请求'})).toBeDisabled();expect(screen.getByLabelText('签名 Job ID')).toBeDisabled();
+  });
+});
+
+describe('prepared request recovery after restart', () => {
+  const prepared = { job_id: 'durable-job', prepared_fingerprint: 'durable-fingerprint', file_sha256: 'file', payload_sha256: 'payload', operation_key: 'original-key', work_dir: '/original/job', result: { status: 'PREPARED' } };
+  const input = { job_id: 'durable-job', file_path: '/original/file', signer_id: 'original-signer', grant_id: 'original-grant', context: { purpose: 'original' } };
+  const durable = (state: string) => ({ id: 'durable-operation', fingerprint: 'immutable', resource: 'signer:original-signer', kind: 'file_prepare', state, observed_at: '2026-10-13T00:00:00Z', result: null });
+  it.each(['succeeded', 'unknown'])('explicitly recovers %s after remount, inspects and submits original fingerprint without replay', async state => {
+    render(() => <LocalTools/>);
+    await waitFor(() => expect(screen.getByRole('button', { name: '检查本机事实' })).toBeEnabled());
+    cleanup();
+    api.jobs.mockResolvedValue([durable(state)]);
+    api.recoverPrepare.mockResolvedValueOnce({ operation_id: 'durable-operation', input, prepared });
+    api.inspect.mockResolvedValueOnce({ command: 'inspect', status: 'reserved', error_code: null });
+    api.submit.mockResolvedValueOnce({ status: 'submitted' });
+    render(() => <LocalTools/>);
+    const recover = await screen.findByRole('button', { name: '恢复此固定签名请求' });
+    await waitFor(() => expect(recover).toBeEnabled());
+    expect(api.recoverPrepare).not.toHaveBeenCalled();
+    fireEvent.click(recover);
+    await waitFor(() => expect(screen.getByLabelText('签名 Job ID')).toHaveValue('durable-job'));
+    expect(api.recoverPrepare).toHaveBeenCalledWith('durable-operation');
+    expect(screen.getByLabelText('签名身份')).toHaveValue(input.signer_id);
+    expect(screen.getByLabelText('实际 grant ID')).toHaveValue(input.grant_id);
+    expect(screen.getByLabelText('完整签名上下文')).toHaveValue(JSON.stringify(input.context));
+    expect(screen.getByLabelText('签名 Job ID')).toBeDisabled();
+    expect(screen.getByRole('button', { name: '提交此请求' })).toBeDisabled();
+    expect(api.prepare).not.toHaveBeenCalled(); expect(api.submit).not.toHaveBeenCalled();
+    api.reconcilePrepare.mockResolvedValueOnce(prepared);
+    fireEvent.click(screen.getByRole('button', { name: '核对原准备操作' }));
+    await waitFor(() => expect(api.reconcilePrepare).toHaveBeenCalledWith(input, 'durable-operation'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '核对原 Job 结果' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '核对原 Job 结果' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '提交此请求' })).toBeEnabled());
+    expect(api.inspect).toHaveBeenCalledWith('durable-job', 'durable-fingerprint');
+    fireEvent.click(screen.getByRole('button', { name: '提交此请求' }));
+    await waitFor(() => expect(api.submit).toHaveBeenCalledTimes(1));
+    expect(api.submit.mock.calls[0].slice(0, 2)).toEqual(['durable-job', 'durable-fingerprint']);
+    expect(api.submit.mock.calls[0][2]).not.toBe('durable-operation');
+    expect(api.prepare).not.toHaveBeenCalled();
+  });
+  it('keeps manual fields and refuses legacy recovery without guessing or replaying', async () => {
+    api.jobs.mockResolvedValue([durable('unknown')]);
+    api.recoverPrepare.mockRejectedValueOnce(new Error('Legacy original input unavailable; inspect manually'));
+    render(() => <LocalTools/>);
+    const recover = await screen.findByRole('button', { name: '恢复此固定签名请求' });
+    await waitFor(() => expect(recover).toBeEnabled());
+    fireEvent.input(screen.getByLabelText('签名 Job ID'), { target: { value: 'manual-job' } });
+    fireEvent.click(recover);
+    await screen.findByText('Legacy original input unavailable; inspect manually');
+    expect(screen.getByLabelText('签名 Job ID')).toHaveValue('manual-job');
+    expect(screen.getByLabelText('签名 Job ID')).toBeEnabled();
+    expect(api.prepare).not.toHaveBeenCalled(); expect(api.submit).not.toHaveBeenCalled();
+  });
+  it('does not replace a different frozen request with a durable operation', async () => {
+    api.jobs.mockResolvedValue([durable('succeeded')]);
+    api.prepare.mockResolvedValueOnce({ ...prepared, job_id: 'original-job' });
+    await fillSigning();
+    fireEvent.click(screen.getByRole('button', { name: '准备固定请求' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '提交此请求' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '恢复此固定签名请求' }));
+    await screen.findByText('当前已有另一固定请求，请先核对原 Job；不能覆盖。');
+    expect(screen.getByLabelText('签名 Job ID')).toHaveValue('original-job');
+    expect(api.recoverPrepare).not.toHaveBeenCalled();
   });
 });
