@@ -10,9 +10,25 @@ fi
 head=$(git -C "$repo_root" rev-parse HEAD)
 target=$(rustc -vV | sed -n 's/^host: //p')
 release="context-$head"
-OASIS7_SOURCE_HEAD_OID="$head" OASIS7_RELEASE_ID="$release" OASIS7_BUILD_TARGET="$target" \
-  "$repo_root/scripts/cargo-dev.sh" build --locked --release -p oasis7_context
-binary="$repo_root/target/release/oasis7_context"
+# Cargo's emitted executable is authoritative: CI does not create the local
+# target symlink, and shared/configured target directories may live elsewhere.
+binary=$(OASIS7_SOURCE_HEAD_OID="$head" OASIS7_RELEASE_ID="$release" OASIS7_BUILD_TARGET="$target" \
+  "$repo_root/scripts/cargo-dev.sh" build --locked --release -p oasis7_context \
+    --message-format=json-render-diagnostics | python3 -c '
+import json, sys
+executables = set()
+for line in sys.stdin:
+    message = json.loads(line)
+    target = message.get("target", {})
+    if (message.get("reason") == "compiler-artifact"
+            and target.get("name") == "oasis7_context"
+            and "bin" in target.get("kind", [])
+            and message.get("executable")):
+        executables.add(message["executable"])
+if len(executables) != 1:
+    raise SystemExit("Expected one Cargo executable artifact for oasis7_context")
+print(executables.pop())
+')
 out="$app_root/src-tauri/resources/context-cli"
 mkdir -p "$out"
 staging=$(mktemp "$out/.context-cli.XXXXXX")
