@@ -1,6 +1,6 @@
 # Gameplay Agent 认领经济合同设计
 
-- 对应需求文档: `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`
+- 对应需求文档: [`Gameplay Agent 认领经济合同`](gameplay-agent-claim-economy-contract.prd.md)
 - 产品承诺入口：[`Agent 所有权与持续经营`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001)
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 
@@ -33,7 +33,7 @@
 
 关键约束：
 - 任一 agent 任一时刻只允许 1 个 `claim_owner_id`。
-- 首个 claim 也必须走完整成本链：`activation fee + claim bond + upkeep`。
+- 首个经济 `ClaimAgent` 也必须走完整成本链：`activation fee + claim bond + upkeep`。首次 `RegisterAgent` / 会话绑定不创建该状态机中的经济 claim，不能仅凭绑定显示 bond 或 upkeep 义务。
 - `restricted starter claim balance` 只改变 `slot-1` 的资金来源，不改变 canonical 成本，也不能旁路 `slot-2/3` 成本。
 - `upkeep_grace` 与 `inactive_reclaim_candidate` 都必须带可见倒计时，不能只靠后台静默清退。
 
@@ -41,7 +41,10 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | 首个 Agent 认领必须展示非零承诺包，并保持成本、资金来源与后续回收可审计。 | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | `producer_system_designer` / `runtime_engineer` | 不证明具体实现、部署或公开 claim。 |
+| [`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | 首个经济 Agent 认领必须展示非零承诺包，并保持成本、资金来源与后续回收可审计。 | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | `producer_system_designer` / `runtime_engineer` | 不证明具体实现、部署或公开 claim。 |
+| [REQ-AGC-CHAT-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-001) | 首聊资源边界按 OR 条件披露，并保留余额耗尽后记录仍有效与其他独立 gate 的区别。 | [DES-CLAIM-CHAT-002](#des-claim-chat-002) | `runtime_engineer` / `viewer_engineer` | 不改 OC 额度、领取资格、账本或现有 chat gate。 |
+| [REQ-AGC-CHAT-002](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-002) | 注册/绑定不等于经济认领；权威延后说明按实际经济 claim 生成。 | [DES-CLAIM-CHAT-003](#des-claim-chat-003) | `runtime_engineer` / `gameplay_designer` | 不据此减免费用、清除历史未决义务或开放免费经济 claim。 |
+| [REQ-AGC-CHAT-003](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-003) | 中英文、Viewer/pure API 保留同一含义；旧版或缺失义务说明保守回退。 | [DES-CLAIM-CHAT-004](#des-claim-chat-004) | `viewer_engineer` / `qa_engineer` | 不要求新增协议字段或把显示状态持久化为世界状态。 |
 
 <a id="des-claim-economy-001"></a>
 ### DES-CLAIM-ECONOMY-001：认领成本与资金来源承接
@@ -119,6 +122,66 @@
 - `liveops_community`
   - 负责 allowlist / campaign 发放策略、回收/停用策略与受控测试口径回流。
 
+### 6.1 首次绑定与经济认领的组件边界
+
+既有 [gameplay action 映射](../../../crates/oasis7/src/viewer/gameplay_actions.rs) 将 `claim_first_agent` 交给 `RegisterAgent`，将 `claim_agent` 交给 `ClaimAgent`。首次绑定只建立可操作 Agent；首聊维护说明需要另外读取该 Agent 作为 claimer 的真实经济 claim。
+
+| 组件 | 本次实现职责 | 依赖与边界 |
+| --- | --- | --- |
+| [claim_snapshot.rs](../../../crates/oasis7/src/viewer/runtime_live/claim_snapshot.rs) | 读取调用方传入的 `WorldState` 和 `primary_agent_id`，保留现有 preview 生成条件，按真实 `owned_claims` 选择维护说明；输入覆盖范围见下文。 | 当前身份、控制权和动作 blocker 仍由既有控制面处理；本函数不接收旧 DTO、不写账本或执行动作。 |
+| [first_chat_unlock_preview.jsx](../../../crates/oasis7_viewer/software_safe_src/first_chat_unlock_preview.jsx) | 本地化新的资源说明和两类权威维护文案；旧版无条件维护文案或缺失义务说明回退为 unknown。 | 只消费六字段 preview，不从字段缺省值、经济报价或英文句子反推 ownership 或动作资格。 |
+| [viewer_app.jsx](../../../crates/oasis7_viewer/software_safe_src/viewer_app.jsx) / 既有 API 投影入口 | 沿用当前预览传递、展示和可用动作合同；同一预览在 Viewer / API 中保留相同含义。 | 不为此次文案修正新增授权、身份、快照版本或缓存失效机制。 |
+
+本地 runtime 测试使用完整 `WorldState`：`main_token_balances[primary_agent_id].liquid_balance` 沿用缺少账户项为零的既有语义；`starter_oc_claims.contains_key(primary_agent_id)` 提供领取记录存在性；`agent_claims` 中 `claim_owner_id == primary_agent_id` 的记录组成现有 `owned_claims`。`next_claim_quote` 是未来选择，不能证明当前经济认领已经生效。
+
+service 来源需单独限定：[world_service/projection.rs](../../../crates/oasis7/src/world_service/projection.rs) 的 allowlist 保留 `agent_claims` 与 `starter_oc_claims`，但不发布 `main_token_balances`；[world_service_link.rs](../../../crates/oasis7/src/viewer/runtime_live/world_service_link.rs) 用该裁剪状态重建 runtime world，再由 [control_blocking.rs](../../../crates/oasis7/src/viewer/runtime_live/control_blocking.rs) 调用本投影。经济 claim 事实仍可用于维护说明，但 service 的真实正 liquid 余额且无领取记录可能因余额未投影而按零值生成预览。这是既有余额输入缺口，本次不修改字段公开范围或 gate；本地回归与同一预览的中英文/API 显示一致性不能证明真实 service gate 已正确。
+
+本次范围是权威生产者文案与 Viewer 的旧文案兼容，不新增 DTO 字段存在性追踪、count/list 协调、gate 三态或资料新鲜度检测。本地状态与当前 service 投影均保留 `agent_claims`；按当前 claimer 筛选的完整结果为空时，才支持没有 owned claim 的结论。经过默认值补齐的旧 preview DTO 不提供这种证据，Viewer 不使用它来生成“没有经济认领”的新结论。
+
+<a id="des-claim-chat-002"></a>
+### 6.2 首聊 gate 与资源边界投影
+
+承接 [REQ-AGC-CHAT-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-001)。现有生成条件保持 `liquid_balance == 0 && !starter_oc_claims.contains_key(primary_agent_id)`，只修正说明，不改变 chat gate。下表以余额与领取记录均完整的权威输入为前提，本次 gate 回归在本地 runtime 状态上验证；service 输入限制见 6.1 节。
+
+| 余额与记录完整的权威输入 | `first_chat_unlock_preview` | 必须表达的边界 |
+| --- | --- | --- |
+| liquid OC 为零且没有 starter OC 记录 | 生成现有六字段预览 | 资源和延后字段都解释完整 OR 条件；`recommended_unlock_action` 仍标识 `claim_starter_oc`。实际可执行性由既有动作面判断。 |
+| liquid OC 大于零，或已有 starter OC 记录 | 不生成该解锁预览 | 任一条件都足以通过这一道 gate；已有记录时余额用尽不重开必领提示，也不产生重复领取资格。 |
+| 调用方传入的 Agent 在世界中不存在 | 沿用既有 `None` 结果 | 不为缺失 Agent 生成首聊解锁预览。 |
+
+`resource_boundary` 独立包含一次性首聊解锁与初始 liquid OC 授予、`liquid OC > 0 OR starter_oc_claims record exists`、记录保留时余额用尽仍通过，以及与经济 slot-1 claim/upkeep funding 分离。`defer_effect` 复用同一 gate 解释，避免两个字段产生不同含义。通过 starter OC gate 不代表其他授权、Agent 控制权或 provider 前提已经通过。
+
+兼容旧文案时，Viewer 只补全上述稳定规则说明，不用它重新计算当前 gate 或发布可用动作。
+
+<a id="des-claim-chat-003"></a>
+### 6.3 经济 claim 事实与延后后果
+
+承接 [REQ-AGC-CHAT-002](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-002)。`chat_purpose` 统一使用当前有控制权的 Agent；经济维护责任由独立的真实 claim 事实决定。
+
+| 输入与证据 | `defer_effect` 规则 | 判定所在层 |
+| --- | --- | --- |
+| 完整经济 claim 集合中，当前 claimer 的 `owned_claims` 为空 | 暂缓不改变当前 Agent 绑定，也不新增经济认领或 upkeep 义务。 | Rust 权威快照生产者；不从未来报价或其他 Agent 的 claim 推导已有义务。 |
+| 完整经济 claim 集合中，当前 claimer 的 `owned_claims` 非空 | 暂缓不改变已有经济认领，其当前维护规则继续适用。 | Rust 权威快照生产者；不额外收费、延长 runway 或清除原有义务。 |
+| Viewer 仅收到旧版无条件 upkeep 文案，或 `defer_effect` 缺失、为空、只有空白 | 经济认领义务尚未确认，请刷新权威状态；暂缓不创建或清除义务。 | Viewer 兼容回退；该旧文案或缺失说明无法证明有 claim 或无 claim。 |
+
+两类权威文案及 unknown 回退都附同一 OR gate 解释。所有变化限于披露，查看和延后不触发 claim、release、费用或账本动作。既有经济规则仍随世界时间运行；当前经济集合为空不证明所有历史未决义务已经结清。
+
+<a id="des-claim-chat-004"></a>
+### 6.4 显示、语言与兼容处理
+
+承接 [REQ-AGC-CHAT-003](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-003)。沿用六字段 preview、现有动作面与精确字符串本地化映射。新生产者直接输出准确英文；Viewer 对同一含义显示对应中文。
+
+| 场景 | 中文含义 | English meaning |
+| --- | --- | --- |
+| 资源边界 | 初始 OC 是一次性首聊解锁与初始可用 OC；可用 OC 大于零或已有领取记录即可通过这一道门。领取记录仍在时，余额用尽不会重新锁定此门；它与经济认领/维护资金分开。 | Starter OC provides a one-time first-chat unlock and initial liquid OC. A positive liquid OC balance or an existing starter OC record passes this gate, even after the credited balance is spent. Economic claim and upkeep funding are separate. |
+| 已确认无当前经济 claim | 暂缓不改变当前 Agent 绑定，也不会新增经济认领或维护义务。 | Deferring leaves your Agent binding unchanged and creates no economic claim or upkeep obligation. |
+| 已有经济 claim | 暂缓不改变已有经济认领，其现行维护规则继续适用。 | Deferring leaves your existing economic claims and their current upkeep rules unchanged. |
+| 旧版或缺失义务说明 | 当前经济认领义务尚未确认，请刷新权威状态；暂缓不会创建或清除义务。 | Current economic claim obligations are not confirmed. Refresh authoritative state; deferring creates or clears no obligation. |
+
+兼容转换只识别受影响的旧版精确文案：旧目的说明改为当前有控制权的 Agent，旧版或缺失资源说明补全静态 gate 规则，旧版或缺失义务说明改为 unknown。其他非空来源文本保持原义；缺少翻译时显示来源文本，不退回另一类经济义务句子。此转换不是从文案推断世界状态。
+
+组件响应调用方提供的预览变化，替换上一条说明；身份选择和过期快照处理仍由原有调用方负责。更新该组件源码后通过既有构建生成 Viewer 产物，显示和翻译不提交领取请求或其他 world action。
+
 ## 7. 设计边界
 - 这不是现实货币付费功能，也不是永久产权出售。
 - 这不是 agent 市场或 NFT 化系统。
@@ -161,3 +224,22 @@
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [`REQ-WR-AOS-001`](../../product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#req-wr-aos-001) | [`DES-CLAIM-ECONOMY-001`](#des-claim-economy-001) | 验证首个 claim 的非零成本、受限资金用途与回收边界保持同一规则链。 | [`agent claim runtime tests`](../../../crates/oasis7/src/runtime/tests/agent_claims.rs) | PR 与实际验证记录 / QA result | 不证明生产部署、公开资格或最终价格平衡。 |
+| [REQ-AGC-CHAT-001](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-001) | [DES-CLAIM-CHAT-002](#des-claim-chat-002) | OR gate、余额耗尽后记录保留，以及资源字段独立披露。 | [首聊 snapshot 回归](../../../crates/oasis7/src/viewer/runtime_live/tests/snapshot_first_chat_unlock_preview.rs) 的 `compat_snapshot_projects_first_chat_unlock_preview_only_for_zero_liquid_without_starter_oc`；同一 source HEAD 的本地 required Rust 层。通过条件：零余额且无记录才有预览，两个文案字段均说明 OR 和余额用尽；这些组合区分实际 gate 与旧文案。 | PR 记录命令、HEAD、本地输入来源与实际测试 verdict。 | 不证明 service 余额投影与真实 gate 正确、provider 可用、重复领取资格或已完成真实对话。 |
+| [REQ-AGC-CHAT-002](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-002) | [DES-CLAIM-CHAT-003](#des-claim-chat-003) | 实际注册与经济认领的义务区分。 | [首聊 snapshot 回归](../../../crates/oasis7/src/viewer/runtime_live/tests/snapshot_first_chat_unlock_preview.rs) 的 `first_chat_unlock_preview_distinguishes_registration_from_economic_claims`；同一 source HEAD 的 action → snapshot 层。通过条件：真实 RegisterAgent 无经济 claim，真实 ClaimAgent 有 owner/upkeep，其他 Agent 的 claim 不污染文案；同时检查世界记录和说明，避免仅有字符串自证。 | PR 记录世界状态断言与实际测试 verdict。 | 不改变经济状态机或证明所有历史未决义务已结清。 |
+| [REQ-AGC-CHAT-003](gameplay-agent-claim-economy-contract.prd.md#req-agc-chat-003) | [DES-CLAIM-CHAT-004](#des-claim-chat-004) | 两种语言、旧版与缺失义务说明、预览更新保持相同含义。 | [首聊 Viewer 测试](../../../crates/oasis7_viewer/software_safe_src/first_chat_unlock_preview.test.jsx)；同一 source HEAD 的组件层并构建生成产物。通过条件：EN/ZH 对应、旧版和缺失说明为 unknown、无翻译保留来源、输入更新替换旧说明；覆盖精确字符串映射最易遗漏的兼容分支。 | PR 记录组件测试 verdict、构建结果与证据范围。 | 不证明新鲜度检测、全场景可玩性、真实留存或发行就绪。 |
+
+<a id="first-chat-validation-matrix"></a>
+### 11.2 首聊披露的最小验收矩阵
+
+选择同一待验收 source HEAD，执行本节对应的本地权威投影与显示测试，实际 verdict 留在 PR 验证记录。本设计不因列出场景而宣称测试已经通过，也不把文档检查当作运行证据。
+
+| 样本 | 权威前置或组件输入 | 必须观察的结果 | 主要验证层 |
+| --- | --- | --- | --- |
+| 首次注册、尚无经济认领 | 通过 `claim_first_agent` 映射的真实 `RegisterAgent` 创建 Agent；经济 claim 集合为空；零 liquid、无领取记录 | 有首聊价值预览；资源边界完整；不声称已有 upkeep；未来 `next_claim_quote` 不当作已完成认领。 | runtime action → snapshot |
+| 已有真实经济认领及其他 Agent | 真实 `ClaimAgent` 成功，owner/target/维护状态可核对；零 liquid、无领取记录 | claimer 的延后说明保留既有维护规则；世界中有另一 Agent 的经济 claim 不使当前无 owned claim 的 Agent 获得维护责任文案。 | runtime action → snapshot |
+| OR 正分支与领取后余额用尽 | 非零 liquid 且无记录；另测记录存在时 liquid 从正数变为零 | 均无必领预览；领取记录保留时不重新要求解锁。 | 状态序列 → snapshot |
+| 旧版或缺失义务说明 | 旧版无条件维护句子；或 defer 字段为缺失、null、空白 | 义务说明为 unknown，不虚构已有 claim，也不改写成没有责任；资源说明保留完整 OR 条件。 | Viewer 兼容显示 |
+| 中英文与无翻译回退 | 无 claim、有 claim、unknown 与无对应翻译的来源说明 | 两种语言的条件和义务一致；没有翻译时显示可读来源文本；保留六个字段标签及建议动作含义。 | Viewer 组件与生成产物 |
+| 预览输入更新 | 调用方依次传入无 claim、有 claim、缺失义务说明的预览 | 组件替换旧说明，并按新输入显示对应含义；不残留上一条 claim 结论。 | Viewer 响应式显示 |
+
+经济义务断言须与实际世界记录核对；只断言旧字符串存在或组件存在不足以验收。本地完整状态测试和同一预览显示测试不覆盖 6.1 节的真实 service 余额输入缺口。此矩阵不增加 DTO 完整性解析、gate 三态、快照失效检测或新权限流程，也不以 Issue 关闭代替实际运行结果。

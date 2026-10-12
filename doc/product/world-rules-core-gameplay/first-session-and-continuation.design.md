@@ -6,7 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-10-12
 - 专业域权威：[`gameplay 工业 walkthrough 合同`](../../game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md#3-五阶段玩家-walkthrough)、[`gameplay 首产物结算合同`](../../game/gameplay/gameplay-industrial-starter-completion-contract.prd.md#3-五阶段结算表)、[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md#4-technical-specifications)、[`world-runtime 专业 PRD`](../../world-runtime/prd.md#consumer-compatibility-industrial-profile-and-stage-execution)、[`testing 专业 PRD`](../../testing/prd.md#6-validation-decision-record)
 
 本文说明玩家怎样理解并继续一条首局工业因果链。配对 PRD 拥有产品要求和验收；专业 authority 拥有玩法顺序、结算、状态、receipt、接口和测试实现。本设计不把目标态写成当前实现或发行承诺。
@@ -51,9 +51,15 @@
 
 首次持续能力必须表现为可继续运转、可恢复并能打开新选择的能力。扩张增加覆盖或产出并引入吞吐压力；稳定/恢复保住能力并放弃一部分即时扩张；专业化/服务把能力转成对本地需求或协作的用途。每个方向都要说明即时收益、后续两个 beat、风险或锁定和下次会话第一动作；适用时还要说明回退窗口、代价、保留和失去的价值。
 
+当主目标是本地或区域专业化时，分支详情继续解释生产能力服务什么需求。模块、工厂核心与合金可以是合法下一步；它们的收益和风险不能突然宣称玩家已进入治理或冲突阶段。当前不可执行的候选不作为推荐，信息不完整时返回可读的不可用原因。
+
+回退是有期限的选择。窗口关闭时，玩家应立即看到原因、已保留的结果和义务，以及仍可执行的修复、重排或换向；后续恢复成功不会重新打开旧窗口。各条路线按自身权威条件判断，展示样例的阶段只解释样例，不代替真实世界的回退能力。首产物完成继续按既定 profile 判断，不能为延长回退窗口暗中加入交付条件。
+
 ## 5. 行为与后果
 
 玩家意图只表达目标和授权范围，不能直接保证 Agent 行动或世界事件成功。入口展示的 accepted、执行、阻塞、生产和交付状态必须来自同一权威事实；推荐、缓存、叙事或计数不能替代 receipt。
+
+目标换向按 [PRD 的三阶段边界](first-session-and-continuation.prd.md#goal-redirection-pending-and-settled-boundary)表达：预览只用于比较；已接受的承诺 / 待决请求按专业合同保留其有限 hold、排队或未决义务，尚无 committed receipt 时仍为待决且未生效；只有权威 receipt 支持且实际生效的后果才显示为已结算结果。已结算范围不能因换向被抹除或再次执行，未结算范围也不能被同一目标的部分 receipt 提前标成完成。新主目标可以取得前景位置，旧请求的待决状态和合法取消、过期、重评或恢复路径仍须可读；receipt 的具体含义与结果范围由原专业合同决定。
 
 报价或展示后发生事实漂移时，系统只能重新评估、无副作用拒绝或进入专业合同明确的有界 pending。重连、重复、乱序、Agent retry、snapshot restore 和 replay 只能重读原 disposition，不得复制材料、资格、receipt、进度、奖励或目的地后果。Viewer 与 pure API 的布局可以不同，但动作、主 blocker、完成边界、下一步和复查点必须同义。
 
@@ -77,6 +83,10 @@ Viewer 与 pure API 共享权威事实和玩家语义；每个入口分别证明
 
 `test_tier_required` 应覆盖 `production_only` 在 production settlement 的正向完成、`terminal-admission` 在 delivery/terminal settlement 的正向完成、`terminal-admission` 下 production 成功但 delivery 未完成的 `produced/undelivered` 情形、handoff 前 `source-settled` 不可直接进入物流、各主要 blocker、arrival order、多输入齐套和重复/重连无副作用；`test_tier_full` 再覆盖跨窗口、争用、损耗、终端故障、持久化恢复及多入口 parity。产品文档通过、自动化检查或合成/Agent 样例只能证明结构和合同可判定性，不能证明当前 runtime、Viewer、Agent、玩家留存、可玩性或发行就绪。
 
+目标换向的 [FS-13](first-session-and-continuation.prd.md#fs-13) 验收保留三类对照：已接受但无 committed receipt 的请求不能显示为已结算；权威 receipt 支持的已结算结果不因换向、重连或重试消失或重复；部分已结算与仍待决范围分别可读。该语义核对不代表本次已执行真实 runtime/Agent 换向或跨入口游玩验收。
+
+分支比较承接 [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001) / [AC-FIRST-BRANCH-001](first-session-and-continuation.prd.md#ac-first-branch-001)：比较主指引和每个推荐的完整承诺，并保留有效的工业用途。回退承接 [REQ-FIRST-BRANCH-002](first-session-and-continuation.prd.md#req-first-branch-002) / [AC-FIRST-BRANCH-002](first-session-and-continuation.prd.md#ac-first-branch-002)：分别观察截止前、截止时和恢复后的选择与后果。具体投影、样例边界及回归方法由 [Viewer 专业设计](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency) 承接；结构正反例不能代签玩家实玩。
+
 ## 10. 相邻权威与未决边界
 
 详细玩法顺序、profile 完成边界、receipt 与稳定窗口由 [`工业 walkthrough 合同`](../../game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md#3-五阶段玩家-walkthrough) 和 [`首产物结算合同`](../../game/gameplay/gameplay-industrial-starter-completion-contract.prd.md#3-五阶段结算表) 拥有；批次、物流、容量、终端和守恒由 [`M4 合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md#4-technical-specifications) 拥有；实现和入口证据由 [`world-runtime 专业 PRD`](../../world-runtime/prd.md#consumer-compatibility-industrial-profile-and-stage-execution)、Viewer、Agent、[`testing 专业 PRD`](../../testing/prd.md#6-validation-decision-record) 等专业 authority 拥有。任何专业规则变化都应重新核对本设计的产品边界和证据窗口。
@@ -94,3 +104,5 @@ This design delegates product requirements and acceptance semantics to its paire
 | [REQ-FIRST-INDUSTRIAL-006](first-session-and-continuation.prd.md#req-first-industrial-006) | [AC-FIRST-INDUSTRIAL-002](first-session-and-continuation.prd.md#ac-first-industrial-002) |
 | [REQ-FIRST-INDUSTRIAL-007](first-session-and-continuation.prd.md#req-first-industrial-007) | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004) |
 | [REQ-FIRST-INDUSTRIAL-008](first-session-and-continuation.prd.md#req-first-industrial-008) | [AC-FIRST-INDUSTRIAL-004](first-session-and-continuation.prd.md#ac-first-industrial-004) |
+| [REQ-FIRST-BRANCH-001](first-session-and-continuation.prd.md#req-first-branch-001) | [AC-FIRST-BRANCH-001](first-session-and-continuation.prd.md#ac-first-branch-001) |
+| [REQ-FIRST-BRANCH-002](first-session-and-continuation.prd.md#req-first-branch-002) | [AC-FIRST-BRANCH-002](first-session-and-continuation.prd.md#ac-first-branch-002) |

@@ -6,7 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-10-12
 - 专业域权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文承载玩家取得、维持和结束 Agent 控制权，以及 Agent 资产、团队扩张和经济连续性的长期产品承诺。它补充首局与持续游玩、间接控制和成熟世界成长分册，但不冻结经济数值、状态字段、身份实现、界面结构、运营操作、测试步骤或当前放行结论。
@@ -19,7 +19,9 @@
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
-玩家以明确、非零且可理解的承诺取得自己的 Agent 控制权，并持续看见这份控制权的成本、义务、风险和下一次选择。首个支持路径可以降低进入门槛，但不会把 Agent 所有权变成免费、可套现或可无限复制的能力。
+玩家通过经济认领取得 Agent 控制权时，必须作出明确、非零且可理解的承诺，并持续看见这份控制权的成本、义务、风险和下一次选择。首个支持路径可以降低进入门槛，但不会把经济认领变成免费、可套现或可无限复制的能力。
+
+本分册的 upfront、upkeep 与认领资助承诺适用于形成经济认领的路径。首次注册或控制绑定须按其真实权威结果解释，不能仅因玩家已能操作 Agent 就宣称已承担经济认领的维护费用；也不能由当前没有经济认领推断历史义务已结清。首聊是否解锁与经济认领是否存在分别判断，具体边界由 [Agent claim 经济合同](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#first-chat-unlock-boundary) 维护。
 
 玩家只能把已绑定或已拥有的 Agent 视为自己的可操作对象；共享世界中的其他 Agent 可以构成世界背景与机会，但不会被误导为当前玩家的控制权。
 
@@ -78,9 +80,10 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 ### 2.5 可验证的控制权与恢复要求
 
 <a id="req-wr-aos-001"></a>
-### REQ-WR-AOS-001：首个控制权确认必须是可比较的非零承诺
+### REQ-WR-AOS-001：首个经济认领必须是可比较的非零承诺
 
-- 要求：玩家在确认首个 Agent 前必须能比较候选用途与差异、非零 upfront 成本、确认后的 upkeep runway、失去控制权的可读触发，以及等待、补足或选择其他候选的替代路径；预览或本地提交不能单独产生控制权、自由财富或持久义务。
+- 适用条件：当前取得 Agent 的路径将形成经济认领；单纯首次注册或控制绑定不自动满足这一条件。
+- 要求：玩家在确认首个经济认领前必须能比较候选用途与差异、非零 upfront 成本、确认后的 upkeep runway、失去控制权的可读触发，以及等待、补足或选择其他候选的替代路径；预览或本地提交不能单独产生控制权、自由财富或持久义务。
 - 专业权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
 - 验收：[AC-WR-AOS-001](#ac-wr-aos-001)
 
@@ -88,7 +91,7 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 ### AC-WR-AOS-001：确认前显示承诺包且不产生旁路效果
 
 - 覆盖要求：REQ-WR-AOS-001
-- 给定：玩家看到一个仍可比较的首个 Agent 候选，其授权、成本、upkeep、失去控制权触发和替代路径均已声明。
+- 给定：玩家看到一个将形成经济认领、仍可比较的首个 Agent 候选，其授权、成本、upkeep、失去控制权触发和替代路径均已声明。
 - 当：玩家尚未完成权威确认，或确认时任一前置条件已发生变化。
 - 则：玩家能读到非零承诺、持续成本和下一步；系统保持待决或原子拒绝并返回当前 blocker，不产生控制权、自由余额、容量豁免或部分扣减。
 

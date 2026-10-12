@@ -12,6 +12,12 @@ use crate::simulator::persist::{
     PlayerFirstChatUnlockPreviewSnapshot,
 };
 
+const STARTER_OC_CHAT_GATE_EXPLANATION: &str = concat!(
+    "First chat passes the starter OC gate with a positive liquid OC balance ",
+    "or an existing starter OC claim record. An existing starter OC record keeps ",
+    "this gate open even after the balance is spent.",
+);
+
 pub(super) fn build_player_agent_claim_snapshot(
     state: &WorldState,
     primary_agent_id: &str,
@@ -204,14 +210,27 @@ pub(super) fn build_player_agent_claim_snapshot(
     let first_chat_unlock_preview = (liquid_main_token_balance == 0
         && !state.starter_oc_claims.contains_key(primary_agent_id))
     .then(|| PlayerFirstChatUnlockPreviewSnapshot {
-        chat_purpose: "Start a first conversation with your claimed Agent.".to_string(),
+        chat_purpose: "Start a first conversation with the Agent you control.".to_string(),
         immediate_playable_help: "Ask what the Agent can do next for the current gameplay goal."
             .to_string(),
         first_question_or_action_hint: "Ask: What should we do first?".to_string(),
-        resource_boundary: "Starter OC unlocks first chat and initial liquid OC; it is separate from slot-1 claim and upkeep funding."
-            .to_string(),
-        defer_effect: "Deferring keeps the completed claim and its upkeep responsibility, but first chat stays locked while liquid OC is zero and no starter OC claim exists."
-            .to_string(),
+        resource_boundary: format!(
+            "Starter OC grants initial liquid OC and a one-time first-chat unlock. \
+             {STARTER_OC_CHAT_GATE_EXPLANATION} \
+             It is separate from economic slot-1 claim and upkeep funding."
+        ),
+        defer_effect: format!(
+            "{} {STARTER_OC_CHAT_GATE_EXPLANATION}",
+            // Local state and the current service projection both retain agent_claims.
+            // A missing legacy preview field cannot supply this ownership evidence.
+            if owned_claims.is_empty() {
+                "Deferring leaves your Agent binding unchanged and creates no economic claim \
+                 or upkeep obligation."
+            } else {
+                "Deferring leaves your existing economic claims and their current upkeep \
+                 rules unchanged."
+            }
+        ),
         recommended_unlock_action: crate::viewer::ACTION_CLAIM_STARTER_OC.to_string(),
     });
 

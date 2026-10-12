@@ -69,7 +69,7 @@ fn generated_world_sidecar_initializes_runtime_live_snapshot_map() {
     );
     assert!(
         server.llm_sidecar.chunk_runtime.asteroid_fragment_enabled,
-        "generated sidecar chunk runtime config should remain authoritative for previews"
+        "generated sidecar chunk runtime config should retain its initialization settings"
     );
     let chunk = server
         .seed_model
@@ -108,8 +108,14 @@ fn generated_world_sidecar_initializes_runtime_live_snapshot_map() {
     let quote = server
         .handle_fragment_refill_preview(request)
         .expect("generated sidecar refill preview");
-    assert!(quote.replenishment_enabled);
-    assert!(quote.next_replenish_tick.is_some());
+    assert!(!quote.replenishment_enabled);
+    assert_eq!(quote.next_replenish_tick, None);
+    assert_eq!(quote.ticks_until_replenish, None);
+    assert_eq!(quote.estimated_replenished_frag_count, 0);
+    assert_eq!(
+        quote.recommended_resource_action,
+        "move_or_switch_material_route"
+    );
 
     std::fs::remove_dir_all(generated_world_dir).expect("cleanup generated sidecar fixture");
 }

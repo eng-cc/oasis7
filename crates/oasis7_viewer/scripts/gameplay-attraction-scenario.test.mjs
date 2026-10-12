@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {
   buildTaskGame076AttractionEvidence,
+  buildTaskGame076RouteSnapshot,
   buildTaskGame076ScenarioSnapshot,
 } from "../software_safe_src/gameplay_attraction_scenario.js";
 
@@ -38,6 +39,12 @@ function assertCompleteRollbackQuote(routeTradeoff, label) {
       `${label} ${field} must not expose an internal snake_case identifier`,
     );
   }
+}
+
+function assertClosedRollbackQuote(routeTradeoff, label) {
+  assert.equal(routeTradeoff.rollback_available, false, `${label} must close rollback`);
+  assert.equal(routeTradeoff.rollback_deadline_beat, "Before incident recovery begins.");
+  assert.match(routeTradeoff.rollback_unavailable_reason, /incident recovery has begun/i);
 }
 
 const evidence = buildTaskGame076AttractionEvidence();
@@ -103,11 +110,11 @@ assert.notEqual(
   evidence.route_branch_regression.accelerate.midrun_visible_metric_delta,
   evidence.route_branch_regression.stabilize.midrun_visible_metric_delta,
 );
-assertCompleteRollbackQuote(
+assertClosedRollbackQuote(
   evidence.route_branch_regression.accelerate,
   "accelerate route rollback quote",
 );
-assertCompleteRollbackQuote(
+assertClosedRollbackQuote(
   evidence.route_branch_regression.stabilize,
   "stabilize route rollback quote",
 );
@@ -168,6 +175,86 @@ assert.equal(evidence.weak_sample_regression.status, "pass");
 assert.equal(evidence.weak_sample_regression.detected_verdict, "progression_pass_but_attraction_weak");
 assert.equal(evidence.boredom_negative_regression.status, "pass");
 assert.equal(evidence.boredom_negative_regression.detected_status, "attraction_weak");
+
+function assertRollbackWindowRejected(snapshot, label) {
+  const result = buildTaskGame076AttractionEvidence({ samples: [...evidence.raw_snapshots, snapshot] });
+  assert.equal(result.second_run_design_card.status, "second_run_hook_weak", label);
+  assert.ok(result.second_run_design_card.missing.includes("route_rollback_window_inconsistent"), label);
+}
+
+for (const mode of ["accelerate", "stabilize"]) {
+  const beforeIncident = buildTaskGame076RouteSnapshot({ mode, phase: "before_incident_recovery" });
+  const openQuote = beforeIncident.player_gameplay.route_tradeoff;
+  assertCompleteRollbackQuote(openQuote, `${mode} before incident recovery`);
+  assert.equal(openQuote.rollback_deadline_beat, "Before incident recovery begins.");
+  assert.equal(beforeIncident.player_gameplay.incident_recovery, null);
+
+  for (const phase of ["before_incident_recovery", "incident_recovery", "repair_completed", "completed"]) {
+    const snapshot = buildTaskGame076RouteSnapshot({ mode, phase });
+    const gameplay = snapshot.player_gameplay;
+    const quote = gameplay.route_tradeoff;
+    const result = buildTaskGame076AttractionEvidence({ samples: [...evidence.raw_snapshots, snapshot] });
+    assert.equal(result.second_run_design_card.status, "second_run_hook_pass", `${mode}/${phase}`);
+    assert.equal(quote.rollback_deadline_beat, openQuote.rollback_deadline_beat);
+    if (phase !== "before_incident_recovery") {
+      assertClosedRollbackQuote(quote, `${mode}/${phase}`);
+      assert.ok(gameplay.available_actions.length > 0, "closing rollback retains supported actions");
+      assert.equal(gameplay.repair_available, true, "closing rollback does not disable repair");
+      assert.equal(gameplay.can_reprioritize, true, "closing rollback does not disable replanning");
+      const stalePreview = structuredClone(snapshot);
+      stalePreview.player_gameplay.route_tradeoff = structuredClone(openQuote);
+      assertRollbackWindowRejected(stalePreview, `${mode}/${phase} must reject the old open preview`);
+      const noReason = structuredClone(snapshot);
+      noReason.player_gameplay.route_tradeoff.rollback_unavailable_reason = " ";
+      assertRollbackWindowRejected(noReason, `${mode}/${phase} must explain the closed window`);
+    }
+    if (phase === "incident_recovery") {
+      assert.equal(gameplay.incident_recovery.selected_repair, null);
+      assert.equal(gameplay.incident_recovery.residual_risk_after_repair, null);
+    }
+    if (phase === "repair_completed" || phase === "completed") {
+      assert.equal(gameplay.incident_recovery.selected_repair, mode === "accelerate" ? "quick_patch" : "root_cause_fix");
+      assert.equal(gameplay.incident_recovery.residual_risk_after_repair, mode === "accelerate" ? "medium" : "low");
+      assert.ok(gameplay.return_package.choice_memory.length >= 2, "completed choices remain recorded");
+      assert.match(quote.rollback_kept_benefit, /output.*repairs.*obligations/);
+    }
+    const wrongAvailability = structuredClone(snapshot);
+    wrongAvailability.player_gameplay.route_tradeoff.rollback_available = !quote.rollback_available;
+    assertRollbackWindowRejected(wrongAvailability, `${mode}/${phase} availability must match the phase`);
+    const laterDeadline = structuredClone(snapshot);
+    laterDeadline.player_gameplay.route_tradeoff.rollback_deadline_beat = mode === "accelerate"
+      ? "Rollback is available until the fast plate surge order is accepted."
+      : "Rollback is available until the Edge Outpost delivery is accepted.";
+    assertRollbackWindowRejected(laterDeadline, `${mode}/${phase} cannot move the deadline to a later order`);
+  }
+
+  const stalePhase = buildTaskGame076RouteSnapshot({ mode });
+  stalePhase.task_game_076_scenario.route_phase = "before_incident_recovery";
+  stalePhase.player_gameplay.route_tradeoff = structuredClone(openQuote);
+  assertRollbackWindowRejected(stalePhase, "an old phase cannot reopen an already repaired incident");
+  for (const phase of [undefined, null, "unknown"]) {
+    const unknownPhase = structuredClone(beforeIncident);
+    unknownPhase.task_game_076_scenario.route_phase = phase;
+    assertRollbackWindowRejected(unknownPhase, "missing or unknown fixture phase must not pass");
+  }
+}
+
+assertClosedRollbackQuote(incidentRecovery.player_gameplay.route_tradeoff, "default repaired incident");
+assertClosedRollbackQuote(returnPackage.player_gameplay.route_tradeoff, "default completed route");
+assertClosedRollbackQuote(localOrderContribution.player_gameplay.route_tradeoff, "completed delivery sample");
+
+// Runtime routes keep their own windows; fixture phase policy must not leak into generic evidence.
+const unrelatedRoute = buildTaskGame076RouteSnapshot({ mode: "stabilize" });
+delete unrelatedRoute.task_game_076_scenario;
+Object.assign(unrelatedRoute.player_gameplay.route_tradeoff, {
+  rollback_available: true,
+  rollback_unavailable_reason: null,
+  rollback_deadline_beat: "Before accepting the next local order.",
+});
+assert.equal(
+  buildTaskGame076AttractionEvidence({ samples: [...evidence.raw_snapshots, unrelatedRoute] }).second_run_design_card.status,
+  "second_run_hook_pass",
+);
 
 for (const field of ROLLBACK_QUOTE_FIELDS) {
   for (const mutation of ["delete", "blank"]) {
