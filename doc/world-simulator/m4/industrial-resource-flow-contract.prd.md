@@ -23,7 +23,7 @@
 
 ### Unresolved player-readable debts
 
-GitHub #2166 中的 `schedule_quote`、`logistics_transfer_quote` / `transfer_impact_preview`、`product_validation_quote` / `validation_unlock_preview`、`power_survival_quote` / `energy_recovery_preview`、`power_sale_quote` / `energy_liquidity_preview`、`market_quote_decision_preview`、`refine_quote` / `refine_preview` 与 data-access recovery 仍是未收口的可读性债务。它们只要求未来实现解释既有规则与后果，不代表本次文档迁移已经实现 quote、Viewer surface、ABI 变更、数值重平衡或发布 readiness。
+GitHub #2166 中的 `schedule_quote`、`logistics_transfer_quote` / `transfer_impact_preview`、`product_validation_quote` / `validation_unlock_preview`、`power_survival_quote` / `energy_recovery_preview`、`power_sale_quote` / `energy_liquidity_preview`、`market_quote_decision_preview`、`refine_quote` / `refine_preview` 与 data-access recovery 的可读性按实际交付范围验收。现有 quote、DTO 或局部 consumer 不应重新写成完全未实现；[#3510](https://github.com/eng-cc/oasis7/issues/3510) 承接仍未收口的独立语义/验收项。文档补充不证明代码修复、全部 Viewer/Agent surface、ABI 变更或发布 readiness。
 
 工业恢复的玩家语义由 gameplay agency/top-level 合同承接：资源不足、采空、不可达或精炼短缺不能把 Agent 的自动裁剪、改道或拒绝伪装成原意图已经完成；正式 surface 将原 accepted intent、约束原因、保留进度和 wait / repair / reroute / reprioritize 的下一决策连在同一因果链。`refine_value_class` 的唯一现行玩家分类是 `enough_to_advance / partial_progress / poor_power_tradeoff`；历史 `enough_for_next_step` 只作该首项的迁移别名，不另行冻结公式或行为。
 
@@ -47,6 +47,19 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 - `MaterialLedgerId` 可表示 world、agent、site 与 factory 账本。旧快照的材料兼容与 WASM 请求兼容必须由 runtime 处理，不能由产品或 Viewer 层伪造。
 - `MaterialStack.kind` 是模块/domain 拥有的字符串材料标签，可以表达 `compound`、`hardware` 等工业材料；它不能扩展、伪装或自动映射为 simulator 内建 `ResourceKind`。内建资源仅有 `Electricity | Data`，模块资产的 manifest、hash、interface、capability、limits、owner 与安装/调用拒绝继续服从 WASM ABI/runtime authority。
 - `TransferMaterial` 的即时或在途结果必须保持守恒、确定性和可审计；其具体字段、事件顺序和 ABI 以 runtime/ABI 真值为准。其中空 route/path binding 且 `auto_reroute=false` 的 zero-distance 请求保留 legacy direct-transfer compatibility；同一空 binding 下 positive-distance remains existing unbound transit。显式 route/path binding 或 `auto_reroute=true` 请求 graph mode，只有 path validation/selection 成功才成为 path-bound transit（即使有效路径距离为零）；invalid explicit binding 或无可用 graph selection 必须 atomic reject；unavailable explicit binding 只有在 `auto_reroute` 选出另一条有效 graph path 时才能替换，且不得 fallback 到 direct。该 runtime compatibility lane 不替代 gameplay authority 对玩家层 co-location/eligibility target 的定义。以上当前边界以 [`world-runtime` status matrix](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix) 为准，不能把 `ActionId/caused_by` trace 写成已经落地的 canonical root identity。
+
+<a id="industrial-quote-ledger-semantics"></a>
+### 报价账本、净缺口与转移失败边界
+
+以下条款补齐现有报价的领域解释与实现验收目标，保持 simulator 的 `Electricity | Data` 与 Runtime 的 `MaterialLedgerId` 两条权威边界，不引入旧 ResourceKind，也不让一条 lane 的公式覆盖另一条。
+
+- **精炼前后余额：** simulator 的 `hardware_shortfall_before` 从动作前真正可用于当前 BuildFactory 目标的 Data 余额计算；after 从执行相同精炼转换后的净 Data 余额计算。旧字段名 `compound_mass_g`/`hardware_output` 不构成两份独立库存或“未精炼 Data 不可建厂”的资格。只有净缺口实际缩小才能称 partial progress，目标已满足或缺口扩大不能因 gross output 为正而称进展；推荐量必须与同一净变化一致。
+- **逐种材料缺口：** Runtime 报价先按当前材料同一性规则聚合重复请求，再对每种材料计算 `max(requested - selected_available, 0)`，最后求和。其他材料的盈余不得抵销本材料短缺；只截总量也不成立。local/world 选择与实际领域供给政策一致，不把两份余额重复合并；DTO 的 allowed、分项/总缺口与推荐理由须同义，材料足够也不保证其它提交前置成立。
+- **消费账本：** 对具体排产结果的报价必须读取该 factory/recipe 实际消费的 input ledger，而不是以发起 Agent 的 ledger 替代；独立库存/行情查询可以说明自己的账本，但不能冒充另一条排产的可执行性。报价显示 owner、消费账本与库存时刻，实际提交仍重新校验。
+- **转移原子性：** simulator `TransferResource` 在任何源扣减前检查源与目标的资源种类支持及入账可行性；Location Electricity 必须提前拒绝。任何转移失败不得留下半笔扣减/入账，也不得通过恢复 Location 电力池或给拒绝事件补扣款来迁就错误；自转移与正常 Agent/合法 Data 路径保留各自既有语义。
+- **物流解释：** 合法 direct/no-route 只表示没有 graph path binding，不等于 path unavailable。route、material default、explicit priority 与 keyword fallback 保留独立 reason；不可执行 quote 的 ETA 显式为不可用或以成立条件限定。引用 Runtime 原判断，不新增 blocker projection、路径或调度 authority，旧零距离兼容单独验收。
+
+最小独立验证包含：默认 fixture 的 2500 Data/50 Electricity 同快照分叉，直接建厂与精炼 2500 后建厂须分别验证；若建设需 5 Data、精炼后余额为 2 Data，真实缺口是 `0 -> 3`，不能报 `5 -> 3` 进展。另测本地/世界富余、一盈一缺、精确覆盖、普通短缺、重复材料、factory 与 Agent 余额不同，以及合法正数 Agent→Location 电力转移拒绝时源仍保留原余额。保留低电力、最小产出、推荐量、只读 quote、正常转移、自转移和余额不足；这些样例定义预期，不表示当前实现已经通过。系统映射见[配对设计](industrial-resource-flow-contract.design.md#industrial-quote-calculation-design)。
 
 ### 工业外部性与 `operational_mitigation` authority（target-only）
 
@@ -137,10 +150,10 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 
 跨工厂、原料、配方与物流的玩家决策还需要一条可对账的经济闭环：玩家先比较一个方案的预期总成本、可交付价值与主要风险，提交后再按实际生产、运输和终端结算结果核对偏差，最后决定继续、减量、改道、换配方或转向其他目标。本节只冻结归因语义与玩家决策边界，不新增价格、产率、税费、运输费率、维护公式、runtime schema 或数值平衡。
 
-- 方案比较必须绑定同一 candidate、root、revision/segment、measurement window 与 authority snapshot，并分开表达 `planned`、`admissible`、`committed`、`actual` 四层。`planned` 是候选预计投入/产出，`admissible` 是当前 profile 允许的合法单位与路径，`committed` 是权威接受后真正形成的投入/容量/义务，`actual` 只能来自已结算的 production、transport、byproduct、delivery/terminal receipt，或 profile 支持的权威 factory/setup/maintenance/downtime settlement evidence；preview、推荐、accepted ack、估算 ETA 与 speculative hold 不能进入实际成本或价值。
+- 首次提交前的方案比较绑定 candidate/config 与 authority snapshot，measurement window 仅在该比较实际声明时提供；此时不要求尚未颁发的 root/revision。只有权威 accepted outcome 创建 root/revision/segment 后，承诺、actual 与后续比较才绑定已颁发的对应 identity；继续既有 operation 时引用其真实 root，不伪造新 root。分开表达 `planned`、`admissible`、`committed`、`actual` 四层。`planned` 是候选预计投入/产出，`admissible` 是当前 profile 允许的合法单位与路径，`committed` 是权威接受后真正形成的投入/容量/义务，`actual` 只能来自已结算的 production、transport、byproduct、delivery/terminal receipt，或 profile 支持的权威 factory/setup/maintenance/downtime settlement evidence；preview、推荐、accepted ack、估算 ETA 与 speculative hold 不能进入实际成本或价值。
 - 成本归因至少覆盖：实际消耗或占用的原材料批次；owner-held electricity 的预计、hold、消耗与未满足部分；物流 tariff/损耗、边吞吐与 buffer/terminal 容量占用；以及 profile 明确支持时的 factory setup、maintenance 或 downtime 成本。未实现或缺失的维护、价格、容量、终端价值或损耗 authority 必须显示 `unknown/degraded`，不能按零成本、零损耗、无限容量或免费机会成本继续比较。
 - 价值归因必须把主产物、副产物、在途/缓冲状态和终端用途分开。副产物只有取得其声明的 ledger、local service、trade 或 quarantine disposition 后，才可按 profile 支持的 value class 计入；无法处置的 branch 只能计为待决、风险或成本，不得用主产物价值抵销。`production receipt` 只证明实际产物进入合法账本、buffer 或显式在途承诺，不能单独计入 delivery value、需求减少、市场/服务结算或终端奖励；这些结果必须等待匹配的 delivery/terminal settlement receipt。
-- 提交前 surface 至少让玩家比较当前真实支持的 `run_full`、`run_reduced_or_partial`、`wait_or_restore_input`、`reroute_or_change_source`、`hold_for_terminal` 与 `pivot_to_other_recipe`。每个候选应说明预计总成本的组成、可执行/未满足量、预计交付量或 value class、仍占用的容量/电力/库存、失败风险、下一复查点和推荐理由；不承诺固定利润、精确 ETA 或未来价格。没有足够 authority 计算方案总成本或终端价值时，候选只能标为 `unknown/degraded`，不能伪装为安全或高收益。
+- 提交前 surface 从 `run_full`、`run_reduced_or_partial`、`wait_or_restore_input`、`reroute_or_change_source`、`hold_for_terminal` 与 `pivot_to_other_recipe` 中，只提供当前专业 profile 真实支持的子集。未支持的选项可作为不可用说明，必须给出原因且不可提交；已有选项的 blocked/unknown 前置仍可只读比较，不要求把整组动作先实现才能解释报价。每个候选应说明预计总成本的组成、可执行/未满足量、预计交付量或 value class、仍占用的容量/电力/库存、失败风险、下一复查点和推荐理由；不承诺固定利润、精确 ETA 或未来价格。没有足够 authority 计算方案总成本或终端价值时，候选只能标为 `unknown/degraded`，不能伪装为安全或高收益。
 - 接受后必须沿同一 root/revision 形成一次 immutable plan baseline，并按生产、物流 handoff/arrival、profile 支持且已有权威 settlement evidence 的 factory/setup/maintenance/downtime、buffer/terminal admission 与 delivery/settlement 实际 receipts 累积对账。对账至少区分 `planned/admissible/committed/actual` 数量、成本、损耗、待决义务与价值结果；profile 支持的 compensating receipt 必须链接原 receipt，不能改写历史成本或价值。因果换线、配方/工厂/边/终端变化建立 parent-linked 新 revision/candidate，旧方案的成本、已发生损耗和未决价值不迁移成新方案收益。
 - 失败恢复必须保留已经消费、仍占用、已损失与可追回的价值，并沿 profile 支持的 `wait`、`release`、`reduce`、`reroute`、`hold`、`rework`、`return`、`salvage`、`requote` 或 `pivot` 路径各生效一次。终端容量、owner、资格、需求或价格 authority 失效时，不得自动退款、免费补偿、静默改道或把产出收益当作已交付；玩家应能看到继续当前方案与改走新方案的机会成本。
 - 同一 root/revision 下的重复 submit、arrival、reconnect、retry、restore 与 replay 只能重读同一成本/价值 disposition，不得复制输入 sink、power debit、运输损耗、产物、副产物、delivery value、奖励或重新计算历史价格。不同 accepted intents 即使 payload 相同，也必须分别归因，不能合并成本或价值。
