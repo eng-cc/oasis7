@@ -105,6 +105,8 @@ OpenClaw 与 Codex 分别保留真实 Runtime/version、model、adapter、profil
   - `P1 多轮记忆/对话`：跨 3~5 轮任务目标保持、失败后重试、上下文连续性。
   - `P2 多 agent 并发`：2~5 个低频 agent 并发，不要求高频战斗 parity。
   - 上述场景使用已有 fixture/observation/action semantics；unified world/observation 与 `Speak`/`Inspect`/`Interact` 新 surface 不在本轮 parity scope，待后续产品决策与对应 authority 合同后再纳入。
+<a id="parity-metric-object-contract"></a>
+
 - Metrics & Thresholds:
   - 行为等价硬门禁:
     - `completion_rate_gap <= 5pp`
@@ -283,3 +285,5 @@ OpenClaw 与 Codex 分别保留真实 Runtime/version、model、adapter、profil
 | DEC-PARITY-002 | parity 以玩家可感知结果和恢复体验为准 | 要求内部实现、prompt、memory 完全一致 | 产品目标是体验等价，不是实现完全同构。 |
 | DEC-PARITY-003 | 分层推进 `P0 -> P1 -> P2` parity | 一次性宣称全量 agent parity | 分层更可验证，也更符合当前 Local Provider 首期低频接入边界。 |
 | DEC-PARITY-004 | 对真实在线 LLM provider 采用“行为等价硬门禁 + rollout latency_class”双层口径 | 继续用单一绝对时延阈值作为 parity fail | 在线模型时延存在天然波动；产品上应把“能否默认启用”与“是否已经行为等价”分开治理。 |
+
+时延的采样边界、保守聚合、历史 extra_wait 别名和缺样本解释统一见[benchmark 时延合同](../prd/acceptance/provider-agent-parity-benchmark-protocol.md#parity-latency-contract)；现有阈值不因文档澄清而改变。
