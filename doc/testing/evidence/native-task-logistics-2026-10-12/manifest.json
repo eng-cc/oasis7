@@ -144,8 +144,8 @@
     },
     {
       "path": "ordinary-regressions.json",
-      "byte_length": 12659,
-      "sha256": "19f8b2fb1b7f931d85fc96710dca0bc382cc1ed641ee7d9e658b7b362b5f5c55",
+      "byte_length": 16452,
+      "sha256": "961be45448be8a0fdac5d64294109ae46dc53ab1e86d787b5fef594be3a09d34",
       "collector": "parent original private-test-world evidence"
     },
     {
@@ -167,7 +167,7 @@
       "collector": "parent original private-test-world evidence"
     }
   ],
-  "ordinary_repair_source": "29a8ca72dec65977fa450135839f7d2ea6a0a4e2",
+  "ordinary_repair_source": "93056a5c6e4b05ccbfb6e36acae7c1ff0b605d4f",
   "ordinary_repair_boundary": "Test harness only; original live source/build/player identities retained. Final-source CI must be checked separately.",
   "later_skill_documentation": {
     "sha256": "c7ee4bc7363e7863355553139600ca0ae81b486674f3ef80c686158ceccf9418",

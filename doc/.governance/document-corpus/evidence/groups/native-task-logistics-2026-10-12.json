@@ -5,7 +5,7 @@
         "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
         "backlink": "doc/testing/evidence/native-task-logistics-2026-10-12/README.md",
         "claim_boundary": "targeted_native_logistics_candidate_history_not_full_first_session_or_deployment",
-        "content_sha256": "84c21af91551f6e7f5d1664721ebebc30832036d07f0032bba008329c757314e",
+        "content_sha256": "50305c2817c29db3bd268353d01cf1474424a6ffc83f96a0b487e51fe73f335e",
         "disposition": "retain",
         "domain_owner": "qa_engineer",
         "evidence_window": "2026-10-12-native-logistics-candidate",
@@ -65,7 +65,7 @@
         "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
         "backlink": "doc/testing/evidence/native-task-logistics-2026-10-12/README.md",
         "claim_boundary": "targeted_native_logistics_candidate_history_not_full_first_session_or_deployment",
-        "content_sha256": "da9590beadabb7890feaf45582f9b3457383900085237ecfddce896a20c27acb",
+        "content_sha256": "462db178b22f758ec4eed0b1e92a61da2d2f2b6f049e0564f3ab4d7822af28d9",
         "disposition": "retain",
         "domain_owner": "qa_engineer",
         "evidence_window": "2026-10-12-native-logistics-candidate",
@@ -105,7 +105,7 @@
         "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
         "backlink": "doc/testing/evidence/native-task-logistics-2026-10-12/README.md",
         "claim_boundary": "targeted_native_logistics_candidate_history_not_full_first_session_or_deployment",
-        "content_sha256": "19f8b2fb1b7f931d85fc96710dca0bc382cc1ed641ee7d9e658b7b362b5f5c55",
+        "content_sha256": "961be45448be8a0fdac5d64294109ae46dc53ab1e86d787b5fef594be3a09d34",
         "disposition": "retain",
         "domain_owner": "qa_engineer",
         "evidence_window": "2026-10-12-native-logistics-candidate",
@@ -182,7 +182,7 @@
         "semantic_role": "native_task_logistics_history"
       }
     ],
-    "group_sha256": "be49e14d697d21287d939665404bde5b65f721c8451fc12429c1a3cd144fda4c",
+    "group_sha256": "d542aa83e8fbfd0de88a09060b67a40a5b1795b4feccc13741bcd9021e886d52",
     "id": "native-task-logistics-2026-10-12"
   },
   "schema": "oasis7.document-evidence-group/v1"

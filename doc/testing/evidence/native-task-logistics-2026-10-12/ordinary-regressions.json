@@ -187,6 +187,42 @@
       "sha256": "79fc1416a6bb23749a14e2b3159908fc6d0b37549d42e8f719b5aa8c2a595741",
       "byte_length": 163,
       "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-integration-ci-failed.log",
+      "sha256": "65d7e2c98d3c2d61edc7c594b0fafdf7cf6f93940997c2303a222caf87055478",
+      "byte_length": 2369120,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-cleanup-slow-admission-red.log",
+      "sha256": "14c2403ad11753a3550a0c7e25e635e2fc36e9ccd1d585c38fbdc0ccc5b4be38",
+      "byte_length": 2009,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-cleanup-slow-admission-green.log",
+      "sha256": "c342564062a5d89609781c05fb447b22b96fbf9213bfa7e24332781b731b7f59",
+      "byte_length": 1831,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-cadence-regression-green.log",
+      "sha256": "184ed4c9a187c76b7c4022be64920d1ef2aad4aaa80bb5acecdd7ab0ded601e5",
+      "byte_length": 2637,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-cleanup-slow-admission-first-compile.log",
+      "sha256": "910d8877addd9b5b37dd47a5ab4b6988fdd66cc7803759e308c2691dee0e56c0",
+      "byte_length": 1252,
+      "status": "original local raw compile failure retained; missing zero-delay caller argument corrected before controlled RED execution"
+    },
+    {
+      "locator": "oasis7-logistics-cadence-clippy.log",
+      "sha256": "d64a84f0380c30da48519ca1af86be5505e62dc30963d80607a3cf41bed9bccc",
+      "byte_length": 163,
+      "status": "original local raw log retained"
     }
   ],
   "scope": "ordinary fixture/code verification; not substitute autonomous play",
@@ -295,6 +331,52 @@
       "owned_ready_files": 2,
       "original_processes_absent": true,
       "public_receipt": "oasis7-logistics-stale-action-public-red-fixtures.json"
+    }
+  },
+  "integration_fixture_repair": {
+    "failed_source": "947bade0111f11e758f493fb56b64e2eb8d128e3",
+    "run": "https://github.com/eng-cc/oasis7/actions/runs/38267128112",
+    "native_results": {
+      "passed": 548,
+      "failed": 2,
+      "ignored": 16,
+      "seconds": 648.35
+    },
+    "failures": [
+      "Existing unknown-response cleanup exhausted its three-second budget.",
+      "Logistics exhausted its sixty-second budget after repeated legitimate prefix version rejection, retaining the final unresolved original action."
+    ],
+    "scope": "Ordinary fixture clock and bounded observation budgets; canonical admission and original operation business predicates preserved. Live host and player budget remain unchanged.",
+    "observed_canonical_commit_total_milliseconds": {
+      "maximum_in_log": 4568,
+      "note": "Canonical commit observation total includes retention and persistence; this is not a pure storage-write latency measurement. The old two-second ordinary cadence could outrun capture/admission under CI load."
+    },
+    "repair_code_source": "93056a5c6e4b05ccbfb6e36acae7c1ff0b605d4f",
+    "ordinary_logistics": {
+      "cadence_seconds": 5,
+      "deadline_ticks": 24,
+      "deadline_seconds": 120,
+      "preparation_attempt_cap": 8,
+      "passed": 1,
+      "seconds": 64.13,
+      "forced_prefix_and_action_rejection": true,
+      "actual_public_release_unique_effect_restart_oracle": true
+    },
+    "ordinary_unknown_cleanup": {
+      "admission_delay_seconds": 4,
+      "old_budget_seconds": 3,
+      "red_seconds": 6.83,
+      "cadence_seconds": 5,
+      "settlement_budget_ticks_per_original": 4,
+      "settlement_budget_seconds_per_original": 20,
+      "green_seconds": 16.32,
+      "passed": 1,
+      "basis": "Retained-original resend1s, injected admission4s, actual worker tick5s, observed canonical commit total up to4.568s and bounded transport/lookup margin. Stop and revoke settle canonically; original one-effect/epoch assertions retained."
+    },
+    "live_boundary": "All live/default call sites pass zero injected delay and retain their original cadence/cleanup budgets. No new model or production run.",
+    "strict_all_target_clippy": {
+      "source": "93056a5c6e4b05ccbfb6e36acae7c1ff0b605d4f",
+      "exit_code": 0
     }
   }
 }
