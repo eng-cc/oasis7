@@ -42,6 +42,26 @@ class Tests(unittest.TestCase):
         self.assertEqual((self.target / "debug/build/artifact").read_text(), "keep")
         self.assertTrue((self.target / cleaner.cache.MARKER).exists())
 
+    def test_target_triple_report_cleanup_and_locks(self):
+        import fcntl
+        profile = self.target / "wasm32-unknown-unknown/debug"
+        (profile / "incremental").mkdir(parents=True)
+        (profile / "incremental/state").write_text("rebuild")
+        (profile / "deps").mkdir()
+        (profile / "deps/library").write_text("keep")
+        report = cleaner.cache.breakdown(self.target)
+        self.assertGreater(report["wasm32-unknown-unknown/debug"]["incremental"], 0)
+        with open(profile / ".cargo-lock", "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaises(OSError):
+                cleaner.clean(self.root, self.target, True)
+        self.assertTrue((self.target / "debug/incremental").exists())
+        preview = cleaner.clean(self.root, self.target)
+        self.assertEqual(len(preview["actions"]), 2)
+        cleaner.clean(self.root, self.target, True)
+        self.assertFalse((profile / "incremental").exists())
+        self.assertEqual((profile / "deps/library").read_text(), "keep")
+
     def test_unknown_and_busy_preserved(self):
         with mock.patch.object(cleaner.resources, "inspect_process_use", return_value={"state": "busy", "reason": "fixture busy"}):
             with self.assertRaises(ValueError):

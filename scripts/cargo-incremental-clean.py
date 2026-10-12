@@ -35,10 +35,11 @@ def clean(root, target, apply=False):
         if usage["state"] != "clear_observed":
             raise ValueError(usage["reason"])
         actions = []
+        profiles = cache.profile_directories(target, strict=True)
         with contextlib.ExitStack() as stack:
             # Raw Cargo does not hold our wrapper lease. Respect its build locks too.
             import fcntl
-            for directory in (target, target / "debug", target / "release", target / "packaging"):
+            for directory in sorted({target, *profiles, *(p.parent for p in profiles)}):
                 if directory.is_symlink():
                     raise ValueError("symlinked profile retained")
                 if not directory.is_dir():
@@ -53,8 +54,8 @@ def clean(root, target, apply=False):
                     fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o600)
                     stack.callback(os.close, fd)
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            for profile in ("debug", "release", "packaging"):
-                path = target / profile / "incremental"
+            for directory in profiles:
+                path = directory / "incremental"
                 if path.is_symlink():
                     raise ValueError("symlinked incremental retained")
                 if path.is_dir():

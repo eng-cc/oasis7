@@ -115,13 +115,35 @@ def physical_size(path):
     return int(result.stdout.split()[0]) * 1024
 
 
+def profile_directories(target, strict=False):
+    """Native profiles and one-level Cargo target-triple profiles only."""
+    profiles = set()
+    for directory in target.iterdir():
+        if directory.is_symlink():
+            if strict:
+                raise ValueError("symlinked target child retained")
+            continue
+        if not directory.is_dir():
+            continue
+        if directory.name in ("debug", "release", "packaging") or any((directory / name).exists() for name in ("deps", "incremental", ".fingerprint")):
+            profiles.add(directory)
+            continue
+        # Custom JSON target stems need not contain a conventional triple.
+        for profile in directory.iterdir():
+            if profile.is_symlink():
+                if strict:
+                    raise ValueError("symlinked target profile retained")
+                continue
+            if profile.is_dir() and (profile.name in ("debug", "release", "packaging") or any((profile / name).exists() for name in ("deps", "incremental", ".fingerprint"))):
+                profiles.add(profile)
+    return sorted(profiles)
+
+
 def breakdown(target):
-    result = {}
-    for profile in ("debug", "release", "packaging"):
-        directory = target / profile
-        if directory.is_dir() and not directory.is_symlink():
-            result[profile] = {name: physical_size(directory / name) if (directory / name).is_dir() and not (directory / name).is_symlink() else 0 for name in ("deps", "incremental", "build")}
-    return result
+    return {str(directory.relative_to(target)): {
+        name: physical_size(directory / name) if (directory / name).is_dir() and not (directory / name).is_symlink() else 0
+        for name in ("deps", "incremental", "build")
+    } for directory in profile_directories(target)}
 
 
 def inventory(root, measure=True):
