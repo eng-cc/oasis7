@@ -160,6 +160,16 @@ impl Protocol {
         self.send(serde_json::json!({"type":"request_snapshot"}));
         self.receive("snapshot")["snapshot"].clone()
     }
+
+    fn request_snapshot(&mut self) -> oasis7::simulator::WorldSnapshot {
+        self.send(serde_json::json!({"type":"request_snapshot"}));
+        let response: oasis7::viewer::ViewerResponse =
+            serde_json::from_value(self.receive("snapshot")).expect("valid Viewer response");
+        let oasis7::viewer::ViewerResponse::Snapshot { snapshot } = response else {
+            panic!("expected the requested snapshot")
+        };
+        snapshot
+    }
 }
 
 #[test]
@@ -399,6 +409,85 @@ fn verify_signed_collect_data(lost_ack: bool) {
     } else {
         println!("PRE2_SHIPPED_VIEWER_SIGNED_COLLECT_DATA_HANDLER_PASSED");
     }
+    verify_collect_data_feedback_isolation(&mut process, &mut protocol);
+}
+
+fn verify_collect_data_feedback_isolation(process: &mut ViewerProcess, owner: &mut Protocol) {
+    // This connection used the shipped registration and signed Submit handlers.
+    // It must receive its own terminal result without an additional Preflight or nonce.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let gameplay = owner
+            .request_snapshot()
+            .player_gameplay
+            .expect("actual owner snapshot contains gameplay");
+        if gameplay.recent_feedback.as_ref().is_some_and(|feedback| {
+            feedback.action == "world_service_intent" && feedback.stage == "committed"
+        }) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "original signed Submit did not expose its canonical terminal feedback: {:?}",
+            gameplay.recent_feedback
+        );
+    }
+
+    let mut observer = process.connect();
+    let initial: oasis7::simulator::WorldSnapshot =
+        serde_json::from_value(observer.subscribe()).expect("valid anonymous WorldSnapshot");
+    assert_snapshot_feedback_absent(initial, "fresh anonymous connection");
+    let request = oasis7::viewer::AuthoritativeReconnectSyncRequest {
+        player_id: "owner-a".into(),
+        session_pubkey: None,
+        last_known_log_cursor: None,
+        expected_reorg_epoch: None,
+    };
+    observer.send(serde_json::json!({"type":"authoritative_recovery","command":{"mode":"reconnect_sync","request":request}}));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let response: oasis7::viewer::ViewerResponse =
+            serde_json::from_value(observer.receive("authoritative_recovery_ack"))
+                .expect("valid reconnect response");
+        let oasis7::viewer::ViewerResponse::AuthoritativeRecoveryAck { ack } = response else {
+            panic!("expected reconnect acknowledgement")
+        };
+        if ack.status == oasis7::viewer::AuthoritativeRecoveryStatus::CatchUpReady
+            && ack.player_id.as_deref() == Some("owner-a")
+        {
+            assert!(ack.session_pubkey.is_none());
+            assert!(ack.session_epoch.is_none());
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "claimed player reconnect was not acknowledged"
+        );
+    }
+    assert_snapshot_feedback_absent(
+        observer.request_snapshot(),
+        "ReconnectSync player ID without authentication",
+    );
+    let retained = owner
+        .request_snapshot()
+        .player_gameplay
+        .expect("actual owner snapshot contains gameplay")
+        .recent_feedback
+        .expect("anonymous reads must not clear the original connection's feedback");
+    assert_eq!(retained.action, "world_service_intent");
+    assert_eq!(retained.stage, "committed");
+    println!("PRE2_SHIPPED_VIEWER_ORIGINAL_TERMINAL_FEEDBACK_ISOLATION_PASSED");
+}
+
+fn assert_snapshot_feedback_absent(snapshot: oasis7::simulator::WorldSnapshot, context: &str) {
+    let gameplay = snapshot
+        .player_gameplay
+        .expect("actual observer snapshot contains gameplay");
+    assert!(
+        gameplay.recent_feedback.is_none(),
+        "{context} exposed another connection's private feedback: {:?}",
+        gameplay.recent_feedback
+    );
 }
 
 #[test]

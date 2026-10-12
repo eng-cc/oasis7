@@ -12,6 +12,7 @@
 ## 范围
 
 - 覆盖 profile、握手、控制请求路由、legacy bridge、timeline、automation 与 Web test API 的动作集合。
+- 玩家动作反馈隔离、业务错误码和 CollectData 预检一致性的实现与验收要求见[动作反馈目标](#player-action-feedback-targets)；它们不改变既有 PromptControl 专属结果合同。
 - 不重写世界规则、共识/P2P 语义、非 live 历史浏览、视觉方向或完整 timeline 架构。
 
 ## 接口 / 数据
@@ -138,7 +139,37 @@ operation_digest = h_v1(
 - 断链、被 gameplay gate 阻断、无可观察进展和不支持的 profile action 是不同状态；实现与 automation 不得将其中任一状态折叠为 fabricated event 或连接成功。
 - 定向验证必须覆盖“空 mailbox 不输出、不推进观测值”以及“其后的有效触发仍能继续 drive”；Viewer 的 event drive 不拥有 node/consensus tick。
 - Viewer UI、timeline、automation 与 `window.__AW_TEST__` 的 `getState`、`describeControls`、`fillControlExample`、`sendControl` 必须对齐 `controlProfile` 与支持集合。
-- 受影响实现改动应覆盖协议 round-trip、live/playback handler、发送路由和 Web test API；可见 UI 改动按 `testing-manual.md` S6 提供 browser/console/语义证据。本轮仅迁移文档，不产生 browser 证据。
+- 受影响实现改动应覆盖协议 round-trip、live/playback handler、发送路由和 Web test API；可见 UI 改动按 `testing-manual.md` S6 提供 browser/console/语义证据。历史文档迁移本身不产生 browser 证据，后续实现按实际候选单独验证。
+
+<a id="player-action-feedback-targets"></a>
+## 玩家动作反馈与预检目标
+
+本节承接 [#2116](https://github.com/eng-cc/oasis7/issues/2116) 中 #2277、#2481 的有效要求。源码审读基线为 `fd5fa7c8ff1851a32cb3e71d488783ca59e05a5e`（2026-10-12）：请求拒绝仍写入共享反馈，兼容提交接口仍折叠 builder 错误码；CollectData 预检与 world-service 提交使用不同的资格依据。以下是本次修复必须满足的合同；实现与实际验证分别记录，不由历史 PR 合入或旧测试存在推导验收完成。
+
+产品结果由[玩家可读表面与反馈连续性](../../product/agents-world-simulation/player-readable-surface-continuity.prd.md#req-agent-surface-003)拥有；技术设计与逐项验证见[动作反馈设计](viewer-control-plane-split-live-playback.design.md#gameplay-feedback-isolation)。优先处理反馈正确性与错误可诊断性；权限一致性的实际可达状态按当前 world-service 路径验证。
+
+<a id="player-scoped-gameplay-feedback"></a>
+### 请求反馈的归属
+
+- `GameplayAction` 与 `CollectData` 的未鉴权拒绝只返回请求连接，不写入其他玩家可读的最近反馈。请求自报的 player/Agent、已有连接标签和目标 Agent 都不能独自证明反馈归属。
+- 已鉴权请求的反馈只能进入已验证玩家的可见范围；玩家 A、玩家 B、匿名连接交叉请求时，彼此的操作结果不被覆盖。身份切换、rebind、延迟结果与断线后的回读继续校验归属。
+- 世界级运行故障保留其共享、脱敏的运行状态语义，不能伪装成某位玩家的动作被拒绝。对已收到但结果未知的提交，继续呈现未知/待确认，不能凭超时写成最终失败或自动重试。
+- 验收覆盖请求错误与异步结果；当前单客户端测试中“匿名失败必须留在全局反馈”的断言应被隔离断言替代。
+
+<a id="gameplay-error-code-contract"></a>
+### 业务错误码保真
+
+- 验签成功后，typed gameplay builder 的错误码与安全错误信息应保持至接口响应；JSON/请求结构无法解析仍可用 `invalid_request`，鉴权失败继续遵守原有隐私和状态码边界。
+- Viewer 与接口消费者按稳定 code 分类，未知 code 使用安全通用提示。不得把业务拒绝改报为连接中断、执行成功或必然可重试。
+- 验收至少包含合法签名搭配未知 action、错误的非空 target 和缺少必需 actor 的请求，确认具体 builder code 未被传输适配层抹掉；签名规范化已拒绝的空 target 仍按鉴权边界处理。
+
+<a id="collect-data-preflight-contract"></a>
+### CollectData 预检与提交资格
+
+- 对同一世界、权威状态版本、已验证 player/key 和同一业务请求，预检与提交使用同一 canonical Agent 归属及动作资格规则。canonical claim 缺失、重复或与有效绑定不一致时，预检不能给出可执行承诺。
+- 新的共享资格检查只读，不扣资源、不创建 claim、不消费动作 nonce。预检请求本身的签名、session nonce 和重放保护仍遵守既有认证规则，不由此承诺整个请求没有认证状态变化。
+- 预检只是当时的资格和资源判断，不预留资源，不替代提交时重新鉴权与校验；状态变化、权限撤销、余额变化均可使随后提交被拒绝。收到提交 ACK 仍只表示收到请求，世界效果由权威结果证明。
+- 验收固定同一权威状态，覆盖零/一/多份 claim、player/key 不匹配、余额不足，以及预检后状态变化。普通本地 Minimal fixture 不代替 world-service 入口的一致性验证；仍受支持的兼容 HTTP 接口按实际消费者覆盖。
 
 ## 里程碑
 

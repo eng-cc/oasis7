@@ -537,6 +537,7 @@ impl ViewerRuntimeLiveServer {
                 target_agent_id: Some(request.target_agent_id.clone()),
             })?;
 
+        self.authorize_active_gameplay_feedback();
         let public_key = normalize_optional_public_key(request.public_key.as_deref());
         let is_first_agent_claim = request.action_id == ACTION_CLAIM_FIRST_AGENT;
         if is_first_agent_claim {
@@ -696,25 +697,29 @@ impl ViewerRuntimeLiveServer {
                 public_key.as_deref(),
                 &request,
             )?;
-            self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
-                action: format!("gameplay_action:{}", request.action_id),
-                stage: "completed_advanced".to_string(),
-                effect: format!(
-                    "bound existing unclaimed first Agent {} to player {}",
-                    request.target_agent_id, verified.player_id
-                ),
-                intent_summary: Some(format!(
-                    "bind existing first Agent {} to player {}",
-                    request.target_agent_id, verified.player_id
-                )),
-                target_agent_id: Some(request.target_agent_id.clone()),
-                reason: None,
-                hint: Some(
-                    "refresh the snapshot; the first Agent is now bound to this player".to_string(),
-                ),
-                delta_logical_time: 0,
-                delta_event_seq: 0,
-            });
+            self.set_verified_player_gameplay_feedback(
+                &verified,
+                PlayerGameplayRecentFeedback {
+                    action: format!("gameplay_action:{}", request.action_id),
+                    stage: "completed_advanced".to_string(),
+                    effect: format!(
+                        "bound existing unclaimed first Agent {} to player {}",
+                        request.target_agent_id, verified.player_id
+                    ),
+                    intent_summary: Some(format!(
+                        "bind existing first Agent {} to player {}",
+                        request.target_agent_id, verified.player_id
+                    )),
+                    target_agent_id: Some(request.target_agent_id.clone()),
+                    reason: None,
+                    hint: Some(
+                        "refresh the snapshot; the first Agent is now bound to this player"
+                            .to_string(),
+                    ),
+                    delta_logical_time: 0,
+                    delta_event_seq: 0,
+                },
+            );
             return Ok(GameplayActionAck {
                 consensus_action_payload_hash: None,
                 action_id: request.action_id,
@@ -762,7 +767,7 @@ impl ViewerRuntimeLiveServer {
                     &request,
                 )?;
             }
-            self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+            self.set_verified_player_gameplay_feedback_for_action(&verified, Some(submitted_action_id), PlayerGameplayRecentFeedback {
                 action: format!("gameplay_action:{}", request.action_id),
                 stage: "submitted".to_string(),
                 effect: format!(
@@ -810,32 +815,36 @@ impl ViewerRuntimeLiveServer {
                 &request,
             )?;
         }
-        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
-            action: format!("gameplay_action:{}", request.action_id),
-            stage: "queued".to_string(),
-            effect: format!(
-                "queued gameplay action {} for {} as runtime action {}",
-                request.action_id, request.target_agent_id, runtime_action_id
-            ),
-            intent_summary: Some(format!(
-                "queue gameplay action {} for {}",
-                request.action_id, request.target_agent_id
-            )),
-            target_agent_id: Some(request.target_agent_id.clone()),
-            reason: None,
-            hint: Some(match request.action_id.as_str() {
-                ACTION_RELEASE_AGENT_CLAIM => {
-                    "advance 1-2 steps to queue the release cooldown for this claim".to_string()
-                }
-                ACTION_CLAIM_STARTER_OC => {
-                    "advance 1-2 steps to credit starter OC, then send your first agent chat"
-                        .to_string()
-                }
-                _ => "advance 1-2 steps to apply the queued gameplay action".to_string(),
-            }),
-            delta_logical_time: 0,
-            delta_event_seq: 0,
-        });
+        self.set_verified_player_gameplay_feedback_for_action(
+            &verified,
+            Some(runtime_action_id),
+            PlayerGameplayRecentFeedback {
+                action: format!("gameplay_action:{}", request.action_id),
+                stage: "queued".to_string(),
+                effect: format!(
+                    "queued gameplay action {} for {} as runtime action {}",
+                    request.action_id, request.target_agent_id, runtime_action_id
+                ),
+                intent_summary: Some(format!(
+                    "queue gameplay action {} for {}",
+                    request.action_id, request.target_agent_id
+                )),
+                target_agent_id: Some(request.target_agent_id.clone()),
+                reason: None,
+                hint: Some(match request.action_id.as_str() {
+                    ACTION_RELEASE_AGENT_CLAIM => {
+                        "advance 1-2 steps to queue the release cooldown for this claim".to_string()
+                    }
+                    ACTION_CLAIM_STARTER_OC => {
+                        "advance 1-2 steps to credit starter OC, then send your first agent chat"
+                            .to_string()
+                    }
+                    _ => "advance 1-2 steps to apply the queued gameplay action".to_string(),
+                }),
+                delta_logical_time: 0,
+                delta_event_seq: 0,
+            },
+        );
 
         Ok(GameplayActionAck {
             consensus_action_payload_hash: None,

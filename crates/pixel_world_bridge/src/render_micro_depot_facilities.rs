@@ -60,6 +60,7 @@ pub(crate) struct PixelWorldMicroDepotThroughputBackingVisual {
 #[derive(Component)]
 pub(crate) struct PixelWorldMicroDepotServiceRadiusVisual {
     pub(crate) id: String,
+    pub(crate) segment: u8,
 }
 
 #[derive(SystemParam)]
@@ -301,6 +302,11 @@ pub(super) fn reconcile_micro_depot_facilities(
         .iter()
         .map(|(entity, visual)| (visual.id.clone(), entity))
         .collect::<HashMap<_, _>>();
+    let service_radius_segments_by_key = overlays
+        .service_radius_outlines
+        .iter()
+        .map(|(entity, visual)| ((visual.id.clone(), visual.segment), entity))
+        .collect::<HashMap<_, _>>();
     let mut active_ids = HashSet::new();
     let mut active_detail_ids = HashSet::new();
     let mut active_runway_segment_keys = HashSet::new();
@@ -308,7 +314,7 @@ pub(super) fn reconcile_micro_depot_facilities(
     let mut active_zero_stock_cross_keys = HashSet::new();
     let mut active_throughput_text_ids = HashSet::new();
     let mut active_throughput_backing_ids = HashSet::new();
-    let mut active_service_radius_ids = HashSet::new();
+    let mut active_service_radius_keys = HashSet::new();
     for facility in &render_state.micro_depot_facilities {
         let Some((color, size, rotation, detail_size)) = facility_glyph(&facility.status) else {
             continue;
@@ -535,36 +541,38 @@ pub(super) fn reconcile_micro_depot_facilities(
                 facility.service_radius_cm / world_bounds.depth_cm.max(1.0) * world_depth_px;
             let points = service_radius_outline_points(canvas_x, canvas_y, radius_x, radius_y);
             let outline_color = Color::srgba(0.35, 0.88, 0.76, SERVICE_RADIUS_ALPHA);
-            active_service_radius_ids.insert(facility.id.clone());
-            // The outline has multiple segments, so it is intentionally not
-            // stored in the one-entity-per-id glyph map. Rebuild its tiny
-            // passive treatment when the camera or published radius changes.
-            for (entity, visual) in overlays.service_radius_outlines.iter() {
-                if visual.id == facility.id {
-                    commands.entity(entity).despawn();
-                }
-            }
             for index in 0..points.len() {
+                let segment = index as u8;
+                let key = (facility.id.clone(), segment);
+                active_service_radius_keys.insert(key.clone());
                 let (from_x, from_y) = points[index];
                 let (to_x, to_y) = points[(index + 1) % points.len()];
                 let length = ((to_x - from_x).powi(2) + (to_y - from_y).powi(2))
                     .sqrt()
                     .max(SERVICE_RADIUS_THICKNESS_PX as f64);
-                commands.spawn((
-                    sprite_for_rect(outline_color, length as f32, SERVICE_RADIUS_THICKNESS_PX),
-                    transform_for_line(
-                        from_x,
-                        from_y,
-                        to_x,
-                        to_y,
-                        width,
-                        height,
-                        SERVICE_RADIUS_LAYER_Z,
-                    ),
-                    PixelWorldMicroDepotServiceRadiusVisual {
-                        id: facility.id.clone(),
-                    },
-                ));
+                let sprite =
+                    sprite_for_rect(outline_color, length as f32, SERVICE_RADIUS_THICKNESS_PX);
+                let transform = transform_for_line(
+                    from_x,
+                    from_y,
+                    to_x,
+                    to_y,
+                    width,
+                    height,
+                    SERVICE_RADIUS_LAYER_Z,
+                );
+                if let Some(entity) = service_radius_segments_by_key.get(&key) {
+                    commands.entity(*entity).insert((sprite, transform));
+                } else {
+                    commands.spawn((
+                        sprite,
+                        transform,
+                        PixelWorldMicroDepotServiceRadiusVisual {
+                            id: facility.id.clone(),
+                            segment,
+                        },
+                    ));
+                }
             }
         }
     }
@@ -599,8 +607,8 @@ pub(super) fn reconcile_micro_depot_facilities(
             commands.entity(entity).despawn();
         }
     }
-    for (entity, visual) in overlays.service_radius_outlines.iter() {
-        if !active_service_radius_ids.contains(&visual.id) {
+    for (key, entity) in service_radius_segments_by_key {
+        if !active_service_radius_keys.contains(&key) {
             commands.entity(entity).despawn();
         }
     }
