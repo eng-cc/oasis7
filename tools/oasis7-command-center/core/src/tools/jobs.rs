@@ -14,6 +14,15 @@ pub struct ToolJob {
     pub observed_at: String,
     pub result: Option<String>,
 }
+/// Match the same ASCII filesystem alias rule used by signer admission only.
+/// Operation IDs and fingerprints always retain exact comparison.
+pub(crate) fn same_reserved_resource(recorded: &str, current: &str) -> bool {
+    if current.starts_with("signer:") {
+        recorded.eq_ignore_ascii_case(current)
+    } else {
+        recorded == current
+    }
+}
 pub struct ToolJobs {
     inner: Mutex<Inner>,
     admission: Mutex<bool>,

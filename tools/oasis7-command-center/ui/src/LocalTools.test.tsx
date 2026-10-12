@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalTools from './LocalTools';
-const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn(),reconcilePrepare:vi.fn(),submit:vi.fn(),snapshot:vi.fn()}));
+const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn(),reconcilePrepare:vi.fn(),submit:vi.fn(),inspect:vi.fn(),snapshot:vi.fn()}));
 vi.mock('./bridge',async importOriginal=>({...await importOriginal<typeof import('./bridge')>(),connected:()=>true,observedTime:(v:string)=>v,contextBridge:api,toolsBridge:api}));
 const binding={id:'bound',bindingVersion:1,root:'/private/context',storeId:'store',projectId:'oasis7',registeredProjectId:'project',name:'private',directoryIdentity:'identity'};
 const metadata={schema_version:'oasis7.context_entry.v1',project_id:'oasis7',id:'machine',kind:'machine',title:'<img src=x onerror=alert(1)>',environment:'local',owner:'human',tags:['preserved'],state:'active',updated_at:'2026-10-12T00:00:00Z',updated_by:'human',verification:null,credential_refs:[{id:'vault',provider:'native',locator:'opaque',usage:'secret reference'}],links:[]};
@@ -14,17 +14,18 @@ describe('private library rendering and conflict handling',()=>{
   it('keeps draft, revision and undisplayed legal metadata after conflict',async()=>{await openEntry();fireEvent.input(screen.getByLabelText('资料正文'),{target:{value:'my unsaved edit'}});fireEvent.click(screen.getByRole('button',{name:'保存资料'}));await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('REVISION_CONFLICT'));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');const request=api.save.mock.calls[0][0];expect(request.expectedRevision).toBe('sha256:original');expect(request.rawText).toContain('opaque');expect(request.rawText).toContain('preserved');expect(request.rawText).toContain('my unsaved edit');api.get.mockResolvedValueOnce({id:'machine',revision:'sha256:new',rawText:raw.replace('evil()','new CLI edit'),metadataJson:JSON.stringify(metadata),verificationState:'unverified'});fireEvent.click(screen.getByRole('button',{name:'比较当前修订与草稿'}));await waitFor(()=>expect(screen.getByLabelText('资料冲突比较')).toHaveTextContent('sha256:new'));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');expect(screen.getByLabelText('资料冲突比较')).toHaveTextContent('opaque');fireEvent.click(screen.getByRole('button',{name:'关闭比较并保留草稿'}));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');});
   it('retains selected library, draft and original binding version across CLI and overview refresh',async()=>{
     await openEntry();
-    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    const refreshButton=screen.getByRole('button',{name:'检查本机事实'});
+    await waitFor(()=>expect(refreshButton).not.toBeDisabled());
     fireEvent.input(screen.getByLabelText('资料正文'),{target:{value:'draft pinned to original binding'}});
     api.installCli.mockResolvedValue({path:'/tools/context'});
     api.bindings.mockResolvedValue([{...binding,bindingVersion:2}]);
     fireEvent.click(screen.getByRole('button',{name:'从本 App 启用资料 CLI'}));
-    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    await waitFor(()=>expect(refreshButton).not.toBeDisabled());
     expect(screen.getByLabelText('资料库')).toHaveValue('bound');
     expect(screen.getByLabelText('资料正文')).toHaveValue('draft pinned to original binding');
-    fireEvent.click(screen.getByRole('button',{name:'检查本机事实'}));
+    fireEvent.click(refreshButton);
     await waitFor(()=>expect(api.bindings).toHaveBeenCalledTimes(3));
-    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    await waitFor(()=>expect(refreshButton).not.toBeDisabled());
     expect(screen.getByLabelText('资料库')).toHaveValue('bound');
     expect(screen.getByLabelText('资料正文')).toHaveValue('draft pinned to original binding');
     expect(api.get).toHaveBeenCalledTimes(1);
@@ -112,5 +113,58 @@ describe('restore without a source library',()=>{
     const restore=screen.getByRole('button',{name:'从加密快照恢复新资料库'});expect(restore).not.toBeDisabled();fireEvent.click(restore);
     await waitFor(()=>expect(api.snapshot).toHaveBeenCalledWith('restore',null,'fresh-secret','restored-library',[]));
     expect(screen.getByLabelText('快照口令')).toHaveValue('');
+  });
+});
+
+describe('new signing request after verified completion',()=>{
+  const prepared={job_id:'original-job',prepared_fingerprint:'original-frozen-identity',file_sha256:'file-digest',payload_sha256:'payload-digest',operation_key:'original-key',work_dir:'/original/job',result:{status:'PREPARED'}};
+  const committed={command:'inspect',status:'committed',error_code:null};
+  it('requires an original verified receipt before clearing and uses fresh operation IDs for the next request',async()=>{
+    api.prepare.mockResolvedValueOnce(prepared);api.submit.mockResolvedValue({status:'committed'});api.inspect.mockResolvedValueOnce(committed);
+    await fillSigning();fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'提交此请求'})).not.toBeDisabled());
+    const originalPrepare=api.prepare.mock.calls[0][1];
+    fireEvent.click(screen.getByRole('button',{name:'提交此请求'}));
+    await waitFor(()=>expect(api.submit).toHaveBeenCalledTimes(1));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'核对原 Job 结果'})).not.toBeDisabled());
+    const originalSubmit=api.submit.mock.calls[0][2];
+    expect(screen.getByRole('button',{name:'开始新的签名请求'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'核对原 Job 结果'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'开始新的签名请求'})).not.toBeDisabled());
+    expect(api.inspect).toHaveBeenCalledWith('original-job','original-frozen-identity');
+    expect(screen.getByLabelText('签名 Job ID')).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'开始新的签名请求'}));
+    expect(screen.getByLabelText('签名 Job ID')).toHaveValue('');expect(screen.getByLabelText('签名 Job ID')).not.toBeDisabled();
+    expect(screen.getByLabelText('签名身份')).toHaveValue('');expect(screen.getByLabelText('实际 grant ID')).toHaveValue('');expect(screen.getByLabelText('完整签名上下文')).toHaveValue('');
+    expect(screen.getByRole('button',{name:'提交此请求'})).toBeDisabled();
+    api.chooseFile.mockResolvedValueOnce('/next/source');fireEvent.click(screen.getByRole('button',{name:'选择待签名文件'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    fireEvent.input(screen.getByLabelText('签名 Job ID'),{target:{value:'next-job'}});fireEvent.input(screen.getByLabelText('签名身份'),{target:{value:'next-signer'}});fireEvent.input(screen.getByLabelText('实际 grant ID'),{target:{value:'next-grant'}});fireEvent.input(screen.getByLabelText('完整签名上下文'),{target:{value:'{}'}});
+    api.prepare.mockResolvedValueOnce({...prepared,job_id:'next-job',prepared_fingerprint:'next-identity'});
+    fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(api.prepare).toHaveBeenCalledTimes(2));
+    expect(api.prepare.mock.calls[1][1]).not.toBe(originalPrepare);
+    await waitFor(()=>expect(screen.getByRole('button',{name:'提交此请求'})).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button',{name:'提交此请求'}));await waitFor(()=>expect(api.submit).toHaveBeenCalledTimes(2));
+    expect(api.submit.mock.calls[1][2]).not.toBe(originalSubmit);expect(api.submit.mock.calls[1].slice(0,2)).toEqual(['next-job','next-identity']);
+  });
+  it('keeps reserved, malformed, failed and lost inspection outcomes frozen',async()=>{
+    api.prepare.mockResolvedValueOnce(prepared);await fillSigning();fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'提交此请求'})).not.toBeDisabled());
+    for(const receipt of [{command:'inspect',status:'reserved',error_code:null},{status:'committed',error_code:null},{command:'inspect',status:'committed',error_code:'ERROR'}]){
+      api.inspect.mockResolvedValueOnce(receipt);fireEvent.click(screen.getByRole('button',{name:'核对原 Job 结果'}));
+      await waitFor(()=>expect(screen.getByRole('button',{name:'核对原 Job 结果'})).not.toBeDisabled());
+      expect(screen.getByRole('button',{name:'开始新的签名请求'})).toBeDisabled();expect(screen.getByLabelText('签名 Job ID')).toBeDisabled();
+    }
+    api.inspect.mockRejectedValueOnce(new Error('lost response'));fireEvent.click(screen.getByRole('button',{name:'核对原 Job 结果'}));
+    await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('lost response'));
+    expect(screen.getByRole('button',{name:'开始新的签名请求'})).toBeDisabled();expect(screen.getByLabelText('签名 Job ID')).toHaveValue('original-job');
+  });
+  it('cannot clear an unknown preparation with a generic committed inspection',async()=>{
+    api.prepare.mockRejectedValueOnce(new Error('lost prepare'));api.inspect.mockResolvedValueOnce(committed);
+    await fillSigning();fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(screen.getByText(/无法确认本次准备是否产生副作用/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button',{name:'核对原 Job 结果'}));await waitFor(()=>expect(api.inspect).toHaveBeenCalled());
+    expect(screen.getByRole('button',{name:'开始新的签名请求'})).toBeDisabled();expect(screen.getByLabelText('签名 Job ID')).toBeDisabled();
   });
 });

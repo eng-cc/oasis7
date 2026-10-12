@@ -108,7 +108,7 @@ export const toolsBridge = {
   chooseFile: () => call<string | null>('tool_choose_file'),
   prepare: (input: FileSignInput, operationId: string) => call<FileSignPrepared>('tool_file_prepare', { input, operationId }),
   submit: (jobId: string, expectedPreparedFingerprint: string, operationId: string) => call<unknown>('tool_signer_submit', { jobId, expectedPreparedFingerprint, operationId }),
-  inspect: (jobId: string) => call<unknown>('tool_signer_inspect', { jobId }),
+  inspect: (jobId: string, expectedPreparedFingerprint?: string) => call<unknown>('tool_signer_inspect', { jobId, expectedPreparedFingerprint: expectedPreparedFingerprint??null }),
   installCli: () => call<import('./generated/core').CliInstallation>('tool_cli_install', { operationId: crypto.randomUUID() }),
   verify: (filePath: string, context: unknown, expectedPublicKey: number[], signature: number[]) => call<boolean>('tool_file_verify', { filePath, context, expectedPublicKey, signature }),
 };

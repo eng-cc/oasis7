@@ -263,10 +263,12 @@ pub async fn tool_signer_submit(
 pub async fn tool_signer_inspect(
     host: State<'_, ToolHost>,
     job_id: String,
+    expected_prepared_fingerprint: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let jobs = host.jobs.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        tools::reconcile_signer_job(&jobs, &job_id).map_err(|e| e.to_string())
+        tools::reconcile_signer_job(&jobs, &job_id, expected_prepared_fingerprint.as_deref())
+            .map_err(|e| e.to_string())
     })
     .await
     .map_err(|_| "Inspection did not complete".to_string())?

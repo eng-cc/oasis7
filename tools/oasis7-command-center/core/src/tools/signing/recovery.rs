@@ -2,8 +2,11 @@ use super::*;
 
 /// Reconcile only the original submitted identity. Missing/reserved observations do
 /// not prove no eventual effect and deliberately retain the unknown reservation.
-pub fn reconcile_signer_job(jobs: &jobs::ToolJobs, job_id: &str) -> Result<serde_json::Value> {
-    let (resource, fingerprint) = frozen_job_identity(job_id, false)?;
+pub fn reconcile_signer_job(
+    jobs: &jobs::ToolJobs,
+    job_id: &str,
+    expected_fingerprint: Option<&str>,
+) -> Result<serde_json::Value> {
     let (cfg, _) = binding()?;
     let directory = oasis7_local_signer::job::JobDirectory::open(
         &cfg,
@@ -13,6 +16,9 @@ pub fn reconcile_signer_job(jobs: &jobs::ToolJobs, job_id: &str) -> Result<serde
     )
     .map_err(invalid)?;
     let prepared = read_prepared(&directory)?;
+    let source = read_source_evidence(&directory, &prepared, false)?;
+    let (resource, fingerprint) = prepared_identity(job_id, &cfg, &prepared, &source)?;
+    require_expected_inspection(&fingerprint, expected_fingerprint)?;
     let result = signer_action("inspect", Some(job_id))?;
     let response: protocol::IpcResponse = serde_json::from_value(result.clone())?;
     if let protocol::IpcResponse::Inspect(response) = response {
@@ -42,25 +48,51 @@ pub fn reconcile_signer_job(jobs: &jobs::ToolJobs, job_id: &str) -> Result<serde
                     "Committed observation does not bind original payload/audit",
                 ));
             }
-            for job in jobs.list()? {
-                if job.resource == resource && job.kind == "submit" && job.state == "unknown" {
-                    if job.fingerprint != fingerprint {
-                        return Err(invalid(
-                            "Original submitted fingerprint differs; retain unknown",
-                        ));
-                    }
-                    jobs.finish(
-                        &job.id,
-                        "succeeded",
-                        Some("Original request committed; verified inspect receipt"),
-                    )?;
-                }
-            }
+            finish_committed_submissions(jobs, &resource, &fingerprint)?;
         }
     } else {
         return Err(invalid("Expected original request inspection"));
     }
     Ok(result)
+}
+
+fn require_expected_inspection(actual: &str, expected: Option<&str>) -> Result<()> {
+    if expected.is_some_and(|value| value != actual) {
+        return Err(invalid(
+            "Inspected Job differs from original prepared preview",
+        ));
+    }
+    Ok(())
+}
+
+fn finish_committed_submissions(
+    jobs: &jobs::ToolJobs,
+    resource: &str,
+    fingerprint: &str,
+) -> Result<()> {
+    let matching: Vec<_> = jobs
+        .list()?
+        .into_iter()
+        .filter(|job| {
+            jobs::same_reserved_resource(&job.resource, resource)
+                && job.kind == "submit"
+                && job.state == "unknown"
+        })
+        .collect();
+    // Check every matched immutable record before changing any of their states.
+    if matching.iter().any(|job| job.fingerprint != fingerprint) {
+        return Err(invalid(
+            "Original submitted fingerprint differs; retain unknown",
+        ));
+    }
+    for job in matching {
+        jobs.finish(
+            &job.id,
+            "succeeded",
+            Some("Original request committed; verified inspect receipt"),
+        )?;
+    }
+    Ok(())
 }
 
 pub fn reconcile_file_prepare(
@@ -155,6 +187,45 @@ fn validate_prepare_operation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inspection_reset_receipt_requires_original_preview_identity() {
+        assert!(require_expected_inspection("original", Some("original")).is_ok());
+        assert!(require_expected_inspection("replacement", Some("original")).is_err());
+        assert!(require_expected_inspection("original", None).is_ok());
+    }
+    #[test]
+    fn verified_receipt_resolves_original_ascii_alias_only_with_exact_fingerprint() {
+        let jobs = jobs::ToolJobs::open(":memory:").unwrap();
+        jobs.admit("original", "frozen", "signer:install:JobOne", "submit")
+            .unwrap();
+        jobs.finish("original", "unknown", None).unwrap();
+        assert!(
+            finish_committed_submissions(&jobs, "signer:install:jobone", "replacement").is_err()
+        );
+        assert_eq!(jobs.list().unwrap()[0].state, "unknown");
+        finish_committed_submissions(&jobs, "signer:install:jobone", "frozen").unwrap();
+        assert_eq!(jobs.list().unwrap()[0].state, "succeeded");
+        assert!(!jobs.quit_pending().unwrap());
+        jobs.admit(
+            "next-explicit",
+            "next-frozen",
+            "signer:install:jobone",
+            "submit",
+        )
+        .unwrap();
+
+        let ordinary = jobs::ToolJobs::open(":memory:").unwrap();
+        ordinary
+            .admit("ordinary", "frozen", "context:Library", "submit")
+            .unwrap();
+        ordinary.finish("ordinary", "unknown", None).unwrap();
+        finish_committed_submissions(&ordinary, "context:library", "frozen").unwrap();
+        assert_eq!(ordinary.list().unwrap()[0].state, "unknown");
+        assert!(!jobs::same_reserved_resource(
+            "signer:install:JobÉ",
+            "signer:install:jobé"
+        ));
+    }
     #[test]
     fn recovery_requires_exact_original_operation_and_quiescent_state() {
         let jobs = jobs::ToolJobs::open(":memory:").unwrap();
