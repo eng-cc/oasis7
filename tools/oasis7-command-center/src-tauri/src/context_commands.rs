@@ -63,9 +63,9 @@ pub async fn context_choose_library(
             .dialog()
             .file()
             .set_title(if create {
-                "Choose independent EMPTY library directory"
+                "选择独立的空资料库目录"
             } else {
-                "Connect independent library directory"
+                "连接独立的资料库目录"
             })
             .blocking_pick_folder()
     })
@@ -314,7 +314,7 @@ pub async fn context_snapshot_export(
         handle
             .dialog()
             .file()
-            .set_title("Save encrypted private snapshot")
+            .set_title("保存私有资料加密快照")
             .set_file_name("context-snapshot.enc")
             .blocking_save_file()
     })
@@ -384,7 +384,7 @@ pub async fn context_snapshot_inspect(
         let Some(file) = handle
             .dialog()
             .file()
-            .set_title("Inspect encrypted private snapshot")
+            .set_title("检查私有资料加密快照")
             .blocking_pick_file()
         else {
             return Ok(None);
@@ -431,7 +431,7 @@ pub async fn context_snapshot_restore(
         let Some(file) = handle
             .dialog()
             .file()
-            .set_title("Restore encrypted private snapshot")
+            .set_title("选择待恢复的私有资料加密快照")
             .blocking_pick_file()
         else {
             return Ok::<_, String>(None);
@@ -439,7 +439,7 @@ pub async fn context_snapshot_restore(
         let Some(parent) = handle
             .dialog()
             .file()
-            .set_title("Select parent for NEW restored library")
+            .set_title("选择新资料库目录的父目录")
             .blocking_pick_folder()
         else {
             return Ok(None);

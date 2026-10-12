@@ -174,7 +174,7 @@ pub async fn tool_signer_submit(
     })
     .await
     .map_err(|_| "Job identity did not complete")??;
-    if fingerprint!=expected_prepared_fingerprint {
+    if fingerprint != expected_prepared_fingerprint {
         return Err("当前 Job 与预览的请求不同，请重新核对；未提交".into());
     }
     let expected = expected_prepared_fingerprint;

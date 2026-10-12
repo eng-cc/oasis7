@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalTools from './LocalTools';
-const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn()}));
+const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn()}));
 vi.mock('./bridge',()=>({connected:()=>true,errorMessage:(e:unknown)=>String(e),observedTime:(v:string)=>v,contextBridge:api,toolsBridge:api}));
 const binding={id:'bound',bindingVersion:1,root:'/private/context',storeId:'store',projectId:'oasis7',registeredProjectId:'project',name:'private',directoryIdentity:'identity'};
 const metadata={schema_version:'oasis7.context_entry.v1',project_id:'oasis7',id:'machine',kind:'machine',title:'<img src=x onerror=alert(1)>',environment:'local',owner:'human',tags:['preserved'],state:'active',updated_at:'2026-10-12T00:00:00Z',updated_by:'human',verification:null,credential_refs:[{id:'vault',provider:'native',locator:'opaque',usage:'secret reference'}],links:[]};
@@ -12,4 +12,30 @@ async function openEntry(){render(()=> <LocalTools/>);await waitFor(()=>expect(s
 describe('private library rendering and conflict handling',()=>{
   it('renders malicious titles and bodies as inert text',async()=>{await openEntry();expect(document.querySelector('img')).toBeNull();expect(document.querySelector('script')).toBeNull();expect(screen.getByLabelText('资料名称')).toHaveValue(metadata.title);});
   it('keeps draft, revision and undisplayed legal metadata after conflict',async()=>{await openEntry();fireEvent.input(screen.getByLabelText('资料正文'),{target:{value:'my unsaved edit'}});fireEvent.click(screen.getByRole('button',{name:'保存资料'}));await waitFor(()=>expect(screen.getByRole('status')).toHaveTextContent('REVISION_CONFLICT'));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');const request=api.save.mock.calls[0][0];expect(request.expectedRevision).toBe('sha256:original');expect(request.rawText).toContain('opaque');expect(request.rawText).toContain('preserved');expect(request.rawText).toContain('my unsaved edit');api.get.mockResolvedValueOnce({id:'machine',revision:'sha256:new',rawText:raw.replace('evil()','new CLI edit'),metadataJson:JSON.stringify(metadata),verificationState:'unverified'});fireEvent.click(screen.getByRole('button',{name:'比较当前修订与草稿'}));await waitFor(()=>expect(screen.getByLabelText('资料冲突比较')).toHaveTextContent('sha256:new'));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');expect(screen.getByLabelText('资料冲突比较')).toHaveTextContent('opaque');fireEvent.click(screen.getByRole('button',{name:'关闭比较并保留草稿'}));expect(screen.getByLabelText('资料正文')).toHaveValue('my unsaved edit');});
+  it('retains selected library, draft and original binding version across CLI and overview refresh',async()=>{
+    await openEntry();
+    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    fireEvent.input(screen.getByLabelText('资料正文'),{target:{value:'draft pinned to original binding'}});
+    api.installCli.mockResolvedValue({path:'/tools/context'});
+    api.bindings.mockResolvedValue([{...binding,bindingVersion:2}]);
+    fireEvent.click(screen.getByRole('button',{name:'从本 App 启用资料 CLI'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    expect(screen.getByLabelText('资料库')).toHaveValue('bound');
+    expect(screen.getByLabelText('资料正文')).toHaveValue('draft pinned to original binding');
+    fireEvent.click(screen.getByRole('button',{name:'检查本机事实'}));
+    await waitFor(()=>expect(api.bindings).toHaveBeenCalledTimes(3));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    expect(screen.getByLabelText('资料库')).toHaveValue('bound');
+    expect(screen.getByLabelText('资料正文')).toHaveValue('draft pinned to original binding');
+    expect(api.get).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button',{name:'保存资料'}));
+    await waitFor(()=>expect(api.save).toHaveBeenCalled());
+    expect(api.save.mock.calls[0][0].bindingVersion).toBe(1);
+  });
+  it('localizes normal signer diagnostics while retaining the actual diagnostic in details',async()=>{
+    api.signer.mockResolvedValue({state:'needs_configuration',reason:'App is not the bound ordinary caller'});
+    render(()=> <LocalTools/>);
+    await waitFor(()=>expect(screen.getByText('当前 App 用户尚未绑定为签名调用者。')).toBeInTheDocument());
+    expect(screen.getByText(/App is not the bound ordinary caller/).closest('details')).not.toBeNull();
+  });
 });
