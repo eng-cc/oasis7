@@ -49,6 +49,7 @@ fn control(r: &GameGoalPrepareV1) -> GameTaskControlV1 {
         task_status: GameTaskStatusV1::Suspended,
         latest_goal_revision: r.expected_latest_goal_revision,
         active_goal_revision: DecimalU64(0),
+        active_goal_reference: None,
         executor_epoch: DecimalU64(0),
         executor_id: None,
         created_operation_id: "create".into(),

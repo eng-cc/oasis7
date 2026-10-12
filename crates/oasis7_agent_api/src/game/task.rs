@@ -62,6 +62,8 @@ pub struct GameTaskControlV1 {
     pub task_status: GameTaskStatusV1,
     pub latest_goal_revision: DecimalU64,
     pub active_goal_revision: DecimalU64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_goal_reference: Option<super::GameGoalReferenceV1>,
     pub executor_epoch: DecimalU64,
     pub executor_id: Option<String>,
     pub created_operation_id: String,

@@ -29,7 +29,20 @@ Game Task 创建复用既有签名 World Service submit/lookup 与 Runtime 共�
 
 任务控制的唯一权威是已提交的 `world_service_results` canonical receipt，沿用现有日志与快照恢复边界。没有第二套 gateway 内存任务表；相同操作标识重放复用原回执，同键不同内容发生关联冲突，同一 Agent 当前 owner/world fence 下的重复创建被拒绝，包括同块多个创建。服务返回 volatile Received 时尚不构成任务持久化或 Game pending；响应丢失后保留原签名 payload/correlation 查询，只有 committed canonical receipt 才能证明任务创建。
 
-`GET /v1/game/worlds/{world}/agents/{agent}/task-control` 通过原设备读签名返回当前 owner 的控制记录及 committed `world_binding`，没有可见任务时返回 `404 task_control_unavailable`。普通 delegate 的 Agent 观察权限不授予任务读取权限。控制记录初始 `suspended`，目标 revision 为零、executor epoch 为零且没有执行方；此记录不是完整 TaskSnapshot 或可行动 context，也不把已有 owner chat goal 当作任务目标。目标内容、执行方绑定与行动权限仍需要后续实施。
+`GET /v1/game/worlds/{world}/agents/{agent}/task-control` 通过原设备读签名返回当前 owner 的控制记录及 committed `world_binding`，没有可见任务时返回 `404 task_control_unavailable`。普通 delegate 的 Agent 观察权限不授予任务读取权限。控制记录初始 `suspended`，目标 revision 为零、executor epoch 为零且没有执行方；发布目标后附带 public-only `active_goal_reference`（版本、不透明承诺、准备/发布操作标识和激活 committed height）。读取 bootstrap schema revision 3 描述该可选字段，旧初始记录仍省略它。任务保持 `suspended`；此记录不是完整 TaskSnapshot 或可行动 context，也不把已有 owner chat goal 当作任务目标。
+
+### 已实施切片：owner 目标准备、发布与当前正文回读
+
+这段流使用原生 World Service，不提前开放 Game HTTP 写路由或 token 会话。默认关闭的私有准备与回读端点、operator 密钥配置、单记录幂等和不可枚举的 salted commitment 见[协作合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。`oasis7::world_service::private_goal_read` 导出路径、请求/响应及 owner 客户端验证方法。
+
+1. owner 保留原 `SignedGoalPrepareV1`，POST `/v1/world/private-goal/prepare`；服务验证当前 owner/world/history/task，再保存完整密文 proof。同操作重试返回原 `PreparedGoalReceiptV1`，同操作异内容为 409，不重新生成目标引用。该 HTTP 入口要求 operator 同时配置独立私有目录和 mode-0600 的精确 32 字节密钥文件，实际监听 IP 仅限 loopback。
+2. 客户端调用 `verify_prepare_response(original, response, configured_service_key)`，再 `publication(original, receipt, publish_operation_id)`；检查原意图、重算私有盐承诺后，使用 `game_goal_publish/v1` 签署 public-only `GameGoalPublishV1`。正文、正文摘要、私有 proof/签名和盐均不进入公开 payload。
+3. `WorldServicePayloadV1::GameGoalPublish` 经原 `/v1/world/submit` 提交；响应未知时只查询或重投原 payload/correlation。Received 不代表激活，canonical committed receipt 才推进 task/latest/active goal revision。共识只检验公共 owner 签名和前驱控制，不查询节点私有正文；同块前驱、版本冲突和恢复后的控制链都进行确定性验证。
+4. owner 以 `/v1/world/private-goal/current` domain 签署 `SignedReadRequest<CurrentGoalRequest>` 并 POST 同路径。返回带受信服务签名的 `CurrentGoalResponse`，包含当前控制、当前读取 CommitRef、真实历史激活 CommitRef 和完整私有准备记录。`verify_current_response` 验证请求关联、服务信任、owner/history、目标版本、proof 和盐承诺。已激活但正文缺失/损坏返回 503 recovery_required，不能以 active_goal=null 冒充完整目标；只有确实无激活目标才返回 null。
+
+`RemoteWorldServiceClient::prepare_goal` 与 `read_current_goal` 执行上述原证明、请求关联和配置服务签名校验，使用独立禁用代理和重定向的客户端；发送前拒绝弱或非规范服务公钥，只接受 HTTPS 或 literal loopback IP HTTP，响应上限为配置值与 64 KiB 的较小值。明文 loopback HTTP 仅支持所有可监听本机端口的进程均受信的 operator host，不支持不受信的其他本机用户；它不会在发送正文前认证对端，服务签名只验证回复。需要不受信多用户隔离时必须使用发送前验证服务端的 TLS 或等效传输，TLS 入口不得转发可公开访问的明文私有端点。
+
+私有服务在读取前及交付前重验当前控制和分支；owner 失效为 403，操作或版本竞态为 409，恢复问题为 503。query、Origin、Authorization 与转发 header 均拒绝，响应禁止缓存。私有存储需独立备份密钥、验证记录与密文；不声明跨节点私有恢复。该切片交付 owner 目标控制与回读，仍不提供完整 TaskSnapshot、executor/Context、采纳确认或目标驱动的实际决策，也不表示首局/真实 Runtime 实玩已经通过。
 
 ## 1. 问题、目标与非目标
 

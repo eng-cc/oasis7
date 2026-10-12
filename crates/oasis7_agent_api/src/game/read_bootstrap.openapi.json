@@ -7,7 +7,7 @@
     "description": "Implemented opt-in loopback HTTP read contract. Disabled by default. No pairing, tokens, contexts, actions or operations are available."
   },
   "x-oasis7-api-revision": 1,
-  "x-oasis7-schema-revision": 2,
+  "x-oasis7-schema-revision": 3,
   "x-oasis7-limits": {
     "max_proof_header_bytes": 8192,
     "max_http_header_bytes": 16384,
@@ -660,7 +660,7 @@
             "const": false
           },
           "schema_revision": {
-            "const": 2
+            "const": 3
           },
           "openapi_url": {
             "const": "/v1/game/openapi.json"
@@ -783,6 +783,9 @@
           },
           "executor_id": {
             "type": "null"
+          },
+          "active_goal_reference": {
+            "$ref": "#/components/schemas/GoalReference"
           }
         },
         "required": [
@@ -804,7 +807,43 @@
           "task_status",
           "executor_id"
         ],
-        "description": "Current canonical owner-only initial task control; no goal content, executor authority or action permission."
+        "description": "Current canonical owner-only task control. A published goal adds its opaque reference; the task remains suspended without executor authority or action permission. Private content, salt, proof and digest are never included."
+      },
+      "GoalReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "goal_revision": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "goal_ref": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "prepare_operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "publish_operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "activation_committed_height": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          }
+        },
+        "required": [
+          "goal_revision",
+          "goal_ref",
+          "prepare_operation_id",
+          "publish_operation_id",
+          "activation_committed_height"
+        ],
+        "description": "Public owner-signed activation metadata. The opaque reference is a private-salt commitment; salt, complete goal and body-bound signature remain private. Committed height locates historical activation; it is not a standalone finality proof."
       }
     }
   }
