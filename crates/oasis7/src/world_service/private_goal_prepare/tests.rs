@@ -210,3 +210,57 @@ fn private_goal_prepare_all_metadata_fields_are_signed_and_envelope_has_no_debug
     impl<T: ?Sized + std::fmt::Debug> AmbiguousIfDebug<u8> for T {}
     let _ = <SignedGoalPrepareV1 as AmbiguousIfDebug<_>>::marker;
 }
+
+#[test]
+fn private_goal_prepare_rejects_low_order_owner_and_identity_signature() {
+    // Edwards identity encoding and R=identity/S=zero require no owner secret.
+    // Ordinary dalek verify accepts this for arbitrary messages; private proofs
+    // must reject it even when the trusted control names that owner key.
+    let identity = "01".to_owned() + &"00".repeat(31);
+    let signature = identity.clone() + &"00".repeat(32);
+    for goal in [
+        "original private goal",
+        "arbitrary substituted private goal",
+    ] {
+        let mut r = request();
+        r.owner_public_key = identity.clone();
+        r.content.goal_text = goal.into();
+        r.goal_digest = game_goal_version_digest(&r.task_id, r.goal_revision, &r.content).unwrap();
+        r.validate().unwrap();
+        let trusted = control(&r);
+        let forged = SignedGoalPrepareV1 {
+            request: r,
+            subject_public_key: identity.clone(),
+            signature_hex: signature.clone(),
+        };
+        assert!(
+            forged.verify().is_err(),
+            "low-order owner must not authenticate arbitrary goal bodies"
+        );
+        assert!(forged.validate_against(&trusted).is_err());
+    }
+}
+
+#[test]
+fn private_goal_prepare_rejects_small_order_r_for_nonweak_owner() {
+    let r = request();
+    let public_key: [u8; 32] = hex::decode(&r.owner_public_key)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert!(
+        !ed25519_dalek::VerifyingKey::from_bytes(&public_key)
+            .unwrap()
+            .is_weak()
+    );
+    let forged = SignedGoalPrepareV1 {
+        subject_public_key: r.owner_public_key.clone(),
+        request: r,
+        signature_hex: "01".to_owned() + &"00".repeat(63),
+    };
+    // This negative vector also fails ordinary verification. The separate
+    // weak-owner regression demonstrates the original acceptance bug; the
+    // production verify_strict call additionally rejects all small-order R.
+    assert!(forged.verify().is_err());
+    assert!(forged.validate_against(&control(&forged.request)).is_err());
+}

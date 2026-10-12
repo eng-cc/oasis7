@@ -1,5 +1,6 @@
 //! Private proof codec only: no HTTP, storage, public intent or activation.
-use super::{SignedReadRequest, sign_read_request, verify_read_request};
+use super::{sign_read_request, signing_bytes};
+use ed25519_dalek::{Signature, VerifyingKey};
 use oasis7_agent_api::game::{GAME_GOAL_PREPARE_DOMAIN, GameGoalPrepareV1, GameTaskControlV1};
 use serde::{Deserialize, Serialize};
 
@@ -43,14 +44,26 @@ impl SignedGoalPrepareV1 {
         {
             return Err("invalid private goal signature envelope".into());
         }
-        verify_read_request(
-            GAME_GOAL_PREPARE_DOMAIN,
-            &SignedReadRequest {
-                request: &self.request,
-                subject_public_key: self.subject_public_key.clone(),
-                signature_hex: self.signature_hex.clone(),
-            },
+        let public_key: [u8; 32] = hex::decode(&self.subject_public_key)
+            .map_err(|_| "invalid private goal owner key")?
+            .try_into()
+            .map_err(|_| "invalid private goal owner key")?;
+        let key =
+            VerifyingKey::from_bytes(&public_key).map_err(|_| "invalid private goal owner key")?;
+        if key.is_weak() {
+            return Err("weak private goal owner key".into());
+        }
+        let signature: [u8; 64] = hex::decode(&self.signature_hex)
+            .map_err(|_| "invalid private goal signature")?
+            .try_into()
+            .map_err(|_| "invalid private goal signature")?;
+        // This private owner boundary requires strict Ed25519 verification,
+        // including canonical scalar/point encodings and non-small-order R.
+        key.verify_strict(
+            &signing_bytes(GAME_GOAL_PREPARE_DOMAIN, &self.request)?,
+            &Signature::from_bytes(&signature),
         )
+        .map_err(|_| "invalid private goal owner signature".into())
     }
 
     /// Caller must obtain this control from freshly authenticated canonical
