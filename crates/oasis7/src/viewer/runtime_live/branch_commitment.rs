@@ -120,7 +120,7 @@ pub(super) fn branch_recommendations(
         commitment(
             "schedule_recipe_assembler_module_rack",
             "Produce a module rack",
-            "Create a governance-stage finished component.",
+            "Create a durable component for the local specialist production route.",
             "The next beat shifts toward assembling durable industrial modules.",
             [
                 "Allocate advanced assembler inputs to complete a durable module rack.",
@@ -150,7 +150,7 @@ pub(super) fn branch_recommendations(
                 "Reserve the smelter queue and iron inputs for another alloy plate.",
                 "Use the renewed alloy supply to choose among the next advanced recipes.",
             ],
-            "Uses the smelter queue and iron inputs without automatically advancing governance.",
+            "Uses the smelter queue and iron inputs before the next advanced recipe can run.",
             "Return to inspect the alloy output and choose the next advanced recipe.",
         ),
     ];
@@ -195,6 +195,73 @@ pub(super) fn effective_branch_stage_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn regional_specialist_recommendations_keep_enabled_industrial_routes() {
+        let action_ids = [
+            "schedule_recipe_assembler_module_rack",
+            "schedule_recipe_assembler_factory_core",
+            "schedule_recipe_smelter_alloy_plate",
+        ];
+        let mut actions: Vec<_> = action_ids
+            .iter()
+            .map(|action_id| PlayerGameplayAction {
+                action_id: (*action_id).to_string(),
+                label: "Industrial route".to_string(),
+                protocol_action: "gameplay_action.submit".to_string(),
+                target_agent_id: None,
+                disabled_reason: None,
+            })
+            .collect();
+        let recommendations = branch_recommendations(
+            IndustryStage::Governance,
+            PlayerGameplayStageStatus::BranchReady,
+            &actions,
+        );
+        assert_eq!(
+            recommendations
+                .iter()
+                .map(|item| item.action_id.as_str())
+                .collect::<Vec<_>>(),
+            action_ids,
+        );
+        for recommendation in &recommendations {
+            let mut copy = vec![
+                recommendation.route_label.as_str(),
+                recommendation.immediate_gain.as_str(),
+                recommendation.future_beat_changed.as_str(),
+                recommendation.risk_or_lockin.as_str(),
+                recommendation.next_session_hook.as_str(),
+            ];
+            copy.extend(recommendation.future_beats.iter().map(String::as_str));
+            let copy = copy.join(" ").to_lowercase();
+            for unsupported_stage in ["governance", "conflict"] {
+                assert!(
+                    !copy.contains(unsupported_stage),
+                    "regional-specialist branch must not imply {unsupported_stage}: {copy}",
+                );
+            }
+            let delivery = recommendation
+                .first_delivery_preview
+                .as_ref()
+                .expect("industrial branch must explain its local purpose");
+            assert!(delivery.local_need.to_lowercase().contains("regional"));
+        }
+
+        actions[0].disabled_reason = Some("missing advanced inputs".to_string());
+        let recommendations = branch_recommendations(
+            IndustryStage::Governance,
+            PlayerGameplayStageStatus::BranchReady,
+            &actions,
+        );
+        assert_eq!(
+            recommendations
+                .iter()
+                .map(|item| item.action_id.as_str())
+                .collect::<Vec<_>>(),
+            action_ids[1..],
+        );
+    }
 
     #[test]
     fn branch_ready_stays_discoverable_when_every_published_candidate_is_disabled() {

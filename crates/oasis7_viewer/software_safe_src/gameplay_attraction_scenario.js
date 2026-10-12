@@ -5,6 +5,7 @@ import {
   TASK_GAME_076_BEATS,
   TASK_GAME_076_SCENARIO_VERSION,
 } from "./gameplay_attraction_fixture_data.js";
+import { fixtureRollbackQuote, fixtureRollbackWindowConsistent } from "./gameplay_attraction_fixture_rollback.js";
 
 export { TASK_GAME_076_BEATS, TASK_GAME_076_SCENARIO_VERSION } from "./gameplay_attraction_fixture_data.js";
 
@@ -297,6 +298,7 @@ function defaultAttractionSamples() {
         task_game_076_scenario: {
           version: TASK_GAME_076_SCENARIO_VERSION,
           variant: "first_visible_output",
+          route_phase: "before_incident_recovery",
           provenance: "deterministic_provider_backed",
           provider_mode: "deterministic_provider_backed",
           content_profile: {
@@ -327,11 +329,6 @@ function defaultAttractionSamples() {
             output_delta: 1,
             risk_delta: -2,
             stability_delta: 3,
-            rollback_available: true,
-            rollback_deadline_beat: "Rollback is available until incident recovery begins.",
-            rollback_cost_summary: "Spend 1 action and give up 1 stability to reopen the route choice.",
-            rollback_kept_benefit: "Keep the Starter Batch: Alloy Plate x3 already produced.",
-            rollback_lost_benefit: "Lose the stabilized line's lower jam risk for the next incident.",
             affected_future_beats: ["micro_commission", "incident_recovery", "return_package"],
             next_commission_modifier: "starter_batch requires 1 less recovery step",
             incident_risk_modifier: "input jam risk lowered; output pace slower",
@@ -371,6 +368,7 @@ function defaultAttractionSamples() {
         task_game_076_scenario: {
           version: TASK_GAME_076_SCENARIO_VERSION,
           variant: "incident_recovery",
+          route_phase: "repair_completed",
           provenance: "deterministic_provider_backed",
           provider_mode: "deterministic_provider_backed",
           content_profile: {
@@ -432,6 +430,7 @@ function defaultAttractionSamples() {
         task_game_076_scenario: {
           version: TASK_GAME_076_SCENARIO_VERSION,
           variant: "opportunity_scan",
+          route_phase: "repair_completed",
           provenance: "deterministic_provider_backed",
           provider_mode: "deterministic_provider_backed",
           content_profile: {
@@ -475,6 +474,7 @@ function defaultAttractionSamples() {
         task_game_076_scenario: {
           version: TASK_GAME_076_SCENARIO_VERSION,
           variant: "return_package",
+          route_phase: "completed",
           provenance: "deterministic_provider_backed",
           provider_mode: "deterministic_provider_backed",
           content_profile: {
@@ -522,6 +522,7 @@ function defaultAttractionSamples() {
         task_game_076_scenario: {
           version: TASK_GAME_076_SCENARIO_VERSION,
           variant: "local_order_contribution",
+          route_phase: "completed",
           provenance: "deterministic_provider_backed",
           provider_mode: "deterministic_provider_backed",
           content_profile: {
@@ -560,7 +561,18 @@ function defaultAttractionSamples() {
         },
       },
     }),
-  ];
+  ].map((snapshot) => {
+    const phase = snapshot.task_game_076_scenario.route_phase;
+    if (phase) {
+      snapshot.player_gameplay.route_tradeoff = {
+        mode: "stabilize",
+        route_commitment_id: "route.stabilize_input_line",
+        ...snapshot.player_gameplay.route_tradeoff,
+        ...fixtureRollbackQuote("stabilize", phase),
+      };
+    }
+    return snapshot;
+  });
 }
 
 function buildContentVolumeCard(cards) {
@@ -633,14 +645,16 @@ function buildGameplayTruthCoverage(samples, cards) {
   };
 }
 
-function routeSnapshot({ mode }) {
+export function buildTaskGame076RouteSnapshot({ mode, phase = "completed" }) {
+  if (!["accelerate", "stabilize"].includes(mode)) throw new RangeError(`Unknown fixture route: ${mode}`);
   const isAccelerate = mode === "accelerate";
-  return buildTaskGame076ScenarioSnapshot({
+  const snapshot = buildTaskGame076ScenarioSnapshot({
     variant: "attraction_evidence",
     overrides: {
       task_game_076_scenario: {
         version: TASK_GAME_076_SCENARIO_VERSION,
         variant: `route_branch_${mode}`,
+        route_phase: phase,
         provenance: "deterministic_provider_backed",
         provider_mode: "deterministic_provider_backed",
         content_profile: {
@@ -686,19 +700,7 @@ function routeSnapshot({ mode }) {
           output_delta: isAccelerate ? 3 : 1,
           risk_delta: isAccelerate ? 2 : -2,
           stability_delta: isAccelerate ? -1 : 3,
-          rollback_available: true,
-          rollback_deadline_beat: isAccelerate
-            ? "Rollback is available until the fast plate surge order is accepted."
-            : "Rollback is available until the Edge Outpost delivery is accepted.",
-          rollback_cost_summary: isAccelerate
-            ? "Spend 1 action and forfeit 1 accelerated output to reopen the route choice."
-            : "Spend 1 action and give up 1 stability to reopen the route choice.",
-          rollback_kept_benefit: isAccelerate
-            ? "Keep 2 of the 3 accelerated output already produced."
-            : "Keep the stable starter batch already produced.",
-          rollback_lost_benefit: isAccelerate
-            ? "Lose access to the high-yield fast plate surge order."
-            : "Lose the stabilized line's lower jam risk for the next incident.",
+          ...fixtureRollbackQuote(mode, phase),
           affected_future_beats: ["micro_commission", "incident_recovery", "return_package"],
           next_commission_modifier: isAccelerate
             ? "starter_batch gains +1 output but needs quick patch readiness"
@@ -780,14 +782,43 @@ function routeSnapshot({ mode }) {
       },
     },
   });
+  const gameplay = snapshot.player_gameplay;
+  if (phase === "before_incident_recovery" || phase === "incident_recovery") {
+    gameplay.stage_status = phase === "incident_recovery" ? "blocked" : "executing";
+    gameplay.execution_state = gameplay.stage_status;
+    gameplay.return_package = null;
+    if (phase === "before_incident_recovery") gameplay.incident_recovery = null;
+    else Object.assign(gameplay.incident_recovery, {
+      selected_repair: null, residual_risk_after_repair: null, repaired_capability_delta: null,
+    });
+  }
+  return snapshot;
 }
 
 function buildRouteBranchRegression() {
-  const accelerate = routeSnapshot({ mode: "accelerate" });
-  const stabilize = routeSnapshot({ mode: "stabilize" });
+  const accelerate = buildTaskGame076RouteSnapshot({ mode: "accelerate" });
+  const stabilize = buildTaskGame076RouteSnapshot({ mode: "stabilize" });
   const accelerateGameplay = accelerate.player_gameplay;
   const stabilizeGameplay = stabilize.player_gameplay;
+  const [accelerateCard, stabilizeCard] = [accelerate, stabilize].map((snapshot) => {
+    const gameplay = snapshot.player_gameplay;
+    return {
+      route_commitment_id: gameplay.route_tradeoff?.route_commitment_id,
+      local_demand_id: snapshot.task_game_076_scenario?.content_profile?.local_demand_id,
+      next_session_goal: gameplay.return_package?.next_session_goal,
+      first_action_on_return: gameplay.return_package?.first_action_on_return,
+      incident_route_consequence_text: gameplay.incident_recovery?.route_consequence_text,
+      midrun_visible_metric_delta: gameplay.route_tradeoff?.midrun_feedback?.visible_metric_delta,
+      rollback_available: gameplay.route_tradeoff?.rollback_available,
+      rollback_deadline_beat: gameplay.route_tradeoff?.rollback_deadline_beat,
+      rollback_unavailable_reason: gameplay.route_tradeoff?.rollback_unavailable_reason,
+      rollback_cost_summary: gameplay.route_tradeoff?.rollback_cost_summary,
+      rollback_kept_benefit: gameplay.route_tradeoff?.rollback_kept_benefit,
+      rollback_lost_benefit: gameplay.route_tradeoff?.rollback_lost_benefit,
+    };
+  });
   const pass =
+    [accelerate, stabilize].every(fixtureRollbackWindowConsistent) &&
     accelerateGameplay.return_package?.next_session_goal !== stabilizeGameplay.return_package?.next_session_goal &&
     accelerateGameplay.return_package?.first_action_on_return !== stabilizeGameplay.return_package?.first_action_on_return &&
     accelerateGameplay.incident_recovery?.route_consequence_text !== stabilizeGameplay.incident_recovery?.route_consequence_text &&
@@ -797,32 +828,8 @@ function buildRouteBranchRegression() {
   return {
     status: pass ? "pass" : "fail",
     assertion: "route choice must change later incident consequence and next-session goal",
-    accelerate: {
-      route_commitment_id: accelerateGameplay.route_tradeoff?.route_commitment_id,
-      local_demand_id: accelerate.task_game_076_scenario?.content_profile?.local_demand_id,
-      next_session_goal: accelerateGameplay.return_package?.next_session_goal,
-      first_action_on_return: accelerateGameplay.return_package?.first_action_on_return,
-      incident_route_consequence_text: accelerateGameplay.incident_recovery?.route_consequence_text,
-      midrun_visible_metric_delta: accelerateGameplay.route_tradeoff?.midrun_feedback?.visible_metric_delta,
-      rollback_available: accelerateGameplay.route_tradeoff?.rollback_available,
-      rollback_deadline_beat: accelerateGameplay.route_tradeoff?.rollback_deadline_beat,
-      rollback_cost_summary: accelerateGameplay.route_tradeoff?.rollback_cost_summary,
-      rollback_kept_benefit: accelerateGameplay.route_tradeoff?.rollback_kept_benefit,
-      rollback_lost_benefit: accelerateGameplay.route_tradeoff?.rollback_lost_benefit,
-    },
-    stabilize: {
-      route_commitment_id: stabilizeGameplay.route_tradeoff?.route_commitment_id,
-      local_demand_id: stabilize.task_game_076_scenario?.content_profile?.local_demand_id,
-      next_session_goal: stabilizeGameplay.return_package?.next_session_goal,
-      first_action_on_return: stabilizeGameplay.return_package?.first_action_on_return,
-      incident_route_consequence_text: stabilizeGameplay.incident_recovery?.route_consequence_text,
-      midrun_visible_metric_delta: stabilizeGameplay.route_tradeoff?.midrun_feedback?.visible_metric_delta,
-      rollback_available: stabilizeGameplay.route_tradeoff?.rollback_available,
-      rollback_deadline_beat: stabilizeGameplay.route_tradeoff?.rollback_deadline_beat,
-      rollback_cost_summary: stabilizeGameplay.route_tradeoff?.rollback_cost_summary,
-      rollback_kept_benefit: stabilizeGameplay.route_tradeoff?.rollback_kept_benefit,
-      rollback_lost_benefit: stabilizeGameplay.route_tradeoff?.rollback_lost_benefit,
-    },
+    accelerate: accelerateCard,
+    stabilize: stabilizeCard,
   };
 }
 
@@ -871,6 +878,7 @@ function buildSecondRunDesignCard(samples) {
   if (!opportunityGeneratedFromChoice) missing.push("opportunity_generated_from_choice");
   if (!choiceReflectiveReturnGoal) missing.push("choice_reflective_return_goal");
   if (!rollbackQuotesComplete) missing.push("route_rollback_quote_missing");
+  if (!samples.every(fixtureRollbackWindowConsistent)) missing.push("route_rollback_window_inconsistent");
   return {
     status: missing.length === 0 ? "second_run_hook_pass" : "second_run_hook_weak",
     route_tradeoff_persists_across_beats: routeTradeoffPersists,

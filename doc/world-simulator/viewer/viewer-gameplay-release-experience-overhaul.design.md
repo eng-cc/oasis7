@@ -19,6 +19,15 @@
   移动端为 `Objective + Player Leverage` 紧凑首行、`Next Move` 第二行，`More / Diagnostics`
   仍从次级入口可达。
 
+### 2.1 需求承接与分配表
+
+本表限定分支指引和吸引力样例的兼容修改；既有 shell、渲染、权限及发布条款保持其原有适用范围。
+
+| 上游 requirement / acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) | 当前区域专业化的主指引与完整分支承诺同义，保留真实可用工业动作 | [分支投影职责](#branch-stage-projection) | gameplay / runtime 发布动作；Viewer 消费 | 不新增治理或冲突机制，不重排 shell |
+| [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) | 回退报价和样例 gate 在截止前、边界及恢复后保持同一窗口判断 | [吸引力样例回退窗口](#fixture-rollback-window) | gameplay 样例阶段；Viewer / QA 结构回归 | 不新增真实 Runtime 回退，不代签真人可玩性 |
+
 ## 3. 当前实现与目标边界
 - 当前 `main` 的 Player 是 fullscreen、world-first 单舞台：世界棋盘为首屏主体，
   `Objective / Next Move / Player Leverage` 是叠加 HUD，`World / Targets / Command`
@@ -295,3 +304,41 @@ unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。Fu
 `1440x1000` 与 `390x844` 复核了 GPU 不可用 fallback。该浏览器证据不覆盖
 `ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败或 tablet `641–1240`
 宽度，也不是发行放行结论；#3248 浏览器证据仍是历史记录。
+
+<a id="branch-preview-consistency"></a>
+## 7. 分支指引与回退预览的一致性
+
+本节承接首局产品合同的 [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) / [AC-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#ac-first-branch-001) 和 [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) / [AC-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#ac-first-branch-002)。它限定既有 gameplay projection 与吸引力样例的解释，不新增真实世界回退动作、协议字段、结算或持久化语义。
+
+<a id="branch-stage-projection"></a>
+### 7.1 分支投影职责
+
+- `crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs` 发布当前主目标、阶段和主指引；`runtime_live/branch_commitment.rs` 依据同次投影的 `available_actions` 选择分支，只推荐已发布且未禁用的动作。
+- `IndustryStage::Governance` 是现有内部阶段，不单独证明治理、投票、领土、安全或冲突玩法开放。其 `regional_specialist` 路径的 route label、immediate gain、future beats、risk 和 return hook 继续解释本地生产与专业化用途。
+- 模块、工厂核心和合金仍是合法工业候选；其对应需求、产出和下一用途沿现有 `first_delivery_preview` 发布。修正文案不改变配方、材料、动作过滤、完成边界或区域需求的地理含义。
+- Viewer 消费发布的承诺并保留不可用状态，不从内部 enum、历史说明或客户端推断额外能力。更换目标或刷新后以当前快照重读；旧推荐不能作为执行授权。
+
+验证时，`branch_commitment.rs` 内的 `regional_specialist_recommendations_keep_enabled_industrial_routes` 单元样例同时启用模块、工厂核心与合金，逐条核对承诺，再禁用模块候选检查过滤；下表的真实 Runtime 场景补充主指引与合金路线投影。两者组合，避免仅凭一条已启用路线推断所有分支文案均已覆盖。
+
+<a id="fixture-rollback-window"></a>
+### 7.2 吸引力样例的回退窗口
+
+`crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js` 的 `TASK-GAME-076` 样例自有 route phase 决定 `rollback_quote`。报价生成与证据 gate 共用同一窗口判断；仅检查非空文案不能证明可回退。规则只作用于该样例版本的 `accelerate` / `stabilize` 路线，不把样例阶段解释为真实 Runtime 的世界状态。
+
+| 样例时点 | 回退含义 | 必须保留的后果与下一步 |
+| --- | --- | --- |
+| incident recovery 尚未开始 | 窗口内可回退；截止条件、代价、保留和失去价值均可读 | 已兑现的结果与既有约束仍可追踪 |
+| incident recovery 开始的边界 | 窗口立即关闭，不等待后续订单或交付 | 明确截止原因；保留当前合法恢复选择 |
+| repair / replan 及之后的完成态 | 原回退继续不可用，恢复完成不重开旧窗口 | 保留恢复收益、已形成能力、义务和回访动作 |
+| route phase 缺失、未知或与样例状态冲突 | 不承诺可回退，相关样例不能获得窗口一致性通过 | 给出资料缺失或冲突原因，不能用旧 quote 补齐 |
+
+修复不清空已提交结果，不改变 `production_only` 的首产物边界，也不把后续交付变成隐藏前置。样例可同时具有“已完成恢复”和“仍有后续用途”，但不能因此恢复已截止的回退能力。真实入口若将来发布回退动作，仍由其专业合同独立判断当前窗口和实际执行结果。
+
+### 11.1 验证映射表
+
+| 上游 requirement / acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法与 test/manual source | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-FIRST-BRANCH-001](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-001) | [分支投影职责](#branch-stage-projection) | 当前区域专业化不发布未开放的阶段承诺，并保留合法合金路线 | [industrial_progression.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/industrial_progression.rs) 的 `runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready`；当前候选 `test_tier_required` | PR 中的聚焦回归结果；主指引、全部承诺及可执行工业路线 | 普通合同回归，实际入口体验另验 |
+| [REQ-FIRST-BRANCH-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-branch-002) | [吸引力样例回退窗口](#fixture-rollback-window) | 同一路线截止前、incident 开始、修复后及完成态；拒绝反向 available、缺失或冲突 phase | [gameplay-attraction-scenario.test.mjs](../../../crates/oasis7_viewer/scripts/gameplay-attraction-scenario.test.mjs)；当前候选 `node` 结构正反例 | PR 中的样例测试结果；报价与 gate 窗口一致 | `fixture_structure_only`，不证明真实回退或 human playability |
+
+本节定义实现与验收边界；具体候选、执行过的测试和未覆盖入口记录在对应 PR。代码或样例回归成功不能升级为真实自主试玩、图形交互或发行验收通过。
