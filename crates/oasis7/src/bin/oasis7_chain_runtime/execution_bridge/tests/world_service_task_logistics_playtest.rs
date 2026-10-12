@@ -285,33 +285,84 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
         let control = game_task::current_control(&initial.world, "agent-a")
             .unwrap()
             .unwrap();
-        let proof = sign_read_request(
-            TASK_CONTEXT_PREPARE_PATH,
-            TaskContextPrepareV1 {
-                schema_revision: 1,
-                fence: GameTaskFenceV1::from_control(&control),
-                client_operation_id: "logistics-delivery-context".into(),
-                client_nonce: "91".repeat(32),
-            },
-            &delegate,
-        )
-        .unwrap();
-        let prepared = client.prepare_task_context(&proof).unwrap();
-        let prefix = request(
-            &world,
-            WorldServicePayloadV1::Scheduler(
-                sign_read_request("scheduler", public_prefix(&prepared).unwrap(), &delegate)
-                    .unwrap(),
-            ),
-        );
         let mut categories = CleanupCategories::default();
-        settle_cleanup_original(
-            &client,
-            &prefix,
-            Instant::now() + Duration::from_secs(15),
-            &mut categories,
-        )
-        .unwrap();
+        let capture_deadline = Instant::now() + Duration::from_secs(60);
+        let mut rejected_prefixes = Vec::new();
+        let mut captured_preparation = None;
+        for attempt in 0..8 {
+            assert!(
+                Instant::now() < capture_deadline,
+                "bounded capture deadline exhausted"
+            );
+            let proof = sign_read_request(
+                TASK_CONTEXT_PREPARE_PATH,
+                TaskContextPrepareV1 {
+                    schema_revision: 1,
+                    fence: GameTaskFenceV1::from_control(&control),
+                    client_operation_id: format!("logistics-delivery-context-{attempt}"),
+                    client_nonce: format!("{:064x}", attempt + 145),
+                },
+                &delegate,
+            )
+            .unwrap();
+            let prepared = client.prepare_task_context(&proof).unwrap();
+            // Deliberately age the first base through two real worker ticks.
+            // This proves replacement follows a settled rejection, not uncertainty.
+            if attempt == 0 {
+                let tick = prepared.snapshot.captured_base_binding.base_tick;
+                while pin().world.state().time < tick + 2 {
+                    assert!(Instant::now() < capture_deadline, "worker did not advance");
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+            let prefix = request(
+                &world,
+                WorldServicePayloadV1::Scheduler(
+                    sign_read_request("scheduler", public_prefix(&prepared).unwrap(), &delegate)
+                        .unwrap(),
+                ),
+            );
+            match settle_cleanup_original(&client, &prefix, capture_deadline, &mut categories) {
+                Ok(_) => {
+                    captured_preparation = Some((proof, prepared));
+                    break;
+                }
+                Err("canonical cleanup rejected") => {
+                    // Requery the signed original. Only authenticated terminal rejection
+                    // or expiration authorizes another preparation; every other state stops.
+                    let settled = client
+                        .lookup(
+                            LookupIntentRequest {
+                                contract_version: 1,
+                                key: prefix.correlation.key.clone(),
+                            },
+                            prefix.signed_payload.clone(),
+                        )
+                        .unwrap();
+                    assert!(matches!(
+                        settled.outcome,
+                        IntentOutcome::Rejected { .. } | IntentOutcome::Expired
+                    ));
+                    println!(
+                        "TASK_LOGISTICS_SETTLED_PREFIX {}",
+                        serde_json::to_string(&settled).unwrap()
+                    );
+                    rejected_prefixes
+                        .push(serde_json::json!({"original":prefix,"settled":settled}));
+                    write_public_json(
+                        &root.join("logistics-prefix-attempts.json"),
+                        &serde_json::json!({"settled_rejections":rejected_prefixes}),
+                    );
+                }
+                Err(reason) => panic!("original capture remains unresolved: {reason}"),
+            }
+        }
+        assert!(
+            !rejected_prefixes.is_empty(),
+            "forced stale original must settle rejected before refresh"
+        );
+        let (proof, prepared) =
+            captured_preparation.expect("maximum eight settled capture attempts exhausted");
         let get = sign_read_request(
             TASK_CONTEXT_READ_PATH,
             TaskContextGetV1 {
