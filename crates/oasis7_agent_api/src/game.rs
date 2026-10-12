@@ -14,9 +14,11 @@
 //! particular, an operation status is a wire value, never a finality proof.
 
 mod goal;
+mod goal_prepare;
 mod json;
 mod task;
 pub use goal::*;
+pub use goal_prepare::*;
 pub use json::parse_request;
 pub use task::*;
 
