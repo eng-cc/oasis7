@@ -15,6 +15,7 @@ fn main() {
         "context_snapshot_inspect",
         "context_snapshot_restore",
         "tool_file_reconcile",
+        "tool_file_recover",
         "tool_cli_reconcile",
         "tool_cli_observe",
         "tool_jobs",

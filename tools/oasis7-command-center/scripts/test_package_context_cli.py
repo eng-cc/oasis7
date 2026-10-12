@@ -149,6 +149,23 @@ if mode == 'failed':
                                         for pattern in patterns),
                                     f'{event} must package when only {dependency} changes')
 
+    def test_main_window_can_invoke_every_registered_app_command(self):
+        host = SCRIPT.parent.parent / 'src-tauri'
+        handlers = (host / 'src/main.rs').read_text().split(
+            '.invoke_handler(tauri::generate_handler![', 1)[1].split('])', 1)[0]
+        registered = set(re.findall(r'\w+::(\w+)\s*,', handlers))
+        manifest = (host / 'build.rs').read_text().split(
+            'let commands = &[', 1)[1].split('];', 1)[0]
+        generated = set(re.findall(r'"(\w+)"', manifest))
+        capability = json.loads((host / 'capabilities/main.json').read_text())
+        granted = {permission.removeprefix('allow-').replace('-', '_')
+                   for permission in capability['permissions']
+                   if isinstance(permission, str) and permission.startswith('allow-')}
+        self.assertTrue(registered, 'the production command handler must be recognized')
+        self.assertEqual(registered, generated, 'registered commands need generated permissions')
+        self.assertEqual(registered, granted, 'the main window needs each finite app permission')
+        self.assertEqual(capability['windows'], ['main'])
+
     def test_requested_desktop_target_is_shared_with_cli_and_catalog(self):
         target = 'x86_64-apple-darwin'
         for args in (['--target', target], ['--target=' + target], ['-t', target], ['-t' + target]):

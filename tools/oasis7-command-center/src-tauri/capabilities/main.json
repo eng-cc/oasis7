@@ -61,6 +61,7 @@
     "allow-start-private-runtime-turn",
     "allow-tool-file-verify",
     "allow-tool-file-reconcile",
+    "allow-tool-file-recover",
     "allow-tool-cli-observe",
     "allow-context-info",
     "allow-context-reconcile",
