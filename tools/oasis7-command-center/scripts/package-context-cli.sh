@@ -18,7 +18,8 @@ mkdir -p "$out"
 staging=$(mktemp "$out/.context-cli.XXXXXX")
 trap 'rm -f "$staging"' EXIT
 cp "$binary" "$staging"
-chmod 555 "$staging"
+# The macOS bundler must clear attributes and sign this generated resource.
+chmod 755 "$staging"
 mv -f "$staging" "$out/oasis7_context"
 python3 - "$out" "$head" "$target" "$release" <<'PYTHON'
 import hashlib,json,pathlib,sys
