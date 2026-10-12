@@ -1,0 +1,84 @@
+{
+  "source_head": "005415753b4158589575be8ca276301fa90f6faf",
+  "commands_env": "env -u RUSTC_WRAPPER CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0",
+  "features": [
+    "default",
+    "test_tier_required"
+  ],
+  "passed": [
+    {
+      "filter": "agent_delegation",
+      "target": "lib",
+      "count": 18
+    },
+    {
+      "filter": "task_recipe_quote",
+      "target": "lib",
+      "count": 2
+    },
+    {
+      "target": "oasis7_game_client",
+      "count": 9
+    },
+    {
+      "filter": "private_task_production_signed_quote_first_product_and_restart",
+      "target": "oasis7_chain_runtime",
+      "count": 1,
+      "seconds": 59.18
+    },
+    {
+      "filter": "private_task",
+      "target": "oasis7_chain_runtime",
+      "passed": 7,
+      "ignored_explicit_live_hosts": 4,
+      "seconds": 66.76
+    },
+    "strict all-target Clippy",
+    "cargo fmt",
+    "doc governance",
+    "Rust file size",
+    "git diff --check"
+  ],
+  "retained_failures": [
+    {
+      "stage": "RED",
+      "result": "valid grant accepted forged produce before canonical-plan hardening"
+    },
+    {
+      "stage": "first complete library run",
+      "passed": 2911,
+      "ignored": 1,
+      "failed": 2,
+      "seconds": 409.17,
+      "failures": [
+        "new signed-quote test used noncanonical base hash; fixture fixed and two focused tests pass",
+        "existing M5 war builtin asset missing; docker info hung; only owned docker child terminated and run failed honestly"
+      ]
+    },
+    {
+      "stage": "first strict Clippy",
+      "failure": "unfulfilled too_many_arguments expectation; removed and strict rerun passed"
+    },
+    {
+      "stage": "first PR CI rust-baseline",
+      "run": 38291455776,
+      "failure": "quinn-proto 0.11.16 RUSTSEC-2026-0338 through 0342; lock upgraded to 0.11.18; no ignore or gate change"
+    }
+  ],
+  "new_dependency_verification": {
+    "cargo_deny_advisories": "passed",
+    "remaining": "new lock source tests and final CI pending"
+  },
+  "local_raw_logs": [
+    {
+      "path": "/tmp/oasis7-production-playtest-20261013/native-regressions.log",
+      "sha256": "ef81443db57ccda89206d7e96265609e7484f1d72bdd5f858c8bf3785aa97c61",
+      "byte_length": 11171
+    },
+    {
+      "path": "/tmp/oasis7-production-playtest-20261013/ci-rust-baseline.log",
+      "sha256": "c020c2f2c0f7a2100b84ed029f3d31a504d8db9002c94c0023bcc0f71aafbadc",
+      "byte_length": 115399
+    }
+  ]
+}

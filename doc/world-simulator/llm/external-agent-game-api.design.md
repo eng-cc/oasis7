@@ -60,6 +60,8 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 普通 `oasis7_game_client` 使用 operator 提供的严格设备配置、mode-0600 原始签名文件与独立加密 operation cache。它在网络发送前保存原 prepare nonce/签名与公共 prefix/action/outcome，请求结果未知时只 lookup 或重投原请求；改变同一 Context 的 action 不覆盖原签名。正式游戏 Skill 为 [oasis7-play](../../../skills/oasis7-play/SKILL.md)，CLI 目前提供 `native.move_agent` 三个 i64 厘米坐标及固定 provider outcomes。完整 catalog 的任意 action CLI、配对/token、问答/审批/报告、完整协作 TaskSnapshot、Hosted 旧执行器目标接入，以及 Codex/OpenClaw 两 Runtime 完整自主首局仍在后续范围。Game HTTP bootstrap 仍 `writes_available=false`；原生私有路径不冒充 `/v1/game` 写路由。
 
+<a id="当前实施候选原生物流执行"></a>
+
 ### 已实施切片：原生物流执行
 
 普通客户端增加 `industry` 授权观察与 `native.transfer_material`：只接收账本、材料、正 i64 数量、非负 i64 公里距离、标准/紧急优先级及有序线路参数；requester 固定为设备配置 Agent，不接收原始 Action、授权、报价或配方计划。转运和移动共用同一个 Context 的原签名缓存；同 Context 改变动作种类或任一业务字段必须冲突，未知原结果只能核对或重投原请求。
@@ -74,7 +76,7 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 签名 POST `/v1/world/private-task/recipe-quote` 同时绑定原 Context 读取证明、当前 fence、主体与预期 base。服务在当前 canonical pin 的私有 clone 上复用实际授权和生产准入，返回规范 action、电费扣除预览、有效输入/输出账本、材料、耗时或拒绝原因；交付前再验当前 pin 与授权。报价不步进世界、不预留库存、不扣预算，电费账本预览不表示电池续航变化。
 
-首次 `schedule` 使用已验证报价的 action 和同 pin 公共 context 保存签名原行动，再提交 cognition。已有 Action cache 时先核对工厂/配方/批次并查询原请求，Unknown 不重新报价或替换请求。`industry` 增加有界 pending recipe jobs 观察；`RecipeStarted` 仅证明排产，真实首产物须核对关联的 `RecipeCompleted` 和输出账本变化。该候选仍待完整原生闭环、独立正式 Skill 试玩、必要 CI 和合入，不代表完整 starter chain、稳定生产、交付、两 Runtime parity 或部署已完成。
+首次 `schedule` 使用已验证报价的 action 和同 pin 公共 context 保存签名原行动，再提交 cognition。已有 Action cache 时先核对工厂/配方/批次并查询原请求，Unknown 不重新报价或替换请求。`industry` 增加有界 pending recipe jobs 观察；`RecipeStarted` 仅证明排产，真实首产物须核对关联的 `RecipeCompleted` 和输出账本变化。真实 TCP 的报价、首产物、重复和驱动重启回归已通过，客户端九项回归与严格 Clippy 通过。独立正式 Skill 试玩在 `005415753` 实际产出三铁锭并恢复原回执，但报告 347 秒超过 240 秒许可，整体实玩保留 inconclusive；详见[生产候选证据](../../testing/evidence/native-task-production-2026-10-13/README.md)。后续依赖候选尚未实玩，当前仍待预算合规的候选试玩、必要 CI 和合入，不代表完整 starter chain、稳定生产、交付、两 Runtime parity 或部署已完成。
 
 ## 1. 问题、目标与非目标
 

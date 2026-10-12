@@ -1,0 +1,209 @@
+{
+  "record": {
+    "entries": [
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "79c5091c9dc4745f7f4177c1859c2f6fc474fed2b063fe45197bcd75b29ed2b4",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "ab9cc7ccd748415db342a9a4dd03bed23af0ae69017c267e3a1f9c1699148b37",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/cleanup.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "4d500f4ca8ad9415abe3a1625da61514197536f981a3cb63d82ff8c10f40e264",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/disposable-world-cleanup.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "66fdba078211cff94d8b999f46c8767dfdc91cc879994cabc64af119e97adb94",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/initial-world-witness.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "2e44ece931330f309633af456008a8b6726c4ce2f16c1585eedeed09281cacec",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/manifest.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "60c5821fb0aa67b71f86814358eb75c3274f565c8ff3f69351811910e6b42130",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/oracle-summary.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "98e6f197164a9866cb0dbb4b858666c07105a2879afe3009e4fd33760abc726d",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/ordinary-regressions.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "8df7103630a339fff2b4205ff5559d2ace19c7b397e12a8fa623bb0c5fefe887",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/player-report.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "d2e35c0df1461b639c233c5bca7e65e835f3d7185828fa713047ae88d59edeb4",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/production-events.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-production-2026-10-13/README.md",
+        "claim_boundary": "targeted_native_production_functional_evidence_budget_inconclusive_not_full_first_session_or_deployment",
+        "content_sha256": "7a85bebeb4a89a4e60b963c402d5bd137dba75edc53b75c71d9a37fe2a2ccfc9",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-production-candidate",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-production-2026-10-13/world-witness.json",
+        "rationale": "Preserve actual first-product results, original receipts and budget deviation without upgrading the live verdict.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only attached Codex; report time exceeded permission; current dependency candidate not played; full first-session, OpenClaw and deployment unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_production_history"
+      }
+    ],
+    "group_sha256": "ac55cbe1eb9058dee033e52750ef52c7dd2ae7650c55d310d9d1a7fa0bab0731",
+    "id": "native-task-production-2026-10-13"
+  },
+  "schema": "oasis7.document-evidence-group/v1"
+}

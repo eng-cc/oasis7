@@ -1,0 +1,110 @@
+{
+  "source_head": "005415753b4158589575be8ca276301fa90f6faf",
+  "base_oid": "5e930face77dd284bbba6186fd997e7e63fa9164",
+  "tested_tree_oid": "749970033025056292ac51ea522a25a4b39851f9",
+  "dirty_patch": null,
+  "runtime": "attached_codex_subagent",
+  "startup": "prepared_world",
+  "scope": "targeted built-in first-product production, original-result recovery",
+  "isolation": "instruction_only/source_visible",
+  "test_tier": "test_tier_full",
+  "evidence_level": "live native TCP execution",
+  "budget": {
+    "cli_calls": 20,
+    "seconds": 240,
+    "maximum_attempts": 2,
+    "paid_external_runtime": false
+  },
+  "build_sha256": "0faac7ba9fa0543bf28f67e8d87d677c2fec93525f694eb6af4470a32bb06716",
+  "host_binary_sha256": "ebf3d954f50fe9ea94fd111a3aabbe1ff74c00d0632b0463a8111c944983afc8",
+  "skill_sha256": "1472bf483037445f7ba48c30d8b3cc601de80f67cd9ffba91295f1638dbcaf33",
+  "schema": "oasis7/native-production-candidate-evidence/v1",
+  "real_child": "/root/production_formal_playtester",
+  "overall_live_verdict": "inconclusive_budget_overrun",
+  "functional_verdict": "passed_targeted_first_product_and_original_lookup",
+  "current_dependency_candidate_live_verdict": "not_executed",
+  "original_player_report": {
+    "sha256": "12ba4da2dc02839979abfa8dcd8157d2c4597e79c4d698e123b584c6e8cb88ca",
+    "byte_length": 20813,
+    "normalization": "only Skill absolute path replaced by repository-relative path"
+  },
+  "source_clauses": [
+    {
+      "path": "doc/product/agents-world-simulation/external-agent-runtime-play.prd.md",
+      "fragment": "ac-ext-003",
+      "source_oid": "005415753b4158589575be8ca276301fa90f6faf",
+      "blob_oid": "6941e246ce1e6e1ba5f0041f6c008372cefbd45e",
+      "content_sha256": "60557925a4f95451bbfb1c9ec4e414e25c8b6664188c1c86ec38e88ea9266096"
+    },
+    {
+      "path": "doc/product/agents-world-simulation/external-agent-runtime-play.prd.md",
+      "fragment": "ac-ext-005",
+      "source_oid": "005415753b4158589575be8ca276301fa90f6faf",
+      "blob_oid": "6941e246ce1e6e1ba5f0041f6c008372cefbd45e",
+      "content_sha256": "60557925a4f95451bbfb1c9ec4e414e25c8b6664188c1c86ec38e88ea9266096"
+    },
+    {
+      "path": "doc/world-simulator/llm/external-agent-game-api.design.md",
+      "fragment": "当前实施候选原生权威配方报价与排产",
+      "source_oid": "005415753b4158589575be8ca276301fa90f6faf",
+      "blob_oid": "3d1267844bdfcfe4792d34b6bf537815f7ec91a3",
+      "content_sha256": "fbcb89a86cb8529ac51a84c4cebe63a4af5abd60774c6b597d4d29d40450788a"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "README.md",
+      "byte_length": 2573,
+      "sha256": "79c5091c9dc4745f7f4177c1859c2f6fc474fed2b063fe45197bcd75b29ed2b4",
+      "collector": "parent readback"
+    },
+    {
+      "path": "cleanup.json",
+      "byte_length": 3054,
+      "sha256": "ab9cc7ccd748415db342a9a4dd03bed23af0ae69017c267e3a1f9c1699148b37",
+      "collector": "parent readback"
+    },
+    {
+      "path": "disposable-world-cleanup.json",
+      "byte_length": 273,
+      "sha256": "4d500f4ca8ad9415abe3a1625da61514197536f981a3cb63d82ff8c10f40e264",
+      "collector": "parent readback"
+    },
+    {
+      "path": "initial-world-witness.json",
+      "byte_length": 5904,
+      "sha256": "66fdba078211cff94d8b999f46c8767dfdc91cc879994cabc64af119e97adb94",
+      "collector": "parent readback"
+    },
+    {
+      "path": "oracle-summary.json",
+      "byte_length": 1073,
+      "sha256": "60c5821fb0aa67b71f86814358eb75c3274f565c8ff3f69351811910e6b42130",
+      "collector": "parent readback"
+    },
+    {
+      "path": "ordinary-regressions.json",
+      "byte_length": 2444,
+      "sha256": "98e6f197164a9866cb0dbb4b858666c07105a2879afe3009e4fd33760abc726d",
+      "collector": "parent readback"
+    },
+    {
+      "path": "player-report.json",
+      "byte_length": 20755,
+      "sha256": "8df7103630a339fff2b4205ff5559d2ace19c7b397e12a8fa623bb0c5fefe887",
+      "collector": "independent player"
+    },
+    {
+      "path": "production-events.json",
+      "byte_length": 3163,
+      "sha256": "d2e35c0df1461b639c233c5bca7e65e835f3d7185828fa713047ae88d59edeb4",
+      "collector": "parent readback"
+    },
+    {
+      "path": "world-witness.json",
+      "byte_length": 19555,
+      "sha256": "7a85bebeb4a89a4e60b963c402d5bd137dba75edc53b75c71d9a37fe2a2ccfc9",
+      "collector": "parent readback"
+    }
+  ]
+}
