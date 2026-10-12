@@ -236,7 +236,7 @@ impl PrivateGoalStore {
             let record = PreparedGoalReceiptV1 {
                 schema_revision: 1,
                 goal_ref: commitment(&salt, proof)?,
-                reference_salt: hex::encode(&*salt),
+                reference_salt: hex::encode(salt.as_slice()),
                 owner_proof: proof.clone(),
             };
             let name = self.prepared_name(&OperationScope::prepare(&proof.request))?;
