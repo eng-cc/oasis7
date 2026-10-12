@@ -24,8 +24,15 @@ pub(super) fn child_deadline() -> Instant {
 }
 
 pub(super) fn run_child(command: &mut Command, root: &std::path::Path) -> Output {
-    let deadline = Instant::now() + CHILD_BUDGET;
-    let unix_deadline = SystemTime::now().duration_since(UNIX_EPOCH).unwrap() + CHILD_BUDGET;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let inherited = std::env::var(DEADLINE_ENV).ok().map(|value| {
+        value
+            .parse::<u128>()
+            .expect("inherited completion deadline")
+    });
+    let budget = launcher_budget(now.as_millis(), inherited);
+    let deadline = Instant::now() + budget;
+    let unix_deadline = now + budget;
     command.env(DEADLINE_ENV, unix_deadline.as_millis().to_string());
     let stdout_path = root.join("completion-child.stdout.log");
     let stderr_path = root.join("completion-child.stderr.log");
@@ -57,7 +64,7 @@ pub(super) fn run_child(command: &mut Command, root: &std::path::Path) -> Output
             eprintln!(
                 "conformance_parent_hard_deadline_exceeded owned_child={} budget_ms={}",
                 child.id(),
-                CHILD_BUDGET.as_millis()
+                budget.as_millis()
             );
             break status;
         }
@@ -78,6 +85,28 @@ pub(super) fn run_child(command: &mut Command, root: &std::path::Path) -> Output
         eprintln!("conformance_full_child_logs={}", destination.display());
     }
     output
+}
+
+fn launcher_budget(now_ms: u128, inherited_deadline_ms: Option<u128>) -> Duration {
+    // A nested QA launcher must stop its App child before its own parent can
+    // stop it. Keep ten seconds for Node, listeners and fixture-thread cleanup.
+    const PARENT_CLEANUP_RESERVE: Duration = Duration::from_secs(10);
+    inherited_deadline_ms
+        .map(|deadline| {
+            Duration::from_millis(deadline.saturating_sub(now_ms).min(u64::MAX as u128) as u64)
+                .saturating_sub(PARENT_CLEANUP_RESERVE)
+                .min(CHILD_BUDGET)
+        })
+        .unwrap_or(CHILD_BUDGET)
+}
+
+#[test]
+fn nested_completion_launcher_preserves_parent_cleanup_budget() {
+    assert_eq!(launcher_budget(1000, None), CHILD_BUDGET);
+    assert_eq!(launcher_budget(1000, Some(61000)), Duration::from_secs(50));
+    assert_eq!(launcher_budget(21000, Some(61000)), Duration::from_secs(30));
+    assert_eq!(launcher_budget(60000, Some(61000)), Duration::ZERO);
+    assert_eq!(launcher_budget(62000, Some(61000)), Duration::ZERO);
 }
 
 fn retained_output(mut file: fs::File) -> Vec<u8> {
