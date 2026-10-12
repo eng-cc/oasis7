@@ -208,6 +208,9 @@ G1 回答“本次精确候选是否提交”，G3 回答“哪一代材料现�
 本合同接受 [DCS-002 同世界恢复](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 的本地 material/replay 子义务、[DWE-004 历史版本](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的 retained manifest/artifact 支持，以及产品根 SC-2/3/6/7 的 pin/reconstruction 子义务。保留高度 H 的 canonical log、checkpoint、原版本/hash/module binding 必须唯一解析，依赖未验证不能 aggressive sweep。准确设计见 [storage history](runtime-storage-footprint-governance.design.md#storage-history-dependency)。
 schema v3+V1/V2 compatibility、last_applied 连续性/current local binding 与 R0 latest/R1 retained 保证分开；root equality/启动不证明 finalized checkpoint、redundant archive、light proof/DA 或可投票/写入。重新服务另走 [root gate](../design.md#runtime-recovery-design)，ops/P2P 提供同窗口 proof/role/archive evidence；本地存储 profile 不改变产品 world identity 或迁移权限。各 SC/AC/NFR 的独立验证及未运行范围见配对 design 的新增 §11.1，旧 §16/历史 trace 保留。
 
+R1 的 committed-input log 重执行与 `WorldJournal` 事件后缀归约分别取证；完整 snapshot 往返也不能代替后者。
+恢复结果拟用于继续执行时，另须满足 [事件后缀与续跑合同](../prd.md#runtime-journal-suffix-recovery) 对适用路径的控制状态完备性和正向对照；AC-3 的 root/journal_len/registry 与 AC-5 的 retained root 检查仍保留，不能单独证明 allocator/schedule 已正确续接。
+
 ## 存储分项接受定位
 下列定位分别保留旧SC/AC/NFR/规则条件；预算均为目标，未由本轮实际测量证明；原DEC-RSF和迁移历史不变。
 

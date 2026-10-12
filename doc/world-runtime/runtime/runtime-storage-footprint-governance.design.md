@@ -458,6 +458,10 @@ G1 的未知保护优先于 G2 的回收目标，G3 的回退选择不得解除 
 5. 将重建得到的 `execution_state_root` 与 `execution_records/H` 中记录值对比。
 6. 匹配则返回 success；否则进入 mismatch fault。
 
+这里的 success 仅表示本条 committed-input 重执行路径的 root 匹配；它不代签 `WorldJournal` 事件后缀恢复或重新开放服务。
+完整 snapshot 往返、事件后缀归约与 committed-input 重执行的输入/执行边界按 [runtime 恢复设计](../design.md#runtime-journal-suffix-recovery-design) 分别标识。
+拟继续执行的候选还必须具备该路径完整的 action cursor/era 与 tick schedule，并按 [续跑验证](../design.md#runtime-journal-suffix-validation) 提供正向对照；不能只凭本步骤的 root success 丢弃仍是唯一控制状态来源的 checkpoint/历史材料。
+
 ### 10.2 无 checkpoint 情况
 - 若 `H` 在 hot window 内，可直接使用最近 hot snapshot 作为 replay 起点。
 - 若 `H` 不在 hot window 且无 checkpoint，视为违反 replay contract，GC 不允许发生到该状态。
@@ -635,6 +639,7 @@ restore root 相等仅本地历史材料条件，开放 voting/serving/new inten
 <a id="storage-case-ac3"></a>
 #### AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同
 按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+该比较保留为存储恢复断言；恢复后继续执行的证明另按 [J1/J2 续跑](../design.md#runtime-journal-suffix-validation) 记录适用路径，空 suffix 结果不关闭非空 suffix 义务。
 
 <a id="storage-case-ac4"></a>
 #### AC-4：GC中断/partialwrite/pin失败保当前index完整闭包；未知另保候选并隔离旧World写入
@@ -643,6 +648,7 @@ restore root 相等仅本地历史材料条件，开放 voting/serving/new inten
 <a id="storage-case-ac5"></a>
 #### AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root
 按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+明确证据是 committed-input 重执行；若使用 WorldJournal 事件后缀，则独立满足 [控制记录兼容](../design.md#runtime-journal-suffix-compatibility) 和 [续跑矩阵](../design.md#runtime-journal-suffix-validation)，不相互替代。
 
 <a id="storage-case-ac6"></a>
 #### AC-6/SC-5：profile/effective_budget/bytes/retained/checkpoint/replay/lastgc/error/degraded可读，无额外扫描
