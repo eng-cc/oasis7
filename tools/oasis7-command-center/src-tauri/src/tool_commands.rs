@@ -239,7 +239,7 @@ pub async fn tool_signer_submit(
 ) -> Result<serde_json::Value, String> {
     let identity_job = job_id.clone();
     let (resource, fingerprint) = tauri::async_runtime::spawn_blocking(move || {
-        tools::signer_job_identity(&identity_job).map_err(|e| e.to_string())
+        tools::signer_submit_identity(&identity_job).map_err(|e| e.to_string())
     })
     .await
     .map_err(|_| "Job identity did not complete")??;

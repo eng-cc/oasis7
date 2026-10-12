@@ -102,7 +102,7 @@ impl Runtime {
         snapshot.operations.retain(|o| {
             o.thread_id
                 .as_ref()
-                .is_some_and(|thread| !private.contains(thread))
+                .is_none_or(|thread| !private.contains(thread))
         });
         // Source error and general runtime logs may derive from any private thread.
         if !private.is_empty() {
@@ -178,6 +178,84 @@ mod tests {
             })
             .unwrap();
         assert!(!raw.contains("private purpose"));
+    }
+    #[test]
+    fn public_projection_preserves_unscoped_management_and_filters_only_private_threads() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut runtime = Runtime::open(dir.path().join("runtime.sqlite")).unwrap();
+        let project = Project {
+            id: "p".into(),
+            path: "/tmp".into(),
+            git_common_dir: "/tmp/.git".into(),
+            branch: None,
+            head: "h".into(),
+            environment: "local".into(),
+        };
+        for (id, thread, state) in [
+            ("start-pending", None, "pending"),
+            ("start-unknown", None, "unknown"),
+            ("ordinary", Some("ordinary-thread"), "unknown"),
+            ("private", Some("private-thread"), "unknown"),
+        ] {
+            let op = RuntimeOperation {
+                id: id.into(),
+                instance_id: "instance".into(),
+                thread_id: thread.map(str::to_owned),
+                turn_id: None,
+                method: if thread.is_none() {
+                    "thread/start"
+                } else {
+                    "turn/start"
+                }
+                .into(),
+                state: state.into(),
+                fingerprint: format!("fingerprint-{id}"),
+                created_at: "now".into(),
+                error: None,
+            };
+            runtime.store.insert("p:local", id, &op, true).unwrap();
+        }
+        let public = runtime.public_snapshot(&project).unwrap();
+        assert_eq!(
+            public.operations.len(),
+            4,
+            "an empty private set must preserve management evidence"
+        );
+        assert!(
+            public.operations.iter().any(|op| op.id == "start-pending"
+                && op.state == "pending"
+                && op.thread_id.is_none())
+        );
+        assert!(
+            public.operations.iter().any(|op| op.id == "start-unknown"
+                && op.state == "unknown"
+                && op.thread_id.is_none())
+        );
+        runtime
+            .store
+            .mark_private("p:local", "private-thread", &[reference()])
+            .unwrap();
+        let public = runtime.public_snapshot(&project).unwrap();
+        assert_eq!(public.operations.len(), 3);
+        assert!(
+            public
+                .operations
+                .iter()
+                .any(|op| op.id == "start-pending" && op.state == "pending")
+        );
+        assert!(
+            public
+                .operations
+                .iter()
+                .any(|op| op.id == "start-unknown" && op.state == "unknown")
+        );
+        assert!(public.operations.iter().any(|op| op.id == "ordinary"));
+        assert!(!public.operations.iter().any(|op| op.id == "private"));
+        assert_eq!(
+            runtime.snapshot(&project).unwrap().operations.len(),
+            4,
+            "private owner view and ledger must remain complete"
+        );
     }
     #[test]
     fn private_registration_failure_cannot_produce_a_transport_send() {

@@ -592,7 +592,14 @@ fn private_input_is_registered_before_send_and_filters_later_public_projections(
     let public = r.public_snapshot(&f.project).unwrap();
     assert!(public.sessions.is_empty());
     assert!(public.requests.is_empty());
-    assert!(public.operations.is_empty());
+    let expected_operations: Vec<_> = snapshot
+        .operations
+        .iter()
+        .filter(|op| op.thread_id.as_deref() != Some(thread.as_str()))
+        .map(|op| op.id.as_str())
+        .collect();
+    let public_operations: Vec<_> = public.operations.iter().map(|op| op.id.as_str()).collect();
+    assert_eq!(public_operations, expected_operations);
     let req = &snapshot.requests[0];
     r.answer_request(
         &f.project,

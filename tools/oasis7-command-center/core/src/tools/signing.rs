@@ -3,7 +3,7 @@ mod submission;
 use super::*;
 pub use recovery::{reconcile_file_prepare, reconcile_signer_job};
 use submission::prepared_identity;
-pub use submission::submit_file_frozen;
+pub use submission::{signer_submit_identity, submit_file_frozen};
 
 pub fn prepare_file(input: &FileSignInput) -> Result<FileSignPrepared> {
     let (resource, fingerprint) = file_prepare_identity(input)?;
