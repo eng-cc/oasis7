@@ -741,3 +741,7 @@ mod tests {
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "client/private_goal_client.rs"]
 mod private_goal_client;
+
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "client/private_task_context_client.rs"]
+mod private_task_context_client;

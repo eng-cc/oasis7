@@ -11,7 +11,7 @@
 - 配对产品 design：[`first-session-and-continuation.design.md`](first-session-and-continuation.design.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-10-03
+- Last reviewed：2026-10-12
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)
 
 本文是长期产品分册，承载首局微循环、后引导承接与首次持续能力的玩家承诺。它不冻结 UI 字段、tick、数值阈值、任务状态或实现方案。
@@ -306,13 +306,48 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 
 可回退的路线还必须说明回退仍有效的窗口、回退的主要代价，以及回退后保留与失去的价值；不可回退或尚无安全回退时也必须明确这一点。上述承诺不冻结成本、数值、世界状态、runtime 字段或 UI 表现；具体可用路线仍取决于权威世界状态。
 
+<a id="req-first-branch-001"></a>
+#### REQ-FIRST-BRANCH-001：分支解释与当前阶段保持同义
+
+- 适用条件：当前主目标允许玩家从已形成的工业能力转向本地或区域专业化。
+- 要求：主指引、分支收益、后续两步、风险和回访动作必须表达同一阶段的可达用途。模块、工厂核心或合金等真实可用的生产选择应说明它们服务的本地需求；不得仅凭内部阶段名称暗示治理、投票、领土或冲突机制已经开放。
+- 上位承诺：3.1、FS-5、FS-10；合法工业动作和地理意义上的区域需求仍可作为专业化路径。
+- 专业权威：[`Viewer 分支投影设计`](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency)。
+- 验收：[AC-FIRST-BRANCH-001](#ac-first-branch-001)。
+
+<a id="ac-first-branch-001"></a>
+#### AC-FIRST-BRANCH-001：专业化指引不发布未开放的阶段承诺
+
+- 给定：玩家处于本地或区域专业化阶段，部分工业动作可执行，另一些候选被权威状态禁用。
+- 当：玩家读取主指引、比较分支并查看后续用途。
+- 则：各处均说明当前可达的生产、服务或协作用途；禁用动作不会被推荐，合法工业动作不会因其类别被隐藏，也不会把内部阶段名称解释为已获得治理或冲突能力。
+- 覆盖：REQ-FIRST-BRANCH-001、FS-5、FS-10。
+
+<a id="req-first-branch-002"></a>
+#### REQ-FIRST-BRANCH-002：回退承诺随窗口关闭而失效
+
+- 适用条件：当前路线提供有明确有效窗口的回退选择。
+- 要求：玩家比较、进入下一阶段或完成恢复后，回退可用性、截止条件和解释必须一致。窗口关闭后说明不可回退的原因，保留真实可用的修复、重排或重新定目标路径；已兑现的收益和既有义务不因回退失效或换向而被抹去。状态不足或冲突时不能继续承诺可回退。
+- 上位承诺：3.1、3.2、FS-10、FS-13；路线各自拥有截止条件，本分册不统一所有路线的截止时点。
+- 专业权威：[`Viewer 回退样例与状态边界`](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency)。
+- 验收：[AC-FIRST-BRANCH-002](#ac-first-branch-002)。
+
+<a id="ac-first-branch-002"></a>
+#### AC-FIRST-BRANCH-002：截止前、截止时和恢复后的回退信息一致
+
+- 给定：同一路线分别处于回退窗口内、窗口刚关闭和随后修复或完成的状态。
+- 当：玩家查看回退说明或尝试继续使用旧的回退选择。
+- 则：只有当前窗口允许时才可回退；截止时及之后均说明不可用原因，保留已形成的结果和义务，并展示仍合法的恢复或换向选择。展示样例只能证明自身的状态合同，不能据此声称真实世界支持回退。
+- 覆盖：REQ-FIRST-BRANCH-002、FS-10、FS-13。
+
+<a id="goal-redirection-pending-and-settled-boundary"></a>
 ### 3.2 目标换向与在途意图边界
 
-主动换向改变玩家接下来要追求的主目标，但不把旧目标的不同处理阶段混成一个结果：
+本节沿用[模块的三阶段合同](prd.md#跨资源承诺、失效与重复提交边界)和[会话失效与待决 intent 边界](../player-entry-distribution/prd.md#player-session-authorization-continuity)。主动换向改变玩家接下来要追求的主目标，但不把旧目标的不同处理阶段混成一个结果：
 
 - **预览 / 推荐**只说明候选目标、预计成本、主要 blocker 与下一步，不产生世界效果；换向可以放弃它，不能把预览当作已提交或已占用资源。
-- **已接受但尚未生效的请求**仍按其专业合同判断可继续、明确取消、过期或重新评估。换向、重连、刷新或普通重试不得把旧请求自动迁移到新目标、复制其资格/优先级或产生第二次世界效果；若需要新目标下的行动，玩家或 Agent 必须形成独立的新请求。
-- **已提交的世界结果**不因换向被追溯取消、伪装成未发生或再次执行；后续纠错、救济或持续义务只能沿适用专业合同处理。换向前已存在的义务、风险和可归因后果仍须可读。
+- **已接受的承诺 / 待决请求**仍按其专业合同判断可继续、明确取消、过期或重新评估。已接受但尚无 committed receipt 的请求保持“待决且未生效”；提交、接受、有限 hold 或排队记录不能单独证明目标结果已结算。换向、重连、刷新或普通重试不得把旧请求自动迁移到新目标、复制其资格/优先级或产生第二次世界效果；若需要新目标下的行动，玩家或 Agent 必须形成独立的新请求。
+- **receipt 支持的已结算结果**只包括已有权威 receipt 支持且实际生效的世界后果；该范围不因换向被追溯取消、伪装成未发生或再次执行。尚未结算的部分仍按承诺或待决请求处理，不能因同一目标已有部分 receipt 就整体视为完成；后续纠错、救济或持续义务只能沿适用专业合同处理。换向前已存在的义务、风险和可归因后果仍须可读。
 
 换向确认后，正式入口只将新目标作为当前主焦点，同时保留旧目标的已生效结果、未决义务/风险和可执行的取消、等待、恢复或重新规划下一步；不得把两个目标同时表现为已接受的当前主线，也不得以切换成功代替旧请求的权威结果。具体请求身份、去重、取消、过期、重评与 receipt 由 runtime、Agent 和 Viewer 专业权威定义。
 
@@ -352,7 +387,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - FS-10：首次持续能力后的样例提供 2 至 3 个当前可达的分支类别，并为每项证明即时收益、实质不同的后续两个 beat、约束/风险/锁定与下次会话第一动作；可回退项还证明窗口、代价、保留价值与失去价值。
 - FS-11：代表性早期 quote/preview 样例围绕一个当前主要决策突出一个主导 blocker 或成本，并保留可恢复细节的回看路径；任何损失、锁定、权威移交、不可逆行动或恢复可用性变化均被提升，不会因信息仲裁而遗漏或改变语义。
 - FS-12：首局至首次持续能力的样例以预设引导脊柱建立一个当前主目标和可执行“继续”路径；达成阶段成果后只在 2 至 3 个实质不同方向或玩家主动换向时请求选择，后台作用域/转译/校验/治理/审计只在实质影响当前选择时提供原因和替代路径。
-- FS-13：代表性主动换向样例区分预览、已接受但尚未生效的请求与已提交的世界结果；换向、重连、并发或重试不会追溯取消已提交结果、自动迁移旧请求或产生第二次 receipt。新目标独立形成，玩家能读到旧目标的已生效结果、未决义务/风险及取消、等待、恢复或重新规划下一步，且正式入口不会把旧、新目标同时表达为当前主线。
+- <a id="fs-13"></a>FS-13：代表性主动换向样例区分预览、已接受的承诺 / 待决请求与 receipt 支持的已结算结果。已接受但尚无 committed receipt 的请求保持待决且未生效，提交、接受、hold 或排队不能代签目标结算；部分结果已结算时，剩余部分仍按其承诺或待决范围判断。换向、重连、并发或重试不会追溯取消已结算结果、自动迁移旧请求或产生第二次 receipt。新目标独立形成，玩家能读到旧目标的已生效结果、未决义务/风险及取消、等待、恢复或重新规划下一步，且正式入口不会把旧、新目标同时表达为当前主线。
 - FS-14：空、陈旧或冲突状态，以及同时存在多个 blocker 的代表性样例，证明 Viewer 与 pure API 采用相同的状态置信度闸门和主要 blocker 优先级：状态未确认时不提供会改变世界的猜测动作，至少保留真实的复核、恢复、安全停止或重新定目标路径；状态一致时先呈现安全/权利/授权与不可逆后果，再处理可恢复前置和可选信息；同级安全路径可比较且不会被静默合并。状态在展示后变化时，旧动作必须按当前状态重新判断，不得沿用旧资格/成本、静默改道或产生第二次世界效果。
 - FS-15：代表性首局工业 walkthrough 在展示为当前主推荐前，必须先通过 `Starter Industrial Feasibility Gate`，并按所选 profile 的实际前置，沿工厂就绪、合法输入/电力、排程与实际生产结算逐节点证明玩家动作、完成边界、主 blocker、反馈与恢复；物流抵达和多输入齐套仅在该配方/入口实际需要时验证，不增加 canonical Smelter 的隐藏前置；只有 `terminal-admission` profile 才继续证明 delivery receipt，`production_only` profile 在匹配 production receipt 后可完成首产物但仍保持 `produced/undelivered`。闸门只返回 `candidate_available` 或 `no_safe_starter_chain`，后者必须保留 current/target/unknown 证据分类、可行动 blocker、下一动作和复查边界，不得发放免费输入或静默改道。walkthrough 至少区分 accepted-unstarted、active/in-transit、produced-but-not-delivered 与 delivered/terminal-settled，证明 production-only 完成不等于交付用途，terminal-admission 只有交付完成才产生目的地后果，且重连/重复提交/回放不复制任一 receipt。当前选定 `production_only` 的正向路径与可恢复阻塞需要 `test_tier_required` 证据；arrival reorder 仅在实际物流前置适用时验证。`terminal-admission` 专题启动后独立核验正向与 production 成功但 delivery 失败/未确认情形，不阻断首产物完成；跨窗口/争用/损耗/适用终端故障与两入口一致性进入 `test_tier_full`。
 
@@ -374,7 +409,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 | FS-10 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 当前可达分支的即时收益、两个不同后续 beat、约束/锁定、回访第一动作及适用时的回退取舍证据 | test_tier_required |
 | FS-11 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 首局 quote/preview 的主要决策、主导成本/阻塞、延后信息回看与高后果信息提升证据 | test_tier_required |
 | FS-12 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-007 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 单一主目标、预设引导脊柱、继续/分支/换向及仅在实质相关时出现的后台护栏 S6 组合证据 | test_tier_required |
-| FS-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 换向、重连、并发与重试下的预览/已接受或待决/已提交分类、旧请求不自动迁移、已提交结果不追溯取消、单次 receipt、新目标独立形成，以及旧义务/风险与下一步的玩家可读性组合证据 | test_tier_full |
+| FS-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 换向、重连、并发与重试下的预览/已接受承诺或待决/receipt 支持的已结算结果分类，无 committed receipt 仍待决、部分结算不冒充整体完成、旧请求不自动迁移、已结算结果不追溯取消、单次 receipt、新目标独立形成，以及旧义务/风险与下一步的玩家可读性组合证据 | test_tier_full |
 | FS-14 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 空/陈旧/冲突状态与多 blocker 的状态置信度闸门、稳定优先级、同级路径比较、展示后重新判断，以及无猜测动作/无静默改道/无第二次效果的 Viewer + pure API 组合证据 | test_tier_full |
 | FS-15 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | Gate-before-recommendation 的 `candidate_available`/`no_safe_starter_chain` 两结果、stable starter-chain/candidate identity 与 authority snapshot/version 绑定、`current-evidence-backed`/`target-contract`/`unknown/not_tracked` 切线、`no_safe_starter_chain` 的 blocker/恢复/复查边界，以及 fresh composite runtime + QA evidence 后才可作 current claim；并覆盖首局工业 walkthrough 的逐节点动作/边界/阻塞/恢复、齐套 arrival-order、accepted 与生产/交付分离、生产成功但交付未完成、重复/重连/回放单次 receipt，以及 Viewer/pure API 事实一致性 | test_tier_required + test_tier_full |
 | FS-16 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 2.2.5 单约束配对样例的完成基线、权威变化与保留价值/安全动作合同证据；入口观察分别记录理解、续玩意愿与提示介入，沿 testing 既有层级独立给出结论 | test_tier_required（合同） + test_tier_full（适用入口组合）；playability 独立 |
@@ -419,3 +454,5 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 | [REQ-FIRST-INDUSTRIAL-006](#req-first-industrial-006) / [AC-FIRST-INDUSTRIAL-002](#ac-first-industrial-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-FIRST-INDUSTRIAL-007](#req-first-industrial-007) / [AC-FIRST-INDUSTRIAL-004](#ac-first-industrial-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-FIRST-INDUSTRIAL-008](#req-first-industrial-008) / [AC-FIRST-INDUSTRIAL-004](#ac-first-industrial-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-FIRST-BRANCH-001](#req-first-branch-001) / [AC-FIRST-BRANCH-001](#ac-first-branch-001) | `gameplay_designer` / `viewer_engineer` / `qa_engineer` | [`Viewer 分支投影设计`](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency) | 主指引与各分支的阶段同义、真实动作过滤及本地用途回归；各入口体验证据独立 | `test_tier_required`；适用入口体验 `test_tier_full` |
+| [REQ-FIRST-BRANCH-002](#req-first-branch-002) / [AC-FIRST-BRANCH-002](#ac-first-branch-002) | `gameplay_designer` / `viewer_engineer` / `qa_engineer` | [`Viewer 回退状态设计`](../../world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md#branch-preview-consistency) | 同一路线截止前、边界、修复后与完成态的正反例；样例与真实世界证据分开 | `test_tier_required`；真实入口适用时 `test_tier_full` |

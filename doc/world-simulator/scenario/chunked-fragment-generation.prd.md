@@ -213,10 +213,32 @@
 - `snapshot.version=2` / `journal.version=2` 允许迁移到当前版本 `v3`（CG6），并补齐 `chunk_generation_schema_version` 默认值。
 - 其他未知版本保持拒绝加载，避免无声破坏账本一致性。
 
+<a id="fragment-refill-preview-contract"></a>
 #### 资源恢复预览约束（与 FRB4 对齐）
-- `FragmentsReplenished` 作为运行期恢复事件时，不应只作为 replay / 后台账本事件存在；当玩家面临 chunk/frag 资源不足、目标 frag 采空或第一工业目标缺料时，玩家侧应能读取 `resource_replenishment_quote` / `fragment_refill_preview`。
-- 预览必须把 `remaining_by_element` / `remaining_by_compound` 的粗粒度状态、下一次补种 tick、预计补种数量、等待成本和当前工业目标关联转换为玩家选择：等待当前 chunk、移动到其他 frag/chunk，或切换替代材料路线。
-- 若动作或策略推荐等待补种，但缺少 `next_replenish_tick`、`estimated_replenished_frag_count`、`next_industrial_goal_relevance` 或 `recommended_resource_action`，标记为 `resource_replenishment_quote_missing`；该缺口不改变生成即定量、采集扣减、回放校验或资源守恒规则。
+
+玩家在目标 frag 采空、当前 chunk 缺料或第一工业目标受阻时，需要在等候、移动到其他 frag/chunk、切换材料路线之间选择。支持补种的世界应给出下一次机会、预计目标量与等待成本，到复查点再读取世界结果；等待不预订材料、不保证掉落，也不自动完成采集。不执行补种的世界应直接说明没有等待补种选项，避免玩家因初始化配置或旧预览而停留。
+
+产品决策与机会成本承接[玩法产品 PRD](../../product/world-rules-core-gameplay/prd.md)及[玩法顶层合同](../../game/gameplay/gameplay-top-level-design.prd.md)；本专题拥有生成、预算、补种与 replay 的专业语义，接线和验证见[配对设计](chunked-fragment-generation.design.md#fragment-refill-preview-design)。当前可计算未来补种量的入口是持有当前完整模型的 `WorldKernel::quote_fragment_refill_preview`。本地 runtime-live 的 named scenario 与 generated-world 均明确返回 disabled；world-service 的当前投影不足以提供权威 chunk/fragment 预算，预览返回 unavailable。这些结果不表示为 live 新增了补种执行能力。
+
+- `FragmentsReplenished` 作为运行期恢复事件时，玩家侧应能读取 `resource_replenishment_quote` / `fragment_refill_preview`，把资源余量、预计补种数量、等待成本和当前工业目标关联转成上述选择。
+- 若动作或策略推荐等待补种，但缺少可用的 `next_replenish_tick`、`estimated_replenished_frag_count`、`next_industrial_goal_relevance` 或 `recommended_resource_action`，仍属于 `resource_replenishment_quote_missing`；未知数据不能用占位数值满足该合同。
+
+<a id="req-frfr-1"></a>
+- **REQ-FRFR-1 执行能力一致**：预览必须根据当前后端的实际补种能力与有效配置确定 `replenishment_enabled`。已知不执行补种时显示 disabled，无下一补种 tick，不推荐 `wait_current_chunk`；玩家可以检查现有资源后移动或切换材料路线。无法确认服务能力与当前资源来源时返回 unavailable，不能据此把整个远程世界宣告为禁用。临时只读 kernel、启动模型或周期配置均不能证明 live 会执行补种。验收：[AC-FRFR-1](#ac-frfr-1)。
+
+<a id="req-frfr-2"></a>
+- **REQ-FRFR-2 启动与资源来源**：named scenario 与 generated-world 的预览必须保留可用的 chunk、fragment 和预算来源，或明确说明该入口不支持相应预览；不能把模型缺失伪装成世界中没有资源。启动模型只能证明初始化状态，不能在世界推进后冒充当前预算。当前两个本地入口均不执行运行期补种，预览标明 disabled 且当前资源余量 unavailable；named scenario 初始快照的模型保留属于独立入口投影边界，不能由本预览修正推导已经完成。验收：[AC-FRFR-2](#ac-frfr-2)。
+
+<a id="req-frfr-3"></a>
+- **REQ-FRFR-3 下一机会时间**：对处理完成的 tick，`next_replenish_tick` 必须严格晚于当前世界时间；周期边界已经处理时不得再次展示现已到期或零等待。从处理完成的 snapshot 与 journal 恢复后遵循同一语义。本合同只接受正常完成边界，不增加持久字段或对任意手工构造中间快照的完成状态推断。验收：[AC-FRFR-3](#ac-frfr-3)。
+
+<a id="req-frfr-4"></a>
+- **REQ-FRFR-4 下一机会数量**：启用且有当前完整模型时，预览按当前缺口、现有比例和上限估计下一次补种目标量，不能仅因尚未到周期就填 `0`。已知目标量为零与输入未知必须区别显示；缺失 chunk 预算或无法表达严格未来 tick 时拒绝报价，不用成功零值代替未知。估计不保证实际落点、材料或接纳数量；满 chunk 或已知零目标量不推荐等待补料。验收：[AC-FRFR-4](#ac-frfr-4)。
+
+<a id="req-frfr-5"></a>
+- **REQ-FRFR-5 只读与复查**：预览和重复请求不得生成 frag、扣改资源、推进 tick、消费世界动作 nonce 或产生补种回执。收到新世界快照、请求失败、重新连接或更换 chunk 后，旧预览不能继续作为当前等待建议；复查以执行后端的实际事件与快照为准。周期尝试未接受任何候选时允许没有补种增量，预览不能凭空产生增量。验收：[AC-FRFR-5](#ac-frfr-5)。
+
+这些约束不改变补种周期、比例、材料分布、生成即定量、采集扣减、持久 schema 或 replay 规则，不增加 Runtime 补种子系统或 world-service RPC。未来开放 live 正向预览需要权威资源投影、实际执行能力以及该入口跨周期结果共同成立，不能仅恢复启动模型或删除 disabled 判断。
 
 ### 经济资源映射契约（与 M4 对齐，CG8 落地）
 为接入现有 `electricity/hardware/data` 三类核心资源，先落地“化合物质量 -> hardware”的最小闭环：
@@ -281,6 +303,19 @@
 - RefineCompound 预览满足 `refine_quote` 可读性：电力成本、硬件产出、精炼后电力、目标缺口前后变化和第一工业目标关联均可追溯。
 - FragmentsReplenished 预览满足 `resource_replenishment_quote` 可读性：下一次补种 tick、预计补种量、当前剩余量摘要、等待成本、第一工业目标关联和推荐资源行动均可追溯。
 - 在默认预算下，批量生成不出现 OOM 或极端耗时。
+
+<a id="fragment-refill-preview-acceptance"></a>
+#### 资源恢复预览验收
+
+验收区分真正执行补种的 kernel 与当前不提供正向补种预览的 live 入口。函数 fixture 可以验证边界公式；启动与执行结果必须通过真实构造、step、事件及恢复验证，不能以手工注入 chunk 或修改 snapshot 时间替代。
+
+| 验收 | 给定 / 当 / 则 | 关联要求 |
+| --- | --- | --- |
+| <a id="ac-frfr-1"></a>**AC-FRFR-1 能力边界** | 本地后端即使配置启用，经签名读取仍返回 disabled、无下一 tick、无等待建议；world-service 资源投影未知时返回 unavailable，即使 Viewer 保留了有效启动 seed 也不得构造正向报价。 | [REQ-FRFR-1](#req-frfr-1) |
+| <a id="ac-frfr-2"></a>**AC-FRFR-2 真实入口** | 从 named asteroid scenario 与 generated-world 的真实构造入口启动并读取签名预览，均诚实报告本地后端 disabled；generated-world 的初始资源模型可读不改变该结果。named scenario 的初始快照完整性不由本验收证明。 | [REQ-FRFR-2](#req-frfr-2) |
+| <a id="ac-frfr-3"></a>**AC-FRFR-3 已处理边界与恢复** | 周期 100 的真实 kernel 从 99 推进到 100，返回后的下一机会为 200、等待 100、due 为 false；从该完成快照恢复以及从初始快照 replay 后预览相同。即使该周期没有补种事件，也不重报已处理 tick 为 due。 | [REQ-FRFR-3](#req-frfr-3) |
+| <a id="ac-frfr-4"></a>**AC-FRFR-4 未来数量与未知** | 上限 100、比例 10,000 ppm、存在缺口时，tick 40 预估下一目标量 1、等待 60；满 chunk 显示已知零并推荐转向；缺失预算或未来 tick 溢出返回不可用。Web 区分已知零与无效数量，不延续未知结果的等待建议。 | [REQ-FRFR-4](#req-frfr-4) |
+| <a id="ac-frfr-5"></a>**AC-FRFR-5 预览到世界结果** | 真正的 kernel 启动后读取预览、跨周期推进，按目标 chunk 核对 `FragmentsReplenished` 明细及 fragment/chunk 预算，再核对 snapshot/replay。事件可包含多个 chunk，不能把全世界增量当作当前 chunk 估计。重复预览不改变世界与日志；Web 在失败、待刷新和坐标变化后撤下旧建议。当前 live 签名路径只验证禁用/不可用，不声称已完成 live 补种闭环。 | [REQ-FRFR-5](#req-frfr-5) |
 
 ### 回放一致性与性能回归测试（CG10 落地）
 - 回放一致性：对携带预算约束的 `ChunkGenerated` 事件执行重放，校验 `fragment_count/block_count/chunk_budget` 与原运行一致。

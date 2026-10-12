@@ -29,11 +29,19 @@ impl WorldKernel {
             && config.replenish_interval_ticks > 0
             && config.replenish_percent_ppm > 0
             && max_fragments > 0;
-        let next_replenish_tick = replenishment_enabled
-            .then(|| next_replenishment_tick(self.time, config.replenish_interval_ticks as u64));
+        let next_replenish_tick = if replenishment_enabled {
+            Some(
+                next_replenishment_tick(self.time, config.replenish_interval_ticks as u64)
+                    .ok_or_else(|| "next replenishment tick is unavailable".to_string())?,
+            )
+        } else {
+            None
+        };
         let ticks_until_replenish = next_replenish_tick.map(|tick| tick.saturating_sub(self.time));
-        let replenishment_due = next_replenish_tick == Some(self.time) && self.time > 0;
-        let estimated_replenished_frag_count = if replenishment_due {
+        // A public kernel snapshot describes a completed tick. Its refill
+        // attempt has already run, including when no candidate was accepted.
+        let replenishment_due = false;
+        let estimated_replenished_frag_count = if replenishment_enabled {
             compute_replenish_target(
                 max_fragments,
                 config.replenish_percent_ppm,
@@ -47,7 +55,7 @@ impl WorldKernel {
             .chunk_resource_budgets
             .get(&chunk_coord)
             .map(|budget| budget.remaining_by_element_g.clone())
-            .unwrap_or_default();
+            .ok_or_else(|| format!("chunk resource budget is unavailable: {chunk_coord:?}"))?;
         let (target_frag_id, current_frag_remaining_summary) =
             select_target_fragment(&self.model, &self.config.space, chunk_coord);
         let resource_type_count = remaining_by_element_g.len();
@@ -98,13 +106,9 @@ impl WorldKernel {
     }
 }
 
-fn next_replenishment_tick(time: WorldTime, interval_ticks: WorldTime) -> WorldTime {
+fn next_replenishment_tick(time: WorldTime, interval_ticks: WorldTime) -> Option<WorldTime> {
     let remainder = time % interval_ticks;
-    if time > 0 && remainder == 0 {
-        time
-    } else {
-        time.saturating_add(interval_ticks.saturating_sub(remainder))
-    }
+    time.checked_add(interval_ticks - remainder)
 }
 
 fn select_target_fragment(

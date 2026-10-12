@@ -1050,6 +1050,7 @@ fn cognition_request(fixture: &Fixture) -> SubmitIntentRequest<WorldServicePaylo
                 },
                 response_artifact,
                 delegation_generation: 1,
+                task_fence: None,
                 causal_proposal: Some(CognitionCausalProposalV1 {
                     expected_consequence: serde_json::json!({"provenance":"agent_explanation_unverified", "prediction":"reach destination"}),
                     stakes: serde_json::json!({"provenance":"agent_explanation_unverified", "summary":"travel cost"}),

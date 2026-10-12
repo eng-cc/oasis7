@@ -987,6 +987,14 @@ pub(super) fn runtime_provider_prefix(
     context: &cognition_context::ProviderContextState,
 ) -> Result<(), String> {
     let request = &context.request_context;
+    crate::world_service::game_task::validate_cognition_fence_staged(
+        world,
+        &request.agent_subject,
+        None,
+        "",
+        0,
+        [],
+    )?;
     let request_digest = request.request_digest.to_string();
     if !cognition_event_matches(world, "TurnStarted", request) {
         world
@@ -1019,6 +1027,14 @@ pub(super) fn runtime_provider_dispatch(
     world: &mut RuntimeWorld,
     request: &crate::simulator::ContinuousAgentRequestContextV1,
 ) -> Result<(), String> {
+    crate::world_service::game_task::validate_cognition_fence_staged(
+        world,
+        &request.agent_subject,
+        None,
+        "",
+        0,
+        [],
+    )?;
     world
         .dispatch_cognition_request(
             request.agent_subject.as_str(),

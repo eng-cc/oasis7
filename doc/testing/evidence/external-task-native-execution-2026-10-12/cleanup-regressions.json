@@ -1,0 +1,37 @@
+{
+  "schema": "oasis7/native-task-cleanup-fault-regression/v1",
+  "code_head": "5b61c36733c0c4791fdedc594ab872f9f6ba1a7c",
+  "code_blob": "d9d5654f57f0f5c268a9177646ef625185bc9474",
+  "tier": "test_tier_required",
+  "model_calls": 0,
+  "aged_real_worker": {
+    "actual_head_at_least": 72,
+    "stop_committed": true,
+    "revoke_committed": true,
+    "age_alone_reproduced_failure": false
+  },
+  "red": {
+    "fault": "first original Stop TCP connection closed before admission",
+    "source_state": "instrumented uncommitted test on 90fc53b26; dirty patch hash unavailable",
+    "submit_unknown": 1,
+    "lookup_unknown": 22,
+    "canonical_stop_count": 0,
+    "result": "deadline exceeded"
+  },
+  "green": {
+    "retained_original_signed_payload": true,
+    "retry_limit_per_second": 1,
+    "submit_unknown": 1,
+    "submit_response": 1,
+    "lookup_unknown": 8,
+    "canonical_stop_count": 1,
+    "executor_epoch": 2,
+    "stop_committed": true,
+    "revoke_committed": true
+  },
+  "filter_result": {
+    "passed": 4,
+    "ignored_explicit_live": 1
+  },
+  "original_attempt_2_first_submit_category": "unobserved; not inferred from controlled fault"
+}

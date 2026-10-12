@@ -42,6 +42,7 @@ impl GameTaskCreateV1 {
 #[serde(rename_all = "snake_case")]
 pub enum GameTaskStatusV1 {
     Suspended,
+    Active,
 }
 
 /// Initial durable control metadata; this is not a complete TaskSnapshot.
@@ -66,6 +67,8 @@ pub struct GameTaskControlV1 {
     pub active_goal_reference: Option<super::GameGoalReferenceV1>,
     pub executor_epoch: DecimalU64,
     pub executor_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executor_binding: Option<super::GameExecutorBindingV1>,
     pub created_operation_id: String,
 }
 

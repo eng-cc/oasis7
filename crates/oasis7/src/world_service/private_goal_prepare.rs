@@ -82,7 +82,7 @@ mod tests;
 
 /// Narrow shared cryptographic boundary for private goal proofs and public owner
 /// goal publications. This does not change generic World Service verification.
-pub(super) fn verify_owner_signature_strict<T: Serialize>(
+pub(crate) fn verify_owner_signature_strict<T: Serialize>(
     domain: &str,
     request: &T,
     subject_public_key: &str,

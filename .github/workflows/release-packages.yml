@@ -349,6 +349,14 @@ jobs:
         env:
           EXPECTED_SHA: ${{ needs.plan.outputs.checkoutSha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Verify release Trunk installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f scripts/install-ci-trunk.sh || ! -s scripts/install-ci-trunk.sh || -L scripts/install-ci-trunk.sh ]]; then
+            echo "error: planned release source must include a nonempty regular scripts/install-ci-trunk.sh; select a source tag with verified Trunk installer support" >&2
+            exit 1
+          fi
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
@@ -363,15 +371,15 @@ jobs:
         with:
           shared-key: release-packages-web-wasm-trusted-v2
           cache-on-failure: true
-      - name: Restore pinned trunk binary
+      - name: Restore pinned Trunk release archive
         id: trunk-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cargo/bin/trunk
-          key: release-packages-trunk-trusted-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_TOOLCHAIN }}-${{ env.TRUNK_VERSION }}
-      - name: Install pinned trunk
-        if: steps.trunk-cache.outputs.cache-hit != 'true'
-        run: cargo install trunk --locked --version "${TRUNK_VERSION}"
+          path: ${{ runner.temp }}/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz
+          key: trunk-archive-${{ runner.os }}-${{ runner.arch }}-${{ env.TRUNK_VERSION }}-${{ hashFiles('scripts/install-ci-trunk.sh') }}
+      - name: Install verified pinned Trunk
+        shell: bash
+        run: bash scripts/install-ci-trunk.sh "$RUNNER_TEMP/ci-tools/trunk-x86_64-unknown-linux-gnu.tar.gz" "$RUNNER_TEMP/ci-tools/bin"
       - name: Verify pinned trunk
         shell: bash
         run: |

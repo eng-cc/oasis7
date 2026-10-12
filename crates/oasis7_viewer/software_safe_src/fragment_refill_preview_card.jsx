@@ -2,14 +2,40 @@ import { createSignal, For } from "solid-js";
 
 function display(value) { return value == null || value === "" ? "—" : String(value); }
 function Metric(props) { return <div class="metric"><div class="metric__label">{props.label}</div><div class="metric__value">{props.value}</div></div>; }
+function hasCountEstimate(quote) { return Number.isSafeInteger(quote.estimated_replenished_frag_count) && quote.estimated_replenished_frag_count >= 0; }
+function hasFutureOpportunity(quote) {
+  return !quote.replenishment_due && Number.isSafeInteger(quote.next_replenish_tick) && Number.isSafeInteger(quote.ticks_until_replenish) && quote.ticks_until_replenish > 0 && quote.next_replenish_tick >= quote.ticks_until_replenish && quote.wait_cost_ticks === quote.ticks_until_replenish;
+}
+function canWaitForReplenishment(quote) { return quote.replenishment_enabled && hasCountEstimate(quote) && quote.estimated_replenished_frag_count > 0 && hasFutureOpportunity(quote); }
 function forecastState(quote, locale, tr) {
-  if (!quote.replenishment_enabled) return tr(locale, "不可用", "Unavailable");
-  return quote.replenishment_due ? tr(locale, "现已到期", "Due now") : tr(locale, "已排期", "Scheduled");
+  if (!quote.replenishment_enabled || !hasCountEstimate(quote)) return tr(locale, "不可用", "Unavailable");
+  if (quote.replenishment_due) return tr(locale, "现已到期", "Due now");
+  return hasFutureOpportunity(quote) ? tr(locale, "已排期", "Scheduled") : tr(locale, "不可用", "Unavailable");
 }
 function uncertaintyCopy(quote, locale, tr) {
   if (!quote.replenishment_enabled) return tr(locale, "此预估中补充已禁用；不承诺会发生材料更新。", "Replenishment is disabled for this forecast; no renewal is promised.");
-  if (!quote.replenishment_due || Number(quote.estimated_replenished_frag_count) <= 0) return tr(locale, "下一次材料更新前没有可用的碎片数量预估。", "No fragment-count estimate is available until the next replenishment.");
+  if (!hasCountEstimate(quote)) return tr(locale, "当前无法估计补充数量，请刷新世界状态后重新评估。", "The fragment-count estimate is unavailable. Refresh the world state before reassessing.");
+  if (quote.estimated_replenished_frag_count === 0) return tr(locale, "当前预计不会增加碎片，请考虑移动或切换材料路线。", "The current forecast expects no new fragments; consider moving or switching material routes.");
   return tr(locale, "这是运行时的只读估算；实际材料以未来世界快照为准。", "This is a read-only runtime estimate; a future world snapshot remains authoritative.");
+}
+
+function remainingSummary(quote, locale, tr) {
+  if (quote.chunk_remaining_summary === "current_chunk_resources_unavailable") return tr(locale, "当前资源余量不可用", "Current resource amounts unavailable");
+  return display(quote.chunk_remaining_summary);
+}
+
+function resourceHint(quote, locale, tr) {
+  if (quote.estimated_replenished_resource_hint === "local_runtime_backend_does_not_execute_fragment_replenishment") return tr(locale, "当前世界不执行碎片补充；等待不会增加碎片。", "This world does not execute fragment replenishment; waiting will not add fragments.");
+  return display(quote.estimated_replenished_resource_hint);
+}
+
+function recommendedAction(quote, locale, tr) {
+  if (!quote.replenishment_enabled) return tr(locale, "检查当前资源后，移动或切换材料路线", "Check current resources, then move or switch material routes");
+  if (!hasCountEstimate(quote)) return tr(locale, "刷新世界状态后重新评估", "Refresh the world state before reassessing");
+  if (quote.estimated_replenished_frag_count === 0 || quote.recommended_resource_action === "move_or_switch_material_route") return tr(locale, "检查当前资源后，移动或切换材料路线", "Check current resources, then move or switch material routes");
+  if (quote.recommended_resource_action === "wait_current_chunk" && !canWaitForReplenishment(quote)) return tr(locale, "刷新世界状态后重新评估", "Refresh the world state before reassessing");
+  if (quote.recommended_resource_action === "wait_current_chunk") return tr(locale, "等待当前区块，到下一补充周期重新评估", "Wait in this chunk and reassess at the next replenishment opportunity");
+  return display(quote.recommended_resource_action);
 }
 
 export function FragmentRefillPreviewPanel(props) {
@@ -39,7 +65,7 @@ export function FragmentRefillPreviewPanel(props) {
     {error() ? <div class="feedback-summary feedback-summary--error" role="alert">{error()}</div> : null}
     {remote().status === "pending" ? <div class="feedback-summary" role="status">{tr(locale(), "正在刷新预估；旧预估已失效。", "Refreshing the forecast; the previous forecast is no longer current.")}</div> : null}
     {stale() && remote().status !== "pending" ? <div class="feedback-summary feedback-summary--warn" role="status" data-testid="fragment-refill-preview-stale">{tr(locale(), "区块坐标已变更；当前预估已过期。请重新刷新。", "Chunk coordinates changed; this forecast is stale. Refresh it.")}</div> : null}
-    {quote() && remote().status !== "pending" ? <div class="stack" data-testid="fragment-refill-preview-card"><div class="badge-row"><span class="badge badge--accent">{forecastState(quote(), locale(), tr)}</span><span class="badge">{`${tr(locale(), "区块", "Chunk")}: ${display(quote().chunk?.x)}, ${display(quote().chunk?.y)}, ${display(quote().chunk?.z)}`}</span></div><div class="summary-grid"><Metric label={tr(locale(), "预计补充碎片", "Estimated replenished fragments")} value={display(quote().estimated_replenished_frag_count)} /><Metric label={tr(locale(), "等待成本", "Wait cost")} value={`${display(quote().wait_cost_ticks)} ${tr(locale(), "步", "ticks")}`} /><Metric label={tr(locale(), "区块余量", "Chunk remaining")} value={display(quote().chunk_remaining_summary)} /></div><div class="feedback-summary">{uncertaintyCopy(quote(), locale(), tr)}</div><div class="feedback-detail">{`${tr(locale(), "资源提示", "Resource hint")}: ${display(quote().estimated_replenished_resource_hint)}`}</div><For each={quote().remaining_by_element_g || []}>{(entry) => <div class="feedback-detail">{`${display(entry.element)}: ${display(entry.remaining_g)}g`}</div>}</For></div> : null}
+    {quote() && remote().status !== "pending" && !error() && !stale() ? <div class="stack" data-testid="fragment-refill-preview-card"><div class="badge-row"><span class="badge badge--accent">{forecastState(quote(), locale(), tr)}</span><span class="badge">{`${tr(locale(), "区块", "Chunk")}: ${display(quote().chunk?.x)}, ${display(quote().chunk?.y)}, ${display(quote().chunk?.z)}`}</span></div><div class="summary-grid"><Metric label={tr(locale(), "预计补充碎片", "Estimated replenished fragments")} value={hasCountEstimate(quote()) ? display(quote().estimated_replenished_frag_count) : tr(locale(), "不可用", "Unavailable")} /><Metric label={tr(locale(), "等待成本", "Wait cost")} value={canWaitForReplenishment(quote()) ? `${display(quote().wait_cost_ticks)} ${tr(locale(), "步", "ticks")}` : tr(locale(), "不可等待补充", "No wait option")} /><Metric label={tr(locale(), "下一复查 tick", "Next recheck tick")} value={display(quote().next_replenish_tick)} /><Metric label={tr(locale(), "区块余量", "Chunk remaining")} value={remainingSummary(quote(), locale(), tr)} /></div><div class="feedback-summary">{uncertaintyCopy(quote(), locale(), tr)}</div><div class="feedback-detail">{`${tr(locale(), "资源提示", "Resource hint")}: ${resourceHint(quote(), locale(), tr)}`}</div><div class="feedback-detail">{`${tr(locale(), "建议行动", "Recommended action")}: ${recommendedAction(quote(), locale(), tr)}`}</div><For each={quote().remaining_by_element_g || []}>{(entry) => <div class="feedback-detail">{`${display(entry.element)}: ${display(entry.remaining_g)}g`}</div>}</For></div> : null}
     </div>
   </section>;
 }

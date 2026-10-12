@@ -1,0 +1,63 @@
+{
+  "schema": "oasis7/native-task-evidence-manifest/v1",
+  "artifacts": [
+    {
+      "path": "attempt-1-cleanup.json",
+      "bytes": 2626,
+      "sha256": "8c93579263116b4fc33458bcc3f059e6d00bcc89df59474bc700c789340f30c8"
+    },
+    {
+      "path": "attempt-1-player.md",
+      "bytes": 2887,
+      "sha256": "a53760913c36b76009a7acd5dc4e257820be56777d99e7b8af2a80d516f9ef90",
+      "original_bytes": 3005,
+      "original_sha256": "3419e300e494e27108b5e9070fea41a67643d4904496b767969cf7885d6e26d4",
+      "redaction": "absolute workspace prefix normalized to repository relative path"
+    },
+    {
+      "path": "attempt-1-witness.json",
+      "bytes": 5190,
+      "sha256": "b0defbabdec8da95e8cd6e1ed883b69358b5ddc2f63739da7d609acc5db653a6"
+    },
+    {
+      "path": "attempt-2-cleanup-failed.json",
+      "bytes": 608,
+      "sha256": "8a7c677f4edfdb960a4d8b24880d2d14f782e00a1680089b64c38ceeb00d9ed0"
+    },
+    {
+      "path": "attempt-2-player.md",
+      "bytes": 2433,
+      "sha256": "da3f6403ee9e6b08817fe0816a54c1db4604a2271969e9448d67d68fe6095636"
+    },
+    {
+      "path": "attempt-2-witness.json",
+      "bytes": 36335,
+      "sha256": "e88feaa346f2482aa9f169a1db944470c525b7328e87125dcd94ffe1c4543db9"
+    },
+    {
+      "path": "cleanup-regressions.json",
+      "bytes": 1155,
+      "sha256": "3b0fca5dbebf47b122a71a78c4ddd681229ec543cce1430a9a720a431a514eb0"
+    },
+    {
+      "path": "disposable-world-cleanup.json",
+      "bytes": 557,
+      "sha256": "f4e3e251a0aadaf974fa78f066c4e557af908e8128a275b7e8a860588c53ca55"
+    },
+    {
+      "path": "oracle-summary.json",
+      "bytes": 1055,
+      "sha256": "33c9cd1cdf323889afe626cb5b9923698c4b4f7742334534ecc2dd0c57ab0385"
+    },
+    {
+      "path": "preflight-prefix-rejected.json",
+      "bytes": 505,
+      "sha256": "52cd33c45091d1c30c89001b3cf6da8a1cb1d0e12b71ff69986493e405a507c1"
+    },
+    {
+      "path": "preflight-witness.json",
+      "bytes": 14706,
+      "sha256": "bddb70e9e53f71830ffbfab96c61870caa0d06f362b622161552f058596ab2ef"
+    }
+  ]
+}
