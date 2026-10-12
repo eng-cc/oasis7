@@ -229,6 +229,25 @@ impl RuntimeReceiptReadbackVerifier for VerifiedWorldReadback {
     }
 }
 
+struct StaleWorldReadback;
+
+impl RuntimeReceiptReadbackVerifier for StaleWorldReadback {
+    fn verify_world_readback(
+        &self,
+        _context: &ContinuousAgentTurnContextV1,
+        _feedback: &FeedbackEnvelopeV1,
+        receipt: &RuntimeReceiptLineageV1,
+        response_identity: &ResponseArtifactIdentityV1,
+    ) -> Result<RuntimeReceiptReadbackHandleV1, crate::simulator::AsyncAgentRunnerError> {
+        let mut stale_lineage = receipt.clone();
+        stale_lineage.feedback_id.push_str("-stale");
+        Ok(RuntimeReceiptReadbackHandleV1::from_durable_world_readback(
+            &stale_lineage,
+            response_identity,
+        ))
+    }
+}
+
 #[test]
 fn committed_feedback_can_cross_only_the_world_readback_identity_seam() {
     let mut runner = provider_backed_runner();
@@ -259,6 +278,29 @@ fn committed_feedback_can_cross_only_the_world_readback_identity_seam() {
         )
         .expect("Runtime readback verifier admits committed memory");
     assert_eq!(store.entries().len(), 1);
+    let accepted_checkpoint = serde_json::to_value(&store).expect("checkpoint serializes");
+    assert_eq!(accepted_checkpoint["revision"], 1);
+    assert_eq!(
+        accepted_checkpoint["entries"][0]["scope"],
+        "session_private"
+    );
+    assert_eq!(
+        accepted_checkpoint["entries"][0]["summary"],
+        "candidate observation awaiting Runtime receipt"
+    );
+    assert_eq!(
+        accepted_checkpoint["entries"][0]["receipt_id"],
+        "receipt-readback-1"
+    );
+    assert_eq!(
+        accepted_checkpoint["entries"][0]["provenance"],
+        "runtime_authoritative"
+    );
+    assert_eq!(accepted_checkpoint["entries"][0]["agent_id"], AGENT_ID);
+    assert_eq!(
+        accepted_checkpoint["entries"][0]["agent_session_id"],
+        SESSION_ID
+    );
     runner
         .consume_runtime_feedback_with_lineage(
             AGENT_ID,
@@ -267,6 +309,11 @@ fn committed_feedback_can_cross_only_the_world_readback_identity_seam() {
             &mut store,
         )
         .expect("legacy lineaged replay remains idempotent after world-readback completion");
+    assert_eq!(
+        serde_json::to_value(&store).expect("replayed checkpoint serializes"),
+        accepted_checkpoint,
+        "accepted replay must preserve the exact persisted memory checkpoint"
+    );
     let mut changed_receipt = receipt.clone();
     changed_receipt.envelope_digest =
         "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd".into();
@@ -283,4 +330,53 @@ fn committed_feedback_can_cross_only_the_world_readback_identity_seam() {
             .contains("replay receipt lineage mismatch")
     );
     assert_eq!(store.entries().len(), 1);
+    assert_eq!(
+        serde_json::to_value(&store).expect("rejected replay checkpoint serializes"),
+        accepted_checkpoint,
+        "rejected replay must not mutate the accepted checkpoint"
+    );
+}
+
+#[test]
+fn mismatched_full_readback_lineage_cannot_authorize_memory_write() {
+    let mut runner = provider_backed_runner();
+    runner
+        .start_turn_with_context(AGENT_ID, host_context())
+        .expect("open provider-backed target turn");
+    let outcome = completed_turn(&mut runner);
+    let mut committed = outcome
+        .feedback_for_runtime_status("committed", Some("receipt-readback-stale"))
+        .expect("build correlated committed feedback");
+    committed.candidate_action_id = Some(7);
+    committed.provenance = "runtime_authoritative".to_string();
+    let receipt = runtime_receipt_for_feedback(&committed);
+    let response_identity = outcome
+        .prepared_response_context
+        .as_ref()
+        .expect("response context retained")
+        .response_artifact_identity();
+    let mut store = MemoryWriteStore::default();
+
+    let error = runner
+        .consume_runtime_feedback_with_world_readback(
+            AGENT_ID,
+            committed,
+            &receipt,
+            &response_identity,
+            &StaleWorldReadback,
+            &mut store,
+        )
+        .expect_err("a full-lineage mismatch must fail closed");
+    assert!(
+        error
+            .to_string()
+            .contains("readback verifier returned mismatched identity"),
+        "unexpected readback error: {error}"
+    );
+    assert!(store.entries().is_empty(), "mismatched proof wrote memory");
+    let checkpoint = serde_json::to_value(&store).expect("memory checkpoint serializes");
+    assert_eq!(
+        checkpoint["revision"], 0,
+        "mismatched proof advanced revision"
+    );
 }

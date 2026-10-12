@@ -1,10 +1,12 @@
 //! Shared receipt-gated projection; no actor identity or awaiting outcome is synthesized.
 use super::*;
 
-pub(crate) fn project_receipt_memory(
+pub(crate) fn project_receipt_memory<A: RuntimeAuthority>(
     context: &ContinuousAgentTurnContextV1,
     feedback: &FeedbackEnvelopeV1,
     runtime_receipt: &RuntimeReceiptLineageV1,
+    authority_receipt: &A::Receipt,
+    authority: &A,
     intents: &[MemoryWriteIntent],
     store: &mut MemoryWriteStore,
 ) -> Result<(), AsyncAgentRunnerError> {
@@ -73,19 +75,18 @@ pub(crate) fn project_receipt_memory(
         normalized.push((intent, digest));
     }
     for (intent, digest) in normalized {
-        if let Err(error) = store.apply_runtime_receipt_with_context(
-            intent,
-            digest,
-            runtime_receipt,
-            Some(&policy_context),
-        ) {
-            tracing::warn!(
-                agent_id,
-                code = error.code(),
-                error = %error,
-                "provider memory projection rejected after Runtime commit"
-            );
-        }
+        store
+            .apply_runtime_receipt_with_authority(
+                intent,
+                digest,
+                authority_receipt,
+                &policy_context,
+                authority,
+            )
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
     }
+    store
+        .finalize_corrections_with_authority(authority_receipt, &policy_context, authority)
+        .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
     Ok(())
 }

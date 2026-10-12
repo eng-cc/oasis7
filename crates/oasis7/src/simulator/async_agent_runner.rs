@@ -48,6 +48,12 @@ use oasis7_agent_harness::{
     CompatibilityTurnRequest as HarnessCompatibilityTurnRequest, RuntimeAuthority,
 };
 
+pub(crate) struct CommittedFeedbackMemoryInput<'a> {
+    pub(crate) agent: &'a str,
+    pub(crate) feedback: FeedbackEnvelopeV1,
+    pub(crate) receipt: &'a RuntimeReceiptLineageV1,
+}
+
 #[path = "agent_harness_adapter.rs"]
 mod agent_harness_adapter;
 
