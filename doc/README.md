@@ -25,6 +25,7 @@
 | 你的目标 | 第一入口 | 第二入口 | 说明 |
 | --- | --- | --- | --- |
 | 想先知道项目当前公开状态与技术预览边界 | `README.md` | `site/index.html` | 先确认“现在能看什么”，再决定是否深入仓库文档 |
+| 想持续掌握目标、进度、近期变化和关键部署/架构决定 | [项目状态](engineering/command-center/README.md) | [架构索引](engineering/command-center/architecture/README.md)与[持续更新流程](engineering/command-center/command-center.manual.md) | 带来源时间的派生阅读入口，目标/规范与交付事实仍回原主责 |
 | 想确认本地 / test / 正式三套环境边界 | `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` | `testing-manual.md` + `doc/p2p/prd.md` | 先看项目三环境总览，再按 hosted-login / network tier / launcher lane 下钻 |
 | 想参与功能开发或治理任务 | `doc/core/prd.md` | `doc/<module>/prd.md` + PR、实际 CI 与评审记录（Issue 按需） | 先看全局目标，再进入目标模块 |
 | 想明确 OpenClaw、Codex 等外部 Runtime 如何持续玩游戏 | [智能体产品目标](product/agents-world-simulation/prd.md#external-runtime-play) | [外部 Runtime 产品分册](product/agents-world-simulation/external-agent-runtime-play.prd.md) + [LLM/provider 专业合同](world-simulator/llm/README.md) | 先读目标、首期流程与验收，再看协议、适配和实际能力证据 |

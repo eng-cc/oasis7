@@ -65,6 +65,8 @@
 - 会话过期、撤销或服务重启后，产品必须明确引导玩家 reconnect、re-register 或 re-auth，不得静默恢复旧 authority。玩家不管理长期 signer material；登录恢复的是 identity/session，不是 private key，也不会仅凭登录解锁敏感操作。
 - 当前状态是 limited playable technical preview，不代表 universal sharing、production custody 或 broad readiness。Hosted entry、session、authentication 与 signer custody 的专业合同由 [`doc/p2p/prd.md`](../../p2p/prd.md) 维护。
 
+<a id="player-session-authorization-continuity"></a>
+
 ### 会话失效、待决 intent 与 Agent 授权连续性
 
 会话过期、撤销、断开或重新认证只改变玩家当前进入与提交新动作的能力；它本身既不撤销、不确认，也不重放已由权威系统接受的 intent。已接受但尚无 committed receipt 的请求保持“待决且未生效”，恢复后只能按当时仍有效的权限、前置条件和 canonical 顺序完成、拒绝、过期或进入专业域已定义的撤回/替代路径。已结算 receipt 不因会话失效消失，重新认证也不得静默重提旧 intent、复制资源 sink，或把旧会话、界面缓存和 Agent 计划当成新的提交授权。

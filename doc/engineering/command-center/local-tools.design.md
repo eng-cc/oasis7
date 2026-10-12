@@ -31,10 +31,10 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 | 上游条款 | 独立义务与适用条件 | 本设计条款 | 外部 owner / dependency | 明确排除或未覆盖 |
 | --- | --- | --- | --- | --- |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 本机资料、保存、历史、快照和同包 CLI | [DES-CC-TOOLS-001](#DES-CC-TOOLS-001) | context 领域库、runtime_engineer | 不将落盘当作 Git 远端同步 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 已有兼容 signer 的普通文件签名 | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | signer caller、原 worker | 用户暂停特权初装/管理 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 未知操作、资源占位及冻结退出 | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | ToolJobs、原 context/signing 持久记录 | 不从进程消失推导回滚 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 显式私有输入和持久线程属性 | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 实验 runtime、agent_engineer | 不保证原 runtime/外部 CLI 全部转存追踪 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机资料、保存、历史、快照和同包 CLI | [DES-CC-TOOLS-001](#DES-CC-TOOLS-001) | context 领域库、runtime_engineer | 不将落盘当作 Git 远端同步 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 已有兼容 signer 的普通文件签名 | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | signer caller、原 worker | 用户暂停特权初装/管理 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 未知操作、资源占位及冻结退出 | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | ToolJobs、原 context/signing 持久记录 | 不从进程消失推导回滚 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 显式私有输入和持久线程属性 | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 实验 runtime、agent_engineer | 不保证原 runtime/外部 CLI 全部转存追踪 |
 
 <a id="DES-CC-TOOLS-002"></a>
 
@@ -81,7 +81,7 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | [DES-CC-TOOLS-001](#DES-CC-TOOLS-001) | 独立库、CAS、元数据、快照及 CLI | [context tests](../../../tools/oasis7-command-center/core/tests/context.rs) 数据隔离和条件保存；context snapshot/CLI 回归；真实 App 新建与重开 | 实现 PR source/build/机器和实际结果 | 未执行原生场景不得计通过 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | 同一请求 prepare/submit/inspect 和公钥验签 | [signer 授权反例](../../../crates/oasis7_local_signer/tests/qa_m0_negative.rs) 精确 purpose/context/hash；detached 单元测试验证 envelope；tools 输入反例和已有专用 signer 回读 | 实现 PR request/job 和真实结果 | 无测试安装时不证明 worker 实际提交；管理员用户暂停 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | 幂等、冻结、未知效果、口令句柄 | [runtime 故障回放](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 未知/退出；tools jobs 单元测试覆盖事务/冻结/查询可用性；secrets 和 native quit tests | 实现 PR 故障与退出回放 | 强退不保证后台继续 |
-| [REQ-CC-013](command-center.prd.md#REQ-CC-013) | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 私有标记先于发送及后续轮次/恢复 | [runtime fault tests](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 登记失败不发 frame、后续普通轮次和重开过滤；PrivateContextInput UI tests | 实现 PR 原线程/来源和回放结果 | 本次不启动模型任务，不证明模型输出质量 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-001](#DES-CC-TOOLS-001) | 独立库、CAS、元数据、快照及 CLI | [context tests](../../../tools/oasis7-command-center/core/tests/context.rs) 数据隔离和条件保存；context snapshot/CLI 回归；真实 App 新建与重开 | 实现 PR source/build/机器和实际结果 | 未执行原生场景不得计通过 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-002](#DES-CC-TOOLS-002) | 同一请求 prepare/submit/inspect 和公钥验签 | [signer 授权反例](../../../crates/oasis7_local_signer/tests/qa_m0_negative.rs) 精确 purpose/context/hash；detached 单元测试验证 envelope；tools 输入反例和已有专用 signer 回读 | 实现 PR request/job 和真实结果 | 无测试安装时不证明 worker 实际提交；管理员用户暂停 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-003](#DES-CC-TOOLS-003) | 幂等、冻结、未知效果、口令句柄 | [runtime 故障回放](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 未知/退出；tools jobs 单元测试覆盖事务/冻结/查询可用性；secrets 和 native quit tests | 实现 PR 故障与退出回放 | 强退不保证后台继续 |
+| [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-TOOLS-004](#DES-CC-TOOLS-004) | 私有标记先于发送及后续轮次/恢复 | [runtime fault tests](../../../tools/oasis7-command-center/core/tests/codex_runtime.rs) 登记失败不发 frame、后续普通轮次和重开过滤；PrivateContextInput UI tests | 实现 PR 原线程/来源和回放结果 | 本次不启动模型任务，不证明模型输出质量 |

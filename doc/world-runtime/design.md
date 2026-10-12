@@ -32,6 +32,8 @@
 - **Fail-closed availability**：when finality is unavailable, player/light-companion profiles expose only the last verified state plus clearly pending intents with no world effect. Dev/local execution uses a separate `world_id` and is never reconciled into the global history.
 - **Recovery trust chain**：fixed world/chain/genesis identity -> legal historical profile/epoch/manifest activation chain -> verified committed checkpoint/header bound to the authority active at that height -> hash-bound snapshot -> canonical committed-log replay -> state-root verification -> serve/vote. Snapshot and DistFS are transport/cache material, not independent authority.
 
+<a id="runtime-authority-commit-recovery-target"></a>
+
 ### Authority-profile commit and recovery seam（目标）
 
 [执行需求](prd.md#runtime-authority-profile-commit) 对接 [P2P authority profiles](../p2p/prd.md#p2p-authority-profiles)；同一 ordered-input/receipt/replay seam 接受合法单权威证明或 BFT 证书，不新建第二套状态机。prepare 与 committed decision 分开；原子校验 writer epoch、parent/head、顺序后，完整输入、结果、事件、里程碑、去重与正式证明/决定在本机及独立故障域达到持久条件，才发布 committed。实际首轮路径适用，局部 prepared publication 和 local fsync 不证明该端到端合同。

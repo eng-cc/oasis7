@@ -68,6 +68,8 @@
 4. 把 deterministic execution 与共识隔离为可版本化语义合同，完成 certificate-gated execution、升级与 replay 证明。
 5. 以同一协议支持 game/Agent/入口的并发消费，逐步扩展 proof-serving 与 light companion，同时保持 finality 缺失 fail closed。
 
+<a id="world-infrastructure-current-stage"></a>
+
 ### 当前阶段：持久单权威到同世界多节点
 
 首次开放的目标 profile 为 `controlled_single_authority`：受控权威决定提交，证明历史来源、顺序与连续性，正确性信任包含运营权威。后续 `bft` 以合法验证者集合的完整协议证书提供适用故障模型内的共识保证。两者复用一个世界、动作、确定性执行、receipt 和恢复协议；现有单签/threshold prototype 仍是原型，本次文档收敛不宣称任一正式 profile 已通过。
