@@ -127,6 +127,60 @@ JSON 的 `error_code` 仍为字符串，HTTP 状态类别与响应 shape 保持�
 - 验证目标是确定性的归属、code 和同状态资格，不在未测量前承诺吞吐、延迟或跨 runtime 历史同步。可见 UI 变化按 S6 验证，行为修复按开发流程选择适用的独立试玩场景；缺少私有 Runtime 或图形环境时标记 blocked/unverified，单元测试不能代签。
 - `runtime_engineer` 在实现时建立“有效 service session 但 canonical claim 不可用”的受支持负例，确认其当前可达性及对外错误映射；在此之前只确认代码判断条件不同，不声明线上已复现。`viewer_engineer`/`qa_engineer` 以 A/B/匿名、切换/迟到和共享故障恢复用例解除反馈隔离待验收状态。
 
+## 客户端与离线回放的补充设计
+
+<a id="viewer-client-request-lifecycle-design"></a>
+### 客户端等待状态与结果相关性设计
+
+本节是[客户端请求生命周期](viewer-control-plane-split-live-playback.prd.md#viewer-client-request-lifecycle)
+的实现要求。静态基准 `5e930fa` 中，`viewer_prompt_control_module.js::handleError` 在检查
+request 身份前清 timer 并改当前 feedback；`legacy_core.js::handleGameplayActionError` 在
+quote facade 分流前清普通动作 timer。已有部分 ACK identity 校验不能证明这些错误路径安全。
+本次补充设计，行为修复和测试结果仍由对应实现 PR 提供。
+
+1. 在发起操作时保存不可变的本地上下文：operation/target、发起玩家、会话与连接代次、协议
+   请求身份和该等待实例。身份取自已有协议/状态，不增加签名字段或另一权限来源。
+2. 注册/签名等每次异步返回后重新核对该上下文与当前操作。旧 completion 不得把新操作从
+   signing 变成 sent/accepted，也不得阻止新的签名完成后真正发送；只有实际发送才启动 ACK 等待。
+3. ACK 和 error 都先做通道/operation/目标/现有身份校验，再在原等待实例上结束 timer、更新
+   feedback 或历史。结束操作使用相同实例/代次，避免旧回调清掉替代请求的 timer。
+   当前合法 control_lost 继续触发现有安全阻断；无归属的 protocol error 只作协议诊断。
+4. quote facade 先识别是否为某个 quote 的结果，再处理该 quote 的状态；未认领的普通 action
+   error 才进入普通动作处理。断连将旧连接 quote 变为可恢复的非在途状态；新连接 hello/snapshot
+   不继承旧 pending。同连接 snapshot 不能清理仍有效的在途报价。已收到的工业报价按相关
+   输入变化标 stale/不可执行，保持可读；报价消息被接纳时立即发布显示更新，不等待无关
+   snapshot。展示缓存不授予执行旧报价的权利，工业数值和有效性仍由[资源流合同](../m4/industrial-resource-flow-contract.prd.md)定义。
+5. 注销 callback 捕获发起会话的代次；其本地清理、注册取消和刷新调度只在该代次仍当前时生效。
+   B 已登录/注册时，A 的成功或失败只结束 A 的操作记录，不清 B，也不根据 A 的结果推断 B 被撤销。
+6. 缺相关字段的 legacy 路径保留受限单请求行为；只在可证明归属的发送上下文内消费。
+   同连接超时后同目标重试等歧义不能靠本地 seq 补出远端没有 echo 的身份；保持未知并沿
+   支持的权威查询/重新建立请求上下文恢复，不把旧 ACK 写成新历史或新 applied。
+
+| 场景 | 必须断言的时序与结果 | 现有实现/测试接点 |
+| --- | --- | --- |
+| R1 Prompt 旧 error | A rollback(999)→B Apply，A error 不改 B ID/timer，B ACK 正常 applied/刷新；B 签名期、A 超时后重试、不同 Agent 与当前 control_lost 分别覆盖 | `viewer_prompt_control_module.js`、`viewer_prompt_control_protocol.test.jsx` |
+| R2 Chat 旧 ACK/error | A 超时→B 发出→A ACK，B 仍在途且不写假历史，B ACK 才完成；暂停 B 签名注入 A ACK，恢复后 B 实际发送；不同玩家/Agent 与 legacy 无 seq 分开 | `legacy_core.js` 的 Chat handlers、`viewer_agent_chat_auth_module.test.js` 与 `viewer_canonical_goal_module.test.js` |
+| R3/R4 quote 与普通动作 | 报价 pending 时断连，重连后可重新报价且拒绝旧连接结果；Q pending→G sent→Q error，G 在 30 秒 ACK 上限仍 timeout，或 G 正确 ACK 正常完成 | `war_declaration_quote_integration.js`、`viewer_quote_protocol_facade.js`、`legacy_core.js` 及对应 integration 测试；使用 fake clock |
+| R5 receipt 生产/消费 | 支持的 AgentChat producer/consumer 对 pending、canonical accepted、失败和重复结果使用相同语义；编译覆盖实际受影响目标，不猜字段迁就编译 | `oasis7_proto` Viewer DTO、Cognition canonical goal producer、当前 Chat consumer；保留旧已完成 producer 映射 |
+| R6 logout 代次 | A revoke ACK→B 登录/注册→A release 成功/HTTP 失败/网络失败，B 状态与刷新不变；普通/断网退出与重复点击仍正常 | 当前 auth/session module、logout handler 和受控 transport 测试 |
+
+上述确定性回归不代签 #3670 的真实双会话产品体验。涉及可见交互时按 S6 选择实际表面；
+本次纯合同修改没有发起登录、撤销、provider 或真实世界操作。
+
+工业报价的显示更新与保留另外承接 [#3510](https://github.com/eng-cc/oasis7/issues/3510) 的
+#2648/#2751：在 `viewer_quote_protocol_facade.js`、`power_survival_quote_state.js` 及相应
+测试验证报价到达立即可读、普通 snapshot 不无条件抹去、相关条件失效明确 stale，且旧报价
+不会绕过当前执行校验。此显示时序不由 R3/R4 的宣战报价通过结果代签。
+
+### 离线 Step / Seek 设计
+
+`server.rs::handle_playback_control` 对一次 Step 单独统计成功发出的 Event 数，并在 Seek 后
+重建后续请求的 logical/sequence 基准。completion 的 `Advanced` 使用本次发送事实，delta
+只报告真实差值；旧全连接最高 sequence 不能成为是否推进的判据。同连接 TCP 验收覆盖
+`Step(3)→Seek(10)→Step(1)` 的同 tick 事件，核实际 Event 与对应 request ID ACK；
+另覆盖重复 Seek、过滤器、EOF、首次 Step 和空 journal。复用 `server.rs` 现有 playback
+completion 测试并补完整链，不引入 Web Seek 或 live seek。
+
 ## 不变量
 
 - live 的世界推进单调，不提供回退或跳时控制。
