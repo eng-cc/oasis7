@@ -12,6 +12,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+mod identity;
+use identity::RepositoryIdentity;
 const OUTPUT_LIMIT: usize = 2 * 1024 * 1024;
 #[derive(Debug, Clone, Serialize)]
 pub struct GitError {
@@ -113,21 +115,34 @@ fn selected_program() -> Result<&'static str, GitError> {
 struct GitRoot<'a> {
     path: &'a Path,
     directory: Option<&'a crate::fs::Directory>,
+    metadata: OnceLock<RepositoryIdentity>,
 }
 impl<'a> GitRoot<'a> {
     fn unpinned(path: &'a Path) -> Self {
         Self {
             path,
             directory: None,
+            metadata: OnceLock::new(),
         }
     }
     fn pinned(path: &'a Path, directory: &'a crate::fs::Directory) -> Self {
         Self {
             path,
             directory: Some(directory),
+            metadata: OnceLock::new(),
         }
     }
+    fn capture_metadata(&self) -> Result<(), GitError> {
+        if self.metadata.get().is_none() {
+            let metadata = RepositoryIdentity::capture(self.path, self.directory)?;
+            let _ = self.metadata.set(metadata);
+        }
+        self.verify()
+    }
     fn verify(&self) -> Result<(), GitError> {
+        if let Some(metadata) = self.metadata.get() {
+            metadata.verify(self.path)?;
+        }
         let Some(directory) = self.directory else {
             return Ok(());
         };
@@ -179,7 +194,9 @@ fn run_program(program: &str, root: Option<&GitRoot>, args: &[&str]) -> Result<V
     ]);
     if let Some(root) = root {
         root.verify()?;
-        if let Some(directory) = root.directory {
+        if let Some(metadata) = root.metadata.get() {
+            metadata.pin(&mut command)?;
+        } else if let Some(directory) = root.directory {
             directory.pin_command_cwd(&mut command).map_err(|_| {
                 error(
                     "HISTORY_UNAVAILABLE",
@@ -234,10 +251,10 @@ fn run_program(program: &str, root: Option<&GitRoot>, args: &[&str]) -> Result<V
     let bytes = reader
         .join()
         .map_err(|_| error("HISTORY_INCOMPLETE", "Git output read failed"))?;
-    result?;
     if let Some(root) = root {
         root.verify()?;
     }
+    result?;
     if exceeded.load(Ordering::Relaxed) {
         return Err(error("HISTORY_INCOMPLETE", "Git output exceeds limit"));
     }
@@ -248,6 +265,7 @@ fn text(bytes: Vec<u8>) -> Result<String, GitError> {
 }
 fn probe(root: &GitRoot) -> Result<(), GitError> {
     selected_program()?;
+    root.capture_metadata()?;
     let top = text(
         run(Some(root), &["rev-parse", "--show-toplevel"]).map_err(|e| {
             if e.code == "HISTORY_IDENTITY_CHANGED" {
@@ -268,6 +286,7 @@ fn probe(root: &GitRoot) -> Result<(), GitError> {
 fn head(root: &GitRoot) -> Result<Option<String>, GitError> {
     match run(Some(root), &["rev-parse", "--verify", "HEAD"]) {
         Ok(bytes) => Ok(Some(text(bytes)?.trim().to_owned())),
+        Err(e) if e.code == "HISTORY_IDENTITY_CHANGED" => Err(e),
         Err(_) => {
             // An unborn branch has no refs, rather than a missing promised commit.
             let refs = run(Some(root), &["rev-parse", "--all"])?;
@@ -472,10 +491,19 @@ pub fn history_pinned(
     history_inner(&GitRoot::pinned(root, directory), id, limit)
 }
 fn history_inner(root: &GitRoot, id: &str, limit: usize) -> Result<History, GitError> {
+    history_after_probe(root, id, limit, || {})
+}
+fn history_after_probe(
+    root: &GitRoot,
+    id: &str,
+    limit: usize,
+    after_probe: impl FnOnce(),
+) -> Result<History, GitError> {
     if !valid_id(id) || limit == 0 || limit > 1000 {
         return Err(error("INVALID_ARGUMENT", "Invalid history ID or limit"));
     }
     probe(root)?;
+    after_probe();
     let head =
         head(root)?.ok_or_else(|| error("HISTORY_UNAVAILABLE", "There is no committed history"))?;
     let path = format!("entries/{id}.md");
@@ -507,6 +535,7 @@ fn history_inner(root: &GitRoot, id: &str, limit: usize) -> Result<History, GitE
     let shallow = shallow(root)?;
     let complete = !shallow && commits.len() <= limit;
     commits.truncate(limit);
+    root.verify()?;
     Ok(History {
         head,
         complete,
@@ -527,6 +556,14 @@ pub fn read_at_commit_pinned(
     read_at_commit_inner(&GitRoot::pinned(root, directory), id, oid)
 }
 fn read_at_commit_inner(root: &GitRoot, id: &str, oid: &str) -> Result<HistoricalEntry, GitError> {
+    read_after_probe(root, id, oid, || {})
+}
+fn read_after_probe(
+    root: &GitRoot,
+    id: &str,
+    oid: &str,
+    after_probe: impl FnOnce(),
+) -> Result<HistoricalEntry, GitError> {
     if !valid_id(id) || !oid_valid(oid) {
         return Err(error(
             "INVALID_ARGUMENT",
@@ -534,6 +571,7 @@ fn read_at_commit_inner(root: &GitRoot, id: &str, oid: &str) -> Result<Historica
         ));
     }
     probe(root)?;
+    after_probe();
     if text(run(Some(root), &["cat-file", "-t", oid])?)?.trim() != "commit" {
         return Err(error("INVALID_ARGUMENT", "The object is not a commit"));
     }
@@ -548,18 +586,20 @@ fn read_at_commit_inner(root: &GitRoot, id: &str, oid: &str) -> Result<Historica
     let entry = objects
         .get(&path)
         .ok_or_else(|| error("HISTORY_INCOMPLETE", "Historical entry is unavailable"))?;
-    Ok(HistoricalEntry {
+    let result = HistoricalEntry {
         commit: oid.to_owned(),
         config_bytes: blob(root, config)?,
         entry_bytes: blob(root, entry)?,
-    })
+    };
+    root.verify()?;
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    fn git(root: &Path, args: &[&str]) {
+    pub(super) fn git(root: &Path, args: &[&str]) {
         let status = Command::new("/usr/bin/git")
             .current_dir(root)
             .args(args)
@@ -571,7 +611,7 @@ mod tests {
             .unwrap();
         assert!(status.success(), "fixture command failed");
     }
-    fn fixture() -> TempDir {
+    pub(super) fn fixture() -> TempDir {
         let dir = TempDir::new().unwrap();
         let canonical_root = dir.path().canonicalize().unwrap();
         let root = canonical_root.as_path();
@@ -802,3 +842,7 @@ mod tests {
         assert!(!marker.exists());
     }
 }
+
+#[cfg(test)]
+#[path = "git/metadata_tests.rs"]
+mod metadata_tests;

@@ -220,6 +220,11 @@ impl Directory {
         let metadata = self.file.metadata()?;
         Ok((metadata.dev(), metadata.ino()))
     }
+    pub fn try_clone(&self) -> Result<Self> {
+        Ok(Self {
+            file: self.file.try_clone()?,
+        })
+    }
     /// Pin a child's working directory to this held descriptor, never its mutable pathname.
     pub fn pin_command_cwd(&self, command: &mut std::process::Command) -> Result<()> {
         use std::os::unix::process::CommandExt;

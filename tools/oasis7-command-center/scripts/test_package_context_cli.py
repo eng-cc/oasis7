@@ -12,18 +12,23 @@ SCRIPT = Path(__file__).with_name("package-context-cli.sh")
 
 
 class PackageContextCli(unittest.TestCase):
-    def run_fixture(self, mode, input_state=None):
+    def run_fixture(self, mode, input_state=None, build_args=None, target=None):
         temporary = tempfile.TemporaryDirectory(prefix="context-package-")
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name) / "checkout"
         package = root / "tools/oasis7-command-center/scripts/package-context-cli.sh"
         package.parent.mkdir(parents=True)
         shutil.copy2(SCRIPT, package)
+        desktop = package.with_name("build-desktop.sh")
+        shutil.copy2(SCRIPT.with_name("build-desktop.sh"), desktop)
         wrapper = root / "scripts/cargo-dev.sh"
         wrapper.parent.mkdir()
         wrapper.write_text("""#!/usr/bin/env python3
 import json, os, sys
-assert sys.argv[1:] == ['build','--locked','--release','-p','oasis7_context','--message-format=json-render-diagnostics']
+expected = ['build','--locked','--release','-p','oasis7_context','--message-format=json-render-diagnostics']
+expected += ['--target', os.environ['OASIS7_BUILD_TARGET']]
+assert sys.argv[1:] == expected
+if os.environ.get('FIXTURE_TARGET'): assert os.environ['OASIS7_BUILD_TARGET'] == os.environ['FIXTURE_TARGET']
 assert os.environ['OASIS7_SOURCE_HEAD_OID'] in os.environ['OASIS7_RELEASE_ID']
 from pathlib import Path
 Path(os.environ['FIXTURE_CARGO_MARKER']).write_text('invoked')
@@ -66,7 +71,18 @@ if mode == 'failed':
             cache = root / 'target/cache'
             cache.parent.mkdir()
             cache.write_text('ignored generated cache')
-        environment = dict(os.environ, CI="true", FIXTURE_ARTIFACT_PATH=str(artifact), FIXTURE_CARGO_MODE=mode, FIXTURE_CARGO_MARKER=str(marker))
+        environment = dict(os.environ, CI="true", CARGO_BUILD_TARGET="invalid-environment-target", FIXTURE_ARTIFACT_PATH=str(artifact), FIXTURE_CARGO_MODE=mode, FIXTURE_CARGO_MARKER=str(marker))
+        if build_args is not None:
+            shim_dir = Path(temporary.name) / 'fixture-bin'
+            shim_dir.mkdir()
+            (shim_dir / 'rustc').write_text("#!/bin/sh\necho 'host: aarch64-apple-darwin'\n")
+            (shim_dir / 'rustc').chmod(0o755)
+            (shim_dir / 'tauri').write_text("#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\nPath(os.environ['FIXTURE_TAURI_MARKER']).write_text(json.dumps(dict(args=sys.argv[1:],target=os.environ['OASIS7_BUILD_TARGET'])))\n")
+            (shim_dir / 'tauri').chmod(0o755)
+            environment['PATH'] = str(shim_dir) + os.pathsep + os.environ['PATH']
+            environment['FIXTURE_TAURI_MARKER'] = str(root.parent / 'tauri-invoked')
+        if target is not None:
+            environment['FIXTURE_TARGET'] = target
         if mode in ('inventory-failure', 'ignored-inventory-failure'):
             shim_dir = Path(temporary.name) / 'fixture-bin'
             shim_dir.mkdir()
@@ -77,7 +93,7 @@ if mode == 'failed':
                 f"os.execv({real_git!r}, [{real_git!r}] + sys.argv[1:])\n")
             shim.chmod(0o755)
             environment['PATH'] = str(shim_dir) + os.pathsep + os.environ['PATH']
-        result = subprocess.run(["bash", str(package)], cwd=root, env=environment, capture_output=True, text=True)
+        result = subprocess.run(["bash", str(desktop if build_args is not None else package)] + (build_args or []), cwd=root, env=environment, capture_output=True, text=True)
         return root, data, head, result
 
     def test_configured_shared_artifact_is_packaged_without_checkout_target(self):
@@ -117,6 +133,36 @@ if mode == 'failed':
     def test_ignored_generated_cache_does_not_invalidate_committed_source(self):
         _, _, _, result = self.run_fixture('success', 'ignored-cache')
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_requested_desktop_target_is_shared_with_cli_and_catalog(self):
+        target = 'x86_64-apple-darwin'
+        for args in (['--target', target], ['--target=' + target], ['-t', target], ['-t' + target]):
+            with self.subTest(args=args):
+                root, _, _, result = self.run_fixture('success', build_args=args, target=target)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                catalog = json.loads((root / 'tools/oasis7-command-center/src-tauri/resources/context-cli/catalog.json').read_text())
+                tauri = json.loads((root.parent / 'tauri-invoked').read_text())
+                self.assertEqual(catalog['target'], target)
+                self.assertEqual(tauri['target'], target)
+                self.assertEqual(tauri['args'][-len(args):], args)
+
+    def test_default_desktop_target_is_explicit_host_despite_cargo_environment(self):
+        root, _, _, result = self.run_fixture('success', build_args=[], target='aarch64-apple-darwin')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        catalog = json.loads((root / 'tools/oasis7-command-center/src-tauri/resources/context-cli/catalog.json').read_text())
+        tauri = json.loads((root.parent / 'tauri-invoked').read_text())
+        self.assertEqual(catalog['target'], 'aarch64-apple-darwin')
+        self.assertEqual(tauri['target'], catalog['target'])
+        self.assertEqual(tauri['args'][-2:], ['--target', catalog['target']])
+
+    def test_universal_or_invalid_target_rejects_before_either_build(self):
+        for args in (['--target', 'universal-apple-darwin'], ['--target='], ['--target'], ['--target', 'x86_64-apple-darwin', '--target=aarch64-apple-darwin'], ['--target=x86_64-apple-darwin', '--target=x86_64-apple-darwin'], ['--', '--target', 'x86_64-apple-darwin'], ['--', '--target=x86_64-apple-darwin']):
+            with self.subTest(args=args):
+                root, _, _, result = self.run_fixture('success', build_args=args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((root.parent / 'cargo-invoked').exists())
+                self.assertFalse((root.parent / 'tauri-invoked').exists())
+                self.assertFalse((root / 'tools/oasis7-command-center/src-tauri/resources/context-cli').exists())
 
     def test_missing_ambiguous_and_failed_build_never_publish(self):
         for mode in ("missing", "ambiguous", "failed"):

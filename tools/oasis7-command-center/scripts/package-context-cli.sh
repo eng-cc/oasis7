@@ -3,6 +3,18 @@ set -euo pipefail
 # Build from the same checkout as the App. No network download or PATH lookup at runtime.
 repo_root=$(git rev-parse --show-toplevel)
 app_root="$repo_root/tools/oasis7-command-center"
+requested_target=""
+if (($#)); then
+  if [[ $# == 2 && "$1" == --target ]]; then requested_target="$2";
+  elif [[ $# == 1 && "$1" == --target=* ]]; then requested_target="${1#--target=}";
+  else echo "Usage: package-context-cli.sh [--target RUST_TRIPLE]" >&2; exit 1; fi
+  if [[ -z "$requested_target" ]]; then echo "--target requires a Rust target triple" >&2; exit 1; fi
+fi
+target=${requested_target:-$(rustc -vV | sed -n 's/^host: //p')}
+if [[ "$target" == universal-apple-darwin || ! "$target" =~ ^[a-zA-Z0-9_]+(-[a-zA-Z0-9_]+){2,}$ ]]; then
+  echo "A single Rust target triple is required; universal/custom target packaging is unsupported" >&2; exit 1
+fi
+
 require_committed_inputs() {
   local untracked ignored_inputs
   if ! untracked=$(git -C "$repo_root" ls-files --others --exclude-standard) \
@@ -19,13 +31,12 @@ require_committed_inputs() {
 }
 require_committed_inputs
 head=$(git -C "$repo_root" rev-parse HEAD)
-target=$(rustc -vV | sed -n 's/^host: //p')
 release="context-$head"
 # Cargo's emitted executable is authoritative: CI does not create the local
 # target symlink, and shared/configured target directories may live elsewhere.
 binary=$(OASIS7_SOURCE_HEAD_OID="$head" OASIS7_RELEASE_ID="$release" OASIS7_BUILD_TARGET="$target" \
   "$repo_root/scripts/cargo-dev.sh" build --locked --release -p oasis7_context \
-    --message-format=json-render-diagnostics | python3 -c '
+    --message-format=json-render-diagnostics --target "$target" | python3 -c '
 import json, sys
 executables = set()
 for line in sys.stdin:
