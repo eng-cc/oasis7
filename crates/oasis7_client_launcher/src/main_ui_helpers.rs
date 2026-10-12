@@ -791,7 +791,18 @@ impl ClientLauncherApp {
     pub(super) fn set_web_request_inflight(&mut self, domain: WebRequestDomain, inflight: bool) {
         match domain {
             WebRequestDomain::StatePoll => self.web_request_inflight.state_poll = inflight,
-            WebRequestDomain::ControlAction => self.web_request_inflight.control_action = inflight,
+            WebRequestDomain::ControlAction => {
+                if self.web_request_inflight.control_action != inflight {
+                    self.web_state_generation = self.web_state_generation.wrapping_add(1);
+                }
+                self.web_request_inflight.control_action = inflight;
+                if inflight {
+                    self.clear_chain_session_evidence();
+                    if matches!(self.chain_runtime_status, ChainRuntimeStatus::Ready) {
+                        self.chain_runtime_status = ChainRuntimeStatus::Starting;
+                    }
+                }
+            }
             #[cfg(target_arch = "wasm32")]
             WebRequestDomain::FeedbackSubmit => {
                 self.web_request_inflight.feedback_submit = inflight;

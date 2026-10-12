@@ -46,8 +46,13 @@ impl ClientLauncherApp {
         while let Ok(event) = self.web_api_rx.try_recv() {
             self.last_web_poll_at = Some(Instant::now());
             match event {
-                WebApiEvent::State(result) => {
+                WebApiEvent::State(generation, result) => {
                     self.set_web_request_inflight(WebRequestDomain::StatePoll, false);
+                    if generation != self.web_state_generation
+                        || self.web_request_inflight_for(WebRequestDomain::ControlAction)
+                    {
+                        continue;
+                    }
                     match result {
                         Ok(snapshot) => self.apply_web_snapshot(snapshot),
                         Err(err) => {
@@ -453,8 +458,9 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::StatePoll, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         spawn_local(async move {
-            let _ = tx.send(WebApiEvent::State(fetch_web_state().await));
+            let _ = tx.send(WebApiEvent::State(generation, fetch_web_state().await));
         });
     }
 
