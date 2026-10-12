@@ -1,4 +1,6 @@
 mod lifecycle;
+mod private_input;
+pub use private_input::*;
 
 use crate::commands::Host;
 use oasis7_command_center_core::{
@@ -18,6 +20,7 @@ use tokio::sync::Semaphore;
 #[derive(Clone)]
 pub struct RuntimeHost {
     runtime: Arc<Mutex<Option<Runtime>>>,
+    jobs: Arc<oasis7_command_center_core::tools::jobs::ToolJobs>,
     failure: Arc<Option<String>>,
     slots: Arc<Semaphore>,
     approved_exit: Arc<AtomicBool>,
@@ -26,12 +29,50 @@ pub struct RuntimeHost {
     watching: Arc<AtomicBool>,
 }
 
+fn with_tool_status(
+    mut status: QuitStatus,
+    jobs: &oasis7_command_center_core::tools::jobs::ToolJobs,
+) -> Result<QuitStatus, String> {
+    let operations = jobs.list().map_err(|e| e.to_string())?;
+    let active = operations
+        .iter()
+        .filter(|job| job.state == "running")
+        .count();
+    let unknown = operations
+        .iter()
+        .filter(|job| job.state == "unknown")
+        .count();
+    status.active += active;
+    status.unknown += unknown;
+    if active + unknown > 0 {
+        status.safe = false;
+        status.reason = format!(
+            "本机工具仍有 {active} 项执行中、{unknown} 项结果未知；{}",
+            status.reason
+        );
+    }
+    Ok(status)
+}
+
 fn exit_ready(status: &QuitStatus) -> bool {
     status.safe && status.active == 0 && status.unknown == 0 && status.pending_requests == 0
 }
 
 impl RuntimeHost {
+    #[cfg(test)]
     pub fn open(path: PathBuf) -> oasis7_command_center_core::Result<Self> {
+        Self::open_with_jobs(
+            path,
+            Arc::new(oasis7_command_center_core::tools::jobs::ToolJobs::open(
+                ":memory:",
+            )?),
+        )
+    }
+
+    pub fn open_with_jobs(
+        path: PathBuf,
+        jobs: Arc<oasis7_command_center_core::tools::jobs::ToolJobs>,
+    ) -> oasis7_command_center_core::Result<Self> {
         let (runtime, failure) = match Runtime::open(&path) {
             Ok(runtime) => (Some(runtime), None),
             Err(error) => (
@@ -44,6 +85,7 @@ impl RuntimeHost {
         };
         Ok(Self {
             runtime: Arc::new(Mutex::new(runtime)),
+            jobs,
             failure: Arc::new(failure),
             slots: Arc::new(Semaphore::new(4)),
             approved_exit: Arc::new(AtomicBool::new(false)),
@@ -79,7 +121,7 @@ impl RuntimeHost {
         .map_err(|_| "执行请求未能完成".to_string())?
     }
 
-    async fn project_work(
+    pub(crate) async fn project_work(
         &self,
         host: &Host,
         work: impl FnOnce(&mut Runtime, &Project) -> oasis7_command_center_core::Result<RuntimeSnapshot>
@@ -170,8 +212,9 @@ pub async fn connect_runtime(
     if !std::path::Path::new(&path).is_absolute() {
         return Err("请选择 Codex 0.137.0 原生程序的绝对路径".into());
     }
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.connect(p, &path))
+        .project_work(&host, move |r, p| jobs.with_open(|| r.connect(p, &path)))
         .await;
     invalidate(&handle);
     result
@@ -184,10 +227,11 @@ pub async fn create_runtime_session(
     handle: tauri::AppHandle,
     mut config: SessionConfig,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
         .project_work(&host, move |r, p| {
             config.basis_revision = p.head.clone();
-            r.create_session(p, config)
+            jobs.with_open(|| r.create_session(p, config))
         })
         .await;
     invalidate(&handle);
@@ -201,8 +245,11 @@ pub async fn continue_runtime_session(
     handle: tauri::AppHandle,
     thread_id: String,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.continue_session(p, &thread_id))
+        .project_work(&host, move |r, p| {
+            jobs.with_open(|| r.continue_session(p, &thread_id))
+        })
         .await;
     invalidate(&handle);
     result
@@ -216,8 +263,11 @@ pub async fn start_runtime_turn(
     thread_id: String,
     input: String,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.start_turn(p, &thread_id, &input))
+        .project_work(&host, move |r, p| {
+            jobs.with_open(|| r.start_turn(p, &thread_id, &input))
+        })
         .await;
     invalidate(&handle);
     result
@@ -231,8 +281,11 @@ pub async fn steer_runtime_turn(
     target: RuntimeTarget,
     input: String,
 ) -> Result<RuntimeSnapshot, String> {
+    let jobs = runtime.jobs.clone();
     let result = runtime
-        .project_work(&host, move |r, p| r.steer_turn(p, target, &input))
+        .project_work(&host, move |r, p| {
+            jobs.with_open(|| r.steer_turn(p, target, &input))
+        })
         .await;
     invalidate(&handle);
     result
@@ -278,7 +331,10 @@ pub async fn get_exit_status(runtime: State<'_, RuntimeHost>) -> Result<QuitStat
             reason: reason.clone(),
         });
     }
-    runtime.run(|r| Ok(r.quit_status())).await
+    let jobs = runtime.jobs.clone();
+    runtime
+        .run(move |r| with_tool_status(r.quit_status(), &jobs))
+        .await
 }
 
 #[tauri::command]
@@ -286,6 +342,10 @@ pub async fn request_exit_wait(
     runtime: State<'_, RuntimeHost>,
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
+    let jobs = runtime.jobs.clone();
+    tauri::async_runtime::spawn_blocking(move || jobs.freeze().map_err(|e| e.to_string()))
+        .await
+        .map_err(|_| "退出准入核对未完成".to_string())??;
     let waiting = runtime.waiting.clone();
     let status = runtime
         .run(move |r| {
@@ -295,7 +355,7 @@ pub async fn request_exit_wait(
         .await?;
     runtime.watch_exit(handle.clone());
     invalidate(&handle);
-    Ok(status)
+    with_tool_status(status, &runtime.jobs)
 }
 
 #[tauri::command]
@@ -303,6 +363,10 @@ pub async fn request_exit_stop(
     runtime: State<'_, RuntimeHost>,
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
+    let jobs = runtime.jobs.clone();
+    tauri::async_runtime::spawn_blocking(move || jobs.freeze().map_err(|e| e.to_string()))
+        .await
+        .map_err(|_| "退出准入核对未完成".to_string())??;
     let waiting = runtime.waiting.clone();
     let result = runtime
         .run(move |r| {
@@ -313,7 +377,7 @@ pub async fn request_exit_stop(
         .await;
     runtime.watch_exit(handle.clone());
     invalidate(&handle);
-    result
+    result.and_then(|status| with_tool_status(status, &runtime.jobs))
 }
 
 #[tauri::command]
@@ -323,23 +387,47 @@ pub async fn cancel_exit_wait(
 ) -> Result<QuitStatus, String> {
     let waiting = runtime.waiting.clone();
     let approved = runtime.approved_exit.clone();
+    let jobs = runtime.jobs.clone();
     let status = runtime
         .run(move |r| {
             if approved.load(Ordering::Acquire) {
                 return Err("客户端已确认退出".into());
             }
+            jobs.unfreeze().map_err(|e| e.to_string())?;
             waiting.store(false, Ordering::Release);
             Ok(r.cancel_exit_wait())
         })
         .await?;
     invalidate(&handle);
-    Ok(status)
+    with_tool_status(status, &runtime.jobs)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[test]
+    fn quit_projection_includes_running_and_unknown_tool_operations() {
+        let jobs = oasis7_command_center_core::tools::jobs::ToolJobs::open(":memory:").unwrap();
+        jobs.admit("install", "hash", "tool", "install").unwrap();
+        let status = QuitStatus {
+            safe: true,
+            active: 0,
+            unknown: 0,
+            pending_requests: 0,
+            waiting: false,
+            reason: String::new(),
+        };
+        let running = with_tool_status(status.clone(), &jobs).unwrap();
+        assert_eq!(running.active, 1);
+        assert!(!exit_ready(&running));
+        jobs.finish("install", "unknown", None).unwrap();
+        let unknown = with_tool_status(status.clone(), &jobs).unwrap();
+        assert_eq!(unknown.unknown, 1);
+        assert!(!exit_ready(&unknown));
+        jobs.finish("install", "succeeded", None).unwrap();
+        assert!(exit_ready(&with_tool_status(status, &jobs).unwrap()));
+    }
     #[test]
     fn exit_requires_idle_known_state_and_no_outstanding_request() {
         let mut status = QuitStatus {

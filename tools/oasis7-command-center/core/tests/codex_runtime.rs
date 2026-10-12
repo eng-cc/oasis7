@@ -513,6 +513,7 @@ fn seed_history(f: &Fixture, protected: bool) {
             owned: true,
             background_state: if protected { "unknown" } else { "clear" }.into(),
             restorable_history: !protected,
+            private_sources: vec![],
         })
         .collect();
     let db = rusqlite::Connection::open(&f.db).unwrap();
@@ -568,4 +569,97 @@ fn session_window_prunes_only_clean_terminal_summaries_and_retains_operation_his
     );
     assert_eq!(r.snapshot(&f.project).unwrap().sessions.len(), 128);
     assert!(!r.quit_status().safe);
+}
+
+#[test]
+fn private_input_is_registered_before_send_and_filters_later_public_projections() {
+    let f = Fixture::new();
+    let mut r = f.runtime();
+    let thread = f.session(&mut r);
+    let source = PrivateInputRef {
+        binding_id: "b".into(),
+        binding_version: 1,
+        entry_id: "machine".into(),
+        revision: "rev".into(),
+        scope: "whole_entry".into(),
+    };
+    r.start_private_turn(&f.project, &thread, "request", vec![source.clone()])
+        .unwrap();
+    tick();
+    let snapshot = r.snapshot(&f.project).unwrap();
+    assert_eq!(snapshot.sessions[0].private_sources, vec![source]);
+    assert_eq!(snapshot.requests.len(), 1); // approval detail remains available to its owner
+    let public = r.public_snapshot(&f.project).unwrap();
+    assert!(public.sessions.is_empty());
+    assert!(public.requests.is_empty());
+    assert!(public.operations.is_empty());
+    let req = &snapshot.requests[0];
+    r.answer_request(
+        &f.project,
+        RequestAnswer {
+            request_id: req.request_id.clone(),
+            target: RuntimeTarget {
+                instance_id: req.instance_id.clone(),
+                thread_id: thread.clone(),
+                turn_id: req.turn_id.clone(),
+            },
+            decision: None,
+            answers: BTreeMap::from([("choice".into(), vec!["A".into()])]),
+        },
+    )
+    .unwrap();
+    tick();
+    r.start_turn(&f.project, &thread, "ordinary later turn")
+        .unwrap();
+    tick();
+    assert_eq!(
+        r.snapshot(&f.project).unwrap().sessions[0]
+            .private_sources
+            .len(),
+        1
+    );
+    assert!(r.public_snapshot(&f.project).unwrap().sessions.is_empty());
+    r.stop_for_exit().unwrap();
+    wait_idle(&mut r);
+    let _ = r.shutdown_if_idle();
+    drop(r);
+    let mut reopened = Runtime::open(&f.db).unwrap();
+    assert_eq!(
+        reopened.snapshot(&f.project).unwrap().sessions[0]
+            .private_sources
+            .len(),
+        1
+    );
+    assert!(
+        reopened
+            .public_snapshot(&f.project)
+            .unwrap()
+            .requests
+            .is_empty()
+    );
+}
+#[test]
+fn failed_private_registration_prevents_any_turn_start_frame() {
+    let f = Fixture::new();
+    let mut r = f.runtime();
+    let thread = f.session(&mut r);
+    let db = rusqlite::Connection::open(&f.db).unwrap();
+    db.execute_batch("DROP TABLE cc_runtime_private_inputs")
+        .unwrap();
+    let source = PrivateInputRef {
+        binding_id: "b".into(),
+        binding_version: 1,
+        entry_id: "machine".into(),
+        revision: "rev".into(),
+        scope: "whole_entry".into(),
+    };
+    assert!(
+        r.start_private_turn(&f.project, &thread, "private data", vec![source])
+            .is_err()
+    );
+    assert!(
+        !std::fs::read_to_string(&f.trace)
+            .unwrap()
+            .contains("turn/start")
+    );
 }

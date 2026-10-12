@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod context_commands;
 mod runtime_commands;
+mod tool_commands;
 
 use commands::Host;
 use tauri::{
@@ -24,9 +26,17 @@ fn main() {
             let directory = app.path().app_data_dir()?;
             std::fs::create_dir_all(&directory)?;
             app.manage(Host::open(directory.join("command-center.sqlite"))?);
-            app.manage(runtime_commands::RuntimeHost::open(
-                directory.join("command-center-runtime.sqlite"),
+            app.manage(context_commands::ContextHost::open(
+                directory.join("command-center.sqlite"),
             )?);
+            let tools =
+                tool_commands::ToolHost::open(directory.join("command-center-tools.sqlite"))?;
+            let runtime = runtime_commands::RuntimeHost::open_with_jobs(
+                directory.join("command-center-runtime.sqlite"),
+                tools.jobs.clone(),
+            )?;
+            app.manage(tools);
+            app.manage(runtime);
             let show = MenuItem::with_id(app, "show", "打开指挥中心", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出指挥中心", true, Some("CmdOrCtrl+Q"))?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -78,6 +88,35 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            context_commands::context_info,
+            context_commands::context_reconcile,
+            context_commands::context_bindings,
+            context_commands::context_choose_library,
+            context_commands::context_list,
+            context_commands::context_get,
+            context_commands::context_save,
+            context_commands::context_archive,
+            context_commands::context_history,
+            context_commands::context_restore_entry,
+            context_commands::context_doctor,
+            context_commands::context_snapshot_export,
+            context_commands::context_snapshot_inspect,
+            context_commands::context_snapshot_restore,
+            tool_commands::tool_file_reconcile,
+            tool_commands::tool_cli_reconcile,
+            tool_commands::tool_cli_observe,
+            tool_commands::tool_jobs,
+            tool_commands::tool_signer_observe,
+            tool_commands::tool_signer_doctor,
+            tool_commands::tool_choose_file,
+            tool_commands::tool_file_verify,
+            tool_commands::tool_file_prepare,
+            tool_commands::tool_signer_submit,
+            tool_commands::tool_signer_inspect,
+            tool_commands::tool_cli_install,
+            tool_commands::secret_stage,
+            runtime_commands::preview_private_input,
+            runtime_commands::start_private_runtime_turn,
             commands::open_project,
             commands::query_view,
             commands::search_rules,

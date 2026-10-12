@@ -11,7 +11,7 @@ pub(crate) fn migrate(db: &Connection) -> Result<()> {
     db.busy_timeout(std::time::Duration::from_secs(2))?;
     db.execute_batch("PRAGMA journal_mode=WAL;")?;
     let tx = db.unchecked_transaction()?;
-    tx.execute_batch("CREATE TABLE IF NOT EXISTS personal(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cache(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS history(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS search(id TEXT PRIMARY KEY,body TEXT NOT NULL,value TEXT NOT NULL); CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(id UNINDEXED,body,tokenize='trigram'); CREATE TABLE IF NOT EXISTS cc_runtime_state(scope TEXT PRIMARY KEY,value TEXT NOT NULL,sequence INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS cc_runtime_operations(id TEXT PRIMARY KEY,scope TEXT NOT NULL,target TEXT NOT NULL,state TEXT NOT NULL,value TEXT NOT NULL); CREATE INDEX IF NOT EXISTS cc_runtime_ops_scope ON cc_runtime_operations(scope,state); PRAGMA user_version=2;")?;
+    tx.execute_batch("CREATE TABLE IF NOT EXISTS personal(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS cache(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS history(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS search(id TEXT PRIMARY KEY,body TEXT NOT NULL,value TEXT NOT NULL); CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(id UNINDEXED,body,tokenize='trigram'); CREATE TABLE IF NOT EXISTS cc_runtime_state(scope TEXT PRIMARY KEY,value TEXT NOT NULL,sequence INTEGER NOT NULL DEFAULT 0); CREATE TABLE IF NOT EXISTS cc_runtime_operations(id TEXT PRIMARY KEY,scope TEXT NOT NULL,target TEXT NOT NULL,state TEXT NOT NULL,value TEXT NOT NULL); CREATE INDEX IF NOT EXISTS cc_runtime_ops_scope ON cc_runtime_operations(scope,state); CREATE TABLE IF NOT EXISTS cc_runtime_private_inputs(scope TEXT NOT NULL,thread TEXT NOT NULL,reference TEXT NOT NULL,PRIMARY KEY(scope,thread,reference)); PRAGMA user_version=2;")?;
     let has_sequence: bool = {
         let mut stmt = tx.prepare("PRAGMA table_info(cc_runtime_state)")?;
         let names = stmt
@@ -50,7 +50,12 @@ impl Store {
     pub fn scopes(&self) -> Result<Vec<RuntimeSnapshot>> {
         let mut stmt = self.db.prepare("SELECT value FROM cc_runtime_state")?;
         stmt.query_map([], |r| r.get::<_, String>(0))?
-            .map(|r| Ok(serde_json::from_str(&r?)?))
+            .map(|r| {
+                let mut snapshot: RuntimeSnapshot = serde_json::from_str(&r?)?;
+                let scope = format!("{}:{}", snapshot.project_id, snapshot.environment);
+                self.apply_private_sources(&scope, &mut snapshot)?;
+                Ok(snapshot)
+            })
             .collect()
     }
     pub fn writer(path: &std::path::Path) -> Result<Self> {
@@ -84,6 +89,7 @@ impl Store {
         event: bool,
     ) -> Result<()> {
         let mut saved = snapshot.clone();
+        self.apply_private_sources(scope, &mut saved)?;
         saved.logs.clear();
         let changed=self.db.execute("INSERT INTO cc_runtime_state(scope,value,sequence) VALUES(?1,?2,?3) ON CONFLICT(scope) DO UPDATE SET value=excluded.value,sequence=excluded.sequence WHERE excluded.sequence>=cc_runtime_state.sequence AND (?4=0 OR json_extract(cc_runtime_state.value,'$.instanceId') IS json_extract(excluded.value,'$.instanceId'))",params![scope,serde_json::to_string(&saved)?,sequence,event])?;
         if changed == 0 && !event {

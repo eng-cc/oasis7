@@ -185,6 +185,11 @@ impl Directory {
         let b = other.file.metadata()?;
         Ok(a.dev() == b.dev() && a.ino() == b.ino())
     }
+    /// Identity of the held directory, independent of later pathname replacement.
+    pub fn identity(&self) -> Result<(u64, u64)> {
+        let metadata = self.file.metadata()?;
+        Ok((metadata.dev(), metadata.ino()))
+    }
     pub fn file_private_permissions(&self, n: &str) -> Result<bool> {
         let c = name(n)?;
         let fd = unsafe {

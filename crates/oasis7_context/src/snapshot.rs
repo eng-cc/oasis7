@@ -130,6 +130,13 @@ impl Snapshot {
     }
 }
 fn read_snapshot(input: &Path, passphrase: &[u8]) -> Result<(Snapshot, SnapshotSummary)> {
+    read_snapshot_frozen(input, passphrase, None)
+}
+fn read_snapshot_frozen(
+    input: &Path,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+) -> Result<(Snapshot, SnapshotSummary)> {
     let bytes = crate::fs::Directory::open(input.parent().ok_or_else(invalid)?)?.read(
         input
             .file_name()
@@ -137,6 +144,12 @@ fn read_snapshot(input: &Path, passphrase: &[u8]) -> Result<(Snapshot, SnapshotS
             .ok_or_else(invalid)?,
         oasis7_secure_envelope::MAX_ENVELOPE_BYTES,
     )?;
+    if expected_digest.is_some_and(|expected| digest(&bytes) != expected) {
+        return Err(ContextError::new(
+            "REVISION_CONFLICT",
+            "snapshot ciphertext changed before restore",
+        ));
+    }
     let plaintext = oasis7_secure_envelope::open(KIND, &bytes, passphrase)
         .map_err(|_| ContextError::new("CRYPTO_ERROR", "snapshot authentication failed"))?;
     if plaintext.len() > MAX_PLAINTEXT_BYTES {
@@ -150,6 +163,41 @@ fn read_snapshot(input: &Path, passphrase: &[u8]) -> Result<(Snapshot, SnapshotS
 pub fn inspect(input: &Path, passphrase: &[u8]) -> Result<SnapshotSummary> {
     read_snapshot(input, passphrase).map(|(_, s)| s)
 }
+/// Validated snapshot identity without returning private plaintext.
+pub fn inspect_revisions(
+    input: &Path,
+    passphrase: &[u8],
+) -> Result<(SnapshotSummary, Vec<(String, String)>)> {
+    let (snapshot, summary) = read_snapshot(input, passphrase)?;
+    let revisions = snapshot
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.id.clone(),
+                crate::format::revision(e.content_utf8.as_bytes()),
+            )
+        })
+        .collect();
+    Ok((summary, revisions))
+}
+pub fn source_digest(
+    config: &StoreConfig,
+    entries: &[crate::model::EntrySnapshot],
+    selection: &[String],
+) -> String {
+    let mut chosen = selection.to_vec();
+    chosen.sort();
+    let mut revisions: Vec<_> = entries
+        .iter()
+        .filter(|e| chosen.is_empty() || chosen.contains(&e.entry.metadata.id))
+        .map(|e| (&e.entry.metadata.id, &e.revision))
+        .collect();
+    revisions.sort();
+    crate::format::digest(&crate::format::canonical_json(
+        &serde_json::json!({"config":config,"selection":chosen,"entries":revisions}),
+    ))
+}
 /// Collect under the store lock, then release it before serialization and KDF.
 pub fn export(
     root: &Path,
@@ -158,6 +206,16 @@ pub fn export(
     passphrase: &[u8],
     lock_timeout_ms: u64,
 ) -> Result<SnapshotSummary> {
+    export_frozen(root, output, selection, passphrase, lock_timeout_ms, None)
+}
+pub fn export_frozen(
+    root: &Path,
+    output: &Path,
+    selection: &[String],
+    passphrase: &[u8],
+    lock_timeout_ms: u64,
+    expected_digest: Option<&str>,
+) -> Result<SnapshotSummary> {
     if !output.is_absolute() {
         return Err(ContextError::new(
             "INVALID_INPUT",
@@ -165,6 +223,25 @@ pub fn export(
         ));
     }
     let store = crate::store::Store::open(root)?;
+    export_from_store(
+        &store,
+        output,
+        selection,
+        passphrase,
+        lock_timeout_ms,
+        expected_digest,
+    )
+}
+pub fn export_from_store(
+    store: &crate::store::Store,
+    output: &Path,
+    selection: &[String],
+    passphrase: &[u8],
+    lock_timeout_ms: u64,
+    expected_digest: Option<&str>,
+) -> Result<SnapshotSummary> {
+    let root = &store.root;
+
     let output_parent_path = output.parent().ok_or_else(invalid)?;
     let output_directory = crate::fs::Directory::open(output_parent_path)?;
     let output_parent = output_parent_path.canonicalize()?;
@@ -183,6 +260,14 @@ pub fn export(
         ));
     }
     let mut entries = store.read_all()?;
+    if expected_digest
+        .is_some_and(|expected| source_digest(&store.config, &entries, selection) != expected)
+    {
+        return Err(ContextError::new(
+            "REVISION_CONFLICT",
+            "snapshot source changed before export",
+        ));
+    }
     entries.sort_by(|a, b| a.entry.metadata.id.cmp(&b.entry.metadata.id));
     let mut chosen = selection.to_vec();
     chosen.sort();
@@ -264,13 +349,30 @@ pub fn restore(
     expected_store_id: Option<&str>,
     passphrase: &[u8],
 ) -> Result<SnapshotSummary> {
+    restore_frozen(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        None,
+    )
+}
+pub fn restore_frozen(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+) -> Result<SnapshotSummary> {
     if !target.is_absolute() {
         return Err(ContextError::new(
             "INVALID_INPUT",
             "restore target must be absolute",
         ));
     }
-    let (snapshot, summary) = read_snapshot(input, passphrase)?;
+    let (snapshot, summary) = read_snapshot_frozen(input, passphrase, expected_digest)?;
     if expected_project.is_some_and(|p| snapshot.store.project_id != p) {
         return Err(ContextError::new(
             "PROJECT_MISMATCH",

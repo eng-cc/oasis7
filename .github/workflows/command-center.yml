@@ -2,12 +2,22 @@ name: Command Center
 on:
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'tools/oasis7-command-center/**'
+      - 'crates/oasis7_context/**'
+      - 'crates/oasis7_local_signer/**'
+      - 'crates/oasis7_secure_envelope/**'
       - '.github/workflows/command-center.yml'
   push:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'tools/oasis7-command-center/**'
+      - 'crates/oasis7_context/**'
+      - 'crates/oasis7_local_signer/**'
+      - 'crates/oasis7_secure_envelope/**'
       - '.github/workflows/command-center.yml'
 permissions:
   contents: read

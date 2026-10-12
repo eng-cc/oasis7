@@ -9,7 +9,7 @@ import { runtimeBridge } from './bridge';
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false, invoke: vi.fn() }));
 afterEach(cleanup);
 const project: Project = {id:'repo',path:'/repo',gitCommonDir:'/repo/.git',head:'head',branch:'work',environment:'local'};
-const session: RuntimeSession = {purpose:'验证修复',scope:'受控测试目录',model:null,basisRevision:'head',threadId:'thread-1',instanceId:'instance-1',turnId:'turn-1',state:'active',owned:true,backgroundState:'clear',restorableHistory:false};
+const session: RuntimeSession = {purpose:'验证修复',scope:'受控测试目录',model:null,basisRevision:'head',threadId:'thread-1',instanceId:'instance-1',turnId:'turn-1',state:'active',owned:true,backgroundState:'clear',restorableHistory:false,privateSources:[]};
 function snapshot(overrides: Partial<RuntimeSnapshot> = {}): RuntimeSnapshot {
   return {projectId:'repo',environment:'local',enabled:true,experimental:true,state:'ready',version:'codex test',instanceId:'instance-1',capabilities:['createSession','continueSession','startTurn','steerTurn','interruptTurn','answerRequest'],coverage:'本客户端明确建立的实例',error:null,sessions:[session],requests:[],operations:[],logs:[],logsTruncated:false,exitWaiting:false,...overrides};
 }

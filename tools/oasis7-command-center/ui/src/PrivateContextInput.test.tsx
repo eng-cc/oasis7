@@ -1,0 +1,27 @@
+import { render, fireEvent, screen, waitFor } from '@solidjs/testing-library';
+import { vi, it, expect, beforeEach } from 'vitest';
+import PrivateContextInput from './PrivateContextInput';
+import { contextBridge } from './bridge';
+import { invoke } from '@tauri-apps/api/core';
+vi.mock('@tauri-apps/api/core',()=>({invoke:vi.fn(),isTauri:()=>false}));
+vi.mock('./bridge',()=>({contextBridge:{bindings:vi.fn(),list:vi.fn()},errorMessage:(e:unknown)=>String(e)}));
+beforeEach(()=>vi.clearAllMocks());
+it('previews escaped private text and sends explicit immutable references only',async()=> {
+  const binding={id:'b',bindingVersion:3,root:'/private',storeId:'store',projectId:'domain',registeredProjectId:'project',name:'资料',directoryIdentity:'inode'};
+  vi.mocked(contextBridge.bindings).mockResolvedValue([binding]);
+  vi.mocked(contextBridge.list).mockResolvedValue({entries:[{id:'entry',title:'环境',kind:'machine',environment:'local',state:'active',revision:'revision',verification_state:'unverified',summary:''}],complete:true,has_more:false,total_matches:1,next_cursor:null,warnings:[],read_at:'now'});
+  const source={bindingId:'b',bindingVersion:3,entryId:'entry',revision:'revision',scope:'whole_entry'};
+  vi.mocked(invoke).mockResolvedValue({source,text:'<script>window.attacked=true</script>'});
+  const send=vi.fn(async(action:()=>Promise<unknown>)=>{await action();});
+  render(()=> <PrivateContextInput threadId="original-thread" input={()=>'明确任务'} disabled={()=>false} send={send as never}/>);
+  fireEvent.click(screen.getByText('读取已绑定资料库'));
+  await waitFor(()=>expect(screen.getByText('资料')).toBeTruthy());
+  fireEvent.change(screen.getByLabelText('资料库'),{target:{value:'b'}});
+  await waitFor(()=>expect(screen.getByText('环境 · entry')).toBeTruthy());
+  fireEvent.change(screen.getByLabelText('条目'),{target:{value:'entry'}});
+  await waitFor(()=>expect(screen.getByText('<script>window.attacked=true</script>')).toBeTruthy());
+  expect(document.querySelector('script')).toBeNull();
+  expect(send).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText('将预览资料与草稿发送到此会话'));
+  await waitFor(()=>expect(invoke).toHaveBeenCalledWith('start_private_runtime_turn',{threadId:'original-thread',input:'明确任务',source}));
+});

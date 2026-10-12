@@ -18,6 +18,13 @@ const MAX_STDERR_BYTES: usize = 64 * 1024;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.as_slice() == ["info", "--json"] {
+        println!(
+            "{}",
+            serde_json::json!({"schema_version":1,"tool_id":"oasis7_local_signer","version":env!("CARGO_PKG_VERSION"),"source_head_oid":option_env!("OASIS7_SOURCE_HEAD_OID"),"release_id":option_env!("OASIS7_RELEASE_ID"),"target":option_env!("OASIS7_BUILD_TARGET"),"protocol_schemas":["oasis7.local_signer_ipc.v1","oasis7.local_signer_job.v1"],"capabilities":[{"id":"file_ed25519_v1","supported":true,"unavailable_reason":null},{"id":"caller_jobs","supported":true,"unavailable_reason":null},{"id":"general_upgrade","supported":false,"unavailable_reason":"No general upgrade contract"}]})
+        );
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "context") {
         std::process::exit(oasis7_context::cli::run(
             &args[1..],

@@ -1,4 +1,4 @@
-use super::{RuntimeHost, exit_ready};
+use super::{RuntimeHost, exit_ready, with_tool_status};
 use std::sync::atomic::Ordering;
 use tauri::Emitter;
 
@@ -13,11 +13,18 @@ impl RuntimeHost {
         if self.exit_checking.swap(true, Ordering::AcqRel) {
             return;
         }
+        let jobs = self.jobs.clone();
         let runtime = self.runtime.clone();
         let failure = self.failure.clone();
         let approved = self.approved_exit.clone();
         let checking = self.exit_checking.clone();
         std::thread::spawn(move || {
+            if jobs.freeze().is_err() {
+                checking.store(false, Ordering::Release);
+                crate::show_main(&app);
+                let _ = app.emit_to("main", "command-center:exit-required", ());
+                return;
+            }
             let status = runtime
                 .lock()
                 .map_err(|_| "执行状态不可用".to_string())
@@ -28,7 +35,8 @@ impl RuntimeHost {
                             .clone()
                             .unwrap_or_else(|| "执行状态不可用".into())
                     })?;
-                    let status = r.shutdown_if_idle().map_err(|e| e.to_string())?;
+                    let status =
+                        with_tool_status(r.shutdown_if_idle().map_err(|e| e.to_string())?, &jobs)?;
                     if exit_ready(&status) {
                         approved.store(true, Ordering::Release);
                     }
@@ -52,6 +60,7 @@ impl RuntimeHost {
             return;
         }
         let owner = self.clone();
+        let jobs = self.jobs.clone();
         let runtime = self.runtime.clone();
         let failure = self.failure.clone();
         let waiting = self.waiting.clone();
@@ -72,7 +81,10 @@ impl RuntimeHost {
                                 .clone()
                                 .unwrap_or_else(|| "执行状态不可用".into())
                         })?;
-                        let status = r.shutdown_if_idle().map_err(|e| e.to_string())?;
+                        let status = with_tool_status(
+                            r.shutdown_if_idle().map_err(|e| e.to_string())?,
+                            &jobs,
+                        )?;
                         if exit_ready(&status) {
                             approved.store(true, Ordering::Release);
                         }

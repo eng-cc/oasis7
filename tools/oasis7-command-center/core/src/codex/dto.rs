@@ -23,6 +23,8 @@ pub struct RuntimeSession {
     pub background_state: String,
     #[serde(default)]
     pub restorable_history: bool,
+    #[serde(default)]
+    pub private_sources: Vec<PrivateInputRef>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -105,4 +107,23 @@ pub struct SessionConfig {
     pub scope: String,
     pub model: Option<String>,
     pub basis_revision: String,
+}
+
+/// References only: private text remains in the original store and explicit runtime input.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivateInputRef {
+    pub binding_id: String,
+    #[ts(type = "number")]
+    pub binding_version: u64,
+    pub entry_id: String,
+    pub revision: String,
+    pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivateInputPreview {
+    pub source: PrivateInputRef,
+    pub text: String,
 }

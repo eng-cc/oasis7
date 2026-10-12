@@ -62,3 +62,44 @@ export function observedTime(value: string | null | undefined): string {
 export function acceptsEnter(event: { key: string; isComposing: boolean; keyCode?: number }, composing: boolean): boolean {
   return event.key === 'Enter' && !event.isComposing && !composing && event.keyCode !== 229;
 }
+
+import type { ContextBinding, ContextEntry, ContextSaveRequest, ToolObservation, FileSignInput, FileSignPrepared, ToolJob } from './generated/core';
+export type { ContextSummary, ContextQuery } from './generated/core';
+import type { ContextQuery } from './generated/core';
+const bound = (binding: ContextBinding) => ({ bindingId: binding.id, bindingVersion: Number(binding.bindingVersion) });
+export const contextBridge = {
+  info: () => call<unknown>('context_info'),
+  reconcile: async (operationId: string, passphrase?: string) => {
+    const secretHandle=passphrase ? await call<string>('secret_stage', { operationId, purpose:'context_reconcile', passphrase }) : null;
+    return call<ToolJob>('context_reconcile', { operationId, secretHandle });
+  },
+  bindings: () => call<ContextBinding[]>('context_bindings'),
+  select: (create: boolean, name: string) => call<ContextBinding | null>('context_choose_library', { create, name, operationId: crypto.randomUUID() }),
+  list: (binding: ContextBinding, query = '', includeArchived = false) => call<ContextQuery>('context_list', { ...bound(binding), query, includeArchived }),
+  get: (binding: ContextBinding, entryId: string) => call<ContextEntry>('context_get', { ...bound(binding), entryId }),
+  save: (request: ContextSaveRequest, operationId: string) => call<{revision: string; persistence: string; changed: boolean}>('context_save', { request, operationId }),
+  archive: (binding: ContextBinding, entryId: string, revision: string) => call<unknown>('context_archive', { ...bound(binding), entryId, revision, operationId: crypto.randomUUID() }),
+  history: (binding: ContextBinding, entryId: string) => call<unknown>('context_history', { ...bound(binding), entryId }),
+  restoreEntry: (binding: ContextBinding, entryId: string, commit: string, revision: string | null) => call<unknown>('context_restore_entry', { ...bound(binding), entryId, commit, revision, operationId: crypto.randomUUID() }),
+  doctor: (binding: ContextBinding) => call<unknown>('context_doctor', bound(binding)),
+  snapshot: async (purpose: 'export' | 'inspect' | 'restore', binding: ContextBinding, passphrase: string, directoryName = '', selection: string[] = []) => {
+    const operationId = crypto.randomUUID();
+    const command = `context_snapshot_${purpose}`;
+    const secretHandle = await call<string>('secret_stage', { operationId, purpose: command, passphrase });
+    return call<unknown>(command, { ...bound(binding), operationId, secretHandle, directoryName, selection });
+  },
+};
+export const toolsBridge = {
+  signer: () => call<ToolObservation>('tool_signer_observe'),
+  jobs: () => call<ToolJob[]>('tool_jobs'),
+  cli: () => call<import('./generated/core').CliInstallation | null>('tool_cli_observe'),
+  reconcileCli: (operationId: string) => call<unknown>('tool_cli_reconcile', { operationId }),
+  reconcilePrepare: (input: FileSignInput) => call<unknown>('tool_file_reconcile', { input }),
+  doctor: () => call<unknown>('tool_signer_doctor'),
+  chooseFile: () => call<string | null>('tool_choose_file'),
+  prepare: (input: FileSignInput, operationId: string) => call<FileSignPrepared>('tool_file_prepare', { input, operationId }),
+  submit: (jobId: string, expectedPreparedFingerprint: string, operationId: string) => call<unknown>('tool_signer_submit', { jobId, expectedPreparedFingerprint, operationId }),
+  inspect: (jobId: string) => call<unknown>('tool_signer_inspect', { jobId }),
+  installCli: () => call<import('./generated/core').CliInstallation>('tool_cli_install', { operationId: crypto.randomUUID() }),
+  verify: (filePath: string, context: unknown, expectedPublicKey: number[], signature: number[]) => call<boolean>('tool_file_verify', { filePath, context, expectedPublicKey, signature }),
+};
