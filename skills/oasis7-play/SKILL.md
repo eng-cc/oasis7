@@ -22,6 +22,8 @@ Run the supplied executable with `--help`, then:
 
 Choose a unique operation ID once per decision context. Retain it across transport errors and restarts. The client durably records the original signed preparation and public prefix before sending. Do not substitute another nonce or operation after an unknown result.
 
+If context returns `usable_context=false`, inspect its original canonical outcome. Pending or unknown outcomes require original lookup/retry. A settled rejection or expiry cannot become a usable context by repeating it: preserve that result, reread the task, and capture a new decision context with a new operation ID while still authorized. A changing world may invalidate a captured base between preparation and submission.
+
 A context is usable only after its prefix is canonically committed. Read the returned complete goal, soft constraints, current task/executor fence, observation schema and actual capability catalog. `world-agent-state/v1` is raw Agent state, not the legacy ProviderObservation format. Derive your decision from this goal and observation. Contexts have a bounded tick lease, at most 16 ticks and never beyond the capability grant expiry; refresh promptly before making a new decision.
 
 ## Decide and act
@@ -36,6 +38,8 @@ The supported CLI proposal is movement of the configured Agent to three signed i
 Choose coordinates yourself to satisfy the actual goal. The runtime still checks authority, capability admission, current task/goal/executor fences, base binding and available resources. A submitted or pending request is not a successful world effect. Inspect the canonical outcome and action receipt, and read a new context to check the resulting position when another decision is needed.
 
 Each context has one original action. Retry the same coordinates and context to recover that exact result. A changed action conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
+
+If the original action is canonically rejected or expired, retain that result and use a fresh context for a new decision. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
 
 ## Recover and finish
 

@@ -312,7 +312,13 @@ pub fn print(value: &impl Serialize) -> Result<(), String> {
     Ok(())
 }
 pub fn pending(response: &IntentResponse<Value>) -> Value {
-    json!({"operation":response,"next":"lookup_original","usable_context":false})
+    json!({"operation":response,"next":context_next_step(&response.outcome),"usable_context":false})
+}
+fn context_next_step<T>(outcome: &IntentOutcome<T>) -> &'static str {
+    match outcome {
+        IntentOutcome::Rejected { .. } | IntentOutcome::Expired => "refresh_after_settled_result",
+        _ => "lookup_original",
+    }
 }
 
 /// Emit only a bounded public category/status, never response text or proofs.
@@ -324,5 +330,34 @@ fn failure_tag(error: &oasis7::world_service::client::WorldServiceClientError) -
         WorldServiceClientError::Assurance(_) => "response not verified".into(),
         WorldServiceClientError::Rejected { status, .. } => format!("rejected HTTP {status}"),
         WorldServiceClientError::Cooldown { status, .. } => format!("cooldown HTTP {status}"),
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    #[test]
+    fn unresolved_contexts_never_advise_a_replacement_operation() {
+        for outcome in [
+            IntentOutcome::<Value>::Unknown,
+            IntentOutcome::Pending,
+            IntentOutcome::HistoryUnavailable,
+            IntentOutcome::Received {
+                durability: AdmissionDurability::Volatile,
+            },
+            IntentOutcome::Received {
+                durability: AdmissionDurability::Durable,
+            },
+        ] {
+            assert_eq!(context_next_step(&outcome), "lookup_original");
+        }
+        for outcome in [
+            IntentOutcome::<Value>::Rejected {
+                reason: WorldServiceErrorKind::Conflict,
+            },
+            IntentOutcome::Expired,
+        ] {
+            assert_eq!(context_next_step(&outcome), "refresh_after_settled_result");
+        }
     }
 }
