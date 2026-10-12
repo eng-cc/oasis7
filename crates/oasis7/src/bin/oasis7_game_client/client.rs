@@ -265,7 +265,12 @@ impl Client {
         let prepared = self
             .remote
             .prepare_task_context(&original)
-            .map_err(|_| "private preparation rejected or unavailable; retry original operation")?;
+            .map_err(|error| {
+                format!(
+                    "private preparation {}; retry original operation",
+                    failure_tag(&error)
+                )
+            })?;
         let signed =
             authority::sign_read_request("scheduler", public_prefix(&prepared)?, &self.key_hex)?;
         self.cache_intent(
@@ -293,8 +298,11 @@ impl Client {
             },
             &self.key_hex,
         )?;
-        self.remote.read_task_context(&signed).map_err(|_| {
-            "context stale, finished or unavailable; query original results and refresh".to_owned()
+        self.remote.read_task_context(&signed).map_err(|error| {
+            format!(
+                "private context {}; query original results and refresh",
+                failure_tag(&error)
+            )
         })
     }
 }
@@ -305,4 +313,16 @@ pub fn print(value: &impl Serialize) -> Result<(), String> {
 }
 pub fn pending(response: &IntentResponse<Value>) -> Value {
     json!({"operation":response,"next":"lookup_original","usable_context":false})
+}
+
+/// Emit only a bounded public category/status, never response text or proofs.
+fn failure_tag(error: &oasis7::world_service::client::WorldServiceClientError) -> String {
+    use oasis7::world_service::client::WorldServiceClientError;
+    match error {
+        WorldServiceClientError::Configuration(_) => "configuration rejected".into(),
+        WorldServiceClientError::Transport(_) => "transport unavailable".into(),
+        WorldServiceClientError::Assurance(_) => "response not verified".into(),
+        WorldServiceClientError::Rejected { status, .. } => format!("rejected HTTP {status}"),
+        WorldServiceClientError::Cooldown { status, .. } => format!("cooldown HTTP {status}"),
+    }
 }

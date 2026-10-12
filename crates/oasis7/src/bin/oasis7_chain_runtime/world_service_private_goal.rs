@@ -195,7 +195,9 @@ fn read_current(
         let WorldServicePayloadV1::GameGoalPublish(public) = &result.request.signed_payload else {
             return Err("invalid publication".into());
         };
-        let historical = service.pin_at_height(result.committed_height)?;
+        let historical = service
+            .pin_at_height(result.committed_height)
+            .map_err(|_| PrivateError::Recovery)?;
         let digest = correlation::key_digest(&result.request.correlation.key)?;
         let encoded = serde_json::to_value(&result).map_err(|_| "invalid publication")?;
         if historical

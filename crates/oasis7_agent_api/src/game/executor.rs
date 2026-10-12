@@ -183,7 +183,20 @@ pub struct TaskContextIdentityV1 {
     pub provider_invocation_commitment: String,
     pub valid_until_tick: DecimalU64,
 }
+/// The public canonical prefix and private preparation share one lease bound.
+pub const TASK_CONTEXT_MAX_LEASE_TICKS: u64 = 16;
 impl TaskContextIdentityV1 {
+    pub fn validate_capture_deadline(&self, captured_tick: u64) -> Result<(), String> {
+        self.validate()?;
+        let limit = captured_tick
+            .checked_add(TASK_CONTEXT_MAX_LEASE_TICKS)
+            .ok_or("task context lease overflow")?;
+        if self.valid_until_tick.0 < captured_tick || self.valid_until_tick.0 > limit {
+            return Err("task context exceeds captured lease".into());
+        }
+        Ok(())
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         self.fence.validate()?;
         if self.schema_revision != 1

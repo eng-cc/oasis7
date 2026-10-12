@@ -50,9 +50,11 @@ Game Task 创建复用既有签名 World Service submit/lookup 与 Runtime 共�
 
 Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 `/v1/world/submit` 提交 Bind/替换/Stop。Bind 必须指向真实当前 delegation，推进 task revision 与 executor epoch，使任务 Active；Stop 推进 fence、清空 binding 并 Suspended。目标发布推进目标/task revision，保留现有 executor binding。全部控制由既有 canonical receipt 链恢复；新变体启用前执行、验证及恢复节点必须同步升级，旧 binary 不能读取新历史。
 
-当前 executor 以当前完整 fence 签署 POST `/v1/world/private-task/context-prepare`；同操作原 nonce 可恢复，异 nonce 冲突。私有记录包含完整 GoalContent/proof、同 pin 的原始 `world-agent-state/v1` AgentState、实际授权目录、Runtime/base binding、随机盐和原准备证明。独立 AEAD 密文保存并 fsync，不截断到旧 Harness 的 512 字节目标摘要。一个 Context 的租期为 `min(catalog.valid_until_tick, checked(base_tick + 16))`；超过期限不能获得正文或授权新效果。
+当前 executor 以当前完整 fence 签署 POST `/v1/world/private-task/context-prepare`；同操作原 nonce 可恢复，异 nonce 冲突。私有记录包含完整 GoalContent/proof、同 pin 的原始 `world-agent-state/v1` AgentState、实际授权目录、Runtime/base binding、随机盐和原准备证明。独立 AEAD 密文保存并 fsync，不截断到旧 Harness 的 512 字节目标摘要。一个 Context 的租期为 `min(catalog.valid_until_tick, checked(base_tick + 16))`；canonical prefix 同样检验原 captured tick 的 16 tick 上限并拒绝溢出，不能靠后续 current tick 延期。超过期限不能获得正文或授权新效果。
 
 准备不等于可用。客户端先提交 identity-only `SchedulerOperationV1::TaskProviderPrefix`，等待 canonical committed，再 POST `/v1/world/private-task/context-read`。回应包含原密文记录、实际捕获 CommitRef/receipt 及当前同 pin 的公共 base binding/观察/能力。客户端核对配置服务签名、原意图、完整目标 proof、盐承诺、捕获回执和新鲜 bundle。世界公开历史只存完整 fence、session/turn/request 标识及三项私有随机盐隔域承诺，不保存正文、原私有摘要、盐或完整 Provider request。受信服务签名证明所交付内容，不代替独立共识证书。
+
+当前目标激活和有效 Context 捕获所依赖的真实历史 snapshot/journal/head proof，由 canonical 世界状态派生专用 CAS pin scope；普通提交、catchup、checkpoint install 和全量维护均保留这些依赖，目标替换或 Context 失效后释放。派生 cache 不构成任务权威，丢失时从 canonical receipt 重建，损坏时阻止 GC。已经被旧版本清理且不可恢复的历史依赖返回 `recovery_required`，不能用当前 CommitRef 冒充历史激活证明。
 
 `CognitionIntentV1.task_fence` 将行动绑定当前任务、目标版本和 executor epoch；实际裁决沿用既有能力、预算、MVCC 和 turn 生命周期。一 Agent 同时只有一个活动 turn。新目标、替换或 Stop 退役旧 pending context 并释放匹配 Reserved lease；首次 Bind 也退役旧 Hosted Provider pending work。已管理 Agent 的旧 unfenced cognition/旧 Provider prefix 不得恢复执行。精确已提交请求可找回原回执；它仍需真实当前读授权，不因此授予新行动。过期 Context 可通过固定公共 `context_expired` outcome 或新的当前 Context 清理，不能沿用过期 grant。
 

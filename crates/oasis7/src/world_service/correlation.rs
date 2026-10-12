@@ -188,6 +188,15 @@ pub fn derive_correlation(
                 &signed.request.operation
             {
                 context.validate()?;
+                if matches!(
+                    &signed.request.operation,
+                    SchedulerOperationV1::TaskProviderPrefix { .. }
+                ) {
+                    context.validate_capture_deadline(
+                        signed.request.captured_base_binding.base_tick,
+                    )?;
+                }
+
                 if let SchedulerOperationV1::TaskProviderFailure { reason, .. } =
                     &signed.request.operation
                     && !matches!(

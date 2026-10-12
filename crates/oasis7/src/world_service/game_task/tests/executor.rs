@@ -250,9 +250,10 @@ fn game_task_executor_invalid_history_tail_and_weak_or_foreign_bind_fail_closed(
             rejected: None,
         })
         .unwrap();
-    let error = World::from_snapshot(checkpoint, world.journal().clone())
-        .err()
-        .expect("conflicting executor tail must fail restore");
+    let error = match World::from_snapshot(checkpoint, world.journal().clone()) {
+        Ok(_) => panic!("conflicting executor tail must fail restore"),
+        Err(error) => error,
+    };
     assert!(format!("{error:?}").contains("executor predecessor"));
     let (world, owner, _, initial) = boot();
     let foreign = executor_request(

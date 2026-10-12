@@ -105,6 +105,8 @@ impl World {
         let mut transaction = self.clone();
         let result = match intent.operation {
             SchedulerOperationV1::TaskProviderPrefix { context } => {
+                context.validate_capture_deadline(intent.captured_base_binding.base_tick)?;
+
                 crate::world_service::game_task::prepare_task_prefix(
                     &mut transaction,
                     &context,

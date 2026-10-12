@@ -14,7 +14,7 @@ pub const TASK_CONTEXT_READ_PATH: &str = "/v1/world/private-task/context-read";
 pub const TASK_SNAPSHOT_PATH: &str = "/v1/world/private-task/goal-snapshot";
 pub const MAX_PRIVATE_CONTEXT_BYTES: usize = 2 * 1024 * 1024;
 /// Maximum lifetime of one captured decision context, within the actual grant expiry.
-pub const TASK_CONTEXT_LEASE_TICKS: u64 = 16;
+pub const TASK_CONTEXT_LEASE_TICKS: u64 = oasis7_agent_api::game::TASK_CONTEXT_MAX_LEASE_TICKS;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TaskContextPrepareV1 {

@@ -12,6 +12,7 @@ use oasis7_agent_api::game::{
 use std::sync::{Arc, Mutex};
 #[test]
 fn private_task_context_native_complete_prepare_capture_read_action_and_restart() {
+    const AGE: u64 = 34;
     let (dir, mut driver, world, owner, owner_public) =
         canonical_agent_chat::driver_fixture_with_verified_authority();
     let create = game_task_tests::create(&world, &owner, "context-task");
@@ -138,6 +139,46 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         &delegate,
     )
     .unwrap();
+    // Active goal evidence survives both the normal 32-block window and full reconciliation.
+    for height in 7..=40 {
+        commit(&mut driver, height, create.clone());
+    }
+    let cas = LocalCasStore::new(dir.join("store"));
+    super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
+        &dir.join("records"),
+        &cas,
+        2,
+    )
+    .unwrap();
+    assert!(
+        super::super::super::world_service_read::pin_at_height(
+            &dir.join("records"),
+            &dir.join("store"),
+            &world,
+            4
+        )
+        .is_ok()
+    );
+    // The live-task cache is derived: remove it and restart from the real current head.
+    cas.clear_pin_scope("execution_bridge_live_tasks_v1")
+        .unwrap();
+    drop(driver);
+    let bootstrap = super::super::super::local_bootstrap::derive_service_execution_bootstrap(
+        &dir.join("world"),
+        &dir.join("records"),
+        &dir.join("store"),
+        "w1",
+    )
+    .unwrap();
+    let mut driver = NodeRuntimeExecutionDriver::new_with_local_bootstrap(
+        dir.join("state.json"),
+        dir.join("world"),
+        dir.join("records"),
+        dir.join("store"),
+        &oasis7_proto::storage_profile::StorageProfileConfig::default(),
+        bootstrap,
+    )
+    .unwrap();
     let prepared = consumer(&dir, &runtime, &signer, &store, &world, |client| {
         client.prepare_task_context(&proof).unwrap()
     });
@@ -145,6 +186,16 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         prepared.snapshot.active_goal.owner_proof.request.content,
         goal.request.content
     );
+    let original_context_file = std::fs::read_dir(&private)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .find(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("context-")
+        })
+        .unwrap();
     drop(store);
     let store = PrivateGoalStore::open(&private, [7; 32]).unwrap();
     let recovered = store.lookup_task_context(&proof).unwrap().unwrap();
@@ -181,6 +232,31 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         409
     );
     let prefix = public_prefix(&prepared).unwrap();
+    // A valid bound executor cannot extend a public context past the lease
+    // simply by bypassing encrypted preparation and signing another prefix.
+    let mut overlong = prefix.clone();
+    let SchedulerOperationV1::TaskProviderPrefix { context } = &mut overlong.operation else {
+        unreachable!()
+    };
+    context.valid_until_tick.0 += 1;
+    let overlong = sign_read_request("scheduler", overlong, &delegate).unwrap();
+    assert!(
+        derive_correlation(
+            world.clone(),
+            &WorldServicePayloadV1::Scheduler(overlong.clone())
+        )
+        .is_err(),
+        "correctly signed overlong public prefix must fail correlation validation"
+    );
+    let before_overlong = driver.execution_world.snapshot();
+    assert!(
+        driver
+            .execution_world
+            .apply_authenticated_scheduler(overlong)
+            .is_err()
+    );
+    assert_eq!(driver.execution_world.snapshot(), before_overlong);
+
     let public = serde_json::to_string(&prefix).unwrap();
     for secret in [
         &goal.request.content.goal_text,
@@ -196,7 +272,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             sign_read_request("scheduler", prefix, &delegate).unwrap(),
         ),
     );
-    commit(&mut driver, 7, submit.clone());
+    commit(&mut driver, AGE + 7, submit.clone());
     assert!(
         game_task_tests::recorded(&driver, &submit)
             .rejected
@@ -217,16 +293,32 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             sign_read_request("scheduler", public_prefix(&competing).unwrap(), &delegate).unwrap(),
         ),
     );
-    commit(&mut driver, 8, competing_submit.clone());
+    commit(&mut driver, AGE + 8, competing_submit.clone());
     assert!(
         game_task_tests::recorded(&driver, &competing_submit)
             .rejected
             .is_some()
     );
+    // A pending capture remains usable even when a full maintenance window excludes its height.
+    super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
+        &dir.join("records"),
+        &cas,
+        1,
+    )
+    .unwrap();
+    assert!(
+        super::super::super::world_service_read::pin_at_height(
+            &dir.join("records"),
+            &dir.join("store"),
+            &world,
+            AGE + 7
+        )
+        .is_ok()
+    );
     let captured = consumer(&dir, &runtime, &signer, &store, &world, |client| {
         client.read_task_context(&get).unwrap()
     });
-    assert_eq!(captured.capture_commit.position, 7);
+    assert_eq!(captured.capture_commit.position, AGE + 7);
     assert_eq!(
         captured
             .prepared
@@ -237,17 +329,30 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .content,
         goal.request.content
     );
+    // Missing historical capture evidence fails before decrypting/delivering context.
+    let capture_path = super::super::super::checkpoint::execution_bridge_record_path(
+        &dir.join("records"),
+        AGE + 7,
+    );
+    let capture_bytes = std::fs::read(&capture_path).unwrap();
+    let mut missing: serde_json::Value = serde_json::from_slice(&capture_bytes).unwrap();
+    missing["snapshot_ref"] = serde_json::Value::Null;
+    std::fs::write(&capture_path, serde_json::to_vec(&missing).unwrap()).unwrap();
+    let (status, error) = http(
+        &dir,
+        &runtime,
+        &signer,
+        Some(&store),
+        TASK_CONTEXT_READ_PATH,
+        &get,
+        "",
+    );
+    assert_eq!(status, 503);
+    assert_eq!(error["error"], "private_goal_recovery_required");
+    assert!(error.get("payload").is_none());
+    std::fs::write(&capture_path, capture_bytes).unwrap();
     // Authenticated capture cannot conceal a missing or corrupted encrypted record.
-    let context_file = std::fs::read_dir(&private)
-        .unwrap()
-        .map(|e| e.unwrap().path())
-        .find(|p| {
-            p.file_name()
-                .unwrap()
-                .to_string_lossy()
-                .starts_with("context-")
-        })
-        .unwrap();
+    let context_file = original_context_file;
     let encrypted = std::fs::read(&context_file).unwrap();
     std::fs::write(&context_file, b"corrupt").unwrap();
     assert_eq!(
@@ -298,7 +403,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             sign_read_request("cognition", action, &delegate).unwrap(),
         ),
     );
-    commit(&mut driver, 9, submit.clone());
+    commit(&mut driver, AGE + 9, submit.clone());
     assert!(
         game_task_tests::recorded(&driver, &submit)
             .rejected
@@ -348,7 +453,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     let g2_receipt = store.prepare(&g2).unwrap();
     commit(
         &mut driver,
-        10,
+        AGE + 10,
         request(
             &world,
             WorldServicePayloadV1::GameGoalPublish(
@@ -373,6 +478,19 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         )
         .0,
         403
+    );
+    let retired = super::super::super::checkpoint::load_execution_bridge_record(
+        &super::super::super::checkpoint::execution_bridge_record_path(&dir.join("records"), 4),
+    )
+    .unwrap();
+    assert!(
+        retired.snapshot_ref.is_none() && retired.journal_ref.is_none(),
+        "replaced goal must release out-of-window full record pins"
+    );
+    assert!(
+        !cas.list_pin_scope_shards("execution_bridge_live_tasks_v1")
+            .unwrap()
+            .contains(&format!("record-{:020}", 4))
     );
     let current = game_task::current_control(&driver.execution_world, "agent-a")
         .unwrap()
@@ -414,7 +532,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     );
     commit(
         &mut driver,
-        11,
+        AGE + 11,
         request(
             &world,
             WorldServicePayloadV1::Scheduler(
@@ -454,7 +572,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .unwrap(),
         ),
     );
-    commit(&mut driver, 12, g2_action.clone());
+    commit(&mut driver, AGE + 12, g2_action.clone());
     assert!(
         game_task_tests::recorded(&driver, &g2_action)
             .rejected
@@ -491,7 +609,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             sign_read_request("scheduler", public_prefix(&expiry).unwrap(), &delegate).unwrap(),
         ),
     );
-    commit(&mut driver, 13, expiry_prefix.clone());
+    commit(&mut driver, AGE + 13, expiry_prefix.clone());
     assert!(
         game_task_tests::recorded(&driver, &expiry_prefix)
             .rejected
@@ -507,12 +625,12 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         &delegate,
     )
     .unwrap();
-    let mut expiry_height = 13;
+    let mut expiry_height = AGE + 13;
     // Administrative receipts preserve simulation time; actual empty simulation
     // blocks advance ticks without fabricating a clock or player action.
     while driver.execution_world.state().time <= expiry.valid_until_tick.0 {
         expiry_height += 1;
-        assert!(expiry_height <= 13 + TASK_CONTEXT_LEASE_TICKS + 1);
+        assert!(expiry_height <= AGE + 13 + TASK_CONTEXT_LEASE_TICKS + 1);
         driver
             .on_commit(NodeExecutionCommitContext {
                 world_id: "w1".into(),
@@ -628,6 +746,83 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         driver.execution_world.state().agents["agent-a"].state.pos,
         oasis7::GeoPos::new(3, 0, 0)
     );
+    // Truly absent historical full evidence is a recovery error, not an unavailable retry.
+    let activation = g2_context
+        .snapshot
+        .control
+        .active_goal_reference
+        .as_ref()
+        .unwrap()
+        .activation_committed_height
+        .0;
+    let historical_path = super::super::super::checkpoint::execution_bridge_record_path(
+        &dir.join("records"),
+        activation,
+    );
+    let historical_bytes = std::fs::read(&historical_path).unwrap();
+    let mut compacted: serde_json::Value = serde_json::from_slice(&historical_bytes).unwrap();
+    compacted["snapshot_ref"] = serde_json::Value::Null;
+    compacted["journal_ref"] = serde_json::Value::Null;
+    compacted["latest_state_ref"] = serde_json::Value::Null;
+    std::fs::write(&historical_path, serde_json::to_vec(&compacted).unwrap()).unwrap();
+    let snapshot_request = sign_read_request(
+        TASK_SNAPSHOT_PATH,
+        TaskGoalSnapshotRequestV1 {
+            schema_revision: 1,
+            fence: fence.clone(),
+        },
+        &delegate,
+    )
+    .unwrap();
+    let (status, error) = http(
+        &dir,
+        &runtime,
+        &signer,
+        Some(&store),
+        TASK_SNAPSHOT_PATH,
+        &snapshot_request,
+        "",
+    );
+    assert_eq!(status, 503);
+    assert_eq!(error["error"], "private_goal_recovery_required");
+    assert!(error.get("payload").is_none());
+    let owner_request = sign_read_request(
+        oasis7::world_service::private_goal_read::GOAL_CURRENT_PATH,
+        oasis7::world_service::private_goal_read::CurrentGoalRequest {
+            schema_revision: 1,
+            world: world.clone(),
+            agent_id: "agent-a".into(),
+            task_id: fence.task_id.clone(),
+        },
+        &owner,
+    )
+    .unwrap();
+    let (status, error) = http(
+        &dir,
+        &runtime,
+        &signer,
+        Some(&store),
+        oasis7::world_service::private_goal_read::GOAL_CURRENT_PATH,
+        &owner_request,
+        "",
+    );
+    assert_eq!(status, 503);
+    assert_eq!(error["error"], "private_goal_recovery_required");
+    assert!(error.get("payload").is_none());
+    std::fs::write(&historical_path, &historical_bytes).unwrap();
+    // Unknown cache entries must prevent retention, never cause arbitrary path/height retention.
+    let cache_dir = dir.join("store/pin_scopes/execution_bridge_live_tasks_v1");
+    let unknown = cache_dir.join("unexpected.json");
+    std::fs::write(&unknown, b"{}").unwrap();
+    assert!(
+        super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
+            &dir.join("records"),
+            &cas,
+            1
+        )
+        .is_err()
+    );
+    std::fs::remove_file(unknown).unwrap();
     // A Stop committed after preparation/decryption and before delivery fences the reply.
     let mut next = g2_prepare.request.clone();
     next.client_operation_id = "next-context".into();

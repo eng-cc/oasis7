@@ -78,6 +78,11 @@ fn public_task_context_has_only_commitments_and_complete_active_fence() {
         valid_until_tick: DecimalU64(50),
     };
     context.validate().unwrap();
+    context.validate_capture_deadline(34).unwrap();
+    assert!(context.validate_capture_deadline(33).is_err());
+    assert!(context.validate_capture_deadline(51).is_err());
+    assert!(context.validate_capture_deadline(u64::MAX).is_err());
+
     let value = serde_json::to_value(&context).unwrap();
     for field in [
         "body",
