@@ -410,9 +410,10 @@ fn game_goal_publish_restore_rejects_missing_predecessor_and_double_version() {
     };
     world.record_world_service_result(broken).unwrap();
     assert!(validate_history(&world).is_err());
-    let error = World::from_snapshot(goal_snapshot(&world), world.journal().clone())
-        .err()
-        .expect("corrupted canonical history must fail restore");
+    let error = match World::from_snapshot(goal_snapshot(&world), world.journal().clone()) {
+        Err(error) => error,
+        Ok(_) => panic!("corrupted canonical history must fail restore"),
+    };
     assert!(format!("{error:?}").contains("goal publication predecessor"));
     let (mut world, private) = fixture();
     let create = result(&world, request(&private, "task"));
@@ -429,9 +430,10 @@ fn game_goal_publish_restore_rejects_missing_predecessor_and_double_version() {
     };
     world.record_world_service_result(a).unwrap();
     world.record_world_service_result(b).unwrap();
-    let error = World::from_snapshot(goal_snapshot(&world), world.journal().clone())
-        .err()
-        .expect("corrupted canonical history must fail restore");
+    let error = match World::from_snapshot(goal_snapshot(&world), world.journal().clone()) {
+        Err(error) => error,
+        Ok(_) => panic!("corrupted canonical history must fail restore"),
+    };
     assert!(format!("{error:?}").contains("goal publication predecessor"));
 }
 
