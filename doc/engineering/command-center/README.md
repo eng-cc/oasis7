@@ -22,6 +22,8 @@
 
 局部增量（2026-10-12，仅 Cargo 拆分）：[#4626](https://github.com/eng-cc/oasis7/pull/4626) 已合入 `133d70e45b71bd062032a734d68be1e290692b2c`，统一生产 cognition memory/continuation 核心并保留 Runtime authority；对应 main Rust [38212520926](https://github.com/eng-cc/oasis7/actions/runs/38212520926) 已成功。本分支正在补支持包 profile 选测隔离，尚未合入或完成 V0。用户确认提速收益已验证；实际自主试玩明确不在此次 Cargo V0 验收范围，不据此宣称实玩通过。该增量不刷新下面其他项目/部署事实的核验时间。
 
+局部文档更新（2026-10-12，仅 [#4438](https://github.com/eng-cc/oasis7/issues/4438)）：以 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 核对 L4 工具链，补齐[构建/驱动、实际 Hosted 会话及结果合同](../../testing/prd.md#l4-build-driver)与[事实/体验判定边界](../../testing/prd.md#l4-evidence-judgment)，同步旧试玩入口。runner 与 scaffold 的实现修复和实际验收仍由该 issue 承接；本次没有新试玩或部署结论，不刷新其他条目的核验时间。
+
 | 来源 | 本轮基线 |
 | --- | --- |
 | 仓库文档与代码 | main [`598b308a23f3f0189843618d14abb1aa31c0d2de`](https://github.com/eng-cc/oasis7/tree/598b308a23f3f0189843618d14abb1aa31c0d2de)，提交于 2026-10-11 18:40:57 +08:00 |
@@ -107,10 +109,6 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 本项局部核验于 2026-10-12：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，交付私有目标准备、单记录重试/重启、公开 canonical 发布和授权当前正文回读。最终 SDK 29、私有 library 22、任务链 8、原生 World Service 29 项回归通过；journal tail 缺前驱恢复缺口已修复，合入源 CI 全部通过。此段只刷新本项，不刷新前述全局或环境核验基线。
 
 下一轮集中实现原生 executor 控制、完整私有 Context 捕获与 task-fenced 行动，并提供普通客户端和正式 Skill；当前候选仍待完整验证、独立试玩及合入。完整协作 TaskSnapshot、两 Runtime 自主首局和公开 Game HTTP 写入口尚未验收。来源：[Game API 当前实施候选](../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)、[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。
-
-### 7. Launcher 会话证据失效与重新验证
-
-2026-10-12 局部核对：已补齐[系统设计](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)对产品 REQ-ENTRY-LAUNCH-001/002 的承接。当前候选修复停止、失败启动和退出后的旧链快照，以及 native/Web 控制请求失败后的旧 Ready；仍在验证，未计入 main 已交付或部署。本项只涉及 operator 本地会话证据，不声明玩家授权恢复、Agent 自主游玩或世界最终性。
 
 <a id="cc-status-changes"></a>
 

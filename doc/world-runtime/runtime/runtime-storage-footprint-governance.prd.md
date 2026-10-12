@@ -13,7 +13,7 @@
 - Proposed Solution 补充（2026-05-15）: 在不改变 `content_hash` / `snapshot_ref` / `journal_ref` 合同的前提下，`LocalCasStore` 允许对大体积 blob 采用“磁盘透明压缩、读出仍返回原始 bytes”的落盘策略，优先压缩 execution bridge snapshots/journals 与 sidecar segments 的重复结构数据。
 - Success Criteria:
   - SC-1: 默认 `dev_local` / launcher profile 在 `llm_bootstrap` 场景连续运行到 `2500` committed heights 后，`output/chain-runtime/<node_id>/store` 稳态占用 `<= 256 MiB`。
-  - SC-2: `reward-runtime-execution-world/.distfs-state/blobs` 在每次成功保存后仅保留被当前有效 manifest / journal segments / 受保护 generation 引用的 blob；`2500` heights 样本下总占用 `<= 16 MiB`，孤儿 blob 数量为 `0`。
+  - SC-2: `reward-runtime-execution-world/.distfs-state/blobs` 在提交已确认且清理成功后仅保留被当前有效 manifest / journal segments / 受保护 generation 引用的 blob，孤儿 blob 数量为 `0`；`2500` heights 样本下清理收敛后的总占用 `<= 16 MiB`。提交与清理分别判定；准备新代或维护降级期间允许保留额外受保护数据，不能为满足稳态预算破坏恢复材料。
   - SC-3: 默认 profile 下 `reward-runtime-execution-world/snapshot.json` 在 `2500` heights 样本下 `<= 512 KiB`，且 `tick_consensus_records` 热窗口外的数据仍可经归档索引审计读取。
   - SC-4: 在 retention / GC 执行后，latest-state 重启恢复成功率 `100%`，恢复后的 `execution_state_root` 与 GC 前一致。
   - SC-5: status/metrics 输出必须包含当前 storage profile、各目录字节数、pin 集大小、最近一次 GC 结果与失败原因，供 launcher / soak / release gate 直接消费。
@@ -39,9 +39,9 @@
   1. Flow-RSF-001（默认开发 profile 持久化）:
      `committed height 推进 -> execution_bridge 写 latest snapshot/journal refs -> retention manager 更新 head pin set -> 清理不再被保留窗口引用的 CAS blob -> status 输出最新 storage metrics`。
   2. Flow-RSF-002（执行世界 sidecar 保存）:
-     `RuntimeWorld::save_to_dir -> 生成 snapshot.manifest/journal.segments -> 写入新 generation pin set -> manifest-aware sweep 删除旧 generation 孤儿 blob -> 保留 latest + rollback-safe generation`。
+     `RuntimeWorld::save_to_dir -> 准备并验证新 generation 的完整引用闭包 -> 确认 index 持久提交 -> 调用方安装对应 World -> 清理不再受保护的数据 -> 成功清理后收敛到 latest + rollback-safe 及外部 pin`。提交未知时暂停写入并核对原候选；提交后的维护降级不撤销提交。
   3. Flow-RSF-003（重启恢复）:
-     `进程重启 -> 读取 latest execution bridge state + execution world head -> 验证被 pin 的 snapshot/journal/manifest refs -> 恢复 runtime -> 对比恢复前后 state_root`。
+     `进程重启 -> 读取已提交 index -> 完整装配并校验 latest 候选，候选完整性失败时尝试 indexed rollback-safe -> 恢复同代 World 与元数据 -> 核对 replay/root 与当前服务闸门`。健康旧候选只证明恢复材料可读，不自行恢复当前写权。
   4. Flow-RSF-004（soak / forensic 模式）:
      `运维选择 soak_forensics profile -> 放宽 hot window / checkpoint 保留 -> 长跑完成后导出 metrics/report -> 按 profile 关闭或回到 dev_local`。
   5. Flow-RSF-005（快照内链路压缩）:
@@ -54,21 +54,21 @@
 | Storage profile 选择 | `storage_profile`, `execution_hot_head_heights`, `execution_checkpoint_interval`, `sidecar_generations_keep`, `tick_consensus_hot_limit` | runtime / launcher / script 启动时加载统一 profile 枚举，可由 CLI/config 显式覆盖，默认 `dev_local` | `configured -> active -> degraded/failed` | 显式参数覆盖 profile 默认值；非法组合直接拒绝启动；`release_default` 默认要求 `execution_hot_head_heights <= execution_checkpoint_interval`，避免在 checkpoint 已覆盖的区间内重复保留整份 execution snapshot | 仅启动参数/配置维护者可放宽预算 |
 | Execution bridge retention | `snapshot_ref`, `journal_ref`, `height`, `retention_class=head/checkpoint/archive` | 每个高度写 record 后重算 pin set，并对 unpinned blob 执行 sweep | `written -> pinned -> pruned/archived` | latest 高度永远保留；checkpoint 按高度升序选取；journal ref 仅按被引用集合保留 | 自动执行，无用户绕过入口 |
 | CAS blob 落盘压缩 | `content_hash`, `blob_encoding`, `raw_size_bytes`, `stored_size_bytes` | 大体积 blob 写入 CAS 时可透明压缩；读路径始终返回原始 bytes，hash 校验仍基于原始 payload | `raw -> compressed-on-disk` 或 `raw -> raw-on-disk` | 仅当压缩后连同 header 都小于原始 bytes 时才启用；`content_hash` 始终保持原始 payload hash，不因磁盘编码变化 | 自动执行；调用方无感知 |
-| Sidecar manifest GC | `generation_id`, `manifest_hash`, `journal_segment_hashes`, `pinned_blob_hashes` | world 保存成功后执行两阶段 pin/sweep；失败则回退到旧 generation | `saving -> committed -> swept` 或 `saving -> rollback` | 仅清理未被 latest/rollback generation 引用的 blob | 自动执行；仅 runtime 自身可写 |
+| Sidecar manifest GC | `generation_id`, `manifest_hash`, `journal_segment_hashes`, `pinned_blob_hashes` | 确认 generation 持久提交后执行维护；确认未提交才保留旧 World，未知时隔离写入并核对 | 保存结果为 `NotCommitted/Committed/StatusUnknown`；`Committed` 后独立记录清理成功或维护降级 | 替代 index 提交前保护当前 index 的全部引用闭包；提交后只清理新 index 与外部 pin 均不再引用的数据 | 自动执行；仅 runtime 自身可写 |
 | Tick consensus compaction | `tick_consensus_hot_limit`, `archive_segment_size`, `archive_index` | 超出热窗口时把旧记录转入 archive 段并更新索引 | `hot -> archived` | 热窗口按最新 tick 保留；archive segment 按 tick 连续范围分段；archive seek 必须能按 `from_tick..to_tick` 读回 | 自动执行；审计只读 |
 | Replay contract | `commit_ref`, `checkpoint_anchor`, `retained_heights`, `replay_profile` | 指定高度回放时从最近 checkpoint + canonical log 重建目标状态 | `requested -> replaying -> matched/mismatched` | 仅对 retention policy 保留的高度提供强保证；重建结果以 `execution_state_root` 校验 | 自动执行；测试/审计只读 |
 | Metrics / status 输出 | `bytes_by_dir`, `blob_counts`, `ref_count`, `pin_count`, `orphan_blob_count`, `last_gc_at_ms`, `last_gc_result`, `last_gc_error`, `degraded_reason`, `storage_profile`, `effective_budget`, `replay_summary` | status API / state file 输出指标；异常时给出原因，launcher / 脚本无需扫描内部目录即可判断预算与回放能力 | `collected -> published` | 字节统计按目录聚合；GC 结果按时间覆盖 latest 并写审计历史；`replay_summary.mode` 仅允许 `latest_only` / `full_log_only` / `checkpoint_plus_log` | status 只读；配置修改受启动权限控制 |
 | Replication hot/cold retention 对齐 | `max_hot_commit_messages`, `cold_index`, `archive_bytes` | 超出热窗口后迁移到冷索引/对象存储，并更新 metrics | `hot -> cold-indexed` | 热窗口按最新高度回推的连续高度范围定义，不再按“最近 N 个现存文件”解释；冷索引统一走 `<namespace>.cold-index/index.json` 元数据协议，并以 `from_key/to_key + first/last_content_hash + entry_count` 表示 cold range anchor；cold-index scan 与按高度 seek 必须共享同一边界语义；rollout 期间若 canonical/legacy 任一缺失，读路径会回填另一侧别名 | 自动执行；策略由 profile 决定 |
 - Acceptance Criteria:
   - AC-1 (PRD-WORLD_RUNTIME-013): `oasis7_viewer_live` / `oasis7_chain_runtime` 默认开发 profile 在 `2500` heights 样本下，`output/chain-runtime/<node_id>/store <= 256 MiB`，且 CAS sweep 后不存在“record 仍引用、blob 已删除”的 dangling refs。
-  - AC-2 (PRD-WORLD_RUNTIME-013): `reward-runtime-execution-world/.distfs-state/blobs` 经过 successful save 后仅保留 latest + rollback-safe generation 的引用集合；测试中孤儿 blob 计数为 `0`。
+  - AC-2 (PRD-WORLD_RUNTIME-013): `reward-runtime-execution-world/.distfs-state/blobs` 在提交已确认且清理成功后收敛到 latest + rollback-safe generation 及外部 pin 的引用集合，孤儿 blob 计数为 `0`；准备新代、提交未知或维护失败时保留额外数据不改变已确认提交结果。
   - AC-3 (PRD-WORLD_RUNTIME-014): 在 execution-bridge retention 与 sidecar GC 生效后，latest-state restart 恢复成功，恢复后 `execution_state_root`、`journal_len`、`module_registry` 与 GC 前一致。
-  - AC-4 (PRD-WORLD_RUNTIME-014): 任意 GC 中断、部分写入或 pin set 构建失败都不得删除 latest generation；系统必须进入 `degraded` 并保留恢复所需数据。
+  - AC-4 (PRD-WORLD_RUNTIME-014): 任意 GC 中断、部分写入或 pin set 构建失败都不得破坏当前已提交 index 引用的 latest、rollback-safe 与外部 pin 完整闭包；系统必须进入 `degraded` 并保留恢复所需数据。`StatusUnknown` 还须保护候选闭包并停止旧 World 发布，不得把降级等同未提交。
   - AC-5 (PRD-WORLD_RUNTIME-014): 对 retention policy 明确保留的任意目标高度 `H`，系统必须能从最近 checkpoint + canonical replay log 重建出与 `execution_records/H` 一致的 `execution_state_root`。
   - AC-6 (PRD-WORLD_RUNTIME-015): status / metrics 输出必须暴露 `storage_profile`、`effective_budget`、`bytes_by_dir`、`retained_heights`、`checkpoint_count`、`replay_summary`、`last_gc_result`、`last_gc_error`、`degraded_reason`，并可被 launcher 或脚本直接采样，无需额外扫描内部目录。
   - AC-6.1 (PRD-WORLD_RUNTIME-015): `oasis7_chain_runtime`、`oasis7_game_launcher`、`oasis7_web_launcher` 与 launcher UI 必须暴露同名 profile 枚举输入，并沿进程边界无损透传到链运行时。bundle 入口 `run-game.sh`、`run-web-launcher.sh`、`run-chain-runtime.sh` 必须共享同一 `OASIS7_CHAIN_STORAGE_PROFILE` 覆盖通道，且未设置时继承各自二进制默认值，不在 shell 中重复硬编码默认 profile。
   - AC-7 (PRD-WORLD_RUNTIME-015): `snapshot.json` 在 `2500` heights 样本下 `<= 512 KiB`；旧 `tick_consensus_records` 通过 archive index 可按区间读取并通过链路校验。
-- AC-8 (PRD-WORLD_RUNTIME-013/014/015): required/full 测试矩阵中必须包含 footprint 上限、restart recovery、GC fail-safe、profile 切换、archive 读取与 retained-height replay 回归。
+- AC-8 (PRD-WORLD_RUNTIME-013/014/015): required/full 测试矩阵中必须包含 footprint 上限、restart recovery、GC fail-safe、profile 切换、archive 读取与 retained-height replay 回归，并分别判定下文 G1、G2、G3 及其交叉边界，不能用一个汇总恢复成功结果替代。
 
 ### Execution bridge record compatibility
 - 当前 `ExecutionBridgeRecord` 为 schema v3：除 `world_id`、height、node/execution hash、state root、journal length、latest/snapshot/journal/commit/checkpoint/external-effect refs 外，还记录 `prev_node_block_hash`、`proposer_id`、`action_root` 与 world-head-proof ref/hash。
@@ -79,6 +79,48 @@
   - 不对 `target/`、打包产物或 third-party 工具链缓存做统一清理策略。
   - 不在本阶段引入远端对象存储、外部数据库或跨节点历史归档服务。
   - 不保证默认开发 profile 可随机访问任意历史高度的完整 `snapshot_ref`；默认 profile 对超出热窗口的历史高度以“checkpoint + canonical replay log”保证重建能力，超出 retention policy 的深历史完整取证能力由 `soak_forensics` profile 承担。
+
+### Generation 保存与恢复的独立合同（目标）
+
+以下条款细化 PRD-WORLD_RUNTIME-013/014/015 的本地持久化与恢复要求，承接[根 runtime generation 合同](../prd.md#runtime-generation-persistence-contract)。它们不授予正式链提交权，也不替代[合法 authority profile 的证明与独立故障域持久条件](../prd.md#runtime-authority-profile-commit)。`runtime_engineer` 负责保存/恢复语义，`qa_engineer` 分别判定各组验收；具体故障矩阵见[配对设计](runtime-storage-footprint-governance.design.md#storage-generation-validation-matrix)。合同定义、实现与实际验证结果分别成立。
+
+<a id="storage-generation-g1"></a>
+#### G1：普通保存结果、内存安装与重试保持一致
+
+普通保存必须绑定稳定操作身份、原 base generation 与本次精确候选，涵盖 snapshot、journal、module store 及适用的 sidecar、archive、recovery metadata 和幂等记录承诺。不得只用 state root、逻辑高度或可被多次普通保存继承的 recovery metadata hash 判同一次提交。提交判定须建立在已验证的单写者和基线前提上；只看到替换后的 index 而尚未确认所承诺的目录同步等持久条件，不能判为 `Committed`；缺少提交确认也不等于已证明 `NotCommitted`。
+
+| 本地持久结果 | 可观察含义 | 调用方义务 |
+| --- | --- | --- |
+| `NotCommitted` | 本次精确候选已确认未跨过持久提交点 | 保留旧 World；按原身份及当前有效前置条件重审或重试，不发布候选业务效果 |
+| `Committed` | 本次精确候选及其持久条件已确认 | 安装或恢复对应 World 后才接受后续写入，返回原操作结果；镜像、GC、GC 结果 index 重写或 metrics 维护失败只报告维护降级 |
+| `StatusUnknown` | 无法证明本次候选已提交或未提交 | 保留原操作/候选身份及旧、新恢复材料，禁止旧 World 再发布；先核对或完成原提交，不能当确定失败、换新身份重做或追加矛盾终态 |
+
+解除写入隔离必须基于原候选的确定结果与对应 World 安装，而不是一次 I/O 重试成功。调用方和状态投影必须能核对保存结果、实际 generation、写入隔离及维护原因；现有状态投影可承载这些语义，不新增业务 receipt 或独立状态台账。已有已提交结果时，同身份同内容重试返回该结果；确认 `NotCommitted` 的基础设施失败可按原身份及当前有效前提重试，不永久缓存为业务终态。冲突内容拒绝，不能重复分配 lease、扣款或生成业务效果。
+
+**独立验收 G1：** 分别覆盖 index 提交前失败、提交后错误、GC 结果重写与兼容镜像失败、持久结果无法确认；对账返回结果、活 World、重启 World 和原 lease/receipt。已提交结果不能被旧内存的后续无关操作覆盖，同身份重试无第二效果；未知期间后续写入被阻断，核对并安装后才恢复。对应[设计 G1](runtime-storage-footprint-governance.design.md#storage-generation-g1-design)。
+
+<a id="storage-generation-g2"></a>
+#### G2：替代 index 提交前保留当前恢复集合
+
+当前持久 index 指向 latest B、rollback-safe A 时，准备 C 不得提前删除 A/B 的任何必要材料。保护集合包含 generation-local manifest、payload、recovery metadata、snapshot/journal/module/archive 的 CAS 依赖和外部 pin，不只保护 blob 名称。C 的替代 index 确认持久提交后，才能按新 index 的 C/B 与外部 pin 回收其余材料；提交未知时保护旧、新集合。`keep=2` 是成功清理后的稳态，不禁止 A/B/C 的暂态共存；清理失败允许多占空间并后续重试。
+
+**独立验收 G2：** 在已有 A/B 的第三代保存中，使替代 index 的写入或持久确认失败，旧 index 未替换时其字节与 A/B 完整闭包保持不变；B 原已损坏时，A 的可恢复性不能因尝试 C 而丢失。C 已提交后保留 C/B，只有确认不再引用的 A 才可回收；回收失败不改判 C 未提交。对应[设计 G2](runtime-storage-footprint-governance.design.md#storage-generation-g2-design)。
+
+<a id="storage-generation-g3"></a>
+#### G3：候选选择覆盖完整同代恢复
+
+普通与 authoritative loader 都必须把候选记录验证、必要 CAS 实际读取与校验、解码、snapshot/journal/module/archive 装配、World 构造及适用恢复元数据核对放在同一个候选边界。latest 优先；候选自身的完整性故障可以拒绝该候选并尝试 index 中的 rollback-safe。index 本身无法可信解释、世界/权威身份冲突或所有允许候选都不可恢复时，整体失败关闭，不能把所有错误无条件当作可回退故障。
+
+候选选择与验证期间不得附加可写持久化配置、写入新 generation、启动调度、调用 provider 或补发业务效果。只有完整候选选定后才可安装并进入既有恢复流程；World、journal、receipt、nonce 和 authoritative recovery metadata 必须属于同一代，禁止拼代或从未索引的可变兼容 JSON 补齐。结果须可辨认实际 generation、是否回退及原因。
+
+**独立验收 G3：** 普通与 authoritative 两入口分别覆盖 latest 独占的 snapshot/journal CAS 对象缺失或损坏、后续装配/World 构造失败；健康 latest 优先，健康 rollback-safe 能被完整选中且 metadata 同代，候选探测无写入或业务副作用。共享必要对象损坏、两代皆坏及不可解释 index/identity 冲突仍失败关闭；保留既有 archive 与兼容读取负例。对应[设计 G3](runtime-storage-footprint-governance.design.md#storage-generation-g3-design)。
+
+<a id="storage-generation-cross-boundary"></a>
+#### 提交判定与恢复材料选择不可互相代替
+
+G1 回答“本次精确候选是否提交”，G3 回答“哪一代材料现在完整可读”。B 已有提交证据而只有 A 可读时，选择 A 不证明 B 未提交，也不能抹去 B 的已确认 receipt、余额、nonce 或历史。健康旧候选只允许作为恢复材料；当前写权还须通过[根恢复闸门](../prd.md#runtime-recovery-acceptance)核对同世界、当前 authority/head、版本和单调连续性。
+
+**交叉验收 G1×G3：** 构造新代已提交但只能回退旧代的样例，保存判定不得因回退结果变为 `NotCommitted`，调用方不得从旧业务状态继续写；恢复材料可读、只读恢复与可服务分别呈现，未通过既有闸门时不产生新权威效果。对应[交叉设计](runtime-storage-footprint-governance.design.md#storage-generation-cross-boundary-design)。G1/G2/G3 的确定性故障与交叉断言进入 `test_tier_required`，`test_tier_full` 保留进程重启/中断与实际存储环境的组合验证；文档检查不代签这些执行结果。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 不适用（本专题不引入新的 AI 推理链路）。
@@ -109,7 +151,7 @@
   - `doc/world-runtime/runtime/runtime-integration.md`
   - `doc/world-runtime/prd.md`
 - Edge Cases & Error Handling:
-  - 保存新 generation 时磁盘写满：必须中止切换、保留旧 generation、标记 `last_gc_result=save_failed`。
+  - 保存新 generation 时磁盘写满：确认未提交才中止切换并保留旧 World；已提交则安装/恢复对应 World 并独立报告维护失败，无法确认则按 [G1](#storage-generation-g1)隔离写入并核对。`last_gc_result` 只描述 GC，不能代替保存结果或把已提交降格为 `save_failed`。
   - GC 扫描过程中发现 latest ref 缺失：立即停止 sweep，状态置为 `degraded`，禁止继续删除。
   - execution record、checkpoint 或 replay log 引用已被外部手工删除：重启或指定高度回放时必须给出结构化错误，并在开发 profile 下允许“仅 latest state 恢复 / retained-height replay 不可用”的显式降级模式，不得静默成功。
   - profile 从 `soak_forensics` 切回 `dev_local`：必须执行一次完整重算 pin set，再按新策略裁剪。
@@ -127,7 +169,7 @@
 - Security & Privacy:
   - GC 只能在 runtime 自己的 `output/chain-runtime/<node_id>`、`output/node-distfs/<node_id>` 根下运行，不得支持任意路径删除。
   - 删除决策必须基于显式 pin 集和 manifest/record 引用计算，不允许“按文件时间猜测删除”。
-  - 与恢复相关的 latest generation / checkpoint 必须在原子切换完成前保持可读，避免中间态造成不可恢复损坏。
+  - 当前已提交 index 的 latest、rollback-safe、checkpoint 与外部 pin 完整闭包必须在替代 index 确认持久提交前保持可读；提交未知时还保留候选闭包，避免中间态造成不可恢复损坏。
   - metrics/status 仅暴露体积、引用、结果与错误，不新增敏感 payload 导出。
 
 ## 5. Risks & Roadmap
@@ -139,7 +181,7 @@
   - 风险-1: 过于激进的 retention 导致历史 record 仍存在但其 `snapshot_ref` 已不可读。
     - 缓解：先定义显式 retention class，再用 pin-set sweep；dangling-ref 测试列为 required。
   - 风险-2: sidecar GC 与 save_to_dir 原子性不足，可能在异常退出后留下不可恢复状态。
-    - 缓解：采用 generation pin + rollback-safe keep=2 的两阶段切换。
+    - 缓解：采用 generation pin + rollback-safe 的两阶段切换；替代 index 提交前保留旧闭包，提交未知时保护旧、新集合，`keep=2` 仅约束成功清理后的稳态。
   - 风险-3: `tick_consensus_records` 压缩破坏链路校验与审计查询。
     - 缓解：保留 archive anchor/hash chain，验证 archive read + verify 路径。
   - 风险-4: 默认 profile 与 soak profile 口径分裂，导致脚本/launcher/运行时行为不一致。
@@ -149,9 +191,9 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-WORLD_RUNTIME-013 | TASK-WORLD_RUNTIME-030/031/032 | `test_tier_required` | 构造 `>= 2500` heights 的 execution-bridge 样本，验证 `store`/sidecar 体积上限、pin set 完整性、无 dangling refs | execution bridge、world persistence、CAS blob retention |
-| PRD-WORLD_RUNTIME-014 | TASK-WORLD_RUNTIME-030/031/032/033 | `test_tier_required` + `test_tier_full` | latest-state restart、checkpoint replay、GC fail-safe 注入、保留高度回放校验、soak profile 恢复验证 | 重启恢复、审计与长跑取证 |
-| PRD-WORLD_RUNTIME-015 | TASK-WORLD_RUNTIME-031/032/033 | `test_tier_required` | status/metrics 输出字段测试、profile 参数透传测试、snapshot size regression、archive 读取验证 | 可观测性、launcher/脚本配置与治理口径 |
+| PRD-WORLD_RUNTIME-013 | TASK-WORLD_RUNTIME-030/031/032 | `test_tier_required` | 构造 `>= 2500` heights 的 execution-bridge 样本，验证清理收敛后的 `store`/sidecar 体积上限、pin set 完整性、无 dangling refs；独立判定 [G2](#storage-generation-g2) 的提交前闭包保护 | execution bridge、world persistence、CAS blob retention |
+| PRD-WORLD_RUNTIME-014 | TASK-WORLD_RUNTIME-030/031/032/033 | `test_tier_required` + `test_tier_full` | latest-state restart、checkpoint replay、GC fail-safe 注入、保留高度回放校验、soak profile 恢复验证；分别判定 [G1](#storage-generation-g1)、[G3](#storage-generation-g3) 与[交叉边界](#storage-generation-cross-boundary) | 重启恢复、审计与长跑取证 |
+| PRD-WORLD_RUNTIME-015 | TASK-WORLD_RUNTIME-031/032/033 | `test_tier_required` | status/metrics 输出字段测试、profile 参数透传测试、snapshot size regression、archive 读取验证；核对 [G1](#storage-generation-g1) 保存结果与维护结果独立、实际 generation 与写入隔离可读 | 可观测性、launcher/脚本配置与治理口径 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -173,13 +215,13 @@ schema v3+V1/V2 compatibility、last_applied 连续性/current local binding 与
 - AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling。该独立条件由配对设计 storage-case-ac1 与其验证场景承接。
 
 <a id="storage-accept-ac2"></a>
-- AC-2/SC-2：latest+rollback-safe引用集合，sidecar≤16 MiB，orphan=0。该独立条件由配对设计 storage-case-ac2 与其验证场景承接。
+- AC-2/SC-2：提交确认且清理成功后收敛到latest+rollback-safe及外部pin引用集合，sidecar≤16 MiB，orphan=0；暂态/降级保护额外数据。该独立条件由配对设计 storage-case-ac2 与其验证场景承接，保存结果与预算收敛分别判定。
 
 <a id="storage-accept-ac3"></a>
 - AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同。该独立条件由配对设计 storage-case-ac3 与其验证场景承接。
 
 <a id="storage-accept-ac4"></a>
-- AC-4：GC中断/partialwrite/pin失败不删latest，degraded保恢复。该独立条件由配对设计 storage-case-ac4 与其验证场景承接。
+- AC-4：GC中断/partialwrite/pin失败保当前index的latest+rollback-safe完整闭包，degraded保恢复；提交未知还保护候选并隔离旧World写入。该独立条件由配对设计 storage-case-ac4 与其验证场景承接。
 
 <a id="storage-accept-ac5"></a>
 - AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root。该独立条件由配对设计 storage-case-ac5 与其验证场景承接。
@@ -194,7 +236,7 @@ schema v3+V1/V2 compatibility、last_applied 连续性/current local binding 与
 - AC-7/SC-3：2500 heights snapshot≤512KiB，archive区间读取+链路校验。该独立条件由配对设计 storage-case-ac7 与其验证场景承接。
 
 <a id="storage-accept-ac8"></a>
-- AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵。该独立条件由配对设计 storage-case-ac8 与其验证场景承接。
+- AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵，并独立判定G1/G2/G3及交叉边界。该独立条件由配对设计 storage-case-ac8 与其验证场景承接。
 
 <a id="storage-accept-sc7"></a>
 - SC-7：release_default hot_head_heights≤checkpoint_interval，不重复保留额外同区间snapshot。该独立条件由配对设计 storage-case-sc7 与其验证场景承接。
@@ -230,7 +272,7 @@ schema v3+V1/V2 compatibility、last_applied 连续性/current local binding 与
 - v3新写/V1V2兼容，stale/noncontiguous heightfailclosed；legacy仅latest-safe无aggressiveGC。该独立条件由配对设计 storage-case-legacy-height 与其验证场景承接。
 
 <a id="storage-accept-save-failure"></a>
-- save满盘/新generation中断保旧，pin/latestmissing停止，replay mismatch阻aggressiveGC。该独立条件由配对设计 storage-case-save-failure 与其验证场景承接。
+- save满盘/新generation中断按G1区分未提交、已提交和未知；保护恢复材料不恢复旧写权，维护失败不撤销提交；pin/latestmissing停止，replay mismatch阻aggressiveGC。该独立条件由配对设计 storage-case-save-failure 与其验证场景承接。
 
 <a id="storage-accept-single-writer"></a>
 - 仅runtime指定根删除，显式pin/无mtime猜测，第二writer检测阻止、metrics不新增payload。该独立条件由配对设计 storage-case-single-writer 与其验证场景承接。
