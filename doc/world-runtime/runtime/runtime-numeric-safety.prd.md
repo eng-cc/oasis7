@@ -1,6 +1,7 @@
 # Runtime 数值安全与原子状态转移契约
 
 - 对应设计文档：`doc/world-runtime/runtime/runtime-numeric-safety.design.md`
+- 专业需求入口：[PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041)；本文细化该需求的数值策略与验收边界。
 - 当前任务状态与历史变更：GitHub task issue evidence 与 Git history；本文与 design 保留稳定数值契约及实现锚点。
 - 专业权威：`runtime_engineer`
 - 吸收范围：已完成的 numeric-correctness phase 1–15 与 infinite-sequence rollover 专题。
@@ -42,6 +43,12 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 | Federated replay archive | 聚合扫描、复合游标 offset 与 archive 查询计数采用 checked helper；溢出不污染 cursor 或聚合结果。 |
 | Runtime sequence rollover | event/action/intent/proposal 四类 `next_*_id` 在 `u64::MAX` 后以持久化的 `era + 1, sequence = 1` 滚动；snapshot 的 era 字段以 `serde(default)` 兼容旧快照（era=0），恢复与 replay 保持同一 era。 |
 
+<a id="numeric-clock-clamp"></a>
+
+### 时钟转换的显式 clamp 边界
+
+`oasis7_net` 的兼容时钟辅助函数 `unix_now_ms_i64` 将无法用 `i64` 表示的毫秒值夹到 `i64::MAX`，系统时间早于 `UNIX_EPOCH` 时返回 `0`。这是有损边界值，不是精确时刻或成功推进权威状态的证明。该约定不把其他可失败的时钟、lease 或 schedule 接口改成 clamp；它们继续遵循各自的受检失败合同。实现入口和现有边界测试见 [clock 设计条款](runtime-numeric-safety.design.md#numeric-clock-clamp)。
+
 ## 4. 验收
 
 - 每条可失败推进路径至少有一个边界测试，验证错误类型与状态未变。
@@ -68,7 +75,7 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-WORLD_RUNTIME-041 | runtime numeric safety | `test_tier_required` + 定向边界测试 | 文档治理、陈旧引用扫描、受检算术与原子性测试 | world、consensus、node、replication、membership |
+| [PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041) | runtime numeric safety | `test_tier_required` + 定向边界测试 | 文档治理、陈旧引用扫描、受检算术与原子性测试；clock clamp 的准确测试与覆盖边界见 [设计验证映射](runtime-numeric-safety.design.md#111-验证映射表) | world、consensus、node、replication、membership、net clock |
 
 | 决策 ID | 选定方案 | 否决方案 | 依据 |
 | --- | --- | --- | --- |
