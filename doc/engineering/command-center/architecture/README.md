@@ -11,6 +11,8 @@
 
 Cargo 边界局部增量（2026-10-12）：[#4626](https://github.com/eng-cc/oasis7/pull/4626) / `133d70e45b71bd062032a734d68be1e290692b2c` 将 native 生产 cognition 状态转换转接至 Harness，World readback 与 signed-service 校验仍由 Runtime 适配器承担，旧 DTO/checkpoint 兼容保留；不新增 Harness→Oasis 依赖。支持包 profile 隔离尚在分支验证，直接 Oasis wasm32 目标及部署不因本次局部摘要变为已验证。测试入口见[测试手册](../../../../testing-manual.md)。
 
+L4 工具链局部文档更新（2026-10-12，核对基线 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056`）：[testing 合同](../../../testing/prd.md#l4-build-driver)明确默认 release/正式 UI、同一实际 Hosted 执行会话、逐次 RunResult 与评审归属；[入口兼容设计](../../../world-simulator/viewer/viewer-web-entry-compatibility.design.md)保留 alias，并将测试 API 限于显式测试产物。[#4438](https://github.com/eng-cc/oasis7/issues/4438) 仍承担旧 runner/scaffold 的实现和运行验收；此处只更新设计导航，不表示新部署或试玩通过。
+
 - 要开新环境、搬服务或调整节点：[环境与部署](#cc-architecture-deployment)。
 - 要决定首次开放、扩成多节点权威或改变恢复承诺：[世界权威与状态](#cc-architecture-authority)。
 - 要拆进程、调整执行边界：[服务与执行](#cc-architecture-runtime)。

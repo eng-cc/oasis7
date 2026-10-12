@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "85fc0d196f89129059789111977ec244615ac524f78d97c7aa1b9c1475f6c04a",
+    "content_sha256": "9b0336cf4294efe6f40b5f7c2522510ae7ecd875628c052d82ab79d6d0ec0eeb",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "wasm_platform_engineer",
     "disposition": "retain_current_interface_authority",
-    "note": "current WASM ABI host capability permission resource and compatibility authority",
+    "note": "current WASM ABI host capability permission resource and compatibility authority Scoped document review for issue #4455 on 2026-10-12: The existing ABI now links to the host suffix-recovery target and planned verification; failure schedule wording is corrected to the existing staged-route rollback behavior. Guest output defaults and current artifact/permission rules remain unchanged. This is document review only, not runtime execution or release acceptance; existing authority, decision owner and disposition are retained.",
     "path": "doc/world-runtime/wasm/wasm-interface.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
