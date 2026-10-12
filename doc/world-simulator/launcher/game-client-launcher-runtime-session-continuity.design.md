@@ -38,7 +38,7 @@ Launcher 构造参数并托管子进程；chain runtime 保持执行与持久化
 3. 成功 spawn 只进入 Starting。只有当前托管进程存在且本次状态端点探测成功，才能发布新的 runtime 快照与 Ready；Ready 只表示该探测成功，不证明身份授权、primary-mode 可玩性、世界最终性或行动完成。
 4. 探测失败撤销当前快照；启动宽限期内为 Starting，之后为 ConfigError/Unreachable。无可信证据不能继续显示旧 identity 为当前身份。
 5. 客户端状态刷新或控制请求失败同样撤销当前证据并标为 Unreachable；不能保留 Ready。停止请求、子进程退出或进程查询失败清除当前快照与 probe 时间。停止失败保留失败诊断，不把它声明为成功停止或世界回退。下一次启动重新执行上述流程。
-6. native/Web 状态轮询携带客户端本地请求代次。控制操作开始时撤销旧快照并将 Ready 收窄为 Starting；开始及结束、证据失效时推进代次；控制请求在途时或代次已经过期的轮询结果不应用，也不以旧失败覆盖新成功。代次只用于本地响应排序，不授予玩家权限，不改变 HTTP schema。下一次新代次轮询仍可重新验证。
+6. native/Web 状态轮询与控制响应携带客户端本地请求代次。控制操作开始时撤销旧快照并将 Ready 收窄为 Starting；开始及结束、证据失效时推进代次；控制请求在途时或代次已经过期的响应不应用，也不以旧失败覆盖新成功。代次只用于本地响应排序，不授予玩家权限，不改变 HTTP schema。托管控制面退出后，已排队的旧成功响应同样失效；只有新代次响应可重新验证。
 7. 陈旧状态仅在 DistributedValidationFailed 与 latest state-root mismatch 同时成立时分类；保留错误与非破坏性 fresh-node 建议。采用建议只是本次输入，仍须完整重新验证；不删除旧数据，不恢复旧权限或重放待决行动。
 
 ### 5.2 Web 失败
@@ -73,7 +73,7 @@ ServiceState 串行控制托管子进程和探测，快照字段在同一次状�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | [重新验证](#session-revalidation) | 失败/停止后撤销旧证据，保持真实错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 的 session_ 回归及 `crates/oasis7_client_launcher/src/main_chain_status.rs` 的 session_state_refresh_failure_invalidates_chain_evidence 与 late_state_poll_cannot_restore_evidence_after_control_action；同候选 native 单元测试，执行入口 [testing-manual](../../../testing-manual.md) | PR 与真实测试输出 | 不证明世界最终性、授权或可玩 |
+| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | [重新验证](#session-revalidation) | 失败/停止后撤销旧证据，保持真实错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 的 session_ 回归及 `crates/oasis7_client_launcher/src/main_chain_status.rs` 的 session_state_refresh_failure_invalidates_chain_evidence 、late_state_poll_cannot_restore_evidence_after_control_action 与 queued_action_snapshot_cannot_restore_exited_control_plane；同候选 native 单元测试，执行入口 [testing-manual](../../../testing-manual.md) | PR 与真实测试输出 | 不证明世界最终性、授权或可玩 |
 | [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | [重新验证](#session-revalidation) | 陈旧、停止、失败启动和退出后须新探测；无安全路径保持错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 会话回归和 `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`；同候选 canonical cargo test；HTTP 大响应回归见 `crates/oasis7/src/bin/oasis7_web_launcher/http_codec.rs` 的 nonblocking_connection_delivers_complete_large_response；Web 可见变化按 [testing-manual S6](../../../testing-manual.md) 验证 | PR、测试及适用浏览器记录 | 不证明无损恢复、世界重放；浏览器证据单独记录 |
 
 设置阶段消费设置 authority；Web 错误表现消费控制面设计；公开 claim 仍须同候选跨层证据，局部进程与单元测试不能成立发行结论。

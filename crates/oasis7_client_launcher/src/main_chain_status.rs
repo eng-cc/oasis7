@@ -51,9 +51,10 @@ mod tests {
 
     #[test]
     fn session_action_failure_invalidates_chain_evidence() {
-        assert_session_request_failure_invalidates_chain_evidence(crate::WebApiEvent::Action(Err(
-            "offline".into(),
-        )));
+        assert_session_request_failure_invalidates_chain_evidence(crate::WebApiEvent::Action(
+            0,
+            Err("offline".into()),
+        ));
     }
 
     fn assert_session_request_failure_invalidates_chain_evidence(event: crate::WebApiEvent) {
@@ -139,7 +140,10 @@ mod response_order_tests {
             "late poll restored previous session identity"
         );
         app.web_api_tx
-            .send(WebApiEvent::State(app.web_state_generation, Ok(fresh)))
+            .send(WebApiEvent::State(
+                app.web_state_generation,
+                Ok(fresh.clone()),
+            ))
             .expect("queue current poll");
         app.poll_process();
         assert_eq!(
@@ -157,5 +161,86 @@ mod response_order_tests {
             app.chain_identity.is_some(),
             "old failure invalidated current evidence"
         );
+        app.set_web_request_inflight(WebRequestDomain::ControlAction, true);
+        let generation = app.web_state_generation;
+        app.web_api_tx
+            .send(WebApiEvent::Action(
+                generation,
+                Ok(crate::WebApiResponse {
+                    ok: true,
+                    error: None,
+                    state: fresh,
+                }),
+            ))
+            .expect("queue current action");
+        app.poll_process();
+        assert_eq!(
+            app.chain_identity
+                .as_ref()
+                .expect("current action identity")
+                .chain_id,
+            "current"
+        );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod termination_tests {
+    use crate::{
+        ChainRuntimeStatus, ClientLauncherApp, RunningProcess, WebApiEvent, WebApiResponse,
+        WebStateSnapshot,
+    };
+
+    #[test]
+    fn queued_action_snapshot_cannot_restore_exited_control_plane() {
+        let mut app = ClientLauncherApp::default();
+        app.control_manage_service = false;
+        let mut child = std::process::Command::new("/bin/sh")
+            .args(["-c", "exit 0"])
+            .spawn()
+            .expect("spawn");
+        child.wait().expect("exit");
+        let (_, log_rx) = std::sync::mpsc::channel();
+        app.running = Some(RunningProcess { child, log_rx });
+        let state = WebStateSnapshot {
+            status: "running".into(),
+            detail: None,
+            chain_status: "ready".into(),
+            chain_detail: None,
+            chain_identity: Some(crate::web_api_support::WebChainIdentityStatus {
+                chain_id: "dead".into(),
+                network_id: "dead".into(),
+            }),
+            chain_p2p_status: None,
+            chain_observability_status: None,
+            chain_replication_status: None,
+            chain_recovery: None,
+            game_url: "http://localhost/".into(),
+            config: app.config.clone(),
+            logs: vec![],
+        };
+        app.web_api_tx
+            .send(WebApiEvent::State(0, Ok(state.clone())))
+            .expect("queue completed poll");
+        app.web_api_tx
+            .send(WebApiEvent::Action(
+                0,
+                Ok(WebApiResponse {
+                    ok: true,
+                    error: None,
+                    state,
+                }),
+            ))
+            .expect("queue completed action");
+        app.poll_process();
+        assert!(
+            app.chain_identity.is_none(),
+            "queued action restored dead session"
+        );
+        assert!(matches!(
+            app.chain_runtime_status,
+            ChainRuntimeStatus::Unreachable(_)
+        ));
+        assert!(matches!(app.status, crate::LauncherStatus::QueryFailed));
     }
 }

@@ -62,8 +62,12 @@ impl ClientLauncherApp {
                         }
                     }
                 }
-                WebApiEvent::Action(result) => {
+                WebApiEvent::Action(generation, result) => {
+                    let current = generation == self.web_state_generation;
                     self.set_web_request_inflight(WebRequestDomain::ControlAction, false);
+                    if !current {
+                        continue;
+                    }
                     match result {
                         Ok(response) => {
                             if !response.ok {
@@ -468,9 +472,13 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         let config = self.config.clone();
         spawn_local(async move {
-            let _ = tx.send(WebApiEvent::Action(post_web_start(config).await));
+            let _ = tx.send(WebApiEvent::Action(
+                generation,
+                post_web_start(config).await,
+            ));
         });
     }
 
@@ -478,8 +486,9 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         spawn_local(async move {
-            let _ = tx.send(WebApiEvent::Action(post_web_stop().await));
+            let _ = tx.send(WebApiEvent::Action(generation, post_web_stop().await));
         });
     }
 
@@ -487,9 +496,13 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         let config = self.config.clone();
         spawn_local(async move {
-            let _ = tx.send(WebApiEvent::Action(post_web_chain_start(config).await));
+            let _ = tx.send(WebApiEvent::Action(
+                generation,
+                post_web_chain_start(config).await,
+            ));
         });
     }
 
@@ -497,8 +510,9 @@ impl ClientLauncherApp {
         self.set_web_request_inflight(WebRequestDomain::ControlAction, true);
         self.last_web_poll_at = Some(Instant::now());
         let tx = self.web_api_tx.clone();
+        let generation = self.web_state_generation;
         spawn_local(async move {
-            let _ = tx.send(WebApiEvent::Action(post_web_chain_stop().await));
+            let _ = tx.send(WebApiEvent::Action(generation, post_web_chain_stop().await));
         });
     }
 
