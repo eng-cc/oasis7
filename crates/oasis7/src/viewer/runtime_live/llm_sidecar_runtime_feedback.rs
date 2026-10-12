@@ -343,11 +343,7 @@ impl RuntimeLlmSidecar {
                     .map_err(|error| {
                         format!("provider memory receipt gate rejected intents: {error}")
                     })?;
-                self.provider_memory_store
-                    .finalize_corrections(receipt)
-                    .map_err(|error| {
-                        format!("provider memory correction receipt gate rejected: {error}")
-                    })
+                Ok(())
             } else {
                 // Canonical WorldService receipts are not necessarily present
                 // in this process's local Runtime World. Preserve Harness

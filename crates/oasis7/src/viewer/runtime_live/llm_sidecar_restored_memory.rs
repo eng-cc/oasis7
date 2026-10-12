@@ -132,10 +132,16 @@ impl crate::viewer::ViewerRuntimeLiveServer {
             let world = crate::runtime::World::new();
             validate_original_memory_checkpoint(&world, &pending)?;
             validate_provider_service_receipt(&pending, &receipt)?;
+            let authority =
+                super::service_feedback_ack::VerifiedProviderServiceMemoryAuthority::new(
+                    &pending, &receipt,
+                )?;
             crate::simulator::project_receipt_memory(
                 &pending.cognition.request.turn_context,
                 &receipt.feedback,
                 &receipt.lineage,
+                &receipt,
+                &authority,
                 &pending.cognition.memory_write_intents,
                 &mut store,
             )

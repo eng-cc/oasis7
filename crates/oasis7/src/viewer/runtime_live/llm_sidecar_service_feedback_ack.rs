@@ -1,7 +1,12 @@
 //! Durable private feedback consumption precedes canonical acknowledgement.
+use super::super::provider_action_commit::{
+    ProviderServiceCognitionReceipt, validate_provider_service_receipt,
+};
 use super::lineage_persistence::PendingProviderServiceIntent;
 use super::*;
 use crate::world_service::{FeedbackAckIntentV1, WorldServicePayloadV1};
+use oasis7_agent_harness::MemoryWritePolicyContextV1 as HarnessMemoryWritePolicyContextV1;
+use oasis7_agent_harness::{ContinuationHostProjection, RuntimeAuthority};
 use oasis7_client_api::world_service::RequestCorrelation;
 use serde::{Deserialize, Serialize};
 #[path = "llm_sidecar_service_feedback_ack_checkpoint.rs"]
@@ -18,6 +23,99 @@ pub(in crate::viewer::runtime_live) struct PendingFeedbackAck {
     pub receipt_lineage: crate::runtime::RuntimeReceiptLineageV1,
     pub delivered: bool,
     pub issued: bool,
+}
+
+/// Memory authority bound to a service receipt only after the existing full
+/// signed-request/response-artifact/commit/lineage/feedback validator accepts
+/// the original pending request. This is not an independent remote-store
+/// readback; it carries the authenticated service result to the Harness's
+/// existing state transition.
+pub(super) struct VerifiedProviderServiceMemoryAuthority<'a> {
+    pending: &'a PendingProviderServiceIntent,
+    receipt: &'a ProviderServiceCognitionReceipt,
+}
+
+impl<'a> VerifiedProviderServiceMemoryAuthority<'a> {
+    pub(super) fn new(
+        pending: &'a PendingProviderServiceIntent,
+        receipt: &'a ProviderServiceCognitionReceipt,
+    ) -> Result<Self, String> {
+        validate_provider_service_receipt(pending, receipt)?;
+        Ok(Self { pending, receipt })
+    }
+}
+
+impl RuntimeAuthority for VerifiedProviderServiceMemoryAuthority<'_> {
+    type Lease = ();
+    type Receipt = ProviderServiceCognitionReceipt;
+    type Continuation = ();
+
+    fn validate_lease(
+        &self,
+        _lease: &Self::Lease,
+        _request: &oasis7_agent_api::ContinuousAgentRequestContextV1,
+    ) -> Result<oasis7_agent_api::CognitionLeaseConsumptionViewV1, oasis7_agent_api::CognitionError>
+    {
+        Err(service_memory_authority_scope_error())
+    }
+
+    fn verify_receipt_readback(
+        &self,
+        _feedback: &oasis7_agent_api::FeedbackEnvelopeV1,
+        _receipt: &Self::Receipt,
+        _response_identity: &oasis7_agent_api::ResponseArtifactIdentityV1,
+    ) -> Result<oasis7_agent_api::RuntimeReceiptLineageV1, oasis7_agent_api::CognitionError> {
+        Err(service_memory_authority_scope_error())
+    }
+
+    fn verify_memory_receipt(
+        &self,
+        receipt: &Self::Receipt,
+        context: Option<&HarnessMemoryWritePolicyContextV1>,
+    ) -> Result<oasis7_agent_api::RuntimeReceiptLineageV1, oasis7_agent_api::CognitionError> {
+        let context = context.ok_or_else(service_memory_authority_scope_error)?;
+        let WorldServicePayloadV1::Cognition(signed) = &self.pending.payload else {
+            return Err(service_memory_authority_scope_error());
+        };
+        let request = &signed.request.request;
+        if !std::ptr::eq(receipt, self.receipt)
+            || context.agent_id != request.agent_id
+            || context.agent_session_id != request.agent_session_id
+            || context.agent_turn_id != request.agent_turn_id
+            || context.request_digest != request.request_digest
+            || context.source != "provider"
+            || context.provenance != "provider_unverified"
+        {
+            return Err(oasis7_agent_api::CognitionError::new(
+                "provider_service_memory_context_mismatch",
+                "service-authorized memory context differs from the original signed request",
+            ));
+        }
+        Ok(receipt.lineage.agent_api_projection())
+    }
+
+    fn validated_feedback_history(
+        &self,
+    ) -> Result<
+        Vec<oasis7_agent_harness::FeedbackHistoryProjection>,
+        oasis7_agent_api::CognitionError,
+    > {
+        Err(service_memory_authority_scope_error())
+    }
+
+    fn continuation_projection(
+        &self,
+        _continuation: &Self::Continuation,
+    ) -> Result<ContinuationHostProjection, oasis7_agent_api::CognitionError> {
+        Err(service_memory_authority_scope_error())
+    }
+}
+
+fn service_memory_authority_scope_error() -> oasis7_agent_api::CognitionError {
+    oasis7_agent_api::CognitionError::new(
+        "provider_service_memory_authority_scope",
+        "validated service receipt authorizes only its matching memory transition",
+    )
 }
 
 fn private_acceptance_digest(
@@ -62,10 +160,11 @@ impl RuntimeLlmSidecar {
         &mut self,
         world: &RuntimeWorld,
         pending: &PendingProviderServiceIntent,
-        feedback: &crate::simulator::FeedbackEnvelopeV1,
-        receipt: &crate::runtime::RuntimeReceiptLineageV1,
-        raw: serde_json::Value,
+        service_receipt: &ProviderServiceCognitionReceipt,
     ) -> Result<(), String> {
+        let feedback = &service_receipt.feedback;
+        let receipt = &service_receipt.lineage;
+        let raw = service_receipt.raw_feedback.clone();
         let agent = &pending.cognition.request.request_context.agent_subject;
         if let Some(existing) = self
             .provider_service_pending
@@ -78,6 +177,8 @@ impl RuntimeLlmSidecar {
             }
             return Ok(());
         }
+        let memory_authority =
+            VerifiedProviderServiceMemoryAuthority::new(pending, service_receipt)?;
         let view = self
             .provider_service_projection
             .as_ref()
@@ -182,13 +283,12 @@ impl RuntimeLlmSidecar {
                         &pending.cognition.request.turn_context,
                         feedback,
                         receipt,
+                        service_receipt,
+                        &memory_authority,
                         &pending.cognition.memory_write_intents,
                         &mut memory,
                     )
                     .map_err(|e| e.to_string())?;
-                    memory
-                        .finalize_corrections(receipt)
-                        .map_err(|e| e.to_string())?;
                     let mut checkpoint = checkpoint;
                     let WorldServicePayloadV1::FeedbackAck(mut signed) = checkpoint.payload else {
                         unreachable!()
@@ -226,11 +326,10 @@ impl RuntimeLlmSidecar {
                     agent,
                     feedback.clone(),
                     receipt,
+                    service_receipt,
+                    &memory_authority,
                     &mut memory,
                     |staged| {
-                        staged
-                            .finalize_corrections(receipt)
-                            .map_err(|e| e.to_string())?;
                         let mut checkpoint = checkpoint;
                         let WorldServicePayloadV1::FeedbackAck(mut signed) = checkpoint.payload
                         else {

@@ -13,6 +13,8 @@ use super::continuous_agent_harness::{CognitionError, Digest32, MemoryWriteInten
 
 pub use oasis7_agent_api::{GoalSnapshotV1, MemoryContextEntryV1, MemoryContextSnapshotV1};
 
+#[cfg(not(target_arch = "wasm32"))]
+use oasis7_agent_harness::RuntimeAuthority as HarnessRuntimeAuthority;
 use oasis7_agent_harness::{
     GoalSnapshotInputV1 as HarnessGoalSnapshotInputV1,
     GoalSnapshotProjector as HarnessGoalSnapshotProjector,
@@ -361,6 +363,8 @@ impl MemoryWriteStore {
         })
     }
 
+    /// Compatibility-only receipt DTO finalization. Production callers must
+    /// finalize corrections through the authority-gated Harness transition.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn finalize_corrections(
         &mut self,
@@ -504,10 +508,9 @@ impl MemoryWriteStore {
         }
     }
 
-    /// Commit only from the Runtime receipt projection.  The lower-level
-    /// `apply` method remains for the policy unit fixtures; production async
-    /// runner paths must use this gate so receipt, action, feedback and turn
-    /// lineage are checked before persistence.
+    /// Compatibility-only projection from a receipt DTO. This validates the
+    /// DTO's internal lineage but does not prove durable World readback, so
+    /// production paths must use the authority-gated Harness transition.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn apply_runtime_receipt(
         &mut self,
@@ -518,10 +521,12 @@ impl MemoryWriteStore {
         self.apply_runtime_receipt_with_context(intent, digest, receipt, None)
     }
 
-    /// Runtime receipt gate with optional Harness identity metadata.  The
-    /// metadata is deliberately outside the intent digest: it is retrieval
-    /// partitioning evidence, while the receipt and policy context remain the
-    /// authority for whether the write may be committed.
+    /// Compatibility-only receipt DTO projection with optional Harness
+    /// identity metadata. The metadata is deliberately outside the intent
+    /// digest: it is retrieval partitioning evidence. This method does not
+    /// establish durable World readback and is not a production authority
+    /// boundary; production paths must use the authority-gated Harness
+    /// transition below.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn apply_runtime_receipt_with_context(
         &mut self,
@@ -556,6 +561,50 @@ impl MemoryWriteStore {
             self.annotate_context(&digest, context);
         }
         Ok(())
+    }
+
+    /// Production receipt projection delegates state changes to the canonical
+    /// Harness transition after the supplied host authority verifies the
+    /// receipt. The public DTO-only methods above remain for compatibility
+    /// fixtures and are not an authorization path for production callers.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn apply_runtime_receipt_with_authority<A: HarnessRuntimeAuthority>(
+        &mut self,
+        intent: NormalizedMemoryWriteIntentV1,
+        digest: Digest32,
+        receipt: &A::Receipt,
+        context: &MemoryWritePolicyContextV1,
+        authority: &A,
+    ) -> Result<(), CognitionError> {
+        let intent: HarnessNormalizedMemoryWriteIntentV1 = serde_json::from_value(
+            serde_json::to_value(intent)
+                .map_err(|err| error("memory_intent_invalid", err.to_string()))?,
+        )
+        .map_err(|err| error("memory_intent_invalid", err.to_string()))?;
+        let context = HarnessMemoryWritePolicyContextV1::from(context);
+        self.with_harness_store(|store| {
+            store.apply_runtime_receipt_with_context(
+                intent,
+                digest,
+                receipt,
+                Some(&context),
+                authority,
+            )
+        })
+    }
+
+    /// Finalize only corrections bound to a receipt accepted by the same
+    /// authority boundary as memory writes. This keeps production correction
+    /// transitions in the canonical Harness store.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn finalize_corrections_with_authority<A: HarnessRuntimeAuthority>(
+        &mut self,
+        receipt: &A::Receipt,
+        context: &MemoryWritePolicyContextV1,
+        authority: &A,
+    ) -> Result<(), CognitionError> {
+        let context = HarnessMemoryWritePolicyContextV1::from(context);
+        self.with_harness_store(|store| store.finalize_corrections(receipt, &context, authority))
     }
 }
 
