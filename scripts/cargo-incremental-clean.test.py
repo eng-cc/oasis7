@@ -31,7 +31,9 @@ class Tests(unittest.TestCase):
         self.addCleanup(self.usage.stop)
 
     def test_preview_and_delete_preserve_dependencies(self):
+        before = sorted(str(p.relative_to(self.target)) for p in self.target.rglob("*"))
         report = cleaner.clean(self.root, self.target)
+        self.assertEqual(before, sorted(str(p.relative_to(self.target)) for p in self.target.rglob("*")))
         self.assertEqual(report["actions"][0]["action"], "would-delete")
         self.assertTrue((self.target / "debug/incremental").exists())
         cleaner.clean(self.root, self.target, True)

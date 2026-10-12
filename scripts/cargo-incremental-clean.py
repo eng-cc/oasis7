@@ -45,7 +45,12 @@ def clean(root, target, apply=False):
                     continue
                 for name in (".cargo-lock", ".cargo-build-lock"):
                     path = directory / name
-                    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+                    if path.is_symlink():
+                        raise ValueError("symlinked Cargo lock retained")
+                    if not apply and not path.exists():
+                        continue
+                    flags = os.O_RDWR | os.O_CREAT if apply else os.O_RDONLY
+                    fd = os.open(path, flags | getattr(os, "O_NOFOLLOW", 0), 0o600)
                     stack.callback(os.close, fd)
                     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             for profile in ("debug", "release", "packaging"):
