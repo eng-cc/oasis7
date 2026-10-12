@@ -32,7 +32,7 @@ getrandom = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 oasis7_agent_harness = { version = "0.1.0", path = "../oasis7_agent_harness" }
-chacha20poly1305 = "0.10"
+chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 zeroize = "1"
 cap-std = "4"
 cap-fs-ext = "4"

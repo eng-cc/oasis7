@@ -20,7 +20,7 @@ use argon2::{Algorithm, Argon2, Block, Params, Version};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{AeadInPlace, KeyInit},
+    aead::{AeadInOut, KeyInit},
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -114,7 +114,7 @@ pub fn seal(kind: &str, plaintext: &[u8], passphrase: &[u8]) -> Result<Vec<u8>, 
     let mut bytes = Zeroizing::new(Vec::with_capacity(plaintext.len() + 16));
     bytes.extend_from_slice(plaintext);
     cipher
-        .encrypt_in_place(XNonce::from_slice(&nonce), &aad, &mut *bytes)
+        .encrypt_in_place(&XNonce::from(nonce), &aad, &mut *bytes)
         .map_err(|_| invalid())?;
     let output = serde_json::to_vec(&Envelope {
         header,
@@ -166,7 +166,7 @@ pub fn open(
     let key = derive(passphrase, &salt)?;
     XChaCha20Poly1305::new_from_slice(&*key)
         .map_err(|_| invalid())?
-        .decrypt_in_place(XNonce::from_slice(&nonce), &aad, &mut *bytes)
+        .decrypt_in_place(&XNonce::from(nonce), &aad, &mut *bytes)
         .map_err(|_| invalid())?;
     Ok(bytes)
 }

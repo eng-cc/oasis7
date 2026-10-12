@@ -137,7 +137,8 @@ class Selection(unittest.TestCase):
             selector.main()
         outputs = dict(line.split('=', 1) for line in Path('outputs.txt').read_text().splitlines())
         plan = json.loads(outputs['plan'])
-        self.assertEqual(set(plan), {'groups', 'resources', 'reasons', 'scope'})
+        self.assertEqual(set(plan), {'groups', 'resources', 'reasons', 'scope',
+                                    'workspace_support_profiles', 'workspace_support_profile_version'})
         self.assertEqual(outputs['run_baseline'], 'true')
         self.assertEqual(outputs['run_other'], 'false')
         self.assertFalse(any(name.startswith('matrix') for name in outputs))
@@ -240,6 +241,10 @@ class Selection(unittest.TestCase):
                     self.write(f'crates/{package}/src/lib.rs', '// changed')
                     plan = selector.select(config, base, self.commit())
                     self.assertEqual(plan['scope'], 'targeted')
+                    expected_profiles = {'oasis7_agent_harness'}
+                    if package == 'oasis7_agent_api':
+                        expected_profiles.add('oasis7_agent_api')
+                    self.assertEqual(set(plan['workspace_support_profiles']), expected_profiles)
                     self.assertEqual(set(plan['groups']), expected)
                     base = self.git('rev-parse', 'HEAD')
 
