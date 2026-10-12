@@ -77,6 +77,13 @@
   - 不在本 PRD 中定义玩法实现细节。
   - 不替代自动化压测脚本的设计文档。
 
+<a id="feedback-score-product-contract"></a>
+### 问卷评分与证据边界
+
+按[唯一评分合同](playability_test_card.md#feedback-score-contract)采集并复算：五个现有维度各占 `20%`；题目映射、Q7 排除、Q14 转换、四档题等距分值、缺答、精度与多卡汇总均由该处定义，模板只引用。此选择落实 [#4516](https://github.com/eng-cc/oasis7/issues/4516) 对五维权重的补齐建议，不改变 runtime 指标或执行行为；历史卡片继续按当时原始口径解释，不追溯改成通过。
+
+AC-1 的复算验收包括：原反例五维 `5/5/5/3/3` 得到 `4.2`；四档题中间答案能唯一映射；缺计分题保持未知；`3.2/4.2` 及邻近值按未舍入总分无空隙判档；多卡保留来源、完整性与独立阻断。数值标签只构成评审输入，既有低理解度/控制感、`world_activity_only`、玩家杠杆、L5 与发布治理要求仍适用。
+
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 可玩性卡片模板、结果聚合脚本、手动长玩记录流程。
 - Evaluation Strategy: 以问题检出率、重复缺陷比例、闭环时长、版本体验评分变化，以及 `world_activity_only` 误报被提前拦截的比例评估。
