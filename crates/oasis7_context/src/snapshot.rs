@@ -384,6 +384,29 @@ pub fn restore_frozen(
     passphrase: &[u8],
     expected_digest: Option<&str>,
 ) -> Result<SnapshotSummary> {
+    let parent = target.parent().ok_or_else(invalid)?;
+    let parent_dir = crate::fs::Directory::open(parent)?;
+    restore_in_parent(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        &parent_dir,
+    )
+}
+
+/// All restore writes and publication stay relative to the caller's held parent.
+pub fn restore_in_parent(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+) -> Result<SnapshotSummary> {
     if !target.is_absolute() {
         return Err(ContextError::new(
             "INVALID_INPUT",
@@ -409,13 +432,11 @@ pub fn restore_frozen(
             "restore target already exists",
         ));
     }
-    let parent = target.parent().ok_or_else(invalid)?;
     let name = target
         .file_name()
         .and_then(|s| s.to_str())
         .ok_or_else(invalid)?;
     let stage = format!(".context-stage-{}", random_id()?);
-    let parent_dir = crate::fs::Directory::open(parent)?;
     parent_dir.create_dir_new(&stage)?;
     let result = (|| {
         let dir = parent_dir.child(&stage)?;

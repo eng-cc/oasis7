@@ -1,5 +1,51 @@
 use super::*;
 #[test]
+fn replacement_after_admission_cannot_become_the_prepared_source() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("selected");
+    fs::write(&path, b"original").unwrap();
+    let admitted = selected_file_identity(&path, 1024).unwrap();
+    // Deterministic pause after admission: same bytes, different inode still differs.
+    let replacement = temp.path().join("replacement");
+    fs::write(&replacement, b"original").unwrap();
+    fs::rename(&replacement, &path).unwrap();
+    let actual = selected_file_identity(&path, 1024).unwrap();
+    assert_ne!(admitted, actual);
+    let resource = "signer:installation:job";
+    let fingerprint = |source: &(String, u64, u64, u64)| {
+        identity::sha256_hex(&identity::canonical_json(source).unwrap())
+    };
+    assert!(
+        require_prepare_identity(
+            resource,
+            &fingerprint(&actual),
+            resource,
+            &fingerprint(&admitted)
+        )
+        .is_err()
+    );
+    fs::write(&path, b"replacement payload").unwrap();
+    let actual = selected_file_identity(&path, 1024).unwrap();
+    assert!(
+        require_prepare_identity(
+            resource,
+            &fingerprint(&actual),
+            resource,
+            &fingerprint(&admitted)
+        )
+        .is_err()
+    );
+    assert!(
+        require_prepare_identity(
+            resource,
+            &fingerprint(&admitted),
+            "signer:replacement:job",
+            &fingerprint(&admitted)
+        )
+        .is_err()
+    );
+}
+#[test]
 fn prepare_input_validation_rejects_correctable_inputs_before_job_creation() {
     let base = FileSignInput {
         job_id: "job-one".into(),

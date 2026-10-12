@@ -42,7 +42,7 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 后端只读取固定安装描述并核对普通 caller UID、受保护实际路径、release manifest 和 executable SHA-256。未知或不兼容安装保留原状；不经普通 App 读取 custody。
 
-文件签名要求明确 file、job、signer、grant 和完整合法 SignContext；不自动填示例值。只读准备校验明确确认无副作用时，表单保留草稿并允许修正；进入原 caller 准备边界、旧操作或结果未知时仍冻结原 Job，先核对，不能另建操作绕过未知结果。原 caller 第一次 prepare 建立私有 job，原 Rust 类型生成 context、file envelope 和 canonical JobInput，第二次 prepare 固定原请求。提交和 inspect 绑定原 job；准备响应丢失时核对原 operation ID、安装、源文件和冻结 envelope，成功后恢复原 prepared 身份及提交入口，表单仍冻结且不重放 prepare。准备不等于 worker 已授权。独立验签重建相同 context 的 envelope，并核对用户明确的预期公钥。选中文件必须是有界普通文件，不接受 FIFO、符号链接或读取中变动。
+文件签名要求明确 file、job、signer、grant 和完整合法 SignContext；不自动填示例值。只读准备校验明确确认无副作用时，表单保留草稿并允许修正；进入原 caller 准备边界、旧操作或结果未知时仍冻结原 Job，先核对，不能另建操作绕过未知结果。原 caller 第一次 prepare 前重新核对原准入的源文件摘要、大小、设备和 inode，禁止采用替换文件的新身份。第一次 prepare 建立私有 job，原 Rust 类型生成 context、file envelope 和 canonical JobInput，第二次 prepare 固定原请求。提交和 inspect 绑定原 job；准备响应丢失时核对原 operation ID、安装、源文件和冻结 envelope，成功后恢复原 prepared 身份及提交入口，表单仍冻结且不重放 prepare。提交把原 IPC 请求及安装发行身份摘要传入 caller；caller 在实际请求构成后、调用 worker 前核对，旧安装缺少 frozen_submit_v1 时禁止提交，不降级绕过。准备不等于 worker 已授权。独立验签重建相同 context 的 envelope，并核对用户明确的预期公钥。选中文件必须是有界普通文件，不接受 FIFO、符号链接或读取中变动。
 
 缺少密钥、policy、grant 或 purpose 配置时明确显示未配置；当前暂停的管理员集成不能用 shell/sudo 透传代替。
 
@@ -51,6 +51,8 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 ## 4. 操作与退出
 
 工具操作先在 SQLite 事务中原子登记 operation ID、输入指纹、不可变目标资源及动作。相同 ID/输入回读既有记录，不重放；不同输入拒绝；已有 running/unknown 占位防止重复副作用。signer 的 ASCII Job 资源按大小写保守共用占位，以覆盖常见 macOS 目录别名；原输入指纹和 Job ID 仍精确核验，其他工具资源保持精确比较。终态不倒退，崩溃中的任务转 unknown，不由进程消失推导回滚。
+
+快照恢复从原证据核对父目录身份，并通过持有的目录句柄完成写入和发布；替换路径不接收正文。父目录在执行中改名时，结果可能位于改名后的原目录，操作保持未知并拒绝绑定替换位置。
 
 完整退出冻结同一准入机制，并检查所有项目的 Codex 和 ToolJobs；运行中或未知效果阻止安全退出声明。窗口关闭仍留后台。Codex 新动作、单轮中断及原请求回复与冻结使用同一锁协调；等待退出时不发送批准、回答或新的中断操作；明确“停止并退出”由退出协调入口执行，取消退出后保留原请求和未发送草稿。已登记的后台任务继续回读。退出状态检查失败时解除工具冻结；执行数据库不可用时仍可取消等待并使用普通工具，但历史终止保持未知，不声明安全退出。冻结、取消和退出批准在同一执行状态锁下串行核对。口令和正文不作为恢复参数。
 

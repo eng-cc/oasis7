@@ -369,3 +369,55 @@ fn lost_volume_exclusions_allow_unrelated_project_and_explicit_recovery() {
     project(&root);
     assert!(center.open_project(&root).is_err());
 }
+
+#[test]
+fn restore_rejects_replaced_prepared_parent_before_plaintext_or_binding() {
+    let temp = tempfile::tempdir().unwrap();
+    let (service, binding, request) = fixture(&temp);
+    service.save(&request).unwrap();
+    let input = temp.path().join("backup.enc");
+    let password = b"parent-identity";
+    service
+        .snapshot_export(&binding.id, binding.binding_version, &input, &[], password)
+        .unwrap();
+    let source = ContextSnapshotRestoreSource {
+        binding_id: Some(binding.id.clone()),
+        binding_version: Some(binding.binding_version),
+        registered_project_id: binding.registered_project_id.clone(),
+    };
+    let parent = temp.path().join("selected-parent");
+    std::fs::create_dir(&parent).unwrap();
+    let target = parent.join("restore");
+    let digest = oasis7_local_signer::identity::sha256_hex(&std::fs::read(&input).unwrap());
+    let evidence = service
+        .restore_snapshot_evidence(&source, &input, &target, password, &digest)
+        .unwrap();
+    let parent_identity = match &evidence {
+        ContextRecoveryEvidence::SnapshotRestore {
+            parent_identity, ..
+        } => parent_identity,
+        _ => unreachable!(),
+    };
+    let original = temp.path().join("original-parent");
+    std::fs::rename(&parent, &original).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    let before = service.bindings().unwrap().len();
+    assert!(
+        service
+            .restore_snapshot_frozen_parent(
+                &source,
+                &input,
+                &target,
+                password,
+                &digest,
+                parent_identity
+            )
+            .is_err()
+    );
+    assert!(!target.exists());
+    assert!(!original.join("restore").exists());
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(&original).unwrap().count(), 0);
+    assert_eq!(service.bindings().unwrap().len(), before);
+    assert_eq!(service.reconcile(&evidence, None).unwrap().state, "unknown");
+}

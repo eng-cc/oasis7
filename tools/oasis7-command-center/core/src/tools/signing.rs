@@ -1,10 +1,46 @@
 mod recovery;
+mod submission;
 use super::*;
 pub use recovery::{reconcile_file_prepare, reconcile_signer_job};
+use submission::prepared_identity;
+pub use submission::submit_file_frozen;
 
 pub fn prepare_file(input: &FileSignInput) -> Result<FileSignPrepared> {
+    let (resource, fingerprint) = file_prepare_identity(input)?;
+    prepare_file_frozen(input, &resource, &fingerprint)
+}
+
+pub fn prepare_file_frozen(
+    input: &FileSignInput,
+    expected_resource: &str,
+    expected_fingerprint: &str,
+) -> Result<FileSignPrepared> {
     let (cfg, _) = binding()?;
     let context = validate_prepare_input(input, &cfg.deployment_id)?;
+    // Carry the admitted identity through every reopen; never adopt replacement bytes.
+    let file = Path::new(&input.file_path);
+    let (hash, file_size, file_device_id, file_inode) =
+        selected_file_identity(file, 1024 * 1024 * 1024)?;
+    let (resource, fingerprint) = prepare_identity_from_source(
+        input,
+        &cfg,
+        &context,
+        (&hash, file_size, file_device_id, file_inode),
+    )?;
+    require_prepare_identity(
+        &resource,
+        &fingerprint,
+        expected_resource,
+        expected_fingerprint,
+    )?;
+    let source = FileSourceEvidence {
+        schema_version: 1,
+        file_path: input.file_path.clone(),
+        file_sha256: hash.clone(),
+        file_size_bytes: file_size,
+        file_device_id,
+        file_inode,
+    };
     let first = signer_action("prepare", Some(&input.job_id))?;
     if first["status"] != "JOB_DIRECTORY_READY" {
         return Err(invalid(
@@ -20,13 +56,12 @@ pub fn prepare_file(input: &FileSignInput) -> Result<FileSignPrepared> {
     .map_err(invalid)?;
     let context_bytes = identity::canonical_json(&context).map_err(invalid)?;
     write_private_new(&job.path().join("context.json"), &context_bytes)?;
-    let file = Path::new(&input.file_path);
-    if !file.is_absolute() {
-        return Err(invalid("absolute selected file required"));
+    if !source_is_current(&source)? {
+        return Err(invalid(
+            "Original admitted file changed before payload preparation",
+        ));
     }
-    // file_cli reopens with no-follow, verifies stable file metadata and exact digest.
-    let (hash, file_size, file_device_id, file_inode) =
-        selected_file_identity(file, 1024 * 1024 * 1024)?;
+    // file_cli verifies the frozen digest; source inode is checked again afterward.
     let args = vec![
         "file-payload".into(),
         "--context".into(),
@@ -43,14 +78,6 @@ pub fn prepare_file(input: &FileSignInput) -> Result<FileSignPrepared> {
     let payload = oasis7_local_signer::file_cli::dispatch(&args)
         .unwrap()
         .map_err(invalid)?;
-    let source = FileSourceEvidence {
-        schema_version: 1,
-        file_path: input.file_path.clone(),
-        file_sha256: hash.clone(),
-        file_size_bytes: file_size,
-        file_device_id,
-        file_inode,
-    };
     if !source_is_current(&source)? {
         return Err(invalid(
             "Original source file identity changed during payload preparation",
@@ -87,7 +114,27 @@ pub fn prepare_file(input: &FileSignInput) -> Result<FileSignPrepared> {
     )
     .map_err(invalid)?;
     let result = signer_action("prepare", Some(&input.job_id))?;
-    let prepared_fingerprint = signer_job_identity(&input.job_id)?.1;
+    let prepared = read_prepared(&job)?;
+    let actual_source = read_source_evidence(&job, &prepared, true)?;
+    if prepared.request.context != context
+        || prepared.request.installation_id != cfg.installation_id
+        || prepared.request.purpose != "file_ed25519_v1"
+        || prepared.request.provider_id.0.is_some()
+        || prepared.request.signer_id != input.signer_id
+        || prepared.request.grant_id.0.as_deref() != Some(&input.grant_id)
+        || prepared.payload
+            != oasis7_local_signer::detached::signing_payload_from_digest(
+                &context, &hash, file_size,
+            )
+            .map_err(invalid)?
+        || identity::canonical_json(&actual_source).map_err(invalid)?
+            != identity::canonical_json(&source).map_err(invalid)?
+    {
+        return Err(invalid(
+            "Prepared request differs from original admitted intent",
+        ));
+    }
+    let prepared_fingerprint = prepared_identity(&input.job_id, &cfg, &prepared, &source)?.1;
     Ok(FileSignPrepared {
         job_id: input.job_id.clone(),
         prepared_fingerprint,
@@ -128,28 +175,8 @@ fn frozen_job_identity(job_id: &str, verify_source: bool) -> Result<(String, Str
     .map_err(invalid)?;
     let prepared = read_prepared(&job)?;
     let source = read_source_evidence(&job, &prepared, verify_source)?;
-    if prepared.request.installation_id != cfg.installation_id
-        || prepared.request.context.deployment_id != cfg.deployment_id
-    {
-        return Err(invalid("Prepared request belongs to another installation"));
-    }
-    let fingerprint = identity::sha256_hex(
-        &identity::canonical_json(&(
-            cfg.installation_id.clone(),
-            cfg.deployment_id,
-            cfg.release_id,
-            prepared.request,
-            identity::sha256_hex(&prepared.payload),
-            source,
-        ))
-        .map_err(invalid)?,
-    );
-    Ok((
-        format!("signer:{}:{}", cfg.installation_id, job_id),
-        fingerprint,
-    ))
+    prepared_identity(job_id, &cfg, &prepared, &source)
 }
-
 pub fn verify_file_signature(
     file_path: &Path,
     context: serde_json::Value,
@@ -278,12 +305,21 @@ pub fn file_prepare_identity(input: &FileSignInput) -> Result<(String, String)> 
     let context = validate_prepare_input(input, &cfg.deployment_id)?;
     let (digest, size, device_id, inode) =
         selected_file_identity(Path::new(&input.file_path), 1024 * 1024 * 1024)?;
+    prepare_identity_from_source(input, &cfg, &context, (&digest, size, device_id, inode))
+}
+fn prepare_identity_from_source(
+    input: &FileSignInput,
+    cfg: &oasis7_local_signer::types::InstallationConfig,
+    context: &protocol::SignContext,
+    source: (&str, u64, u64, u64),
+) -> Result<(String, String)> {
+    let (digest, size, device_id, inode) = source;
     let context_bytes = identity::canonical_json(&context).map_err(invalid)?;
     let fingerprint = identity::sha256_hex(
         &identity::canonical_json(&(
             cfg.installation_id.clone(),
-            cfg.deployment_id,
-            cfg.release_id,
+            &cfg.deployment_id,
+            &cfg.release_id,
             input,
             digest,
             size,
@@ -297,6 +333,17 @@ pub fn file_prepare_identity(input: &FileSignInput) -> Result<(String, String)> 
         format!("signer:{}:{}", cfg.installation_id, input.job_id),
         fingerprint,
     ))
+}
+fn require_prepare_identity(
+    resource: &str,
+    fingerprint: &str,
+    expected_resource: &str,
+    expected_fingerprint: &str,
+) -> Result<()> {
+    if resource != expected_resource || fingerprint != expected_fingerprint {
+        return Err(invalid("Original admitted preparation identity changed"));
+    }
+    Ok(())
 }
 
 /// Resolve the real reservation before validating other user input. `None` is

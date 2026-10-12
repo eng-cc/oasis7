@@ -214,7 +214,7 @@ pub async fn tool_file_prepare(
             return Err(tools::FilePrepareError::no_effect(error));
         }
         // Past this boundary a caller job or files may exist, even on an error.
-        let result = tools::prepare_file(&input);
+        let result = tools::prepare_file_frozen(&input, &resource, &fingerprint);
         jobs.finish(
             &operation_id,
             if result.is_ok() {
@@ -255,7 +255,7 @@ pub async fn tool_signer_submit(
         {
             return Err("签名请求身份变化；请核对原请求".into());
         }
-        tools::signer_action("submit", Some(&job_id)).map_err(|e| e.to_string())
+        tools::submit_file_frozen(&job_id, &expected).map_err(|e| e.to_string())
     })
     .await
 }

@@ -172,3 +172,34 @@ fn restored_store_preserves_identity_and_excludes_local_state() {
     assert!(inspect(&input, b"wrong test passphrase").is_err());
     std::fs::remove_dir_all(base).unwrap();
 }
+
+#[test]
+fn restore_writes_and_publication_follow_held_parent_not_replaced_path() {
+    let base = tempfile::tempdir().unwrap();
+    let root = base.path().canonicalize().unwrap();
+    let input = root.join("snapshot.enc");
+    let pass = b"held-parent-fixture";
+    std::fs::write(
+        &input,
+        oasis7_secure_envelope::seal(KIND, &serde_json::to_vec(&fixture()).unwrap(), pass).unwrap(),
+    )
+    .unwrap();
+    let parent = root.join("selected");
+    std::fs::create_dir(&parent).unwrap();
+    let held = crate::fs::Directory::open(&parent).unwrap();
+    let original = root.join("original");
+    std::fs::rename(&parent, &original).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    restore_in_parent(
+        &input,
+        &parent.join("restored"),
+        None,
+        None,
+        pass,
+        None,
+        &held,
+    )
+    .unwrap();
+    assert!(original.join("restored/entries/machine-test.md").is_file());
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+}

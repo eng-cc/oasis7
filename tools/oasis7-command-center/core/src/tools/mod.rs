@@ -4,8 +4,9 @@ pub mod jobs;
 mod signing;
 use signing::compatible_info;
 pub use signing::{
-    file_prepare_identity, file_prepare_resource, prepare_file, reconcile_file_prepare,
-    reconcile_signer_job, selected_file_digest, signer_job_identity, verify_file_signature,
+    file_prepare_identity, file_prepare_resource, prepare_file, prepare_file_frozen,
+    reconcile_file_prepare, reconcile_signer_job, selected_file_digest, signer_job_identity,
+    submit_file_frozen, verify_file_signature,
 };
 pub mod secrets;
 use crate::{Error, Result};

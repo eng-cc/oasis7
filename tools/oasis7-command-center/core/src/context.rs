@@ -491,6 +491,39 @@ impl ContextService {
         passphrase: &[u8],
         expected_digest: &str,
     ) -> Result<ContextBinding> {
+        let parent = target
+            .parent()
+            .ok_or_else(|| failure("restore target needs parent"))?;
+        let parent_identity = directory_identity(parent)?;
+        self.restore_snapshot_frozen_parent(
+            source,
+            input,
+            target,
+            passphrase,
+            expected_digest,
+            &parent_identity,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn restore_snapshot_frozen_parent(
+        &self,
+        source: &ContextSnapshotRestoreSource,
+        input: &Path,
+        target: &Path,
+        passphrase: &[u8],
+        expected_digest: &str,
+        expected_parent_identity: &str,
+    ) -> Result<ContextBinding> {
+        let parent = target
+            .parent()
+            .ok_or_else(|| failure("restore target needs parent"))?;
+        let parent_dir = oasis7_context::fs::Directory::open(parent).map_err(Error::Context)?;
+        let (device, inode) = parent_dir.identity().map_err(Error::Context)?;
+        let held_identity = format!("{device}:{inode}");
+        if held_identity != expected_parent_identity || directory_identity(parent)? != held_identity
+        {
+            return Err(failure("restore parent changed after preparation"));
+        }
         let identity = self.restore_identity(source, input, passphrase, expected_digest)?;
 
         let root = canonical_candidate(target)?;
@@ -508,15 +541,21 @@ impl ContextService {
             [root.to_string_lossy()],
         )?;
         tx.commit()?;
-        oasis7_context::snapshot::restore_frozen(
+        oasis7_context::snapshot::restore_in_parent(
             input,
             &root,
             Some(&identity.project_id),
             Some(&identity.store_id),
             passphrase,
             Some(expected_digest),
+            &parent_dir,
         )
         .map_err(Error::Context)?;
+        if directory_identity(parent)? != held_identity {
+            return Err(failure(
+                "restore parent changed during publication; original held directory contains restore",
+            ));
+        }
         self.bind(&root, &identity.registered_project_id, "", false)
     }
     pub fn doctor(&self, id: &str, version: u64) -> Result<serde_json::Value> {

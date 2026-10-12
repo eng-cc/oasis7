@@ -93,6 +93,8 @@ pub fn reconcile_file_prepare(
     let context: protocol::SignContext = serde_json::from_value(input.context.clone())?;
     let (digest, size) = file_digest(Path::new(&input.file_path))?;
     if prepared.request.installation_id != cfg.installation_id
+        || prepared.request.purpose != "file_ed25519_v1"
+        || prepared.request.provider_id.0.is_some()
         || prepared.request.context.deployment_id != cfg.deployment_id
         || prepared.request.context != context
         || prepared.request.signer_id != input.signer_id
