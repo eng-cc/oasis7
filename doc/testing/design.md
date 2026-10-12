@@ -15,6 +15,19 @@
 3. `doc/testing/prd.index.md`
 5. 下钻 `ci/`、`governance/`、`launcher/`、`longrun/`、`performance/` 等专题目录
 
+### 2.1 需求承接与分配表
+
+本表只承接 L4 工具链本次受影响条款；既有 QA infrastructure 方法、89 项依赖矩阵和各专业域义务继续保留。
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [L4 构建与驱动](prd.md#l4-build-driver) | 默认 release 通过正式 UI 驱动；显式测试构建与观测能力单独选择。 | [构建与驱动选择](design.md#l4-build-selection) | Viewer build/driver；producer bundle 入口。 | 测试产物或参数不能代签 release 体验。 |
+| [L4 Hosted 会话](prd.md#l4-hosted-session) | 实际执行 session 完成受支持登录/恢复，确认 player 关联并回收自有资源。 | [浏览器与玩家会话编排](design.md#l4-session-orchestration) | 既有 Hosted 登录、runtime session 与 agent-browser 生命周期合同。 | 不新增账户、认证、签名或跨会话凭据交接体系。 |
+| [L4 执行结果](prd.md#l4-execution-result) | 每个 attempt 保留实际执行模式、阶段、阻断、停止和清理结果。 | [执行记录与终态](design.md#l4-result-record) | 既有 RunInput/RunResult 与 QA receiver；runner 负责落盘。 | 有结果文件不表示已完成实玩或通过。 |
+| [L4 证据与判定](prd.md#l4-evidence-judgment) | 采样事实、权威结果和人工体验判定分开，失败尝试及未评状态保留。 | [证据与体验判定边界](design.md#l4-judgment-boundary) | gameplay/runtime oracle；producer 与 QA。 | 固定动作成功不证明自主游玩、continue、满分或 L5。 |
+| [L4 入口兼容](prd.md#l4-entry-compatibility) | canonical/compat 两入口均保持所选 release/test 构建边界。 | [入口与构建兼容](design.md#l4-entry-profile) | Viewer entry compatibility PRD/design 与 dist copy。 | 不删除兼容入口或把测试 API 带回 release。 |
+| [L4 scaffold 输出](prd.md#l4-scaffold-output) | 路径通过 argv 传入序列化器，JSON stdout 与 manifest 一致且保留目录保护。 | [Scaffold 序列化](design.md#l4-scaffold-serialization) | prepare-playability-l4-review.sh 与其 stdout/manifest 消费者。 | 离线 scaffold 成功不完成 L4A/L4B。 |
+
 ## 3. 设计结构
 - 分层层：`test_tier_required` / `test_tier_full` 的职责分工。
 - 证据层：测试结果、失败签名、门禁与复审记录。
@@ -30,7 +43,7 @@
 - `doc/core/prd.md`
 - `doc/scripts/prd.md`
 - `scripts/prepare-playability-l4-review.sh`：在一个 worktree 固定 L4 packet、role/persona cards、L4B card、可选校准 notes、summary 与命令。
-- `scripts/run-playability-l4b-agent.sh`：执行真实 agent 操作并写入 L4B state/screenshot/summary/card evidence。
+- `scripts/run-playability-l4b-agent.sh`：现有 L4 driver 与采样入口；其构建、登录编排及结果判定缺口见 [L4 工具链设计](#l4-toolchain-design)，不能仅凭脚本名称认定已完成具身 agent 试玩。
 
 ## 5. 专题导航
 - CI 与覆盖进入 `ci/`
@@ -163,3 +176,74 @@ This matrix is per frozen object, not a whole-file rewrite list. It preserves th
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
 - 若 legacy redirect 未明确标注为兼容跳转，读者可能误判历史入口为当前执行入口。
 - 若自动化、synthetic、agent 实操和真实人类信号混写，stage/release claim 会越过证据边界；QA 以 `world_activity_only`、L4B session evidence 与 L5 缺失状态阻断升级。
+
+<a id="l4-toolchain-design"></a>
+## 6. L4 构建、会话与证据编排
+
+### 当前基线与交付边界
+
+固定基线 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 的静态核查中，L4B runner 仍默认调用 producer 普通 bundle、依赖 `__AW_TEST__`、创建独立 automation session 并只等待 `connected/authReady`；这与 release 不安装测试 API、Hosted 干净会话需要登录的现有合同不兼容。当前实现与后续验收由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 跟踪。本节补齐目标设计，未修改 runner 或执行真实试玩；下列验证矩阵不是通过记录，默认命令仍需实现修复后才能按目标合同验收。
+
+<a id="l4-build-selection"></a>
+### 6.1 构建与驱动选择
+
+启动前固定同一候选的 source/build、Viewer 构建类型、driver、访问模式和证据范围。Viewer `release/visual-test` 与 Rust bundle 的 `packaging/dev` 是不同维度；不得把现有 `--profile dev` 当成开启 Viewer 测试 API 的开关，也不在文档中假设 runner 已存在新的选项。
+
+| Viewer 构建与用途 | 驱动与观测 | 失败/证明边界 |
+| --- | --- | --- |
+| 默认 release，正式 L4B 玩家入口 | 使用正式 UI 的可见控件和状态；世界效果由同候选的现有权威 oracle 核验。 | `__AW_TEST__` 缺失是预期；UI driver 不可用时报告所缺驱动能力，不能回退到测试 API。 |
+| 显式 `build:viewer:visual-test`，受限隔离自动化 | 从 `.viewer-test-dist/` 选择测试产物；仅在明确 opt-in 后使用约定测试 API，并记录该构建与实际 `execution_mode`。 | 所选测试 lane 缺 API 时报告构建/观测能力 blocker，不循环等待登录；测试动作和 fixture 结果不能代签 release UI 或自主试玩。 |
+
+`test_api=1` 是显式测试产物内的运行时 opt-in，不能改变编译产物。凡以 L4B 玩家行为为目标，操作必须由该候选支持的正式玩家路径完成；测试 API 采样不能替代玩家动作或世界结果 oracle。
+
+<a id="l4-session-orchestration"></a>
+### 6.2 浏览器与玩家会话编排
+
+复用 [Hosted 玩家流程](../p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md#2-user-experience-functionality)、[Hosted 身份职责](../p2p/blockchain/hosted-public-join-managed-identity-custody.design.md#4-目标身份模型) 和 [agent-browser 生命周期](manual/web-ui-agent-browser-closure-manual.manual.md#agent-browser-会话生命周期约定)。L4B 仅消费这些合同，不改变其认证、注册、刷新和撤销语义。
+
+1. runner 创建本轮唯一的 owned browser session，producer 采用同一个 session 引用；登录、观测、正式 UI 操作和最终截图均绑定该 session。若另有 observer，其角色与独立 session 单列，不能用 observer 的登录状态证明 driver 已登录。
+2. 默认干净 `hosted_public_join` 路径先记录 guest 状态，再在实际 driver session 通过现有合法登录/注册路径进入玩家态。缺账号配置、受支持登录能力或登录失败时记录具体前置 blocker；不静默改部署模式或自动赋予身份。
+3. 登录后核对实际 player/device session 与 runtime 的受支持注册/恢复就绪结果，再进入玩法。浏览器 session 名称、连接成功、`authReady` 或另一个窗口的状态均不能单独代替这一步；记录关联引用和就绪证据，不记录凭据。
+4. 已认证恢复是独立选择的受支持路径：按既有 restore 检查确认当前 driver 恢复的是预期玩家及当前世界，再核验注册/重连结果。恢复失败如实收口；不得作为干净 guest→登录场景的通过证据，也不把 `--session` 名称前缀解释为认证恢复。
+5. 正常结束、前置阻断、超时或取消均保存本次结果并执行 owned cleanup；仅回收本轮资源，保留清理失败及其诊断。会话准备与实际游玩继续遵循 [自主试玩启动边界](governance/agent-runtime-self-playtest.design.md#selftest-skill-entry)，prepared world 不代签 cold entry。
+
+<a id="l4-result-record"></a>
+### 6.3 执行记录与终态
+
+复用 [RunInput/RunResult](governance/agent-runtime-self-playtest.design.md#6-接口与数据合同) 和 [SourceSceneRecord](governance/agent-runtime-self-playtest.design.md#selftest-source-scene)，沿用 `preparing → ready → playing → verifying → reported → cleanup` 的阶段与任意阶段 blocked/aborted 收口。项 verdict 保持 `pass/fail/blocked/inconclusive/not_applicable`，与 `execution_state` 正交，不建立第二套 run-status 枚举。
+
+每个 attempt 关联候选/build、实际 `execution_mode`、driver/session 与 player 绑定、就绪证据、ArtifactRef、oracle、`blocking_reason`/`failure_signature`、`stop_reason`、`cleanup_result` 和复测引用。`current_attempt` 只引用该次 RunResult；首次执行即建立记录，失败/超时/取消也须收口。重试追加新 `attempt_id`，保留原尝试，不能通过重试覆盖失败分母。
+
+构建与 driver 不匹配、显式测试 lane 缺 API、登录前置缺失、runtime 未就绪分别保留原因；负例按自身 oracle 判断，不能将产品符合预期的拒绝误记成玩法失败。结果写入失败须向调用者明确报告并保留已有材料，不能返回完整证据已生成的成功结论。
+
+<a id="l4-judgment-boundary"></a>
+### 6.4 证据与体验判定边界
+
+采样器只写实际观测、动作/回执引用和相应 oracle 检查；真实自主试玩与旧固定动作模式按 [现有 runner 演进边界（§10）](governance/agent-runtime-self-playtest.design.md) 记录不同 `execution_mode`。世界自然推进、一个动作 ack 或固定建厂成功不自动生成 continue 判定、满分或发布建议。
+
+新 attempt 的体验评审默认 `review_status=unreviewed`；缺实际 L4B 游玩时保留 `l4b_agentic_verdict=missing`。producer/QA 在回读证据后填写其负责的体验结论与依据，记录评审者、关联 attempt 和未证明项；脚本不得替其评分。card 和最终 summary 从同一 RunResult 引用采样事实，人工评审单独保存，不能用预填成功值或本次未评结果覆盖历史已评结论。
+
+<a id="l4-entry-profile"></a>
+### 6.5 入口与构建兼容
+
+两类构建均保留 `viewer` canonical 与 `software_safe` compat alias；测试 API 的一致性只在显式测试构建与同一 opt-in 条件下成立。构建、复制、stale-dist rebuild 必须保留已选类型，不能因 alias/freshness 修复换用另一构建。具体矩阵和独有 alias anchors 由 [Viewer entry compatibility](../world-simulator/viewer/viewer-web-entry-compatibility.design.md#compat-build-profile-boundary) 承接。
+
+<a id="l4-scaffold-serialization"></a>
+### 6.6 Scaffold 序列化
+
+`prepare-playability-l4-review.sh --json` 的路径值通过 argv 传入 Python，由 `json.dumps` 序列化；不把 Bash `${VAR@Q}` 拼成 Python 源。普通、含空格、含单引号的合法路径使用同一方式，成功时 stdout 仅输出 JSON 对象且退出 0；`run_id/output_dir/packet_path/summary_path` 与磁盘 manifest 一致，`manifest_path` 指向该 manifest。保留已有目录保护；末尾输出失败后不得无提示覆盖已生成目录，调用方需要保留诊断并按既有保护处理。该合同可离线验证，不启动 L4A 栈、模型或浏览器，也不产生试玩完成结论。
+
+## 11. L4 验证与证据
+
+### 11.1 验证映射表
+
+以下是目标合同的验证计划；本次文档修改仅做静态一致性核对。真实构建、浏览器、登录及自主试玩必须在相应实现与前置具备后执行并保留独立结果。
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [L4 构建与驱动](prd.md#l4-build-driver) | [构建与驱动选择](design.md#l4-build-selection) | 默认 release/UI 与显式 test/API 分离，缺能力准确阻断。 | [主手册 L4-C01](../../testing-manual.md#l4-toolchain-validation)：固定同候选 release/test 产物，静态核对默认选择，再按实现执行所选 driver 与能力缺失负例。 | 两构建身份、driver 选择与能力判断的本次记录。 | 文档通过不证明默认 runner 已可用或浏览器已执行。 |
+| [L4 Hosted 会话](prd.md#l4-hosted-session) | [浏览器与玩家会话编排](design.md#l4-session-orchestration) | 干净 guest 登录及独立恢复路径分别验证，实际执行 player/session 一致。 | [主手册 L4-C02](../../testing-manual.md#l4-toolchain-validation)：受支持 Hosted 测试环境与同候选 driver，覆盖干净登录、恢复、失败前置和 owned cleanup。 | guest/登录/注册就绪、session/player 关联及清理证据。 | 不扩展认证体系；其他窗口或 DevLocal lane 不证明默认 Hosted 路径。 |
+| [L4 执行结果](prd.md#l4-execution-result) | [执行记录与终态](design.md#l4-result-record) | 各阶段结果、取消、失败、重试与清理均有可追溯记录。 | [主手册 L4-C03](../../testing-manual.md#l4-toolchain-validation)：离线可控 driver 验证各收口路径及报告失败；真实依赖另按所选场景执行。 | attempt/RunResult、停止与清理结果、保留的失败记录。 | fake driver 不证明已登录、已实玩或世界效果。 |
+| [L4 证据与判定](prd.md#l4-evidence-judgment) | [证据与体验判定边界](design.md#l4-judgment-boundary) | 采样不自动给 continue/满分；card/summary 引用同次结果并保留人工判定。 | [主手册 L4-C04](../../testing-manual.md#l4-toolchain-validation)：检查无实玩、固定脚本、失败重试和已评历史样本；真实 L4B 另由对应 oracle 与角色评审。 | 同 attempt 事实引用、unreviewed/missing 边界与独立评审依据。 | 动作 ack、模板或自动分数不证明体验或 L5。 |
+| [L4 入口兼容](prd.md#l4-entry-compatibility) | [入口与构建兼容](design.md#l4-entry-profile) | canonical/compat × release/test 保留 alias、构建类型与 API opt-in 边界。 | [主手册 L4-C05](../../testing-manual.md#l4-toolchain-validation)：同候选四格矩阵，并分别核对 test opt-in 开/关及 release 加参数负例。 | 四格产物/入口结果与现有 alias/copy/freshness 验证记录。 | 不证明 CDN/线上部署或 release 试玩结论。 |
+| [L4 scaffold 输出](prd.md#l4-scaffold-output) | [Scaffold 序列化](design.md#l4-scaffold-serialization) | stdout JSON 可解析且与 manifest 一致，已有目录重试保护保留。 | [主手册 L4-C06](../../testing-manual.md#l4-toolchain-validation)：离线临时目录覆盖普通、空格、单引号路径及已有目录重试。 | 退出码、stdout JSON、manifest 字段对账与目录保护结果。 | scaffold 验证不完成 L4A/L4B，也不执行模型或真实游戏。 |

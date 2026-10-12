@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "a62dd3c2b587f19bb2f2dd1d9030e5ca0a41a07a5802558c1c18cc0858d24314",
+    "content_sha256": "023660b22654a1ad4a858ab65f5618f8e92185390740989a2d0c15c2a9fdcb54",
     "current_authority": "testing-manual.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current testing domain requirements authority; developer workflow record projection updated, product authority retained",
+    "note": "current testing domain requirements authority; reviewed #4438 L4 build/driver, actual Hosted session, per-attempt result, judgment ownership and scaffold output contracts; existing QA receiver and evidence boundaries retained; not execution evidence",
     "path": "doc/testing/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

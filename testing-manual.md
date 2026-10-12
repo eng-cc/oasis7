@@ -254,19 +254,43 @@ CI 分层口径：ordinary PR 以 impact-scoped `required-gate` 作为 premerge 
 ### L4A synthetic 内部闭环层（Web 为默认）
 - 目标：验证 formal player surface 的真实可用性（加载、交互、状态可见、无 console error），并在此基础上完成 synthetic internal playability review。
 - 默认：agent / QA 在当前 git worktree 内做开发回归时，优先使用 `./scripts/worktree-harness.sh up` 起一套 worktree 隔离 Web 栈；它会为当前 worktree 派生独立端口组、bundle / runtime / artifact 根目录与浏览器 session，并把状态写到 `output/harness/<worktree_id>/state.json`。这一层属于 `L4A synthetic`，可以产出 UI 闭环、subagent review、persona panel 等内部模拟证据。`scripts/run-launcher-stack.sh` 保留为底层 bootstrap，并支持 `--bundle-dir <bundle>` 复用产物入口；当 bundle 缺少 freshness manifest 或已落后于当前工作区源码时，脚本会默认阻断。launcher stack 与 `--with-harness` 预热都走 formal gameplay 的 active LLM path；`--no-llm` 只保留给直接 `oasis7_viewer_live` 观战/调试排障。
-- 完整 `L4` scaffold：先运行 `./scripts/prepare-playability-l4-review.sh --with-l4a-stack`。它会在当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/` 下生成 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`，并在 `evidence/` 下冻结当前 `L4A` harness state / URL。这个入口继承 formal gameplay 的 active LLM provider preflight；若当前环境缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml`，会在 harness 启动前 fail-fast。
+- 完整 `L4` scaffold：`./scripts/prepare-playability-l4-review.sh` 只准备当前 worktree 自己的 `output/harness/<worktree_id>/artifacts/playability-l4-<timestamp>/`，包含 `l4-review-packet.md`、`role-review-cards/*.md`、`persona-cards/*.md`、`l4-summary.md`、`commands.sh`、`manifest.json`；生成命令和模板不代表任何层已执行。显式加 `--with-l4a-stack` 才先启动 harness，并在 `evidence/` 下冻结当前 `L4A` state / URL；该启动继承 formal gameplay 的 active LLM provider preflight，缺少 `OASIS7_LLM_MODEL` / 等价 `config.toml` 时会在 harness 启动前 fail-fast。离线 JSON、部分输出及重试规则见 [L4-C06](#l4-toolchain-validation)。
 - 最低完成定义：至少回填 review packet、`producer_system_designer` / `qa_engineer` 角色卡，以及命中的其余角色卡与 persona cards；只跑 harness / S6，不回填这些卡片，不算 `L4A` 完成。
 - 结论边界：这一层可以回答“synthetic 看起来会不会继续玩”，不能直接回答“真人是否真的想继续玩”。
 - native 抓图：仅 fallback（Web 无法复现或 native 图形链路问题）。
 
 ### L4B 具身 agent 试玩层
 - 目标：验证 agent 实际进入 formal player surface、执行真实操作链路后，是否表现出可持续继续游玩的行为与可解释的玩家杠杆判断；这一层的设计目标是尽可能逼近真人评审“还想不想继续玩”的判断效果。
-- 默认：agent 试玩优先使用 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`。它会通过 `./scripts/run-producer-playtest.sh --open-headed` 拉起真实游玩入口、在同一浏览器 session 内执行最小真实操作链路（至少包含一步推进与一次玩法动作提交）、并把状态快照、截图、启动日志路径与 `L4B` summary 落到当前 artifact；只有启动脚本、没有实际 agent play session 与 summary/card 产物，不算 `L4B` 完成。
-- 与 `L4A` 的衔接：`./scripts/prepare-playability-l4-review.sh` 会在同一 artifact 目录里复制 `l4b-agent-playtest-card.md`、生成 `optional-internal-human-corroboration.md`、`manifest.json` 和可直接执行的 `commands.sh`；`commands.sh` 默认调用 `run-playability-l4b-agent.sh` 收口 `L4B` evidence。默认完整 `L4` 至少收口 `L4A` packet / cards、`L4B` agent 卡和最终 `l4-summary.md`；若还需要内部人类校准，只能作为 `L4B` 的可选佐证附录，不新增正式层。
-- 最低完成定义：脚本实际跑过、agent 实际游玩过、`evidence/l4b-agent-*/l4b-agent-summary.json` 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，并在 `l4-summary.md` 明确写出 `L4B` verdict；只有启动脚本，没有 agent 主动操作或 summary，不算完整 `L4B`。
+- 默认目标：使用候选 release Viewer 产物，由 agent 经正式 UI 完成真实玩家动作、核对可归因世界结果，并根据结果作出下一步决策。URL 取自本次 harness/producer 的实际输出；登录、操作和采证绑定同一 owned browser session。独立试玩的输入、有限时长和结果合同沿用[自主试玩设计](doc/testing/governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)。记录实际 `execution_mode`；固定脚本路线不能改名为自主规划证据。
+- 构建与驱动前置：release 不安装 `__AW_TEST__`，即使 URL 带 `test_api=1` 也不安装。需要测试 API 的受控回归必须显式使用 `build:viewer:visual-test` 的隔离产物，并启用测试查询参数；它只证明所声明的测试范围，不能代签 release UI。先核对实际产物和驱动能力，能力不匹配时在登录/玩法等待前停止并留痕；不要为通过测试给 release 注入测试 API。
+- 实际操作会话：默认 `hosted_public_join` 从 guest 识别开始，经正式登录/注册成为 authenticated；恢复会话也须核对当前 player 和 gameplay readiness 后再提交。准备者另开的 headed 窗口不能代签执行会话的登录。缺账号/配置、登录失败或 player 不一致分别记 blocker；不得自动签发 Hosted 身份或静默切换 `trusted_local_only`。凭据不进入日志、截图或卡片。
+- 当前工具差距：在 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 核对的 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 仍依赖测试 API、分开创建 producer/headed 与 automation session，并缺少实际操作会话的 Hosted 登录编排；其自动评分和早退结果也未满足下述合同。`commands.sh` 仍包含该旧入口，不能仅因生成成功就把它当作已验证的默认 L4B。实现与实际验收继续由 [#4438](https://github.com/eng-cc/oasis7/issues/4438) 承接，本次文档不增加尚未实现的 runner 参数。
+- 与 `L4A` 的衔接：scaffold 还复制 `l4b-agent-playtest-card.md`、生成 `optional-internal-human-corroboration.md`。完整 `L4` 至少收口 `L4A` packet / cards、当前尝试的 `L4B` agent 卡和最终 `l4-summary.md`。已有启动部件可用于准备 release 环境；能否形成 L4B 以实际会话和下述证据为准，不以启动器名称判定。
+- 执行结果：每次尝试独立保留 [RunResult](doc/testing/governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)，summary 显式引用 `current_attempt`、结果和证据路径。沿用 `preparing -> ready -> playing -> verifying -> reported -> cleanup`，阻断、取消和中断也记录已到阶段、停止原因、清理结果及未覆盖项；缺前置是 `blocked`，未知是 `inconclusive`，已执行且违反约定才是 `fail`。新尝试不能借旧成功产物通过。旧 runner 未完成该写出合同前，使用新 artifact 并保留已评审卡片，缺 RunResult 明确写缺失。
+- 最低完成定义：agent 实际游玩、具备当前尝试的动作/结果/后续决策证据，RunResult 与 `l4b-agent-playtest-card.md`（或等价正式卡片）已落盘，再由 `producer_system_designer` / `qa_engineer` 审阅 `L4B` verdict。只有启动、截图、时间/进度增长或 ACK，不足以填写 `agent_continue_observed`、玩家杠杆满分或 `world_activity_only=no`。五分项分别需要动作、可归因变化、结果解释、新决策与继续理由；缺观察保持未知。无实际试玩时 L4B 为 `missing`，不能把登录失败解释为 agent 不想玩。
+- 评审归属：runner 只追加当前尝试的事实；自动产物和旧 runner 导入默认 `unreviewed`，不能覆盖已经评审的最终 verdict。`unreviewed` 是评审占位状态，与执行 verdict、`go/watch/hold/block` 分开；重评须绑定当前候选和尝试，并保留旧结论。
 - 结论边界：这一层可以回答“agent 在真实操作链路里是否表现出继续玩的倾向”，并应尽量逼近真人评审效果，但仍不能自动等价于 `L5` 真实人类或外部市场验证。
 - 可选内部真人佐证：制作人试玩 / QA headed rerun 仍可沿用 `./scripts/run-producer-playtest.sh`；如执行，必须把结果写入 `optional-internal-human-corroboration.md` 或等价正式卡片，并在 `l4-summary.md` 里明确它是 `L4B` corroboration / contradiction，而不是新层级。只有人类试玩而没有对 `L4B` 的对照说明，不算合格佐证。
 - source-tree Viewer Web 开发态统一通过 `run-launcher-stack.sh`（通常由 `worktree-harness.sh` 或 `run-producer-playtest.sh` 调用）并走 freshness gate；当 `crates/oasis7_viewer/viewer.html`、`viewer.js`、`viewer_first_agent_claim_evidence.html`、`package.json`、`package-lock.json`、`vite.software-safe.config.mjs`、`scripts/`、`software_safe_src/` 或相关静态资源比 `dist/` 更新时，默认应优先重建 fresh dist。重建时由 canonical `viewer.html` 与 claim fixture 生成 `dist/software_safe.html`、`software_safe.js` 和 `software_safe_first_agent_claim_evidence.html`；freshness / dist copy contract 会验证这些 outputs。
+
+<a id="l4-toolchain-validation"></a>
+
+### L4 工具链合同验收
+
+下表承接 [L4 工具链 PRD](doc/testing/prd.md#l4-build-driver)与 [testing design](doc/testing/design.md)。它是实现修复时的定向验收矩阵；文档链接/格式检查通过不表示这些运行场景已经执行。每个适用场景按[来源到场景记录](doc/testing/governance/agent-runtime-self-playtest.design.md#selftest-source-scene)绑定候选、实际产物、配置/会话、命令或 UI 动作、原始证据和逐项 verdict。Hosted、浏览器、真实 provider 及玩法采证只在对应执行任务授权的范围与预算内进行。
+
+| 场景 | 操作与正/负路径 | 必须核对的结果 | 执行范围与证据边界 |
+| --- | --- | --- | --- |
+| L4-C01 构建与驱动 | 分别检查 canonical/compat 页面 × release/visual-test；release 加 `test_api=1`，测试产物分别启用和省略/关闭测试参数；用要求 API 的驱动连接 release | 两种入口保留兼容语义；release 始终无 API，测试产物仅显式启用时安装；驱动不匹配在登录/玩法等待前停止并报告实际 profile | 定向构建/浏览器能力检查；只证明该产物与驱动合同，不形成继续游玩结论 |
+| L4-C02 Hosted 会话 | 在实际执行 session 测 clean guest、正式 UI 登录成功、已认证恢复、缺配置、登录失败和另一窗口已登录但执行 session 未登录；操作前比较 player | 仅同一实际 session 的 authenticated/player/readiness 可放行；失败分阶段留痕，不自动签发身份，不回退 trusted local | 使用获授权的测试账号/环境；W3/transport 诊断或另一会话不能替代 Hosted 产品链路，凭据不进入证据 |
+| L4-C03 执行终态 | 对可创建 artifact 的启动、能力检查、登录、操作及采证失败设置受控故障；另测取消、中断、清理失败和“旧成功后新阻断” | 每次保留独立结果和停止阶段，`current_attempt` 指向新尝试；缺前置/未知/违约分别归类，清理结果不伪装玩法结果；旧汇总不覆盖当前阻断 | 先用受控 fixture 检查结果写出与指针，再用适用环境验证真实故障；若输出目录本身不可写，stderr/退出结果明确说明无法落盘，不能声称有结果文件 |
+| L4-C04 事实与判断 | 提供只有 progress/ACK/player 一致的样本、完整五项观察样本、缺一项样本；对已评审卡片重跑事实采集 | 机械事实不自动产生继续结论、满分或非环境推进判断；五项逐项引用证据，缺项未知；自动采集不覆写已评审 verdict，固定脚本如实记录执行模式 | fixture 可检查写入归属；真实继续倾向、因果与理解必须来自实际会话和评审，不能由 fixture 代签 |
+| L4-C05 兼容产物与操作入口 | 对照本手册、game-test、Viewer entry compatibility；在 L4-C01 四格中分别执行 alias 生成、dist copy 与 stale-dist rebuild，并复核 opt-in 正负例；不同 worktree 使用各自实际 URL/session | 所有兼容产物保留，复制/重建前后类型一致且不覆盖另一类输出；无固定端口、跨会话假定或 release 测试 API 等待；错误 URL/session 明确阻断，原锚点保留 | 文档链接检查、alias/copy/freshness 定向回归与适用浏览器验证；历史 URL 保留为历史证据，不当当前默认 |
+| L4-C06 离线 scaffold | 不带 `--with-l4a-stack`，以普通、含空格、含单引号的合法新目录运行 `--json`；再用已存在目录重试，并模拟生成后失败 | 成功 stdout 为单个 JSON 对象且退出 0；`run_id/output_dir/packet_path/summary_path` 与 manifest 一致，`manifest_path` 指向它；已存在目录退出 2 且不改原文件，部分输出失败明确范围并非成功 | 纯离线产物验收，不启动游戏/模型。当前实现的 shell 到 Python 序列化缺陷仍待 #4438 修复，不能在本次文档验证中记为通过 |
+
+L4-C05 保留已有三条回归入口：[alias 生成](crates/oasis7_viewer/scripts/viewer-compat-aliases.test.mjs)、[dist copy](scripts/copy-viewer-web-dist.test.sh)、[stale-dist fallback](scripts/agent-browser-viewer-dist-freshness-test.sh)。在实现验收中还须补齐上述两类构建的类型保持断言与实际入口采证，不能把现有 fixture 通过直接当作全部四格已覆盖。
+
+Scaffold 操作语义：`--json` 是已有 CLI 选项，成功的五字段摘要应只占 stdout，诊断写 stderr。若命令非零退出，即使目录已有卡片或 manifest，也只算部分输出；保留现场、检查失败原因，并为新尝试选择新目录/`--run-id`，不要自动删除或覆盖旧证据。`commands.sh` 只记录待执行步骤，其存在和可执行位不证明 L4A/L4B 成功。
 
 ### L5 真实人类 / 受控线上验证层
 - 目标：验证真实人类或受控外部玩家在真实时间、注意力和机会成本约束下，是否仍愿意继续玩；这是 `L4B` 之上的正式验证层。
@@ -519,11 +543,11 @@ env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-u
 - 若改动触达 `crates/oasis7_viewer/software_safe_src/**` 的结构、Prompt/Chat surface、主入口锚点或移动端分区导航，优先执行 `npm --prefix crates/oasis7_viewer run test:ui`；这套 Vitest + `@solidjs/testing-library` 回归用于验证 repo-owned `World / Targets / Command` 锚点、`Runtime Diagnostics` 降级面、`Agent Chat` 与 `Prompt Overrides` 的 DOM 可达性，不替代 S6 headed browser 证据。
 - 只要改动触达可视化相关代码、样式、资源或可见输出，S6 截图采证后默认执行模型视觉评审；典型触发面包括 UI component / DOM / CSS / layout / responsive / canvas / WebGL / pixel-world renderer / visual DTO 映射 / screenshot fixture / 图片资产 / 可见状态文案。`verdict=pass` 且 `confidence=high` 可替代 routine 人工视觉 review；`verdict=watch/block/human_escalation`、`confidence=low` 或对外 claim 影响必须升级人类 owner。输出格式使用 `doc/testing/templates/model-visual-review-card-template.md`；只有明确不影响任何可见 surface 的改动才能豁免，并需在任务日志或 PR evidence 写明理由。
 - 若需要稳定触发一条标准 `AgentSpoke` 供消息流验收，在 source runtime 启动前显式设置 `OASIS7_RUNTIME_AGENT_CHAT_ECHO=1`；该开关仅用于 Viewer / QA 测试态，默认产品路径必须保持关闭。
-- 若 Viewer 页面长期停在 `connecting` 且 `logicalTime=0`，必须查看 `window.__AW_TEST__.getState().lastError`；命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 等 fatal 时，按图形环境门禁失败处理，不进入玩法结论。
-- `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先查看 `window.__AW_TEST__.getState().renderMode`。
+- 若 Viewer 页面长期停在 `connecting` 且 `logicalTime=0`，显式测试产物可查看 `window.__AW_TEST__.getState().lastError`；release 使用可见错误和 console 证据，不等待测试 API。命中 `copy_deferred_lighting_id_pipeline` / `CONTEXT_LOST_WEBGL` 等 fatal 时，按图形环境门禁失败处理，不进入玩法结论。
+- `headed` 不是充分条件：若 `browser_env.json` / WebGL renderer 显示 `SwiftShader` 或其他 software renderer，先核对实际 `renderMode`；仅在显式测试产物中通过 `window.__AW_TEST__.getState().renderMode` 读取，release 使用可见入口与诊断证据。
   - `renderMode=viewer`（或兼容 alias `software_safe`）：允许继续做最小闭环验证（连接、选择目标、自然实时推进；若运行态被 blocker 卡住，则要求 blocker 文案显式可见）。
   - `renderMode` 既不是 `viewer` 也不是兼容 alias `software_safe`：仍按图形环境阻断处理；默认先使用 `--use-angle=gl,--ignore-gpu-blocklist` 固定硬件路径。
-- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，优先执行 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json`，由它内部调用 `./scripts/run-producer-playtest.sh --open-headed` 并自动采集证据，再审阅/补齐 `l4b-agent-playtest-card.md`。若需要内部人类 spot-check，只能沿用同一入口并把结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录。仅执行启动脚本、不产出 `L4B` summary/card，不算 `L4B` 完成；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-launcher-stack.sh --bundle-dir <bundle>` 启动。
+- `oasis7_web_launcher` / launcher Web 控制面：默认优先使用 GUI Agent 驱动产品动作，再用 Web 页面做状态与字段校验；Canvas 直点仅作补充。若目标是 `L4A synthetic`，优先走 harness / Web UI 闭环；若目标是 `L4B embodied-agent`，按本手册 L4B 的 release 正式 UI、实际 Hosted 会话和当前尝试结果合同执行，验收见 [L4-C01..06](#l4-toolchain-validation)。旧 `run-playability-l4b-agent.sh` 仍有上述实现差距，不能因自动生成 summary 就判定 L4B 完成。内部人类 spot-check 可用 `./scripts/run-producer-playtest.sh --open-headed`，结果写进 `optional-internal-human-corroboration.md` 或等价正式卡片，作为 `L4B` 校准附录；如需手动控制 bundle，再使用 `<bundle>/run-game.sh` 或 `./scripts/run-launcher-stack.sh --bundle-dir <bundle>` 启动。
 - agent / QA 若只是想在当前 worktree 内起一套隔离回归栈，优先执行 `./scripts/worktree-harness.sh up`，然后通过 `./scripts/worktree-harness.sh url` / `status --json` / `logs` 获取 URL 与状态；`run-launcher-stack.sh` 继续作为该 harness 的底层启动器，不应再被当作并行 worktree 回归的顶层主入口。
 - 不要把 Viewer 页面专用的 `agent-browser` 操作步骤直接套用到 launcher 控制面动作执行上。
 - 涉及 `Explorer / Transfer` 的闭环时，先准备可观测数据，再执行查询与字段断言；不得只以“页面打开了/接口返回 200”判定通过。

@@ -2,18 +2,37 @@
 
 审计轮次: 5
 
-## 标准字段（提交前必填 / 自动回填）
+## 标准字段（事实可自动采集 / 判断由评审填写）
+
 - 发布候选 / 版本号：用于横向对比，不可留空。
 - 测试场景：如 `新手首玩` / `微循环复测` / `版本对比`。
 - 测试者：记录执行者或来源（人测 / AI 辅助）。
 - 会话时长：至少记录开始 / 结束时间或总时长。
-- 关键操作链路：至少列出 1 条实际执行的主链路。
-- 结论标签：`继续可玩` / `需观察` / `高优先级阻断` 三选一。
+- 关键操作链路：列出实际执行的主链路；未入局则标明未执行及 blocker，不补造动作。
+- 结论标签：`未评审`；完成复核后按证据选择 `继续可玩` / `需观察` / `高优先级阻断`。
 - 过程证据：截图、录屏、console、启动日志至少其一；高优问题必须有证据路径。
 - 问题摘要：若存在负反馈，必须给出 1 句话摘要。
 - 玩家杠杆摘要：必须明确回答“玩家做了什么、世界因此改变了什么、是否打开新决策”；不得只写“世界很活跃 / AI 很忙”。
 
+## 运行结果与评审归属
+
+复用 [RunResult](https://github.com/eng-cc/oasis7/blob/main/doc/testing/governance/agent-runtime-self-playtest.design.md#6-接口与数据合同)与 [L4 执行结果](https://github.com/eng-cc/oasis7/blob/main/doc/testing/prd.md#l4-execution-result)。本节是现有卡片的运行引用，不新增通用门禁或要求另建报告。
+
+- `current_attempt` / `run_result_ref`：
+- 实际候选 / build / `viewer_build_profile`：
+- 实际 `execution_mode` / 操作 session 与 player 引用：
+- 当前阶段 / 停止原因 / 清理结果：
+- 逐项执行结果 / `blocking_reason` / `failure_signature` / 未覆盖范围：
+- `review_status`：`unreviewed`
+- `reviewed_attempt` / `reviewed_by` / 评审证据：
+
+阶段及每项 `pass / fail / blocked / inconclusive / not_applicable` 沿用 RunResult；缺构建、登录或其他前置记 blocked，未执行不能写玩法失败，也不能填“玩家不愿继续”。仅有部分观察时保留未知和已采事实。每次尝试单独保存，旧成功不覆盖当前阻断。
+
+自动回填仅限实际命令/动作、状态、返回值、时间及证据路径。按 [L4 判断合同](https://github.com/eng-cc/oasis7/blob/main/doc/testing/prd.md#l4-evidence-judgment)，继续结论、五项玩家杠杆和 `world_activity_only` 由 producer/QA 根据当前尝试的证据填写；人类原始回答仍保留来源，不以模型代填。旧 runner 可能仍自动填写这些判断字段，该输出统一视为 `unreviewed`，不能直接引用为评审结论。复核完成后记录 `review_status=reviewed` 与具体 attempt；重跑使用新 artifact，保留已评卡片，不让自动预填覆盖最终判定。
+
 ## 评分口径
+
+- 以下分数仅适用于已有实际回答或已核实观察的样本；缺失、未执行和未评审保留未知，不能自动按 0 分或满分补齐。
 - 单题默认按 1~5 计分：最负向答案 = 1，最正向答案 = 5。
 - 多选题（第 14 题）按体验信号计分：
   - 正向：`好奇` / `有成就感` / `有掌控感` / `想再试一次` 各 +1
@@ -40,6 +59,7 @@
   - 若玩家明确勾选“不会继续玩”且开放题给出阻断性原因，也建议至少标为 `需观察` 并进入问题池。
 - 玩家杠杆判定（独立于总评）：
   - 下列 5 项各记 `0/1`：`玩家关键动作明确`、`世界变化可归因到玩家`、`玩家能解释结果`、`结果打开新决策`、`这条链路会促使继续玩`
+  - 每项须写明当前尝试的判据与证据引用，可复用同一原始证据；只有五项都完成判断才汇总 `0~5`。时间/progress 推进或提交 ACK 不能直接填五分；ACK 也不能单独确定 `world_activity_only=no`。
   - `player_leverage_score = 0~5`
   - `4~5` => `pass`
   - `2~3` => `watch`
@@ -312,14 +332,14 @@
 
 ## 30. 玩家杠杆汇总
 
-- 玩家关键动作明确（`player_action_present`, 0/1）：
-- 世界变化可归因到玩家（`world_change_attributable_to_player`, 0/1）：
-- 玩家能解释结果（`causal_explainable`, 0/1）：
-- 结果打开新决策（`opened_decision`, 0/1）：
-- 这条链路会促使继续玩（`return_hook`, 0/1）：
-- `player_leverage_score`（0~5）：
-- `leverage_verdict`：`pass` / `watch` / `block`
-- `world_activity_only`：`yes` / `no`
+- 玩家关键动作明确（`player_action_present`, 0/1）：未评审；判据与证据：
+- 世界变化可归因到玩家（`world_change_attributable_to_player`, 0/1）：未评审；判据与证据：
+- 玩家能解释结果（`causal_explainable`, 0/1）：未评审；判据与证据：
+- 结果打开新决策（`opened_decision`, 0/1）：未评审；判据与证据：
+- 这条链路会促使继续玩（`return_hook`, 0/1）：未评审；判据与证据：
+- `player_leverage_score`（0~5）：未评审；五项齐备后汇总。
+- `leverage_verdict`：未评审；复核后填写 `pass` / `watch` / `block`。
+- `world_activity_only`：未知；复核后填写 `yes` / `no` 并给出归因证据。
 - 备注（`notes`）：
 
 # 附录

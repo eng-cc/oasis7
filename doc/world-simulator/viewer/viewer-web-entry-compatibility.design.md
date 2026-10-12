@@ -14,6 +14,7 @@
 | [Viewer Web Entry Compatibility PRD §5](viewer-web-entry-compatibility.prd.md#5-acceptance-criteria) | Keep the public `software_safe.html` / `software_safe.js` paths and evidence route generated from canonical HTML and claim fixture. | [Compatibility static entry output](viewer-web-entry-compatibility.design.md#compat-static-entry-output) | Viewer build/finalize generates all aliases. | Does not change the default entry, URL query semantics, bundle behavior, or player-facing flow. |
 | [Viewer Web Entry Compatibility PRD §5](viewer-web-entry-compatibility.prd.md#5-acceptance-criteria) | Keep each generated compatibility route in delivery copies. | [Compatibility dist copy](viewer-web-entry-compatibility.design.md#compat-dist-copy-contract) | Viewer dist copy and delivery scripts. | Does not alter generated contents or URL semantics. |
 | [Viewer Web Entry Compatibility PRD §5](viewer-web-entry-compatibility.prd.md#5-acceptance-criteria) | Keep compatibility routes available after stale-dist browser rebuild. | [Stale-dist browser fallback](viewer-web-entry-compatibility.design.md#compat-browser-fallback) | Agent-browser rebuild helper and generated dist. | Does not prove production hosting/CDN delivery or headed browser rendering. |
+| [Viewer 构建类型边界](viewer-web-entry-compatibility.prd.md#entry-build-profile-boundary) | canonical/compat 在 release/test 中保留兼容路由；测试 API 仅在显式测试产物及 opt-in 下可用。 | [构建类型与 API 安装](viewer-web-entry-compatibility.design.md#compat-build-profile-boundary) | Viewer 编译/finalize/copy/freshness；testing 拥有 L4 driver 与会话编排。 | 不新增 release 测试 API，不证明 runner 修复、Hosted 登录或自主试玩。 |
 
 ## 1. 设计定位
 `viewer` 是唯一正式 Web Viewer / UI 入口；`software_safe` 只保留为兼容 alias。设计目标不再是“主入口 + 第二 Viewer 分流”，而是围绕单一静态入口维护稳定浏览器玩法与观测闭环。
@@ -21,7 +22,7 @@
 ## 2. 核心设计决策
 - 保留 `viewer.html` + `software_safe_src/**` 和 canonical claim evidence fixture 作为源码输入，generated bundle 以 `viewer.js` 为 canonical；build 从这些 canonical inputs 生成 dist `viewer.html`、`software_safe.html`、`software_safe.js` 与 compat evidence page。
 - 删除第二 Viewer 跳转、退役模式入口与相关 UI 文案。
-- 保留 `__AW_TEST__` 作为统一自动化契约。
+- `__AW_TEST__` 仅作为显式测试产物在 opt-in 下的统一自动化契约；release 不安装测试 API，默认通过正式 UI 驱动。
 - 保留 freshness gate，防止 stale dist。
 
 ## 3. 设计结构
@@ -37,6 +38,7 @@
 ### 3.3 Automation
 - `viewer-primary-web-entry-regression.sh` 验证默认入口
 - `viewer-software-safe-step-regression*.sh` 验证 gameplay/blocked 契约
+- 上述脚本或其他消费者依赖 `__AW_TEST__` 时，必须明确选择显式测试构建；脚本名中的 primary/release 或 URL 参数都不能代替产物身份。其测试结果保持所执行场景的证明范围。
 
 <a id="compat-dist-copy-contract"></a>
 ### 3.4 Compatibility dist copy
@@ -45,6 +47,21 @@
 <a id="compat-browser-fallback"></a>
 ### 3.5 Stale-dist browser fallback
 - When agent-browser rebuilds stale Viewer output, the fallback copies compatibility assets from the generated source dist.
+
+<a id="compat-build-profile-boundary"></a>
+### 3.6 构建类型与 API 安装
+
+| 条件 | 构建与安装行为 | canonical/compat 一致性 |
+| --- | --- | --- |
+| release | 普通 Vite 构建令 `__OASIS7_VISUAL_TEST__` 为 false；`installTestApi` 直接返回。 | 两入口均不安装 API，追加任一受支持的 `test_api` 真值仍不安装。 |
+| 显式 visual-test，未 opt-in | `build:viewer:visual-test` 使用测试 entry 并输出 `.viewer-test-dist/`；API 安装仍需运行时 opt-in。 | 两入口均保持 API 未安装，普通兼容路径继续保留。 |
+| 显式 visual-test，已 opt-in | 编译期开关为 true 且 `isTestApiEnabled()` 为 true 时，安装约定 API。 | 两入口暴露同一接口集合与调用合同；状态比较需固定同候选与同配置/场景。 |
+
+`isTestApiEnabled()` 在基线 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 同时检查编译期开关和 `test_api`：值先去空白、转小写，只有 `1/true/yes/on` 为真。标准测试 URL 使用 `test_api=1`。Rust `packaging/dev`、兼容 alias、`render_mode` 或单独增加 query 参数均不能改变 Viewer 编译类型。
+
+finalize、dist copy 与 stale-dist fallback 应从调用方已选类型的源产物生成/复制对应 alias，不把 test 产物覆盖到 release 输出，也不为恢复测试 API 静默切换类型。保留原有三个 alias 设计 anchors 与其独立回归；本条只补充每条路径必须维持构建身份。
+
+L4 的默认 release/UI、实际 session 登录和结果判定由 [testing 设计](../../testing/design.md#l4-toolchain-design) 承接。该固定基线已有编译期 API 隔离，但 L4B runner 的默认构建/观测及 Hosted 前置尚未闭合；本次修正文档不代表其实现或真实浏览器验收已完成。
 
 ## 4. 关键约束
 - 不再暴露第二 Viewer 跳转
@@ -60,3 +77,4 @@
 | [Viewer Web Entry Compatibility PRD §5](viewer-web-entry-compatibility.prd.md#5-acceptance-criteria) | [Compatibility static entry output](viewer-web-entry-compatibility.design.md#compat-static-entry-output) | Prove canonical inputs generate the public compatibility aliases and evidence route with current claim fields. | Run [`viewer-compat-aliases.test.mjs`](../../../crates/oasis7_viewer/scripts/viewer-compat-aliases.test.mjs); its isolated fixture checks each generated alias and current claim field. | Current task evidence and generated alias fixture output. | Does not prove delivery copy or production hosting. |
 | [Viewer Web Entry Compatibility PRD §5](viewer-web-entry-compatibility.prd.md#5-acceptance-criteria) | [Compatibility dist copy](viewer-web-entry-compatibility.design.md#compat-dist-copy-contract) | Prove copy packaging retains each generated public compatibility path. | Run [`copy-viewer-web-dist.test.sh`](../../../scripts/copy-viewer-web-dist.test.sh); its fixture checks copied `software_safe.html`, `software_safe.js`, and claim evidence output. | Current task evidence and copied dist fixture output. | Does not prove production hosting/CDN delivery or headed browser rendering. |
 | [Viewer Web Entry Compatibility PRD §5](viewer-web-entry-compatibility.prd.md#5-acceptance-criteria) | [Stale-dist browser fallback](viewer-web-entry-compatibility.design.md#compat-browser-fallback) | Prove the stale-dist rebuild fallback serves the public compatibility route and current claim fields. | Run [`agent-browser-viewer-dist-freshness-test.sh`](../../../scripts/agent-browser-viewer-dist-freshness-test.sh); its isolated rebuild fixture checks compatibility HTML/JS/evidence routes. | Current task evidence and rebuilt dist fixture output. | Does not prove production hosting/CDN delivery or headed browser rendering. |
+| [Viewer 构建类型边界](viewer-web-entry-compatibility.prd.md#entry-build-profile-boundary) | [构建类型与 API 安装](viewer-web-entry-compatibility.design.md#compat-build-profile-boundary) | 证明 canonical/compat × release/test 四格中 alias、构建身份与 opt-in 行为一致，复制和 rebuild 不跨类型。 | [主手册 L4-C05](../../../testing-manual.md#l4-toolchain-validation)：固定同候选四格产物，分别核验 test opt-in 开/关、release 加参数负例及现有 copy/freshness 回归；实际构建/浏览器结果单列。 | 四格构建/入口结果、API 存在性和接口合同检查，以及本次 alias/copy/freshness 证据。 | 文档一致性不证明 runner 已修复、线上部署、Hosted 登录或 release 试玩。 |
