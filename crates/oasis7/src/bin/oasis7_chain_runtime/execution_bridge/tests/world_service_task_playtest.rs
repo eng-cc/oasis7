@@ -164,10 +164,6 @@ fn run_prepared_world_service(
         false,
     )
 }
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Explicit isolated service scenario and fault controls"
-)]
 fn run_prepared_world_service_scenario(
     ready: std::path::PathBuf,
     tick_interval: Duration,
