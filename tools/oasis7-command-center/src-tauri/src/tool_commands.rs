@@ -135,31 +135,75 @@ pub async fn tool_file_prepare(
     host: State<'_, ToolHost>,
     input: FileSignInput,
     operation_id: String,
-) -> Result<FileSignPrepared, String> {
+) -> Result<FileSignPrepared, tools::FilePrepareError> {
     let identity_input = input.clone();
+    let preflight_jobs = host.jobs.clone();
+    let preflight_operation = operation_id.clone();
     let (resource, fingerprint) = tauri::async_runtime::spawn_blocking(move || {
-        tools::file_prepare_identity(&identity_input).map_err(|e| e.to_string())
+        if let Some(job) = preflight_jobs
+            .list()
+            .map_err(tools::FilePrepareError::unknown)?
+            .into_iter()
+            .find(|job| job.id == preflight_operation)
+        {
+            return Err(tools::FilePrepareError::unknown(format!(
+                "原操作 {} 状态为 {}；请核对原操作",
+                job.id, job.state
+            )));
+        }
+        tools::file_prepare_identity(&identity_input).map_err(|error| {
+            tools::record_prepare_validation_failure(
+                &preflight_jobs,
+                &preflight_operation,
+                &identity_input,
+                error,
+            )
+        })
     })
     .await
-    .map_err(|_| "Input identity did not complete")??;
-    let expected = fingerprint.clone();
-    host.mutate(
-        operation_id,
-        fingerprint,
-        resource,
-        "file_prepare",
-        move || {
-            if tools::file_prepare_identity(&input)
-                .map_err(|e| e.to_string())?
-                .1
-                != expected
-            {
-                return Err("Prepared input identity changed".into());
+    .map_err(tools::FilePrepareError::unknown)??;
+    let jobs = host.jobs.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (job, fresh) = jobs
+            .admit_once(&operation_id, &fingerprint, &resource, "file_prepare")
+            .map_err(tools::FilePrepareError::unknown)?;
+        if !fresh {
+            return Err(tools::FilePrepareError::unknown(format!(
+                "原操作 {} 状态为 {}；请核对原操作，不能自动重发",
+                job.id, job.state
+            )));
+        }
+        // Before the first caller prepare, this identity recheck is read-only.
+        let recheck = tools::file_prepare_identity(&input).and_then(|(_, actual)| {
+            if actual == fingerprint {
+                Ok(())
+            } else {
+                Err(oasis7_command_center_core::Error::Invalid(
+                    "准备输入身份已变化".into(),
+                ))
             }
-            tools::prepare_file(&input).map_err(|e| e.to_string())
-        },
-    )
+        });
+        if let Err(error) = recheck {
+            jobs.finish(&operation_id, "failed", None)
+                .map_err(tools::FilePrepareError::unknown)?;
+            return Err(tools::FilePrepareError::no_effect(error));
+        }
+        // Past this boundary a caller job or files may exist, even on an error.
+        let result = tools::prepare_file(&input);
+        jobs.finish(
+            &operation_id,
+            if result.is_ok() {
+                "succeeded"
+            } else {
+                "unknown"
+            },
+            None,
+        )
+        .map_err(tools::FilePrepareError::unknown)?;
+        result.map_err(tools::FilePrepareError::unknown)
+    })
     .await
+    .map_err(tools::FilePrepareError::unknown)?
 }
 #[tauri::command]
 pub async fn tool_signer_submit(

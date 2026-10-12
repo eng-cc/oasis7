@@ -148,8 +148,14 @@ impl ContextService {
         revision: Option<&str>,
     ) -> Result<ContextRecoveryEvidence> {
         let binding = self.validate_binding(id, version)?;
-        let old = oasis7_context::git::read_at_commit(Path::new(&binding.root), entry_id, commit)
-            .map_err(failure)?;
+        let store = self.store(id, version)?;
+        let old = oasis7_context::git::read_at_commit_pinned(
+            &store.root,
+            store.directory(),
+            entry_id,
+            commit,
+        )
+        .map_err(failure)?;
         let config: oasis7_context::model::StoreConfig =
             format::strict_json(&old.config_bytes).map_err(Error::Context)?;
         if config.store_id != binding.store_id || config.project_id != binding.project_id {

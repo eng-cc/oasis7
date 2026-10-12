@@ -366,15 +366,16 @@ fn execute(args: &Arguments, prefix: &str) -> Result<Output> {
         "status" => {
             args.arity(1)?;
             args.allow(&[])?;
-            serialize(crate::git::status(&root).map_err(git_error)?)?
+            serialize(crate::git::status_pinned(&root, store.directory()).map_err(git_error)?)?
         }
         "history" => {
             args.arity(2)?;
             args.allow(&["limit"])?;
-            serialize(
-                crate::git::history(&root, &args.positional[1], args.number("limit", 20, 1000)?)
-                    .map_err(git_error)?,
-            )?
+            serialize(crate::application::history(
+                &store,
+                &args.positional[1],
+                args.number("limit", 20, 1000)?,
+            )?)?
         }
         "restore" => {
             args.arity(2)?;

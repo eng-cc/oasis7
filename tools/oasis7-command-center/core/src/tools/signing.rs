@@ -4,13 +4,7 @@ pub use recovery::{reconcile_file_prepare, reconcile_signer_job};
 
 pub fn prepare_file(input: &FileSignInput) -> Result<FileSignPrepared> {
     let (cfg, _) = binding()?;
-    let context: protocol::SignContext = serde_json::from_value(input.context.clone())?;
-    oasis7_local_signer::detached::signing_payload(&context, b"").map_err(invalid)?;
-    if context.deployment_id != cfg.deployment_id {
-        return Err(invalid("deployment does not match installation"));
-    }
-    protocol::validate_id(&input.signer_id).map_err(invalid)?;
-    protocol::validate_id(&input.grant_id).map_err(invalid)?;
+    let context = validate_prepare_input(input, &cfg.deployment_id)?;
     let first = signer_action("prepare", Some(&input.job_id))?;
     if first["status"] != "JOB_DIRECTORY_READY" {
         return Err(invalid(
@@ -281,7 +275,7 @@ pub(super) fn compatible_info(value: &serde_json::Value) -> bool {
 
 pub fn file_prepare_identity(input: &FileSignInput) -> Result<(String, String)> {
     let (cfg, _) = binding()?;
-    let context: protocol::SignContext = serde_json::from_value(input.context.clone())?;
+    let context = validate_prepare_input(input, &cfg.deployment_id)?;
     let (digest, size, device_id, inode) =
         selected_file_identity(Path::new(&input.file_path), 1024 * 1024 * 1024)?;
     let context_bytes = identity::canonical_json(&context).map_err(invalid)?;
@@ -303,6 +297,26 @@ pub fn file_prepare_identity(input: &FileSignInput) -> Result<(String, String)> 
         format!("signer:{}:{}", cfg.installation_id, input.job_id),
         fingerprint,
     ))
+}
+
+// This function and selected_file_identity are read-only. Keep all ordinary
+// correctable input validation ahead of the first caller prepare invocation.
+fn validate_prepare_input(
+    input: &FileSignInput,
+    deployment_id: &str,
+) -> Result<protocol::SignContext> {
+    let context: protocol::SignContext = serde_json::from_value(input.context.clone())?;
+    oasis7_local_signer::detached::signing_payload(&context, b"").map_err(invalid)?;
+    if context.deployment_id != deployment_id {
+        return Err(invalid("deployment does not match installation"));
+    }
+    protocol::validate_id(&input.job_id).map_err(invalid)?;
+    protocol::validate_id(&input.signer_id).map_err(invalid)?;
+    protocol::validate_id(&input.grant_id).map_err(invalid)?;
+    if !Path::new(&input.file_path).is_absolute() {
+        return Err(invalid("absolute selected file required"));
+    }
+    Ok(context)
 }
 
 fn read_prepared(
@@ -403,6 +417,126 @@ fn source_is_current(source: &FileSourceEvidence) -> Result<bool> {
 #[cfg(all(test, unix))]
 mod file_tests {
     use super::*;
+    #[test]
+    fn prepare_input_validation_rejects_correctable_inputs_before_job_creation() {
+        let base = FileSignInput {
+            job_id: "job-one".into(),
+            file_path: "/selected/file".into(),
+            signer_id: "signer-one".into(),
+            grant_id: "grant-one".into(),
+            context: serde_json::json!({
+                "deployment_id":"deployment-one","network_id":"network-one",
+                "task_uid":"task-one","source_head_oid":"a".repeat(40),
+                "protocol_context":{"authority_id":"authority-one","rollback_ticket":"ticket-one","receipt_id":"receipt-one","nonce":"nonce-one"}
+            }),
+        };
+        assert!(validate_prepare_input(&base, "deployment-one").is_ok());
+        assert!(validate_prepare_input(&base, "different-deployment").is_err());
+        let mut invalid = base.clone();
+        invalid.context = serde_json::Value::Null;
+        assert!(validate_prepare_input(&invalid, "deployment-one").is_err());
+        invalid = base.clone();
+        invalid.context["source_head_oid"] = "invalid-oid".into();
+        assert!(validate_prepare_input(&invalid, "deployment-one").is_err());
+        invalid = base.clone();
+        invalid.grant_id.clear();
+        assert!(validate_prepare_input(&invalid, "deployment-one").is_err());
+        invalid = base.clone();
+        invalid.job_id = "../../another-job".into();
+        assert!(validate_prepare_input(&invalid, "deployment-one").is_err());
+        invalid = base;
+        invalid.file_path = "relative-file".into();
+        assert!(validate_prepare_input(&invalid, "deployment-one").is_err());
+    }
+    fn rejected_input() -> FileSignInput {
+        FileSignInput {
+            job_id: "job-one".into(),
+            file_path: "/missing/file".into(),
+            signer_id: "signer-one".into(),
+            grant_id: "grant-one".into(),
+            context: serde_json::Value::Null,
+        }
+    }
+    #[test]
+    fn no_effect_failure_claim_prevents_same_id_from_starting_prepare() {
+        let jobs = jobs::ToolJobs::open(":memory:").unwrap();
+        let error = record_prepare_validation_failure(
+            &jobs,
+            "operation-one",
+            &rejected_input(),
+            "invalid context",
+        );
+        assert!(matches!(error.effect, FilePrepareEffect::None));
+        assert_eq!(jobs.list().unwrap()[0].state, "failed");
+        assert!(
+            jobs.admit_once(
+                "operation-one",
+                "prepared-fingerprint",
+                "signer:installation:job-one",
+                "file_prepare"
+            )
+            .is_err()
+        );
+        assert!(
+            jobs.admit_once(
+                "corrected-operation",
+                "prepared-fingerprint",
+                "signer:installation:job-one",
+                "file_prepare"
+            )
+            .unwrap()
+            .1
+        );
+    }
+    #[test]
+    fn rejected_preflight_cannot_label_original_unknown_operation_no_effect() {
+        let jobs = jobs::ToolJobs::open(":memory:").unwrap();
+        jobs.admit_once(
+            "operation-one",
+            "prepared-fingerprint",
+            "signer:installation:job-one",
+            "file_prepare",
+        )
+        .unwrap();
+        jobs.finish("operation-one", "unknown", None).unwrap();
+        let error = record_prepare_validation_failure(
+            &jobs,
+            "operation-one",
+            &rejected_input(),
+            "file disappeared",
+        );
+        assert!(matches!(error.effect, FilePrepareEffect::Unknown));
+        assert_eq!(jobs.list().unwrap()[0].state, "unknown");
+    }
+    #[test]
+    fn concurrent_preflight_failure_and_prepare_cannot_both_claim_same_id() {
+        use std::sync::{Arc, Barrier};
+        let jobs = Arc::new(jobs::ToolJobs::open(":memory:").unwrap());
+        let barrier = Arc::new(Barrier::new(2));
+        let prepare_jobs = jobs.clone();
+        let prepare_barrier = barrier.clone();
+        let prepare = std::thread::spawn(move || {
+            prepare_barrier.wait();
+            prepare_jobs.admit_once(
+                "operation-one",
+                "prepared-fingerprint",
+                "signer:installation:job-one",
+                "file_prepare",
+            )
+        });
+        barrier.wait();
+        let failure = record_prepare_validation_failure(
+            &jobs,
+            "operation-one",
+            &rejected_input(),
+            "invalid context",
+        );
+        let preparation = prepare.join().unwrap();
+        match failure.effect {
+            FilePrepareEffect::None => assert!(preparation.is_err()),
+            FilePrepareEffect::Unknown => assert!(preparation.unwrap().1),
+        }
+    }
     #[test]
     fn changed_original_file_cannot_reuse_prepared_digest() {
         let temp = tempfile::tempdir().unwrap();

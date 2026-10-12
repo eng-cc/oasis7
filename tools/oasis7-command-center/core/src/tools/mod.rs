@@ -46,6 +46,64 @@ pub struct FileSignPrepared {
     #[ts(type = "unknown")]
     pub result: serde_json::Value,
 }
+/// Only a read-only preflight failure can permit editing and a new operation.
+/// Errors after preparing starts, existing operations and interrupted work stay unknown.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum FilePrepareEffect {
+    None,
+    Unknown,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct FilePrepareError {
+    pub message: String,
+    pub effect: FilePrepareEffect,
+}
+impl FilePrepareError {
+    pub fn no_effect(message: impl std::fmt::Display) -> Self {
+        Self {
+            message: message.to_string(),
+            effect: FilePrepareEffect::None,
+        }
+    }
+    pub fn unknown(message: impl std::fmt::Display) -> Self {
+        Self {
+            message: message.to_string(),
+            effect: FilePrepareEffect::Unknown,
+        }
+    }
+}
+/// Atomically claim a rejected invocation before proving that its ID cannot
+/// also start preparing elsewhere. No signer job or files are touched here.
+pub fn record_prepare_validation_failure(
+    jobs: &jobs::ToolJobs,
+    operation_id: &str,
+    input: &FileSignInput,
+    error: impl std::fmt::Display,
+) -> FilePrepareError {
+    let input_bytes = match serde_json::to_vec(input) {
+        Ok(bytes) => bytes,
+        Err(error) => return FilePrepareError::unknown(error),
+    };
+    let fingerprint = format!("prepare-validation:{}", identity::sha256_hex(&input_bytes));
+    let admission = jobs.admit_once(
+        operation_id,
+        &fingerprint,
+        &format!("prepare-validation:{operation_id}"),
+        "file_prepare",
+    );
+    match admission {
+        Ok((_, true)) => match jobs.finish(operation_id, "failed", None) {
+            Ok(_) => FilePrepareError::no_effect(error),
+            Err(error) => FilePrepareError::unknown(error),
+        },
+        Ok((job, false)) => FilePrepareError::unknown(format!(
+            "原操作 {} 状态为 {}；请核对原操作",
+            job.id, job.state
+        )),
+        Err(error) => FilePrepareError::unknown(error),
+    }
+}
 fn invalid(s: impl ToString) -> Error {
     Error::Invalid(s.to_string())
 }

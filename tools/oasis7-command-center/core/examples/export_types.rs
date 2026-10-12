@@ -15,6 +15,8 @@ fn main() {
         ToolObservation::decl(),
         FileSignInput::decl(),
         FileSignPrepared::decl(),
+        FilePrepareEffect::decl(),
+        FilePrepareError::decl(),
         ToolJob::decl(),
         oasis7_command_center_core::tools::cli::CliInstallation::decl(),
         PrivateInputRef::decl(),

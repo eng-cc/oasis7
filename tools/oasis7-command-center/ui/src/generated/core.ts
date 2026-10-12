@@ -11,6 +11,8 @@ expectedRevision: string | null, actor: string, };
 export type ToolObservation = { tool_id: string, state: string, path: string | null, reason: string | null, observed_at: string, info: unknown, };
 export type FileSignInput = { job_id: string, file_path: string, signer_id: string, grant_id: string, context: unknown, };
 export type FileSignPrepared = { job_id: string, prepared_fingerprint: string, file_sha256: string, payload_sha256: string, operation_key: string, work_dir: string, result: unknown, };
+export type FilePrepareEffect = "none" | "unknown";
+export type FilePrepareError = { message: string, effect: FilePrepareEffect, };
 export type ToolJob = { id: string, fingerprint: string, resource: string, kind: string, state: string, observed_at: string, result: string | null, };
 export type CliInstallation = { tool_id: string, release_id: string, path: string, sha256: string, terminal_path_configured: boolean, };
 export type PrivateInputRef = { bindingId: string, bindingVersion: number, entryId: string, revision: string, scope: string, };

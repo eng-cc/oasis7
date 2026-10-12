@@ -82,6 +82,10 @@ pub fn save_raw(
 ) -> Result<SaveResult> {
     store.put(id, candidate, condition, actor)
 }
+pub fn history(store: &Store, id: &str, limit: usize) -> Result<crate::git::History> {
+    crate::git::history_pinned(&store.root, store.directory(), id, limit)
+        .map_err(|e| ContextError::new(e.code, e.message))
+}
 pub fn restore_entry(
     store: &Store,
     id: &str,
@@ -89,7 +93,7 @@ pub fn restore_entry(
     condition: WriteCondition,
     actor: &str,
 ) -> Result<(String, SaveResult)> {
-    let old = crate::git::read_at_commit(&store.root, id, commit)
+    let old = crate::git::read_at_commit_pinned(&store.root, store.directory(), id, commit)
         .map_err(|e| ContextError::new(e.code, e.message))?;
     let config: StoreConfig = crate::format::strict_json(&old.config_bytes)?;
     config.validate()?;

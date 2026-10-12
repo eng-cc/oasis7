@@ -389,7 +389,7 @@ impl Store {
                 Err(_) => warnings.push("invalid local state directory".into()),
             }
         }
-        let history = match crate::git::status(&self.root) {
+        let history = match crate::git::status_pinned(&self.root, self.directory()) {
             Ok(s) => serde_json::to_value(s).unwrap(),
             Err(e) => serde_json::json!({"available":false,"code":e.code}),
         };

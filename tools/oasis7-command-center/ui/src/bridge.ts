@@ -50,7 +50,16 @@ export async function subscribeRuntime(invalidate: () => void, exitRequired: () 
   if (failed?.status === 'rejected') { stops.forEach(stop => stop()); throw failed.reason; }
   return () => stops.forEach(unlisten => unlisten());
 }
-export function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+export function errorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') return error.message;
+  return String(error);
+}
+// Unstructured failures (old hosts, transport loss or interrupted work) never
+// prove that preparing a job had no effects.
+export function prepareFailureEffect(error: unknown): 'none' | 'unknown' {
+  return typeof error === 'object' && error !== null && 'effect' in error && error.effect === 'none'
+    && 'message' in error && typeof error.message === 'string' ? 'none' : 'unknown';
+}
 export function statusLabel(state: string): string {
   return ({ loading: '读取中', ready: '已读取', disconnected: '未接入', success: '已读取', empty: '读取成功 · 空', partial: '部分读取', stale: '已过期', error: '读取失败', unconnected: '未接入' } as Record<string,string>)[state] ?? state;
 }

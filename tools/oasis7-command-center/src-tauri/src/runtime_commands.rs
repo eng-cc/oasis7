@@ -155,6 +155,18 @@ impl RuntimeHost {
         })
         .await
     }
+
+    async fn answer_request(
+        &self,
+        host: &Host,
+        reply: RequestAnswer,
+    ) -> Result<RuntimeSnapshot, String> {
+        let jobs = self.jobs.clone();
+        self.project_work(host, move |runtime, project| {
+            jobs.with_open(|| runtime.answer_request(project, reply))
+        })
+        .await
+    }
 }
 
 fn invalidate(app: &tauri::AppHandle) {
@@ -312,9 +324,7 @@ pub async fn answer_runtime_request(
     handle: tauri::AppHandle,
     reply: RequestAnswer,
 ) -> Result<RuntimeSnapshot, String> {
-    let result = runtime
-        .project_work(&host, move |r, p| r.answer_request(p, reply))
-        .await;
+    let result = runtime.answer_request(&host, reply).await;
     invalidate(&handle);
     result
 }
@@ -405,6 +415,44 @@ pub async fn cancel_exit_wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn request_answers_are_rejected_by_exit_admission_before_runtime_work() {
+        let host = Host::open(PathBuf::from(":memory:")).unwrap();
+        *host.project.lock().unwrap() = Some(Project {
+            id: "fixture".into(),
+            path: "/fixture".into(),
+            git_common_dir: "/fixture/.git".into(),
+            branch: Some("fixture".into()),
+            head: "fixture-head".into(),
+            environment: "local".into(),
+        });
+        let runtime = RuntimeHost::open(PathBuf::from(":memory:")).unwrap();
+        let reply = RequestAnswer {
+            request_id: "original-request".into(),
+            target: RuntimeTarget {
+                instance_id: "original-instance".into(),
+                thread_id: "original-thread".into(),
+                turn_id: "original-turn".into(),
+            },
+            decision: Some("accept".into()),
+            answers: Default::default(),
+        };
+        runtime.jobs.freeze().unwrap();
+        let frozen = tauri::async_runtime::block_on(runtime.answer_request(&host, reply.clone()));
+        assert!(
+            frozen
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
+        runtime.jobs.unfreeze().unwrap();
+        let reopened = tauri::async_runtime::block_on(runtime.answer_request(&host, reply));
+        assert!(
+            !reopened
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
+    }
 
     #[test]
     fn quit_projection_includes_running_and_unknown_tool_operations() {

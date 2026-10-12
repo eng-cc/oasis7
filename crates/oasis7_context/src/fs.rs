@@ -190,6 +190,23 @@ impl Directory {
         let metadata = self.file.metadata()?;
         Ok((metadata.dev(), metadata.ino()))
     }
+    /// Pin a child's working directory to this held descriptor, never its mutable pathname.
+    pub fn pin_command_cwd(&self, command: &mut std::process::Command) -> Result<()> {
+        use std::os::unix::process::CommandExt;
+        let directory = self.file.try_clone()?;
+        // SAFETY: the closure owns the duplicated descriptor through spawn. After fork it
+        // performs only fchdir and errno retrieval; no allocation or lock acquisition.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::fchdir(directory.as_raw_fd()) != 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            });
+        }
+        Ok(())
+    }
     pub fn file_private_permissions(&self, n: &str) -> Result<bool> {
         let c = name(n)?;
         let fd = unsafe {

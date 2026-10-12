@@ -330,7 +330,7 @@ impl ContextService {
     pub fn history(&self, id: &str, version: u64, entry_id: &str) -> Result<serde_json::Value> {
         let store = self.store(id, version)?;
         Ok(serde_json::to_value(
-            oasis7_context::git::history(&store.root, entry_id, 100).map_err(failure)?,
+            application::history(&store, entry_id, 100).map_err(Error::Context)?,
         )?)
     }
     pub fn restore_entry(

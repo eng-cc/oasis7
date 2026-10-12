@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalTools from './LocalTools';
-const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn()}));
-vi.mock('./bridge',()=>({connected:()=>true,errorMessage:(e:unknown)=>String(e),observedTime:(v:string)=>v,contextBridge:api,toolsBridge:api}));
+const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn()}));
+vi.mock('./bridge',async importOriginal=>({...await importOriginal<typeof import('./bridge')>(),connected:()=>true,observedTime:(v:string)=>v,contextBridge:api,toolsBridge:api}));
 const binding={id:'bound',bindingVersion:1,root:'/private/context',storeId:'store',projectId:'oasis7',registeredProjectId:'project',name:'private',directoryIdentity:'identity'};
 const metadata={schema_version:'oasis7.context_entry.v1',project_id:'oasis7',id:'machine',kind:'machine',title:'<img src=x onerror=alert(1)>',environment:'local',owner:'human',tags:['preserved'],state:'active',updated_at:'2026-10-12T00:00:00Z',updated_by:'human',verification:null,credential_refs:[{id:'vault',provider:'native',locator:'opaque',usage:'secret reference'}],links:[]};
 const raw=`---\n${JSON.stringify(metadata)}\n---\n<script>evil()</script>`;
@@ -37,5 +37,51 @@ describe('private library rendering and conflict handling',()=>{
     render(()=> <LocalTools/>);
     await waitFor(()=>expect(screen.getByText('当前 App 用户尚未绑定为签名调用者。')).toBeInTheDocument());
     expect(screen.getByText(/App is not the bound ordinary caller/).closest('details')).not.toBeNull();
+  });
+});
+async function fillSigning(context='{}'){
+  api.signer.mockResolvedValue({state:'available'});api.chooseFile.mockResolvedValue('/selected/source');
+  render(()=> <LocalTools/>);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'选择待签名文件'})).not.toBeDisabled());
+  fireEvent.click(screen.getByRole('button',{name:'选择待签名文件'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+  fireEvent.input(screen.getByLabelText('签名 Job ID'),{target:{value:'original-job'}});
+  fireEvent.input(screen.getByLabelText('签名身份'),{target:{value:'signer-one'}});
+  fireEvent.input(screen.getByLabelText('实际 grant ID'),{target:{value:'grant-one'}});
+  fireEvent.input(screen.getByLabelText('完整签名上下文'),{target:{value:context}});
+}
+describe('prepare effect boundary',()=>{
+  it('allows correction and a new operation after proven no-effect preflight failure',async()=>{
+    api.prepare.mockRejectedValueOnce({message:'invalid context',effect:'none'});
+    await fillSigning('null');
+    fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(screen.getByText(/本次准备未创建或修改签名 Job/)).toBeInTheDocument());
+    expect(screen.getByLabelText('完整签名上下文')).not.toBeDisabled();
+    expect(screen.getByRole('button',{name:'准备固定请求'})).not.toBeDisabled();
+    expect(screen.getByLabelText('签名 Job ID')).toHaveValue('original-job');
+    const originalOperation=api.prepare.mock.calls[0][1];
+    fireEvent.input(screen.getByLabelText('完整签名上下文'),{target:{value:'{"deployment_id":"corrected"}'}});
+    api.prepare.mockRejectedValueOnce({message:'still invalid',effect:'none'});
+    fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(api.prepare).toHaveBeenCalledTimes(2));
+    expect(api.prepare.mock.calls[1][1]).not.toBe(originalOperation);
+    expect(api.prepare.mock.calls[1][0].job_id).toBe('original-job');
+  });
+  it.each([{message:'write failed after job creation',effect:'unknown'},new Error('transport lost')])('keeps original job frozen when no-effect cannot be established: %j',async error=>{
+    api.prepare.mockRejectedValueOnce(error);await fillSigning();
+    fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(screen.getByText(/无法确认本次准备是否产生副作用/)).toBeInTheDocument());
+    expect(screen.getByLabelText('签名 Job ID')).toBeDisabled();
+    expect(screen.getByLabelText('签名 Job ID')).toHaveValue('original-job');
+    expect(screen.getByLabelText('完整签名上下文')).toBeDisabled();
+    expect(screen.getByRole('button',{name:'准备固定请求'})).toBeDisabled();
+    expect(screen.getByRole('button',{name:'核对原准备操作'})).not.toBeDisabled();
+    expect(api.prepare).toHaveBeenCalledTimes(1);
+  });
+  it('keeps malformed JSON editable without invoking native prepare',async()=>{
+    await fillSigning('{');fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(screen.getByRole('status')).toBeInTheDocument());
+    expect(screen.getByLabelText('完整签名上下文')).not.toBeDisabled();
+    expect(api.prepare).not.toHaveBeenCalled();
   });
 });

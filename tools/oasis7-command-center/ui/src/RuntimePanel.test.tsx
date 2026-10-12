@@ -32,6 +32,27 @@ function fakeApi(initial: RuntimeSnapshot) {
 }
 const subscribe = vi.fn(async () => () => {});
 
+it('freezes original request replies during exit and preserves the draft until exit is cancelled', async () => {
+  const request = {requestId:'original',instanceId:'instance-1',threadId:'thread-1',turnId:'turn-1',method:'input',state:'pending',summary:'退出期间请求',questions:[{id:'q',header:'输入',question:'必要答案',options:[],isSecret:false}],allowedDecisions:[]};
+  const {api,setSnapshot} = fakeApi(snapshot({requests:[request]}));
+  render(() => <RuntimePanel project={project} view="attention" api={api} subscribe={subscribe} />);
+  const input=await screen.findByLabelText('回答 q');
+  fireEvent.input(input,{target:{value:'保留原请求答案'}});
+  const submit=screen.getByRole('button',{name:'向原请求回复一次'});
+  expect(submit).toBeEnabled();
+  setSnapshot(snapshot({requests:[request],exitWaiting:true}));
+  fireEvent.click(screen.getByRole('button',{name:'只读核对状态'}));
+  await waitFor(()=>expect(submit).toBeDisabled());
+  fireEvent.click(submit); expect(api.answer).not.toHaveBeenCalled();
+  expect(input).toHaveValue('保留原请求答案');
+  setSnapshot(snapshot({requests:[request],exitWaiting:false}));
+  fireEvent.click(screen.getByRole('button',{name:'只读核对状态'}));
+  await waitFor(()=>expect(submit).toBeEnabled());
+  fireEvent.click(submit);
+  await waitFor(()=>expect(api.answer).toHaveBeenCalledTimes(1));
+  expect(api.answer).toHaveBeenCalledWith({requestId:'original',target:{instanceId:'instance-1',threadId:'thread-1',turnId:'turn-1'},decision:null,answers:{q:['保留原请求答案']}});
+});
+
 it('allows one genuine original request answer after an unrelated lost acknowledgement', async () => {
   const {api,setSnapshot} = fakeApi(snapshot());
   api.steer.mockRejectedValue(new Error('lost acknowledgement'));

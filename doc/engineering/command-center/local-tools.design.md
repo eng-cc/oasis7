@@ -19,7 +19,7 @@
 
 context 的 `application` 应用接口共享显式资料 root、完整原文校验、条件保存、历史恢复身份校验及原快照实现；CLI 不在 GUI 进程中运行。`info --json` 固定 schema 1，未知构建来源返回 null；它不打开资料库或 custody。caller 的 info 和其 context info 分别表示各自能力。
 
-资料绑定持久保存真实 root、设备号/inode、store ID、原 store 项目 ID、面板关联项目 ID 和单调版本。所有读写按原绑定核对目录及 store 身份。普通项目和私有资料目录双向包含均拒绝，普通索引、缓存回退、搜索、阅读历史访问和来源打开都检查私有隔离；用户历史数据保留而不经普通入口暴露。正文只按需读取，不持久复制到普通文档索引。
+资料绑定持久保存真实 root、设备号/inode、store ID、原 store 项目 ID、面板关联项目 ID 和单调版本。所有读写按原绑定核对目录及 store 身份。Git 历史读取与恢复通过持有的原目录身份执行，并在读取前后核对绑定路径；目录被更名或替换时拒绝，不从复用路径读取另一个资料库。普通项目和私有资料目录双向包含均拒绝，普通索引、缓存回退、搜索、阅读历史访问和来源打开都检查私有隔离；用户历史数据保留而不经普通入口暴露。正文只按需读取，不持久复制到普通文档索引。
 
 简化表单修改完整原文中的负责字段，保留其余合法元数据。新建是 create-only，修改提交读取时 revision；CLI 与 GUI 使用原跨进程写锁。冲突保留草稿，重新读取后可再次保存；已确定未写入的错误不能锁死目标。资料落盘、Git 提交和远端同步是独立事实。
 
@@ -42,7 +42,7 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 后端只读取固定安装描述并核对普通 caller UID、受保护实际路径、release manifest 和 executable SHA-256。未知或不兼容安装保留原状；不经普通 App 读取 custody。
 
-文件签名要求明确 file、job、signer、grant 和完整合法 SignContext；不自动填示例值。原 caller 第一次 prepare 建立私有 job，原 Rust 类型生成 context、file envelope 和 canonical JobInput，第二次 prepare 固定原请求。提交和 inspect 绑定原 job；准备不等于 worker 已授权。独立验签重建相同 context 的 envelope，并核对用户明确的预期公钥。选中文件必须是有界普通文件，不接受 FIFO、符号链接或读取中变动。
+文件签名要求明确 file、job、signer、grant 和完整合法 SignContext；不自动填示例值。只读准备校验明确确认无副作用时，表单保留草稿并允许修正；进入原 caller 准备边界、旧操作或结果未知时仍冻结原 Job，先核对，不能另建操作绕过未知结果。原 caller 第一次 prepare 建立私有 job，原 Rust 类型生成 context、file envelope 和 canonical JobInput，第二次 prepare 固定原请求。提交和 inspect 绑定原 job；准备不等于 worker 已授权。独立验签重建相同 context 的 envelope，并核对用户明确的预期公钥。选中文件必须是有界普通文件，不接受 FIFO、符号链接或读取中变动。
 
 缺少密钥、policy、grant 或 purpose 配置时明确显示未配置；当前暂停的管理员集成不能用 shell/sudo 透传代替。
 
@@ -52,7 +52,7 @@ context 的 `application` 应用接口共享显式资料 root、完整原文校�
 
 工具操作先在 SQLite 事务中原子登记 operation ID、输入指纹、不可变目标资源及动作。相同 ID/输入回读既有记录，不重放；不同输入拒绝；已有 running/unknown 占位防止重复副作用。终态不倒退，崩溃中的任务转 unknown，不由进程消失推导回滚。
 
-完整退出冻结同一准入机制，并检查所有项目的 Codex 和 ToolJobs；运行中或未知效果阻止安全退出声明。窗口关闭仍留后台。Codex 新动作与冻结使用同一锁协调，已登记的后台任务继续回读。口令和正文不作为恢复参数。
+完整退出冻结同一准入机制，并检查所有项目的 Codex 和 ToolJobs；运行中或未知效果阻止安全退出声明。窗口关闭仍留后台。Codex 新动作及原请求回复与冻结使用同一锁协调；等待退出时不发送批准或回答，取消退出后保留原请求和未发送草稿。已登记的后台任务继续回读。口令和正文不作为恢复参数。
 
 <a id="DES-CC-TOOLS-004"></a>
 
