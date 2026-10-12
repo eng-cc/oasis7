@@ -56,11 +56,17 @@ impl WorldServiceProjection {
         caller_public_key: &str,
     ) -> Result<Self, String> {
         let mut projection = Self::from_world(world, authorized_agent)?;
-        if let Some(agent) = authorized_agent
-            && super::agent_authority::owner_public_key(world, agent)? == caller_public_key
-        {
-            projection.canonical_agent_chat = super::agent_chat::owner_view(world, agent)?;
-            projection.game_task_control = super::game_task::current_control(world, agent)?;
+        if let Some(agent) = authorized_agent {
+            if super::agent_authority::owner_public_key(world, agent)? == caller_public_key {
+                projection.canonical_agent_chat = super::agent_chat::owner_view(world, agent)?;
+            }
+            if let Some(control) = super::game_task::current_control(world, agent)? {
+                let fence = oasis7_agent_api::game::GameTaskFenceV1::from_control(&control);
+                if super::game_task::validate_task_reader(world, &fence, caller_public_key).is_ok()
+                {
+                    projection.game_task_control = Some(control);
+                }
+            }
         }
         Ok(projection)
     }

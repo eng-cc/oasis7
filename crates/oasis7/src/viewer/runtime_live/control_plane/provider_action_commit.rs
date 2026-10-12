@@ -767,6 +767,7 @@ fn provider_service_cognition_payload(
         response_artifact,
         delegation_generation: signer.delegation_generation,
         causal_proposal: Some(causal_proposal),
+        task_fence: None,
     };
     let signed = crate::world_service::authority::sign_read_request(
         "cognition",

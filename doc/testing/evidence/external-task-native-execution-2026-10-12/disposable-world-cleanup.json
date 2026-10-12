@@ -1,0 +1,22 @@
+{
+  "schema": "oasis7/disposable-task-world-cleanup/v1",
+  "scope": "owned prepared-world fixtures only; canonical attempt-2 cleanup remains failed",
+  "records": [
+    {
+      "pid": 4085,
+      "world_deleted": true,
+      "private_device_and_goal_records_deleted": true
+    },
+    {
+      "pid": 79822,
+      "world_deleted": true,
+      "private_device_and_goal_records_deleted": true
+    },
+    {
+      "pid": 91007,
+      "world_deleted": true,
+      "private_device_and_goal_records_deleted": true
+    }
+  ],
+  "shared_cargo_cache_preserved": true
+}

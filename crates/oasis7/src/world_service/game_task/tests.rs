@@ -531,3 +531,6 @@ fn goal_snapshot(world: &World) -> crate::runtime::Snapshot {
         "fixture",
     )
 }
+
+#[path = "tests/executor.rs"]
+mod executor_tests;

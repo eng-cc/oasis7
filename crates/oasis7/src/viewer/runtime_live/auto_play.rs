@@ -58,7 +58,7 @@ impl ViewerRuntimeLiveServer {
         if session.explicitly_subscribed_to(ViewerStream::Snapshot)
             && should_emit_runtime_advance_snapshot(session, "play", false)
         {
-            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+            let snapshot = self.compat_snapshot_for_session(session);
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         session.metrics = runtime_metrics(&self.world);

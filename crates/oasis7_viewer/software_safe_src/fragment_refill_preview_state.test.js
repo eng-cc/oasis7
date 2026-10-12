@@ -13,6 +13,14 @@ function createModule(requestKey = "2:-1:0") {
 }
 
 describe("fragment refill preview response correlation", () => {
+  it("clears an old successful forecast when the current projection is unavailable", () => {
+    const { module, state } = createModule();
+    state.fragmentRefillPreview = { chunk: { x: 2, y: -1, z: 0 }, replenishment_enabled: true };
+    expect(module.handleFragmentRefillPreviewError({ action_id: "preview_fragment_replenishment", code: "fragment_refill_preview_projection_failed", message: "current projection is unavailable" })).toBe(true);
+    expect(state.fragmentRefillPreview).toBeNull();
+    expect(state.fragmentRefillPreviewRequest).toEqual({ status: "error", error: "current projection is unavailable" });
+  });
+
   it("ignores delayed or malformed replies without clearing the newer pending request", () => {
     const { module, state } = createModule("2:-1:0");
 

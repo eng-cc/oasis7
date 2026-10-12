@@ -125,7 +125,8 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
   - `npm --prefix crates/oasis7_viewer run build:software-safe`
-  - 变更 `oasis7_agent_api` 或 `oasis7_agent_harness` 时，planner 选择 `workspace_support`：API wire-contract 集成测试、Harness 单元测试及两 crate 的 strict Clippy；Cargo 依赖图也会保留 `oasis7` 消费者组。
+  - 变更 `oasis7_agent_api` 或 `oasis7_agent_harness` 时，planner 选择 `workspace_support` 内实际受影响的 package profiles：API wire-contract 集成测试、Harness 单元测试及对应 strict Clippy；Cargo 依赖图仍保留 `oasis7` 消费者组。Launcher 代码变更保留 native profile 与 `launcher_web`。支持包清单位于 `plan-rust-required-scope.py`；驱动以 `--support-plan` 接收 trusted selector 的完整 JSON，不将 JSON 插入 shell 源码。
+  - profile 计划版本为 1；空、未知、重复 profile、未知版本或 full 计划漏项均拒绝。旧 trusted planner 没有 profile 版本字段时仍执行完整支持包库存，不提前缩测；控制/manifest/lockfile/未知输入及非包规则继续保守全量。每个 profile 的命令成功后才输出完成标记，任何失败退出仍由原 `required-gate` 聚合。直接本地 `required --group workspace_support` 不传计划时保留原完整入口。
   - planner 始终声明 `required_gate_baseline`：这是 required-gate 的普适治理/契约 authority，不等同于每个 Rust、Node、provider 或 P2P 套件都对所有路径执行。
   - 触达场景定义、场景 integration test 或场景 PRD 时，planner 追加 `scenario_regression`，运行窄命令：`env -u RUSTC_WRAPPER cargo test -p oasis7 --test oasis7_init_demo --features test_tier_full oasis7_init_demo_runs_`；不追加 test-harness 参数，保证 `CI_VERBOSE=1` 的 Cargo verbosity 仍由 wrapper 正确处理。
   - provider remote-HTTPS、P2P/testnet、state-sync、S10 与 release-preflight contract 只在 planner 选择 `operational_contracts` 时运行；对应跨平台 workflow jobs 未命中时直接 skip，保留 stable context 的同时避免 docs-only 或不相关 PR 分配 runner 执行跨域 operational work。
@@ -169,6 +170,20 @@ python3 scripts/cargo-cache.py gc --budget-gib 60 --min-age-days 7 --apply
 - CI 控制改动的 PR 仍由可信 base selector 选择全部 24 组。候选 selector 的精确路由仅在合入后成为可信规则，required-gate 的组集合与失败判定保留。
 - 本地合同验证：`bash scripts/plan-wasm-determinism-scope.test.sh`、`bash scripts/ensure-wasm-bindgen-cli.test.sh`、`python3 scripts/ci-local-signer-tests.test.py`、`python3 scripts/plan-rust-required-scope.test.py`、`python3 scripts/ci-required-result.test.py`、`python3 scripts/ci-workflow.test.py`；前三项接入 workflow_governance。
 - net 的 libp2p/Python/WASM 检查、Viewer auth smoke 与 performance visual build 均通过 `ci-tests.sh --group` 执行一次；YAML 负责工具、浏览器和依赖准备。stable 安装使用 minimal 并显式安装 rustfmt/clippy，nightly、rust-src 与 WASM targets 保留。
+
+<a id="ci-dependency-installation-validation"></a>
+### CI 依赖安装与 Release 工具缓存核验
+
+要求与设计见 [CI 分级执行 PRD](doc/testing/ci/ci-tiered-execution.prd.md#ci-install-trunk)和[依赖准备设计](doc/testing/ci/ci-tiered-execution.design.md#ci-install-trunk-design)。本节给出验证方法；具体执行版本、结果和未覆盖范围记录在对应 PR 与 Actions 运行中。
+
+- 本地接线回归：`bash scripts/release-packages-trunk-cache-contract.test.sh`。检查 Release 使用计划源中的共享安装器、与 Rust CI/main writer 一致的归档身份、只恢复 action 和冷热均执行验证，必要失败不能变成成功。历史 tag 缺安装器时应在恢复前明确失败。
+- 安装器行为：`bash scripts/install-ci-trunk.test.sh` 覆盖冷下载、合法缓存、损坏缓存/下载、错误版本、错误 pin 及受支持宿主的真实 binary。此测试首次需要下载固定官方归档并核验摘要；缺网络时如实记录未执行，不能以离线接线测试代替。损坏归档不得先解压或执行。
+- hosted 功能：读取后续自然发生且已授权的 Release `build-web-dist`，确认工具验证后原有 Web 构建、source/BUILDINFO 与发布检查正常。不要为本节人为触发发布；未发生的发布保持待观察。
+- 真实跨 tag 缓存：关联 main `full-regression` 的实际归档保存记录和两个不同 tag 的 reader，记录 run/job URL、event/ref、请求/匹配 key、工具/安装器身份、路径及 cache version 兼容条件、恢复和摘要验证结果。同 tag rerun、仅配置相同或只有 cache-hit 输出均不足以确认 main seed 复用。
+- 冷暖量测：区分实际下载、跨 run 恢复、本地已有和恢复异常后下载；分别记录恢复、下载、验证安装、总准备及 writer 保存成本。日志只有 step 级时间时保持该粒度。附 runner image/OS/arch、source、Trunk 版本/摘要、helper 指纹、样本窗口与数量；失败和取消单列，排队和整个 Release 耗时另报。样本不足时报告原始观察，不预写提速百分比。
+- apt 先观察索引更新、下载、安装、锁等待和失败分布。本次没有新增 apt helper；后续确需预算治理时，使用假命令与临时进程 fixture 验证正常/瞬态/永久错误、总预算、挂起或忽略终止信号的子进程、父进程先退出、取消与无受控遗留进程。不得在真实 apt/dpkg 上故障注入；强制终止后的包状态不明确时应失败并使用新 runner。
+
+本地合同测试只证明其实际范围；main 合入、hosted 构建、跨 tag 恢复与性能收益分别核实，不新增通用 required check、预热工作流或验收回执。
 
 ### 当前 CI 未直接覆盖（需手册补齐）
 - Web UI agent-browser 闭环（现为手动/agent 流程，不在 CI 默认路径中）。

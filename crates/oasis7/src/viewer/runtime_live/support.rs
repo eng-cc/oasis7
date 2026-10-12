@@ -256,6 +256,10 @@ pub(super) struct RuntimeLiveSession {
     pub(super) subscribed: HashSet<ViewerStream>,
     pub(super) event_filters: Option<HashSet<ViewerEventKind>>,
     pub(super) current_player_id: Option<String>,
+    pub(super) gameplay_feedback_owner:
+        Option<super::gameplay_feedback_scope::GameplayFeedbackOwner>,
+    pub(super) local_gameplay_feedback:
+        Arc<Mutex<super::gameplay_feedback_scope::SessionGameplayFeedback>>,
     pub(super) playing: bool,
     pub(super) next_play_step_at: Option<Instant>,
     pub(super) next_background_snapshot_at: Option<Instant>,
@@ -284,6 +288,8 @@ impl RuntimeLiveSession {
             subscribed: HashSet::new(),
             event_filters: None,
             current_player_id: None,
+            gameplay_feedback_owner: None,
+            local_gameplay_feedback: Arc::new(Mutex::new(Default::default())),
             playing,
             next_play_step_at: None,
             next_background_snapshot_at: None,

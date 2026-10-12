@@ -309,7 +309,7 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar
             .primary_intents
             .insert(agent_id.clone(), primary_intent);
-        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+        self.set_verified_player_gameplay_feedback(&verified, PlayerGameplayRecentFeedback {
             action: "agent_chat".to_string(),
             stage: "accepted".to_string(),
             effect: format!("queued direct agent instruction for {}", agent_id),

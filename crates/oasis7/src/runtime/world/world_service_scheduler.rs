@@ -18,7 +18,71 @@ impl World {
         &mut self,
         signed: SignedReadRequest<SchedulerIntentV1>,
     ) -> Result<Value, String> {
+        self.apply_authenticated_scheduler_staged(signed, &[])
+    }
+    pub fn apply_authenticated_scheduler_staged(
+        &mut self,
+        signed: SignedReadRequest<SchedulerIntentV1>,
+        staged: &[crate::world_service::CanonicalIntentResultV1],
+    ) -> Result<Value, String> {
         verify_read_request("scheduler", &signed)?;
+        let task_context = match &signed.request.operation {
+            SchedulerOperationV1::TaskProviderPrefix { context }
+            | SchedulerOperationV1::TaskProviderFailure { context, .. } => Some(context),
+            _ => None,
+        };
+        if let Some(context) = task_context {
+            if let SchedulerOperationV1::TaskProviderFailure { reason, .. } =
+                &signed.request.operation
+            {
+                crate::world_service::game_task::validate_task_failure_context(
+                    self,
+                    context,
+                    &signed.subject_public_key,
+                    signed.request.delegation_generation,
+                    reason,
+                    staged,
+                )?;
+            } else {
+                crate::world_service::game_task::validate_task_context_identity(
+                    self,
+                    context,
+                    &signed.subject_public_key,
+                    signed.request.delegation_generation,
+                    staged,
+                )?;
+            }
+            crate::world_service::private_goal_prepare::verify_owner_signature_strict(
+                "scheduler",
+                &signed.request,
+                &signed.subject_public_key,
+                &signed.signature_hex,
+            )?;
+            if context.fence.agent_id != signed.request.agent_id {
+                return Err("task context subject mismatch".into());
+            }
+            crate::world_service::game_task::validate_cognition_fence_staged(
+                self,
+                &signed.request.agent_id,
+                Some(&context.fence),
+                &signed.subject_public_key,
+                signed.request.delegation_generation,
+                staged,
+            )?;
+        } else if matches!(
+            &signed.request.operation,
+            SchedulerOperationV1::ProviderPrefix { .. }
+                | SchedulerOperationV1::ProviderFailure { .. }
+        ) {
+            crate::world_service::game_task::validate_cognition_fence_staged(
+                self,
+                &signed.request.agent_id,
+                None,
+                &signed.subject_public_key,
+                signed.request.delegation_generation,
+                staged,
+            )?;
+        }
         let intent = signed.request;
         agent_authority::validate_agent_signer(
             self,
@@ -40,6 +104,96 @@ impl World {
         // partially mutated canonical scheduler/economy state.
         let mut transaction = self.clone();
         let result = match intent.operation {
+            SchedulerOperationV1::TaskProviderPrefix { context } => {
+                context.validate_capture_deadline(intent.captured_base_binding.base_tick)?;
+
+                crate::world_service::game_task::prepare_task_prefix(
+                    &mut transaction,
+                    &context,
+                    staged,
+                )?;
+                let exists = |world: &World, kind: &str| {
+                    world
+                        .cognition()
+                        .get("cognition_journal")
+                        .and_then(|j| j.get("events"))
+                        .and_then(Value::as_array)
+                        .is_some_and(|events| {
+                            events.iter().any(|e| {
+                                e.get("event_kind").and_then(Value::as_str) == Some(kind)
+                                    && e.get("agent_id").and_then(Value::as_str) == Some(agent)
+                                    && e.get("decision_request_id").and_then(Value::as_str)
+                                        == Some(&context.decision_request_id)
+                                    && e.get("request_digest").and_then(Value::as_str)
+                                        == Some(&context.request_commitment)
+                            })
+                        })
+                };
+                if !exists(&transaction, "TurnStarted") {
+                    transaction
+                        .start_cognition_turn(
+                            agent,
+                            &context.agent_session_id,
+                            &context.agent_turn_id,
+                            &context.decision_request_id,
+                            &context.request_commitment,
+                        )
+                        .map_err(error)?;
+                }
+                if !exists(&transaction, "ContextCaptured") {
+                    transaction
+                        .capture_cognition_context(
+                            agent,
+                            &context.agent_session_id,
+                            &context.agent_turn_id,
+                            &context.decision_request_id,
+                            &context.request_commitment,
+                            &context.context_commitment,
+                        )
+                        .map_err(error)?;
+                }
+                transaction
+                    .dispatch_cognition_request(
+                        agent,
+                        &context.agent_session_id,
+                        &context.agent_turn_id,
+                        &context.decision_request_id,
+                        &context.request_commitment,
+                        &crate::runtime::AgentDecisionEnvelopeV1::provider_invocation_key_for_request(&context.request_commitment),
+                        context.retry_seq,
+                        context.transport_attempt,
+                    )
+                    .map_err(error)?;
+                serde_json::json!({"captured": true, "request_commitment": context.request_commitment})
+            }
+            SchedulerOperationV1::TaskProviderFailure { context, reason } => {
+                if !matches!(
+                    reason.as_str(),
+                    "provider_failed"
+                        | "transport_exhausted"
+                        | "context_expired"
+                        | "executor_aborted"
+                ) {
+                    return Err("task failure requires bounded public code".into());
+                }
+                transaction
+                    .fail_cognition_turn(
+                        agent,
+                        &context.agent_session_id,
+                        &context.agent_turn_id,
+                        &context.decision_request_id,
+                        &context.request_commitment,
+                        "cognition_failed",
+                        context.retry_seq,
+                        context.transport_attempt,
+                    )
+                    .map_err(error)?;
+                crate::world_service::game_task::release_task_context_leases(
+                    &mut transaction,
+                    &context,
+                )?;
+                serde_json::json!({"failed": true, "request_commitment": context.request_commitment})
+            }
             SchedulerOperationV1::ProviderFailure { request, reason } => {
                 if request.agent_subject != agent {
                     return Err("provider failure subject mismatch".into());

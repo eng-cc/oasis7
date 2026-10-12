@@ -809,21 +809,38 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
             "future beats must describe substantively distinct changes"
         );
         let published_claims = format!(
-            "{} {} {} {} {}",
+            "{} {} {} {} {} {}",
             recommendation.route_label,
             recommendation.immediate_gain,
             recommendation.future_beat_changed,
             recommendation.risk_or_lockin,
             recommendation.next_session_hook,
+            recommendation.future_beats.join(" "),
         )
         .to_lowercase();
-        for unsupported_claim in ["vote", "voting", "territory", "territorial", "security"] {
+        for unsupported_claim in [
+            "governance",
+            "conflict",
+            "vote",
+            "voting",
+            "territory",
+            "territorial",
+            "security",
+        ] {
             assert!(
                 !published_claims.contains(unsupported_claim),
-                "governance-stage recommendation must not claim unsupported {unsupported_claim} mechanics",
+                "regional-specialist recommendation must not claim unsupported {unsupported_claim} mechanics",
             );
         }
     }
+    assert!(
+        gameplay
+            .branch_recommendations
+            .iter()
+            .any(|recommendation| {
+                recommendation.action_id == "schedule_recipe_smelter_alloy_plate"
+            })
+    );
     assert!(
         gameplay
             .available_actions

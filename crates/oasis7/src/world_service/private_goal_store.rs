@@ -182,3 +182,8 @@ mod unix;
 
 pub mod prepared;
 pub use prepared::{PreparedGoalError, PreparedGoalReceiptV1};
+
+mod task_context;
+pub use task_context::PrivateTaskContextError;
+
+pub mod client_state;

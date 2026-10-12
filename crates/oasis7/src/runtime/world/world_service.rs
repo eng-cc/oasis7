@@ -116,7 +116,15 @@ impl World {
         &mut self,
         signed: SignedReadRequest<CognitionIntentV1>,
     ) -> Result<serde_json::Value, String> {
-        agent_authority::validate_cognition(self, &signed)?;
+        self.commit_authenticated_cognition_staged(signed, &[])
+    }
+    pub fn commit_authenticated_cognition_staged(
+        &mut self,
+        signed: SignedReadRequest<CognitionIntentV1>,
+        staged: &[crate::world_service::CanonicalIntentResultV1],
+    ) -> Result<serde_json::Value, String> {
+        agent_authority::validate_cognition_staged(self, &signed, staged)?;
+        let subject = signed.subject_public_key;
         let intent = signed.request;
         // The outer service correlation already binds the signed payload. This
         // additional canonical fence prevents a differently signed explanation
@@ -183,9 +191,18 @@ impl World {
             )
             .map_err(|e| format!("{e:?}"))?;
         }
-        let (record, lineage) = self
-            .commit_cognition_action(intent.request, intent.action, intent.response_artifact)
-            .map_err(|e| format!("{e:?}"))?;
+        let committed = if let Some(fence) = &intent.task_fence {
+            self.commit_task_cognition_action(
+                intent.request,
+                intent.action,
+                intent.response_artifact,
+                (fence, &subject, intent.delegation_generation),
+                staged,
+            )
+        } else {
+            self.commit_cognition_action(intent.request, intent.action, intent.response_artifact)
+        };
+        let (record, lineage) = committed.map_err(|e| format!("{e:?}"))?;
         self.verify_runtime_receipt_lineage(&lineage)
             .map_err(|e| format!("{e:?}"))?;
         let action_id = lineage

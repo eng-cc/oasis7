@@ -82,6 +82,7 @@ let firstAgentClaimAutoAdvanceTimer = null;
 let firstAgentClaimAutoRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
+let localTestPlayerSessionInFlight = null;
 let viewerPromptControlModule = null;
 let viewerControlLossModule = null;
 let semanticSendLoop = null;
@@ -1794,52 +1795,56 @@ function canAutoIssueLocalTestPlayerSession() {
   return isLoopbackHostname(pageHost) && isLoopbackHostname(wsHost);
 }
 
-async function issueLocalTestPlayerSession() {
+async function issueLocalTestPlayerSession(expectedAuth) {
   const stored = resolveStoredLocalTestPlayerSession();
-  if (stored) {
-    await installSession(state, stored);
-    render();
-    maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
-    return state.auth;
+  let installed;
+  try {
+    if (stored) {
+      installed = await installSession(state, stored, expectedAuth);
+    } else {
+      const keypair = await generateEphemeralEd25519Keypair();
+      // A cleared guest session is a new context too. Cancel issuance that
+      // started before it instead of reviving the previous local identity.
+      if (state.auth !== expectedAuth || state.auth.available) return state.auth;
+      const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
+      installed = await installSession(state, {
+        available: true,
+        hostedAccountId: null,
+        playerId,
+        loginChannel: null,
+        maskedLoginHint: null,
+        deviceSessionId: playerId,
+        publicKey: keypair.publicKey,
+        privateKey: keypair.privateKey,
+        releaseToken: null,
+        error: null,
+        revokeReason: null,
+        revokedBy: null,
+        source: "local_test_api_ephemeral",
+        registrationStatus: "issued",
+        sessionEpoch: null,
+        issuedAtUnixMs: Date.now(),
+        recoveryErrorCode: null,
+        recoveryErrorMessage: null,
+        issueInFlight: false,
+        syncInFlight: false,
+        runtimeStatus: "issued",
+        boundAgentId: null,
+        controlLostAgentId: null,
+        pendingRequestedAgentId: null,
+        pendingForceRebind: false,
+        rebindNotice: null,
+      }, expectedAuth);
+    }
+  } catch (error) {
+    if (state.auth !== expectedAuth) return state.auth;
+    throw error;
   }
-  const keypair = await generateEphemeralEd25519Keypair();
-  // Auth can be installed by a test fixture or another login path while key
-  // generation is suspended. Preserve that newer session instead of replacing
-  // it with the stale local-test issuance that started from guest state.
-  if (state.auth.available) {
-    return state.auth;
+  if (state.auth !== installed) return state.auth;
+  if (!stored) {
+    if (__OASIS7_VISUAL_TEST__ === true) window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__?.();
+    persistLocalTestPlayerSession(state.auth);
   }
-  const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
-  await installSession(state, {
-    available: true,
-    hostedAccountId: null,
-    playerId,
-    loginChannel: null,
-    maskedLoginHint: null,
-    deviceSessionId: playerId,
-    publicKey: keypair.publicKey,
-    privateKey: keypair.privateKey,
-    releaseToken: null,
-    error: null,
-    revokeReason: null,
-    revokedBy: null,
-    source: "local_test_api_ephemeral",
-    registrationStatus: "issued",
-    sessionEpoch: null,
-    issuedAtUnixMs: Date.now(),
-    recoveryErrorCode: null,
-    recoveryErrorMessage: null,
-    issueInFlight: false,
-    syncInFlight: false,
-    runtimeStatus: "issued",
-    boundAgentId: null,
-    controlLostAgentId: null,
-    pendingRequestedAgentId: null,
-    pendingForceRebind: false,
-    rebindNotice: null,
-  });
-  if (__OASIS7_VISUAL_TEST__ === true) window.__OASIS7_PIXEL_WORLD_VISUAL_FIXTURE_AUTH_ALIGNMENT__?.();
-  persistLocalTestPlayerSession(state.auth);
   render();
   maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
   return state.auth;
@@ -1915,7 +1920,15 @@ async function issueHostedPlayerIdentity() {
 
 async function ensureHostedPlayerAuthAvailable() {
   if (canAutoIssueLocalTestPlayerSession()) {
-    return issueLocalTestPlayerSession();
+    const expectedAuth = state.auth;
+    if (localTestPlayerSessionInFlight?.auth !== expectedAuth) {
+      const pending = { auth: expectedAuth, promise: null };
+      pending.promise = issueLocalTestPlayerSession(expectedAuth).finally(() => {
+        if (localTestPlayerSessionInFlight === pending) localTestPlayerSessionInFlight = null;
+      });
+      localTestPlayerSessionInFlight = pending;
+    }
+    return localTestPlayerSessionInFlight.promise;
   }
   return state.auth;
 }
@@ -3371,7 +3384,7 @@ function handleViewerMessage(message, sourceSocket = null) { if (sourceSocket &&
       void ensureHostedPlayerAuthAvailable().then(() => {
         void syncHostedPlayerSessionOnConnect().catch((error) => { state.auth.error = String(error); render(); });
         render();
-      });
+      }).catch((error) => { state.auth.error = String(error); render(); });
       break;
     case "snapshot":
       handleSnapshot(message.snapshot);
@@ -4223,14 +4236,20 @@ async function bootstrap() {
   });
   installTestApi();
   render();
-  if (shouldRunHostedBootstrap()) {
+  const hostedBootstrap = shouldRunHostedBootstrap();
+  if (hostedBootstrap) {
     void refreshHostedAdmissionState().then(() => render());
-    void ensureHostedPlayerAuthAvailable().then(() => render());
   }
   if (shouldConnectViewerWs()) {
     connect();
   } else {
     state.connectionStatus = "disconnected";
+  }
+  if (hostedBootstrap) {
+    // Local key generation belongs to initialization; it must not outlive an
+    // awaited bootstrap. Socket connection and hosted admission stay independent.
+    await ensureHostedPlayerAuthAvailable();
+    render();
   }
 }
 

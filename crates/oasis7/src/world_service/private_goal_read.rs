@@ -155,7 +155,11 @@ pub fn verify_current_response(
                 || commit.position != reference.activation_committed_height.0
                 || commit.position > p.read_commit.position
                 || c.latest_goal_revision != c.active_goal_revision
-                || proof.expected_task_revision.0.checked_add(1) != Some(c.task_revision.0)
+                || proof
+                    .expected_task_revision
+                    .0
+                    .checked_add(1)
+                    .is_none_or(|revision| revision > c.task_revision.0)
                 || proof.expected_latest_goal_revision.0.checked_add(1)
                     != Some(c.active_goal_revision.0)
                 || proof.world_id != c.world_id

@@ -28,6 +28,14 @@
 - `intel_ttl_ticks` 等观测配置必须跨 snapshot 保持兼容；observation cache/hook 属于进程内派生状态，恢复时重建或清空，不能作为 Agent 长期记忆或权威世界事实。
 - logistics SLA 与 threat heatmap 是由权威运输、战争和危机状态生成的观测/调度数据；heatmap 当前是 alliance/global 聚合而非空间格网，并可能被治理规则消费，因此不能描述成纯 UI 指标或独立玩法承诺。
 
+<a id="kernel-rule-cost-contract"></a>
+
+### Kernel 规则成本兼容边界
+
+`PRD-WORLD_SIMULATOR-002/003` 的历史 rule-hook adapter 保留 `KernelRuleDecision.cost` 作为决策与合并结果中的数据。`WorldKernel` 当前只聚合该字段，不据此自动检查余额或扣账；字段存在也不承诺成本已作为独立记录写入 journal。已有动作自身的资源规则继续由动作实现负责，正式 runtime 的规则成本结算由 [world-runtime 专业合同](../world-runtime/prd.md) 及其执行链负责。
+
+后续若改变该字段的结算作用，须明确付款主体、成本符号、拒绝与原子性、事件/replay 和旧消费者兼容方案，并同步需求、设计与相应行为验证。本条补回现有边界，不新增成本生效或资源结算功能。实现解释与验证关系见 [设计条款](design.md#kernel-rule-cost-boundary)。
+
 ## 接口 / 数据
 - PRD 主入口: `doc/world-simulator/prd.md`
 - 文档 landing: `doc/world-simulator/README.md`
@@ -62,6 +70,7 @@
 | --- | --- | --- |
 | 场景与世界契约 | `PRD-WORLD_SIMULATOR-001/002/003` | 场景初始化、资源变化、关键交互和发布证据必须可复现，并通过统一验收清单映射到测试证据。 |
 | kernel builtin resource boundary | `PRD-WORLD_SIMULATOR-002/003` | 内建 `ResourceKind` 固定为 `Electricity | Data`；`Compound/Hardware` 不是兼容别名或内建输入。工业材料、模块资产、ABI 与执行权限分别服从 M4/domain 与 world-runtime/WASM 专业 authority。 |
+| kernel rule cost adapter | `PRD-WORLD_SIMULATOR-002/003` | [规则成本兼容边界](#kernel-rule-cost-contract)：`KernelRuleDecision.cost` 只在决策合并中保留，不自动结算，也不证明存在持久成本记录。 |
 | 多阶段工业批次与资源流 | `PRD-WORLD_SIMULATOR-047` / `m4/industrial-resource-flow-contract.prd.md` | 中间品批次适用性、数量有界的权威预留、有限 buffer/背压、确定性 split/merge 与跨阶段 lineage 必须由 M4/domain 和 runtime 专业合同共同约束；产品 SC-21 组合玩家结果，但不替代专业执行语义或声称当前已实现。 |
 | runtime live / LLM / provider authority | `PRD-WORLD_SIMULATOR-016-019`, `036-040` | runtime live 是主驱动方向；provider 决策层保持 provider advisory / runtime authoritative。provider 失败产生结构化 trace/error，并可收敛为不提交动作的 `Wait` 或显式 catalog/runtime rejection；不得回退到状态变更的启发式替代动作。runtime event/snapshot mapping 不得静默丢字段，trace/action/result 保持因果关联。AgentChat、PromptControl、profile/override、鉴权与实际应用结果属于本专业域；产品层只组合对话、草稿、持续调整与反馈恢复的玩家语义。 |
 | primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；退役第二 Viewer surface 已退出 active delivery。 |
@@ -111,6 +120,7 @@
 
 ## Validation
 - 文档治理与引用可达：`./scripts/doc-governance-check.sh`
+- Kernel cost 边界：按 [设计验证映射](design.md#111-验证映射表) 回读决策聚合与动作执行入口；现有 hook 测试不得被表述成已经验证非零 cost 不扣账。
 
 - Markdown / whitespace sanity：`git diff --check`
 - 行数回归观察：`wc -l doc/world-simulator/prd.md doc/world-simulator/README.md doc/world-simulator/prd.index.md`

@@ -8,7 +8,15 @@ use super::{MAX_JSON_DEPTH, MAX_REQUEST_BYTES};
 /// Parse raw request bytes before any conversion to `Value` can discard duplicate
 /// keys. The depth and byte budgets are fixed protocol limits, not caller input.
 pub fn parse_request<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, serde_json::Error> {
-    if bytes.len() > MAX_REQUEST_BYTES {
+    parse_bounded_json(bytes, MAX_REQUEST_BYTES)
+}
+
+/// Bounded strict JSON for deployment-owned private responses; public requests retain their fixed limit.
+pub fn parse_bounded_json<T: DeserializeOwned>(
+    bytes: &[u8],
+    maximum: usize,
+) -> Result<T, serde_json::Error> {
+    if bytes.len() > maximum {
         return Err(de::Error::custom("Game API request exceeds byte limit"));
     }
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
@@ -76,5 +84,19 @@ impl<'de> Visitor<'de> for JsonSeed {
             values.insert(key, a.next_value_seed(JsonSeed(self.0 + 1))?);
         }
         Ok(Value::Object(values))
+    }
+}
+
+#[cfg(test)]
+mod bounded_tests {
+    use super::*;
+    #[test]
+    fn private_context_json_cap_preserves_public_limit_and_duplicate_rejection() {
+        let bytes =
+            serde_json::to_vec(&serde_json::json!({"body":"x".repeat(MAX_REQUEST_BYTES)})).unwrap();
+        assert!(parse_request::<Value>(&bytes).is_err());
+        assert!(parse_bounded_json::<Value>(&bytes, 2 * 1024 * 1024).is_ok());
+        assert!(parse_bounded_json::<Value>(&bytes, bytes.len() - 1).is_err());
+        assert!(parse_bounded_json::<Value>(br#"{"body":1,"body":2}"#, 2 * 1024 * 1024).is_err());
     }
 }

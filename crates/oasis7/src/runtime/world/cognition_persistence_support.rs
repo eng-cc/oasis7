@@ -250,6 +250,35 @@ impl World {
         action: crate::runtime::Action,
         response_artifact: RuntimeCognitionResponseArtifactV1,
     ) -> Result<(WorldCommitRecordV1, RuntimeReceiptLineageV1), WorldError> {
+        self.commit_cognition_action_inner(request, action, response_artifact, None, &[])
+    }
+
+    /// Task execution carries public authority separately from private context input.
+    pub fn commit_task_cognition_action(
+        &mut self,
+        request: RuntimeCognitionCommitRequestV1,
+        action: crate::runtime::Action,
+        response_artifact: RuntimeCognitionResponseArtifactV1,
+        task_authority: (&oasis7_agent_api::game::GameTaskFenceV1, &str, u64),
+        staged: &[crate::world_service::CanonicalIntentResultV1],
+    ) -> Result<(WorldCommitRecordV1, RuntimeReceiptLineageV1), WorldError> {
+        self.commit_cognition_action_inner(
+            request,
+            action,
+            response_artifact,
+            Some(task_authority),
+            staged,
+        )
+    }
+
+    fn commit_cognition_action_inner(
+        &mut self,
+        request: RuntimeCognitionCommitRequestV1,
+        action: crate::runtime::Action,
+        response_artifact: RuntimeCognitionResponseArtifactV1,
+        task_authority: Option<(&oasis7_agent_api::game::GameTaskFenceV1, &str, u64)>,
+        staged: &[crate::world_service::CanonicalIntentResultV1],
+    ) -> Result<(WorldCommitRecordV1, RuntimeReceiptLineageV1), WorldError> {
         request
             .validate()
             .map_err(|error| cognition_validation(error.code()))?;
@@ -323,6 +352,14 @@ impl World {
                 return Ok((existing.clone(), lineage));
             }
         }
+
+        crate::world_service::game_task::validate_task_cognition_admission(
+            self,
+            &request,
+            task_authority,
+            staged,
+        )
+        .map_err(|_| cognition_validation("cognition_task_fenced"))?;
 
         let authority = self.current_cognition_runtime_authority()?;
         let base_binding = self.cognition_runtime_base_binding(&authority);

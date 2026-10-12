@@ -9,6 +9,8 @@
 
 ## 从问题进入
 
+Cargo 边界局部增量（2026-10-12）：[#4626](https://github.com/eng-cc/oasis7/pull/4626) / `133d70e45b71bd062032a734d68be1e290692b2c` 将 native 生产 cognition 状态转换转接至 Harness，World readback 与 signed-service 校验仍由 Runtime 适配器承担，旧 DTO/checkpoint 兼容保留；不新增 Harness→Oasis 依赖。支持包 profile 隔离尚在分支验证，直接 Oasis wasm32 目标及部署不因本次局部摘要变为已验证。测试入口见[测试手册](../../../../testing-manual.md)。
+
 - 要开新环境、搬服务或调整节点：[环境与部署](#cc-architecture-deployment)。
 - 要决定首次开放、扩成多节点权威或改变恢复承诺：[世界权威与状态](#cc-architecture-authority)。
 - 要拆进程、调整执行边界：[服务与执行](#cc-architecture-runtime)。
@@ -97,7 +99,7 @@
 - ARCH-08：headless ingress 已定义签名 payload、ed25519、单调 nonce 与恢复防重放；它不自动证明任意新 API 的完整授权和恢复行为。
 - ARCH-09：[PR #4562](https://github.com/eng-cc/oasis7/pull/4562)交付 Game API 的发现合同和已实现签名读取；范围仍是显式开启的 loopback bootstrap。
 - [PR #4565](https://github.com/eng-cc/oasis7/pull/4565)增加持久、owner-signed task control；初态 suspended、没有 executor。配对、私有目标、完整 context 和 action admission 不在该切片内。
-- 2026-10-12 局部核验：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 候选 `edae8d18` 将私有 owner proof/盐存入独立密文记录，公开世界只保存 salted commitment 与版本控制；正文回读依赖当前 owner/history 并在交付前复验。此候选尚未合入或部署，其他主题基线不变。[主责合同](../../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)明确：明文 loopback 要求所有可监听本机端口的进程受信；首次启用新 canonical 发布前须升级相关执行、验证和恢复节点，旧 binary 不能恢复新发布历史。当前读回是目标子集，不能作为完整 TaskSnapshot/Context。
+- 2026-10-12 局部核验：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，私有 owner proof/盐独立密文保存、公共 canonical 目标发布与 owner/history 当前正文回读已交付；journal-tail 控制链恢复回归和最终 CI 已通过。当前下一候选接通 executor 控制、私有 Context 与 task-fenced 行动，仍待完整验证和独立试玩。[当前实施候选](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)不表示完整 TaskSnapshot、两 Runtime 首局或部署已完成；其他主题基线不变。
 - 两个真实游戏 Runtime 的自主首局、多轮目标和恢复仍需分别证明；开发 Codex adapter 的合入不能替代这些游戏结果。
 
 **实际部署核验：** 本轮未核对端点暴露、TLS/网关、账号存储、凭据 lane 或真实 Runtime 支持组合，也没有启动游戏/模型任务。

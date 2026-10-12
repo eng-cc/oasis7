@@ -804,7 +804,7 @@ function render$1(code, element, init, options = {}) {
 	let disposer;
 	createRoot((dispose) => {
 		disposer = dispose;
-		element === document ? code() : insert(element, code(), element.firstChild ? null : void 0, init);
+		element === document ? code() : insert(element, code(), !init && element.firstChild ? null : void 0, init);
 	}, options.owner);
 	return () => {
 		disposer();
@@ -920,21 +920,25 @@ function eventHandler(e) {
 		}
 	});
 	if (sharedConfig.registry && !sharedConfig.done) sharedConfig.done = _$HY.done = true;
-	if (e.composedPath) {
-		const path = e.composedPath();
-		retarget(path[0]);
-		for (let i = 0; i < path.length - 2; i++) {
-			node = path[i];
-			if (!handleNode()) break;
-			if (node._$host) {
-				node = node._$host;
-				walkUpTree();
-				break;
+	try {
+		if (e.composedPath) {
+			const path = e.composedPath();
+			retarget(path[0]);
+			for (let i = 0; i < path.length - 2; i++) {
+				node = path[i];
+				if (!handleNode()) break;
+				if (node._$host) {
+					node = node._$host;
+					walkUpTree();
+					break;
+				}
+				if (node.parentNode === oriCurrentTarget) break;
 			}
-			if (node.parentNode === oriCurrentTarget) break;
-		}
-	} else walkUpTree();
-	retarget(oriTarget);
+		} else walkUpTree();
+		retarget(oriTarget);
+	} finally {
+		e = node = null;
+	}
 }
 function insertExpression(parent, value, current, marker, unwrapArray) {
 	const hydrating = isHydrating(parent);
@@ -1087,6 +1091,472 @@ function Portal(props) {
 		}
 	}, void 0, { render: !hydrating });
 	return marker;
+}
+//#endregion
+//#region software_safe_src/software_safe_constants.js
+var RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
+var VIEWER_RENDER_MODE = "viewer";
+var SOFTWARE_SAFE_RENDER_MODE_ALIAS = "software_safe";
+var VIEWER_AUTH_BOOTSTRAP_OBJECT = "__OASIS7_VIEWER_AUTH_ENV";
+var VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
+var VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
+var VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
+var VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
+var LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE = "legacy_viewer_auth_bootstrap";
+var HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
+var UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
+var PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";
+var HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
+var HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
+var HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
+var HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
+var HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
+var HOSTED_ACCOUNT_TEST_LOGIN_ROUTE = "/api/public/hosted-account/test-login";
+var HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
+var HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE = "hosted_public_join";
+var HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 3e4;
+var SOFTWARE_RENDERER_MARKERS = [
+	"swiftshader",
+	"llvmpipe",
+	"software rasterizer",
+	"basic render driver",
+	"softpipe",
+	"lavapipe"
+];
+function isHostedPublicJoinDeploymentMode(deploymentMode) {
+	return String(deploymentMode || "").trim() === HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE;
+}
+//#endregion
+//#region software_safe_src/viewer_auth_crypto.js
+var ED25519_PKCS8_PREFIX = new Uint8Array([
+	48,
+	46,
+	2,
+	1,
+	0,
+	48,
+	5,
+	6,
+	3,
+	43,
+	101,
+	112,
+	4,
+	34,
+	4,
+	32
+]);
+var textEncoder = new TextEncoder();
+var authKeyCache = /* @__PURE__ */ new Map();
+var signingIdentityCache = /* @__PURE__ */ new Map();
+var nextIdentityId = 0;
+var HEX_BYTE_LOOKUP = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
+function cborHeader(majorType, length) {
+	if (!Number.isInteger(length) || length < 0) throw new Error(`invalid CBOR length: ${length}`);
+	if (length < 24) return Uint8Array.of(majorType << 5 | length);
+	if (length < 256) return Uint8Array.of(majorType << 5 | 24, length);
+	if (length < 65536) return Uint8Array.of(majorType << 5 | 25, length >> 8 & 255, length & 255);
+	if (length <= 4294967295) return Uint8Array.of(majorType << 5 | 26, length >>> 24 & 255, length >>> 16 & 255, length >>> 8 & 255, length & 255);
+	if (length <= Number.MAX_SAFE_INTEGER) {
+		const value = BigInt(length);
+		return Uint8Array.of(majorType << 5 | 27, Number(value >> 56n & 255n), Number(value >> 48n & 255n), Number(value >> 40n & 255n), Number(value >> 32n & 255n), Number(value >> 24n & 255n), Number(value >> 16n & 255n), Number(value >> 8n & 255n), Number(value & 255n));
+	}
+	throw new Error("CBOR length exceeds Number.MAX_SAFE_INTEGER");
+}
+function concatBytes(...parts) {
+	const totalLength = parts.reduce((sum, bytes) => sum + bytes.length, 0);
+	const out = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const bytes of parts) {
+		out.set(bytes, offset);
+		offset += bytes.length;
+	}
+	return out;
+}
+function cborEncode(value) {
+	if (value === null) return Uint8Array.of(246);
+	if (value === false) return Uint8Array.of(244);
+	if (value === true) return Uint8Array.of(245);
+	if (typeof value === "number") {
+		if (!Number.isInteger(value) || value < 0) throw new Error(`unsupported CBOR number: ${value}`);
+		return cborHeader(0, value);
+	}
+	if (typeof value === "string") {
+		const bytes = textEncoder.encode(value);
+		return concatBytes(cborHeader(3, bytes.length), bytes);
+	}
+	if (Array.isArray(value)) return concatBytes(cborHeader(4, value.length), ...value.map((entry) => cborEncode(entry)));
+	if (value instanceof Uint8Array) return concatBytes(cborHeader(2, value.length), value);
+	if (typeof value === "object") {
+		const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== void 0);
+		const encoded = [cborHeader(5, entries.length)];
+		for (const [key, entryValue] of entries) {
+			encoded.push(cborEncode(String(key)));
+			encoded.push(cborEncode(entryValue));
+		}
+		return concatBytes(...encoded);
+	}
+	throw new Error(`unsupported CBOR type: ${typeof value}`);
+}
+function cborCanonicalEncode(value) {
+	if (Array.isArray(value)) return concatBytes(cborHeader(4, value.length), ...value.map(cborCanonicalEncode));
+	if (value && typeof value === "object" && !(value instanceof Uint8Array)) {
+		const entries = Object.entries(value).map(([key, entryValue]) => {
+			if (entryValue === void 0) throw new Error("canonical CBOR cannot omit undefined fields");
+			return [cborEncode(key), cborCanonicalEncode(entryValue)];
+		}).sort(([left], [right]) => {
+			if (left.length !== right.length) return left.length - right.length;
+			for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return left[index] - right[index];
+			return 0;
+		});
+		return concatBytes(cborHeader(5, entries.length), ...entries.flat());
+	}
+	return cborEncode(value);
+}
+function hexToBytes(raw) {
+	const value = String(raw || "").trim().toLowerCase();
+	if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) throw new Error("invalid hex payload");
+	const bytes = new Uint8Array(value.length / 2);
+	for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
+	return bytes;
+}
+function bytesToHex(bytes) {
+	let out = "";
+	for (let index = 0; index < bytes.length; index += 1) out += HEX_BYTE_LOOKUP[bytes[index]];
+	return out;
+}
+function bytesStartWith(bytes, prefix) {
+	if (bytes.length < prefix.length) return false;
+	for (let index = 0; index < prefix.length; index += 1) if (bytes[index] !== prefix[index]) return false;
+	return true;
+}
+async function importEd25519SigningKey(privateKeyHex) {
+	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
+	if (!authKeyCache.has(privateKeyHex)) {
+		const rawPrivateKey = hexToBytes(privateKeyHex);
+		if (rawPrivateKey.length !== 32) throw new Error(`viewer auth private key length mismatch: expected 32 bytes, got ${rawPrivateKey.length}`);
+		const pkcs8 = concatBytes(ED25519_PKCS8_PREFIX, rawPrivateKey);
+		authKeyCache.set(privateKeyHex, window.crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]));
+	}
+	return authKeyCache.get(privateKeyHex);
+}
+function importSigningIdentity(publicKeyHex, privateKeyHex) {
+	if (typeof publicKeyHex !== "string" || typeof privateKeyHex !== "string" || !/^[0-9a-f]{64}$/i.test(publicKeyHex) || !/^[0-9a-f]{64}$/i.test(privateKeyHex)) throw new Error("viewer auth keys require strict hex encoding of exactly 32 bytes");
+	const publicBytes = hexToBytes(publicKeyHex);
+	const privateBytes = hexToBytes(privateKeyHex);
+	if (publicBytes.length !== 32 || privateBytes.length !== 32) throw new Error("viewer auth keys must each contain exactly 32 bytes");
+	const publicKey = bytesToHex(publicBytes);
+	const cacheKey = `${publicKey}:${bytesToHex(privateBytes)}`;
+	if (!signingIdentityCache.has(cacheKey)) {
+		const pending = (async () => {
+			if (!window.crypto?.subtle) throw new Error("Ed25519 Web Crypto is unavailable");
+			const privateKey = await importEd25519SigningKey(bytesToHex(privateBytes));
+			const verifyKey = await window.crypto.subtle.importKey("raw", publicBytes, { name: "Ed25519" }, false, ["verify"]);
+			const challenge = window.crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(32));
+			const proof = await window.crypto.subtle.sign("Ed25519", privateKey, challenge);
+			if (!await window.crypto.subtle.verify("Ed25519", verifyKey, proof, challenge)) throw new Error("viewer auth public and private keys do not match");
+			return Object.freeze({
+				identityId: ++nextIdentityId,
+				publicKey,
+				sign: async (bytes) => new Uint8Array(await window.crypto.subtle.sign("Ed25519", privateKey, bytes))
+			});
+		})();
+		signingIdentityCache.set(cacheKey, pending);
+		pending.catch(() => signingIdentityCache.delete(cacheKey));
+	}
+	return signingIdentityCache.get(cacheKey);
+}
+var identityLookup = () => null;
+var signingGeneration = () => 0;
+function setSigningIdentityLookup(lookup, generation) {
+	identityLookup = lookup;
+	signingGeneration = generation;
+}
+async function signAuthPayload(signingPayloadBytes, auth) {
+	const generation = signingGeneration();
+	const installed = identityLookup(auth);
+	if (!installed) throw new Error("authentication requires a verified installed signing identity");
+	const signature = await installed.sign(signingPayloadBytes);
+	if (signingGeneration() !== generation || installed && identityLookup(auth) !== installed) throw new Error("authentication context changed during signing");
+	return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(signature)}`;
+}
+async function generateEphemeralEd25519Keypair() {
+	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
+	const keyPair = await window.crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
+	const pkcs8 = new Uint8Array(await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
+	if (!bytesStartWith(pkcs8, ED25519_PKCS8_PREFIX) || pkcs8.length !== ED25519_PKCS8_PREFIX.length + 32) throw new Error("unexpected Ed25519 pkcs8 encoding from Web Crypto");
+	const rawPublicKey = new Uint8Array(await window.crypto.subtle.exportKey("raw", keyPair.publicKey));
+	if (rawPublicKey.length !== 32) throw new Error(`unexpected Ed25519 public key length: ${rawPublicKey.length}`);
+	return {
+		publicKey: bytesToHex(rawPublicKey),
+		privateKey: bytesToHex(pkcs8.slice(ED25519_PKCS8_PREFIX.length))
+	};
+}
+function buildAuthEnvelope(payload) {
+	return cborEncode({
+		version: 1,
+		payload
+	});
+}
+function promptFieldPatchV1(patch) {
+	if (!patch || patch.mode === "unchanged") return "unchanged";
+	if (patch.mode === "clear") return "clear";
+	const value = String(patch.value ?? "").trim();
+	return value ? { set: value } : "clear";
+}
+function buildPromptControlSigningPayload(mode, request, auth) {
+	const normalizedMode = String(mode || "").trim().toLowerCase();
+	const rollback = normalizedMode === "rollback";
+	const preview = normalizedMode === "preview";
+	return {
+		operation: rollback ? "prompt_control_rollback" : preview ? "prompt_control_preview" : "prompt_control_apply",
+		preview,
+		request_id: String(request?.request_id || "").trim(),
+		agent_id: String(request?.agent_id || "").trim(),
+		player_id: String(auth?.playerId || request?.player_id || "").trim(),
+		public_key: String(auth?.publicKey || request?.public_key || "").trim().toLowerCase(),
+		nonce: request?.nonce,
+		session_epoch: Number(request?.session_epoch),
+		binding_epoch: Number(request?.binding_epoch),
+		expected_authority_epoch: String(request?.expected_authority_epoch || "").trim(),
+		expected_version: Number(request?.expected_version),
+		system_prompt: rollback ? "unchanged" : promptFieldPatchV1(request?.system_prompt_override),
+		short_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.short_term_goal_override),
+		long_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.long_term_goal_override),
+		rollback_target: rollback ? Number(request?.to_version) : null,
+		updated_by: String(request?.updated_by || "").trim() || void 0
+	};
+}
+//#endregion
+//#region software_safe_src/viewer_canonical_owner_read_module.js
+var DOMAIN = "/v1/world/view";
+var hex = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+var canonicalHex = (value) => hex(cborCanonicalEncode(value));
+function validCommit(commit) {
+	return Number.isSafeInteger(commit?.position) && commit.position >= 0 && [
+		commit?.execution_block_hash,
+		commit?.state_root_ref,
+		commit?.binding?.provider_world_id,
+		commit?.binding?.branch_id,
+		commit?.binding?.finality_ref,
+		commit?.binding?.governing_manifest_ref
+	].every((value) => typeof value === "string" && !!value.trim()) && [
+		commit?.binding?.reorg_generation,
+		commit?.binding?.authority_generation,
+		commit?.binding?.permission_generation
+	].every((value) => Number.isSafeInteger(value) && value >= 0);
+}
+function canonicalAgentChatView(state) {
+	if (state.viewerProtocol?.capabilities?.includes("canonical_agent_chat_v1")) {
+		const view = state.canonicalAgentOwnerView;
+		return view && view.player_id === state.auth.playerId && view.public_key === state.auth.publicKey && view.agent_id === state.auth.boundAgentId && view.world_id === state.worldFeed?.worldId && view.reorg_epoch === state.worldFeed?.reorgEpoch && state.worldFeed?.stale !== true ? view : null;
+	}
+	return state.snapshot?.player_gameplay?.canonical_agent_chat || null;
+}
+function createCanonicalOwnerReadModule({ state, sendJson, signAuthPayload, render, getSocket }) {
+	let pending = null;
+	function identity(agentId) {
+		return {
+			agentId,
+			playerId: state.auth.playerId,
+			publicKey: state.auth.publicKey,
+			worldId: state.worldFeed?.worldId,
+			reorgEpoch: state.worldFeed?.reorgEpoch
+		};
+	}
+	function current(id) {
+		return state.auth.available && state.auth.registrationStatus === "registered" && state.auth.boundAgentId === id.agentId && state.auth.playerId === id.playerId && state.auth.publicKey === id.publicKey && state.worldFeed?.worldId === id.worldId && state.worldFeed?.reorgEpoch === id.reorgEpoch && state.worldFeed?.stale !== true;
+	}
+	function matchesSubject(subject, id) {
+		return subject?.agent_id === id.agentId && subject?.player_id === id.playerId && subject?.public_key === id.publicKey && subject?.world_id === id.worldId && subject?.reorg_epoch === id.reorgEpoch;
+	}
+	function matchesFence(fence, id) {
+		return matchesSubject(fence, id) && typeof fence?.canonical_authority?.branch_id === "string" && !!fence.canonical_authority.branch_id && Number.isSafeInteger(fence.canonical_authority.agent_identity_generation) && fence.canonical_authority.agent_identity_generation > 0;
+	}
+	function fail(reason) {
+		state.canonicalAgentOwnerView = null;
+		const active = pending;
+		pending = null;
+		if (active) {
+			clearTimeout(active.timer);
+			active.reject(new Error(reason));
+		}
+		render();
+	}
+	function refresh(agentId = state.auth.boundAgentId) {
+		if (!state.viewerProtocol?.capabilities?.includes("canonical_agent_chat_v1")) return Promise.resolve(null);
+		const id = identity(agentId);
+		if (!current(id) || !getSocket() || getSocket().readyState !== WebSocket.OPEN) {
+			fail("canonical owner read requires the current registered connection");
+			return Promise.reject(/* @__PURE__ */ new Error("canonical owner read requires the current registered connection"));
+		}
+		if (pending) {
+			if (canonicalHex(pending.id) === canonicalHex(id)) return pending.promise;
+			fail("canonical owner read identity changed");
+		}
+		state.canonicalAgentOwnerView = null;
+		let resolve;
+		let reject;
+		const promise = new Promise((ok, error) => {
+			resolve = ok;
+			reject = error;
+		});
+		pending = {
+			id,
+			promise,
+			resolve,
+			reject,
+			timer: setTimeout(() => fail("canonical owner read timed out"), 1e4)
+		};
+		sendJson({
+			type: "request_canonical_agent_owner_read_context",
+			agent_id: agentId
+		});
+		return promise;
+	}
+	async function handleContext(context) {
+		const active = pending;
+		if (!active) return;
+		try {
+			const request = context?.request;
+			const fence = context?.fence;
+			const expected = context?.expected;
+			if (!current(active.id) || !matchesSubject(expected, active.id) || typeof expected?.branch_id !== "string" || !expected.branch_id.trim() || fence != null && (!matchesFence(fence, active.id) || fence.canonical_authority.branch_id !== expected.branch_id) || context.signing_domain !== DOMAIN || request?.contract_version !== 1 || request?.world?.world_id !== active.id.worldId || typeof request?.world?.genesis_digest !== "string" || !request.world.genesis_digest.trim() || request.scope_id !== `agent:${active.id.agentId}` || !validCommit(request.min_commit) || request.fixed_commit !== null || request.deadline_unix_ms !== null || canonicalHex(request.min_commit.world) !== canonicalHex(request.world) || request.min_commit.binding?.branch_id !== expected.branch_id || request.min_commit.binding?.reorg_generation !== active.id.reorgEpoch) throw new Error("canonical owner read context mismatch");
+			const signingBytes = cborCanonicalEncode([
+				"oasis7.world-service.v1",
+				DOMAIN,
+				request
+			]);
+			if (hex(signingBytes) !== context.signing_bytes_hex) throw new Error("canonical owner read signing bytes mismatch");
+			const signature = await signAuthPayload(signingBytes, state.auth);
+			if (pending !== active || !current(active.id)) throw new Error("canonical owner read identity changed during signing");
+			if (!/^awviewauth:v1:[0-9a-f]{128}$/.test(signature)) throw new Error("canonical owner read signature invalid");
+			active.fence = fence == null ? null : structuredClone(fence);
+			active.expected = structuredClone(expected);
+			active.signed = {
+				request: structuredClone(request),
+				subject_public_key: active.id.publicKey,
+				signature_hex: signature.slice(14)
+			};
+			sendJson({
+				type: "canonical_agent_owner_read",
+				request: active.signed
+			});
+		} catch (error) {
+			if (pending === active) fail(String(error));
+		}
+	}
+	function handleView(message) {
+		const active = pending;
+		if (!active?.signed) return;
+		try {
+			if (!current(active.id) || !/^blake3:[0-9a-f]{64}$/.test(message?.request_digest || "") || canonicalHex(message.request) !== canonicalHex(active.signed) || !matchesFence(message.view, active.id) || message.view.canonical_authority.branch_id !== active.expected.branch_id || active.fence != null && canonicalHex(message.view.canonical_authority) !== canonicalHex(active.fence.canonical_authority) || canonicalHex(message.version?.commit?.world) !== canonicalHex(active.signed.request.world) || canonicalHex(message.version?.commit?.binding) !== canonicalHex(active.signed.request.min_commit.binding) || !validCommit(message.version?.commit) || message.version.commit.position < active.signed.request.min_commit.position || message.version.commit.position === active.signed.request.min_commit.position && canonicalHex(message.version.commit) !== canonicalHex(active.signed.request.min_commit)) throw new Error("canonical owner read response mismatch");
+			state.canonicalAgentOwnerView = structuredClone(message.view);
+			pending = null;
+			clearTimeout(active.timer);
+			active.resolve(state.canonicalAgentOwnerView);
+			render();
+		} catch (error) {
+			if (pending === active) fail(String(error));
+		}
+	}
+	return {
+		refresh,
+		handleContext,
+		handleView,
+		reset: () => fail("canonical owner read connection reset")
+	};
+}
+//#endregion
+//#region software_safe_src/viewer_canonical_goal_module.js
+function scheduleCanonicalGoalPending({ ack, feedback, state, clone, requestSnapshotSafe, sameAgentChatFeedback, failPendingAgentChatAck, sendJson, scheduleAgentChatAckTimeout, getSocket }) {
+	feedback.stage = "pending";
+	feedback.ok = false;
+	feedback.accepted = false;
+	feedback.effect = "goal submitted; waiting for canonical commit";
+	feedback.response = clone(ack);
+	requestSnapshotSafe();
+	if (feedback.canonicalRetryCount >= 29) {
+		scheduleAgentChatAckTimeout(feedback);
+		return null;
+	}
+	feedback.canonicalRetryCount += 1;
+	return window.setTimeout(() => {
+		if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || feedback.stage !== "pending") return;
+		const request = feedback.canonicalRequest;
+		const socket = getSocket();
+		const canonical = canonicalAgentChatView(state);
+		if (state.worldFeed?.worldId !== request.world_id || state.worldFeed?.reorgEpoch !== request.reorg_epoch || state.worldFeed?.stale === true || canonical?.canonical_authority?.branch_id !== request.canonical_authority?.branch_id || canonical?.canonical_authority?.agent_identity_generation !== request.canonical_authority?.agent_identity_generation || request.auth.player_id !== state.auth.playerId || request.auth.public_key !== state.auth.publicKey || request.agent_id !== state.auth.boundAgentId || !socket || socket.readyState !== WebSocket.OPEN) {
+			failPendingAgentChatAck("canonical goal identity or connection changed");
+			return;
+		}
+		sendJson({
+			type: "agent_chat",
+			request
+		});
+		scheduleAgentChatAckTimeout(feedback);
+	}, 1500);
+}
+function canonicalGoalMarkup(state, agentId, escapeHtml) {
+	const goal = authenticatedCanonicalGoal(state, agentId);
+	return goal ? `<p data-canonical-agent-goal>Current goal: ${escapeHtml(goal.message)}</p>` : "";
+}
+function applyCommittedChatAck({ ack, feedback, state, clone, pushChatHistory }) {
+	feedback.stage = "ack";
+	feedback.ok = true;
+	feedback.accepted = true;
+	feedback.reason = null;
+	feedback.effect = `chat accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
+	feedback.response = clone(ack);
+	state.lastChatFeedback = feedback;
+	pushChatHistory({
+		id: `chat-ack-${feedback.id}`,
+		source: "player",
+		agentId: ack?.agent_id || feedback.agentId || null,
+		message: feedback.pendingMessage || "",
+		tick: Number(ack?.accepted_at_tick || state.logicalTime || 0),
+		speaker: feedback.pendingPlayerId || state.auth.playerId || null,
+		playerId: feedback.pendingPlayerId || state.auth.playerId || null,
+		targetAgentId: ack?.agent_id || feedback.agentId || null,
+		intentSeq: ack?.intent_seq || null
+	});
+}
+function authenticatedCanonicalGoal(state, agentId) {
+	const canonical = canonicalAgentChatView(state);
+	if (!canonical?.goal || typeof canonical.goal.message !== "string" || !["accepted", "blocked"].includes(canonical.goal.status) || typeof canonical.goal.intent_id !== "string" || !canonical.goal.intent_id || canonical.current_intent_id !== canonical.goal.intent_id || state.worldFeed?.stale === true || canonical.world_id !== state.worldFeed?.worldId || canonical.reorg_epoch !== state.worldFeed?.reorgEpoch || canonical.agent_id !== agentId || canonical.player_id !== state.auth.playerId || canonical.public_key !== state.auth.publicKey) return null;
+	return canonical.goal;
+}
+function canonicalAckMatches(ack, request) {
+	return ack?.agent_id === request.agent_id && ack?.player_id === request.player_id && ack?.intent_seq === request.intent_seq && ack?.intent_tick === request.intent_tick && ack?.auth_nonce === request.auth?.nonce;
+}
+//#endregion
+//#region software_safe_src/canonical_agent_goal.jsx
+var _tmpl$$33 = /*#__PURE__*/ template(`<p data-canonical-agent-goal-pending role=status>`);
+var _tmpl$2$31 = /*#__PURE__*/ template(`<p data-canonical-agent-goal>: `);
+function CanonicalAgentGoal(props) {
+	const goal = () => authenticatedCanonicalGoal(props.state, props.agentId);
+	const pending = () => props.state.lastChatFeedback?.agentId === props.agentId && props.state.lastChatFeedback?.stage === "pending" && props.state.lastChatFeedback?.canonicalRequest;
+	const zh = () => String(props.locale || "en").startsWith("zh");
+	return [createComponent(Show, {
+		get when() {
+			return goal();
+		},
+		children: (current) => (() => {
+			var _el$2 = _tmpl$2$31(), _el$3 = _el$2.firstChild;
+			insert(_el$2, () => zh() ? "当前目标" : "Current goal", _el$3);
+			insert(_el$2, () => current().message, null);
+			return _el$2;
+		})()
+	}), createComponent(Show, {
+		get when() {
+			return pending();
+		},
+		get children() {
+			var _el$ = _tmpl$$33();
+			insert(_el$, () => zh() ? "目标已提交，等待世界确认。" : "Goal submitted; waiting for world confirmation.");
+			return _el$;
+		}
+	})];
 }
 //#endregion
 //#region software_safe_src/industrial_starter_outcome_card.jsx
@@ -1412,226 +1882,6 @@ function wrap(value) {
 }
 function createMutable(state, options) {
 	return wrap(unwrap(state || {}));
-}
-//#endregion
-//#region software_safe_src/software_safe_constants.js
-var RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
-var VIEWER_RENDER_MODE = "viewer";
-var SOFTWARE_SAFE_RENDER_MODE_ALIAS = "software_safe";
-var VIEWER_AUTH_BOOTSTRAP_OBJECT = "__OASIS7_VIEWER_AUTH_ENV";
-var VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
-var VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
-var VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
-var VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
-var LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE = "legacy_viewer_auth_bootstrap";
-var HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
-var UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
-var PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";
-var HOSTED_PLAYER_SESSION_ADMISSION_ROUTE = "/api/public/player-session/admission";
-var HOSTED_PLAYER_SESSION_REFRESH_ROUTE = "/api/public/player-session/refresh";
-var HOSTED_PLAYER_SESSION_RELEASE_ROUTE = "/api/public/player-session/release";
-var HOSTED_ACCOUNT_LOGIN_START_ROUTE = "/api/public/hosted-account/login/start";
-var HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE = "/api/public/hosted-account/login/complete";
-var HOSTED_ACCOUNT_TEST_LOGIN_ROUTE = "/api/public/hosted-account/test-login";
-var HOSTED_STRONG_AUTH_GRANT_ROUTE = "/api/public/strong-auth/grant";
-var HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE = "hosted_public_join";
-var HOSTED_PLAYER_SESSION_REFRESH_INTERVAL_MS = 3e4;
-var SOFTWARE_RENDERER_MARKERS = [
-	"swiftshader",
-	"llvmpipe",
-	"software rasterizer",
-	"basic render driver",
-	"softpipe",
-	"lavapipe"
-];
-function isHostedPublicJoinDeploymentMode(deploymentMode) {
-	return String(deploymentMode || "").trim() === HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE;
-}
-//#endregion
-//#region software_safe_src/viewer_auth_crypto.js
-var ED25519_PKCS8_PREFIX = new Uint8Array([
-	48,
-	46,
-	2,
-	1,
-	0,
-	48,
-	5,
-	6,
-	3,
-	43,
-	101,
-	112,
-	4,
-	34,
-	4,
-	32
-]);
-var textEncoder = new TextEncoder();
-var authKeyCache = /* @__PURE__ */ new Map();
-var signingIdentityCache = /* @__PURE__ */ new Map();
-var nextIdentityId = 0;
-var HEX_BYTE_LOOKUP = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
-function cborHeader(majorType, length) {
-	if (!Number.isInteger(length) || length < 0) throw new Error(`invalid CBOR length: ${length}`);
-	if (length < 24) return Uint8Array.of(majorType << 5 | length);
-	if (length < 256) return Uint8Array.of(majorType << 5 | 24, length);
-	if (length < 65536) return Uint8Array.of(majorType << 5 | 25, length >> 8 & 255, length & 255);
-	if (length <= 4294967295) return Uint8Array.of(majorType << 5 | 26, length >>> 24 & 255, length >>> 16 & 255, length >>> 8 & 255, length & 255);
-	if (length <= Number.MAX_SAFE_INTEGER) {
-		const value = BigInt(length);
-		return Uint8Array.of(majorType << 5 | 27, Number(value >> 56n & 255n), Number(value >> 48n & 255n), Number(value >> 40n & 255n), Number(value >> 32n & 255n), Number(value >> 24n & 255n), Number(value >> 16n & 255n), Number(value >> 8n & 255n), Number(value & 255n));
-	}
-	throw new Error("CBOR length exceeds Number.MAX_SAFE_INTEGER");
-}
-function concatBytes(...parts) {
-	const totalLength = parts.reduce((sum, bytes) => sum + bytes.length, 0);
-	const out = new Uint8Array(totalLength);
-	let offset = 0;
-	for (const bytes of parts) {
-		out.set(bytes, offset);
-		offset += bytes.length;
-	}
-	return out;
-}
-function cborEncode(value) {
-	if (value === null) return Uint8Array.of(246);
-	if (value === false) return Uint8Array.of(244);
-	if (value === true) return Uint8Array.of(245);
-	if (typeof value === "number") {
-		if (!Number.isInteger(value) || value < 0) throw new Error(`unsupported CBOR number: ${value}`);
-		return cborHeader(0, value);
-	}
-	if (typeof value === "string") {
-		const bytes = textEncoder.encode(value);
-		return concatBytes(cborHeader(3, bytes.length), bytes);
-	}
-	if (Array.isArray(value)) return concatBytes(cborHeader(4, value.length), ...value.map((entry) => cborEncode(entry)));
-	if (value instanceof Uint8Array) return concatBytes(cborHeader(2, value.length), value);
-	if (typeof value === "object") {
-		const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== void 0);
-		const encoded = [cborHeader(5, entries.length)];
-		for (const [key, entryValue] of entries) {
-			encoded.push(cborEncode(String(key)));
-			encoded.push(cborEncode(entryValue));
-		}
-		return concatBytes(...encoded);
-	}
-	throw new Error(`unsupported CBOR type: ${typeof value}`);
-}
-function hexToBytes(raw) {
-	const value = String(raw || "").trim().toLowerCase();
-	if (!value || value.length % 2 !== 0 || /[^0-9a-f]/.test(value)) throw new Error("invalid hex payload");
-	const bytes = new Uint8Array(value.length / 2);
-	for (let index = 0; index < bytes.length; index += 1) bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-	return bytes;
-}
-function bytesToHex(bytes) {
-	let out = "";
-	for (let index = 0; index < bytes.length; index += 1) out += HEX_BYTE_LOOKUP[bytes[index]];
-	return out;
-}
-function bytesStartWith(bytes, prefix) {
-	if (bytes.length < prefix.length) return false;
-	for (let index = 0; index < prefix.length; index += 1) if (bytes[index] !== prefix[index]) return false;
-	return true;
-}
-async function importEd25519SigningKey(privateKeyHex) {
-	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
-	if (!authKeyCache.has(privateKeyHex)) {
-		const rawPrivateKey = hexToBytes(privateKeyHex);
-		if (rawPrivateKey.length !== 32) throw new Error(`viewer auth private key length mismatch: expected 32 bytes, got ${rawPrivateKey.length}`);
-		const pkcs8 = concatBytes(ED25519_PKCS8_PREFIX, rawPrivateKey);
-		authKeyCache.set(privateKeyHex, window.crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]));
-	}
-	return authKeyCache.get(privateKeyHex);
-}
-function importSigningIdentity(publicKeyHex, privateKeyHex) {
-	if (typeof publicKeyHex !== "string" || typeof privateKeyHex !== "string" || !/^[0-9a-f]{64}$/i.test(publicKeyHex) || !/^[0-9a-f]{64}$/i.test(privateKeyHex)) throw new Error("viewer auth keys require strict hex encoding of exactly 32 bytes");
-	const publicBytes = hexToBytes(publicKeyHex);
-	const privateBytes = hexToBytes(privateKeyHex);
-	if (publicBytes.length !== 32 || privateBytes.length !== 32) throw new Error("viewer auth keys must each contain exactly 32 bytes");
-	const publicKey = bytesToHex(publicBytes);
-	const cacheKey = `${publicKey}:${bytesToHex(privateBytes)}`;
-	if (!signingIdentityCache.has(cacheKey)) {
-		const pending = (async () => {
-			if (!window.crypto?.subtle) throw new Error("Ed25519 Web Crypto is unavailable");
-			const privateKey = await importEd25519SigningKey(bytesToHex(privateBytes));
-			const verifyKey = await window.crypto.subtle.importKey("raw", publicBytes, { name: "Ed25519" }, false, ["verify"]);
-			const challenge = window.crypto.getRandomValues(/* @__PURE__ */ new Uint8Array(32));
-			const proof = await window.crypto.subtle.sign("Ed25519", privateKey, challenge);
-			if (!await window.crypto.subtle.verify("Ed25519", verifyKey, proof, challenge)) throw new Error("viewer auth public and private keys do not match");
-			return Object.freeze({
-				identityId: ++nextIdentityId,
-				publicKey,
-				sign: async (bytes) => new Uint8Array(await window.crypto.subtle.sign("Ed25519", privateKey, bytes))
-			});
-		})();
-		signingIdentityCache.set(cacheKey, pending);
-		pending.catch(() => signingIdentityCache.delete(cacheKey));
-	}
-	return signingIdentityCache.get(cacheKey);
-}
-var identityLookup = () => null;
-var signingGeneration = () => 0;
-function setSigningIdentityLookup(lookup, generation) {
-	identityLookup = lookup;
-	signingGeneration = generation;
-}
-async function signAuthPayload(signingPayloadBytes, auth) {
-	const generation = signingGeneration();
-	const installed = identityLookup(auth);
-	if (!installed) throw new Error("authentication requires a verified installed signing identity");
-	const signature = await installed.sign(signingPayloadBytes);
-	if (signingGeneration() !== generation || installed && identityLookup(auth) !== installed) throw new Error("authentication context changed during signing");
-	return `${VIEWER_AUTH_SIGNATURE_PREFIX}${bytesToHex(signature)}`;
-}
-async function generateEphemeralEd25519Keypair() {
-	if (!window.crypto?.subtle) throw new Error("Web Crypto subtle API is unavailable");
-	const keyPair = await window.crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]);
-	const pkcs8 = new Uint8Array(await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey));
-	if (!bytesStartWith(pkcs8, ED25519_PKCS8_PREFIX) || pkcs8.length !== ED25519_PKCS8_PREFIX.length + 32) throw new Error("unexpected Ed25519 pkcs8 encoding from Web Crypto");
-	const rawPublicKey = new Uint8Array(await window.crypto.subtle.exportKey("raw", keyPair.publicKey));
-	if (rawPublicKey.length !== 32) throw new Error(`unexpected Ed25519 public key length: ${rawPublicKey.length}`);
-	return {
-		publicKey: bytesToHex(rawPublicKey),
-		privateKey: bytesToHex(pkcs8.slice(ED25519_PKCS8_PREFIX.length))
-	};
-}
-function buildAuthEnvelope(payload) {
-	return cborEncode({
-		version: 1,
-		payload
-	});
-}
-function promptFieldPatchV1(patch) {
-	if (!patch || patch.mode === "unchanged") return "unchanged";
-	if (patch.mode === "clear") return "clear";
-	const value = String(patch.value ?? "").trim();
-	return value ? { set: value } : "clear";
-}
-function buildPromptControlSigningPayload(mode, request, auth) {
-	const normalizedMode = String(mode || "").trim().toLowerCase();
-	const rollback = normalizedMode === "rollback";
-	const preview = normalizedMode === "preview";
-	return {
-		operation: rollback ? "prompt_control_rollback" : preview ? "prompt_control_preview" : "prompt_control_apply",
-		preview,
-		request_id: String(request?.request_id || "").trim(),
-		agent_id: String(request?.agent_id || "").trim(),
-		player_id: String(auth?.playerId || request?.player_id || "").trim(),
-		public_key: String(auth?.publicKey || request?.public_key || "").trim().toLowerCase(),
-		nonce: request?.nonce,
-		session_epoch: Number(request?.session_epoch),
-		binding_epoch: Number(request?.binding_epoch),
-		expected_authority_epoch: String(request?.expected_authority_epoch || "").trim(),
-		expected_version: Number(request?.expected_version),
-		system_prompt: rollback ? "unchanged" : promptFieldPatchV1(request?.system_prompt_override),
-		short_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.short_term_goal_override),
-		long_term_goal: rollback ? "unchanged" : promptFieldPatchV1(request?.long_term_goal_override),
-		rollback_target: rollback ? Number(request?.to_version) : null,
-		updated_by: String(request?.updated_by || "").trim() || void 0
-	};
 }
 //#endregion
 //#region software_safe_src/viewer_auth_session_module.js
@@ -3646,7 +3896,23 @@ function currentRuntimeAuthority(state) {
 function createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, signAuthPayload, state }) {
 	async function buildAuthProof(request, auth) {
 		const authority = currentRuntimeAuthority(state);
+		const canonical = canonicalAgentChatView(state);
+		const required = state.viewerProtocol?.capabilities?.includes("canonical_agent_chat_v1");
+		if (canonical != null || required) {
+			const extension = canonical?.canonical_authority;
+			if (!canonical || canonical.agent_id !== request.agent_id || canonical.player_id !== auth.playerId || canonical.public_key !== auth.publicKey || canonical.world_id !== authority.world_id || canonical.reorg_epoch !== authority.reorg_epoch || canonical.authority_scope !== AGENT_CHAT_AUTHORITY_SCOPE || typeof extension?.branch_id !== "string" || !extension.branch_id.trim() || canonical.current_intent_id != null && (typeof canonical.current_intent_id !== "string" || !canonical.current_intent_id.trim()) || !Number.isSafeInteger(extension.agent_identity_generation) || extension.agent_identity_generation < 0) throw new Error("agent_chat requires current authenticated canonical owner authority");
+			request.canonical_authority = {
+				branch_id: extension.branch_id,
+				agent_identity_generation: extension.agent_identity_generation
+			};
+			if (canonical.current_intent_id != null) request.replaces_intent_id = canonical.current_intent_id;
+		}
 		const nonce = nextAuthNonce();
+		if (request.canonical_authority) {
+			if (!Number.isSafeInteger(state.logicalTime) || state.logicalTime < 0) throw new Error("canonical goal requires current logical time");
+			request.intent_seq = nonce;
+			request.intent_tick = state.logicalTime;
+		}
 		request.world_id = authority.world_id;
 		request.reorg_epoch = authority.reorg_epoch;
 		request.authority_scope = authority.authority_scope;
@@ -3664,13 +3930,19 @@ function createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, sig
 		payload.reorg_epoch = authority.reorg_epoch;
 		payload.authority_scope = authority.authority_scope;
 		if (request.replaces_intent_id != null) payload.replaces_intent_id = request.replaces_intent_id;
-		const signingPayload = buildAuthEnvelope(payload);
+		if (request.canonical_authority != null) payload.canonical_authority = request.canonical_authority;
+		const signature = await signAuthPayload(buildAuthEnvelope(payload), auth);
+		if (request.canonical_authority) {
+			const current = canonicalAgentChatView(state);
+			const runtime = currentRuntimeAuthority(state);
+			if (current?.player_id !== auth.playerId || current?.public_key !== auth.publicKey || current?.agent_id !== request.agent_id || runtime.world_id !== request.world_id || runtime.reorg_epoch !== request.reorg_epoch || current?.canonical_authority?.branch_id !== request.canonical_authority.branch_id || current?.canonical_authority?.agent_identity_generation !== request.canonical_authority.agent_identity_generation || (current?.current_intent_id ?? null) !== (request.replaces_intent_id ?? null)) throw new Error("canonical owner authority changed during signing");
+		}
 		return {
 			scheme: "ed25519",
 			player_id: auth.playerId,
 			public_key: auth.publicKey,
 			nonce,
-			signature: await signAuthPayload(signingPayload, auth)
+			signature
 		};
 	}
 	return { buildAuthProof };
@@ -4793,7 +5065,7 @@ function createViewerWorldScaleModule({ documentRef, state, isLocaleZh, normaliz
 		if (!width || !depth || !height) return null;
 		return `${width} × ${depth} × ${height}`;
 	}
-	function selectedWorldAnchor() {
+	function selectedWorldAnchor(locations) {
 		const selected = state.selectedObject;
 		if (selected && finitePositionComponents(selected.pos)) return {
 			kind: state.selectedKind || "location",
@@ -4802,7 +5074,7 @@ function createViewerWorldScaleModule({ documentRef, state, isLocaleZh, normaliz
 			radiusCm: locationRadiusCm(selected),
 			locationId: selected.location_id || selected.id || null
 		};
-		const fallback = Object.values(state.snapshot?.model?.locations || {}).find((location) => location?.pos);
+		const fallback = locations.find((location) => location?.pos);
 		if (!fallback) return null;
 		return {
 			kind: "location",
@@ -4840,8 +5112,9 @@ function createViewerWorldScaleModule({ documentRef, state, isLocaleZh, normaliz
 	function buildWorldScaleSurface(locale = state.uiLocale) {
 		const isZh = isLocaleZh(locale);
 		const worldBoundsLabel = formatWorldBoundsLabel(snapshotSpaceConfig(), locale);
-		const anchor = selectedWorldAnchor();
-		const nearestLocations = nearestLocationsForAnchor(anchor, Object.values(state.snapshot?.model?.locations || {}).filter((location) => location?.id && location?.pos), locale);
+		const allLocations = Object.values(state.snapshot?.model?.locations || {});
+		const anchor = selectedWorldAnchor(allLocations);
+		const nearestLocations = nearestLocationsForAnchor(anchor, allLocations.filter((location) => location?.id && location?.pos), locale);
 		return {
 			physicalTruth: {
 				canonicalUnitLabel: formatPhysicalDistanceCm(1, locale),
@@ -5918,10 +6191,13 @@ function createFragmentRefillPreviewStateModule({ clone, state }) {
 	}
 	function handleFragmentRefillPreviewError(error) {
 		if (String(error?.action_id || "").trim() !== "preview_fragment_replenishment") return false;
-		if (state.fragmentRefillPreviewRequest?.status === "pending") state.fragmentRefillPreviewRequest = {
-			status: "error",
-			error: String(error?.message || error?.code || "fragment refill preview request failed")
-		};
+		if (state.fragmentRefillPreviewRequest?.status === "pending") {
+			state.fragmentRefillPreview = null;
+			state.fragmentRefillPreviewRequest = {
+				status: "error",
+				error: String(error?.message || error?.code || "fragment refill preview request failed")
+			};
+		}
 		return true;
 	}
 	function invalidateFragmentRefillPreview() {
@@ -7219,6 +7495,7 @@ var firstAgentClaimAutoAdvanceTimer = null;
 var firstAgentClaimAutoRefreshTimer = null;
 var requestId = 0;
 var authNonceCounter = 0;
+var localTestPlayerSessionInFlight = null;
 var viewerPromptControlModule = null;
 var viewerControlLossModule = null;
 var semanticSendLoop = null;
@@ -7643,6 +7920,13 @@ function nextAuthNonce() {
 	authNonceCounter += 1;
 	return Date.now() + authNonceCounter;
 }
+var canonicalOwnerRead = createCanonicalOwnerReadModule({
+	state,
+	sendJson,
+	signAuthPayload,
+	render,
+	getSocket: () => socket
+});
 var viewerAgentChatAuthModule = createViewerAgentChatAuthModule({
 	buildAuthEnvelope,
 	nextAuthNonce,
@@ -7650,6 +7934,7 @@ var viewerAgentChatAuthModule = createViewerAgentChatAuthModule({
 	state
 });
 function resetViewerProtocolForConnection() {
+	canonicalOwnerRead.reset();
 	viewerPromptControlModule?.resetForConnection();
 }
 function promptControlCapabilitySelected() {
@@ -8076,7 +8361,8 @@ function agentChatFeedbackInFlight(feedback) {
 		"queued",
 		"registering",
 		"signing",
-		"sent"
+		"sent",
+		"pending"
 	].includes(String(feedback.stage || ""));
 }
 function semanticFeedbackInFlight(feedback) {
@@ -8103,11 +8389,11 @@ function isAgentChatInFlight() {
 }
 function markAgentChatFeedbackError(feedback, reason, effect = "agent_chat failed") {
 	if (!feedback) return;
-	feedback.stage = "error";
+	feedback.stage = feedback.canonicalRequest ? "unknown" : "error";
 	feedback.ok = false;
 	feedback.accepted = false;
 	feedback.reason = reason;
-	feedback.effect = effect;
+	feedback.effect = feedback.canonicalRequest ? "canonical goal result unknown; refresh current world state" : effect;
 	state.lastChatFeedback = feedback;
 }
 function expireAgentChatOverallTimeout(feedback) {
@@ -8167,7 +8453,7 @@ function scheduleAgentChatAckTimeout(feedback) {
 	clearPendingAgentChatAckTimer();
 	pendingAgentChatAckTimer = window.setTimeout(() => {
 		pendingAgentChatAckTimer = null;
-		if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || state.lastChatFeedback.stage !== "sent") return;
+		if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || !["sent", "pending"].includes(state.lastChatFeedback.stage)) return;
 		clearPendingAgentChatOverallTimer();
 		markAgentChatFeedbackError(feedback, "agent_chat timed out waiting for ack/error from live server", "agent_chat ack timeout");
 		render();
@@ -8495,6 +8781,7 @@ function handleSnapshot(snapshot) {
 	}
 	hydrateChatHistoryFromStorage();
 	syncAgentInteractionDrafts(reconcilePendingPromptAuthoritativeRefresh(snapshot));
+	canonicalOwnerRead.refresh().catch(() => {});
 	syncEmptyEntitySnapshotRefreshLoop();
 	if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) clearFirstAgentClaimAutoAdvanceTimers();
 	worldFeedTransport.refreshAfterSnapshot();
@@ -8832,46 +9119,50 @@ function canAutoIssueLocalTestPlayerSession() {
 	const wsHost = hostnameFromUrl(state.wsUrl || initialWsUrl());
 	return isLoopbackHostname(pageHost) && isLoopbackHostname(wsHost);
 }
-async function issueLocalTestPlayerSession() {
+async function issueLocalTestPlayerSession(expectedAuth) {
 	const stored = resolveStoredLocalTestPlayerSession();
-	if (stored) {
-		await installSession(state, stored);
-		render();
-		maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
-		return state.auth;
+	let installed;
+	try {
+		if (stored) installed = await installSession(state, stored, expectedAuth);
+		else {
+			const keypair = await generateEphemeralEd25519Keypair();
+			if (state.auth !== expectedAuth || state.auth.available) return state.auth;
+			const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
+			installed = await installSession(state, {
+				available: true,
+				hostedAccountId: null,
+				playerId,
+				loginChannel: null,
+				maskedLoginHint: null,
+				deviceSessionId: playerId,
+				publicKey: keypair.publicKey,
+				privateKey: keypair.privateKey,
+				releaseToken: null,
+				error: null,
+				revokeReason: null,
+				revokedBy: null,
+				source: "local_test_api_ephemeral",
+				registrationStatus: "issued",
+				sessionEpoch: null,
+				issuedAtUnixMs: Date.now(),
+				recoveryErrorCode: null,
+				recoveryErrorMessage: null,
+				issueInFlight: false,
+				syncInFlight: false,
+				runtimeStatus: "issued",
+				boundAgentId: null,
+				controlLostAgentId: null,
+				pendingRequestedAgentId: null,
+				pendingForceRebind: false,
+				rebindNotice: null
+			}, expectedAuth);
+		}
+	} catch (error) {
+		if (state.auth !== expectedAuth) return state.auth;
+		throw error;
 	}
-	const keypair = await generateEphemeralEd25519Keypair();
-	if (state.auth.available) return state.auth;
-	const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
-	await installSession(state, {
-		available: true,
-		hostedAccountId: null,
-		playerId,
-		loginChannel: null,
-		maskedLoginHint: null,
-		deviceSessionId: playerId,
-		publicKey: keypair.publicKey,
-		privateKey: keypair.privateKey,
-		releaseToken: null,
-		error: null,
-		revokeReason: null,
-		revokedBy: null,
-		source: "local_test_api_ephemeral",
-		registrationStatus: "issued",
-		sessionEpoch: null,
-		issuedAtUnixMs: Date.now(),
-		recoveryErrorCode: null,
-		recoveryErrorMessage: null,
-		issueInFlight: false,
-		syncInFlight: false,
-		runtimeStatus: "issued",
-		boundAgentId: null,
-		controlLostAgentId: null,
-		pendingRequestedAgentId: null,
-		pendingForceRebind: false,
-		rebindNotice: null
-	});
-	persistLocalTestPlayerSession(state.auth);
+	if (state.auth !== installed) return state.auth;
+	if (!stored) persistLocalTestPlayerSession(state.auth);
 	render();
 	maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
 	return state.auth;
@@ -8948,7 +9239,20 @@ async function issueHostedPlayerIdentity() {
 	return completeHostedAccountLogin();
 }
 async function ensureHostedPlayerAuthAvailable() {
-	if (canAutoIssueLocalTestPlayerSession()) return issueLocalTestPlayerSession();
+	if (canAutoIssueLocalTestPlayerSession()) {
+		const expectedAuth = state.auth;
+		if (localTestPlayerSessionInFlight?.auth !== expectedAuth) {
+			const pending = {
+				auth: expectedAuth,
+				promise: null
+			};
+			pending.promise = issueLocalTestPlayerSession(expectedAuth).finally(() => {
+				if (localTestPlayerSessionInFlight === pending) localTestPlayerSessionInFlight = null;
+			});
+			localTestPlayerSessionInFlight = pending;
+		}
+		return localTestPlayerSessionInFlight.promise;
+	}
 	return state.auth;
 }
 async function retryHostedPlayerIdentityIssue() {
@@ -9533,6 +9837,7 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
 			assertSemanticCapability("agent_chat");
 			await ensureRegisteredPlayerSession(agentId);
 			assertAgentChatFeedbackActive(feedback);
+			await canonicalOwnerRead.refresh(agentId);
 			feedback.stage = "signing";
 			feedback.effect = "building auth proof";
 			render();
@@ -9544,6 +9849,9 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
 			};
 			request.auth = await buildAgentChatAuthProof(request, state.auth);
 			assertAgentChatFeedbackActive(feedback);
+			if (request.auth.player_id !== state.auth.playerId || request.auth.public_key !== state.auth.publicKey) throw new Error("agent_chat identity changed during signing");
+			feedback.canonicalRequest = request.canonical_authority ? request : null;
+			feedback.canonicalRetryCount = 0;
 			feedback.stage = "sent";
 			feedback.effect = "agent_chat request sent; waiting for ack";
 			state.lastChatFeedback = feedback;
@@ -9930,25 +10238,34 @@ function handleAgentChatAck(ack) {
 	if (!acceptRuntimeAckIdentity(ack)) return;
 	const feedback = state.lastChatFeedback;
 	if (!agentChatFeedbackInFlight(feedback) || ack?.agent_id !== feedback.agentId) return;
+	if (feedback.canonicalRequest && !canonicalAckMatches(ack, feedback.canonicalRequest)) return;
 	clearPendingAgentChatAckTimer();
+	if (feedback.canonicalRequest && ack?.status === "pending") {
+		pendingAgentChatAckTimer = scheduleCanonicalGoalPending({
+			ack,
+			feedback,
+			state,
+			clone,
+			requestSnapshotSafe,
+			sameAgentChatFeedback,
+			failPendingAgentChatAck,
+			sendJson,
+			scheduleAgentChatAckTimeout,
+			getSocket: () => socket
+		});
+		return;
+	}
+	if (feedback.canonicalRequest && (ack?.status !== "accepted" || !ack?.intent_id)) {
+		failPendingAgentChatAck("canonical goal commit was not confirmed");
+		return;
+	}
 	clearPendingAgentChatOverallTimer();
-	feedback.stage = "ack";
-	feedback.ok = true;
-	feedback.accepted = true;
-	feedback.reason = null;
-	feedback.effect = `chat accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
-	feedback.response = clone(ack);
-	state.lastChatFeedback = feedback;
-	pushChatHistory({
-		id: `chat-ack-${feedback.id}`,
-		source: "player",
-		agentId: ack?.agent_id || feedback.agentId || null,
-		message: feedback.pendingMessage || "",
-		tick: Number(ack?.accepted_at_tick || state.logicalTime || 0),
-		speaker: feedback.pendingPlayerId || state.auth.playerId || null,
-		playerId: feedback.pendingPlayerId || state.auth.playerId || null,
-		targetAgentId: ack?.agent_id || feedback.agentId || null,
-		intentSeq: ack?.intent_seq || null
+	applyCommittedChatAck({
+		ack,
+		feedback,
+		state,
+		clone,
+		pushChatHistory
 	});
 }
 function handleAgentChatError(error) {
@@ -10158,6 +10475,9 @@ function handleViewerMessage(message, sourceSocket = null) {
 					render();
 				});
 				render();
+			}).catch((error) => {
+				state.auth.error = String(error);
+				render();
 			});
 			break;
 		case "snapshot":
@@ -10189,6 +10509,12 @@ function handleViewerMessage(message, sourceSocket = null) {
 			break;
 		case "prompt_control_error":
 			handlePromptControlError(message.error);
+			break;
+		case "canonical_agent_owner_read_context":
+			canonicalOwnerRead.handleContext(message.context);
+			break;
+		case "canonical_agent_owner_view":
+			canonicalOwnerRead.handleView(message);
 			break;
 		case "agent_chat_ack":
 			handleAgentChatAck(message.ack);
@@ -10630,7 +10956,7 @@ function renderInteractionPanel() {
         <div class="panel__header"><div class="panel__title">Agent Chat</div></div>
         <div class="panel__body stack">
           <div class="field">
-            <label for="agent-chat-message">Message</label>
+            <label for="agent-chat-message">Message</label>${canonicalGoalMarkup(state, selectedAgentId(), escapeHtml)}
             <textarea id="agent-chat-message" rows="4" placeholder="Send a message to the selected agent" ${chatCapability.enabled ? "" : "disabled"}>${escapeHtml(state.chatDraft.message)}</textarea>
           </div>
           <div class="toolbar">
@@ -10846,12 +11172,14 @@ async function bootstrap() {
 		webglVersion: state.webglVersion
 	});
 	render();
-	if (shouldRunHostedBootstrap()) {
-		refreshHostedAdmissionState().then(() => render());
-		ensureHostedPlayerAuthAvailable().then(() => render());
-	}
+	const hostedBootstrap = shouldRunHostedBootstrap();
+	if (hostedBootstrap) refreshHostedAdmissionState().then(() => render());
 	if (shouldConnectViewerWs()) connect();
 	else state.connectionStatus = "disconnected";
+	if (hostedBootstrap) {
+		await ensureHostedPlayerAuthAvailable();
+		render();
+	}
 }
 function updatePixelWorldRuntimeMeta(meta = {}) {
 	if (!meta || typeof meta !== "object") return getState();
@@ -10884,15 +11212,37 @@ window.addEventListener("unhandledrejection", (event) => {
 //#region software_safe_src/first_chat_unlock_preview.jsx
 var _tmpl$$31 = /*#__PURE__*/ template(`<div class="stack stack--compact"data-testid=first-chat-unlock-preview>`);
 var _tmpl$2$29 = /*#__PURE__*/ template(`<div class=first-chat-unlock-preview__field><div class=metric__label></div><div>`);
+var CHAT_PURPOSE = "Start a first conversation with the Agent you control.";
+var CHAT_GATE_EXPLANATION = "First chat passes the starter OC gate with a positive liquid OC balance or an existing starter OC claim record. An existing starter OC record keeps this gate open even after the balance is spent.";
+var RESOURCE_BOUNDARY = `Starter OC grants initial liquid OC and a one-time first-chat unlock. ${CHAT_GATE_EXPLANATION} It is separate from economic slot-1 claim and upkeep funding.`;
+var DEFER_WITHOUT_ECONOMIC_CLAIM = `Deferring leaves your Agent binding unchanged and creates no economic claim or upkeep obligation. ${CHAT_GATE_EXPLANATION}`;
+var DEFER_WITH_ECONOMIC_CLAIMS = `Deferring leaves your existing economic claims and their current upkeep rules unchanged. ${CHAT_GATE_EXPLANATION}`;
+var DEFER_WITH_UNKNOWN_CLAIMS = `Current economic claim obligations are not confirmed. Refresh authoritative state; deferring creates or clears no obligation. ${CHAT_GATE_EXPLANATION}`;
+var LEGACY_CHAT_PURPOSE = "Start a first conversation with your claimed Agent.";
+var LEGACY_RESOURCE_BOUNDARY = "Starter OC unlocks first chat and initial liquid OC; it is separate from slot-1 claim and upkeep funding.";
+var LEGACY_DEFER_EFFECT = "Deferring keeps the completed claim and its upkeep responsibility, but first chat stays locked while liquid OC is zero and no starter OC claim exists.";
+var ZH_CHAT_GATE_EXPLANATION = "可用 OC 大于零或已有初始 OC 领取记录，即可通过初始 OC 这道首聊门禁。已有领取记录时，即使余额用尽，这道门禁也保持通过。";
 var ZH_VALUE_MAP = {
-	chat_purpose: { "Start a first conversation with your claimed Agent.": "与已认领的 Agent 开始第一次对话。" },
+	chat_purpose: { [CHAT_PURPOSE]: "与当前有控制权的 Agent 开始第一次对话。" },
 	immediate_playable_help: { "Ask what the Agent can do next for the current gameplay goal.": "询问 Agent 为当前玩法目标下一步能做什么。" },
 	first_question_or_action_hint: { "Ask: What should we do first?": "试着问：我们第一步该做什么？" },
-	resource_boundary: { "Starter OC unlocks first chat and initial liquid OC; it is separate from slot-1 claim and upkeep funding.": "初始 OC 会解锁首次聊天和初始可用 OC；它不同于第 1 个槽位的认领及维护资金。" },
-	defer_effect: { "Deferring keeps the completed claim and its upkeep responsibility, but first chat stays locked while liquid OC is zero and no starter OC claim exists.": "暂缓不会取消已完成的认领及其维护责任；但在可用 OC 为零且尚未领取初始 OC 时，首次聊天仍会锁定。" }
+	resource_boundary: { [RESOURCE_BOUNDARY]: `初始 OC 提供一次性首聊解锁和初始可用 OC。${ZH_CHAT_GATE_EXPLANATION}它与经济认领中第 1 个槽位的认领及维护资金分开。` },
+	defer_effect: {
+		[DEFER_WITHOUT_ECONOMIC_CLAIM]: `暂缓不改变当前 Agent 绑定，也不会新增经济认领或维护义务。${ZH_CHAT_GATE_EXPLANATION}`,
+		[DEFER_WITH_ECONOMIC_CLAIMS]: `暂缓不改变已有经济认领，其现行维护规则继续适用。${ZH_CHAT_GATE_EXPLANATION}`,
+		[DEFER_WITH_UNKNOWN_CLAIMS]: `当前经济认领义务尚未确认，请刷新权威状态；暂缓不会创建或清除义务。${ZH_CHAT_GATE_EXPLANATION}`
+	}
 };
+function canonicalPreviewValue(field, value) {
+	const hasText = typeof value === "string" && value.trim().length > 0;
+	if (field === "chat_purpose" && value === LEGACY_CHAT_PURPOSE) return CHAT_PURPOSE;
+	if (field === "resource_boundary" && (!hasText || value === LEGACY_RESOURCE_BOUNDARY)) return RESOURCE_BOUNDARY;
+	if (field === "defer_effect" && (!hasText || value === LEGACY_DEFER_EFFECT)) return DEFER_WITH_UNKNOWN_CLAIMS;
+	return value;
+}
 function previewValue(field, value, locale) {
-	return locale === "zh" ? ZH_VALUE_MAP[field]?.[value] || value : value;
+	const canonicalValue = canonicalPreviewValue(field, value);
+	return locale === "zh" ? ZH_VALUE_MAP[field]?.[canonicalValue] || canonicalValue : canonicalValue;
 }
 function recommendedActionValue(value, locale) {
 	if (value === "claim_starter_oc") return locale === "zh" ? "领取初始 OC" : "Claim Starter OC";
@@ -10909,7 +11259,7 @@ function FirstChatUnlockPreview(props) {
 		["defer_effect", tr("如果等待", "If you wait")],
 		["recommended_unlock_action", tr("建议操作", "Recommended action")]
 	];
-	const value = (field) => field === "recommended_unlock_action" ? recommendedActionValue(props.preview[field], locale()) : previewValue(field, props.preview[field], locale());
+	const value = (field) => field === "recommended_unlock_action" ? recommendedActionValue(props.preview?.[field], locale()) : previewValue(field, props.preview?.[field], locale());
 	return (() => {
 		var _el$ = _tmpl$$31();
 		insert(_el$, createComponent(For, {
@@ -16819,7 +17169,7 @@ var _tmpl$2$15 = /*#__PURE__*/ template(`<section class="panel panel--nested"dat
 var _tmpl$3$14 = /*#__PURE__*/ template(`<div class="feedback-summary feedback-summary--error"role=alert>`);
 var _tmpl$4$13 = /*#__PURE__*/ template(`<div class=feedback-summary role=status>`);
 var _tmpl$5$12 = /*#__PURE__*/ template(`<div class="feedback-summary feedback-summary--warn"role=status data-testid=fragment-refill-preview-stale>`);
-var _tmpl$6$7 = /*#__PURE__*/ template(`<div class=stack data-testid=fragment-refill-preview-card><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-detail>`);
+var _tmpl$6$7 = /*#__PURE__*/ template(`<div class=stack data-testid=fragment-refill-preview-card><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-detail></div><div class=feedback-detail>`);
 var _tmpl$7$5 = /*#__PURE__*/ template(`<div class=feedback-detail>`);
 function display$4(value) {
 	return value == null || value === "" ? "—" : String(value);
@@ -16832,14 +17182,41 @@ function Metric$6(props) {
 		return _el$;
 	})();
 }
+function hasCountEstimate(quote) {
+	return Number.isSafeInteger(quote.estimated_replenished_frag_count) && quote.estimated_replenished_frag_count >= 0;
+}
+function hasFutureOpportunity(quote) {
+	return !quote.replenishment_due && Number.isSafeInteger(quote.next_replenish_tick) && Number.isSafeInteger(quote.ticks_until_replenish) && quote.ticks_until_replenish > 0 && quote.next_replenish_tick >= quote.ticks_until_replenish && quote.wait_cost_ticks === quote.ticks_until_replenish;
+}
+function canWaitForReplenishment(quote) {
+	return quote.replenishment_enabled && hasCountEstimate(quote) && quote.estimated_replenished_frag_count > 0 && hasFutureOpportunity(quote);
+}
 function forecastState(quote, locale, tr) {
-	if (!quote.replenishment_enabled) return tr(locale, "不可用", "Unavailable");
-	return quote.replenishment_due ? tr(locale, "现已到期", "Due now") : tr(locale, "已排期", "Scheduled");
+	if (!quote.replenishment_enabled || !hasCountEstimate(quote)) return tr(locale, "不可用", "Unavailable");
+	if (quote.replenishment_due) return tr(locale, "现已到期", "Due now");
+	return hasFutureOpportunity(quote) ? tr(locale, "已排期", "Scheduled") : tr(locale, "不可用", "Unavailable");
 }
 function uncertaintyCopy(quote, locale, tr) {
 	if (!quote.replenishment_enabled) return tr(locale, "此预估中补充已禁用；不承诺会发生材料更新。", "Replenishment is disabled for this forecast; no renewal is promised.");
-	if (!quote.replenishment_due || Number(quote.estimated_replenished_frag_count) <= 0) return tr(locale, "下一次材料更新前没有可用的碎片数量预估。", "No fragment-count estimate is available until the next replenishment.");
+	if (!hasCountEstimate(quote)) return tr(locale, "当前无法估计补充数量，请刷新世界状态后重新评估。", "The fragment-count estimate is unavailable. Refresh the world state before reassessing.");
+	if (quote.estimated_replenished_frag_count === 0) return tr(locale, "当前预计不会增加碎片，请考虑移动或切换材料路线。", "The current forecast expects no new fragments; consider moving or switching material routes.");
 	return tr(locale, "这是运行时的只读估算；实际材料以未来世界快照为准。", "This is a read-only runtime estimate; a future world snapshot remains authoritative.");
+}
+function remainingSummary(quote, locale, tr) {
+	if (quote.chunk_remaining_summary === "current_chunk_resources_unavailable") return tr(locale, "当前资源余量不可用", "Current resource amounts unavailable");
+	return display$4(quote.chunk_remaining_summary);
+}
+function resourceHint(quote, locale, tr) {
+	if (quote.estimated_replenished_resource_hint === "local_runtime_backend_does_not_execute_fragment_replenishment") return tr(locale, "当前世界不执行碎片补充；等待不会增加碎片。", "This world does not execute fragment replenishment; waiting will not add fragments.");
+	return display$4(quote.estimated_replenished_resource_hint);
+}
+function recommendedAction(quote, locale, tr) {
+	if (!quote.replenishment_enabled) return tr(locale, "检查当前资源后，移动或切换材料路线", "Check current resources, then move or switch material routes");
+	if (!hasCountEstimate(quote)) return tr(locale, "刷新世界状态后重新评估", "Refresh the world state before reassessing");
+	if (quote.estimated_replenished_frag_count === 0 || quote.recommended_resource_action === "move_or_switch_material_route") return tr(locale, "检查当前资源后，移动或切换材料路线", "Check current resources, then move or switch material routes");
+	if (quote.recommended_resource_action === "wait_current_chunk" && !canWaitForReplenishment(quote)) return tr(locale, "刷新世界状态后重新评估", "Refresh the world state before reassessing");
+	if (quote.recommended_resource_action === "wait_current_chunk") return tr(locale, "等待当前区块，到下一补充周期重新评估", "Wait in this chunk and reassess at the next replenishment opportunity");
+	return display$4(quote.recommended_resource_action);
 }
 function FragmentRefillPreviewPanel(props) {
 	const [x, setX] = createSignal(String(props.quote?.chunk?.x ?? 0));
@@ -16915,9 +17292,9 @@ function FragmentRefillPreviewPanel(props) {
 			})() : null;
 		})(), null);
 		insert(_el$0, (() => {
-			var _c$5 = memo(() => !!(quote() && remote().status !== "pending"));
+			var _c$5 = memo(() => !!(quote() && remote().status !== "pending" && !error() && !stale()));
 			return () => _c$5() ? (() => {
-				var _el$23 = _tmpl$6$7(), _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$24.nextSibling, _el$28 = _el$27.nextSibling, _el$29 = _el$28.nextSibling;
+				var _el$23 = _tmpl$6$7(), _el$24 = _el$23.firstChild, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$24.nextSibling, _el$28 = _el$27.nextSibling, _el$29 = _el$28.nextSibling, _el$30 = _el$29.nextSibling;
 				insert(_el$25, () => forecastState(quote(), locale(), tr));
 				insert(_el$26, () => `${tr(locale(), "区块", "Chunk")}: ${display$4(quote().chunk?.x)}, ${display$4(quote().chunk?.y)}, ${display$4(quote().chunk?.z)}`);
 				insert(_el$27, createComponent(Metric$6, {
@@ -16925,7 +17302,7 @@ function FragmentRefillPreviewPanel(props) {
 						return tr(locale(), "预计补充碎片", "Estimated replenished fragments");
 					},
 					get value() {
-						return display$4(quote().estimated_replenished_frag_count);
+						return memo(() => !!hasCountEstimate(quote()))() ? display$4(quote().estimated_replenished_frag_count) : tr(locale(), "不可用", "Unavailable");
 					}
 				}), null);
 				insert(_el$27, createComponent(Metric$6, {
@@ -16933,7 +17310,15 @@ function FragmentRefillPreviewPanel(props) {
 						return tr(locale(), "等待成本", "Wait cost");
 					},
 					get value() {
-						return `${display$4(quote().wait_cost_ticks)} ${tr(locale(), "步", "ticks")}`;
+						return memo(() => !!canWaitForReplenishment(quote()))() ? `${display$4(quote().wait_cost_ticks)} ${tr(locale(), "步", "ticks")}` : tr(locale(), "不可等待补充", "No wait option");
+					}
+				}), null);
+				insert(_el$27, createComponent(Metric$6, {
+					get label() {
+						return tr(locale(), "下一复查 tick", "Next recheck tick");
+					},
+					get value() {
+						return display$4(quote().next_replenish_tick);
 					}
 				}), null);
 				insert(_el$27, createComponent(Metric$6, {
@@ -16941,19 +17326,20 @@ function FragmentRefillPreviewPanel(props) {
 						return tr(locale(), "区块余量", "Chunk remaining");
 					},
 					get value() {
-						return display$4(quote().chunk_remaining_summary);
+						return remainingSummary(quote(), locale(), tr);
 					}
 				}), null);
 				insert(_el$28, () => uncertaintyCopy(quote(), locale(), tr));
-				insert(_el$29, () => `${tr(locale(), "资源提示", "Resource hint")}: ${display$4(quote().estimated_replenished_resource_hint)}`);
+				insert(_el$29, () => `${tr(locale(), "资源提示", "Resource hint")}: ${resourceHint(quote(), locale(), tr)}`);
+				insert(_el$30, () => `${tr(locale(), "建议行动", "Recommended action")}: ${recommendedAction(quote(), locale(), tr)}`);
 				insert(_el$23, createComponent(For, {
 					get each() {
 						return quote().remaining_by_element_g || [];
 					},
 					children: (entry) => (() => {
-						var _el$30 = _tmpl$7$5();
-						insert(_el$30, () => `${display$4(entry.element)}: ${display$4(entry.remaining_g)}g`);
-						return _el$30;
+						var _el$31 = _tmpl$7$5();
+						insert(_el$31, () => `${display$4(entry.element)}: ${display$4(entry.remaining_g)}g`);
+						return _el$31;
 					})()
 				}), null);
 				return _el$23;
@@ -25222,6 +25608,15 @@ function InteractionPanel() {
 					return [
 						(() => {
 							var _el$318 = _tmpl$55(), _el$319 = _el$318.firstChild, _el$320 = _el$319.nextSibling;
+							insert(_el$318, createComponent(CanonicalAgentGoal, {
+								state,
+								get agentId() {
+									return agentId();
+								},
+								get locale() {
+									return locale();
+								}
+							}), _el$319);
 							insert(_el$319, () => tr(locale(), "消息", "Message"));
 							_el$320.$$input = (event) => {
 								state.chatDraft.message = String(event.currentTarget.value || "");

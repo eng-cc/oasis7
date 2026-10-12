@@ -695,7 +695,8 @@ jobs:
           CI_VERBOSE: "1"
           OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
-        run: bash ./scripts/ci-tests.sh required --group "workspace_support" --repo-root "$GITHUB_WORKSPACE"
+          SUPPORT_PLAN: ${{ needs.select.outputs.plan }}
+        run: bash ./scripts/ci-tests.sh required --group "workspace_support" --repo-root "$GITHUB_WORKSPACE" --support-plan "$SUPPORT_PLAN"
 
   scenario-regression:
     needs: select

@@ -3,7 +3,7 @@ use super::control_plane::{
 };
 use super::session_policy::map_session_policy_error_code;
 use super::*;
-use crate::simulator::{ChunkCoord, FragmentRefillPreview, WorldKernel};
+use crate::simulator::{ChunkCoord, FragmentRefillPreview};
 use crate::viewer::auth::verify_fragment_refill_preview_auth_proof;
 use crate::viewer::protocol::{
     FragmentRefillElementRemaining, FragmentRefillPreviewChunk,
@@ -46,7 +46,7 @@ impl ViewerRuntimeLiveServer {
         .map(fragment_refill_preview_response)
     }
 
-    /// Reads the kernel's fragment-replenishment forecast from a fresh runtime projection.
+    /// Reports local backend capability or an unavailable service projection.
     /// It does not advance time, consume a nonce, or mutate a player/session binding.
     pub(in crate::viewer::runtime_live) fn handle_fragment_refill_preview(
         &mut self,
@@ -98,35 +98,43 @@ impl ViewerRuntimeLiveServer {
             action_id: Some(ACTION_ID.to_string()),
             target_agent_id: err.agent_id,
         })?;
-        let model = super::mapping::runtime_state_to_simulator_model(
-            self.world.state(),
-            &self.llm_sidecar,
-            self.seed_model.as_ref(),
-        );
-        let mut kernel = WorldKernel::with_model_and_chunk_runtime(
-            self.snapshot_config.clone(),
-            model,
-            self.llm_sidecar.chunk_runtime.clone(),
-        );
-        let mut snapshot = kernel.snapshot();
-        snapshot.time = self.world.state().time;
-        kernel =
-            WorldKernel::from_snapshot(snapshot, kernel.journal_snapshot()).map_err(|err| {
-                GameplayActionError {
-                    code: "fragment_refill_preview_projection_failed".to_string(),
-                    message: format!("{ACTION_ID} projection failed: {err:?}"),
-                    action_id: Some(ACTION_ID.to_string()),
-                    target_agent_id: Some(agent_id.to_string()),
-                }
-            })?;
-        kernel
-            .quote_fragment_refill_preview(request.chunk)
-            .map_err(|reason| GameplayActionError {
-                code: "fragment_refill_preview_rejected".to_string(),
-                message: format!("{ACTION_ID} rejected: {reason}"),
-                action_id: Some(ACTION_ID.to_string()),
-                target_agent_id: Some(agent_id.to_string()),
-            })
+        if self.config.world_service.is_none() {
+            // RuntimeWorld advances this backend and has no fragment refill
+            // executor. A generated seed or temporary kernel is not evidence
+            // of a future live refill. Keep unknown resource amounts explicit.
+            return Ok(disabled_local_fragment_refill_preview(request.chunk));
+        }
+        // WorldServiceProjection does not publish authoritative chunk budgets
+        // or refill capability. A startup seed cannot establish either fact.
+        Err(GameplayActionError {
+            code: "fragment_refill_preview_projection_failed".to_string(),
+            message: "current fragment resource projection is unavailable from the world service"
+                .to_string(),
+            action_id: Some(ACTION_ID.to_string()),
+            target_agent_id: Some(agent_id.to_string()),
+        })
+    }
+}
+
+fn disabled_local_fragment_refill_preview(chunk_coord: ChunkCoord) -> FragmentRefillPreview {
+    FragmentRefillPreview {
+        chunk_coord,
+        target_frag_id: None,
+        current_frag_remaining_summary: "current_fragment_resources_unavailable".to_string(),
+        chunk_remaining_summary: "current_chunk_resources_unavailable".to_string(),
+        remaining_by_element_g: Default::default(),
+        replenishment_enabled: false,
+        replenishment_due: false,
+        next_replenish_tick: None,
+        ticks_until_replenish: None,
+        wait_cost_ticks: 0,
+        estimated_replenished_frag_count: 0,
+        estimated_replenished_resource_hint:
+            "local_runtime_backend_does_not_execute_fragment_replenishment".to_string(),
+        next_industrial_goal_relevance:
+            "check_current_resources_before_moving_or_switching_material_route".to_string(),
+        wait_cost_summary: "replenishment_disabled_no_wait_option".to_string(),
+        recommended_resource_action: "move_or_switch_material_route".to_string(),
     }
 }
 

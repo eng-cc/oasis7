@@ -7,7 +7,7 @@
     "description": "Implemented opt-in loopback HTTP read contract. Disabled by default. No pairing, tokens, contexts, actions or operations are available."
   },
   "x-oasis7-api-revision": 1,
-  "x-oasis7-schema-revision": 3,
+  "x-oasis7-schema-revision": 4,
   "x-oasis7-limits": {
     "max_proof_header_bytes": 8192,
     "max_http_header_bytes": 16384,
@@ -261,7 +261,7 @@
     "/v1/game/worlds/{world}/agents/{agent}/task-control": {
       "get": {
         "operationId": "getAgentTaskControl",
-        "description": "Only the current canonical owner can read task control. Delegated Agent reads do not grant task access. Returns the initial suspended control record from durable Runtime intent receipts, not a goal snapshot, executor context or action permission. Uses the same device-signed /v1/world/view proof; no query, body, browser Origin or historical read.",
+        "description": "The current canonical owner or currently bound executor with a live matching delegation can read current task control metadata. Other delegated Agent reads do not grant task access. Uses the device-signed /v1/world/view proof; no query, body, browser Origin or historical read. Complete private goals and captured contexts use the separate native task lane.",
         "security": [
           {
             "DeviceReadProof": []
@@ -607,7 +607,7 @@
           },
           "data": {
             "type": "object",
-            "description": "Authorized AgentCell or CapabilityCatalogSnapshot projection. All integer values recursively use decimal strings; non-integer numbers keep their JSON numeric representation. This is not a complete first-session observation or an action schema. Task-control data is current owner-only, initially suspended with no active goal or executor; it is not a complete task snapshot."
+            "description": "Authorized AgentCell, CapabilityCatalogSnapshot or current task control metadata. All integer values recursively use decimal strings. This is not a full first-session observation or action schema. Private goal bodies, salts and proofs are excluded."
           }
         },
         "required": [
@@ -660,7 +660,7 @@
             "const": false
           },
           "schema_revision": {
-            "const": 3
+            "const": 4
           },
           "openapi_url": {
             "const": "/v1/game/openapi.json"
@@ -779,13 +779,23 @@
             "const": "1"
           },
           "task_status": {
-            "const": "suspended"
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended"
+            ]
           },
           "executor_id": {
-            "type": "null"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "active_goal_reference": {
             "$ref": "#/components/schemas/GoalReference"
+          },
+          "executor_binding": {
+            "$ref": "#/components/schemas/ExecutorBinding"
           }
         },
         "required": [
@@ -807,7 +817,7 @@
           "task_status",
           "executor_id"
         ],
-        "description": "Current canonical owner-only task control. A published goal adds its opaque reference; the task remains suspended without executor authority or action permission. Private content, salt, proof and digest are never included."
+        "description": "Current canonical task control metadata for the owner or currently bound delegated executor. Binding, replacement and Stop advance the executor fence; goal publication retains the current binding. Private content, salt, proof and digest are excluded."
       },
       "GoalReference": {
         "type": "object",
@@ -844,6 +854,34 @@
           "activation_committed_height"
         ],
         "description": "Public owner-signed activation metadata. The opaque reference is a private-salt commitment; salt, complete goal and body-bound signature remain private. Committed height locates historical activation; it is not a standalone finality proof."
+      },
+      "ExecutorBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "executor_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "executor_public_key": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "delegation_generation": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "executor_epoch": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          }
+        },
+        "required": [
+          "executor_id",
+          "executor_public_key",
+          "delegation_generation",
+          "executor_epoch"
+        ]
       }
     }
   }

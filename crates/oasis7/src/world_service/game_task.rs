@@ -7,6 +7,12 @@ pub use oasis7_agent_api::game::{
     GameGoalPublishV1, GameGoalReferenceV1, GameTaskControlV1, GameTaskCreateV1,
 };
 use std::collections::BTreeMap;
+mod executor;
+pub use executor::*;
+mod task_context;
+pub use task_context::*;
+mod task_retirement;
+pub use task_retirement::*;
 
 pub fn validate_owner(
     world: &World,
@@ -66,6 +72,7 @@ fn create_control(
         active_goal_reference: None,
         executor_epoch: DecimalU64(0),
         executor_id: None,
+        executor_binding: None,
         created_operation_id: value.client_operation_id.clone(),
     })
 }
@@ -155,6 +162,10 @@ pub(super) fn validate_result(result: &CanonicalIntentResultV1) -> Result<(), St
         WorldServicePayloadV1::GameTaskCreate(_) => Some(
             serde_json::to_value(create_control(&result.request)?).map_err(|e| e.to_string())?,
         ),
+        WorldServicePayloadV1::GameExecutorControl(_) => Some(
+            serde_json::to_value(executor::executor_receipt(&result.request)?)
+                .map_err(|e| e.to_string())?,
+        ),
         WorldServicePayloadV1::GameGoalPublish(_) => Some(
             serde_json::to_value(publish_receipt(&result.request, result.committed_height)?)
                 .map_err(|e| e.to_string())?,
@@ -189,7 +200,9 @@ fn collect<'a>(
             serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
         if matches!(
             result.request.signed_payload,
-            WorldServicePayloadV1::GameTaskCreate(_) | WorldServicePayloadV1::GameGoalPublish(_)
+            WorldServicePayloadV1::GameTaskCreate(_)
+                | WorldServicePayloadV1::GameGoalPublish(_)
+                | WorldServicePayloadV1::GameExecutorControl(_)
         ) {
             results.insert(key.clone(), result);
         }
@@ -200,7 +213,9 @@ fn collect<'a>(
         correlation::validate_result(&key, &value)?;
         if !matches!(
             result.request.signed_payload,
-            WorldServicePayloadV1::GameTaskCreate(_) | WorldServicePayloadV1::GameGoalPublish(_)
+            WorldServicePayloadV1::GameTaskCreate(_)
+                | WorldServicePayloadV1::GameGoalPublish(_)
+                | WorldServicePayloadV1::GameExecutorControl(_)
         ) {
             continue;
         }
@@ -269,6 +284,11 @@ fn reduce(results: Vec<CanonicalIntentResultV1>) -> Result<BTreeMap<String, Redu
                     return Err("duplicate canonical task identity".into());
                 }
             }
+            WorldServicePayloadV1::GameExecutorControl(signed) => publishes.push((
+                signed.request.fence.task_id.clone(),
+                signed.request.fence.task_revision.0,
+                result,
+            )),
             WorldServicePayloadV1::GameGoalPublish(signed) => publishes.push((
                 signed.request.task_id.clone(),
                 signed.request.expected_task_revision.0,
@@ -279,6 +299,25 @@ fn reduce(results: Vec<CanonicalIntentResultV1>) -> Result<BTreeMap<String, Redu
     }
     publishes.sort_by(|a, b| (&a.0, a.1).cmp(&(&b.0, b.1)));
     for (_, _, result) in publishes {
+        if let WorldServicePayloadV1::GameExecutorControl(signed) = &result.request.signed_payload {
+            let task = tasks
+                .get_mut(&signed.request.fence.task_id)
+                .ok_or("executor has no canonical task predecessor")?;
+            if oasis7_agent_api::game::GameTaskFenceV1::from_control(&task.control)
+                != signed.request.fence
+            {
+                return Err("executor predecessor or owner fence mismatch".into());
+            }
+            if task.last_height > result.committed_height {
+                return Err("executor control heights regress".into());
+            }
+            executor::apply_executor_receipt(
+                &mut task.control,
+                executor::executor_receipt(&result.request)?,
+            );
+            task.last_height = result.committed_height;
+            continue;
+        }
         let WorldServicePayloadV1::GameGoalPublish(signed) = &result.request.signed_payload else {
             unreachable!()
         };
