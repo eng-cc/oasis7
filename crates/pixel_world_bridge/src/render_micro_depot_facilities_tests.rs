@@ -35,6 +35,42 @@ fn depot_with_service_radius(id: &str, service_radius_cm: f64) -> MicroDepotFaci
     }
 }
 
+fn service_radius_segments(app: &mut App) -> BTreeMap<(String, u8), (Entity, Vec3, Quat, Vec2)> {
+    let world = app.world_mut();
+    world
+        .query::<(
+            Entity,
+            &PixelWorldMicroDepotServiceRadiusVisual,
+            &Transform,
+            &Sprite,
+        )>()
+        .iter(world)
+        .map(|(entity, visual, transform, sprite)| {
+            (
+                (visual.id.clone(), visual.segment),
+                (
+                    entity,
+                    transform.translation,
+                    transform.rotation,
+                    sprite
+                        .custom_size
+                        .expect("service-radius segment has a size"),
+                ),
+            )
+        })
+        .collect()
+}
+
+fn reconcile_depot_scene(app: &mut App) {
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.reactive_scheduling = true;
+        runtime.needs_reconcile = true;
+        runtime.camera_user_override = true;
+    }
+    app.update();
+}
+
 #[test]
 fn facility_only_snapshots_reconcile_added_glyph_and_grounding() {
     assert_facility_snapshot_reconciles(false);
@@ -567,8 +603,9 @@ fn micro_depot_service_radius_outline_is_noninteractive_and_cleans_up_when_inval
         .iter(world)
         .filter(|(visual, _, _)| visual.id == "micro_depot:active")
         .collect::<Vec<_>>();
-    assert!(
-        !rendered.is_empty(),
+    assert_eq!(
+        rendered.len(),
+        8,
         "a positive published service radius needs a visible world-scale outline"
     );
     assert!(rendered.iter().all(|(_, sprite, transform)| {
@@ -604,6 +641,15 @@ fn micro_depot_service_radius_outline_is_noninteractive_and_cleans_up_when_inval
         .render_state
         .as_mut()
         .expect("test render state")
+        .micro_depot_facilities[0]
+        .service_radius_cm = 240_000.0;
+    app.update();
+    assert_eq!(service_radius_segments(&mut app).len(), 8);
+    app.world_mut()
+        .resource_mut::<BevyRuntimeState>()
+        .render_state
+        .as_mut()
+        .expect("test render state")
         .world_bounds = None;
     app.update();
     let world = app.world_mut();
@@ -613,6 +659,113 @@ fn micro_depot_service_radius_outline_is_noninteractive_and_cleans_up_when_inval
         0,
         "missing world bounds cannot leave a stale service-radius outline"
     );
+}
+
+#[test]
+fn micro_depot_service_radius_reuses_entities_across_static_reconcile_and_reorder() {
+    let mut state = sample_render_state(12_000.0);
+    state.selection = None;
+    state.micro_depot_facilities = vec![
+        depot_with_service_radius("first", 240_000.0),
+        depot_with_service_radius("second", 120_000.0),
+    ];
+    let mut app = render_test_app(state);
+    let initial = service_radius_segments(&mut app);
+    assert_eq!(initial.len(), 16);
+
+    reconcile_depot_scene(&mut app);
+    assert_eq!(service_radius_segments(&mut app), initial);
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let state = runtime.render_state.as_mut().expect("render state");
+        state.micro_depot_facilities.reverse();
+        state.agents[0]
+            .status_badges
+            .push("unrelated update".into());
+    }
+    reconcile_depot_scene(&mut app);
+    assert_eq!(
+        service_radius_segments(&mut app),
+        initial,
+        "DTO order and unrelated updates must not recreate or move radius segments"
+    );
+}
+
+#[test]
+fn micro_depot_service_radius_updates_geometry_without_churning_on_animation_frames() {
+    let mut state = sample_render_state(12_000.0);
+    state.selection = None;
+    state.micro_depot_facilities = vec![depot_with_service_radius("active", 240_000.0)];
+    let mut app = render_test_app(state);
+    let initial = service_radius_segments(&mut app);
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.camera.zoom *= 1.5;
+        runtime.camera.pan_x_px += 10.0;
+    }
+    reconcile_depot_scene(&mut app);
+    let moved = service_radius_segments(&mut app);
+    assert_ne!(moved, initial, "camera changes update outline geometry");
+    for (key, segment) in &initial {
+        assert_eq!(moved[key].0, segment.0, "camera changes retain entity IDs");
+    }
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime
+            .render_state
+            .as_mut()
+            .expect("render state")
+            .micro_depot_facilities[0]
+            .service_radius_cm = 120_000.0;
+        runtime.needs_reconcile = false;
+        runtime.animation_dirty = true;
+    }
+    app.update();
+    assert_eq!(
+        service_radius_segments(&mut app),
+        moved,
+        "animation-only updates must not reconcile depot geometry"
+    );
+    reconcile_depot_scene(&mut app);
+    let resized = service_radius_segments(&mut app);
+    assert_ne!(resized, moved, "static updates apply the changed radius");
+    for (key, segment) in &initial {
+        assert_eq!(
+            resized[key].0, segment.0,
+            "radius changes retain entity IDs"
+        );
+    }
+}
+
+#[test]
+fn micro_depot_service_radius_cleans_up_stale_keys_and_unmounts_without_touching_survivors() {
+    let mut state = sample_render_state(12_000.0);
+    state.selection = None;
+    state.micro_depot_facilities = vec![
+        depot_with_service_radius("removed", 240_000.0),
+        depot_with_service_radius("survivor", 120_000.0),
+    ];
+    let mut app = render_test_app(state);
+    let expected_survivor = service_radius_segments(&mut app)
+        .into_iter()
+        .filter(|((id, _), _)| id == "micro_depot:survivor")
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(expected_survivor.len(), 8);
+    app.world_mut()
+        .resource_mut::<BevyRuntimeState>()
+        .render_state
+        .as_mut()
+        .expect("render state")
+        .micro_depot_facilities
+        .remove(0);
+    reconcile_depot_scene(&mut app);
+    assert_eq!(service_radius_segments(&mut app), expected_survivor);
+
+    app.world_mut().resource_mut::<BevyRuntimeState>().mounted = false;
+    app.update();
+    assert!(service_radius_segments(&mut app).is_empty());
 }
 
 #[test]

@@ -5,6 +5,8 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         feedback: PlayerGameplayRecentFeedback,
     ) {
+        // Only world progress/readiness producers write the shared layer.
+        // Signed request feedback belongs in set_verified_player_gameplay_feedback.
         self.set_latest_player_gameplay_feedback_with_causality(feedback, None);
     }
 
@@ -75,10 +77,12 @@ impl ViewerRuntimeLiveServer {
         ));
     }
 
-    pub(super) fn record_gameplay_action_rejection(&mut self, error: &GameplayActionError) {
+    pub(super) fn gameplay_action_rejection_feedback(
+        error: &GameplayActionError,
+    ) -> PlayerGameplayRecentFeedback {
         let action_id = error.action_id.as_deref().unwrap_or("unknown");
         let hint = gameplay_action_rejection_hint(error.code.as_str());
-        self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
+        Self::make_player_gameplay_feedback(
             format!("gameplay_action:{action_id}"),
             if error.code == "world_service_outcome_unknown" {
                 "unknown"
@@ -92,7 +96,7 @@ impl ViewerRuntimeLiveServer {
             Some(hint.to_string()),
             0,
             0,
-        ));
+        )
     }
 
     pub(super) fn clear_chain_sync_failure_feedback(&mut self) {

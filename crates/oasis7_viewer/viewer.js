@@ -5065,7 +5065,7 @@ function createViewerWorldScaleModule({ documentRef, state, isLocaleZh, normaliz
 		if (!width || !depth || !height) return null;
 		return `${width} × ${depth} × ${height}`;
 	}
-	function selectedWorldAnchor() {
+	function selectedWorldAnchor(locations) {
 		const selected = state.selectedObject;
 		if (selected && finitePositionComponents(selected.pos)) return {
 			kind: state.selectedKind || "location",
@@ -5074,7 +5074,7 @@ function createViewerWorldScaleModule({ documentRef, state, isLocaleZh, normaliz
 			radiusCm: locationRadiusCm(selected),
 			locationId: selected.location_id || selected.id || null
 		};
-		const fallback = Object.values(state.snapshot?.model?.locations || {}).find((location) => location?.pos);
+		const fallback = locations.find((location) => location?.pos);
 		if (!fallback) return null;
 		return {
 			kind: "location",
@@ -5112,8 +5112,9 @@ function createViewerWorldScaleModule({ documentRef, state, isLocaleZh, normaliz
 	function buildWorldScaleSurface(locale = state.uiLocale) {
 		const isZh = isLocaleZh(locale);
 		const worldBoundsLabel = formatWorldBoundsLabel(snapshotSpaceConfig(), locale);
-		const anchor = selectedWorldAnchor();
-		const nearestLocations = nearestLocationsForAnchor(anchor, Object.values(state.snapshot?.model?.locations || {}).filter((location) => location?.id && location?.pos), locale);
+		const allLocations = Object.values(state.snapshot?.model?.locations || {});
+		const anchor = selectedWorldAnchor(allLocations);
+		const nearestLocations = nearestLocationsForAnchor(anchor, allLocations.filter((location) => location?.id && location?.pos), locale);
 		return {
 			physicalTruth: {
 				canonicalUnitLabel: formatPhysicalDistanceCm(1, locale),
@@ -7494,6 +7495,7 @@ var firstAgentClaimAutoAdvanceTimer = null;
 var firstAgentClaimAutoRefreshTimer = null;
 var requestId = 0;
 var authNonceCounter = 0;
+var localTestPlayerSessionInFlight = null;
 var viewerPromptControlModule = null;
 var viewerControlLossModule = null;
 var semanticSendLoop = null;
@@ -9117,46 +9119,50 @@ function canAutoIssueLocalTestPlayerSession() {
 	const wsHost = hostnameFromUrl(state.wsUrl || initialWsUrl());
 	return isLoopbackHostname(pageHost) && isLoopbackHostname(wsHost);
 }
-async function issueLocalTestPlayerSession() {
+async function issueLocalTestPlayerSession(expectedAuth) {
 	const stored = resolveStoredLocalTestPlayerSession();
-	if (stored) {
-		await installSession(state, stored);
-		render();
-		maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
-		return state.auth;
+	let installed;
+	try {
+		if (stored) installed = await installSession(state, stored, expectedAuth);
+		else {
+			const keypair = await generateEphemeralEd25519Keypair();
+			if (state.auth !== expectedAuth || state.auth.available) return state.auth;
+			const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
+			installed = await installSession(state, {
+				available: true,
+				hostedAccountId: null,
+				playerId,
+				loginChannel: null,
+				maskedLoginHint: null,
+				deviceSessionId: playerId,
+				publicKey: keypair.publicKey,
+				privateKey: keypair.privateKey,
+				releaseToken: null,
+				error: null,
+				revokeReason: null,
+				revokedBy: null,
+				source: "local_test_api_ephemeral",
+				registrationStatus: "issued",
+				sessionEpoch: null,
+				issuedAtUnixMs: Date.now(),
+				recoveryErrorCode: null,
+				recoveryErrorMessage: null,
+				issueInFlight: false,
+				syncInFlight: false,
+				runtimeStatus: "issued",
+				boundAgentId: null,
+				controlLostAgentId: null,
+				pendingRequestedAgentId: null,
+				pendingForceRebind: false,
+				rebindNotice: null
+			}, expectedAuth);
+		}
+	} catch (error) {
+		if (state.auth !== expectedAuth) return state.auth;
+		throw error;
 	}
-	const keypair = await generateEphemeralEd25519Keypair();
-	if (state.auth.available) return state.auth;
-	const playerId = `local-test-player-${Date.now().toString(36)}-${authNonceCounter + 1}`;
-	await installSession(state, {
-		available: true,
-		hostedAccountId: null,
-		playerId,
-		loginChannel: null,
-		maskedLoginHint: null,
-		deviceSessionId: playerId,
-		publicKey: keypair.publicKey,
-		privateKey: keypair.privateKey,
-		releaseToken: null,
-		error: null,
-		revokeReason: null,
-		revokedBy: null,
-		source: "local_test_api_ephemeral",
-		registrationStatus: "issued",
-		sessionEpoch: null,
-		issuedAtUnixMs: Date.now(),
-		recoveryErrorCode: null,
-		recoveryErrorMessage: null,
-		issueInFlight: false,
-		syncInFlight: false,
-		runtimeStatus: "issued",
-		boundAgentId: null,
-		controlLostAgentId: null,
-		pendingRequestedAgentId: null,
-		pendingForceRebind: false,
-		rebindNotice: null
-	});
-	persistLocalTestPlayerSession(state.auth);
+	if (state.auth !== installed) return state.auth;
+	if (!stored) persistLocalTestPlayerSession(state.auth);
 	render();
 	maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
 	return state.auth;
@@ -9233,7 +9239,20 @@ async function issueHostedPlayerIdentity() {
 	return completeHostedAccountLogin();
 }
 async function ensureHostedPlayerAuthAvailable() {
-	if (canAutoIssueLocalTestPlayerSession()) return issueLocalTestPlayerSession();
+	if (canAutoIssueLocalTestPlayerSession()) {
+		const expectedAuth = state.auth;
+		if (localTestPlayerSessionInFlight?.auth !== expectedAuth) {
+			const pending = {
+				auth: expectedAuth,
+				promise: null
+			};
+			pending.promise = issueLocalTestPlayerSession(expectedAuth).finally(() => {
+				if (localTestPlayerSessionInFlight === pending) localTestPlayerSessionInFlight = null;
+			});
+			localTestPlayerSessionInFlight = pending;
+		}
+		return localTestPlayerSessionInFlight.promise;
+	}
 	return state.auth;
 }
 async function retryHostedPlayerIdentityIssue() {
@@ -10456,6 +10475,9 @@ function handleViewerMessage(message, sourceSocket = null) {
 					render();
 				});
 				render();
+			}).catch((error) => {
+				state.auth.error = String(error);
+				render();
 			});
 			break;
 		case "snapshot":
@@ -11150,12 +11172,14 @@ async function bootstrap() {
 		webglVersion: state.webglVersion
 	});
 	render();
-	if (shouldRunHostedBootstrap()) {
-		refreshHostedAdmissionState().then(() => render());
-		ensureHostedPlayerAuthAvailable().then(() => render());
-	}
+	const hostedBootstrap = shouldRunHostedBootstrap();
+	if (hostedBootstrap) refreshHostedAdmissionState().then(() => render());
 	if (shouldConnectViewerWs()) connect();
 	else state.connectionStatus = "disconnected";
+	if (hostedBootstrap) {
+		await ensureHostedPlayerAuthAvailable();
+		render();
+	}
 }
 function updatePixelWorldRuntimeMeta(meta = {}) {
 	if (!meta || typeof meta !== "object") return getState();

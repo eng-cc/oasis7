@@ -745,6 +745,33 @@ while installation remains unrouted and replay shares the same raw reducer seman
 ### 待决持久化与恢复重审
 提交接收与 canonical execution 是两个状态边界。无 finality 的 signed intent 必须由 runtime/P2P 批准的持久化 owner 保留 identity、原 payload、关联和 truthful no-effect disposition；字段/schema 尚待专业合同批准，不能用 effect queue/cognition journal 冒充通用实现。入队/重连/status read 不扣资源、不授予资格、不推进工业/W 或后续依赖。恢复必须先通过服务闸门，再从 fresh canonical snapshot 读取当前权限、资源、期限、manifest 和前置条件，在 canonical 顺序重审，原子产生生效 receipt 或无效果拒绝/过期/重规划处置。crash 前后不能静默丢失、结算或改变原请求；pending 持久状态、winner 和 receipt 应落在 §6.2.3 同一完整 generation/历史边界，不能拼接混合 generations。消费者读取 committed receipt 与 truthful pending，无完成时间或退款新承诺；withdrawal/replacement 不获单方面取消权。
 
+上述“无效果、恢复后当前条件重审”只适用于尚无固定 execution continuation 且已核实无效果
+的 pending；没有 finality 回应或原回应丢失不构成该事实。Unknown 先核对原持久记录，
+不得释放原 nonce 或据此新开动作。已固定原决定的执行中崩溃，适用下节的原输入恢复。
+
+<a id="runtime-controlled-candidate-recovery-receiver"></a>
+### 受控权威原决定恢复的接收边界（目标）
+
+Runtime 接收 [P2P 原 candidate 恢复 v1](../p2p/design.md#des-p2p-original-candidate-recovery-v1)：
+精确原 Snapshot/Journal、签名输入、nonce/reservation、已决定 context、时间/随机输入及
+native/WASM/规则工件必须在执行前形成双端持久闭包。恢复先处理已决定、qualified 或
+published 事实；只有缺原 candidate 且闭包完整时，才在 detached World 以相同原 parent、
+版本和决定输入重建。原 admission 及 reservation 不在当前 snapshot 上重算，也不再次扣除。
+缺材料、冲突 root 或旧工件不可执行保留原身份并 `recovery_required`。
+
+本目标中的 candidate 重建可调用精确原版本的纯执行器/WASM；它和 §6.2.3 的 canonical
+history replay 分属不同阶段。后者继续只应用已提交历史，前者只构造未发布的内存候选；
+二者都不得新调 LLM、读取外部实时条件或触发 dispatcher。重建的业务状态、结果、nonce、
+里程碑和 outbox 沿一个完整 generation 发布，外部派发仍由提交后的既有幂等合同主责。
+已经固定的 continuation 必须在后继版本/epoch activation 前收敛，不被 activation 重新选版。
+
+正式 authority、控制记录类型及五路 API 的 proof/version 规则由
+[P2P 正式受控权威 v1](../p2p/design.md#des-p2p-formal-controlled-authority-v1) 主责。
+Runtime 仅从验证后的 ActiveAuthority 和同记录 proof 构造正式 CommitRef/可发布结果；
+工程 scope、配置、WorldService 服务签名和本地重执行成功都不能代替正式证明。
+现有 guarded-local 在完整 candidate 未落盘时仍停写；本节是尚未实施的接收目标，
+不把原工程回归、普通 v1 客户端或部署状态升级为正式能力。
+
 <a id="runtime-lineage-design"></a>
 ### 互斥胜者与原子处置
 专业域负责标记同 lineage 的互斥成员及允许的 withdrawal/replacement；runtime 不从相同 payload、ActionId 或 retry 推断互斥。canonical ordering 后在一个 root transaction 内检查尚无 effect-bearing winner、当前成员有效，暂存业务效果、winner、其 receipt 和其余成员终止处置，全部 prepare 成功后统一 publish；没有 inner commit 或业务效果先行的 loser repair。若首个成员仅被 rejected/expired，终止它自身，不占 effect winner，不取消其他/独立请求。失败/commit uncertainty 服从 §6.2.2；retry/replay 读取原 winner/disposition，不产生新 effect/receipt。持久重启必须恢复一致 winner+effect+loser 状态，否则 fail closed。既有单操作 idempotency/签名验证是必要子能力，不能代替此目标仲裁；具体标记/schema/排序依赖 P2P、domain owner 与 QA 评审。
@@ -753,6 +780,10 @@ while installation remains unrouted and replay shares the same raw reducer seman
 ### Manifest activation 与历史回放
 治理负责 canonical activation boundary，P2P 提供 finalized block/activation proof，WASM 提供 admissible ABI/artifact/schema。节点预置兼容工件后只证明可用性。首次已 committed/finality-verified execution block 按 boundary 前/at/after 决定 governing version；candidate 或 client compatibility declaration 仅非权威兼容输入，不绑定世界规则。执行按该版本当前权限/资源/前置条件重新 preflight 和 prepare；激活前 pending 在新版本下不能继承旧 quote/资格，不能静默翻译 payload、先应用旧部分再套新规则。不兼容原子拒绝/过期，主体可明确重规划新兼容请求；linked replacement 仍走互斥 winner，独立未关联请求需要专业确认。
 执行与 receipt 的历史 binding 必须可回读其 block manifest/artifact；保留高度的依赖由 storage pin/replay 合同保护。历史 replay 永远按原 binding，不用当前 manifest/price 改写旧成本、权限、资源、责任；缺失/冲突 activation proof、artifact 或 compatibility 同时阻断执行与恢复。§6.3 instance history 与 §6.2.3 replay/generation 是承载边界，完整 activation ledger/readiness/rollback 仍未证明。四条 release lane 保持独立，协议/不兼容 host ABI 变动要协调升级/fork 与迁移证据。
+
+这里“激活前 pending 在新版本重审”同样限于未固定 execution continuation 的请求；
+已固定原决定的重建沿 [原决定接收边界](#runtime-controlled-candidate-recovery-receiver)，
+不能借 activation 变更原执行版本、nonce 或结果。
 
 <a id="runtime-recovery-design"></a>
 ### 同世界恢复与服务闸门
@@ -806,6 +837,7 @@ admission 前验证 target world 身份，receipt 与 parent/history/result 保�
 
 | 上游 requirement / acceptance | 具体 obligation 与条件 | 本设计条款 | 外部 owner / dependency | 排除或未覆盖 |
 | --- | --- | --- | --- | --- |
+| [单权威提交](../p2p/prd.md#p2p-single-authority-durable-commit) | 固定原决定按精确输入恢复，与当前重审 pending 分开；正式证明先于发布 | [接收设计](#runtime-controlled-candidate-recovery-receiver) | P2P continuation/proof 与存储；WASM/native 工件；QA 故障 oracle | 新接收协议待实施，现有 guarded-local 拒绝边界不变 |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-001) | 同 version/ordered inputs/parent，全 active validator re-execute，missing/mismatch/越权零部分效果 | [设计](#runtime-deterministic-design) | P2P finality/集合/round；WASM artifact；QA 同候选 full | 单节点不代签 SC-1/4 |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-002) | 无 finality durable no-effect pending，恢复 fresh 当前权限/资源/期限/canonical order，只有 committed receipt 更新结论 | [设计](#runtime-pending-design) | P2P pending/order；Agent/Viewer/API 可读状态 | effect/cognition queue 不代签通用 signed pending |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-003) | effect-bearing 首 winner+业务+loser termination 原子；reject/expire 自身，independent intent 并发 | [设计](#runtime-lineage-design) | domain 标记互斥/安全替代；P2P order；consumer association | 单操作 retry/签名不等于 lineage 仲裁 |
@@ -823,6 +855,7 @@ admission 前验证 target world 身份，receipt 与 parent/history/result 保�
 
 | 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [单权威提交](../p2p/prd.md#p2p-single-authority-durable-commit) | [接收设计](#runtime-controlled-candidate-recovery-receiver) | 原决定恢复不重算 admission；正式 proof 才允许共同发布 | Planned CA-R1/R2/R3/CA-C1，承接 P2P 的原 candidate/普通消费者验证计划；现有基线 [execution transaction regressions](../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs) 不覆盖新协议；同候选比较 parent/版本/nonce/roots 与外部调用计数 | 未来 task evidence 中的原身份、故障 seam、恢复 disposition、proof 和一次发布结果 | 本次未实现/运行；不证明 live、BFT 或任意旧 native 可移植 |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-001) | [设计](#runtime-deterministic-design) | 同 version/ordered inputs/parent，全 active validator re-execute，missing/mismatch/越权零部分效果 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs)；required 局部 failed_step/committed_context/snapshot-replay 定义；target full 同候选全 validator+transport conformance，compare roots/receipt 与零副作用 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 单节点不代签 SC-1/4 |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-002) | [设计](#runtime-pending-design) | 无 finality durable no-effect pending，恢复 fresh 当前权限/资源/期限/canonical order，只有 committed receipt 更新结论 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs)；required 局部 queue/receipt publication 定义；target pending outage+restart+权限/资源/期限变化，观察零资格/效果及执行/拒绝/过期/replan 真实状态 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | effect/cognition queue 不代签通用 signed pending |
 | [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-003) | [设计](#runtime-lineage-design) | effect-bearing 首 winner+业务+loser termination 原子；reject/expire 自身，independent intent 并发 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/effects.rs)；required 局部 anchor/receipt 定义；target original/withdraw/replacement race、rejected-first、independent、crash/retry/replay，winner effect≤1、loser0 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 单操作 retry/签名不等于 lineage 仲裁 |

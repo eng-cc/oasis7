@@ -435,17 +435,20 @@ impl ViewerRuntimeLiveServer {
             if let Some(stage) = stage {
                 self.pending_world_service_gameplay
                     .retain(|(correlation, _)| correlation != &result.correlation);
-                self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
-                    "world_service_intent",
-                    stage,
-                    "original signed request has an authenticated canonical disposition",
-                    None,
-                    None,
-                    None,
-                    Some("inspect the committed view and receipt for actual effects".into()),
-                    0,
-                    0,
-                ));
+                self.complete_pending_gameplay_feedback(
+                    &result.correlation,
+                    Self::make_player_gameplay_feedback(
+                        "world_service_intent",
+                        stage,
+                        "original signed request has an authenticated canonical disposition",
+                        None,
+                        None,
+                        None,
+                        Some("inspect the committed view and receipt for actual effects".into()),
+                        0,
+                        0,
+                    ),
+                );
             }
         }
         let baseline_logical_time = self.world.state().time;
@@ -635,6 +638,8 @@ impl ViewerRuntimeLiveServer {
         }
         self.confirm_player_gameplay_progress();
 
+        self.update_gameplay_feedback_from_runtime_events(&runtime_events);
+
         let mapped_events: Vec<_> = runtime_events
             .iter()
             .map(|runtime_event| {
@@ -682,7 +687,7 @@ impl ViewerRuntimeLiveServer {
         }
 
         if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+            let snapshot = self.compat_snapshot_for_session(session);
             responses.push(ViewerResponse::Snapshot { snapshot });
         }
 

@@ -15,6 +15,7 @@
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
+| [合法 authority profiles](../prd.md#p2p-authority-profiles) | 正式配置须消费同世界合法激活证明，版本有效或声明 active 均不能自授运行权威。 | [正式激活接收目标](#formal-controlled-activation-receiver) | P2P 正式证明与历史；Runtime、launcher、readiness 消费者；QA | 待实现 v3；v1 兼容和 v2 planned 拒绝边界不变，不证明部署或资产资格。 |
 | [AC-2](formal-network-tiers-testnet-mechanism.prd.md#2-user-experience-functionality) | 定义 `local_devnet -> public_testnet -> mainnet` 三层 operator/runtime 模型；`shared_devnet` 只作为 legacy/rehearsal evidence，不作为目标 test 环境或玩家世界。 | [分层模型](#分层模型) | `producer_system_designer` 维护 tier 语义；runtime manifest 消费者按同一分层接线。 | 不把 tier 解释为多个玩家世界，也不以 shared rehearsal 声明 public availability。 |
 | [AC-3 / AC-4](formal-network-tiers-testnet-mechanism.prd.md#2-user-experience-functionality) | 分别固定 `public_testnet` 与 `mainnet` manifest 的必需字段及其差异，特别是 reset、faucet、validator admission 和 required gates。 | [Manifest Schema](#manifest-schema) | `producer_system_designer` 维护字段语义；`runtime_engineer` 消费 manifest；主网安全专题提供 `MAINNET-1~4`。 | 本设计不激活 live `public_testnet` 或 mainnet，也不存放私密凭据。 |
 | [AC-5 / AC-6](formal-network-tiers-testnet-mechanism.prd.md#2-user-experience-functionality) | 提供 manifest create/validate、smoke、三类 example manifests 和 testing-manual 入口；手册入口是执行索引。 | [Repo-Owned Skeleton](#repo-owned-skeleton) | `runtime_engineer` 维护技术入口；`qa_engineer` 复核测试边界；testing manual 是消费者入口。 | skeleton、example 与本地 smoke 不证明 live 网络或当前 readiness。 |
@@ -39,6 +40,34 @@ v1 `network_tier_manifest.rs` 保留 `local_devnet=preview+ephemeral`、`public_
 配置验证返回 schema-valid 后，运行启动入口另行拒绝 planned/unsupported authority，且该检查必须早于 registry import 或 execution world 写入。readiness 与 exit review 输出未激活 blocker，旧 proof producer 拒绝 v2，不能将其套入现有三节点 threshold 运行路径。status 若呈现声明，应同时呈现 runtime-supported=false；声明不是已生效世界状态。
 
 验证沿用 `network-tier-manifest-smoke.sh` 与 Rust manifest/CLI/launcher 回归：同一 v2 fixture 的合法计划声明、缺 policy、未知 profile/version、live、双 reset、v1 混入 v2 policy，以及旧 lanes 全通过仍不能放行。实际提交证明、fencing、独立故障域持久确认和恢复不在这个 schema 变更的通过结论中。
+
+<a id="formal-controlled-activation-receiver"></a>
+### 正式受控权威的 manifest 接收目标
+
+后继正式配置采用新 `oasis7.network_tier_manifest.v3`，消费
+[正式受控权威 v1](../design.md#des-p2p-formal-controlled-authority-v1) 的激活与提交证明。
+本节规定待实现的版本边界；当前代码仍拒绝 v3，v2 永远保留 planned 含义，
+不能将已有 v2 文件中的状态改成 live/active 后启动兼容 prototype。
+
+v3 保留 v2 的 release/world/token 分工，`authority_policy` 要求
+`profile=controlled_single_authority`、`profile_version=1`、`activation=proof_required`，
+并增加必需的 `formal_authority_ref` 内容 digest 与 `minimum_commit_ref`。
+前者定位合法 activation/history 证明，后者限定同世界可接受历史的最低提交锚；
+两者都不是可由配置构造的 ActiveAuthority。世界身份必须与 `world_policy.world_id`、
+`chain_id`、`runtime_refs.genesis_ref` 和独立认证的 issuer/genesis 一致。
+未知或混用版本字段、缺字段、null、错误 profile/version 和证明不匹配均拒绝。
+
+启动与 readiness 分两步处理：先在 registry import、业务状态写入或对外服务之前验证
+schema、原证明字节、合法历史与工件；取得证明的方式和大小/缺失处理沿 P2P 主责合同。
+合法历史至多支持 verified read-only；当前 epoch/head、双端持久与 signer/storage 隔离
+也成立后，才可报告可写就绪。配置、schema-valid、工程 scope 或普通服务签名都不能
+替代这两步。已持久的最低 head/epoch 锚优先于较旧配置，不能靠换 manifest 回退历史。
+首次 activation 控制记录仍由 P2P 的独立创世授权分支建立；此消费者不生成 issuer 或世界。
+
+launcher、节点、WorldService 和 readiness 必须在同候选支持对应版本后共同接线；
+旧消费者拒绝 v3，正式消费者不降级成 v1/工程证明。只读可验证、可写就绪、实际部署和
+公开发行分别表达；网络 tier、保留承诺与 token 价值/faucet/结算资格继续独立判断。
+本版本不通过 authority 激活重发资产或升格测试奖励，也不解除实际部署暂缓。
 
 ## 分层模型
 Network tier 是统一持久大世界的运行/验证载体分层，不是玩家可见的多个世界模型。
@@ -127,6 +156,7 @@ Network tier 是统一持久大世界的运行/验证载体分层，不是玩家
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [合法 authority profiles](../prd.md#p2p-authority-profiles) | [正式激活接收目标](#formal-controlled-activation-receiver) | 配置版本不自授 active，合法历史与当前可写条件分开。 | 后继实现沿 [testing-manual.md Network Tiers section](../../../testing-manual.md#network-tiers-shared-network-evidence) 增加同候选 schema/startup/launcher/readiness 合同回归：v1/v2 原边界、合法 v3 证明、缺/错 proof、混版、低于已存 head、错误 genesis/epoch 与不满足双端条件；断言失败先于 registry/业务写入，历史可读不代签可写。 | 固定候选、manifest/proof 原字节、逐消费者 verdict 与无提前写入断言。 | 现有 smoke/手册是入口基线，尚不覆盖 v3；新协议、独立故障域和正式开放未实施/未验收。 |
 | [AC-2](formal-network-tiers-testnet-mechanism.prd.md#2-user-experience-functionality) | [分层模型](#分层模型) | 在本地 example manifests 中分别核对三层语义和 legacy shared boundary；不得以 shared rehearsal 推导 public availability。 | 对 repository examples 运行 `./scripts/network-tier-manifest-smoke.sh`；命令入口与边界见 [testing-manual.md Network Tiers section](../../../testing-manual.md#network-tiers-shared-network-evidence)。 | smoke exit/result 与本地 example manifest。 | 不证明 live `public_testnet`、mainnet 或玩家世界状态。 |
 | [AC-3 / AC-4](formal-network-tiers-testnet-mechanism.prd.md#2-user-experience-functionality) | [Manifest Schema](#manifest-schema) | 分别验证 public-testnet 与 mainnet 的必需 manifest 字段，并检查 reset/faucet/validator/gate 字段组合。 | 对三类 example manifests 运行 `./scripts/network-tier-manifest-smoke.sh`，并用手册中的 `./scripts/network-tier-manifest.sh validate --manifest <manifest>` 复核；入口见 [testing-manual.md Network Tiers section](../../../testing-manual.md)。 | 命令退出结果和被校验的 manifest。 | 不证明 manifest 指向的 bundle、genesis 或 peers 当前可用。 |
 | [AC-5 / AC-6](formal-network-tiers-testnet-mechanism.prd.md#2-user-experience-functionality) | [Repo-Owned Skeleton](#repo-owned-skeleton) | 验证 create/validate、smoke 和三类 example manifest 入口可复用；manual 只索引当前命令。 | 执行 `./scripts/network-tier-manifest-smoke.sh`，并核对 [testing-manual.md Network Tiers section](../../../testing-manual.md) 中的 canonical commands。 | smoke 输出及当前手册命令段。 | 不证明部署、节点健康或 live readiness。 |

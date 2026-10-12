@@ -328,6 +328,102 @@ fn gameplay_submit_handler_rejects_missing_auth_proof() {
 }
 
 #[test]
+fn gameplay_submit_handler_preserves_signed_action_errors_without_consuming_nonce() {
+    let _guard = gameplay_submit_test_guard();
+    reset_gameplay_submit_state_for_tests();
+    let config = NodeConfig::new(
+        "node-gameplay-submit-action-errors",
+        "world-gameplay-submit-action-errors",
+        NodeRole::Sequencer,
+    )
+    .expect("node config");
+    let runtime = Arc::new(Mutex::new(NodeRuntime::new(config)));
+    let world_dir = gameplay_nonce_world_dir("action-errors");
+    let (public_key, private_key) = gameplay_test_signer(19);
+    let player_id = "player-gameplay-submit-action-errors";
+    let cases = [
+        (
+            "missing_gameplay_action",
+            "unknown_gameplay_action",
+            "unknown gameplay action `missing_gameplay_action` for target `agent-1`",
+        ),
+        (
+            "claim_first_agent",
+            "invalid_first_agent_claim_target",
+            "gameplay_action `claim_first_agent` must target starter-agent-0",
+        ),
+        (
+            "claim_agent",
+            "actor_agent_required",
+            "gameplay_action `claim_agent` requires non-empty actor_agent_id",
+        ),
+    ];
+    for (action_id, expected_code, expected_message) in cases {
+        let mut request = signed_gameplay_submit_request(player_id, 17);
+        request.action_id = action_id.to_string();
+        request.auth = Some(
+            sign_gameplay_action_auth_proof(&request, 17, &public_key, &private_key)
+                .expect("sign invalid gameplay action after choosing its payload"),
+        );
+        let body = serde_json::to_string(&request).expect("serialize invalid action");
+        let (status, response) = submit_json(&runtime, world_dir.as_path(), &body);
+        assert_eq!(status, 400, "{action_id}");
+        assert!(!response.ok, "{action_id}");
+        assert_eq!(
+            response.error_code.as_deref(),
+            Some(expected_code),
+            "{action_id}"
+        );
+        assert_eq!(
+            response.error.as_deref(),
+            Some(expected_message),
+            "{action_id}"
+        );
+        assert_eq!(response.action_id, None);
+        assert_eq!(response.consensus_action_payload_hash, None);
+        assert_eq!(response.submitted_at_unix_ms, None);
+        assert!(!world_dir.join(super::GAMEPLAY_NONCE_LEDGER_FILE).exists());
+    }
+
+    let valid = signed_gameplay_submit_request(player_id, 17);
+    let body = serde_json::to_string(&valid).expect("serialize valid action with same nonce");
+    let (status, response) = submit_json(&runtime, world_dir.as_path(), &body);
+    assert_eq!(status, 200);
+    assert!(response.ok);
+    assert_eq!(response.action_id, Some(1));
+}
+
+#[test]
+fn gameplay_submit_handler_rejects_tampering_before_action_validation() {
+    let _guard = gameplay_submit_test_guard();
+    reset_gameplay_submit_state_for_tests();
+    let config = NodeConfig::new(
+        "node-gameplay-submit-tampered-action",
+        "world-gameplay-submit-tampered-action",
+        NodeRole::Sequencer,
+    )
+    .expect("node config");
+    let runtime = Arc::new(Mutex::new(NodeRuntime::new(config)));
+    let world_dir = gameplay_nonce_world_dir("tampered-action");
+    let original = signed_gameplay_submit_request("player-gameplay-submit-tampered-action", 23);
+    let mut tampered = original.clone();
+    tampered.action_id = "missing_gameplay_action".to_string();
+    let body = serde_json::to_string(&tampered).expect("serialize tampered request");
+    let (status, response) = submit_json(&runtime, world_dir.as_path(), &body);
+    assert_eq!(status, 401);
+    assert!(!response.ok);
+    assert_eq!(response.error_code.as_deref(), Some("invalid_auth"));
+    assert_eq!(response.action_id, None);
+    assert!(!world_dir.join(super::GAMEPLAY_NONCE_LEDGER_FILE).exists());
+
+    let body = serde_json::to_string(&original).expect("serialize original signed request");
+    let (status, response) = submit_json(&runtime, world_dir.as_path(), &body);
+    assert_eq!(status, 200);
+    assert!(response.ok);
+    assert_eq!(response.action_id, Some(1));
+}
+
+#[test]
 fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
     let _guard = gameplay_submit_test_guard();
     reset_gameplay_submit_state_for_tests();

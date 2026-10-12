@@ -946,3 +946,6 @@ fn runtime_collect_data_quotes_and_submits_the_exact_authenticated_request() {
         data_before + 11
     );
 }
+
+#[path = "auth_actions_collect_data_service.rs"]
+mod service;
