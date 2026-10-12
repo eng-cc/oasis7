@@ -7,17 +7,17 @@ use oasis7::world_service::{
     private_goal_store::PrivateGoalStore,
 };
 use oasis7_agent_api::game::{
-    game_goal_version_digest, DecimalU64, GameExecutorControlV1, GameExecutorOperationV1,
-    GameGoalPrepareV1, GameTaskFenceV1, GoalContentV1, GAME_EXECUTOR_CONTROL_DOMAIN,
-    GAME_GOAL_PUBLISH_DOMAIN,
+    DecimalU64, GAME_EXECUTOR_CONTROL_DOMAIN, GAME_GOAL_PUBLISH_DOMAIN, GameExecutorControlV1,
+    GameExecutorOperationV1, GameGoalPrepareV1, GameTaskFenceV1, GoalContentV1,
+    game_goal_version_digest,
 };
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::{
     io::{Read, Write},
     net::TcpListener,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -598,9 +598,11 @@ fn private_task_prepared_world_no_model_authority_cleanup() {
             .unwrap();
     let operations = cleanup["authority_operations"].as_array().unwrap();
     assert_eq!(operations.len(), 2);
-    assert!(operations
-        .iter()
-        .all(|result| result["outcome"]["status"] == "committed"));
+    assert!(
+        operations
+            .iter()
+            .all(|result| result["outcome"]["status"] == "committed")
+    );
     let identity =
         super::super::super::world_service_read::identity(&root.join("world"), "w1").unwrap();
     let pinned = super::super::super::world_service_read::pin(
@@ -610,11 +612,13 @@ fn private_task_prepared_world_no_model_authority_cleanup() {
         None,
     )
     .unwrap();
-    assert!(game_task::current_control(&pinned.world, "agent-a")
-        .unwrap()
-        .unwrap()
-        .executor_binding
-        .is_none());
+    assert!(
+        game_task::current_control(&pinned.world, "agent-a")
+            .unwrap()
+            .unwrap()
+            .executor_binding
+            .is_none()
+    );
     assert!(
         pinned
             .world
@@ -673,11 +677,13 @@ fn private_task_prepared_world_aged_cleanup_diagnostic() {
             .unwrap();
     println!("TASK_AGED_CLEANUP_CATEGORIES {}", cleanup["categories"]);
     assert_eq!(cleanup["authority_operations"].as_array().unwrap().len(), 2);
-    assert!(cleanup["authority_operations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|result| result["outcome"]["status"] == "committed"));
+    assert!(
+        cleanup["authority_operations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|result| result["outcome"]["status"] == "committed")
+    );
     fs::remove_file(ready).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
@@ -706,11 +712,13 @@ fn private_task_prepared_world_unknown_cleanup_retries_exact_original() {
             .unwrap();
     println!("TASK_UNKNOWN_CLEANUP_CATEGORIES {}", cleanup["categories"]);
     assert_eq!(cleanup["authority_operations"].as_array().unwrap().len(), 2);
-    assert!(cleanup["authority_operations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|result| result["outcome"]["status"] == "committed"));
+    assert!(
+        cleanup["authority_operations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|result| result["outcome"]["status"] == "committed")
+    );
     assert_eq!(cleanup["categories"][0]["submit_unknown"], 1);
     let identity =
         super::super::super::world_service_read::identity(&root.join("world"), "w1").unwrap();
