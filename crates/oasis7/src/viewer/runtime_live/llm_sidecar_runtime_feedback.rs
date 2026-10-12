@@ -305,13 +305,14 @@ impl RuntimeLlmSidecar {
         Ok(feedback)
     }
 
-    /// Apply intents captured by an actor only after the Runtime has read back
-    /// and verified the committed receipt lineage. Rejected or pending
-    /// dispositions never enter the MemoryWriteStore. Native actors retain
-    /// their awaiting outcome in AsyncAgentRunner, while the WASM synchronous
-    /// lane projects the same bounded intent policy here. Pass `None` for a
-    /// canonical WorldService receipt absent from this local World: that path
-    /// preserves lifecycle/replay handling without projecting local memory.
+    /// Apply intents captured by a native actor only after the Runtime has
+    /// read back and verified the committed receipt lineage. Rejected or
+    /// pending dispositions never enter the MemoryWriteStore. Native actors
+    /// retain their awaiting outcome in AsyncAgentRunner. The `wasm32` cfg
+    /// branch below is legacy source inside `viewer::runtime_live`, a module
+    /// that is itself excluded from wasm32 builds. Pass `None` for a canonical
+    /// WorldService receipt absent from this local World: that path preserves
+    /// lifecycle/replay handling without projecting local memory.
     pub(in crate::viewer::runtime_live) fn consume_provider_memory_after_receipt(
         &mut self,
         world: Option<&crate::runtime::World>,
