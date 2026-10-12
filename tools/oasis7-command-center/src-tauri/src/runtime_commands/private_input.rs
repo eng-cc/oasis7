@@ -73,18 +73,46 @@ pub async fn start_private_runtime_turn(
         .map_err(PrivateInputError::no_effect)?;
     let combined = compose_input(&input, &source, &text)?;
     let jobs = runtime.jobs.clone();
+    let mismatch = Arc::new(AtomicBool::new(false));
+    let observed_mismatch = mismatch.clone();
     let result = runtime
         .project_work(&host, move |r, p| {
-            if p.id != project_id {
-                return Err(oasis7_command_center_core::Error::Invalid(
-                    "资料绑定项目与会话项目不匹配".into(),
-                ));
-            }
-            jobs.with_open(|| r.start_private_turn(p, &thread_id, &combined, vec![source]))
+            dispatch_for_project(&p.id, &project_id, &mismatch, || {
+                jobs.with_open(|| r.start_private_turn(p, &thread_id, &combined, vec![source]))
+            })
         })
         .await;
     invalidate(&handle);
-    result.map_err(PrivateInputError::unknown)
+    classify_dispatch_result(result, &observed_mismatch)
+}
+
+// The marker is set only by the project check inside project_work's protected
+// closure. Runtime and host failures must never acquire this no-effect proof.
+fn dispatch_for_project<T>(
+    current: &str,
+    bound: &str,
+    mismatch: &AtomicBool,
+    dispatch: impl FnOnce() -> oasis7_command_center_core::Result<T>,
+) -> oasis7_command_center_core::Result<T> {
+    if current != bound {
+        mismatch.store(true, Ordering::Release);
+        return Err(oasis7_command_center_core::Error::Invalid(
+            "资料绑定项目与会话项目不匹配；尚未发送，草稿保留".into(),
+        ));
+    }
+    dispatch()
+}
+fn classify_dispatch_result<T>(
+    result: Result<T, String>,
+    mismatch: &AtomicBool,
+) -> Result<T, PrivateInputError> {
+    result.map_err(|message| {
+        if mismatch.load(Ordering::Acquire) {
+            PrivateInputError::no_effect(message)
+        } else {
+            PrivateInputError::unknown(message)
+        }
+    })
 }
 
 const MAX_INPUT_BYTES: usize = 32768;
@@ -154,6 +182,52 @@ fn select_text(raw: &str, scope: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn project_mismatch_does_not_dispatch_and_draft_can_retry() {
+        let mismatch = AtomicBool::new(false);
+        let mut dispatched = 0;
+        let draft = "unchanged draft";
+        let rejected = dispatch_for_project("other", "bound", &mismatch, || {
+            dispatched += 1;
+            Ok(draft)
+        });
+        let error =
+            classify_dispatch_result(rejected.map_err(|e| e.to_string()), &mismatch).unwrap_err();
+        assert_eq!(error.effect, "none");
+        assert_eq!(dispatched, 0);
+        let retry_marker = AtomicBool::new(false);
+        let retry = dispatch_for_project("bound", "bound", &retry_marker, || {
+            dispatched += 1;
+            Ok(draft)
+        });
+        assert_eq!(
+            classify_dispatch_result(retry.map_err(|e| e.to_string()), &retry_marker).unwrap(),
+            draft
+        );
+        assert_eq!(dispatched, 1);
+    }
+    #[test]
+    fn dispatch_invalid_and_outer_failures_remain_unknown() {
+        let marker = AtomicBool::new(false);
+        let result: oasis7_command_center_core::Result<()> =
+            dispatch_for_project("bound", "bound", &marker, || {
+                Err(oasis7_command_center_core::Error::Invalid(
+                    "runtime failure".into(),
+                ))
+            });
+        assert_eq!(
+            classify_dispatch_result(result.map_err(|e| e.to_string()), &marker)
+                .unwrap_err()
+                .effect,
+            "unknown"
+        );
+        assert_eq!(
+            classify_dispatch_result::<()>(Err("host changed".into()), &marker)
+                .unwrap_err()
+                .effect,
+            "unknown"
+        );
+    }
     #[test]
     fn composed_budget_counts_unicode_and_header_without_truncating() {
         let source = PrivateInputRef {

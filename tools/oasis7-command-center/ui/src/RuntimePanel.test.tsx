@@ -204,16 +204,18 @@ it('keeps exit diagnostics available when the optional runtime source fails', as
   expect(api.start).not.toHaveBeenCalled();
 });
 
-it('keeps correctable no-effect input rejection editable without creating unknown-send state', async () => {
+it.each(['合计输入超限；尚未发送，草稿保留', '资料绑定项目与会话项目不匹配；尚未发送，草稿保留'])('keeps correctable no-effect input rejection editable: %s', async (message) => {
   const {api}=fakeApi(snapshot());
-  api.steer.mockRejectedValue({effect:'none',message:'合计输入超限；尚未发送，草稿保留'});
+  api.steer.mockRejectedValueOnce({effect:'none',message});
   render(() => <RuntimePanel project={project} view="execution" api={api} subscribe={subscribe} />);
   const input=await screen.findByLabelText('向此原始会话发送明确输入');
   fireEvent.input(input,{target:{value:'保留待缩小草稿'}});
   const send=screen.getByRole('button',{name:'追加到当前运行'});
   fireEvent.click(send);
-  await screen.findByText('合计输入超限；尚未发送，草稿保留');
+  await screen.findByText(message);
   await waitFor(()=>expect(send).toBeEnabled());
   expect(input).toHaveValue('保留待缩小草稿');
   expect(screen.queryByText(/结果核对前发送入口保持关闭/)).toBeNull();
+  fireEvent.click(send);
+  await waitFor(()=>expect(api.steer).toHaveBeenCalledTimes(2));
 });
