@@ -161,6 +161,11 @@ fn native_budget_denial_round_trips_through_live_sidecar_without_effects() {
     );
     let mut runner = crate::simulator::AsyncAgentRunner::new(16).expect("create native runner");
     runner.register(behavior).expect("register native behavior");
+    super::super::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &server.world,
+        &mut runner,
+    )
+    .expect("restore actual Runtime-owned feedback history before provider admission");
     server.llm_sidecar.runner = Some(RuntimeDecisionRunner::Builtin(runner));
     server
         .llm_sidecar
@@ -324,6 +329,11 @@ fn budget_wait_without_response_context_enters_terminal_cleanup() {
     );
     let mut runner = crate::simulator::AsyncAgentRunner::new(16).expect("create native runner");
     runner.register(behavior).expect("register native behavior");
+    super::super::llm_sidecar_feedback_recovery::restore_agent_feedback_history(
+        &server.world,
+        &mut runner,
+    )
+    .expect("restore actual Runtime feedback history before provider admission");
     server.llm_sidecar.runner = Some(RuntimeDecisionRunner::Builtin(runner));
     server
         .llm_sidecar

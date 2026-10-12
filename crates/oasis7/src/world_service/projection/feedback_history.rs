@@ -3,6 +3,8 @@ use crate::runtime::{RuntimeReceiptLineageV1, World};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::simulator::AsyncAgentRunner;
 use crate::simulator::FeedbackEnvelopeV1;
+#[cfg(not(target_arch = "wasm32"))]
+use oasis7_agent_harness::{FeedbackHistoryLineage, FeedbackHistoryProjection};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +107,35 @@ impl WorldServiceFeedbackHistory {
             })
             .collect()
     }
+
+    /// Preserve the complete authenticated recovery identity across the
+    /// extracted Harness boundary. In particular, the envelope digest is for
+    /// the original payload (including redacted projection fields) and must
+    /// never be recomputed from `feedback`.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn harness_projections(
+        &self,
+        agent: &str,
+    ) -> Result<Vec<FeedbackHistoryProjection>, String> {
+        self.metadata(agent)?;
+        self.records
+            .iter()
+            .map(|record| {
+                Ok(FeedbackHistoryProjection {
+                    feedback: crate::simulator::agent_api_compat::feedback_to_api(&record.feedback),
+                    acknowledged: record.delivery_state == "acked",
+                    lineage: Some(FeedbackHistoryLineage {
+                        original_envelope_digest: record.original_envelope_digest.clone(),
+                        delivery_state: record.delivery_state.clone(),
+                        receipt_lineage: record
+                            .receipt_lineage
+                            .as_ref()
+                            .map(crate::runtime::RuntimeReceiptLineageV1::agent_api_projection),
+                    }),
+                })
+            })
+            .collect()
+    }
     /// Only call after the enclosing View has passed authentication and CAS validation.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn restore_preverified(
@@ -113,7 +144,7 @@ impl WorldServiceFeedbackHistory {
         runner: &mut AsyncAgentRunner,
     ) -> Result<(), String> {
         runner
-            .restore_preverified_scoped_feedback_history(&self.metadata(agent)?)
+            .restore_preverified_scoped_feedback_history(&self.harness_projections(agent)?)
             .map_err(|e| e.to_string())
     }
     #[cfg(not(target_arch = "wasm32"))]

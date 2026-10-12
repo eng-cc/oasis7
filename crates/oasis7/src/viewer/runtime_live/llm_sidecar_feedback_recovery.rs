@@ -5,54 +5,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::runtime::World as RuntimeWorld;
-use crate::simulator::{AsyncAgentRunner, FeedbackEnvelopeV1};
+use crate::simulator::AsyncAgentRunner;
 
 pub(in crate::viewer::runtime_live) fn restore_agent_feedback_history(
     world: &RuntimeWorld,
     runner: &mut AsyncAgentRunner,
 ) -> Result<(), String> {
-    let records = world
-        .runtime_feedback_outbox()
-        .map_err(|error| format!("Runtime feedback recovery outbox read failed: {error:?}"))?;
-    for record in &records {
-        record
-            .validate()
-            .map_err(|error| format!("Runtime feedback recovery record invalid: {error}"))?;
-        let feedback = serde_json::from_value::<FeedbackEnvelopeV1>(record.payload.clone())
-            .map_err(|error| format!("Runtime feedback recovery payload invalid: {error}"))?;
-        if feedback.status != "committed" {
-            continue;
-        }
-        let receipt_id = feedback
-            .runtime_receipt_id
-            .as_deref()
-            .ok_or_else(|| "committed Runtime feedback lacks a receipt identity".to_string())?;
-        let receipt = world
-            .read_runtime_receipt_lineage(receipt_id)
-            .map_err(|error| format!("Runtime feedback receipt readback failed: {error:?}"))?;
-        receipt
-            .validate()
-            .map_err(|error| format!("Runtime feedback receipt lineage invalid: {error}"))?;
-        let action_matches = feedback
-            .candidate_action_id
-            .is_some_and(|action_id| receipt.action_id == format!("action:{action_id}"));
-        if receipt.receipt_id != receipt_id
-            || receipt.agent_id != feedback.agent_subject
-            || receipt.agent_session_id != feedback.agent_session_id
-            || receipt.agent_turn_id != feedback.agent_turn_id
-            || receipt.decision_request_id != feedback.decision_request_id
-            || receipt.request_digest != feedback.request_digest.to_string()
-            || receipt.feedback_id != feedback.feedback_id
-            || !action_matches
-        {
-            return Err(format!(
-                "Runtime feedback {} does not match its committed receipt lineage",
-                feedback.feedback_id
-            ));
-        }
-    }
+    let authority = super::harness_authority::RuntimeWorldAuthority::new(world);
     runner
-        .restore_runtime_feedback_outbox(&records)
+        .restore_host_validated_feedback_history(&authority)
         .map_err(|error| format!("Runtime feedback verifier recovery failed: {error}"))
 }
 
@@ -155,5 +116,30 @@ mod tests {
             blocked_provider_agents(&runner, &candidates, &unknown_session),
             BTreeSet::from(["agent-b".to_string()])
         );
+    }
+
+    #[test]
+    fn local_runtime_recovery_uses_world_authority_projection_before_dispatch() {
+        let mut world = RuntimeWorld::new();
+        let feedback = feedback("agent-a", "session-a", 2, "feedback-gap");
+        world
+            .enqueue_runtime_feedback(feedback.clone())
+            .expect("Runtime stores feedback history");
+        world
+            .claim_runtime_feedback(&feedback.feedback_id)
+            .expect("Runtime claims feedback");
+        world
+            .ack_runtime_feedback(&feedback.feedback_id)
+            .expect("Runtime acknowledges feedback");
+
+        let mut runner = AsyncAgentRunner::new(4).expect("valid native Runner capacity");
+        restore_agent_feedback_history(&world, &mut runner)
+            .expect("the host authority returns a validated projection");
+
+        assert!(feedback_history_blocks_dispatch(
+            &runner,
+            "agent-a",
+            "session-a"
+        ));
     }
 }

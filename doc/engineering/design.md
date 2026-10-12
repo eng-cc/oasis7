@@ -74,3 +74,7 @@
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
 - 若 legacy redirect 未明确标注为兼容跳转，读者可能误判历史入口为当前执行入口。
 - 若治理专题继续回流到 `engineering` 根目录，根入口会重新退化为专题堆放区。
+
+## 私有资料工具
+
+普通用户态资料工具与 signer 共用纯加密实现，详细边界见 [私有资料系统设计](private-context/private-context.design.md)。

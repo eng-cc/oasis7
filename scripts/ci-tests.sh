@@ -185,6 +185,10 @@ run_oasis7_net_libp2p_clippy() {
 }
 
 run_oasis7_workspace_support_crate_tests() {
+  run_cargo_clippy -p oasis7_agent_api --all-targets
+  run_cargo_clippy -p oasis7_agent_harness --all-targets
+  run_cargo test -p oasis7_agent_api
+  run_cargo test -p oasis7_agent_harness --lib
   run_cargo test \
     -p oasis7_client_api \
     -p oasis7_local_signer \
@@ -198,6 +202,8 @@ run_oasis7_workspace_support_crate_tests() {
     -p pixel_world_bridge \
     --lib
   run_cargo test -p oasis7_wasm_executor --features wasmtime --lib
+  run_cargo test -p oasis7_secure_envelope -p oasis7_context --all-targets --locked
+  run_cargo test -p oasis7_local_signer --test context_cli --locked
   run_cargo test -p oasis7_client_launcher --bin oasis7_client_launcher
   # Native tool tests build the real template with the installed stable WASM target.
   OASIS7_WASM_BUILD_STD=0 run_cargo test -p wasm_build_suite -p wasm_module_observe
@@ -274,6 +280,7 @@ run_workflow_governance_contract_tests() {
 
 run_packaging_artifact_contract_tests() {
   run python3 ./scripts/package-source-plan.test.py
+  run python3 ./scripts/package-release-version.test.py
   run python3 ./scripts/safe-git-archive.test.py
   run bash ./scripts/native-packaging-contract.test.sh
   run bash ./scripts/packaging-artifact-size-contract.test.sh

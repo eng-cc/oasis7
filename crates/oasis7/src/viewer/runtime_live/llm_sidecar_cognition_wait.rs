@@ -586,16 +586,23 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
             },
         ));
     }
-    let post_admission_error = if let Some(runner) = sidecar
+    let runner_present = sidecar
         .runner
         .as_mut()
         .and_then(RuntimeDecisionRunner::async_runner_mut)
-    {
-        if let Err(error) = runner.apply_runtime_continuation_projection_with_current_context(
-            request.agent_subject.as_str(),
-            admitted,
-            &current,
-        ) {
+        .is_some();
+    let post_admission_error = if runner_present {
+        let projection_result = sidecar
+            .runner
+            .as_mut()
+            .and_then(RuntimeDecisionRunner::async_runner_mut)
+            .expect("runner presence checked")
+            .apply_runtime_continuation_projection_with_current_context(
+                request.agent_subject.as_str(),
+                admitted,
+                &current,
+            );
+        if let Err(error) = projection_result {
             Some(format!(
                 "provider Wait Runtime projection failed after admission: {error} (Harness handle {:?})",
                 handle.as_ref().map(|handle| &handle.chain_id)
@@ -610,16 +617,55 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
             } else {
                 request.agent_turn_id.clone()
             };
-            runner
-                .release_runtime_turn_for_continuation(
-                    request.agent_subject.as_str(),
-                    request.agent_session_id.as_str(),
-                    release_turn_id.as_str(),
-                    request.decision_request_id.as_str(),
-                    request.request_digest.to_string().as_str(),
-                )
-                .err()
-                .map(|error| format!("provider Wait actor turn release failed: {error}"))
+            let active_backup = sidecar
+                .provider_active_turns
+                .get(request.agent_subject.as_str())
+                .cloned();
+            let context_backup = sidecar
+                .provider_contexts
+                .get(request.agent_subject.as_str())
+                .cloned();
+            let wait_until_backup = sidecar
+                .provider_wait_until
+                .get(request.agent_subject.as_str())
+                .copied();
+            sidecar
+                .provider_active_turns
+                .remove(request.agent_subject.as_str());
+            sidecar
+                .provider_contexts
+                .remove(request.agent_subject.as_str());
+            sidecar
+                .provider_wait_until
+                .remove(request.agent_subject.as_str());
+            match sidecar.with_runtime_turn_release_for_continuation(
+                request.agent_subject.as_str(),
+                request.agent_session_id.as_str(),
+                release_turn_id.as_str(),
+                request.decision_request_id.as_str(),
+                request.request_digest.to_string().as_str(),
+                |sidecar| sidecar.persist_provider_lineage(),
+            ) {
+                Ok(()) => None,
+                Err(error) => {
+                    if let Some(context) = active_backup {
+                        sidecar
+                            .provider_active_turns
+                            .insert(request.agent_subject.clone(), context);
+                    }
+                    if let Some(context) = context_backup {
+                        sidecar
+                            .provider_contexts
+                            .insert(request.agent_subject.clone(), context);
+                    }
+                    if let Some(wait_until) = wait_until_backup {
+                        sidecar
+                            .provider_wait_until
+                            .insert(request.agent_subject.clone(), wait_until);
+                    }
+                    Some(format!("provider Wait actor turn release failed: {error}"))
+                }
+            }
         }
     } else {
         None
@@ -634,16 +680,18 @@ pub(in crate::viewer::runtime_live::control_plane::llm_sidecar) fn admit_provide
             error,
         ));
     }
-    sidecar
-        .provider_active_turns
-        .remove(request.agent_subject.as_str());
-    sidecar
-        .provider_contexts
-        .remove(request.agent_subject.as_str());
-    sidecar
-        .provider_wait_until
-        .remove(request.agent_subject.as_str());
-    sidecar.persist_provider_lineage_best_effort();
+    if !runner_present {
+        sidecar
+            .provider_active_turns
+            .remove(request.agent_subject.as_str());
+        sidecar
+            .provider_contexts
+            .remove(request.agent_subject.as_str());
+        sidecar
+            .provider_wait_until
+            .remove(request.agent_subject.as_str());
+        sidecar.persist_provider_lineage_best_effort();
+    }
     Ok(())
 }
 

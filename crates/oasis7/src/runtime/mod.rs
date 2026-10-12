@@ -115,6 +115,7 @@ pub use cognition::{
 };
 
 // Durable cognition commit/recovery boundary
+pub(crate) use cognition_recovery::response_artifact_digest;
 pub use cognition_recovery::{
     CognitionCrashPrefix, CognitionReceiptViewV1, CognitionRecovery, CognitionRecoveryError,
     CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionRecoveryReport,

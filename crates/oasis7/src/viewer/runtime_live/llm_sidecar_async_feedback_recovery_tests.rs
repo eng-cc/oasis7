@@ -1,6 +1,5 @@
 //! Async provider feedback-history restoration and recovery admission proofs.
 use super::*;
-use crate::runtime::{RuntimeFeedbackOutboxRecordV1, RuntimeFeedbackProjectionV1};
 use crate::simulator::{AsyncAgentRunner, Digest32, FeedbackEnvelopeV1};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -48,13 +47,8 @@ impl Drop for ProviderEnvSnapshot {
     }
 }
 
-fn recovery_feedback(
-    agent: &str,
-    session: &str,
-    seq: u64,
-    id: &str,
-) -> RuntimeFeedbackOutboxRecordV1 {
-    let feedback = FeedbackEnvelopeV1 {
+fn recovery_feedback(agent: &str, session: &str, seq: u64, id: &str) -> FeedbackEnvelopeV1 {
+    FeedbackEnvelopeV1 {
         feedback_id: id.to_string(),
         feedback_seq: seq,
         agent_subject: agent.to_string(),
@@ -67,15 +61,20 @@ fn recovery_feedback(
         request_digest: Digest32(format!("blake3:{}", "a".repeat(64))),
         reject_reason: Some("stale_base".to_string()),
         provenance: "runtime_authoritative".to_string(),
-    };
-    let mut record = RuntimeFeedbackOutboxRecordV1::from_feedback_with_projection(
-        &feedback,
-        RuntimeFeedbackProjectionV1::default(),
-    )
-    .expect("terminal feedback fixture is valid");
-    record.state = "acked".to_string();
-    record.validate().expect("acknowledged feedback is valid");
-    record
+    }
+}
+
+fn enqueue_acknowledged_feedback(world: &mut RuntimeWorld, feedback: FeedbackEnvelopeV1) {
+    let feedback_id = feedback.feedback_id.clone();
+    world
+        .enqueue_runtime_feedback(feedback)
+        .expect("Runtime stores feedback history");
+    world
+        .claim_runtime_feedback(&feedback_id)
+        .expect("Runtime claims feedback for delivery");
+    world
+        .ack_runtime_feedback(&feedback_id)
+        .expect("Runtime retains acknowledged feedback history");
 }
 
 fn register_mock_provider(
@@ -191,32 +190,88 @@ fn async_poll_delivers_completed_result_then_skips_only_fenced_session() {
         .request_context
         .agent_session_id
         .clone();
-    sidecar.provider_contexts.remove(blocked_agent);
-    let records = vec![
+    for feedback in [
         recovery_feedback(blocked_agent, &blocked_session, 1, "blocked-feedback-1"),
         recovery_feedback(blocked_agent, &blocked_session, 3, "blocked-feedback-3"),
-    ];
-    sidecar
+    ] {
+        enqueue_acknowledged_feedback(&mut world, feedback);
+    }
+    sidecar.provider_contexts.remove(blocked_agent);
+    sidecar.shadow_kernel = Some(kernel);
+    let runner = sidecar
         .runner
-        .as_mut()
-        .and_then(RuntimeDecisionRunner::async_runner_mut)
-        .expect("native provider runner")
-        .restore_runtime_feedback_outbox(&records)
-        .expect("retain the exact blocked session fence");
+        .as_ref()
+        .and_then(RuntimeDecisionRunner::async_runner)
+        .expect("native provider runner");
+    assert_eq!(runner.active_turn_count(), 1);
+    assert!(runner.needs_runtime_feedback_recovery());
 
-    let completed = sidecar
-        .next_async_provider_decision(&mut world, &mut kernel, world_id)
-        .expect("native poll should deliver the completed blocked Agent turn");
+    sidecar.llm_decision_mailbox = 1;
+    let legacy_completion = sidecar
+        .next_llm_decision(&mut world, &WorldConfig::default(), world_id)
+        .expect("the active compatibility turn completion remains deliverable");
     assert_eq!(
-        completed.agent_id, blocked_agent,
-        "recovery admission must not discard an already completed actor result"
+        legacy_completion.agent_id, blocked_agent,
+        "an active compatibility turn defers recovery without losing its completion"
+    );
+    let runner = sidecar
+        .runner
+        .as_ref()
+        .and_then(RuntimeDecisionRunner::async_runner)
+        .expect("native provider runner");
+    assert!(
+        runner.needs_runtime_feedback_recovery(),
+        "compatibility admission must not initialize production recovery"
+    );
+    assert!(
+        world
+            .cognition_economy()
+            .expect("Runtime cognition economy remains readable")
+            .leases
+            .is_empty(),
+        "missing feedback history must fence production before reserving a Runtime lease"
+    );
+    assert_eq!(
+        sidecar
+            .runner
+            .as_ref()
+            .and_then(RuntimeDecisionRunner::async_runner)
+            .expect("native provider runner")
+            .active_turn_count(),
+        0,
+        "polling the compatibility completion must release the active turn"
+    );
+    let runner = sidecar
+        .runner
+        .as_ref()
+        .and_then(RuntimeDecisionRunner::async_runner)
+        .expect("native provider runner");
+    assert_eq!(runner.active_turn_count(), 0);
+    assert!(
+        runner.needs_runtime_feedback_recovery(),
+        "compatibility completion cannot satisfy production history recovery"
     );
 
+    sidecar.llm_decision_mailbox = 1;
     assert!(
         sidecar
-            .next_async_provider_decision(&mut world, &mut kernel, world_id)
+            .next_llm_decision(&mut world, &WorldConfig::default(), world_id)
             .is_none(),
         "the allowed Agent should start asynchronously after the blocked candidate is skipped"
+    );
+    let runner = sidecar
+        .runner
+        .as_ref()
+        .and_then(RuntimeDecisionRunner::async_runner)
+        .expect("native provider runner");
+    assert!(runner.runtime_feedback_history_loaded());
+    assert!(
+        runner.needs_runtime_feedback_recovery(),
+        "a validated but gapped history remains refreshable without globally blocking siblings"
+    );
+    assert!(
+        runner.feedback_recovery_blocked(blocked_agent, blocked_session.as_str()),
+        "the real RuntimeWorld authority must restore the exact gapped session fence"
     );
     let allowed_deadline = Instant::now() + Duration::from_secs(2);
     while allowed_state

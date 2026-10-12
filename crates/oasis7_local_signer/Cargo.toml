@@ -17,6 +17,8 @@ name = "oasis7_local_signer_runtime_gate"
 path = "src/bin/oasis7_local_signer_runtime_gate.rs"
 
 [dependencies]
+oasis7_context = { path = "../oasis7_context" }
+oasis7_secure_envelope = { path = "../oasis7_secure_envelope" }
 argon2 = { version = "0.5", features = ["zeroize"] }
 chacha20poly1305 = "0.10"
 base64 = "0.22"
@@ -29,6 +31,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 zeroize = "1"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints.rust]
 unsafe_code = "warn"

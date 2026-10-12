@@ -437,6 +437,24 @@ impl RuntimeLlmSidecar {
             return Some(decision);
         }
 
+        // Legacy compatibility actors may enter before production recovery is
+        // loaded. Let their existing completions drain, but do not reserve a
+        // Runtime lease for a new production request until the authority
+        // projection has been restored. The Harness keeps the final strict
+        // start-turn guard; this earlier check avoids a provisional lease,
+        // failure feedback, and release cycle on every idle candidate.
+        if self
+            .runner
+            .as_ref()
+            .and_then(RuntimeDecisionRunner::async_runner)
+            .is_some_and(|runner| {
+                runner.needs_runtime_feedback_recovery()
+                    && !runner.runtime_feedback_history_loaded()
+            })
+        {
+            return None;
+        }
+
         if let Err(message) = self.prepare_provider_request_contexts(world, kernel, world_id) {
             return Some(RuntimeLlmDecision::from_error(world, message));
         }

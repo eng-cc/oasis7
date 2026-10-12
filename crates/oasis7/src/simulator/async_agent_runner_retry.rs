@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use super::*;
 
 impl AsyncAgentRunner {
@@ -87,28 +85,37 @@ impl AsyncAgentRunner {
 
         let actor = self
             .actors
-            .get_mut(agent_id)
+            .get(agent_id)
             .ok_or_else(|| AsyncAgentRunnerError::AgentNotRegistered(agent_id.to_string()))?;
-        if actor.active_turn.load(Ordering::Acquire) {
+        if self.harness.provider_is_still_in_flight(agent_id) {
             return Err(AsyncAgentRunnerError::AgentBusy(agent_id.to_string()));
         }
-        if !actor.accepting_commands.load(Ordering::Acquire) {
-            return Err(AsyncAgentRunnerError::ActorUnavailable(
-                agent_id.to_string(),
-            ));
-        }
+        let harness_turn_id = *self.harness_turns.get(&turn_id).ok_or_else(|| {
+            AsyncAgentRunnerError::Cognition("retry Harness turn identity is unavailable".into())
+        })?;
+        let key = production_key_from_context(&retry_request_context);
         actor
-            .try_send(ActorCommand::Decide {
-                turn_id,
+            .control
+            .install_production_input(
+                key.clone(),
                 observation,
-                context: Some(context),
-                request_context: Some(retry_request_context),
-            })
-            .map_err(|error| error.with_agent(agent_id))?;
+                context,
+                retry_request_context.clone(),
+            )
+            .map_err(|error| AsyncAgentRunnerError::Cognition(error.to_string()))?;
+        if let Err(error) = self.harness.retry_awaiting_turn(
+            harness_turn_id,
+            &super::super::agent_api_compat::request_context_to_api(&expected_request_context),
+        ) {
+            actor.control.clear_production_input(&key);
+            return Err(map_harness_error(error).with_agent(agent_id));
+        }
+        if let Some(metadata) = self.turn_metadata.get_mut(&turn_id) {
+            metadata.request_context = Some(retry_request_context);
+        }
         if let Some(lease) = cognition_lease {
             self.cognition_leases.insert(turn_id, lease);
         }
-        actor.active_turn.store(true, Ordering::Release);
         self.active_turns = self.active_turns.saturating_add(1);
         // The caller has already observed this failed/completed outcome and
         // is explicitly retrying it. Remove the stale world-facing queue

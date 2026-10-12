@@ -23,6 +23,17 @@ fn continue_local_advance(advanced: bool, had_phase: bool, has_phase: bool, coun
     advanced && had_phase && has_phase && count < MAX_LOCAL_ADVANCES
 }
 
+fn phase_identity_requires_retry(
+    identity: Option<Result<String, String>>,
+    original_phase: &str,
+) -> bool {
+    match identity {
+        Some(Ok(identity)) => identity == original_phase,
+        Some(Err(_)) => true,
+        None => false,
+    }
+}
+
 fn unpublished_response(result: &AgentServiceIoResult) -> bool {
     let outcome = match &result.response {
         Err(_) | Ok(AgentServiceIoResponse::Submit(SubmitObservation::OutcomeUnknown(_))) => {
@@ -192,13 +203,20 @@ impl ViewerRuntimeLiveServer {
                             let applied = diagnostics.apply(&mut server, result);
                             #[cfg(not(any(test, feature = "test_tier_required")))]
                             let applied = server.apply_agent_service_io(result);
-                            retry_without_progress = unpublished_response
-                                || applied.is_err()
-                                || server
+                            let phase_identity = if applied.is_err() {
+                                None
+                            } else {
+                                server
                                     .llm_sidecar
                                     .hosted_service_phase
                                     .as_ref()
-                                    .is_some_and(|phase| phase.identity() == original_phase);
+                                    .map(|phase| phase.identity())
+                            };
+                            let phase_identity_unavailable =
+                                phase_identity.as_ref().is_some_and(Result::is_err);
+                            retry_without_progress = unpublished_response
+                                || applied.is_err()
+                                || phase_identity_requires_retry(phase_identity, &original_phase);
                             match applied {
                                 Ok(value) => {
                                     server.observe_agent_pump_progress(&value);
@@ -214,6 +232,11 @@ impl ViewerRuntimeLiveServer {
                                     }
                                     server.record_agent_pump_error("Agent service result could not be applied; original work remains pending");
                                 }
+                            }
+                            if phase_identity_unavailable {
+                                server.record_agent_pump_error(
+                                    "Agent service phase identity is unavailable; original work remains pending",
+                                );
                             }
                         }
                         Err(mpsc::TryRecvError::Disconnected) => {
@@ -334,5 +357,22 @@ mod tests {
         assert!(!continue_local_advance(false, true, true, 0)); // Idle or NeedsIo
         assert!(!continue_local_advance(true, false, true, 0)); // Fresh turn
         assert!(!continue_local_advance(true, true, false, 0)); // Terminal
+    }
+
+    #[test]
+    fn phase_identity_encoding_failure_fails_closed_for_retry() {
+        assert!(phase_identity_requires_retry(
+            Some(Err("encoding failed".into())),
+            "expected-phase"
+        ));
+        assert!(phase_identity_requires_retry(
+            Some(Ok("expected-phase".into())),
+            "expected-phase"
+        ));
+        assert!(!phase_identity_requires_retry(
+            Some(Ok("next-phase".into())),
+            "expected-phase"
+        ));
+        assert!(!phase_identity_requires_retry(None, "expected-phase"));
     }
 }

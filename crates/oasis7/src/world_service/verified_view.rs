@@ -74,6 +74,17 @@ impl VerifiedWorldView {
             }
         }
         let agent = request.scope_id.strip_prefix("agent:");
+        let feedback_history_out_of_scope = match (agent, response.view.feedback_history.as_ref()) {
+            (None, Some(_)) => true,
+            (Some(agent), Some(history)) => {
+                history.agent_id != agent
+                    || history
+                        .records
+                        .iter()
+                        .any(|record| record.feedback.agent_subject != agent)
+            }
+            _ => false,
+        };
         if response
             .view
             .agent_context
@@ -94,6 +105,7 @@ impl VerifiedWorldView {
                 .cognition_leases
                 .iter()
                 .any(|lease| Some(lease.agent_id.as_str()) != agent)
+            || feedback_history_out_of_scope
         {
             return Err("Agent observation differs from authorized visibility scope".into());
         }
@@ -132,10 +144,39 @@ impl VerifiedWorldView {
 
 #[cfg(test)]
 mod tests {
+    use super::super::projection::{WorldServiceFeedbackHistory, WorldServiceFeedbackReplayRecord};
     use super::*;
     use oasis7_client_api::world_service::{
         CommitRef, ExecutionBinding, WORLD_SERVICE_CONTRACT_VERSION, WorldIdentity,
     };
+
+    fn feedback_history(agent_id: &str, subject: &str) -> WorldServiceFeedbackHistory {
+        WorldServiceFeedbackHistory {
+            agent_id: agent_id.into(),
+            records: vec![WorldServiceFeedbackReplayRecord {
+                feedback: crate::simulator::FeedbackEnvelopeV1 {
+                    feedback_id: "feedback".into(),
+                    feedback_seq: 1,
+                    agent_subject: subject.into(),
+                    agent_session_id: "session".into(),
+                    agent_turn_id: "turn".into(),
+                    decision_request_id: "request".into(),
+                    candidate_action_id: None,
+                    runtime_receipt_id: None,
+                    status: "rejected".into(),
+                    request_digest: crate::simulator::Digest32(format!(
+                        "blake3:{}",
+                        "a".repeat(64)
+                    )),
+                    reject_reason: Some("stale_base".into()),
+                    provenance: "runtime_authoritative".into(),
+                },
+                original_envelope_digest: format!("blake3:{}", "b".repeat(64)),
+                delivery_state: "pending".into(),
+                receipt_lineage: None,
+            }],
+        }
+    }
 
     fn fixture() -> (
         ReadWorldViewRequest,
@@ -278,5 +319,35 @@ mod tests {
         generation.version.commit.binding.permission_generation += 1;
         generation.continuation.commit = generation.version.commit.clone();
         assert!(VerifiedWorldView::new(generation, &request).is_err());
+    }
+
+    #[test]
+    fn verified_view_binds_feedback_history_to_agent_scope_and_hides_it_from_public_scope() {
+        let (public_request, mut public_response) = fixture();
+        public_response.view.feedback_history = Some(feedback_history("agent-a", "agent-a"));
+        assert!(
+            VerifiedWorldView::new(public_response, &public_request).is_err(),
+            "public projection must not expose private agent feedback history"
+        );
+
+        let (mut agent_request, mut agent_response) = fixture();
+        agent_request.scope_id = "agent:agent-a".into();
+        agent_response.version.visibility_scope = agent_request.scope_id.clone();
+        agent_response.continuation.scope_id = agent_request.scope_id.clone();
+
+        agent_response.view.feedback_history = Some(feedback_history("agent-b", "agent-b"));
+        assert!(
+            VerifiedWorldView::new(agent_response.clone(), &agent_request).is_err(),
+            "history owner must match the requested agent"
+        );
+
+        agent_response.view.feedback_history = Some(feedback_history("agent-a", "agent-b"));
+        assert!(
+            VerifiedWorldView::new(agent_response.clone(), &agent_request).is_err(),
+            "every feedback subject must match the requested agent"
+        );
+
+        agent_response.view.feedback_history = Some(feedback_history("agent-a", "agent-a"));
+        assert!(VerifiedWorldView::new(agent_response, &agent_request).is_ok());
     }
 }

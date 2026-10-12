@@ -5,6 +5,23 @@ use super::agent_service_io::{
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
+fn phase_code(phase_digest: &str) -> u64 {
+    match phase_digest.split(':').next().unwrap_or("") {
+        "act" => 1,
+        "act_view" => 2,
+        "act_settled_view" => 3,
+        "act_settle" => 4,
+        "feedback" => 5,
+        "feedback_ack" => 6,
+        "feedback_ack_view" => 7,
+        "wait" => 8,
+        "resume" => 9,
+        "handoff_wake" => 10,
+        "handoff_view" => 11,
+        _ => 0,
+    }
+}
+
 pub(super) struct IoDiagnostics {
     origin: Instant,
     state: AtomicU64,
@@ -86,18 +103,7 @@ impl IoDiagnostics {
             },
             Ordering::Relaxed,
         );
-        let phase = match job.token.phase_digest.split(':').next().unwrap_or("") {
-            "act" => 1,
-            "act_view" => 2,
-            "act_settled_view" => 3,
-            "act_settle" => 4,
-            "feedback" => 5,
-            "feedback_ack" => 6,
-            "feedback_ack_view" => 7,
-            "wait" => 8,
-            "resume" => 9,
-            _ => 0,
-        };
+        let phase = phase_code(&job.token.phase_digest);
         if self.phase_code.swap(phase, Ordering::Relaxed) == phase {
             self.same_phase_launches.fetch_add(1, Ordering::Relaxed);
         } else {
@@ -207,6 +213,13 @@ mod tests {
         thread,
         time::Duration,
     };
+
+    #[test]
+    fn handoff_phases_have_distinct_diagnostic_codes() {
+        assert_eq!(phase_code("handoff_wake:invocation:digest"), 10);
+        assert_eq!(phase_code("handoff_view:invocation:digest"), 11);
+        assert_eq!(phase_code("unrecognized:invocation:digest"), 0);
+    }
 
     #[test]
     fn real_http_lifecycle_distinguishes_execution_from_viewer_lock_wait() {
