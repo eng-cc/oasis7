@@ -2,6 +2,7 @@ use super::feedback::RuntimeReceiptReadbackVerifier;
 use super::*;
 #[cfg(test)]
 use crate::runtime::RuntimeFeedbackOutboxRecordV1;
+use oasis7_agent_harness::MemoryWritePolicyContextV1 as HarnessMemoryWritePolicyContextV1;
 
 fn runtime_receipt_from_api_projection(
     receipt: &oasis7_agent_api::RuntimeReceiptLineageV1,
@@ -20,6 +21,103 @@ fn runtime_receipt_from_api_projection(
         request_digest: receipt.request_digest.clone(),
         feedback_id: receipt.feedback_id.clone(),
     }
+}
+
+/// Short-lived Harness authority created only after the strict verifier has
+/// returned an identity-matching opaque World-readback handle. The handle is
+/// carried to the write boundary; this adapter adds no serialized or
+/// caller-mintable proof and performs no substitute readback.
+struct VerifiedWorldMemoryAuthority<'a> {
+    turn: &'a ContinuousAgentTurnContextV1,
+    feedback: &'a FeedbackEnvelopeV1,
+    receipt: &'a RuntimeReceiptLineageV1,
+    readback: &'a super::feedback::RuntimeReceiptReadbackHandleV1,
+}
+
+impl RuntimeAuthority for VerifiedWorldMemoryAuthority<'_> {
+    type Lease = ();
+    type Receipt = RuntimeReceiptLineageV1;
+    type Continuation = ();
+
+    fn validate_lease(
+        &self,
+        _lease: &Self::Lease,
+        _request: &oasis7_agent_api::ContinuousAgentRequestContextV1,
+    ) -> Result<oasis7_agent_api::CognitionLeaseConsumptionViewV1, oasis7_agent_api::CognitionError>
+    {
+        Err(memory_authority_scope_error())
+    }
+
+    fn verify_receipt_readback(
+        &self,
+        _feedback: &oasis7_agent_api::FeedbackEnvelopeV1,
+        _receipt: &Self::Receipt,
+        _response_identity: &oasis7_agent_api::ResponseArtifactIdentityV1,
+    ) -> Result<oasis7_agent_api::RuntimeReceiptLineageV1, oasis7_agent_api::CognitionError> {
+        Err(memory_authority_scope_error())
+    }
+
+    fn verify_memory_receipt(
+        &self,
+        receipt: &Self::Receipt,
+        context: Option<&HarnessMemoryWritePolicyContextV1>,
+    ) -> Result<oasis7_agent_api::RuntimeReceiptLineageV1, oasis7_agent_api::CognitionError> {
+        let context = context.ok_or_else(memory_authority_scope_error)?;
+        if receipt != self.receipt
+            || receipt.validate().is_err()
+            || receipt.receipt_id != self.readback.receipt_id()
+            || receipt.receipt_digest != self.readback.receipt_digest().as_str()
+            || self.readback.verified_lineage() != receipt
+            || !self
+                .readback
+                .response_artifact_digest()
+                .is_canonical_blake3()
+            || self.feedback.status != "committed"
+            || self.feedback.runtime_receipt_id.as_deref() != Some(receipt.receipt_id.as_str())
+            || self.feedback.feedback_id != receipt.feedback_id
+            || self.feedback.agent_subject != self.turn.agent_id
+            || self.feedback.agent_session_id != self.turn.agent_session_id
+            || self.feedback.agent_turn_id != self.turn.agent_turn_id
+            || self.feedback.decision_request_id != self.turn.decision_request_id
+            || self.feedback.request_digest != self.turn.request_digest
+            || context.agent_id != self.turn.agent_id
+            || context.agent_session_id != self.turn.agent_session_id
+            || context.agent_turn_id != self.turn.agent_turn_id
+            || context.request_digest != self.turn.request_digest.to_string()
+            || context.source != "provider"
+            || context.provenance != "provider_unverified"
+        {
+            return Err(oasis7_agent_api::CognitionError::new(
+                "runtime_memory_readback_mismatch",
+                "verified World readback does not match the exact committed feedback context",
+            ));
+        }
+        Ok(receipt.agent_api_projection())
+    }
+
+    fn validated_feedback_history(
+        &self,
+    ) -> Result<
+        Vec<oasis7_agent_harness::FeedbackHistoryProjection>,
+        oasis7_agent_api::CognitionError,
+    > {
+        Err(memory_authority_scope_error())
+    }
+
+    fn continuation_projection(
+        &self,
+        _continuation: &Self::Continuation,
+    ) -> Result<oasis7_agent_harness::ContinuationHostProjection, oasis7_agent_api::CognitionError>
+    {
+        Err(memory_authority_scope_error())
+    }
+}
+
+fn memory_authority_scope_error() -> oasis7_agent_api::CognitionError {
+    oasis7_agent_api::CognitionError::new(
+        "runtime_memory_authority_scope",
+        "verified World readback authorizes only its matching memory transition",
+    )
 }
 
 impl AsyncAgentRunner {
@@ -267,17 +365,23 @@ impl AsyncAgentRunner {
 
     /// Roll back native verifier/turn ledgers and private memory if the sole
     /// durable consumption checkpoint fails. No actor I/O occurs here.
-    pub(crate) fn with_committed_feedback_memory_transaction<F>(
+    pub(crate) fn with_committed_feedback_memory_transaction<A, F>(
         &mut self,
-        agent: &str,
-        feedback: FeedbackEnvelopeV1,
-        receipt: &RuntimeReceiptLineageV1,
+        input: CommittedFeedbackMemoryInput<'_>,
+        authority_receipt: &A::Receipt,
+        authority: &A,
         memory: &mut MemoryWriteStore,
         persist: F,
     ) -> Result<(), AsyncAgentRunnerError>
     where
+        A: RuntimeAuthority,
         F: FnOnce(&mut MemoryWriteStore) -> Result<(), String>,
     {
+        let CommittedFeedbackMemoryInput {
+            agent,
+            feedback,
+            receipt,
+        } = input;
         let outcome = self
             .find_feedback_outcome(agent, &feedback)
             .ok_or_else(|| AsyncAgentRunnerError::Cognition("unknown actor outcome".into()))?;
@@ -296,6 +400,8 @@ impl AsyncAgentRunner {
             context,
             &feedback,
             receipt,
+            authority_receipt,
+            authority,
             &outcome.memory_write_intents,
             &mut staged_memory,
         )?;
@@ -429,10 +535,18 @@ impl AsyncAgentRunner {
                     ));
                 }
                 let mut staged = store.clone();
+                let authority = VerifiedWorldMemoryAuthority {
+                    turn: context,
+                    feedback: &feedback,
+                    receipt: runtime_receipt,
+                    readback,
+                };
                 project_receipt_memory(
                     context,
                     &feedback,
                     runtime_receipt,
+                    runtime_receipt,
+                    &authority,
                     &outcome.memory_write_intents,
                     &mut staged,
                 )?;
@@ -550,6 +664,7 @@ impl AsyncAgentRunner {
             )?;
             if handle.receipt_id() != runtime_receipt.receipt_id
                 || handle.receipt_digest().as_str() != runtime_receipt.receipt_digest
+                || handle.verified_lineage() != runtime_receipt
                 || handle.response_artifact_digest() != &response_identity.artifact_digest
             {
                 return Err(AsyncAgentRunnerError::Cognition(

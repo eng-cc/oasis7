@@ -46,7 +46,7 @@ Runtime owner 负责世界侧 control fence、顺序、授权及恢复；Agent o
 <a id="collab-binding"></a>
 ### 4.1 唯一控制记录
 
-每个 world/Agent 首期最多一个 active task 和一个 active decision executor。`TaskControl` 由当前世界权威维护，包含 task_id、owner/control revision、active_goal_revision、goal_digest、grant_revision、executor_id、executor_epoch、task_status 与最后控制提交引用。
+每个 world/Agent 首期最多一个 active task 和一个 active decision executor。`TaskControl` 由当前世界权威维护，包含 task_id、owner/control revision、active_goal_revision、active_goal_reference、grant_revision、executor_id、executor_epoch、task_status 与最后控制提交引用。公开目标引用保存不透明的私有盐承诺与准备/发布操作关联，不保存正文 digest；私有 digest 仅在受权正文投影内使用。
 
 `executor_epoch` 是 Runtime 持久单调 fence，不是客户端时间、token expiry 或内部 session ID。初次绑定、重新接管、替换及 stop 均经 owner 授权并形成新的 control revision；旧 epoch 即使仍持有未过期 token 也不能发起新副作用。不同执行进程可以共享只读历史但不能并行占有一个 Agent；内部多工具不获得独立 fence。
 
@@ -54,7 +54,7 @@ Runtime owner 负责世界侧 control fence、顺序、授权及恢复；Agent o
 
 ### 4.2 两类数据，不同权威
 
-**权威控制元数据**：目标版本/摘要引用、executor fence、grant 与预算、任务运行许可，进入 Runtime control journal/checkpoint，与世界行动按一致顺序重验。
+**权威控制元数据**：目标版本/不透明承诺引用、executor fence、grant 与预算、任务运行许可，进入 Runtime control journal/checkpoint，与世界行动按一致顺序重验。
 
 **私有协作正文**：Prompt、计划、问题和回复使用 audience-scoped 的持久内容存储，密文/索引放在 Runtime 所属的受控存储域；世界公开快照仅保存授权可公开的承诺或不透明引用，不公开可枚举的私有正文指纹；私有 goal digest 只在受权上下文内使用，不复制明文到公共 P2P、广播事件或玩家公开世界流。首期复用现有执行世界存储代际机制，新增私有 namespace，不要求独立数据库或跨服务分布式事务。
 
@@ -122,17 +122,23 @@ ApprovalRequestV1 = {approval_id, request_revision, task_id,
 
 `active_goal` 是 `GET T/snapshot` 的必需字段：有激活目标时，内联返回该调用者有权读取的完整 `GoalVersionProjectionV1`，而不只是 revision/digest 或无法解引用的存储地址。`content` 与 `PUT goal` 接受并持久化的完整目标正文使用同一 `GoalContentV1` schema，不以摘要、裁剪文本或尚未激活的新版本替代；硬授权仍单独来自 grant。只有切点 S 上确实没有激活目标（active_goal_revision="0"）时才返回 `active_goal=null`、`active_goal_digest=null`，此时不能开启有目标的决策。
 
-投影的 task_id、goal_revision、goal_digest 和 activation_commit_ref 必须与同一切点 S 的 TaskControl、world_binding 一致；正文按版本化 GoalVersion codec 重算并匹配所引用 digest。该私有正文 digest 与 Harness 的 GoalSnapshot/context digest 各有原合同，不得混为一个哈希。goal_text 非空，完整正文继续受 4 KiB 上限约束，任何超限/截断不得伪装成功。latest_goal_revision 可大于 active_goal_revision，但未激活内容不得作为 executor 当前目标。
+投影的 task_id、goal_revision、私有证明承诺引用和 activation_commit_ref 必须与同一切点 S 的 TaskControl、world_binding 一致；正文按版本化 GoalVersion codec 重算并匹配私有 owner proof 内的 digest，再重算私有盐承诺以匹配公共 owner 发布签名的引用。该私有正文 digest 与 Harness 的 GoalSnapshot/context digest 各有原合同，不得混为一个哈希，也不能将其复制到公开 TaskControl。goal_text 非空，完整正文继续受 4 KiB 上限约束，任何超限/截断不得伪装成功。latest_goal_revision 可大于 active_goal_revision，但未激活内容不得作为 executor 当前目标。
 
-已实施 SDK 合同位于 `oasis7_agent_api::game`：`GoalContentV1` 的 4 KiB 上限按完整紧凑 JSON 编码的 UTF-8 字节数计算，包含字段名、软约束与转义开销；不裁剪、不重排、不规范化原文。`game_goal_version_digest` 复用 canonical CBOR/BLAKE3，将 `["game_goal_version/v1", {schema_revision: 1, task_id, goal_revision, content}]` 编码后取 `blake3:<lowercase-hex>`，其中 goal_revision 是规范十进制字符串。activation_commit_ref 不进入正文摘要，由 `GoalVersionProjectionV1::validate_against` 与同切点权威控制记录单独比对。调用者必须从可信 TaskControl 取得 expected task/revision/digest/activation，继续验证 WorldBinding 和当前 audience；仅解析或自洽摘要不证明激活或读权。
+已实施 SDK 合同位于 `oasis7_agent_api::game`：`GoalContentV1` 的 4 KiB 上限按完整紧凑 JSON 编码的 UTF-8 字节数计算，包含字段名、软约束与转义开销；不裁剪、不重排、不规范化原文。`game_goal_version_digest` 复用 canonical CBOR/BLAKE3，将 `["game_goal_version/v1", {schema_revision: 1, task_id, goal_revision, content}]` 编码后取 `blake3:<lowercase-hex>`，其中 goal_revision 是规范十进制字符串。activation_commit_ref 不进入正文摘要。`GoalVersionProjectionV1::validate_against` 比对的 expected digest 必须来自已验证私有 owner proof，不能取自公开控制记录；公共控制中的 task/revision/承诺引用与历史激活提交另外核对。调用者继续验证 WorldBinding 和当前 audience；仅解析或自洽摘要不证明激活或读权。
 
-目标发布的私有前置合同为 `GameGoalPrepareV1`：完整正文、重算的私有 goal_digest、独立随机 client_nonce 和稳定 client_operation_id 一起签名，并绑定世界/genesis、task/Agent、owner key/binding/generation、branch/reorg、expected task/latest goal revision 与严格递增的新 goal revision。Runtime 的独立 `private_goal_prepare` 模块使用专用私有签名 domain、拒绝弱 Ed25519 公钥并执行严格验签；验签后仍须与受信当前 TaskControl 逐项比较。解析、有效签名和自洽 digest 均不证明当前控制权、持久化、幂等或激活；服务接入必须在提交时重新核对权威切点。正文、摘要和该签名证明仅用于私有传输及存储，不能包装为公共 canonical intent。该前置合同不开放 HTTP 端点，也未连接存储、发布或执行器决策。
+目标发布的私有前置合同为 `GameGoalPrepareV1`：完整正文、重算的私有 goal_digest、独立随机 client_nonce 和稳定 client_operation_id 一起签名，并绑定世界/genesis、task/Agent、owner key/binding/generation、branch/reorg、expected task/latest goal revision 与严格递增的新 goal revision。Runtime 的独立 `private_goal_prepare` 模块使用专用私有签名 domain、拒绝弱 Ed25519 公钥并执行严格验签；验签后仍须与受信当前 TaskControl 逐项比较。正文、摘要和该签名证明仅用于私有传输及存储，不能包装为公共 canonical intent。
+
+`PrivateGoalStore::prepare` 将完整原始 proof、独立生成的私有 32 字节随机盐和 salted commitment 引用放在单份不可覆盖的加密记录内。文件名为 operator 密钥派生的 keyed operation locator，作用域包括 world/genesis、task/Agent、owner key/binding/generation、branch/reorg 和准备 operation ID；不包含正文、digest、nonce 或 revision。同操作相同 proof 重试返回原记录，不同 proof 冲突；响应丢失、并发发布与重启都重读原胜者，没有第二份权威索引事务。引用为 canonical CBOR `["oasis7/private-goal-reference/v1", salt_lowercase_hex, SignedGoalPrepareV1]` 的 BLAKE3 lowercase hex；盐和完整 proof 始终保持私有，因此不是可枚举正文地址。客户端保留原 proof，验证准备响应的配置服务签名和请求关联，再调用 `validate_against(original)` 重算引用；不能只信服务提供的引用字符串。
+
+owner 另以 `game_goal_publish/v1` domain 签署 `GameGoalPublishV1`，只公开 owner/world/history/task fences、expected/new revision、不透明引用、准备操作 ID 和独立发布操作 ID。普通 `/v1/world/submit` 与 `/lookup` 沿用持久关联与 canonical receipts。执行时重验当前 owner、严格签名、版本前驱和同块 staged 控制记录；成功提交同时推进 task/latest/active goal revision，任务仍 suspended 且 executor 未绑定。公共状态不记录 private proof、盐或正文 digest。激活记录只保存 committed height 和发布关联；读取历史 pin 取得真实 CommitRef，避免把参与 state hash 的 receipt 再引用自己的 root。共识不读取节点私有文件，canonical 激活不保证正文副本可用；缺失正文使私有回读及后续 Context 阻塞，不改变已提交历史。 `GameGoalPublish` 是新增 canonical payload，旧节点不能解析它或恢复包含其回执的历史；首次发布前必须升级所有相关执行、验证和恢复节点，已有新发布历史不能回滚至旧 binary。读取 schema revision 3 不构成节点能力协商或 mixed-version 升级屏障。
+
+原生 chain status 服务提供默认关闭的 owner 目标子集：POST `/v1/world/private-goal/prepare` 与 `/v1/world/private-goal/current`。必须同时配置 `OASIS7_PRIVATE_GOAL_DIR` 和 `OASIS7_PRIVATE_GOAL_KEY_FILE`，实际 listener 必须是 loopback；专用目录和密钥路径不得位于公共 world/records/CAS 存储内。密钥是 operator-owned、mode 0600、无链接的精确 32 字节文件，祖先分量禁止符号链接；密钥不进入公共配置或快照。明文 loopback 传输要求所有可监听本机端口的进程受信，不能只依赖同 UID 文件隔离；客户端发送正文前未认证 HTTP 对端，配置服务公钥只验证回复，不保护已发送正文。不受信多用户部署须使用发送前验证服务端的 TLS 或等效传输，不能暴露公开明文私有入口。私有客户端禁用代理、重定向并限制回复至配置值与 64 KiB 的较小值。入口拒绝 query、Origin、Authorization 与转发 header，响应 no-store。准备先检查当前 owner/world/task/history，再查询原操作；已发布的原 proof 可以重试，新的准备才比较当前 expected revision。回读先检查当前 owner，再验证历史激活、私有 proof/承诺/绑定，并在交付前重新 pin 当前控制与世界分支。返回完整当前 owner 目标、当前读取 CommitRef 和历史 activation CommitRef；它明确不是完整 TaskSnapshot，也不授予认知或执行权限。
 
 Runtime 的 native library 提供独立私有目标存储基础 `world_service::private_goal_store`：operator 显式传入专用目录和 32 字节密钥，完整正文及重算 digest 仅存于 XChaCha20Poly1305 密文；公开可引用值为独立随机的不透明引用。关联数据绑定 world/genesis、task/Agent、owner identity/generation、branch/reorg 与 goal revision。namespace 以随机 challenge 的加密密钥验证记录固定当前密钥；打开及读写时重验该记录，错误密钥、篡改或缺失记录均拒绝。初始化只允许严格空目录，原子发布且不覆盖并发胜者；没有验证记录却存在目标或暂存文件时不自动接管，operator 须核查初始化残留并恢复原验证记录。该存储版本不填写尚未发生的 activation_commit_ref，存储成功不等于目标激活。
 
 存储只在支持 Unix 私有权限的系统可用；目录与文件权限、所有权、符号链接及普通文件类型检查均须通过，有界读取后解密并重新验证完整正文。文件和目录同步完成后才返回引用；对象不可覆盖，不自动回收被引用的版本。operator 必须把 namespace 和密钥放在公共 CAS、P2P、公开备份/快照之外，确保祖先目录和同一系统账号受信；目录句柄与禁止链接访问不防御拥有该账号权限的恶意进程，也不自动证明目录已排除在公开存储之外。独立保留密文与密钥才能恢复；公共世界 checkpoint 不包含这些正文，也不证明跨节点私有副本已恢复。
 
-该底层存储尚未接入目标发布、TaskSnapshot 或 Context；调用者提供的存储绑定不证明当前 owner/audience 授权，后续服务接入仍须在解密前及交付前重验权威控制。现有 World Service canonical intent 会保留完整请求，不能直接承载私有目标正文或可枚举的正文 digest；这些值不得进入公共 CAS、P2P 或公开世界流。
+旧 `put/get` 基础存储仍只接受调用者提供的绑定，不自动授予当前 owner/audience 资格。新 prepared 记录接入上述 owner 发布/回读，但完整 TaskSnapshot、Context、executor delivery/adoption 和实际决策仍待实现。World Service canonical intent 会保留完整请求，故只能承载 public-only PublishGoal，不能承载私有目标正文、盐、正文签名或可枚举 digest；这些值不得进入公共 CAS、P2P 或公开世界流。
 
 解密/投影前及响应交付前按当前 owner/audience 和 executor fence 验证读取资格；切点 S 或旧 token 不保留已撤销的读权。无权请求不返回正文、正文指纹或新 owner 的差异。元数据引用的正文缺失、损坏或无法验证时，返回 `503 ErrorV1(code=recovery_required, refresh=task_snapshot)`，不返回伪完整 TaskSnapshot、空目标或公开内容 URL，相关新 context 保持阻塞。客户端只能在授权仍有效后重新读取 snapshot，不挂载私有存储或依赖历史事件取回正文。
 

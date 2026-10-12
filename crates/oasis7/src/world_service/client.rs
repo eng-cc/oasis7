@@ -737,3 +737,7 @@ mod tests {
         assert!(!format!("{signer:?}").contains(&signer.private_key_hex));
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "client/private_goal_client.rs"]
+mod private_goal_client;

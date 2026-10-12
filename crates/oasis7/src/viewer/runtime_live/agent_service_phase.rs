@@ -245,9 +245,7 @@ impl crate::viewer::ViewerRuntimeLiveServer {
                 self.llm_sidecar.checkpoint_service_feedback_consumption(
                     &self.world,
                     &pending,
-                    &receipt.feedback,
-                    &receipt.lineage,
-                    receipt.raw_feedback.clone(),
+                    &receipt,
                 )?;
             }
             let pending = self

@@ -265,6 +265,72 @@ fn verify_key_durable(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
     sync(dir)
 }
 
+// Prepared operations use their own envelope/domain, while sharing exactly
+// the same permission, key-verifier and durable publication boundary.
+pub(super) fn publish_record(
+    dir: &Dir,
+    key: &[u8; 32],
+    name: &str,
+    magic: &[u8; 8],
+    aad: &[u8],
+    plaintext: &[u8],
+) -> Result<bool, String> {
+    private_directory(dir)?;
+    verify_key(dir, key)?;
+    let nonce = random::<24>()?;
+    let ciphertext = XChaCha20Poly1305::new(key.into())
+        .encrypt(
+            XNonce::from_slice(&nonce),
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
+        .map_err(|_| "private prepared goal encryption failed")?;
+    let mut bytes = Vec::with_capacity(32 + ciphertext.len());
+    bytes.extend_from_slice(magic);
+    bytes.extend_from_slice(&nonce);
+    bytes.extend_from_slice(&ciphertext);
+    if bytes.len() > MAX_PRIVATE_GOAL_FILE_BYTES {
+        return Err("private prepared goal file exceeds limit".into());
+    }
+    publish_immutable(dir, name, &bytes)
+}
+
+pub(super) fn read_record(
+    dir: &Dir,
+    key: &[u8; 32],
+    name: &str,
+    magic: &[u8; 8],
+    aad: &[u8],
+) -> Result<Option<Zeroizing<Vec<u8>>>, String> {
+    private_directory(dir)?;
+    verify_key(dir, key)?;
+    match dir.symlink_metadata(name) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error(error)),
+        Ok(_) => (),
+    }
+    let bytes = read_private(dir, name, MAX_PRIVATE_GOAL_FILE_BYTES)?;
+    if bytes.len() < 48 || &bytes[..8] != magic {
+        return Err("invalid private prepared goal envelope".into());
+    }
+    let plaintext = XChaCha20Poly1305::new(key.into())
+        .decrypt(
+            XNonce::from_slice(&bytes[8..32]),
+            Payload {
+                msg: &bytes[32..],
+                aad,
+            },
+        )
+        .map(Zeroizing::new)
+        .map_err(|_| "private prepared goal authentication failed")?;
+    // A retry may observe the concurrent publisher after linking, before its
+    // directory fsync. Every successful read completes durable publication.
+    sync(dir)?;
+    Ok(Some(plaintext))
+}
+
 /// A marker-less nonempty namespace is never repaired or re-keyed. This includes
 /// interrupted initialization temporaries: operator inspection is required.
 pub(super) fn initialize_key(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
