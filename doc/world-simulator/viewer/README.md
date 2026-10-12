@@ -1,6 +1,6 @@
 # `world-simulator/viewer` 热点子域入口
 
-更新时间: 2026-07-07
+更新时间: 2026-10-12
 
 ## 从这里开始
 - 想先理解 Pixel-world 对玩家承诺的首读层级、空间关系来源、可归因因果与诊断边界：读 [`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；具体 DTO、LOD、renderer 与验证仍回到本目录专业文档。
@@ -14,6 +14,8 @@
 - 想确认 pixel-world 面向商业化游戏首屏如何呈现目标、下一步、玩家杠杆与诊断降噪：先读 `viewer-pixel-world-player-readable-rendering.prd.md`
 - 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-control-plane-split-live-playback.prd.md`；操作、进程与 runtime-live 观测边界读 `viewer-manual.manual.md`，Agent/provider 语义读 `../llm/decision-provider-contract.prd.md`
+- 想确认本人、其他玩家与匿名请求的反馈归属，以及预检和提交的边界：产品读[反馈连续性](../../product/agents-world-simulation/player-readable-surface-continuity.prd.md#req-agent-surface-003)，专业要求读[动作反馈目标](viewer-control-plane-split-live-playback.prd.md#player-action-feedback-targets)，实现方案读[控制面设计](viewer-control-plane-split-live-playback.design.md#gameplay-feedback-isolation)。实现、定向回归和真实多人验收分别核实，文档导航不代替运行证据。
+- 想处理锚点重复枚举、depot 范围圈实体复用或 selected/corner-frame 视觉回归：读[增量与回归要求](viewer-pixel-world-bridge-rendering.prd.md#render-reconcile-and-visual-regression-requirements)及配对设计；claim evidence 测试页的[已有分类](viewer-pixel-world-bridge-rendering.prd.md#claim-evidence-classification)不再作为缺口。
 - 想先理解 Agent 对话、预设/草稿、Prompt/目标调整与反馈恢复的产品语义：读 [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 及其配对产品设计；当前 surface、协议、操作边界与自动化合同继续读 `viewer-manual.manual.md` 和 `viewer-web-semantic-test-api.prd.md`
 - 想确认 Viewer terminal shell 的目标与 current-vs-target 边界：先读 `viewer-gameplay-release-experience-overhaul.prd.md`；旧 `immersion-phase2~10` 阶段三件套不再作为首读或 active 索引入口。
 - 终态实现状态：`world_feed/v1` runtime/Viewer projection 与 `#viewer-world-feed` 已落地；Director verifier/state machine 与 `/api/public/director/capability` fail-closed boundary 已落地，但可信 issuer 缺失时生产成功进入仍为 `capability_blocked`。WebGL2 在 GPU-enabled 环境走 `ready`，GPU-disabled 环境明确显示 `Renderer Unavailable`；具体操作与证据边界读 `viewer-manual.manual.md`。

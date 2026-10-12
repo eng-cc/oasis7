@@ -233,6 +233,7 @@ pub(super) struct PreparedWorldServiceSubmission {
     pub(super) outcome:
         Result<oasis7_client_api::world_service::SubmitObservation<serde_json::Value>, String>,
     pub(super) admission_error: Option<GameplayActionError>,
+    pub(super) feedback_origin: Option<super::gameplay_feedback_scope::GameplayFeedbackOrigin>,
 }
 
 impl ViewerRuntimeLiveServer {
@@ -285,7 +286,7 @@ impl ViewerRuntimeLiveServer {
             use super::super::auth::{
                 verify_collect_data_auth_proof, verify_gameplay_action_auth_proof,
             };
-            let server = lock_shared_server(shared)?;
+            let mut server = lock_shared_server(shared)?;
             let verified = match request {
                 ViewerRequest::AgentChat { request } => request
                     .auth
@@ -313,21 +314,26 @@ impl ViewerRuntimeLiveServer {
                 server
                     .session_policy
                     .validate_known_session_key(&verified.player_id, &verified.public_key)
-                    .map(|_| ())
+                    .map(|_| ())?;
+                Ok(server.new_gameplay_feedback_origin(&verified))
             })
         };
-        if let Err(message) = admission {
-            return Ok(Some(PreparedWorldServiceSubmission {
-                correlation,
-                outcome: Err("Viewer admission rejected before service submission".into()),
-                admission_error: Some(GameplayActionError {
-                    code: super::session_policy::map_session_policy_error_code(&message).into(),
-                    message,
-                    action_id: None,
-                    target_agent_id: None,
-                }),
-            }));
-        }
+        let feedback_origin = match admission {
+            Ok(origin) => origin,
+            Err(message) => {
+                return Ok(Some(PreparedWorldServiceSubmission {
+                    correlation,
+                    outcome: Err("Viewer admission rejected before service submission".into()),
+                    admission_error: Some(GameplayActionError {
+                        code: super::session_policy::map_session_policy_error_code(&message).into(),
+                        message,
+                        action_id: None,
+                        target_agent_id: None,
+                    }),
+                    feedback_origin: None,
+                }));
+            }
+        };
         let client = RemoteWorldServiceClient::new(config)
             .map_err(|e| ViewerRuntimeLiveServerError::Init(e.to_string()))?
             .with_query_state(query_state);
@@ -343,6 +349,7 @@ impl ViewerRuntimeLiveServer {
             correlation,
             outcome,
             admission_error: None,
+            feedback_origin,
         }))
     }
     pub(super) fn submit_world_service_gameplay<T: serde::Serialize>(
@@ -375,6 +382,11 @@ impl ViewerRuntimeLiveServer {
             &payload,
         )
         .map_err(|e| error("world_service_invalid_request", e))?;
+        let origin = self.reuse_pending_gameplay_feedback_origin(
+            &correlation,
+            self.active_gameplay_feedback_origin.clone(),
+        );
+        self.active_gameplay_feedback_origin = origin.clone();
         let outcome = if let Some(prepared) = self.prepared_world_service_submission.take() {
             if prepared.correlation != correlation {
                 return Err(error(
@@ -400,8 +412,8 @@ impl ViewerRuntimeLiveServer {
         };
         match outcome {
             SubmitObservation::OutcomeUnknown(_) => {
-                self.pending_world_service_gameplay
-                    .push((correlation, payload));
+                self.pending_gameplay_feedback_origin(&correlation, origin);
+                self.remember_pending_world_service_gameplay(correlation, payload);
                 Err(error("world_service_outcome_unknown",
                     "submission outcome unknown; query the original signed request, do not replace its nonce".into()))
             }
@@ -420,22 +432,36 @@ impl ViewerRuntimeLiveServer {
                         .get("consensus_action_payload_hash")
                         .and_then(serde_json::Value::as_str)
                         .map(str::to_owned);
+                    if let Some(origin) = origin {
+                        self.set_request_gameplay_feedback(origin, Self::make_player_gameplay_feedback(
+                            "world_service_intent", "committed",
+                            "original signed request has an authenticated canonical disposition",
+                            None, None, None,
+                            Some("inspect the committed view and receipt for actual effects".into()),
+                            0, 0,
+                        ));
+                    }
                     Ok((action_id, payload_hash))
                 }
                 IntentOutcome::Received { .. } | IntentOutcome::Pending => {
-                    self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
-                        "world_service_intent",
-                        "pending",
-                        "intent received; no committed world effect yet",
-                        None,
-                        None,
-                        None,
-                        Some("wait for the original request outcome".into()),
-                        0,
-                        0,
-                    ));
-                    self.pending_world_service_gameplay
-                        .push((correlation, payload));
+                    if let Some(origin) = origin.clone() {
+                        self.set_request_gameplay_feedback(
+                            origin,
+                            Self::make_player_gameplay_feedback(
+                                "world_service_intent",
+                                "pending",
+                                "intent received; no committed world effect yet",
+                                None,
+                                None,
+                                None,
+                                Some("wait for the original request outcome".into()),
+                                0,
+                                0,
+                            ),
+                        );
+                    }
+                    self.pending_gameplay_feedback_origin(&correlation, origin);
+                    self.remember_pending_world_service_gameplay(correlation, payload);
                     // Legacy ACK has a scalar action ID; zero denotes no
                     // committed action reference, never execution success.
                     Ok((0, None))

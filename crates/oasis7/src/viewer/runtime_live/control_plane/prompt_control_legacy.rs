@@ -141,7 +141,7 @@ impl ViewerRuntimeLiveServer {
         let player_id =
             normalize_required_player_id(request.player_id.as_str(), request.agent_id.as_str())?;
         let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        self.verify_and_consume_prompt_control_apply_auth(
+        let verified = self.verify_and_consume_prompt_control_apply_auth(
             PromptControlAuthIntent::Apply,
             &request,
         )?;
@@ -221,7 +221,7 @@ impl ViewerRuntimeLiveServer {
             );
         }
         self.llm_sidecar.request_decision();
-        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+        self.set_verified_player_gameplay_feedback(&verified, PlayerGameplayRecentFeedback {
             action: "prompt_control.apply".to_string(),
             stage: "completed_advanced".to_string(),
             effect: format!(
@@ -263,7 +263,7 @@ impl ViewerRuntimeLiveServer {
         let player_id =
             normalize_required_player_id(request.player_id.as_str(), request.agent_id.as_str())?;
         let public_key = normalize_optional_public_key(request.public_key.as_deref());
-        self.verify_and_consume_prompt_control_rollback_auth(&request)?;
+        let verified = self.verify_and_consume_prompt_control_rollback_auth(&request)?;
         ensure_agent_player_access_runtime(
             &self.world,
             &self.llm_sidecar,
@@ -348,26 +348,29 @@ impl ViewerRuntimeLiveServer {
             target_short_term_goal.as_deref(),
         );
         self.llm_sidecar.request_decision();
-        self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
-            action: "prompt_control.rollback".to_string(),
-            stage: "completed_advanced".to_string(),
-            effect: format!(
-                "rolled back prompt guidance for {} to base version {} via version {}",
-                request.agent_id, request.to_version, candidate.version
-            ),
-            intent_summary: Some(format!(
-                "roll back prompt guidance for {}",
-                request.agent_id
-            )),
-            target_agent_id: Some(request.agent_id.clone()),
-            reason: None,
-            hint: Some(
-                "continue the world and confirm the agent now follows the restored guidance"
-                    .to_string(),
-            ),
-            delta_logical_time: 0,
-            delta_event_seq: 0,
-        });
+        self.set_verified_player_gameplay_feedback(
+            &verified,
+            PlayerGameplayRecentFeedback {
+                action: "prompt_control.rollback".to_string(),
+                stage: "completed_advanced".to_string(),
+                effect: format!(
+                    "rolled back prompt guidance for {} to base version {} via version {}",
+                    request.agent_id, request.to_version, candidate.version
+                ),
+                intent_summary: Some(format!(
+                    "roll back prompt guidance for {}",
+                    request.agent_id
+                )),
+                target_agent_id: Some(request.agent_id.clone()),
+                reason: None,
+                hint: Some(
+                    "continue the world and confirm the agent now follows the restored guidance"
+                        .to_string(),
+                ),
+                delta_logical_time: 0,
+                delta_event_seq: 0,
+            },
+        );
 
         Ok(PromptControlAck {
             agent_id: request.agent_id,
@@ -390,7 +393,7 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         intent: PromptControlAuthIntent,
         request: &PromptControlApplyRequest,
-    ) -> Result<(), PromptControlError> {
+    ) -> Result<VerifiedPlayerAuth, PromptControlError> {
         let Some(auth) = request.auth.as_ref() else {
             return Err(PromptControlError {
                 code: "auth_proof_required".to_string(),
@@ -428,7 +431,7 @@ impl ViewerRuntimeLiveServer {
                 current_version: self.current_prompt_version(request.agent_id.as_str()),
                 ..PromptControlError::default_legacy()
             })?;
-        Ok(())
+        Ok(verified)
     }
 
     #[expect(
@@ -478,7 +481,7 @@ impl ViewerRuntimeLiveServer {
     fn verify_and_consume_prompt_control_rollback_auth(
         &mut self,
         request: &PromptControlRollbackRequest,
-    ) -> Result<(), PromptControlError> {
+    ) -> Result<VerifiedPlayerAuth, PromptControlError> {
         let Some(auth) = request.auth.as_ref() else {
             return Err(PromptControlError {
                 code: "auth_proof_required".to_string(),
@@ -516,7 +519,7 @@ impl ViewerRuntimeLiveServer {
                 current_version: self.current_prompt_version(request.agent_id.as_str()),
                 ..PromptControlError::default_legacy()
             })?;
-        Ok(())
+        Ok(verified)
     }
 
     #[expect(

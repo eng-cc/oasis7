@@ -80,6 +80,7 @@ mod control_utils;
 #[path = "runtime_live/decision_trace.rs"]
 mod decision_trace;
 mod fragment_refill_preview;
+mod gameplay_feedback_scope;
 mod gameplay_snapshot;
 mod gameplay_snapshot_feedback;
 mod gameplay_snapshot_helpers;
@@ -213,6 +214,12 @@ pub struct ViewerRuntimeLiveServer {
     settlement_ranking_gate: RuntimeSettlementRankingGate,
     latest_player_gameplay_feedback: Option<PlayerGameplayRecentFeedback>,
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
+    scoped_gameplay_feedback: BTreeMap<String, gameplay_feedback_scope::ScopedGameplayFeedback>,
+    pending_gameplay_feedback:
+        BTreeMap<(String, String), gameplay_feedback_scope::PendingGameplayFeedback>,
+    active_gameplay_feedback_origin: Option<gameplay_feedback_scope::GameplayFeedbackOrigin>,
+    active_gameplay_feedback_authorized: bool,
+    next_gameplay_feedback_order: u64,
     runtime_action_players: BTreeMap<u64, String>,
     consumed_rollback_operator_nonces: BTreeSet<String>,
     prompt_control_authority: PromptControlRuntimeAuthority,
@@ -486,6 +493,11 @@ impl ViewerRuntimeLiveServer {
             settlement_ranking_gate: RuntimeSettlementRankingGate::default(),
             latest_player_gameplay_feedback: None,
             latest_player_gameplay_causality: None,
+            scoped_gameplay_feedback: BTreeMap::new(),
+            pending_gameplay_feedback: BTreeMap::new(),
+            active_gameplay_feedback_origin: None,
+            active_gameplay_feedback_authorized: false,
+            next_gameplay_feedback_order: 0,
             runtime_action_players: recovered_generation
                 .as_ref()
                 .map(|generation| generation.runtime_action_players.clone())
@@ -964,7 +976,7 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
                 if session.wants_initial_snapshot() {
-                    let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                    let snapshot = self.compat_snapshot_for_session(session);
                     send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                 }
                 if session.wants_initial_recovery_metadata() {
@@ -1033,9 +1045,26 @@ impl ViewerRuntimeLiveServer {
                 self.apply_control_mode(mode, request_id, session, writer)?;
             }
             ViewerRequest::PromptControl { command } => {
-                match self
-                    .handle_prompt_control_for_protocol(*command, &session.negotiated_protocol)
-                {
+                let feedback_request = matches!(
+                    command.as_ref(),
+                    crate::viewer::PromptControlCommand::Apply { .. }
+                        | crate::viewer::PromptControlCommand::Rollback { .. }
+                );
+                if feedback_request {
+                    let origin =
+                        self.gameplay_request_feedback_origin(&ViewerRequest::PromptControl {
+                            command: command.clone(),
+                        });
+                    self.active_gameplay_feedback_origin =
+                        self.begin_gameplay_feedback_request(session, origin);
+                    self.active_gameplay_feedback_authorized = false;
+                }
+                let result =
+                    self.handle_prompt_control_for_protocol(*command, &session.negotiated_protocol);
+                if feedback_request {
+                    self.finish_gameplay_feedback_request(session);
+                }
+                match result {
                     Ok(ack) => {
                         send_response(writer, &ViewerResponse::PromptControlAck { ack })?;
                     }
@@ -1044,41 +1073,62 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             }
-            ViewerRequest::AgentChat { request } => match self.handle_agent_chat(request) {
-                Ok(ack) => {
-                    send_response(writer, &ViewerResponse::AgentChatAck { ack })?;
-                    let provider_errors = self.enqueue_pending_provider_agent_chat_replies();
-                    for error in provider_errors {
+            ViewerRequest::AgentChat { request } => {
+                let origin = self.gameplay_request_feedback_origin(&ViewerRequest::AgentChat {
+                    request: request.clone(),
+                });
+                self.active_gameplay_feedback_origin =
+                    self.begin_gameplay_feedback_request(session, origin);
+                self.active_gameplay_feedback_authorized = false;
+                let result = self.handle_agent_chat(request);
+                self.finish_gameplay_feedback_request(session);
+                match result {
+                    Ok(ack) => {
+                        send_response(writer, &ViewerResponse::AgentChatAck { ack })?;
+                        let provider_errors = self.enqueue_pending_provider_agent_chat_replies();
+                        for error in provider_errors {
+                            send_response(writer, &ViewerResponse::AgentChatError { error })?;
+                        }
+                        self.flush_pending_virtual_events(session, writer)?;
+                    }
+                    Err(error) => {
                         send_response(writer, &ViewerResponse::AgentChatError { error })?;
                     }
-                    self.flush_pending_virtual_events(session, writer)?;
                 }
-                Err(error) => {
-                    send_response(writer, &ViewerResponse::AgentChatError { error })?;
-                }
-            },
-            ViewerRequest::GameplayAction { request } => match self.handle_gameplay_action(request)
-            {
-                Ok(ack) => {
-                    let ack_player_id = ack.player_id.clone();
-                    send_response(writer, &ViewerResponse::GameplayActionAck { ack })?;
-                    if !ack_player_id.trim().is_empty() {
-                        session.current_player_id = Some(ack_player_id);
+            }
+            ViewerRequest::GameplayAction { request } => {
+                let origin =
+                    self.gameplay_request_feedback_origin(&ViewerRequest::GameplayAction {
+                        request: request.clone(),
+                    });
+                let origin = self.begin_gameplay_feedback_request(session, origin);
+                self.active_gameplay_feedback_authorized = self.config.world_service.is_some()
+                    && self.gameplay_feedback_session_matches(session, origin.as_ref());
+                self.active_gameplay_feedback_origin = origin.clone();
+                let result = self.handle_gameplay_action(request);
+                let origin = self.finish_gameplay_feedback_request(session);
+                match result {
+                    Ok(ack) => {
+                        let ack_player_id = ack.player_id.clone();
+                        send_response(writer, &ViewerResponse::GameplayActionAck { ack })?;
+                        if !ack_player_id.trim().is_empty() {
+                            self.set_gameplay_feedback_session_player(session, ack_player_id);
+                        }
+                        if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
+                            let snapshot = self.compat_snapshot_for_session(session);
+                            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+                        }
                     }
-                    if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-                        let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
-                        send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+                    Err(error) => {
+                        self.record_session_gameplay_rejection(session, &error, origin);
+                        send_response(writer, &ViewerResponse::GameplayActionError { error })?;
+                        if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
+                            let snapshot = self.compat_snapshot_for_session(session);
+                            send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+                        }
                     }
                 }
-                Err(error) => {
-                    self.record_gameplay_action_rejection(&error);
-                    send_response(writer, &ViewerResponse::GameplayActionError { error })?;
-                    if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-                        let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
-                        send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-                    }
-                }
-            },
+            }
             ViewerRequest::CollectData { command } => {
                 self.handle_collect_data_protocol_request(command, session, writer)?;
             }
@@ -1149,6 +1199,9 @@ impl ViewerRuntimeLiveServer {
                         let ack_status = ack.status;
                         send_response(writer, &ViewerResponse::AuthoritativeRecoveryAck { ack })?;
                         if let Some(player_id) = ack_player_id.as_deref() {
+                            // Legacy reconnect accepts an asserted player ID,
+                            // not a fresh signed proof for private feedback.
+                            self.clear_session_gameplay_feedback(session);
                             match ack_status {
                                 AuthoritativeRecoveryStatus::SessionRevoked => {
                                     if session.current_player_id.as_deref() == Some(player_id) {
@@ -1162,8 +1215,7 @@ impl ViewerRuntimeLiveServer {
                             }
                         }
                         if emit_snapshot_after_ack {
-                            let snapshot =
-                                self.compat_snapshot(session.current_player_id.as_deref());
+                            let snapshot = self.compat_snapshot_for_session(session);
                             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                             self.emit_authoritative_batch_snapshot(writer)?;
                             self.emit_authoritative_challenge_snapshot(writer)?;

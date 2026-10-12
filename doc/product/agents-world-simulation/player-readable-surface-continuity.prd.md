@@ -8,9 +8,11 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`Viewer 手册`](../../world-simulator/viewer/viewer-manual.manual.md)、[`world-simulator PRD`](../../world-simulator/prd.md)、[`Web 语义测试 API`](../../world-simulator/viewer/viewer-web-semantic-test-api.prd.md)
-- Last reviewed：2026-09-14
+- Last reviewed：2026-10-12
 
 本文定义正式玩家表面在 viewport、信息密度、语言与连接状态变化时保持可理解、可操作和可恢复的长期产品承诺。它不冻结 Viewer 布局、组件、Web/EGUI/Bevy 实现、协议字段、缓存、字体资产或当前发布结论。
+
+本文的规范性条款是目标要求；`active` 表示产品语义权威，不表示每项能力已经实现或完成验收。实现范围和验证结论由对应专业合同、PR 与实际证据说明。
 
 ## 设计适用性与生命周期闭合
 
@@ -64,6 +66,12 @@
 
 该优先级只规定玩家的默认首要解释，不冻结字段、状态枚举或 UI 排版。任何新的提交仍须按当前权威条件独立校验；重连、刷新和跨入口查看不能产生第二次世界效果。
 
+### 4.2 本人的行动结果与提交前判断
+
+玩家正在查看自己一次行动的结果时，另一位玩家或未登录连接可能同时发起失败请求。玩家应继续读到与本人行动对应的结果；别人的拒绝不能覆盖这条反馈，也不能变成本人的 blocker。共享世界中有权公开的事件仍可显示，但要与本人的操作反馈区分。
+
+正常路径是先确认当前操作身份和目标；行动提供提交前检查时，查看当前资格、主要成本和缺少的条件，再选择修改、等待、返回或明确提交。检查通过只说明本次检查可确认的条件，不能预留未来权限或保证执行成功。提交后按真实的待决、拒绝或已确认结果继续；拒绝应给出本人有权获得的原因和真实下一步，未知结果先核对原请求，不引导重复行动。
+
 ## 5. 叶级产品要求与验收
 
 <a id="req-agent-surface-001"></a>
@@ -92,6 +100,57 @@
 - 场景与结果：不支持行动、权限阻塞、已接受未结算请求和断连同时出现时，首要解释按当前权威语义呈现；重连、刷新、后台 tick 或跨入口查看不会把请求变成成功、取消或第二次世界效果。
 - 证据边界：请求 acceptance、世界结果、去重与恢复合同由 runtime/Agent 专业 authority 提供；产品层不冻结 transport 或 UI 实现。
 
+<a id="req-agent-surface-003"></a>
+### REQ-AGENT-SURFACE-003：个人行动反馈必须属于当前玩家
+
+- 性质与适用条件：目标要求；适用于正式玩家表面的个人行动反馈及其重连、刷新和身份切换。
+- 要求：产品必须依据经确认的当前身份展示该玩家有权读取的行动反馈；无关玩家或匿名请求的失败不得覆盖、追加到或暴露为本人的个人反馈。匿名请求可以获得自身有权获得的拒绝说明，但不能借请求中的身份声明影响已鉴权玩家。
+- 理由与上位承诺：保留本人结果、避免误判和私有反馈泄露，细化[根成功标准 SC-3 / SC-10](prd.md#5-done：成功标准与验收)。
+- 专业权威：[玩家反馈归属合同](../../world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md#player-scoped-gameplay-feedback)；产品经历见[反馈归属设计](player-readable-surface-continuity.design.md#player-feedback-ownership)。
+- 验收：[AC-AGENT-SURFACE-003](#ac-agent-surface-003)。
+
+<a id="ac-agent-surface-003"></a>
+### AC-AGENT-SURFACE-003：两名玩家与匿名失败互不污染
+
+- 覆盖要求：[REQ-AGENT-SURFACE-003](#req-agent-surface-003)。
+- 给定：两名已鉴权玩家各自已有可信个人反馈，以及一个未鉴权连接。
+- 当：分别由本人、另一玩家和匿名连接发起被拒绝的请求，并交叉刷新、重连或切换身份读取反馈。
+- 则：有权的请求方能看到自己的拒绝；另一玩家的个人反馈不变，匿名拒绝不进入任何已鉴权玩家的个人反馈。身份切换后不显示先前身份的私有反馈；合法公共事件仍按现行可见性展示，不冒充本人行动结果。
+
+<a id="req-agent-surface-004"></a>
+### REQ-AGENT-SURFACE-004：拒绝原因必须支持真实下一步
+
+- 性质与适用条件：目标要求；适用于本人有权获得的行动拒绝与失败说明。
+- 要求：产品必须保留足以区分修正输入、重新确认身份或权限、补齐世界条件、等待或安全停止的失败含义；已有明确原因不能统一降成“请求错误”或“请重连”。原因不足或结果未知时如实说明，不能编造成功、失败细节或必然有效的重试。
+- 理由与上位承诺：减少无效重试并让玩家继续决策，细化[根成功标准 SC-3 / SC-10](prd.md#5-done：成功标准与验收)。
+- 专业权威：[行动错误语义合同](../../world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md#gameplay-error-code-contract)；产品经历见[可操作拒绝设计](player-readable-surface-continuity.design.md#actionable-rejection)。
+- 验收：[AC-AGENT-SURFACE-004](#ac-agent-surface-004)。
+
+<a id="ac-agent-surface-004"></a>
+### AC-AGENT-SURFACE-004：不同失败仍能选择正确恢复路径
+
+- 覆盖要求：[REQ-AGENT-SURFACE-004](#req-agent-surface-004)。
+- 给定：身份有效但行动输入不合法、权限不足、世界前置不满足，以及投递后结果未知的独立样例。
+- 当：玩家读取各自反馈并选择下一步。
+- 则：可确认的失败保留相应原因和可行恢复路径；输入问题不会被包装为连接问题，未知结果先核对原请求。解释不泄露其他玩家私有信息或凭据，也不因语言或入口变化改变拒绝的含义。
+
+<a id="req-agent-surface-005"></a>
+### REQ-AGENT-SURFACE-005：提交前检查必须与当前提交资格一致
+
+- 性质与适用条件：目标要求；仅适用于已提供提交前检查的受支持行动，不要求所有行动新增检查入口。
+- 要求：对同一经确认身份、同一行动意图与同一权威世界状态，检查对共享资格条件的判断必须与提交时的资格校验一致；无法确认身份或权威状态时明确不可确认或阻塞。检查不得被表达为行动已接受、已执行或已结算，也不保证状态变化后的提交成功。
+- 理由与上位承诺：玩家能够依据检查选择下一步，同时理解观察与行动之间的变化风险，细化[根成功标准 SC-3 / SC-5 / SC-6](prd.md#5-done：成功标准与验收)。
+- 专业权威：[CollectData 检查与提交合同](../../world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md#collect-data-preflight-contract)；产品经历见[检查与提交边界](player-readable-surface-continuity.design.md#preflight-submission-boundary)。
+- 验收：[AC-AGENT-SURFACE-005](#ac-agent-surface-005)。
+
+<a id="ac-agent-surface-005"></a>
+### AC-AGENT-SURFACE-005：资格一致且状态变化后重新判断
+
+- 覆盖要求：[REQ-AGENT-SURFACE-005](#req-agent-surface-005)。
+- 给定：相同身份、行动与权威状态下的合格和不合格样例，另有检查后权限、绑定或资源条件改变的样例。
+- 当：依次进行提交前检查和真实提交。
+- 则：未变化样例对共享资格条件给出一致判断；条件变化时按提交时权威事实重新判断，并能读到变化或拒绝原因。检查通过及请求受理均不显示为世界执行成功；无法取得权威状态时不使用旧检查结果继续承诺资格。
+
 ## 5.1 组合验收
 
 - PSC-1：代表性 desktop、窄屏和低高度 viewport 中，当前目标、主要 blocker、接受/结果反馈与下一步保持可读且可恢复。
@@ -110,10 +169,21 @@
 | --- | --- | --- | --- | --- | --- |
 | [REQ-AGENT-SURFACE-001](#req-agent-surface-001) / [AC-AGENT-SURFACE-001](#ac-agent-surface-001) | `producer_system_designer`：产品语义、非目标和组合验收，不拥有专业实现或 readiness verdict；`viewer_engineer`：viewport、fallback 文本、连接状态和下一步在正式 surface 的可读表达，不拥有世界真值；`runtime_engineer`：committed/pending/recovery 的权威结果与无第二次效果，不拥有布局；`wasm_platform_engineer`：WASM bridge/executor 的 ABI、限制、结构化失败和兼容边界，不拥有 locale 或布局；`agent_engineer`：Agent observation/action、provider 失败反馈和模式边界，不授予 world acceptance；`qa_engineer`：跨 surface 的可复验证据与失败签名，不以单一局部 green 代签产品结论。 | `PRD-WORLD_SIMULATOR-001/039/041/046`；`PRD-WORLD_RUNTIME-001/031/033`；`PRD-WORLD_RUNTIME-002/036/037`；`PRD-WORLD_SIMULATOR-040/040B`；`PRD-TESTING-003` / `PRD-TESTING-WEB-001/002/003` | [`world-simulator active baseline`](../../world-simulator/prd.md#active-requirement-baseline)、[`Viewer 证据边界`](../../world-simulator/viewer/viewer-manual.manual.md#证据边界)、[`Viewer 连接与 no-throw 合同`](../../world-simulator/viewer/viewer-web-semantic-test-api.prd.md#current-connection-and-no-throw-boundary)、[`runtime receipt 边界`](../../world-runtime/prd.md#executionreceipt、tick-compatibility-与-finality-边界)、[`WASM sandbox 与工件完整性`](../../world-runtime/wasm/wasm-executor.prd.md#sandbox-与工件完整性契约)、[`Agent 双模式验证`](../../world-simulator/llm/provider-agent-dual-mode.prd.md#6-validation-decision-record)、[`testing validation`](../../testing/prd.md#6-validation-decision-record) | `Viewer`：headed S6 desktop、窄屏、低高度和双语 fallback 样例，保存 screenshot、console、snapshot/state 与实际操作结果，检查目标、blocker、可信反馈和恢复入口；`runtime`：同一 fixture 对账 committed receipt、pending/recovery、canonical state/journal/replay root；`WASM`：ABI/limit/capability rejection、工件 hash、结构化错误和 replay/no-effect 证据；`Agent`：`player_parity`/`headless_agent` 的同场景 observation/action、mode metadata 与 provider 失败到 Wait/拒绝的证据；`QA`：把上述输入合并为可复核的跨 surface 证据包，并记录未覆盖 viewport、语言、连接状态和专业边界。 | `test_tier_required`：产品/authority 链接治理、Viewer/Agent/runtime/WASM 定向合同和最小 S6 required 输入；`test_tier_full`：跨 surface 的双语、窄屏/低高度、恢复与 replay 对账，含 Agent parity、WASM 兼容/失败路径和 QA 组合审查。 |
 | [REQ-AGENT-SURFACE-002](#req-agent-surface-002) / [AC-AGENT-SURFACE-002](#ac-agent-surface-002) | `producer_system_designer`：产品语义、非目标和组合验收，不拥有专业实现或 readiness verdict；`viewer_engineer`：把能力边界、权限/规则阻塞、accepted/pending 和断连表达为不同可读状态，不制造 action 或 world effect；`runtime_engineer`：acceptance、commit、拒绝、去重、恢复和 canonical world effect 的唯一顺序；`wasm_platform_engineer`：模块调用的 deterministic limits、compatibility fault 和失败时无副作用边界；`agent_engineer`：Agent/provider 的 action contract、Wait/拒绝与恢复反馈，不把 provider 建议当作权威应用；`qa_engineer`：覆盖重叠状态和负例的 required/full 证据，不把 reconnect/refresh 当成功。 | `PRD-WORLD_SIMULATOR-039/041/046`；`PRD-WORLD_RUNTIME-001/031/033/047`；`PRD-WORLD_RUNTIME-002/036/037`；`PRD-WORLD_SIMULATOR-040/040B`；`PRD-TESTING-003` / `PRD-TESTING-WEB-001/002/003` | [`runtime snapshot/replay contract`](../../world-runtime/prd.md#snapshot、replay、version-与-canonical-timeline-兼容)、[`Agent authority/capability boundary`](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#6-agentintentv2-与-authoritycapability-边界)、[`Agent deterministic/replay acceptance`](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#8-acceptance-与-deterministicreplay-verification)、[`WASM sandbox 与工件完整性`](../../world-runtime/wasm/wasm-executor.prd.md#sandbox-与工件完整性契约)、[`Agent 双模式验证`](../../world-simulator/llm/provider-agent-dual-mode.prd.md#6-validation-decision-record)、[`Web UI 验证决策记录`](../../testing/manual/web-ui-agent-browser-closure-manual.prd.md#6-validation-decision-record)、[`testing validation`](../../testing/prd.md#6-validation-decision-record) | `Viewer`：不支持行动、权限/规则阻塞、accepted 未结算、未确认和断连重叠样例的 headed S6 状态/操作证据；`runtime`：fresh/stale/duplicate/conflict、accepted-but-uncommitted、reconnect/replay/restart fixture 的 disposition、receipt/state root 和 exactly-once 对账；`WASM`：超时、超限、坏工件、compatibility fault 与恢复后的 no-effect/结构化错误证据；`Agent`：相同 observation/action contract 下 provider failure、Wait/拒绝、重试和 replay 不产生隐式替代行动或第二次效果；`QA`：按状态优先级核对首要解释、真实下一步与未覆盖组合，明确 required 与 full 的证据窗口。 | `test_tier_required`：状态分类、能力边界、拒绝/Wait/no-effect 与玩家可读下一步的定向合同及 S6 required 输入；`test_tier_full`：四类重叠状态的恢复、replay、去重、跨入口/跨 adapter 组合证据，以及 Viewer/runtime/WASM/Agent/QA 的同候选对账。 |
+| [REQ-AGENT-SURFACE-003](#req-agent-surface-003) / [AC-AGENT-SURFACE-003](#ac-agent-surface-003) | viewer_engineer / runtime_engineer：身份与个人反馈隔离；qa_engineer：交叉负例 | PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | [反馈隔离系统设计](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#gameplay-feedback-isolation) | 两名玩家和匿名请求的反馈读取、刷新、重连及身份切换；本人拒绝可达、其他个人反馈不变 | test_tier_required |
+| [REQ-AGENT-SURFACE-004](#req-agent-surface-004) / [AC-AGENT-SURFACE-004](#ac-agent-surface-004) | viewer_engineer / gameplay_designer：错误与恢复语义；runtime_engineer：真实拒绝原因；qa_engineer：分类与入口核对 | PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | [错误语义系统设计](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#gameplay-error-code-preservation) | 输入、权限、世界条件和未知结果独立判定；身份有效但输入非法的专项负例 | test_tier_required |
+| [REQ-AGENT-SURFACE-005](#req-agent-surface-005) / [AC-AGENT-SURFACE-005](#ac-agent-surface-005) | viewer_engineer / gameplay_designer / runtime_engineer：检查与提交资格；qa_engineer：同状态及变化样例 | PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | [检查与提交系统设计](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#collect-data-preflight-consistency) | 同身份/意图/权威状态的资格正反例，以及检查后权限、绑定或资源变化与未知状态 | test_tier_required |
+
+### 5.3 表现与视觉证据边界
+
+视觉改动继续消费[决策锚点](#req-agent-surface-001)、[世界舞台的目的与因果](player-readable-world-stage.prd.md#req-agent-stage-001)和[观察来源与未知](player-readable-world-stage.prd.md#req-agent-stage-002)，不新增固定颜色、帧率、渲染算法或产品页面。画面优化须保留适用范围内的选中对象、空间含义和可访问反馈；回归对比、渲染复用与浏览器验证方法由[渲染专业合同](../../world-simulator/viewer/viewer-pixel-world-bridge-rendering.prd.md#render-reconcile-and-visual-regression-requirements)与[视觉回归设计](../../world-simulator/viewer/viewer-pixel-world-bridge-rendering.design.md#visual-regression-target)负责。
+
+确定性视觉比较证明其选中场景的表现是否变化；浏览器证据另证明真实表面能否读到对应语义。只有非空画面、某种颜色存在或历史截图，不能单独证明指定视觉特征仍然有效，也不能外推为完整玩家体验。证据声明应限定候选、场景、入口和已覆盖的状态。
 
 ## 6. 范围与非目标
 
 覆盖可用空间、信息密度、当前模式支持的行动、语言、关键文本、连接中断与恢复的跨 surface 产品连续性。不定义具体 panel/module、fullscreen 控件、布局宽度、hit boundary、字体/资产、local JSON/cache、控制 profile、时间/事件计数、WebSocket 时序、Test API、测试命令或发布/readiness claim。
+
+同一受支持行动也通过 `pure_api` 提供时，个人反馈归属、拒绝含义和提交资格保持一致；不要求两种入口布局相同，也不据此新增行动能力。反馈存储、鉴权机制、错误码、数据结构、检查算法及性能指标仍归专业域。
 
 ## 7. 接口 / 数据
 
@@ -131,3 +201,9 @@
 - 将连接恢复或 request acceptance 误写成世界已经推进。
 - 将语言、viewport 或本地偏好实现细节冻结为产品合同。
 - 删除仍承担协议真值的专业文档；本专题只允许删除已有代码、测试或当前专业文档承接的历史来源。
+
+## 10. 设计取舍与未决问题
+
+个人结果的正确归属优先于显示一条看似连续的“最新反馈”；无法确认归属时保留未知或返回安全入口。检查提供当前判断而不冻结世界，玩家需要承担检查后条件变化、重新观察或重新提交的机会成本。两者都不能用自动重试掩盖。
+
+未决的具体错误展示、身份切换后的历史反馈可见范围和检查失效提示，由 Viewer、runtime、gameplay 与 QA owner 在相应入口实施前依据现行授权和专业合同明确；未确认的范围不承诺跨账号反馈保留、固定重试策略或未来资格。

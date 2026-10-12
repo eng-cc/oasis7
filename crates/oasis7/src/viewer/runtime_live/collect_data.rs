@@ -15,7 +15,17 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut dyn Write,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
-        match self.handle_collect_data(command) {
+        let origin = self.gameplay_request_feedback_origin(&ViewerRequest::CollectData {
+            command: command.clone(),
+        });
+        let origin = self.begin_gameplay_feedback_request(session, origin);
+        self.active_gameplay_feedback_authorized = self.config.world_service.is_some()
+            && matches!(command, CollectDataCommand::Submit { .. })
+            && self.gameplay_feedback_session_matches(session, origin.as_ref());
+        self.active_gameplay_feedback_origin = origin.clone();
+        let result = self.handle_collect_data(command);
+        let origin = self.finish_gameplay_feedback_request(session);
+        match result {
             Ok(CollectDataResult::Preflight(quote)) => {
                 send_response(writer, &ViewerResponse::CollectDataPreflight { quote })?;
             }
@@ -23,18 +33,18 @@ impl ViewerRuntimeLiveServer {
                 let ack_player_id = ack.player_id.clone();
                 send_response(writer, &ViewerResponse::GameplayActionAck { ack })?;
                 if !ack_player_id.trim().is_empty() {
-                    session.current_player_id = Some(ack_player_id);
+                    self.set_gameplay_feedback_session_player(session, ack_player_id);
                 }
                 if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-                    let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                    let snapshot = self.compat_snapshot_for_session(session);
                     send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                 }
             }
             Err(error) => {
-                self.record_gameplay_action_rejection(&error);
+                self.record_session_gameplay_rejection(session, &error, origin);
                 send_response(writer, &ViewerResponse::GameplayActionError { error })?;
                 if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-                    let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                    let snapshot = self.compat_snapshot_for_session(session);
                     send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                 }
             }
@@ -77,14 +87,23 @@ impl ViewerRuntimeLiveServer {
                 self.runtime_action_players
                     .insert(runtime_action_id, verified.player_id.clone());
             }
+            let target_agent_id = self
+                .collect_data_quote_state()
+                .ok()
+                .and_then(|state| {
+                    crate::world_service::gameplay::resolve_collect_data_collector(
+                        state,
+                        &verified.player_id,
+                        &verified.public_key,
+                    )
+                    .ok()
+                })
+                .unwrap_or_default()
+                .to_owned();
             return Ok(CollectDataResult::Submit(GameplayActionAck {
                 consensus_action_payload_hash,
                 action_id: "collect_data".into(),
-                target_agent_id: self
-                    .llm_sidecar
-                    .bound_agent_for_player(&verified.player_id)
-                    .unwrap_or_default()
-                    .into(),
+                target_agent_id,
                 player_id: verified.player_id,
                 runtime_action_id,
                 accepted_at_tick: self.world.state().time,
@@ -98,8 +117,7 @@ impl ViewerRuntimeLiveServer {
             }
         };
         let available_electricity = self
-            .world
-            .state()
+            .collect_data_quote_state()?
             .agents
             .get(collector_agent_id.as_str())
             .map(|agent| agent.state.resources.get(ResourceKind::Electricity))
@@ -170,6 +188,12 @@ impl ViewerRuntimeLiveServer {
                     );
                     self.runtime_action_players
                         .insert(runtime_action_id, verified.player_id.clone());
+                    self.set_collect_data_submission_feedback(
+                        &verified,
+                        &collector_agent_id,
+                        runtime_action_id,
+                        "submitted",
+                    );
                     return Ok(CollectDataResult::Submit(GameplayActionAck {
                         consensus_action_payload_hash: submitted.consensus_action_payload_hash,
                         action_id: "collect_data".to_string(),
@@ -190,6 +214,12 @@ impl ViewerRuntimeLiveServer {
                 });
                 self.runtime_action_players
                     .insert(runtime_action_id, verified.player_id.clone());
+                self.set_collect_data_submission_feedback(
+                    &verified,
+                    &collector_agent_id,
+                    runtime_action_id,
+                    "queued",
+                );
                 Ok(CollectDataResult::Submit(GameplayActionAck {
                     consensus_action_payload_hash: None,
                     action_id: "collect_data".to_string(),
@@ -203,6 +233,30 @@ impl ViewerRuntimeLiveServer {
                 }))
             }
         }
+    }
+
+    fn set_collect_data_submission_feedback(
+        &mut self,
+        verified: &VerifiedPlayerAuth,
+        collector_agent_id: &str,
+        runtime_action_id: u64,
+        stage: &str,
+    ) {
+        self.set_verified_player_gameplay_feedback_for_action(
+            verified,
+            Some(runtime_action_id),
+            Self::make_player_gameplay_feedback(
+                "gameplay_action:collect_data",
+                stage,
+                format!("{stage} data collection as runtime action {runtime_action_id}"),
+                Some("collect data using the authorized collector".into()),
+                Some(collector_agent_id.into()),
+                None,
+                Some("observe the matching committed data collection result".into()),
+                0,
+                0,
+            ),
+        );
     }
 
     fn authorize_collect_data(
@@ -251,6 +305,40 @@ impl ViewerRuntimeLiveServer {
                 action_id: Some("collect_data".to_string()),
                 target_agent_id: None,
             })?;
+        self.authorize_active_gameplay_feedback();
+        if self.chain_link_enabled() {
+            let collector = crate::world_service::gameplay::resolve_collect_data_collector(
+                self.collect_data_quote_state()?,
+                &verified.player_id,
+                &verified.public_key,
+            )
+            .map_err(|error| GameplayActionError {
+                code: error.code().into(),
+                message: error.message().into(),
+                action_id: Some("collect_data".into()),
+                target_agent_id: None,
+            })?
+            .to_owned();
+            let bound = self
+                .llm_sidecar
+                .bound_agent_for_player(&verified.player_id)
+                .ok_or_else(|| GameplayActionError {
+                    code: "player_agent_binding_required".into(),
+                    message: "refresh committed world state to resolve this player's Agent binding"
+                        .into(),
+                    action_id: Some("collect_data".into()),
+                    target_agent_id: Some(collector.clone()),
+                })?;
+            if bound != collector {
+                return Err(GameplayActionError {
+                    code: "collect_data_binding_mismatch".into(),
+                    message: "canonical collector differs from the current player binding; refresh committed world state".into(),
+                    action_id: Some("collect_data".into()),
+                    target_agent_id: Some(collector),
+                });
+            }
+            return Ok((verified, collector));
+        }
         let collector_agent_id = self
             .llm_sidecar
             .bound_agent_for_player(verified.player_id.as_str())
@@ -276,5 +364,25 @@ impl ViewerRuntimeLiveServer {
             target_agent_id: err.agent_id,
         })?;
         Ok((verified, collector_agent_id))
+    }
+
+    /// Admission and quote evaluation run under the same Viewer lock without
+    /// I/O between them. Service mode reads only its immutable verified view;
+    /// the disposable local World is not an authority fallback.
+    fn collect_data_quote_state(&self) -> Result<&crate::runtime::WorldState, GameplayActionError> {
+        if let Some(config) = &self.config.world_service {
+            return self
+                .verified_world_view
+                .as_ref()
+                .filter(|view| view.version().commit.world == config.expected_world)
+                .map(|view| &view.projection().state)
+                .ok_or_else(|| GameplayActionError {
+                    code: "runtime_sync_unavailable".into(),
+                    message: "collect_data requires an authenticated committed world view".into(),
+                    action_id: Some("collect_data".into()),
+                    target_agent_id: None,
+                });
+        }
+        Ok(self.world.state())
     }
 }
