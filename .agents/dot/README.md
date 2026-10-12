@@ -12,11 +12,12 @@
 | [AUTONOMY.md](AUTONOMY.md) | 用户授权、外部任务、隐私和规则修改边界 |
 | [WORKFLOW.md](WORKFLOW.md) | 读取上下文、分析、实施协作、核实与交付的方法 |
 | [REPORTING.md](REPORTING.md) | 面向用户的进度、评审和交付表达 |
-| [SCHEDULE.md](SCHEDULE.md) | 每天各时间点要执行的事项，当前为每天 13:00 的 CI 回顾 |
+| [SCHEDULE.md](SCHEDULE.md) | 每天 06:00 整理 Issue、13:00 回顾前一日 CI |
 | [HEARTBEAT.md](HEARTBEAT.md) | 每 20 分钟检查到期项、去重派工及收取结果的方法 |
-| [CI 回顾任务](tasks/ci-duration-review.md) | 交给 subagent 的前一日 CI 耗时与合入卡点检查说明 |
+| [CI 回顾任务](tasks/ci-duration-review.md) | 检查前一日 CI 耗时，对卡点创建或关联 Issue |
+| [Issue 整理任务](tasks/issue-triage.md) | 整理前三天的 Issue，核实关闭、去重与合并 |
 
-先读本文件，再依次读取 ROLE、AUTONOMY、WORKFLOW、REPORTING。通用开发规则只由[开发流程规范](../../doc/engineering/workflow/source-of-truth.md)拥有；仓库入口为 [AGENTS.md](../../AGENTS.md)。本目录不增加 Issue、Project、固定角色链、审批材料或 CI 放行条件。执行时间表任务时，再读取 SCHEDULE、HEARTBEAT 和对应任务说明；仅审阅其他文件时不启动巡检。
+先读本文件，再依次读取 ROLE、AUTONOMY、WORKFLOW、REPORTING。通用开发规则只由[开发流程规范](../../doc/engineering/workflow/source-of-truth.md)拥有；仓库入口为 [AGENTS.md](../../AGENTS.md)。本目录不把 Issue、Project、固定角色链或审批材料设为通用必经流程，不增加 CI 放行条件；时间表中用户明确要求的 Issue 管理仅适用于对应任务。执行时间表任务时，再读取 SCHEDULE、HEARTBEAT 和对应任务说明；仅审阅其他文件时不启动巡检。
 
 ## 启用方式
 
@@ -40,7 +41,7 @@ OpenAI 的 [dot 入门说明](https://help.openai.com/en/articles/20001530-getti
 
 ## 时间表与巡检
 
-时间表定义“何时做什么”，HEARTBEAT 定义“一轮如何协调”，任务说明定义“subagent 做什么”。主 Agent 在这些例行任务中只查到期状态、派工、跟踪和汇总，不代做 CI 分析；这不改变普通交互任务或仓库通用流程的分工。
+时间表定义“何时做什么”，HEARTBEAT 定义“一轮如何协调”，任务说明定义“subagent 做什么”。主 Agent 在这些例行任务中只查到期状态、派工、跟踪和汇总，不代做 CI 分析或 Issue 整理。subagent 仅在对应任务授权范围内创建、关联或整理 Issue；不可用时保留待执行实例，20 分钟后再尝试，不停止协调器、不退回主 Agent 代跑。这不改变普通交互任务或仓库通用流程的分工。
 
 当前仅提供文件约定，尚未接入或启用实际 20 分钟触发器、持久执行记录和 subagent 派工适配器。2026-10-12 核对的 [ChatGPT 定时任务说明](https://help.openai.com/en/articles/10291617-scheduled-tasks-in-chatgpt)规定付费周期任务最高每小时一次；不能用本目录保证 20 分钟周期，也不拆成多个任务绕过限制。项目内定时任务不能依赖项目附件，运行器须能通过授权的 GitHub 连接读取选定规则版本。
 

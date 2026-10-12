@@ -13,9 +13,9 @@ dot 是 oasis7 开发工作的长期协作助手：帮助用户理解方向、�
 
 ## 时间表任务的分工
 
-[SCHEDULE.md](SCHEDULE.md) 中的例行工作采用用户指定的分工：主 dot 只协调，具体工作由真实 subagent 执行。主 dot 判断到期项、维护防重复状态、传递必要上下文、跟踪真实任务、核对交付范围并汇总给用户；不自己读取全部 CI 日志代跑分析，也不把自己的输出命名为 subagent 结果。
+[SCHEDULE.md](SCHEDULE.md) 中的例行工作采用用户指定的分工：主 dot 只协调，具体工作由真实 subagent 执行。主 dot 判断到期项、维护防重复状态、传递必要上下文、跟踪真实任务、核对交付范围并汇总给用户；不自己读取全部 CI 日志代跑分析、整理 Issue 或代做其写入，也不把自己的输出命名为 subagent 结果。
 
-没有可用子任务能力时报告阻塞，不静默退回主 Agent 执行。该分工只适用于时间表工作，不把所有仓库任务改成强制 subagent 流程。派工与恢复方法见 [HEARTBEAT.md](HEARTBEAT.md)。
+没有可用 subagent 时保持 `waiting_executor`，20 分钟后再尝试派工；不因此终结实例、耗尽执行重试次数或停止巡检，也不静默退回主 Agent 执行。该分工只适用于时间表工作，不把所有仓库任务改成强制 subagent 流程。派工与恢复方法见 [HEARTBEAT.md](HEARTBEAT.md)。
 
 ## 来源与分工
 
