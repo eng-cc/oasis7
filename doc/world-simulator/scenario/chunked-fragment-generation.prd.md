@@ -174,7 +174,7 @@
 - `asteroid-fragment-voxel`
   - native resolution: `AsteroidFragmentConfig.voxel_size_km`，默认 `10km`，sanitize 后最小 `1km`
   - cm mapping: voxel bounds 先转为 chunk 局部 cm 空间，再随机生成碎片中心
-  - rounding: 候选中心坐标 round 到最近整数 cm 后再写入 `Location.pos`
+  - rounding: 候选中心坐标 round 到最近整数 cm 后，仍须满足记账 chunk 的内部半开边界；世界最外沿保留现有 clamp 语义，再写入 `Location.pos`
 - `fragment-block-geometry`
   - native resolution: block 仍使用 cm 几何，但不是“任意小数厘米”
   - cm mapping: `origin_cm/size_cm` 都直接落在 cm 真值
@@ -271,10 +271,14 @@
 - 产出约束：`hardware_output > 0`，否则 `ActionRejected(InvalidAmount)`。
 - 落账约束：成功动作必须追加 `CompoundRefined`，并在回放中重放扣电与加硬件。
 - Edge case: 若 `RefineCompound` 可提交但玩家看不到 `electricity_cost`、`hardware_output` 或 `hardware_shortfall_before/after`，标记为 `refine_quote_missing`；该缺口属于精炼净收益/电力机会成本可读性问题，不改变公式、产率或拒绝条件。
+- 当前 Simulator 的 compound/hardware 资源键、投入/产出 before/after 与净缺口口径以[工业报价账本语义](../m4/industrial-resource-flow-contract.prd.md)为准；旧操作名不能被解释成两份独立库存。
 - Acceptance: 精炼前玩家至少能判断“花这些电，换来的 hardware 是否足够推进当前第一工业目标”；若不足，应给出推荐精炼量或提示先采矿/先补电。
 
+<a id="fragment-center-budget-contract"></a>
 ### 跨 chunk 边界一致性规则（CG7 落地）
 - 归属规则：碎片按中心点归属 chunk；候选碎片生成时先做“本 chunk 内 spacing”，再做“邻接 chunk（26 邻域）校验”。
+- 厘米取整后的 `chunk_coord_of(center)` 必须仍等于生成/记账 coord；内部上边界不能因 round 跨入相邻块而继续记在原预算。该不变量同时适用于初始化和 replenishment，不限制碎片半径跨边界。
+- 边界验收覆盖 `max - 0.5cm` 两侧及内部面/边/角，核对初始生成、补种、后续消费命中同一 chunk 预算；世界最外沿 clamp 保留。修复改变生成结果时须说明生成版本/确定性兼容范围，历史 committed delta 不重生成。本文补充验收不表示生成实现已修复或存在已执行的固定 seed 复现。
 - 邻块校验：当前 chunk 生成时，读取已生成邻块碎片并执行 `radius_a + radius_b + spacing` 距离约束。
 - 边界保留：新增 `WorldModel.chunk_boundary_reservations: BTreeMap<ChunkCoord, Vec<BoundaryReservation>>`。
 - 保留写入：若邻块处于 `Unexplored` 且候选碎片到邻块包围盒距离 `<= radius + spacing`，写入 `BoundaryReservation`。
