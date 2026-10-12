@@ -323,9 +323,11 @@ impl RuntimeLlmSidecar {
             }
             Some(runner) => runner
                 .with_committed_feedback_memory_transaction(
-                    agent,
-                    feedback.clone(),
-                    receipt,
+                    crate::simulator::CommittedFeedbackMemoryInput {
+                        agent,
+                        feedback: feedback.clone(),
+                        receipt,
+                    },
                     service_receipt,
                     &memory_authority,
                     &mut memory,

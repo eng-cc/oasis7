@@ -367,9 +367,7 @@ impl AsyncAgentRunner {
     /// durable consumption checkpoint fails. No actor I/O occurs here.
     pub(crate) fn with_committed_feedback_memory_transaction<A, F>(
         &mut self,
-        agent: &str,
-        feedback: FeedbackEnvelopeV1,
-        receipt: &RuntimeReceiptLineageV1,
+        input: CommittedFeedbackMemoryInput<'_>,
         authority_receipt: &A::Receipt,
         authority: &A,
         memory: &mut MemoryWriteStore,
@@ -379,6 +377,11 @@ impl AsyncAgentRunner {
         A: RuntimeAuthority,
         F: FnOnce(&mut MemoryWriteStore) -> Result<(), String>,
     {
+        let CommittedFeedbackMemoryInput {
+            agent,
+            feedback,
+            receipt,
+        } = input;
         let outcome = self
             .find_feedback_outcome(agent, &feedback)
             .ok_or_else(|| AsyncAgentRunnerError::Cognition("unknown actor outcome".into()))?;
