@@ -6,6 +6,11 @@
 
 Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；固定审读基线 f9d5a552d9af04c1b1398262808198a58e560230，2026-09-26。本设计消费下表有限关系；旧章节保留作兼容详细条款，新增DES细化原义务而不改算法/schema/默认值/产品承诺。任务实际source/integration/tested tree/config/environment/window/结果由GitHub Issue/Project evidence维护，本文不伪造候选/通过结果。
 
+2026-10-12 以 e01e29064517f4bf375767a19a09802335828249 补充的
+`original-candidate-recovery-v1`、`formal-controlled-authority-v1` 与
+`controlled-epoch-takeover-v1` 是后继目标协议，明确新增目标类型和状态机。
+它们尚未实现或验收，不改变下文已交付 prerequisite 的 schema、拒绝边界、默认入口或部署状态。
+
 非目标：不以文档active/合并、local fixture、历史MIG或CLI可编译宣称运行、BFT、部署、SLA或release。剩余215-object required set及root SC1..10/full组合不变。
 
 ## 2. 上游约束与相关角色
@@ -16,7 +21,18 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) / [单权威提交](prd.md#p2p-single-authority-durable-commit) / [交接](prd.md#p2p-authority-handoff) | 固定身份与合法 profile 激活、原子追加、跨故障域持久确认、未知提交和 H/H+1 不可撤回 | [des-p2p-authority-profiles](#des-p2p-authority-profiles)、[本机日志前置](#des-p2p-local-authority-journal-prerequisite)、[双端协议前置](#des-p2p-replicated-durability-prerequisite) | P2P/runtime、ops、消费者与 QA 同候选验证 | target；现有 prototype/单调 guard 不证明正式提交或 readiness |
+| [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) | 固定世界身份与合法 profile 激活，工程前置材料不自授正式权威 | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | P2P/runtime、ops、消费者与 QA 同候选验证 | target；现有 prototype/单调 guard 不证明正式提交或 readiness |
+| [单权威提交](prd.md#p2p-single-authority-durable-commit) | 固定身份/epoch 的本机原子追加、去重与恢复查询 | [本机日志前置](#des-p2p-local-authority-journal-prerequisite) | DistFS 本机 journal 与 Runtime 接收 | 仅工程前置；不证明跨故障域持久确认 |
+| [单权威提交](prd.md#p2p-single-authority-durable-commit) | 双端持久确认、未知结果保留原请求及单调 head | [双端协议前置](#des-p2p-replicated-durability-prerequisite) | P2P/DistFS 双端与 Runtime 接收 | 本地协议验证不证明真实独立故障域、正式提交或 readiness |
+| [交接](prd.md#p2p-authority-handoff) | H 提交后旧 profile 永久停写；H/H+1 不可撤回且不能双权威 | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | P2P/runtime、治理与 QA 同候选验证 | target；不以 prototype 替代正式 BFT 交接 |
+| [单权威提交](prd.md#p2p-single-authority-durable-commit) | 完整 candidate 尚未落盘时保留原决定，核对持久事实后按原身份确定性重建 | [原 candidate 恢复 v1](#des-p2p-original-candidate-recovery-v1) | Runtime 执行闭包；DistFS 持久状态；QA 故障 oracle | 新协议待实现；guarded 路径仍拒绝该窗口自动 replay |
+| [AC-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-002) | 缺失/冲突恢复材料不能生成替代 candidate 或更短历史 | [原 candidate 恢复 v1](#des-p2p-original-candidate-recovery-v1) | Runtime/P2P 原闭包与 head 验证 | 目标；不承诺缺失 native 工件可恢复 |
+| [AC-DWE-002](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-002) | 未决定 pending 当前重审；固定原 continuation 不重开 admission | [原 candidate 恢复 v1](#des-p2p-original-candidate-recovery-v1) | Runtime 两阶段接收与 QA 对照 | 不替代完整 lineage 合同 |
+| [合法 profiles](prd.md#p2p-authority-profiles) | 正式初次激活、同历史 proof 与原 CommitRef 绑定 | [正式受控权威 v1](#des-p2p-formal-controlled-authority-v1) | P2P 证明与 Runtime typed activation | 目标；工程证据或配置不能自授正式权威 |
+| [AC-DCS-005](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-005) | 普通五路 API 共同验证正式历史与 service grade | [正式受控权威 v1](#des-p2p-formal-controlled-authority-v1) | WorldService/client；tier 仅引用证明 | 新 wire/consumer 未实施，不证明完整玩家旅程 |
+| [单权威提交](prd.md#p2p-single-authority-durable-commit) | 硬隔离旧签写权限，恢复 signer 仅限原未决请求 | [人工接管 v1](#des-p2p-controlled-epoch-takeover-v1) | Ops 真实隔离；P2P 存储和 signer | 不提供自动接管或部署授权 |
+| [AC-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-002) | 单域丢失及半完成 epoch 保留 tail、原请求与单调 epoch | [人工接管 v1](#des-p2p-controlled-epoch-takeover-v1) | P2P/ops 恢复材料与 QA 故障矩阵 | 目标；尚无实际故障域证据 |
+| [交接](prd.md#p2p-authority-handoff) | H 已提交后恢复 issuer 也不得恢复 controlled 写入 | [人工接管 v1](#des-p2p-controlled-epoch-takeover-v1) | P2P 历史 handoff verifier | 不替代 BFT 算法与新 profile 恢复 |
 | [professional_acceptance: p2p-ordered-execution](prd.md#p2p-ordered-execution) | 下一committed height、有序序列/root/decode及journal绑定；错误不推进 | [des-p2p-ordered-commit](#des-p2p-ordered-commit) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-receipt-finality-boundary](prd.md#p2p-receipt-finality-boundary) | receipt≠QC；同parent/manifest/actions独立重执行，缺artifact/fault/root拒绝vote/commit | [des-p2p-receipt-finality](#des-p2p-receipt-finality) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-target-bft](prd.md#p2p-target-bft) | Propose/Prevote/Precommit仅verified >2/3 active stake cert生效；world/height/round/phase/roots/set和dedup签名绑定 | [des-p2p-target-bft](#des-p2p-target-bft) | runtime/WASM/消费者/ops/QA各自authority；同candidate证据 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
@@ -90,7 +106,10 @@ net 拥有 transport/peer/DHT；consensus 拥有 proposer/attestation/action-roo
 
 verified-serving→stale/catching-up→readonly→serving；proof冲突→isolated；非serving新intent receipt0、历史不改。
 
-只读恢复只读verified历史与无效果pending；服务闸门必须同时满足identity/checkpoint/head/hash材料、当前append/finality、governing manifest compatibility和单调head。不满足时新intent receipt0；满足后pending当前permission/resources/version/conditions重审，无outage期限/priority继承，accepted新intent≤1 receipt/no第二效果。退回blocked/isolated不撤销/重放已confirmed receipt。consumer可读semantic/blocker/next-step与linked attachment由外部owner供给。
+只读恢复提供 verified 历史与 truthful pending/unknown；服务闸门必须同时满足 identity/checkpoint/head/hash 材料、当前 append/finality、governing manifest compatibility 和单调 head。
+不满足时新 intent 不产生 committed receipt；满足后，尚无固定原决定且已知无效果的 pending 按当前 permission/resources/version/conditions 重审，无 outage 期限/priority 继承。
+已经固定的原决定按 [原 candidate 恢复](#des-p2p-original-candidate-recovery-v1) 先核对、续办，unknown 不推断为无效果；accepted 新 intent 至多一个原结果且无第二效果。
+退回 blocked/isolated 不撤销或改写已 confirmed receipt；consumer 可读 semantic/blocker/next-step 与 linked attachment 由外部 owner 供给。
 
 组合执行 lane 见 [Game World State Sync and Commit Closure](../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md)；evidence envelope 见 [topology/node truth](../testing/templates/state-sync-closure-evidence-packet-template.md#topology-and-node-truth)、[peer-head/gap sync](../testing/templates/state-sync-closure-evidence-packet-template.md#peer-heads-and-gap-sync) 与 [bundle/blob closure](../testing/templates/state-sync-closure-evidence-packet-template.md#state-sync-bundle-and-blob-closure)。DC-5 还需要真实 linked structured attachment/schema，逐项含状态转换、manifest/head 负例、每 intent receipt0/1、consumer blocker/next-step；现有模板本身不闭合它。Ops同窗口事实、runtime根/receipt和消费者反馈由QA组合，缺任何适用字段不通过。
 
@@ -185,6 +204,274 @@ All signed Describe, IntentResponse, ReadView and Changes responses bind optiona
 
 Focused fixtures use real local FileEndpoints, actual NodeRuntime decisions and signed WorldService requests, with endpoint-file unavailability and restart recovery; two local directories do not prove independent hardware. Verification command: `cargo test -p oasis7 --bin oasis7_chain_runtime --no-default-features --features node-libp2p,wasmtime,test_tier_required controlled_live`.
 
+### des-p2p-original-candidate-recovery-v1
+
+本节选择“同原请求、同原决定输入的确定性 candidate 重建”，作为正式受控权威的目标协议。
+它不是当前 guarded-local 的自动重放开关：现有完整 candidate 落盘前崩溃仍按
+[工程边界](#des-p2p-guarded-local-initial-execution-prerequisite) 停写。
+只有本节闭包、正式激活与故障验证全部实现后，新入口才可声明支持此恢复能力。
+
+#### 执行前持久闭包
+
+每个世界最多有一个已固定但尚未完成提交的 execution slot；未收敛前不选择或执行后继 slot。
+选定输入只是不可替换的执行决定，不等于世界已经 committed。
+执行器第一次进入前，`PreExecutionContinuationV1` 及其可达对象必须在 primary 和独立
+replica 完整校验并同步落盘；两端返回同一 continuation digest 才允许执行。
+只完成单端保存时只能续存同一记录，不能开始执行或另选输入。
+
+该版本的必需材料如下；引用均为内容 hash，所指完整字节也属于持久闭包。
+
+| 材料 | 必须固定的内容与校验 |
+| --- | --- |
+| 身份与位置 | `world_id/chain_id/genesis_hash`、合法 activation ref、profile/version、authority epoch、全局 position/height、预期 parent CommitRef/state root、原 Snapshot/Journal 与已验证历史锚。 |
+| 原请求与 admission | 原始已签名 envelope 字节、请求 identity 与 payload digest、所有适用 nonce domain、原 nonce reservation、授权检查依据及原有序 action 序列；不从重建结果反推身份。 |
+| 原决定 context | Node 已固定的时间、slot/height、stake、前驱 hash、simulation tick 和计数器；原执行使用的随机输入或确定性随机流及其算法版本。恢复后主机时间或新随机数不能替代。 |
+| 精确执行版本 | 原 native executable 字节及 digest、受支持 target/ABI/feature 与确定性配置，原 runtime manifest、全部 WASM、规则与 typed 引用闭包；版本字符串或当前二进制不足以恢复旧语义。 |
+| 无外部效果边界 | 执行所需 provider 结果已作为原输入固定；candidate 只能访问上述输入和内存暂存。LLM、HTTP、当前权限查询、主机时钟/熵及外部 dispatcher 均不进入重建过程。 |
+| 持久控制 | continuation digest、原请求索引、预留执行/存储预算及状态。原 nonce reservation 随记录保留，不释放给 replacement，也不第二次扣除。 |
+
+continuation 使用独立的非最终性签名域；签名只承诺选定输入，不冒充正式提交证明。
+执行前按既有域容量规则预留闭包与 candidate 空间，超限拒绝进入执行；未决闭包不参与 GC。
+native 历史工件不可用、平台不能复现原语义或原执行需要未冻结的外部输入时，进入
+`recovery_required`，不能用当前 Runtime、mock provider 或补造 sidecar 继续。
+
+#### 恢复顺序与写入一次
+
+重启先核对两端持久状态、原请求索引、已发布 checkpoint、正式证明和外部最低 head 锚。
+单端 `NotRecorded`、超时或本地 marker 不能证明请求未提交。
+先采用已决定/qualified/published 事实；只有排除冲突历史且需要原 candidate 时才调用执行器。
+
+| 查明的原请求阶段 | 唯一允许的后继动作 |
+| --- | --- |
+| 尚无固定 continuation 的 pending | 保持原 signed intent；服务恢复后按当前权限、资源、期限和 governing manifest 重新 admission，尚不适用原决定 replay。 |
+| continuation 已完整持久、execution 未开始 | 校验原闭包和预期 parent；以原决定执行一次。当前 snapshot 不能替代原 parent。 |
+| execution 已开始、完整 candidate 未持久 | 在 detached World 上用精确原输入重建 candidate；无磁盘发布绑定或 dispatcher。与任何已保存 proposal/result hash 对账后续存同一 candidate。 |
+| 完整 candidate 已持久、尚无持久提交决定 | 校验完整九角色记录与原 continuation，续办同一 prepare/decision；不再次执行。 |
+| primary 已持久决定、尚未 qualified | 决定不可撤回；补齐该决定的副本、回执和完整证据，不能重选结果或判失败。 |
+| 已 qualified、尚未发布 | 安装同一不可变 checkpoint/result/nonce/outbox generation，持久发布指针后才回应；不再次执行。 |
+| 已发布、原回应丢失 | Lookup/同身份重试读取原 disposition、结果和 CommitRef；不产生第二 receipt、里程碑或外部派发。 |
+
+重建阶段的 `candidate_put(original_identity, payload_digest, continuation_digest)` 是持久
+put-if-absent：同 key 同完整结果返回既有对象，任一 digest/root 不同即隔离。
+任何残存 prepared proposal 必须与重建的全部九角色 bytes/roots 相同；不能仅比较业务结果。
+原请求结果、业务状态、nonce/去重、里程碑和 outbox 沿一个正式记录及完整 generation 发布，
+只能写入一次。候选内计算可以重新运行；对外效果仍仅由 committed outbox 按既有幂等合同派发。
+这与 [Runtime 的 canonical history replay](../world-runtime/design.md#runtime-controlled-candidate-recovery-receiver)
+是不同阶段，不放宽历史 replay 的不执行外部效果约束。
+
+材料缺失、不同端点决定冲突、未知更高 head、原版本不可执行或重建不一致均保留原身份并
+进入 `recovery_required`；只允许补回可验证的原字节或续办原持久决定。
+重试次数、经过时间、用户换 nonce 或恢复后权限变化都不能把已固定决定变成失败或新动作。
+恢复任务按世界串行，有界占用既有预算；没有新材料或状态变化时不无限自动重放。
+
+### des-p2p-formal-controlled-authority-v1
+
+本节规定目标 `controlled_single_authority` profile version 1 的正式发行与消费协议；
+实现仍缺。它沿用两端完整持久判定，新增正式激活链、proof 编码、不可绕过的 signer/storage
+admission 和普通客户端验证，不能通过删掉 `execution_evidence_scope` 升级工程记录。
+此 profile 仍信任运营权威的执行正确性，不声称独立验证者 BFT。
+
+#### 初次激活与证明编码
+
+初次 issuer 来自部署前独立认证并固定的创世授权；不能由待验文件自行提供可信 issuer。
+`FormalAuthorityActivationV1` 固定世界/chain/genesis、初始状态与执行工件、profile/version、
+initial epoch、writer/primary/replica 身份和互不相同的 key、允许的恢复 issuer/key 与恢复权限，
+以及部署 inventory 中的独立持久域引用。已有保留世界必须沿其合法身份与历史接续，
+没有合法历史证明时阻断，不能以该证书重创世或把工程历史追认为正式提交。
+
+issuer 的证书只授权首次 activation record。其签名 body 绑定初始 height、genesis parent、
+初始 state root、执行工件和除 Input 外的八角色 roots；Input 是完整证书的 canonical 字节，
+随后由正式 commit core 绑定 Input root，避免证书递归包含自己的 hash。
+primary/replica 分别验证证书、完整 typed bootstrap 闭包及 genesis 身份，保存同一无业务
+状态变化的 activation record。两端正式证明完整持久、checkpoint 安装且只读复验通过后，
+才可构造不可由配置直接生成的 `ActiveAuthorityV1`；离线 `VerifiedInitialActivation`
+和 bootstrap anchor 仍只是 prerequisite，不能转换为该对象。
+
+正式对象使用新域 `oasis7.controlled_authority.formal.<kind>.v1.<purpose>`。
+`kind` 仅为 `core`、`proof`、`activation`、`continuation`、`commit`、`primary_prepare`、`replica_prepare`、
+`primary_decision`、`replica_decision`、`recovery_plan`、`epoch_seal`、`epoch_activation`。
+`purpose=object` 对完整 typed 对象（含已有签名封装）求内容 digest；`purpose=signature`
+只对该类型的未签名 body 签名，body 不含自己的签名。`core/proof` 只允许 object purpose，
+`request_commitment`、`recovery_requests` 与 `pending_handoff` 是另三个仅供 object digest
+使用的 kind，分别承诺原请求、恢复 allowlist 和待交接 pending 集合，不能签成正式提交。
+编码固定为无浮点、无重复/未知字段、整数最短表示的 deterministic CBOR；map key 以编码字节
+长度及字节序排序，数组保持协议顺序，缺失必需值和显式 null 均拒绝。
+domain UTF-8 长度以 u64 big-endian 前缀编码，再串接 domain 和 body，形成 framing bytes。
+BLAKE3 对 framing bytes 计算内容 digest；Ed25519 直接签完整 framing bytes，验证使用
+strict verification，不把 digest 再当作待签 message。key/hash 为 32 bytes、signature 为 64 bytes。
+这要求专门 codec 和 golden fixtures，不能把现有 serde 编码函数直接标记成新正式编码。
+
+| 对象 | 必需绑定与准入规则 |
+| --- | --- |
+| `FormalControlledCommitCoreV1` | record kind、固定世界/chain/genesis、全局 position/height、epoch 内 sequence、parent commit hash/state root、result state root、activation certificate digest、profile/version/epoch、runtime/native/WASM/rules 工件闭包的 commitments、九角色 roots；execution 另绑定 `request_commitment` 与 continuation digest。公开 core 不包含原主体/nonce tuple 或原 payload。 |
+| `FormalControlledCommitProofV1` | core digest、writer decision、同一 core 的 primary/replica prepare 与 durable decision 回执、适用 activation certificate 及其历史证明引用；角色 key 匹配当时合法 activation，公开 proof 引用逐一验 hash。九角色私有字节闭包只由受控持久/恢复端核验。 |
+| 存储 head / 请求索引 | 原子 compare-and-append 校验世界、epoch、sequence、预期 parent 和原请求 identity/digest；同位置只能有一个 core，持久决定不可替换。允许确认的最高 head 与完整 proof/record 一起保存。 |
+| `CommitRef` | 映射到该 core 的世界、height、commit hash、parent 和 state root；仅凭 WorldService 签名或格式正确不能构造可认可的正式 CommitRef。 |
+
+签名不循环：activation certificate digest 不包含承载它的 commit proof；core 不包含自身
+proof。prepare receipt 只绑定 core digest 与接收端角色/身份，不等待 writer commit 签名；
+writer decision 的签名 body 绑定 core digest 和两端 prepare receipt digest；decision receipt
+再绑定该完整 writer decision digest，完整 proof 是这些对象的外层封装。
+first activation 使用 position 1 和 genesis parent；以后 position 连续，epoch 切换不重置
+全局 position，epoch 内 sequence 从 1 起。普通 execution 的高度/上下文保持原决定，
+控制记录不伪造 gameplay tick 或资源效果。
+
+`request_commitment` 是专用 `request_commitment` 域中对原请求 identity、payload digest
+和 continuation digest 的承诺；该域仅计算 BLAKE3 内容 digest，不签发提交证明。
+原 tuple、原签名和 payload 留在授权 Lookup 及私有 Input，普通读者只核对承诺与正式签名。
+公开 proof 验证证明受信 authority 对该 root 的正式承诺，不证明读者已经重执行私有状态；
+ReadView 的私有投影继续依赖受权服务对精确 CommitRef 的签名绑定。
+
+执行采用“两端完整 prepare → 合法 writer 签 commit → primary 持久不可撤回决定 →
+replica 持久同一决定 → 两端保存全部 proof/record 与可确认 head → 发布”的顺序。
+signer 仅能通过受控服务使用 key，按 record kind 验证授权：execution 校验当前 active
+epoch、parent、两端 prepare 和原 continuation；initial activation 校验独立固定的 issuer
+证书、genesis 空 head 与两端 prepare；epoch activation 校验既有 recovery policy、全部
+seal、唯一新绑定和两端 prepare。后两者不要求先存在待构造的新 ActiveAuthority，且只允许
+对应的那一条控制记录；不能把控制记录授权用于 execution。
+writer 不能直接读出 signer key、替换最终存储文件或绕过接收端追加检查。
+任一端丢失后，幸存端保存的完整 qualified 前缀仍可验证已确认历史；缺副本时只读，
+恢复写入必须先恢复完整双端条件。独立域和实际 fsync 能力另须部署事实证明，不能由签名
+或两个目录推导。首次正式开放及单故障域演练仍由现有运行验收闸门控制。
+
+#### 普通 WorldService / client 消费
+
+目标正式服务固定使用 `WorldService contract_version=2`；v1 原 wire/signature 和工程策略保持
+现状。v2 签名响应新增 `formal_authority_ref`；凡声明 committed view/result 的响应另必需
+`commit_proof_ref`，二者均为内容 digest 引用，响应请求关联与原有字段也在 v2 签名内。
+其中 `formal_authority_ref` 指向已持久 activation record 的完整 proof digest，而非单独的
+issuer 证书；`commit_proof_ref` 指向本次结果记录的完整 proof digest。普通 execution core
+中的 certificate digest 必须与前者证明的合法 activation 对应。
+v2 不接受 `execution_evidence_scope`。签名域必须包含 contract version；不允许 v2 转 v1
+或丢字段后重新签名来兼容正式消费者。JSON 中 u64 沿现有十进制无损约定，正式 proof 字节
+由上述 codec 独立验证。未来 active tier 只引用已验证 activation，见
+[manifest 接收边界](blockchain/formal-network-tiers-testnet-mechanism.design.md#formal-controlled-activation-receiver)。
+
+| 路由 | 正式消费与失败后行为 |
+| --- | --- |
+| Describe | 返回经过验证的 activation/profile/epoch、proof scheme、当前 service grade 和 head；消费者核对独立固定的 genesis/issuer 与完整历史链。配置声明或服务签名不足以把 planned 变为 active。 |
+| SubmitIntent | admission 检查固定世界、当前 active epoch 和当前授权；accepted/pending 不产生 committed 声称。进入原决定后固定原身份与 continuation，最终结果必须带可验证 proof。 |
+| LookupIntent | 先验证查询主体与原请求关联，再查原持久索引；原结果不能因旧 Submit 的 freshness 或现行 execution 版本被重算。未决/未知/无效果拒绝沿既有 API 合同呈现，只有合格证明支持 committed。 |
+| ReadView | 独立验证精确 CommitRef 的 profile/proof 与 root，再验证服务签名对该 root 和授权投影的绑定；公开证明不扩大 owner/private 投影权限。 |
+| Changes | 每个 cursor 推进绑定连续的 CommitRef/proof；跨 epoch/profile 验证 activation 链。缺页、缺 proof、错误 genesis 或回退保留旧 cursor 并阻断推进，不混拼缓存视图。 |
+
+#### Proof 字节交付与公开边界
+
+上述引用必须可解析为完整公开证明。目标另设固定只读入口 `POST /v2/world/proofs`，
+复用配置中已认证的 WorldService origin 与 v2 读请求/响应签名，不接受响应内任意 URL、
+重定向 origin、文件路径或由 proof 声明的新可信服务 key。它只供应证明材料，不新增世界写入。
+`ProofReadRequestV1` 绑定 world、request correlation，并且恰选一种查询：
+`objects` 请求至多 16 个去重的内容 digest；`history` 请求从已验证 `after CommitRef`
+到固定 `through_commit_hash` 的连续公开记录，单页至多 16 条。
+响应回显原 world/query，完整返回对应对象或显式 `missing`；history 必须从 after 的直接
+后继开始，返回最后 record 的 cursor 和 `complete`，不能跳页或由服务改写目标 head。
+
+公开对象种类只含 core、正式签名与两端回执、activation certificate、epoch seal、公开
+recovery authorization 和历史 header/proof。单对象 canonical bytes 上限 64 KiB，单次响应
+编码后上限 2 MiB；未知 kind、超限、重复/额外对象、错 hash 或非 canonical 编码拒绝。
+历史引用单调向既有 parent/epoch，循环或不连续拒绝；客户端按既有请求预算逐页验证，
+只保存已经验过的连续锚，目标 proof 未闭合前不认可目标结果/推进其业务 cursor。
+缺页、未取得证明、取消或超时只使本次核验保持不可用，并保留原请求与最后已验锚；
+不能退回“只验服务签名”，也不能把同请求改成新动作。
+
+接口使用显式公开类型白名单，不从 ClosedRecord 通用序列化输出字段。九角色的 Input、
+Snapshot、Journal、nonce 全账本、outbox、目标正文、账户私有状态及完整执行闭包不在
+公开 proof DTO，也不能通过其 root digest 从此入口读取；返回这些字段属于协议错误。
+public recovery authorization 只含冻结请求集合的 commitment，不含原主体或请求列表；
+运维隔离证据也只公开引用 digest，实际凭据/实例控制信息仍受控。
+授权 Lookup 才把调用者原 tuple/payload 与 `request_commitment` 对账；proof 可读不授予
+owner 读取权、原始账本读取权或重建 private projection 的能力。
+
+普通客户端、Agent 与 Viewer 共用正式 verifier；服务 grade 与提交 proof 分别校验。
+当前 authority 不可用但历史完整时可以提供明确的 verified read-only 历史；不能恢复写入。
+客户端持久保存已接受的最低 head/activation 锚，重连拒绝低于该锚的历史；无锚的新客户端
+仍须使用独立认证的 genesis/issuer，不能信任 endpoint 自报的新世界。
+原请求 Unknown、rejected 及重试规则由 [外部 API 恢复协议](../world-simulator/llm/external-agent-game-api.design.md#63-操作状态、回查和恢复协议)
+继续主责，本节只增加证明消费，不引入一套替代结果状态。
+
+| wire / evidence | 既有 v1 客户端 | 目标正式 v2 客户端 |
+| --- | --- | --- |
+| v1 且无工程 scope | 保持现有兼容行为 | 只能识别为兼容服务，不能打开正式世界或确认正式提交。 |
+| v1 且为已知 prerequisite scope | Ordinary 拒绝；显式工程 policy 按原有界入口消费 | 拒绝正式使用；不通过删 scope、换签名或重新包裹提升旧记录。 |
+| v2 且完整已知正式 proof/activation | 版本不支持，拒绝 | 全部身份、历史、root、签名和路由授权验证通过才接受。 |
+| v2 缺该响应必需的 proof/activation、混工程 scope、未知 profile/版本/签名域，或未知 wire version | 拒绝 | 拒绝且保留原请求/cursor，不回退旧 verifier；真实 pending 无 committed 声称时不要求结果 proof。 |
+
+### des-p2p-controlled-epoch-takeover-v1
+
+目标 v1 采用人工停写与硬隔离，不使用 timeout/lease 推选新 authority。
+创世授权只允许恢复 issuer 为同世界 controlled epoch 指定受限恢复器及唯一 E+1 绑定，
+不授予它任意业务写入、改资产/授权、另建 genesis 或撤销 BFT handoff 的权限。
+旧机器从硬隔离完成起即不能新增任何签名或存储写入；旧 key 在排空原请求期间仅由受限
+恢复器使用，封 epoch 后才彻底退役，避免原决定已冻结却无人能完成其正式签名的死锁。
+
+#### 权限与持久状态
+
+`RecoveryPlanV1` 绑定固定世界身份、唯一 `recovery_id`、E/E+1、先前 activation、两端
+可确认 head/外部最低锚、冻结原请求集合的 commitment、受限恢复器公钥、
+原 writer/primary/replica 绑定、预定新绑定，以及实际隔离证明引用；由既有 recovery issuer
+签名。每个 E 的计划用 compare-and-set 持久保存；同 ID 内容不符或第二份竞争计划拒绝。
+完整冻结集合保存原 identity、continuation digest/position 和必要 payload，属于两端与
+signer 的私有恢复闭包；按原 identity 的 canonical 编码排序，在 `recovery_requests` 域
+计算的内容 digest 必须等于计划 commitment，不能从公开 proof 枚举。
+issuer 签的就是上述含 commitment 的公开 plan body；公开 verifier 收到完整原签名 body，
+不是从已签私有 allowlist 对象中删字段。受控端另持有完整私有集合并核验 commitment。
+单世界单 execution slot 使允许继续执行的原决定集合至多一个；尚未选定的 pending
+保留原身份，但不进入旧 epoch 恢复签名 allowlist。
+
+实际隔离必须同时撤销旧进程对 signer 和接收端的凭据、终止并阻止旧实例重启/重挂盘、
+撤销直写卷/对象存储路径及备用凭据。存储和 signer 服务由不同受控权限保护，旧 writer
+不能拥有其管理员权限或原始密钥。基础设施控制面确认与旧凭据实际签写拒绝结果共同作为
+隔离证据；“节点失联”“磁盘暂时不可达”或操作员声明本身都不是证据。
+恢复所需 endpoint/writer key 必须可从受保护、独立于失效域的备份恢复到服务，不能因
+key 丢失生成替代 key 来假冒旧身份；无法安全恢复则继续停写。
+
+| 阶段 | 执行主体、持久动作与允许的后继 |
+| --- | --- |
+| `fenced` | Ops 完成真实隔离；恢复控制器读取全部可用持久前缀、外部锚与未决闭包。任何已确认 tail 无法证明完整时保持 `recovery_required`，不能选择较短 head。 |
+| `plan_persisted` | 两端接收器和 signer 保存同一 RecoveryPlan 后进入仅恢复模式。只允许计划内原 identity/continuation/position，拒绝新 Submit、替换 payload、新 nonce 或其他旧 epoch core。 |
+| `draining` | 隔离恢复器获得 signer 服务的计划限定访问，原 writer key 仍只签原决定；接收器同时校验 allowlist、parent、原 continuation 和两端 prepare。先补已持久决定/qualified/publication，再按恢复 v1 重建原 candidate。 |
+| `drained` | 所有不可撤回原决定、result/nonce/outbox 已持久收敛并发布；固定唯一 cutover head C 与根。原未决定 pending 及其 nonce/去重关联完整冻结，形成私有交接集合和 `pending_handoff_root`。两端及 signer 校验无其余未决 continuation，持久绑定计划、C、该 root 与新绑定 digest。 |
+| `sealing` | 两端及 signer 分别持久 `EpochSealV1(recovery_id,E,E+1,C,pending_handoff_root,new_bindings_digest)`；每个组件从本地 seal 成功起永久拒绝 E 签写，同时禁止普通 E+1 execution。首个 seal 后不能退回 draining 或改 C、pending 集合、新绑定。 |
+| `epoch_activation` | 预授权 recovery issuer 签新 epoch activation，绑定先前 activation、C、`pending_handoff_root`、全部 seal 回执与新角色 keys。新绑定指定且满足独立持久域要求的 primary/replica 先复制并核对 C 的完整历史、九角色恢复闭包、外部最低锚、同一计划/全部 seal 及私有冻结集合；新两端完成本地持久接收后才可签该 activation 的 prepare。新 writer signer 先持久同一计划与 seals，只允许承载该证书的唯一控制记录：全局下一 position、E+1 sequence 1、相同业务 state root。其正式 proof/record 在新两端持久后才激活 E+1；旧实例不得因轮换 key 恢复签写权限。 |
+| `active_next` | 新 ActiveAuthority 及当前 head/工件/双端条件全部通过才开放写入；原未决定 pending 按当前权限和 manifest 重审。旧 E 永久只可查历史。 |
+
+受限恢复器不拥有原 key 的任意签名接口。signer 与两个存储接收器均从已持久计划生成
+allowlist，只接受原 continuation 推导的 core 或已经保存的决定；新结果仍须按原闭包
+确定性核验。恢复 issuer 的签名不能替代上述检查，也不能自己为旧 epoch 创建新业务请求。
+
+待交接 pending 集合保留原签名请求、原 identity/digest、状态及 nonce/去重关联，按原
+identity 的 canonical 编码排序，在 `pending_handoff` 域计算 `pending_handoff_root`；
+空集合也有唯一显式 root，缺集合不能解释为空。该 root 同时进入 seal 与新 activation 的
+签名 body，覆盖尚未进入 C 的 canonical execution 的已接受请求。新两端必须按 root
+逐项验证并持久保存完整私有集合；缺失、冲突或较短 tail 均阻断 activation prepare。
+公开 proof 只带该 digest，不能通过 proof 入口取得私有 pending；接管不重签请求或重占 nonce。
+
+控制面只限制 key 的调用主体，未提前废除旧 epoch 的合法签名，所以 `draining` 能完成
+原决定；seal 后的新 epoch activation 由创世预授权证书闭合，不再要求已经退役的旧 key
+签新记录。新 activation 沿 C 接续同一历史，不执行游戏动作或制造新资产。
+
+#### 单域丢失、半完成 epoch 与旧盘
+
+单域失效时先硬隔离失效角色的旧实例，再从幸存端完整 qualified 前缀、可确认 head、
+未决 continuation/decision 与外部最低锚恢复；不能只取 snapshot。
+若排空需要缺失 endpoint 的回执，先以原 endpoint ID/key 恢复其受控服务并复制完整闭包，
+两端核对后才进入原 E 的受限 draining。角色换 key/端点的正式生效只能发生在 E+1；
+同身份恢复旧服务也必须证明旧实例无法再签写，不能并行运行两个持有原 key 的实例。
+
+计划或 seal 只写到一端后崩溃，不把它视为取消：重启合并可验证的单调状态，只能完成
+同一 recovery_id/新绑定；C 一旦在 drained 阶段固定也不可改变。尚未 sealed 的端点不得
+独自放行 E 或 E+1；任何一份已持久
+seal 都要求重建另一端后续封，不能回滚本地 max epoch。所有端点在正常服务前先核对
+现行计划/seal/activation 与独立最低锚，旧盘的较小 epoch/head 只可作历史材料，不能成为
+writer、signer 或最高 head 的来源。
+若现存材料无法判断是否曾封 epoch、是否存在更高可确认 tail 或旧写权限是否已隔离，
+保持 verified read-only / `recovery_required`；不以超时推断失败或重开旧 epoch。
+
+恢复发现已经正式提交的 BFT handoff H 时，拒绝创建或继续 controlled E+1 activation。
+即使 H+1 尚无 BFT 提交，也只能由合法新 profile 恢复；本节不撤销 H 或恢复旧单权威。
+未开始隔离且未持久计划前可放弃一次接管准备；进入持久恢复流程后按表单调推进，
+不把恢复失败当作旧机器重新上线的授权。
+
 ## 5. 关键运行流程
 
 先校验提交身份/大小/队列→固定有序actions/root→同parent/manifest执行并匹配receipt commitments→fenced epoch/parent/head 下原子预备追加及跨故障域持久确认→合法 profile 生成并验证提交决定/证明→最终决定/证明跨故障域持久确认→消费者committed读取。BFT 的独立重执行与投票步骤继续适用其专属合同；单权威不通过等待尚未生成的证明制造循环依赖。当前prototype推进与目标QC闸门不是同一实现证明。恢复先证明原world历史链再判只读；当前追加/finality/manifest/head全满足才重新serve/vote，失效回只读/隔离。
@@ -232,7 +519,10 @@ target protected validators + public services；governed registry有效epoch/sta
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [professional_acceptance: p2p-single-authority-durable-commit](prd.md#p2p-single-authority-durable-commit) | [本机日志前置](#des-p2p-local-authority-journal-prerequisite) | 仅固定身份/epoch的本机原子记录、去重与恢复查询；不授予正式 committed | `cargo test -p oasis7_distfs controlled_authority`；同候选测试竞争写者、stale epoch/parent、请求碰撞、各持久阶段故障、跨世界/proof篡改、带外最低anchor截断拒绝；Unix持久行为与不支持平台拒绝分别判定 | 当次 GitHub Issue #4363 候选/命令/exit/log；只有实际执行结果可记录通过 | 未提供独立副本确认、跨主机 fencing、完整 runtime prepare/commit 接线或 BFT/激活证明 |
+| [professional_acceptance: p2p-authority-profiles](prd.md#p2p-authority-profiles) | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | 固定身份与合法 profile 激活，工程证据不授予正式权威 | [testing-manual.md](../../testing-manual.md) S9A；planned 同候选 profile/identity 错配、无激活证明、工程 scope 升格负例与合法转换正例 | 同 world/profile 候选、激活材料与拒绝/接收结果 | profile 原则验证不证明正式入口实现、真实域或 BFT |
+| [professional_acceptance: p2p-single-authority-durable-commit](prd.md#p2p-single-authority-durable-commit) | [本机日志前置](#des-p2p-local-authority-journal-prerequisite) | 仅固定身份/epoch的本机原子记录、去重与恢复查询；不授予正式 committed | [testing-manual.md](../../testing-manual.md) S9A；`cargo test -p oasis7_distfs controlled_authority`；同候选测试竞争写者、stale epoch/parent、请求碰撞、各持久阶段故障、跨世界/proof篡改、带外最低anchor截断拒绝；Unix持久行为与不支持平台拒绝分别判定 | 当次 GitHub Issue #4363 候选/命令/exit/log；只有实际执行结果可记录通过 | 未提供独立副本确认、跨主机 fencing、完整 runtime prepare/commit 接线或 BFT/激活证明 |
+| [单权威提交](prd.md#p2p-single-authority-durable-commit) | [双端协议前置](#des-p2p-replicated-durability-prerequisite) | 双端确认与未知结果恢复维持原请求和单调 head | [testing-manual.md](../../testing-manual.md) S9A；`cargo test -p oasis7_distfs replicated_protocol` 为现有本机协议基线；逐持久阶段中断、单端不可用、重复原请求与错误 receipt/head；真实独立域验证仍 planned | 双端持久阶段、原请求/回执与恢复 head；同候选实际命令结果 | 本地目录不证明跨主机 fencing、正式激活或真实故障域 |
+| [交接](prd.md#p2p-authority-handoff) | [des-p2p-authority-profiles](#des-p2p-authority-profiles) | H/H+1 唯一 profile 与提交后不可撤回 | [testing-manual.md](../../testing-manual.md) S9A；planned H 未提交、H 已提交及 H+1 尚未提交/已提交四个窗口，尝试旧 profile 追加、回滚和双权威激活 | H/H+1 证据链、选定 profile、拒绝结果与零旧追加 | 不证明完整 BFT 或实际治理交接已执行 |
 | [professional_acceptance: p2p-ordered-execution](prd.md#p2p-ordered-execution) | [des-p2p-ordered-commit](#des-p2p-ordered-commit) | 下一committed height、有序序列/root/decode及journal绑定；错误不推进 | [testing-manual.md](../../testing-manual.md)；S9A phase2/3；同candidate重排、tamper、decode/root/journal负例；执行receipt/状态变化oracle。现有手册入口，完整组合未运行。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-receipt-finality-boundary](prd.md#p2p-receipt-finality-boundary) | [des-p2p-receipt-finality](#des-p2p-receipt-finality) | receipt≠QC；同parent/manifest/actions独立重执行，缺artifact/fault/root拒绝vote/commit | [testing-manual.md](../../testing-manual.md)；S9A；全部活动validator+runtime相同输入/父状态/版本，逐一根不匹配及旧threshold1证据负例。target完整矩阵planned。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
 | [professional_acceptance: p2p-target-bft](prd.md#p2p-target-bft) | [des-p2p-target-bft](#des-p2p-target-bft) | Propose/Prevote/Precommit仅verified >2/3 active stake cert生效；world/height/round/phase/roots/set和dedup签名绑定 | [testing-manual.md](../../testing-manual.md)；S9A full target场景：错误签名/阈值/集合/round、缺证/equivocation拒绝；锁定/解锁、timeout/new-round、transition、partition/heal/restart；prototype不能证明。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | target实现与full组合未证明；外部pending/lineage/manifest/消费者字段未闭合 |
@@ -258,10 +548,36 @@ target protected validators + public services；governed registry有效epoch/sta
 | [product_requirement: ac-dwe-003](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-003) | [des-p2p-target-service-gate](#des-p2p-target-service-gate) | receipt无第二效果为交接条件；互斥lineage首有效receipt唯一胜者/终止其余由runtime拥有，拒绝过期只终止自身，独立intent并发 | [testing-manual S9A](../../testing-manual.md)；对应DWE同candidate跨runtime/P2P/消费者replay/outage/lineage/activation负例计划；DWE004 full，其余局部required不代根组合。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | external durability/lineage/activation/消费者设计及证据未闭合 |
 | [product_requirement: req-dwe-004](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) | [des-p2p-receipt-finality](#des-p2p-receipt-finality) | 首次committed/finality-verified canonical block与activation选version；compat declaration不选规则，历史receipt原manifest replay，缺证failclosed；runtime/WASM详细设计外部 | [testing-manual S9A](../../testing-manual.md)；对应DWE同candidate跨runtime/P2P/消费者replay/outage/lineage/activation负例计划；DWE004 full，其余局部required不代根组合。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | external durability/lineage/activation/消费者设计及证据未闭合 |
 | [product_requirement: ac-dwe-004](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-004) | [des-p2p-receipt-finality](#des-p2p-receipt-finality) | 首次committed/finality-verified canonical block与activation选version；compat declaration不选规则，历史receipt原manifest replay，缺证failclosed；runtime/WASM详细设计外部 | [testing-manual S9A](../../testing-manual.md)；对应DWE同candidate跨runtime/P2P/消费者replay/outage/lineage/activation负例计划；DWE004 full，其余局部required不代根组合。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | external durability/lineage/activation/消费者设计及证据未闭合 |
+| [单权威提交](prd.md#p2p-single-authority-durable-commit) | [原 candidate 恢复](#des-p2p-original-candidate-recovery-v1) | 未开始、执行中、完整 candidate、已决定、qualified 与回应丢失均收敛原身份一次 | CA-R1，planned crash integration：在表中各阶段切断进程，和无故障同输入 oracle 比较全部九角色 roots、原结果与 nonce；LLM 调用及 outbox 新派发不得因重建增加；实施入口承接 [S9A manual](../../testing-manual.md) | 原 identity、故障 seam、恢复阶段、全 roots 与效果计数 | 现有 `controlled_live` 不覆盖 candidate 未完整窗口；不是执行通过 |
+| [AC-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-002) | [原 candidate 恢复](#des-p2p-original-candidate-recovery-v1) | 缺失或冲突材料不能产生替代决定 | CA-R2，planned negative integration：逐项删改原 parent、native/WASM、time/randomness、nonce、prepared root 或更高 head；应保留原请求并 recovery_required；补回精确原材料后才能续办；实施入口承接 [S9A manual](../../testing-manual.md) | 故障输入、阻断原因、零新增发布及续办结果 | 不证明任意旧 native 版本可移植；缺工件保持阻断 |
+| [AC-DWE-002](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-002) | [原 candidate 恢复](#des-p2p-original-candidate-recovery-v1) | 未决定 pending 当前重审；固定决定保持原语义 | CA-R3，planned Runtime contract：分别在两阶段改变当前权限、期限和 manifest；pending 走新条件，固定 continuation 对原 parent/版本产生相同结果且不新占 nonce；实施入口承接 [S9A manual](../../testing-manual.md) | 两阶段输入、选版、reservation 与结果对照 | 不关闭跨域 lineage 或全部消费者验证 |
+| [合法 profiles](prd.md#p2p-authority-profiles) | [正式激活/证明](#des-p2p-formal-controlled-authority-v1) | 初次 activation 与完整双端证明才授予正式权威 | CA-A1，planned codec/unit/integration：golden 字节；自授 issuer、错误身份/roots/keys、递归字段、非 canonical 编码、单回执及 activation 半持久负例；完整链正例；实施入口承接 [S9A manual](../../testing-manual.md) | 证书/codec vectors、双端 proof 与 ActiveAuthority 构造结果 | 签名不证明实际独立故障域或执行正确性 |
+| [AC-DCS-005](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-005) | [普通消费](#des-p2p-formal-controlled-authority-v1) | 五路 API 不将工程或未知版本当正式；保持投影权限 | CA-C1，planned WorldService/client conformance：未预装 proof 的新客户端从独立信任锚取得 genesis 至当前 head 的连续公开证明，再逐路执行 wire/evidence 矩阵，检查 Describe/read-only、原 Lookup、私有 projection、Changes 缺 proof/回退；proof 不可用、错 hash/缺页/超限/私有字段泄露均拒绝，公开 plan 签名及私有集合 commitment 对账；旧 v1 必须拒 v2；实施入口承接 [S9A manual](../../testing-manual.md) | 请求关联、签名/proof verdict、原结果/cursor 与零越权读取 | 现有 service-signature verifier 不覆盖正式 proof；不证明玩家完整旅程 |
+| [单权威提交](prd.md#p2p-single-authority-durable-commit) | [人工接管](#des-p2p-controlled-epoch-takeover-v1) | 旧机器/旧盘/备用凭据不能绕过存储与 signer | CA-F1，planned adversarial integration 和后续独立域演练：旧实例存活、重挂旧盘、旧 signer/存储凭据实际写入；隔离未证实不得进入 draining，隔离后全部拒绝；实施入口承接 [S9A manual](../../testing-manual.md) | 同窗口控制面证据与实际负例拒绝结果 | 文档和本地目录不证明基础设施隔离；部署尚未执行 |
+| [AC-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-002) | [人工接管](#des-p2p-controlled-epoch-takeover-v1) | 单域丢失与部分 plan/seal/activation 不回退或丢尾部 | CA-F2，planned crash matrix：每次持久动作后中断，并丢失任一域；同 recovery_id/C/新绑定收敛，原未决决定一次；新绑定端缺 C 历史、闭包、seal 或原 pending 时不得签 activation prepare；缺完整 tail 或隔离证据只能停写；实施入口承接 [S9A manual](../../testing-manual.md) | 前后 head/epoch、冻结请求、seal 回执、新两端接收证明、旧写拒绝和恢复 root | 真实 durability/key backup 仍须受控环境演练 |
+| [H/H+1 交接](prd.md#p2p-authority-handoff) | [人工接管](#des-p2p-controlled-epoch-takeover-v1) | H committed 后不得用恢复 issuer 复活 controlled 权威 | CA-B1，planned handoff integration：H 已持久、H+1 未提交时宕机，尝试 controlled drain/epoch activation；全部拒绝新旧 profile 越界；实施入口承接 [S9A manual](../../testing-manual.md) | H proof、恢复请求、拒绝 verdict 与零旧追加 | 不实现或代签完整 BFT 共识验收 |
+
+#### val-p2p-controlled-authority-v1
+
+以下 CA 场景全部为新目标验证计划，尚无实现通过或真实故障域证据。
+现有 `controlled_live`、`replicated_protocol`、`controlled_history` 回归仅提供故障接缝与原
+工程拒绝行为的基线，不覆盖新 codec、formal activation、普通 v2 消费或跨主机 fencing。
+实施时由 Runtime/P2P/QA 绑定同 source/integration/tested tree、world/config、执行工件和
+环境窗口；单机故障注入与实际独立域演练分别出证。实际部署 hold 不因文档验收解除。
+
+上述 §11.1 主表的 CA-R1/R2/R3、CA-A1、CA-C1、CA-F1/F2 与 CA-B1
+分别承接本节八项目标关系；本锚点仅说明验证范围，不另建第二套映射。
 
 ## 12. 决策、长期风险与未决问题
 
 选择保留现有专业合同并精确分配，拒绝以导航/历史标签免除真实设计，也拒绝将local证明升级为full。目标锁定/解锁、anti-double-sign、timeout/new-round、set transition与partition/heal/restart需独立对抗性证明；本文给拒绝条件而不发明新lock算法/schema。pending/lineage/manifest/consumer字段及DC5 structured attachment仍外部未闭合。
+
+后继 controlled v1 明确选择执行前双端闭包和原决定重建，代价是额外持久写入、原 native
+工件保留与单世界未决执行串行；不选择重开原请求、采用当前版本或依赖外部 provider 重试。
+人工接管选择真实隔离加受限恢复 signer，代价是失联或隔离不可证明时牺牲写入可用性。
+正式 proof 和 WorldService v2 是兼容边界，不保留通过删除工程标签升级的捷径。
+独立评审必须核查确定性闭包、签名域/编码、恢复 signer 权限与半完成 epoch；其后仍需实现
+和 CA 矩阵证据，本文不提供安全、运行或发布通过结论。
 
 runtime/P2P负责缺失技术/实现；ops负责环境事实；QA负责计划覆盖和verdict；producer审读产品含义。新算法/schema、权限/默认值变化、额外消费者或claim扩展触发重新评审；未解除项保留在GitHub正式evidence及剩余required set，不能靠未来Issue占位关闭。下列原章节的里程碑/审计轮次是保留provenance，不维护可变进度。
 

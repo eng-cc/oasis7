@@ -69,6 +69,8 @@ Cargo 边界局部增量（2026-10-12）：[#4626](https://github.com/eng-cc/oas
 
 **设计状态：** 本组是当前主责文档声明的路线与目标合同；正式 profile、完整事务和灾备目标不能因为已有前置切片而标为已验收。
 
+2026-10-12 局部设计增量（实现边界核对至 `main@e01e29064517f4bf375767a19a09802335828249`）：[原候选恢复 v1](../../../p2p/design.md#des-p2p-original-candidate-recovery-v1) 要求执行前完整材料持久化、先核对原决定再隔离重放；[正式受控权威 v1](../../../p2p/design.md#des-p2p-formal-controlled-authority-v1) 与 [epoch 接管](../../../p2p/design.md#des-p2p-controlled-epoch-takeover-v1) 集中定义激活、普通消费者和存储/签名隔离。均为待实现目标，现有工程 scope 不因本次文档收敛取得正式权威；实际部署和故障域证据未刷新。
+
 **已有实现：**
 
 - ARCH-04：本地 journal、双端持久协议、受控历史重执行、activation/bootstrap 等前置持续落地；完整正式激活、消费者接线和 BFT 验收尚未闭合。
@@ -92,6 +94,8 @@ Cargo 边界局部增量（2026-10-12）：[#4626](https://github.com/eng-cc/oas
 | ARCH-09 · 两类 Runtime | 游戏侧目标是 OpenClaw/Codex 通过官方游戏 Skill 和受授权游戏 API 持续游玩；开发指挥客户端管理代码开发会话 | 声明 Runtime 支持、管理多 Agent、改预算/停止行为或连接游戏 Viewer 与开发看板 | [游戏角色](../../../product/agents-world-simulation/external-agent-runtime-play.prd.md#12-角色与职责)、[首批 Runtime 目标](../../../product/agents-world-simulation/external-agent-runtime-play.prd.md#21-首批-runtime-与支持单位)、[开发会话](../command-center.design.md#1101-可选实验执行实现) |
 
 **设计状态：** 接入、委托和角色边界由各自主责合同拥有。外部 Runtime 的首期功能清单是承诺范围，阶段标签不等于实现状态。
+
+2026-10-12 局部设计增量（同上固定基线）：[首次绑定目标](../../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-entry-001) 按账号在同一世界的权威状态处理注册、返回和幂等；[首聊 service 目标](../../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-chat-005) 使用 owner 最小权威投影区分可通过、受阻和未知，并在提交时重验。注册/绑定、starter OC 领取与经济 ClaimAgent 分别成立；现有固定 starter 和不完整余额投影不能证明这些后继目标已实现。
 
 **已有实现：**
 
