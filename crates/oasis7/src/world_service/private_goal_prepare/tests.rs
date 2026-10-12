@@ -52,6 +52,7 @@ fn control(r: &GameGoalPrepareV1) -> GameTaskControlV1 {
         active_goal_reference: None,
         executor_epoch: DecimalU64(0),
         executor_id: None,
+        executor_binding: None,
         created_operation_id: "create".into(),
     }
 }

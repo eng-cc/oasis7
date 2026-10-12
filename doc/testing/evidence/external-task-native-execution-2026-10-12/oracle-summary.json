@@ -1,0 +1,39 @@
+{
+  "schema": "oasis7/native-task-world-oracle/v1",
+  "candidate": "b59d010556e39beaf1928eb1e95aa9aad099e180",
+  "collector": "parent direct world witness",
+  "canonical_cognition_count": 2,
+  "rows": [
+    {
+      "height": 45,
+      "goal_revision": "1",
+      "executor_epoch": "1",
+      "action": "action:3",
+      "to": {
+        "x_cm": 200,
+        "y_cm": 0,
+        "z_cm": 0
+      },
+      "correlation": "blake3:6943fbde1fdb210dc81410882e28014a4d651daddf9178eb29371d43586509e8",
+      "receipt": "blake3:02b9f4bf3e5774de0b725ba8b547655ab1b1bbebba0b0eddc5969e8a649b7fdf"
+    },
+    {
+      "height": 53,
+      "goal_revision": "2",
+      "executor_epoch": "1",
+      "action": "action:4",
+      "to": {
+        "x_cm": -200,
+        "y_cm": 0,
+        "z_cm": 0
+      },
+      "correlation": "blake3:9f06730f7728fd82883ac02df7e607b76a260c060da16b757883ea7be442be55",
+      "receipt": "blake3:b2c4cb573c7578cdf8449424ec649f69b5c7d4d037393739afd4438e487cfe98"
+    }
+  ],
+  "final_position": {
+    "x_cm": -200,
+    "y_cm": 0,
+    "z_cm": 0
+  }
+}

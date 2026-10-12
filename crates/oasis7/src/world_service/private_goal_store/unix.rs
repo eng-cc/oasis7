@@ -275,6 +275,25 @@ pub(super) fn publish_record(
     aad: &[u8],
     plaintext: &[u8],
 ) -> Result<bool, String> {
+    publish_bounded_record(
+        dir,
+        key,
+        name,
+        magic,
+        aad,
+        plaintext,
+        MAX_PRIVATE_GOAL_FILE_BYTES,
+    )
+}
+pub(super) fn publish_bounded_record(
+    dir: &Dir,
+    key: &[u8; 32],
+    name: &str,
+    magic: &[u8; 8],
+    aad: &[u8],
+    plaintext: &[u8],
+    maximum: usize,
+) -> Result<bool, String> {
     private_directory(dir)?;
     verify_key(dir, key)?;
     let nonce = random::<24>()?;
@@ -291,8 +310,8 @@ pub(super) fn publish_record(
     bytes.extend_from_slice(magic);
     bytes.extend_from_slice(&nonce);
     bytes.extend_from_slice(&ciphertext);
-    if bytes.len() > MAX_PRIVATE_GOAL_FILE_BYTES {
-        return Err("private prepared goal file exceeds limit".into());
+    if bytes.len() > maximum {
+        return Err("private prepared record file exceeds limit".into());
     }
     publish_immutable(dir, name, &bytes)
 }
@@ -304,6 +323,16 @@ pub(super) fn read_record(
     magic: &[u8; 8],
     aad: &[u8],
 ) -> Result<Option<Zeroizing<Vec<u8>>>, String> {
+    read_bounded_record(dir, key, name, magic, aad, MAX_PRIVATE_GOAL_FILE_BYTES)
+}
+pub(super) fn read_bounded_record(
+    dir: &Dir,
+    key: &[u8; 32],
+    name: &str,
+    magic: &[u8; 8],
+    aad: &[u8],
+    maximum: usize,
+) -> Result<Option<Zeroizing<Vec<u8>>>, String> {
     private_directory(dir)?;
     verify_key(dir, key)?;
     match dir.symlink_metadata(name) {
@@ -311,7 +340,7 @@ pub(super) fn read_record(
         Err(error) => return Err(io_error(error)),
         Ok(_) => (),
     }
-    let bytes = read_private(dir, name, MAX_PRIVATE_GOAL_FILE_BYTES)?;
+    let bytes = read_private(dir, name, maximum)?;
     if bytes.len() < 48 || &bytes[..8] != magic {
         return Err("invalid private prepared goal envelope".into());
     }

@@ -14,6 +14,15 @@ use super::{
 };
 
 const EXECUTION_BRIDGE_PIN_SCOPE: &str = "execution_bridge_v1";
+mod task_evidence;
+pub(super) fn refresh_live_task_read_evidence(
+    records: &Path,
+    store: &LocalCasStore,
+    world: &oasis7::runtime::World,
+    hot: u64,
+) -> Result<(), String> {
+    task_evidence::refresh(records, store, world, hot)
+}
 
 pub(super) fn execution_checkpoint_root_dir(execution_records_dir: &Path) -> std::path::PathBuf {
     execution_records_dir.join("checkpoints")
@@ -377,8 +386,10 @@ fn collect_execution_checkpoint_retained_refs(
 
 fn build_execution_bridge_pin_set(
     execution_records_dir: &Path,
+    execution_store: &LocalCasStore,
     hot_window_heights: u64,
 ) -> Result<ExecutionBridgePinSet, String> {
+    let protected = task_evidence::protected_heights(execution_records_dir, execution_store)?;
     let record_heights = list_execution_bridge_record_heights(execution_records_dir)?;
     let checkpoint_heights = list_execution_checkpoint_heights(execution_records_dir)?
         .into_iter()
@@ -414,11 +425,12 @@ fn build_execution_bridge_pin_set(
         collect_execution_bridge_record_retained_refs(
             &record,
             record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+                || protected.contains(&record.height)
                 || pin_set
                     .archive_window_start_height
                     .is_none_or(|start_height| record.height >= start_height),
             record.height == latest_height,
-            record.height >= hot_window_start_height,
+            record.height >= hot_window_start_height || protected.contains(&record.height),
             &mut pin_set.pinned_refs,
             &mut pin_set.best_effort_pinned_refs,
         );
@@ -433,7 +445,9 @@ pub(super) fn sync_execution_bridge_pin_set(
     execution_store: &LocalCasStore,
     hot_window_heights: u64,
 ) -> Result<ExecutionBridgePinSet, String> {
-    let pin_set = build_execution_bridge_pin_set(execution_records_dir, hot_window_heights)?;
+    let pin_set =
+        build_execution_bridge_pin_set(execution_records_dir, execution_store, hot_window_heights)?;
+    let protected = task_evidence::protected_heights(execution_records_dir, execution_store)?;
     let mut desired_pins = pin_set.pinned_refs.clone();
     for pinned_ref in pin_set
         .best_effort_pinned_refs
@@ -460,13 +474,15 @@ pub(super) fn sync_execution_bridge_pin_set(
             execution_bridge_record_path(execution_records_dir, height).as_path(),
         )?;
         let retain_archive = record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+            || protected.contains(&height)
             || pin_set
                 .archive_window_start_height
                 .is_none_or(|start_height| height >= start_height);
         let retain_latest = pin_set.latest_height == Some(height);
         let retain_hot = pin_set
             .hot_window_start_height
-            .is_some_and(|start_height| height >= start_height);
+            .is_some_and(|start_height| height >= start_height)
+            || protected.contains(&height);
         replace_execution_bridge_record_pin_shard(
             &record,
             retain_archive,
@@ -700,6 +716,7 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
     checkpoint_keep_latest: usize,
     gc_allowed: bool,
 ) -> Result<u64, String> {
+    let protected = task_evidence::protected_heights(execution_records_dir, execution_store)?;
     replace_execution_bridge_record_pin_shard(record, true, true, true, execution_store)?;
 
     if record.checkpoint_ref.is_some() {
@@ -712,6 +729,7 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
 
     let retained_hot_window = hot_window_heights.max(1);
     if let Some(evicted_height) = record.height.checked_sub(retained_hot_window)
+        && !protected.contains(&evicted_height)
         && let Some(evicted_record) =
             compact_execution_bridge_record_at_height(execution_records_dir, evicted_height)?
     {
@@ -735,6 +753,9 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
                 .saturating_sub(checkpoint_interval_heights.saturating_sub(1))
                 .max(1);
             for archive_height in prune_start..=pruned_height {
+                if protected.contains(&archive_height) {
+                    continue;
+                }
                 prune_execution_bridge_record_archive_at_height(
                     execution_records_dir,
                     archive_height,
@@ -953,6 +974,7 @@ pub(super) fn maybe_persist_execution_checkpoint_for_record(
 fn compact_execution_bridge_records(
     execution_records_dir: &Path,
     pin_set: &ExecutionBridgePinSet,
+    protected: &BTreeSet<u64>,
 ) -> Result<usize, String> {
     let record_heights = list_execution_bridge_record_heights(execution_records_dir)?;
     let latest_height = pin_set.latest_height;
@@ -967,7 +989,7 @@ fn compact_execution_bridge_records(
         let retain_hot_window = height >= hot_window_start_height;
         let retain_checkpoint = pin_set.checkpoint_heights.contains(&height);
 
-        if !retain_latest_head && !retain_hot_window {
+        if !retain_latest_head && !retain_hot_window && !protected.contains(&height) {
             record.latest_state_ref = None;
             record.snapshot_ref = None;
             record.journal_ref = None;
@@ -977,6 +999,7 @@ fn compact_execution_bridge_records(
             }
         }
         let retain_archive = record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+            || protected.contains(&height)
             || pin_set
                 .archive_window_start_height
                 .is_none_or(|start_height| height >= start_height);
@@ -1010,8 +1033,13 @@ pub(super) fn run_execution_bridge_retention_maintenance(
         sync_execution_bridge_pin_set(execution_records_dir, execution_store, hot_window_heights)?;
         0
     } else {
-        let pin_set = build_execution_bridge_pin_set(execution_records_dir, hot_window_heights)?;
-        compact_execution_bridge_records(execution_records_dir, &pin_set)?;
+        let pin_set = build_execution_bridge_pin_set(
+            execution_records_dir,
+            execution_store,
+            hot_window_heights,
+        )?;
+        let protected = task_evidence::protected_heights(execution_records_dir, execution_store)?;
+        compact_execution_bridge_records(execution_records_dir, &pin_set, &protected)?;
         sync_execution_bridge_pin_set(execution_records_dir, execution_store, hot_window_heights)?;
         execution_store
             .prune_orphan_blobs()

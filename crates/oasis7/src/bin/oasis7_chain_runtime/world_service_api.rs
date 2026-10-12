@@ -83,6 +83,38 @@ impl Service<'_> {
         agent_authority::validate_agent_signer(&pinned.world, agent, key, generation)?;
         Ok(Some(agent.into()))
     }
+    // Exact settled results remain readable under current Agent signer authority.
+    // This authenticates receipt access, not a new write or executor admission.
+    fn check_replay_payload(
+        &self,
+        pinned: &PinnedWorld,
+        payload: &WorldServicePayloadV1,
+    ) -> Result<(), String> {
+        match payload {
+            WorldServicePayloadV1::Cognition(signed) => agent_authority::validate_agent_signer(
+                &pinned.world,
+                &signed.request.request.agent_id,
+                &signed.subject_public_key,
+                signed.request.delegation_generation,
+            ),
+            WorldServicePayloadV1::Scheduler(signed) => agent_authority::validate_agent_signer(
+                &pinned.world,
+                &signed.request.agent_id,
+                &signed.subject_public_key,
+                signed.request.delegation_generation,
+            ),
+            WorldServicePayloadV1::GameExecutorControl(signed) => {
+                if agent_authority::owner_public_key(&pinned.world, &signed.request.fence.agent_id)?
+                    != signed.subject_public_key
+                {
+                    return Err("executor receipt requires current owner".into());
+                }
+                Ok(())
+            }
+            _ => self.check_payload(pinned, payload),
+        }
+    }
+
     fn check_payload(
         &self,
         pinned: &PinnedWorld,
@@ -91,6 +123,9 @@ impl Service<'_> {
         match payload {
             WorldServicePayloadV1::GameTaskCreate(signed) => {
                 oasis7::world_service::game_task::validate_owner(&pinned.world, signed)?;
+            }
+            WorldServicePayloadV1::GameExecutorControl(signed) => {
+                game_task::validate_executor_owner(&pinned.world, signed)?;
             }
             WorldServicePayloadV1::GameGoalPublish(signed) => {
                 game_task::validate_publish_owner(&pinned.world, signed)?;

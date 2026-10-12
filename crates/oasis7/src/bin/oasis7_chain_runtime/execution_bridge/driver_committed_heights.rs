@@ -174,14 +174,32 @@ fn bridge_committed_heights_with_policy(
         }
         persist_execution_bridge_record(execution_records_dir, &record)?;
 
-        if let Err(err) = run_execution_bridge_incremental_retention_maintenance(
-            execution_records_dir,
-            execution_store,
-            &record,
-            hot_window_heights,
-            checkpoint_interval_heights,
-            checkpoint_keep_latest,
-        ) {
+        if let Err(err) =
+            super::checkpoint::begin_execution_bridge_retention_transaction(execution_records_dir)
+                .and_then(|_| {
+                    super::checkpoint::refresh_live_task_read_evidence(
+                        execution_records_dir,
+                        execution_store,
+                        execution_world,
+                        hot_window_heights,
+                    )
+                })
+                .and_then(|_| {
+                    run_execution_bridge_incremental_retention_maintenance(
+                        execution_records_dir,
+                        execution_store,
+                        &record,
+                        hot_window_heights,
+                        checkpoint_interval_heights,
+                        checkpoint_keep_latest,
+                    )
+                })
+                .and_then(|_| {
+                    super::checkpoint::complete_execution_bridge_retention_transaction(
+                        execution_records_dir,
+                    )
+                })
+        {
             oasis7::observability::emit_stderr_or_event(
                 tracing::Level::WARN,
                 format!(

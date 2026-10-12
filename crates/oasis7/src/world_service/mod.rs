@@ -19,3 +19,9 @@ pub use wire::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod private_goal_read;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod private_task_context;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod private_key_file;

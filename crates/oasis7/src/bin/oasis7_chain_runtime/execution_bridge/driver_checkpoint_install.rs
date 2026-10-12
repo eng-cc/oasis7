@@ -789,6 +789,14 @@ pub(super) fn install_checkpoint_bundle(
     let retention_result =
         begin_execution_bridge_retention_transaction(driver.records_dir.as_path())
             .and_then(|_| {
+                super::checkpoint::refresh_live_task_read_evidence(
+                    driver.records_dir.as_path(),
+                    &driver.execution_store,
+                    &driver.execution_world,
+                    driver.hot_window_heights,
+                )
+            })
+            .and_then(|_| {
                 run_execution_bridge_retention_maintenance(
                     driver.records_dir.as_path(),
                     &driver.execution_store,

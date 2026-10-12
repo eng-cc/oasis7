@@ -62,6 +62,29 @@ pub(super) fn apply_intents(
         let mut candidate = world.clone();
         let mut runtime_action_id = None;
         let applied = match request.signed_payload.clone() {
+            WorldServicePayloadV1::GameExecutorControl(_) => {
+                oasis7::world_service::game_task::prepare_executor_control(
+                    &candidate,
+                    &request,
+                    staged.iter().map(|entry: &StagedResult| &entry.result),
+                )
+                .and_then(|receipt| {
+                    let WorldServicePayloadV1::GameExecutorControl(signed) =
+                        &request.signed_payload
+                    else {
+                        unreachable!()
+                    };
+                    oasis7::world_service::game_task::retire_task_contexts(
+                        &mut candidate,
+                        &signed.request.fence.agent_id,
+                        &staged
+                            .iter()
+                            .map(|entry: &StagedResult| entry.result.clone())
+                            .collect::<Vec<_>>(),
+                    )?;
+                    Ok(receipt)
+                })
+            }
             WorldServicePayloadV1::GameGoalPublish(_) => {
                 oasis7::world_service::game_task::prepare_publish(
                     &candidate,
@@ -69,6 +92,21 @@ pub(super) fn apply_intents(
                     staged.iter().map(|entry: &StagedResult| &entry.result),
                     context.height,
                 )
+                .and_then(|receipt| {
+                    let WorldServicePayloadV1::GameGoalPublish(signed) = &request.signed_payload
+                    else {
+                        unreachable!()
+                    };
+                    oasis7::world_service::game_task::retire_task_contexts(
+                        &mut candidate,
+                        &signed.request.agent_id,
+                        &staged
+                            .iter()
+                            .map(|entry: &StagedResult| entry.result.clone())
+                            .collect::<Vec<_>>(),
+                    )?;
+                    Ok(receipt)
+                })
             }
             WorldServicePayloadV1::GameTaskCreate(_) => {
                 oasis7::world_service::game_task::prepare_create(
@@ -134,18 +172,28 @@ pub(super) fn apply_intents(
                     candidate.apply_authenticated_agent_chat(&request)
                 }
             }
-            WorldServicePayloadV1::Cognition(signed) => {
-                candidate.commit_authenticated_cognition(signed)
-            }
+            WorldServicePayloadV1::Cognition(signed) => candidate
+                .commit_authenticated_cognition_staged(
+                    signed,
+                    &staged
+                        .iter()
+                        .map(|entry: &StagedResult| entry.result.clone())
+                        .collect::<Vec<_>>(),
+                ),
             WorldServicePayloadV1::FeedbackAck(signed) => {
                 candidate.apply_authenticated_feedback_ack(signed)
             }
             WorldServicePayloadV1::Delegation(signed) => candidate
                 .apply_agent_signer_delegation(&signed)
                 .map(|()| serde_json::json!({"delegation": signed.request})),
-            WorldServicePayloadV1::Scheduler(signed) => {
-                candidate.apply_authenticated_scheduler(signed)
-            }
+            WorldServicePayloadV1::Scheduler(signed) => candidate
+                .apply_authenticated_scheduler_staged(
+                    signed,
+                    &staged
+                        .iter()
+                        .map(|entry: &StagedResult| entry.result.clone())
+                        .collect::<Vec<_>>(),
+                ),
         };
         let (receipt, rejected) = match applied {
             Ok(value) => {
