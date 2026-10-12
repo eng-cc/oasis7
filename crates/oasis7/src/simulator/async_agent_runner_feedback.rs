@@ -11,6 +11,7 @@ pub struct RuntimeReceiptReadbackHandleV1 {
     receipt_id: String,
     receipt_digest: Digest32,
     response_artifact_digest: Digest32,
+    verified_lineage: RuntimeReceiptLineageV1,
 }
 
 impl RuntimeReceiptReadbackHandleV1 {
@@ -26,6 +27,10 @@ impl RuntimeReceiptReadbackHandleV1 {
         &self.response_artifact_digest
     }
 
+    pub(crate) fn verified_lineage(&self) -> &RuntimeReceiptLineageV1 {
+        &self.verified_lineage
+    }
+
     /// Runtime's concrete World adapter constructs this only after it has
     /// read back and verified both durable identities. Keep the constructor
     /// crate-private: provider callers and external verifier implementations
@@ -38,6 +43,7 @@ impl RuntimeReceiptReadbackHandleV1 {
             receipt_id: receipt.receipt_id.clone(),
             receipt_digest: Digest32::from(receipt.receipt_digest.clone()),
             response_artifact_digest: response_identity.artifact_digest.clone(),
+            verified_lineage: receipt.clone(),
         }
     }
 }
