@@ -143,6 +143,11 @@ become visible or all remain absent. Cache capacity, registry, instances, and
 tick schedules MUST remain unchanged; action validation priority and supplied
 reason bytes remain compatible.
 
+This publication boundary alone does not establish recoverable retirement.
+The [module persistence contract](#module-store-persistence-and-recovery-contract)
+also requires the accepted retired state to remain readable without making
+unrelated live modules unavailable or deleting historical registry records.
+
 The standalone multi-module change API MUST commit its sorted register,
 upgrade, activate, and deactivate events as one failure boundary. A validation,
 publication, retention, allocator, schedule, cache-invalidation, or consensus
@@ -441,12 +446,12 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 - Gameplay 生命周期沿用 `validated Action -> DomainEvent -> WorldState` 的 runtime 权威链；动作校验与路由以 `crates/oasis7/src/runtime/world/event_processing.rs` 为准，事件与持久状态以 `crates/oasis7/src/runtime/events.rs` 及 state apply 路径为准。
 - 周期性治理、危机、战争与元进度推进由 `crates/oasis7/src/runtime/world/gameplay_loop.rs` 在 tick 中确定性执行；存在激活的 Gameplay tick module 时先校验并应用其 directive，只有没有激活 Gameplay tick module 时才整体使用 native fallback，激活模块后不会因某类 directive 缺失而逐项回退。具体动作名单、阈值、评分和玩家可读后果不在本 runtime 入口复制。
 - 内建 Gameplay 模块的注册、`ModuleRole::Gameplay` 绑定与 readiness 由 `crates/oasis7/src/runtime/world/bootstrap_gameplay.rs` 和当前回归测试承接。模块存在或 readiness 通过不替代 gameplay 专业域的可玩性与后果可读性验收。
-- Gameplay manifest 必须使用 `ModuleRole::Gameplay` 并携带合法 contract：mode 非空、去空白后唯一，`min_players >= 1`，设置 `max_players` 时必须满足 `max_players >= min_players`；非 Gameplay manifest 不得携带该 contract。register、activate、deactivate、upgrade 都必须对变更后的 active set 预检，同一 `(mode, GameplayModuleKind)` 最多只能有一个 active module。
+- Gameplay manifest 必须使用 `ModuleRole::Gameplay` 并携带合法 contract：mode 非空、去空白后唯一，`min_players >= 1`，设置 `max_players` 时必须满足 `max_players >= min_players`；非 Gameplay manifest 不得携带该 contract。register、activate、deactivate、upgrade 都必须对变更后的 active set 预检，同一 `(mode, GameplayModuleKind)` 最多只能有一个 active module；mode 判等统一按[派生 mode key 合同](#gameplay-mode-identity-contract)，不能只在输入校验时 trim。
 - `gameplay_modules()` 与 `gameplay_mode_readiness(mode)` 返回确定排序的 active-set / coverage snapshot；readiness 只表示 runtime operational coverage，不是玩家体验、视觉或发布验收。
 - Base module governance 负责通用 identity、version、artifact、interface/export、subscription、capability 与 limit 校验，只把 Gameplay contract 和变更后 active-set slot 冲突交给 gameplay layer。这是内部实现职责拆分，不创建新的 ABI 或规则语义边界；公开协议仍以本页和 `doc/world-runtime/wasm/wasm-interface.md` 为准。
 - 发生 tick-consensus drift 时，runtime 恢复必须让受影响 action 得到显式处置（保留、replay，或带恢复路径的拒绝），不得静默丢失。可执行 governed rollback v2 的 custody、C/T reconciliation、nonce、journal/root 校验与 all-clear 流程仍由现行 rollback runbook 承载；历史 release `Go`、RTO/RPO 或一次性 soak 结果不得充当当前 release authority。
 - 生命周期事件与状态仍受本 PRD 的确定性、receipt、replay、恢复与 ABI 兼容合同约束；持久化保留和恢复细则见 `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`。历史 closure 的实现过程从 Git history 与 PR 与实际验证记录 追溯，不再作为长期 runtime 权威入口。
-- 对激活且订阅 `tick` 的模块，runtime 只在 logical time 到期时调用，并将 schedule 随 snapshot/replay 持久化；一次 tick 调用先消费旧 schedule，只有模块明确请求 wake 才建立下一次调度，`suspend` 或缺省指令不再调度。ABI wire shape、最小 wake clamp、tick context 与结构化失败约定以 `doc/world-runtime/wasm/wasm-interface.md` 为准。
+- 对激活且订阅 `tick` 的模块，runtime 只在 logical time 到期时调用，并将 schedule 随 snapshot/replay 持久化；一次 tick 调用在暂存视图消费旧 schedule，成功时只有模块明确请求 wake 才建立下一次调度，`suspend` 或缺省指令不再调度。整条 route 失败丢弃暂存、保留原 schedule，并返回既有结构化错误/失败审计，不承诺自动重试。ABI wire shape、最小 wake clamp、tick context 与失败约定以 `doc/world-runtime/wasm/wasm-interface.md` 为准。
 - 链 PoS 的时间锚、slot/tick 相位、严格滞后恢复、控制面参数、status 与 restart/replay 边界由 `doc/world-runtime/runtime/chain-pos-control-plane.prd.md` 唯一承接；它不定义 validator 经济、节点运维或发布结论。
 
 ## 接口 / 数据
@@ -789,6 +794,28 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 
 <a id="module-store-persistence-and-recovery-contract"></a>
 本锚点是旧 ModuleStore persistence and recovery contract 的兼容定位，原有 load/save/late-record/error/cache/instance 条款保持原节全文，接受关系消费该节而非通用工业矩阵。
+
+### 合法退休、实例升级与共享内容的可恢复性
+
+以下补齐 [#4417](https://github.com/eng-cc/oasis7/issues/4417) 的独立验收边界，是应满足的合同；既有局部原子发布、普通 round-trip 或文档通过不等于这些实现已完成。存储、兼容与测试设计见[模块生命周期分册](module/module-lifecycle.md#module-retirement-and-shared-content)。
+
+- **合法退休仍可读**：通过真实安装形成 registry 的 inactive artifact，在没有任何 active instance 或 legacy active 引用时合法销毁，必须保留历史 registry、实例身份和原有审计，并使销毁后的 `snapshot/from_snapshot`、`save/load` 与 canonical CAS restart 得到一致可读结果。退休模块不能恢复执行；其他模块正常。不能删历史 registry、把所有缺 bytes 都视为退休，或等重启失败后才承认该已提交状态不完整。
+- **退休与损坏分开**：当前可执行集合、历史 registry 与可恢复的工件闭包是三种信息。只有受支持持久格式中可验证的退休事实，才允许对应历史记录缺少当前执行 bytes；active 引用或未退休记录缺 bytes 仍拒绝。保留中的历史 checkpoint/replay 所需 bytes 继续由既有保留合同管理，不能随当前 artifact 销毁一起误删。
+- **实例升级可复用版本**：A/B 两实例从 v1 依次正常升级到同一 v2 时，目标已注册且完整 manifest 一致即可复用，不能重复注册或覆盖它；源版本依据被升级实例的历史绑定，不依据另一个实例已改变的全局 active 指针。每次保留该实例 ID、owner、target 与独立 state，且不改变另一实例。错误 owner/from/manifest、冻结、不兼容或无效 finality 继续拒绝且不扣升级费；不能用 rollback 事件或冻结正常 v1 代替 upgrade。
+- **共享内容不丢 manifest**：`wasm_hash` 只标识内容，同模块不同 version、不同模块可以共享 bytes，但各自完整 manifest identity 必须保留。标准保存后的 Observer 与普通恢复均能读取全部合法记录，包括 inactive 记录；不以最后写入的 `<hash>.meta.json` 覆盖结果当作唯一 manifest。坏 bytes、错误 manifest identity 仍拒绝，Observer 不写源目录。
+
+| 独立验收 | 最小可判定场景 | 不足以代签的样例 |
+| --- | --- | --- |
+| 退休闭包（P1） | 真实安装 inactive A，保留另一合法模块 B，销毁 A 后分别做 snapshot、目录、canonical CAS restart；核对历史记录、A 不可执行和 B 正常，再验证 active 销毁与未退休 missing bytes 负例。 | registry 为空的 artifact fixture、只有销毁前 baseline+tail、单独缓存读取。 |
+| 多实例升级 | A 升级 v2 后保存/恢复，再升级仍在 v1 的 B；比较两者身份/state、收费与 upgrade 事件，并覆盖上述拒绝路径。 | 单实例升级成功、用 rollback 或重装生成新实例。 |
+| 共享内容 | 同模块两版本及不同模块共用 H，标准 writer 保存后通过真实 Observer 加载；单 active/全 inactive 与受支持 inline/non-inline 各测一次，覆盖错误 hash/identity。 | 仅普通 inline round-trip、新 service 旁路不读该格式。 |
+
+<a id="gameplay-mode-identity-contract"></a>
+### Gameplay mode 的统一判等
+
+补齐 [#4497](https://github.com/eng-cc/oasis7/issues/4497) 所承接的 mode 边界：manifest 原文及其 hash 保持不变，所有 mode 校验、active-slot 冲突检查、readiness 查询与恢复后投影使用同一派生 key `mode.trim()`；不额外做大小写或其他字符归一化。manifest 声明的空 key 拒绝，单 manifest 中派生 key 重复拒绝；查询保留现有空输入行为，不由此新增错误返回。同 kind 的 `sandbox` 与 ` sandbox ` 占用同一槽，不得双重激活，也不得出现激活成功却查询不到的覆盖。
+
+这是现行合同的一致性目标，不声称当前所有消费者已经统一。register/activate/deactivate/upgrade 及 snapshot/replay 后以相同输入判定；旧合法原文字节可读，恢复不得静默改写 manifest、覆盖冲突或任选一个 active record。测试分别覆盖单条带空白的合法声明、单 manifest 重复、跨 manifest 同槽冲突、不同 kind 合法覆盖和恢复后的相同 readiness；设计接线见[派生 mode key](module/module-lifecycle.md#gameplay-mode-key-design)。
 
 ## 基础设施专业接受与事实边界
 

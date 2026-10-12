@@ -15,10 +15,10 @@
 
 > 目标：用**内容寻址**与**审计元数据**管理 WASM 模块，支持可回放、可治理的动态装载。
 
-**存储布局（示意）**
-- `module_registry.json`：模块索引（哈希 → 元数据）
+**现有存储布局（兼容示意）**
+- `module_registry.json`：模块索引（`module_id/version` → 完整 manifest 与注册记录）；内容哈希不是 manifest 主键。
 - `modules/<wasm_hash>.wasm`：WASM 工件（只读、内容地址）
-- `modules/<wasm_hash>.meta.json`：模块元信息（manifest 快照）
+- `modules/<wasm_hash>.meta.json`：旧版单 manifest 元信息；不能表示共享 H 的多个不同 manifest。新保存/Observer 合同见[共享内容与退休闭包](#module-retirement-and-shared-content)，此旧布局不再是新实现应复制的完整方案。
 
 **module_registry.json（示意结构）**
 ```
@@ -193,7 +193,7 @@ fn apply_governed_proposal(changes: ModuleChangeSet) -> Result<()> {
 - `module_id` 在 `register/activate/deactivate/upgrade` 内不得重复冲突。
 - `register` 与 `upgrade` 不能同时针对同一 `module_id`。
 - `activate` 与 `deactivate` 若同时出现，按顺序执行，但必须显式声明（避免隐式切换）。
-- `upgrade` 需要 `from_version` == 当前激活版本；`to_version` 必须单调递增。
+- 此处 `ModuleChangeSet.upgrade` 是全局版本注册/激活操作，`from_version` 校验当前全局激活版本；`to_version` 必须单调递增。对持久实例执行正常 upgrade 时，仅将“目标必须首次注册”和“源版本取全局 active”分别替换为注册复用与实例源版本判断；其余既有版本合法性约束保留，见[实例迁移](#instance-upgrade-version-reuse)。
 - `register` 后默认不自动激活，需显式 `activate`（保证可审计变更意图）。
 - 所有变更均需通过 shadow 校验（hash/ABI/limits/caps）。
 
@@ -327,6 +327,66 @@ ManifestMigrated {
 - artifact 市场只允许当前 owner 上架、下架或销毁；结算时校验正价格、价格资源类型与余额，成交后转移 ownership 并清理相关 offer/bid。active instance 仍引用 artifact 时拒绝销毁。
 - 费用事件只在成功动作路径产生；旧事件新增字段使用明确兼容默认值，replay 不重新撮合、不重新报价，也不把历史订单视为保证成交。
 
+<a id="module-retirement-and-shared-content"></a>
+## 退休、共享内容与持久消费者的一致设计
+
+本节承接 [runtime 保存与恢复合同](../prd.md#module-store-persistence-and-recovery-contract)，补齐 #4417 的退休、升级与共享内容分项。基准 `5e930face77dd284bbba6186fd997e7e63fa9164` 仍在退休时移除 bytes、在保存/恢复时遍历全部 registry；`ModuleStore` 仍只按 H 写 metadata，Observer 逐条比较完整 manifest。这些是待修的不同路径，不从本文推导为已经可用，也不重做已有 direct/trusted command 隔离设计。
+
+### 退休事实与恢复所需材料
+
+1. 退休准入保持 owner、费用、reason、active instance 和 legacy active 引用检查。销毁后的运行状态移除当前 artifact membership/执行 bytes，并按现行合同清理 cache；registry 历史、实例身份和 schedules 保留。恢复不得因历史 registry 尚在就重新启用该模块。
+2. 目标持久表示必须保留可验证、绑定该 artifact 和已接受销毁事件的退休事实。writer 与 snapshot/CAS 使用同一判定，将“已退休的历史引用”与“仍需执行的引用”区分。只有前者可以缺当前执行 bytes；仅凭 owner 不存在、bytes map 为空、文件缺失或可变缓存不能推断退休。当前 raw destroyed event 的 state-only 兼容行为仍独立，不能仅回放该事件就伪造已完成 sidecar 退休。
+3. 在发布可确认的生命周期结果前，候选的 registry、退休事实、可执行 bytes、实例引用和持久闭包必须能由受支持 reader 一致重建；失败则不发布这一成功转换。canonical CAS 不能只序列化成功就接受不可重建的候选。已经持久提交或提交结果未知时，沿既有 generation/commit 核对恢复，不能倒写未提交或删掉旧事实。
+4. 保留窗口内的旧 snapshot、历史版本执行及受支持 replay 仍需的工件属于历史闭包，不能与当前执行 bytes 一同 GC；具体存储保留仍由[存储治理](../runtime/runtime-storage-footprint-governance.prd.md)拥有。当前不存在受支持的退休持久表示时，实施必须先补其 reader/writer 与明确兼容策略，不能通过全局忽略 missing bytes 放行。
+
+退休判定属于所捕获版本的生命周期状态，不是对 H 的永久全局黑名单。后续显式、合法的同 hash 重新发布仍遵守现有准入与收费，只有新的已提交生命周期转换才能改变当前可用性；不能借缓存或旧 registry 自动复活，也不能重写退休前后已经固定的历史 snapshot。
+
+### 两种身份与共享 bytes
+
+`wasm_hash=H` 标识一份内容；registry 的 `module_id/version` 及完整 manifest 标识一条不可覆盖的注册记录。两个 manifest 可以指向 H，不能把两个 manifest 当成同一对象。一次捕获的 immutable generation 固定完整 registry/manifest 集及 H 的内容引用，读取顺序不影响恢复结果。
+
+新 writer 以 generation 内受哈希绑定的完整 registry manifest 为元数据真值，WASM bytes 继续按 H 去重；若需要独立 metadata 文件，则按完整 manifest 的内容摘要引用并绑定到同一 generation，不能继续用单个 H 槽覆盖多个 manifest。不能从 module/version 裸字符串拼出未校验路径。新格式必须有明确识别方式；旧格式仍走其既有精确校验，不将不兼容目录静默当新格式读取。
+
+Observer 和普通 reader 先核对所选 generation、全部 manifest 身份与其内容引用，再按同一退休判定取得必需 bytes。inline bytes 只改变取材位置，不绕过元数据/内容校验；all-inactive 也不能省略历史 registry。合法退休只放宽对应历史工件的当前 bytes 要求，不放宽活跃或未退休工件的 hash、identity、权限/兼容检查。Observer 保持只读、no-follow 与现有预算，不能现场补 meta、覆盖源目录或借较新 cache 修补旧 checkpoint。
+
+<a id="instance-upgrade-version-reuse"></a>
+### 实例升级与注册复用
+
+正常实例 upgrade 分开准备“确保目标版本已合法注册”和“迁移该实例”。前者在目标不存在时复用现有注册准入；已存在时比较完整 manifest，一致才复用、不重复注册，不一致拒绝。后者从目标实例 ID 读取其当前 module/version/hash、owner、target、state 及兼容要求，`from_version` 与该实例匹配；A 改变全局 active 不能让仍在 v1 的 B 变成错误源版本。
+
+既有目标版本合法性及 owner/artifact/冻结/interface/export/subscription/capability/limits/finality 校验不因复用省略，目标等于本实例当前版本仍拒绝；正常 upgrade 的版本约束以实例源版本判断，rollback 保持独立入口，不新增版本排序算法。`activate` 对全局视图的作用仍受既有规则约束，不能偷偷迁移其他实例。目标注册（若需要）、该实例升级、费用、既有调度变更和业务事件通过现有 prepared publication 一起提交。任何失败不留下半注册、半迁移或升级扣费；已有 proposal/shadow/approval 与 failure audit 的边界保留。
+
+成功结果保留原实例 ID、owner、target 和独立 state，以真实 upgrade 事件记录新版本绑定。不得改用 rollback 审计、额外冻结正常 v1，或通过 install 新实例冒充迁移。snapshot/replay 保留 A/B 各自绑定；恢复后 B 仍可升级到同一 v2。通用 schema 迁移与完整 SR2 交易目标保持下文的独立范围。
+
+<a id="gameplay-mode-key-design"></a>
+### Gameplay mode key 的单一派生
+
+承接 [mode 判等合同](../prd.md#gameplay-mode-identity-contract)：在 Gameplay layer 共用 `mode.trim()` 派生逻辑，给 manifest 去重、变更后 `(mode, kind)` 槽检查及 readiness 两边的 mode 比较使用。保留原始 manifest 和其哈希，不在 register/load 时原地修剪字段；查询返回的规范 mode 与原 manifest 展示内容应区分。snapshot/replay 重建同一派生视图；冲突不得以排序后取首项来隐藏。此接线修正不增加新的 wire identity、字符归一化或原始 manifest 迁移。
+
+<a id="module-lifecycle-recovery-validation"></a>
+### 独立验证与兼容边界
+
+以下为待执行回归，优先扩展现有 `runtime/tests/persistence.rs`、`runtime/tests/module_action_loop_release_controls_tests.rs`、Observer load 与 chain runtime recovery tests；存在这些测试文件不表示本矩阵已通过。
+
+| 场景 | 输入与检查 | 必须保留的负例/边界 |
+| --- | --- | --- |
+| 退休后 snapshot | 正常安装 inactive A，并保留 B 的 bytes；合法销毁 A 后直接 snapshot/from_snapshot，历史 A 可查、不可执行、B 正常。 | active 引用销毁拒绝；未退休缺 bytes 拒绝；空 registry fixture 不代签。 |
+| 退休后目录与 CAS | 对同一销毁后状态分别 save/load、提交 canonical CAS 后 restart；核对 registry、退休事实、身份/状态及可继续操作的 B。 | 不用销毁前 baseline+tail 或较新 cache 代替；失败准备零部分发布。 |
+| 原始销毁兼容 | 通过原 raw destroy event 路径重放并比较 sidecar。 | 保留该入口既有 state-only 行为，不擅自删除持久 bytes 或把事件存在等同合法退休事实。 |
+| 同 H 后续重新发布 | 捕获退休后的旧 snapshot，再显式合法重新发布同 H 并捕获新 snapshot；分别独立恢复并继续运行。 | 旧 snapshot 的退休状态不被新 cache/registry 改写；只有新已提交生命周期允许当前工件重新可用。 |
+| 多实例正常升级 | A/B 在 v1，A 升 v2，snapshot/replay 后 B 再升同 v2，保留各自 ID/owner/target/state 及一次升级费。 | 同实例相同版本、不同 manifest、错 owner/from、冻结、不兼容、无效 finality 拒绝；无 rollback 事件或额外冻结。 |
+| 共享 H 的 Observer | 同模块两版本、不同模块分别共享 H；经标准 writer 保存再走真实 Observer，单 active/全 inactive，支持的 inline/non-inline 分别覆盖。 | 错 manifest/hash、坏 bytes、损坏或不支持旧格式拒绝；源目录无新增或改写。 |
+| mode 一致性 | 单条 ` sandbox ` 可被 canonical 查询发现；同 manifest 重复与同 kind 跨 manifest 冲突拒绝；不同 kind 覆盖合法，恢复后结果相同。 | 所有生命周期入口一致；raw manifest/hash 不变；不增加大小写归一化。 |
+
+<a id="revoked-grant-discovery"></a>
+### 撤销历史与当前能力目录
+
+目录遵守 [WASM capability 合同](../wasm/wasm-interface.md#3-capability权限和-kernel-边界)，保留持久 grant 历史，由已验证的当前 authority/revocation 状态排除明确 revoked/superseded 的条目，再投影其余有效声明与授权。合法撤销 A 不应阻断独立有效 B；损坏签名、错误 authority/proof 或不可解释冲突仍拒绝，不能改成吞掉所有验证错误。执行时仍重验 live revocation，旧目录不能重新授权 A。
+
+针对 #4502，待执行回归必须先成功注册 A/B，再合法撤销 A，然后真实调用目录派生及 B 的调用上下文生成：A 不可发现/执行，B 仍可发现；受支持 snapshot round-trip 和 journal replay 后同义。先撤销 A 再尝试注册 A 的 fixture 不覆盖此场景。该投影修复不等于生产 Agent E2E、command 实例隔离或全体能力迁移验收。
+
+文档 PR 只证明这些设计边界已写明；退休 P1 先行，其余分项可独立实现验收。旧格式有缺失或不可证明退休事实时，应明确拒绝或采用另有验证的迁移，不把“缺 bytes”当成默认兼容值。
+
 ## SR2 目标合同：运行时生命周期的十二视图
 
 本节 owner 为 runtime_engineer；审读基线为 `9c41d57b4436f71f0cf9b481043d882cfdc551ed`，2026-09-26 文档作者审读；独立 review 尚未完成。原文的当前义务和草案资格保持有效。以下为实际目标设计，未实现，不修改当前 wasm-1、市场规则、费率或上述 governed proposal prepared seam 的 partial 边界。本次文档变更采纳的是目标文档合同，不是运行能力或 proof 状态。
@@ -341,6 +401,8 @@ ManifestMigrated {
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
+| [保存/实例合同](../prd.md#module-store-persistence-and-recovery-contract) | 退休可恢复、多实例升级、共享内容各自成立 | [生命周期闭包](#module-retirement-and-shared-content) | Runtime/WASM store/Observer 与 chain recovery | 文档不证明格式迁移或实现完成 |
+| [mode 判等合同](../prd.md#gameplay-mode-identity-contract) | 校验、active slots、readiness 与恢复同义 | [mode key](#gameplay-mode-key-design) | Gameplay layer/runtime | 不改原 manifest/hash 或新增 wire |
 | [req-dwe-003](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003) | exclusive winner / no collateral termination | [sr2-pending-contract](module-lifecycle.md#sr2-pending-contract) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | current Agent chat superseded 不证明 general lineage |
 | [sr2-migration-contract](../wasm/wasm-interface.md#sr2-migration-contract) | all objects atomic, old bytes replay retained | [sr2-migration-publication](module-lifecycle.md#sr2-migration-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | 完整 migration 未执行 |
 | [sr2-release-acceptance](online-module-release-legality-closure-2026-03-08.prd.md#sr2-release-acceptance) | canonical inclusive version boundary and historical schedule | [sr2-activation-contract](module-lifecycle.md#sr2-activation-contract) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | prototype finality 非 BFT |
@@ -398,6 +460,8 @@ Production 不能从本地 unsigned/self-signed receipt、CI artifact 或 health
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [保存/实例合同](../prd.md#module-store-persistence-and-recovery-contract) | [生命周期闭包](#module-retirement-and-shared-content) | 退休、升级、共享 H 分别验证 | [本页独立矩阵](#module-lifecycle-recovery-validation)；使用真实安装、两实例及标准 writer/Observer/CAS，不以空 registry 或普通 inline round-trip 替代 | 实施 PR 的实际命令、候选、状态/费用/目录对照 | 本文未运行；不代签完整 SR2、跨主机或新 wire |
+| [mode 判等合同](../prd.md#gameplay-mode-identity-contract) | [mode key](#gameplay-mode-key-design) | lifecycle/readiness/restore 使用相同派生 key | [mode 一致性矩阵](#module-lifecycle-recovery-validation)；分别覆盖 trim、重复、同槽冲突、不同 kind 与恢复 | 实施 PR 的原 manifest/hash 与查询/拒绝结果 | 当前仅目标设计，无业务回归结果 |
 | [req-dwe-003](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003) | [sr2-pending-contract](module-lifecycle.md#sr2-pending-contract) | exclusive winner / no collateral termination | SR2-RT-02/03; LIN-01..04; required both canonical orders/same-block tie/duplicate/restart; full actual consumer readback；[located partial source](../../../crates/oasis7/src/runtime/tests/module_action_loop_release_controls_tests.rs) | candidate-bound artifact + GWSC matrix | current Agent chat superseded 不证明 general lineage |
 | [sr2-migration-contract](../wasm/wasm-interface.md#sr2-migration-contract) | [sr2-migration-publication](module-lifecycle.md#sr2-migration-publication) | all objects atomic, old bytes replay retained | SR2-RT-07/08; MIG-01..03; required bad second object/output/context/post-prepare injections; module_lifecycle.rs shadow_failure_blocks_apply/replay_preserves_module_events 是 partial locator；[located partial source](../../../crates/oasis7/tests/module_lifecycle.rs) | Task evidence state/journal/charge/receipt equality | 完整 migration 未执行 |
 | [sr2-release-acceptance](online-module-release-legality-closure-2026-03-08.prd.md#sr2-release-acceptance) | [sr2-activation-contract](module-lifecycle.md#sr2-activation-contract) | canonical inclusive version boundary and historical schedule | SR2-RT-04/05; ACT-01/MET-01; before/at/after boundary, old-submit/new-finalize, missing activation/artifact; full canonical proof replay；[located partial source](../../../testing-manual.md) | candidate-bound activation and replay artifact | prototype finality 非 BFT |

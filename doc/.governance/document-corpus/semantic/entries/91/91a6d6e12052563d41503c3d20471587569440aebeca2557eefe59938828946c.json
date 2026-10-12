@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "e77c557b1da058fde017122e2a1ffdd6b6b80e0d2ec09d22301896973e1e3ad7",
+    "content_sha256": "8adef8c588aae644c102705b8c447584d5a5db03e3170c865594dc73f729b649",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_design_companion",
-    "note": "current draft module lifecycle companion; not implemented production capability evidence",
+    "note": "current draft module lifecycle companion; not implemented production capability evidence Scoped document review for #4417 and #4497: preserve independent retirement recovery, instance-version reuse, shared-content metadata and canonical mode obligations, including raw-event compatibility and historical snapshots. Revoked-grant discovery and failed tick wording remain bounded by existing authority and execution checks. Review only; no implementation, replay, security or release acceptance is asserted. Existing authority, owner and disposition are retained.",
     "path": "doc/world-runtime/module/module-lifecycle.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
