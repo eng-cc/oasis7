@@ -157,6 +157,36 @@
       "sha256": "2d2138a1f66ed1a5a0a02e9feb44aa503629ff75ba13a89324936562be9b1e06",
       "byte_length": 6666,
       "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-final-ci-failed.log",
+      "sha256": "47d94cd4e20b4da82c4f0b0e40361c3a69aac2d26de06548dce0f9ea895f243a",
+      "byte_length": 2361398,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-stale-action-red.log",
+      "sha256": "c5abefc3dffbef502075d7dbd8988931278c4fdde6343ebdcfb1a0382229b40d",
+      "byte_length": 2434,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-stale-action-attempt2-red.log",
+      "sha256": "8da7246346717e54f9660e843ab9233a27e47d89793e235ec731375f993a5b8e",
+      "byte_length": 2976,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-stale-action-attempt3.log",
+      "sha256": "681b6cf57dcc13a9af3a2efa21bf67e6be2b5ac03906d245387c547288ceb39d",
+      "byte_length": 5053,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-action-repair-clippy.log",
+      "sha256": "79fc1416a6bb23749a14e2b3159908fc6d0b37549d42e8f719b5aa8c2a595741",
+      "byte_length": 163,
+      "status": "original local raw log retained"
     }
   ],
   "scope": "ordinary fixture/code verification; not substitute autonomous play",
@@ -228,6 +258,43 @@
         "ignored": 3,
         "seconds": 52.47
       }
+    }
+  },
+  "ci_action_repair": {
+    "failed_source": "e4f17103a7ee635f3b5fe0b37e8b9b53e004106e",
+    "run": "https://github.com/eng-cc/oasis7/actions/runs/38255196306",
+    "native_results": {
+      "passed": 549,
+      "failed": 1,
+      "ignored": 16
+    },
+    "cause": "After capture succeeded, background canonical advancement legitimately rejected the original Cognition. The test covered settled rejection during capture but still unwrapped first action admission.",
+    "boundary": "Only an independently looked-up original Rejected/Expired operation permits a new preparation. Unknown original freezes replacement. Production admission and original single-delivery oracle remain authoritative.",
+    "code_source": "29a8ca72dec65977fa450135839f7d2ea6a0a4e2",
+    "red": {
+      "forced_two_tick_action_rejection": "reproduced canonical rejection",
+      "elapsed_seconds": 19.79
+    },
+    "intermediate_failure": "Next immutable private prepare hit Transport after actual abort; retry now preserves the identical signed proof for Transport/Cooldown only.",
+    "green": {
+      "passed": 1,
+      "failed": 0,
+      "elapsed_seconds": 41.94,
+      "forced_stale_prefix": true,
+      "forced_stale_action": true,
+      "actual_public_context_release": true,
+      "unique_transit_and_restart_result": true
+    },
+    "cli_gap": "The fixture public fresh-base release path does not demonstrate automatic refresh of the ordinary client cached outcome; the Skill explicitly documents waiting for lease expiry after settled rejection.",
+    "strict_all_target_clippy": {
+      "source": "29a8ca72dec65977fa450135839f7d2ea6a0a4e2",
+      "exit_code": 0
+    },
+    "failed_fixture_cleanup": {
+      "owned_roots": 2,
+      "owned_ready_files": 2,
+      "original_processes_absent": true,
+      "public_receipt": "oasis7-logistics-stale-action-public-red-fixtures.json"
     }
   }
 }

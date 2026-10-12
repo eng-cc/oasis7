@@ -50,7 +50,7 @@ Ledger IDs are `world`, `agent:<id>`, `site:<id>` or `factory:<id>`. Routes are 
 
 Each context has one original action shared by movement and transfer. Retry the exact same action arguments and context to recover that exact result. Changing the action kind, route order, ledgers, amount or other arguments conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
 
-If the original action is canonically rejected or expired, retain that result and use a fresh context for a new decision. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
+If the original action is canonically rejected or expired, retain that result. Rejection does not necessarily release its active context: obtain a committed terminal outcome or wait for the context's bounded lease to expire before capturing a new decision context. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
 
 ## Recover and finish
 
@@ -60,7 +60,7 @@ For a lost response, use `lookup --kind prefix|action|outcome` with the original
 <client> --config <device.json> outcome --context <context-id> --reason executor_aborted
 ```
 
-The other supported reasons are `provider_failed` and `transport_exhausted`. Do not place private explanation text in public reasons. Expired contexts cannot be decrypted through this CLI; a fresh context retires expired pending work when current grants permit it. Grant expiry requires owner renewal or Stop, not unauthorized reuse.
+The other supported reasons are `provider_failed` and `transport_exhausted`. Do not place private explanation text in public reasons. An outcome can itself be rejected when the world advances beyond its captured base. This CLI preserves that immutable original outcome; it does not automatically re-sign it with a fresh base. Query its original result and, after confirmed rejection, wait for the context lease to expire if it remains active. Expired contexts cannot be decrypted through this CLI; a fresh context retires expired pending work when current grants permit it. Grant expiry requires owner renewal or Stop, not unauthorized reuse.
 
 After goal publication, executor replacement, Stop or delegation revocation, old contexts cannot authorize new effects. Query original settled results, reread `task`, and capture a fresh context only while still authorized. On Stop or revoked authority, stop acting and report the boundary. Do not rebind yourself or alter the owner goal.
 

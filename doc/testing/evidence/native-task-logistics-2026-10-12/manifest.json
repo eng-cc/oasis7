@@ -51,7 +51,8 @@
     "model disconnect/process restart",
     "GUI",
     "full Game HTTP writes",
-    "deployment"
+    "deployment",
+    "ordinary client automatic stale-context abort refresh"
   ],
   "source_clauses": [
     {
@@ -143,8 +144,8 @@
     },
     {
       "path": "ordinary-regressions.json",
-      "byte_length": 9605,
-      "sha256": "8b070eab5f70ac9c9fb81ddc7309a1755d226602e68177e5c08b9774827bfac1",
+      "byte_length": 12659,
+      "sha256": "19f8b2fb1b7f931d85fc96710dca0bc382cc1ed641ee7d9e658b7b362b5f5c55",
       "collector": "parent original private-test-world evidence"
     },
     {
@@ -166,6 +167,11 @@
       "collector": "parent original private-test-world evidence"
     }
   ],
-  "ordinary_repair_source": "3d461030b848ccb19799eef6b3d0e3bb25ea29e2",
-  "ordinary_repair_boundary": "Test harness only; original live source/build/player identities retained. Final-source CI must be checked separately."
+  "ordinary_repair_source": "29a8ca72dec65977fa450135839f7d2ea6a0a4e2",
+  "ordinary_repair_boundary": "Test harness only; original live source/build/player identities retained. Final-source CI must be checked separately.",
+  "later_skill_documentation": {
+    "sha256": "c7ee4bc7363e7863355553139600ca0ae81b486674f3ef80c686158ceccf9418",
+    "byte_length": 7248,
+    "scope": "Clarifies existing active-context lease and stale immutable outcome recovery limits; no new CLI behavior. The original builds.skill hash and player source still identify the original326 play. No additional model run for documentation-only changes."
+  }
 }
