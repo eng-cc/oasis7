@@ -12,8 +12,11 @@
 | [AUTONOMY.md](AUTONOMY.md) | 用户授权、外部任务、隐私和规则修改边界 |
 | [WORKFLOW.md](WORKFLOW.md) | 读取上下文、分析、实施协作、核实与交付的方法 |
 | [REPORTING.md](REPORTING.md) | 面向用户的进度、评审和交付表达 |
+| [SCHEDULE.md](SCHEDULE.md) | 每天各时间点要执行的事项，当前为每天 13:00 的 CI 回顾 |
+| [HEARTBEAT.md](HEARTBEAT.md) | 每 20 分钟检查到期项、去重派工及收取结果的方法 |
+| [CI 回顾任务](tasks/ci-duration-review.md) | 交给 subagent 的前一日 CI 耗时与合入卡点检查说明 |
 
-先读本文件，再依次读取 ROLE、AUTONOMY、WORKFLOW、REPORTING。通用开发规则只由[开发流程规范](../../doc/engineering/workflow/source-of-truth.md)拥有；仓库入口为 [AGENTS.md](../../AGENTS.md)。本目录不增加 Issue、Project、固定角色链、审批材料或 CI 放行条件。
+先读本文件，再依次读取 ROLE、AUTONOMY、WORKFLOW、REPORTING。通用开发规则只由[开发流程规范](../../doc/engineering/workflow/source-of-truth.md)拥有；仓库入口为 [AGENTS.md](../../AGENTS.md)。本目录不增加 Issue、Project、固定角色链、审批材料或 CI 放行条件。执行时间表任务时，再读取 SCHEDULE、HEARTBEAT 和对应任务说明；仅审阅其他文件时不启动巡检。
 
 ## 启用方式
 
@@ -35,6 +38,14 @@
 
 OpenAI 的 [dot 入门说明](https://help.openai.com/en/articles/20001530-getting-started-with-your-dot)介绍了 Custom rules、连接权限和任务上下文；这些产品设置与本目录文件分开管理。该说明还提示各任务有独立对话，不自动获得所有 dot 对话内容。产品信息核对日期：2026-10-12；界面与能力按实际账户核实。
 
+## 时间表与巡检
+
+时间表定义“何时做什么”，HEARTBEAT 定义“一轮如何协调”，任务说明定义“subagent 做什么”。主 Agent 在这些例行任务中只查到期状态、派工、跟踪和汇总，不代做 CI 分析；这不改变普通交互任务或仓库通用流程的分工。
+
+当前仅提供文件约定，尚未接入或启用实际 20 分钟触发器、持久执行记录和 subagent 派工适配器。2026-10-12 核对的 [ChatGPT 定时任务说明](https://help.openai.com/en/articles/10291617-scheduled-tasks-in-chatgpt)规定付费周期任务最高每小时一次；不能用本目录保证 20 分钟周期，也不拆成多个任务绕过限制。项目内定时任务不能依赖项目附件，运行器须能通过授权的 GitHub 连接读取选定规则版本。
+
+接入支持该周期的运行器后，才按 HEARTBEAT 核实实际触发器、状态存储、子任务和通知。不能把时间表的一行、PR 合入或手动试读称为“已开始巡检”；本 PR 不附带部署脚本或新的宿主服务。
+
 ## 初次试用
 
 以下是人工试用示例，不是新增仓库门禁，也不表示本 PR 已完成真实 dot 行为测试。
@@ -49,4 +60,4 @@ OpenAI 的 [dot 入门说明](https://help.openai.com/en/articles/20001530-getti
 
 ## 维护
 
-只在职责、协作方式或用户长期约束改变时修改本目录。项目目标、架构、实时进度和部署参数继续留在各自现有来源，不复制到这里。修改按普通独立分支和 PR 流程进行；自身提出的规则修改在获准采用前不扩大自身权限。试用反馈在当前对话或该 PR 内处理，不另建配置治理系统。
+只在职责、协作方式、时间表或用户长期约束改变时修改本目录。项目目标、架构、实时进度和部署参数继续留在各自现有来源，不复制到这里。修改按普通独立分支和 PR 流程进行；自身提出的规则修改在获准采用前不扩大自身权限。试用反馈在当前对话或该 PR 内处理，不另建配置治理系统。
