@@ -3,6 +3,11 @@
 - 对应设计文档: `doc/world-simulator/llm/llm-lmso29-stability.design.md`
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 
+本专题维护预算调优与稳定性要求。当前必需观测、目标、最新查询结果的保护和
+不可容纳时的停止行为由 [builtin 输入合同](decision-provider-contract.prd.md#builtin-input-integrity)
+及其 [请求设计](decision-provider-contract.design.md#builtin-request-contract) 定义；
+阈值放宽与摘要压缩必须遵守该合同，历史稳定性样本不证明当前请求已保留这些输入。
+
 审计轮次: 5
 
 ## 1. Executive Summary
@@ -70,5 +75,9 @@
 
 - 本文保留 prompt-budget、协议兼容和稳定性约束；历史任务状态、运行
   产物与执行证据由 PR 与实际验证记录 和 Git history 管理。
+- 当前输入完整性按 [builtin 确定性验收](decision-provider-contract.prd.md#ac-builtin-input-integrity)
+  检查最终 Responses 请求及配置不足时的调用阻断；本专题的 peak/soft-cap 单测和
+  稳定性统计分别保留其证明范围，不替代该验收。
 - 扩大上下文预算只是一项受测的稳定性调整，不证明模型/provider 切换、
   长时成本、无漂移行为或 release readiness。
+

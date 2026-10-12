@@ -9,7 +9,7 @@
 - Product PRD-ID：`PRD-PRODUCT-003`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-10-10`
+- Last reviewed：`2026-10-12`
 - 后继文档：`无`
 - 下层专业域：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 
@@ -100,11 +100,11 @@ Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[A
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
 | SC-1 | runtime_engineer | PRD-WORLD_SIMULATOR-001/002/003 | `doc/world-simulator/prd.md` | 场景初始化、事件与回放证据 | test_tier_required |
-| SC-2 | agent_engineer | PRD-WORLD_SIMULATOR-016-019 | `doc/world-simulator/prd.md` | live provider 和权威行为闭环 | test_tier_required |
+| SC-2 | agent_engineer | PRD-WORLD_SIMULATOR-016-019 / PRD-WORLD_SIMULATOR-036 | `doc/world-simulator/prd.md`；[builtin 输入完整性](../../world-simulator/llm/decision-provider-contract.prd.md#builtin-input-integrity)与[参数说明一致性](../../world-simulator/llm/decision-provider-contract.prd.md#builtin-parameter-consistency) | live provider 和权威行为闭环；builtin 的[输入完整性验收](../../world-simulator/llm/decision-provider-contract.prd.md#ac-builtin-input-integrity)与[参数一致性验收](../../world-simulator/llm/decision-provider-contract.prd.md#ac-builtin-parameter-consistency)分别提供专业证据，不代签完整玩家体验或其它 provider 支持 | test_tier_required |
 | SC-3 | viewer_engineer | PRD-WORLD_SIMULATOR-039/041/046 | `doc/world-simulator/prd.md` | 主 Web Viewer 真实世界交互证据 | test_tier_required |
 | SC-4 | qa_engineer | PRD-WORLD_SIMULATOR-020-031 | `doc/world-simulator/prd.md` | 模式、转移与多入口 claim 回归 | test_tier_required |
 | SC-5 | runtime_engineer / agent_engineer / gameplay_designer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-001 / PRD-WORLD_RUNTIME-001 / PRD-GAME-008 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/game/prd.md`; `doc/testing/prd.md` | 等价重排序、冲突、重复投递、重试与 replay 的 accepted/rejected 集合、单次效果，以及 Viewer/pure API 解释一致性证据，包含 S6 玩家 surface 核对 | test_tier_full |
-| SC-6 | agent_engineer / viewer_engineer | PRD-WORLD_SIMULATOR-016 | `doc/world-simulator/prd.md` | 观测新鲜度、不确定性与刷新/纠正/重排路径证据，包含正式玩家 surface 的 S6 交互闭环 | test_tier_required |
+| SC-6 | agent_engineer / viewer_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-036 | `doc/world-simulator/prd.md`；[builtin 当前输入与不足处理](../../world-simulator/llm/decision-provider-contract.prd.md#builtin-input-integrity) | 观测新鲜度、不确定性与刷新/纠正/重排路径证据，包含正式玩家 surface 的 S6 交互闭环；builtin 必需输入与配置不足另按[专业验收](../../world-simulator/llm/decision-provider-contract.prd.md#ac-builtin-input-integrity)取证，局部 fixture 不代签 S6 | test_tier_required |
 | SC-7 | agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-WORLD_SIMULATOR-001 / PRD-WORLD_SIMULATOR-016 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 | `doc/world-simulator/prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/product/world-rules-core-gameplay/prd.md`; `doc/product/world-infrastructure/prd.md` | Agent 工业约束到权威后果与玩家反馈的端到端证据；工业、市场、物流和治理的产品语义由 `doc/product/world-rules-core-gameplay/prd.md` 提供，`doc/product/world-infrastructure/prd.md` 仅提供最终性、确定性执行与状态连续性保证 | test_tier_required |
 | SC-8 | producer_system_designer / gameplay_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 账号绑定/认领可读性、首次承诺与持续维护选择、受限启动帮助边界，以及无法维持时的恢复/释放/重规划玩家 surface 证据；不复制数值、字段或状态机 | test_tier_required |
 | SC-9 | producer_system_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | `doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 对话、草稿、默认/override、accepted/applied/rejected/blocked 与窄屏可达性对账 | test_tier_required |
@@ -119,3 +119,4 @@ Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[A
 - 不在产品层决定 Viewer 组件、Launcher 协议、provider 或 runtime 实现。
 - 不将 mock、software-safe、本地回退或单次截图包装为真实产品闭环。
 - 不复制 `world-simulator` 专题 PRD、project 任务或测试步骤。
+
