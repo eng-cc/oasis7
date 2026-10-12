@@ -76,7 +76,7 @@
     },
     {
       "path": "doc/world-simulator/llm/external-agent-game-api.design.md",
-      "fragment": "当前实施候选原生物流执行",
+      "fragment": "\u5f53\u524d\u5b9e\u65bd\u5019\u9009\u539f\u751f\u7269\u6d41\u6267\u884c",
       "clause_ids": [
         "native-logistics-candidate"
       ],
@@ -143,8 +143,8 @@
     },
     {
       "path": "ordinary-regressions.json",
-      "byte_length": 4281,
-      "sha256": "a6da37164a0e57e0d3a6312d6b115e1962ca7f8164408cd8b51d0315701a9e4a",
+      "byte_length": 9605,
+      "sha256": "8b070eab5f70ac9c9fb81ddc7309a1755d226602e68177e5c08b9774827bfac1",
       "collector": "parent original private-test-world evidence"
     },
     {
@@ -165,5 +165,7 @@
       "sha256": "d7e5eac93b33ecd7b897ff25d746cc46c5fee04b9934b910e71bfb7b663668b9",
       "collector": "parent original private-test-world evidence"
     }
-  ]
+  ],
+  "ordinary_repair_source": "3d461030b848ccb19799eef6b3d0e3bb25ea29e2",
+  "ordinary_repair_boundary": "Test harness only; original live source/build/player identities retained. Final-source CI must be checked separately."
 }

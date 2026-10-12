@@ -79,6 +79,84 @@
       "sha256": "f002bd77232d249af71b8172d3e9c0d0d83820e83a560249585386521e612570",
       "byte_length": 924,
       "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-ci-failed.log",
+      "sha256": "c3a46c0b8f80849942e3c13c1ae3f206a0db609591b3a92c93b40e9886bf2142",
+      "byte_length": 2824863,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-stale-prefix-regression.log",
+      "sha256": "df3ab68af3523a2303393d73c064cd68b8915065f684a709856e5567966f17d9",
+      "byte_length": 2472,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-wait-delay-red.log",
+      "sha256": "37eab6ba1c9391f57736d76d7d4b9c11d837239b06f8c92e9a0d69c5e536ee28",
+      "byte_length": 86037,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-wait-delay-green.log",
+      "sha256": "295142f895677a283ab250d3091ecc200cd83215f3274ff8c42ec63a1d4e4982",
+      "byte_length": 247166,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-wait-write-green.log",
+      "sha256": "bb2b007b3f4b5ffc13c1defafc6132d3f5f888f23c6007e9f053981db8ec9237",
+      "byte_length": 30092,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-wait-write-fixed-green.log",
+      "sha256": "adaf7641013c3416ad0731defdc567df0a3b3d1d4f0417a8ccdbe4568c5a237a",
+      "byte_length": 51939,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-resume-write-fixed-green.log",
+      "sha256": "32e6c1aeadaea9e3901f75e0ad9dfb330bdaa3dcd2f5811b4d6e6a6cc4239c22",
+      "byte_length": 52997,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-rollback-error-unit-green.log",
+      "sha256": "48619c244251899e8b1812ca5c37c1a0dec9e5e4703a0e259e84ace2db78e420",
+      "byte_length": 460,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-wait-final-green.log",
+      "sha256": "7dcd782f753ca6f0f9475ad70f92eeff2a4852f1ed3d64660276ed9ea4c1e844",
+      "byte_length": 297037,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-nested-budget-unit-green.log",
+      "sha256": "00e3eb3870500e46be4ef5ef9cb1b5839a15fe8521ecd4b7303b469093452523",
+      "byte_length": 561,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-hosted-wait-inherited-budget-green.log",
+      "sha256": "8b3f9a5ac12b3ea4b8dcb8d5c3796cc45383a1219976dd3c34f4cdda31aa88b8",
+      "byte_length": 223374,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-ci-repair-clippy.log",
+      "sha256": "5413bc884058b081ec1e55358f7d9c9c7a1de9400495b327532b9f1641bc4468",
+      "byte_length": 162,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-ci-repair-native.log",
+      "sha256": "2d2138a1f66ed1a5a0a02e9feb44aa503629ff75ba13a89324936562be9b1e06",
+      "byte_length": 6666,
+      "status": "original local raw log retained"
     }
   ],
   "scope": "ordinary fixture/code verification; not substitute autonomous play",
@@ -93,5 +171,63 @@
     "command": "env -u RUSTC_WRAPPER CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 cargo test -p oasis7 --bin oasis7_game_client --features test_tier_required",
     "passed": 6,
     "failed": 0
+  },
+  "ci_repair": {
+    "failed_source": "cf7439330d033bd949a22abe314deafabeaa13a5",
+    "run": "https://github.com/eng-cc/oasis7/actions/runs/38248953434",
+    "native_results": {
+      "passed": 541,
+      "failed": 4,
+      "ignored": 16
+    },
+    "causes": [
+      "Logistics context prefix was rejected after legitimate background version advancement; the original test did not settle rejection before refreshing.",
+      "Three existing HostedWait modes stopped at a fixed twelve-second observation deadline despite healthy canonical pipeline progress."
+    ],
+    "repairs": [
+      "Bounded fresh preparation only after exact original lookup confirms Rejected/Expired; unknown original never replaced. The ordinary regression deliberately ages its first prefix by two actual worker ticks.",
+      "Shared bounded completion observation preserves exact resumed digest, committed state, empty pending work and canonical memory; known injected preparation rollback may retry only with matching fault root and actual rollback marker."
+    ],
+    "live_evidence_reuse": "Independent play remains the original326189ecd candidate. These changes affect ordinary regression harnesses only; no new live candidate result is claimed.",
+    "code_source": "3d461030b848ccb19799eef6b3d0e3bb25ea29e2",
+    "local_checks": {
+      "hosted_wait_module": {
+        "passed": 3,
+        "seconds": 36.52,
+        "source": "7b92dde1f"
+      },
+      "wait_write_failure": {
+        "passed": 1,
+        "seconds": 8.77,
+        "source": "7b92dde1f"
+      },
+      "resume_write_failure": {
+        "passed": 1,
+        "seconds": 8.81,
+        "source": "7b92dde1f"
+      },
+      "inherited_budget_delayed_regression": {
+        "passed": 1,
+        "seconds": 28.17,
+        "source": "3d461030b848ccb19799eef6b3d0e3bb25ea29e2"
+      },
+      "rollback_error_classifier": {
+        "passed": 1
+      },
+      "nested_budget_unit": {
+        "passed": 1
+      },
+      "all_target_strict_clippy": {
+        "exit_code": 0,
+        "source": "3d461030b848ccb19799eef6b3d0e3bb25ea29e2"
+      },
+      "native_world_service": {
+        "source": "3d461030b848ccb19799eef6b3d0e3bb25ea29e2",
+        "passed": 35,
+        "failed": 0,
+        "ignored": 3,
+        "seconds": 52.47
+      }
+    }
   }
 }
