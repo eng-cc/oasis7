@@ -181,6 +181,13 @@ pub(super) fn submit_chain_feedback(
     }
 }
 
+fn clear_chain_session_evidence(state: &mut ServiceState) {
+    state.chain_identity = None;
+    state.chain_p2p_status = None;
+    state.chain_observability_status = None;
+    state.chain_replication_status = None;
+}
+
 pub(super) fn poll_service_state(state: &mut ServiceState) {
     poll_process_state(state);
     poll_chain_process_state(state);
@@ -227,6 +234,7 @@ pub(super) fn poll_chain_process_state(state: &mut ServiceState) {
 
     match running.child.try_wait() {
         Ok(Some(status)) => {
+            clear_chain_session_evidence(state);
             state.chain_started_at = None;
             state.last_chain_probe_at = None;
             let exit_line = format!("oasis7_chain_runtime exited: {status}");
@@ -252,6 +260,7 @@ pub(super) fn poll_chain_process_state(state: &mut ServiceState) {
             state.chain_running = Some(running);
         }
         Err(err) => {
+            clear_chain_session_evidence(state);
             state.chain_started_at = None;
             state.last_chain_probe_at = None;
             state.chain_runtime_status =
@@ -276,6 +285,7 @@ pub(super) fn update_chain_runtime_status(state: &mut ServiceState) {
     }
 
     if state.chain_running.is_none() {
+        clear_chain_session_evidence(state);
         if !matches!(
             state.chain_runtime_status,
             ChainRuntimeStatus::ConfigError(_)
@@ -512,6 +522,12 @@ pub(super) fn start_chain_process(
     state: &mut ServiceState,
     config: LauncherConfig,
 ) -> Result<(), String> {
+    if state.chain_running.is_some() {
+        return Err("oasis7_chain_runtime is already running".to_string());
+    }
+
+    clear_chain_session_evidence(state);
+    state.last_chain_probe_at = None;
     if local_chain_runtime_is_blocked(&config) {
         let err = local_chain_runtime_blocked_error(&config);
         state.config = config;
@@ -537,10 +553,6 @@ pub(super) fn start_chain_process(
         state.last_chain_probe_at = None;
         state.mark_updated();
         return Err("chain runtime is disabled".to_string());
-    }
-
-    if state.chain_running.is_some() {
-        return Err("oasis7_chain_runtime is already running".to_string());
     }
 
     let issues = validate_chain_config(&config);
@@ -638,6 +650,7 @@ pub(super) fn stop_process(state: &mut ServiceState) -> Result<(), String> {
 }
 
 pub(super) fn stop_chain_process(state: &mut ServiceState) -> Result<(), String> {
+    clear_chain_session_evidence(state);
     let Some(mut running) = state.chain_running.take() else {
         if !matches!(
             state.chain_runtime_status,
