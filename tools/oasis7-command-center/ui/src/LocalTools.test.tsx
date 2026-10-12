@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalTools from './LocalTools';
-const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn(),snapshot:vi.fn()}));
+const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn(),reconcilePrepare:vi.fn(),submit:vi.fn(),snapshot:vi.fn()}));
 vi.mock('./bridge',async importOriginal=>({...await importOriginal<typeof import('./bridge')>(),connected:()=>true,observedTime:(v:string)=>v,contextBridge:api,toolsBridge:api}));
 const binding={id:'bound',bindingVersion:1,root:'/private/context',storeId:'store',projectId:'oasis7',registeredProjectId:'project',name:'private',directoryIdentity:'identity'};
 const metadata={schema_version:'oasis7.context_entry.v1',project_id:'oasis7',id:'machine',kind:'machine',title:'<img src=x onerror=alert(1)>',environment:'local',owner:'human',tags:['preserved'],state:'active',updated_at:'2026-10-12T00:00:00Z',updated_by:'human',verification:null,credential_refs:[{id:'vault',provider:'native',locator:'opaque',usage:'secret reference'}],links:[]};
@@ -77,6 +77,22 @@ describe('prepare effect boundary',()=>{
     expect(screen.getByRole('button',{name:'准备固定请求'})).toBeDisabled();
     expect(screen.getByRole('button',{name:'核对原准备操作'})).not.toBeDisabled();
     expect(api.prepare).toHaveBeenCalledTimes(1);
+  });
+  it('recovers the exact prepared preview after a lost response without unlocking or replaying',async()=>{
+    const recovered={job_id:'original-job',prepared_fingerprint:'original-frozen-identity',file_sha256:'file-digest',payload_sha256:'payload-digest',operation_key:'original-key',work_dir:'/original/job',result:{status:'PREPARED'}};
+    api.prepare.mockRejectedValueOnce(new Error('transport lost'));api.reconcilePrepare.mockResolvedValueOnce(recovered);api.submit.mockResolvedValue({status:'submitted'});
+    await fillSigning();fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));
+    await waitFor(()=>expect(screen.getByText(/无法确认本次准备是否产生副作用/)).toBeInTheDocument());
+    const originalOperation=api.prepare.mock.calls[0][1];
+    fireEvent.click(screen.getByRole('button',{name:'核对原准备操作'}));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'提交此请求'})).not.toBeDisabled());
+    expect(api.reconcilePrepare.mock.calls[0][1]).toBe(originalOperation);
+    expect(api.reconcilePrepare.mock.calls[0][0]).toEqual(api.prepare.mock.calls[0][0]);
+    expect(screen.getByLabelText('签名 Job ID')).toBeDisabled();expect(screen.getByLabelText('完整签名上下文')).toBeDisabled();
+    expect(screen.getByRole('button',{name:'准备固定请求'})).toBeDisabled();expect(api.prepare).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button',{name:'提交此请求'}));
+    await waitFor(()=>expect(api.submit).toHaveBeenCalled());
+    expect(api.submit.mock.calls[0].slice(0,2)).toEqual(['original-job','original-frozen-identity']);
   });
   it('keeps malformed JSON editable without invoking native prepare',async()=>{
     await fillSigning('{');fireEvent.click(screen.getByRole('button',{name:'准备固定请求'}));

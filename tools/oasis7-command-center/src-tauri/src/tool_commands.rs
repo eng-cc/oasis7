@@ -370,10 +370,11 @@ pub async fn tool_file_verify(
 pub async fn tool_file_reconcile(
     host: State<'_, ToolHost>,
     input: FileSignInput,
-) -> Result<serde_json::Value, String> {
+    operation_id: String,
+) -> Result<FileSignPrepared, String> {
     let jobs = host.jobs.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        tools::reconcile_file_prepare(&jobs, &input).map_err(|e| e.to_string())
+        tools::reconcile_file_prepare(&jobs, &input, &operation_id).map_err(|e| e.to_string())
     })
     .await
     .map_err(|_| "Reconciliation did not complete".to_string())?

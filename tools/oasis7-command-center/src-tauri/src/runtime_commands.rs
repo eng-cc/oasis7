@@ -216,6 +216,18 @@ impl RuntimeHost {
         with_tool_status(status, &self.jobs)
     }
 
+    async fn interrupt_turn(
+        &self,
+        host: &Host,
+        target: RuntimeTarget,
+    ) -> Result<RuntimeSnapshot, String> {
+        let jobs = self.jobs.clone();
+        self.project_work(host, move |runtime, project| {
+            jobs.with_open(|| runtime.interrupt_turn(project, target))
+        })
+        .await
+    }
+
     async fn answer_request(
         &self,
         host: &Host,
@@ -370,9 +382,7 @@ pub async fn interrupt_runtime_turn(
     handle: tauri::AppHandle,
     target: RuntimeTarget,
 ) -> Result<RuntimeSnapshot, String> {
-    let result = runtime
-        .project_work(&host, move |r, p| r.interrupt_turn(p, target))
-        .await;
+    let result = runtime.interrupt_turn(&host, target).await;
     invalidate(&handle);
     result
 }
@@ -522,6 +532,13 @@ mod tests {
             answers: Default::default(),
         };
         runtime.jobs.freeze().unwrap();
+        let interrupt =
+            tauri::async_runtime::block_on(runtime.interrupt_turn(&host, reply.target.clone()));
+        assert!(
+            interrupt
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
         let frozen = tauri::async_runtime::block_on(runtime.answer_request(&host, reply.clone()));
         assert!(
             frozen
@@ -529,6 +546,13 @@ mod tests {
                 .contains("exit has frozen new side effects")
         );
         runtime.jobs.unfreeze().unwrap();
+        let interrupt =
+            tauri::async_runtime::block_on(runtime.interrupt_turn(&host, reply.target.clone()));
+        assert!(
+            !interrupt
+                .unwrap_err()
+                .contains("exit has frozen new side effects")
+        );
         let reopened = tauri::async_runtime::block_on(runtime.answer_request(&host, reply));
         assert!(
             !reopened

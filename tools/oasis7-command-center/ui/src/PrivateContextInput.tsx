@@ -1,4 +1,4 @@
-import { createSignal, For, Show } from 'solid-js';
+import { createMemo, createSignal, For, Show } from 'solid-js';
 import { invoke } from '@tauri-apps/api/core';
 import { contextBridge, errorMessage } from './bridge';
 import type { ContextBinding, PrivateInputPreview, RuntimeSnapshot } from './generated/core';
@@ -13,6 +13,7 @@ export default function PrivateContextInput(props: { threadId: string; input: ()
   const [endLine,setEndLine]=createSignal('');
   const [error, setError] = createSignal('');
   const [busy, setBusy] = createSignal(false);
+  const remaining = createMemo(() => { const value = preview(); return value ? value.maxInputBytes - value.attachmentBytes - new TextEncoder().encode(props.input()).length : 0; });
   let generation = 0;
   async function load() {
     setBusy(true); setError('');
@@ -49,8 +50,9 @@ export default function PrivateContextInput(props: { threadId: string; input: ()
     <label>片段终止行<input type="number" min="1" value={endLine()} onInput={e=>{setEndLine(e.currentTarget.value);setPreview(undefined);}}/></label>
     <button disabled={busy() || !entryId()} onClick={()=>void read(entryId())}>重新预览选定范围</button>
     <Show when={preview()}>{value=><><p class="metadata">目标会话 {props.threadId} · 来源 {value().source.entryId} · 修订 {value().source.revision} · 范围 {value().source.scope}</p><pre>{value().text}</pre>
-      <button disabled={busy() || props.disabled() || !props.input().trim()} onClick={()=> {
-        const selected=preview(); if(!selected || props.disabled()) return;
+      <p role="status">合计包含来源说明，剩余 {remaining()} UTF-8 字节；超出时请缩小资料范围或草稿，不会截断。</p>
+      <button disabled={busy() || props.disabled() || !props.input().trim() || remaining() < 0} onClick={()=> {
+        const selected=preview(); if(!selected || props.disabled() || !props.input().trim() || remaining() < 0) return;
         void props.send(()=>invoke<RuntimeSnapshot>('start_private_runtime_turn',{threadId:props.threadId,input:props.input(),source:selected.source}));
       }}>将预览资料与草稿发送到此会话</button></>}</Show>
     <Show when={error()}><p role="status" class="notice">{error()}</p></Show>

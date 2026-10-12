@@ -66,8 +66,15 @@ pub fn reconcile_signer_job(jobs: &jobs::ToolJobs, job_id: &str) -> Result<serde
 pub fn reconcile_file_prepare(
     jobs: &jobs::ToolJobs,
     input: &FileSignInput,
-) -> Result<serde_json::Value> {
+    operation_id: &str,
+) -> Result<FileSignPrepared> {
     let (resource, fingerprint) = file_prepare_identity(input)?;
+    let operation = jobs
+        .list()?
+        .into_iter()
+        .find(|job| job.id == operation_id)
+        .ok_or_else(|| invalid("Original preparation operation is absent"))?;
+    validate_prepare_operation(&operation, &resource, &fingerprint)?;
     let (cfg, _) = binding()?;
     let job = oasis7_local_signer::job::JobDirectory::open(
         &cfg,
@@ -96,19 +103,72 @@ pub fn reconcile_file_prepare(
     {
         return Err(invalid("Prepared files do not match original intent"));
     }
-    for job in jobs.list()? {
-        if job.resource == resource && job.kind == "file_prepare" && job.state == "unknown" {
-            if job.fingerprint != fingerprint {
-                return Err(invalid("Original preparation fingerprint differs"));
-            }
-            jobs.finish(
-                &job.id,
-                "succeeded",
-                Some("Original prepared request files verified"),
-            )?;
-        }
-    }
-    Ok(
-        serde_json::json!({"status":"PREPARED","job_id":input.job_id,"request_id":prepared.request.request_id,"payload_sha256":identity::sha256_hex(&prepared.payload),"signing_enabled":false}),
+    let prepared_fingerprint = frozen_job_identity(&input.job_id, true)?.1;
+    let payload_sha256 = identity::sha256_hex(&prepared.payload);
+    let operation_key = identity::operation_key(
+        &cfg.installation_id,
+        &cfg.deployment_id,
+        &context.network_id,
+        &prepared.request.purpose,
+        &input.signer_id,
+        &identity::sha256(&prepared.payload),
     )
+    .map_err(invalid)?;
+    let result = FileSignPrepared {
+        job_id: input.job_id.clone(),
+        prepared_fingerprint,
+        file_sha256: digest,
+        payload_sha256,
+        operation_key,
+        work_dir: job.path().display().to_string(),
+        result: serde_json::json!({"status":"PREPARED","job_id":input.job_id,"request_id":prepared.request.request_id,"signing_enabled":false}),
+    };
+    if operation.state == "unknown" {
+        jobs.finish(
+            operation_id,
+            "succeeded",
+            Some("Original prepared request files verified"),
+        )?;
+    }
+    Ok(result)
+}
+
+fn validate_prepare_operation(
+    operation: &jobs::ToolJob,
+    resource: &str,
+    fingerprint: &str,
+) -> Result<()> {
+    if operation.resource != resource
+        || operation.kind != "file_prepare"
+        || operation.fingerprint != fingerprint
+        || !matches!(operation.state.as_str(), "unknown" | "succeeded")
+    {
+        return Err(invalid(
+            "Original preparation operation identity or state differs",
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn recovery_requires_exact_original_operation_and_quiescent_state() {
+        let jobs = jobs::ToolJobs::open(":memory:").unwrap();
+        let (mut operation, _) = jobs
+            .admit_once("original", "frozen", "signer:install:job", "file_prepare")
+            .unwrap();
+        assert!(validate_prepare_operation(&operation, "signer:install:job", "frozen").is_err());
+        operation.state = "unknown".into();
+        assert!(validate_prepare_operation(&operation, "signer:install:job", "frozen").is_ok());
+        assert!(validate_prepare_operation(&operation, "signer:install:other", "frozen").is_err());
+        assert!(validate_prepare_operation(&operation, "signer:install:job", "changed").is_err());
+        operation.state = "failed".into();
+        assert!(validate_prepare_operation(&operation, "signer:install:job", "frozen").is_err());
+        operation.state = "succeeded".into();
+        assert!(validate_prepare_operation(&operation, "signer:install:job", "frozen").is_ok());
+        operation.kind = "submit".into();
+        assert!(validate_prepare_operation(&operation, "signer:install:job", "frozen").is_err());
+    }
 }

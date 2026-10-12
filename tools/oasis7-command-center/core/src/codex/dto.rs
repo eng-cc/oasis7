@@ -126,4 +126,6 @@ pub struct PrivateInputRef {
 pub struct PrivateInputPreview {
     pub source: PrivateInputRef,
     pub text: String,
+    pub attachment_bytes: usize,
+    pub max_input_bytes: usize,
 }

@@ -105,6 +105,7 @@ it('keeps exact instance, thread and turn identity; rejects unknown sends while 
   const pending = snapshot({sessions:[{...session,state:'completed'}],operations:[{id:'op',instanceId:'instance-1',threadId:'thread-1',turnId:'turn-1',method:'turn/start',state:'unknown',fingerprint:'f',createdAt:'1',error:null}]});
   expect(canStart(pending,pending.sessions[0])).toBe(false);
   expect(canInterrupt(snapshot({enabled:false}),session)).toBe(true);
+  expect(canInterrupt(snapshot({exitWaiting:true}),session)).toBe(false);
   expect(canInterrupt(snapshot({enabled:false,state:'degraded'}),session)).toBe(true);
   expect(canSteer(snapshot({state:'degraded'}),session)).toBe(false);
   expect(canInterrupt(snapshot({operations:[{...pending.operations[0],method:'turn/interrupt',state:'confirmed'}]}),session)).toBe(false);
@@ -201,4 +202,18 @@ it('keeps exit diagnostics available when the optional runtime source fails', as
   expect(await screen.findByText('旧自管工作状态未知，请保留数据库')).toBeInTheDocument();
   expect(screen.getByText('未确认可以安全退出')).toBeInTheDocument();
   expect(api.start).not.toHaveBeenCalled();
+});
+
+it('keeps correctable no-effect input rejection editable without creating unknown-send state', async () => {
+  const {api}=fakeApi(snapshot());
+  api.steer.mockRejectedValue({effect:'none',message:'合计输入超限；尚未发送，草稿保留'});
+  render(() => <RuntimePanel project={project} view="execution" api={api} subscribe={subscribe} />);
+  const input=await screen.findByLabelText('向此原始会话发送明确输入');
+  fireEvent.input(input,{target:{value:'保留待缩小草稿'}});
+  const send=screen.getByRole('button',{name:'追加到当前运行'});
+  fireEvent.click(send);
+  await screen.findByText('合计输入超限；尚未发送，草稿保留');
+  await waitFor(()=>expect(send).toBeEnabled());
+  expect(input).toHaveValue('保留待缩小草稿');
+  expect(screen.queryByText(/结果核对前发送入口保持关闭/)).toBeNull();
 });

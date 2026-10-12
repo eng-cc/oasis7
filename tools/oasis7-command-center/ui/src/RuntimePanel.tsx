@@ -68,8 +68,12 @@ export default function RuntimePanel(props: Props) {
       if (generation === epoch && !disposed) apply(next);
     } catch (e) {
       if (generation === epoch && !disposed) {
-        setUncertainSend(true);
-        setError(`操作未取得成功回执：${errorMessage(e)}。请核对下方持久操作记录；结果核对前发送入口保持关闭，不会自动重发。`);
+        if (typeof e === 'object' && e !== null && 'effect' in e && e.effect === 'none' && 'message' in e && typeof e.message === 'string') {
+          setError(e.message);
+        } else {
+          setUncertainSend(true);
+          setError(`操作未取得成功回执：${errorMessage(e)}。请核对下方持久操作记录；结果核对前发送入口保持关闭，不会自动重发。`);
+        }
       }
     } finally { setBusy(false); void read(); }
   };
@@ -187,7 +191,7 @@ function SessionCard(props: { data: () => RuntimeSession; snapshot: () => Runtim
     <Show when={!current()}><p class="notice">原运行实例当前未取得控制能力。相同 thread 或分支不自动转移控制。{session().restorableHistory ? '来源保存了此前已核实的空闲退出；可明确恢复原历史会话，收到真实 resume 回执后才重绑新实例。' : '此前活跃或未知结果尚未核实，不能恢复或重发，请核对原记录。'}</p></Show>
     <Show when={unresolvedFor(props.snapshot(), session())}><p class="notice">此目标有尚未核实的发送记录，追加/启动入口暂不可用，不会自动重发。</p></Show>
     <Show when={session().privateSources?.length}><p class="notice">此会话含私有资料来源；后续轮次、请求与恢复持续按私有会话处理。</p></Show>
-    <PrivateContextInput threadId={session().threadId} input={input} disabled={() => props.busy() || props.blocked() || !canStart(props.snapshot(),session())} send={props.run} />
+    <PrivateContextInput threadId={session().threadId} input={input} disabled={() => composing() || props.busy() || props.blocked() || !canStart(props.snapshot(),session())} send={props.run} />
     <label class="runtime-path">向此原始会话发送明确输入<textarea disabled={!current()} value={input()} maxLength={32768} onInput={e => setInput(e.currentTarget.value)} onCompositionStart={() => setComposing(true)} onCompositionEnd={() => setComposing(false)} onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && acceptsEnter(e, composing())) { e.preventDefault(); send(); } }} /></label>
     <div class="actions runtime-controls"><button disabled={props.busy() || props.blocked() || composing() || !input().trim() || !fitsUtf8(input(),32768) || (!canStart(props.snapshot(), session()) && !canSteer(props.snapshot(), session()))} onClick={send}>{session().state === 'active' ? '追加到当前运行' : '启动明确本轮任务'}</button><button disabled={props.busy() || props.blocked() || !canContinue(props.snapshot(),session())} onClick={() => void props.run(() => props.api.continue(session().threadId))}>{current() ? '核实并继续原会话' : '明确核实并恢复历史会话'}</button><button disabled={props.busy() || !canInterrupt(props.snapshot(), session())} onClick={() => void props.run(() => props.api.interrupt(targetOf(session())!), true)}>明确请求中断本轮</button></div><p class="muted small">普通 Enter 保留换行；⌘/Ctrl + Enter 明确发送。中文候选组合期间不发送。输入草稿保留，按钮回执不代表任务完成。</p>
   </div></div>;
