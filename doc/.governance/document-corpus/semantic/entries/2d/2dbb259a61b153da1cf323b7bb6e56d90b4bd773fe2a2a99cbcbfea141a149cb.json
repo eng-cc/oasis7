@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "c05aad3fb6a6a9c7f2e9519c89898c8a62e6cbf561d4f3adde60e2e8234a7750",
+    "content_sha256": "c318a1650910fe27ee4b996ad81746481dc6e1bbad3bb524e4ea3ca406c8a6c6",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_authority",
-    "note": "Reviewed nonce-bound committed recipe origin, explicit v2 ingress/executor rollout and legacy None continuity; retained read-only Observer/recovery limits and current runtime authority without upgrading SC8 or release evidence. Navigation-only follow-up review of PR #4574 head 782a67ed3fdbdac95ed4bf7895cf415f9d9f18f8 confirms that adding runtime-authority-commit-recovery-target and its separator leaves the target commit/recovery contract and all other source bytes unchanged; the existing authority, disposition, implementation gaps and evidence boundaries are retained.",
+    "note": "Reviewed nonce-bound committed recipe origin, explicit v2 ingress/executor rollout and legacy None continuity; retained read-only Observer/recovery limits and current runtime authority without upgrading SC8 or release evidence. Navigation-only follow-up review of PR #4574 head 782a67ed3fdbdac95ed4bf7895cf415f9d9f18f8 confirms that adding runtime-authority-commit-recovery-target and its separator leaves the target commit/recovery contract and all other source bytes unchanged; the existing authority, disposition, implementation gaps and evidence boundaries are retained. Reviewed on 2026-10-12 for issue #2667: the instance-command target now specifies identity and authorization binding, legacy manifest-only singleton compatibility, staging with the established failure audit, and explicit regression scenarios. #3555 and the broader receipt/catalog/transaction gaps remain partial. This is a scoped design review, not runtime test evidence; existing authority and disposition are retained.",
     "path": "doc/world-runtime/design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

@@ -13,6 +13,14 @@ except ModuleNotFoundError:
 from pathlib import Path
 
 PLATFORM_GROUPS = ('windows_rollout', 'macos_package_contract', 'fleet_health')
+SUPPORT_PROFILES = (
+    'oasis7_agent_api', 'oasis7_agent_harness', 'oasis7_client_api',
+    'oasis7_local_signer', 'oasis7_launcher_ui', 'oasis7_proto',
+    'oasis7_wasm_abi', 'oasis7_wasm_build', 'oasis7_wasm_router',
+    'oasis7_wasm_sdk', 'oasis7_wasm_store', 'pixel_world_bridge',
+    'oasis7_wasm_executor', 'oasis7_secure_envelope', 'oasis7_context',
+    'oasis7_client_launcher', 'wasm_build_suite', 'wasm_module_observe',
+)
 CONTROL = ('Cargo.toml', 'Cargo.lock', '**/Cargo.toml', '**/Cargo.lock', '**/build.rs',
            '.cargo/**', 'rust-toolchain*', '.github/**', 'scripts/ci-*', 'scripts/build-*', '**/world/artifacts/**',
            'scripts/plan-rust-required-scope*', 'scripts/document_corpus.py')
@@ -178,6 +186,7 @@ def select(config, base, source_head, test_head=None, additions=()):
     paths = []
     affected = set()
     full = False
+    support_rule = False
     try:
         # Selection covers both source diff and the actual tested merge combination.
         paths = changed_paths(base, source_head)
@@ -200,6 +209,7 @@ def select(config, base, source_head, test_head=None, additions=()):
                 if any(fnmatch.fnmatchcase(path, pattern) for pattern in rule['match']):
                     matched = True
                     chosen.update(rule.get('groups', []))
+                    support_rule |= 'workspace_support' in rule.get('groups', [])
                     full |= rule.get('full', False)
                     reasons.append(rule['reason'] + ': ' + path)
             if any(embedded.get('__unresolved_embed__') for _, _, embedded in graphs) and not any(
@@ -238,7 +248,19 @@ def select(config, base, source_head, test_head=None, additions=()):
     if 'packaging_contracts' in chosen:
         chosen.add('macos_package_contract')
     resources = sorted({resource for group in chosen for resource in config['resources'][group]})
+    support_profiles = []
+    if 'workspace_support' in chosen:
+        support_profiles = sorted(set(affected).intersection(SUPPORT_PROFILES))
+        # Non-package rules and explicit group requests retain the complete group.
+        # Control/uncertain inputs must never narrow the old command inventory.
+        unmapped_support = any(
+            'workspace_support' in config['package_groups'].get(package, [])
+            and package not in SUPPORT_PROFILES for package in affected)
+        if full or support_rule or unmapped_support or not support_profiles or 'workspace_support' in additions:
+            support_profiles = sorted(SUPPORT_PROFILES)
     return {'groups': sorted(chosen), 'resources': resources,
+            'workspace_support_profiles': support_profiles,
+            'workspace_support_profile_version': 1,
             'reasons': list(dict.fromkeys(reasons)), 'scope': 'full' if full else 'targeted'}
 
 

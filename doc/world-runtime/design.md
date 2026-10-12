@@ -548,6 +548,7 @@ and becomes `proven` only after execution, rejection, fault, replay, recovery,
 idempotency, outbox, persistence, serde, and WASM compatibility evidence all
 pass. No single staged step test or in-memory swap proves general atomicity.
 
+<a id="module-instance-command-design"></a>
 ### 6.3 Command-path module-instance completeness
 
 Instance identity is an authorization and addressing key, not merely a
@@ -569,6 +570,65 @@ before the first effect; there is no global `module_id` fallback. Agent-facing
 semantic interpretation and tool policy remain Agent/WASM authority; this
 document only requires runtime to expose a verifiable instance-bound machine
 descriptor input.
+
+#### Compatibility routing and validation plan
+
+This design accepts the instance-isolation obligation in
+[REQ-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001)
+and [AC-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-001),
+through the [runtime command-path contract](prd.md#command-path-module-instance-completeness).
+The following rules are targets for [#3555](https://github.com/eng-cc/oasis7/issues/3555),
+not a claim that the current command paths already enforce them.
+
+1. Both direct and trusted entrypoints resolve the target against the same active
+   registry and instance view before invoking the sandbox. An explicit target
+   must match its logical identity, active binding and authorization audience.
+   A legacy module-id-only call resolves to the sole active instance when one
+   exists and rejects multiple active instances before execution. The existing
+   manifest-only singleton remains an explicit legacy compatibility case when
+   no persisted instance exists: a named compatibility adapter validates its
+   sole active manifest and existing legacy state binding, then freezes that
+   legacy target. It must not select this route after an explicit-instance
+   lookup or authorization failure, or when any instance makes the target
+   ambiguous. Missing active bindings are rejected. This preserves old singleton
+   callers without claiming that the legacy state shape is instance-complete.
+2. Freeze the resolved instance state key and binding in the command stage.
+   State lookup, output application and emitted events use that target. Trusted
+   audience validation and execution cannot select different instances; a
+   missing, stale or mismatched binding is rejected before the first effect.
+3. Preserve the existing staged publication boundary for business state, events,
+   resource effects and receipts. Failed commands discard these staged business
+   projections; target-resolution and ambiguity rejection leave the journal
+   unchanged. Existing sandbox failures retain their established disposition:
+   where the entrypoint records `ModuleCallFailed`, it atomically records that
+   audit once after discarding the business stage, without adding a second
+   failure event. Reuse the existing instance-key and event/replay conventions; this
+   bounded routing change must preserve the `wasm-1` wire ABI and persisted
+   snapshot shape. It does not complete the broader receipt/catalog lineage or
+   whole-runtime transaction migration by itself.
+
+The implementation should extend the existing runtime test modules selected by
+[testing-manual.md](../../testing-manual.md). Relevant current locations are
+`crates/oasis7/src/runtime/tests/module_command_provenance.rs`,
+`crates/oasis7/src/runtime/world/module_runtime_tests.rs` and the
+`crates/oasis7/src/runtime/tests/capability_grant_v2.rs`,
+`capability_grant_v2_regressions.rs` and `capability_grant_v2_recovery_regressions.rs`
+tests in that same runtime test directory. Their
+existence is not evidence that the following target cases already pass.
+
+| Target case | Required input and assertion | Acceptance boundary |
+| --- | --- | --- |
+| Direct two-instance command | Same artifact, two active instances with distinct state; target each instance in turn and assert only its state and emitted events change. | No cross-instance write or event attribution. |
+| Trusted target and audience | Two active instances; execute matching authorized commands against each in turn and assert only its state and emitted events change. Also exercise mismatched command/authorization targets and reject them before sandbox effects. | Authorization and execution bind the same instance, with no cross-instance writes. |
+| Legacy ambiguity and missing target | Call the module-id-only entrypoint with two active instances, or with neither an active instance nor a valid legacy singleton binding; assert rejection with unchanged state, resources, journal and receipts. | No silent target substitution or partial publication. |
+| Single-instance compatibility | Resolve one active instance, then separately exercise the existing manifest-only singleton through its explicit legacy adapter; compare established command results, output bytes and business effects. | Unique resolution and preserved legacy singleton behavior; no new snapshot fields. |
+| Failure audit and replay compatibility | Exercise an existing sandbox failure and assert zero published business delta and exactly the established failure audit, then round-trip existing snapshot/wire fixtures and replay successful instance updates; repeat target rejection after restore. | Existing error disposition and formats remain readable; target attribution survives replay and broader migration proof remains separate. |
+
+Run the affected direct/trusted and restore/replay regressions on the implementation
+candidate, preserving the existing error-order and transaction tests. Record the
+actual commands and results in its PR; documentation-only checks do not establish
+instance isolation or release readiness.
+
 
 ### 6.4 Gradual subsystem state encapsulation
 

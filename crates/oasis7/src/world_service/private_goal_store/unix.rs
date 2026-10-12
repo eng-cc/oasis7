@@ -118,7 +118,7 @@ pub(super) fn put_with_reference(
         let nonce = random::<24>()?;
         let ciphertext = XChaCha20Poly1305::new(key.into())
             .encrypt(
-                XNonce::from_slice(&nonce),
+                &XNonce::from(nonce),
                 Payload {
                     msg: plaintext,
                     aad: &aad(binding, &reference)?,
@@ -152,7 +152,7 @@ pub(super) fn get(
     }
     XChaCha20Poly1305::new(key.into())
         .decrypt(
-            XNonce::from_slice(&bytes[8..32]),
+            &XNonce::try_from(&bytes[8..32]).map_err(|_| "invalid private goal nonce")?,
             Payload {
                 msg: &bytes[32..],
                 aad: &aad(binding, reference)?,
@@ -245,7 +245,7 @@ fn verify_key(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
     }
     let plaintext = XChaCha20Poly1305::new(key.into())
         .decrypt(
-            XNonce::from_slice(&bytes[8..32]),
+            &XNonce::try_from(&bytes[8..32]).map_err(|_| "invalid private goal nonce")?,
             Payload {
                 msg: &bytes[32..],
                 aad: KEY_AAD,
@@ -299,7 +299,7 @@ pub(super) fn publish_bounded_record(
     let nonce = random::<24>()?;
     let ciphertext = XChaCha20Poly1305::new(key.into())
         .encrypt(
-            XNonce::from_slice(&nonce),
+            &XNonce::from(nonce),
             Payload {
                 msg: plaintext,
                 aad,
@@ -346,7 +346,7 @@ pub(super) fn read_bounded_record(
     }
     let plaintext = XChaCha20Poly1305::new(key.into())
         .decrypt(
-            XNonce::from_slice(&bytes[8..32]),
+            &XNonce::try_from(&bytes[8..32]).map_err(|_| "invalid private goal nonce")?,
             Payload {
                 msg: &bytes[32..],
                 aad,
@@ -378,7 +378,7 @@ pub(super) fn initialize_key(dir: &Dir, key: &[u8; 32]) -> Result<(), String> {
     challenge.extend_from_slice(&random::<32>()?);
     let encrypted = XChaCha20Poly1305::new(key.into())
         .encrypt(
-            XNonce::from_slice(&nonce),
+            &XNonce::from(nonce),
             Payload {
                 msg: &challenge,
                 aad: KEY_AAD,
