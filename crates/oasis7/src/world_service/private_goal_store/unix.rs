@@ -280,7 +280,7 @@ pub(super) fn publish_record(
     let nonce = random::<24>()?;
     let ciphertext = XChaCha20Poly1305::new(key.into())
         .encrypt(
-            XNonce::from_slice(&nonce),
+            &XNonce::from(nonce),
             Payload {
                 msg: plaintext,
                 aad,
@@ -317,7 +317,7 @@ pub(super) fn read_record(
     }
     let plaintext = XChaCha20Poly1305::new(key.into())
         .decrypt(
-            XNonce::from_slice(&bytes[8..32]),
+            &XNonce::try_from(&bytes[8..32]).map_err(|_| "invalid private goal nonce")?,
             Payload {
                 msg: &bytes[32..],
                 aad,
