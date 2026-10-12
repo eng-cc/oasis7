@@ -1,0 +1,169 @@
+{
+  "schema": "oasis7/native-logistics-candidate-evidence/v1",
+  "source_head": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+  "base_oid": "8d05254c7d6d0de62c7855bbbf8460569350447a",
+  "tested_tree_oid": "192e586d3d168d9fc1b31e8d4719043224424cbf",
+  "execution_target": "owned native NodeRuntime Sequencer, five-second tick, localhost TCP private service",
+  "dirty_patch": null,
+  "build_features": [
+    "default",
+    "test_tier_required"
+  ],
+  "runtime_profile": "attached_codex_subagent",
+  "execution_mode": "prepared_world",
+  "isolation": "instruction_only/source_visible",
+  "scope": "targeted",
+  "scenes": [
+    {
+      "scene": "ST-02",
+      "check_kind": "live",
+      "test_tier": "test_tier_full",
+      "verdict": "passed",
+      "basis": "actual independent Skill discovery and full private context capture"
+    },
+    {
+      "scene": "ST-03",
+      "check_kind": "live",
+      "test_tier": "test_tier_full",
+      "verdict": "passed_targeted_logistics_only",
+      "basis": "original canonical action plus matching transit start/completion and destination arrival; not first factory product"
+    },
+    {
+      "scene": "ST-04",
+      "check_kind": "live",
+      "test_tier": "test_tier_full",
+      "verdict": "passed_original_lookup_only",
+      "basis": "same original receipt readback; model process restart and new goal not selected"
+    },
+    {
+      "scene": "ST-04",
+      "check_kind": "contract",
+      "test_tier": "test_tier_required",
+      "verdict": "passed",
+      "basis": "ordinary exact duplicate, different signed payload rejection and actual driver reopen"
+    }
+  ],
+  "retained_gaps": [
+    "full AC-EXT-010 lifecycle",
+    "real OpenClaw",
+    "cold entry/pairing",
+    "factory production and production-blocked continue",
+    "model disconnect/process restart",
+    "GUI",
+    "full Game HTTP writes",
+    "deployment"
+  ],
+  "source_clauses": [
+    {
+      "path": "doc/product/agents-world-simulation/external-agent-runtime-play.prd.md",
+      "fragment": "ac-ext-003",
+      "clause_ids": [
+        "AC-EXT-003"
+      ],
+      "source_oid": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+      "blob_oid": "6941e246ce1e6e1ba5f0041f6c008372cefbd45e",
+      "content_sha256": "60557925a4f95451bbfb1c9ec4e414e25c8b6664188c1c86ec38e88ea9266096"
+    },
+    {
+      "path": "doc/product/agents-world-simulation/external-agent-runtime-play.prd.md",
+      "fragment": "ac-ext-005",
+      "clause_ids": [
+        "AC-EXT-005"
+      ],
+      "source_oid": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+      "blob_oid": "6941e246ce1e6e1ba5f0041f6c008372cefbd45e",
+      "content_sha256": "60557925a4f95451bbfb1c9ec4e414e25c8b6664188c1c86ec38e88ea9266096"
+    },
+    {
+      "path": "doc/world-simulator/llm/external-agent-game-api.design.md",
+      "fragment": "当前实施候选原生物流执行",
+      "clause_ids": [
+        "native-logistics-candidate"
+      ],
+      "source_oid": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+      "blob_oid": "985578376a1f748eae8bc433007bb6df9f8a3218",
+      "content_sha256": "e559f4bf52c64c25319a8664b39d24ad1cf640a87dcb9387cfb3805ec44c9868"
+    }
+  ],
+  "builds": {
+    "client": {
+      "sha256": "21a136346749c2098a509adad222fb9139da7666d89c084f53e2d68fdb004364",
+      "byte_length": 80502992,
+      "initial_build_source": "cdc4f37c45910d53eafcb947a7dc4a65cda34061",
+      "current_source_confirmation": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+      "confirmation": "cargo build after play at current source succeeded with identical artifact hash; delta from initial build only removes unused lint expectation in unrelated test host"
+    },
+    "host": {
+      "sha256": "60fec0e9b84939ee763db8ff5f4dfd6d6a08305a3db7bb5c54a1377f7c3cd908",
+      "byte_length": 368989168,
+      "source": "326189ecd2744c5adfbb2ba28afd292df91219b3"
+    },
+    "skill": {
+      "path": "skills/oasis7-play/SKILL.md",
+      "sha256": "695c038cbf459c922da0eaa2202a7f217069025bc2ebacb970c4cdc460c13b5b",
+      "byte_length": 6796
+    }
+  },
+  "original_player_report": {
+    "sha256": "7b67299a3bf86c311ae7b3f0f9f486d287054d62598e716e17785228fed96ea4",
+    "bytes": 2457,
+    "normalization": "only formal Skill absolute path replaced by repository-relative path"
+  },
+  "real_child": "/root/logistics_formal_playtester",
+  "fees": {
+    "world_transit_tariff_electricity": 0,
+    "model_and_total_cost": "unknown"
+  },
+  "budget": {
+    "max_client_calls": 20,
+    "max_seconds": 240,
+    "max_decision_rounds": 2,
+    "actual_calls": 10,
+    "actual_rounds": 1,
+    "ready_to_report_upper_bound_seconds": 213.93157315254211
+  },
+  "artifacts": [
+    {
+      "path": "cleanup.json",
+      "byte_length": 3055,
+      "sha256": "b57c05943d80fa3f8bcf58b251d827446ea6ac1c35d4b9014f2f89c27d2035b8",
+      "collector": "parent original private-test-world evidence"
+    },
+    {
+      "path": "disposable-world-cleanup.json",
+      "byte_length": 500,
+      "sha256": "d3713bc4784a16e9af4bd5aaafc8c49c2cb3a2a978eef7f6737579d74bf4dedb",
+      "collector": "parent original private-test-world evidence"
+    },
+    {
+      "path": "oracle-summary.json",
+      "byte_length": 1781,
+      "sha256": "86caf6996a9e26c931317c3fcd7da61b270af54a0378d726b5ffdae413fe5e67",
+      "collector": "parent original private-test-world evidence"
+    },
+    {
+      "path": "ordinary-regressions.json",
+      "byte_length": 4281,
+      "sha256": "a6da37164a0e57e0d3a6312d6b115e1962ca7f8164408cd8b51d0315701a9e4a",
+      "collector": "parent original private-test-world evidence"
+    },
+    {
+      "path": "player-report.md",
+      "byte_length": 2398,
+      "sha256": "e17d3cb70cf6fda855bf2477ece5db6b1da42156991d1e9b46797643a981273b",
+      "collector": "independent player"
+    },
+    {
+      "path": "transit-events.json",
+      "byte_length": 1721,
+      "sha256": "4758dee6a3fbf6e7ecc06909793cd1061702b62e446e2706557111fbd07a4cab",
+      "collector": "parent original private-test-world evidence"
+    },
+    {
+      "path": "world-witness.json",
+      "byte_length": 18162,
+      "sha256": "d7e5eac93b33ecd7b897ff25d746cc46c5fee04b9934b910e71bfb7b663668b9",
+      "collector": "parent original private-test-world evidence"
+    }
+  ]
+}

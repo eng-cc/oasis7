@@ -1,0 +1,97 @@
+{
+  "schema": "oasis7/native-logistics-ordinary-regressions/v1",
+  "failures": [
+    {
+      "candidate": "7da41a8c0a25cbc2208472e03b3b60a37161e6a3",
+      "reason": "fixture material balances mutated after last state-root event; reload correctly rejected",
+      "fix": "initial state contains inventory before first canonical bootstrap step",
+      "raw_log": "full original overwritten before preservation; captured tool failure retained, not relabeled original"
+    },
+    {
+      "reason": "same-key altered payload assertion expected IntentOutcome instead of existing HTTP503 rejection",
+      "fix": "assert actual Rejected status503 and preserve original single effect",
+      "attempts": 2,
+      "dirty_patch_hash": "not captured; no retrospective exact-head claim"
+    },
+    {
+      "candidate": "cdc4f37c45910d53eafcb947a7dc4a65cda34061",
+      "reason": "unfulfilled lint expectation on seven-argument fixture helper",
+      "fix": "remove unused expectation; no behavior change"
+    }
+  ],
+  "final_native": {
+    "candidate": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+    "command": "env -u RUSTC_WRAPPER CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 cargo test -p oasis7 --bin oasis7_chain_runtime world_service --features test_tier_required -- --test-threads=1",
+    "passed": 35,
+    "ignored": 3,
+    "failed": 0
+  },
+  "final_clippy": {
+    "candidate": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+    "command": "env -u RUSTC_WRAPPER CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 cargo clippy -p oasis7 --all-targets --features test_tier_required -- -D warnings",
+    "exit_code": 0
+  },
+  "log_artifacts": [
+    {
+      "locator": "oasis7-logistics-native-regression-red.log",
+      "sha256": "b49a5d048d483954a2a7ef2ed51f5e192a50275f16d839e48de133b73acd6dce",
+      "byte_length": 809,
+      "status": "transcript-derived captured excerpt; original full raw log unavailable"
+    },
+    {
+      "locator": "oasis7-logistics-native-regression-attempt2-red.log",
+      "sha256": "6d5b4b1e4c8a8fd8492ec6f274c770c02fda326f8a7e39020ae20de606ec935f",
+      "byte_length": 2198,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-native-regression-attempt5.log",
+      "sha256": "83a4404b9b238975e0ddb65d8906ed3cdef81f64235c203d23037a8eef608c35",
+      "byte_length": 1935,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-native-final.log",
+      "sha256": "93e4f7dbb0025278913fcccc341743299319fa0ad28af54082e03748742b62c8",
+      "byte_length": 6769,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-clippy.log",
+      "sha256": "0325d61bc3152cfe81ef97b7615a66a71ffedcd1f650fda6902073f4065f30d8",
+      "byte_length": 717,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-clippy-final.log",
+      "sha256": "a5d6b435c6759c77f17248d07256a03d1b84db32a4e11171d7d3260ee240bd12",
+      "byte_length": 162,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-lib-final.log",
+      "sha256": "2241b87bf41b8b3a078b9060116d82480806ee9556e05bbd5ab2522603c6e6c7",
+      "byte_length": 8427,
+      "status": "original local raw log retained"
+    },
+    {
+      "locator": "oasis7-logistics-client-final-tests.log",
+      "sha256": "f002bd77232d249af71b8172d3e9c0d0d83820e83a560249585386521e612570",
+      "byte_length": 924,
+      "status": "original local raw log retained"
+    }
+  ],
+  "scope": "ordinary fixture/code verification; not substitute autonomous play",
+  "final_library": {
+    "candidate": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+    "command": "env -u RUSTC_WRAPPER CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 cargo test -p oasis7 --lib world_service --features test_tier_required",
+    "passed": 66,
+    "failed": 0
+  },
+  "final_client": {
+    "candidate": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+    "command": "env -u RUSTC_WRAPPER CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 cargo test -p oasis7 --bin oasis7_game_client --features test_tier_required",
+    "passed": 6,
+    "failed": 0
+  }
+}

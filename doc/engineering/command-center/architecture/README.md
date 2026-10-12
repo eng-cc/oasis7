@@ -98,7 +98,7 @@ Cargo 边界局部增量（2026-10-12）：[#4626](https://github.com/eng-cc/oas
 - ARCH-08：headless ingress 已定义签名 payload、ed25519、单调 nonce 与恢复防重放；它不自动证明任意新 API 的完整授权和恢复行为。
 - ARCH-09：[PR #4562](https://github.com/eng-cc/oasis7/pull/4562)交付 Game API 的发现合同和已实现签名读取；范围仍是显式开启的 loopback bootstrap。
 - [PR #4565](https://github.com/eng-cc/oasis7/pull/4565)增加持久、owner-signed task control；初态 suspended、没有 executor。配对、私有目标、完整 context 和 action admission 不在该切片内。
-- 2026-10-12 局部核验：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，私有 owner proof/盐独立密文保存、公共 canonical 目标发布与 owner/history 当前正文回读已交付；journal-tail 控制链恢复回归和最终 CI 已通过。[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，executor 控制、私有 Context 与 task-fenced 行动已交付；独立附着 Codex 的两目标移动记录绑定候选 `b59d0105`，最终源 `cd2976b7` 普通验证、独立评审与 required CI 已通过。下一候选补齐原生物流观察与转运，仍待验证和独立试玩。[当前实施候选](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)不表示完整 TaskSnapshot、两 Runtime 首局或部署已完成；其他主题基线不变。
+- 2026-10-12 局部核验：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，私有 owner proof/盐独立密文保存、公共 canonical 目标发布与 owner/history 当前正文回读已交付；journal-tail 控制链恢复回归和最终 CI 已通过。[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，executor 控制、私有 Context 与 task-fenced 行动已交付；独立附着 Codex 的两目标移动记录绑定候选 `b59d0105`，最终源 `cd2976b7` 普通验证、独立评审与 required CI 已通过。[#4634](https://github.com/eng-cc/oasis7/pull/4634) 候选 `326189ecd` 补齐原生物流观察与转运，普通回归、独立权限评审及一次独立 Skill 转运/到账已通过；尚待最终 CI 与合入。[当前实施候选](../../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)不表示完整 TaskSnapshot、两 Runtime 首局或部署已完成；其他主题基线不变。
 - 两个真实游戏 Runtime 的自主首局、多轮目标和恢复仍需分别证明；开发 Codex adapter 的合入不能替代这些游戏结果。
 
 **实际部署核验：** 本轮未核对端点暴露、TLS/网关、账号存储、凭据 lane 或真实 Runtime 支持组合，也没有启动游戏/模型任务。

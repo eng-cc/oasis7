@@ -1,0 +1,53 @@
+{
+  "schema": "oasis7/native-logistics-world-oracle/v1",
+  "candidate": "326189ecd2744c5adfbb2ba28afd292df91219b3",
+  "tested_tree": "192e586d3d168d9fc1b31e8d4719043224424cbf",
+  "collector": "parent original canonical witness and persisted domain journal",
+  "canonical_cognition_count": 1,
+  "committed_height": 41,
+  "action": "action:3",
+  "receipt": "blake3:9b329d1422a78c8654abd9da4df6bddf443e2dbc542ab9e7518dd336481d5a8a",
+  "decision_request": "task-request-12af51ee6f4306ad95fdc38c14f818de16522d46107a238037277f24ed6f8c0f",
+  "goal_revision": "1",
+  "executor_epoch": "1",
+  "native_grant": "logistics-transfer-budget",
+  "domain_event_ids": [
+    26,
+    28
+  ],
+  "delivery_tick": 42,
+  "source_final": 10,
+  "destination_final": 10,
+  "pending_final": 0,
+  "tariff_electricity": 0,
+  "total_model_cost": "unknown",
+  "runtime_profile": "attached_codex_subagent",
+  "execution_mode": "prepared_world",
+  "isolation": "instruction_only/source_visible",
+  "client_invocations": 10,
+  "decision_rounds": 1,
+  "client_phase_seconds_reported": 41,
+  "ready_to_report_seconds_upper_bound": 213.93157315254211,
+  "time_bound_basis": "subagent was dispatched after ready file; report was saved before final response; this includes pre-client activity",
+  "budget": {
+    "max_client_invocations": 20,
+    "max_seconds": 240,
+    "max_rounds": 2,
+    "model_attempts_used": 1
+  },
+  "scope": "targeted_native_logistics_entry_action_delivery_original_lookup",
+  "retained_gaps": [
+    "cold_entry",
+    "first_factory_product",
+    "production_blocked_continue",
+    "new_goal_application",
+    "leave_revisit",
+    "disconnect_resume",
+    "model_runtime_process_restart",
+    "OpenClaw",
+    "GUI",
+    "token_pairing",
+    "Game_HTTP_writes",
+    "production_deployment"
+  ]
+}

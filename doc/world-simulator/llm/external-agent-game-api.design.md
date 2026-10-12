@@ -66,7 +66,7 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 `capabilities` 分开描述客户端支持的原生提案、实际模块命令 catalog 和当前 Agent 的 native action/object electricity grants。World Service 授权 Agent 投影返回该 Agent 的委托预算读模型；generic projection 和其他 Agent 的 grants 不进入该字段。revoked、expired、not_yet_valid、exhausted 与 current 是读取时状态，不代替 Runtime 的最终 admission。无 native grant 不表示已获权，signer delegation 也不替代业务预算授权。
 
-`industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。当前候选待普通验证、独立正式 Skill 试玩和评审；排产计划生成、配对、完整 Game HTTP 写路由及完整首局缺口继续保留。
+`industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。候选 `326189ecd` 的 library/client/native 回归为 66/6/35 通过，独立正式 Skill 试玩自主提交一次转运并核对真实到账、原 lookup 与匹配运输事件；严格 Clippy 和独立权限评审通过。详细来源与未覆盖范围见[物流证据](../../testing/evidence/native-task-logistics-2026-10-12/README.md)。当前 PR 尚待最终 CI 和合入；排产计划生成、配对、完整 Game HTTP 写路由及完整首局缺口继续保留。
 
 ## 1. 问题、目标与非目标
 
