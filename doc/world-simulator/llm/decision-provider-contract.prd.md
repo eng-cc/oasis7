@@ -395,4 +395,3 @@ active 状态的 module command（例如 `economic_contract.open`）。在同一
 - 当：分别检查请求正文、tool schema 与 parser/Runtime 合同，并验证正反向边界。
 - 则：正文与 schema 均表述 `pass_threshold_bps = 5000..=10000`、`voting_window_ticks = 1..=1440`，排除旧的 `1000..=9000` 和 `8..=256` 范围说明。parser 接受门槛 `5000/10000` 与窗口 `1/1440`，拒绝门槛 `4999/10001` 与窗口 `0/1441`；保留 `6500` 正例及其它正常主体校验，不放宽 Runtime 规则或声称支持 30% 门槛。
 - 专业 owner：`agent_engineer` / `runtime_engineer` / `qa_engineer`；验证层级：`test_tier_required`。取证边界见[系统验证映射](decision-provider-contract.design.md#ver-builtin-parameter-consistency)。本项可共用请求捕获 fixture，但必须与输入完整性独立判定；无需真实模型，不以 schema 正确或一次解析成功代签正文一致性。
-

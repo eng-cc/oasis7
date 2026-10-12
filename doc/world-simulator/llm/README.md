@@ -154,4 +154,3 @@ its rollout may retire unnecessary Bridge code after checking real consumers.
 
 Use the linked PRD/design/contract for durable technical or product claims.
 Use PRs and actual verification records for mutable work history.
-
