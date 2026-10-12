@@ -107,7 +107,16 @@ impl ToolJobs {
             }
             return Ok((job, false));
         }
-        let busy:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM tool_jobs WHERE resource=?1 AND state IN ('running','unknown'))",[resource],|r|r.get(0))?;
+        // Valid signer identifiers are ASCII. On ordinary macOS volumes their
+        // case variants can name the same Job directory, including old ledger
+        // rows. Conservatively serialize those aliases without changing either
+        // the immutable operation fingerprint or any non-signer resource.
+        let resource_query = if resource.starts_with("signer:") {
+            "SELECT EXISTS(SELECT 1 FROM tool_jobs WHERE resource=?1 COLLATE NOCASE AND state IN ('running','unknown'))"
+        } else {
+            "SELECT EXISTS(SELECT 1 FROM tool_jobs WHERE resource=?1 AND state IN ('running','unknown'))"
+        };
+        let busy: bool = tx.query_row(resource_query, [resource], |r| r.get(0))?;
         if busy {
             return Err(Error::Invalid(
                 "Target already has an active or unknown operation; reconcile it first".into(),
@@ -268,6 +277,63 @@ fn get(db: &Connection, id: &str) -> Result<Option<ToolJob>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signer_job_case_aliases_preserve_existing_running_and_unknown_reservations() {
+        let jobs = ToolJobs::open(":memory:").unwrap();
+        jobs.admit(
+            "original",
+            "original-input",
+            "signer:install:JobOne",
+            "file_prepare",
+        )
+        .unwrap();
+        assert!(
+            jobs.admit(
+                "another",
+                "other-input",
+                "signer:install:jobone",
+                "file_prepare"
+            )
+            .is_err()
+        );
+        jobs.finish("original", "unknown", None).unwrap();
+        assert!(
+            jobs.admit(
+                "another",
+                "other-input",
+                "signer:install:JOBONE",
+                "file_prepare"
+            )
+            .is_err()
+        );
+        assert!(
+            jobs.admit(
+                "original",
+                "original-input",
+                "signer:install:jobone",
+                "file_prepare"
+            )
+            .is_err()
+        );
+        jobs.finish("original", "succeeded", None).unwrap();
+        assert!(
+            jobs.admit(
+                "another",
+                "other-input",
+                "signer:install:jobone",
+                "file_prepare"
+            )
+            .is_ok()
+        );
+        // Only signer Jobs have this conservative filesystem-alias guard.
+        jobs.admit("cli-upper", "upper", "cli:Release", "install")
+            .unwrap();
+        assert!(
+            jobs.admit("cli-lower", "lower", "cli:release", "install")
+                .is_ok()
+        );
+    }
     #[test]
     fn runtime_admission_does_not_block_job_queries_or_receipts() {
         let jobs = std::sync::Arc::new(ToolJobs::open(":memory:").unwrap());

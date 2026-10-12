@@ -151,14 +151,39 @@ pub async fn tool_file_prepare(
                 job.id, job.state
             )));
         }
-        tools::file_prepare_identity(&identity_input).map_err(|error| {
+        let target_resource = tools::file_prepare_resource(&identity_input.job_id)
+            .map_err(tools::FilePrepareError::unknown)?;
+        if target_resource.is_none() {
+            return Err(tools::record_prepare_validation_failure(
+                &preflight_jobs,
+                &preflight_operation,
+                &identity_input,
+                None,
+                "签名 Job ID 无效；未开始准备",
+            ));
+        }
+        let identity = tools::file_prepare_identity(&identity_input).map_err(|error| {
+            match tools::file_prepare_resource(&identity_input.job_id) {
+                Ok(current) if current == target_resource => {}
+                Ok(_) => {
+                    return tools::FilePrepareError::unknown("签名安装身份已变化；请核对原操作");
+                }
+                Err(error) => return tools::FilePrepareError::unknown(error),
+            }
             tools::record_prepare_validation_failure(
                 &preflight_jobs,
                 &preflight_operation,
                 &identity_input,
+                target_resource.as_deref(),
                 error,
             )
-        })
+        })?;
+        if Some(identity.0.as_str()) != target_resource.as_deref() {
+            return Err(tools::FilePrepareError::unknown(
+                "签名安装身份已变化；请核对原操作",
+            ));
+        }
+        Ok(identity)
     })
     .await
     .map_err(tools::FilePrepareError::unknown)??;

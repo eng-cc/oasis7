@@ -4,8 +4,8 @@ pub mod jobs;
 mod signing;
 use signing::compatible_info;
 pub use signing::{
-    file_prepare_identity, prepare_file, reconcile_file_prepare, reconcile_signer_job,
-    selected_file_digest, signer_job_identity, verify_file_signature,
+    file_prepare_identity, file_prepare_resource, prepare_file, reconcile_file_prepare,
+    reconcile_signer_job, selected_file_digest, signer_job_identity, verify_file_signature,
 };
 pub mod secrets;
 use crate::{Error, Result};
@@ -79,19 +79,24 @@ pub fn record_prepare_validation_failure(
     jobs: &jobs::ToolJobs,
     operation_id: &str,
     input: &FileSignInput,
+    target_resource: Option<&str>,
     error: impl std::fmt::Display,
 ) -> FilePrepareError {
+    // A valid Job cannot be declared unaffected when its installation identity
+    // is unknown. Invalid identifiers cannot refer to a legitimate caller Job.
+    let resource = match target_resource {
+        Some(resource) => resource.to_owned(),
+        None if protocol::validate_id(&input.job_id).is_err() => {
+            format!("prepare-validation:{operation_id}")
+        }
+        None => return FilePrepareError::unknown("无法核对原 Job 的安装身份；请核对原操作"),
+    };
     let input_bytes = match serde_json::to_vec(input) {
         Ok(bytes) => bytes,
         Err(error) => return FilePrepareError::unknown(error),
     };
     let fingerprint = format!("prepare-validation:{}", identity::sha256_hex(&input_bytes));
-    let admission = jobs.admit_once(
-        operation_id,
-        &fingerprint,
-        &format!("prepare-validation:{operation_id}"),
-        "file_prepare",
-    );
+    let admission = jobs.admit_once(operation_id, &fingerprint, &resource, "file_prepare");
     match admission {
         Ok((_, true)) => match jobs.finish(operation_id, "failed", None) {
             Ok(_) => FilePrepareError::no_effect(error),
