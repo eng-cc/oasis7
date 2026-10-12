@@ -453,6 +453,71 @@ pub fn restore_directory_in_parent(
     expected_digest: Option<&str>,
     parent_dir: &crate::fs::Directory,
 ) -> Result<(SnapshotSummary, crate::fs::Directory)> {
+    let stage = new_restore_stage();
+    restore_directory_with_stage(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        parent_dir,
+        &stage,
+    )
+}
+pub fn new_restore_stage() -> String {
+    format!(".context-stage-{}", crate::fs::random_id())
+}
+pub fn validate_restore_stage(stage: &str) -> Result<()> {
+    if !stage.strip_prefix(".context-stage-").is_some_and(|id| {
+        id.len() == 32
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    }) {
+        return Err(ContextError::new(
+            "INVALID_INPUT",
+            "invalid restore staging reference",
+        ));
+    }
+    Ok(())
+}
+#[allow(clippy::too_many_arguments)]
+pub fn restore_directory_with_stage(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+    stage: &str,
+) -> Result<(SnapshotSummary, crate::fs::Directory)> {
+    restore_staged(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        parent_dir,
+        stage,
+        |_, _| Ok(()),
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn restore_staged(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+    stage: &str,
+    mut checkpoint: impl FnMut(&str, &crate::fs::Directory) -> Result<()>,
+) -> Result<(SnapshotSummary, crate::fs::Directory)> {
+    validate_restore_stage(stage)?;
     if !target.is_absolute() {
         return Err(ContextError::new(
             "INVALID_INPUT",
@@ -482,10 +547,9 @@ pub fn restore_directory_in_parent(
         .file_name()
         .and_then(|s| s.to_str())
         .ok_or_else(invalid)?;
-    let stage = format!(".context-stage-{}", random_id()?);
-    parent_dir.create_dir_new(&stage)?;
+    let dir = parent_dir.create_dir_new(stage)?;
     let result = (|| {
-        let dir = parent_dir.child(&stage)?;
+        checkpoint("staged", &dir)?;
         dir.create_dir("entries")?;
         dir.create_dir(".context-local")?;
         let entries = dir.child("entries")?;
@@ -497,6 +561,7 @@ pub fn restore_directory_in_parent(
                 false,
             )?;
         }
+        checkpoint("entries_written", &dir)?;
         entries.sync()?;
         dir.write_atomic(
             ".gitignore",
@@ -509,23 +574,23 @@ pub fn restore_directory_in_parent(
             &serde_json::to_vec_pretty(&snapshot.store).map_err(|_| invalid())?,
             false,
         )?;
+        checkpoint("before_sync", &dir)?;
         dir.sync()?;
-        parent_dir
-            .publish_new_directory(&stage, name)
-            .map_err(|e| {
-                if e.code == "ALREADY_EXISTS" {
-                    ContextError::new("RESTORE_TARGET_EXISTS", "restore target already exists")
-                } else {
-                    e
-                }
-            })?;
+        checkpoint("before_publish", &dir)?;
+        parent_dir.publish_new_directory(stage, name).map_err(|e| {
+            if e.code == "ALREADY_EXISTS" {
+                ContextError::new("RESTORE_TARGET_EXISTS", "restore target already exists")
+            } else {
+                e
+            }
+        })?;
         Ok((summary, dir))
     })();
     // Leave private staging on failure: reopening its path could traverse a replaced parent.
-    result
-}
-fn random_id() -> Result<String> {
-    Ok(crate::fs::random_id())
+    result.map_err(|mut e: ContextError| {
+        e.effect = "applied".into();
+        e
+    })
 }
 #[cfg(test)]
 #[path = "snapshot_tests.rs"]

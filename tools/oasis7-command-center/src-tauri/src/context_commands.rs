@@ -500,11 +500,12 @@ pub async fn context_snapshot_restore(
             Ok((evidence, password))
         })
         .await?;
-    let parent_identity = match &evidence {
+    let (parent_identity, staging_name) = match &evidence {
         oasis7_command_center_core::context::ContextRecoveryEvidence::SnapshotRestore {
             parent_identity,
+            staging_name: Some(staging_name),
             ..
-        } => parent_identity.clone(),
+        } => (parent_identity.clone(), staging_name.clone()),
         _ => return Err("Unexpected restore evidence".into()),
     };
     tools
@@ -529,13 +530,14 @@ pub async fn context_snapshot_restore(
                     ));
                 }
                 ContextService::open(path)?
-                    .restore_snapshot_frozen_parent(
+                    .restore_snapshot_frozen_stage(
                         &source,
                         &input,
                         &target,
                         &password,
                         &encrypted_digest,
                         &parent_identity,
+                        &staging_name,
                     )
                     .map(Some)
             },

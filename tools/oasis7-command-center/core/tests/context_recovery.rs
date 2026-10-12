@@ -553,3 +553,164 @@ fn export_rejects_parent_replacement_and_restore_binding_keeps_published_inode()
             .ends_with(b"secret body never persisted to job database\n")
     );
 }
+
+#[test]
+fn staged_restore_evidence_retains_unknown_reservation_without_replay() {
+    let temp = tempfile::tempdir().unwrap();
+    let (service, binding, request) = fixture(&temp);
+    service.save(&request).unwrap();
+    let input = temp.path().join("backup.enc");
+    let password = b"restore-staging-recovery";
+    service
+        .snapshot_export(&binding.id, binding.binding_version, &input, &[], password)
+        .unwrap();
+    let source = ContextSnapshotRestoreSource {
+        binding_id: Some(binding.id.clone()),
+        binding_version: Some(binding.binding_version),
+        registered_project_id: binding.registered_project_id.clone(),
+    };
+    let target = temp.path().join("staged-target");
+    let digest = oasis7_local_signer::identity::sha256_hex(&std::fs::read(&input).unwrap());
+    let evidence = service
+        .restore_snapshot_evidence(&source, &input, &target, password, &digest)
+        .unwrap();
+    let stage = match &evidence {
+        ContextRecoveryEvidence::SnapshotRestore {
+            staging_name: Some(stage),
+            ..
+        } => stage.clone(),
+        _ => unreachable!(),
+    };
+    let stage_path = target.parent().unwrap().join(&stage);
+    std::fs::create_dir(&stage_path).unwrap();
+    std::fs::write(stage_path.join("partial.md"), b"private staged plaintext").unwrap();
+    let jobs = ToolJobs::open(":memory:").unwrap();
+    jobs.admit_once_with_evidence(
+        "restore-original",
+        "frozen",
+        "restore-target",
+        "snapshot_restore",
+        &evidence,
+    )
+    .unwrap();
+    jobs.finish("restore-original", "unknown", None).unwrap();
+    assert_eq!(
+        jobs.reconcile_context("restore-original", &service, None)
+            .unwrap()
+            .state,
+        "unknown"
+    );
+    assert!(jobs.quit_pending().unwrap());
+    assert!(
+        jobs.admit("replacement", "new", "restore-target", "snapshot_restore")
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read(stage_path.join("partial.md")).unwrap(),
+        b"private staged plaintext"
+    );
+    // Missing staging is not proof that no plaintext effect occurred or moved.
+    std::fs::rename(&stage_path, temp.path().join("moved-staging")).unwrap();
+    assert_eq!(service.reconcile(&evidence, None).unwrap().state, "unknown");
+    let mut legacy = serde_json::to_value(&evidence).unwrap();
+    legacy.as_object_mut().unwrap().remove("staging_name");
+    let legacy: ContextRecoveryEvidence = serde_json::from_value(legacy).unwrap();
+    assert_eq!(service.reconcile(&legacy, None).unwrap().state, "unknown");
+    let mut invalid = evidence.clone();
+    if let ContextRecoveryEvidence::SnapshotRestore { staging_name, .. } = &mut invalid {
+        *staging_name = Some("../outside".into());
+    }
+    assert!(service.reconcile(&invalid, None).is_err());
+    let db = rusqlite::Connection::open(temp.path().join("host.db")).unwrap();
+    let before: u64 = db
+        .query_row("SELECT COUNT(*) FROM context_reserved_roots", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert!(
+        service
+            .restore_snapshot_frozen_stage(
+                &source,
+                &input,
+                &target,
+                password,
+                &digest,
+                "unused",
+                "../outside"
+            )
+            .is_err()
+    );
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM context_reserved_roots", [], |r| r
+            .get::<_, u64>(0))
+            .unwrap(),
+        before
+    );
+    assert_eq!(jobs.list().unwrap()[0].state, "unknown");
+}
+
+#[test]
+fn original_restore_stage_is_reserved_private_with_a_durable_claim() {
+    let temp = tempfile::tempdir().unwrap();
+    let (service, binding, request) = fixture(&temp);
+    service.save(&request).unwrap();
+    let input = temp.path().join("backup.enc");
+    let password = b"restore-stage-exclusion";
+    service
+        .snapshot_export(&binding.id, binding.binding_version, &input, &[], password)
+        .unwrap();
+    let source = ContextSnapshotRestoreSource {
+        binding_id: Some(binding.id.clone()),
+        binding_version: Some(binding.binding_version),
+        registered_project_id: binding.registered_project_id.clone(),
+    };
+    let target = temp.path().join("restored-exclusion");
+    let digest = oasis7_local_signer::identity::sha256_hex(&std::fs::read(&input).unwrap());
+    let evidence = service
+        .restore_snapshot_evidence(&source, &input, &target, password, &digest)
+        .unwrap();
+    let (parent, stage) = match &evidence {
+        ContextRecoveryEvidence::SnapshotRestore {
+            parent_identity,
+            staging_name: Some(stage),
+            ..
+        } => (parent_identity, stage),
+        _ => unreachable!(),
+    };
+    service
+        .restore_snapshot_frozen_stage(&source, &input, &target, password, &digest, parent, stage)
+        .unwrap();
+    let staging = temp.path().canonicalize().unwrap().join(stage);
+    let db = rusqlite::Connection::open(temp.path().join("host.db")).unwrap();
+    assert!(
+        db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM context_reserved_roots WHERE path=?1)",
+            [staging.to_string_lossy()],
+            |r| r.get::<_, bool>(0)
+        )
+        .unwrap()
+    );
+    assert!(
+        db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM context_binding_claims WHERE path=?1)",
+            [staging.to_string_lossy()],
+            |r| r.get::<_, bool>(0)
+        )
+        .unwrap()
+    );
+    std::fs::create_dir(&staging).unwrap();
+    assert!(service.reconcile(&evidence, None).unwrap().state == "unknown");
+    std::fs::write(staging.join("private.md"), b"private stage residual").unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .arg("init")
+            .arg(&staging)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let mut center =
+        oasis7_command_center_core::CommandCenter::open(temp.path().join("host.db")).unwrap();
+    assert!(center.open_project(&staging).is_err());
+}

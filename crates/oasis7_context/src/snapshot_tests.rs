@@ -144,7 +144,7 @@ fn authenticated_invalid_manifest_creates_no_restore_target() {
 fn restored_store_preserves_identity_and_excludes_local_state() {
     let base = std::env::temp_dir().join(format!(
         "oasis7-context-snapshot-test-{}",
-        random_id().unwrap()
+        crate::fs::random_id()
     ));
     std::fs::create_dir(&base).unwrap();
     let base = base.canonicalize().unwrap();
@@ -284,4 +284,113 @@ fn initialized_store_is_returned_from_original_held_parent_and_root() {
     assert!(!store.directory().matches_path(&existing).unwrap());
     assert!(moved.join("context.json").is_file());
     assert_eq!(std::fs::read_dir(&existing).unwrap().count(), 0);
+}
+
+#[test]
+fn restore_faults_after_staging_report_applied_and_preserve_private_plaintext() {
+    for phase in ["staged", "entries_written", "before_sync", "before_publish"] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let input = root.join("backup.enc");
+        let pass = b"staged-restore-fault-fixture";
+        std::fs::write(
+            &input,
+            oasis7_secure_envelope::seal(KIND, &serde_json::to_vec(&fixture()).unwrap(), pass)
+                .unwrap(),
+        )
+        .unwrap();
+        let parent = crate::fs::Directory::open(&root).unwrap();
+        let stage = new_restore_stage();
+        let target = root.join("restored");
+        let error = restore_staged(
+            &input,
+            &target,
+            None,
+            None,
+            pass,
+            None,
+            &parent,
+            &stage,
+            |current, _| {
+                if current == phase {
+                    return Err(std::io::Error::from_raw_os_error(
+                        if current == "entries_written" {
+                            libc::ENOSPC
+                        } else {
+                            libc::EIO
+                        },
+                    )
+                    .into());
+                }
+                Ok(())
+            },
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.code, "IO_ERROR");
+        assert_eq!(
+            error.effect, "applied",
+            "{phase} must not claim no filesystem effect"
+        );
+        assert!(!target.exists());
+        assert!(root.join(&stage).is_dir());
+        if phase != "staged" {
+            assert_eq!(
+                std::fs::read(root.join(&stage).join("entries/machine-test.md")).unwrap(),
+                fixture().entries[0].content_utf8.as_bytes()
+            );
+        }
+    }
+}
+
+#[test]
+fn actual_restore_write_and_publication_failures_keep_applied_staging() {
+    for conflict in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let input = root.join("backup.enc");
+        let pass = b"staged-restore-real-fault";
+        std::fs::write(
+            &input,
+            oasis7_secure_envelope::seal(KIND, &serde_json::to_vec(&fixture()).unwrap(), pass)
+                .unwrap(),
+        )
+        .unwrap();
+        let parent = crate::fs::Directory::open(&root).unwrap();
+        let stage = new_restore_stage();
+        let target = root.join("restored");
+        let error = restore_staged(
+            &input,
+            &target,
+            None,
+            None,
+            pass,
+            None,
+            &parent,
+            &stage,
+            |phase, dir| {
+                if !conflict && phase == "staged" {
+                    dir.write_atomic("entries", b"write obstruction", false)?;
+                }
+                if conflict && phase == "before_publish" {
+                    std::fs::create_dir(&target)?;
+                }
+                Ok(())
+            },
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.effect, "applied");
+        assert!(root.join(&stage).is_dir());
+        if conflict {
+            assert_eq!(error.code, "RESTORE_TARGET_EXISTS");
+            assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+            assert_eq!(
+                std::fs::read(root.join(&stage).join("entries/machine-test.md")).unwrap(),
+                fixture().entries[0].content_utf8.as_bytes()
+            );
+        } else {
+            assert!(!target.exists());
+        }
+    }
 }

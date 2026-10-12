@@ -88,7 +88,7 @@ pub struct ContextService {
     db: Connection,
 }
 pub(crate) fn migrate(db: &Connection) -> Result<()> {
-    db.execute_batch("CREATE TABLE IF NOT EXISTS context_bindings(id TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS ordinary_projects(path TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS context_reserved_roots(path TEXT PRIMARY KEY);")?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS context_bindings(id TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS ordinary_projects(path TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS context_reserved_roots(path TEXT PRIMARY KEY); CREATE TABLE IF NOT EXISTS context_binding_claims(id TEXT PRIMARY KEY,path TEXT NOT NULL); CREATE TABLE IF NOT EXISTS context_owned_reservations(path TEXT PRIMARY KEY,owner TEXT NOT NULL);")?;
     Ok(())
 }
 fn failure(e: impl std::fmt::Display) -> Error {
@@ -175,18 +175,27 @@ fn held_directory_identity(dir: &oasis7_context::fs::Directory) -> Result<String
     let (device, inode) = dir.identity().map_err(Error::Context)?;
     Ok(format!("{device}:{inode}"))
 }
-fn check_ordinary_overlap(tx: &Transaction<'_>, root: &Path) -> Result<()> {
-    let mut statement = tx.prepare("SELECT path FROM ordinary_projects")?;
+const ORDINARY_OVERLAP: &str =
+    "private library overlaps an ordinary project; choose an independent directory";
+fn check_ordinary_overlap(db: &Connection, root: &Path) -> Result<()> {
+    let mut statement = db.prepare("SELECT path FROM ordinary_projects")?;
     for value in statement.query_map([], |r| r.get::<_, String>(0))? {
         let value = value?;
         let registered = Path::new(&value);
         if overlaps(root, registered) || overlaps(root, &exclusion_root(registered)?) {
-            return Err(failure(
-                "private library overlaps an ordinary project; choose an independent directory",
-            ));
+            return Err(failure(ORDINARY_OVERLAP));
         }
     }
     Ok(())
+}
+/// Only this policy rejection before initialization proves no private effects.
+fn check_unwritten_ordinary_overlap(db: &Connection, root: &Path) -> Result<()> {
+    check_ordinary_overlap(db, root).map_err(|error| match error {
+        Error::Invalid(message) if message == ORDINARY_OVERLAP => Error::Context(
+            oasis7_context::error::ContextError::new("INVALID_INPUT", &message),
+        ),
+        other => other,
+    })
 }
 impl ContextService {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -254,8 +263,17 @@ impl ContextService {
             }
             None => None,
         };
-        self.reserve_private_root(&root)?;
-        let store = if create {
+        let rollback_root = if create && expected_store_id.is_none() {
+            held_root
+                .as_ref()
+                .map(|dir| dir.try_clone())
+                .transpose()
+                .map_err(Error::Context)?
+        } else {
+            None
+        };
+        let reservation = self.reserve_private_root(&root)?;
+        let store_result = if create {
             match held_root {
                 Some(dir) => Store::init_directory_frozen(
                     &root,
@@ -271,8 +289,29 @@ impl ContextService {
                 &root,
                 held_root.ok_or_else(|| failure("existing binding directory required"))?,
             )
-        }
-        .map_err(Error::Context)?;
+        };
+        let store = match store_result {
+            Ok(store) => store,
+            Err(error) => {
+                // This exact existing-empty-directory validation path precedes
+                // initialization/lock writes. Other failures retain private custody.
+                if create
+                    && expected_store_id.is_none()
+                    && error.effect == "none"
+                    && error.code == "INVALID_INPUT"
+                    && let Some(expected_root) = root_identity.as_deref()
+                    && let Some(original_directory) = rollback_root.as_ref()
+                {
+                    self.release_unwritten_binding_reservation(
+                        &root,
+                        &reservation,
+                        expected_root,
+                        original_directory,
+                    )?;
+                }
+                return Err(Error::Context(error));
+            }
+        };
         if expected_store_id
             .as_ref()
             .is_some_and(|id| id != &store.config.store_id)
@@ -285,14 +324,114 @@ impl ContextService {
         }
         self.bind_held_store(&store, project_id)
     }
-    fn reserve_private_root(&self, root: &Path) -> Result<()> {
+    fn reserve_private_root(&self, root: &Path) -> Result<(String, Option<String>)> {
         let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
-        check_ordinary_overlap(&tx, root)?;
-        tx.execute(
+        let reservation = Self::reserve_private_root_in(&tx, root)?;
+        tx.commit()?;
+        Ok(reservation)
+    }
+    fn reserve_private_root_in(
+        tx: &Transaction<'_>,
+        root: &Path,
+    ) -> Result<(String, Option<String>)> {
+        check_unwritten_ordinary_overlap(tx, root)?;
+        let inserted = tx.execute(
             "INSERT OR IGNORE INTO context_reserved_roots(path) VALUES (?1)",
             [root.to_string_lossy()],
+        )? == 1;
+        let claim = oasis7_context::fs::random_id();
+        if inserted {
+            tx.execute(
+                "INSERT INTO context_owned_reservations(path,owner) VALUES (?1,?2)",
+                params![root.to_string_lossy(), claim],
+            )?;
+        }
+        let owner: Option<String> = tx
+            .query_row(
+                "SELECT owner FROM context_owned_reservations WHERE path=?1",
+                [root.to_string_lossy()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        tx.execute(
+            "INSERT INTO context_binding_claims(id,path) VALUES (?1,?2)",
+            params![claim, root.to_string_lossy()],
         )?;
+        Ok((claim, owner))
+    }
+    fn release_unwritten_binding_reservation(
+        &self,
+        root: &Path,
+        reservation: &(String, Option<String>),
+        expected_directory_identity: &str,
+        original_directory: &oasis7_context::fs::Directory,
+    ) -> Result<()> {
+        if held_directory_identity(original_directory)? != expected_directory_identity
+            || !original_directory
+                .matches_path(root)
+                .map_err(Error::Context)?
+        {
+            return Ok(());
+        }
+        // Same cross-process store lock as CLI initialization. Keep it through
+        // the SQL commit so an in-place initializer cannot acquire custody mid-cleanup.
+        let Ok(_lock) = original_directory.lock(0) else {
+            return Ok(());
+        };
+        let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
+        // Revalidate custody too: an unrelated store/path replacement is not our
+        // unwritten directory, even if this initialization itself had no effect.
+        if !original_directory
+            .matches_path(root)
+            .map_err(Error::Context)?
+            || !matches!(original_directory.read("context.json", oasis7_context::model::MAX_METADATA_BYTES), Err(ref e) if e.code == "ENTRY_NOT_FOUND")
+        {
+            return Ok(());
+        }
+        Self::release_unwritten_reservation_in(&tx, root, reservation)?;
+        if !original_directory
+            .matches_path(root)
+            .map_err(Error::Context)?
+        {
+            return Ok(()); // The uncommitted claim cleanup rolls back with this transaction.
+        }
         tx.commit()?;
+        Ok(())
+    }
+    /// Caller must prove no effect and unchanged custody before releasing its claim.
+    fn release_unwritten_reservation_in(
+        tx: &Transaction<'_>,
+        root: &Path,
+        reservation: &(String, Option<String>),
+    ) -> Result<()> {
+        let removed = tx.execute(
+            "DELETE FROM context_binding_claims WHERE id=?1 AND path=?2",
+            params![reservation.0, root.to_string_lossy()],
+        )?;
+        let active: u64 = tx.query_row(
+            "SELECT COUNT(*) FROM context_binding_claims WHERE path=?1",
+            [root.to_string_lossy()],
+            |r| r.get(0),
+        )?;
+        let existing_binding = bindings(tx)?
+            .iter()
+            .any(|binding| overlaps(root, Path::new(&binding.root)));
+        if removed == 1
+            && active == 0
+            && !existing_binding
+            && let Some(owner) = &reservation.1
+        {
+            let owned = tx.execute(
+                "DELETE FROM context_owned_reservations WHERE path=?1 AND owner=?2",
+                params![root.to_string_lossy(), owner],
+            )?;
+            if owned == 1 {
+                tx.execute(
+                    "DELETE FROM context_reserved_roots WHERE path=?1",
+                    [root.to_string_lossy()],
+                )?;
+            }
+        }
         Ok(())
     }
     /// Publish only the identity and metadata of the held store. Path checks never adopt a reopened store.
@@ -614,6 +753,52 @@ impl ContextService {
         expected_digest: &str,
         expected_parent_identity: &str,
     ) -> Result<ContextBinding> {
+        let stage = oasis7_context::snapshot::new_restore_stage();
+        self.restore_snapshot_frozen_stage(
+            source,
+            input,
+            target,
+            passphrase,
+            expected_digest,
+            expected_parent_identity,
+            &stage,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn restore_snapshot_frozen_stage(
+        &self,
+        source: &ContextSnapshotRestoreSource,
+        input: &Path,
+        target: &Path,
+        passphrase: &[u8],
+        expected_digest: &str,
+        expected_parent_identity: &str,
+        staging_name: &str,
+    ) -> Result<ContextBinding> {
+        self.restore_snapshot_frozen_stage_with(
+            source,
+            input,
+            target,
+            passphrase,
+            expected_digest,
+            expected_parent_identity,
+            staging_name,
+            || {},
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    fn restore_snapshot_frozen_stage_with(
+        &self,
+        source: &ContextSnapshotRestoreSource,
+        input: &Path,
+        target: &Path,
+        passphrase: &[u8],
+        expected_digest: &str,
+        expected_parent_identity: &str,
+        staging_name: &str,
+        before_restore: impl FnOnce(),
+    ) -> Result<ContextBinding> {
+        oasis7_context::snapshot::validate_restore_stage(staging_name).map_err(Error::Context)?;
         let parent = target
             .parent()
             .ok_or_else(|| failure("restore target needs parent"))?;
@@ -628,20 +813,16 @@ impl ContextService {
 
         let root = canonical_candidate(target)?;
         let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
-        let mut statement = tx.prepare("SELECT path FROM ordinary_projects")?;
-        for value in statement.query_map([], |r| r.get::<_, String>(0))? {
-            let value = value?;
-            if overlaps(&root, &exclusion_root(Path::new(&value))?) {
-                return Err(failure("restore target overlaps ordinary project"));
-            }
-        }
-        drop(statement);
-        tx.execute(
-            "INSERT OR IGNORE INTO context_reserved_roots(path) VALUES (?1)",
-            [root.to_string_lossy()],
-        )?;
+        let staging_path = root
+            .parent()
+            .ok_or_else(|| failure("restore target needs parent"))?
+            .join(staging_name);
+        check_unwritten_ordinary_overlap(&tx, &staging_path)?;
+        let root_reservation = Self::reserve_private_root_in(&tx, &root)?;
+        let staging_reservation = Self::reserve_private_root_in(&tx, &staging_path)?;
         tx.commit()?;
-        let (_, published_dir) = oasis7_context::snapshot::restore_directory_in_parent(
+        before_restore();
+        let restore_result = oasis7_context::snapshot::restore_directory_with_stage(
             input,
             &root,
             Some(&identity.project_id),
@@ -649,8 +830,24 @@ impl ContextService {
             passphrase,
             Some(expected_digest),
             &parent_dir,
-        )
-        .map_err(Error::Context)?;
+            staging_name,
+        );
+        let (_, published_dir) = match restore_result {
+            Ok(restored) => restored,
+            Err(error) => {
+                if error.effect == "none" {
+                    self.release_unwritten_restore_reservations(
+                        &root,
+                        &staging_path,
+                        &parent_dir,
+                        &held_identity,
+                        &root_reservation,
+                        &staging_reservation,
+                    )?;
+                }
+                return Err(Error::Context(error));
+            }
+        };
         if directory_identity(parent)? != held_identity {
             return Err(failure(
                 "restore parent changed during publication; original held directory contains restore",
@@ -664,6 +861,68 @@ impl ContextService {
         }
         self.bind_held_store(&store, &identity.registered_project_id)
     }
+    #[allow(clippy::too_many_arguments)]
+    fn release_unwritten_restore_reservations(
+        &self,
+        root: &Path,
+        staging: &Path,
+        parent: &oasis7_context::fs::Directory,
+        expected_parent_identity: &str,
+        root_reservation: &(String, Option<String>),
+        staging_reservation: &(String, Option<String>),
+    ) -> Result<()> {
+        let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
+        let parent_path = root
+            .parent()
+            .ok_or_else(|| failure("restore target needs parent"))?;
+        let stage_name = staging
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| failure("invalid restore staging"))?;
+        if held_directory_identity(parent)? != expected_parent_identity
+            || !parent.matches_path(parent_path).map_err(Error::Context)?
+            || parent.contains(stage_name).map_err(Error::Context)?
+        {
+            return Ok(());
+        }
+        let target_name = root
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| failure("invalid restore target"))?;
+        let target_custody = if parent.contains(target_name).map_err(Error::Context)? {
+            let Ok(target) = parent.child(target_name) else {
+                return Ok(());
+            };
+            let Ok(lock) = target.lock(0) else {
+                return Ok(());
+            };
+            if target.contains("context.json").map_err(Error::Context)? {
+                return Ok(());
+            }
+            Some((target, lock))
+        } else {
+            None
+        };
+        Self::release_unwritten_reservation_in(&tx, staging, staging_reservation)?;
+        Self::release_unwritten_reservation_in(&tx, root, root_reservation)?;
+        // Uncommitted removals roll back if original custody changes while checking.
+        if !parent.matches_path(parent_path).map_err(Error::Context)?
+            || parent.contains(stage_name).map_err(Error::Context)?
+        {
+            return Ok(());
+        }
+        if let Some((target, _)) = &target_custody {
+            if !target.matches_path(root).map_err(Error::Context)?
+                || target.contains("context.json").map_err(Error::Context)?
+            {
+                return Ok(());
+            }
+        } else if parent.contains(target_name).map_err(Error::Context)? {
+            return Ok(());
+        }
+        tx.commit()?;
+        Ok(())
+    }
     pub fn doctor(&self, id: &str, version: u64) -> Result<serde_json::Value> {
         self.store(id, version)?.doctor().map_err(Error::Context)
     }
@@ -673,3 +932,10 @@ fn condition(revision: Option<&str>) -> WriteCondition {
         .map(|r| WriteCondition::Revision(r.into()))
         .unwrap_or(WriteCondition::Absent)
 }
+
+#[cfg(test)]
+mod reservation_tests;
+
+#[cfg(test)]
+#[path = "context/restore_reservation_tests.rs"]
+mod restore_reservation_tests;

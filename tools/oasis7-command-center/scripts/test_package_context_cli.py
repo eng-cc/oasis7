@@ -1,4 +1,6 @@
 """Packaging regression: Cargo artifacts need not live under checkout/target."""
+import fnmatch
+import re
 import hashlib
 import json
 import os
@@ -133,6 +135,19 @@ if mode == 'failed':
     def test_ignored_generated_cache_does_not_invalidate_committed_source(self):
         _, _, _, result = self.run_fixture('success', 'ignored-cache')
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_desktop_workflow_covers_cli_build_driver_inputs(self):
+        workflow = (SCRIPT.parents[3] / '.github/workflows/command-center.yml').read_text()
+        for event, ending in (('pull_request', '  push:'), ('push', 'permissions:')):
+            section = workflow.split('  ' + event + ':', 1)[1].split(ending, 1)[0]
+            patterns = re.findall(r"^\s+- '([^']+)'$", section, re.MULTILINE)
+            for dependency in ('scripts/cargo-dev.sh', 'scripts/cargo-cache.py',
+                               'scripts/find-python-with-module.sh', 'rust-toolchain.toml',
+                               '.cargo/config.toml'):
+                with self.subTest(event=event, dependency=dependency):
+                    self.assertTrue(any(fnmatch.fnmatchcase(dependency, pattern)
+                                        for pattern in patterns),
+                                    f'{event} must package when only {dependency} changes')
 
     def test_requested_desktop_target_is_shared_with_cli_and_catalog(self):
         target = 'x86_64-apple-darwin'

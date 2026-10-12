@@ -32,6 +32,8 @@ pub enum ContextRecoveryEvidence {
         target_path: String,
         parent_identity: String,
         input_sha256: String,
+        #[serde(default)]
+        staging_name: Option<String>,
         revisions: Vec<(String, String)>,
     },
 }
@@ -176,6 +178,7 @@ impl ContextService {
         create: bool,
     ) -> Result<ContextRecoveryEvidence> {
         let root = canonical_candidate(path)?;
+        check_unwritten_ordinary_overlap(&self.db, &root)?;
         let parent = root
             .parent()
             .ok_or_else(|| failure("binding root needs parent"))?;
@@ -359,6 +362,7 @@ impl ContextService {
             oasis7_context::snapshot::inspect_revisions_frozen(input, passphrase, &digest)
                 .map_err(Error::Context)?;
         let target = canonical_candidate(target)?;
+        check_unwritten_ordinary_overlap(&self.db, &target)?;
         if target.exists() {
             return Err(failure("restore target already exists"));
         }
@@ -372,6 +376,7 @@ impl ContextService {
                     .ok_or_else(|| failure("restore target needs parent"))?,
             )?,
             input_sha256: digest,
+            staging_name: Some(oasis7_context::snapshot::new_restore_stage()),
             revisions,
         })
     }
@@ -450,8 +455,15 @@ impl ContextService {
                 }
                 if absent(&Path::new(root).join("context.json"))? {
                     return Ok(conclusion(
-                        "failed",
-                        "Target has no initialized library or completed binding",
+                        "unknown",
+                        &format!(
+                            "原资料库未完成初始化或绑定；无法确认是否保留初始化暂存目录。原目标：{}；原父目录：{}。请人工核对该父目录中的 .context-stage-*；不会自动打开、清理或重放。",
+                            root,
+                            Path::new(root)
+                                .parent()
+                                .ok_or_else(|| failure("binding root needs parent"))?
+                                .display()
+                        ),
                     ));
                 }
                 let store = application::open(Some(Path::new(root))).map_err(Error::Context)?;
@@ -526,9 +538,14 @@ impl ContextService {
                 binding: identity,
                 target_path,
                 parent_identity,
+                staging_name,
                 revisions: expected,
                 ..
             } => {
+                if let Some(stage) = staging_name {
+                    oasis7_context::snapshot::validate_restore_stage(stage)
+                        .map_err(Error::Context)?;
+                }
                 let target = Path::new(target_path);
                 if directory_identity(
                     target
@@ -541,10 +558,35 @@ impl ContextService {
                         "Original restore parent identity changed",
                     ));
                 }
+                let parent = target
+                    .parent()
+                    .ok_or_else(|| failure("restore target needs parent"))?;
+                if let Some(stage) = staging_name {
+                    let staging_path = parent.join(stage);
+                    if !absent(&staging_path)? {
+                        return Ok(conclusion(
+                            "unknown",
+                            &format!(
+                                "原恢复暂存目录仍在，可能含私有明文：{}。原目标：{}。请人工核对原目录；不会自动打开、清理或重放。",
+                                staging_path.display(),
+                                target.display()
+                            ),
+                        ));
+                    }
+                }
                 if absent(target)? {
+                    let reference = staging_name
+                        .as_ref()
+                        .map(|stage| parent.join(stage).display().to_string())
+                        .unwrap_or_else(|| "旧记录没有暂存目录身份".into());
                     return Ok(conclusion(
-                        "failed",
-                        "Exact new restore directory is absent",
+                        "unknown",
+                        &format!(
+                            "原恢复目标未发布，无法证明暂存明文未移动或未移除。原目标：{}；原暂存引用：{}；原父目录：{}。请人工核对；不会重放。",
+                            target.display(),
+                            reference,
+                            parent.display()
+                        ),
                     ));
                 }
                 let store = application::open(Some(target)).map_err(Error::Context)?;

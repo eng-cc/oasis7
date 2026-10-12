@@ -4,6 +4,11 @@ on:
     paths:
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'scripts/cargo-dev.sh'
+      - 'scripts/cargo-cache.py'
+      - 'scripts/find-python-with-module.sh'
       - 'tools/oasis7-command-center/**'
       - 'crates/oasis7_context/**'
       - 'crates/oasis7_local_signer/**'
@@ -14,6 +19,11 @@ on:
     paths:
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'scripts/cargo-dev.sh'
+      - 'scripts/cargo-cache.py'
+      - 'scripts/find-python-with-module.sh'
       - 'tools/oasis7-command-center/**'
       - 'crates/oasis7_context/**'
       - 'crates/oasis7_local_signer/**'

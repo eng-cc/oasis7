@@ -170,7 +170,30 @@ impl Directory {
         if unsafe { libc::mkdirat(self.file.as_raw_fd(), c.as_ptr(), 0o700) } < 0 {
             return Err(last());
         }
-        self.child(n)
+        self.child(n).map_err(|mut e| {
+            e.effect = "applied".into();
+            e
+        })
+    }
+    /// Observe a single entry relative to this held parent without following links.
+    pub fn contains(&self, n: &str) -> Result<bool> {
+        let n = name(n)?;
+        let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
+        if unsafe {
+            libc::fstatat(
+                self.file.as_raw_fd(),
+                n.as_ptr(),
+                metadata.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } == 0
+        {
+            return Ok(true);
+        }
+        if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT) {
+            return Ok(false);
+        }
+        Err(last())
     }
     pub fn remove_dir(&self, n: &str) -> Result<()> {
         let n = name(n)?;
