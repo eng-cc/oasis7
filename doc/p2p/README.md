@@ -11,6 +11,7 @@
 - 想先进入 phase / 增量文档密集的子域：先读 `doc/p2p/distfs/README.md`、`doc/p2p/observer/README.md`、`doc/p2p/distributed/README.md` 或 `doc/p2p/viewer-live/README.md`，再进入具体专题。
 - 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`。
 - 想先进入主链安全、network tier、signer custody 或 `hosted_public_join` 玩家身份专题：`doc/p2p/blockchain/README.md`
+- 想核对 HTTP 接纳、action ID、批次处置与 Explorer 查询一致性：进入[链 HTTP / Explorer 合同](blockchain/chain-http-submit-explorer-contract.prd.md)及其[系统设计](blockchain/chain-http-submit-explorer-contract.design.md)；Launcher 表现层另由对应 Explorer 专题负责。
 - 想执行 formal `public_testnet` readiness 或从 deployment truth 重建 validator pair：分别进入 `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md` 与 `doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md`；两者都是专业 operator authority，不升级 public-launch 或 mainnet claim。
 - 想先看“没有公网 IP 也要成为正式节点”的主链级覆盖网络目标态：`doc/p2p/network/mainnet-private-reachability-architecture.prd.md`
 - 想先看 P2P/DistFS/consensus/execution/observer 如何作为“链上大世界状态底座”单模块自闭环测试：`testing-manual.md#s9a链上大世界状态底座自闭环`

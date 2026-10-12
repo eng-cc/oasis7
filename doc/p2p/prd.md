@@ -27,6 +27,17 @@ Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 so
 
 首次开放证据必须在副本写入中、正式证明/提交决定写入中、回应 committed 前分别注入故障，并实证单故障域恢复 root/receipt 对账与旧 writer 拒绝。普通单测不能替代实际故障域演练；本段是 target，不宣称现有 prototype 已满足。
 
+后继设计把这些义务具体落为 [原 candidate 恢复 v1](design.md#des-p2p-original-candidate-recovery-v1)、
+[正式激活与消费 v1](design.md#des-p2p-formal-controlled-authority-v1) 和
+[人工 epoch 接管 v1](design.md#des-p2p-controlled-epoch-takeover-v1)。完整 candidate 落盘前
+的恢复必须先核对原持久决定，再以执行前双端保存的原输入/版本/nonce 重建，不能重新
+admission 或替换身份；只有尚无固定决定的 pending 才按恢复后的当前条件重审。
+人工接管先隔离旧进程签写权限，由创世预授权且限定原请求的恢复器排空旧 epoch，再封旧
+epoch 并激活唯一后继；恢复 issuer 不获任意业务或 BFT 回退权。
+正式证明需贯通普通 Describe、Submit、Lookup、ReadView 和 Changes，不能仅移除工程 scope。
+这些是未实施的目标协议及 [验收计划](design.md#val-p2p-controlled-authority-v1)，现有工程入口
+拒绝边界、planned 配置与实际部署 hold 保持有效。
+
 <a id="p2p-authority-handoff"></a>
 ### 单权威到 BFT 的 H/H+1 交接（目标）
 

@@ -18,6 +18,8 @@
 
 ## 核验基线与覆盖范围
 
+文档局部收敛（2026-10-12，仅 #4363）：以 `main@e01e29064517f4bf375767a19a09802335828249` 核对首局、首次绑定/首聊及持久权威合同，本次变更补齐下文第 1、2 项的目标设计与验收映射。新增目标尚待实现及适用验收；未取得新的部署或真人结果，其他条目的核验时点不变。
+
 局部增量（2026-10-12，仅 Cargo 拆分）：[#4626](https://github.com/eng-cc/oasis7/pull/4626) 已合入 `133d70e45b71bd062032a734d68be1e290692b2c`，统一生产 cognition memory/continuation 核心并保留 Runtime authority；对应 main Rust [38212520926](https://github.com/eng-cc/oasis7/actions/runs/38212520926) 已成功。本分支正在补支持包 profile 选测隔离，尚未合入或完成 V0。用户确认提速收益已验证；实际自主试玩明确不在此次 Cargo V0 验收范围，不据此宣称实玩通过。该增量不刷新下面其他项目/部署事实的核验时间。
 
 | 来源 | 本轮基线 |
@@ -70,12 +72,16 @@ Smelter 合法建成 → 铁锭生产 cycle → owner-bound output ledger 实际
 下一步先在已有代码与验证范围内收口缺口；实际部署暂缓，不能把本地双目录当成独立硬件故障域。
 来源：[基础设施当前阶段](../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[#4363 当前剩余条件](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
+2026-10-12 目标设计收敛：[原候选恢复](../../p2p/design.md#des-p2p-original-candidate-recovery-v1) 固定执行前完整材料与原请求重放；[正式权威 v1](../../p2p/design.md#des-p2p-formal-controlled-authority-v1) 和 [epoch 接管](../../p2p/design.md#des-p2p-controlled-epoch-takeover-v1) 明确激活、普通证明消费者及旧写者隔离顺序。下一步按这些主责合同实现与验证；现有工程证明、离线 verifier 和本地双目录仍不足以完成正式开放。
+
 ### 2. 真实首产物、阻塞恢复与回访
 
 starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/只读世界推进和 Hosted 修复分别已合入。
 同一候选、同一正式世界上的实际生产、授权纠偏、阻塞恢复与目标接续尚未组合验收。
 下一步核对实际 owner/Agent 入口与首产物链路；guest 启动不能代替 owner onboarding 或游戏操作。
 来源：[成果承接持续能力](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-008)、[#4363](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)、[#4566](https://github.com/eng-cc/oasis7/pull/4566)。
+
+2026-10-12 合同收敛：[当前首产物与后续专题](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#starter-profile-applicability) 分别确定适用验收；[同世界逐账号首次绑定与返回](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#player-session-first-agent-entry) 与 [service 首聊权威状态](../../game/gameplay/gameplay-agent-claim-economy-contract.design.md#des-claim-chat-005) 补齐后继目标。固定 starter 注册与缺余额投影的现实现仍待接线验证，不能用空世界单账号或本地完整状态测试代签第二玩家、未知状态及跨入口首局。
 
 ### 3. 当前验证与消费者收口
 

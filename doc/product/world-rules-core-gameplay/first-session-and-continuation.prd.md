@@ -1,6 +1,6 @@
 # 首局与持续游玩
 
-当前阶段唯一代表性链采用产品根选定的 `starter-industrial-smelter-to-assembler-v1` / `production_only`：合法地点建成 `factory.smelter.mk1`，以 `recipe.smelter.iron_ingot` 完成合法 cycle，在 owner-bound output ledger 形成首笔匹配正量铁锭结算，再开放 Assembler 候选。排程、资源扣减、入列和普通库存变化不能替代该结算；首产物不要求建成 Assembler，也不代签稳定能力、交付或需求满足。
+当前阶段唯一代表性链采用产品根选定的 `starter-industrial-smelter-to-assembler-v1` / `production_only`：合法地点建成 `factory.smelter.mk1`，以 `recipe.smelter.iron_ingot` 完成合法 cycle，在 owner-bound output ledger 形成首笔匹配正量 `iron_ingot` 结算，保留对应持久首产物里程碑，再开放 Assembler 候选。排程、资源扣减、入列和普通库存变化不能替代该结算；首产物不要求建成 Assembler，也不代签稳定能力、交付或需求满足。
 
 首轮前景化一个主要生产目标，Agent 只代办有效授权范围内的执行。优先观察生产规模与余量，以及缺料/缺电后等待、补足、减量或改道的真实取舍；只展示当前 authority 支持的动作。再次进入恢复旧成果、当前目标、未完成义务和下一动作，按当前授权、资源与版本重新裁决 pending，不复活失效授权，不重新结算旧效果。玩法恢复、节点灾备和玩家回访分别取证。提交结果未知时保留原请求身份核对，不判确定失败；安全停止或重新定目标不等于取消既有未知提交。
 
@@ -25,7 +25,7 @@
 
 ### 1.1 代表性情境
 
-玩家第一次来到一个仍有资源、物流和生产约束的世界，想把一个可理解的工业目标推进到当前 `starter_completion_profile` 声明的真实完成边界：先确认工厂和配方，再准备原料、等待或改道物流，观察多输入齐套，完成排程与生产；`production_only` 在匹配 production receipt 后完成首产物并保持 `produced/undelivered`，后续 `production-stable` 仍须满足另行声明的稳定条件；`terminal-admission` 才继续确认匹配 delivery/terminal settlement 是否产生目的地后果。玩家需要在每一步知道系统是否接受、当前主要阻塞是什么、已经保留或消耗了什么，以及失败、重连或事实变化后还能安全地继续哪条路；首局结束后，他还应理解下一项可以持续运转的能力和真实分支，而不是只看到一次动作成功。
+玩家第一次来到一个仍有资源和生产约束的世界，想把一个可理解的工业目标推进到当前 `starter_completion_profile` 声明的真实完成边界：先确认工厂和配方，再按该配方的实际前置准备合法输入与电力，完成排程与生产；来源获取/精炼、handoff、物流抵达和多输入齐套仅在所选配方/profile 明确依赖时进入这条链。`production_only` 在匹配 production receipt 后完成首产物并保持 `produced/undelivered`，后续 `production-stable` 仍须满足另行声明的稳定条件；后续 `terminal-admission` 专题才独立确认匹配 delivery/terminal settlement 是否产生目的地后果。玩家需要在每一步知道系统是否接受、当前主要阻塞是什么、已经保留或消耗了什么，以及失败、重连或事实变化后还能安全地继续哪条路；首局结束后，他还应理解下一项可以持续运转的能力和真实分支，而不是只看到一次动作成功。
 
 ### 1.2 事实、假设与未决问题
 
@@ -86,11 +86,20 @@
 
 ### 2.2.1 首个工业闭环 walkthrough
 
-首局至首次持续能力至少要能把一条代表性工业目标讲成同一条可追溯因果链，并按当前 `starter_completion_profile` 读出其完成边界：
+首局至首次持续能力至少要能把一条代表性工业目标讲成同一条可追溯因果链。当前 canonical `production_only` 首产物按以下边界验收：
 
-`工厂就绪 -> 比较配方 -> 获取/精炼原料 -> ready_for_logistics material batch -> 物流抵达 -> 多输入齐套 -> 排程 -> 生产 receipt ->（terminal-admission profile 时）交付 receipt`
+`合法 Smelter 就绪 -> 确认配方与合法输入/电力 -> 排程 -> 真实生产 receipt 与 owner-bound 正量铁锭结算 -> 持久首产物里程碑与 Assembler 候选`
 
-这是一条玩家可执行的引导脊柱，不是把内部步骤逐项变成任务清单。每一步都必须让玩家知道当前要做的事、什么会让它停下、哪些投入已被保留或消耗，以及完成后下一步是什么；同一事实可由 Viewer 或 pure API 以各自入口表达，但不能改变动作、阻塞或完成边界。
+<a id="starter-profile-applicability"></a>
+以下适用范围共同约束本节 walkthrough、feasibility Gate、REQ-FIRST-INDUSTRIAL-001..006、相应 AC 与 FS-15；具体依赖由所选配方/profile 和现行专业 authority 判定，不按通用表格自动增加当前前置。
+
+| 范围 | 纳入的前置与验收边界 |
+| --- | --- |
+| 当前 `starter-industrial-smelter-to-assembler-v1` / `production_only` | 核验合法工厂、该配方实际需要的输入/电力、真实结算、持久里程碑、Assembler 候选与阻塞恢复；匹配 production receipt 完成首产物，不要求稳定窗口、建成 Assembler 或 delivery。保留不得伪造交付、终端奖励或需求减少的负向验证。 |
+| 来源/精炼、handoff、物流与多输入 | 仅在选定配方/profile 明确依赖对应阶段时加入，使用下表与专业合同逐节点验收；无该依赖时不要求生成对应批次、物流、join 或 receipt。真实前置的 authority 缺失、未知或不受支持仍须 fail closed，不能改称“不适用”。 |
+| 后续 `terminal-admission` | 专题启动并选定该 profile 后，独立验证匹配 delivery/terminal settlement 的正向完成及生产成功但交付失败/未确认；不阻断当前 `production_only` 首产物完成。 |
+
+这是一条玩家可执行的引导脊柱，不是把内部步骤逐项变成任务清单。下表按上述适用范围展开，每个适用节点都必须让玩家知道当前要做的事、什么会让它停下、哪些投入已被保留或消耗，以及完成后下一步是什么；同一事实可由 Viewer 或 pure API 以各自入口表达，但不能改变动作、阻塞或完成边界。
 
 | 引导节点 | 玩家可做的决定与完成边界 | 必须区分的主阻塞、反馈与恢复 |
 | --- | --- | --- |
@@ -99,13 +108,13 @@
 | 获取/精炼原料 | 进入下方的“原材料准备子循环”，沿来源评估、获取/补充决策、采集/精炼结算到 `ready_for_logistics` 批次的顺序推进；只有真实结果已经形成、且可交给物流环节时才算准备完成。 | 原料不足、来源不可达、精炼未完成或结果不满足适用性时，分别指出供给、可达性、能源还是规格问题；玩家只能使用该专业合同当前支持的等待、改源、减量、补电、改配方或延期，不能静默裁剪投入。 |
 | 物流抵达 | 选择并提交把已准备的原料送到工厂的路径；“在途”只表示运输义务存在，只有在目标账本/工厂侧实际到达并结算后才算抵达。 | 路线、边吞吐、在途损耗、目的地容量或时限造成的阻塞必须分开可读；玩家只能比较适用专业合同当前支持的等待、改道、减少承诺或取消尚未生效运输等路径，已发生的在途结果不能伪装为未发生或自动退款。 |
 | 多输入齐套 | 在同一配方批次中确认所有独立输入均已到达且适用，再让本次生产进入可执行状态；先到的输入可保持在有界等待/保留状态，但不单独算生产进度。 | 缺失、冲突、过期或不适用的 parent input 是齐套阻塞，不得按到达顺序猜测或先消费一部分来冒充齐套。玩家可补齐缺口或等待未决输入；释放未消费保留、重新排配方等处置只有在适用专业合同支持时才可展示，后到输入只重评尚未满足的部分。 |
-| 排程 | 在输入齐套后决定何时让本次配方进入工厂执行；排程被接受不等于已获得执行容量，也不等于生产开始。 | 工厂/阶段容量、电力、窗口或竞争导致的排程阻塞必须说明是尚未开始、暂缓还是拒绝，并显示保留与机会成本；玩家只能比较适用专业合同当前支持的等待释放、重排优先级、改配方/工厂或结束本次意图等路径。 |
+| 排程 | 在该配方实际输入与电力前置满足后决定何时进入工厂执行；需要多输入 join 时先完成对应齐套。排程被接受不等于已获得执行容量，也不等于生产开始。 | 工厂/阶段容量、电力、窗口或竞争导致的排程阻塞必须说明是尚未开始、暂缓还是拒绝，并显示保留与机会成本；玩家只能比较适用专业合同当前支持的等待释放、重排优先级、改配方/工厂或结束本次意图等路径。 |
 | 生产 receipt | 只有配方周期实际执行并按该配方的产物策略结算后，才算“生产完成”；这证明产物在工厂或规定的中间缓冲中形成。`production_only` profile 在匹配 production receipt 后达到首产物完成，但仍保持 `produced/undelivered`，不因此证明已经交付、可交易或已满足目的地用途。 | 生产阶段停机、产物分支无法接收或执行窗口失效时，明确保留的输入、已发生的产出与未决义务；只提供适用专业合同支持的恢复、暂停、改道、重排或终止，不能只显示排程成功。 |
 | 交付 receipt（`terminal-admission` profile） | 只有声明需要终端准入的 profile 才继续等待产物通过运输并进入目标终端/目的地的准入或 buffer；取得独立的交付/终端结算 receipt 后，才算该 profile 的“交付完成”。该 receipt 必须能回指本次生产结果和实际运输后果，且只有交付完成后才可把目的地用途作为本链路后果展示。 | 终端容量、目的地资格/需求失效、路线迟到或结算未确认时，生产完成保持生产完成，交付保持未完成；玩家只能比较适用专业合同当前支持的等待、改道、本地用途或结束交付意图等路径，不得把准入、buffer、在途、缓存或预览当作交付。 |
 
 #### 原材料准备子循环：从来源评估到可进入物流的批次
 
-walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一条受边界约束的准备链。它必须在同一选定配方/首个工业目标上下文中收敛为：
+当选定配方/profile 明确要求从来源获取/精炼并经 handoff、物流供应输入时，walkthrough 中的“获取/精炼原料”才使用本子循环。它不是一个点击动作，而是在同一选定配方/首个工业目标上下文中收敛为：
 
 `source assessment -> acquire/replenish decision -> extraction/refinement settlement -> ready_for_logistics material batch`
 
@@ -122,25 +131,25 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 
 首局 walkthrough 的失败恢复必须把玩家带回同一条因果链：来源耗尽且无补充时停止虚假等待并改源/减量/改配方/延期；来源争用时显示实际分配和未满足量；精炼低电力时先补电、减量或延期；规格/质量未知时在形成 `ready_for_logistics` 前保持 blocked 并等待复查或换合法候选，目的地到达后的 quality/owner/recipe applicability 重验失败则保持到达但不可齐套并沿物流/配方合同恢复；重复提交、重连、乱序与回放只返回同一 source/refinement/arrival disposition，不复制材料、适用资格、齐套进度或奖励。后台补种、Agent 推荐和客户端缓存都不能替代玩家确认或权威 receipt。
 
-该子循环的 `test_tier_required` 至少覆盖：一条“来源评估 → 获取/精炼 → settled receipt → `ready_for_logistics` 批次 → transfer submit/in-transit → destination arrival 重验 → applicable batch → join 候选”的正向链；耗尽且不支持补充、同一来源争用、低电力、规格未知及到达后适用性失败各一个可恢复或安全停止样例；preview 无副作用、获取/精炼与物流提交分别 fresh submit 重验、source/refinement、ready_for_logistics、arrived/applicable 分层，以及重复/重连/replay 不复制材料或进度。`test_tier_full` 再覆盖多来源/多批次、补充后重评、跨账本损耗、到达顺序变化、持久化恢复及 Viewer/pure API/Agent 的状态和下一动作同义性。
+该子循环按[适用范围](#starter-profile-applicability)进入所选链路后，`test_tier_required` 至少覆盖一条“来源评估 → 获取/精炼 → settled receipt → `ready_for_logistics` 批次 → transfer submit/in-transit → destination arrival 重验 → applicable batch”的正向链，需要多输入 join 时再验证 join 候选；耗尽且不支持补充、同一来源争用、低电力、规格未知及到达后适用性失败各一个可恢复或安全停止样例；preview 无副作用、获取/精炼与物流提交分别 fresh submit 重验、source/refinement、ready_for_logistics、arrived/applicable 分层，以及重复/重连/replay 不复制材料或进度。`test_tier_full` 再覆盖适用的多来源/多批次、补充后重评、跨账本损耗、到达顺序变化、持久化恢复及 Viewer/pure API/Agent 的状态和下一动作同义性；这些后续子循环样例不自动成为 canonical Smelter 首产物的前置。
 
-本 walkthrough 的反馈至少要把以下四种边界说清楚：**已接受但未开始**、**正在执行/在途**、**已生产但未交付**、**已交付并产生目的地后果**。其中，生产 receipt 与交付 receipt 是两个独立完成窗口；重复提交、重连、重排或回放不能复制任一世界效果，也不能把前一个 receipt 代替后一个 receipt。若链路在任一节点停下，玩家看到的主 blocker 应是当前最早且可行动的未满足条件，后续影响可作为次要后果呈现。
+本 walkthrough 的反馈按适用范围区分实际发生的状态与尚未满足的边界：**已接受但未开始**、**正在执行/适用的在途**、**已生产但未交付**、**已交付并产生目的地后果**。其中交付部分，当前 production_only 验证尚未交付的负边界；已交付的正向完成留给 terminal-admission 专题。生产 receipt 与交付 receipt 是两个独立完成窗口；重复提交、重连、重排或回放不能复制任一世界效果，也不能把前一个 receipt 代替后一个 receipt。若链路在任一节点停下，玩家看到的主 blocker 应是当前最早且可行动的未满足条件，后续影响可作为次要后果呈现。
 
-首局验收使用 `test_tier_required`：至少覆盖一条正向 walkthrough、每类节点一个可恢复阻塞、输入到达顺序变化下的多输入齐套、生产完成但交付未完成，以及重连/重复提交不复制 receipt。`test_tier_full` 再覆盖跨阶段窗口、容量争用、在途损耗、终端失败、恢复/换线与 Viewer/pure API 的事实一致性；这些验证由对应专业域执行，本分册只冻结玩家可理解的因果边界。
+当前首局的 `test_tier_required` 覆盖 canonical `production_only` 的正向 walkthrough、各适用节点的可恢复阻塞、生产完成仍为 `produced/undelivered` 且不产生交付/终端奖励，以及重连/重复提交不复制 receipt、里程碑或产出。输入到达顺序与多输入齐套仅在选定配方/profile 明确依赖时验证；`terminal-admission` 的正向及生产成功但交付失败/未确认样例在专题启动后独立验收。`test_tier_full` 再按适用范围覆盖跨阶段窗口、容量争用、在途损耗、终端失败、恢复/换线与 Viewer/pure API 的事实一致性；这些验证由对应专业域执行，本分册只冻结玩家可理解的因果边界。
 
 ### 2.2.2 Starter Industrial Feasibility Gate
 
 在系统把预设工业目标作为首局引导脊柱或当前主推荐交给玩家前，必须先运行产品根 PRD 定义的 `Starter Industrial Feasibility Gate`。本分册把它收敛为一张玩家可读的 feasibility card：闸门顶层结果只有 `candidate_available` 或 `no_safe_starter_chain`，不把内部 job、ledger、target contract 或旧缓存当成可行性证明；闸门本身不创建目标、不锁定库存/容量、不扣资源、不排程，也不保证产量、价格、ETA 或长期稳定。
 
-`candidate_available` 只表示同一份 fresh authority snapshot 已证明一条代表性 starter chain 能到达其 profile 声明的完成边界。卡片至少说明稳定的 starter-chain/candidate identity（或等价的不可变上下文摘要）、绑定的 authority snapshot/version、当前工厂/地点、可用 recipe candidate、原料来源或精炼结果、有效物流路径、电力与输出/终端前置、主要风险、completion boundary、首个可验证成果、即时收益、`progression_effect`、`next_action`、`next_recheck` 与完成后打开的下一 beat；identity 必须覆盖改变产出因果的工厂、配方、输入来源、物流与完成边界。如果有多个候选，不得静默选定，推荐必须能说明来自当前事实的理由。只有已被专业 evidence 证明的 current path 才能通过；多输入 join、多阶段 root/window、output bundle、terminal settlement 或 maintenance 等 target-only 能力不能借 walkthrough 文本直接当作当前前置。首个可验证成果只能证明该链真实产生了声明的第一个世界结果，不能提前发放稳定/交付成长；即时收益必须是本次选择保住的能力、用途或下一选择，而不是后台完成或免费资源。
+`candidate_available` 只表示同一份 fresh authority snapshot 已证明一条代表性 starter chain 能到达其 profile 声明的完成边界。卡片至少说明稳定的 starter-chain/candidate identity（或等价的不可变上下文摘要）、绑定的 authority snapshot/version、当前工厂/地点、可用 recipe candidate、合法输入、电力与输出前置、主要风险、completion boundary、首个可验证成果、即时收益、`progression_effect`、`next_action`、`next_recheck` 与完成后打开的下一 beat；来源/精炼结果、handoff、物流路径、多输入和终端前置仅按[适用范围](#starter-profile-applicability)纳入。identity 必须覆盖实际改变本候选产出因果的工厂、配方、输入来源、适用物流与完成边界。如果有多个候选，不得静默选定，推荐必须能说明来自当前事实的理由。只有已被专业 evidence 证明的 current path 才能通过；多输入 join、多阶段 root/window、output bundle、terminal settlement 或 maintenance 等 target-only 能力不能借 walkthrough 文本直接当作当前前置。首个可验证成果只能证明该链真实产生了声明的第一个世界结果，不能提前发放稳定/交付成长；即时收益必须是本次选择保住的能力、用途或下一选择，而不是后台完成或免费资源。
 
 `no_safe_starter_chain` 不是永久失败。卡片必须指出最早且可行动的 blocker、证据分类（`current-evidence-backed`、`target-contract` 或 `unknown/not_tracked`）、已保留/已消费的价值、真实可用的补料、补证、等待、修复、改道、改候选或重新定目标路径，以及下一次复查边界；该结果不产生工业成长奖励、`progression_effect` 或下一 beat，只有恢复后从 fresh authority snapshot 重新通过闸门，才能再次进入目标。没有安全恢复时，系统应安全停止并交回其他当前可达目标；不得无限等待、自动补料、后台改道、发放免费输入，或把 target/unknown 填成“可达”。
 
-闸门只负责接受前的可行性判断。玩家确认后仍须经过既有配方、排程、生产、交付与 receipt 边界；提交前工厂、配方、输入、路径、容量、电力或终端事实发生变化，或 starter-chain/candidate identity 绑定的 authority snapshot/version 失效时，必须重新判断或无副作用拒绝，不能保留旧 identity、静默切换候选或沿旧 identity 发放 `progression_effect`。`production_only` 的 starter 目标在匹配 production receipt 后完成首产物，仍标记 `produced/undelivered`；另行声明的稳定条件只决定何时可标记 `production-stable`，不得延迟首产物完成。声明 terminal-admission/delivery 的目标必须等匹配 delivery/terminal settlement receipt，不能把生产、buffer 或准入当成交付。
+闸门只负责接受前的可行性判断。玩家确认后仍须经过既有配方、排程、生产、适用交付与 receipt 边界；提交前本候选实际依赖的工厂、配方、输入、路径、容量、电力或终端事实发生变化，或 starter-chain/candidate identity 绑定的 authority snapshot/version 失效时，必须重新判断或无副作用拒绝，不能保留旧 identity、静默切换候选或沿旧 identity 发放 `progression_effect`。`production_only` 的 starter 目标在匹配 production receipt 后完成首产物，仍标记 `produced/undelivered`；另行声明的稳定条件只决定何时可标记 `production-stable`，不得延迟首产物完成。声明 terminal-admission/delivery 的目标必须等匹配 delivery/terminal settlement receipt，不能把生产、buffer 或准入当成交付。
 
 闸门的 current/target 切线是玩家承诺的证据边界，不是新的 runtime 状态：`current-evidence-backed` 可以进入候选但提交仍须 fresh revalidation；`target-contract` 只能作为未来能力或复查方向；`unknown/not_tracked` 必须进入 `no_safe_starter_chain`，并保留未知原因。相同 authority snapshot/version 应得到相同结果；重连、重复请求、Agent retry、snapshot restore 与 replay 只能重读同一 feasibility/receipt 结果，不复制资源效果、目标完成或奖励。在 fresh composite runtime + QA evidence 证明 Gate 与 starter chain 之前，`test_tier_required` 与 `test_tier_full` 只是验收目标，不是当前 pass；已有 Gate、milestone 与投影实现不代签同候选正式默认可用；surface 可说明实现事实，但正式推荐缺当前适用证据时必须返回 `no_safe_starter_chain`。
 
-本闸门的 `test_tier_required` 至少覆盖一条正向 starter chain、稳定 identity 与 authority snapshot/version 绑定、首个可验证成果/即时收益/`progression_effect`/下一 beat、工厂/配方/原料/物流/电力/输出各类 blocker、target-only/unknown fail-closed、报价后事实漂移、production-only 与 terminal-admission 的不同完成边界，以及重复/重连/replay 无副作用；`test_tier_full` 再覆盖多候选争用、跨窗口/多阶段链、持久化恢复和 Viewer/pure API 对结果、blocker、下一步与复查点的同义表达。该卡片不新增配方、数值、runtime schema、任务树、自动补给/改道或 UI 布局。
+本闸门的 `test_tier_required` 至少覆盖当前 canonical `production_only` 正向 starter chain、稳定 identity 与 authority snapshot/version 绑定、首个可验证成果/即时收益/`progression_effect`/下一 beat、实际工厂/配方/输入/电力/输出 blocker、target-only/unknown fail-closed、报价后事实漂移，以及重复/重连/replay 无副作用；生产成功不得伪造 delivery、需求减少或终端奖励。来源/handoff/物流/多输入仅按所选依赖追加，terminal-admission 正向及其交付失败/未确认按后续专题独立验证。`test_tier_full` 再按适用范围覆盖多候选争用、跨窗口/多阶段链、持久化恢复和 Viewer/pure API 对结果、blocker、下一步与复查点的同义表达。该卡片不新增配方、数值、runtime schema、任务树、自动补给/改道或 UI 布局。
 
 ### 2.2.3 首个工业闭环的叶子要求
 
@@ -159,7 +168,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 #### REQ-FIRST-INDUSTRIAL-002：完整工业因果链
 
 - 适用条件：玩家选择一个可行的首局工业目标。
-- 要求：玩家必须能沿当前 `starter_completion_profile` 声明的完成边界理解“工厂就绪 → 配方比较 → 原料获取/精炼 → 物流抵达 → 多输入齐套 → 排程 → 生产 receipt”以及适用时的“交付 receipt”；每个节点都必须保留当前动作、完成边界、主 blocker、投入状态和下一步。`production_only` profile 在匹配的 production receipt 后达到首产物完成，并保持 `produced/undelivered`，不要求 delivery/terminal settlement；`terminal-admission` profile 才必须继续到匹配的 delivery/terminal settlement。中间阶段不得被合并成单一成功。
+- 要求：玩家必须能沿当前 `starter_completion_profile` 声明的完成边界理解“工厂就绪 → 配方与合法输入/电力 → 排程 → 生产 receipt”；来源获取/精炼、handoff、物流抵达和多输入齐套仅在所选配方/profile 明确依赖时展开，交付 receipt 仅由后续 terminal-admission 专题要求。每个适用节点都必须保留当前动作、完成边界、主 blocker、投入状态和下一步。当前 canonical `production_only` 在匹配的 owner-bound 正量铁锭结算与持久首产物里程碑后开放 Assembler 候选，并保持 `produced/undelivered`，不要求稳定窗口、建成 Assembler 或 delivery/terminal settlement；`terminal-admission` profile 才必须继续到匹配的 delivery/terminal settlement。适用的中间阶段不得被合并成单一成功。
 - 上位承诺：2.2.1、FS-1、FS-15。
 - 专业权威：[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-001。
@@ -167,7 +176,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 <a id="req-first-industrial-003"></a>
 #### REQ-FIRST-INDUSTRIAL-003：原料准备与物流边界
 
-- 适用条件：玩家为选定配方准备原料。
+- 适用条件：选定配方/profile 明确要求来源获取/精炼、source/owner ledger handoff 及物流供应输入；不适用于已由其专业 authority 证明无需这些阶段的 canonical 输入路径。
 - 要求：只有 source/refinement 结算后按适用的 source/owner ledger 规则完成 handoff、实际数量/损耗与来源 lineage 可对账，并形成带 lineage 的 `ready_for_logistics` material batch 后，原料准备才算完成；`source-settled` 是 source/refinement receipt 的结算状态，不是 `ready_for_logistics` 的别名。`preview` 不产生世界效果，`transfer submit`、`in-transit` 和 `destination arrival` 必须由后续物流节点独立表达并重新校验。
 - 上位承诺：2.2.1 原材料准备子循环、FS-15。
 - 专业权威：[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) 和 [`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md)。
@@ -223,21 +232,21 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 <a id="ac-first-industrial-001"></a>
 #### AC-FIRST-INDUSTRIAL-001：正向 starter chain
 
-给定：当前工厂、配方、原料来源、物流路径、电力、`starter_completion_profile` 与其适用的输出/终端前置均有 fresh authority evidence。
-当：玩家从 feasibility card 选择候选并依次完成工厂就绪、配方比较、原料准备、物流抵达、多输入齐套、排程和生产。
-则：每个节点显示可执行动作、完成边界、投入状态、主 blocker 和下一步；`ready_for_logistics`、arrival 与 production receipt 各自可追溯。若 profile 为 `production_only`，匹配 production receipt 即构成首产物完成，结果保持 `produced/undelivered`，delivery 不是该正向 AC 的前置；若 profile 为 `terminal-admission`，production receipt 后必须继续等待并取得匹配 delivery/terminal settlement，交付完成后才呈现目的地后果。
+给定：当前 canonical `starter-industrial-smelter-to-assembler-v1` / `production_only` 的工厂、配方、合法输入、电力与输出前置均有 fresh authority evidence；来源/handoff/物流/多输入只按所选配方/profile 的真实依赖增加前置。
+当：玩家从 feasibility card 选择候选并完成合法 Smelter 就绪、配方与输入/电力确认、排程和真实生产；仅执行该候选实际需要的来源准备、handoff、物流抵达或多输入齐套。
+则：每个适用节点显示可执行动作、完成边界、投入状态、主 blocker 和下一步；production receipt、owner-bound output ledger 首笔匹配正量 `iron_ingot`、对应持久首产物里程碑及 Assembler 候选相互一致；结果保持 `produced/undelivered`，不要求建成 Assembler、稳定窗口或 delivery，也不得产生交付/终端奖励或需求减少。需要物流时，`ready_for_logistics` 与 arrival 继续独立可追溯。后续 terminal-admission 专题使用本 AC 的适用节点并独立增加匹配 delivery/terminal settlement 正向验收，只有交付完成后才呈现目的地后果。
 
-覆盖：REQ-FIRST-INDUSTRIAL-001、002、003、004；对应 FS-1、FS-7、FS-15。
+覆盖：REQ-FIRST-INDUSTRIAL-001、002、004，以及适用时的 003；对应 FS-1、FS-7、FS-15。
 非证明项：该场景不证明所有工厂、配方、路线都可在首局完成，也不证明当前实现或发行已通过。
 
 <a id="ac-first-industrial-002"></a>
 #### AC-FIRST-INDUSTRIAL-002：不可达链路的安全恢复
 
-给定：Gate 或链路遇到来源耗尽且无补充、规格未知、低电、争用、物流容量或终端不可用。
+给定：Gate 或链路的实际前置遇到缺料、低电、权限/规格未知或争用；来源耗尽、物流容量和终端不可用仅在所选配方/profile 明确依赖时适用。
 当：玩家查看当前推荐或提交下一节点。
 则：系统返回 `no_safe_starter_chain` 或当前最早 blocker，保留已发生价值与未满足量，提供真实的补充、减量、改源、改配方、改道、延期、恢复或重新定目标路径；没有安全路径时停止，不无限等待、不免费补料、不静默改道。
 
-覆盖：REQ-FIRST-INDUSTRIAL-001、003、006；对应 FS-2、FS-7、FS-15。
+覆盖：REQ-FIRST-INDUSTRIAL-001、006，以及适用时的 003；对应 FS-2、FS-7、FS-15。
 
 <a id="ac-first-industrial-003"></a>
 #### AC-FIRST-INDUSTRIAL-003：漂移与重放不复制结果
@@ -260,7 +269,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 <a id="ac-first-industrial-005"></a>
 #### AC-FIRST-INDUSTRIAL-005：生产完成但交付未完成
 
-给定：本次工业候选已有匹配的 production receipt，但 profile 与交付状态需要按权威结算边界继续判定。
+给定：本次工业候选已有匹配的 production receipt；当前 production_only 先验证不得冒充交付，terminal-admission 分支仅在该后续专题启动且选定相应 profile 后独立验证。
 当：玩家重连、重新打开该候选，或尝试使用产物的目的地用途。
 则：当 `starter_completion_profile=terminal-admission` 且尚未取得匹配的 delivery/terminal settlement receipt 时，系统必须保持 `produced/undelivered`，继续显示交付 blocker 与真实可用的等待、改道、持有、重报价或延期路径；不得表现为已交付，不得产生目的地后果、交付/终端奖励、需求减少或 terminal-admission 用途解锁。只有匹配的 delivery/terminal settlement receipt 才能推进该 profile 的交付完成。当 `starter_completion_profile=production_only` 时，同一 `produced/undelivered` 状态是首产物的正向完成边界；仍不得把它表现为已交付、发放 terminal reward 或解锁 delivery-only 用途。任一 profile 下重读 production receipt 都不得复制生产效果。
 
@@ -389,7 +398,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - FS-12：首局至首次持续能力的样例以预设引导脊柱建立一个当前主目标和可执行“继续”路径；达成阶段成果后只在 2 至 3 个实质不同方向或玩家主动换向时请求选择，后台作用域/转译/校验/治理/审计只在实质影响当前选择时提供原因和替代路径。
 - <a id="fs-13"></a>FS-13：代表性主动换向样例区分预览、已接受的承诺 / 待决请求与 receipt 支持的已结算结果。已接受但尚无 committed receipt 的请求保持待决且未生效，提交、接受、hold 或排队不能代签目标结算；部分结果已结算时，剩余部分仍按其承诺或待决范围判断。换向、重连、并发或重试不会追溯取消已结算结果、自动迁移旧请求或产生第二次 receipt。新目标独立形成，玩家能读到旧目标的已生效结果、未决义务/风险及取消、等待、恢复或重新规划下一步，且正式入口不会把旧、新目标同时表达为当前主线。
 - FS-14：空、陈旧或冲突状态，以及同时存在多个 blocker 的代表性样例，证明 Viewer 与 pure API 采用相同的状态置信度闸门和主要 blocker 优先级：状态未确认时不提供会改变世界的猜测动作，至少保留真实的复核、恢复、安全停止或重新定目标路径；状态一致时先呈现安全/权利/授权与不可逆后果，再处理可恢复前置和可选信息；同级安全路径可比较且不会被静默合并。状态在展示后变化时，旧动作必须按当前状态重新判断，不得沿用旧资格/成本、静默改道或产生第二次世界效果。
-- FS-15：代表性首局工业 walkthrough 在展示为当前主推荐前，必须先通过 `Starter Industrial Feasibility Gate`，并按所选 profile 的实际前置，沿工厂就绪、合法输入/电力、排程与实际生产结算逐节点证明玩家动作、完成边界、主 blocker、反馈与恢复；物流抵达和多输入齐套仅在该配方/入口实际需要时验证，不增加 canonical Smelter 的隐藏前置；只有 `terminal-admission` profile 才继续证明 delivery receipt，`production_only` profile 在匹配 production receipt 后可完成首产物但仍保持 `produced/undelivered`。闸门只返回 `candidate_available` 或 `no_safe_starter_chain`，后者必须保留 current/target/unknown 证据分类、可行动 blocker、下一动作和复查边界，不得发放免费输入或静默改道。walkthrough 至少区分 accepted-unstarted、active/in-transit、produced-but-not-delivered 与 delivered/terminal-settled，证明 production-only 完成不等于交付用途，terminal-admission 只有交付完成才产生目的地后果，且重连/重复提交/回放不复制任一 receipt。当前选定 `production_only` 的正向路径与可恢复阻塞需要 `test_tier_required` 证据；arrival reorder 仅在实际物流前置适用时验证。`terminal-admission` 专题启动后独立核验正向与 production 成功但 delivery 失败/未确认情形，不阻断首产物完成；跨窗口/争用/损耗/适用终端故障与两入口一致性进入 `test_tier_full`。
+- FS-15：代表性首局工业 walkthrough 在展示为当前主推荐前，必须先通过 `Starter Industrial Feasibility Gate`，并按[所选 profile 的实际前置](#starter-profile-applicability)，沿工厂就绪、合法输入/电力、排程与实际生产结算逐节点证明玩家动作、完成边界、主 blocker、反馈与恢复；来源/精炼、handoff、物流抵达和多输入齐套仅在该配方/profile 明确依赖时验证，不增加 canonical Smelter 的隐藏前置。当前 `production_only` 核验匹配 production receipt、owner-bound 正量铁锭结算、持久首产物里程碑与 Assembler 候选一致，首产物完成仍保持 `produced/undelivered`。闸门只返回 `candidate_available` 或 `no_safe_starter_chain`，后者必须保留 current/target/unknown 证据分类、可行动 blocker、下一动作和复查边界，不得发放免费输入或静默改道。walkthrough 区分 accepted-unstarted、active、produced-but-not-delivered 与适用的 in-transit/delivered/terminal-settled；当前 required 证据保留 production-only 完成不等于交付用途、需求减少或终端奖励，以及重连/重复提交/回放不复制任一 receipt、里程碑或产出的负向验证。当前选定 `production_only` 的正向路径与可恢复阻塞需要 `test_tier_required` 证据；arrival reorder 仅在实际物流前置适用时验证。`terminal-admission` 专题启动后独立核验正向与 production 成功但 delivery 失败/未确认情形，不阻断首产物完成；跨窗口/争用/损耗/适用终端故障与两入口一致性进入 `test_tier_full`。
 
 - FS-16：首局成功基线后的单约束配对样例按 2.2.5 记录匹配完成 receipt、变化前后权威事实与未变化条件，分别给出主要 blocker、保留/占用/消费/损失价值、下一安全动作及条件的观察证据；链路完成、理解迁移、继续意愿与提示介入分别判定。缺少适用观察时保持未验证，不以 fixture、代操作或重复确认宣称独立理解。
 
@@ -411,7 +420,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 | FS-12 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-007 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 单一主目标、预设引导脊柱、继续/分支/换向及仅在实质相关时出现的后台护栏 S6 组合证据 | test_tier_required |
 | FS-13 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 换向、重连、并发与重试下的预览/已接受承诺或待决/receipt 支持的已结算结果分类，无 committed receipt 仍待决、部分结算不冒充整体完成、旧请求不自动迁移、已结算结果不追溯取消、单次 receipt、新目标独立形成，以及旧义务/风险与下一步的玩家可读性组合证据 | test_tier_full |
 | FS-14 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 空/陈旧/冲突状态与多 blocker 的状态置信度闸门、稳定优先级、同级路径比较、展示后重新判断，以及无猜测动作/无静默改道/无第二次效果的 Viewer + pure API 组合证据 | test_tier_full |
-| FS-15 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | Gate-before-recommendation 的 `candidate_available`/`no_safe_starter_chain` 两结果、stable starter-chain/candidate identity 与 authority snapshot/version 绑定、`current-evidence-backed`/`target-contract`/`unknown/not_tracked` 切线、`no_safe_starter_chain` 的 blocker/恢复/复查边界，以及 fresh composite runtime + QA evidence 后才可作 current claim；并覆盖首局工业 walkthrough 的逐节点动作/边界/阻塞/恢复、齐套 arrival-order、accepted 与生产/交付分离、生产成功但交付未完成、重复/重连/回放单次 receipt，以及 Viewer/pure API 事实一致性 | test_tier_required + test_tier_full |
+| FS-15 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-019 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 按[profile 适用性](#starter-profile-applicability)固定 Gate 两结果、candidate/snapshot identity、current/target/unknown 与 blocker/恢复/复查；当前 required 核验 Smelter 正向/阻塞、matching receipt/正量铁锭/持久里程碑/Assembler 候选一致、不得伪造 delivery/reward，以及重复/重连/回放单次结果。来源/handoff/物流/多输入及 arrival-order 仅在所选依赖成立时追加；terminal-admission 正向及交付失败/未确认在后续专题独立取证；适用 full 证据核验跨窗口、持久化恢复与 Viewer/pure API 同义。fresh composite runtime + QA evidence 前不作 current claim | test_tier_required + test_tier_full（按 profile 适用性） |
 | FS-16 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 2.2.5 单约束配对样例的完成基线、权威变化与保留价值/安全动作合同证据；入口观察分别记录理解、续玩意愿与提示介入，沿 testing 既有层级独立给出结论 | test_tier_required（合同） + test_tier_full（适用入口组合）；playability 独立 |
 
 具体字段矩阵、测试命令与历史 verdict 不复制到本分册。
@@ -422,7 +431,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 | --- | --- | --- | --- |
 | REQ-FIRST-INDUSTRIAL-001 | 2.2.2、FS-7、FS-15 | AC-FIRST-INDUSTRIAL-001/002 | 根 PRD starter feasibility、`doc/game`、M4 |
 | REQ-FIRST-INDUSTRIAL-002 | 2.2.1、FS-1、FS-15、profile completion boundary | AC-FIRST-INDUSTRIAL-001 | gameplay industrial walkthrough、starter completion profile |
-| REQ-FIRST-INDUSTRIAL-003 | 原料准备子循环、FS-15 | AC-FIRST-INDUSTRIAL-001/002 | M4 工业资源流转合同 |
+| REQ-FIRST-INDUSTRIAL-003 | 按[profile 依赖](#starter-profile-applicability)适用的原料准备子循环、FS-15 | AC-FIRST-INDUSTRIAL-001/002（适用时） | M4 工业资源流转合同 |
 | REQ-FIRST-INDUSTRIAL-004 | walkthrough 四类阶段、profile completion boundary、FS-3/4/15 | AC-FIRST-INDUSTRIAL-001/005 | gameplay/runtime 结算合同 |
 | REQ-FIRST-INDUSTRIAL-005 | 子循环、Gate、FS-13/15 | AC-FIRST-INDUSTRIAL-003 | runtime/Agent/Viewer authority |
 | REQ-FIRST-INDUSTRIAL-006 | 2.2.1/2.2.2、FS-2/7/15 | AC-FIRST-INDUSTRIAL-002 | gameplay/M4/runtime authority |
