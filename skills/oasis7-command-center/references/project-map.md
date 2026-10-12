@@ -2,76 +2,52 @@
 
 ## 使用方式
 
-这是一份查找地图，不是冻结的规范或项目状态。核对基线为 `eng-cc/oasis7` 的 `main@60d5ee0cb621c25ffc23ca8567a77a2cdc90facc`（2026-10-09）。每次执行重新解析当前请求的分支/版本并读取有关来源；路径迁移时沿当前索引与 Git 历史定位，不恢复旧文件来凑齐地图。
+这是一份当前主责入口的查找地图。项目状态保存在[项目状态页](../../../doc/engineering/command-center/README.md)，关键设计与部署信息保存在[架构索引](../../../doc/engineering/command-center/architecture/README.md)；不要在 Skill 里再保存一份阶段、节点清单或已完成任务。
+
+每次执行先解析用户选择的仓库、工作树和版本，再读取有关来源。远程文档固定到实际读取提交，GitHub/环境记录分别保留观测时间。摘要页的文件读取时间不是其中事实的核验时间；历史快照不能称为最新 main 或当前线上状态。
 
 ## 按问题读取
 
-| 信息 | 当前入口 | 解释边界 |
+| 信息 | 入口 | 解释边界 |
 | --- | --- | --- |
+| 日常状态、目标与最近变化 | [项目状态](../../../doc/engineering/command-center/README.md) | 派生摘要，先看基线和覆盖，再核对受影响的原始来源 |
+| 顶层设计与部署边界 | [架构索引](../../../doc/engineering/command-center/architecture/README.md) | 设计、实现、实际部署分别解释；索引不接管条款权威 |
+| 怎样持续维护 | [持续更新流程](../../../doc/engineering/command-center/command-center.manual.md) | 工作收尾与回顾中的方法；不另建台账、审批或日报库 |
 | 开发通用流程 | `doc/engineering/workflow/source-of-truth.md`；`AGENTS.md` | 流程只由前者拥有；入口、脚本和 Skill 不另设条件 |
-| 项目定位、当前公开阶段 | `README.md` | 公开状态与承诺范围以根 README 为准，愿景不是当前能力 |
-| 当前阶段目标、全局 P0、依赖 | `doc/core/prd.md` 的“当前阶段交付目标与全局 P0” | 读取该节，不默认采用头部历史 M1–M5 或旧轮次 |
-| 全局架构 | `doc/core/design.md`；core PRD 的模块地图 | 只作全局路由，细节下钻主责专业域 |
-| 产品分类及条款主责 | `doc/product/README.md` | 下面四域是产品分类，工程工具不增列为第五产品模块 |
-| 世界规则与玩法系统 | `doc/product/world-rules-core-gameplay/prd.md` | 产品目标、循环、成长、资源与制度；玩法细节下钻 `doc/game/prd.md` |
-| 权威世界基础设施 | `doc/product/world-infrastructure/prd.md` | 持久、确定、恢复与一致性承诺；技术下钻 `doc/p2p/prd.md`、`doc/world-runtime/prd.md` |
-| 智能体、世界模拟与交互 | `doc/product/agents-world-simulation/prd.md` | 游戏内 Agent、provider 和玩家交互；下钻 `doc/world-simulator/prd.md` |
-| 玩家接入与发行 | `doc/product/player-entry-distribution/prd.md` | 发现、安装、访问与发行组合；不代替根 README 的公开状态 |
-| 测试命令与验证方式 | `testing-manual.md`；`doc/testing/prd.md` | 按实际改动选测试；普通 CI 默认，专项环境验证按真实缺口使用 |
-| 实际工作与交付 | Git、PR、CI、review；按需 Issue/Project | 完整读取所选范围，保留被测版本与结果；规范文档不提供实时交付事实 |
+| 项目定位与公开阶段 | `README.md` 的“项目状态” | 愿景、安装包、局部测试不能代替当前对外承诺 |
+| 当前阶段目标、全局 P0 与依赖 | `doc/core/prd.md` 的“当前阶段交付目标与全局 P0” | 不默认采用头部历史里程碑或旧轮次 |
+| 全局架构与产品分类 | `doc/core/design.md`；`doc/product/README.md` | core 作全局路由，技术细节下钻主责域；工程工具不增加第五产品域 |
+| 世界规则与玩法 | `doc/product/world-rules-core-gameplay/prd.md` | 长期目标、循环、资源与制度；具体玩法下钻 `doc/game/prd.md` |
+| 世界基础设施 | `doc/product/world-infrastructure/prd.md` | 持久、确定、恢复与一致性承诺；下钻 P2P/world-runtime 合同 |
+| 智能体与世界模拟 | `doc/product/agents-world-simulation/prd.md` | 游戏 Agent、外部 Runtime 与玩家交互；不代表开发会话 |
+| 玩家接入与发行 | `doc/product/player-entry-distribution/prd.md` | 发现、安装、访问及发行组合；公开阶段仍核对根 README |
+| 环境与运维 | `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`；`doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md` | 清单带自身日期；未采样环境不宣称部署就绪 |
+| 实际工作与交付 | Git、PR、CI、review；按需 Issue/Project | 只有 PR 的工作也能展示；保留实际测试版本和未覆盖范围 |
+| 验证方法 | `testing-manual.md`；`doc/testing/prd.md` | 按改动选择测试，普通 CI 为默认；不把完整游戏栈当看板前置 |
 
-从产品根文档的活跃专题继续下钻，按条款范围、显式引用和后继关系判定权威。`active` 表示文档身份；`superseded`、`retired` 仅按历史用途显示。不要按文件修改时间或审计轮次给规范排优先级。
+从产品和专业入口继续沿显式引用下钻。规范效力按条款范围、主责身份和明确后继确定；`active` 是文档身份，不能推导能力已验收。发现冲突写清来源和影响，不先要求整理全仓后才能使用看板。
 
-## 当前阶段的阅读提示
+## 当前实现入口
 
-在上述核对基线，项目对外仍是受限可玩技术预览。近期主线是同一持久世界中的真实首产物、可恢复阻塞、成果保留与再次进入后的续接。
-
-core 当前里程碑包含顶层收敛、持久单权威、代表性体验、受控真人验证、BFT 与交接。持久底座与代表性体验可并行，真人验证依赖所需开放条件；BFT 可并行研发，未验收不自动否定已验收的受控单权威阶段。不要把专题自身的 P0、完整战争/制度/分片等长期内容全部提升为当前试玩前置。
-
-以上只帮助定位。实际展示时重新读取该节与其指向的 PR/Issue；不要将本参考中的里程碑写成永久默认任务，也不要由文档描述直接给完成率。
-
-## 迁移与流程残留
-
-- 此核对基线根目录没有 `world-rule.md`。用户提供的《Agent World Specification v0.1》及旧 README 可用于理解历史意图，但需与四产品及专业合同核对；“可能”“潜在方向”“开放问题”不能自动成为现行规则。
-- 旧 `agent_world_*` 命名和无 `.prd` / `.manual` 后缀的导航不可靠，优先使用当前索引。Viewer 手册当前入口是 `doc/world-simulator/viewer/viewer-manual.manual.md`。
-- `doc/README.md`、产品入口和 core 的部分旧段落仍提到强制 Issue/Project、`task_uid`、pre-PR packet、ROUND 或 `.pm` owner。对通用开发流程，以当前 `source-of-truth.md` 为准；具体产品与技术约束仍由对应条款拥有。
-- `.pm/README.md` 将其余 `.pm` 内容定位为历史记忆/缓存；旧执行器与模板已退役。不要重启任务注册表、状态回执或 `.pm/github-project-sync/tasks.json`。保留用户已有历史资料。
-- `AGENTS.md` 可能引用用户本机文件；在实际环境可用且相关时读取，不把某台机器的绝对路径写成可移植依赖。
-
-发现残留冲突时说明“哪一项表述冲突、按哪份主责规范解释、影响什么”；不将整理全仓冲突变成使用看板的前置任务。
-
-## 现有方法
-
-按需读取 `.agents/skills/README.md`。当前包含：
-
-- `executing-project-tasks`：实施和交付。
-- `verification-before-completion`：核实完成声明。
-- `requesting-repo-owned-review`：按实际风险组织评审。
-- `systematic-debugging`：定位并修复问题。
-
-根 `skills/` 是非默认专家参考库；不要全量加载或恢复固定角色链。本 Skill 不依赖安装第三方 Skill。
-
-## UI 落点
-
-此核对基线的仓库 Web 入口是：
-
-| 入口 | 当前形态 | 对开发看板的意义 |
+| 入口 | 用途 | 核对方法 |
 | --- | --- | --- |
-| `site/index.html`、`site/en/index.html` | 公共纯静态站；共享 `site/assets/styles.css` 和 `site/assets/app.js` | `doc/site/design.md` 不允许增加必需框架/构建链；不自动放入私有开发状态或操作权限 |
-| `crates/oasis7_viewer/` | Solid.js / JSX / Vite / Vitest；`software_safe_src/main.jsx` 进入 `viewer_app.jsx` | 可参考展示模型、状态表达与组件组织；没有理由把开发会话混入游戏世界协议 |
+| [tools/oasis7-command-center](../../../tools/oasis7-command-center/README.md) | 独立桌面客户端、来源索引、四视图与可选开发会话接入 | 先读实际 README、依赖和验证记录；完整边界见[系统设计 §11](../../../doc/engineering/command-center/command-center.design.md#11-验证设计与可追溯性) |
+| `site/index.html`、`site/en/index.html` | 公共静态站点 | 从 `doc/site/design.md` 查公开内容与构建边界；不自动放入私有开发状态 |
+| `crates/oasis7_viewer/` | 玩家 Viewer 与游戏交互 | 只有修改 Viewer 才使用其依赖和专项验证，不把它作为开发任务状态源 |
 
-Viewer 的 Director、Agent Activity、Intent 是游戏世界的实体与行动界面。Launcher 的 `gui-agent` API 也是游戏控制，不能作为 Codex thread、PR 或开发任务的状态源。此快照未确认已有开发指挥台；构建时先重新查找，不把“没查到”当作永久不存在。
+独立客户端的目标技术栈、进程和恢复合同在正式 PRD/design 中维护。早期设计快照中“尚无程序”的描述不能覆盖后续实现节与真实 PR；同样，代码目录存在不能证明签名分发、完整系统体验或全部模型任务已通过。
 
-默认交付 macOS 优先、与公共站点和玩家 Viewer 分离的独立桌面客户端；具体形态、本地与远端职责以及首版范围见 [客户端形态分册](desktop-client.md)。沿用用户明确指定的宿主；说明代码落点、启动方式和数据接入，需要新技术栈时说明具体收益，避免自动引入 React、数据库、云部署或新的管理平台。
+Viewer 的 Director、Agent Activity、Intent 和 Launcher 的 `gui-agent` 面向游戏世界。游戏外部 Runtime 产品从 `doc/product/agents-world-simulation/external-agent-runtime-play.prd.md` 进入；开发 Codex 会话按[接入方法](codex-integration.md)识别，不能混用身份、能力或验收结果。
 
-查看实际 `package.json` 和测试手册后选择命令；此快照 Viewer 未声明 `npm run dev`。仅修改 Viewer 时才采用其 S6 验证，不把启动完整游戏栈设成开发看板的必经步骤。
+## 迁移与旧材料
 
-## 核对来源
+- 上传的旧 `world-rule.md` 与 `agent_world_*` 命名只帮助理解历史意图，沿当前产品/专业索引寻找接收条款；可能方向不自动成为当前规则。
+- 文档中的历史任务格式、强制 Issue/Project 或 `.pm` 描述与通用流程不一致时，回当前 `source-of-truth.md` 核对；不要重启退役任务注册表或回执链。
+- 路径变化沿当前索引、显式后继和 Git 历史定位，不恢复删除文件来凑齐地图。
+- `AGENTS.md` 可能引用用户本机文件；仅在实际环境可用且相关时读取，不把某台机器的绝对路径写成可移植依赖。
 
-- [固定基线](https://github.com/eng-cc/oasis7/commit/60d5ee0cb621c25ffc23ca8567a77a2cdc90facc)
-- [开发流程规范](https://github.com/eng-cc/oasis7/blob/60d5ee0cb621c25ffc23ca8567a77a2cdc90facc/doc/engineering/workflow/source-of-truth.md)
-- [当前阶段目标](https://github.com/eng-cc/oasis7/blob/60d5ee0cb621c25ffc23ca8567a77a2cdc90facc/doc/core/prd.md#当前阶段交付目标与全局-p0)
-- [产品四域](https://github.com/eng-cc/oasis7/blob/60d5ee0cb621c25ffc23ca8567a77a2cdc90facc/doc/product/README.md)
-- [现有开发方法](https://github.com/eng-cc/oasis7/blob/60d5ee0cb621c25ffc23ca8567a77a2cdc90facc/.agents/skills/README.md)
-- [站点设计](https://github.com/eng-cc/oasis7/blob/60d5ee0cb621c25ffc23ca8567a77a2cdc90facc/doc/site/design.md)
-- [Viewer 依赖](https://github.com/eng-cc/oasis7/blob/60d5ee0cb621c25ffc23ca8567a77a2cdc90facc/crates/oasis7_viewer/package.json)
+## 现有方法与维护
+
+按需读取 `.agents/skills/README.md`，复用实施、自测、调试、完成核实和专业评审方法，不串固定角色链。根 `skills/` 是非默认专家参考库，不全量加载，也不依赖安装第三方 Skill。
+
+地图仅在入口或主责关系变化时更新。日常目标、进度、近期交付、需要人关注的事项和部署核验时间，统一更新前述状态页及架构索引。只读查询直接给结果；持久文档修改按已有授权和普通分支/PR 工作完成。
