@@ -53,6 +53,7 @@ fn derive_player_gameplay_execution_state(
                 return PlayerGameplayExecutionState::Accepted;
             }
             "rejected" => return PlayerGameplayExecutionState::Rejected,
+            "executing" => return PlayerGameplayExecutionState::Executing,
             "blocked" | "completed_no_progress" => return PlayerGameplayExecutionState::Blocked,
             "completed_advanced" => return PlayerGameplayExecutionState::Completed,
             _ => {}
@@ -160,10 +161,23 @@ fn finalize_player_gameplay_snapshot(
     }
     let player_facing_feedback = player_gameplay_player_facing_feedback(recent_feedback);
     let player_facing_feedback_ref = player_facing_feedback.as_ref();
+    // A guidance receipt confirms the instruction/profile update itself. It
+    // is not a pending world action and cannot freeze the current world state
+    // as accepted or completed while the Agent continues to act.
+    let execution_feedback = player_facing_feedback_ref.filter(|feedback| {
+        !matches!(
+            (feedback.action.as_str(), feedback.stage.as_str()),
+            ("agent_chat", "accepted")
+                | (
+                    "prompt_control.apply" | "prompt_control.rollback",
+                    "completed_advanced"
+                )
+        )
+    });
     gameplay.execution_state =
-        derive_player_gameplay_execution_state(gameplay.stage_status, player_facing_feedback_ref);
+        derive_player_gameplay_execution_state(gameplay.stage_status, execution_feedback);
     let (causality_kind, causality_detail) =
-        derive_player_gameplay_causality(&gameplay, player_facing_feedback_ref, causality_signal);
+        derive_player_gameplay_causality(&gameplay, execution_feedback, causality_signal);
     gameplay.causality_kind = causality_kind;
     gameplay.causality_detail = causality_detail;
     let status_reason = player_gameplay_status_reason(&gameplay, player_facing_feedback_ref);
@@ -182,7 +196,7 @@ fn finalize_player_gameplay_snapshot(
     gameplay.resume_anchor = Some(format!("{} ({})", gameplay.goal_title, gameplay.goal_id));
     gameplay.primary_blocker = player_gameplay_primary_blocker(&gameplay, status_reason.as_ref());
     gameplay.response_window_class =
-        player_gameplay_response_window_class(&gameplay, player_facing_feedback_ref);
+        player_gameplay_response_window_class(&gameplay, execution_feedback);
     gameplay.stalled_reason = player_gameplay_stalled_reason(&gameplay, player_facing_feedback_ref);
     gameplay.escalation_hint =
         player_gameplay_escalation_hint(&gameplay, player_facing_feedback_ref);

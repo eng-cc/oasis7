@@ -1,7 +1,49 @@
 use crate::{
-    runtime::{Action, World},
+    runtime::{Action, World, WorldState},
     viewer::*,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CollectDataQualificationError {
+    OwnerClaimMissing,
+    OwnerClaimAmbiguous,
+}
+
+impl CollectDataQualificationError {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::OwnerClaimMissing => "collect_data_owner_claim_missing",
+            Self::OwnerClaimAmbiguous => "collect_data_owner_claim_ambiguous",
+        }
+    }
+
+    pub fn message(self) -> &'static str {
+        match self {
+            Self::OwnerClaimMissing => "canonical Agent owner claim unavailable",
+            Self::OwnerClaimAmbiguous => "ambiguous Agent owner claim",
+        }
+    }
+}
+
+/// Resolve the same canonical player/key qualification for a read-only quote,
+/// submission admission and execution. This does not consume an auth nonce or
+/// mutate the world; each caller retains its existing authentication rules.
+pub fn resolve_collect_data_collector<'a>(
+    state: &'a WorldState,
+    player_id: &str,
+    public_key: &str,
+) -> Result<&'a str, CollectDataQualificationError> {
+    let mut claims = state.starter_oc_claims.values().filter(|claim| {
+        claim.player_id == player_id && claim.public_key.as_deref() == Some(public_key)
+    });
+    let claim = claims
+        .next()
+        .ok_or(CollectDataQualificationError::OwnerClaimMissing)?;
+    if claims.next().is_some() {
+        return Err(CollectDataQualificationError::OwnerClaimAmbiguous);
+    }
+    Ok(claim.agent_id.as_str())
+}
 
 /// A consumed legacy nonce alone does not identify the historical effect or
 /// receipt. Callers must prefer a real service correlation record, if present.
@@ -69,19 +111,12 @@ pub fn authenticated_action_with_origin(
         .as_ref()
         .ok_or("missing collect_data signature")?;
     let verified = verify_collect_data_auth_proof(&command, proof)?;
-    let mut claims = world.state().starter_oc_claims.values().filter(|claim| {
-        claim.player_id == verified.player_id
-            && claim.public_key.as_deref() == Some(&verified.public_key)
-    });
-    let claim = claims
-        .next()
-        .ok_or("canonical Agent owner claim unavailable")?;
-    if claims.next().is_some() {
-        return Err("ambiguous Agent owner claim".into());
-    }
+    let collector_agent_id =
+        resolve_collect_data_collector(world.state(), &verified.player_id, &verified.public_key)
+            .map_err(|error| error.message().to_owned())?;
     Ok((
         Action::CollectDataAuthenticated {
-            collector_agent_id: claim.agent_id.clone(),
+            collector_agent_id: collector_agent_id.to_owned(),
             electricity_cost: request.electricity_cost,
             data_amount: request.data_amount,
             player_id: verified.player_id,
@@ -91,4 +126,43 @@ pub fn authenticated_action_with_origin(
         },
         None,
     ))
+}
+
+#[cfg(test)]
+mod qualification_tests {
+    use super::*;
+
+    #[test]
+    fn collect_data_qualification_is_unique_subject_bound_and_read_only() {
+        let mut state = WorldState::default();
+        assert_eq!(
+            resolve_collect_data_collector(&state, "player-a", "key-a"),
+            Err(CollectDataQualificationError::OwnerClaimMissing)
+        );
+        state.starter_oc_claims.insert("agent-a".into(), serde_json::from_value(serde_json::json!({
+            "agent_id":"agent-a", "player_id":"player-a", "public_key":"key-a", "amount":0, "claimed_at":0
+        })).unwrap());
+        let claim = state.starter_oc_claims["agent-a"].clone();
+        let before = serde_json::to_value(&state).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                resolve_collect_data_collector(&state, "player-a", "key-a"),
+                Ok("agent-a")
+            );
+        }
+        assert_eq!(serde_json::to_value(&state).unwrap(), before);
+        assert_eq!(
+            resolve_collect_data_collector(&state, "player-a", "other-key"),
+            Err(CollectDataQualificationError::OwnerClaimMissing)
+        );
+        assert_eq!(
+            resolve_collect_data_collector(&state, "other-player", "key-a"),
+            Err(CollectDataQualificationError::OwnerClaimMissing)
+        );
+        state.starter_oc_claims.insert("duplicate".into(), claim);
+        assert_eq!(
+            resolve_collect_data_collector(&state, "player-a", "key-a"),
+            Err(CollectDataQualificationError::OwnerClaimAmbiguous)
+        );
+    }
 }

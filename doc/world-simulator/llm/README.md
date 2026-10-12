@@ -60,6 +60,13 @@ its rollout may retire unnecessary Bridge code after checking real consumers.
   agnostic decision boundary: providers propose structured decisions, while the
   runtime validates and executes actions, owns world facts, and returns ordered
   feedback.
+- Their [builtin input contract](decision-provider-contract.prd.md#builtin-input-integrity)
+  and [request design](decision-provider-contract.design.md#builtin-request-contract)
+  own required current observations, goals, query-tool replies, final-request
+  capacity checks and configuration-insufficient failure. The separate
+  [parameter contract](decision-provider-contract.prd.md#builtin-parameter-consistency)
+  keeps builtin text, tool schema, parser and Runtime constraints consistent.
+  These are requirements; implementation and verification remain PR evidence.
 - `continuous-agent-harness.prd.md` and `.design.md` define the Agent-owned
   cognition lifecycle above that provider boundary: session/turn/request
   identity, provider-neutral context and feedback isolation, memory-write
@@ -101,9 +108,12 @@ its rollout may retire unnecessary Bridge code after checking real consumers.
   and runtime validation; only their observation exposure differs. Formal
   player access modes remain `viewer` and `pure_api`, as defined by the
   [player-entry authority](../../product/player-entry-distribution/prd.md).
-- `llm-factory-strategy-optimization.*` and `llm-lmso29-stability.*` define
-  prompt, typed-decision, recovery, and context-budget safeguards for the
-  builtin Agent loop.
+- `llm-factory-strategy-optimization.*` and `llm-lmso29-stability.*` retain
+  builtin strategy, typed-decision, recovery and bounded stability-tuning
+  requirements. Prompt-budget tuning consumes the
+  [builtin input contract](decision-provider-contract.prd.md#builtin-input-integrity)
+  and its paired request design; historical soft/peak-cap samples do not prove
+  that current required inputs reach the next model request.
 
 ## Decision and evidence boundaries
 

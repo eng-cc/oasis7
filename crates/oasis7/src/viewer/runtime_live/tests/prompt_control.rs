@@ -544,8 +544,7 @@ fn runtime_prompt_control_apply_updates_snapshot_and_bindings() {
         .expect("llm mode apply");
     assert_eq!(ack.version, 1);
     let feedback = server
-        .latest_player_gameplay_feedback
-        .as_ref()
+        .scoped_feedback_for_player(Some("player-a"))
         .expect("prompt-control feedback recorded");
     assert_eq!(feedback.action, "prompt_control.apply");
     assert_eq!(feedback.stage, "completed_advanced");

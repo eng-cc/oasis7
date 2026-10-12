@@ -57,8 +57,7 @@ fn runtime_agent_chat_echo_env_enqueues_agent_spoke_virtual_event() {
     let ack = server.handle_agent_chat(request).expect("chat accepted");
     assert_eq!(ack.agent_id, agent_id);
     let feedback = server
-        .latest_player_gameplay_feedback
-        .as_ref()
+        .scoped_feedback_for_player(Some("player-a"))
         .expect("agent-chat feedback recorded");
     assert_eq!(feedback.action, "agent_chat");
     assert_eq!(feedback.stage, "accepted");
