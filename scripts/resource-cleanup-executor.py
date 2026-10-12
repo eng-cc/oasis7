@@ -2,6 +2,7 @@
 """Explicit, conservative Git resource cleanup; dry run unless --execute."""
 import argparse
 import json
+import hashlib
 import os
 import pathlib
 import subprocess
@@ -451,7 +452,8 @@ def cargo_cache_followup(repo, worktree):
     try:
         preview = _run(command, timeout=120)
         data = json.loads(preview.stdout)
-        result['targets'] = [r for r in data['targets'] if r.get('owner') == str(worktree.resolve())]
+        namespace = 'worktree-' + hashlib.sha256(str(worktree.resolve()).encode()).hexdigest()[:12]
+        result['targets'] = [r for r in data['targets'] if r.get('owner') == str(worktree.resolve()) or pathlib.Path(r['target']).parent.name == namespace]
         targets = {r['target'] for r in result['targets']}
         result['actions'] = [a for a in data['actions'] if a['target'] in targets]
     except (CleanupError, ValueError, KeyError) as exc:

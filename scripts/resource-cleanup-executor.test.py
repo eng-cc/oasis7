@@ -41,11 +41,13 @@ class SafetyTests(unittest.TestCase):
 
     def test_cache_followup_is_scoped_read_only_and_nonblocking(self):
         owner = str(self.path.resolve())
-        data = {'targets': [{'owner': owner, 'target': '/cache/own'}, {'owner': '/other', 'target': '/cache/other'}],
+        namespace = 'worktree-' + cleanup.hashlib.sha256(owner.encode()).hexdigest()[:12]
+        data = {'targets': [{'owner': owner, 'target': '/cache/own'}, {'owner': '/other', 'target': '/cache/other'}, {'owner': None, 'status': 'unknown', 'target': '/cache/' + namespace + '/rustc-legacy'}],
                 'actions': [{'target': '/cache/own', 'action': 'would-delete'}, {'target': '/cache/other', 'action': 'would-delete'}]}
         with patch.object(cleanup, '_run', return_value=subprocess.CompletedProcess([], 0, json.dumps(data), '')) as run:
             result = cleanup.cargo_cache_followup(self.repo, self.path)
-            self.assertEqual(len(result['targets']), 1)
+            self.assertEqual(len(result['targets']), 2)
+            self.assertEqual(result['targets'][1]['status'], 'unknown')
             self.assertEqual(len(result['actions']), 1)
             self.assertNotIn('--apply', run.call_args.args[0])
             self.assertEqual(result['default_retention_days'], 7)
