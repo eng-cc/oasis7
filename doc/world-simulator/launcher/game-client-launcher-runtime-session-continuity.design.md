@@ -42,7 +42,7 @@ Launcher 构造参数并托管子进程；chain runtime 保持执行与持久化
 
 ### 5.2 Web 失败
 
-初始化、刷新和控制请求失败由控制面/客户端映射为可见错误及支持的下一步，不无限加载或假成功；本设计拥有 runtime 探测与会话证据失效，表现映射消费控制面合同。时钟和刷新使用目标平台支持的实现，不定义永久轮询 API 或 WASM ABI。
+初始化、刷新和控制请求失败由控制面/客户端映射为可见错误及支持的下一步，不无限加载或假成功；本设计拥有 runtime 探测与会话证据失效，表现映射消费控制面合同。时钟和刷新使用目标平台支持的实现，不定义永久轮询 API 或 WASM ABI。独立 HTTP worker 在读取请求前将接收连接显式切回阻塞模式，并设置有界读取/写入超时；监听器仍非阻塞。大 WASM 文件不能因继承的非阻塞属性在 WouldBlock 时截断。
 
 ## 6. 接口与数据合同
 
@@ -60,7 +60,7 @@ ServiceState 串行控制托管子进程和探测，快照字段在同一次状�
 
 ## 9. 质量与容量
 
-不改变既有探测超时、启动宽限期和轮询间隔，不承诺新增 SLA。验证输入为旧成功快照加停止/失败/退出刺激；响应必须清除当前快照、保留准确错误，且新会话没有成功探测前不能 Ready。容量与确定性执行仍归 runtime authority。
+不改变既有探测超时、启动宽限期和轮询间隔，不承诺新增 SLA。HTTP worker 每次阻塞读取沿用 3 秒超时，每次阻塞写入使用 3 秒超时；这不是整个连接的绝对总时限。慢连接失败仍可诊断，不无限等待单次 I/O。验证输入为旧成功快照加停止/失败/退出刺激；响应必须清除当前快照、保留准确错误，且新会话没有成功探测前不能 Ready。容量与确定性执行仍归 runtime authority。
 
 ## 10. 兼容、迁移与回滚
 
@@ -73,7 +73,7 @@ ServiceState 串行控制托管子进程和探测，快照字段在同一次状�
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | [重新验证](#session-revalidation) | 失败/停止后撤销旧证据，保持真实错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 的 session_ 回归及 `crates/oasis7_client_launcher/src/main_chain_status.rs` 的 session_state_refresh_failure_invalidates_chain_evidence；同候选 native 单元测试，执行入口 [testing-manual](../../../testing-manual.md) | PR 与真实测试输出 | 不证明世界最终性、授权或可玩 |
-| [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | [重新验证](#session-revalidation) | 陈旧、停止、失败启动和退出后须新探测；无安全路径保持错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 会话回归和 `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`；同候选 canonical cargo test；Web 可见变化按 [testing-manual S6](../../../testing-manual.md) 验证 | PR、测试及适用浏览器记录 | 不证明无损恢复、世界重放；浏览器证据单独记录 |
+| [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | [重新验证](#session-revalidation) | 陈旧、停止、失败启动和退出后须新探测；无安全路径保持错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 会话回归和 `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`；同候选 canonical cargo test；HTTP 大响应回归见 `crates/oasis7/src/bin/oasis7_web_launcher/http_codec.rs` 的 nonblocking_connection_delivers_complete_large_response；Web 可见变化按 [testing-manual S6](../../../testing-manual.md) 验证 | PR、测试及适用浏览器记录 | 不证明无损恢复、世界重放；浏览器证据单独记录 |
 
 设置阶段消费设置 authority；Web 错误表现消费控制面设计；公开 claim 仍须同候选跨层证据，局部进程与单元测试不能成立发行结论。
 
