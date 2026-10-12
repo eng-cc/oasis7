@@ -286,94 +286,7 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
             .unwrap()
             .unwrap();
         let mut categories = CleanupCategories::default();
-        let capture_deadline = Instant::now() + Duration::from_secs(60);
-        let mut rejected_prefixes = Vec::new();
-        let mut captured_preparation = None;
-        for attempt in 0..8 {
-            assert!(
-                Instant::now() < capture_deadline,
-                "bounded capture deadline exhausted"
-            );
-            let proof = sign_read_request(
-                TASK_CONTEXT_PREPARE_PATH,
-                TaskContextPrepareV1 {
-                    schema_revision: 1,
-                    fence: GameTaskFenceV1::from_control(&control),
-                    client_operation_id: format!("logistics-delivery-context-{attempt}"),
-                    client_nonce: format!("{:064x}", attempt + 145),
-                },
-                &delegate,
-            )
-            .unwrap();
-            let prepared = client.prepare_task_context(&proof).unwrap();
-            // Deliberately age the first base through two real worker ticks.
-            // This proves replacement follows a settled rejection, not uncertainty.
-            if attempt == 0 {
-                let tick = prepared.snapshot.captured_base_binding.base_tick;
-                while pin().world.state().time < tick + 2 {
-                    assert!(Instant::now() < capture_deadline, "worker did not advance");
-                    std::thread::sleep(Duration::from_millis(50));
-                }
-            }
-            let prefix = request(
-                &world,
-                WorldServicePayloadV1::Scheduler(
-                    sign_read_request("scheduler", public_prefix(&prepared).unwrap(), &delegate)
-                        .unwrap(),
-                ),
-            );
-            match settle_cleanup_original(&client, &prefix, capture_deadline, &mut categories) {
-                Ok(_) => {
-                    captured_preparation = Some((proof, prepared));
-                    break;
-                }
-                Err("canonical cleanup rejected") => {
-                    // Requery the signed original. Only authenticated terminal rejection
-                    // or expiration authorizes another preparation; every other state stops.
-                    let settled = client
-                        .lookup(
-                            LookupIntentRequest {
-                                contract_version: 1,
-                                key: prefix.correlation.key.clone(),
-                            },
-                            prefix.signed_payload.clone(),
-                        )
-                        .unwrap();
-                    assert!(matches!(
-                        settled.outcome,
-                        IntentOutcome::Rejected { .. } | IntentOutcome::Expired
-                    ));
-                    println!(
-                        "TASK_LOGISTICS_SETTLED_PREFIX {}",
-                        serde_json::to_string(&settled).unwrap()
-                    );
-                    rejected_prefixes
-                        .push(serde_json::json!({"original":prefix,"settled":settled}));
-                    write_public_json(
-                        &root.join("logistics-prefix-attempts.json"),
-                        &serde_json::json!({"settled_rejections":rejected_prefixes}),
-                    );
-                }
-                Err(reason) => panic!("original capture remains unresolved: {reason}"),
-            }
-        }
-        assert!(
-            !rejected_prefixes.is_empty(),
-            "forced stale original must settle rejected before refresh"
-        );
-        let (proof, prepared) =
-            captured_preparation.expect("maximum eight settled capture attempts exhausted");
-        let get = sign_read_request(
-            TASK_CONTEXT_READ_PATH,
-            TaskContextGetV1 {
-                schema_revision: 1,
-                context: prepared.identity.clone(),
-                prepare_operation_id: proof.request.client_operation_id.clone(),
-            },
-            &delegate,
-        )
-        .unwrap();
-        let captured = client.read_task_context(&get).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
         let action = Action::TransferMaterial {
             requester_agent_id: "agent-a".into(),
             from_ledger: oasis7::runtime::MaterialLedgerId::agent("agent-a"),
@@ -386,20 +299,178 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
             route_ids: vec![],
             auto_reroute: false,
         };
-        let intent = cognition_intent(&captured, action.clone()).unwrap();
-        let original = request(
-            &world,
-            WorldServicePayloadV1::Cognition(
-                sign_read_request("cognition", intent.clone(), &delegate).unwrap(),
-            ),
+        let mut attempts = Vec::new();
+        let mut forced_action_rejection = false;
+        let mut committed = None;
+        for attempt in 0..8 {
+            assert!(
+                Instant::now() < deadline,
+                "bounded task chain deadline exhausted"
+            );
+            let proof = sign_read_request(
+                TASK_CONTEXT_PREPARE_PATH,
+                TaskContextPrepareV1 {
+                    schema_revision: 1,
+                    fence: GameTaskFenceV1::from_control(&control),
+                    client_operation_id: format!("logistics-delivery-context-{attempt}"),
+                    client_nonce: format!("{:064x}", attempt + 145),
+                },
+                &delegate,
+            )
+            .unwrap();
+            let prepared = loop {
+                match client.prepare_task_context(&proof) {
+                    Ok(prepared) => break prepared,
+                    Err(
+                        oasis7::world_service::client::WorldServiceClientError::Transport(_)
+                        | oasis7::world_service::client::WorldServiceClientError::Cooldown { .. },
+                    ) => {
+                        assert!(
+                            Instant::now() < deadline,
+                            "original private preparation transport unresolved"
+                        );
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                    Err(error) => panic!("private preparation rejected: {error}"),
+                }
+            };
+            if attempt == 0 {
+                let tick = prepared.snapshot.captured_base_binding.base_tick;
+                while pin().world.state().time < tick + 2 {
+                    assert!(Instant::now() < deadline);
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+            let prefix = request(
+                &world,
+                WorldServicePayloadV1::Scheduler(
+                    sign_read_request("scheduler", public_prefix(&prepared).unwrap(), &delegate)
+                        .unwrap(),
+                ),
+            );
+            match settle_cleanup_original(&client, &prefix, deadline, &mut categories) {
+                Ok(_) => {}
+                Err("canonical cleanup rejected") => {
+                    retain_terminal_original(&client, &prefix, "prefix", &root, &mut attempts);
+                    continue;
+                }
+                Err(reason) => panic!("original prefix remains unresolved: {reason}"),
+            }
+            let get = sign_read_request(
+                TASK_CONTEXT_READ_PATH,
+                TaskContextGetV1 {
+                    schema_revision: 1,
+                    context: prepared.identity.clone(),
+                    prepare_operation_id: proof.request.client_operation_id.clone(),
+                },
+                &delegate,
+            )
+            .unwrap();
+            let captured = client.read_task_context(&get).unwrap();
+            let intent = cognition_intent(&captured, action.clone()).unwrap();
+            // Force one real stale cognition as well as the first stale prefix.
+            if !forced_action_rejection {
+                let tick = pin().world.state().time;
+                while pin().world.state().time < tick + 2 {
+                    assert!(Instant::now() < deadline);
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+            }
+            let original = request(
+                &world,
+                WorldServicePayloadV1::Cognition(
+                    sign_read_request("cognition", intent, &delegate).unwrap(),
+                ),
+            );
+            match settle_cleanup_original(&client, &original, deadline, &mut categories) {
+                Ok(first) => {
+                    committed = Some((captured, original, first));
+                    break;
+                }
+                Err("canonical cleanup rejected") => {
+                    retain_terminal_original(&client, &original, "action", &root, &mut attempts);
+                    forced_action_rejection = true;
+                    assert_eq!(
+                        pin().world.ledger_material_balance(
+                            &oasis7::runtime::MaterialLedgerId::agent("agent-a"),
+                            "iron_ingot"
+                        ),
+                        20,
+                        "rejected action must have no transfer effect"
+                    );
+                    // A rejected action leaves its captured turn active. Close it through
+                    // the supported public failure lane before opening a fresh turn.
+                    let mut closed = false;
+                    for outcome_attempt in 0..8 {
+                        assert!(Instant::now() < deadline);
+                        let current_base = pin().world.current_cognition_base_binding().unwrap();
+                        let reason =
+                            if current_base.base_tick > prepared.identity.valid_until_tick.0 {
+                                "context_expired"
+                            } else {
+                                "executor_aborted"
+                            };
+                        let mut outcome =
+                            public_outcome_intent(&prepared.identity, current_base, reason)
+                                .unwrap();
+                        // Scheduler request identity is independent of the exact context
+                        // identity; each new operation follows a verified terminal result.
+                        outcome.request_id = format!(
+                            "{}:outcome:{outcome_attempt}",
+                            prepared.identity.decision_request_id
+                        );
+                        let abort = request(
+                            &world,
+                            WorldServicePayloadV1::Scheduler(
+                                sign_read_request("scheduler", outcome, &delegate).unwrap(),
+                            ),
+                        );
+                        match settle_cleanup_original(&client, &abort, deadline, &mut categories) {
+                            Ok(receipt) => {
+                                attempts.push(serde_json::json!({"phase":"abort","original":abort,"settled":receipt}));
+                                closed = true;
+                                break;
+                            }
+                            Err("canonical cleanup rejected") => retain_terminal_original(
+                                &client,
+                                &abort,
+                                "abort",
+                                &root,
+                                &mut attempts,
+                            ),
+                            Err(reason) => panic!("original abort remains unresolved: {reason}"),
+                        }
+                    }
+                    assert!(closed, "bounded public abort attempts exhausted");
+                    let subject = sign_read_request("key", (), &delegate)
+                        .unwrap()
+                        .subject_public_key;
+                    assert!(
+                        game_task::validate_task_context_capture(
+                            &pin().world,
+                            &prepared.identity,
+                            &subject
+                        )
+                        .is_err(),
+                        "old context must be inactive before fresh preparation"
+                    );
+                    write_public_json(
+                        &root.join("logistics-task-attempts.json"),
+                        &serde_json::json!({"settled_attempts":attempts}),
+                    );
+                }
+                Err(reason) => panic!("original action remains unresolved: {reason}"),
+            }
+        }
+        assert!(
+            attempts.iter().any(|a| a["phase"] == "prefix"),
+            "forced prefix must settle rejected"
         );
-        let first = settle_cleanup_original(
-            &client,
-            &original,
-            Instant::now() + Duration::from_secs(15),
-            &mut categories,
-        )
-        .unwrap();
+        assert!(
+            forced_action_rejection,
+            "forced stale action must settle rejected"
+        );
+        let (captured, original, first) = committed.expect("maximum eight task attempts exhausted");
         let duplicate = settle_cleanup_original(
             &client,
             &original,
@@ -526,4 +597,38 @@ fn private_task_logistics_signed_transfer_once_restart_and_conflict() {
         fs::remove_file(&ready).unwrap();
         fs::remove_dir_all(root).unwrap();
     });
+}
+
+fn retain_terminal_original(
+    client: &RemoteWorldServiceClient,
+    original: &SubmitIntentRequest<WorldServicePayloadV1>,
+    phase: &str,
+    root: &Path,
+    attempts: &mut Vec<serde_json::Value>,
+) {
+    let settled = client
+        .lookup(
+            LookupIntentRequest {
+                contract_version: 1,
+                key: original.correlation.key.clone(),
+            },
+            original.signed_payload.clone(),
+        )
+        .unwrap();
+    assert!(
+        matches!(
+            settled.outcome,
+            IntentOutcome::Rejected { .. } | IntentOutcome::Expired
+        ),
+        "only authenticated terminal result permits replacement"
+    );
+    println!(
+        "TASK_LOGISTICS_SETTLED_REJECTION {}",
+        serde_json::to_string(&settled).unwrap()
+    );
+    attempts.push(serde_json::json!({"phase":phase,"original":original,"settled":settled}));
+    write_public_json(
+        &root.join("logistics-task-attempts.json"),
+        &serde_json::json!({"settled_attempts":attempts}),
+    );
 }
