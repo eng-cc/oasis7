@@ -100,6 +100,10 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 目标控制仍保持 suspended、未绑定 executor；完整 TaskSnapshot/Context、正式 Skill、实际 Runtime 目标应用与自主首局仍未验收。下一步连接这些消费者，并按真实游戏自测合同验收，不能用 TCP 脚本代签自主游玩。来源：[Game API 当前切片](../../world-simulator/llm/external-agent-game-api.design.md#已实施切片owner-目标准备发布与当前正文回读)、[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。
 
+### 7. Launcher 会话证据失效与重新验证
+
+2026-10-12 局部核对：已补齐[系统设计](../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)对产品 REQ-ENTRY-LAUNCH-001/002 的承接。当前候选修复停止、失败启动和退出后的旧链快照，以及 native/Web 控制请求失败后的旧 Ready；仍在验证，未计入 main 已交付或部署。本项只涉及 operator 本地会话证据，不声明玩家授权恢复、Agent 自主游玩或世界最终性。
+
 <a id="cc-status-changes"></a>
 
 ## 最近做了什么

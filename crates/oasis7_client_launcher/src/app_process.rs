@@ -65,6 +65,7 @@ impl ClientLauncherApp {
                         Ok(snapshot) => self.apply_web_snapshot(snapshot),
                         Err(err) => {
                             self.status = LauncherStatus::QueryFailed;
+                            self.invalidate_chain_session_evidence(err.as_str());
                             self.append_log(format!("web state refresh failed: {err}"));
                         }
                     }
@@ -84,6 +85,7 @@ impl ClientLauncherApp {
                         }
                         Err(err) => {
                             self.status = LauncherStatus::QueryFailed;
+                            self.invalidate_chain_session_evidence(err.as_str());
                             self.append_log(format!("web action request failed: {err}"));
                         }
                     }
@@ -278,6 +280,7 @@ impl ClientLauncherApp {
         match running.child.try_wait() {
             Ok(Some(status)) => {
                 self.status = LauncherStatus::QueryFailed;
+                self.invalidate_chain_session_evidence("control plane exited");
                 self.append_log(format!("control plane exited: {status}"));
                 self.running = None;
             }
@@ -286,6 +289,7 @@ impl ClientLauncherApp {
             }
             Err(err) => {
                 self.status = LauncherStatus::QueryFailed;
+                self.invalidate_chain_session_evidence(&err.to_string());
                 self.append_log(format!("query control plane status failed: {err}"));
                 self.running = None;
             }

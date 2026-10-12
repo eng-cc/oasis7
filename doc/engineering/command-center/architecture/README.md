@@ -93,6 +93,7 @@
 
 **已有实现：**
 
+- 2026-10-12 局部设计核对：[Launcher 会话重新验证](../../../world-simulator/launcher/game-client-launcher-runtime-session-continuity.design.md#session-revalidation)要求停止、失败和退出后撤销旧链快照，再由新探测发布；operator 状态不恢复玩家授权或世界结果。本项候选仍在实现验证，未计入 main 交付或部署。
 - ARCH-08：headless ingress 已定义签名 payload、ed25519、单调 nonce 与恢复防重放；它不自动证明任意新 API 的完整授权和恢复行为。
 - ARCH-09：[PR #4562](https://github.com/eng-cc/oasis7/pull/4562)交付 Game API 的发现合同和已实现签名读取；范围仍是显式开启的 loopback bootstrap。
 - [PR #4565](https://github.com/eng-cc/oasis7/pull/4565)增加持久、owner-signed task control；初态 suspended、没有 executor。配对、私有目标、完整 context 和 action admission 不在该切片内。

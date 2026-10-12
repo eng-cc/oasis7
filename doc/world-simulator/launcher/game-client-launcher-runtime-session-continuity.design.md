@@ -1,27 +1,84 @@
 # 游戏客户端启动器运行时会话连续性设计
 
-审计轮次: 5
+## 1. 问题、目标与非目标
 
-> 对应需求: `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md`
-> 历史迁移、验证与 task 状态：GitHub task issue evidence。
+Launcher 构造参数并托管子进程；chain runtime 保持执行与持久化权威。本设计防止停止、启动失败和恢复后继续呈现旧会话证据。进程存在、请求受理、页面可见和配置保存不证明世界健康、可玩或行动成功；不承诺无损恢复、自动迁移或发行就绪。
 
-## 结构
+## 2. 上游约束与相关角色
 
-1. **编排边界**：Launcher 构造 node-scoped 启动参数、托管子进程并读取既有状态；chain runtime 保持执行与持久化权威。
-2. **输出边界**：托管入口显式传递 execution-world 目录，避免 cwd 将 runtime 产物写入源码树。
-3. **恢复边界**：只将严格匹配的状态根冲突提升为 stale execution world；默认给出 fresh node 建议，破坏性重置须显式确认。
-4. **存储边界**：Launcher 读取 runtime 发布的 profile、指标和降级状态；head、checkpoint、replay 与 GC 的确定性归运行态存储治理专题。
-5. **浏览器边界**：WASM 路径使用可用的计时/刷新实现；失败保持可诊断，并以目标编译和浏览器证据防止平台回归。
+- 专业合同：[运行时会话连续性 PRD](game-client-launcher-runtime-session-continuity.prd.md)。
+- 产品主责：[REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001)、[REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002)。这里消费产品结果边界，不重新定义产品权利。
+- 玩家状态与动作顺序消费[配对产品设计 §2.1](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.design.md#21-状态动作结果恢复决策)。runtime 拥有执行和存储；Launcher 拥有本地编排；QA 验证各层事实。
 
-## 不变量
+### 2.1 需求承接与分配表
 
-- Launcher 不把本地进程可启动、状态可读或建议可见误报为 chain health、最终性或玩家承诺。
-- stale 分类不得吞没其他启动错误；fresh node 建议不得删除或修改旧 execution-world 数据。
-- 任何清理只能由 runtime 的 pin/manifest/replay 合同或明确确认的实现路径决定，不能由 Launcher 以文件年龄推断。
-- Web/WASM 兼容层不定义 WASM ABI、runtime 时钟或永久轮询 API。
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | 本地探测结果和世界结果分离；失效证据不作为当前 authority | [重新验证](#session-revalidation) | Launcher/runtime/Viewer/QA | 不证明世界最终性、身份授权或可玩 |
+| [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | 停止、失败、退出后重新探测；不沿用旧会话证据 | [重新验证](#session-revalidation) | Launcher/runtime/Viewer/QA | 不实现世界存储重建或待决行动重放 |
 
-## 代码与验证接点
+## 3. 当前状态、目标状态与差距
 
-- Launcher 参数与进程/浏览器适配：`oasis7_client_launcher`、`oasis7_game_launcher`、`oasis7_web_launcher`。
-- runtime execution-world 存储和恢复：`oasis7_chain_runtime/execution_bridge` 与运行态存储治理专题。
-- 行为修改应覆盖受影响参数构造、stale 分类/恢复、进程或浏览器路径测试；可见浏览器变化另按 `testing-manual.md` S6 取证。
+已有显式 execution-world 输出、严格 stale 分类、fresh-node 建议及状态探测。原设计缺恢复后重新验证和逐项验收映射；实现部分退出、停止与失败路径仍保留旧 identity/replication 快照。目标是在这些边界立即撤销当前证据，只有新的成功探测才重新发布，不将设计目标预写成已验证事实。
+
+## 4. 边界与结构
+
+1. Launcher 使用 node-scoped 参数与显式 execution-world 目录，避免 cwd 将产物写入源码树。
+2. runtime 发布 identity、P2P、observability 和 replication 快照；Launcher 不重算世界状态。
+3. native/Web 客户端消费同一控制面状态。[控制面设计](game-client-launcher-control-plane-and-machine-interface.design.md)拥有请求、结果和可见错误映射。
+4. head、checkpoint、replay、GC 与 pin 的确定性归[运行态存储治理](../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md)。Launcher 不能按文件年龄清理。
+
+## 5. 关键运行流程
+
+<a id="session-revalidation"></a>
+### 5.1 停止、重入与恢复重新验证
+
+1. 请求使用本次配置，经部署模式、chain-enabled、并发进程和配置校验决定是否允许；运行中的重复启动拒绝，不替换其配置或进程。
+2. 没有活动进程的新启动尝试先清除旧 identity、P2P、observability、replication 和 probe 时间。参数或二进制失败保留准确错误，不沿用旧证据。
+3. 成功 spawn 只进入 Starting。只有当前托管进程存在且本次状态端点探测成功，才能发布新的 runtime 快照与 Ready；Ready 只表示该探测成功，不证明身份授权、primary-mode 可玩性、世界最终性或行动完成。
+4. 探测失败撤销当前快照；启动宽限期内为 Starting，之后为 ConfigError/Unreachable。无可信证据不能继续显示旧 identity 为当前身份。
+5. 客户端状态刷新或控制请求失败同样撤销当前证据并标为 Unreachable；不能保留 Ready。停止请求、子进程退出或进程查询失败清除当前快照与 probe 时间。停止失败保留失败诊断，不把它声明为成功停止或世界回退。下一次启动重新执行上述流程。
+6. 陈旧状态仅在 DistributedValidationFailed 与 latest state-root mismatch 同时成立时分类；保留错误与非破坏性 fresh-node 建议。采用建议只是本次输入，仍须完整重新验证；不删除旧数据，不恢复旧权限或重放待决行动。
+
+### 5.2 Web 失败
+
+初始化、刷新和控制请求失败由控制面/客户端映射为可见错误及支持的下一步，不无限加载或假成功；本设计拥有 runtime 探测与会话证据失效，表现映射消费控制面合同。时钟和刷新使用目标平台支持的实现，不定义永久轮询 API 或 WASM ABI。
+
+## 6. 接口与数据合同
+
+沿用 /api/state、控制动作和 runtime status 的既有 schema，不新增玩家模式或公共协议。identity、P2P、observability、replication 的 None 表示当前会话没有有效探测证据；客户端不得解释为世界数据删除。日志与 stale 恢复建议可保留作诊断，但不是当前 authority。配置、provider 和凭据结果阶段由各自设置 authority 承接，本设计不代签已应用。
+
+## 7. 状态、事务与持久化
+
+ServiceState 串行控制托管子进程和探测，快照字段在同一次状态更新内一起失效或发布。Starting/Ready/NotStarted/Disabled/ConfigError/Unreachable/StaleExecutionWorld 沿用当前技术状态，产品阅读状态由客户端组合，不新造持久化会话。
+
+本地控制结果只证明请求或进程事实；世界 applied/persisted 以 runtime receipt/权威历史为准。此修改不改 execution-world、checkpoint、世界行动或存储格式，不把本地重启、清理和停止变成世界回滚、保存或重放。
+
+## 8. 部署、安全与运行约束
+
+沿用部署模式对本地 runtime 的限制。fresh node 不修改旧 execution-world；破坏性重置只能走明确确认的实现路径。诊断表面沿用凭据与敏感路径保护；查询失败不能放宽授权。浏览器状态不代签 native、另一模式或公开服务 readiness。
+
+## 9. 质量与容量
+
+不改变既有探测超时、启动宽限期和轮询间隔，不承诺新增 SLA。验证输入为旧成功快照加停止/失败/退出刺激；响应必须清除当前快照、保留准确错误，且新会话没有成功探测前不能 Ready。容量与确定性执行仍归 runtime authority。
+
+## 10. 兼容、迁移与回滚
+
+保持 JSON 字段、错误类别和恢复建议兼容，仅使失效证据返回既有空值。无数据迁移或双写；回滚代码不撤销世界事实，但会重新引入旧证据显示风险。旧消费者应已处理启动时的空快照，需验证相应 native/Web 状态消费。
+
+## 11. 验证设计与可追溯性
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [REQ-ENTRY-LAUNCH-001](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-001) | [重新验证](#session-revalidation) | 失败/停止后撤销旧证据，保持真实错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 的 session_ 回归及 `crates/oasis7_client_launcher/src/main_chain_status.rs` 的 session_state_refresh_failure_invalidates_chain_evidence；同候选 native 单元测试，执行入口 [testing-manual](../../../testing-manual.md) | PR 与真实测试输出 | 不证明世界最终性、授权或可玩 |
+| [REQ-ENTRY-LAUNCH-002](../../product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md#req-entry-launch-002) | [重新验证](#session-revalidation) | 陈旧、停止、失败启动和退出后须新探测；无安全路径保持错误 | `crates/oasis7/src/bin/oasis7_web_launcher/control_plane/tests.rs` 会话回归和 `crates/oasis7/src/bin/oasis7_web_launcher/oasis7_web_launcher_tests.rs`；同候选 canonical cargo test；Web 可见变化按 [testing-manual S6](../../../testing-manual.md) 验证 | PR、测试及适用浏览器记录 | 不证明无损恢复、世界重放；浏览器证据单独记录 |
+
+设置阶段消费设置 authority；Web 错误表现消费控制面设计；公开 claim 仍须同候选跨层证据，局部进程与单元测试不能成立发行结论。
+
+实现接点：oasis7_web_launcher/control_plane.rs、control_plane/chain_status_probe.rs、oasis7_client_launcher 的 native/Web 状态消费。canonical 局部命令：env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_web_launcher；文档检查使用 scripts/doc-governance-check.sh。实际结果记录在 PR，不在长期设计预写通过。
+
+## 12. 决策、长期风险与未决问题
+
+沿用现有技术状态和空快照表达证据失效，避免新增未经支持的授权/可玩协议。残余风险：成功状态端点探测本身不证明完整会话授权或可玩；客户端并发响应与跨模式配置应用由控制面 authority 管理。Owner 为 Launcher/runtime/Viewer/QA；若未来 Ready 被用作世界动作授权条件，必须另行验证身份绑定和授权合同，不能从本设计推导。

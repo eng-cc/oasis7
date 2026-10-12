@@ -52,6 +52,7 @@ impl ClientLauncherApp {
                         Ok(snapshot) => self.apply_web_snapshot(snapshot),
                         Err(err) => {
                             self.status = LauncherStatus::QueryFailed;
+                            self.invalidate_chain_session_evidence(err.as_str());
                             self.append_log(format!("web state refresh failed: {err}"));
                         }
                     }
@@ -71,6 +72,7 @@ impl ClientLauncherApp {
                         }
                         Err(err) => {
                             self.status = LauncherStatus::QueryFailed;
+                            self.invalidate_chain_session_evidence(err.as_str());
                             self.append_log(format!("web action request failed: {err}"));
                         }
                     }
