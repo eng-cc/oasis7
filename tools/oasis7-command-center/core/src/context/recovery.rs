@@ -28,7 +28,7 @@ pub enum ContextRecoveryEvidence {
         source_digest: String,
     },
     SnapshotRestore {
-        binding: ContextBinding,
+        binding: ContextRestoreIdentity,
         target_path: String,
         parent_identity: String,
         input_sha256: String,
@@ -279,24 +279,35 @@ impl ContextService {
         target: &Path,
         passphrase: &[u8],
     ) -> Result<ContextRecoveryEvidence> {
-        let binding = self.validate_binding(id, version)?;
+        let binding = self.binding_record(id, version)?;
+        let source = ContextSnapshotRestoreSource {
+            binding_id: Some(id.into()),
+            binding_version: Some(version),
+            registered_project_id: binding.registered_project_id,
+        };
         let digest = file_digest(input)?;
-        let (summary, mut revisions) =
-            oasis7_context::snapshot::inspect_revisions(input, passphrase)
+        self.restore_snapshot_evidence(&source, input, target, passphrase, &digest)
+    }
+    pub fn restore_snapshot_evidence(
+        &self,
+        source: &ContextSnapshotRestoreSource,
+        input: &Path,
+        target: &Path,
+        passphrase: &[u8],
+        expected_input_sha256: &str,
+    ) -> Result<ContextRecoveryEvidence> {
+        let digest = expected_input_sha256.to_owned();
+        let identity = self.restore_identity(source, input, passphrase, &digest)?;
+        let (_, mut revisions) =
+            oasis7_context::snapshot::inspect_revisions_frozen(input, passphrase, &digest)
                 .map_err(Error::Context)?;
-        if summary.store_id != binding.store_id || summary.project_id != binding.project_id {
-            return Err(failure("snapshot identity differs from selected library"));
-        }
-        if file_digest(input)? != digest {
-            return Err(failure("snapshot changed while preparing restore"));
-        }
         let target = canonical_candidate(target)?;
         if target.exists() {
             return Err(failure("restore target already exists"));
         }
         revisions.sort();
         Ok(ContextRecoveryEvidence::SnapshotRestore {
-            binding,
+            binding: identity,
             target_path: target.display().to_string(),
             parent_identity: directory_identity(
                 target
@@ -455,7 +466,7 @@ impl ContextService {
                 ))
             }
             ContextRecoveryEvidence::SnapshotRestore {
-                binding,
+                binding: identity,
                 target_path,
                 parent_identity,
                 revisions: expected,
@@ -480,17 +491,17 @@ impl ContextService {
                     ));
                 }
                 let store = application::open(Some(target)).map_err(Error::Context)?;
-                if store.config.store_id != binding.store_id
-                    || store.config.project_id != binding.project_id
+                if store.config.store_id != identity.store_id
+                    || store.config.project_id != identity.project_id
                 {
                     return Ok(conclusion("unknown", "Restored store identity differs"));
                 }
                 if revisions(&store.read_all().map_err(Error::Context)?, &[]) == *expected {
                     let registered = self.bindings()?.into_iter().find(|candidate| {
                         candidate.root == *target_path
-                            && candidate.store_id == binding.store_id
-                            && candidate.project_id == binding.project_id
-                            && candidate.registered_project_id == binding.registered_project_id
+                            && candidate.store_id == identity.store_id
+                            && candidate.project_id == identity.project_id
+                            && candidate.registered_project_id == identity.registered_project_id
                     });
                     if let Some(registered) = registered {
                         self.validate_binding(&registered.id, registered.binding_version)?;

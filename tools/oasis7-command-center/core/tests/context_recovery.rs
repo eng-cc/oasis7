@@ -196,3 +196,176 @@ fn initialized_but_unbound_library_is_known_partial_without_replay() {
     jobs.admit("connect", "new-fingerprint", "root", "bind")
         .unwrap();
 }
+
+#[test]
+fn encrypted_backup_restores_after_source_loss_and_on_a_fresh_machine() {
+    let temp = tempfile::tempdir().unwrap();
+    let (service, binding, request) = fixture(&temp);
+    service.save(&request).unwrap();
+    let encrypted = temp.path().join("backup.enc");
+    let password = b"restore-only-password";
+    service
+        .snapshot_export(
+            &binding.id,
+            binding.binding_version,
+            &encrypted,
+            &[],
+            password,
+        )
+        .unwrap();
+    std::fs::remove_dir_all(&binding.root).unwrap();
+    assert!(
+        service
+            .validate_binding(&binding.id, binding.binding_version)
+            .is_err()
+    );
+    let restored = temp.path().join("restored-with-record");
+    service
+        .snapshot_restore(
+            &binding.id,
+            binding.binding_version,
+            &encrypted,
+            &restored,
+            password,
+        )
+        .unwrap();
+    assert!(restored.join("entries/machine.md").exists());
+    let fresh = ContextService::open(temp.path().join("fresh-host.db")).unwrap();
+    let source = ContextSnapshotRestoreSource {
+        binding_id: None,
+        binding_version: None,
+        registered_project_id: "fresh-project".into(),
+    };
+    let target = temp.path().join("fresh-restored");
+    let frozen_digest =
+        oasis7_local_signer::identity::sha256_hex(&std::fs::read(&encrypted).unwrap());
+    let stale_target = temp.path().join("stale-evidence-target");
+    assert!(
+        fresh
+            .restore_snapshot_evidence(
+                &source,
+                &encrypted,
+                &stale_target,
+                password,
+                &"0".repeat(64)
+            )
+            .is_err()
+    );
+    assert!(!stale_target.exists());
+    let db = rusqlite::Connection::open(temp.path().join("fresh-host.db")).unwrap();
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM context_reserved_roots", [], |r| r
+            .get::<_, u64>(0))
+            .unwrap(),
+        0
+    );
+    let evidence = fresh
+        .restore_snapshot_evidence(&source, &encrypted, &target, password, &frozen_digest)
+        .unwrap();
+    let digest = match &evidence {
+        ContextRecoveryEvidence::SnapshotRestore { input_sha256, .. } => input_sha256,
+        _ => unreachable!(),
+    };
+    let wrong = temp.path().join("wrong-password");
+    assert!(
+        fresh
+            .restore_snapshot_frozen(&source, &encrypted, &wrong, b"wrong", digest)
+            .is_err()
+    );
+    assert!(!wrong.exists());
+    let result = fresh
+        .restore_snapshot_frozen(&source, &encrypted, &target, password, digest)
+        .unwrap();
+    assert_eq!(result.store_id, binding.store_id);
+    assert_eq!(result.project_id, binding.project_id);
+    assert_eq!(result.registered_project_id, "fresh-project");
+    assert_eq!(fresh.reconcile(&evidence, None).unwrap().state, "succeeded");
+}
+
+#[test]
+fn lost_volume_exclusions_allow_unrelated_project_and_explicit_recovery() {
+    use oasis7_command_center_core::CommandCenter;
+    fn project(root: &Path) {
+        std::fs::create_dir_all(root).unwrap();
+        for args in [
+            vec!["init", "-q"],
+            vec![
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-qm",
+                "Initial",
+            ],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(root)
+                    .args(args)
+                    .output()
+                    .unwrap()
+                    .status
+                    .success()
+            );
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let volume = temp.path().join("lost-volume");
+    let old_project = volume.join("project");
+    project(&old_project);
+    let db = temp.path().join("host.db");
+    let mut center = CommandCenter::open(&db).unwrap();
+    let old_id = center
+        .open_project(&old_project)
+        .unwrap()
+        .project
+        .unwrap()
+        .id;
+    let root = volume.join("private");
+    oasis7_context::store::Store::init(&root, "fixture", "Test").unwrap();
+    let service = ContextService::open(&db).unwrap();
+    let binding = service.bind(&root, &old_id, "Test", false).unwrap();
+    service
+        .save(&ContextSaveRequest {
+            binding_id: binding.id.clone(),
+            binding_version: binding.binding_version,
+            id: "machine".into(),
+            raw_text: candidate(),
+            expected_revision: None,
+            actor: "test".into(),
+        })
+        .unwrap();
+    let encrypted = temp.path().join("backup.enc");
+    let password = b"volume-recovery";
+    service
+        .snapshot_export(
+            &binding.id,
+            binding.binding_version,
+            &encrypted,
+            &[],
+            password,
+        )
+        .unwrap();
+    std::fs::remove_dir_all(&volume).unwrap();
+    let unrelated = temp.path().join("unrelated-project");
+    project(&unrelated);
+    let current = center.open_project(&unrelated).unwrap().project.unwrap();
+    let source = ContextSnapshotRestoreSource {
+        binding_id: Some(binding.id.clone()),
+        binding_version: Some(binding.binding_version),
+        registered_project_id: current.id.clone(),
+    };
+    let target = temp.path().join("new-private");
+    let digest = oasis7_local_signer::identity::sha256_hex(&std::fs::read(&encrypted).unwrap());
+    let restored = service
+        .restore_snapshot_frozen(&source, &encrypted, &target, password, &digest)
+        .unwrap();
+    assert_eq!(restored.registered_project_id, current.id);
+    assert_eq!(restored.store_id, binding.store_id);
+    // The vanished namespace remains private even if someone creates a new Git repo there.
+    project(&root);
+    assert!(center.open_project(&root).is_err());
+}

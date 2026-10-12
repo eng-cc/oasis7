@@ -91,11 +91,11 @@ export const contextBridge = {
   history: (binding: ContextBinding, entryId: string) => call<unknown>('context_history', { ...bound(binding), entryId }),
   restoreEntry: (binding: ContextBinding, entryId: string, commit: string, revision: string | null) => call<unknown>('context_restore_entry', { ...bound(binding), entryId, commit, revision, operationId: crypto.randomUUID() }),
   doctor: (binding: ContextBinding) => call<unknown>('context_doctor', bound(binding)),
-  snapshot: async (purpose: 'export' | 'inspect' | 'restore', binding: ContextBinding, passphrase: string, directoryName = '', selection: string[] = []) => {
+  snapshot: async (purpose: 'export' | 'inspect' | 'restore', binding: ContextBinding | null, passphrase: string, directoryName = '', selection: string[] = []) => {
     const operationId = crypto.randomUUID();
     const command = `context_snapshot_${purpose}`;
     const secretHandle = await call<string>('secret_stage', { operationId, purpose: command, passphrase });
-    return call<unknown>(command, { ...bound(binding), operationId, secretHandle, directoryName, selection });
+    return call<unknown>(command, { ...(binding ? bound(binding) : {bindingId:null,bindingVersion:null}), operationId, secretHandle, directoryName, selection });
   },
 };
 export const toolsBridge = {

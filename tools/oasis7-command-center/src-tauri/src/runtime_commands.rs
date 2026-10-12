@@ -156,6 +156,66 @@ impl RuntimeHost {
         .await
     }
 
+    fn check_exit(&self) -> Result<QuitStatus, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "执行状态不可用".to_string())?;
+        self.jobs.freeze().map_err(|e| e.to_string())?;
+        let status = (|| {
+            let r = runtime
+                .as_mut()
+                .ok_or_else(|| self.unavailable_quit_status().reason)?;
+            let status =
+                with_tool_status(r.shutdown_if_idle().map_err(|e| e.to_string())?, &self.jobs)?;
+            if exit_ready(&status) {
+                self.approved_exit.store(true, Ordering::Release);
+            }
+            Ok(status)
+        })();
+        if status.is_err() && !self.approved_exit.load(Ordering::Acquire) {
+            self.jobs.unfreeze().map_err(|e| e.to_string())?;
+        }
+        status
+    }
+
+    fn unavailable_quit_status(&self) -> QuitStatus {
+        QuitStatus {
+            safe: false,
+            active: 0,
+            unknown: 1,
+            pending_requests: 0,
+            waiting: false,
+            reason: self
+                .failure
+                .as_ref()
+                .clone()
+                .unwrap_or_else(|| "执行状态不可用".into()),
+        }
+    }
+
+    // Serialize cancellation with the watcher that can approve process exit.
+    // A missing runtime is an unknown outcome, but must not disable ordinary tools.
+    fn cancel_wait(&self) -> Result<QuitStatus, String> {
+        let mut runtime = self
+            .runtime
+            .lock()
+            .map_err(|_| "执行状态不可用".to_string())?;
+        if self.approved_exit.load(Ordering::Acquire) {
+            return Err("客户端已确认退出".into());
+        }
+        if self.exit_checking.load(Ordering::Acquire) {
+            return Err("正在核对退出状态，请稍后取消".into());
+        }
+        self.jobs.unfreeze().map_err(|e| e.to_string())?;
+        self.waiting.store(false, Ordering::Release);
+        let status = runtime
+            .as_mut()
+            .map(|r| r.cancel_exit_wait())
+            .unwrap_or_else(|| self.unavailable_quit_status());
+        with_tool_status(status, &self.jobs)
+    }
+
     async fn answer_request(
         &self,
         host: &Host,
@@ -331,15 +391,8 @@ pub async fn answer_runtime_request(
 
 #[tauri::command]
 pub async fn get_exit_status(runtime: State<'_, RuntimeHost>) -> Result<QuitStatus, String> {
-    if let Some(reason) = runtime.failure.as_ref() {
-        return Ok(QuitStatus {
-            safe: false,
-            active: 0,
-            unknown: 1,
-            pending_requests: 0,
-            waiting: false,
-            reason: reason.clone(),
-        });
+    if runtime.failure.is_some() {
+        return with_tool_status(runtime.unavailable_quit_status(), &runtime.jobs);
     }
     let jobs = runtime.jobs.clone();
     runtime
@@ -353,19 +406,29 @@ pub async fn request_exit_wait(
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
     let jobs = runtime.jobs.clone();
-    tauri::async_runtime::spawn_blocking(move || jobs.freeze().map_err(|e| e.to_string()))
-        .await
-        .map_err(|_| "退出准入核对未完成".to_string())??;
+    let checking = runtime.exit_checking.clone();
+    let approved = runtime.approved_exit.clone();
     let waiting = runtime.waiting.clone();
     let status = runtime
         .run(move |r| {
+            if checking.load(Ordering::Acquire) || approved.load(Ordering::Acquire) {
+                return Err("正在核对或已确认退出".into());
+            }
+            jobs.freeze().map_err(|e| e.to_string())?;
             waiting.store(true, Ordering::Release);
             Ok(r.begin_wait_for_exit())
         })
-        .await?;
+        .await;
+    let status = match status.and_then(|status| with_tool_status(status, &runtime.jobs)) {
+        Ok(status) => status,
+        Err(error) => {
+            runtime.cancel_wait()?;
+            return Err(error);
+        }
+    };
     runtime.watch_exit(handle.clone());
     invalidate(&handle);
-    with_tool_status(status, &runtime.jobs)
+    Ok(status)
 }
 
 #[tauri::command]
@@ -374,20 +437,28 @@ pub async fn request_exit_stop(
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
     let jobs = runtime.jobs.clone();
-    tauri::async_runtime::spawn_blocking(move || jobs.freeze().map_err(|e| e.to_string()))
-        .await
-        .map_err(|_| "退出准入核对未完成".to_string())??;
+    let checking = runtime.exit_checking.clone();
+    let approved = runtime.approved_exit.clone();
     let waiting = runtime.waiting.clone();
     let result = runtime
         .run(move |r| {
+            if checking.load(Ordering::Acquire) || approved.load(Ordering::Acquire) {
+                return Err("正在核对或已确认退出".into());
+            }
+            jobs.freeze().map_err(|e| e.to_string())?;
             waiting.store(true, Ordering::Release);
             r.begin_wait_for_exit();
             r.stop_for_exit().map_err(|e| e.to_string())
         })
         .await;
-    runtime.watch_exit(handle.clone());
+    let result = result.and_then(|status| with_tool_status(status, &runtime.jobs));
+    if result.is_err() {
+        runtime.cancel_wait()?;
+    } else {
+        runtime.watch_exit(handle.clone());
+    }
     invalidate(&handle);
-    result.and_then(|status| with_tool_status(status, &runtime.jobs))
+    result
 }
 
 #[tauri::command]
@@ -395,26 +466,38 @@ pub async fn cancel_exit_wait(
     runtime: State<'_, RuntimeHost>,
     handle: tauri::AppHandle,
 ) -> Result<QuitStatus, String> {
-    let waiting = runtime.waiting.clone();
-    let approved = runtime.approved_exit.clone();
-    let jobs = runtime.jobs.clone();
-    let status = runtime
-        .run(move |r| {
-            if approved.load(Ordering::Acquire) {
-                return Err("客户端已确认退出".into());
-            }
-            jobs.unfreeze().map_err(|e| e.to_string())?;
-            waiting.store(false, Ordering::Release);
-            Ok(r.cancel_exit_wait())
-        })
-        .await?;
+    let owner = runtime.inner().clone();
+    let status = tauri::async_runtime::spawn_blocking(move || owner.cancel_wait())
+        .await
+        .map_err(|_| "退出取消未完成".to_string())??;
     invalidate(&handle);
-    with_tool_status(status, &runtime.jobs)
+    Ok(status)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concurrent_cancel_and_exit_check_never_reopen_approved_admission() {
+        for _ in 0..32 {
+            let runtime = RuntimeHost::open(PathBuf::from(":memory:")).unwrap();
+            let barrier = Arc::new(std::sync::Barrier::new(2));
+            let cancel_host = runtime.clone();
+            let cancel_barrier = barrier.clone();
+            let cancel = std::thread::spawn(move || {
+                cancel_barrier.wait();
+                cancel_host.cancel_wait()
+            });
+            barrier.wait();
+            let status = runtime.check_exit().unwrap();
+            let _ = cancel.join().unwrap();
+            assert!(exit_ready(&status));
+            assert!(runtime.exit_is_approved());
+            assert!(runtime.jobs.with_open(|| Ok(())).is_err());
+            assert!(runtime.cancel_wait().is_err());
+        }
+    }
 
     #[test]
     fn request_answers_are_rejected_by_exit_admission_before_runtime_work() {
@@ -540,10 +623,21 @@ mod tests {
                 .contains("历史自管工作的终止尚未确认")
         );
         assert!(!runtime.exit_is_approved());
-        assert_eq!(std::fs::read(path).unwrap(), original);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
         let result = tauri::async_runtime::block_on(
             runtime.run::<()>(|_| panic!("damaged runtime storage must reject execution")),
         );
         assert!(result.is_err());
+        assert!(runtime.check_exit().is_err());
+        runtime.jobs.with_open(|| Ok(())).unwrap();
+        runtime.jobs.freeze().unwrap();
+        runtime.waiting.store(true, Ordering::Release);
+        let status = runtime.cancel_wait().unwrap();
+        assert!(!status.safe);
+        assert_eq!(status.unknown, 1);
+        assert!(!status.waiting);
+        runtime.jobs.with_open(|| Ok(())).unwrap();
+        assert!(!runtime.exit_is_approved());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
     }
 }

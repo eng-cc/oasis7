@@ -403,8 +403,9 @@ pub async fn context_snapshot_restore(
     tools: State<'_, crate::tool_commands::ToolHost>,
     window: tauri::WebviewWindow,
     handle: tauri::AppHandle,
-    binding_id: String,
-    binding_version: u64,
+    project: State<'_, crate::commands::Host>,
+    binding_id: Option<String>,
+    binding_version: Option<u64>,
     operation_id: String,
     secret_handle: String,
     directory_name: String,
@@ -417,6 +418,18 @@ pub async fn context_snapshot_restore(
     {
         return Err("A new directory name is required".into());
     }
+    let registered_project_id = project
+        .project
+        .lock()
+        .map_err(|_| "Project identity unavailable")?
+        .as_ref()
+        .map(|p| p.id.clone())
+        .ok_or("Select an ordinary project first")?;
+    let source = ContextSnapshotRestoreSource {
+        binding_id,
+        binding_version,
+        registered_project_id,
+    };
     let password = tools
         .secrets
         .take(
@@ -466,28 +479,17 @@ pub async fn context_snapshot_restore(
     .await
     .map_err(|_| "Snapshot input read did not complete")??;
     let fingerprint = crate::tool_commands::digest(
-        &serde_json::to_vec(&(
-            &binding_id,
-            binding_version,
-            &input,
-            &target,
-            &encrypted_digest,
-        ))
-        .map_err(|e| e.to_string())?,
+        &serde_json::to_vec(&(&source, &input, &target, &encrypted_digest))
+            .map_err(|e| e.to_string())?,
     );
-    let ev_binding = binding_id.clone();
+    let ev_source = source.clone();
+    let ev_digest = encrypted_digest.clone();
     let ev_input = input.clone();
     let ev_target = target.clone();
     let (evidence, password) = host
         .run(move |service| {
             let evidence = service
-                .snapshot_restore_evidence(
-                    &ev_binding,
-                    binding_version,
-                    &ev_input,
-                    &ev_target,
-                    &password,
-                )
+                .restore_snapshot_evidence(&ev_source, &ev_input, &ev_target, &password, &ev_digest)
                 .map_err(|e| e.to_string())?;
             Ok((evidence, password))
         })
@@ -496,7 +498,10 @@ pub async fn context_snapshot_restore(
         .mutate_context(
             operation_id,
             fingerprint,
-            format!("context:{binding_id}"),
+            format!(
+                "context-restore:{}",
+                crate::tool_commands::digest(target.to_string_lossy().as_bytes())
+            ),
             "snapshot_restore",
             evidence,
             move || {
@@ -511,14 +516,7 @@ pub async fn context_snapshot_restore(
                     ));
                 }
                 ContextService::open(path)?
-                    .snapshot_restore_frozen(
-                        &binding_id,
-                        binding_version,
-                        &input,
-                        &target,
-                        &password,
-                        &encrypted_digest,
-                    )
+                    .restore_snapshot_frozen(&source, &input, &target, &password, &encrypted_digest)
                     .map(Some)
             },
         )

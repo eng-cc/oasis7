@@ -12,6 +12,8 @@ fn main() {
         ContextSummary::decl(),
         ContextQuery::decl(),
         ContextSaveRequest::decl(),
+        ContextSnapshotRestoreSource::decl(),
+        ContextRestoreIdentity::decl(),
         ToolObservation::decl(),
         FileSignInput::decl(),
         FileSignPrepared::decl(),

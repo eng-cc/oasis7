@@ -69,6 +69,21 @@ pub struct ContextSaveRequest {
     pub expected_revision: Option<String>,
     pub actor: String,
 }
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextSnapshotRestoreSource {
+    pub binding_id: Option<String>,
+    #[ts(type = "number | null")]
+    pub binding_version: Option<u64>,
+    pub registered_project_id: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextRestoreIdentity {
+    pub store_id: String,
+    pub project_id: String,
+    pub registered_project_id: String,
+}
 pub struct ContextService {
     db: Connection,
 }
@@ -95,6 +110,18 @@ fn canonical_candidate(path: &Path) -> Result<PathBuf> {
         .ok_or_else(|| failure("directory needs name"))?;
     Ok(parent.join(name))
 }
+/// Historical exclusions survive unavailable volumes. Only absence can fall back
+/// to the recorded absolute namespace; permission and other failures stay closed.
+fn exclusion_root(path: &Path) -> Result<PathBuf> {
+    if !path.is_absolute() {
+        return Err(failure("registered exclusion path must be absolute"));
+    }
+    match path.canonicalize() {
+        Ok(root) => Ok(root),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(path.to_path_buf()),
+        Err(error) => Err(Error::Io(error)),
+    }
+}
 fn overlaps(a: &Path, b: &Path) -> bool {
     a.starts_with(b) || b.starts_with(a)
 }
@@ -106,10 +133,10 @@ fn bindings(db: &Connection) -> Result<Vec<ContextBinding>> {
 pub(crate) fn check_project(db: &Connection, path: &Path) -> Result<()> {
     // Cached source facts remain readable when a worktree is temporarily absent.
     // Its registered absolute path still participates in the privacy exclusion.
-    let root = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let root = exclusion_root(path)?;
     for binding in bindings(db)? {
         let registered = Path::new(&binding.root);
-        let current = canonical_candidate(registered)?;
+        let current = exclusion_root(registered)?;
         if overlaps(&root, registered) || overlaps(&root, &current) {
             return Err(failure(
                 "ordinary project overlaps a private library; choose independent directories",
@@ -120,9 +147,7 @@ pub(crate) fn check_project(db: &Connection, path: &Path) -> Result<()> {
     for value in statement.query_map([], |r| r.get::<_, String>(0))? {
         let value = value?;
         let registered = Path::new(&value);
-        let current = registered
-            .canonicalize()
-            .unwrap_or_else(|_| registered.to_path_buf());
+        let current = exclusion_root(registered)?;
         if overlaps(&root, registered) || overlaps(&root, &current) {
             return Err(failure(
                 "ordinary project overlaps an original private restore target",
@@ -169,7 +194,7 @@ impl ContextService {
         for value in statement.query_map([], |r| r.get::<_, String>(0))? {
             let value = value?;
             let registered = Path::new(&value);
-            let current = canonical_candidate(registered)?;
+            let current = exclusion_root(registered)?;
             if overlaps(&root, registered) || overlaps(&root, &current) {
                 return Err(failure(
                     "private library overlaps an ordinary project; choose an independent directory",
@@ -219,6 +244,48 @@ impl ContextService {
         tx.commit()?;
         Ok(binding)
     }
+    /// Recorded identity is enough to restore a lost source; it does not certify live health.
+    pub fn binding_record(&self, id: &str, version: u64) -> Result<ContextBinding> {
+        let binding = self
+            .bindings()?
+            .into_iter()
+            .find(|b| b.id == id)
+            .ok_or_else(|| failure("unknown private library binding"))?;
+        if binding.binding_version != version {
+            return Err(failure("private library binding changed"));
+        }
+        Ok(binding)
+    }
+    fn restore_identity(
+        &self,
+        source: &ContextSnapshotRestoreSource,
+        input: &Path,
+        password: &[u8],
+        digest: &str,
+    ) -> Result<ContextRestoreIdentity> {
+        let (summary, _) =
+            oasis7_context::snapshot::inspect_revisions_frozen(input, password, digest)
+                .map_err(Error::Context)?;
+        match (&source.binding_id, source.binding_version) {
+            (Some(id), Some(version)) => {
+                let record = self.binding_record(id, version)?;
+                if record.store_id != summary.store_id || record.project_id != summary.project_id {
+                    return Err(failure("snapshot identity or registered project differs"));
+                }
+            }
+            (None, None) => {}
+            _ => {
+                return Err(failure(
+                    "source binding ID and version must be supplied together",
+                ));
+            }
+        }
+        Ok(ContextRestoreIdentity {
+            store_id: summary.store_id,
+            project_id: summary.project_id,
+            registered_project_id: source.registered_project_id.clone(),
+        })
+    }
     pub fn validate_binding(&self, id: &str, version: u64) -> Result<ContextBinding> {
         let binding = self
             .bindings()?
@@ -235,7 +302,7 @@ impl ContextService {
         let mut statement = self.db.prepare("SELECT path FROM ordinary_projects")?;
         for value in statement.query_map([], |r| r.get::<_, String>(0))? {
             let value = value?;
-            if overlaps(root, &canonical_candidate(Path::new(&value))?) {
+            if overlaps(root, &exclusion_root(Path::new(&value))?) {
                 return Err(failure(
                     "ordinary project directory now overlaps private library",
                 ));
@@ -404,13 +471,34 @@ impl ContextService {
         passphrase: &[u8],
         expected_digest: Option<&str>,
     ) -> Result<ContextBinding> {
-        let binding = self.validate_binding(id, version)?;
+        let binding = self.binding_record(id, version)?;
+        let source = ContextSnapshotRestoreSource {
+            binding_id: Some(id.into()),
+            binding_version: Some(version),
+            registered_project_id: binding.registered_project_id,
+        };
+        let digest = match expected_digest {
+            Some(digest) => digest.to_string(),
+            None => recovery::file_digest(input)?,
+        };
+        self.restore_snapshot_frozen(&source, input, target, passphrase, &digest)
+    }
+    pub fn restore_snapshot_frozen(
+        &self,
+        source: &ContextSnapshotRestoreSource,
+        input: &Path,
+        target: &Path,
+        passphrase: &[u8],
+        expected_digest: &str,
+    ) -> Result<ContextBinding> {
+        let identity = self.restore_identity(source, input, passphrase, expected_digest)?;
+
         let root = canonical_candidate(target)?;
         let tx = Transaction::new_unchecked(&self.db, TransactionBehavior::Immediate)?;
         let mut statement = tx.prepare("SELECT path FROM ordinary_projects")?;
         for value in statement.query_map([], |r| r.get::<_, String>(0))? {
             let value = value?;
-            if overlaps(&root, &canonical_candidate(Path::new(&value))?) {
+            if overlaps(&root, &exclusion_root(Path::new(&value))?) {
                 return Err(failure("restore target overlaps ordinary project"));
             }
         }
@@ -423,13 +511,13 @@ impl ContextService {
         oasis7_context::snapshot::restore_frozen(
             input,
             &root,
-            Some(&binding.project_id),
-            Some(&binding.store_id),
+            Some(&identity.project_id),
+            Some(&identity.store_id),
             passphrase,
-            expected_digest,
+            Some(expected_digest),
         )
         .map_err(Error::Context)?;
-        self.bind(&root, &binding.registered_project_id, &binding.name, false)
+        self.bind(&root, &identity.registered_project_id, "", false)
     }
     pub fn doctor(&self, id: &str, version: u64) -> Result<serde_json::Value> {
         self.store(id, version)?.doctor().map_err(Error::Context)

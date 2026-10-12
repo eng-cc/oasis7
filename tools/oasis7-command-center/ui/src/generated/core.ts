@@ -8,6 +8,8 @@ export type ContextSaveRequest = { bindingId: string, bindingVersion: number, id
  * None means create only, never unconditional overwrite.
  */
 expectedRevision: string | null, actor: string, };
+export type ContextSnapshotRestoreSource = { bindingId: string | null, bindingVersion: number | null, registeredProjectId: string, };
+export type ContextRestoreIdentity = { storeId: string, projectId: string, registeredProjectId: string, };
 export type ToolObservation = { tool_id: string, state: string, path: string | null, reason: string | null, observed_at: string, info: unknown, };
 export type FileSignInput = { job_id: string, file_path: string, signer_id: string, grant_id: string, context: unknown, };
 export type FileSignPrepared = { job_id: string, prepared_fingerprint: string, file_sha256: string, payload_sha256: string, operation_key: string, work_dir: string, result: unknown, };

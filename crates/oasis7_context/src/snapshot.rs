@@ -181,6 +181,24 @@ pub fn inspect_revisions(
         .collect();
     Ok((summary, revisions))
 }
+pub fn inspect_revisions_frozen(
+    input: &Path,
+    passphrase: &[u8],
+    expected_digest: &str,
+) -> Result<(SnapshotSummary, Vec<(String, String)>)> {
+    let (snapshot, summary) = read_snapshot_frozen(input, passphrase, Some(expected_digest))?;
+    let revisions = snapshot
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.id.clone(),
+                crate::format::revision(e.content_utf8.as_bytes()),
+            )
+        })
+        .collect();
+    Ok((summary, revisions))
+}
 pub fn source_digest(
     config: &StoreConfig,
     entries: &[crate::model::EntrySnapshot],

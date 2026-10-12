@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LocalTools from './LocalTools';
-const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn()}));
+const api=vi.hoisted(()=>({info:vi.fn(),bindings:vi.fn(),list:vi.fn(),get:vi.fn(),save:vi.fn(),signer:vi.fn(),jobs:vi.fn(),cli:vi.fn(),installCli:vi.fn(),chooseFile:vi.fn(),prepare:vi.fn(),snapshot:vi.fn()}));
 vi.mock('./bridge',async importOriginal=>({...await importOriginal<typeof import('./bridge')>(),connected:()=>true,observedTime:(v:string)=>v,contextBridge:api,toolsBridge:api}));
 const binding={id:'bound',bindingVersion:1,root:'/private/context',storeId:'store',projectId:'oasis7',registeredProjectId:'project',name:'private',directoryIdentity:'identity'};
 const metadata={schema_version:'oasis7.context_entry.v1',project_id:'oasis7',id:'machine',kind:'machine',title:'<img src=x onerror=alert(1)>',environment:'local',owner:'human',tags:['preserved'],state:'active',updated_at:'2026-10-12T00:00:00Z',updated_by:'human',verification:null,credential_refs:[{id:'vault',provider:'native',locator:'opaque',usage:'secret reference'}],links:[]};
@@ -83,5 +83,18 @@ describe('prepare effect boundary',()=>{
     await waitFor(()=>expect(screen.getByRole('status')).toBeInTheDocument());
     expect(screen.getByLabelText('完整签名上下文')).not.toBeDisabled();
     expect(api.prepare).not.toHaveBeenCalled();
+  });
+});
+
+describe('restore without a source library',()=>{
+  it('offers encrypted recovery and submits no binding on a fresh machine',async()=>{
+    api.bindings.mockResolvedValue([]);api.snapshot.mockResolvedValue({storeId:'restored-store'});
+    render(()=> <LocalTools project={{id:'project',path:'/repo',gitCommonDir:'/repo/.git',branch:'main',head:'head',environment:'local'}}/>);
+    await waitFor(()=>expect(screen.getByRole('button',{name:'检查本机事实'})).not.toBeDisabled());
+    fireEvent.input(screen.getByLabelText('快照口令'),{target:{value:'fresh-secret'}});
+    fireEvent.input(screen.getByLabelText('恢复新目录名称'),{target:{value:'restored-library'}});
+    const restore=screen.getByRole('button',{name:'从加密快照恢复新资料库'});expect(restore).not.toBeDisabled();fireEvent.click(restore);
+    await waitFor(()=>expect(api.snapshot).toHaveBeenCalledWith('restore',null,'fresh-secret','restored-library',[]));
+    expect(screen.getByLabelText('快照口令')).toHaveValue('');
   });
 });

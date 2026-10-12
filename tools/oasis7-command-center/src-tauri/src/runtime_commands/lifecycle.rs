@@ -13,35 +13,10 @@ impl RuntimeHost {
         if self.exit_checking.swap(true, Ordering::AcqRel) {
             return;
         }
-        let jobs = self.jobs.clone();
-        let runtime = self.runtime.clone();
-        let failure = self.failure.clone();
-        let approved = self.approved_exit.clone();
+        let owner = self.clone();
         let checking = self.exit_checking.clone();
         std::thread::spawn(move || {
-            if jobs.freeze().is_err() {
-                checking.store(false, Ordering::Release);
-                crate::show_main(&app);
-                let _ = app.emit_to("main", "command-center:exit-required", ());
-                return;
-            }
-            let status = runtime
-                .lock()
-                .map_err(|_| "执行状态不可用".to_string())
-                .and_then(|mut r| {
-                    let r = r.as_mut().ok_or_else(|| {
-                        failure
-                            .as_ref()
-                            .clone()
-                            .unwrap_or_else(|| "执行状态不可用".into())
-                    })?;
-                    let status =
-                        with_tool_status(r.shutdown_if_idle().map_err(|e| e.to_string())?, &jobs)?;
-                    if exit_ready(&status) {
-                        approved.store(true, Ordering::Release);
-                    }
-                    Ok(status)
-                });
+            let status = owner.check_exit();
             checking.store(false, Ordering::Release);
             match status {
                 Ok(status) if exit_ready(&status) => {
