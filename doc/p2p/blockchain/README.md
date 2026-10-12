@@ -2,6 +2,7 @@
 
 ## 从这里开始
 
+- 想确认链 HTTP 提交的请求身份、accepted 后的处理责任，以及 Explorer 生命周期、独立查询与组合过滤：先读 [chain HTTP / Explorer 专业需求](chain-http-submit-explorer-contract.prd.md)，实现时进入[配对设计](chain-http-submit-explorer-contract.design.md)。
 - 想确认当前网络层级、`public_testnet`/`mainnet` 的 claim boundary、governed bootstrap 或 operator 路径：先读 `formal-network-tiers-testnet-mechanism.prd.md`；执行时再进入 `formal-network-tiers-testnet-mechanism.runbook.md` 和 `public-testnet-governed-bootstrap.runbook.md`。
 - 想确认主链安全基线、剩余 mainnet-grade blocker、signer custody 或 genesis ceremony：先读 `p2p-mainnet-security-governance-readiness.prd.md`，再下钻到资产授权、registry drill 和 network-tier 专业证据。
 - 想确认普通玩家的 `hosted_public_join`、邮箱登录、托管 player signer 和后续自托管升级：先读 `hosted-public-join-managed-identity-custody.prd.md`。它不覆盖 node、validator 或 governance signer custody。
@@ -11,6 +12,7 @@
 
 | 主题簇 | 默认入口 | 入口边界 |
 | --- | --- | --- |
+| Chain HTTP / Explorer | [chain-http-submit-explorer-contract.prd.md](chain-http-submit-explorer-contract.prd.md) | 同一 Node 的 HTTP 接纳、请求关联和 Explorer 后端查询合同；目标要求与实现验收分开，界面由 Launcher 专题承接。 |
 | Formal network tiers | `formal-network-tiers-testnet-mechanism.prd.md` | `local_devnet -> public_testnet -> mainnet` 的现行语义、promotion gate 与公开口径；operator 步骤见 companion runbook。 |
 | Mainnet-grade security | `p2p-mainnet-security-governance-readiness.prd.md` | 当前仍是 `not_mainnet_grade` 的 custody、governance、genesis 和 QA gate；不以历史规格完成态升级结论。 |
 | Hosted player identity | `hosted-public-join-managed-identity-custody.prd.md` | `hosted_public_join` 的玩家身份、邮箱登录与 managed player signer；不替代协议级 signer custody。 |
@@ -25,5 +27,5 @@
 
 ## 维护规则
 
-- 新增 blockchain 专题先归入现行网络层级、主链安全、hosted player identity 或可检索历史之一；只有改变默认首读路径时才更新本页和 `../README.md` / `../prd.index.md`。
+- 新增 blockchain 专题先归入链 HTTP / Explorer、现行网络层级、主链安全、hosted player identity 或可检索历史之一；只有改变默认首读路径时才更新本页和 `../README.md` / `../prd.index.md`。
 - 需要淘汰历史专题时，先完成 successor 和活跃引用审计；保留审计证据不等于把它作为现行默认入口。
