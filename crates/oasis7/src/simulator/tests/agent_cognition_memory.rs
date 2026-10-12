@@ -6,7 +6,7 @@
 
 use crate::simulator::{
     AgentBehavior, AgentDecision, AsyncAgentRunner, AsyncAgentTurnOutcome,
-    ContinuousAgentTurnContextV1, MemoryContextSnapshotV1, MemoryWriteIntent,
+    ContinuousAgentTurnContextV1, MemoryContextSnapshotV1, MemoryCorrectionV1, MemoryWriteIntent,
     MemoryWriteIntentPolicyV1, MemoryWriteIntentV1, MemoryWritePolicyContextV1,
     MemoryWritePolicyOutcome, MemoryWriteStore, Observation,
 };
@@ -101,6 +101,189 @@ fn memory_intent_normalizes_nfc_trim_and_only_dedupes_sorted_tags() {
             .intent_digest(&reordered, &context())
             .expect("reordered digest"),
         digest
+    );
+}
+
+#[test]
+fn oasis_memory_policy_matches_harness_golden_contract() {
+    let oasis_policy = MemoryWriteIntentPolicyV1::default();
+    let harness_policy = oasis7_agent_harness::MemoryWriteIntentPolicyV1::default();
+    let oasis_context = context();
+    let harness_context: oasis7_agent_harness::MemoryWritePolicyContextV1 =
+        serde_json::from_value(serde_json::to_value(&oasis_context).unwrap()).unwrap();
+    let input = intent("session_private", Some(" e\u{301} "), &[" z ", "a", "a"]);
+    let harness_input: oasis7_agent_api::MemoryWriteIntentV1 =
+        serde_json::from_value(serde_json::to_value(&input).unwrap()).unwrap();
+
+    let oasis_normalized = oasis_policy
+        .normalize(input, &oasis_context)
+        .expect("Oasis adapter normalizes the shared policy input");
+    let harness_normalized = harness_policy
+        .normalize(harness_input, &harness_context)
+        .expect("Harness canonical policy normalizes the same input");
+    assert_eq!(
+        serde_json::to_value(&oasis_normalized).unwrap(),
+        serde_json::to_value(&harness_normalized).unwrap()
+    );
+    let oasis_digest = oasis_policy
+        .intent_digest(&oasis_normalized, &oasis_context)
+        .expect("Oasis adapter digest");
+    let harness_digest = harness_policy
+        .intent_digest(&harness_normalized, &harness_context)
+        .expect("Harness canonical digest");
+    assert_eq!(
+        oasis_digest.as_str(),
+        "blake3:9b9025a8c606a75a074e5e1b1c747d4d42cd9ed037f9d30e708a2b93f4713690"
+    );
+    assert_eq!(oasis_digest, harness_digest);
+}
+
+#[test]
+fn oasis_goal_snapshot_adapter_matches_harness_projection_golden() {
+    let oasis_input = crate::simulator::GoalSnapshotInputV1 {
+        revision: 7,
+        short_term_summary: " short-term ".into(),
+        long_term_summary: " e\u{301}-term ".into(),
+        blocked_reason: Some("   ".into()),
+        provenance: "harness_projection".into(),
+    };
+    let harness_input: oasis7_agent_harness::GoalSnapshotInputV1 =
+        serde_json::from_value(serde_json::to_value(&oasis_input).unwrap()).unwrap();
+    let oasis = crate::simulator::GoalSnapshotProjector::project(Some(oasis_input), None).unwrap();
+    let harness =
+        oasis7_agent_harness::GoalSnapshotProjector::project(Some(harness_input), None).unwrap();
+    assert_eq!(
+        serde_json::to_value(&oasis).unwrap(),
+        serde_json::to_value(&harness).unwrap()
+    );
+    assert_eq!(oasis.short_term_summary, "short-term");
+    assert_eq!(oasis.long_term_summary, "é-term");
+    assert_eq!(oasis.blocked_reason, None);
+}
+
+#[test]
+fn memory_store_reads_legacy_checkpoint_defaults_without_losing_correction_lineage() {
+    let legacy = serde_json::json!({
+        "entries": [{
+            "schema_version": 1,
+            "scope": "session_private",
+            "summary": "kept private",
+            "tags": [],
+            "intent_digest": "blake3:entry",
+            "receipt_id": "receipt:entry",
+            "provenance": "runtime_authoritative",
+            "agent_id": AGENT_ID,
+            "agent_session_id": SESSION_ID
+        }],
+        "committed_by_digest": {"blake3:entry": "receipt:entry"},
+        "corrections": [{
+            "correction_id": "correction:legacy",
+            "agent_id": AGENT_ID,
+            "agent_session_id": SESSION_ID,
+            "scope": "session_private",
+            "target_memory_id": "blake3:entry",
+            "expected_revision": 0,
+            "replacement_summary": "corrected private fact",
+            "status": "accepted",
+            "reason": "next_retrieval_pending",
+            "memory_revision": 1,
+            "earliest_decision_request_id": "request:legacy",
+            "earliest_request_digest": REQUEST_DIGEST,
+            "runtime_receipt_id": null,
+            "action_id": null
+        }]
+    });
+
+    let store: MemoryWriteStore = serde_json::from_value(legacy).unwrap();
+    let encoded = serde_json::to_value(&store).unwrap();
+    assert_eq!(encoded["revision"], 0, "missing legacy revision defaults");
+    assert_eq!(encoded["entries"][0]["receipt_id"], "receipt:entry");
+    assert_eq!(
+        encoded["committed_by_digest"]["blake3:entry"],
+        "receipt:entry"
+    );
+    assert_eq!(
+        encoded["corrections"][0]["active_decision_request_id"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        encoded["corrections"][0]["active_request_digest"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        encoded["corrections"][0]["committed_decision_request_id"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        encoded["corrections"][0]["committed_request_digest"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        encoded["referenced_context_by_agent"],
+        serde_json::json!({})
+    );
+}
+
+#[test]
+fn oasis_memory_correction_and_snapshot_adapters_match_harness_state_contract() {
+    let checkpoint = serde_json::json!({
+        "entries": [{
+            "schema_version": 1,
+            "scope": "session_private",
+            "summary": "old private fact",
+            "tags": ["verified"],
+            "intent_digest": "blake3:memory-target",
+            "receipt_id": "receipt:memory-target",
+            "provenance": "runtime_authoritative",
+            "agent_id": AGENT_ID,
+            "agent_session_id": SESSION_ID
+        }],
+        "committed_by_digest": {"blake3:memory-target": "receipt:memory-target"},
+        "corrections": [],
+        "referenced_context_by_agent": {}
+    });
+    let mut oasis: MemoryWriteStore = serde_json::from_value(checkpoint.clone()).unwrap();
+    let mut harness: oasis7_agent_harness::MemoryWriteStore =
+        serde_json::from_value(checkpoint).unwrap();
+    let correction = serde_json::json!({
+        "correction_id": "correction:adapter-parity",
+        "agent_id": AGENT_ID,
+        "agent_session_id": SESSION_ID,
+        "scope": "session_private",
+        "target_memory_id": "blake3:memory-target",
+        "expected_revision": 0,
+        "replacement_summary": " corrected private fact ",
+        "status": "pending",
+        "reason": "provider_proposal",
+        "memory_revision": 0,
+        "earliest_decision_request_id": null,
+        "earliest_request_digest": null,
+        "active_decision_request_id": null,
+        "active_request_digest": null,
+        "committed_decision_request_id": null,
+        "committed_request_digest": null,
+        "runtime_receipt_id": null,
+        "action_id": null
+    });
+    let oasis_correction: MemoryCorrectionV1 = serde_json::from_value(correction.clone()).unwrap();
+    let harness_correction: oasis7_agent_harness::MemoryCorrectionV1 =
+        serde_json::from_value(correction).unwrap();
+
+    let oasis_result = oasis.correct_memory(oasis_correction).unwrap();
+    let harness_result = harness.correct_memory(harness_correction).unwrap();
+    assert_eq!(
+        serde_json::to_value(oasis_result).unwrap(),
+        serde_json::to_value(harness_result).unwrap()
+    );
+    assert_eq!(
+        serde_json::to_value(oasis.context_snapshot(AGENT_ID, SESSION_ID, "session_private", 8))
+            .unwrap(),
+        serde_json::to_value(harness.context_snapshot(AGENT_ID, SESSION_ID, "session_private", 8))
+            .unwrap()
+    );
+    assert_eq!(
+        serde_json::to_value(oasis).unwrap(),
+        serde_json::to_value(harness).unwrap()
     );
 }
 

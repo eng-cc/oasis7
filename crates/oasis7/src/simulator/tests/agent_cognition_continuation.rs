@@ -474,6 +474,56 @@ fn continuation_budget_is_chain_owned_monotonic_and_duplicate_wake_idempotent() 
 }
 
 #[test]
+fn oasis_continuation_adapter_matches_harness_accounting_projection() {
+    let proposal = proposal();
+    let context = authority_context();
+    let harness_context: oasis7_agent_harness::ContinuationAuthorityContextV1 =
+        serde_json::from_value(serde_json::to_value(&context).unwrap()).unwrap();
+    let mut oasis = ContinuationHarness::default();
+    let mut harness = oasis7_agent_harness::ContinuationHarness::default();
+
+    let mut oasis_handle = oasis
+        .submit_with_context(proposal.clone(), &context)
+        .expect("Oasis adapter admits a matching proposal");
+    let mut harness_handle = harness
+        .submit_with_context(proposal, &harness_context)
+        .expect("Harness core admits the same matching proposal");
+    assert_eq!(
+        serde_json::to_value(&oasis_handle).unwrap(),
+        serde_json::to_value(&harness_handle).unwrap()
+    );
+
+    let oasis_progress = oasis
+        .consume_wake(&mut oasis_handle, "parity-wake-1", 1)
+        .expect("Oasis adapter consumes the wake");
+    let harness_progress = harness
+        .consume_wake(&mut harness_handle, "parity-wake-1", 1)
+        .expect("Harness core consumes the same wake");
+    assert_eq!(
+        serde_json::to_value(oasis_progress).unwrap(),
+        serde_json::to_value(harness_progress).unwrap()
+    );
+    assert_eq!(
+        serde_json::to_value(&oasis_handle).unwrap(),
+        serde_json::to_value(&harness_handle).unwrap()
+    );
+
+    let oasis_terminal = oasis
+        .invalidate(oasis_handle, ContinuationInvalidationReason::Cancelled)
+        .expect("Oasis adapter retires the continuation");
+    let harness_terminal = harness
+        .invalidate(
+            harness_handle,
+            oasis7_agent_harness::ContinuationInvalidationReason::Cancelled,
+        )
+        .expect("Harness core retires the same continuation");
+    assert_eq!(
+        serde_json::to_value(oasis_terminal).unwrap(),
+        serde_json::to_value(harness_terminal).unwrap()
+    );
+}
+
+#[test]
 fn consumed_runtime_wake_must_revalidate_context_and_expose_next_step() {
     let mut harness = ContinuationHarness::default();
     let context = authority_context();

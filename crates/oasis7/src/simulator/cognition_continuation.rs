@@ -1,13 +1,18 @@
 //! Simulator continuation policy and Runtime projection seams.
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 use super::super::Observation;
 use super::super::continuous_agent_harness::{CognitionError, Digest32, h_v1};
 use super::GoalSnapshotV1;
+use oasis7_agent_harness::{
+    ContinuationAuthorityContextV1 as HarnessContinuationAuthorityContextV1,
+    ContinuationBudgetProgressV1 as HarnessContinuationBudgetProgressV1,
+    ContinuationHandle as HarnessContinuationHandle,
+    ContinuationHarness as HarnessContinuationHarness, ContinuationHostProjection,
+    ContinuationInvalidationReason as HarnessInvalidationReason,
+    ContinuationStatusProjectionV1 as HarnessContinuationStatusProjectionV1, RuntimeAuthority,
+};
 
 pub use oasis7_agent_api::{
     ContinuationBudgetV1, ContinuationProposalV1, WakeConditionSubjectV1, WakeConditionV1,
@@ -210,218 +215,234 @@ pub enum ContinuationInvalidationReason {
     Cancelled,
 }
 
-impl ContinuationInvalidationReason {
-    fn status(self) -> &'static str {
-        match self {
-            Self::ObservationChanged
-            | Self::GoalChanged
-            | Self::PolicyChanged
-            | Self::PreconditionChanged
-            | Self::Stale
-            | Self::Reorg => "invalidated",
-            Self::Rejected => "rejected",
-            Self::BudgetExhausted => "expired",
-            Self::Timeout | Self::Expired => "expired",
-            Self::Cancelled => "cancelled",
+impl From<&ContinuationAuthorityContextV1> for HarnessContinuationAuthorityContextV1 {
+    fn from(value: &ContinuationAuthorityContextV1) -> Self {
+        Self {
+            baseline_observation_digest: value.baseline_observation_digest.clone(),
+            goal_digest: value.goal_digest.clone(),
+            policy_digest: value.policy_digest.clone(),
+            precondition_digest: value.precondition_digest.clone(),
         }
     }
+}
 
-    fn reason(self) -> &'static str {
-        match self {
-            Self::ObservationChanged => "observation_changed",
-            Self::GoalChanged => "goal_changed",
-            Self::PolicyChanged => "policy_changed",
-            Self::PreconditionChanged => "precondition_changed",
-            Self::BudgetExhausted => "budget_exhausted",
-            Self::Rejected => "rejected",
-            Self::Stale => "stale",
-            Self::Timeout => "timeout",
-            Self::Expired => "expired",
-            Self::Reorg => "reorg",
-            Self::Cancelled => "cancelled",
+impl From<ContinuationInvalidationReason> for HarnessInvalidationReason {
+    fn from(value: ContinuationInvalidationReason) -> Self {
+        match value {
+            ContinuationInvalidationReason::ObservationChanged => Self::ObservationChanged,
+            ContinuationInvalidationReason::GoalChanged => Self::GoalChanged,
+            ContinuationInvalidationReason::PolicyChanged => Self::PolicyChanged,
+            ContinuationInvalidationReason::PreconditionChanged => Self::PreconditionChanged,
+            ContinuationInvalidationReason::BudgetExhausted => Self::BudgetExhausted,
+            ContinuationInvalidationReason::Rejected => Self::Rejected,
+            ContinuationInvalidationReason::Stale => Self::Stale,
+            ContinuationInvalidationReason::Timeout => Self::Timeout,
+            ContinuationInvalidationReason::Expired => Self::Expired,
+            ContinuationInvalidationReason::Reorg => Self::Reorg,
+            ContinuationInvalidationReason::Cancelled => Self::Cancelled,
         }
     }
 }
 
 pub type ContinuationProjectionV1 = ContinuationHandle;
 
-#[derive(Debug, Clone, Default)]
-pub struct ContinuationHarness {
-    active: BTreeMap<String, ContinuationProposalV1>,
-    chains: BTreeMap<String, ContinuationChainState>,
-    deliveries: BTreeMap<(String, String), ContinuationBudgetProgressV1>,
-}
-
-#[derive(Debug, Clone)]
-struct ContinuationChainState {
-    unit: String,
-    remaining: u64,
-    consumed: u64,
-    terminal_disposition: Option<String>,
-}
-
-impl ContinuationHarness {
-    fn chain_id(proposal: &ContinuationProposalV1) -> String {
-        h_v1(
-            "oasis7.cognition.continuation-chain.v1",
-            &json!({
-                "world_id": proposal.world_id,
-                "agent_id": proposal.agent_id,
-                "origin_turn_id": proposal.origin_turn_id,
-                "origin_request_digest": proposal.origin_request_digest,
-            }),
-        )
-        .to_string()
+impl From<HarnessContinuationHandle> for ContinuationHandle {
+    fn from(value: HarnessContinuationHandle) -> Self {
+        Self {
+            proposal: value.proposal,
+            chain_id: value.chain_id,
+            continuation_id: value.continuation_id,
+            wake_id: value.wake_id,
+            wake_seq: value.wake_seq,
+            continuation_digest: value.continuation_digest,
+            continuation_status_digest: value.continuation_status_digest,
+            status: value.status,
+            terminal_disposition: value.terminal_disposition,
+            active: value.active,
+            provenance: value.provenance,
+            world_effect: value.world_effect,
+            provider_invocation_count: value.provider_invocation_count,
+            remaining_budget: value.remaining_budget,
+            consumed_budget: value.consumed_budget,
+        }
     }
+}
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Stable continuation handle seam preserves canonical gameplay identity inputs."
-    )]
-    fn handle_for(
+impl From<ContinuationHandle> for HarnessContinuationHandle {
+    fn from(value: ContinuationHandle) -> Self {
+        Self {
+            proposal: value.proposal,
+            chain_id: value.chain_id,
+            continuation_id: value.continuation_id,
+            wake_id: value.wake_id,
+            wake_seq: value.wake_seq,
+            continuation_digest: value.continuation_digest,
+            continuation_status_digest: value.continuation_status_digest,
+            status: value.status,
+            terminal_disposition: value.terminal_disposition,
+            active: value.active,
+            provenance: value.provenance,
+            world_effect: value.world_effect,
+            provider_invocation_count: value.provider_invocation_count,
+            remaining_budget: value.remaining_budget,
+            consumed_budget: value.consumed_budget,
+        }
+    }
+}
+
+impl From<HarnessContinuationBudgetProgressV1> for ContinuationBudgetProgressV1 {
+    fn from(value: HarnessContinuationBudgetProgressV1) -> Self {
+        Self {
+            chain_id: value.chain_id,
+            wake_id: value.wake_id,
+            unit: value.unit,
+            consumed: value.consumed,
+            remaining: value.remaining,
+            exhausted: value.exhausted,
+            duplicate: value.duplicate,
+            terminal_disposition: value.terminal_disposition,
+        }
+    }
+}
+
+struct RuntimeContinuationAuthority;
+
+impl RuntimeAuthority for RuntimeContinuationAuthority {
+    type Lease = ();
+    type Receipt = ();
+    type Continuation = crate::runtime::AgentContinuation;
+
+    fn validate_lease(
         &self,
-        proposal: ContinuationProposalV1,
-        chain_id: String,
-        status: &str,
-        active: bool,
-        provenance: &str,
-        continuation_id: String,
-        wake_id: String,
-        wake_seq: u64,
-        continuation_digest: String,
-        continuation_status_digest: String,
-        terminal_disposition: Option<String>,
-    ) -> ContinuationHandle {
-        let (remaining, consumed) = self
-            .chains
-            .get(&chain_id)
-            .map(|state| {
-                (
-                    ContinuationBudgetV1 {
-                        unit: state.unit.clone(),
-                        value: state.remaining,
-                    },
-                    state.consumed,
-                )
-            })
-            .unwrap_or_else(|| (proposal.remaining_budget.clone(), 0));
-        ContinuationHandle {
-            proposal,
-            chain_id,
-            continuation_id,
-            wake_id,
-            wake_seq,
-            continuation_digest,
-            continuation_status_digest,
-            status: status.to_string(),
-            terminal_disposition,
-            active,
-            provenance: provenance.to_string(),
-            world_effect: false,
-            provider_invocation_count: 0,
-            remaining_budget: remaining,
-            consumed_budget: consumed,
-        }
-    }
-
-    fn submit_inner(
-        &mut self,
-        proposal: ContinuationProposalV1,
-        context: Option<&ContinuationAuthorityContextV1>,
-    ) -> Result<ContinuationHandle, CognitionError> {
-        proposal.validate()?;
-        if let Some(context) = context {
-            context.validate_proposal(&proposal)?;
-        }
-        let chain_id = Self::chain_id(&proposal);
-        if let Some(existing) = self.active.get(&proposal.continuation_proposal_id) {
-            if existing.proposal_digest != proposal.proposal_digest {
-                return Err(error(
-                    "continuation_duplicate",
-                    "continuation proposal id was reused with a different digest",
-                ));
-            }
-            return Ok(self.handle_for(
-                existing.clone(),
-                chain_id,
-                "scheduled",
-                true,
-                "harness_policy",
-                String::new(),
-                String::new(),
-                0,
-                String::new(),
-                String::new(),
-                None,
-            ));
-        }
-        if let Some(state) = self.chains.get(&chain_id) {
-            if state.unit != proposal.remaining_budget.unit {
-                return Err(error(
-                    "continuation_budget_unit_mismatch",
-                    "continuation chain cannot change budget units",
-                ));
-            }
-            if state.remaining == 0 {
-                return Err(error(
-                    "continuation_budget_exhausted",
-                    "continuation chain has no remaining budget",
-                ));
-            }
-            if state.terminal_disposition.is_some() {
-                return Err(error(
-                    "continuation_terminal",
-                    "continuation chain has already reached a terminal disposition",
-                ));
-            }
-            if proposal.remaining_budget.value > state.remaining {
-                return Err(error(
-                    "continuation_budget_increase",
-                    "continuation proposal budget exceeds the chain remainder",
-                ));
-            }
-        } else {
-            self.chains.insert(
-                chain_id.clone(),
-                ContinuationChainState {
-                    unit: proposal.remaining_budget.unit.clone(),
-                    remaining: proposal.remaining_budget.value,
-                    consumed: 0,
-                    terminal_disposition: None,
-                },
-            );
-        }
-        if self.active.values().any(|existing| {
-            Self::chain_id(existing) == chain_id
-                && existing.continuation_proposal_id != proposal.continuation_proposal_id
-        }) {
-            return Err(error(
-                "continuation_active",
-                "a continuation in this cognition chain is already active",
-            ));
-        }
-        self.active
-            .insert(proposal.continuation_proposal_id.clone(), proposal.clone());
-        Ok(self.handle_for(
-            proposal,
-            chain_id,
-            "scheduled",
-            true,
-            "harness_policy",
-            String::new(),
-            String::new(),
-            0,
-            String::new(),
-            String::new(),
-            None,
+        _lease: &Self::Lease,
+        _request: &oasis7_agent_api::ContinuousAgentRequestContextV1,
+    ) -> Result<oasis7_agent_api::CognitionLeaseConsumptionViewV1, CognitionError> {
+        Err(error(
+            "continuation_authority_unavailable",
+            "continuation adapter does not validate leases",
         ))
     }
 
+    fn verify_receipt_readback(
+        &self,
+        _feedback: &oasis7_agent_api::FeedbackEnvelopeV1,
+        _receipt: &Self::Receipt,
+        _response_identity: &oasis7_agent_api::ResponseArtifactIdentityV1,
+    ) -> Result<oasis7_agent_api::RuntimeReceiptLineageV1, CognitionError> {
+        Err(error(
+            "continuation_authority_unavailable",
+            "continuation adapter does not verify receipt readback",
+        ))
+    }
+
+    fn verify_memory_receipt(
+        &self,
+        _receipt: &Self::Receipt,
+        _context: Option<&oasis7_agent_harness::MemoryWritePolicyContextV1>,
+    ) -> Result<oasis7_agent_api::RuntimeReceiptLineageV1, CognitionError> {
+        Err(error(
+            "continuation_authority_unavailable",
+            "continuation adapter does not verify memory receipts",
+        ))
+    }
+
+    fn validated_feedback_history(
+        &self,
+    ) -> Result<Vec<oasis7_agent_harness::FeedbackHistoryProjection>, CognitionError> {
+        Err(error(
+            "continuation_authority_unavailable",
+            "continuation adapter does not read feedback history",
+        ))
+    }
+
+    fn continuation_projection(
+        &self,
+        continuation: &Self::Continuation,
+    ) -> Result<ContinuationHostProjection, CognitionError> {
+        continuation
+            .validate_authoritative()
+            .map_err(|runtime_error| {
+                error(
+                    "continuation_runtime_projection_invalid",
+                    runtime_error.to_string(),
+                )
+            })?;
+        let continuation_status_digest = continuation
+            .continuation_status_digest
+            .clone()
+            .ok_or_else(|| {
+                error(
+                    "continuation_runtime_projection_invalid",
+                    "validated Runtime continuation is missing its status digest",
+                )
+            })?;
+        Ok(ContinuationHostProjection {
+            continuation_proposal_id: continuation.continuation_proposal_id.clone(),
+            proposal_digest: continuation.proposal_digest.clone(),
+            world_id: continuation.world_id.clone(),
+            agent_id: continuation.agent_id.clone(),
+            agent_session_id: continuation.agent_session_id.clone(),
+            agent_turn_id: continuation.agent_turn_id.clone(),
+            decision_request_id: continuation.decision_request_id.clone(),
+            origin_turn_id: continuation.origin_turn_id.clone(),
+            origin_request_digest: continuation.origin_request_digest.clone(),
+            action_or_envelope_digest: continuation.action_or_envelope_digest.clone(),
+            precondition_digest: continuation.precondition_digest.clone(),
+            valid_until_tick: continuation.valid_until_tick,
+            continuation_id: continuation.continuation_id.clone(),
+            wake_id: continuation.wake_id.clone(),
+            wake_seq: continuation.wake_seq,
+            continuation_digest: continuation.continuation_digest(),
+            continuation_status_digest,
+            status: match continuation.status {
+                crate::runtime::ContinuationStatusV1::Scheduled => {
+                    HarnessContinuationStatusProjectionV1::Scheduled
+                }
+                crate::runtime::ContinuationStatusV1::Pending => {
+                    HarnessContinuationStatusProjectionV1::Pending
+                }
+                crate::runtime::ContinuationStatusV1::Waking => {
+                    HarnessContinuationStatusProjectionV1::Waking
+                }
+                crate::runtime::ContinuationStatusV1::Consumed => {
+                    HarnessContinuationStatusProjectionV1::Consumed
+                }
+                crate::runtime::ContinuationStatusV1::Completed => {
+                    HarnessContinuationStatusProjectionV1::Completed
+                }
+                crate::runtime::ContinuationStatusV1::Cancelled => {
+                    HarnessContinuationStatusProjectionV1::Cancelled
+                }
+                crate::runtime::ContinuationStatusV1::Invalidated => {
+                    HarnessContinuationStatusProjectionV1::Invalidated
+                }
+                crate::runtime::ContinuationStatusV1::Expired => {
+                    HarnessContinuationStatusProjectionV1::Expired
+                }
+                crate::runtime::ContinuationStatusV1::Rejected => {
+                    HarnessContinuationStatusProjectionV1::Rejected
+                }
+            },
+            terminal_disposition: continuation.terminal_disposition.clone(),
+            remaining_budget: ContinuationBudgetV1 {
+                unit: continuation.remaining_budget.unit.clone(),
+                value: continuation.remaining_budget.value,
+            },
+        })
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ContinuationHarness {
+    core: HarnessContinuationHarness,
+}
+
+impl ContinuationHarness {
     pub fn submit(
         &mut self,
         proposal: ContinuationProposalV1,
     ) -> Result<ContinuationHandle, CognitionError> {
-        self.submit_inner(proposal, None)
+        self.core.submit(proposal).map(Into::into)
     }
 
     /// Production continuation admission. The old `submit` method remains a
@@ -432,7 +453,9 @@ impl ContinuationHarness {
         proposal: ContinuationProposalV1,
         context: &ContinuationAuthorityContextV1,
     ) -> Result<ContinuationHandle, CognitionError> {
-        self.submit_inner(proposal, Some(context))
+        self.core
+            .submit_with_context(proposal, &context.into())
+            .map(Into::into)
     }
 
     /// Consume exactly one logical wake delivery (or a bounded number of
@@ -444,89 +467,10 @@ impl ContinuationHarness {
         wake_id: &str,
         units: u64,
     ) -> Result<ContinuationBudgetProgressV1, CognitionError> {
-        let chain_id = handle.chain_id.clone();
-        if chain_id.is_empty() || wake_id.trim().is_empty() {
-            return Err(error(
-                "continuation_delivery_invalid",
-                "a continuation chain and wake identity are required",
-            ));
-        }
-        if let Some(previous) = self
-            .deliveries
-            .get(&(chain_id.clone(), wake_id.to_string()))
-            .cloned()
-        {
-            handle.remaining_budget = ContinuationBudgetV1 {
-                unit: previous.unit.clone(),
-                value: previous.remaining,
-            };
-            handle.consumed_budget = previous.consumed;
-            if previous.exhausted {
-                handle.active = false;
-                handle.status = "expired".to_string();
-                handle.terminal_disposition = previous.terminal_disposition.clone();
-            }
-            let mut duplicate = previous;
-            duplicate.duplicate = true;
-            return Ok(duplicate);
-        }
-        if !handle.active
-            || !self
-                .active
-                .contains_key(&handle.proposal.continuation_proposal_id)
-        {
-            return Err(error(
-                "continuation_unknown",
-                "continuation handle is not active",
-            ));
-        }
-        if units == 0 {
-            return Err(error(
-                "continuation_budget_invalid",
-                "continuation consumption must be positive",
-            ));
-        }
-        let state = self
-            .chains
-            .get_mut(&chain_id)
-            .ok_or_else(|| error("continuation_unknown", "continuation chain is not active"))?;
-        if units > state.remaining {
-            return Err(error(
-                "continuation_budget_exhausted",
-                "continuation delivery exceeds the remaining chain budget",
-            ));
-        }
-        state.remaining -= units;
-        state.consumed = state.consumed.saturating_add(units);
-        let exhausted = state.remaining == 0;
-        if exhausted {
-            state.terminal_disposition = Some("budget_exhausted".to_string());
-        }
-        let progress = ContinuationBudgetProgressV1 {
-            chain_id: chain_id.clone(),
-            wake_id: wake_id.to_string(),
-            unit: state.unit.clone(),
-            consumed: state.consumed,
-            remaining: state.remaining,
-            exhausted,
-            duplicate: false,
-            terminal_disposition: exhausted.then(|| "budget_exhausted".to_string()),
-        };
-        self.deliveries
-            .insert((chain_id, wake_id.to_string()), progress.clone());
-        handle.remaining_budget = ContinuationBudgetV1 {
-            unit: progress.unit.clone(),
-            value: progress.remaining,
-        };
-        handle.consumed_budget = progress.consumed;
-        if exhausted {
-            handle.active = false;
-            handle.status = "expired".to_string();
-            handle.terminal_disposition = progress.terminal_disposition.clone();
-            self.active
-                .remove(&handle.proposal.continuation_proposal_id);
-        }
-        Ok(progress)
+        let mut core_handle: HarnessContinuationHandle = handle.clone().into();
+        let progress = self.core.consume_wake(&mut core_handle, wake_id, units)?;
+        *handle = core_handle.into();
+        Ok(progress.into())
     }
 
     pub fn consume_runtime_status(
@@ -542,163 +486,14 @@ impl ContinuationHarness {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn reconcile_runtime_budget(
-        &mut self,
-        proposal: &ContinuationProposalV1,
-        runtime: &crate::runtime::AgentContinuation,
-    ) -> Result<(String, ContinuationBudgetV1, u64), CognitionError> {
-        let chain_id = Self::chain_id(proposal);
-        let delivery_key = (chain_id.clone(), runtime.wake_id.clone());
-        if let Some(previous) = self.deliveries.get(&delivery_key) {
-            if runtime.remaining_budget.unit != previous.unit
-                || runtime.remaining_budget.value != previous.remaining
-            {
-                return Err(error(
-                    "continuation_budget_replay_mismatch",
-                    "a Runtime wake was replayed with a different remaining budget",
-                ));
-            }
-            return Ok((
-                chain_id,
-                ContinuationBudgetV1 {
-                    unit: previous.unit.clone(),
-                    value: previous.remaining,
-                },
-                previous.consumed,
-            ));
-        }
-
-        let (progress, remaining, consumed) = {
-            let state = self
-                .chains
-                .get_mut(&chain_id)
-                .ok_or_else(|| error("continuation_unknown", "continuation chain is not active"))?;
-            if runtime.remaining_budget.unit != state.unit {
-                return Err(error(
-                    "continuation_budget_unit_mismatch",
-                    "Runtime changed the continuation budget unit",
-                ));
-            }
-            if runtime.remaining_budget.value > state.remaining {
-                return Err(error(
-                    "continuation_budget_increase",
-                    "Runtime increased the remaining continuation budget",
-                ));
-            }
-            let delta = state.remaining - runtime.remaining_budget.value;
-            state.remaining = runtime.remaining_budget.value;
-            state.consumed = state.consumed.saturating_add(delta);
-            let exhausted = state.remaining == 0;
-            let progress = (delta > 0).then(|| ContinuationBudgetProgressV1 {
-                chain_id: chain_id.clone(),
-                wake_id: runtime.wake_id.clone(),
-                unit: state.unit.clone(),
-                consumed: state.consumed,
-                remaining: state.remaining,
-                exhausted,
-                duplicate: false,
-                terminal_disposition: if exhausted {
-                    runtime
-                        .terminal_disposition
-                        .clone()
-                        .or_else(|| Some("budget_exhausted".to_string()))
-                } else {
-                    None
-                },
-            });
-            (progress, state.remaining, state.consumed)
-        };
-        if let Some(progress) = progress {
-            self.deliveries.insert(delivery_key, progress);
-        }
-        Ok((
-            chain_id,
-            ContinuationBudgetV1 {
-                unit: runtime.remaining_budget.unit.clone(),
-                value: remaining,
-            },
-            consumed,
-        ))
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn consume_runtime_projection(
         &mut self,
         handle: ContinuationHandle,
         runtime: &crate::runtime::AgentContinuation,
     ) -> Result<ContinuationProjectionV1, CognitionError> {
-        let proposal = self
-            .active
-            .get(&handle.proposal.continuation_proposal_id)
-            .filter(|candidate| candidate.proposal_digest == handle.proposal.proposal_digest)
-            .cloned()
-            .ok_or_else(|| error("continuation_unknown", "continuation handle is not active"))?;
-        runtime.validate_authoritative().map_err(|runtime_error| {
-            error(
-                "continuation_runtime_projection_invalid",
-                runtime_error.to_string(),
-            )
-        })?;
-        if runtime.continuation_proposal_id != proposal.continuation_proposal_id
-            || runtime.proposal_digest != proposal.proposal_digest
-            || runtime.world_id != proposal.world_id
-            || runtime.agent_id != proposal.agent_id
-            || runtime.agent_session_id != proposal.agent_session_id
-            || runtime.agent_turn_id != proposal.agent_turn_id
-            || runtime.decision_request_id != proposal.decision_request_id
-            || runtime.origin_turn_id != proposal.origin_turn_id
-            || runtime.origin_request_digest != proposal.origin_request_digest
-            || runtime.action_or_envelope_digest != proposal.action_or_envelope_digest
-            || runtime.precondition_digest != proposal.precondition_digest
-            || runtime.valid_until_tick != proposal.valid_until_tick
-        {
-            return Err(error(
-                "continuation_runtime_correlation_mismatch",
-                "Runtime continuation projection does not match the proposal lineage",
-            ));
-        }
-        let (chain_id, remaining_budget, consumed_budget) =
-            self.reconcile_runtime_budget(&proposal, runtime)?;
-        let (status, active) = match runtime.status {
-            crate::runtime::ContinuationStatusV1::Scheduled => ("scheduled", true),
-            crate::runtime::ContinuationStatusV1::Pending => ("pending", true),
-            crate::runtime::ContinuationStatusV1::Waking => ("waking", true),
-            crate::runtime::ContinuationStatusV1::Consumed => ("consumed", true),
-            crate::runtime::ContinuationStatusV1::Completed => ("completed", false),
-            crate::runtime::ContinuationStatusV1::Cancelled => ("cancelled", false),
-            crate::runtime::ContinuationStatusV1::Invalidated => ("invalidated", false),
-            crate::runtime::ContinuationStatusV1::Expired => ("expired", false),
-            crate::runtime::ContinuationStatusV1::Rejected => ("rejected", false),
-        };
-        if !active {
-            if let Some(state) = self.chains.get_mut(&chain_id) {
-                state.terminal_disposition = runtime
-                    .terminal_disposition
-                    .clone()
-                    .or_else(|| Some(status.to_string()));
-            }
-            self.active.remove(&proposal.continuation_proposal_id);
-        }
-        Ok(ContinuationHandle {
-            proposal,
-            chain_id,
-            continuation_id: runtime.continuation_id.clone(),
-            wake_id: runtime.wake_id.clone(),
-            wake_seq: runtime.wake_seq,
-            continuation_digest: runtime.continuation_digest(),
-            continuation_status_digest: runtime
-                .continuation_status_digest
-                .clone()
-                .expect("validated Runtime continuation has a status digest"),
-            status: status.to_string(),
-            terminal_disposition: runtime.terminal_disposition.clone(),
-            active,
-            provenance: "runtime_authoritative".to_string(),
-            world_effect: false,
-            provider_invocation_count: 0,
-            remaining_budget,
-            consumed_budget,
-        })
+        self.core
+            .consume_authoritative_projection(handle.into(), runtime, &RuntimeContinuationAuthority)
+            .map(Into::into)
     }
 
     /// Runtime projection consumer for the production wake path. The
@@ -712,14 +507,14 @@ impl ContinuationHarness {
         runtime: &crate::runtime::AgentContinuation,
         context: &ContinuationAuthorityContextV1,
     ) -> Result<ContinuationProjectionV1, CognitionError> {
-        let proposal = self
-            .active
-            .get(&handle.proposal.continuation_proposal_id)
-            .filter(|candidate| candidate.proposal_digest == handle.proposal.proposal_digest)
-            .cloned()
-            .ok_or_else(|| error("continuation_unknown", "continuation handle is not active"))?;
-        context.validate_proposal(&proposal)?;
-        self.consume_runtime_projection(handle, runtime)
+        self.core
+            .consume_authoritative_projection_with_context(
+                handle.into(),
+                runtime,
+                &context.into(),
+                &RuntimeContinuationAuthority,
+            )
+            .map(Into::into)
     }
 
     /// Consume a Runtime-ready wake only after rechecking the current
@@ -735,55 +530,17 @@ impl ContinuationHarness {
         runtime: &crate::runtime::AgentContinuation,
         context: &ContinuationAuthorityContextV1,
     ) -> Result<ContinuationHandle, CognitionError> {
-        let proposal = self
-            .active
-            .get(&handle.proposal.continuation_proposal_id)
-            .filter(|candidate| candidate.proposal_digest == handle.proposal.proposal_digest)
-            .cloned()
-            .ok_or_else(|| error("continuation_unknown", "continuation handle is not active"))?;
-        context.validate_proposal(&proposal)?;
-        runtime.validate_authoritative().map_err(|runtime_error| {
-            error(
-                "continuation_runtime_projection_invalid",
-                runtime_error.to_string(),
+        let mut projected = self
+            .core
+            .advance_ready_wake(
+                handle.into(),
+                runtime,
+                &context.into(),
+                &RuntimeContinuationAuthority,
             )
-        })?;
-        if !matches!(
-            runtime.status,
-            crate::runtime::ContinuationStatusV1::Consumed
-                | crate::runtime::ContinuationStatusV1::Completed
-                | crate::runtime::ContinuationStatusV1::Cancelled
-                | crate::runtime::ContinuationStatusV1::Invalidated
-                | crate::runtime::ContinuationStatusV1::Expired
-                | crate::runtime::ContinuationStatusV1::Rejected
-        ) {
-            return Err(error(
-                "continuation_wake_not_ready",
-                "a pending or waking continuation cannot advance to the next cognition step",
-            ));
-        }
-        if runtime.status == crate::runtime::ContinuationStatusV1::Consumed {
-            let chain_id = Self::chain_id(&proposal);
-            let delivery_key = (chain_id.clone(), runtime.wake_id.clone());
-            let prior = self.deliveries.get(&delivery_key);
-            let chain_remaining = self
-                .chains
-                .get(&chain_id)
-                .ok_or_else(|| error("continuation_unknown", "continuation chain is not active"))?
-                .remaining;
-            if prior.is_none() && runtime.remaining_budget.value == chain_remaining {
-                return Err(error(
-                    "continuation_budget_not_consumed",
-                    "a consumed wake must carry a lower remaining budget",
-                ));
-            }
-        }
-        let mut projected = self.consume_runtime_projection(handle, runtime)?;
+            .map(ContinuationHandle::from)?;
         if runtime.status == crate::runtime::ContinuationStatusV1::Consumed {
             projected.active = false;
-            projected.status = "consumed".to_string();
-            self.active
-                .remove(&projected.proposal.continuation_proposal_id);
         }
         Ok(projected)
     }
@@ -793,51 +550,12 @@ impl ContinuationHarness {
         handle: ContinuationHandle,
         reason: ContinuationInvalidationReason,
     ) -> Result<ContinuationProjectionV1, CognitionError> {
-        let proposal = self
-            .active
-            .get(&handle.proposal.continuation_proposal_id)
-            .filter(|candidate| candidate.proposal_digest == handle.proposal.proposal_digest)
-            .cloned()
-            .ok_or_else(|| error("continuation_unknown", "continuation handle is not active"))?;
-        self.active
-            .remove(&handle.proposal.continuation_proposal_id);
-        let chain_id = Self::chain_id(&proposal);
-        if let Some(state) = self.chains.get_mut(&chain_id) {
-            state.terminal_disposition = Some(reason.reason().to_string());
-        }
-        let (remaining_budget, consumed_budget) = self
-            .chains
-            .get(&chain_id)
-            .map(|state| {
-                (
-                    ContinuationBudgetV1 {
-                        unit: state.unit.clone(),
-                        value: state.remaining,
-                    },
-                    state.consumed,
-                )
-            })
-            .unwrap_or_else(|| (proposal.remaining_budget.clone(), 0));
-        Ok(ContinuationHandle {
-            proposal,
-            chain_id,
-            continuation_id: String::new(),
-            wake_id: String::new(),
-            wake_seq: 0,
-            continuation_digest: String::new(),
-            continuation_status_digest: String::new(),
-            status: reason.status().to_string(),
-            terminal_disposition: Some(reason.reason().to_string()),
-            active: false,
-            provenance: "harness_policy".to_string(),
-            world_effect: false,
-            provider_invocation_count: 0,
-            remaining_budget,
-            consumed_budget,
-        })
+        self.core
+            .invalidate(handle.into(), reason.into())
+            .map(Into::into)
     }
 
     pub fn active_count(&self) -> usize {
-        self.active.len()
+        self.core.active_count()
     }
 }
