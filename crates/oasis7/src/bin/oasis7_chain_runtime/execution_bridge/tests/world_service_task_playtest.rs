@@ -7,17 +7,17 @@ use oasis7::world_service::{
     private_goal_store::PrivateGoalStore,
 };
 use oasis7_agent_api::game::{
-    DecimalU64, GAME_EXECUTOR_CONTROL_DOMAIN, GAME_GOAL_PUBLISH_DOMAIN, GameExecutorControlV1,
-    GameExecutorOperationV1, GameGoalPrepareV1, GameTaskFenceV1, GoalContentV1,
-    game_goal_version_digest,
+    game_goal_version_digest, DecimalU64, GameExecutorControlV1, GameExecutorOperationV1,
+    GameGoalPrepareV1, GameTaskFenceV1, GoalContentV1, GAME_EXECUTOR_CONTROL_DOMAIN,
+    GAME_GOAL_PUBLISH_DOMAIN,
 };
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::{
     io::{Read, Write},
     net::TcpListener,
     sync::{
-        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -53,20 +53,45 @@ impl Drop for NodeStopOnDrop {
         let _ = node.stop();
     }
 }
+#[derive(Default, serde::Serialize)]
+struct CleanupCategories {
+    submit_response: u64,
+    submit_unknown: u64,
+    submit_transport: u64,
+    lookup_unknown: u64,
+    lookup_pending: u64,
+    lookup_received: u64,
+    lookup_history_unavailable: u64,
+    lookup_committed: u64,
+    lookup_transport: u64,
+    cooldown: u64,
+}
 fn settle_cleanup_original(
     client: &RemoteWorldServiceClient,
     original: &SubmitIntentRequest<WorldServicePayloadV1>,
     until: Instant,
+    categories: &mut CleanupCategories,
 ) -> Result<serde_json::Value, &'static str> {
     let mut submitted = false;
+    let mut next_submit = Instant::now();
     while Instant::now() < until {
-        if !submitted {
+        if !submitted && Instant::now() >= next_submit {
+            // Retry the retained signed original only; uncertain delivery is not admission.
+            next_submit = Instant::now() + Duration::from_secs(1);
             match client.submit(original.clone()) {
-                Ok(_) => submitted = true,
-                Err(oasis7::world_service::client::WorldServiceClientError::Transport(_))
-                | Err(oasis7::world_service::client::WorldServiceClientError::Cooldown {
+                Ok(SubmitObservation::Response(_)) => {
+                    categories.submit_response += 1;
+                    submitted = true;
+                }
+                Ok(SubmitObservation::OutcomeUnknown(_)) => {
+                    categories.submit_unknown += 1;
+                }
+                Err(oasis7::world_service::client::WorldServiceClientError::Transport(_)) => {
+                    categories.submit_transport += 1
+                }
+                Err(oasis7::world_service::client::WorldServiceClientError::Cooldown {
                     ..
-                }) => {}
+                }) => categories.cooldown += 1,
                 Err(_) => return Err("cleanup submit boundary rejected"),
             }
         }
@@ -79,16 +104,27 @@ fn settle_cleanup_original(
         ) {
             Ok(result) => match result.outcome {
                 IntentOutcome::Committed { .. } => {
+                    categories.lookup_committed += 1;
                     return serde_json::to_value(result)
                         .map_err(|_| "cleanup receipt encoding failed");
                 }
                 IntentOutcome::Rejected { .. } | IntentOutcome::Expired => {
                     return Err("canonical cleanup rejected");
                 }
-                _ => {}
+                IntentOutcome::Unknown => {
+                    categories.lookup_unknown += 1;
+                    submitted = false;
+                }
+                IntentOutcome::Pending => categories.lookup_pending += 1,
+                IntentOutcome::Received { .. } => categories.lookup_received += 1,
+                IntentOutcome::HistoryUnavailable => categories.lookup_history_unavailable += 1,
             },
-            Err(oasis7::world_service::client::WorldServiceClientError::Transport(_))
-            | Err(oasis7::world_service::client::WorldServiceClientError::Cooldown { .. }) => {}
+            Err(oasis7::world_service::client::WorldServiceClientError::Transport(_)) => {
+                categories.lookup_transport += 1
+            }
+            Err(oasis7::world_service::client::WorldServiceClientError::Cooldown { .. }) => {
+                categories.cooldown += 1
+            }
             Err(_) => return Err("cleanup lookup boundary rejected"),
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -101,12 +137,22 @@ fn private_task_prepared_world_live_service() {
     let ready = std::path::PathBuf::from(
         std::env::var_os("OASIS7_TASK_PLAYTEST_READY").expect("explicit ready path required"),
     );
-    run_prepared_world_service(ready, Duration::from_secs(5), false);
+    run_prepared_world_service(
+        ready,
+        Duration::from_secs(5),
+        false,
+        None,
+        false,
+        Duration::from_secs(30),
+    );
 }
 fn run_prepared_world_service(
     ready: std::path::PathBuf,
     tick_interval: Duration,
     immediate_cleanup: bool,
+    cleanup_after_height: Option<u64>,
+    drop_first_cleanup_submit: bool,
+    cleanup_budget: Duration,
 ) -> std::path::PathBuf {
     assert!(ready.is_absolute());
     assert!(!ready.exists());
@@ -282,6 +328,7 @@ fn run_prepared_world_service(
     })
     .unwrap();
     let stop = AtomicBool::new(false);
+    let first_cleanup_drop = AtomicBool::new(drop_first_cleanup_submit);
     std::thread::scope(|scope| {
         let _listener_stop = ListenerStopOnDrop(&stop);
         let server = scope.spawn(|| {
@@ -325,6 +372,8 @@ fn run_prepared_world_service(
                         if stream.read_exact(&mut body).is_err() {
                             continue;
                         }
+                        let drop_original=path==SUBMIT_PATH&&serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(&body).is_ok_and(|request|matches!(request.signed_payload,WorldServicePayloadV1::GameExecutorControl(signed) if signed.request.client_operation_id=="playtest-cleanup-stop"));
+                        if drop_original&&first_cleanup_drop.swap(false,Ordering::SeqCst){println!("TASK_CLEANUP_FAULT original Stop connection closed before admission");continue;}
                         bytes.extend(body);
                         let handled = crate::world_service_api::private_goal::maybe_handle(
                             &mut stream,
@@ -380,6 +429,9 @@ fn run_prepared_world_service(
                 None,
             )
             .unwrap();
+            if cleanup_after_height.is_some_and(|height| pinned.commit.position >= height) {
+                break;
+            }
             let control = game_task::current_control(&pinned.world, "agent-a")
                 .unwrap()
                 .unwrap();
@@ -491,14 +543,19 @@ fn run_prepared_world_service(
             ),
         );
         let mut cleanup = Vec::new();
+        let mut cleanup_categories = Vec::new();
         for original in [stop_request, revoke_request] {
-            let until = Instant::now() + Duration::from_secs(30);
-            match settle_cleanup_original(&owner_client, &original, until) {
-                Ok(receipt) => cleanup.push(receipt),
+            let until = Instant::now() + cleanup_budget;
+            let mut categories = CleanupCategories::default();
+            match settle_cleanup_original(&owner_client, &original, until, &mut categories) {
+                Ok(receipt) => {
+                    cleanup.push(receipt);
+                    cleanup_categories.push(categories);
+                }
                 Err(category) => {
                     write_public_json(
                         &root.join("task-playtest-cleanup-failed.json"),
-                        &serde_json::json!({"schema":"oasis7/task-prepared-world-cleanup-failed/v1","category":category,"original_correlation":original.correlation,"settled_authority_operations":cleanup}),
+                        &serde_json::json!({"schema":"oasis7/task-prepared-world-cleanup-failed/v1","category":category,"categories":categories,"original_correlation":original.correlation,"settled_authority_operations":cleanup}),
                     );
                     panic!("{category}");
                 }
@@ -507,7 +564,7 @@ fn run_prepared_world_service(
         write_public_json(
             &root.join("task-playtest-cleanup.json"),
             &serde_json::json!({
-                "schema":"oasis7/task-prepared-world-cleanup/v1", "authority_operations":cleanup,
+                "schema":"oasis7/task-prepared-world-cleanup/v1", "authority_operations":cleanup,"categories":cleanup_categories,
             }),
         );
         stop.store(true, Ordering::SeqCst);
@@ -528,17 +585,22 @@ fn private_task_prepared_world_no_model_authority_cleanup() {
             .unwrap()
             .as_nanos()
     ));
-    let root = run_prepared_world_service(ready.clone(), Duration::from_millis(100), true);
+    let root = run_prepared_world_service(
+        ready.clone(),
+        Duration::from_millis(100),
+        true,
+        None,
+        false,
+        Duration::from_secs(30),
+    );
     let cleanup: serde_json::Value =
         serde_json::from_slice(&fs::read(root.join("task-playtest-cleanup.json")).unwrap())
             .unwrap();
     let operations = cleanup["authority_operations"].as_array().unwrap();
     assert_eq!(operations.len(), 2);
-    assert!(
-        operations
-            .iter()
-            .all(|result| result["outcome"]["status"] == "committed")
-    );
+    assert!(operations
+        .iter()
+        .all(|result| result["outcome"]["status"] == "committed"));
     let identity =
         super::super::super::world_service_read::identity(&root.join("world"), "w1").unwrap();
     let pinned = super::super::super::world_service_read::pin(
@@ -548,13 +610,11 @@ fn private_task_prepared_world_no_model_authority_cleanup() {
         None,
     )
     .unwrap();
-    assert!(
-        game_task::current_control(&pinned.world, "agent-a")
-            .unwrap()
-            .unwrap()
-            .executor_binding
-            .is_none()
-    );
+    assert!(game_task::current_control(&pinned.world, "agent-a")
+        .unwrap()
+        .unwrap()
+        .executor_binding
+        .is_none());
     assert!(
         pinned
             .world
@@ -587,4 +647,91 @@ fn private_task_prepared_world_listener_guard_stops_scoped_thread_on_panic() {
     }));
     assert!(result.is_err());
     assert!(stop.load(Ordering::SeqCst));
+}
+
+#[test]
+fn private_task_prepared_world_aged_cleanup_diagnostic() {
+    let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
+        "oasis7-task-aged-cleanup-ready-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    println!("TASK_AGED_CLEANUP_READY {}", ready.display());
+    let root = run_prepared_world_service(
+        ready.clone(),
+        Duration::from_millis(100),
+        false,
+        Some(72),
+        false,
+        Duration::from_secs(30),
+    );
+    let cleanup: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("task-playtest-cleanup.json")).unwrap())
+            .unwrap();
+    println!("TASK_AGED_CLEANUP_CATEGORIES {}", cleanup["categories"]);
+    assert_eq!(cleanup["authority_operations"].as_array().unwrap().len(), 2);
+    assert!(cleanup["authority_operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|result| result["outcome"]["status"] == "committed"));
+    fs::remove_file(ready).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn private_task_prepared_world_unknown_cleanup_retries_exact_original() {
+    let ready = std::env::temp_dir().canonicalize().unwrap().join(format!(
+        "oasis7-task-unknown-cleanup-ready-{}-{}.json",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    println!("TASK_UNKNOWN_CLEANUP_READY {}", ready.display());
+    let root = run_prepared_world_service(
+        ready.clone(),
+        Duration::from_millis(100),
+        true,
+        None,
+        true,
+        Duration::from_secs(3),
+    );
+    let cleanup: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("task-playtest-cleanup.json")).unwrap())
+            .unwrap();
+    println!("TASK_UNKNOWN_CLEANUP_CATEGORIES {}", cleanup["categories"]);
+    assert_eq!(cleanup["authority_operations"].as_array().unwrap().len(), 2);
+    assert!(cleanup["authority_operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|result| result["outcome"]["status"] == "committed"));
+    assert_eq!(cleanup["categories"][0]["submit_unknown"], 1);
+    let identity =
+        super::super::super::world_service_read::identity(&root.join("world"), "w1").unwrap();
+    let pinned = super::super::super::world_service_read::pin(
+        &root.join("records"),
+        &root.join("store"),
+        &identity,
+        None,
+    )
+    .unwrap();
+    let stops=pinned.world.capability_revocation_state().world_service_results.values().filter_map(|value|serde_json::from_value::<CanonicalIntentResultV1>(value.clone()).ok()).filter(|result|matches!(&result.request.signed_payload,WorldServicePayloadV1::GameExecutorControl(signed) if signed.request.client_operation_id=="playtest-cleanup-stop")).collect::<Vec<_>>();
+    assert_eq!(stops.len(), 1);
+    assert!(stops[0].rejected.is_none());
+    assert_eq!(
+        game_task::current_control(&pinned.world, "agent-a")
+            .unwrap()
+            .unwrap()
+            .executor_epoch
+            .0,
+        2
+    );
+    fs::remove_file(ready).unwrap();
+    fs::remove_dir_all(root).unwrap();
 }
