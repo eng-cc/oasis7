@@ -4,7 +4,7 @@
 - 专业需求入口：[PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041)；本文细化该需求的数值策略与验收边界。
 - 当前任务状态与历史变更：GitHub task issue evidence 与 Git history；本文与 design 保留稳定数值契约及实现锚点。
 - 专业权威：`runtime_engineer`
-- 吸收范围：已完成的 numeric-correctness phase 1–15 与 infinite-sequence rollover 专题。
+- 吸收范围：已完成的 numeric-correctness phase 1–15 与 infinite-sequence rollover 专题；另以目标合同补齐 action allocator 的 journal-suffix 恢复，不据此宣告实现完成。
 
 ## 1. 目标
 
@@ -41,7 +41,20 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 | Governance archive/audit | recovery drill、audit retention、tiered offload、rollback streak 与 alert window 的时间和计数运算采用受检语义；时间回拨或边界异常在 archive、governance、alert 状态写入前失败。 |
 | Membership reconciliation / sync / mempool | 调度与 revocation-dedup 时间差、reconciliation/sync report 计数、mempool batch/zone payload 字节数采用 checked 算术；溢出以带现场值的 `WorldError::DistributedValidationFailed` 返回，schedule、dedup、report 与 batch 状态不部分更新。 |
 | Federated replay archive | 聚合扫描、复合游标 offset 与 archive 查询计数采用 checked helper；溢出不污染 cursor 或聚合结果。 |
-| Runtime sequence rollover | event/action/intent/proposal 四类 `next_*_id` 在 `u64::MAX` 后以持久化的 `era + 1, sequence = 1` 滚动；snapshot 的 era 字段以 `serde(default)` 兼容旧快照（era=0），恢复与 replay 保持同一 era。 |
+| Runtime sequence rollover | event/action/intent/proposal 四类 `next_*_id` 在 `u64::MAX` 后以持久化的 `era + 1, sequence = 1` 滚动；snapshot 的 era 字段以 `serde(default)` 兼容旧快照（era=0），恢复与 replay 保持同一 era。现有边界分配与 snapshot 测试不证明非空 action journal suffix 的恢复完整性；该目标见下文。 |
+
+<a id="numeric-action-allocator-replay"></a>
+
+### Action allocator 的 journal-suffix 恢复
+
+本节承接 [runtime 恢复合同](../prd.md#runtime-journal-suffix-recovery)，定义 action allocator 的目标行为与验收，不把目标记录描述成已有 DTO 或已完成实现。`next_action_id` 与 `action_id_era` 决定后续分配；恢复至目标切点 T 后二者必须与不中断执行至 T 的对照一致。只比较业务 `WorldState`、历史 receipt 或 state root 不足以证明该条件。
+
+1. 权威来源是宿主真实完成的分配及其持久化记录。记录必须绑定宿主 allocation 身份、分配前 cursor、实际分配值、后继 `(era, sequence)`、所属事务与 action/queue 关联；具体语义由 [allocator 恢复设计](runtime-numeric-safety.design.md#numeric-action-allocator-replay) 承接。分配和业务执行是两个事实：持久分配不表示 action 已成功执行，业务拒绝也不使已经完成的分配变成未发生。
+2. 一次分配只推进一次 cursor。一个 action 产生多个事件、重复出现的 `CausedBy::Action`、业务拒绝和 system event 都不能被按事件数量换算成分配次数。已预分配或显式指定的 ID 按宿主来源关联判断是否已计入 cursor，不能仅因 ID 出现在事件或队列中再次分配。数字最大值、现存 job 表及任意外部提交编号都不是分配进度的替代权威。
+3. 分配来源记录、cursor 与相关 queue 变更在其所属的既有原子边界内一同发布和持久化。该边界失败时保持进入它之前的状态；此前已持久化的分配不得因后续 step 失败被回退。没有业务事件的分配只有被完整 checkpoint 或可验证的控制记录覆盖才可恢复，不能从“没有事件”推导出未分配、默认 cursor 或一个虚构的连续区间。
+4. Canonical 历史恢复与 pending 恢复分开判断。checkpoint/suffix 已记录为消费或终结的历史 action 不得再次入队；仍有效的已持久 pending 保留原分配关联并按上位合同重审，不能分配新 ID 冒充原请求。未持久化的内存 pending 不获得新增恢复承诺；有持久 pending 时，cursor 与队列必须属于同一恢复切点，不能拼接旧 cursor 与较新队列或静默丢弃队列来制造一致。
+5. rollover 必须从分配来源记录恢复原代际与后继顺序，不能按裸 `u64` ID 大小排序或取 max。旧 snapshot 缺 era 仍按 `serde(default)` 读取为 0；这不证明旧 tail 没有 rollover 或分配缺口。无法证明旧 tail 的 cursor/queue 完备性时，遵循 [共同兼容矩阵](../design.md#runtime-journal-suffix-compatibility)，不重执行 action 或通过遍历 job 补洞。
+6. 同一规则覆盖 `World::from_snapshot`、普通 snapshot/load/replay，以及 `oasis7_world_repair_rebuild --source-world-dir`。repair 的保存和再次加载成功不能代替 cursor 与续跑验证；`--generated-world-dir` 是 bootstrap，不属于已有历史恢复证明。
 
 <a id="numeric-clock-clamp"></a>
 
@@ -55,6 +68,7 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 - 涉及 durable write 的路径必须验证失败前未写入或写入事务整体回滚。
 - 涉及 replay/recovery 的路径必须验证拒绝结果可观测，且不会生成新的 committed history。
 - rollover 必须验证边界分配、snapshot roundtrip 与缺失 era 字段的 legacy load；它只消除溢出失效，纯 `u64` ID 在不同 era 极端远期仍可能复用，不能表述为全链路复合 ID 唯一性。
+- Action allocator 必须通过 [J1 计划验收](runtime-numeric-safety.design.md#numeric-action-allocator-validation)：从合法 finalized checkpoint C<T 加完整非空 suffix 恢复，在权限、资源、版本与输入相同的对照中，新 recipe 正常完成一次且不复用既有 settled job；另独立验证多事件/拒绝、预分配/pending、rollover、旧 tail 与各恢复入口。root 相同或“效果至多一次”不能替代该正向续跑结果。
 - 文档或实现若改变受检失败、rollover、clamp 三者之一，必须同步更新本文、对应 design、相关测试与 PR 与实际验证记录。
 
 ## 5. 里程碑
@@ -76,6 +90,7 @@ Runtime、consensus 与 node 的权威状态不得因整数越界、隐式窄化
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | [PRD-WORLD_RUNTIME-041](../prd.md#prd-world-runtime-041) | runtime numeric safety | `test_tier_required` + 定向边界测试 | 文档治理、陈旧引用扫描、受检算术与原子性测试；clock clamp 的准确测试与覆盖边界见 [设计验证映射](runtime-numeric-safety.design.md#111-验证映射表) | world、consensus、node、replication、membership、net clock |
+| [Action allocator 恢复](#numeric-action-allocator-replay) | [#4455](https://github.com/eng-cc/oasis7/issues/4455) J1 | 目标 `test_tier_required`；文档修订按 S0 | [设计验证映射](runtime-numeric-safety.design.md#numeric-action-allocator-validation) 的 J1-CONTINUE / ORDER / PENDING / ROLLOVER / ENTRYPOINTS 均为 planned，不能当作已存在或已运行测试 | World allocator、pending queue、event-suffix replay、普通恢复及 source-journal repair；不扩展外部 ID ABI |
 
 | 决策 ID | 选定方案 | 否决方案 | 依据 |
 | --- | --- | --- | --- |

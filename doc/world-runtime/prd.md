@@ -178,9 +178,11 @@ deterministic routing metrics, module output, cache-miss additions, allocators, 
 backpressure together. Its prepared envelope deliberately carries no
 consensus candidate; `run_modules_for_current_tick()` owns the single final
 tick record. A snapshot taken after direct routing but before that finalization
-is therefore not a replayable canonical checkpoint, and a pre-route snapshot
-plus the later journal cannot reconstruct schedule/metric sidecars absent from
-that snapshot. Only a finalized-tick snapshot is a replay/restore boundary.
+is not a replayable canonical checkpoint. A finalized checkpoint is a valid
+starting cut, but does not by itself prove that a later event suffix reconstructs
+schedule/metric sidecars. That reconstruction remains a current limitation;
+the [event-suffix recovery target](#runtime-journal-suffix-recovery) requires a
+complete recorded path from an earlier finalized checkpoint to the target.
 Due-record preflight errors retain the compatibility exception of recording
 metrics directly while leaving the schedule unchanged.
 
@@ -342,6 +344,24 @@ proposer 可以提交候选 receipt；active validator 必须从同一 committed
 - replay 以 checkpoint + canonical journal 重建，在每个 receipt 边界比较 action/event/next-state commitment；遇到首个差异、缺失 artifact 或旧 schema 不可解释时返回结构化 mismatch/fault，保留原始证据并阻止不一致状态重新对外暴露。
 - retry、restart、restore、GC 后恢复与跨 adapter replay 必须对同一 accepted input 生成同一 receipt/state root；被拒绝 action 也必须有稳定 disposition，不能静默丢失。v2 restore 在重新对外暴露 state 前必须比较 snapshot root、replay root 与 next state root；legacy adapter 也必须产出同等比较证据，否则只允许诊断读取，不允许继续提交新效果。
 - 当前产品与 runtime 仍只有一条 `world_id` 对应的 canonical world timeline。dev/local 或测试 world 必须使用独立 `world_id`，不得把离线历史合并回 global world。region/partition 先作为逻辑 scope 或存储/调度边界，独立 shard finality、跨 shard commit 与动态 World Database 均暂缓，不构成当前实现承诺。
+
+<a id="runtime-journal-suffix-recovery"></a>
+### 事件后缀恢复与续跑（目标）
+
+本条承接产品 [恢复可服务验收](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-005)。
+合法 finalized checkpoint `C<T` 加完整、非空的 `WorldJournal` 事件后缀恢复到 T 后，必须保留决定后续执行的控制状态。
+完整 T snapshot 往返、WorldJournal 事件归约、committed-input 重执行是三种独立验证路径；后两者的输入与执行边界见 [系统设计](design.md#runtime-journal-suffix-recovery-design)。
+
+- **J1 — action allocator：**恢复 `next_action_id` 与 `action_id_era` 及相关预分配队列边界，接续分配与不中断对照一致；下一合法 recipe 不得复用后缀中已 settled 的 job identity。
+  记录来源、单动作多事件、业务拒绝、显式/预分配 ID 与 rollover 由 [数值恢复合同](runtime/runtime-numeric-safety.prd.md#numeric-action-allocator-replay) 承接；HTTP producer 的独立命名空间不在本条范围。
+- **J2 — module tick schedule：**每次成功 tick 的消费、重排或停止调度结果须可由记录重建；恢复后的 schedule、下次调用时点与不中断对照一致。
+  WakeAfterTicks、Suspend、缺省、Pure/无 new_state 与双实例隔离由 [宿主 tick 重放设计](runtime/runtime-integration.md#module-tick-journal-replay) 承接。
+- **正向续跑：**同候选、同 world、相同合法 authority/manifest/权限/资源及后续输入下，两分支比较 disposition、动作/job identity、唤醒次序、状态与费用；至少一个合法新 recipe 正常完成一次。
+  单独的 WorldState/root 一致或“效果至多一次”不代替该结果；这不是无条件成功或完成时限承诺。
+- **恢复边界：**普通加载、既有 signed rollback v2 的 C→T 路径及 repair 的 source-journal 重建采用同一控制状态语义；保留既有签名、artifact、finality、服务闸门及失败原子性。
+  event replay 只应用已记录事实，不重新执行 action/WASM、不重新推导费用或派发外部效果；J1/J2 独立验收，不互相代签。
+- **旧历史：**可反序列化不代表可继续执行；必要控制记录缺失时采用 [显式兼容矩阵](design.md#runtime-journal-suffix-compatibility)，不得把无记录解释为未分配或 suspend。
+  本条和 [验证矩阵](design.md#runtime-journal-suffix-validation) 是目标合同，现有 snapshot/局部事务测试不构成非空 suffix 已通过的证据。
 
 ### Consumer compatibility: industrial profile and stage execution
 

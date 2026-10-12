@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "a62dd3c2b587f19bb2f2dd1d9030e5ca0a41a07a5802558c1c18cc0858d24314",
+    "content_sha256": "d76d3fed792fd96eafa23282284cd3aedd7bc7d327768415b112145c986c3a95",
     "current_authority": "testing-manual.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",
-    "note": "current testing domain requirements authority; developer workflow record projection updated, product authority retained",
+    "note": "current testing domain requirements authority; developer workflow record projection updated, product authority retained Scoped document review for issue #4455 on 2026-10-12: V-RECOVERY now requires independent action and successful-tick continuation evidence from a real nonempty event suffix; full-snapshot loading and committed-input re-execution remain separate evidence lanes. This is document review only, not runtime execution or release acceptance; existing authority, decision owner and disposition are retained.",
     "path": "doc/testing/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
