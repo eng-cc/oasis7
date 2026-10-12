@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "5f69f2c9d184c4d61a0ce82f3231a758ac5141c14847a89f426cfa2c53076077",
+    "content_sha256": "cbdd3b63bc093ed6911eb0d4600954a6d918363070f9d2e7b09efc5bcb5467a5",
     "current_authority": "doc/product/world-infrastructure/prd.md",
     "decision_owner": "runtime_engineer",
     "disposition": "retain_current_authority",
-    "note": "current world-runtime requirements authority; developer workflow record projection updated, product authority retained Reviewed on 2026-10-12 for issue #2667: declared PRD-WORLD_RUNTIME-041 and its numerical-boundary verification mapping; linked the independently open #3555 instance-command target without upgrading implementation or execution evidence. Existing product authority, disposition and unrelated acceptance obligations are retained.",
+    "note": "current world-runtime requirements authority; developer workflow record projection updated, product authority retained Reviewed on 2026-10-12 for issue #2667: declared PRD-WORLD_RUNTIME-041 and its numerical-boundary verification mapping; linked the independently open #3555 instance-command target without upgrading implementation or execution evidence. Existing product authority, disposition and unrelated acceptance obligations are retained. Scoped document review for issue #4452: ordinary generation persistence now distinguishes NotCommitted, Committed and StatusUnknown, limits failure/no-change promises to proven non-commit, retains the committed index closure and any unresolved candidate closure, and requires complete same-generation candidate validation before a separate serving decision. The linked storage requirements distinguish cleanup convergence from commit success and specify independent G1, G2, G3 and cross-boundary acceptance. Existing product authority, decision owner, disposition and unrelated acceptance obligations are retained. These are target requirements; this records document review only, not implementation, runtime, fault-injection or release evidence.",
     "path": "doc/world-runtime/prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"
