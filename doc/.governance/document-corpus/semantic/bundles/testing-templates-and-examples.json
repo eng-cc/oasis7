@@ -1,11 +1,11 @@
 {
   "record": {
-    "content_set_sha256": "74f7cd5854ddaec5d9e69db210617d2a626c13009bb3e165a7dd935511aa640d",
+    "content_set_sha256": "48302b4e9dd27e2d0105cdef1d30470a3a2ff96e96e211d69724dd962343478e",
     "current_authority": "doc/testing/templates/README.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_active_template_or_example",
     "id": "testing-templates-and-examples",
-    "note": "reusable schemas and deliberately non-live examples; never execution evidence or readiness; developer workflow record projection updated, product authority retained",
+    "note": "reviewed all 38 reusable template/example members and #4438 L4 summary execution-result, unreviewed judgment and portable authority-link changes; explicitly legacy rehearsal material remains non-live; current authority, full member set and non-readiness boundaries retained; no execution or release claim",
     "paths": [
       "doc/testing/templates/chain-proof-evidence-v1-template.md",
       "doc/testing/templates/external-verifier-light-client-lite-v1-template.md",

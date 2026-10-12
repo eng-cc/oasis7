@@ -5,7 +5,7 @@
 ## 从这里开始
 - 想先理解 testing 模块覆盖哪些测试层级、门禁和证据边界：`doc/testing/prd.md`
 - 想判断好玩性证据、`L4A/L4B/L5` 边界、角色 subagent review 或 simulated player persona 的 canonical topic：`doc/testing/governance/README.md`
-- 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先经 `doc/testing/governance/README.md` 确认所需证据层，再读 `testing-manual.md` 的 `L4A/L4B/L5` 章节并执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
+- 想在一个 worktree 里准备 `L4A + L4B` 验证：先经 `doc/testing/governance/README.md` 确认所需证据层，再读 [L4 工具链合同与验收](../../testing-manual.md#l4-toolchain-validation)。`./scripts/prepare-playability-l4-review.sh` 只生成 scaffold；L4B 还需实际 release/UI、Hosted 执行会话与当前尝试证据，旧 runner 的实现差距见总手册 L4B 章节。
 - 想执行 Web UI、Playwright、public-testnet attach 或模型视觉评审手册：先读 `doc/testing/manual/README.md`，再按问题进入对应 manual。
 - 想看当前测试策略、覆盖缺口与 QA 证据边界：`doc/testing/prd.md`；可变任务状态和历史以 PR、实际 CI 与评审记录（Issue 按需） 为准。
 - 想先判断要跑哪套测试或查操作步骤：先读 `testing-manual.md`；涉及专项操作再进入 `doc/testing/manual/README.md`。
