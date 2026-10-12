@@ -100,7 +100,7 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 本项局部核验于 2026-10-12：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，交付私有目标准备、单记录重试/重启、公开 canonical 发布和授权当前正文回读。最终 SDK 29、私有 library 22、任务链 8、原生 World Service 29 项回归通过；journal tail 缺前驱恢复缺口已修复，合入源 CI 全部通过。此段只刷新本项，不刷新前述全局或环境核验基线。
 
-下一轮集中实现原生 executor 控制、完整私有 Context 捕获与 task-fenced 行动，并提供普通客户端和正式 Skill；当前候选仍待完整验证、独立试玩及合入。完整协作 TaskSnapshot、两 Runtime 自主首局和公开 Game HTTP 写入口尚未验收。来源：[Game API 当前实施候选](../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)、[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。
+2026-10-12 续核验：[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，交付原生 executor 控制、完整私有 Context 捕获、task-fenced 行动、普通客户端及正式 Skill；独立附着 Codex 在候选 `b59d0105` 完成两个目标版本的移动与原结果恢复，最终源 `cd2976b7` 通过普通回归、独立评审和 required CI。该实玩记录保留一次失败 cleanup，不代签完整首局。下一批集中补齐原生物流观察、委托范围发现、转运行动及到账核验；当前物流候选尚未验证或合入。完整协作 TaskSnapshot、两 Runtime 自主首局和公开 Game HTTP 写入口尚未验收。来源：[Game API 当前实施候选](../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)、[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。
 
 <a id="cc-status-changes"></a>
 

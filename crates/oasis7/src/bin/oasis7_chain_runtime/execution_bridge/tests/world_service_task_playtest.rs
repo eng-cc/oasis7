@@ -154,10 +154,36 @@ fn run_prepared_world_service(
     drop_first_cleanup_submit: bool,
     cleanup_budget: Duration,
 ) -> std::path::PathBuf {
+    run_prepared_world_service_scenario(
+        ready,
+        tick_interval,
+        immediate_cleanup,
+        cleanup_after_height,
+        drop_first_cleanup_submit,
+        cleanup_budget,
+        false,
+    )
+}
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Explicit isolated service scenario and fault controls"
+)]
+fn run_prepared_world_service_scenario(
+    ready: std::path::PathBuf,
+    tick_interval: Duration,
+    immediate_cleanup: bool,
+    cleanup_after_height: Option<u64>,
+    drop_first_cleanup_submit: bool,
+    cleanup_budget: Duration,
+    logistics: bool,
+) -> std::path::PathBuf {
     assert!(ready.is_absolute());
     assert!(!ready.exists());
-    let (dir, mut driver, world, owner, owner_public) =
-        canonical_agent_chat::driver_fixture_with_verified_authority();
+    let (dir, mut driver, world, owner, owner_public) = if logistics {
+        logistics_playtest::fixture()
+    } else {
+        canonical_agent_chat::driver_fixture_with_verified_authority()
+    };
     let create = game_task_tests::create(&world, &owner, "context-task");
     commit(&mut driver, 3, create.clone());
     let c = game_task::current_control(&driver.execution_world, "agent-a")
@@ -165,14 +191,18 @@ fn run_prepared_world_service(
         .unwrap();
     let private = dir.canonicalize().unwrap().join("private-goals");
     let store = PrivateGoalStore::open(&private, [7; 32]).unwrap();
-    let content = GoalContentV1 {
-        goal_text: format!(
-            "Reach the landmark at coordinates (200, 0, 0) centimeters. Read the complete goal and choose a valid movement action yourself. {}",
-            "The task goal is delivered privately without truncation.".repeat(24)
-        ),
-        soft_constraints: vec![
-            "Use the currently bound executor and canonical signed task action lane.".into(),
-        ],
+    let content = if logistics {
+        logistics_playtest::goal()
+    } else {
+        GoalContentV1 {
+            goal_text: format!(
+                "Reach the landmark at coordinates (200, 0, 0) centimeters. Read the complete goal and choose a valid movement action yourself. {}",
+                "The task goal is delivered privately without truncation.".repeat(24)
+            ),
+            soft_constraints: vec![
+                "Use the currently bound executor and canonical signed task action lane.".into(),
+            ],
+        }
     };
     let goal = sign_goal_prepare(
         GameGoalPrepareV1 {
@@ -436,7 +466,8 @@ fn run_prepared_world_service(
                 .unwrap()
                 .unwrap();
             let position = pinned.world.state().agents["agent-a"].state.pos;
-            if position == oasis7::GeoPos::new(200, 0, 0)
+            if !logistics
+                && position == oasis7::GeoPos::new(200, 0, 0)
                 && control.active_goal_revision == DecimalU64(1)
                 && goal2_submission.is_none()
             {
@@ -487,7 +518,7 @@ fn run_prepared_world_service(
             let node_snapshot = node.lock().unwrap().snapshot();
             write_public_json(
                 &root.join("task-playtest-witness.json"),
-                &serde_json::json!({"schema":"oasis7/task-prepared-world-witness/v1","commit":pinned.commit,"task_revision":control.task_revision,"goal_revision":control.active_goal_revision,"executor_epoch":control.executor_epoch,"executor_binding":control.executor_binding,"position":position,"canonical_effect_receipts":effects,"goal2_public_submission":goal2_submission,"node":{"node_id":node_snapshot.node_id,"running":node_snapshot.running,"tick_count":node_snapshot.tick_count,"last_error":node_snapshot.last_error},"scope":"actual immutable canonical pin; setup owner only changes goals; player actions use native submitted intents"}),
+                &serde_json::json!({"schema":"oasis7/task-prepared-world-witness/v1","commit":pinned.commit,"task_revision":control.task_revision,"goal_revision":control.active_goal_revision,"executor_epoch":control.executor_epoch,"executor_binding":control.executor_binding,"position":position,"logistics":logistics.then(||logistics_playtest::witness(&pinned.world)),"canonical_effect_receipts":effects,"goal2_public_submission":goal2_submission,"node":{"node_id":node_snapshot.node_id,"running":node_snapshot.running,"tick_count":node_snapshot.tick_count,"last_error":node_snapshot.last_error},"scope":"actual immutable canonical pin; setup owner only changes goals; player actions use native submitted intents"}),
             );
             std::thread::sleep(Duration::from_millis(250));
         }
@@ -743,3 +774,6 @@ fn private_task_prepared_world_unknown_cleanup_retries_exact_original() {
     fs::remove_file(ready).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
+
+#[path = "world_service_task_logistics_playtest.rs"]
+mod logistics_playtest;

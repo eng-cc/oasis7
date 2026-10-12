@@ -46,7 +46,7 @@ Game Task 创建复用既有签名 World Service submit/lookup 与 Runtime 共�
 
 ### 当前实施候选：原生任务执行链
 
-本轮在同一 PR 实现 executor binding → 完整私有目标 Context → canonical 捕获 → task-fenced cognition → 原始结果恢复。合入和实际试玩证据须读取 PR 验证记录；本段描述当前实现边界，不代表部署或完整产品验收。
+[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，在同一 PR 实现 executor binding → 完整私有目标 Context → canonical 捕获 → task-fenced cognition → 原始结果恢复。独立附着 Codex 的两目标移动实玩绑定候选 `b59d0105`；最终源 `cd2976b7` 的普通验证、独立评审与 required CI 通过。详细失败与范围见[原生执行证据](../../testing/evidence/external-task-native-execution-2026-10-12/README.md)。本段不代表部署或完整产品验收。
 
 Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 `/v1/world/submit` 提交 Bind/替换/Stop。Bind 必须指向真实当前 delegation，推进 task revision 与 executor epoch，使任务 Active；Stop 推进 fence、清空 binding 并 Suspended。目标发布推进目标/task revision，保留现有 executor binding。全部控制由既有 canonical receipt 链恢复；新变体启用前执行、验证及恢复节点必须同步升级，旧 binary 不能读取新历史。
 
@@ -59,6 +59,14 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 `CognitionIntentV1.task_fence` 将行动绑定当前任务、目标版本和 executor epoch；实际裁决沿用既有能力、预算、MVCC 和 turn 生命周期。一 Agent 同时只有一个活动 turn。新目标、替换或 Stop 退役旧 pending context 并释放匹配 Reserved lease；首次 Bind 也退役旧 Hosted Provider pending work。已管理 Agent 的旧 unfenced cognition/旧 Provider prefix 不得恢复执行。精确已提交请求可找回原回执；它仍需真实当前读授权，不因此授予新行动。过期 Context 可通过固定公共 `context_expired` outcome 或新的当前 Context 清理，不能沿用过期 grant。
 
 普通 `oasis7_game_client` 使用 operator 提供的严格设备配置、mode-0600 原始签名文件与独立加密 operation cache。它在网络发送前保存原 prepare nonce/签名与公共 prefix/action/outcome，请求结果未知时只 lookup 或重投原请求；改变同一 Context 的 action 不覆盖原签名。正式游戏 Skill 为 [oasis7-play](../../../skills/oasis7-play/SKILL.md)，CLI 目前提供 `native.move_agent` 三个 i64 厘米坐标及固定 provider outcomes。完整 catalog 的任意 action CLI、配对/token、问答/审批/报告、完整协作 TaskSnapshot、Hosted 旧执行器目标接入，以及 Codex/OpenClaw 两 Runtime 完整自主首局仍在后续范围。Game HTTP bootstrap 仍 `writes_available=false`；原生私有路径不冒充 `/v1/game` 写路由。
+
+### 当前实施候选：原生物流执行
+
+普通客户端增加 `industry` 授权观察与 `native.transfer_material`：只接收账本、材料、正 i64 数量、非负 i64 公里距离、标准/紧急优先级及有序线路参数；requester 固定为设备配置 Agent，不接收原始 Action、授权、报价或配方计划。转运和移动共用同一个 Context 的原签名缓存；同 Context 改变动作种类或任一业务字段必须冲突，未知原结果只能核对或重投原请求。
+
+`capabilities` 分开描述客户端支持的原生提案、实际模块命令 catalog 和当前 Agent 的 native action/object electricity grants。World Service 授权 Agent 投影返回该 Agent 的委托预算读模型；generic projection 和其他 Agent 的 grants 不进入该字段。revoked、expired、not_yet_valid、exhausted 与 current 是读取时状态，不代替 Runtime 的最终 admission。无 native grant 不表示已获权，signer delegation 也不替代业务预算授权。
+
+`industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。当前候选待普通验证、独立正式 Skill 试玩和评审；排产计划生成、配对、完整 Game HTTP 写路由及完整首局缺口继续保留。
 
 ## 1. 问题、目标与非目标
 

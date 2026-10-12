@@ -1,3 +1,4 @@
+use oasis7::runtime as crate_action;
 use oasis7::world_service::{
     client::{RemoteWorldServiceClient, WorldServiceClientConfig, WorldServicePort},
     private_goal_store::{
@@ -91,6 +92,110 @@ impl Client {
             key_hex,
             state,
         })
+    }
+    pub fn public_view(
+        &self,
+    ) -> Result<oasis7::world_service::verified_view::VerifiedWorldView, String> {
+        self.remote
+            .read_view(ReadWorldViewRequest {
+                contract_version: 1,
+                world: self.world.clone(),
+                scope_id: format!("agent:{}", self.agent),
+                min_commit: None,
+                fixed_commit: None,
+                deadline_unix_ms: None,
+            })
+            .map_err(|_| "signed Agent read unavailable".to_owned())
+    }
+    pub fn capabilities(&self) -> Result<Value, String> {
+        let view = self.public_view()?;
+        let projection = view.projection();
+        let grants: Vec<_> = projection
+            .native_delegation_authorizations
+            .iter()
+            .take(128)
+            .map(|authorization| {
+                let grant = &authorization.grant;
+                let status = if grant.revoked {
+                    "revoked"
+                } else if view.logical_tick() < grant.valid_from_tick {
+                    "not_yet_valid"
+                } else if view.logical_tick() > grant.valid_until_tick {
+                    "expired"
+                } else if authorization.remaining_units == 0 {
+                    "exhausted"
+                } else {
+                    "current"
+                };
+                json!({"authorization":authorization,"status":status,"admission_required":true})
+            })
+            .collect();
+        Ok(
+            json!({"api_revision":1,"read_version":view.version(),"logical_tick":view.logical_tick(),
+                "task_control":projection.game_task_control,
+                "proposal_forms":[
+                    {"action_ref":"native.move_agent","arguments":{"to":"three signed i64 centimeter coordinates x,y,z"},"admission_required":true},
+                    {"action_ref":"native.transfer_material","arguments":{"from":"ledger ID","to":"ledger ID","material":"kind","amount":"positive i64","distance_km":"nonnegative i64","priority":"standard|urgent","routes":"ordered route IDs or direct"},"admission_required":true}
+                ],
+                "module_capability_catalog":projection.agent_context.as_ref().map(|context| &context.capability_catalog),
+                "native_delegation_authorizations":grants,
+                "native_authorization_count":projection.native_delegation_authorizations.len(),
+                "native_authorizations_truncated":projection.native_delegation_authorizations.len()>128,
+                "outcomes":["executor_aborted","provider_failed","transport_exhausted"],
+                "scope":"local native proposal forms are distinct from module commands and native action/object electricity grants; current grants do not guarantee admission"
+            }),
+        )
+    }
+    pub fn industry(&self) -> Result<Value, String> {
+        let view = self.public_view()?;
+        let state = serde_json::to_value(&view.projection().state)
+            .map_err(|_| "industry encoding failed")?;
+        let mut fields = serde_json::Map::new();
+        for name in [
+            "materials",
+            "material_ledgers",
+            "material_profiles",
+            "logistics_routes",
+            "factories",
+            "recipe_profiles",
+            "factory_profiles",
+            "product_profiles",
+            "pending_material_transits",
+            "industry_progress",
+        ] {
+            fields.insert(
+                name.into(),
+                bounded_collection(state.get(name).cloned().unwrap_or(Value::Null)),
+            );
+        }
+        Ok(
+            json!({"api_revision":1,"read_version":view.version(),"logical_tick":view.logical_tick(),
+            "industry":fields,"collection_limit":128,"scope":"authenticated public industry observation; no signed transfer quote is provided"}),
+        )
+    }
+    pub fn submit_action(
+        &self,
+        operation: &str,
+        action: crate_action::Action,
+    ) -> Result<IntentResponse<Value>, String> {
+        let request =
+            if let Some(request) = self.cached_intent(ClientStateKind::Action, operation)? {
+                validate_original_action(&request, &action)?;
+                request
+            } else {
+                let captured = self.captured(operation)?;
+                let signed = authority::sign_read_request(
+                    "cognition",
+                    cognition_intent(&captured, action)?,
+                    &self.key_hex,
+                )?;
+                self.cache_intent(
+                    ClientStateKind::Action,
+                    operation,
+                    WorldServicePayloadV1::Cognition(signed),
+                )?
+            };
+        self.submit_and_poll(&request)
     }
     pub fn task_fence(&self) -> Result<GameTaskFenceV1, String> {
         let view = self
@@ -359,5 +464,108 @@ mod recovery_tests {
         ] {
             assert_eq!(context_next_step(&outcome), "refresh_after_settled_result");
         }
+    }
+}
+
+fn validate_original_action(
+    request: &SubmitIntentRequest<WorldServicePayloadV1>,
+    action: &crate_action::Action,
+) -> Result<(), String> {
+    let WorldServicePayloadV1::Cognition(signed) = &request.signed_payload else {
+        return Err("invalid cached action".into());
+    };
+    validate_action_identity(&signed.request.action, action)
+}
+fn validate_action_identity(
+    original: &crate_action::Action,
+    proposed: &crate_action::Action,
+) -> Result<(), String> {
+    if original != proposed {
+        return Err("context already has a different original action; query its result".into());
+    }
+    Ok(())
+}
+fn bounded_collection(value: Value) -> Value {
+    match value {
+        Value::Object(values) => {
+            let count = values.len();
+            let items: serde_json::Map<_, _> = values.into_iter().take(128).collect();
+            json!({"items":items,"count":count,"truncated":count>128})
+        }
+        Value::Array(values) => {
+            let count = values.len();
+            let items: Vec<_> = values.into_iter().take(128).collect();
+            json!({"items":items,"count":count,"truncated":count>128})
+        }
+        other => json!({"value":other,"truncated":false}),
+    }
+}
+
+#[cfg(test)]
+mod action_tests {
+    use super::*;
+    fn transfer() -> crate_action::Action {
+        crate_action::Action::TransferMaterial {
+            requester_agent_id: "configured".into(),
+            from_ledger: oasis7::industry_types::MaterialLedgerId::agent("configured"),
+            to_ledger: oasis7::industry_types::MaterialLedgerId::factory("smelter"),
+            kind: "iron_ore".into(),
+            amount: 2,
+            distance_km: 1,
+            priority: Some(crate_action::MaterialTransitPriority::Standard),
+            route_id: None,
+            route_ids: vec!["a".into(), "b".into()],
+            auto_reroute: false,
+        }
+    }
+    #[test]
+    fn original_transfer_identity_protects_every_business_field_and_action_kind() {
+        let original = transfer();
+        assert!(validate_action_identity(&original, &original).is_ok());
+        for field in 0..10 {
+            let mut changed = transfer();
+            let crate_action::Action::TransferMaterial {
+                requester_agent_id,
+                from_ledger,
+                to_ledger,
+                kind,
+                amount,
+                distance_km,
+                priority,
+                route_id,
+                route_ids,
+                auto_reroute,
+            } = &mut changed
+            else {
+                unreachable!()
+            };
+            match field {
+                0 => *requester_agent_id = "foreign".into(),
+                1 => *from_ledger = oasis7::industry_types::MaterialLedgerId::world(),
+                2 => *to_ledger = oasis7::industry_types::MaterialLedgerId::site("other"),
+                3 => *kind = "copper".into(),
+                4 => *amount += 1,
+                5 => *distance_km += 1,
+                6 => *priority = Some(crate_action::MaterialTransitPriority::Urgent),
+                7 => *route_id = Some("a".into()),
+                8 => route_ids.reverse(),
+                9 => *auto_reroute = true,
+                _ => unreachable!(),
+            }
+            assert!(validate_action_identity(&original, &changed).is_err());
+        }
+        let movement = crate_action::Action::MoveAgent {
+            agent_id: "configured".into(),
+            to: oasis7::GeoPos::new(0, 0, 0),
+        };
+        assert!(validate_action_identity(&original, &movement).is_err());
+        assert!(validate_action_identity(&movement, &original).is_err());
+    }
+    #[test]
+    fn industry_truncation_reports_omitted_entries() {
+        let value = bounded_collection(json!((0..129).collect::<Vec<_>>()));
+        assert_eq!(value["items"].as_array().unwrap().len(), 128);
+        assert_eq!(value["count"], 129);
+        assert_eq!(value["truncated"], true);
     }
 }
