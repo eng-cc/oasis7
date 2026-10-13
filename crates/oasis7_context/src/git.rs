@@ -12,6 +12,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+mod identity;
+use identity::RepositoryIdentity;
 const OUTPUT_LIMIT: usize = 2 * 1024 * 1024;
 #[derive(Debug, Clone, Serialize)]
 pub struct GitError {
@@ -110,10 +112,58 @@ fn selected_program() -> Result<&'static str, GitError> {
         })
         .clone()
 }
-fn run(root: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, GitError> {
+struct GitRoot<'a> {
+    path: &'a Path,
+    directory: Option<&'a crate::fs::Directory>,
+    metadata: OnceLock<RepositoryIdentity>,
+}
+impl<'a> GitRoot<'a> {
+    fn unpinned(path: &'a Path) -> Self {
+        Self {
+            path,
+            directory: None,
+            metadata: OnceLock::new(),
+        }
+    }
+    fn pinned(path: &'a Path, directory: &'a crate::fs::Directory) -> Self {
+        Self {
+            path,
+            directory: Some(directory),
+            metadata: OnceLock::new(),
+        }
+    }
+    fn capture_metadata(&self) -> Result<(), GitError> {
+        if self.metadata.get().is_none() {
+            let metadata = RepositoryIdentity::capture(self.path, self.directory)?;
+            let _ = self.metadata.set(metadata);
+        }
+        self.verify()
+    }
+    fn verify(&self) -> Result<(), GitError> {
+        if let Some(metadata) = self.metadata.get() {
+            metadata.verify(self.path)?;
+        }
+        let Some(directory) = self.directory else {
+            return Ok(());
+        };
+        if !directory.matches_path(self.path).map_err(|_| {
+            error(
+                "HISTORY_IDENTITY_CHANGED",
+                "Pinned context directory is no longer available",
+            )
+        })? {
+            return Err(error(
+                "HISTORY_IDENTITY_CHANGED",
+                "Pinned context directory identity changed",
+            ));
+        }
+        Ok(())
+    }
+}
+fn run(root: Option<&GitRoot>, args: &[&str]) -> Result<Vec<u8>, GitError> {
     run_program(selected_program()?, root, args)
 }
-fn run_program(program: &str, root: Option<&Path>, args: &[&str]) -> Result<Vec<u8>, GitError> {
+fn run_program(program: &str, root: Option<&GitRoot>, args: &[&str]) -> Result<Vec<u8>, GitError> {
     let mut command = Command::new(program);
     for (key, _) in std::env::vars_os() {
         if key.to_string_lossy().starts_with("GIT_") {
@@ -143,7 +193,19 @@ fn run_program(program: &str, root: Option<&Path>, args: &[&str]) -> Result<Vec<
         "i18n.logOutputEncoding=UTF-8",
     ]);
     if let Some(root) = root {
-        command.current_dir(root);
+        root.verify()?;
+        if let Some(metadata) = root.metadata.get() {
+            metadata.pin(&mut command)?;
+        } else if let Some(directory) = root.directory {
+            directory.pin_command_cwd(&mut command).map_err(|_| {
+                error(
+                    "HISTORY_UNAVAILABLE",
+                    "Pinned Git working directory is unavailable",
+                )
+            })?;
+        } else {
+            command.current_dir(root.path);
+        }
     }
     command
         .args(args)
@@ -189,6 +251,9 @@ fn run_program(program: &str, root: Option<&Path>, args: &[&str]) -> Result<Vec<
     let bytes = reader
         .join()
         .map_err(|_| error("HISTORY_INCOMPLETE", "Git output read failed"))?;
+    if let Some(root) = root {
+        root.verify()?;
+    }
     result?;
     if exceeded.load(Ordering::Relaxed) {
         return Err(error("HISTORY_INCOMPLETE", "Git output exceeds limit"));
@@ -198,13 +263,19 @@ fn run_program(program: &str, root: Option<&Path>, args: &[&str]) -> Result<Vec<
 fn text(bytes: Vec<u8>) -> Result<String, GitError> {
     String::from_utf8(bytes).map_err(|_| error("HISTORY_INCOMPLETE", "Git metadata is not UTF-8"))
 }
-fn probe(root: &Path) -> Result<(), GitError> {
+fn probe(root: &GitRoot) -> Result<(), GitError> {
     selected_program()?;
+    root.capture_metadata()?;
     let top = text(
-        run(Some(root), &["rev-parse", "--show-toplevel"])
-            .map_err(|_| error("HISTORY_UNAVAILABLE", "The store is not a Git checkout"))?,
+        run(Some(root), &["rev-parse", "--show-toplevel"]).map_err(|e| {
+            if e.code == "HISTORY_IDENTITY_CHANGED" {
+                e
+            } else {
+                error("HISTORY_UNAVAILABLE", "The store is not a Git checkout")
+            }
+        })?,
     )?;
-    if std::fs::canonicalize(root).ok() != std::fs::canonicalize(top.trim()).ok() {
+    if std::fs::canonicalize(root.path).ok() != std::fs::canonicalize(top.trim()).ok() {
         return Err(error(
             "HISTORY_UNAVAILABLE",
             "Git checkout root must equal the context root",
@@ -212,9 +283,10 @@ fn probe(root: &Path) -> Result<(), GitError> {
     }
     Ok(())
 }
-fn head(root: &Path) -> Result<Option<String>, GitError> {
+fn head(root: &GitRoot) -> Result<Option<String>, GitError> {
     match run(Some(root), &["rev-parse", "--verify", "HEAD"]) {
         Ok(bytes) => Ok(Some(text(bytes)?.trim().to_owned())),
+        Err(e) if e.code == "HISTORY_IDENTITY_CHANGED" => Err(e),
         Err(_) => {
             // An unborn branch has no refs, rather than a missing promised commit.
             let refs = run(Some(root), &["rev-parse", "--all"])?;
@@ -226,7 +298,7 @@ fn head(root: &Path) -> Result<Option<String>, GitError> {
         }
     }
 }
-fn shallow(root: &Path) -> Result<bool, GitError> {
+fn shallow(root: &GitRoot) -> Result<bool, GitError> {
     Ok(text(run(Some(root), &["rev-parse", "--is-shallow-repository"])?)?.trim() == "true")
 }
 fn valid_id(id: &str) -> bool {
@@ -249,10 +321,10 @@ fn managed(path: &str) -> bool {
             .and_then(|s| s.strip_suffix(".md"))
             .is_some_and(valid_id)
 }
-fn blob(root: &Path, oid: &str) -> Result<Vec<u8>, GitError> {
+fn blob(root: &GitRoot, oid: &str) -> Result<Vec<u8>, GitError> {
     run(Some(root), &["cat-file", "blob", oid])
 }
-fn tree(root: &Path, commit: &str) -> Result<BTreeMap<String, String>, GitError> {
+fn tree(root: &GitRoot, commit: &str) -> Result<BTreeMap<String, String>, GitError> {
     let data = run(
         Some(root),
         &[
@@ -285,7 +357,7 @@ fn tree(root: &Path, commit: &str) -> Result<BTreeMap<String, String>, GitError>
     }
     Ok(map)
 }
-fn index(root: &Path) -> Result<BTreeMap<String, String>, GitError> {
+fn index(root: &GitRoot) -> Result<BTreeMap<String, String>, GitError> {
     let data = run(
         Some(root),
         &["ls-files", "--stage", "-z", "--", "context.json", "entries"],
@@ -310,14 +382,20 @@ fn index(root: &Path) -> Result<BTreeMap<String, String>, GitError> {
     }
     Ok(map)
 }
-fn current(root: &Path) -> Result<BTreeMap<String, Vec<u8>>, GitError> {
+fn current(root: &GitRoot) -> Result<BTreeMap<String, Vec<u8>>, GitError> {
     let unavailable = || {
         error(
             "HISTORY_INCOMPLETE",
             "Current store files are unavailable or unsafe",
         )
     };
-    let directory = crate::fs::Directory::open(root).map_err(|_| unavailable())?;
+    let opened;
+    let directory = if let Some(directory) = root.directory {
+        directory
+    } else {
+        opened = crate::fs::Directory::open(root.path).map_err(|_| unavailable())?;
+        &opened
+    };
     let entries = directory.child("entries").map_err(|_| unavailable())?;
     let mut map = BTreeMap::new();
     let config = directory
@@ -344,6 +422,12 @@ fn current(root: &Path) -> Result<BTreeMap<String, Vec<u8>>, GitError> {
     Ok(map)
 }
 pub fn status(root: &Path) -> Result<GitStatus, GitError> {
+    status_inner(&GitRoot::unpinned(root))
+}
+pub fn status_pinned(root: &Path, directory: &crate::fs::Directory) -> Result<GitStatus, GitError> {
+    status_inner(&GitRoot::pinned(root, directory))
+}
+fn status_inner(root: &GitRoot) -> Result<GitStatus, GitError> {
     if let Err(err) = probe(root) {
         if err.code == "HISTORY_UNAVAILABLE" {
             return Ok(GitStatus {
@@ -396,10 +480,30 @@ pub fn status(root: &Path) -> Result<GitStatus, GitError> {
     })
 }
 pub fn history(root: &Path, id: &str, limit: usize) -> Result<History, GitError> {
+    history_inner(&GitRoot::unpinned(root), id, limit)
+}
+pub fn history_pinned(
+    root: &Path,
+    directory: &crate::fs::Directory,
+    id: &str,
+    limit: usize,
+) -> Result<History, GitError> {
+    history_inner(&GitRoot::pinned(root, directory), id, limit)
+}
+fn history_inner(root: &GitRoot, id: &str, limit: usize) -> Result<History, GitError> {
+    history_after_probe(root, id, limit, || {})
+}
+fn history_after_probe(
+    root: &GitRoot,
+    id: &str,
+    limit: usize,
+    after_probe: impl FnOnce(),
+) -> Result<History, GitError> {
     if !valid_id(id) || limit == 0 || limit > 1000 {
         return Err(error("INVALID_ARGUMENT", "Invalid history ID or limit"));
     }
     probe(root)?;
+    after_probe();
     let head =
         head(root)?.ok_or_else(|| error("HISTORY_UNAVAILABLE", "There is no committed history"))?;
     let path = format!("entries/{id}.md");
@@ -431,6 +535,7 @@ pub fn history(root: &Path, id: &str, limit: usize) -> Result<History, GitError>
     let shallow = shallow(root)?;
     let complete = !shallow && commits.len() <= limit;
     commits.truncate(limit);
+    root.verify()?;
     Ok(History {
         head,
         complete,
@@ -440,6 +545,25 @@ pub fn history(root: &Path, id: &str, limit: usize) -> Result<History, GitError>
     })
 }
 pub fn read_at_commit(root: &Path, id: &str, oid: &str) -> Result<HistoricalEntry, GitError> {
+    read_at_commit_inner(&GitRoot::unpinned(root), id, oid)
+}
+pub fn read_at_commit_pinned(
+    root: &Path,
+    directory: &crate::fs::Directory,
+    id: &str,
+    oid: &str,
+) -> Result<HistoricalEntry, GitError> {
+    read_at_commit_inner(&GitRoot::pinned(root, directory), id, oid)
+}
+fn read_at_commit_inner(root: &GitRoot, id: &str, oid: &str) -> Result<HistoricalEntry, GitError> {
+    read_after_probe(root, id, oid, || {})
+}
+fn read_after_probe(
+    root: &GitRoot,
+    id: &str,
+    oid: &str,
+    after_probe: impl FnOnce(),
+) -> Result<HistoricalEntry, GitError> {
     if !valid_id(id) || !oid_valid(oid) {
         return Err(error(
             "INVALID_ARGUMENT",
@@ -447,6 +571,7 @@ pub fn read_at_commit(root: &Path, id: &str, oid: &str) -> Result<HistoricalEntr
         ));
     }
     probe(root)?;
+    after_probe();
     if text(run(Some(root), &["cat-file", "-t", oid])?)?.trim() != "commit" {
         return Err(error("INVALID_ARGUMENT", "The object is not a commit"));
     }
@@ -461,18 +586,20 @@ pub fn read_at_commit(root: &Path, id: &str, oid: &str) -> Result<HistoricalEntr
     let entry = objects
         .get(&path)
         .ok_or_else(|| error("HISTORY_INCOMPLETE", "Historical entry is unavailable"))?;
-    Ok(HistoricalEntry {
+    let result = HistoricalEntry {
         commit: oid.to_owned(),
         config_bytes: blob(root, config)?,
         entry_bytes: blob(root, entry)?,
-    })
+    };
+    root.verify()?;
+    Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    fn git(root: &Path, args: &[&str]) {
+    pub(super) fn git(root: &Path, args: &[&str]) {
         let status = Command::new("/usr/bin/git")
             .current_dir(root)
             .args(args)
@@ -484,7 +611,7 @@ mod tests {
             .unwrap();
         assert!(status.success(), "fixture command failed");
     }
-    fn fixture() -> TempDir {
+    pub(super) fn fixture() -> TempDir {
         let dir = TempDir::new().unwrap();
         let canonical_root = dir.path().canonicalize().unwrap();
         let root = canonical_root.as_path();
@@ -690,7 +817,7 @@ mod tests {
         let canonical_root = dir.path().canonicalize().unwrap();
         let root = canonical_root.as_path();
         let h = history(root, "machine-test", 10).unwrap();
-        let objects = tree(root, &h.head).unwrap();
+        let objects = tree(&GitRoot::unpinned(root), &h.head).unwrap();
         let oid = &objects["entries/machine-test.md"];
         // A promised object must not invoke this configured transport during a query.
         let marker = root.join("remote-contacted");
@@ -715,3 +842,7 @@ mod tests {
         assert!(!marker.exists());
     }
 }
+
+#[cfg(test)]
+#[path = "git/metadata_tests.rs"]
+mod metadata_tests;

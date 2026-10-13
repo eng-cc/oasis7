@@ -21,6 +21,9 @@
 - known_out_of_scope:
 
 ## Verdict
+
+Apply the [canonical verdict/confidence decision table](../manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract). Only `pass + high` without an independent escalation condition can replace routine human visual review. `medium/low`, the first `watch`, `block`, and `human_escalation` require escalation; missing inputs remain incomplete. Screenshots are required; DOM or smoke output is supplemental evidence. Preserve historical cards when issuing a new review.
+
 - verdict: `pass` / `watch` / `block` / `human_escalation`
 - confidence: `high` / `medium` / `low`
 - human_escalation_needed: `yes` / `no`

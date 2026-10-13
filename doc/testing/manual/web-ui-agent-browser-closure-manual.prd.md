@@ -11,7 +11,7 @@
 - Proposed Solution: 保留 agent-browser 作为 Viewer 页面默认闭环方案，但把“逐步执行命令与证据采样”下沉到 `web-ui-agent-browser-closure-manual.manual.md`；本 PRD 只维护边界、成功标准与发布/阻断口径。同时显式规定 `oasis7_web_launcher` / launcher Web 控制面先用 GUI Agent 驱动产品动作，再用页面做状态与字段校验，并统一接入当前 repo-owned Web 回归脚本与 fail-fast 处置。
 - Success Criteria:
   - SC-1: S6 Web 闭环流程可由手册命令一键复现，并明确区分 Viewer 与 launcher 控制面两类 surface。
-  - SC-2: 验收口径强制 `open ... --headed`，并默认附带 `--use-angle=gl,--ignore-gpu-blocklist`；若仍命中 `SwiftShader/software rendering` 继续阻断。
+  - SC-2: Viewer 默认 `open ... --headed`，并附带 `--use-angle=gl,--ignore-gpu-blocklist`；实际命中 software renderer 时按 [S6 renderer/验收目的分流](../../../testing-manual.md#testing-software-renderer-scope)，只允许 `viewer` / compat alias 的最小 DOM 闭环继续，不能据此完成 GPU、完整视觉、producer 或 release/playability 验收。
   - SC-3: 至少输出 `snapshot + console + screenshot + state` 证据。
   - SC-4: 当前 repo-owned Web 回归脚本可直接复用手册约束。
   - SC-5: 文档迁移后统一 `.prd.md plus GitHub task issue evidence` 命名并通过治理检查。
@@ -38,7 +38,7 @@
   1. Flow-WEB-001: `启动 oasis7_game_launcher -> 端口/主页自检 -> 打开 Web 页`
   2. Flow-WEB-002: `Viewer 页面执行 agent-browser 语义步骤 -> 采集状态/日志/截图 -> 关闭会话`
   3. Flow-WEB-002A: `launcher 控制面执行 GUI Agent 动作 -> 页面核对状态/字段 -> 归档响应与截图`
-  3. Flow-WEB-003: `执行 GPU/headed 硬门禁 -> 检测软件渲染关键字 -> pass/fail`
+  3. Flow-WEB-003: `固定验收目的及实际 renderMode -> 记录 renderer/headed 证据 -> 按 S6 限定继续或环境阻断`
   4. Flow-WEB-004: `触发 F1~F4 -> 输出分级结论 -> 归档证据并阻断放行`
   5. Flow-WEB-005: `运行 qa-loop/full-coverage -> 汇总产物 -> 发布评审`
   6. Flow-WEB-006: `强制 software_safe -> 选择 Agent -> prompt apply/rollback -> agent chat -> 采集 chatHistory / agent_spoke 签名`
@@ -47,7 +47,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 启动与自检 | `--live-bind`、`--web-bind`、viewer URL、端口监听 | 启动 launcher 并检查 4173/5011 与主页可达 | `booting -> ready` | 先端口后 URL，再进入采样 | 执行者可操作 |
-| GPU 硬门禁 | `--headed`、`--use-angle=gl,--ignore-gpu-blocklist`、renderer/console 关键字 (`SwiftShader` 等) | 采样前执行硬门禁检查 | `gating -> pass/fail` | headed 若仍是软件渲染也 fail | 发布/测试共同遵循 |
+| 图形环境与验收范围 | 目标 scope、`renderMode`、headed、renderer/console、状态/截图 | 采样前按 S6 核对环境，保留诊断采样 | `gating -> limited_scope/blocked` | 软件 renderer 下仅已确认可用的 viewer DOM 最小闭环可继续；GPU/full 目标保留环境阻断 | 发布/测试按各自范围核验，有限通过不升级 |
 | agent-browser 采样 | `snapshot`、`eval`、`console`、`screenshot`、`getState` | 基于 `__AW_TEST__` 执行语义步骤 | `sampling -> evidence` | 至少 1 张截图 + state 字段完整 | 执行者产出，发布者审阅 |
 | launcher 控制面驱动 | `/api/gui-agent/capabilities`、`/api/gui-agent/state`、`/api/gui-agent/action`、页面字段快照 | 先通过 GUI Agent 执行动作，再用浏览器页面校验结果 | `action_requested -> applied -> verified` | launcher 控制面默认优先，不得被 canvas 直点替代 | 执行者与发布负责人共同审阅 |
 | 会话隔离与回收 | worktree-scoped named session、`session id/info/list`、owned `close`、fail-fast 预检查 | 每轮创建并回收自身 session；共享 CDP tab 时显式 pin | `created -> opened -> stable -> closed` | 先 doctor/session info，再 open；只回收自身 session，避免跨任务干扰 | 执行者维护 |
@@ -56,7 +56,7 @@
 | 故障分级 | F1~F4 签名、处置动作、证据清单 | 识别错误并匹配处置流程 | `detected -> triaged -> archived` | 连接问题优先于可玩性判定 | 值守与维护者执行 |
 - Acceptance Criteria:
   - AC-1: 手册提供可直接复制的启动/采样/门禁命令。
-  - AC-2: 明确禁止 headless 验收与软件渲染口径，并声明 headed 若仍落到 SwiftShader 也不得放行。
+  - AC-2: 与 S6 使用同一分流：viewer/compat software-safe 最小闭环可继续，其他 renderMode 或 GPU/完整视觉目标遇软件 renderer 仍阻断；headed、renderer、验收目的均有记录，有限闭环不等于发布通过。
   - AC-3: 定义最小通过标准（canvas、`__AW_TEST__`、`console error=0`、截图）。
   - AC-4: 提供 F1~F4 分级与对应处置动作。
   - AC-5: 发布脚本产物路径与门禁规则可追溯到本手册。
@@ -92,7 +92,7 @@
   - F3 `connecting + tick=0` 长时间不推进：先执行 `play` 并额外观察约 12 秒，仍无推进则失败。
   - F4 URL 在 `source` 场景解析失败：强制使用带引号 URL，避免 `&` 被 shell 截断。
   - 会话残留或 daemon/IPC 异常：先执行 `doctor --offline --quick --json` 与本轮 named session 的 `session info --json`；仅重建并关闭本轮自有 session，不重放非幂等动作，也不影响其他任务 session。
-  - headed 仍落到 SwiftShader/software renderer：按环境阻断处理，不得把“窗口能打开”误判成可玩性通过；默认先尝试 `--use-angle=gl,--ignore-gpu-blocklist`，并归档 `browser_env.json`。
+  - headed 或 QA 哨兵 headless 落到 SwiftShader/software renderer：先核对实际 `renderMode` 与验收目的。已确认 viewer/compat DOM 路径只继续连接、目标选择、自然实时推进或可见 blocker 的最小闭环；其他模式及 GPU/完整验收目标保留环境阻断。归档 `browser_env.json`、状态、截图及缺失范围，“窗口能打开”不构成可玩性通过。
   - 视觉门禁假通过：full coverage 需额外校验 `capture_status.txt` 的 `connection_status=connected` 与 `snapshot_ready=1`。
 - Non-Functional Requirements:
   - NFR-WEB-1: 首轮 Web smoke 在环境就绪后 5 分钟内完成首个 verdict。
@@ -107,7 +107,7 @@
 - Phased Rollout:
   - MVP (WPCM-1): 从 `testing-manual.md` 拆分 Web agent-browser 分册并建立唯一入口。
   - v1.1 (WPCM-2): 增加启动前自检、会话防抖与 F1~F4 fail-fast 处置。
-  - v2.0 (WPCM-3): 强化 GPU + headed 硬门禁与软件渲染阻断。
+  - v2.0 (WPCM-3): 保留 GPU/完整验收的环境要求，并按 S6 界定软件 DOM 最小闭环范围。
   - v2.1 (WPCM-4): 对齐一键 QA/full coverage 产物门禁与失败策略。
   - v2.2 (WPCM-5): strict schema 人工迁移与命名统一收口。
 - Technical Risks:
@@ -127,11 +127,11 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-WEB-001 | Viewer 页面默认走 agent-browser；launcher 控制面默认走 GUI Agent | 继续以 native 抓图为默认；或让 launcher 控制面也直接走纯 agent-browser/canvas | 不同 surface 已具备不同机器接口，按边界分流才能同时获得稳定动作驱动与可审计页面证据。 |
-| DEC-WEB-002 | 验收强制 headed + GPU | 允许 headless 或软件渲染 | 避免性能/视觉口径失真。 |
+| DEC-WEB-002 | 默认 headed；软件 renderer 按 S6 分流，限定最小 DOM 证据范围 | 无条件阻断所有 DOM 采样或用软件最小闭环代签完整验收 | 保留性能/视觉/发布要求，同时不误阻断 S6 明确允许的有限功能检查。 |
 | DEC-WEB-003 | 语义化 `__AW_TEST__` 操作优先 | 纯坐标点击脚本 | 减少 UI 变动导致的脆弱性。 |
 | DEC-WEB-004 | 失败分级 F1~F4 + 证据归档 | 仅记录通用失败日志 | 缩短定位时间并提升复盘质量。 |
 | DEC-WEB-005 | legacy 文档逐篇人工迁移 | 脚本批量改写 | 保证历史约束和执行语义完整。 |
-| DEC-WEB-006 | Viewer Web 默认固定 `--use-angle=gl,--ignore-gpu-blocklist`，若 headed 仍是 software renderer 则继续阻断 | 仅要求 `--headed` 不固定后端 | 当前环境中 headed 默认仍可能回退 SwiftShader，必须把硬件后端策略写进脚本与手册。 |
+| DEC-WEB-006 | Viewer Web 默认固定硬件 WebGL 参数，并检查实际 renderer、renderMode 与验收目标 | 仅凭 headed 认定硬件可用 | headed 仍可能回退软件；按 S6 记录有限继续/环境阻断，不能把软件采样当作 GPU 证明。 |
 | DEC-WEB-007 | 使用 worktree-scoped named session，记录 session/doctor 诊断并由创建者显式 owned close | 默认 session 或跨任务全局清理 | agent-browser 0.37.1 的 session 生命周期必须隔离并可审计，避免并行运行相互干扰。 |
 
 ## 原文约束点映射（内容保真）

@@ -137,6 +137,9 @@ export OASIS7_PLAYWRIGHT_NODE_MODULES=/path/to/node_modules
 
 ## 证据判读
 
+实际 renderer 与 `renderMode`、headless/headed、候选/profile 和本轮验证目标必须一并记录。按 [S6 分流](../../../testing-manual.md#testing-software-renderer-scope)允许的软件 DOM 最小闭环只证明对应功能；不能补足 Bevy/WASM/GPU、完整视觉、producer、release 或真实 provider 的未执行部分。
+
+
 一次有效 Playwright 实跑证据至少需要：
 
 - 命令行通过输出。

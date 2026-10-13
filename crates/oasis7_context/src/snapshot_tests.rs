@@ -144,7 +144,7 @@ fn authenticated_invalid_manifest_creates_no_restore_target() {
 fn restored_store_preserves_identity_and_excludes_local_state() {
     let base = std::env::temp_dir().join(format!(
         "oasis7-context-snapshot-test-{}",
-        random_id().unwrap()
+        crate::fs::random_id()
     ));
     std::fs::create_dir(&base).unwrap();
     let base = base.canonicalize().unwrap();
@@ -171,4 +171,226 @@ fn restored_store_preserves_identity_and_excludes_local_state() {
     assert!(!invalid_target.exists());
     assert!(inspect(&input, b"wrong test passphrase").is_err());
     std::fs::remove_dir_all(base).unwrap();
+}
+
+#[test]
+fn restore_writes_and_publication_follow_held_parent_not_replaced_path() {
+    let base = tempfile::tempdir().unwrap();
+    let root = base.path().canonicalize().unwrap();
+    let input = root.join("snapshot.enc");
+    let pass = b"held-parent-fixture";
+    std::fs::write(
+        &input,
+        oasis7_secure_envelope::seal(KIND, &serde_json::to_vec(&fixture()).unwrap(), pass).unwrap(),
+    )
+    .unwrap();
+    let parent = root.join("selected");
+    std::fs::create_dir(&parent).unwrap();
+    let held = crate::fs::Directory::open(&parent).unwrap();
+    let original = root.join("original");
+    std::fs::rename(&parent, &original).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    restore_in_parent(
+        &input,
+        &parent.join("restored"),
+        None,
+        None,
+        pass,
+        None,
+        &held,
+    )
+    .unwrap();
+    assert!(original.join("restored/entries/machine-test.md").is_file());
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+}
+
+#[test]
+fn held_export_parent_and_source_ancestry_survive_path_replacement() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("store");
+    let store = crate::store::Store::init(&root, "test", "Test").unwrap();
+    store
+        .put(
+            "machine-test",
+            fixture().entries[0].content_utf8.as_bytes(),
+            crate::model::WriteCondition::Absent,
+            "test",
+        )
+        .unwrap();
+    let parent = base.join("output");
+    std::fs::create_dir(&parent).unwrap();
+    let held = crate::fs::Directory::open(&parent).unwrap();
+    let original = base.join("original-output");
+    std::fs::rename(&parent, &original).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    assert!(
+        export_to_directory(
+            &store,
+            &parent.join("backup.enc"),
+            &[],
+            b"held-boundary-password",
+            0,
+            None,
+            &held
+        )
+        .is_err()
+    );
+    assert!(original.join("backup.enc").is_file());
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+    let moved_store = base.join("original-store");
+    std::fs::rename(&root, &moved_store).unwrap();
+    std::fs::create_dir(&root).unwrap();
+    let inside = moved_store.join("inside");
+    std::fs::create_dir(&inside).unwrap();
+    let held_inside = crate::fs::Directory::open(&inside).unwrap();
+    assert!(
+        export_to_directory(
+            &store,
+            &inside.join("leak.enc"),
+            &[],
+            b"held-boundary-password",
+            0,
+            None,
+            &held_inside
+        )
+        .is_err()
+    );
+    assert!(!inside.join("leak.enc").exists());
+}
+#[test]
+fn initialized_store_is_returned_from_original_held_parent_and_root() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let parent = base.join("parent");
+    std::fs::create_dir(&parent).unwrap();
+    let held = crate::fs::Directory::open(&parent).unwrap();
+    let moved = base.join("original-parent");
+    std::fs::rename(&parent, &moved).unwrap();
+    std::fs::create_dir(&parent).unwrap();
+    let root = parent.join("created");
+    let store = crate::store::Store::init_in_parent(&root, &held, "test", "Original").unwrap();
+    assert!(!store.directory().matches_path(&root).unwrap_or(false));
+    assert_eq!(store.config.name, "Original");
+    assert!(moved.join("created/context.json").is_file());
+    assert_eq!(std::fs::read_dir(&parent).unwrap().count(), 0);
+    let existing = base.join("empty");
+    std::fs::create_dir(&existing).unwrap();
+    let held = crate::fs::Directory::open(&existing).unwrap();
+    let moved = base.join("original-empty");
+    std::fs::rename(&existing, &moved).unwrap();
+    std::fs::create_dir(&existing).unwrap();
+    let store = crate::store::Store::init_directory(&existing, held, "test", "Original").unwrap();
+    assert!(!store.directory().matches_path(&existing).unwrap());
+    assert!(moved.join("context.json").is_file());
+    assert_eq!(std::fs::read_dir(&existing).unwrap().count(), 0);
+}
+
+#[test]
+fn restore_faults_after_staging_report_applied_and_preserve_private_plaintext() {
+    for phase in ["staged", "entries_written", "before_sync", "before_publish"] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let input = root.join("backup.enc");
+        let pass = b"staged-restore-fault-fixture";
+        std::fs::write(
+            &input,
+            oasis7_secure_envelope::seal(KIND, &serde_json::to_vec(&fixture()).unwrap(), pass)
+                .unwrap(),
+        )
+        .unwrap();
+        let parent = crate::fs::Directory::open(&root).unwrap();
+        let stage = new_restore_stage();
+        let target = root.join("restored");
+        let error = restore_staged(
+            &input,
+            &target,
+            None,
+            None,
+            pass,
+            None,
+            &parent,
+            &stage,
+            |current, _| {
+                if current == phase {
+                    return Err(std::io::Error::from_raw_os_error(
+                        if current == "entries_written" {
+                            libc::ENOSPC
+                        } else {
+                            libc::EIO
+                        },
+                    )
+                    .into());
+                }
+                Ok(())
+            },
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.code, "IO_ERROR");
+        assert_eq!(
+            error.effect, "applied",
+            "{phase} must not claim no filesystem effect"
+        );
+        assert!(!target.exists());
+        assert!(root.join(&stage).is_dir());
+        if phase != "staged" {
+            assert_eq!(
+                std::fs::read(root.join(&stage).join("entries/machine-test.md")).unwrap(),
+                fixture().entries[0].content_utf8.as_bytes()
+            );
+        }
+    }
+}
+
+#[test]
+fn actual_restore_write_and_publication_failures_keep_applied_staging() {
+    for conflict in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let input = root.join("backup.enc");
+        let pass = b"staged-restore-real-fault";
+        std::fs::write(
+            &input,
+            oasis7_secure_envelope::seal(KIND, &serde_json::to_vec(&fixture()).unwrap(), pass)
+                .unwrap(),
+        )
+        .unwrap();
+        let parent = crate::fs::Directory::open(&root).unwrap();
+        let stage = new_restore_stage();
+        let target = root.join("restored");
+        let error = restore_staged(
+            &input,
+            &target,
+            None,
+            None,
+            pass,
+            None,
+            &parent,
+            &stage,
+            |phase, dir| {
+                if !conflict && phase == "staged" {
+                    dir.write_atomic("entries", b"write obstruction", false)?;
+                }
+                if conflict && phase == "before_publish" {
+                    std::fs::create_dir(&target)?;
+                }
+                Ok(())
+            },
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error.effect, "applied");
+        assert!(root.join(&stage).is_dir());
+        if conflict {
+            assert_eq!(error.code, "RESTORE_TARGET_EXISTS");
+            assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+            assert_eq!(
+                std::fs::read(root.join(&stage).join("entries/machine-test.md")).unwrap(),
+                fixture().entries[0].content_utf8.as_bytes()
+            );
+        } else {
+            assert!(!target.exists());
+        }
+    }
 }

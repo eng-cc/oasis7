@@ -17,6 +17,12 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 - DistFS probe 预热层：reward worker 启动时仅在 blob set 为空时写入幂等、非敏感 seed；失败局部记录而不阻断主循环。
 - 验收归档层：沉淀 `summary.json`、`summary.md`、`timeline.csv`、节点日志、失败签名与门禁结论。
 
+### 2.1 需求承接与分配表
+
+| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Reward 时间线](s10-five-node-real-game-soak.prd.md#reward-timeline-source-contract) | 原始计数、零分母与缺失值逐列一致 | [导出设计](#reward-timeline-source-design) | QA / reward-runtime 维护者 | 不修改奖励与门禁，不代签真实节点 |
+
 ## 3. 关键接口 / 入口
 - `scripts/s10-five-node-game-soak.sh`
 - `crates/oasis7/src/bin/oasis7_chain_runtime.rs`
@@ -38,3 +44,18 @@ S10 本身不引入 chaos 编排；恢复、故障注入和 state-sync/commit cl
 - 固化 settlement/mint/DistFS/lag 门禁指标。
 - 固化空集 seed 的幂等、非阻断与非证明边界。
 - 与 GWSC 方案对齐 state-sync/commit claim boundary。
+
+<a id="reward-timeline-source-design"></a>
+## Reward 时间线导出
+
+采样层将同一 node/time 的 reward 计数传给 exporter，按固定 header 写入 `total_checks`、`failed_checks` 和比率；S10 还传 settlement attempts/failures。正分母用实际计数计算比率，已知 0/0 保留零计数与空比率，缺失指标保留空数值并回链同次 unavailable 告警。CSV 解析须区分空值与 0，不以独立 aggregate/gate 正确为逐行正确的证明。
+
+本节为 exporter 和消费者应共同满足的设计，不声称当前脚本已修复；不改变 reward 计算、结算、累计摘要聚合或既有门禁。验收按列回读 5/0、5/1、0/0、missing 和 S10 8/1 的离线 fixture，不启动节点。
+
+## 11. 验证设计与可追溯性
+
+### 11.1 验证映射表
+
+| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Reward 时间线](s10-five-node-real-game-soak.prd.md#reward-timeline-source-contract) | [导出设计](#reward-timeline-source-design) | 同次样本、header、分母、空值一致 | 候选版本[现有验证入口](../../../scripts/s10-five-node-game-soak-summary.test.sh)，补充逐行 5/0、5/1、0/0、missing、S10 8/1 fixture；原有 summary 断言不代签新 exporter 回归 | 实施 PR 的输入、CSV、解析断言与实际退出结果 | 本次文档修订不表示回归已运行，不证明真实长跑或结算 |
