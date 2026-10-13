@@ -95,7 +95,7 @@ chain-runtime config/CLI严格范围；budget/base/max backoff与hash mismatch/m
 | 阶段 | PRD-ID | 保留结果/决策 |
 | --- | --- | --- |
 | Phase 1 | MIG-067 | CAS 写删、索引审计、孤儿回收与 manifest 基线。 |
-| Phase 2 | MIG-068 | 本地 challenge request/receipt/validation；非 PoRep/PoSt。 |
+| Phase 2 | MIG-068 | 本地 challenge request/receipt/validation 与聚合统计；非 PoRep/PoSt。 |
 | Phase 3 | MIG-069 | challenge probe 到 reward runtime 的兼容接线；非网络级协调器。 |
 | Phase 4 | MIG-070 | cursor 调度和本地 probe-state 持久化；错误状态仅 best-effort 默认化。 |
 | Phase 5 | MIG-071 | chain-runtime CLI/runtime 配置、模块化与 aggregate report；旧细粒度 report 字段 superseded。 |
