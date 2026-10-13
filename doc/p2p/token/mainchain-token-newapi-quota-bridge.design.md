@@ -59,6 +59,7 @@
   - `beneficiary_ref`
   - `deposit_account_id`
   - `deposit_token`
+  - `route_type`
   - `pricing_version`
   - `topup_plan_id`
   - `expires_at`
