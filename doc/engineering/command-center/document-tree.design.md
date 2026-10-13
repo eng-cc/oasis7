@@ -42,7 +42,7 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 
 结构节点与文件节点分开，树 occurrence 只引用文件键；一个文件被多个父项引用时显示多个引用入口，详情与计数按文件去重。树展开时维护当前祖先集合，遇到循环展示“循环引用”链接并停止该路径展开；交叉域和多对多配对在详情列为关系，不强行放入唯一父子树。排序沿源导航顺序；无序集合按路径稳定排序。
 
-计数标注快照范围、生命周期筛选和去重口径。配对计数只统计已解析 paired_design，不将普通引用或 upstream_requirement 自动提升为配对；无配对、未读取、明确缺失分别计数。生命周期原样保留源声明（包括 `target-contract` 等专业值），另存规范化的已知类别 proposed/draft/active/superseded/retired；其他已声明值归 other，可按原值筛选，只有缺声明才显示 unknown。规范化只提取状态字段首个完整 token（移除包裹反引号并按大小写归一），以空白、中文/英文分号或逗号作为 token 终止符；已知 token 后的说明保留在 raw，不影响类别，例如 draft 后附目标说明归 draft，active 后附 owner 信息归 active，target-contract 保持 other。声明为空或格式歧义时单独标记解析诊断，不猜状态。默认隐藏明确历史类别的叶项，但被当前条款引用时显示历史引用占位。生命周期不决定运行或发布状态。
+计数标注快照范围、生命周期筛选和去重口径。配对计数只统计已解析 paired_design，不将普通引用或 upstream_requirement 自动提升为配对；无配对、未读取、明确缺失分别计数。生命周期原样保留源声明（包括 `target-contract` 等专业值），另存规范化的已知类别 proposed/draft/active/superseded/retired；其他已声明值归 other，可按原值筛选，只有缺声明才显示 unknown。规范化只提取状态字段首个完整 token（移除包裹反引号并按大小写归一），首项若为 Markdown code span，只取该完整 code span 的内容；否则以空白、中文/英文分号、逗号及左右圆括号（含全角括号）作为 token 终止符；已知 token 后的说明保留在 raw，不影响类别，例如 draft 后附目标说明归 draft，active 后附 owner 信息归 active，target-contract 保持 other。声明为空或格式歧义时单独标记解析诊断，不猜状态。默认隐藏明确历史类别的叶项，但被当前条款引用时显示历史引用占位。生命周期不决定运行或发布状态。
 
 <a id="DES-CC-TREE-002"></a>
 
@@ -72,13 +72,57 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 
 UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折叠、Enter 打开详情，IME 组合输入不触发跳转。窄窗口以树/详情两页和返回入口保持阅读上下文；加载、空结果、部分结果与错误分别呈现。数量和预算采用实现后代表性语料验证，不预写性能达标结论。
 
+## 6. 接口合同与关键运行流程
+
+| 接口 | producer → consumer | 身份与版本 | 顺序/重放 | 成功与错误 | 兼容与预算 |
+| --- | --- | --- | --- | --- | --- |
+| 刷新 | UI → Rust application → Git adapter | project/worktree、基线模式/OID、单调 request generation | 相同 generation 重复请求复用进行中尝试；新 generation 使旧尝试不得发布 | 返回 attempt 状态、当前成功 snapshot 和 coverage；取消/超时不发布候选 | 每项目一个刷新；初始 30 秒总期限，超时保留旧值；预算见 §4，实施时验证 |
+| 树查询 | Rust → 同包 UI | schemaVersion、snapshot、view、parent、cursor、filter | 只读重复调用无副作用；cursor 绑定快照和过滤摘要 | 返回分页、coverage；snapshot/cursor 失效要求重新定位，版本不支持报 unsupported | 每页最多 100 个节点；搜索每页最多 100 个命中及祖先，深度最多 64；完整计数不受分页影响 |
+| 详情与打开源 | Rust → UI / 有限宿主入口 | 文件键、snapshot、fragment | 原快照原文优先，打开现行工作树另标版本 | read_error、missing、ambiguous、outside_scope 分别返回；不执行原文命令 | 内容受单文件预算；源打开复用受控 scheme 和路径校验 |
+
+用户刷新先选择基线并取得 generation，Rust 列举候选、读取解析并校验，再按 §7 提交；UI 只在发布成功后切换当前树。失败/取消返回尝试状态及最后成功快照。查询超时不自动重复刷新，用户可重试只读查询；两次选择不同项目不能交叉展示结果。所有期限和资源上限是目标合同，尚未性能验收。
+
+## 7. 状态、事务与持久化
+
+快照状态与源文档生命周期分别存储。Rust application 拥有 attempt 状态机，SQLite 拥有提交事实；UI 接受请求不等于快照已发布。
+
+| 对象/状态 | 触发与转移 | 拒绝/终态及阅读结果 |
+| --- | --- | --- |
+| attempt queued → reading → validating | 用户明确刷新，身份/基线有效，获取该项目刷新槽位 | 无效路径/基线/schema 拒绝，不建立成功快照 |
+| validating → complete | 候选全部完成且前后校验一致，仍是当前 generation | 原子持久化节点/边/coverage 并切换 current pointer 后才为 published；数据库提交失败转 failed |
+| reading/validating → partial | 权限、读取或预算产生已知遗漏 | 独立终态 attempt，保存可用候选与缺口；旧成功 snapshot 保留并标 stale；无旧成功值时显示 partial |
+| queued/reading/validating → failed/cancelled | 超时、用户取消、并发变更或不可恢复解析/存储错误 | 终态、不改 current pointer；记录原因，不自动重扫或重放 |
+| current → stale → current | 当前刷新失败/partial 标 stale；后续 complete 成功可切换 current | stale 是最后成功数据的新鲜度，节点仍绑定原 snapshot；切换项目不取消源事实 |
+
+只有最新 generation 可提交 current pointer；旧请求完成或 UI 已取消时拒绝发布，保留取消原因。整个快照与 pointer 在一个 SQLite 事务提交，进程中断要么保留旧 pointer，要么看到完整新快照，不能出现一半节点和另一版关系。attempt ID 与快照摘要构成幂等键，重复读取结果可复用派生对象但不修改源；异常重开将非终态 attempt 标 abandoned/failed 并保留最后成功 pointer，用户选择刷新才新建 generation。已提交终态不重放。
+
+源文件归仓库 owner，节点/关系/coverage/attempt 归可重建派生缓存，偏好及已有个人数据归用户存储。每项目保留 current、最近一次 partial 和最近 20 条终态尝试元信息，清理先确认未被当前读取引用；个人偏好不随缓存清理删除。被淘汰的 snapshot 查询返回 expired，原视图可按原路径修复定位。快照元信息只含文档路径、摘要、覆盖和错误码，不持久化凭据或私有会话。persisted 以事务成功为据，published 以 pointer 绑定为据，不代表文档语义正确或产品功能已实现。
+
+## 8. 部署、安全与运行约束
+
+沿既有 macOS App 的普通用户 Rust Core 和静态 UI 部署，无新进程、后台调度、凭据或网络来源。用户选择项目与预览范围后只能读取该范围；刷新不授予 Git 写入或执行权限，源文件含命令与链接仍是展示数据。固定提交模式拒绝 symlink blob；工作树模式拒绝文件及祖先 symlink，并在打开/读取时复核对象身份，替换成链接或范围改变即拒绝该候选。路径越界或权限失败不扩大读取范围，其他视图继续使用原数据。
+
+## 9. 质量与容量
+
+| 场景 | 环境与输入 | 预期响应 | 指标/阈值来源 | 验证入口 | 当前范围 |
+| --- | --- | --- | --- | --- | --- |
+| 定位设计 | 真实 macOS App、四域与 engineering 代表语料 | 找到两个专题及明确配对、正确返回 | AC-CC-016 的三分钟任务；记录机器、规模、实际耗时 | §11.1 UI/真实桌面任务 | 未验证 |
+| 预算边界 | 3000 文件、1 MiB 单文件、16 MiB 总量的前后边界及 64 层输入 | 有界读取/分页，显示遗漏与原快照 | 既有预算及 §6 深度/页数，拒绝无限递归 | §11.1 foundation 故障回放 | 未验证 |
+| 异常恢复 | 权限/超时/并发编辑/中途退出/数据库事务失败 | 不发布混合快照，不丢个人数据 | §7 原子性与拒绝条件；重开前后核对 pointer/个人数据 | §11.1 foundation 回放 | 未验证 |
+
+不承诺未测的启动时间、帧率或内存分位数；实施记录样本环境和测量窗口后再提出性能目标。跨平台 Core fixture 只证明逻辑，macOS 读屏/窄窗口必须真实验证。
+
+## 10. 兼容、迁移与回滚
+
+§4 的独立 document_tree_v1 缓存先初始化，再生成新 DTO，成功后开放树入口；旧 Snapshot 和既有视图继续原格式，不双写旧模型。新缓存构建失败禁用树增量并展示原因。回退到本文核对基线的旧 App 时忽略新增表/键，源文件与既有个人记录没有不可逆变更；仅新增树阅读偏好暂不可见。旧库 schema 被未知版本修改或无法打开时保留数据库并报告错误，禁止删库恢复。实施前用实际旧库副本验证旧/新 App 读取及事务失败恢复，不把此设计当作兼容已证明。
+
 ## 11. 验证映射与实施顺序
 
 ### 11.1 验证映射表
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 当前仅设计，无新增程序回归 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注及紧邻全角括号 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 当前仅设计，无新增程序回归 |
 | [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 未验证工作树并发与完整 corpus 性能 |
 | [AC-CC-016](command-center.prd.md#AC-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | 搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
 
