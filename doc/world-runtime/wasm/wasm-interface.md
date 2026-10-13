@@ -263,7 +263,7 @@ fn call(input: Bytes, ctx: ModuleContext) -> Bytes
 - 当 `new_state` 为非空时，运行时记录 `ModuleStateUpdated` 事件并更新模块状态。
 - Pure 模块不得返回 `new_state`，否则视为 InvalidOutput。
 - `tick_lifecycle` 是 ABI 的可选、serde-defaulted 扩展：旧模块输出省略该字段仍可解码，且其既有非-tick 调用行为不变；若该输出来自 tick 调用，缺省的兼容含义是 suspend（不再调度），而不是隐式每 tick 重试。
-- 回归至少覆盖初排、到期、wake、suspend/缺省、零 ticks clamp、调用失败不重排与 snapshot round-trip，并完成 [非空 suffix 与恢复后续跑验证](../runtime/runtime-integration.md#module-tick-journal-replay-validation)。
+- 回归至少覆盖初排、到期、wake、成功 route 的 suspend/缺省、零 ticks clamp，以及失败 route 丢弃业务与 wake 暂存、保留原 schedule 并返回既有结构化错误/失败审计；不承诺自动重试。另覆盖 snapshot round-trip 和 [非空 suffix 与恢复后续跑验证](../runtime/runtime-integration.md#module-tick-journal-replay-validation)。
 **错误约定**
 - 模块返回非规范 CBOR、输出超限或字段缺失时，宿主记录 `ModuleCallFailed` 事件并拒绝输出。
 ## 开放制度扩展合同（试点，非全面迁移）
@@ -703,16 +703,16 @@ AgentCommandResponse = {
 module_id, instance_id)`; a governed non-instance command uses an explicit variant, never global
 fallback. Snapshot hash and bound nonce/context/receipt cover world, branch, finality block/epoch,
 policy hash/epoch, revocation epoch, subject/audience, entries and validity.
-The host builds a catalog by intersecting active module declarations with the current
-subject's non-revoked grants and policy for the requested audience. Entries must be
-sorted and bound to the snapshot's `module_registry_hash`, policy hash, branch,
-finality epoch and revocation epoch. `eligible_grant_ids` is a discovery hint for
-auditability, not a bearer token; exposing it does not confer authority. Provider code
-may turn entries into dynamic tool schemas and return one candidate response, but it
-cannot add a command, alter the subject, substitute a grant, alter the audience, or
-issue a new scope. The response is invalid if its selected entry, envelope schema,
-subject, presenter binding, audience, snapshot id or response nonce does not match the
-request.
+Catalog entries intersect active declarations, the subject's grants and audience policy.
+Verified revoked/superseded grants are excluded without hiding unrelated valid grants;
+history remains persisted. Corrupt signature/authority/proof or unexplained conflicts
+still fail closed; see [discovery validation](../module/module-lifecycle.md#revoked-grant-discovery).
+Sorted entries bind `module_registry_hash`, policy hash, branch, finality and revocation
+epochs. `eligible_grant_ids` is an audit hint, not a bearer token or new authority.
+Providers may derive dynamic schemas and propose a response, but cannot add commands,
+change subject/audience, substitute grants or issue scope. Selected entry, envelope
+schema, subject, presenter binding, audience, snapshot id and response nonce must all
+match the request; execution independently rechecks live authority below.
 The current response may carry a raw `ModuleCommandEnvelope`; the trusted host treats it
 as compatibility input and re-runs declaration/hash/size checks. Once `typed_args` exists,
 only the host encoder produces payload bytes. Provider cannot choose another descriptor,
