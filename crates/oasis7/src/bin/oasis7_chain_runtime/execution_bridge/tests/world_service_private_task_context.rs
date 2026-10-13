@@ -1,4 +1,4 @@
-use super::private_goal_tests::{consumer_retry as consumer, http, http_with_hook};
+use super::private_goal_tests::{consumer, http, http_with_hook};
 use super::*;
 use oasis7::world_service::{
     private_goal_prepare::sign_goal_prepare, private_goal_read::publication,
@@ -180,9 +180,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     )
     .unwrap();
     let prepared = consumer(&dir, &runtime, &signer, &store, &world, |client| {
-        client.prepare_task_context(&proof)
-    })
-    .unwrap();
+        client.prepare_task_context(&proof).unwrap()
+    });
     assert_eq!(
         prepared.snapshot.active_goal.owner_proof.request.content,
         goal.request.content
@@ -286,9 +285,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     competing.client_operation_id = "competing-context".into();
     let competing = sign_read_request(TASK_CONTEXT_PREPARE_PATH, competing, &delegate).unwrap();
     let competing = consumer(&dir, &runtime, &signer, &store, &world, |client| {
-        client.prepare_task_context(&competing)
-    })
-    .unwrap();
+        client.prepare_task_context(&competing).unwrap()
+    });
     let competing_submit = request(
         &world,
         WorldServicePayloadV1::Scheduler(
@@ -318,9 +316,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         .is_ok()
     );
     let captured = consumer(&dir, &runtime, &signer, &store, &world, |client| {
-        client.read_task_context(&get)
-    })
-    .unwrap();
+        client.read_task_context(&get).unwrap()
+    });
     assert_eq!(captured.capture_commit.position, AGE + 7);
     assert_eq!(
         captured
@@ -523,9 +520,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     )
     .unwrap();
     let g2_context = consumer(&dir, &runtime, &signer, &store, &world, |client| {
-        client.prepare_task_context(&g2_prepare)
-    })
-    .unwrap();
+        client.prepare_task_context(&g2_prepare).unwrap()
+    });
     assert_eq!(
         g2_context.snapshot.active_goal.owner_proof.request.content,
         g2.request.content
@@ -556,9 +552,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     )
     .unwrap();
     let g2_captured = consumer(&dir, &runtime, &signer, &store, &world, |client| {
-        client.read_task_context(&g2_get)
-    })
-    .unwrap();
+        client.read_task_context(&g2_get).unwrap()
+    });
     let g2_action = request(
         &world,
         WorldServicePayloadV1::Cognition(
@@ -594,9 +589,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     let expiry_proof =
         sign_read_request(TASK_CONTEXT_PREPARE_PATH, expiry_request, &delegate).unwrap();
     let expiry = consumer(&dir, &runtime, &signer, &store, &world, |client| {
-        client.prepare_task_context(&expiry_proof)
-    })
-    .unwrap();
+        client.prepare_task_context(&expiry_proof).unwrap()
+    });
     assert_eq!(
         expiry.valid_until_tick.0,
         expiry.snapshot.captured_base_binding.base_tick + TASK_CONTEXT_LEASE_TICKS
@@ -692,20 +686,9 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     fresh_request.client_nonce = "91".repeat(32);
     let fresh_proof =
         sign_read_request(TASK_CONTEXT_PREPARE_PATH, fresh_request, &delegate).unwrap();
-    let delay = std::env::var("OASIS7_QA_PRIVATE_CONSUMER_FIRST_RESPONSE_DELAY_MS")
-        .ok()
-        .map(|value| std::time::Duration::from_millis(value.parse().unwrap()))
-        .unwrap_or_default();
-    let fresh = super::private_goal_tests::consumer_retry_delayed(
-        &dir,
-        &runtime,
-        &signer,
-        &store,
-        &world,
-        delay,
-        |client| client.prepare_task_context(&fresh_proof),
-    )
-    .unwrap();
+    let fresh = consumer(&dir, &runtime, &signer, &store, &world, |client| {
+        client.prepare_task_context(&fresh_proof).unwrap()
+    });
     assert_eq!(
         fresh.identity.fence.executor_binding,
         expiry.identity.fence.executor_binding
@@ -733,9 +716,8 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     )
     .unwrap();
     let fresh_captured = consumer(&dir, &runtime, &signer, &store, &world, |client| {
-        client.read_task_context(&fresh_get)
-    })
-    .unwrap();
+        client.read_task_context(&fresh_get).unwrap()
+    });
     let fresh_action = request(
         &world,
         WorldServicePayloadV1::Cognition(

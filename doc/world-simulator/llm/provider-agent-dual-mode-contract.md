@@ -92,6 +92,21 @@
 - `global_optimal_path`
 - 任意未通过玩家正常感知可获得的精确真值
 
+#### 4.3.1 最近事件的逐 Agent 投影
+
+`recent_events` 与请求 envelope 的 `recent_event_summary` 必须来自同一次、同一 Agent、同一 mode 的可见事件投影；不能在 Agent 循环外截取全局 journal 后复制给所有 Agent。先判断事件和字段是否可见，再应用最近事件数量上限；内部 journal 可读不等于玩家感知授权。
+
+| 事件类别 | 可输出条件与摘要字段 | 不能由该事件额外暴露的信息 |
+| --- | --- | --- |
+| 自身动作 accepted/rejected/最终结果 | 关联到本 Agent 的动作；输出动作引用、阶段、结果和玩家可见失败原因 | accepted 不冒充执行成功；内部诊断、其他 Agent 载荷不直接透传 |
+| `AgentMoved` | 自身移动可输出已知起止；其他 Agent 仅输出正常感知到的移动片段及已暴露实体引用、相对位置提示 | 仅因终点可见就公开视野外 `from`；远处 Agent 的精确 `from/to` |
+| `AgentRegistered`、身体或地点状态变化 | 该 Agent 可正常观察对应实体/状态；只输出该观察已允许的字段 | 未揭示的精确位置、属性或隐藏状态 |
+| 意图、问答、Observation 类事件 | 本 Agent/玩家按相应交互合同可见的目标或反馈摘要 | 其他 Agent 的 Observation、内部意图全文、私有推理上下文 |
+| 公共公告 | 事件种类已有明确公告合同；仅使用该合同列出的公开字段 | 将整个治理、模块或经济事件 body 默认当作公告 |
+| 未定义可见规则的事件 | 不进入玩家摘要，待该事件的专业合同明确可见字段 | 因目标 ID 出现在 nearby 列表就透传整个 body |
+
+两份摘要只允许在表现形式上不同，事件集合和字段权限相同。序列化适配与 prompt 拼装不得重新拼入原始 body；`headless_agent` 独立遵循 §4.4，不把本修正解释为所有模式均可读取全局真值。
+
 ### 4.4 `headless_agent` 观测约束
 `headless_agent` 可额外暴露以下结构化辅助信息：
 - `local_navigation_graph`
@@ -159,7 +174,7 @@
   - schema / profile 不匹配：立即阻断并升级配置问题
   - 可恢复观察不足：优先 `inspect_target` 或有界 `wait_ticks`
   - 非法动作：下一轮避免复现相同行为，并在 `last_action.failure_reason` 中可见
-  - 图形链路失败：不应映射为玩法失败；应通过 `fallback_reason` 切到 headless 或 software-safe 调试链路
+  - 图形链路失败：记录 `fallback_reason`，不映射为玩法失败；独立 Agent Runtime 按原有 observation/action 合同及原 execution lane 继续。可以另启隔离的 headless/software-safe 调试链路，但不得静默切换 primary access mode、运行 lane 或观测权限。若实际切 lane，显式记录切换前后 lane、可见性差异和原因，并将后续样本重新归属；headless 增强样本不能计入 player-parity。`fallback_reason` 仅记录原因，不构成切换授权或验收等价证明。此处与[双模式主 PRD](provider-agent-dual-mode.prd.md)对齐，分别区分观战失败、另启调试和实际切换。
 
 ## 7. Mode Metadata Contract
 以下字段必须写入 replay / summary / parity 样本：
@@ -182,6 +197,7 @@
   - contract 文档冻结评审
   - fixture diff：验证 `player_parity` / `headless_agent` 差异仅在观测层
   - schema 元数据校验：所有样本必须携带 `mode/schema version`
+  - 事件可见性离线反例：A 与 B 在彼此视野外，B 的 `AgentMoved` 位于 journal 最近窗口；A 的两份摘要、最终请求 JSON 和 prompt 均不含该移动的精确 body。自身、正常可见移动片段和有公开字段合同的公告分别保留；未知事件默认不输出。此回归验证感知合同，不需要真实 provider。
 - `test_tier_full`
   - 同场景双模式对照采证
   - 偏差分析：成功率、等待时延、失败签名分布

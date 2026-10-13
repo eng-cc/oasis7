@@ -98,208 +98,24 @@ pub(super) fn consumer<T>(
     world: &WorldIdentity,
     call: impl FnOnce(&oasis7::world_service::client::RemoteWorldServiceClient) -> T,
 ) -> T {
-    consumer_delayed(
-        dir,
-        runtime,
-        signer,
-        store,
-        world,
-        std::time::Duration::ZERO,
-        call,
-    )
-}
-pub(super) fn consumer_delayed<T>(
-    dir: &Path,
-    runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
-    signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
-    store: &PrivateGoalStore,
-    world: &WorldIdentity,
-    response_delay: std::time::Duration,
-    call: impl FnOnce(&oasis7::world_service::client::RemoteWorldServiceClient) -> T,
-) -> T {
-    consumer_attempt(
-        dir,
-        runtime,
-        signer,
-        store,
-        world,
-        ConsumerTiming {
-            response_delay,
-            timeout: std::time::Duration::from_secs(5),
-            request_bodies: None,
-        },
-        call,
-    )
-}
-
-pub(super) fn consumer_retry<T>(
-    dir: &Path,
-    runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
-    signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
-    store: &PrivateGoalStore,
-    world: &WorldIdentity,
-    call: impl Fn(
-        &oasis7::world_service::client::RemoteWorldServiceClient,
-    ) -> Result<T, oasis7::world_service::client::WorldServiceClientError>,
-) -> Result<T, oasis7::world_service::client::WorldServiceClientError> {
-    consumer_retry_delayed(
-        dir,
-        runtime,
-        signer,
-        store,
-        world,
-        std::time::Duration::ZERO,
-        call,
-    )
-}
-
-pub(super) fn consumer_retry_delayed<T>(
-    dir: &Path,
-    runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
-    signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
-    store: &PrivateGoalStore,
-    world: &WorldIdentity,
-    first_response_delay: std::time::Duration,
-    call: impl Fn(
-        &oasis7::world_service::client::RemoteWorldServiceClient,
-    ) -> Result<T, oasis7::world_service::client::WorldServiceClientError>,
-) -> Result<T, oasis7::world_service::client::WorldServiceClientError> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-    let bodies = Mutex::new(Vec::new());
-    let mut previous_transport = None;
-    // The deadline bounds starting retries. A dispatched real handler is joined,
-    // never abandoned halfway through persistence; its finish may cross this window.
-    for attempt in 1..=3 {
-        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-        if remaining.is_zero() {
-            return Err(previous_transport.unwrap_or_else(|| {
-                oasis7::world_service::client::WorldServiceClientError::Transport(
-                    "QA retry-start deadline elapsed".into(),
-                )
-            }));
-        }
-        let result = consumer_attempt(
-            dir,
-            runtime,
-            signer,
-            store,
-            world,
-            ConsumerTiming {
-                response_delay: if attempt == 1 {
-                    first_response_delay
-                } else {
-                    std::time::Duration::ZERO
-                },
-                timeout: remaining.min(std::time::Duration::from_secs(5)),
-                request_bodies: Some(&bodies),
-            },
-            &call,
-        );
-        if fixture_transport_retry(&result, attempt, std::time::Instant::now() < deadline) {
-            eprintln!(
-                "qa_private_consumer_transport_retry attempt={attempt} original_signed_proof_retry=true"
-            );
-            previous_transport = result.err();
-            continue;
-        }
-        eprintln!(
-            "qa_private_consumer_recovery attempts={attempt} observed_request_bodies={} same_signed_body=true",
-            bodies.lock().unwrap().len()
-        );
-        return result;
-    }
-    unreachable!("three bounded original-proof attempts")
-}
-
-fn fixture_transport_retry<T>(
-    result: &Result<T, oasis7::world_service::client::WorldServiceClientError>,
-    attempt: u32,
-    within_deadline: bool,
-) -> bool {
-    matches!(
-        result,
-        Err(oasis7::world_service::client::WorldServiceClientError::Transport(_))
-    ) && attempt < 3
-        && within_deadline
-}
-#[test]
-fn private_fixture_retry_preserves_domain_errors_and_attempt_deadline_bounds() {
-    use oasis7::world_service::client::WorldServiceClientError;
-    let transport: Result<(), _> =
-        Err(WorldServiceClientError::Transport("closed response".into()));
-    assert!(fixture_transport_retry(&transport, 1, true));
-    assert!(fixture_transport_retry(&transport, 2, true));
-    assert!(!fixture_transport_retry(&transport, 3, true));
-    assert!(!fixture_transport_retry(&transport, 1, false));
-    for error in [
-        WorldServiceClientError::Assurance("signature".into()),
-        WorldServiceClientError::Configuration("invalid config".into()),
-        WorldServiceClientError::Rejected {
-            status: 409,
-            message: "domain denial".into(),
-        },
-        WorldServiceClientError::Cooldown {
-            status: 429,
-            retry_after: std::time::Duration::from_secs(1),
-        },
-    ] {
-        assert!(!fixture_transport_retry(&Err::<(), _>(error), 1, true));
-    }
-    assert!(!fixture_transport_retry(
-        &Ok::<(), WorldServiceClientError>(()),
-        1,
-        true
-    ));
-}
-
-struct ConsumerTiming<'a> {
-    response_delay: std::time::Duration,
-    timeout: std::time::Duration,
-    request_bodies: Option<&'a Mutex<Vec<Vec<u8>>>>,
-}
-fn consumer_attempt<T>(
-    dir: &Path,
-    runtime: &Arc<Mutex<oasis7_node::NodeRuntime>>,
-    signer: &crate::feedback_submit_api::FeedbackSubmitSigner,
-    store: &PrivateGoalStore,
-    world: &WorldIdentity,
-    timing: ConsumerTiming<'_>,
-    call: impl FnOnce(&oasis7::world_service::client::RemoteWorldServiceClient) -> T,
-) -> T {
-    assert!(
-        timing.response_delay <= std::time::Duration::from_millis(5500),
-        "bounded QA response delay"
-    );
     use oasis7::world_service::client::{RemoteWorldServiceClient, WorldServiceClientConfig};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    // Functional recovery requests rebuild current/historical worlds and fsync
+    // private records. Keep a finite CI budget without imposing a 5s latency SLA.
+    let request_timeout = std::time::Duration::from_secs(30);
     let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
         endpoint: format!("http://{}", listener.local_addr().unwrap()),
         trusted_service_public_key: signer.public_key_hex.clone(),
         expected_world: world.clone(),
         scope_id: "agent:agent-a".into(),
         read_private_key_hex: signer.private_key_hex.clone(),
-        timeout: timing.timeout,
+        timeout: request_timeout,
         max_response_bytes: 65536,
     })
     .unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let stop = std::sync::atomic::AtomicBool::new(false);
     std::thread::scope(|scope| {
         let serving = scope.spawn(|| {
-            let accept_deadline = std::time::Instant::now() + timing.timeout;
-            let mut stream = loop {
-                match listener.accept() {
-                    Ok((stream, _)) => break stream,
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        if stop.load(std::sync::atomic::Ordering::SeqCst)
-                            || std::time::Instant::now() >= accept_deadline { return; }
-                        std::thread::sleep(std::time::Duration::from_millis(1));
-                    }
-                    Err(error) => panic!("private fake consumer accept failed: {error}"),
-                }
-            };
-            stream.set_read_timeout(Some(timing.timeout)).unwrap();
-            stream.set_write_timeout(Some(timing.timeout)).unwrap();
+            let (mut stream, _) = listener.accept().unwrap();
             let mut bytes = Vec::new();
             while !bytes.ends_with(b"\r\n\r\n") {
                 let mut byte = [0; 1];
@@ -318,49 +134,30 @@ fn consumer_attempt<T>(
                 .trim()
                 .parse::<usize>()
                 .unwrap();
-            assert!(length <= 65536, "bounded private fixture body");
             let mut body = vec![0; length];
             stream.read_exact(&mut body).unwrap();
-            if let Some(original) = timing.request_bodies {
-                let mut observed = original.lock().unwrap();
-                if let Some(first) = observed.first() {
-                    assert!(&body == first, "Transport retry must preserve exact signed request body");
-                }
-                observed.push(body.clone());
-            }
             bytes.extend(body);
-            // QA-only successful-response causal probe: keep signed bytes unchanged.
-            std::thread::sleep(timing.response_delay);
+            let request_started = std::time::Instant::now();
             let handled = crate::world_service_api::private_goal::maybe_handle(
-                    &mut stream,
-                    &bytes,
-                    runtime,
-                    "POST",
-                    &path,
-                    "w1",
-                    &dir.join("world"),
-                    &dir.join("records"),
-                    &dir.join("store"),
-                    signer,
-                    Some(store)
-                );
-            match handled {
-                Ok(true) => {},
-                Err(error) if error == "private response write failed" => {
-                    eprintln!("qa_private_consumer_response_write_failed=true original_request_retained=true");
-                }
-                other => panic!("private fake consumer dispatcher failed: {other:?}"),
-            }
+                &mut stream,
+                &bytes,
+                runtime,
+                "POST",
+                &path,
+                "w1",
+                &dir.join("world"),
+                &dir.join("records"),
+                &dir.join("store"),
+                signer,
+                Some(store),
+            );
+            eprintln!(
+                "private HTTP fixture {path}: handler_elapsed={:?}, client_timeout={request_timeout:?}",
+                request_started.elapsed()
+            );
+            assert!(handled.unwrap());
         });
-        struct StopOnDrop<'a>(&'a std::sync::atomic::AtomicBool);
-        impl Drop for StopOnDrop<'_> {
-            fn drop(&mut self) {
-                self.0.store(true, std::sync::atomic::Ordering::SeqCst);
-            }
-        }
-        let guard = StopOnDrop(&stop);
         let result = call(&client);
-        drop(guard);
         serving.join().unwrap();
         result
     })

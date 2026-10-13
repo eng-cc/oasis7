@@ -24,7 +24,7 @@
 - `oasis7_init_demo` 支持 `--scenario-file` 从 JSON 文件加载场景。
 
 ### Out of Scope
-- 运行时从任意路径加载自定义场景文件（仅内置文件）。
+- 通用生产 runtime 的任意路径场景热加载或热更新；已支持的 `oasis7_init_demo --scenario-file` 初始化时读取显式 JSON 文件不在此排除项内。
 - 复杂场景 DSL（条件生成、随机分布等）。
 - 场景文件的版本迁移工具。
 
@@ -57,10 +57,11 @@
 
 > `origin.pos` 仍支持 `center` / `center_offset` / `absolute`，仅用于 origin 的显式定位。
 
+<a id="scenario-loading-contract"></a>
 ### 加载策略
-- 场景文件通过 `include_str!` 嵌入编译产物，避免运行时 I/O。
-- `WorldInitConfig::from_scenario` 读取场景文件并生成初始化配置。
-- `oasis7_init_demo --scenario-file` 走运行时加载路径，便于调试自定义场景文件。
+- 内置场景通过 `include_str!` 嵌入编译产物，`WorldInitConfig::from_scenario` 使用该嵌入配置，避免运行时场景文件 I/O；修改内置 JSON 后须重新编译对应程序。
+- `oasis7_init_demo --scenario-file <path>` 在本次初始化时通过 `WorldScenarioSpec::load_from_path` 读取显式 JSON；修改该外部文件后重新运行 demo 即可，无需仅为场景数据重编译。
+- 两条加载路径使用相同场景解析、effective config 和初始化校验；demo 例外不构成生产 runtime 热加载承诺。
 
 ## 5. Risks & Roadmap
 - **F1**：输出场景文件设计文档。
@@ -69,7 +70,7 @@
 ### Technical Risks
 - 场景文件与代码结构漂移导致解析失败。
 - 相对位置表达不当引入边界越界风险。
-- 场景文件修改需要重新编译才能生效。
+- 修改嵌入的内置 JSON 需重编译；demo 自定义 JSON 的风险是给定文件不可读或解析/初始化失败，不能静默改用内置场景。
 
 ## 场景测试覆盖矩阵（2026-02-06）
 
@@ -90,9 +91,32 @@
 | `asteroid_fragment_twin_region_bootstrap` | 碎片分块 + 双区域结构联动（无默认设施） | `asteroid_fragment_twin_region_bootstrap_seeds_fragments_and_regions`、`scenarios_are_stable`、`oasis7_init_demo_runs_asteroid_fragment_twin_summary` |
 | `asteroid_fragment_triad_region_bootstrap` | 碎片分块 + 三区域结构联动（无默认设施） | `asteroid_fragment_triad_region_bootstrap_seeds_fragments_and_regions`、`scenarios_are_stable`、`oasis7_init_demo_runs_asteroid_fragment_triad_summary` |
 
-场景说明补充：
-- `asteroid_fragment_detail_bootstrap` 设计用于 viewer 细粒度 location 渲染回归，默认关闭 origin 与 agents，避免干扰观察。
-- 建议在 Web 闭环中配合主入口或 `software_safe` 回归脚本使用对应场景。
+### 场景初始化与消费入口矩阵
+
+此表区分初始 Simulator 模型与 Runtime 对外快照，不能从场景 JSON 解析成功推断各入口保留同一模型。
+
+| 入口 | 初始模型与默认实体语义 | 可证明范围 |
+| --- | --- | --- |
+| Simulator `build_world_model` / `initialize_kernel`；`oasis7_init_demo` | 按场景的 origin、agents、bootstrap chunks 和显式设施装配 | 场景初始状态；`asteroid_fragment_detail_bootstrap` 保留四个 bootstrap chunks、关闭 origin、Agent 数为 0 |
+| 普通 named runtime-live `--scenario`（含 Web 回归脚本转发） | 把 Simulator 配置投影为 Runtime；不保留完整 Simulator seed model，空 Agent 集会补 Runtime 默认 Agent | Runtime 调试启动/投影；不能用作纯碎片、零 Agent 的初始模型保留证据 |
+| runtime-live `--generated-world-dir` | 当前只检查 provenance 路径是文件，再加载 generated-world sidecar；保留 seed model 参与快照映射，仍使用 Runtime Agent 投影 | 仅证明 sidecar 可加载和该消费者的模型映射；不证明 provenance 内容与 sidecar 对应或生成可复现，也不能等同于 named `--scenario` 或自动保证零 Agent |
+
+`asteroid_fragment_detail_bootstrap` 的纯碎片回归目前推荐 Simulator 离线初始化入口；普通 Web 主入口或 `software_safe` 脚本的 `--scenario` 不满足该条件。未来若提供 Web 专项入口，须显式定义 debug-only 模型保留和默认 Agent 处理，不能无条件改变正式 Runtime。
+
+推荐纯碎片入口的验收应读取初始模型/快照，逐项核对 JSON 指定的四个 bootstrap chunk 的碎片均保留、无补入的默认 Agent、origin 未注入；只校验 JSON 可解析、模型非空或网页已加载均不足。此要求不宣称已有 Web 入口通过，也不覆盖 live refill 的 enabled/available 边界。
+
+<a id="generated-world-provenance-contract"></a>
+### generated-world 来源与可复现声明
+
+当前 [`bootstrap_generated_sidecar_runtime_world_with_chunk_runtime`](../../../crates/oasis7/src/viewer/runtime_live/support.rs) 对 `world-generation-provenance.json` 仅调用 `is_file()`，不解析 JSON，也不比较 seed、场景配置、manifest 或 sidecar 内容。文件存在只满足当前调试加载的前置条件，不能把加载成功写成“来源已验证”或“同输入可复现”。
+
+以下是允许作出上述声明的目标验收条件，尚未由该加载入口实现：
+
+- provenance 必须可解析，`artifact_kind` 与生成工件类型相符；`scenario_id`、场景 `config` 和 `seed` 必须与实际采用的场景及有效初始化输入一致。需核对载入快照的 seed、有效配置和初始化模型，不能只检查两个标签相同。
+- 必须核验实际消费的 public manifest 字节摘要及条目数，并将 provenance 与同次生成的 sidecar `snapshot.json` / `journal.json` 绑定到可重算的内容摘要；加载时重算并比较这组绑定。相同目录、文件名或 seed 不构成内容绑定，`public_manifest_sha256` 也不是 sidecar 的摘要。当前 provenance 的六个字段没有提供 sidecar 内容绑定，这仍是生成与消费实现的缺口。
+- 可复现声明还须固定生成程序版本、场景输入、effective `WorldConfig`/fragment 配置及 chunk trigger order，并以独立重建的初始模型、预算和 journal 比较支持结论。当前 provenance 的 `config` 保存场景 spec，不能单独代表它未显式覆盖的全部有效默认值；加载现成快照也不能替代重建比较。
+
+验收至少覆盖一致产物、非法或缺失 provenance、seed 不匹配、同 seed 的不同配置/sidecar，以及 manifest 不匹配。无法建立绑定时，结果只能是来源未验证；明确不匹配则报告对应原因，不得填为验证通过。当前存在检查与未来内容验证应分别记录，补齐文档不代表加载器已拒绝所有不匹配样本，也不引入新的生产热加载入口。
 
 ## 物流瓶颈验证口径（2026-02-14）
 

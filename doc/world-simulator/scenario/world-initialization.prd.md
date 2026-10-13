@@ -34,6 +34,7 @@
 
 ## 4. Technical Specifications
 
+<a id="init-explicit-facilities"></a>
 ### 关键结构
 - `WorldInitConfig`
   - `seed: u64`
@@ -42,29 +43,20 @@
   - `asteroid_fragment: AsteroidFragmentInitConfig`（小行星带碎片生成配置）
   - `agents: AgentSpawnConfig`
   - `power_plants: Vec<PowerPlantSeedConfig>`
-- `WorldScenario`
-  - `minimal`：原点 + 1 Agent，不启用小行星带碎片
-  - `two_bases`：原点 + 2 个基地地点 + 2 Agent，不启用小行星带碎片
-  - `power_bootstrap`：原点 + 1 Agent + 基础发电设施
-  - `resource_bootstrap`：原点 + 1 Agent + 初始电力/硬件/数据库存
-  - `twin_region_bootstrap`：双区域 + 双 Agent + 基础发电与资源库存
-  - `triad_region_bootstrap`：三区域 + 三 Agent + 分层电力与资源库存
-  - `triad_p2p_bootstrap`：三 P2P 节点 + 3 Agent（Agent 出生地点由 seed 随机）
-  - `asteroid_fragment_bootstrap`：小行星带碎片开启 + 原点 + 1 Agent + 发电设施与基础资源
-  - `asteroid_fragment_twin_region_bootstrap`：小行星带碎片开启 + 双区域 + 双 Agent + 基础电力与资源
-  - `asteroid_fragment_triad_region_bootstrap`：小行星带碎片开启 + 三区域 + 三 Agent + 基础电力与资源
-  - 场景定义文件：`crates/oasis7/scenarios/*.json`（编译期嵌入）
+- `WorldScenario` 的场景能力与覆盖测试以[场景文件主矩阵](scenario-files.prd.md#场景测试覆盖矩阵2026-02-06)为唯一完整清单；本页只解释初始化用途，不再维护第二份能力表。
+  - 场景定义文件：`crates/oasis7/scenarios/*.json`（编译期嵌入）。
+  - 只有 `power_bootstrap` 显式声明默认发电设施；`twin_region_bootstrap`、`asteroid_fragment_bootstrap` 的默认设施数均为 0。初始电力资源库存不等于发电设施。
 
 ### 场景使用建议
 - `minimal`：用于测试核心流程或最小单 Agent 回归。
 - `two_bases`：用于验证多地点移动与基础互动。
 - `power_bootstrap`：用于验证发电设施路径。
 - `resource_bootstrap`：用于验证资源库存与交易/消耗逻辑。
-- `twin_region_bootstrap` / `triad_region_bootstrap`：用于验证多区域资源/设施差异与运输成本。
+- `twin_region_bootstrap` / `triad_region_bootstrap`：用于验证多区域结构、资源分布与运输成本；设施差异必须另行提供显式 `power_plants` 的自定义 JSON/初始化配置。
 - `triad_p2p_bootstrap`：用于验证 P2P 多节点拓扑与节点内 Agent 初始分布。
 - `asteroid_fragment_bootstrap`：用于验证小行星带碎片/辐射采集与热管理路径。
-- `asteroid_fragment_twin_region_bootstrap`：用于验证小行星带碎片下的多区域资源/设施差异与运输成本。
-- `asteroid_fragment_triad_region_bootstrap`：用于验证小行星带碎片下的三方资源/设施差异与协作/竞争。
+- `asteroid_fragment_twin_region_bootstrap`：用于验证小行星带碎片下的多区域结构与运输成本，不默认注入设施。
+- `asteroid_fragment_triad_region_bootstrap`：用于验证小行星带碎片下的三方结构与协作/竞争；需要设施的用例须显式声明 `power_plants`。
 
 ### 场景别名
 - `two_bases`：`two-bases`
@@ -114,16 +106,19 @@
 - `WorldInitError`
   - 越界位置、ID 冲突、出生地点缺失、负资源等错误
 
+<a id="init-time-events"></a>
 ### 初始化语义
 - 初始化在**时间 0** 完成：
   - `WorldKernel.time = 0`
-  - `journal` 为空（初始化视为“世界既成事实”）。
+  - 时间 0 不等于 `journal` 必为空。启用碎片且已生成 chunk 时，`initialize_kernel` 会记录 `ChunkGenerated`、`cause=Init`；关闭碎片或没有生成 chunk 的路径仍可为空。
+  - snapshot 承载完整初始状态；chunk 初始化事件仅承载专业合同声明的生成事实，不能据此声称 origin、自定义地点、Agent、设施等全部对象均可只靠事件重建。事件与回放范围见[分块生成合同](chunked-fragment-generation.prd.md)。
 - 生成过程使用 `WorldConfig` 的 `space/asteroid_fragment/power` 配置。
 - 任意初始化入口写入 `WorldModel` 时，位置坐标都必须已经满足 `SPACE_UNIT_CM=1` 的整数厘米合同；不接受也不持久化 sub-cm 坐标。
 - 生成顺序：origin → custom locations → asteroid fragments → agents → facilities（确保依赖对象已存在）。
 - `LocationSeedConfig` / `PowerPlantSeedConfig` / 后续 `Factory` 站点绑定继续使用 `location_id` 作为离散原生分辨率；其物理真值由对应 `Location.pos` 与 `Location.profile.radius_cm` 提供，不支持初始化阶段写入 sub-location offset。
 - 场景模板通过 `WorldInitConfig::from_scenario(scenario, config)` 生成初始化配置。
 - 场景文件由 `WorldScenario` 加载并转换为 `WorldInitConfig`。
+- 本节约束 Simulator 初始化；named runtime-live 与 generated-world 的保留/投影差异见[消费入口矩阵](scenario-files.prd.md#场景初始化与消费入口矩阵)，不以 Runtime 默认实体补入行为改写场景模型合同。
 
 ### 示例工具
 - `oasis7_init_demo`：命令行示例，按场景生成世界并输出统计摘要。
@@ -147,7 +142,8 @@
 ### Technical Risks
 - 默认小行星带碎片生成可能导致初始化耗时波动（需可配置关闭）。
 - 依赖浮点随机数的确定性：需确保同平台可复现。
-- 初始化不写入事件日志，可能影响“完整事件回放”场景。
+- 初始状态不全部由 journal 描述；消费方须按 snapshot 与已声明事件的覆盖范围恢复，不因时间 0 存在合法 Init 事件而清空日志。
 
 ## 6. Validation & Decision Record
+- 文档/离线回归分别覆盖：两个默认区域/碎片场景设施数 0、`power_bootstrap` 显式设施正例、自定义设施声明；时间 0 下 enabled chunk 的 Init 事件与 fragment-disabled 路径。复用 `simulator/tests/init.rs`、`simulator/tests/persist.rs` 的对应测试，文档核对不代签运行结果。
 - 追溯: GitHub task issue evidence 与 Git history 保留原实施过程；本文与 design 保持现行约束语义。
