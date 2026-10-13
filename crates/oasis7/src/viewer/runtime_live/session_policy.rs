@@ -367,6 +367,55 @@ impl RuntimeSessionPolicy {
     }
 }
 
+pub(super) fn normalize_optional_string(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+pub(super) fn session_revoke_metadata_key(
+    player_id: &str,
+    session_pubkey: &str,
+) -> (String, String) {
+    (
+        player_id.trim().to_string(),
+        session_pubkey.trim().to_string(),
+    )
+}
+
+pub(super) fn map_session_policy_error_code(message: &str) -> &'static str {
+    if message.contains("hosted_authorization_expired") {
+        return "hosted_authorization_expired";
+    }
+    if message.contains("hosted_authorization_required") {
+        return "hosted_authorization_required";
+    }
+    if message.contains("hosted_authorization") {
+        return "hosted_authorization_invalid";
+    }
+    if message.contains("session_revoked") {
+        return "session_revoked";
+    }
+    if message.contains("session_key_mismatch") {
+        return "session_key_mismatch";
+    }
+    if message.contains("session_not_found") {
+        return "session_not_found";
+    }
+    if message.contains("session_pubkey_invalid")
+        || message.contains("session_player_id_invalid")
+        || message.contains("session_rotation_invalid")
+    {
+        return "session_invalid";
+    }
+    "session_policy_error"
+}
+
+pub(super) fn location_id_for_pos(pos: GeoPos) -> String {
+    format!("runtime:{}:{}:{}", pos.x_cm, pos.y_cm, pos.z_cm)
+}
+
 #[cfg(test)]
 mod hosted_authorization_tests {
     use super::*;
@@ -493,53 +542,4 @@ mod hosted_authorization_tests {
             );
         }
     }
-}
-
-pub(super) fn normalize_optional_string(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-pub(super) fn session_revoke_metadata_key(
-    player_id: &str,
-    session_pubkey: &str,
-) -> (String, String) {
-    (
-        player_id.trim().to_string(),
-        session_pubkey.trim().to_string(),
-    )
-}
-
-pub(super) fn map_session_policy_error_code(message: &str) -> &'static str {
-    if message.contains("hosted_authorization_expired") {
-        return "hosted_authorization_expired";
-    }
-    if message.contains("hosted_authorization_required") {
-        return "hosted_authorization_required";
-    }
-    if message.contains("hosted_authorization") {
-        return "hosted_authorization_invalid";
-    }
-    if message.contains("session_revoked") {
-        return "session_revoked";
-    }
-    if message.contains("session_key_mismatch") {
-        return "session_key_mismatch";
-    }
-    if message.contains("session_not_found") {
-        return "session_not_found";
-    }
-    if message.contains("session_pubkey_invalid")
-        || message.contains("session_player_id_invalid")
-        || message.contains("session_rotation_invalid")
-    {
-        return "session_invalid";
-    }
-    "session_policy_error"
-}
-
-pub(super) fn location_id_for_pos(pos: GeoPos) -> String {
-    format!("runtime:{}:{}:{}", pos.x_cm, pos.y_cm, pos.z_cm)
 }

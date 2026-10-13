@@ -1,6 +1,10 @@
 use super::*;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn release_hosted_session(
         &mut self,
         request: crate::viewer::HostedSessionReleaseRequest,

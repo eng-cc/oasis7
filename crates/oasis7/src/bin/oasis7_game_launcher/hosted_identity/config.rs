@@ -13,9 +13,6 @@ pub(crate) struct IdentityConfig {
     pub trusted_proxy_loopback: bool,
 }
 
-#[cfg(test)]
-#[path = "config_tests.rs"]
-mod config_tests;
 impl IdentityConfig {
     pub fn from_env() -> Result<Option<Self>, String> {
         if env::var("OASIS7_HOSTED_IDENTITY_V2_ENABLED")
@@ -128,3 +125,7 @@ impl IdentityConfig {
         }))
     }
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod config_tests;
