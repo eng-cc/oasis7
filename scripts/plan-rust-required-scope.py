@@ -188,11 +188,27 @@ def select(config, base, source_head, test_head=None, additions=()):
     full = False
     support_rule = False
     try:
-        # Selection covers both source diff and the actual tested merge combination.
+        # Push/source-only checks retain the event range. For PR merge checks,
+        # exclude target history already present in the actual first parent.
+        graph_refs = [base, source_head, test_head or source_head]
         paths = changed_paths(base, source_head)
         if test_head and test_head != source_head:
-            paths = list(dict.fromkeys(paths + changed_paths(base, test_head)))
-        graphs = [cargo_graph(ref) for ref in dict.fromkeys([base, source_head, test_head or source_head])]
+            source_oid = git('rev-parse', source_head + '^{commit}').decode().strip()
+            base_oid = git('rev-parse', base + '^{commit}').decode().strip()
+            parents = git('show', '-s', '--format=%P', test_head).decode().split()
+            if len(parents) != 2 or parents[1] != source_oid:
+                raise ValueError('tested commit is not a target/source merge')
+            target = parents[0]
+            if git('merge-base', base_oid, target).decode().strip() != base_oid:
+                raise ValueError('event base is not an ancestor of tested target')
+            forks = git('merge-base', '--all', target, source_oid).decode().split()
+            if len(forks) != 1:
+                raise ValueError('ambiguous source/target merge base')
+            source_base = forks[0]
+            paths = list(dict.fromkeys(changed_paths(source_base, source_oid)
+                                       + changed_paths(target, test_head)))
+            graph_refs.extend([source_base, target])
+        graphs = [cargo_graph(ref) for ref in dict.fromkeys(graph_refs)]
         for path in paths:
             if any(fnmatch.fnmatchcase(path, pattern) for pattern in CONTROL):
                 full = True
