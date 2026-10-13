@@ -189,15 +189,15 @@
   - `testing-manual.md`
   - 各模块 `doc/<module>/prd.md`、design/evidence 与 README / `prd.index.md`
   - PR、实际 CI 与评审记录（Issue 按需）
-  - pre-PR local role review evidence packet
+  - 按现行开发流程进行的适用评审记录（不要求额外通用放行材料）
 - Edge Cases & Error Handling:
   - 模块入口失效：若目标路径迁移，core 必须同步更新导航并保留可追溯说明。
   - 信息缺失：若模块 PRD 尚未更新，标记“口径待同步”并阻断发布结论。
-  - 版本漂移：core 与分册冲突时，以最近审阅通过版本为准并触发修复任务。
+  - 版本漂移：先按争议内容和声明 scope 确定 authority，再在同一 authority 内比较审定版本；较新日期不产生跨域覆盖权。范围不明或跨域冲突由对应责任人显式决定，并同步受影响条款，见 [权威裁决](../engineering/doc-governance/doc-structure-standard.design.md#doc-authority-resolution)。
   - 依赖冲突：同一链路被多个模块修改时，需合并影响面并重跑 required 级验证。
   - 测试证据缺口：无证据不得判定链路通过，必须补齐最小 required 证据。
   - 术语冲突：同术语多定义时优先使用 core 词典并登记决策记录。
-  - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按当前 `.pm` task owner、正式专题文档与 pre-PR role review evidence 裁定，并回写 core / project。
+  - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按正式专题的职责范围与当前明确负责人协调；core 记录跨域决定，PR/评审及按需 Issue 记录执行事实，不依赖退役 `.pm` task owner 或额外角色回执。
   - Git、PR 与实际 CI 记录 缺承接：若 P0 项在 PRD 已定义但对应任务未承接，状态只能记为 `candidate`，不得进入发布结论。
   - 证据格式未统一：若测试闭环可跑但证据包未统一格式，仅可记为 `conditionally_ready`，不得视作 fully ready。
   - 资源抢占：若 launcher / explorer 新需求与 P0 资源冲突，默认降级到 P2，除非能直接服务玩法闭环或发布门禁。
@@ -206,7 +206,7 @@
   - NFR-CORE-2: 跨模块评审时，影响面识别耗时 <= 30 分钟。
   - NFR-CORE-3: 发布评审前，PRD-ID 到测试证据映射完整率 100%。
   - NFR-CORE-4: 所有核心术语变更需在 1 个工作日内同步到相关入口文档。
-  - NFR-CORE-5: core 主文档维持 <= 1000 行，超限必须拆分分册。
+  - NFR-CORE-5: core 文档长度仅作编辑参考；按语义与维护成本决定是否拆分，不因超过 1000 行阻断或要求长度豁免。
   - NFR-CORE-6: P0 项的 owner / 输入 / 输出 / 验收标准 / 阻断条件覆盖率 100%。
   - NFR-CORE-7: 发布评审时 P0 证据缺失数必须为 0；P1 可存在未完成项，但必须附带风险与缓解方案。
   - NFR-CORE-8: 跨角色证据交接在 PRD / project / PR、实际 CI 与评审记录（Issue 按需） / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。

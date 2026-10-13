@@ -115,7 +115,24 @@
 - Non-Goals:
   - 不在 site PRD 中定义 runtime/p2p 低层实现。
   - 不覆盖内部测试流程细节（由 testing 模块负责）。
-  - 本轮不重做 deck、story、manual 或 docs hub，不引入 SPA/构建系统，不新增概念图，也不改变 runtime、installer 或 release 能力。
+  - 不重做 deck、story、manual 或 docs hub，不引入 SPA/构建系统，不新增概念图，也不改变 runtime、installer 或 release 能力；现有故事入口和章节状态的有界正确性修复按下节合同执行。
+
+<a id="story-entry-and-state-contract"></a>
+### 故事首访与章节状态合同
+
+承接 PRD-SITE-002 的公开入口可用性；设计见 [故事路由与状态机](design.md#story-reader-design)。
+本节只修现有故事页的入口和阅读行为，不要求翻译正文、新增英文故事页、重写小说或引入 SPA。
+
+| 专业验收 | 用户可观察结果 |
+| --- | --- |
+| STORY-AC-1 | 干净英文首选浏览器直达 `/story/` 或 `/story/index.html` 时，保留有内容的中文页面并可加载章节；只对明确有对应语言页面的入口自动选语言 |
+| STORY-AC-2 | 手动选择优先并持久化；首页双语、文档路径排除、根域/项目子路径及 query/hash 均保持，单语言页面不消耗首页首次语言判断 |
+| STORY-AC-3 | 页面只显示当前章节的真实 `loading/ready/error/empty` 状态；生产页面不显示状态示例集合，不虚构阅读进度同步故障 |
+| STORY-AC-4 | 404/网络失败进入 error，提供当前章节重试或实际原文入口；200 空串/全空白进入 empty，不宣告正文已加载；正常内容进入 ready |
+| STORY-AC-5 | 快速切章时，旧请求的成功或失败都不能覆盖最新章节、选中项、状态或 aria-busy；重试仍针对当前选择 |
+
+以同一候选从干净英文直达故事入口后继续覆盖延迟、失败、空白、正常与快速切换矩阵，回归首页和文档入口。
+静态链接检查和 Pages CI 只证明各自静态合同，不能替代上述行为及适用浏览器/视觉验证；未运行的场景保持未验证。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 静态站构建链路、链接检查、截图/视觉基线流程。

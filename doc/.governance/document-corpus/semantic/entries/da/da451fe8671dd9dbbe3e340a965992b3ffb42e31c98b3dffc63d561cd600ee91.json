@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "3af6d2bb2ca3f46dc06db153f4770a5c1dbd2c8fd1d025b5e6535cd843643dac",
+    "content_sha256": "88cc254ee58f8a24e89b33a8caebc5362b7795c802036f8a419f778b8f276bff",
     "current_authority": "doc/site/prd.md",
     "decision_owner": "viewer_engineer",
     "disposition": "retain_current_authority",
-    "note": "current visual interaction and evidence-routing contract; retired workflow metadata updated, domain authority retained",
+    "note": "current visual interaction and evidence-routing contract retained; author self-review of story route allowlist, mutually exclusive reader state and request-race validation design; browser behavior and independent approval not claimed",
     "path": "doc/site/design.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

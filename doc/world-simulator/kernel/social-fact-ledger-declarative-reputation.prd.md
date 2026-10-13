@@ -27,7 +27,7 @@
 - 最小语义内核：内核只记录可验证事实与状态，不强行解释含义。
 - 多制度并存：不同 schema/关系维度可并行存在、互不覆盖。
 - 证据优先：事实必须携带可追溯证据引用（事件或动作）。
-- 争议可闭环：任何事实可被质疑，并由治理动作给出终局裁决。
+- 争议可闭环：符合当前生命周期与资格条件的事实可被质疑，并由有权动作给出终局裁决；历史挑战不是重开终态的许可。
 - 事件溯源：所有状态变更均以事件入账，可回放还原。
 
 ## 3. AI System Requirements (If Applicable)
@@ -131,13 +131,36 @@
 - `schema_id` / `claim` / `relation_kind` 必须非空。
 - `confidence_ppm` 必须在闭区间 `[1, 1_000_000]`。
 - `evidence_event_ids` 必须非空，且所有事件 ID 均已存在。
-- `backing_fact_ids` 必须全部存在，且不可引用 `Retracted/Revoked` 事实。
+- `backing_fact_ids` 必须全部存在，且仅允许引用 `Active/Confirmed` 事实；不可引用 `Challenged/Retracted/Revoked/Expired` 事实。
 - 仲裁权限：v1 当前可表示的 `ResourceOwner` 中仅事实发布者可仲裁；`ResourceOwner::World` 保留为设计目标，但尚未在 simulator owner ABI 中表示。
 - 撤销权限：仅事实发布者可撤销。
 - 过期规则：带 `ttl_ticks` 的事实/关系在到期 tick 自动标记 `Expired`。
-- 质押规则：若设置 `stake`，发布/质疑动作先扣减资源；
-  - 仲裁 `Confirm`：质疑者质押记入系统池；
-  - 仲裁 `Retract`：发布者质押记入系统池。
+- 质押规则：设置 stake 的动作必须先完成全部无副作用资格检查，再扣减并提交对应事实/挑战记录；拒绝请求不得部分扣资源。
+  - 仲裁 `Confirm`：质疑者质押记入系统池，发布者剩余质押按已有结算规则归还。
+  - 仲裁 `Retract`：发布者质押记入系统池，质疑者剩余质押按已有结算规则归还。
+
+<a id="social-lifecycle-contract"></a>
+### 生命周期与拒绝不变性
+
+本节限定 Simulator 已有社会动作及游戏资源，不增加社会玩法、仲裁权限、真实货币或 runtime-live 的可达性承诺。
+设计与验证见 [状态机与资源提交](social-fact-ledger-declarative-reputation.design.md#social-lifecycle-design)。
+
+| 当前事实 | Challenge | Adjudicate（Confirm/Retract） |
+| --- | --- | --- |
+| 不存在 | 拒绝，资源不变 | 拒绝，资源不变 |
+| Active 或 Confirmed，且无历史 challenge | 全部资格/资源检查通过后，扣一次 stake 并转 Challenged | 拒绝；不能以无 challenge 事实开始裁决 |
+| Challenged | 拒绝重复挑战，资源不变 | 发布者且其余检查通过时转 Confirmed/Retracted，并仅结算一次 |
+| Confirmed 且保留历史 challenge | 拒绝重复挑战 | 拒绝新的重复裁决，不新增成功裁决事件或再次结算 |
+| Retracted / Revoked / Expired | 拒绝，资源不变 | 拒绝，即使保留历史 challenge 也不能复活 |
+
+- SOCIAL-AC-1：quote/apply 共享当前资格和生命周期规则；quote 始终只读且不预留，apply 在执行时重新校验。旧 quote 或历史 challenge 不产生当前裁决资格。
+- SOCIAL-AC-2：Challenge 在扣 stake 前完成 owner、reason、stake、事实存在、生命周期、已有 challenge 及资源条件检查；普通拒绝后库存、stake pool、事实和关系边均不变。正常时间/拒绝事件 ID 推进独立断言，不要求整个世界逐字不变。
+- SOCIAL-AC-3：Publish→Challenge→Revoke→Confirm 的最后一步拒绝，事实仍 Revoked；以其新建 backing 边也拒绝。Retract→Confirm、Challenged→Expired→裁决和重复裁决分别覆盖；保留 challenge 审计信息，不用清空历史掩盖状态机问题。
+- SOCIAL-AC-4：合法首次挑战只扣一次并记录同额 stake，正常裁决、撤销、过期及结算保持；新动作的重复裁决拒绝不改变上层已有请求幂等返回原结果的合同。
+- SOCIAL-AC-5：新拒绝序列的动作前 snapshot+journal replay 与 live 资源/社会状态一致。收紧新动作资格不无说明改变历史事件重放；旧记录版本、兼容读取和不可恢复的历史缺证需明确处置，不能伪造事件补余额。
+
+未开放社会动作的首局候选不因本节新增社会玩法前置；开放了该能力的候选不能以“不在工业主路径”为由把缺陷记为通过。
+文档修订只固定目标语义，行为修复与各场景结果仍须由实际候选证明。
 
 ## 可重放与一致性
 - 所有状态变更仅由事件驱动。

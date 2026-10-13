@@ -1,11 +1,11 @@
 # 仓库文档分工与组织规范（2026-03-09）
 
 - 对应设计文档: `doc/engineering/doc-governance/doc-structure-standard.design.md`
-- 历史执行记录: `doc/engineering/doc-governance/doc-structure-standard.prd.md`（只读历史）
+- 历史执行记录: Git history、PR 与实际验证记录；本文维护现行需求，不充当执行台账。
 
 审计轮次: 4
 
-- 当前执行入口: GitHub Issue（`可选 Issue` + evidence comments）与关联 GitHub Project item
+- 当前执行入口: Git、PR、实际 CI 与评审记录；Issue/Project 按需使用，不构成建档或修改前置。
 - 对应规范正文: `doc/engineering/doc-governance/doc-structure-standard.design.md`
 
 ## 目标
@@ -26,8 +26,7 @@
 - 标准载体：
   - 需求与边界：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
   - 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
-  - 执行状态（当前仓库文件）：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
-  - 规范目标命名：GitHub Issue（任务与证据）
+  - 执行状态：Git、PR、实际 CI 与评审记录；需要跟踪时使用 Issue/Project，不在本 PRD 维护任务状态。
 
 ## 里程碑
 - M1 (2026-03-09): 输出顶层规范草案，冻结文档对象层级与职责后缀模型。
@@ -70,7 +69,7 @@
   1. Flow-DOC-001（模块级建档）:
      `确定需求所属模块 -> 进入 doc/<module>/ -> 阅读 prd.md / design.md / GitHub Issue（任务与证据） -> 决定是否新增专题目录`
   2. Flow-DOC-002（专题级建档）:
-     `创建 topic 目录 -> 用同一 basename 新增 *.prd.md / *.design.md，并创建 GitHub Issue -> 在模块索引与 README 回写入口`
+     `先核对已有长期主题 -> 按需维护或新增配套 PRD/Design -> 同步实际受影响入口；Issue 按跟踪需要使用`
   3. Flow-DOC-003（评审阅读）:
      `先读模块 prd.md -> 再读模块 design.md -> 下钻 topic 文档；任务态查 GitHub Issue`
   4. Flow-DOC-004（角色裁定）:
@@ -103,6 +102,20 @@
   - 不在本规范中直接修改 `scripts/doc-governance-check.sh` 门禁逻辑。
   - 不强制所有现存杂项说明文档立即改名为 `*.design.md`。
 
+<a id="doc-authority-and-validation"></a>
+### 现行权威、入口与检查一致性
+
+本节承接 PRD-ENGINEERING-015 的现行治理要求；技术分配与验证见
+[权威与检查设计](doc-structure-standard.design.md#doc-authority-resolution)。
+
+- GOV-AC-1：争议先按内容和声明 scope 确定权威。同一权威内才比较审定版本；较新的 core、产品专题或索引不得跨域覆盖专业合同。跨域矛盾由相关责任人作显式决定，未决定前标明冲突及受影响结论，不新建通用审批材料。
+- GOV-AC-2：Git、PR、实际 CI 与评审记录承载交付事实；Issue/Project 按需跟踪。活跃入口不能把已退役 project ledger、`.pm` 映射或额外任务身份作为日常开发前置；历史引用保留其版本与原判定。
+- GOV-AC-3：Markdown 长度仅作编辑提示。其他规则成立时，999/1000/1001 行样本不能仅因长度失败；缺失引用、非法结构等真实错误仍失败。规范、help、退出语义及实际调用入口应一致，不改 Rust 代码/测试的体量规则。
+- GOV-AC-4：registry.entry 必须落在所登记 domain 内，并在根导航中精确可达；product_overlay 仅归 product 记录。各检查阶段对 owning-module 的允许范围一致；活跃引用扫描覆盖实际消费文档的 tools，不以目录前缀或总数代替归属验证。
+- GOV-AC-5：PRD/design 索引只承诺其真实覆盖范围；完整 evidence 检索应指向实际目录或当前 corpus entries/groups。逐链接核对 label 对应的目标与 fragment，不以同行其他链接存在相同 ID 代替。
+
+治理仅处理当前规则冲突、失效入口和仍有实际消费者的检查缺口。去重前先保全独有合同、修复活跃/动态消费者和必要登记；不为文件数量、旧批次数或 main 前进重做历史迁移。冻结 evidence 与 legacy fixture 不改成当前通过记录。每项检查的实现与实际运行另由候选和测试结果证明；文档修订不表示脚本已修复。
+
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements: 无新增 AI 专属工具要求；现有 Agent 与人工作者均按同一文档组织规范执行。
 - Evaluation Strategy:
@@ -132,8 +145,8 @@
   - NFR-1: 新增文档的职责应能在 5 分钟内被评审者判定。
   - NFR-2: 模块级固定入口数量保持稳定，不因专题膨胀而改变阅读起点。
   - NFR-3: 专题目录内相关文档的 basename 一致率应为 100%。
-  - NFR-4: 规范正文控制在单文件 1000 行以内，便于长期维护。
-  - NFR-5: 允许例外，但例外必须是显式、可说明、可复核的。
+  - NFR-4: 文档长度仅作编辑参考；是否拆分按语义与维护成本判断，不设 1000 行硬门禁，不要求长度豁免，也不压成长行规避提示。
+  - NFR-5: 结构或职责例外须说明适用范围和理由；这一要求不将长度提示恢复为审批条件。
 - Security & Privacy:
   - 本规范仅定义文档组织，不新增数据权限或隐私边界。
   - 涉及密钥、凭据、用户数据的细节仍由对应模块文档处理，不得因组织规范而外泄。
