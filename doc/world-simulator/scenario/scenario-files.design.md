@@ -19,6 +19,7 @@
 | --- | --- | --- | --- | --- |
 | [加载与 demo 例外](scenario-files.prd.md#scenario-loading-contract) | include_str 重编译与 demo 显式文件初始化；同解析与校验 | [设计约束](#scenario-loading-design) | 对应模块维护者与 QA | 文档补齐不宣称实现或真实运行完成 |
 | [消费入口矩阵](scenario-files.prd.md#场景初始化与消费入口矩阵) | Simulator/named runtime-live/generated-world 的模型保留与默认 Agent 分开 | [设计约束](#scenario-loading-design) | 对应模块维护者与 QA | 文档补齐不宣称实现或真实运行完成 |
+| [generated-world 来源](scenario-files.prd.md#generated-world-provenance-contract) | 区分当前文件存在检查与未来内容绑定、固定输入重建验证 | [来源校验边界](#generated-world-provenance-design) | Simulator 工件生成器、runtime-live 消费者与 QA | 不把现有加载成功当成已验证来源；本次不改加载器或持久格式 |
 
 ## 3. 关键接口 / 入口
 - `crates/oasis7/scenarios/*.json`
@@ -35,6 +36,15 @@
 - 只有显式 `power_bootstrap` 数据可注入 `power_plants`；其他内置和 `asteroid_fragment*` 场景无隐式设施。该注入不改变 runtime 电力规则、storage/动作 ABI、链上经济或治理边界。
 - 不在本专题扩展复杂 DSL 与版本迁移工具。
 
+<a id="generated-world-provenance-design"></a>
+### 4.1 generated-world 的当前校验与目标绑定
+
+当前 runtime-live 在检查 provenance 文件存在后直接加载 `generated-scenario-world`，没有将 provenance 内容交给 `WorldKernel::load_from_dir` 验证。[生成器](../../../crates/oasis7/src/bin/oasis7_generate_world_artifact.rs) 写出的 `artifact_kind`、`scenario_id`、`seed`、`config`、`public_manifest_sha256` 和 `public_manifest_entry_count` 中，`config` 是场景 spec，后两项只绑定 public manifest；该格式没有 sidecar 内容摘要。不得据此把存在检查写成完整来源验证。
+
+目标验证依次检查 provenance 的结构与类型、实际 manifest 的摘要与数量、有效场景输入及快照 seed/config/model 的一致性，最后以生成端记录的内容摘要绑定实际消费的 sidecar checkpoint/journal。绑定记录必须由生成路径对实际写出的内容形成，消费者对实际载入的内容重算比较；只在加载后给未知来源文件计算一个摘要不能反向证明它与 provenance 同次生成。现有六字段缺少这项关联，补齐生成/消费实现及兼容编码后才能宣称目标成立，本设计不虚构当前可读的新字段。
+
+固定生成版本、全部有效输入与触发顺序的重建比较另行证明可复现；它与加载成功、来源内容一致是不同结论。缺字段/不支持的旧工件只能保留来源未验证的结论，解析失败或内容不匹配需给出具体原因。当前调试入口的存在检查行为不因本次文档变更而被描述为已经拒绝这些输入。
+
 ## 5. 设计演进计划
 - 先迁移内置场景为 JSON。
 - 再接入加载逻辑与调试入口。
@@ -49,3 +59,4 @@
 | --- | --- | --- | --- | --- | --- |
 | [加载与 demo 例外](scenario-files.prd.md#scenario-loading-contract) | [设计约束](#scenario-loading-design) | include_str 重编译与 demo 显式文件初始化；同解析与校验 | 候选版本的[验证入口](../../../crates/oasis7/tests/oasis7_init_demo.rs)：核对自定义文件与内置场景入口、不可读/解析失败，不宣称热更新；静态核对与实际执行分别记录 | 实施 PR 的候选、命令、fixture 与真实结果 | 不代签未执行回归、真实模型、浏览器、节点或发布验收 |
 | [消费入口矩阵](scenario-files.prd.md#场景初始化与消费入口矩阵) | [设计约束](#scenario-loading-design) | Simulator/named runtime-live/generated-world 的模型保留与默认 Agent 分开 | 候选版本的[验证入口](../../../crates/oasis7/src/simulator/tests/init.rs)：核对纯碎片四 chunks、无 origin/Agent；Web 保留入口未实现则不宣称通过；静态核对与实际执行分别记录 | 实施 PR 的候选、命令、fixture 与真实结果 | 不代签未执行回归、真实模型、浏览器、节点或发布验收 |
+| [generated-world 来源](scenario-files.prd.md#generated-world-provenance-contract) | [来源校验边界](#generated-world-provenance-design) | 来源存在、内容绑定与固定输入重建分别验证 | [snapshot_generated_world.rs](../../../crates/oasis7/src/viewer/runtime_live/tests/snapshot_generated_world.rs) 当前 fixture 的场景 seed 为 9、provenance seed 为 42，仅验证映射；实现候选需另补一致产物、非法/缺失 provenance、seed/config/sidecar/manifest 不匹配，以及固定生成输入重建的离线回归 | 实施 PR 的候选、实际产物摘要、输入与真实验证结果 | 现有 fixture 不证明来源校验，本次未执行绑定或重建回归 |

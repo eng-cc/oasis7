@@ -271,8 +271,17 @@
 - 产出约束：`hardware_output > 0`，否则 `ActionRejected(InvalidAmount)`。
 - 落账约束：成功动作必须追加 `CompoundRefined`，并在回放中重放扣电与加硬件。
 - Edge case: 若 `RefineCompound` 可提交但玩家看不到 `electricity_cost`、`hardware_output` 或 `hardware_shortfall_before/after`，标记为 `refine_quote_missing`；该缺口属于精炼净收益/电力机会成本可读性问题，不改变公式、产率或拒绝条件。
-- 当前 Simulator 的 compound/hardware 资源键、投入/产出 before/after 与净缺口口径以[工业报价账本语义](../m4/industrial-resource-flow-contract.prd.md)为准；旧操作名不能被解释成两份独立库存。
+- 当前 Simulator 的旧精炼动作使用下述 Data 账本语义；M4 材料账本不作为这两个旧操作名的自动映射依据。
 - Acceptance: 精炼前玩家至少能判断“花这些电，换来的 hardware 是否足够推进当前第一工业目标”；若不足，应给出推荐精炼量或提示先采矿/先补电。
+
+<a id="legacy-simulator-refining-ledger"></a>
+#### 当前 Simulator Data 账本与 M4 材料账本
+
+当前 [`RefineCompound` 执行路径](../../../crates/oasis7/src/simulator/kernel/actions_core.rs) 从同一 owner 的 `ResourceKind::Data` 扣除投入 `M = compound_mass_g`，再把 `H = hardware_output` 加回该余额。合法成功动作的余额由提交前 `D` 变为 `D - M + H`；`compound` / `hardware` 是该旧动作的输入/产出名称，不是两份独立库存。
+
+该消费者的目标报价必须比较完整动作前后：对第一工业目标需求 `B`，`hardware_shortfall_before = max(B - D, 0)`，`hardware_shortfall_after = max(B - (D - M + H), 0)`。不得把已扣除投入的 `D - M` 当作动作前余额；`partial_progress` 只有在动作后的净缺口严格缩小且仍大于 0 时才成立，产出 `H > 0` 本身不足以证明推进。当前 [`quote_refine_compound`](../../../crates/oasis7/src/simulator/kernel/actions_refine_quote.rs) 仍以 `D - M` 计算 before，这属于待修实现偏差；本次文档不宣称报价已修复或相关回归已通过。
+
+[M4 工业材料合同](../m4/industrial-resource-flow-contract.prd.md#工业与材料) 定义的是 domain 拥有的 `MaterialStack.kind` 标签与材料账本；其 `compound`、`hardware` 不能自动映射为内建 `ResourceKind`。按 M4 账本消费材料时，应使用对应实际材料和账本合同，不能套用本节 legacy Data 余额公式，也不能据本节修改 M4 类型或增加内建资源种类。
 
 <a id="fragment-center-budget-contract"></a>
 ### 跨 chunk 边界一致性规则（CG7 落地）

@@ -18,7 +18,7 @@
 
 ### 2.1 需求承接与分配表
 
-本表承接资源恢复预览及中心坐标与预算归属的受影响条款；其他生成、精炼与预算设计继续遵循前述结构和约束。owner 为 simulator 与 Viewer 维护者，服务权威投影由 world-service 维护者负责。
+本表承接资源恢复预览、旧精炼账本边界及中心坐标与预算归属的受影响条款；其他生成与预算设计继续遵循前述结构和约束。owner 为 simulator 与 Viewer 维护者，服务权威投影由 world-service 维护者负责。
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
@@ -28,6 +28,7 @@
 | [REQ-FRFR-4](chunked-fragment-generation.prd.md#req-frfr-4) | 在非 due 时计算下一目标量，缺预算和时间溢出不能返回成功零值。 | [DES-FRFR-ESTIMATE](chunked-fragment-generation.design.md#des-frfr-estimate) | 现有 compute_replenish_target 与 chunk budget。 | 不保证候选接纳数量、材料或落点。 |
 | [REQ-FRFR-5](chunked-fragment-generation.prd.md#req-frfr-5) | 预览只读、旧建议失效，补种结果按目标 chunk 的实际增量核验。 | [DES-FRFR-READONLY](chunked-fragment-generation.design.md#des-frfr-readonly) | 现有 Viewer 失效处理与 kernel committed delta。 | 本地组件测试不证明真实服务或浏览器端到端闭环。 |
 | [中心与预算归属](chunked-fragment-generation.prd.md#fragment-center-budget-contract) | 初始化/补种/消费的最终中心归属一致，内部取整不跨账 | [落位设计](#fragment-center-budget-design) | Simulator 生成器、kernel 与 replay 维护者 | 不重算历史 committed delta；不改变半径可跨块规则 |
+| [旧精炼账本边界](chunked-fragment-generation.prd.md#legacy-simulator-refining-ledger) | 同一 Data 余额的净变化与独立 M4 材料账本分开；before 不预扣投入 | [精炼账本解释](#legacy-simulator-refining-design) | Simulator kernel 与报价消费者 | 本次不修报价实现，不改变 M4 材料类型或账本 |
 
 ## 3. 关键接口 / 入口
 - chunk 生成配置
@@ -61,6 +62,13 @@
 初始化与补种共享同一厘米坐标落位约束：候选转换为整数 cm 后、进入 spacing/接纳与预算落账前，必须校验 `chunk_coord_of(center) == generating_chunk`。内部块采用半开边界，不能让 round 到内部上边界的中心留在原 chunk 预算；若采用确定性归一或拒绝候选，须受现有有界尝试与有效配置约束，并在相同 seed/config/trigger order 下可复现。世界最外沿沿用现有 clamp，碎片半径跨界仍合法。
 
 接纳后的 `Location.pos`、fragment 索引和初始化/补种预算必须使用同一个最终中心；后续消费按该中心定位同一预算。不能仅修预算或仅修显示坐标，也不能在 replay 重新随机生成。此设计对应 [#4497](https://github.com/eng-cc/oasis7/issues/4497) 的边界取整缺口；实际归一策略、生成版本兼容与 fixture 由实现 PR 验证，本文不宣称现有生成器已修。
+
+<a id="legacy-simulator-refining-design"></a>
+### 4.1 旧精炼账本解释
+
+旧 Simulator 动作中的 compound 输入与 hardware 输出都落在同一 owner 的 `ResourceKind::Data`。预览应从动作提交前余额 `D` 读取 before，以真实扣入加出后的 `D - M + H` 读取 after，再按同一目标 `B` 比较净缺口；不得将 `D - M` 称作 before，或仅因 `H > 0` 显示 `partial_progress`。当前报价实现尚使用预扣投入的 before，纠正它需要独立实现和回归，本次只补齐消费者合同。
+
+M4 的 `MaterialStack.kind` 标签和独立材料账本遵循 [PRD 的领域边界](chunked-fragment-generation.prd.md#legacy-simulator-refining-ledger)，不由旧 Simulator 操作名推导资源映射。数据投影与玩家提示均需明确所消费的执行路径；此说明不修改产率、电力成本、ABI、实际落账或回放。
 
 <a id="fragment-refill-preview-design"></a>
 ## 5. 资源恢复预览与执行边界
@@ -124,6 +132,7 @@ named scenario 初始快照投影的完整性、world-service 的权威碎片投
 | [REQ-FRFR-4](chunked-fragment-generation.prd.md#req-frfr-4) | [DES-FRFR-ESTIMATE](chunked-fragment-generation.design.md#des-frfr-estimate) | 非 due 估计下一目标量；满 chunk 已知零；缺预算不可用。 | [fragment_replenishment_quote.rs](../../../crates/oasis7/src/simulator/tests/fragment_replenishment_quote.rs)：`fragment_refill_preview_reports_wait_cost_when_replenishment_is_not_yet_due`、`fragment_refill_preview_does_not_recommend_waiting_for_a_full_chunk`、`fragment_refill_preview_rejects_unknown_budget_instead_of_reporting_zero_resources`；Web 补充验证见表后。 | 当前 PR 的候选 Rust 与聚焦 Vitest 输出。 | 不保证实际候选量或材料，也不证明 Web 接入正向 live 补种。 |
 | [REQ-FRFR-5](chunked-fragment-generation.prd.md#req-frfr-5) | [DES-FRFR-READONLY](chunked-fragment-generation.design.md#des-frfr-readonly) | 重复预览只读，事件按目标 chunk 核验，失败/过期后移除旧建议。 | [fragment_replenishment_quote.rs](../../../crates/oasis7/src/simulator/tests/fragment_replenishment_quote.rs)：`fragment_refill_preview_is_deterministic_and_does_not_mutate_kernel_state` 与真实 step 测试，在候选 kernel 验证重复读取和按 chunk 核验增量；Web 补充验证见表后。 | 当前 PR 的只读、增量及 Web 状态测试输出。 | 不证明真实网络重连或浏览器游玩闭环。 |
 | [中心与预算归属](chunked-fragment-generation.prd.md#fragment-center-budget-contract) | [落位设计](#fragment-center-budget-design) | 内部 face/edge/corner、max−0.5cm 两侧及世界外沿都落到正确预算 | 按 [S7 场景回归](../../../testing-manual.md)在实现候选上增加确定性边界 fixture，分别核对初始化、补种、后续消费与 committed replay；当前仅审读合同 | 实施 PR 的候选、seed/config/order、最终中心、chunk 与两级预算断言结果 | 本文无固定 seed 运行或实现修复结果，不代签真实世界/Viewer 验收 |
+| [旧精炼账本边界](chunked-fragment-generation.prd.md#legacy-simulator-refining-ledger) | [精炼账本解释](#legacy-simulator-refining-design) | 按同一 Data 余额复算动作前后净缺口，不能混用 M4 材料标签 | [kernel_regressions.rs](../../../crates/oasis7/src/simulator/tests/kernel_regressions.rs) 中现有 quote 测试需随实现修正，覆盖投入降低 Data、净缺口未缩小而有正产出、目标已满足；对照实际成功动作后的余额，静态公式核对与测试执行分别记录 | 实施 PR 的固定候选、D/M/H/B、前后余额、报价及真实断言结果 | 当前旧测试断言不证明目标 before/after 正确，本次未运行或修正这些测试 |
 
 Web 补充验证使用候选版本的 [fragment_refill_preview_card.test.jsx](../../../crates/oasis7_viewer/software_safe_src/fragment_refill_preview_card.test.jsx)，覆盖 REQ-FRFR-4 的已知零、无效数量与合法未来时间约束，以及 REQ-FRFR-5 的 pending/error/坐标失效展示；[fragment_refill_preview_state.test.js](../../../crates/oasis7_viewer/software_safe_src/fragment_refill_preview_state.test.js) 覆盖匹配预览错误后清除旧 quote。卡片只有在启用、数量为安全正整数、下一机会和正等待时间可用且一致时才展示等待建议，disabled/零量改为转向，未知数量或时间提示刷新重评；未知数量的指标本身显示不可用。
 

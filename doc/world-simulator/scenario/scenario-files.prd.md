@@ -99,11 +99,24 @@
 | --- | --- | --- |
 | Simulator `build_world_model` / `initialize_kernel`；`oasis7_init_demo` | 按场景的 origin、agents、bootstrap chunks 和显式设施装配 | 场景初始状态；`asteroid_fragment_detail_bootstrap` 保留四个 bootstrap chunks、关闭 origin、Agent 数为 0 |
 | 普通 named runtime-live `--scenario`（含 Web 回归脚本转发） | 把 Simulator 配置投影为 Runtime；不保留完整 Simulator seed model，空 Agent 集会补 Runtime 默认 Agent | Runtime 调试启动/投影；不能用作纯碎片、零 Agent 的初始模型保留证据 |
-| runtime-live `--generated-world-dir` | 加载有 provenance 的 generated-world sidecar，并保留 seed model 参与快照映射；仍使用 Runtime Agent 投影 | 仅证明给定 generated-world 工件与对应消费者；不能等同于 named `--scenario`，也不自动保证零 Agent |
+| runtime-live `--generated-world-dir` | 当前只检查 provenance 路径是文件，再加载 generated-world sidecar；保留 seed model 参与快照映射，仍使用 Runtime Agent 投影 | 仅证明 sidecar 可加载和该消费者的模型映射；不证明 provenance 内容与 sidecar 对应或生成可复现，也不能等同于 named `--scenario` 或自动保证零 Agent |
 
 `asteroid_fragment_detail_bootstrap` 的纯碎片回归目前推荐 Simulator 离线初始化入口；普通 Web 主入口或 `software_safe` 脚本的 `--scenario` 不满足该条件。未来若提供 Web 专项入口，须显式定义 debug-only 模型保留和默认 Agent 处理，不能无条件改变正式 Runtime。
 
 推荐纯碎片入口的验收应读取初始模型/快照，逐项核对 JSON 指定的四个 bootstrap chunk 的碎片均保留、无补入的默认 Agent、origin 未注入；只校验 JSON 可解析、模型非空或网页已加载均不足。此要求不宣称已有 Web 入口通过，也不覆盖 live refill 的 enabled/available 边界。
+
+<a id="generated-world-provenance-contract"></a>
+### generated-world 来源与可复现声明
+
+当前 [`bootstrap_generated_sidecar_runtime_world_with_chunk_runtime`](../../../crates/oasis7/src/viewer/runtime_live/support.rs) 对 `world-generation-provenance.json` 仅调用 `is_file()`，不解析 JSON，也不比较 seed、场景配置、manifest 或 sidecar 内容。文件存在只满足当前调试加载的前置条件，不能把加载成功写成“来源已验证”或“同输入可复现”。
+
+以下是允许作出上述声明的目标验收条件，尚未由该加载入口实现：
+
+- provenance 必须可解析，`artifact_kind` 与生成工件类型相符；`scenario_id`、场景 `config` 和 `seed` 必须与实际采用的场景及有效初始化输入一致。需核对载入快照的 seed、有效配置和初始化模型，不能只检查两个标签相同。
+- 必须核验实际消费的 public manifest 字节摘要及条目数，并将 provenance 与同次生成的 sidecar `snapshot.json` / `journal.json` 绑定到可重算的内容摘要；加载时重算并比较这组绑定。相同目录、文件名或 seed 不构成内容绑定，`public_manifest_sha256` 也不是 sidecar 的摘要。当前 provenance 的六个字段没有提供 sidecar 内容绑定，这仍是生成与消费实现的缺口。
+- 可复现声明还须固定生成程序版本、场景输入、effective `WorldConfig`/fragment 配置及 chunk trigger order，并以独立重建的初始模型、预算和 journal 比较支持结论。当前 provenance 的 `config` 保存场景 spec，不能单独代表它未显式覆盖的全部有效默认值；加载现成快照也不能替代重建比较。
+
+验收至少覆盖一致产物、非法或缺失 provenance、seed 不匹配、同 seed 的不同配置/sidecar，以及 manifest 不匹配。无法建立绑定时，结果只能是来源未验证；明确不匹配则报告对应原因，不得填为验证通过。当前存在检查与未来内容验证应分别记录，补齐文档不代表加载器已拒绝所有不匹配样本，也不引入新的生产热加载入口。
 
 ## 物流瓶颈验证口径（2026-02-14）
 
