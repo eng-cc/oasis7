@@ -1,0 +1,30 @@
+{
+  "source": "0a97ad641440f11306076319f405b0f94cc5d1d1",
+  "overall": "inconclusive",
+  "construction": "passed targeted independent construction",
+  "factory_built_at": 64,
+  "build_action_id": 3,
+  "construction_cost": 6,
+  "electricity_after": 94,
+  "remaining_feedstock": {
+    "carbon_fuel": 2,
+    "iron_ore": 8
+  },
+  "products": {
+    "iron_ingot": 0,
+    "slag": 0
+  },
+  "completed_recipe_jobs": 0,
+  "original_response_byte_equal": true,
+  "original_response_sha256": "da2e2b17365e1385c4c429ef4adc763ea8da44c07c467f91237ada42e7265a7d",
+  "client_calls": 9,
+  "last_call_finished_elapsed": 347.5944032080006,
+  "report_elapsed_estimate": 420.78039145469666,
+  "report_after_deadline": true,
+  "cleanup_committed_heights": [
+    75,
+    76
+  ],
+  "host_exit": 0,
+  "scope": "prepared-world attached Codex; instruction-only isolation; no cold entry/OpenClaw/full first-session/deployment claim"
+}

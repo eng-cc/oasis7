@@ -1,0 +1,13 @@
+{
+  "source": "0a97ad641440f11306076319f405b0f94cc5d1d1",
+  "base": "dbe03eda6e60444a69d57655a15709830660d288",
+  "files": {
+    "game-client": "17002e27c9b28d1362cf6213ad306546d7dfc3c863b6cae97211d54e4048faf6",
+    "host-test": "64767ed026ac846d81f3b7f552093489991d114a806b03235211b2fe65efbb76",
+    "SKILL.md": "2aa9a15a23b27ec63e10c03ce13cf4b0d4fcd225d0ad74f0ebdd876804f6317e",
+    "client": "9a5a348c2dedd8d9a0ee859c185e73c9ebacaa41903065cba1ca4a880ac9b608"
+  },
+  "scope": "one prepared claimed-Agent local round; instruction-only isolation; no paid external Runtime or deployment",
+  "limit_calls": 20,
+  "limit_seconds": 360
+}

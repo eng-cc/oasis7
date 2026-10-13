@@ -1,0 +1,8 @@
+{
+  "owned_realm_removed": true,
+  "private_goals_keys_cache_removed": true,
+  "raw_context_outputs_removed": true,
+  "stop_height": 75,
+  "revoke_height": 76,
+  "host_exit": 0
+}

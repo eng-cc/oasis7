@@ -1,0 +1,169 @@
+{
+  "record": {
+    "entries": [
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "97d1ac741c52636a55898ed1a2415cc648bb1945c6bd77598701c3d1b8f7b652",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "23f94b5c20fa09c7cc5b729f6f3fba2631403e5fdd6d5efeff0cac3b4d29990a",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/calls.jsonl",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "d4af50f89d145eb7f8dd06a098d8bb9c8c9d9bcff864f09d408f0062c2fa4b22",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/construction-events.json",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "80e9d416c76e2617bc63957dd08909a380c6190ffe91e7c2bb30c5605c6e904d",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/disposable-world-cleanup.json",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "5bb32b6dfdddf9bb55ed11e1d5ea7ff74ea794e105acb96016d5cf74bdc2a3ef",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/guard-close.json",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "75dd01104356dcf2e35f263ed7f30ba4476a95d3df38130d6e97b1e9d58ce99c",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/oracle-summary.json",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "07970430732f803e3e49eab9d69a3fdffffcc795d9e19ddc887ea0a69e99c49b",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/player-report.json",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      },
+      {
+        "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
+        "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
+        "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
+        "content_sha256": "62441fd2b23b5126f31bb0e9590b5fbdce0d2737499cf6e3dbf7bfebbc25ee4b",
+        "disposition": "retain",
+        "domain_owner": "qa_engineer",
+        "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
+        "lifecycle": "HISTORICAL_PROVENANCE",
+        "path": "doc/testing/evidence/native-task-starter-chain-2026-10-13/source-manifest.json",
+        "rationale": "Preserve actual construction, original response recovery, deadline and incomplete production result.",
+        "required_followup_roles": [
+          "agent_engineer",
+          "runtime_engineer",
+          "qa_engineer"
+        ],
+        "residual_risk": "Prepared-world instruction-only Codex; first call at 220.79 seconds; report late; transfer/production and complete independent chain unverified.",
+        "retention_owner": "qa_engineer",
+        "semantic_role": "native_task_starter_chain_bounded_history"
+      }
+    ],
+    "group_sha256": "51f71e13964ea69d2e63dcef9ec4271d187a3d7fa7e5eb5ca5869ed5d459bd66",
+    "id": "native-task-starter-chain-2026-10-13"
+  },
+  "schema": "oasis7.document-evidence-group/v1"
+}

@@ -84,7 +84,7 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 签名 POST `/v1/world/private-task/factory-quote` 绑定主体、原 Context 证明、当前 fence 和预期 base，在 canonical pin 的私有 clone 上复用真实建设准入，返回规范 action、材料账本、耗时、site/location revision、电力义务及拒绝原因；交付前再核对 pin 与授权。报价不预留材料或扣预算。首次提交先保存原签名；已有缓存先核对完整业务选择并恢复原结果，Unknown 不替换请求。
 
-`industry` 增加有界 pending build、建设场地、Agent 位置和建设电力授权观察。新增投影只交付该 Agent 的建设和位置范围，场地不泄露其他主体 owner/allowlist。既有公共 anchor 与工厂电力观察边界沿用原合同。建设开始须关联唯一完成事件，再核对投料到账和真实首产物；客户端 13 项、委托授权 24 项、签名 DTO 与主体投影回归已通过；真实 TCP 连续链路单独在 76.91 秒通过，相关私有任务回归 8 项通过、5 个显式试玩/诊断入口保持 ignored。独立预审未发现阻断问题；严格 Clippy、冻结版本评审及本批独立正式 Skill 试玩仍待完成，CI 或合入尚未完成。身份注册、配对/token、多工厂完整 starter chain、稳定生产与两 Runtime 完整首局仍在后续范围；部署暂停。
+`industry` 增加有界 pending build、建设场地、Agent 位置和建设电力授权观察。新增投影只交付该 Agent 的建设和位置范围，场地不泄露其他主体 owner/allowlist。既有公共 anchor 与工厂电力观察边界沿用原合同。建设开始须关联唯一完成事件，再核对投料到账和真实首产物；客户端 13 项、委托授权 24 项、签名 DTO 与主体投影回归已通过；真实 TCP 连续链路单独在 76.91 秒通过，相关私有任务回归 8 项通过、5 个显式试玩/诊断入口保持 ignored。严格全目标 Clippy 与冻结源 `0a97ad641` 独立代码评审已通过。本批获准的一轮正式 Skill 试玩在 360 秒限内转发九次调用，真实建成唯一 Smelter 并恢复原回应，但未执行投料和生产，报告也晚于截止；整链独立实玩保留 inconclusive，详见[本批有界试玩证据](../../testing/evidence/native-task-starter-chain-2026-10-13/README.md)。Stop/revoke 与一次性世界清理完成，未追加试玩。当前 [PR #4662](https://github.com/eng-cc/oasis7/pull/4662) 的 CI 和合入尚未完成。身份注册、配对/token、多工厂完整 starter chain、稳定生产与两 Runtime 完整首局仍在后续范围；部署暂停。
 
 ## 1. 问题、目标与非目标
 
