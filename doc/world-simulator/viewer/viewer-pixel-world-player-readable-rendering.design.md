@@ -34,7 +34,7 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | [本设计布局条款](#ui-layout) | 当前操作条款与主合同一致，不能要求恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 [host](../../../crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx)、[窄屏 CSS](../../../crates/oasis7_viewer/viewer_terminal_shell.css) 做静态对照；未来可见改动另按 [视觉矩阵](viewer-brand-system-2026-06-05.design.md#6-screenshot-and-visual-evidence-matrix)取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |
+| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | [本设计布局条款](#ui-layout) | 当前操作条款与主合同一致，不能要求恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx`、`crates/oasis7_viewer/viewer_terminal_shell.css` 做静态对照；未来可见改动另按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md) 的视觉矩阵取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |
 | [产业图谱目标](viewer-pixel-world-player-readable-rendering.prd.md#industry-detail-requirements) | [产业与细节目标](viewer-pixel-world-player-readable-rendering.design.md#industry-detail-target) | 未来支持产业数据时验证分层节点/流/状态与目标定位、推断/未知及负载边界 | [Viewer 手册验收入口](viewer-manual.manual.md#industry-detail-acceptance)：同候选/权威数据下 external headed desktop+narrow 验证 World/Region/Node 主次信息、符号/根因/定位、未知和拥塞密度；未执行 | 未来 state/权威来源对账、console、桌面/窄屏截图、可见集和负载证据 | 当前 routes/HUD/热点不替代产业图谱或 semantic zoom 通过；本文仅映射验收方法 |
 
 ## DTO Shape

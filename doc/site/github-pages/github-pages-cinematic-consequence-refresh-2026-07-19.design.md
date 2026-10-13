@@ -92,4 +92,4 @@ preview rather than a released game.
 
 | 上游要求 | 本设计条款 | 验收内容 | 验证来源 | 记录 | 限制 |
 | --- | --- | --- | --- | --- | --- |
-| [首页布局与预览边界](../design.md#homepage-layout-authority) | [决策与承接范围](#decision) | 同候选根设计与两个补充对三列摘要、主次操作、图注和预览状态给出一致要求 | [文档检查](../../../scripts/doc-governance-check.sh)与同候选三文逐条审读；实际页面改动按本文件视口、双语、键盘/no-JS/reduced-motion 验收 | 文档 diff 和实际检查输出；页面变化另留真实截图和行为结果 | 本次文本修订不构成浏览器、视觉通过、部署或发布证据 |
+| [首页布局与预览边界](../design.md#homepage-layout-authority) | [决策与承接范围](#decision) | 同候选根设计与两个补充对三列摘要、主次操作、图注和预览状态给出一致要求 | [文档检查](../../../scripts/doc-governance-check.test.sh)与同候选三文逐条审读；实际页面改动按本文件视口、双语、键盘/no-JS/reduced-motion 验收 | 文档 diff 和实际检查输出；页面变化另留真实截图和行为结果 | 本次文本修订不构成浏览器、视觉通过、部署或发布证据 |

@@ -25,4 +25,4 @@
 
 | 上游要求 | 本设计条款 | 验收内容 | 验证来源 | 记录 | 限制 |
 | --- | --- | --- | --- | --- | --- |
-| [专题要求](site-manual-static-docs.prd.md#static-manual-requirements) | [兼容路由](#compatibility-route) | 同候选链接到存在的接收节；接收节保有原职责与独立验证 | [文档检查](../../../scripts/doc-governance-check.sh)及接收节逐项映射审读 | 修改 diff、链接核对及实际检查输出 | 文档检查不证明领域运行或发布通过 |
+| [专题要求](site-manual-static-docs.prd.md#static-manual-requirements) | [兼容路由](#compatibility-route) | 同候选链接到存在的接收节；接收节保有原职责与独立验证 | [文档检查](../../../scripts/doc-governance-check.test.sh)及接收节逐项映射审读 | 修改 diff、链接核对及实际检查输出 | 文档检查不证明领域运行或发布通过 |
