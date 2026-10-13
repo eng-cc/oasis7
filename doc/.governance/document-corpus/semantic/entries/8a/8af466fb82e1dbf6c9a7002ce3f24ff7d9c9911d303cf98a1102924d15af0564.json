@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "b183e16aa1f90d308ecc0c104adde8041cc9c2434c39827e5882030fecbef8c8",
+    "content_sha256": "8d964027aac29048bd24282ea111ec66cb7317a052501c86001929426227c8db",
     "current_authority": "doc/world-runtime/wasm/wasm-interface.md",
     "decision_owner": "wasm_platform_engineer",
     "disposition": "retain_historical_validation_index",

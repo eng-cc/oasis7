@@ -1,8 +1,8 @@
 # WASM 平台稳定证据与验证入口
 
 本页索引可重复执行的 WASM 平台验证面和其证据边界。它不保存任务状态、待办、
-候选发布结论、CI run 实时状态或 blocker；这些可变事实由 GitHub task issue /
-Project 与 Git history 承接。
+候选发布结论、CI run 实时状态或 blocker；这些可变事实由 Git、PR、实际 CI
+和评审记录承接，Issue / Project 按需使用。
 
 ## ABI 与执行器
 
@@ -24,7 +24,10 @@ executor 对 manifest limits/capabilities 的安全执行边界。
 | publishable artifact 只由 digest-pinned Docker canonical builder 生成 | `docker/wasm-builder/Dockerfile`、`scripts/build-wasm-module.sh`、`tools/wasm_build_suite` | Docker wrapper 成功或明确失败；不得退回 host-native publish path |
 | receipt 绑定 source closure、build manifest、builder digest、canonical platform、canonicalizer 和 wasm hash | `tools/wasm_build_suite`、`crates/oasis7_distfs/src/bin/sync_builtin_wasm_identity.rs` | builtin sync/check 与 receipt/identity 一致性回归 |
 | release manifest 写单一 `linux-x86_64=<sha256>` canonical token；legacy 多 token 仅读兼容 | sync scripts、identity writer、release-manifest consumer | `scripts/sync-m1-builtin-wasm-artifacts.sh --check`、对应 m4/m5 check |
-| production runtime 是 binary consumer，runtime source compile 默认关闭 | `ReleaseSecurityPolicy`、`module_source_compiler`、chain runtime status | module release acceptance 的 hardened-policy / receipt-mismatch 阻断用例 |
+| production `ReleaseSecurityPolicy` 默认拒绝动作级 `CompileModuleArtifactFromSource`；不是所有 builtin 物化路径的总开关 | `ReleaseSecurityPolicy`、`module_source_compiler`、chain runtime status | module release acceptance 的 hardened-policy / receipt-mismatch 阻断用例，只证明受该 policy 管理的路径 |
+| builtin materializer 的 binary 获取、SHA-256 校验、缓存与 source-compile fallback 另有边界 | `crates/oasis7/src/runtime/builtin_wasm_materializer.rs`、WASM 主设计 §5.0 | 物化路径自身的获取失败、hash 不匹配、缓存与 fallback 回归；不能用动作 gate 的结果代签 |
+
+当前路径划分以[主设计 §5.0](wasm-deterministic-build-pipeline.design.md#50-builtin-工件-materialization)为准：builtin materializer 不接收 identity、receipt 或 release policy，本地候选不可用后仍有 fetch 与源码回退路径；外围 artifact selection / release-gated pipeline 承担对应身份及发布校验。主设计 §2 的 2026-03-18 现状表是有日期的记录，其“关闭 builtin fallback”摘要不能扩为当前所有物化路径的结论。binary-only 是发布目标，文档修订不改变运行策略，也不证明任一线上配置已执行或已关闭 fallback。
 
 跨宿主 determinism 只能由同一候选的 `linux-x86_64` 与 Docker-capable
 `darwin-arm64` summaries 及其 receipt evidence 共同证明。Linux-only stable gate
@@ -61,5 +64,5 @@ instrumentation 的降级不得阻断模块执行，也不能代签功能正确�
 - identity manifest、artifact hash、builder receipt 和 release proof 必须彼此
   对齐；CI artifact/report 本身不等于生产 release authorization。
 - 本页的命令是平台级回归入口，不构成 `test_tier_required`、`test_tier_full`、
-  集成、长期运行或发布就绪结论。具体候选证据仍需绑定 GitHub task、提交和
-  当前 CI receipt。
+  集成、长期运行或发布就绪结论。具体候选证据仍需绑定实际提交/构建、
+  适用场景及对应 CI/测试记录；未执行或不适用必须分别说明。

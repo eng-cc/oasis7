@@ -2,7 +2,9 @@
 
 审计轮次: 4
 
-本分册为 `doc/world-runtime/prd.md` 的详细展开。
+本分册为 `doc/world-runtime/prd.md` 的详细展开。2026-03-04 实现口径保留为当时记录；它不代表本次已执行导出或确认当前部署。
+
+当前接口与筛选的源码入口为 [World::save_audit_log](../../../crates/oasis7/src/runtime/world/audit.rs) 与 [AuditFilter / AuditEventKind](../../../crates/oasis7/src/runtime/audit.rs)。下方事件名按 `baded561af0808d9d5cb154d8acc68efe54e80db`（2026-10-13）枚举静态核对；后续新增/变更应以消费代码同版本的枚举与 serde 注解为完整权威，不能把此列表当作跨版本不变协议。
 
 ## 当前实现口径（2026-03-04）
 - 导出入口：`World::save_audit_log(path, filter)`。
@@ -29,9 +31,12 @@ pub fn save_audit_log(
 - `caused_by`: `action` / `effect`。
 
 ## AuditEventKind（当前）
+
+序列化名称遵循 `#[serde(rename_all = "snake_case")]`。本列表仅是上述固定版本的名称参考；字段与治理 payload 仍回到源码，不以字段对照代签解析、筛选或导出测试。
 - `domain`
 - `effect_queued`
 - `receipt_appended`
+- `capability_authorization`
 - `policy_decision`
 - `rule_decision`
 - `action_overridden`
@@ -41,6 +46,7 @@ pub fn save_audit_log(
 - `module_emitted`
 - `module_state_updated`
 - `module_runtime_charged`
+- `product_validation_delivery_cursor_updated`
 - `snapshot_created`
 - `manifest_updated`
 - `rollback_applied`
