@@ -2,7 +2,7 @@
   "record": {
     "authority_entry": "doc/playability_test_result/README.md",
     "authority_layer": "evidence_domain",
-    "content_sha256": "dec998074bafaa95e36035b4a3007d3ca2c7d789f4f30215edb621f739b82d4c",
+    "content_sha256": "9c13b72a3e6fafba43a44ed2c8db2974c1263e76ee4fc4f62b9380fcd8a227e4",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "review_required",
     "object_kind": "markdown_record",
