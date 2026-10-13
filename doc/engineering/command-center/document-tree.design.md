@@ -42,7 +42,7 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 
 结构节点与文件节点分开，树 occurrence 只引用文件键；一个文件被多个父项引用时显示多个引用入口，详情与计数按文件去重。树展开时维护当前祖先集合，遇到循环展示“循环引用”链接并停止该路径展开；交叉域和多对多配对在详情列为关系，不强行放入唯一父子树。排序沿源导航顺序；无序集合按路径稳定排序。
 
-计数标注快照范围、生命周期筛选和去重口径。配对计数只统计已解析 paired_design，不将普通引用或 upstream_requirement 自动提升为配对；无配对、未读取、明确缺失分别计数。生命周期原样保留源声明（包括 `target-contract` 等专业值），另存规范化的已知类别 proposed/draft/active/superseded/retired；其他已声明值归 other，可按原值筛选，只有缺声明才显示 unknown。默认隐藏明确历史类别的叶项，但被当前条款引用时显示历史引用占位。生命周期不决定运行或发布状态。
+计数标注快照范围、生命周期筛选和去重口径。配对计数只统计已解析 paired_design，不将普通引用或 upstream_requirement 自动提升为配对；无配对、未读取、明确缺失分别计数。生命周期原样保留源声明（包括 `target-contract` 等专业值），另存规范化的已知类别 proposed/draft/active/superseded/retired；其他已声明值归 other，可按原值筛选，只有缺声明才显示 unknown。规范化只提取状态字段首个完整 token（移除包裹反引号并按大小写归一），以空白、中文/英文分号或逗号作为 token 终止符；已知 token 后的说明保留在 raw，不影响类别，例如 draft 后附目标说明归 draft，active 后附 owner 信息归 active，target-contract 保持 other。声明为空或格式歧义时单独标记解析诊断，不猜状态。默认隐藏明确历史类别的叶项，但被当前条款引用时显示历史引用占位。生命周期不决定运行或发布状态。
 
 <a id="DES-CC-TREE-002"></a>
 
@@ -56,7 +56,9 @@ Rust 构建文件级 `DocumentNode`，至少含 worktree/project 身份、仓库
 
 快照含基线模式/OID、工作树身份、清单摘要、生成时间、每文件摘要和覆盖结果。完整成功候选以事务替换当前快照；错误或部分候选单独保存为本次尝试，最后成功快照仍作为默认阅读快照并标明 stale、原版本及本次失败/遗漏范围，用户可显式查看部分尝试。首次无成功快照时可以展示 partial，并明确没有完整基线。节点与边不可混用两个快照；同项目较早异步请求不能覆盖较新选择。缓存过期时保留旧来源版本及原因，重建只替换派生数据，不删除个人关联、阅读偏好或未决操作。
 
-本功能不执行 fetch、checkout、模型调用或文件写入。源 Markdown 视为不可信展示数据，复用安全渲染和受控源打开；拒绝目录逃逸、任意 scheme 与原文内脚本/命令执行。不存在的本地目标只有在完整列举范围内核实后标 missing，外部/未读目标标 outside_scope/unread。
+升级采用独立版本化的 document_tree_v1 派生缓存键/表，不向当前持久 Snapshot 的反序列化模型新增必填字段。旧缓存仍可供既有视图读取；树缓存缺失、版本不兼容或损坏时只重建树派生对象，不清空个人表和原 Snapshot。节点、关系、覆盖与部分尝试可重建，个人阅读偏好使用独立版本化记录和可选默认值；失败只回退树入口，不阻止原项目打开。缓存 schema 初始化及写入采用事务，失败保留旧 schema；旧 App 忽略新表/键，回退不删除个人或未决数据。生成 DTO 与 bridge/UI 随同包原子更新，tree 查询携带 schemaVersion，未知版本返回明确 unsupported，旧客户端不消费新 DTO；既有查询响应保持原 shape。实施回归须覆盖旧数据库打开、损坏树缓存、迁移失败和旧版本回读，确认个人关联/草稿/未决操作保留。
+
+本功能不执行 fetch、checkout、模型调用或源文档写入。源 Markdown 视为不可信展示数据，复用安全渲染和受控源打开；拒绝目录逃逸、任意 scheme 与原文内脚本/命令执行。不存在的本地目标只有在完整列举范围内核实后标 missing，外部/未读目标标 outside_scope/unread。
 
 <a id="DES-CC-TREE-003"></a>
 
@@ -76,8 +78,8 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 
 | 上游条款 | 本设计条款 | 独立义务与适用条件 | 验证方法与当前入口 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 当前仅设计，无新增程序回归 |
-| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 未验证工作树并发与完整 corpus 性能 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-001](#DES-CC-TREE-001) | 四域/专业树、配对、历史与歧义 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，并补生命周期反例：多父、多配对、重复 ID/锚点、循环、任意原始状态值、已知状态附注 token 归一、无配对和断链 fixture | 实现 PR 的 source HEAD 与实际测试结果 | 当前仅设计，无新增程序回归 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-TREE-002](#DES-CC-TREE-002) | 有界读取、快照一致性和隔离 | 扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs) 的故障回放覆盖删除/权限/超限/并发修改/旧请求晚到及部分刷新保留成功快照和旧库/缓存版本升级回退；覆盖 doc 链接到仓库内 `.env`、目录外目标及祖先目录链接的拒绝反例；检查无外部读取、模型调用和源写入 | 实现 PR 的候选及失败/恢复结果 | 未验证工作树并发与完整 corpus 性能 |
 | [AC-CC-016](command-center.prd.md#AC-CC-016) | [DES-CC-TREE-003](#DES-CC-TREE-003) | 搜索祖先、往返和个人位置 | 扩展 [UI tests](../../../tools/oasis7-command-center/ui/src/App.test.tsx) 覆盖筛选/分页/恢复；真实 macOS App 完成三分钟定位、键盘/IME/读屏和窄窗口任务 | 实现 PR 的 App build、语料规模、耗时与具体卡点 | 浏览器/DOM 测试不能代签原生体验 |
 
 先实现文件清单与覆盖反馈，再实现关系和快照投影，随后接入树/详情及恢复，最后验证真实 App。只到前两步时可以交付索引切片，但不宣称 AC-CC-016 已通过。纯设计不改变游戏 Agent Skill/API/runtime 行为，开发自主试玩不适用；功能实现仍需上述真实桌面验证。
