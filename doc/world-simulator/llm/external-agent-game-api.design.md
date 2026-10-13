@@ -76,7 +76,7 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 签名 POST `/v1/world/private-task/recipe-quote` 同时绑定原 Context 读取证明、当前 fence、主体与预期 base。服务在当前 canonical pin 的私有 clone 上复用实际授权和生产准入，返回规范 action、电费扣除预览、有效输入/输出账本、材料、耗时或拒绝原因；交付前再验当前 pin 与授权。报价不步进世界、不预留库存、不扣预算，电费账本预览不表示电池续航变化。
 
-首次 `schedule` 使用已验证报价的 action 和同 pin 公共 context 保存签名原行动，再提交 cognition。已有 Action cache 时先核对工厂/配方/批次并查询原请求，Unknown 不重新报价或替换请求。`industry` 增加有界 pending recipe jobs 观察；`RecipeStarted` 仅证明排产，真实首产物须核对关联的 `RecipeCompleted` 和输出账本变化。真实 TCP 的报价、首产物、重复和驱动重启回归已通过，客户端九项回归与严格 Clippy 通过。独立正式 Skill 试玩在 `005415753` 实际产出三铁锭并恢复原回执，但报告 347 秒超过 240 秒许可，整体实玩保留 inconclusive；详见[生产候选证据](../../testing/evidence/native-task-production-2026-10-13/README.md)。后续依赖候选尚未实玩，当前仍待预算合规的候选试玩、必要 CI 和合入，不代表完整 starter chain、稳定生产、交付、两 Runtime parity 或部署已完成。
+首次 `schedule` 使用已验证报价的 action 和同 pin 公共 context 保存签名原行动，再提交 cognition。已有 Action cache 时先核对工厂/配方/批次并查询原请求，Unknown 不重新报价或替换请求。`industry` 增加有界 pending recipe jobs 观察；`RecipeStarted` 仅证明排产，真实首产物须核对关联的 `RecipeCompleted` 和输出账本变化。真实 TCP 的报价、首产物、重复和驱动重启回归已通过，客户端九项回归与严格 Clippy 通过。独立正式 Skill 试玩在 `005415753` 实际产出三铁锭并恢复原回执，但报告 347 秒超过 240 秒许可，整体实玩保留 inconclusive；详见[生产候选证据](../../testing/evidence/native-task-production-2026-10-13/README.md)。人类明确批准的第二轮在 `795944322` 完成七次真实客户端调用，报告于 233.34 秒写入，独立硬截止在 240 秒关闭世界；父侧核对唯一生产、匹配首产物、原响应字节一致及 Stop/revoke 清理，详见[有界复测证据](../../testing/evidence/native-task-production-2026-10-13/bounded-retry/README.md)。该源必要 CI 已通过；最后证据更新仍待当前 HEAD 的必要 CI 与合入，不代表完整 starter chain、稳定生产、交付、两 Runtime parity 或部署已完成。
 
 ## 1. 问题、目标与非目标
 
