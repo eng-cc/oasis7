@@ -21,6 +21,8 @@
 
 ## 生成四视图结果或简报
 
+首页及同一工作的组织规则读取 [REQ-CC-013](../../../doc/engineering/command-center/command-center.prd.md#REQ-CC-013)、[REQ-CC-014](../../../doc/engineering/command-center/command-center.prd.md#REQ-CC-014)。先核对摘要、源引用和实际能力，再生成重点、成果、真实待处理与返回工作入口；无明确优先级保留并列，关系失效保留原依据。静态简报、文档可检索与完整客户端闭环分别说明。
+
 - 先写当前阶段、近期交付和长期目标的关联，再说明目前进展、明确时间窗口内最近做了什么、未完成条件和下一步；每项重要结论保留来源入口。
 - 顶层架构按问题导航，分别解释设计约定、已有实现和实际部署；人工关注区分需要决定、待补事实和知悉变化，已有决定保留来源与理由。
 - 执行信息按 PRD [REQ-CC-005](../../../doc/engineering/command-center/command-center.prd.md#REQ-CC-005)连接工作目的与真实运行范围，分别解释 PR、CI、会话和目标状态。

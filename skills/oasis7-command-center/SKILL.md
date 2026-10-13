@@ -7,6 +7,8 @@ description: 为 eng-cc/oasis7 构建、修改或刷新项目开发指挥看板�
 
 按真实项目来源帮助用户判断目标、进展、决定和当前行动。产品行为与验收读取[正式产品设计](../../doc/engineering/command-center/command-center.prd.md)，技术选型与实现合同读取[正式系统设计](../../doc/engineering/command-center/command-center.design.md)。本 Skill 只保留使用和执行方法，不另立产品合同。
 
+日常入口按正式 PRD 的 [首页判断](../../doc/engineering/command-center/command-center.prd.md#REQ-CC-013) 和 [工作接续](../../doc/engineering/command-center/command-center.prd.md#REQ-CC-014)组织；完整基础首版和来源/桌面切片分别说明。仅调整设计时保留当前实现差距，不顺带运行模型、迁移会话或改变已有暂停范围。
+
 遵循当前仓库的 `doc/engineering/workflow/source-of-truth.md`，不增加任务准入、审批、生命周期、回执或交付条件。若从独立 Skill 位置调用，按已确认的 oasis7 Git 根目录解析上述文档。
 
 ## 先按请求确定动作
