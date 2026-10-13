@@ -11,7 +11,7 @@
 - 以场景 `seed` 作为地点生成的唯一随机源，保证同输入可复现。
 - 场景文件移除 `locations` 显式列表，改为声明地点生成参数。
 - Agent 初始化时不再依赖固定 `location_id`，改为随机地点出生。
-- 生成顺序不影响结果：同一场景/seed 多次运行得到相同 chunk 与 location。
+- 普通 `location_generator` 按 seed 与地点序号派生结果，不依赖外部 chunk 触发顺序；此承诺不扩展为 chunk/fragment 布局的无条件顺序无关。
 
 ## 2. User Experience & Functionality
 
@@ -66,9 +66,17 @@
   - 每个 Agent 选择一次；允许多个 Agent 出生在同一地点。
 - 若无可用地点则报错 `SpawnLocationMissing`。
 
+<a id="location-determinism"></a>
 ### 确定性约束
-- 同 `seed` + 同 `WorldConfig.space` + 同场景配置，生成的地点 ID、位置与 Agent 出生分配一致。
+- 普通地点在同 `seed` + 同 `WorldConfig.space` + 同 `location_generator` 下得到相同 ID 与位置；Agent 出生还要求相同可用地点集合与确定性枚举顺序。
 - 随机逻辑只依赖显式 seed，不依赖运行时时钟或哈希随机状态。
+- chunk/fragment 按[专业生成合同](chunked-fragment-generation.prd.md)约束：同 world seed、effective config 和 chunk trigger order 下可复现，边界冲突先生成者优先；重排触发顺序不能自动视为等价。历史回放应用 committed delta，不用当前默认配置重新生成。
+
+<a id="location-effective-seed"></a>
+### 场景级有效 seed 与显式坐标
+- 内置场景接受 seed override 时，先在 `WorldScenarioSpec` 上确定有效 seed，再生成普通地点并转换 `WorldInitConfig`；Agent 出生与 fragment 的派生随机源使用同一有效根 seed（fragment 保留自身 offset）。不得先按模板生成地点后只改 `init.seed`。
+- 显式 `WorldInitConfig.locations` 表示调用者指定坐标；覆盖 seed 不重新生成这些地点。无 override 时保留模板 seed，现有配置 sanitization 仍生效。
+- 验收覆盖不同 seed 的生成差异、无覆盖与模板等价、显式坐标不变、Agent/fragment 使用有效 seed；`scenario_test_runner` 的接线修复需独立实现/回归，本条不表示该实现已经完成。
 
 ## 5. Risks & Roadmap
 - **SL1**：完成设计/项目文档与场景 schema 改造。
