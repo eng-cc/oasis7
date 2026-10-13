@@ -685,8 +685,7 @@ fn build_action(
     root: &Path,
     world: &WorldIdentity,
 ) -> Action {
-    for _ in 0..8 {
-        assert!(Instant::now() < deadline);
+    while Instant::now() < deadline {
         let proof = sign_read_request(
             TASK_FACTORY_QUOTE_PATH,
             TaskFactoryQuoteRequestV1 {
@@ -765,7 +764,7 @@ fn build_action(
         )
         .unwrap();
         assert_eq!(
-            private_http(endpoint, &serde_json::to_value(outsider).unwrap()),
+            private_http(endpoint, &serde_json::to_value(outsider).unwrap(), deadline),
             400
         );
         let mut wrong = proof.request.clone();
@@ -777,7 +776,8 @@ fn build_action(
                 &serde_json::to_value(
                     sign_read_request(TASK_FACTORY_QUOTE_PATH, wrong, delegate).unwrap()
                 )
-                .unwrap()
+                .unwrap(),
+                deadline
             ),
             409
         );
@@ -797,7 +797,8 @@ fn build_action(
                 &serde_json::to_value(
                     sign_read_request(TASK_FACTORY_QUOTE_PATH, wrong, delegate).unwrap()
                 )
-                .unwrap()
+                .unwrap(),
+                deadline
             ),
             409
         );
@@ -825,17 +826,18 @@ fn build_action(
                 &serde_json::to_value(
                     sign_read_request(TASK_FACTORY_QUOTE_PATH, wrong, delegate).unwrap()
                 )
-                .unwrap()
+                .unwrap(),
+                deadline
             ),
             403
         );
         let mut raw = serde_json::to_value(&proof).unwrap();
         raw["request"]["spec"] = serde_json::json!({"build_cost":[]});
-        assert_eq!(private_http(endpoint, &raw), 400);
+        assert_eq!(private_http(endpoint, &raw, deadline), 400);
         let mut tampered = proof.clone();
         tampered.request.site_id = "foreign-site".into();
         assert_eq!(
-            private_http(endpoint, &serde_json::to_value(tampered).unwrap()),
+            private_http(endpoint, &serde_json::to_value(tampered).unwrap(), deadline),
             400
         );
         let mut forged = quote.clone();
@@ -866,7 +868,7 @@ fn build_action(
         captured.current_public_context = quote.current_public_context;
         return quote.quote.action;
     }
-    panic!("maximum factory quote refreshes exhausted");
+    panic!("starter chain deadline exhausted during factory quote refresh");
 }
 fn recipe_action(
     client: &RemoteWorldServiceClient,
@@ -875,8 +877,7 @@ fn recipe_action(
     captured: &mut CapturedTaskContextV1,
     deadline: Instant,
 ) -> Action {
-    for _ in 0..8 {
-        assert!(Instant::now() < deadline);
+    while Instant::now() < deadline {
         let proof = sign_read_request(
             TASK_RECIPE_QUOTE_PATH,
             TaskRecipeQuoteRequestV1 {
@@ -917,19 +918,27 @@ fn recipe_action(
         }
         *captured = retry_private(|| client.read_task_context(get), deadline);
     }
-    panic!("maximum recipe quote refreshes exhausted");
+    panic!("starter chain deadline exhausted during recipe quote refresh");
 }
-fn private_http(endpoint: &str, body: &serde_json::Value) -> u16 {
+fn private_http(endpoint: &str, body: &serde_json::Value, deadline: Instant) -> u16 {
     let mut stream =
         std::net::TcpStream::connect(endpoint.strip_prefix("http://").unwrap()).unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    assert!(
+        !remaining.is_zero(),
+        "starter chain HTTP probe deadline exhausted"
+    );
+    stream.set_read_timeout(Some(remaining)).unwrap();
+    stream.set_write_timeout(Some(remaining)).unwrap();
     let body = serde_json::to_vec(body).unwrap();
     write!(stream,"POST {TASK_FACTORY_QUOTE_PATH} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",body.len()).unwrap();
     stream.write_all(&body).unwrap();
     let mut response = String::new();
     stream.read_to_string(&mut response).unwrap();
+    assert!(
+        Instant::now() < deadline,
+        "starter chain HTTP probe exceeded deadline"
+    );
     assert!(response.contains("Cache-Control: no-store"));
     response.split_whitespace().nth(1).unwrap().parse().unwrap()
 }
