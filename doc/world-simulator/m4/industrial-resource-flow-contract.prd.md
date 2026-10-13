@@ -25,7 +25,7 @@
 
 GitHub #2166 中的 `schedule_quote`、`logistics_transfer_quote` / `transfer_impact_preview`、`product_validation_quote` / `validation_unlock_preview`、`power_survival_quote` / `energy_recovery_preview`、`power_sale_quote` / `energy_liquidity_preview`、`market_quote_decision_preview`、`refine_quote` / `refine_preview` 与 data-access recovery 的可读性按实际交付范围验收。现有 quote、DTO 或局部 consumer 不应重新写成完全未实现；[#3510](https://github.com/eng-cc/oasis7/issues/3510) 承接仍未收口的独立语义/验收项。文档补充不证明代码修复、全部 Viewer/Agent surface、ABI 变更或发布 readiness。
 
-工业恢复的玩家语义由 gameplay agency/top-level 合同承接：资源不足、采空、不可达或精炼短缺不能把 Agent 的自动裁剪、改道或拒绝伪装成原意图已经完成；正式 surface 将原 accepted intent、约束原因、保留进度和 wait / repair / reroute / reprioritize 的下一决策连在同一因果链。`refine_value_class` 的唯一现行玩家分类是 `enough_to_advance / partial_progress / poor_power_tradeoff`；历史 `enough_for_next_step` 只作该首项的迁移别名，不另行冻结公式或行为。
+工业恢复的玩家语义由 gameplay agency/top-level 合同承接：资源不足、采空、不可达或精炼短缺不能把 Agent 的自动裁剪、改道或拒绝伪装成原意图已经完成；正式 surface 将原 accepted intent、约束原因、保留进度和 wait / repair / reroute / reprioritize 的下一决策连在同一因果链。`refine_value_class` 的玩家词表保留 `enough_to_advance / partial_progress / poor_power_tradeoff`，不表示各项在当前资源模型都可达，适用范围见下文净缺口合同；历史 `enough_for_next_step` 只作该首项的迁移别名，不另行冻结公式或行为。
 
 历史 LLM debug 资源注入保持 `LLMSKIP`/debug-probe 边界：默认不暴露给正式玩家，非 debug 模式必须拒绝，且不得作为工业 progression、经济结果、active-LLM formal lane 或 playability/release 证据。该边界不新增调试工具、玩家资源入口或运行时实现承诺。
 
@@ -53,9 +53,9 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 
 以下条款补齐现有报价的领域解释与实现验收目标，保持 simulator 的 `Electricity | Data` 与 Runtime 的 `MaterialLedgerId` 两条权威边界，不引入旧 ResourceKind，也不让一条 lane 的公式覆盖另一条。
 
-- **精炼前后余额：** simulator 的 `hardware_shortfall_before` 从动作前真正可用于当前 BuildFactory 目标的 Data 余额计算；after 从执行相同精炼转换后的净 Data 余额计算。旧字段名 `compound_mass_g`/`hardware_output` 不构成两份独立库存或“未精炼 Data 不可建厂”的资格。只有净缺口实际缩小才能称 partial progress，目标已满足或缺口扩大不能因 gross output 为正而称进展；推荐量必须与同一净变化一致。
-- **逐种材料缺口：** Runtime 报价先按当前材料同一性规则聚合重复请求，再对每种材料计算 `max(requested - selected_available, 0)`，最后求和。其他材料的盈余不得抵销本材料短缺；只截总量也不成立。local/world 选择与实际领域供给政策一致，不把两份余额重复合并；DTO 的 allowed、分项/总缺口与推荐理由须同义，材料足够也不保证其它提交前置成立。
-- **消费账本：** 对具体排产结果的报价必须读取该 factory/recipe 实际消费的 input ledger，而不是以发起 Agent 的 ledger 替代；独立库存/行情查询可以说明自己的账本，但不能冒充另一条排产的可执行性。报价显示 owner、消费账本与库存时刻，实际提交仍重新校验。
+- **精炼前后余额：** simulator 的 `hardware_shortfall_before` 从动作前真正可用于当前 BuildFactory 目标的 Data 余额计算；after 从执行相同精炼转换后的净 Data 余额计算。旧字段名 `compound_mass_g`/`hardware_output` 不构成两份独立库存或“未精炼 Data 不可建厂”的资格。现行产率上限使产出不大于投入，净 Data 不增加，建厂缺口不能缩小；当前模型不得产生 `enough_to_advance` / `partial_progress` 的目标进展判定，也不要求这两类不可达正例。合法转换成功仍须按 `poor_power_tradeoff` 说明无改善或净损失，推荐量必须与同一净变化一致。
+- **逐种材料缺口：** Runtime 报价先按当前材料同一性规则聚合重复请求，再对每种材料计算 `max(requested - selected_available, 0)`，最后求和。其他材料的盈余不得抵销本材料短缺；只截总量也不成立。独立行情保留现有 local/world 来源比较，不把两份余额重复合并；对 `ScheduleRecipe` 的准入报价，`selected_available` 只取实际 factory input ledger，不能用 world cover 清零排产缺口。DTO 的 allowed、分项/总缺口与推荐理由须同义，材料足够也不保证其它提交前置成立。
+- **消费账本：** 对具体排产结果的报价必须读取该 factory/recipe 实际消费的 input ledger，而不是以发起 Agent 或 world ledger 替代；独立库存/行情查询可以说明自己的账本，但不能冒充另一条排产的可执行性。工厂不足而世界有料时，只能推荐受支持的显式采购/调运；材料实际入厂后重新报价和校验，不能以 `submit_with_world_supply` 直接提交或隐式跨账本扣料。报价显示 owner、消费账本与库存时刻，实际提交仍重新校验。
 - **转移原子性：** simulator `TransferResource` 在任何源扣减前检查源与目标的资源种类支持及入账可行性；Location Electricity 必须提前拒绝。任何转移失败不得留下半笔扣减/入账，也不得通过恢复 Location 电力池或给拒绝事件补扣款来迁就错误；自转移与正常 Agent/合法 Data 路径保留各自既有语义。
 - **物流解释：** 合法 direct/no-route 只表示没有 graph path binding，不等于 path unavailable。route、material default、explicit priority 与 keyword fallback 保留独立 reason；不可执行 quote 的 ETA 显式为不可用或以成立条件限定。引用 Runtime 原判断，不新增 blocker projection、路径或调度 authority，旧零距离兼容单独验收。
 
