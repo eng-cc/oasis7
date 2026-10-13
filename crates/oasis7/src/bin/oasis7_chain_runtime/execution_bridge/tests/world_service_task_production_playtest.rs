@@ -773,9 +773,29 @@ fn check_quote_read_contract(
     let before = pin();
     match client.quote_task_recipe(proof) {
         Ok(repeated) => {
+            // A canonical commit can advance without changing the runtime base.
+            // The repeated read must report its actual pin, while every quote
+            // and context field other than that read provenance stays identical.
+            assert_eq!(repeated.read_commit.world, quoted.read_commit.world);
+            assert_eq!(repeated.read_commit.binding, quoted.read_commit.binding);
+            assert!(repeated.read_commit.position >= quoted.read_commit.position);
+            assert_eq!(
+                repeated.current_public_context.read_commit,
+                repeated.read_commit
+            );
+            assert_eq!(
+                quoted.current_public_context.read_commit,
+                quoted.read_commit
+            );
+            if repeated.read_commit.position == quoted.read_commit.position {
+                assert_eq!(repeated.read_commit, quoted.read_commit);
+            }
+            let mut expected = quoted.clone();
+            expected.read_commit = repeated.read_commit.clone();
+            expected.current_public_context.read_commit = repeated.read_commit.clone();
             assert_eq!(
                 serde_json::to_value(&repeated).unwrap(),
-                serde_json::to_value(quoted).unwrap()
+                serde_json::to_value(&expected).unwrap()
             );
             let after = pin();
             if before.commit == after.commit {
