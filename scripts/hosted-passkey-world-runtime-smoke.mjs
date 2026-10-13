@@ -411,21 +411,28 @@ try {
   }));
   process.exitCode = 1;
 } finally {
-  if (browser) await browser.close();
-  writeFileSync(join(scratch, 'stop'), 'stop', {
-    mode: 0o600
-  });
-  for (const p of children) {
-    if (p.exitCode !== null || p.signalCode !== null) continue;
+  try {
+    if (browser) await Promise.race([browser.close(), sleep(3000).then(() => {
+      throw new Error('browser_close_timeout');
+    })]);
+  } catch {
+    process.exitCode = 1;
+    console.error(JSON.stringify({ cleanup: 'browser_close_failed' }));
+  } finally {
     try {
-      process.kill(-p.pid, 'SIGTERM');
-    } catch {}
-  }
-  await sleep(500);
-  for (const p of children) {
-    if (p.exitCode !== null || p.signalCode !== null) continue;
-    try {
-      process.kill(-p.pid, 'SIGKILL');
-    } catch {}
+      writeFileSync(join(scratch, 'stop'), 'stop', { mode: 0o600 });
+    } catch {
+      process.exitCode = 1;
+      console.error(JSON.stringify({ cleanup: 'fixture_stop_file_failed' }));
+    }
+    for (const p of children) {
+      if (p.exitCode !== null || p.signalCode !== null) continue;
+      try { process.kill(-p.pid, 'SIGTERM'); } catch {}
+    }
+    await sleep(500);
+    for (const p of children) {
+      if (p.exitCode !== null || p.signalCode !== null) continue;
+      try { process.kill(-p.pid, 'SIGKILL'); } catch {}
+    }
   }
 }
