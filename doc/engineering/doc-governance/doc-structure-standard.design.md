@@ -1,7 +1,7 @@
 # 文档分工与组织规范正文（2026-03-09）
 
 - 对应需求文档: `doc/engineering/doc-governance/doc-structure-standard.prd.md`
-- 历史执行记录: `doc/engineering/doc-governance/doc-structure-standard.prd.md`（只读历史）
+- 历史执行记录: Git history、PR 与实际验证记录；本页不承载任务状态。
 - 执行记录: Git、PR、实际 CI 与评审记录；Issue 和 Project 按需使用
 
 ## 1. 规范定位
@@ -47,6 +47,37 @@
 - 可选 Issue（跟踪）
 
 这样可以保证“一眼知道这些文档是同一个专题的不同视角”。
+
+<a id="doc-authority-resolution"></a>
+### 2.5 权威裁决与有界修复
+
+承接 [GOV-AC-1–5](doc-structure-standard.prd.md#doc-authority-and-validation)。
+先识别争议对象、内容类型和声明 scope，再找拥有该内容的既有权威；同一权威内才使用审定版本先后。
+core 协调跨域影响，产品层拥有用户承诺，专业层拥有规则和技术合同，工作流拥有日常开发规则；
+索引、时间戳与历史任务摘要都不获得跨域覆盖权。范围不明时记录具体冲突、受影响结论及对应责任人，
+由现有 PR/评审或按需 Issue 承接，不增加准入、角色证明或放行回执。
+
+修复顺序为“确认仍使用的规则/入口 → 修改既有主责条款 → 同步活跃消费者 → 对该缺口验证”。
+共享设计可以承接重复正文，但独立 PRD 的需求和验收不消失；删除前核对路径、锚点、目录约定和动态消费者。
+没有当前影响的旧迁移批次不恢复；旧 source、日期、PASS/hold 和 frozen fixture 保持历史语义。
+
+<a id="doc-validation-boundary"></a>
+### 2.6 检查实现与验证分配
+
+检查结果按真实错误与编辑提示分开累计。Markdown 长度只能进入提示集合，不进入 failures 或任何上层
+baseline/required 的失败条件；有效性错误仍按既有合同失败。help、调用方和回归同步，Rust 体量规则不变。
+结构通过不证明语义正确，登记更新不证明审核完成，引用存在也不证明 required 实际运行了检查。
+
+| 上游验收 | 实现责任与判定 | 验证设计（待在实施候选执行） |
+| --- | --- | --- |
+| GOV-AC-1/2 | 当前 authority 与活跃入口；交付事实回到 PR/CI，任务身份按需 | 较新 core 与较旧专业合同冲突仍按内容归属；活跃消费者不依赖退役 `.pm`/project 入口，历史链接不机械改写 |
+| GOV-AC-3 | `scripts/doc-governance-check.sh` 的提示/失败通道及其真实调用者 | 999/1000/1001 行均不因长度非零；各自叠加缺失引用仍失败；检查 help 与 baseline/required 调用，不降低其他错误 |
+| GOV-AC-4 | registry 精确 entry/domain/导航、product_overlay、owning-module 与 tools 引用范围 | 错域同前缀、overlay 互换、topic 合法 metadata、tools 中活跃退役引用分别作正负例，不只查总数 |
+| GOV-AC-5 | 每个链接及其 fragment 独立绑定，证据入口按真实集合导航 | 同行交叉错绑 ID/fragment 必须检出；PRD 索引未覆盖的 evidence 仍可从真实目录或 corpus 定位 |
+
+当前 v3 只更新受影响对象/组，不能为追平 main 重写旧单体清单或冻结摘要。任何语义复核记录的更新须
+保留实际复核范围和未证明事项；自动 sync 不更新批准结论。上述验证分别记录候选、命令和结果，不要求
+新增一套全仓治理台账或在无相关改动时重复运行全部历史检查。
 
 ## 3. 一级模块组织规范
 每个一级模块目录固定保留以下入口：
@@ -163,7 +194,7 @@ doc/product/<module>/
 
 `doc/` 的物理目录树与 `doc/product/` 的四模块逻辑产品树是两层 taxonomy：专业域、治理域、测试/证据域和受控例外目录不会成为第五个产品模块。
 
-`doc/.governance/top-level-directory-registry.json` 是一级物理目录的机器可读结构登记。每个 live `doc/` 一级目录必须登记 `name`、`type`、`owner`、`entry` 和 `reason`；`entry` 必须在 `doc/README.md` 的人工阅读导航中可达。registry 负责结构真值和可验证性，README 负责读者路径，不从 registry 自动生成完整文件系统清单。
+`doc/.governance/top-level-directory-registry.json` 是一级物理目录的机器可读结构登记。每个 live `doc/` 一级目录必须登记 `name`、`type`、`owner`、`entry` 和 `reason`；`entry` 必须位于本记录的 domain 内，并在 `doc/README.md` 的人工阅读导航中精确可达；只匹配目录前缀不充分。`product_overlay` 类型只允许用于 `product` 记录，其他记录不得占用。registry 负责结构真值和可验证性，README 负责读者路径，不从 registry 自动生成完整文件系统清单。
 
 例外目录还必须登记非空的 `entry_conditions`、`review_trigger` 与 `exit_conditions`。历史摘要与短周期证据池只可按其例外条件存在，不得默认为长期模块或运行态真值。新增、删除或重新分类一级目录时，必须同步更新 registry、根 README 和相关 landing page，并运行文档治理检查。
 

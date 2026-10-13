@@ -1,11 +1,11 @@
 # oasis7 三节点运维观测合同
 
 - 对应设计文档: `doc/p2p/node/node-triad-operations-observability.design.md`
-- 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
+- 执行与验证事实: Git、PR、实际 CI 与评审记录；Issue/Project 按需使用。
 
 ## 权威边界
 
-本专题是 real-environment triad 的当前 operator 与 evidence authority。它定义节点 inventory、health/status/host/process/traffic/WASM 采样、bounded artifact、summary 解释和 fail-closed 行为；runtime 的 consensus、status schema 与 replay 语义仍由对应 runtime authority 定义，QA 决定 release/evidence verdict。
+本专题拥有被实际选用的 real-environment triad 工具之 operator 与 evidence 合同，不声明任何历史 fleet 当前仍在线或必须继续部署。它定义节点 inventory、health/status/host/process/traffic/WASM 采样、bounded artifact、summary 解释和 fail-closed 行为；runtime 的 consensus、status schema 与 replay 语义仍由对应 runtime authority 定义，QA 决定 release/evidence verdict。
 
 它不声明主网、public-chain-grade reachability、长期告警平台、自动 deploy/restart/rollback/restore/state-sync 或 release readiness。一次 status read、fixture 或 monitor run 不创建、续期或升级运行证据。
 
@@ -23,7 +23,7 @@
 
 ## Inventory 与采样合同
 
-当前 triad 以 `local_node`、`sequencer_ecs`、`storage_ecs` 标识；实际 runtime role 必须从同一窗口的 sampled status 读取，不能由标签推断。默认 service labels 为 `oasis7-triad-observer.service`、`oasis7-triad-sequencer.service`、`oasis7-triad-storage.service`，部署 inventory 可以显式覆盖。
+三节点工具沿用 `local_node`、`sequencer_ecs`、`storage_ecs` 兼容标签；实际 runtime role 必须从同一窗口的 sampled status 读取，不能由标签推断。默认 service labels 为 `oasis7-triad-observer.service`、`oasis7-triad-sequencer.service`、`oasis7-triad-storage.service`，部署 inventory 可以显式覆盖。
 
 | 输入 | 当前合同 | fail-closed 行为 |
 | --- | --- | --- |
@@ -48,6 +48,29 @@ Canonical command is `scripts/p2p-real-env-observability-monitor.sh`; it compose
 - reward worker 的 collector/probe state 持久化失败是独立诊断事实：完整轮末 `last_error`/degraded 与告警仍须可见，已有 report、没有新 epoch 或 invariant 正常均不能清除此错误。best-effort 数值仍可更新；只有对应写入真正恢复成功后才清错，不根据其他步骤成功推定恢复。
 
 本节规定应满足的编排/诊断合同，不把文档修订作为脚本或 worker 修复证明。离线验收分别覆盖首个/后续/全部 SSH 失败、固定时钟同 out-dir 并发与预存 sentinel、不同 inventory、service/status URL 单项和组合、非法参数写前失败，以及连续两轮写失败/真正恢复后清错；使用实际 orchestration 的 stub collectors，不只测 summary helper，无需真实 SSH/节点。
+
+<a id="ops-selected-scope"></a>
+## 当次选用范围与历史环境退出
+
+先明确实际使用的环境、模式、用途、节点集合及一个候选版本；不从旧标签、IP、包版本或过往停机记录推断今天的状态。
+本专题的 triad 工具只在实际选用其受支持三节点范围时验收；其他单权威/多节点路径按所属合同验证，
+不因本页名称获得支持声明，也不把旧三/五/六节点拓扑作为工业首局的新前置。
+
+旧 fleet 不再使用时，记录其退出范围和理由即可停止旧候选逐轮追验；未验证的历史结果不改为通过。
+继续使用时，仅对当次选定 candidate 核包/BUILDINFO/checksum、实际 service ExecStart/readback、适用 readiness、
+health/NRestarts 和同窗推进。报告、工具回归和现场部署分开交付，离线工具修复无需等待旧 fleet。
+已有 consumer-impact、observer hold 与禁止操作仍有效；范围调整不授权重启、清理、恢复或对外 all-clear。
+
+<a id="ops-report-contract"></a>
+## 报告准确性与新鲜度验收
+
+- OPS-AC-1：真实 single-node traffic envelope 的 bytes/window/reset/last_error 能进入 merged Markdown；未知 schema、available=false 或缺文件显式不可用，不静默填 0。仅支持的旧平铺格式可走显式 adapter。
+- OPS-AC-2：最新 attempt、最近成功及窗口截止分别表达。成功后持续失败不能沿用旧成功窗口宣称当前完整覆盖；离线重算使用明确 as-of，不强制套用当前墙钟，也不抹掉有界历史成功。
+- OPS-AC-3：p99 使用实际采样窗口和明确算法；128 个样本中 127×100ms＋1×1000ms 的 nearest-rank p99 为 100ms，max 为 1000ms。样本不足不能以 max 冒充已满足完整窗口的 p99。
+- OPS-AC-4：容量与 GC 结果按 [存储指标及 Gate 合同](../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md#storage-observation-contract) 解释；报告告警不等于发布授权，也不证明 GC 执行机制正确。
+
+以上只定义当前使用这些工具时的正确输出。JSON、Markdown 与终端的事实和窗口保持一致；现场全 fleet 健康、
+对外恢复、只读可用和指定写服务恢复各需其适用证据，不能用单节点/validator pair 健康相互替代。
 
 ## 验证与恢复边界
 

@@ -513,6 +513,29 @@ G1 的未知保护优先于 G2 的回收目标，G3 的回退选择不得解除 
 - soak profile 可以把“保留策略导致的正常增长”和“孤儿泄漏”区分开。
 - required/full 测试直接断言预算与错误状态。
 
+<a id="storage-observation-design"></a>
+### 12.4 指标归约与独立 Gate 终态
+
+承接 [STORAGE-AC-1–5](runtime-storage-footprint-governance.prd.md#storage-observation-contract)。
+collector 提供实际目录关系及可用性，adapter 统一字段，summary 保留解释；不更改 GC 的删除决策。
+
+| 责任 | 设计与反例 |
+| --- | --- |
+| 容量并集 | 使用可验证的规范化目录身份与包含关系计算并集，不重扫或公开敏感原始路径；同目录别名去重。root=40B 内含 child=20B、grandchild=16B，另有外置目录=16B 时 total=56B 而非逐字段相加的 92B。外置 override 不能因字段名像 child 被忽略；关系不足时 total 不可用且解释缺失项 |
+| GC availability | 显式分类 success/failed/not_run/not_available/unknown/缺字段；仅 failed 派生失败 GC 告警/优化项。其他类别按可用性给诊断，独立 degraded/orphan 告警照常保留；未知不是 success |
+| 有效采集间隔 | worker 接受的 effective interval 是 status/JSON 回显来源；requested/default 仅作来源解释。用可控时钟覆盖三档配置、首次采集、门槛及一次慢采集未完成时不重入，独立 degraded 通知不等待周期 |
+| 普通 Gate | 解析/读取→评估→保存两种报告→输出状态/路径→返回判定。Bash 显式保留 Python/评估退出结果，报告成功和最终 echo 不将 FAIL 改为 0；输入或报告写入失败保持错误，无成功声明 |
+| dry-run | 参数先经 argv/env 传给 serializer，输出真实 string/null/number/bool；Markdown 不使用会展开反引号命令替换的 heredoc。不访问传入的 status 路径，不执行评估；标注这是配置预览而非 PASS |
+
+验证分别覆盖完整输入链与进程边界：容量经 runtime collection→adapter→summary 的生产形 fixture；GC 六类状态
+与独立异常组合；间隔以可控时钟检查实际调用次数；Gate 用 orphan 超限、checkpoint 不足、profile 不匹配、
+启用 require-no-degraded 的 degraded 及启用 require-gc-clean 的 failed 逐项断言非零且报告为 FAIL。
+健康 fixture 必须为 0/PASS，无效输入和不可读源保持错误；dry-run 用不存在的源路径证明不读取，覆盖省略 profile
+及 dev_local/release_default/soak_forensics，stderr 不出现 command not found。
+
+此处定义待实现/待验证的合同；普通报告、CLI exit、配置预览和 release 接线分别判定，不推断当前发布门禁已接入，
+不运行真实节点、GC、恢复或性能压力测试来代替这些有限回归。
+
 ## 13. 失败语义与恢复策略
 ### 13.1 GC 失败
 - 任何 pin set 构建失败、引用校验失败、latest ref 缺失：
@@ -732,6 +755,7 @@ restore root 相等仅本地历史材料条件，开放 voting/serving/new inten
 
 | 上游 requirement / acceptance | 具体 obligation 与条件 | 本设计条款 | 外部 owner / dependency | 排除或未覆盖 |
 | --- | --- | --- | --- | --- |
+| [观测输出合同](runtime-storage-footprint-governance.prd.md#storage-observation-contract) | STORAGE-AC-1–5：容量并集、GC availability、实际间隔、普通 Gate 与 dry-run 分别验收 | [观测设计](#storage-observation-design) | 对应工具/运行时维护者及 QA | 文档修订不声明脚本或现场验收通过，不新增发布门禁 |
 | [G1](runtime-storage-footprint-governance.prd.md#storage-generation-g1) | 普通保存按精确候选与 durable 证据区分三态，安装/原返回值/幂等/fence 一致，维护失败独立 | [G1 设计](#storage-generation-g1-design) | runtime persistence 与普通 mutator；现有 cognition key；QA | 目标；不新增业务 ledger、外部 wire enum 或网络正式提交证明 |
 | [G2](runtime-storage-footprint-governance.prd.md#storage-generation-g2) | 替代 index 确认前保旧闭包，确认后回收，未知保护旧/新材料 | [G2 设计](#storage-generation-g2-design) | runtime storage 单 writer；DistFS 引用与 sync；QA | 不增加多 writer 协调或远端归档；未证明真实掉电 |
 | [G3](runtime-storage-footprint-governance.prd.md#storage-generation-g3) | 只读完整同代候选含 CAS 组装，typed 错误决定回退，健康 latest 优先 | [G3 设计](#storage-generation-g3-design) | 普通/authoritative loader；DistFS 解码校验；QA | 不吞全局错误、不改 legacy/index/schema 校验，不授予 serving |
@@ -767,6 +791,7 @@ restore root 相等仅本地历史材料条件，开放 voting/serving/new inten
 
 | 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [观测输出合同](runtime-storage-footprint-governance.prd.md#storage-observation-contract) | [观测设计](#storage-observation-design) | STORAGE-AC-1–5：容量并集、GC availability、实际间隔、普通 Gate 与 dry-run 分别验收 | [现有验证入口](../../../testing-manual.md)；在实际实施候选按观测设计中的各正负 fixture 和进程边界分别运行，入口存在不代表矩阵已覆盖 | 实施 PR 的候选、命令、逐项结果和未运行项 | 本次未运行行为、真实节点、部署或性能验收 |
 | [G1](runtime-storage-footprint-governance.prd.md#storage-generation-g1) | [G1 设计](#storage-generation-g1-design) | GEN-G1 的提交前后、维护和 sync/回读故障分别成立 | [局部基线](../../../crates/oasis7/src/runtime/tests/cognition_economy.rs)；目标 required GEN-G1：同候选单 writer 临时目录，注入 §16.3 全部故障窗并对账返回值、内存、恢复和同 key/后续写入；现有基线不覆盖该组合 | PR 中实际故障窗、命令、exit 与 lease/余额/receipt、fence 对账 | 本次未实现/运行；平台持久性、真实掉电/provider 未证明 |
 | [G2](runtime-storage-footprint-governance.prd.md#storage-generation-g2) | [G2 设计](#storage-generation-g2-design) | GEN-G2 的 A/B/C 保护与提交后清理独立于 G1 | [局部基线](../../../crates/oasis7/src/runtime/tests/persistence.rs)；目标 required GEN-G2：同候选单 writer 临时目录，第三代 index.tmp open/write/sync 注入、坏 B/健康 A、提交后 GC 失败与重试；比旧 index 字节与全闭包 | PR 中实际 A/B/C 身份、故障窗、工件完整性和回收结果 | 本次未实现/运行；已有 interrupted-save 测试不代签全部窗口 |
 | [G3](runtime-storage-footprint-governance.prd.md#storage-generation-g3) | [G3 设计](#storage-generation-g3-design) | GEN-G3 八格、后续组装/World 构造及共享损坏/来源错误负例；返回同代且探测无副作用 | [局部基线](../../../crates/oasis7/src/runtime/tests/persistence.rs)；目标 required GEN-G3：同候选两入口临时目录，取 latest 独占 blobs 后分别缺失/损坏并注入后续构造失败；核对身份与同代材料、零文件/活 World 写入及零 provider/dispatcher 调用，保留 archive/index 负例 | PR 中实际独占/共享对象集合、各格错误、选择及非变更结果 | 本次未实现/运行；不证明业务恢复到最新 head 或正式 serving |

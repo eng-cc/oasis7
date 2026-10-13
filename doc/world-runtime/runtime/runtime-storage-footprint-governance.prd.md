@@ -57,7 +57,7 @@
 | Sidecar manifest GC | `generation_id`, `manifest_hash`, `journal_segment_hashes`, `pinned_blob_hashes` | 确认 generation 持久提交后执行维护；确认未提交才保留旧 World，未知时隔离写入并核对 | 保存结果为 `NotCommitted/Committed/StatusUnknown`；`Committed` 后独立记录清理成功或维护降级 | 替代 index 提交前保护当前 index 的全部引用闭包；提交后只清理新 index 与外部 pin 均不再引用的数据 | 自动执行；仅 runtime 自身可写 |
 | Tick consensus compaction | `tick_consensus_hot_limit`, `archive_segment_size`, `archive_index` | 超出热窗口时把旧记录转入 archive 段并更新索引 | `hot -> archived` | 热窗口按最新 tick 保留；archive segment 按 tick 连续范围分段；archive seek 必须能按 `from_tick..to_tick` 读回 | 自动执行；审计只读 |
 | Replay contract | `commit_ref`, `checkpoint_anchor`, `retained_heights`, `replay_profile` | 指定高度回放时从最近 checkpoint + canonical log 重建目标状态 | `requested -> replaying -> matched/mismatched` | 仅对 retention policy 保留的高度提供强保证；重建结果以 `execution_state_root` 校验 | 自动执行；测试/审计只读 |
-| Metrics / status 输出 | `bytes_by_dir`, `blob_counts`, `ref_count`, `pin_count`, `orphan_blob_count`, `last_gc_at_ms`, `last_gc_result`, `last_gc_error`, `degraded_reason`, `storage_profile`, `effective_budget`, `replay_summary` | status API / state file 输出指标；异常时给出原因，launcher / 脚本无需扫描内部目录即可判断预算与回放能力 | `collected -> published` | 字节统计按目录聚合；GC 结果按时间覆盖 latest 并写审计历史；`replay_summary.mode` 仅允许 `latest_only` / `full_log_only` / `checkpoint_plus_log` | status 只读；配置修改受启动权限控制 |
+| Metrics / status 输出 | `bytes_by_dir`, `blob_counts`, `ref_count`, `pin_count`, `orphan_blob_count`, `last_gc_at_ms`, `last_gc_result`, `last_gc_error`, `degraded_reason`, `storage_profile`, `effective_budget`, `replay_summary` | status API / state file 输出指标；异常时给出原因，launcher / 脚本无需扫描内部目录即可判断预算与回放能力 | `collected -> published` | 各目录保留递归字节数，total_bytes 对真实目录并集去重；GC 结果保留失败、未运行、不可用及未知的不同语义；`replay_summary.mode` 仅允许 `latest_only` / `full_log_only` / `checkpoint_plus_log` | status 只读；配置修改受启动权限控制 |
 | Replication hot/cold retention 对齐 | `max_hot_commit_messages`, `cold_index`, `archive_bytes` | 超出热窗口后迁移到冷索引/对象存储，并更新 metrics | `hot -> cold-indexed` | 热窗口按最新高度回推的连续高度范围定义，不再按“最近 N 个现存文件”解释；冷索引统一走 `<namespace>.cold-index/index.json` 元数据协议，并以 `from_key/to_key + first/last_content_hash + entry_count` 表示 cold range anchor；cold-index scan 与按高度 seek 必须共享同一边界语义；rollout 期间若 canonical/legacy 任一缺失，读路径会回填另一侧别名 | 自动执行；策略由 profile 决定 |
 - Acceptance Criteria:
   - AC-1 (PRD-WORLD_RUNTIME-013): `oasis7_viewer_live` / `oasis7_chain_runtime` 默认开发 profile 在 `2500` heights 样本下，`output/chain-runtime/<node_id>/store <= 256 MiB`，且 CAS sweep 后不存在“record 仍引用、blob 已删除”的 dangling refs。
@@ -171,6 +171,23 @@ G1 回答“本次精确候选是否提交”，G3 回答“哪一代材料现�
   - 删除决策必须基于显式 pin 集和 manifest/record 引用计算，不允许“按文件时间猜测删除”。
   - 当前已提交 index 的 latest、rollback-safe、checkpoint 与外部 pin 完整闭包必须在替代 index 确认持久提交前保持可读；提交未知时还保留候选闭包，避免中间态造成不可恢复损坏。
   - metrics/status 仅暴露体积、引用、结果与错误，不新增敏感 payload 导出。
+
+<a id="storage-observation-contract"></a>
+### 存储指标与独立 Storage Gate 合同
+
+本节承接 PRD-WORLD_RUNTIME-015 的可观测输出，设计见
+[指标归约与 Gate 终态](runtime-storage-footprint-governance.design.md#storage-observation-design)。
+它不改变 GC、提交、checkpoint 或恢复机制，不新增发布前置。
+
+- STORAGE-AC-1：bytes_by_dir 保留各目录递归值；total_bytes 按实际目录集合的并集去重，默认嵌套、外置 override 和同目录多字段均只计一次。缺少路径关系的旧字段必须给不可确定/不完整诊断，不能硬编码忽略子目录或把未知当 0。
+- STORAGE-AC-2：只有明确 `last_gc_result=failed` 产生 storage_gc_failed/critical。success、not_run、not_available、unknown 和缺字段分别保留含义；非失败不伪造失败，也不自动证明健康。degraded_reason/orphan 的独立异常不得丢失。
+- STORAGE-AC-3：worker、status 与持久 JSON 对 effective interval 使用同一实际配置；必要时区分 requested/default/effective，不能把声明值当实际调度。首次采集、门槛和慢采集不重叠分别验证，degraded 通知独立更新。
+- STORAGE-AC-4：独立 `oasis7-runtime-storage-gate.sh` 普通评估先保存完整 JSON/Markdown，再令 PASS=0、FAIL 非零；终端展示状态和报告路径。无效输入/读取/写报告失败仍非零，不能由最后一次 echo 掩盖，也不能吞异常以制造报告。
+- STORAGE-AC-5：dry-run 只预览配置，不读 status 源、不发请求、不运行评估或 GC。省略 expected-profile 及三个合法 profile 均能输出类型正确的 JSON 与完整 Markdown；预览成功不表示存储通过。
+
+验收覆盖嵌套并集、GC 六类状态、30000/15000/5000ms 实际配置、profile/checkpoint/orphan/degraded/GC
+各负例与健康正例；普通 Gate 和 dry-run 分别记录进程退出码、JSON、Markdown 与 stderr。
+观测报告、独立 CLI gate 与真实 release gate 接线不是同一个验收，不能用其中一项通过代替另一项。
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
