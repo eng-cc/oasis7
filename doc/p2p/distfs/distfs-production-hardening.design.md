@@ -24,6 +24,7 @@ runtime/P2P拥有机制；ops拥有同窗口部署事实；QA拥有组合证据�
 | [professional_acceptance: dh-local-probe](distfs-production-hardening.prd.md#dh-local-probe) | atomic scheduler persist；missing默认，坏state warning/default不阻main settlement/tick | [des-dh-probe-state](#des-dh-probe-state) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-backoff-report](distfs-production-hardening.prd.md#dh-backoff-report) | budget/backoff/reason multiplier/old defaults兼容、不改算法/公式 | [des-dh-backoff](#des-dh-backoff) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-backoff-report](distfs-production-hardening.prd.md#dh-backoff-report) | chain-runtime CLI严格范围；epoch aggregate-only、详细state local | [des-dh-report](#des-dh-report) | runtime/node/net/distfs与QA；相关外部authority | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dh-decompression-bound](distfs-production-hardening.prd.md#dh-decompression-bound) | 缓存填充在产生实际解压字节时限制预算，完整验证后才入缓存 | [des-dh-decompression](#des-dh-decompression) | DistFS decoder/cache 与 runtime/QA | 目标；不改变合法大 blob 的非缓存合同，不证明全局 RSS/CPU/网络防护 |
 
 ## 3. 当前状态、目标状态与差距
 
@@ -139,6 +140,7 @@ MIG067..075、MIG080仅历史；旧probe state字段default兼容。Phase5细rep
 | [professional_acceptance: dh-local-probe](distfs-production-hardening.prd.md#dh-local-probe) | [des-dh-probe-state](#des-dh-probe-state) | atomic scheduler persist；missing默认，坏state warning/default不阻main settlement/tick | [testing-manual.md](../../../testing-manual.md)；S4 required planned chain-runtime load/persist：missing/unreadable/malformed/writefailure与worker进展；distfs_probe_runtime.rs仅implementation locator，尚未定位完整测试。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-backoff-report](distfs-production-hardening.prd.md#dh-backoff-report) | [des-dh-backoff](#des-dh-backoff) | budget/backoff/reason multiplier/old defaults兼容、不改算法/公式 | [testing-manual S4/S9A](../../../testing-manual.md)；exact local test source `crates/oasis7_distfs/src/challenge_scheduler.rs`；existing probe_with_policy_limits_checks_per_round、probe_with_policy_applies_backoff_after_failure_round、probe_cursor_state_deserializes_from_legacy_snapshot、probe_with_policy_rejects_zero_reason_multiplier；local。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
 | [professional_acceptance: dh-backoff-report](distfs-production-hardening.prd.md#dh-backoff-report) | [des-dh-report](#des-dh-report) | chain-runtime CLI严格范围；epoch aggregate-only、详细state local | [testing-manual.md](../../../testing-manual.md)；S4 required planned CLI拒非法值、legacy state/readback与epoch fields oracle；CLI/worker/report完整测试未定位，本地lib suite不足。 | 当次GitHub task Issue evidence、实际命令/exit code/log/artifact；实际source/integration/tested tree/config/environment/window在执行时绑定 | local test source≠执行通过；全拓扑/恢复/finality/release未证明 |
+| [professional_acceptance: dh-decompression-bound](distfs-production-hardening.prd.md#dh-decompression-bound) | [des-dh-decompression](#des-dh-decompression) | 缓存解压实际输出预算与完整性后发布 | §13 的有界 reader/sink 计数、损坏输入、缓存不变和大文件兼容场景；planned local fixture，入口为现有 DistFS lib suite | source、固定容量配置、输出计数、缓存前后结果与命令退出码 | 最终报错不足；未运行，不证明 decoder workspace、RSS、CPU 或网络 DoS 上界 |
 
 ## 12. 决策、长期风险与未决问题
 
@@ -176,3 +178,33 @@ runtime/P2P负责缺失技术/实现；ops负责环境事实；QA负责计划覆
 - `crates/oasis7/src/bin/oasis7_chain_runtime/{cli.rs,distfs_probe_runtime.rs,reward_runtime_worker.rs}`。
 - 本地回归：`env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib`。
 - 涉及节点、真实数据可用性或恢复声明时，使用 `testing-manual.md` S9A 的 state-sync/blob closure、triad、real-env 和 release 分层验证；本设计不把本地测试提升为这些证据。
+
+<a id="des-dh-decompression"></a>
+## 13. 有界解压与缓存提交
+
+本节消费[缓存解压输出上界](distfs-production-hardening.prd.md#dh-decompression-bound)。它是待实现/验证的局部设计，不更改 blob 格式、缓存容量、合法大文件策略或现有完整性算法。
+
+### 13.1 校验和分配顺序
+
+头部读取与格式/数值范围检查 -> 决定是否进入现有缓存准入路径 -> 建立有界解压输出 -> 核对完整解码、精确长度及原完整性要求 -> 发布缓存项。声明长度 `L`、转换为地址空间长度以及加一哨兵运算必须检查溢出；不得先以未验证长度 reserve/分配。
+
+对缓存准入路径，令 `C` 为该路径实际缓存容量，`B = min(L, C)`。reader/sink 在每次交付解压字节时限制剩余预算；允许最多 `B + 1` 个输出字节用于发现超长，然后立即停止并返回原错误体系中可诊断的失败。不能先无界解码到 Vec，再包一层长度检查；也不能在外层已经完整分配后才套 bounded reader。
+
+正常完成要求实际长度恰为 `L`，不是“读满 B 就当成功”；长度短于声明、压缩流截断、解码错误或完整性失败全部拒绝。错误不发布部分缓存，不改 blob/index，不触发另一条无界解码重试；无关的已有缓存项保持原合同。
+
+### 13.2 容量范围与兼容
+
+`C` 来自已有缓存配置/常量，不增加另一个漂移的全局限制。以 32 MiB 容量作为该问题的回归配置时，分别覆盖小声明、大实际输出和恰好达到容量的边界。正常超过缓存准入范围的合法 blob 仍使用原有非缓存路径；本节只防止已选缓存路径用不可信头部绕过自己的输出预算，不宣称所有读取都只有 32 MiB 内存。
+
+输出计数限制不等于完整 decoder workspace、压缩输入驻留、线程并发总量或 CPU 限制。实现审读需确认具体库没有在预算之外先物化完整输出；有额外内部窗口/分配上界问题时独立说明，不能用这个局部补丁宣称全进程资源防护已完成。没有现场证据时不声称发生了远程 OOM、可利用攻击或数据损失。
+
+### 13.3 可观察验收
+
+| 输入 | 必须观察的结果 |
+| --- | --- |
+| 合法声明及合法完整压缩流；包含恰好 B 字节 | 精确读取、原完整性通过后才缓存；重复读取符合原缓存语义 |
+| 小 `raw_len`，实际解压内容超过声明或 32 MiB 回归容量 | reader/sink 的实际输出计数最多 B+1，立即失败；未物化完整大输出，无新缓存项 |
+| 零长度声明、长度/加一溢出、截断和坏压缩内容 | 按相应边界失败，不通过分配、短读成功或回退掩盖错误 |
+| 合法的大 blob 非缓存路径 | 原先支持的读取仍可使用；不因缓存修复变成全局尺寸拒绝 |
+
+使用计数 reader/sink 或等价仪表验证实际输出上界，并比较失败前后的缓存状态；只断言 error 或依赖一次 RSS 采样都不足。正反例进入现有 DistFS lib 回归，文档和测试定义不代表实际执行通过。
