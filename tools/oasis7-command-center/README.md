@@ -2,13 +2,17 @@
 
 macOS desktop implementation of [PR #4518](https://github.com/eng-cc/oasis7/pull/4518), following the [product contract](../../doc/engineering/command-center/command-center.prd.md) and [system design](../../doc/engineering/command-center/command-center.design.md).
 
-This application implements the two foundation increments: local document/Git reading, Chinese search, durable decisions and reading history, manual work-to-goal associations, and an optional read-only GitHub PR/check window in four Chinese views. The optional Codex execution connector is experimental and separately enabled for each project/local environment. It manages only its own stdio process and explicitly created sessions; existing Codex work remains in its original tool. Missing runtime observation is displayed as unknown, never as an empty task inventory.
+This application provides implementation foundations: local document/Git reading, Chinese search, durable decisions and reading history, manual work-to-goal associations, and an optional read-only GitHub PR/check window in four Chinese views. The optional Codex execution connector is experimental and separately enabled for each project/local environment. It manages only its own stdio process and explicitly created sessions; existing Codex work remains in its original tool. Missing runtime observation is displayed as unknown, never as an empty task inventory.
+
+The product revision of 2026-10-13 defines the complete foundation release around daily work: understand priorities and changes, enter the correct existing tool or owned session, handle a real request, and inspect the outcome. A dedicated home summary, unified work detail, external-session navigation, relationship reuse/repair, and three end-to-end user tasks remain implementation or acceptance gaps. Existing views and tests do not establish that complete release. See [the implementation gap](../../doc/engineering/command-center/command-center.design.md#1104-日常工作闭环的实现差距) and [product acceptance](../../doc/engineering/command-center/command-center.prd.md#cc-product-acceptance).
 
 ## Project status and architecture
 
 Start with the [project status](../../doc/engineering/command-center/README.md) for long-term direction, current goals, verified progress, recent changes and human attention. Use the [architecture index](../../doc/engineering/command-center/architecture/README.md) to find deployment, authority, persistence, access and recovery boundaries. The [continuous maintenance workflow](../../doc/engineering/command-center/command-center.manual.md) explains who refreshes these documents and when.
 
 These are derived repository documents with explicit source and observation windows. A fresh file read does not refresh the deployment or acceptance facts inside it. Once the documents are tracked in the selected worktree and within index coverage, use their Chinese titles or paths in document search. Repository links remain usable when a document is outside the local index. Refresh reads existing content; it does not rewrite summaries, schedule background jobs, start a model or inspect deployed machines.
+
+This search-based access describes the current foundation. The target home view provides direct status/architecture entry points and an actionable projection; it is not supplied merely by adding repository documents. External work should be connected through supported observation or a verified original-tool reference, with read, open and control capabilities shown separately; automatic takeover is outside the contract.
 
 ## Run and package
 
@@ -64,6 +68,8 @@ The independent workspace owns a single Cargo lockfile. Do not change `CARGO_TAR
 A debug first load on macOS 26.5 / arm64 read 7,499 sections from the implementation worktree in about 20 seconds, using an in-memory SQLite database. This is a single observed sample, not a startup guarantee or a production resource benchmark.
 
 Desktop acceptance must additionally exercise the packaged App: native folder selection; a real repository with a dirty Markdown file; two-character Chinese search; decision save, quit/reopen and cache rebuild; history after source edits; one PR linked to two goals; unavailable gh preserving local capability; close/reopen through the menu bar; keyboard focus and Chinese composition. Browser tests verify UI behavior, not VoiceOver or macOS IME quality. Runtime acceptance additionally checks explicit enable/connect/create/input, original target management after disabling, unknown receipts without replay, pending requests, and active/unknown quit coordination. `core/tests/codex_runtime.rs` owns the fake stdio fault replays; `core/examples/codex_smoke.rs` accepts an absolute native binary path and an optional `--turn` flag for an isolated, no-write model turn. The latter is opt-in and is not run by CI. Actual build/environment results belong in the implementation PR. Signing, older-system compatibility, full VoiceOver and remote/external-session control remain unproven.
+
+Future implementation must also exercise [AC-CC-013](../../doc/engineering/command-center/command-center.prd.md#AC-CC-013) through AC-CC-015: start the day, handle an interruption, resume work, and return from auxiliary tools. Record task completion, time, extra searches/context switches/manual entry and specific obstacles. The five-minute orientation criterion starts after available sources are loaded; loading is measured separately. A document-only revision does not provide new desktop, model-output or user-task evidence.
 
 ## Local tools
 
