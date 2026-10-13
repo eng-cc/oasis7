@@ -227,11 +227,17 @@ fn private_task_production_signed_quote_first_product_and_restart() {
             .unwrap()
             .as_nanos()
     ));
-    // The former two-second cadence was shorter than CI durable commit work
-    // (canonical commit total up to 4.6 seconds, including retention/persistence).
-    // Match the live five-second cadence and bound the
-    // full retry/release chain to 24 ticks, retaining the eight-attempt cap.
-    let cadence = Duration::from_secs(5);
+    // Ordinary probe can slow the real tick to expose assumptions about
+    // completion timing; the explicit live host retains its fixed cadence.
+    let cadence_ms = std::env::var("OASIS7_QA_PRODUCTION_TICK_MS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("production probe tick must be u64")
+        })
+        .unwrap_or(5000);
+    assert!((5000..=20000).contains(&cadence_ms));
+    let cadence = Duration::from_millis(cadence_ms);
     std::thread::scope(|scope| {
         let host = scope.spawn(|| {
             super::run_prepared_world_service_kind(
@@ -300,7 +306,9 @@ fn private_task_production_signed_quote_first_product_and_restart() {
             .unwrap()
             .unwrap();
         let mut categories = CleanupCategories::default();
-        let deadline = Instant::now() + cadence * 24;
+        // Bound the whole task chain, including observing its first product.
+        // Leave at least 60 seconds before the host's 360-second service limit.
+        let deadline = Instant::now() + (cadence * 24).min(Duration::from_secs(300));
         let mut attempts = Vec::new();
         let mut forced_action_rejection = false;
         let mut committed = None;
@@ -536,7 +544,6 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                 )
                 .is_err()
         );
-        let arrival = Instant::now() + Duration::from_secs(15);
         let delivered = loop {
             let p = pin();
             if p.world.ledger_material_balance(
@@ -546,7 +553,10 @@ fn private_task_production_signed_quote_first_product_and_restart() {
             {
                 break p;
             }
-            assert!(Instant::now() < arrival, "first product never completed");
+            assert!(
+                Instant::now() < deadline,
+                "first product never completed within task chain deadline"
+            );
             std::thread::sleep(Duration::from_millis(100));
         };
         assert_eq!(
