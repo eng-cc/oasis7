@@ -6,13 +6,14 @@ fn authorized_dissent_is_evidence_and_commits_once_without_owner_override() {
     let mut allowance = grant();
     allowance.object_id = "factory".into();
     allowance.action_kinds = vec!["ScheduleRecipe".into()];
+    allowance.limit_units = 12;
     world.install_agent_delegation_grant(allowance).unwrap();
     let intent = accepted(&mut world);
     let prepared = prepare(
         &mut world,
         "dissent-authorized",
-        recipe(2),
-        2,
+        recipe(),
+        8,
         AgentDecisionCausalContextV1 {
             intent_id: Some(intent.intent_id.clone()),
             dissent: Some("prefer to preserve electricity".into()),
@@ -37,10 +38,10 @@ fn authorized_dissent_is_evidence_and_commits_once_without_owner_override() {
     assert!(receipt.override_actor.is_none());
     assert!(receipt.owner_control_refs.is_empty());
     assert!(!receipt.domain_event_refs.is_empty());
-    assert_eq!(receipt.authorization.as_ref().unwrap().spent_units, 2);
+    assert_eq!(receipt.authorization.as_ref().unwrap().spent_units, 8);
     assert_eq!(
         world.agent_delegation_authorizations(AGENT_ID).unwrap()[0].remaining_units,
-        1
+        4
     );
     let root = world.current_state_root_hash().unwrap();
     let journal_len = world.journal().events.len();
@@ -53,7 +54,7 @@ fn authorized_dissent_is_evidence_and_commits_once_without_owner_override() {
     assert_eq!(restored.journal().events.len(), journal_len);
     assert_eq!(
         restored.agent_delegation_authorizations(AGENT_ID).unwrap()[0].spent_units,
-        2
+        8
     );
 }
 
@@ -99,6 +100,7 @@ fn dissent_does_not_preserve_execution_authority_after_revocation() {
     let mut allowance = grant();
     allowance.object_id = "factory".into();
     allowance.action_kinds = vec!["ScheduleRecipe".into()];
+    allowance.limit_units = 12;
     world
         .install_agent_delegation_grant(allowance.clone())
         .unwrap();
@@ -106,8 +108,8 @@ fn dissent_does_not_preserve_execution_authority_after_revocation() {
     let prepared = prepare(
         &mut world,
         "dissent-revoked",
-        recipe(2),
-        2,
+        recipe(),
+        8,
         AgentDecisionCausalContextV1 {
             intent_id: Some(intent.intent_id.clone()),
             dissent: Some("prefer to wait".into()),

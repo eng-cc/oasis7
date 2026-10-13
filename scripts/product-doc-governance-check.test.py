@@ -34,6 +34,7 @@ COPY_PATHS = (
     "doc/world-simulator/m4/industrial-resource-flow-contract.prd.md",
     "doc/world-simulator/llm/decision-provider-contract.prd.md",
     "doc/world-simulator/llm/provider-agent-experience-parity.prd.md",
+    "doc/world-simulator/llm/decision-provider-contract.prd.md",
     "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md",
     "doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md",
 )
