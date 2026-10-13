@@ -801,12 +801,14 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 
 - **合法退休仍可读**：通过真实安装形成 registry 的 inactive artifact，在没有任何 active instance 或 legacy active 引用时合法销毁，必须保留历史 registry、实例身份和原有审计，并使销毁后的 `snapshot/from_snapshot`、`save/load` 与 canonical CAS restart 得到一致可读结果。退休模块不能恢复执行；其他模块正常。不能删历史 registry、把所有缺 bytes 都视为退休，或等重启失败后才承认该已提交状态不完整。
 - **退休与损坏分开**：当前可执行集合、历史 registry 与可恢复的工件闭包是三种信息。只有受支持持久格式中可验证的退休事实，才允许对应历史记录缺少当前执行 bytes；active 引用或未退休记录缺 bytes 仍拒绝。保留中的历史 checkpoint/replay 所需 bytes 继续由既有保留合同管理，不能随当前 artifact 销毁一起误删。
+- **退休可由 journal 重建**：成功销毁的退休事实必须与销毁事件在同一提交中持久记录，绑定具体 artifact 生命周期；从销毁前 checkpoint 重放成功动作 tail，与直接恢复销毁后 snapshot/目录/CAS 得到同一结果。旧的单条 raw destroyed event 保持 state-only 兼容，不能作为动作退休的充分证据；新格式缺失、截断或错配的退休记录不能恢复出合法退休。具体记录及原子边界见[动作退休 journal 设计](module/module-lifecycle.md#module-artifact-retirement-journal)。
 - **实例升级可复用版本**：A/B 两实例从 v1 依次正常升级到同一 v2 时，目标已注册且完整 manifest 一致即可复用，不能重复注册或覆盖它；源版本依据被升级实例的历史绑定，不依据另一个实例已改变的全局 active 指针。每次保留该实例 ID、owner、target 与独立 state，且不改变另一实例。错误 owner/from/manifest、冻结、不兼容或无效 finality 继续拒绝且不扣升级费；不能用 rollback 事件或冻结正常 v1 代替 upgrade。
 - **共享内容不丢 manifest**：`wasm_hash` 只标识内容，同模块不同 version、不同模块可以共享 bytes，但各自完整 manifest identity 必须保留。标准保存后的 Observer 与普通恢复均能读取全部合法记录，包括 inactive 记录；不以最后写入的 `<hash>.meta.json` 覆盖结果当作唯一 manifest。坏 bytes、错误 manifest identity 仍拒绝，Observer 不写源目录。
 
 | 独立验收 | 最小可判定场景 | 不足以代签的样例 |
 | --- | --- | --- |
 | 退休闭包（P1） | 真实安装 inactive A，保留另一合法模块 B，销毁 A 后分别做 snapshot、目录、canonical CAS restart；核对历史记录、A 不可执行和 B 正常，再验证 active 销毁与未退休 missing bytes 负例。 | registry 为空的 artifact fixture、只有销毁前 baseline+tail、单独缓存读取。 |
+| 动作退休 tail 恢复（P1） | 由销毁前 checkpoint 重放已成功提交的销毁事件及绑定退休记录，再保存/恢复并与直接销毁后状态比较；A 不可执行、B 正常，重放不重复收费。 | 单条 raw destroyed event、手填退休字段、缺失/错配/截断的新格式单元、只测试销毁后 snapshot。 |
 | 多实例升级 | A 升级 v2 后保存/恢复，再升级仍在 v1 的 B；比较两者身份/state、收费与 upgrade 事件，并覆盖上述拒绝路径。 | 单实例升级成功、用 rollback 或重装生成新实例。 |
 | 共享内容 | 同模块两版本及不同模块共用 H，标准 writer 保存后通过真实 Observer 加载；单 active/全 inactive 与受支持 inline/non-inline 各测一次，覆盖错误 hash/identity。 | 仅普通 inline round-trip、新 service 旁路不读该格式。 |
 

@@ -335,9 +335,20 @@ ManifestMigrated {
 ### 退休事实与恢复所需材料
 
 1. 退休准入保持 owner、费用、reason、active instance 和 legacy active 引用检查。销毁后的运行状态移除当前 artifact membership/执行 bytes，并按现行合同清理 cache；registry 历史、实例身份和 schedules 保留。恢复不得因历史 registry 尚在就重新启用该模块。
-2. 目标持久表示必须保留可验证、绑定该 artifact 和已接受销毁事件的退休事实。writer 与 snapshot/CAS 使用同一判定，将“已退休的历史引用”与“仍需执行的引用”区分。只有前者可以缺当前执行 bytes；仅凭 owner 不存在、bytes map 为空、文件缺失或可变缓存不能推断退休。当前 raw destroyed event 的 state-only 兼容行为仍独立，不能仅回放该事件就伪造已完成 sidecar 退休。
+2. 目标持久表示必须保留可验证、绑定该 artifact 和已接受销毁事件的退休事实。writer 与 snapshot/CAS 使用同一判定，将“已退休的历史引用”与“仍需执行的引用”区分。只有前者可以缺当前执行 bytes；仅凭 owner 不存在、bytes map 为空、文件缺失或可变缓存不能推断退休。旧的单条 raw destroyed event 保持 state-only 兼容行为；合法动作退休必须另有下文定义的 journaled fact，不能只增加 snapshot 字段而遗漏 journal writer/replay reader。
 3. 在发布可确认的生命周期结果前，候选的 registry、退休事实、可执行 bytes、实例引用和持久闭包必须能由受支持 reader 一致重建；失败则不发布这一成功转换。canonical CAS 不能只序列化成功就接受不可重建的候选。已经持久提交或提交结果未知时，沿既有 generation/commit 核对恢复，不能倒写未提交或删掉旧事实。
 4. 保留窗口内的旧 snapshot、历史版本执行及受支持 replay 仍需的工件属于历史闭包，不能与当前执行 bytes 一同 GC；具体存储保留仍由[存储治理](../runtime/runtime-storage-footprint-governance.prd.md)拥有。当前不存在受支持的退休持久表示时，实施必须先补其 reader/writer 与明确兼容策略，不能通过全局忽略 missing bytes 放行。
+
+<a id="module-artifact-retirement-journal"></a>
+#### 可重放的动作退休记录（目标）
+
+目标新增版本化 journal 记录 `ModuleArtifactRetirementCommitted`，用于重建成功动作的 sidecar 退休；名称及以下格式义务均为待实现设计，当前 `ModuleArtifactDestroyed` 不能单独承担这一含义。
+
+- 记录至少携带格式版本、`wasm_hash`、该 artifact 本轮合法发布的事件引用和本次 `ModuleArtifactDestroyed` 的事件引用。事件引用使用所属 journal/提交内的既有稳定身份，完整记录受同一持久提交绑定；H 不能单独区分退休后再次发布的生命周期。
+- 通过既有 owner、active 引用、费用及 reason 准入后，动作路径在同一 prepared publication 中按固定顺序准备 destroyed event 和退休记录，并将两者、原有业务状态、artifact membership/bytes 的移除与 cache 失效作为一个提交单元。journal/consensus/持久闭包任一步准备失败，均不发布半个单元；不得先宣告销毁成功，再异步补退休记录。退休记录不额外扣费，也不产生第二次玩家业务回执。
+- `replay_from` 从已验证 checkpoint 按已提交 journal 顺序读取整个单元：核对发布引用、本次销毁事件及 H 一致后，重建退休事实并移除该生命周期的当前 membership/执行 bytes，执行既有 cache 失效，保留 registry 历史和实例。它不重新运行动作、当前 owner/报价准入或收费；同一记录重复恢复保持幂等，较旧生命周期的记录不能删除后来显式重新发布的 H。
+- 销毁后 checkpoint 必须包含已验证的退休事实及其绑定，供 `World::from_snapshot`、目录 reader 与 canonical CAS 在不依赖较新缓存的情况下恢复。销毁前 checkpoint 则保留当时的工件闭包，由成功动作的完整 journal tail 重建同一退休结果；两个入口必须与直接捕获销毁后状态等价，不能互相替代验收。
+- 新格式的 reader 只接受完整、相互匹配的已提交单元。未提交或截断 tail、错事件引用/生命周期、冲突重复和未知格式不能产生已退休状态；对声称完整的新格式恢复应明确拒绝。旧格式中的单条 raw destroyed event 仍按原 state-only 合同解释，不凭其存在升级为新格式的动作退休事实，也不以“兼容”忽略未退休 missing bytes。
 
 退休判定属于所捕获版本的生命周期状态，不是对 H 的永久全局黑名单。后续显式、合法的同 hash 重新发布仍遵守现有准入与收费，只有新的已提交生命周期转换才能改变当前可用性；不能借缓存或旧 registry 自动复活，也不能重写退休前后已经固定的历史 snapshot。
 
@@ -372,6 +383,7 @@ Observer 和普通 reader 先核对所选 generation、全部 manifest 身份与
 | --- | --- | --- |
 | 退休后 snapshot | 正常安装 inactive A，并保留 B 的 bytes；合法销毁 A 后直接 snapshot/from_snapshot，历史 A 可查、不可执行、B 正常。 | active 引用销毁拒绝；未退休缺 bytes 拒绝；空 registry fixture 不代签。 |
 | 退休后目录与 CAS | 对同一销毁后状态分别 save/load、提交 canonical CAS 后 restart；核对 registry、退休事实、身份/状态及可继续操作的 B。 | 不用销毁前 baseline+tail 或较新 cache 代替；失败准备零部分发布。 |
+| 退休前 checkpoint + 成功动作 tail | 安装 inactive A/B 后捕获 checkpoint；合法销毁 A，保存包含 destroyed event 与绑定退休记录的完整提交 tail；新 World 从 checkpoint 经 `replay_from` 恢复，再做 snapshot/from_snapshot、目录与 CAS restart，与直接销毁后状态比较。 | A 历史可查且不可执行，B 正常；费用只出现一次。缺失/截断单元、错发布或销毁引用、冲突重复、未知格式拒绝；同一记录重复恢复及同 H 后续发布不得误删新生命周期。 |
 | 原始销毁兼容 | 通过原 raw destroy event 路径重放并比较 sidecar。 | 保留该入口既有 state-only 行为，不擅自删除持久 bytes 或把事件存在等同合法退休事实。 |
 | 同 H 后续重新发布 | 捕获退休后的旧 snapshot，再显式合法重新发布同 H 并捕获新 snapshot；分别独立恢复并继续运行。 | 旧 snapshot 的退休状态不被新 cache/registry 改写；只有新已提交生命周期允许当前工件重新可用。 |
 | 多实例正常升级 | A/B 在 v1，A 升 v2，snapshot/replay 后 B 再升同 v2，保留各自 ID/owner/target/state 及一次升级费。 | 同实例相同版本、不同 manifest、错 owner/from、冻结、不兼容、无效 finality 拒绝；无 rollback 事件或额外冻结。 |
