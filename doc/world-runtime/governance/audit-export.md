@@ -57,15 +57,22 @@ pub fn save_audit_log(
       "payload": {
         "type": "Proposed",
         "data": {
-          "proposal_id": "p-001",
+          "proposal_id": 1,
           "author": "agent:alpha",
-          "base_manifest_hash": "h0"
+          "base_manifest_hash": "example-base-manifest-hash",
+          "manifest": {
+            "version": 1,
+            "content": {}
+          },
+          "patch": null
         }
       }
     }
   }
 ]
 ```
+
+本例对应 `Vec<WorldEvent>` 的 JSON 形状：`ProposalId` 为 `u64`，`GovernanceEvent::Proposed` 必须包含完整 `Manifest { version, content }`，无 patch 时显式写 `null`。`base_manifest_hash` 是示例字符串，不是某次真实导出或有效治理执行的证据。维护示例时应按上述 Rust 类型执行离线解析/序列化回读；JSON 语法检查或字段对照不能代签该 round-trip 已运行。
 
 ## 待补齐能力（未实现）
 - 分页导出（`limit/cursor`）。

@@ -308,8 +308,8 @@ known metrics:
 ```json
 {
   "metric": "cargo_check_warm_seconds",
-  "baseline": 0.0,
-  "current": 0.0,
+  "baseline": 1.0,
+  "current": 1.0,
   "delta": 0.0,
   "percent": 0.0
 }

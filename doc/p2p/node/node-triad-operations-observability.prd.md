@@ -38,6 +38,17 @@ Canonical command is `scripts/p2p-real-env-observability-monitor.sh`; it compose
 
 `pass_with_resource_alerts` 或 `pass_with_module_alerts` 仅可在 underlying snapshot 为 `pass_candidate` 时使用。summary 的可读诊断不构成 public-chain claim、长期可用性承诺或发布许可。
 
+<a id="observability-run-contract"></a>
+## 单次编排与失败诊断
+
+- 写任何配置、样本或 report 之前，snapshot 与外层 monitor 必须原子取得独占 run 目录；可分配不同目录，或使冲突调用在写前明确失败。秒级/更高精度时间戳和 `mkdir -p` 本身不保证独占，不能截断预存 sentinel 或另一调用工件。
+- 同一 run 的 inventory、host/traffic/WASM 输入与最终报告保持所属一致；只读取该次产物，不把旧 `latest_summary` 冒充本轮。
+- host SSH 在首次、后续或全部节点采样失败时，仍保留该次带准确 label、采集时间、不可用状态和受限错误类别的失败样本，继续收集可用节点，最终生成 host 与 merged JSON/Markdown 诊断并非零退出。不得以正常数值填缺数，也不得覆盖 underlying snapshot 的 blocked。
+- 先解析 canonical CLI 参数，再按消费者传递：service 覆盖只给 snapshot/host，status URL 只给 snapshot/traffic，共享 target 只给适用者；非法选项须在采集前拒绝，help 与操作说明一致。
+- reward worker 的 collector/probe state 持久化失败是独立诊断事实：完整轮末 `last_error`/degraded 与告警仍须可见，已有 report、没有新 epoch 或 invariant 正常均不能清除此错误。best-effort 数值仍可更新；只有对应写入真正恢复成功后才清错，不根据其他步骤成功推定恢复。
+
+本节规定应满足的编排/诊断合同，不把文档修订作为脚本或 worker 修复证明。离线验收分别覆盖首个/后续/全部 SSH 失败、固定时钟同 out-dir 并发与预存 sentinel、不同 inventory、service/status URL 单项和组合、非法参数写前失败，以及连续两轮写失败/真正恢复后清错；使用实际 orchestration 的 stub collectors，不只测 summary helper，无需真实 SSH/节点。
+
 ## 验证与恢复边界
 
 - `bash -n scripts/p2p-real-env-node-host-sample.sh scripts/p2p-real-env-host-monitor.sh scripts/p2p-real-env-observability-monitor.sh`

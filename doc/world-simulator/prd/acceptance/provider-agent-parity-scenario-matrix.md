@@ -2,6 +2,8 @@
 
 审计轮次: 2
 
+本矩阵的各层必采指标与硬门禁继承[主 PRD metric-object 合同](../../llm/provider-agent-experience-parity.prd.md#parity-metric-object-contract)，包括独立的 `illegal_schema_rate`（阈值、计数/形状及缺项 blocked 以该合同为准）。后续层继承 P0 时也继承本项；本页列表是导航摘要，不缩减上游要求。
+
 ## 目标
 - 冻结 `Local Provider` 与内置 agent 的 parity 场景层级、样本选择与通过顺序，避免后续评估随意挑样。
 - 为 `PRD-WORLD_SIMULATOR-038` 提供统一场景输入基线，使自动 benchmark 与主观试玩评分复用同一组任务目标。
