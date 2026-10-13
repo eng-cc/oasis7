@@ -353,7 +353,7 @@ active 状态的 module command（例如 `economic_contract.open`）。在同一
 ## 内置 Responses Provider 基线与诊断 receipt 边界
 
 - builtin provider 使用 OpenAI-compatible Responses transport；`base_url` 可规范化 API base、`/v1/`、旧 chat-completions 或 responses 后缀。配置解析优先级为 `[llm]` 直接值、选中 profile/provider、root、环境变量与 builtin default；agent override 以规范化 agent 名称选择。坏 TOML 必须显式失败，不能因单键可回退而静默吞掉整份配置错误。
-- 未配置 `system_prompt` 时 builtin fallback 为“硅基个体存在的意义是保障硅基文明存续和发展；”。这只是可配置的 provider 指令默认值，不是世界规则、玩家承诺或对目标达成的保证。
+- builtin fallback 保留当前“读规则/观察 → 资源稳态 → 产业建设 → 治理协作 → 危机韧性”的策略基线，完整默认值及显式覆盖见[默认 prompt 合同](#builtin-default-system-prompt)。这只是可配置的 provider 指令，不是世界规则、玩家承诺或对目标达成的保证；短句样例不是省略配置时的默认值。
 - profile 是 `DecisionRequest.provider_config_ref` 的受控配置，而非世界记忆或兼容别名。未知 profile 必须结构化失败；不得静默改用通用 profile。单次 `timeout_ms` 是明确上限，有限 retry 只适用于可解释 provider error；超时、格式错误、预算耗尽、未知工具或非法动作都留下分类 trace/error，并收敛为无状态变化的 `Wait` 或 `ActionRejected`，不得生成启发式替代动作。
 - builtin prompt 保持 tool-only：每 turn 只能查询或提交一个最终 `agent_submit_decision`，不以自由文本授权动作。`PromptBudget` 对 observation、conversation/module history 与 memory digest 的裁剪须满足下述[当前输入完整性目标](#builtin-input-integrity)，不能以旧摘要可裁为由丢掉当前必需材料；module calls、decision turns 与 repair rounds 均有上限。多个可解析片段只选择一个稳定终态并记录 collapse trace，绝不顺序执行同一 completion 的多个动作。
 - 感知/上下文/短长期目标进入结构化 request；候选决策经 catalog/schema 与 runtime 校验后执行；只有 committed replayed `ActionResult` 回写 feedback、recent summary 和本地权威 memory。player、agent、tool、system chat role 分离；原始 provider JSON 不得伪装为玩家可读消息。外部 memory 只可提出 write intent，长期记忆影响玩家当前行动时的可读、可纠正合同仍由游戏专业 authority 证明，内部 history/trace 不能替代该证明。
@@ -361,6 +361,28 @@ active 状态的 module command（例如 `economic_contract.open`）。在同一
 - `LlmEffectIntentTrace` / `LlmEffectReceiptTrace` 记录 `llm.prompt.module_call`、intent id、params、capability ref、origin、status、payload 与预留 cost；`max_module_calls` 控制体积，旧 trace 以默认字段兼容。这些是 simulator diagnostic facts：在 runtime-owned T4/T5 证明 intent-to-ActionResult causality、replay never re-calls provider、以及恢复不重复外部副作用前，不得宣称完整 effect/receipt 或 replay closure。
 - simulator diagnostic event 名称固定为 `LlmEffectQueued { agent_id, intent }` 与 `LlmReceiptAppended { agent_id, receipt }`。写入顺序是：`LlmAgentBehavior` 处理 module call 时生成 intent/receipt，`AgentRunner::tick` 从 `AgentDecisionTrace` 读取，再逐条写入 `WorldKernel.journal`。该顺序仅描述诊断记录，不把 intent/receipt 提升为权威 effect、ActionResult 因果或 replay 幂等证明。
 - provider 可表达 compile/deploy/install、offer/bid/purchase/delist/destroy/cancel 等模块意图，但 parser/schema 通过不等于动作已接受；所有意图仍经 runtime 权威校验、共识提交和结果回执。production 禁止 runtime source compile，只有显式 dev/test 可用受限 source package；actor、hash、版本、价格、订单标识与必填 payload 必须严格校验。`module.lifecycle.status` 只派生自已知 artifact/instance/ownership/listing/order/installed 状态，不是第二 registry，也不宣称激活、所有权或成交。
+
+<a id="builtin-default-system-prompt"></a>
+### builtin 默认 system prompt 与显式覆盖
+
+在没有生效的显式覆盖时，builtin Responses 的基础 prompt 为：
+
+```text
+你是硅基文明发展 Agent。按“读规则/观察 -> 资源稳态 -> 产业建设 -> 治理协作 -> 危机韧性”推进文明进程，每轮仅提交一个可执行 decision。若规则或动作前置条件不明确，先调用 world.rules.guide 与 environment.current_observation，再做决策。
+```
+
+保留该策略是对当前两处默认常量与实际 `base_system_prompt` 接线的文档对齐，不重新选择模型策略，也不证明其游戏效果。env-only、合法 TOML 省略字段以及空白值在没有其他有效配置来源时均回退到此值；有效 TOML、环境变量与 runtime prompt override 的既有优先级保持。清除 runtime override 后回到已解析配置，而不是无条件覆盖为默认值。
+
+`config.example.toml` 中的“硅基个体存在的意义是保障硅基文明存续和发展；”是显式配置样例；复制该行会有意覆盖默认策略。TOML prompt profile 与 `DecisionRequest.provider_config_ref` 分属各自配置合同，不能互作别名。本节只适用于 builtin Responses，不把该默认值施加给 local bridge 的独立 Chat Completions prompt。
+
+验收应捕获实际组装请求的 `base_system_prompt`，分别覆盖默认/空白与显式 TOML、env、runtime override/清除，预期使用本节独立文本，不只与同一个实现常量自比；现有重复常量也须逐一对账。无需真实模型调用。实现映射见[系统设计](decision-provider-contract.design.md#des-builtin-default-system-prompt)。
+
+<a id="builtin-concurrency-retry"></a>
+### builtin concurrency-limit 的有界恢复
+
+builtin unbudgeted 请求的既有一次恢复机会不能取决于合法 JSON 的空格或换行。对受支持的 SSE error payload，只有同一个结构化 error 对象同时包含 `type=rate_limit_error` 与表达 `concurrency limit exceeded` 的 message，才适用一次、250 ms 退避的重试；不能拼接不同对象的字段、扫描任意文字或扩展到所有 HTTP 429。
+
+紧凑、含空格和合法多行 JSON 表达同一错误时，结果必须等价；缺字段、其它类型、无关 message、坏 JSON 保持原失败路径。`max_model_calls=None` 时首次错误后成功总共两次请求，重复错误也最多两次；`Some(max_model_calls)` 仍关闭 adapter 内部重试，每次 `complete` 仅一次请求，由上层原预算合同决定后续工作。设计与离线参数矩阵见[系统设计](decision-provider-contract.design.md#des-builtin-concurrency-retry)。本节补齐格式语义，不表示 detector 已修复或真实服务已验证。
 
 <a id="builtin-input-integrity"></a>
 ### builtin 当前输入完整性（目标）

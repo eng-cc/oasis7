@@ -8,7 +8,9 @@ Project 与 Git history 承接。
 
 | 稳定契约 | 实现锚点 | 最低验证 |
 | --- | --- | --- |
-| `wasm-1` Canonical CBOR input/output、optional/default 兼容和结构化失败 | `crates/oasis7_wasm_abi`、`crates/oasis7_wasm_executor`、[wasm-interface.md](wasm-interface.md) | `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor` |
+| 执行器纯 Rust helper、limits/count、FixedSandbox 与 fallback | `crates/oasis7_wasm_executor`（`default=[]`） | `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor`；不选中真实 WASM 调用测试 |
+| 真实 WASM 成功调用、CBOR 输出及坏 CBOR → `InvalidOutput` | `crates/oasis7_wasm_executor/src/tests.rs` 的 `cfg(feature="wasmtime")` 测试 | `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_executor --features wasmtime` |
+| `wasm-1` ABI 编解码与 optional/default 兼容 | `crates/oasis7_wasm_abi`、[wasm-interface.md](wasm-interface.md) | `env -u RUSTC_WRAPPER cargo test -p oasis7_wasm_abi`；逐项核对现有兼容回归，执行器 feature 开启不自动证明全部 ABI 合同 |
 | fuel fallback、epoch interruption、memory growth、输出限制和权限失败 | `crates/oasis7_wasm_executor/src/lib.rs` | 执行器的 out-of-fuel、interrupt、memory-growth 与 invalid-output 回归 |
 | SHA-256 artifact 校验与 compiled-cache compatibility domain | `crates/oasis7_wasm_executor`、runtime module persistence | serialized cache round-trip、corruption-as-miss 与 hash-mismatch rejection 回归 |
 

@@ -100,13 +100,16 @@ pub(super) fn consumer<T>(
 ) -> T {
     use oasis7::world_service::client::{RemoteWorldServiceClient, WorldServiceClientConfig};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    // Functional recovery requests rebuild current/historical worlds and fsync
+    // private records. Keep a finite CI budget without imposing a 5s latency SLA.
+    let request_timeout = std::time::Duration::from_secs(30);
     let client = RemoteWorldServiceClient::new(WorldServiceClientConfig {
         endpoint: format!("http://{}", listener.local_addr().unwrap()),
         trusted_service_public_key: signer.public_key_hex.clone(),
         expected_world: world.clone(),
         scope_id: "agent:agent-a".into(),
         read_private_key_hex: signer.private_key_hex.clone(),
-        timeout: std::time::Duration::from_secs(5),
+        timeout: request_timeout,
         max_response_bytes: 65536,
     })
     .unwrap();
@@ -134,22 +137,25 @@ pub(super) fn consumer<T>(
             let mut body = vec![0; length];
             stream.read_exact(&mut body).unwrap();
             bytes.extend(body);
-            assert!(
-                crate::world_service_api::private_goal::maybe_handle(
-                    &mut stream,
-                    &bytes,
-                    runtime,
-                    "POST",
-                    &path,
-                    "w1",
-                    &dir.join("world"),
-                    &dir.join("records"),
-                    &dir.join("store"),
-                    signer,
-                    Some(store)
-                )
-                .unwrap()
+            let request_started = std::time::Instant::now();
+            let handled = crate::world_service_api::private_goal::maybe_handle(
+                &mut stream,
+                &bytes,
+                runtime,
+                "POST",
+                &path,
+                "w1",
+                &dir.join("world"),
+                &dir.join("records"),
+                &dir.join("store"),
+                signer,
+                Some(store),
             );
+            eprintln!(
+                "private HTTP fixture {path}: handler_elapsed={:?}, client_timeout={request_timeout:?}",
+                request_started.elapsed()
+            );
+            assert!(handled.unwrap());
         });
         let result = call(&client);
         serving.join().unwrap();

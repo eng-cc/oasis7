@@ -20,8 +20,8 @@ pub fn run(args: &[String], prefix: &str) -> i32 {
         .and_then(|a| a.positional.first())
         .filter(|s| {
             [
-                "init", "doctor", "status", "list", "search", "get", "put", "edit", "archive",
-                "verify", "history", "restore", "snapshot",
+                "info", "init", "doctor", "status", "list", "search", "get", "put", "edit",
+                "archive", "verify", "history", "restore", "snapshot",
             ]
             .contains(&s.as_str())
         })
@@ -195,17 +195,25 @@ fn execute(args: &Arguments, prefix: &str) -> Result<Output> {
         return Ok(output(
             "help",
             None,
-            json!({"usage":format!("{prefix} [--root ABSOLUTE] [--json] COMMAND\nCommands: init, doctor, status, list, search QUERY, get ID, put ID --file FILE, edit ID, archive ID, verify ID, history ID, restore ID --from-commit OID, snapshot export|inspect|restore\nWrites require --if-absent or --expected-revision. init requires --root and --project. Snapshot passphrases: hidden TTY or --passphrase-stdin.\nUse the private-context design/manual for command options.")}),
+            json!({"usage":format!("{prefix} [--root ABSOLUTE] [--json] COMMAND\nCommands: info --json, init, doctor, status, list, search QUERY, get ID, put ID --file FILE, edit ID, archive ID, verify ID, history ID, restore ID --from-commit OID, snapshot export|inspect|restore\nWrites require --if-absent or --expected-revision. init requires --root and --project. Snapshot passphrases: hidden TTY or --passphrase-stdin.\nUse the private-context design/manual for command options.")}),
         ));
     }
     let command = args.positional[0].as_str();
     if ![
-        "init", "doctor", "status", "list", "search", "get", "put", "edit", "archive", "verify",
-        "history", "restore", "snapshot",
+        "info", "init", "doctor", "status", "list", "search", "get", "put", "edit", "archive",
+        "verify", "history", "restore", "snapshot",
     ]
     .contains(&command)
     {
         return Err(invalid("unknown context command"));
+    }
+    if command == "info" {
+        args.arity(1)?;
+        args.allow(&[])?;
+        return Ok(Output::Raw(
+            serde_json::to_vec(&crate::application::info())
+                .map_err(|_| invalid("result serialization failed"))?,
+        ));
     }
     if command == "snapshot" {
         return snapshot(args);
@@ -265,7 +273,8 @@ fn execute(args: &Arguments, prefix: &str) -> Result<Output> {
                 "actor",
                 "lock-timeout-ms",
             ])?;
-            let result = store.put(
+            let result = crate::application::save_raw(
+                &store,
                 &args.positional[1],
                 &candidate(args.required("file")?)?,
                 condition(args)?,
@@ -357,15 +366,16 @@ fn execute(args: &Arguments, prefix: &str) -> Result<Output> {
         "status" => {
             args.arity(1)?;
             args.allow(&[])?;
-            serialize(crate::git::status(&root).map_err(git_error)?)?
+            serialize(crate::git::status_pinned(&root, store.directory()).map_err(git_error)?)?
         }
         "history" => {
             args.arity(2)?;
             args.allow(&["limit"])?;
-            serialize(
-                crate::git::history(&root, &args.positional[1], args.number("limit", 20, 1000)?)
-                    .map_err(git_error)?,
-            )?
+            serialize(crate::application::history(
+                &store,
+                &args.positional[1],
+                args.number("limit", 20, 1000)?,
+            )?)?
         }
         "restore" => {
             args.arity(2)?;
@@ -376,26 +386,14 @@ fn execute(args: &Arguments, prefix: &str) -> Result<Output> {
                 "actor",
                 "lock-timeout-ms",
             ])?;
-            let old = crate::git::read_at_commit(
-                &root,
+            let (commit, saved) = crate::application::restore_entry(
+                &store,
                 &args.positional[1],
                 args.required("from-commit")?,
-            )
-            .map_err(git_error)?;
-            let config: StoreConfig = crate::format::strict_json(&old.config_bytes)?;
-            config.validate()?;
-            if config.store_id != store.config.store_id
-                || config.project_id != store.config.project_id
-            {
-                return Err(invalid("historical store identity does not match"));
-            }
-            let saved = store.put(
-                &args.positional[1],
-                &old.entry_bytes,
                 condition(args)?,
                 actor,
             )?;
-            json!({"id":args.positional[1],"from_commit":old.commit,"revision":saved.revision,"persistence":saved.persistence,"changed":saved.changed})
+            json!({"id":args.positional[1],"from_commit":commit,"revision":saved.revision,"persistence":saved.persistence,"changed":saved.changed})
         }
         _ => return Err(invalid("unknown context command")),
     };
@@ -413,7 +411,7 @@ fn snapshot(args: &Arguments) -> Result<Output> {
             let root = crate::config::select_root(explicit.as_deref(), &local)?;
             let output = absolute(args.required("output")?)?;
             let pass = crate::passphrase::read(args.flag("passphrase-stdin"), true)?;
-            crate::snapshot::export(
+            crate::application::snapshot_export(
                 &root,
                 &output,
                 &args.many("id"),
@@ -425,7 +423,7 @@ fn snapshot(args: &Arguments) -> Result<Output> {
             args.allow(&["input", "passphrase-stdin"])?;
             let input = absolute(args.required("input")?)?;
             let pass = crate::passphrase::read(args.flag("passphrase-stdin"), false)?;
-            crate::snapshot::inspect(&input, &pass)?
+            crate::application::snapshot_inspect(&input, &pass)?
         }
         "restore" => {
             args.allow(&[
@@ -438,7 +436,7 @@ fn snapshot(args: &Arguments) -> Result<Output> {
             let input = absolute(args.required("input")?)?;
             let target = absolute(args.required("to")?)?;
             let pass = crate::passphrase::read(args.flag("passphrase-stdin"), false)?;
-            crate::snapshot::restore(
+            crate::application::snapshot_restore(
                 &input,
                 &target,
                 args.value("expected-project"),

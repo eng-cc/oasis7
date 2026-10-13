@@ -2,12 +2,32 @@ name: Command Center
 on:
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'scripts/cargo-dev.sh'
+      - 'scripts/cargo-cache.py'
+      - 'scripts/find-python-with-module.sh'
       - 'tools/oasis7-command-center/**'
+      - 'crates/oasis7_context/**'
+      - 'crates/oasis7_local_signer/**'
+      - 'crates/oasis7_secure_envelope/**'
       - '.github/workflows/command-center.yml'
   push:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.cargo/**'
+      - 'scripts/cargo-dev.sh'
+      - 'scripts/cargo-cache.py'
+      - 'scripts/find-python-with-module.sh'
       - 'tools/oasis7-command-center/**'
+      - 'crates/oasis7_context/**'
+      - 'crates/oasis7_local_signer/**'
+      - 'crates/oasis7_secure_envelope/**'
       - '.github/workflows/command-center.yml'
 permissions:
   contents: read
@@ -29,7 +49,9 @@ jobs:
       - name: Check core and host formatting
         run: env -u RUSTC_WRAPPER cargo fmt --manifest-path tools/oasis7-command-center/Cargo.toml --all -- --check
       - name: Core regressions
-        run: env -u RUSTC_WRAPPER cargo test --locked --manifest-path tools/oasis7-command-center/Cargo.toml -p oasis7-command-center-core
+        run: |
+          env -u RUSTC_WRAPPER cargo test --locked --manifest-path tools/oasis7-command-center/Cargo.toml -p oasis7-command-center-core
+          python3 tools/oasis7-command-center/scripts/test_package_context_cli.py
       - name: Verify generated JSON contracts
         run: |
           env -u RUSTC_WRAPPER cargo run --locked --manifest-path tools/oasis7-command-center/Cargo.toml -p oasis7-command-center-core --example export_types

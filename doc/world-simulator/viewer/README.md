@@ -104,13 +104,17 @@
 - 适合问题:
   - 首局体验、release readiness、viewer 主体验的主文档是什么
   - 哪些沉浸阶段已经物理合并，哪些不再是独立首读入口
-- 当前状态摘要：Player 已是 fullscreen、world-first 单舞台，三卡 HUD 与按需
+- 当前状态摘要：Player 已是 fullscreen、world-first 单舞台，单一 Next Move 主动作及从属
+  Objective / Player Leverage 上下文与按需
   `World / Targets / Command` drawer 属于当前入口；旧左/中/右三栏仅可能出现在
   显式 Director 工具视图。#3315 已以 focused implementation tests 修复三处
   World Feed / 多资源摘要缺陷；测试证据与历史 #3248 浏览器边界见上述 PRD。#3315
   已用外部 Chrome 在 headed `1440x1000` 与 `390x844` 复核 GPU 不可用 fallback；这不是
   `ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败或 tablet `641–1240`
-  宽度的放行证据。后续视觉收口目标仍是权威可选 world_read 摘要、单一 Next Move
+  宽度的放行证据。后续 #3624/#3638/#3668 的证据按其实际范围保留，不因旧环境限制
+  推定全部仍未实现。2026-10-12 源码基准 `5e930fa` 已包含窄屏 Next Move 第一行、
+  上下文第二行及 P1-A 的 display-model/组件；结构存在不代签当前行为验收。
+  持续视觉约束包括权威可选 world_read 摘要、单一 Next Move
   CTA、默认 command/chat 与收起 Diagnostics，以及保留内部 hooks 的
   `Cinematic View / Minimal HUD`；不新增 synthetic Power/Data/Consensus 或
   runtime/protocol 字段。

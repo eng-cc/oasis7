@@ -206,20 +206,22 @@ An asset is acceptable only if it:
 Assets that are purely atmospheric, ornamental, blurred, or unrelated to the
 actual world state are not valid for Viewer product surfaces.
 
+<a id="visual-evidence-matrix-design"></a>
+
 ## 6. Screenshot and Visual Evidence Matrix
 Any visible change must choose the smallest row set that covers its risk. A
-large visual-system change must run all required rows.
+large visual-system change must run all required rows. Every triggered review retains target screenshots, including mobile when required by the parent spec; DOM/test/smoke output supplements those images. One screenshot may cover several selected rows when each risk is visible. A row does not create a separate screenshot obligation when the same image already covers it.
 
 | Row | Viewport/state | Required for | Evidence |
 | --- | --- | --- | --- |
-| desktop player first screen | 1280x720 or wider | all stage/layout/token changes | screenshot or browser DOM+visual smoke |
-| mobile player first screen | 390x844 or equivalent | navigation, first screen, text density | screenshot or browser DOM+visual smoke |
+| desktop player first screen | 1280x720 or wider | all stage/layout/token changes | screenshot, supplemented by browser DOM/visual smoke |
+| mobile player first screen | 390x844 or equivalent | navigation, first screen, text density | screenshot, supplemented by browser DOM/visual smoke |
 | diagnostics demotion | Runtime Diagnostics collapsed | diagnostics, routing, QA surfaces | DOM/test assertion plus screenshot when visual |
 | renderer unavailable | unavailable diagnostic visible | renderer/pixel-world work | targeted UI/browser evidence |
 | action receipt | present receipt | command/receipt/action work | `action-receipt-visual.png` or equivalent |
 | no receipt | no player-caused receipt | causality/data honesty work | UI test or targeted screenshot |
 | dense pixel-world | agent/location/route/terrain together | layer priority changes | pixel-world visual smoke |
-| CJK/long text | `locale=zh` and long labels where touched | typography/density/localization changes | screenshot or targeted DOM overflow probe |
+| CJK/long text | `locale=zh` and long labels where touched | typography/density/localization changes | screenshot plus targeted DOM overflow probe |
 | focus/keyboard | focusable controls/canvas where touched | accessibility changes | CSS/test/browser evidence |
 
 Blocking findings:
@@ -260,8 +262,23 @@ A visual-system task is done only when:
 - this document and the parent visual spec stay in sync;
 - CSS/DOM hooks use semantic tokens or documented aliases;
 - status marks include text equivalents and stable hooks;
-- relevant screenshots or visual smoke artifacts are recorded;
+- required screenshots and supporting automated evidence are recorded; screenshot-free DOM or smoke output cannot substitute for the visual review input;
 - `npm --prefix crates/oasis7_viewer run test:ui` passes;
 - `npm --prefix crates/oasis7_viewer run build:software-safe` passes;
 - `git diff --check` and `./scripts/doc-governance-check.sh` pass;
-- task execution log records role verdicts and evidence paths.
+- task execution log records role verdicts and evidence paths; verdict/confidence follows the [canonical decision table](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract), including escalation on the first `watch` and on `medium/low`.
+
+
+## Visual review traceability
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 截图为必要输入；DOM/smoke 为补充；按风险最小行集且允许一图覆盖多行 | [本设计条款](#visual-evidence-matrix-design) | QA 与视觉 owner；实际截图和自动化摘要由对应执行者提供 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [本设计条款](#visual-evidence-matrix-design) | 同修订文档对相同证据与 verdict/confidence 给出同一处置 | 按 [SOP 判定表](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)离线审读无截图有 DOM、缺视口、首轮/连续 watch、high/medium/low、block、公开/内部与方向争议 fixture；实际视觉改动另采本候选截图 | 文档 fixture 的条件、预期处置与交叉引用；执行后另留真实截图/card | 本次规则审读不生成浏览器运行、视觉通过或发布证据 |

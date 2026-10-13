@@ -47,19 +47,26 @@
   - runtime gameplay bridge: on/off
 - 执行命令：
   - `./scripts/llm-longrun-stress.sh --scenario <scenario> --ticks <n> --out-dir .tmp/llm_stress/<run>`
-- 指标摘要（来自 summary/report）：
-  - run.status:
-  - metric_gate.status:
-  - parse_errors:
-  - llm_errors:
-  - active_ticks:
-  - action_kinds:
+- 人工执行判定（不是 summary/report 字段）：
+  - run verdict: succeeded / failed / unknown
+  - metric gate verdict: passed / failed / not_evaluated / unknown
+  - wrapper 最终退出码：
+  - 判定依据：完整 wrapper stdout/stderr 的相关输出
+- 指标摘要（真实来源）：
+  - summary.txt: parse_errors / llm_errors / active_ticks
+  - summary.txt: action_kinds_total / action_kind_counts
+  - report.json: trace_counts.parse_errors / trace_counts.llm_errors / active_ticks
 - 证据路径：
   - ` .tmp/llm_stress/<run>/report.json`
   - ` .tmp/llm_stress/<run>/summary.txt`
-  - ` .tmp/llm_stress/<run>/run.log`
+  - ` .tmp/llm_stress/<run>/run.log`（demo 输出）
+  - wrapper stdout/stderr：放在独立 attempt 目录
 - 结论：
 ```
+
+summary/report 不提供 `run.status` 或 `metric_gate.status`。stress 可能写好 summary 后才在阈值检查失败，因此产物存在不等于 gate 通过：wrapper 最终退出 0 且要求的检查全部执行才填 passed；执行失败时 gate 为 not_evaluated 或已有明确失败；阈值失败填 failed 并保留 wrapper stderr，不能用 demo run.log 代替。缺最终退出/日志时填 unknown。
+
+离线核对分别覆盖完整成功、demo 运行失败、生成 summary 后阈值失败、缺少退出结果四种卡片；这只验证取值与判定来源，不证明真实模型行为。
 
 ## 模板 C：合并发布口径（S6 + S8）
 ```md
@@ -72,5 +79,5 @@
 
 ## 必填检查
 - S6 至少包含 1 张截图和 1 份 console 日志。
-- S8 至少包含 `report.json + summary.txt + run.log`。
+- S8 包含本次实际生成的 `report.json + summary.txt + run.log` 及 wrapper stdout/stderr/最终退出码；提前失败缺产物时保留失败记录，不伪造正常文件。
 - 若任一条失败，必须补“失败原因 + 复跑结论”。

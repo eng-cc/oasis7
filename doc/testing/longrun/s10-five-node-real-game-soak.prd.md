@@ -137,3 +137,12 @@
 - 原“里程碑 M0~M3 + 后续修复演进” -> 第 5 章 phased rollout（S10REAL-0~11）。
 - 原“风险（资源竞争、LLM 非确定性、chaos 覆盖、auto-attest 覆盖）” -> 第 5 章 Technical Risks。
 - 原“结算发布条件、mint 前置绑定、非连续高度容错、签名编码修复” -> 第 4 章 Edge Cases & Error Handling。
+
+<a id="reward-timeline-source-contract"></a>
+## Reward 逐样本时间线合同
+
+`timeline.csv` 的 DistFS `total_checks`、`failed_checks`、`distfs_failure_ratio` 必须来自该节点该次实际 reward-runtime 样本，不能写固定零或用聚合摘要代替；S10 的 `settlement_apply_attempts_total`、`settlement_apply_failures_total`、`settlement_apply_failure_ratio` 同理。按 CSV header 名逐列解释，不依赖读者猜测列位置。
+
+正分母时 ratio=failures/attempts；0/0 是已知无样本，保留真实 0 计数；比率列留空并按既有 insufficient_data 规则解释，不能当成成功。metrics unavailable 时对应数字列留空，并在同次 failures/summary 保留 unavailable/缺样本告警，不能伪造成有效 0/0。CSV 消费者须兼容空数值，不能默认解析为 0。现有累计聚合和 gate 的算法/阈值保持其独立合同。
+
+离线 exporter fixture 覆盖 5/0→0、5/1→0.2、0/0、missing metrics 和 S10 的 8/1→0.125，按 header 回读后核对原始样本及时间线；不运行真实节点或结算。文档补齐不表示 exporter 已改，也不以摘要正确代签逐样本输出。

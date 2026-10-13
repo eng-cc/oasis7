@@ -27,7 +27,7 @@
 
 ## 目标
 - 把“看起来是否对”从临时人工主观 review，改成可重复的截图输入、固定 rubric、结构化 verdict 和升级边界。
-- 让 routine visual review 默认由模型完成，人类只处理阻断、低置信、审美方向争议、对外 claim 和最终治理放行。
+- 让 routine visual review 默认由模型完成，人类处理未达到 `pass + high` 的评审、审美方向争议、对外 claim 和最终治理放行。
 - 让模型视觉结论可追溯到截图、viewport、commit、任务目标和自动化验证结果。
 
 ## 输入要求
@@ -73,10 +73,22 @@
    - 已知 out of scope
 4. 让模型按固定 rubric 输出 review card。
 5. owner 根据 verdict 处理：
-   - `pass`: 可替代 routine human visual review，进入常规验证/PR 主链。
-   - `watch`: 可继续，但要记录 residual risk；若是 release/public surface，升级人类复核。
-   - `block`: 必须修复或明确产品放弃该方向。
-   - `human_escalation`: 交给对应 owner / reviewer，人类结论回写正式 sink。
+   - 按下表同时核对 `verdict`、`confidence` 和独立升级条件，不能只看 verdict。
+
+<a id="visual-review-decision-contract"></a>
+### Verdict / confidence 与后续动作
+
+本表沿用总手册 S6 的严格口径；不把旧 SOP 的“首次 watch 可继续、第二轮才升级”作为当前放行规则。`confidence` 表示证据足以支撑视觉判断的程度，不是 pass 概率或可玩性分数。
+
+| Verdict | Confidence | Routine review 处理 | `human_escalation_needed` |
+| --- | --- | --- | --- |
+| `pass` | `high` | 必需截图、目标与自动化摘要一致，且无下述独立升级条件时，可替代 routine 人工视觉 review | 仅无独立升级条件时为 `no` |
+| `pass` | `medium` / `low` | 不足以替代 routine review；补齐证据或由人类 owner 复核 | `yes` |
+| `watch` | 任意 | 首次即升级；记录 residual risk 与 owner action，不能自行作为视觉验收通过 | `yes` |
+| `block` | 任意 | 升级 owner，并修复、复核或由有权 owner 明确裁决；未处置不得通过 | `yes` |
+| `human_escalation` | 任意 | 交给对应 owner / reviewer，结论回写正式 sink | `yes` |
+
+`high` 要求关键视口、状态与本轮目标均可判读且无未解释冲突；`medium` 表示仍有局部不确定性，`low` 表示缺关键输入、可读性不足或结论冲突。缺失/非法 verdict 或 confidence 视为未完成，不能默认 `pass`。补充证据后可生成新的评审卡；原图、原卡、原结论保留，不追改历史卡片以制造通过率。
 
 ## 模型评审 Rubric
 | 维度 | 必答问题 | `block` 信号 |
@@ -125,16 +137,17 @@
   - 法务、安全、经济、权限、隐私或财务风险
   - L5 真实玩家 / 真实外部信号
   - GitHub branch protection 要求的 review / approval
-  - 模型 confidence 为 `low` 或截图证据缺关键视口
+  - 未达到 `pass + high`，或截图证据缺关键视口
 
 ## 升级条件
+- 任意 `watch/block/human_escalation`，或 `confidence=medium/low`；详见 [判定表](#visual-review-decision-contract)。
 - 任一 must-pass check 为 `block`。
 - 模型指出截图缺失、状态不明或无法判断真实交互。
 - 模型与自动化 state / DOM probe 结论冲突。
 - 评审结论会影响公开 claim、release note、limited preview 或用户承诺。
 - 评审结论涉及视觉方向、交互手感或玩家屏幕流程方向裁决。
 - 用户或 owner 明确要求人工审美判断。
-- 同一问题连续两轮模型评审仍为 `watch`。
+- 连续评审只用于复核整改；不得等待第二轮 `watch` 才升级。
 
 ## 正式 Sink
 - 当前 task：回写 PR、实际 CI 与评审记录（Issue 按需）。
@@ -146,7 +159,7 @@
 - 至少一组截图已采集并可打开。
 - 模型视觉 review card 已按模板填写。
 - verdict 与 human escalation 状态明确。
-- 若 verdict 为 `pass`，自动化验证也必须已通过或明确列出未跑原因。
+- 若主张替代 routine review，必须为 `pass + high`，自动化验证也必须已通过或明确列出未跑原因；记录原因不豁免其他适用 required checks。
 - 若 verdict 为 `watch/block/human_escalation`，下一步 owner action 已写清。
 
 ## 推荐命令入口
@@ -163,4 +176,4 @@ npm --prefix crates/oasis7_viewer run test:ui
 ## 决策记录
 - DEC-MVR-001: 模型视觉评审是 routine visual review 的默认替代路径，但不是发布治理或 GitHub required review 的替代品。
 - DEC-MVR-002: 模型视觉评审必须以截图证据为输入，不能只读 DOM 或口头描述后给视觉 verdict。
-- DEC-MVR-003: `pass` 只有在截图、自动化摘要与任务目标一致时才能替代人工视觉 review；低置信或 claim 影响对外口径时必须升级人类。
+- DEC-MVR-003: 只有 `pass + high` 且截图、自动化摘要与任务目标一致时才能替代 routine 人工视觉 review；其他组合及独立升级条件按判定表处理。release、对外 claim、方向裁决、required review 与 L5 的治理边界继续独立成立。

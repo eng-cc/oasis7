@@ -129,7 +129,7 @@ AUTHZ-01..18 的原文与原 required/full tier 继续有效；其唯一规则 a
 1. 校验 `ModuleCallRequest`（limits 与运行时最大值）。
 2. 按 `wasm_hash` 获取/编译模块（命中缓存或新编译）。
 3. 绑定 host functions（仅暴露 ABI 必需的接口）。
-4. 调用模块入口（`reduce` 或 `compute`），传入序列化输入。
+4. 按 [WASM ABI](wasm-interface.md) 调用物理导出：`Reducer -> reduce`、`Pure -> call`，传入序列化输入；`compute` 不是 ABI 导出名。
 5. 读取并反序列化输出，执行 `ModuleOutput` 校验。
 6. 超时/超限返回 `ModuleCallFailure`，写入 `ModuleCallFailed` 事件。
 

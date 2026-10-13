@@ -89,22 +89,40 @@ agent-browser --version
 agent-browser doctor --offline --quick --json
 AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"
 export AB_SESSION
-cleanup() {
-  local status=$?
-  trap - EXIT INT TERM
-  agent-browser --session "$AB_SESSION" close &gt;/dev/null 2&gt;&amp;1 || true
-  exit "$status"
-}
-trap cleanup EXIT INT TERM
 mkdir -p output/playwright/viewer
+VIEWER_EVIDENCE_DIR="$(mktemp -d "output/playwright/viewer/${AB_SESSION}.XXXXXX")"
+cleanup() {
+  local main_status=$?
+  local close_status=0
+  trap - EXIT INT TERM
+  if agent-browser --session "$AB_SESSION" close &gt;"$VIEWER_EVIDENCE_DIR/close.log" 2&gt;&amp;1; then
+    close_status=0
+  else
+    close_status=$?
+  fi
+  if (( close_status != 0 )); then
+    printf 'cleanup blocker: close_status=%s; see %s/close.log\n' "$close_status" "$VIEWER_EVIDENCE_DIR" &gt;&amp;2
+  fi
+  if ! printf 'main_status=%s\nclose_status=%s\n' "$main_status" "$close_status" &gt;"$VIEWER_EVIDENCE_DIR/cleanup.status"; then
+    printf 'could not write cleanup status\n' &gt;&amp;2
+  fi
+  if (( main_status != 0 )); then
+    exit "$main_status"
+  fi
+  exit "$close_status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
 agent-browser --session "$AB_SESSION" wait --load domcontentloaded
 agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
-agent-browser --session "$AB_SESSION" session info --json | tee output/playwright/viewer/session-info.json
+agent-browser --session "$AB_SESSION" session info --json | tee "$VIEWER_EVIDENCE_DIR/session-info.json"
 agent-browser --session "$AB_SESSION" snapshot -i
 agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
-agent-browser --session "$AB_SESSION" console | tee output/playwright/viewer/console.log
-agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer-web.png</code></pre>
+agent-browser --session "$AB_SESSION" console | tee "$VIEWER_EVIDENCE_DIR/console.log"
+agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-web.png"</code></pre>
+        <p>保留采样原失败码；采样成功但 close 失败则返回非零。当前目录的 close.log / cleanup.status 保存 cleanup blocker 诊断；close 非零不代表进程必然仍活着，只回收本轮 session。</p>
         <p>最小通过标准：页面加载成功、<code>__AW_TEST__</code> 可用、<code>renderMode=viewer</code>（或兼容 alias <code>software_safe</code>）、并产出截图与日志。</p>
       </section>
 

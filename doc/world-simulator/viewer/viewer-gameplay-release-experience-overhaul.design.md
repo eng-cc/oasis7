@@ -15,9 +15,9 @@
 - **信息层级**：`World / Targets / Command` 为主路径；`Search` 是 Targets 内的
   `#entity-search` 兼容过滤/导航能力，`Diagnostics` 次级；`Quote` 属于 Command/Console 上下文。
 - **反馈**：`Action Receipt` 负责玩家因果，已实现的 `world_feed/v1` 仅是环境上下文投影。
-- **Fullscreen HUD**：桌面默认以 `Objective / Next Move / Player Leverage` 三个紧凑卡片并列；
-  移动端为 `Objective + Player Leverage` 紧凑首行、`Next Move` 第二行，`More / Diagnostics`
-  仍从次级入口可达。
+- **Fullscreen HUD**：桌面以 `Next Move` 主动作区和 `Objective / Player Leverage` 从属
+  上下文区并列；窄屏把主动作放在第一行、上下文放在第二行，保持 DOM 与键盘顺序一致。
+  `More / Diagnostics` 仍从次级入口可达。
 
 ### 2.1 需求承接与分配表
 
@@ -32,7 +32,7 @@
 - 当前 `main` 的 Player 是 fullscreen、world-first 单舞台：世界棋盘为首屏主体，
   `Objective / Next Move / Player Leverage` 是叠加 HUD，`World / Targets / Command`
   由按需 drawer 提供。旧“左侧/中间/右侧”三栏只适用于显式、能力门控的 Director
-  工具密度，不能作为 Player 的当前 IA；三卡 HUD 也不等于旧三栏。
+  工具密度，不能作为 Player 的当前 IA；主动作及从属上下文也不是常驻工具栏。
 - 当前实现保留 focus/right-panel 兼容 hooks，且 `#entity-search` 仍是 Targets
   过滤入口；这些是实现基线/债务，不是第二产品模式或终端 authority。
 - 当前页面仍以 Recent Events/Gameplay Feedback 等现有投影为准；它们不能被重命名为
@@ -45,13 +45,47 @@
   已实现安全边界而非已放行的 operator 能力。目标实现仍须由 Viewer/QA 以真实桌面、移动、
   键盘和空/不可用状态验证。
 
+<a id="shell-interaction-recovery"></a>
+### Shell 交互与恢复实现边界
+
+本节对应配对 PRD 的 Shell 局部合同。2026-10-12 基准 `5e930fa` 已有路由、Prompt 草稿、
+列表/舞台投影、Feed state 和 renderer loader 接点；待修的具体时序按 #3425 独立验收，
+不因同一文件已有功能就宣称该路径通过。
+
+- 路由切换在一个 transition 内协调受管理浮层、disclosure、aria 与 focus。离开 Diagnostics
+  时关闭实际 fixed 面板，而非仅改 hash；只管理注册的 shell surface，保留普通 disclosure。
+  Escape 使用实际打开状态和既有 IME 优先级，返回入口仍可获得焦点。
+- 选择模型与草稿模型分离：同 Agent 重选只刷新 selected object；dirty 草稿继续引用原编辑
+  baseline。显式 reload 或对应 Apply 的权威确认才按原规则刷新草稿；新的授权失效仍优先
+  进入安全 blocked，不借“保护草稿”显示无权读取的新值。
+- Targets filter 在列表 projection 上执行。host/bridge 输入使用同一快照中受会话可见性约束、
+  未被关键词裁剪的实体/地点/设施集合；真实删除和权限变化在源集合生效，不用旧场景缓存补回。
+- Feed transport 的 page 状态与合并后的显示状态分开。state reducer 在同 world/epoch 的
+  连续 cursor 上保留/去重已有窗口，空增量不清空也不覆盖为 empty；replay 未追平前仍保留
+  replay 语义。panel 与 HUD 共用这一结果；gap/reorg/unavailable 按原恢复边界处理。
+- renderer loader 区分未初始化、在途、成功和失败。失败 promise 不得永久缓存为后续 Retry
+  的结果；只清除该失败 attempt 的引用，避免迟到失败清掉较新的初始化。每次重试重新走
+  descriptor、bytes、size/hash 与 init；当前在途请求共享，成功实例复用，持续失败保持
+  unavailable。Host Retry 不触发整页刷新、测试模块重置或另一 renderer 的隐式切换。
+
+| 独立场景 | 最小有效验证与现有接点 | 不能证明 |
+| --- | --- | --- |
+| S3 导航/浮层 | `viewer_terminal_shell` 路由及相关 UI 测试；实际 1440×1000、390×844 下 More→World/Back/Forward、Targets/Command→World，核 geometry/visibility/focus 与 IME | hash 或 DOM attribute 单独正确不证明舞台可操作 |
+| S4 同 Agent 草稿 | 实际 selection→state→Prompt panel 路径，覆盖 dirty/clean、成功 Apply、明确 reload、跨对象、control-lost/stale | 草稿存在不证明授权或应用成功 |
+| S5 搜索与舞台 | `pixel_world_host` 及列表集成测试：输入关键词、再接收 snapshot，核列表裁剪而世界 entity/fragment/facility 不受裁剪，另核删除/不可见 | mock 列表结果不证明真实渲染 |
+| S7 Feed 空增量 | `world_feed_transport`→`world_feed_state`→`world_feed_panel` 与 HUD；非空→同 cursor 空、多页 replay、追平、首次空、gap/unavailable | reducer 单测不代签 transport/panel；空页不证明 LIVE |
+| G3 页面内 Retry | `pixel_world_runtime_module_wasm` 和 Host 集成：同模块首次 503、下一次正确 bytes、连续失败、成功复用和并发 single-flight；可见变化再做 S6 | 测试 reset/重载不证明页面内恢复；mock bytes 不证明 GPU readiness |
+
+这些都是后续行为验证的选择规则；本次只修改合同，不启动 Runtime/provider 或宣称浏览器验收。
+
 ### Expanded visual contract (target handoff)
 - Player HUD 的层级固定为条件性 attention、`Objective`、一个主导性的 `Next Move`
   动作、`Player Leverage`/selection context、`Action Receipt`；World Feed 仍是收起的
   ambient chip。`world_read` 的 `tick/agents/routes/fragments/hotspots` 只有在既有
   projection 明确发布时才可作为次级摘要，不能假设 Power/Data/Consensus 等字段存在。
-- `Next Move` 目标是单一 CTA + 内联 blocker；不要复制 Stage Hero 文案或让 World Feed
-  代替 receipt。该层级是待实现的视觉目标，当前三卡 HUD 的实现边界仍以上文为准。
+- `Next Move` 使用单一 CTA + 内联 blocker；不要复制 Stage Hero 文案或让 World Feed
+  代替 receipt。主动作/从属上下文的结构已实现；剩余视觉和交互验收按当前候选、场景及
+  受影响表面记录，不能把结构存在当作整个视觉目标已通过。
 - Agent Console 默认先显示 selected context、授权 command/chat、blocker 与 receipt；
   raw snapshot/JSON、auth/capability、prompt override、world-scale 和 Director 工具
   默认收起到 `Diagnostics / More`，不改变控制权或 fail-closed 语义。
@@ -61,15 +95,16 @@
 - 这些约束不新增协议/runtime 字段，不改变仿真、replay、renderer、Director capability、
   ownership、经济或玩家权限；真实 headed 证据必须覆盖 `1440x1000` 与 `390x844`。
 
-### Next optimization visual handoff (target; pending implementation)
+### Player visual handoff（既有结构与持续验收边界）
 
 The next bounded visual pass uses this reading order:
 
 `connection/renderer/blocker attention → Objective → one dominant Next Move → selected Agent context / Player Leverage → Action Receipt → collapsed World Feed`.
 
 - Objective and Next Move must not repeat the same instruction. Objective and Player Leverage
-  may become typographic context; only Next Move needs the dominant actionable surface. This is a
-  target, not evidence that the current three-cell responsive HUD has already been flattened.
+  share the supporting context; only Next Move has the dominant actionable surface. The current
+  `PixelWorldCommercialHud` and terminal-shell CSS implement that structure, with Next Move first
+  on narrow screens. Geometry, input and accessibility acceptance remain candidate-specific.
 - Action Receipt outranks ambient events and helper copy whenever present. Player and Cinematic
   must not show duplicate causal receipts; first verify the current normal/compact overlay geometry
   in a headed browser, then make presentation ownership explicit rather than masking overlap.
@@ -101,7 +136,7 @@ relationships, plan/memory/rationale, provider or cost data, multi-Agent graphs,
 verbs require producer/runtime/agent definitions for source, freshness, permission, missing-state,
 idempotency, and receipt semantics before visual design is treated as implementable.
 
-#### P1-A Agent Context Lite（源码与聚焦自动化已完成；headed 证据部分完成）
+#### P1-A Agent Context Lite（既有实现与分项验收边界）
 
 P1-A 先实现一个 Agent-only composition，作为后续实体 Inspector 的窄入口；Location、
 Facility、Territory、Organization、Depot、Module 的 generalized Inspector 明确是 post-P1-A。
@@ -139,15 +174,16 @@ Facility、Territory、Organization、Depot、Module 的 generalized Inspector �
 P1-A 的视觉验收只针对 selected Agent、缺失/陈旧/不可用态和非 Agent honest-unavailable 态；
 必须覆盖 `1440x1000`、`1024x768`、`768x1024`、`390x844`、键盘/IME/CJK/长文本、Focus 返回
 路径和单一正式 Receipt，并覆盖 current、last-known/stale、reconnecting、unknown、conflict、
-replay、gap、reorg、unavailable 与 control/permission lost。当前源码与聚焦自动化已完成；headed
-证据仅覆盖外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。`ready=true`
-WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，因此当前
-只维持 technical preview；本节不单独构成完整 headed 验收或发行放行结论。
+replay、gap、reorg、unavailable 与 control/permission lost。Context Lite 源码与聚焦自动化已经
+存在。早期外部 Chrome 样本只覆盖 GPU-unavailable fallback（`1440x1000`、`390x844`），
+不能据此给 `ready=true` WebGL2/Cinematic、probe 后异步失败或 tablet `641–1240` 放行。
+后续 #3624/#3638/#3668 的证据按各自候选、场景与表面范围保留；旧 fallback 样本不再表示
+全部后续工作未验收。本节不单独构成完整 headed 验收或发行放行结论。
 
 P1-A 的 canonical acceptance crosswalk 为：`P1A-CTX-01 → ENT-01/CTX-01/EMP-01`、
 `P1A-CTX-02 → STA-01/CTX-01/FED-01/FED-02`、`P1A-CTX-03 → INT-01/REC-01/REC-02`、
 `P1A-CTX-04 → CAP-01/CON-01`、`P1A-CTX-05 → IA-01/HUD-01/TXT-01/FOC-01/FOC-02`。
-这些是当前实现与 QA 的证据映射；发行放行仍服从仓库 terminal gates。
+这些是分项实现与 QA 的证据映射；发行判断仍需适用的当前候选证据，不恢复已退休的历史回执流程。
 
 #### P1-B World semantic presentation（当前切片源码与 headed 验收已完成）
 
@@ -270,12 +306,11 @@ source tests, and CSS arithmetic do not prove exact-head headed readiness.
   contextual Command；选择只导航/高亮，不执行。
 - Escape 先关闭局部 surface/drawer，再退出 Focus/presentation；IME composition
   期间由 IME 消费 Escape，关闭后焦点回到 invoker。
-- 实施顺序固定为 anchors/tests → shell layout → console/receipt → focus/a11y →
-  World Feed v1 → headed QA；当前 P1 切片已有源码/协议实现与聚焦自动化，headed 证据仅覆盖
-  外部 Chrome 的 GPU-unavailable fallback（`1440x1000`、`390x844`）。`ready=true`
-  WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败和 tablet `641–1240` 宽度仍待验证，
-  因此当前只维持 technical preview。issuer-backed Director allowed path 和仓库级 runtime/QA
-  release verdict 仍是独立终端证据，不由这部分 headed 结果替代。
+- 实施顺序为 anchors/tests → shell layout → console/receipt → focus/a11y →
+  World Feed v1 → headed QA。已有源码/协议实现和历史分项证据不作为未做事项重跑；新修改按
+  实际命中的表面、renderer 与时序补验证。GPU-unavailable fallback 证据不覆盖 GPU 正常路径，
+  后续 GPU/headed 结果也只证明自己的范围。issuer-backed Director allowed path 和仓库级
+  runtime/QA release verdict 仍需各自适用证据。
 
 World Feed 现作为 `world_feed/v1` additive ambient projection：identity/dedup 为
 `(world_id,reorg_epoch,event_seq)`，source order ascending；nullable receipt link

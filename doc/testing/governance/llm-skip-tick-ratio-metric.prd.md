@@ -15,6 +15,7 @@
   - SC-3: `report.json` 持久化包含新增字段，自动脚本可直接消费。
   - SC-4: 指标计算口径固定为 `llm_skipped_ticks / active_ticks` 并有测试覆盖。
 
+<a id="llmskip-observation-contract"></a>
 ## 2. User Experience & Functionality
 - User Personas:
   - 测试维护者：需要量化 LLM 调用节省与运行行为变化。
