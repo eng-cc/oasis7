@@ -238,6 +238,10 @@ fn private_task_production_signed_quote_first_product_and_restart() {
         .unwrap_or(5000);
     assert!((5000..=20000).contains(&cadence_ms));
     let cadence = Duration::from_millis(cadence_ms);
+    // Cadence excludes canonical persistence and terminal-rejection recovery.
+    // Use one host-bounded deadline for startup and the complete task chain;
+    // starting before the host leaves at least 60 seconds of service reserve.
+    let deadline = Instant::now() + Duration::from_secs(300);
     std::thread::scope(|scope| {
         let host = scope.spawn(|| {
             super::run_prepared_world_service_kind(
@@ -306,9 +310,6 @@ fn private_task_production_signed_quote_first_product_and_restart() {
             .unwrap()
             .unwrap();
         let mut categories = CleanupCategories::default();
-        // Bound the whole task chain, including observing its first product.
-        // Leave at least 60 seconds before the host's 360-second service limit.
-        let deadline = Instant::now() + (cadence * 24).min(Duration::from_secs(300));
         let mut attempts = Vec::new();
         let mut forced_action_rejection = false;
         let mut committed = None;
