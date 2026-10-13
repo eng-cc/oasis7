@@ -452,7 +452,7 @@ fn run_prepared_world_service_kind(
                             std::thread::sleep(cleanup_admission_delay);
                         }
                         bytes.extend(body);
-                        let handled = crate::world_service_api::private_goal::maybe_handle(
+                        let response = crate::world_service_api::private_goal::maybe_handle(
                             &mut stream,
                             &bytes,
                             &node,
@@ -464,8 +464,17 @@ fn run_prepared_world_service_kind(
                             &root.join("store"),
                             &signer,
                             Some(&store),
-                        )
-                        .unwrap();
+                        );
+                        let handled = match response {
+                            Ok(handled) => handled,
+                            Err(error) if error == "private response write failed" => {
+                                // A disconnected peer did not receive an outcome. Keep serving
+                                // so the client can retry its original signed operation.
+                                println!("TASK_PRIVATE_RESPONSE_PEER_DISCONNECTED");
+                                continue;
+                            }
+                            Err(error) => panic!("private handler failed: {error}"),
+                        };
                         if !handled {
                             assert!(
                                 crate::world_service_api::maybe_handle(
@@ -846,3 +855,23 @@ enum PreparedWorldKind {
 }
 #[path = "world_service_task_starter_chain_playtest.rs"]
 mod starter_chain_playtest;
+
+pub(super) fn retry_private<T>(
+    mut read: impl FnMut() -> Result<T, oasis7::world_service::client::WorldServiceClientError>,
+    deadline: Instant,
+) -> T {
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "private original read deadline exhausted"
+        );
+        match read() {
+            Ok(value) => return value,
+            Err(
+                oasis7::world_service::client::WorldServiceClientError::Transport(_)
+                | oasis7::world_service::client::WorldServiceClientError::Cooldown { .. },
+            ) => std::thread::sleep(Duration::from_millis(100)),
+            Err(e) => panic!("private original read failed: {e}"),
+        }
+    }
+}

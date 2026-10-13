@@ -394,7 +394,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                 &delegate,
             )
             .unwrap();
-            let mut captured = client.read_task_context(&get).unwrap();
+            let mut captured = retry_private(|| client.read_task_context(&get), deadline);
             let (quoted, quote_proof) =
                 verified_quote(&client, &delegate, &get, &mut captured, deadline);
             if !forced_action_rejection {
@@ -699,11 +699,7 @@ fn verified_quote(
     SignedReadRequest<oasis7::world_service::task_recipe_quote::TaskRecipeQuoteRequestV1>,
 ) {
     use oasis7::world_service::task_recipe_quote::*;
-    for _ in 0..8 {
-        assert!(
-            Instant::now() < deadline,
-            "bounded quote read deadline exhausted"
-        );
+    while Instant::now() < deadline {
         let proof = sign_read_request(
             TASK_RECIPE_QUOTE_PATH,
             TaskRecipeQuoteRequestV1 {
@@ -742,9 +738,9 @@ fn verified_quote(
         }
         // A quote read reserves nothing. An explicit base conflict permits a
         // fresh read of the same captured identity; no action has been submitted.
-        *captured = client.read_task_context(get).unwrap();
+        *captured = retry_private(|| client.read_task_context(get), deadline);
     }
-    panic!("maximum quote base refreshes exhausted");
+    panic!("production chain deadline exhausted during quote refresh");
 }
 fn private_http(endpoint: &str, body: &serde_json::Value) -> (u16, serde_json::Value) {
     use oasis7::world_service::task_recipe_quote::TASK_RECIPE_QUOTE_PATH;

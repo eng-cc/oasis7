@@ -651,25 +651,6 @@ fn assert_terminal(
         "replacement requires authenticated terminal result"
     );
 }
-fn retry_private<T>(
-    mut read: impl FnMut() -> Result<T, oasis7::world_service::client::WorldServiceClientError>,
-    deadline: Instant,
-) -> T {
-    loop {
-        assert!(
-            Instant::now() < deadline,
-            "private original read deadline exhausted"
-        );
-        match read() {
-            Ok(value) => return value,
-            Err(
-                oasis7::world_service::client::WorldServiceClientError::Transport(_)
-                | oasis7::world_service::client::WorldServiceClientError::Cooldown { .. },
-            ) => std::thread::sleep(Duration::from_millis(100)),
-            Err(e) => panic!("private original read failed: {e}"),
-        }
-    }
-}
 
 #[expect(
     clippy::too_many_arguments,
@@ -939,6 +920,9 @@ fn private_http(endpoint: &str, body: &serde_json::Value, deadline: Instant) -> 
         Instant::now() < deadline,
         "starter chain HTTP probe exceeded deadline"
     );
-    assert!(response.contains("Cache-Control: no-store"));
+    assert!(
+        response.contains("Cache-Control: no-store"),
+        "private HTTP probe missing no-store: {response:?}"
+    );
     response.split_whitespace().nth(1).unwrap().parse().unwrap()
 }
