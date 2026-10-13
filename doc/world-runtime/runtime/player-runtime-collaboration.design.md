@@ -30,7 +30,7 @@ Runtime owner 负责世界侧 control fence、顺序、授权及恢复；Agent o
 | [AC-COLLAB-004](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-004) | 问题/回答关联原任务和目标，旧问题不改新目标 | [collab-content](#collab-content) | runtime_engineer / agent_engineer / viewer_engineer | 不证明自然语言策略正确或第三方工具已获授权 |
 | [AC-COLLAB-005](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-005) | 有效 owner 批准与累积预算在执行时重验 | [collab-approval](#collab-approval) | runtime_engineer / agent_engineer / viewer_engineer | 不证明自然语言策略正确或第三方工具已获授权 |
 | [AC-COLLAB-006](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-006) | 重复消息、迟到和历史缺口安全恢复 | [collab-recovery](#collab-recovery) | runtime_engineer / agent_engineer / viewer_engineer | 不证明自然语言策略正确或第三方工具已获授权 |
-| [AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) | 实际执行在线、停止和重新接入可区分 | [collab-binding](#collab-binding) | runtime_engineer / agent_engineer / viewer_engineer | 不证明自然语言策略正确或第三方工具已获授权 |
+| [AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) | 同一任务中证明离开 Viewer、停止、离线改目标、续接、问答、明确授权及世界结果 | [collab-runtime-journey](#collab-runtime-journey) | runtime_engineer / agent_engineer / viewer_engineer | 不证明自然语言策略正确或第三方工具已获授权 |
 
 ## 3. 当前状态、目标状态与差距
 
@@ -103,7 +103,8 @@ TaskSnapshotV1 = {world_binding, task_id, agent_id, owner_revision,
   task_revision, latest_goal_revision, active_goal_revision, active_goal_digest, grant_revision,
   executor_binding, task_status, activation_operation?,
   active_goal: GoalVersionProjectionV1|null, goal_delivery, latest_reports, unanswered_questions, pending_approvals,
-  unsettled_operation_refs, snapshot_seq, resume_cursor, completeness}
+  unsettled_operation_refs, snapshot_seq, snapshot_id, page_index, total_counts,
+  next_snapshot_cursor, resume_cursor, completeness: partial|complete}
 GoalVersionProjectionV1 = {schema_revision, task_id, goal_revision,
   goal_digest, activation_commit_ref, content: GoalContentV1}
 GoalContentV1 = {goal_text, soft_constraints: string[]}
@@ -146,6 +147,65 @@ Runtime 的 native library 提供独立私有目标存储基础 `world_service::
 
 控制命令至少包含 `PublishGoal / BindExecutor / StopDelegation / SubmitApprovalDecision`，复用 typed owner authority。消息类命令 `PostReport / AskQuestion / AnswerQuestion / AcknowledgeGoal` 不能改 grant。每条命令都携带稳定 operation ID、expected revision 和所属世界分支；通道切换不改变身份作用域。
 
+<a id="collab-snapshot-pages"></a>
+### 6.1 同切点快照分页合同
+
+承接 [AC-COLLAB-006](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-006)
+与 [AC-EXT-008](../../product/agents-world-simulation/external-agent-runtime-play.prd.md#ac-ext-008)。
+复用 [Game API](../../world-simulator/llm/external-agent-game-api.design.md#api-wire) 的目标
+`GET T/snapshot`，不另建公共内容下载入口。本节是尚未发布的完整 TaskSnapshot 合同补充；
+已实施的 task-control/private-goal 子集不因此具备分页、完整恢复或新的读取授权。
+
+**读取请求与切点。** 首次请求不带 `snapshot_cursor`，可带十进制整数 `limit`（1–200，默认 200）；
+Runtime 在已提交控制记录与私有正文投影间固定一致切点 S，建立有界只读 pin，再返回第一页。
+后续请求仍调用同一路由，只携带服务端返回的 `snapshot_cursor`；不能更改 limit、切点或排序。
+游标绑定 snapshot_id、world/genesis/branch、task/Agent、已认证主体、audience/读权限版本、
+适用 executor fence、S、页位置与到期时间；它不是 bearer 权限，不含正文、正文指纹或私有存储路径。
+传输、日志和缓存按私有协作数据处理，响应 `Cache-Control: no-store`，游标不进入公开日志。
+
+| 字段 | 含义与消费规则 |
+| --- | --- |
+| snapshot_id / snapshot_seq | 本次只读 pin 的不透明身份与切点 S；各页必须一致，不能与另一轮 snapshot 混合 |
+| page_index | 从 `"0"` 连续递增的十进制字符串；重试同游标返回同一页，客户端不能重复追加 |
+| total_counts | 四个列表在 S 上、该 audience 可见的确切总数，均为十进制字符串；不披露其他受众计数 |
+| next_snapshot_cursor | 还有当前态项目时的下一页游标；最后一页为 null，不以短页或空列表判定结束 |
+| resume_cursor | 非最后页为 null；最后页给出与同一 S 绑定的 after-S 事件游标，不从末页读取时间开始 |
+| completeness | `partial` 表示仍有续页；`complete` 只标记末页，不表示末页本身就是整份快照 |
+
+每页保留同一 S 的 world/control/goal/executor 元数据及完整 active_goal；四个列表只放该页项目。
+按 `unanswered_questions → pending_approvals → unsettled_operation_refs → latest_reports` 固定集合顺序，
+集合内按原稳定 question/message、approval、operation、report ID 的 UTF-8 字节顺序升序枚举。
+同集合 ID 唯一，S 上的内容与版本也固定；禁止在不断变化的当前列表上使用 offset 分页。
+`latest_reports` 的当前投影同样读齐，但完整历史报告仍沿既有授权历史入口读取，不借快照承诺无限历史。
+
+**完整度与字节预算。** limit 是一页四个列表合计的条数上限，仍不得超过 200；服务端按上述顺序
+逐项加入，并计算整个未压缩 UTF-8 JSON 响应的实际编码字节，包含字段名、转义、分隔符、重复头部和游标。
+达到 2 MiB 前提前结束该页，不能按字符数或正文相加估算，也不能裁剪单个项目。只要仍有项目，成功页必须
+至少前进一项。空任务返回 page_index=0、四个计数为零、complete 和 after-S 游标。
+
+为保证合法单项总能装入一页，完整快照的非列表头部（含游标/计数）和每个完整当前态项目各不超过
+64 KiB 编码字节；goal 4 KiB、message/report 8 KiB 的既有正文限制和每 task 256 个待决项总限额不变。
+新控制/消息/申请写入及当前投影更新在持久接受前检查完整编码，超限明确拒绝；追加历史不无限膨胀当前投影。
+不符合此尚未发布合同的旧草案记录保留原数据并返回 recovery_required，不能删记录、切正文或把 partial
+改成 complete。格式修复与兼容处理完成前不宣称该候选具备完整恢复能力。
+
+**读取期间变化。** pin 保留 S 上的当前项、所引用的私有正文版本以及可接续的 after-S 事件窗口；
+事件传输日志压缩不得删除这些当前项。新问题、回答、决定及目标更新只改变 S 之后的事件和当前权威状态，
+不会改写 pin 的成员或原页内容。读取 pin 不持有 World::step 的长事务锁；pin 寿命与并发配额由 LimitsV1
+公布实际值，不能由重试无限续租。资源不足在建立 pin 前返回 429；pin 到期、进程重启后无法恢复该 pin、
+分支变化或保留窗口无法保证时，返回 409 cursor_reset_required / refresh=task_snapshot 并终止该轮，
+不能把新切点拼入旧页，也不能用空页掩盖被回收的增量。
+
+每页在解密前及交付前重验当前读权限；无权时先返回不泄露对象/计数的 401/403，再谈任何版本差异。
+audience/读权限版本或适用 executor fence 变化使旧 pin 失效；仍有读权的主体从新 snapshot 重建，
+不能因历史切点继续取得被撤销的正文。客户端失去读权后清除有关私有缓存；此前已经合法交付的信息无法
+被服务端追溯收回，不作这种承诺。
+
+客户端只在从第零页开始、页号连续、身份/切点/固定头一致、稳定 ID 去重且每集合计数等于 total_counts，
+并取得唯一末页后，才原子替换本地基线，再从 S 消费增量；此前保持 recovery_required，不启动新认知或批准。
+断连期间只缓存私有暂存页，不发布伪完整状态。已知未结算 operation 先对账，snapshot 中出现待批项目不执行批准。
+新 context、owner 决定与世界提交仍使用当前版本及授权检查；S 上的许可不成为今天的写权限。
+
 ## 7. 状态、事务与持久化
 
 <a id="collab-recovery"></a>
@@ -161,7 +221,7 @@ Runtime 的 native library 提供独立私有目标存储基础 `world_service::
 
 Runtime 生成 task-scoped 单调 event_seq，投递至少一次。cursor 是服务端签发的不透明值，绑定 world branch、task、受众与权限 revision、位置及有效窗口；不能将全局消息总量或其他人的事件通过游标泄露。
 
-收到消息后执行器先持久化本地 inbox/去重位点，再确认。服务端同 message_id 同内容幂等，不同内容冲突。任务 snapshot 包含一致读取切点 S：该切点的当前目标、授权、未答问题、待决批准和未结算 operation，与 `events after S` 接续。snapshot 生成时并发新消息只会出现在增量中，不会落在两者之间。激活目标正文作为该 snapshot 的必需当前态，不依赖 S 之前的 GoalVersionSaved/Activated 事件是否仍在重放窗口内。首次连接且没有任何本地缓存的执行器也能仅凭授权 snapshot 与 after-S 事件完成初始化；若取得 context 前目标再次激活，按 expected revision 拒绝并重新同步，不把旧正文重新标注为新版本。
+收到消息后执行器先持久化本地 inbox/去重位点，再确认。服务端同 message_id 同内容幂等，不同内容冲突。任务 snapshot 按[同切点分页合同](#collab-snapshot-pages)读齐后包含一致读取切点 S：该切点的当前目标、授权、未答问题、待决批准和未结算 operation，与 `events after S` 接续。snapshot 生成时并发新消息只会出现在增量中，不会落在两者之间。激活目标正文作为该 snapshot 的必需当前态，不依赖 S 之前的 GoalVersionSaved/Activated 事件是否仍在重放窗口内。首次连接且没有任何本地缓存的执行器也能仅凭全部授权 snapshot 页与 after-S 事件完成初始化；若取得 context 前目标再次激活，按 expected revision 拒绝并重新同步，不把旧正文重新标注为新版本。
 
 游标过期、分支/受众变化或存储窗口外返回 `cursor_reset_required`，提供允许访问的当前 snapshot 获取方式；客户端标记历史缺口，不当作“无新事件”。恢复只消费当前有效目标/批准，不按旧历史顺序重演副作用；已知世界 operation 逐项先对账。
 
@@ -179,7 +239,7 @@ Stop 的效果是持久失效当前执行许可并阻断新受限提案，保留
 
 ## 9. 质量与容量
 
-复用 Game API LimitsV1：goal 4 KiB，message/report 8 KiB，列表最多 200，单响应 2 MiB。每 task 首期最多 256 个未答问题加待决申请；超过返回 quota_exceeded，不丢弃未答项。保留索引是可重建投影，pending 的 source 必须持久。
+复用 Game API LimitsV1：goal 4 KiB，message/report 8 KiB，单页列表合计最多 200，单响应 2 MiB。每 task 首期最多 256 个未答问题加待决申请；超过时在接受新项前返回 quota_exceeded，不丢弃已接受项。201 个同类或合计 256 个合法待决项通过[同切点分页](#collab-snapshot-pages)完整读取；分页数量限制不是待决项准入限制。完整编码、单项可装入性、pin 配额和失效处理按 §6.1 执行，不能指望 after-S 找回 S 前被遗漏的待决项。保留索引是可重建投影，pending 的 source 必须持久。
 
 恢复目标是同一完整 checkpoint 中已确认 control operation 不丢失；这是目标，不是现有线上 RPO 声明。并发验证必须含两个 owner 窗口、两个 executor、目标更新/撤销与世界 commit 交错。事件读取不能阻塞 World::step，report 洪泛不得挤占 stop/撤销的有界控制队列。
 
@@ -189,11 +249,14 @@ Stop 的效果是持久失效当前执行许可并阻断新受限提案，保留
 
 实现可复用既有 goal/journal，但必须提供新语义的完整回读，不通过 alias 默默丢掉版本。回滚关闭新命令、保留任务与操作结果查询；schema 不可读时 fail closed，不清空状态或自动回退到旧 executor。未满足持久一致性与私有存储验证前不能对外承诺跨节点恢复。
 
-本修订补齐尚未发布的 revision 1 目标快照合同，不需要为缺少 active_goal 的草案实现保留静默兼容；读取不完整旧形状时停止认知并要求 schema 对齐。
+本修订补齐尚未发布的 revision 1 目标快照合同，不需要为缺少 active_goal 的草案实现保留静默兼容；读取不完整旧形状或不识别分页完整度时停止认知并要求 schema 对齐；不能把第一页当旧式完整快照。
 
 ## 11. 验证设计与可追溯性
 
 先在普通 CI 使用 fake RuntimePort/fake driver 和实际持久存储做故障注入，再以真实 Runtime + Web/native 做跨设备体验。主动扩大 scope/修改旧世界权限不属于本次文档交付。
+
+A1 的完整恢复容量回归由 [collab-snapshot-pages](../../testing/manual/external-agent-runtime-contract-validation.manual.md#collab-snapshot-pages)
+接收，联合下表 AC-EXT-008 / AC-COLLAB-006 的恢复与增量负例；验证计划不等于已存在测试实现。
 
 ### 11.1 验证映射表
 
@@ -207,7 +270,23 @@ Stop 的效果是持久失效当前执行许可并阻断新受限提案，保留
 | [AC-COLLAB-004](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-004) | [collab-content](#collab-content) | 问题/回答关联原任务和目标，旧问题不改新目标 | [collab-questions](../../testing/manual/external-agent-runtime-contract-validation.manual.md#collab-questions)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明自然语言策略正确或第三方工具已获授权 |
 | [AC-COLLAB-005](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-005) | [collab-approval](#collab-approval) | 有效 owner 批准与累积预算在执行时重验 | [collab-approval](../../testing/manual/external-agent-runtime-contract-validation.manual.md#collab-approval)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明自然语言策略正确或第三方工具已获授权 |
 | [AC-COLLAB-006](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-006) | [collab-recovery](#collab-recovery) | 重复消息、迟到和历史缺口安全恢复 | [collab-events](../../testing/manual/external-agent-runtime-contract-validation.manual.md#collab-events)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明自然语言策略正确或第三方工具已获授权 |
-| [AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) | [collab-binding](#collab-binding) | 实际执行在线、停止和重新接入可区分 | [collab-executor](../../testing/manual/external-agent-runtime-contract-validation.manual.md#collab-executor)；按该场景的候选、环境、故障注入和判据执行 | 对应 source HEAD 的 CI 输出或脱敏实测记录，保留世界回执关联 | 不证明自然语言策略正确或第三方工具已获授权 |
+| [AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007) | [collab-runtime-journey](#collab-runtime-journey) | 同一任务中证明离开 Viewer、停止、离线改目标、续接、问答、明确授权及世界结果 | [collab-session](../../testing/manual/external-agent-runtime-contract-validation.manual.md#collab-session)；按该场景的候选、环境、故障注入和判据执行 | 每个声明支持的真实 Runtime/profile 独立成案，保留同任务关联链 | 不证明自然语言策略正确或第三方工具已获授权 |
+
+<a id="collab-runtime-journey"></a>
+### 11.2 同任务的真实 Runtime 组合验收
+
+[AC-COLLAB-007](../../product/agents-world-simulation/player-runtime-collaboration.prd.md#ac-collab-007)
+由 [collab-session](../../testing/manual/external-agent-runtime-contract-validation.manual.md#collab-session)
+组合既有 executor、adoption、questions、approval 与真实世界结果场景。QA 主责证据关联，Agent owner
+提供真实 Runtime/worker 会话，Runtime owner 核对控制提交及世界回执，Viewer owner 核对实际使用的界面。
+每个声明支持的 Runtime/profile 独立保留同一 task 的过程，目标 revision 和 executor epoch 的变化必须
+有连续来源，而不是强行相等；另一任务的成功、另一个 Runtime 的截图或 fake driver 的运行不能补齐该链。
+
+该组合只增加关联和缺口判定，不要求重跑所有确定性负例与平台的笛卡尔积。可引用同候选、明确适用范围的
+普通回归；真实过程必须覆盖离开 Viewer 后仍执行、停止后的真实离线、离线发布、重新授权/绑定与续接，
+以及同任务的问答、专用批准和后续唯一世界效果。停止进程与 StopDelegation 的权威提交分别留证，不能
+把重启当旧授权复活。任一环节未实现、未获准或未运行，该 Runtime 的对应验收保持 blocked/not_run，
+不把本节验证计划、文档合入或 native 子集证据升级为整体通过。
 
 ## 12. 决策、长期风险与未决问题
 

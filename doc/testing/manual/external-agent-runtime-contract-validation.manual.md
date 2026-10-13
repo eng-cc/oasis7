@@ -101,9 +101,35 @@
 - 给定：临时单权威世界与私有内容 store，包含已确认目标、未答问题、待批申请和未结算操作。
 - 执行：在正文 fsync、control commit、outbox 发布之间注入 crash；恢复并核验缺正文/坏 digest/旧备份情况。
 - 判定：不丢已确认引用；缺正文保持 recovery_required；不以空目标、旧 epoch 或旧批准继续。
-- 冷启动回归：先激活含非空完整正文的 G1，使激活事件早于切点 S 并从事件重放窗口移除；另保存未激活 G2。使用无任何本地缓存的新受权 executor，仅 GET snapshot 和 after-S 事件初始化。必须取得 G1 的完整 GoalVersionProjectionV1，task/revision/digest/activation ref 与切点一致，可确认 received 并申请对应 context；不能用 G2、摘要或空目标替代。
+- 冷启动回归：先激活含非空完整正文的 G1，使激活事件早于切点 S 并从事件重放窗口移除；另保存未激活 G2。使用无任何本地缓存的新受权 executor，仅 GET snapshot 的完整分页序列和 after-S 事件初始化。必须取得 G1 的完整 GoalVersionProjectionV1，task/revision/digest/activation ref 与切点一致，可确认 received 并申请对应 context；不能用 G2、摘要或空目标替代。
 - 失败与竞态：缺正文、损坏 digest、正文超限均不得返回伪完整 snapshot 或启动认知；撤销/转让后不泄露正文/指纹；真正无激活目标才有 active_goal=null。snapshot 后激活 G2，按 G1 申请 context 必须被拒绝并重取 G2，不重新标注旧正文。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
+
+<a id="collab-snapshot-pages"></a>
+### 场景 collab-snapshot-pages
+
+- 层/环境：普通 HTTP contract + 临时持久存储 + 确定性并发，不调用真实模型。
+- 主责与追踪：runtime_engineer / agent_engineer / qa_engineer；承接
+  [同切点分页合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-snapshot-pages)
+  的 AC-COLLAB-006 / AC-EXT-008，复用 collab-recovery、collab-events、api-wire 的 fixture。
+- 给定：已提交 G1，合法的私有目标/待决记录和未结算 operation；移除 S 前的传输事件，
+  客户端无任何本地缓存。按实际 JSON 编码构造正文、元数据和转义边界，不以字符串长度估算容量。
+
+| 用例 | 执行与可判定预期 |
+| --- | --- |
+| 空集、200/201/256 个同类项 | 分别只放问题、只放申请；200 项可能因字节提前分页，201/256 项不得被 200 的列表上限拒收或截断。最终唯一 ID 集合与 S 上授权集合完全相等，最后页单独不能初始化 |
+| 混合集合 | 128 个问题 + 128 个申请，另有未结算操作和当前报告；用 limit=1、200 验证跨集合边界、顺序、total_counts 与原 operation 关联，不能只读问题列表 |
+| 最大编码边界 | goal 4 KiB、message/report 8 KiB，包含引号、反斜线、控制字符、多字节字符；另测 64 KiB 当前项/头部及超出一个字节。整个响应不超过 2 MiB，metadata 不能绕过检查，单项不切片 |
+| 条数与大小拒绝 | 第 257 个待决项、非法 limit、超大新记录在接受前明确拒绝且无持久副作用；256 个既有项及其正文保持不变。旧草案过大记录保留原数据并 recovery_required，不伪完整 |
+| 重试、乱序与断连 | 重复同 cursor 返回同一页；客户端重复页幂等，缺第零页/中间页、另一 snapshot_id 或被改写头部不能提交基线；重试不延长 pin 寿命 |
+| 页间新增、回答与批准 | 取得第一页后新增问题、回答旧问题、终结待批申请；其 S 上旧形态仍在原页，变化恰好经 after-S 接续。应用增量后不复活已回答/终结项目，不重放批准或原世界副作用 |
+| 日志压缩、到期与重启 | 原事件过期仍从当前态读齐；pin 内所需版本和 after-S 窗口可用。强制 pin 到期、服务重启丢 pin 或窗口不足，显式 reset 后从新 S 重建，不能返回空的成功尾页 |
+| 撤权与历史分支变化 | 读页后、解密前及交付前分别撤销/转让/替换 executor；无权请求不返回正文、计数或差异。仍有读权但 pin 绑定失效须 reset；分支不混用 |
+| 恢复到决策 | 完整基线及增量形成后再取 context；页间已激活 G2 或 grant 已失效，旧 G1/context 仍被当前权威拒绝。原未知 operation 先对账，读取快照不会生成任何批准或重提 |
+
+每例保留 source/build、S、授权版本、脱敏稳定 ID 集合、页号/实际编码字节数、原操作与前后世界结果。
+游标只记录不可反用的关联标识，不把可重放游标、私有正文或私有 digest 写进公开证据。
+本表是实现后的验证计划；模型化分页算例只能证明算例本身，不能证明真实持久化、权限或 HTTP 实现。
 
 <a id="collab-bind"></a>
 ### 场景 collab-bind
@@ -156,7 +182,7 @@
 - 层/环境：Event replay / snapshot cut。
 - 给定：task 在 cut S 后持续写消息，保留期可在测试中压缩，另有 audience 变化。
 - 执行：snapshot 读取与增量并发；重复、乱序、游标到期/篡改、重连与权限收窄。
-- 判定：S 与 after-S 没有静默缺口；过期显式 reset；private 数据不串线，pending 当前项不会因传输日志压缩丢失。
+- 判定：S 与 after-S 没有静默缺口；过期显式 reset；private 数据不串线，pending 当前项不会因传输日志压缩丢失。完整度和容量联合 [collab-snapshot-pages](#collab-snapshot-pages) 验证，不能只测第一页。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
 
 <a id="collab-executor"></a>
@@ -165,8 +191,48 @@
 - 层/环境：Control / stop / restart。
 - 给定：有运行中 driver、待决世界动作和保存后的新目标。
 - 执行：stop 提交时推理仍在，之后重启旧实例并启动 owner 认可的新绑定。
-- 判定：stop 从权威提交点阻止新动作，不等 ack；世界旧结果可查询，新 worker 不继承旧授权。
+- 判定：stop 从权威提交点阻止新动作，不等 ack；世界旧结果可查询，新 worker 不继承旧授权。该分项本身不代签 AC-COLLAB-007，组合取证见 [collab-session](#collab-session)。
 - 证据：候选标识、脱敏交互记录、适用控制版本与实际世界结果；失败保留错误原因，不替换为一次重跑的成功截图。
+
+<a id="collab-session"></a>
+### 场景 collab-session
+
+- 层/环境：真实外部 Runtime + 独立 worker + 实际使用的 Viewer surface + 临时授权世界。
+- 主责与追踪：qa_engineer 联合 agent_engineer / runtime_engineer / viewer_engineer；承接
+  [同任务组合验收](../../world-runtime/runtime/player-runtime-collaboration.design.md#collab-runtime-journey)
+  的 AC-COLLAB-007。这是现有场景的组合取证规则，不是另一套测试平台或发行 gate。
+
+**一案一 Runtime/profile。** 每个声明支持的 OpenClaw/Codex 组合各自建立 case_id，记录实际
+Runtime/driver/worker/Skill/API/Viewer build、source HEAD、primary mode、平台、许可与预算。
+同案始终使用同一 world/genesis/branch、Agent 和 task；G1→G2、E1→E2 的变化保留明确的
+goal/control/grant revision 与提交引用，不把新版本伪装成相同值。各案可用独立临时世界，不要求共用任务，
+也不能拿一个 Runtime 的完整过程补另一 Runtime 的缺段。
+
+| 同案阶段 | 必须能关联的事实与预期 |
+| --- | --- |
+| 启动并离开 Viewer | E1 对 G1 有真实 Runtime session/run/context 和调用记录；关闭 Viewer 后，在原合法预算内仍能继续一次决策/查询/行动。健康或 heartbeat 单独不足以证明继续执行 |
+| 停止执行器 | 记录 StopDelegation 的权威 control commit/fence 变化及自有 worker/driver 的停止结果。前者阻止新受限动作，后者证明进程确已离线；未知停止结果不得写成已停止，不能终止 world authority 或他人进程来制造成功 |
+| 离线更新 | world authority 保持运行，owner 在同一 task 发布并激活 G2；保存、激活引用和 awaiting_executor 分别可读。离线不是未保存，也不是运行中已采纳 |
+| 重启续接 | 用当前有权主体认可的绑定取得 E2，经完整 snapshot/after-S 恢复 G2；不新建 Agent/task，不把 stop 前的授权复活。记录真实新 session、context 和 G2 的 received/adoption/decision 关联 |
+| 问题与回答 | 在 G2/E2 下产生 Q2 与 message_id，owner 的回答以 in_reply_to 指回该问题；旧 G1 的问题/答复若仍存在，保持 stale，不替换当前目标；普通“同意”不生成 grant |
+| 明确批准 | 当前 executor 发起绑定 task/G2/E2、proposal digest、owner revision、scope/累计预算和 expiry 的申请 P2；owner 通过专用 decisions 入口生成唯一 decision_ref/grant_ref，不以聊天或截图当授权 |
+| 后续世界结果 | P2 的授权关联到实际 context/decision、client_operation_id/operation_id、admission 与权威 receipt；回读前后状态确认真实效果且只一次。accepted、adoption_reported 或 completion_reported 不代签 committed |
+| 回访与收尾 | 重开实际 Viewer，读取同一 task 的目标、问题/决定和原 operation 结果；失败、未知与 world result 分层可读。只清理本案资源，保留原失败和恢复过程 |
+
+证据可分多个文件或直接复用现有记录，但须有一份小型关联表：
+`case_id → runtime/profile/session → world/task/Agent → goal revision → executor epoch →
+question/answer → approval/decision/grant → context/operation → world receipt`。
+每条边都来自实际请求、受信边界记录或权威回读；QA 检查它们属于同候选的同一过程。只按时间接近、
+同一用户名、另一 task 的绿色结果或任意 receipt 字符串拼接，均为证据缺口；脱敏不得破坏关联，也不得公开秘密。
+
+可复用同候选且范围匹配的 collab-executor/questions/approval、api-idempotency 等确定性负例，
+不要求每个真实 Runtime 重跑全部故障点，不增加所有平台/模型的笛卡尔矩阵。图形交互仍按实际 surface
+分别验证；本案只覆盖所记录的平台/入口。后续世界效果可复用同案 api-first-session 的 production_only
+回执，不能据此宣称稳定生产、完整工业链、跨 Runtime 私有记忆迁移或公开发行就绪。
+
+缺接口、独立试玩、Runtime、GUI、有效授权或预算时，记录缺失阶段为 blocked/not_run；保留已完成的
+分项范围，但 AC-COLLAB-007 的该组合不能整体通过。文档检查或 fake driver 不代签真实会话，
+也不因本验证计划存在而调用未经批准的付费模型。
 
 <a id="adapter-connect"></a>
 ### 场景 adapter-connect
