@@ -12,6 +12,7 @@ mod agent_cell;
 mod agent_claims;
 mod audit;
 mod blob_store;
+mod builtin_factory_catalog;
 mod builtin_recipe_catalog;
 mod builtin_wasm_identity_manifest;
 mod builtin_wasm_materializer;
@@ -58,6 +59,7 @@ mod world_event;
 #[cfg(test)]
 mod tests;
 
+pub use builtin_factory_catalog::builtin_factory_spec;
 pub use builtin_recipe_catalog::builtin_recipe_plan;
 
 // Re-export all public types
@@ -128,7 +130,7 @@ pub use cognition_recovery::{
     RuntimeReceiptLineageV1, WorldCommitRecordV1, WorldRootViewV1,
 };
 pub use world::{
-    BuiltinRecipeStartPreview, COGNITION_ECONOMY_SCHEMA_VERSION,
+    BuiltinFactoryStartPreview, BuiltinRecipeStartPreview, COGNITION_ECONOMY_SCHEMA_VERSION,
     COGNITION_FIXED_UNIT_EXPERIMENTAL_POLICY_REVISION, COGNITION_LEASE_SCHEMA_VERSION,
     COGNITION_PROVISIONING_EVENT_SCHEMA_VERSION, COGNITION_PROVISIONING_RECEIPT_SCHEMA_VERSION,
     COGNITION_PROVISIONING_SCHEMA_VERSION, COGNITION_RECEIPT_SCHEMA_VERSION,
@@ -141,8 +143,8 @@ pub use world::{
     CognitionResourceBalanceV1, LOCAL_TEST_PROVIDER_GRANT_RENEWAL_THRESHOLD_TICKS,
     LOCAL_TEST_PROVIDER_GRANT_TTL_TICKS, LocalTestProviderAuthorityConfig,
     LocalTestProviderAuthorityMode, LocalTestProviderGrantStatus, LocalTestProviderModuleArtifact,
-    LocalTestProviderProvisioning, LocalTestProviderSessionMode, NativeBuiltinRecipeQuote,
-    ProviderBackedBootstrapAuthorityV1,
+    LocalTestProviderProvisioning, LocalTestProviderSessionMode, NativeBuiltinFactoryQuote,
+    NativeBuiltinRecipeQuote, ProviderBackedBootstrapAuthorityV1,
 };
 
 // Durable cognition scheduler, wake and continuation projections

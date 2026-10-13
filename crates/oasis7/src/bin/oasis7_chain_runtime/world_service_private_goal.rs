@@ -11,6 +11,7 @@ mod task_context;
 use oasis7::world_service::private_task_context::{
     TASK_CONTEXT_PREPARE_PATH, TASK_CONTEXT_READ_PATH, TASK_SNAPSHOT_PATH,
 };
+use oasis7::world_service::task_factory_quote::TASK_FACTORY_QUOTE_PATH;
 use oasis7::world_service::task_recipe_quote::TASK_RECIPE_QUOTE_PATH;
 
 use oasis7::world_service::private_goal_read::{
@@ -381,6 +382,7 @@ pub(crate) fn maybe_handle_with_delivery_hook(
         TASK_CONTEXT_PREPARE_PATH,
         TASK_CONTEXT_READ_PATH,
         TASK_RECIPE_QUOTE_PATH,
+        TASK_FACTORY_QUOTE_PATH,
     ]
     .contains(&path)
     {
@@ -418,6 +420,7 @@ pub(crate) fn maybe_handle_with_delivery_hook(
             TASK_CONTEXT_PREPARE_PATH,
             TASK_CONTEXT_READ_PATH,
             TASK_RECIPE_QUOTE_PATH,
+            TASK_FACTORY_QUOTE_PATH,
         ]
         .contains(&path)
         {
@@ -475,7 +478,7 @@ pub(crate) fn maybe_handle_with_delivery_hook(
 mod tests {
     use super::*;
     #[test]
-    fn private_recipe_quote_route_rejects_query_origin_and_disabled_store() {
+    fn private_native_quote_routes_reject_query_origin_and_disabled_store() {
         use std::io::{Read, Write};
         let runtime = Arc::new(Mutex::new(NodeRuntime::new(
             oasis7_node::NodeConfig::new("quote-node", "world", oasis7_node::NodeRole::Sequencer)
@@ -485,47 +488,49 @@ mod tests {
             private_key_hex: hex::encode([9; 32]),
             public_key_hex: hex::encode([10; 32]),
         };
-        for (suffix, headers, expected) in [
-            ("?token=forbidden", "", 403),
-            ("", "Origin: https://example.invalid\r\n", 403),
-            ("", "", 503),
-        ] {
-            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-            let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
-            let (mut server, _) = listener.accept().unwrap();
-            let target = format!("{TASK_RECIPE_QUOTE_PATH}{suffix}");
-            let bytes=format!("POST {target} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n{headers}Content-Length: 2\r\n\r\n{{}}").into_bytes();
-            assert!(
-                maybe_handle(
-                    &mut server,
-                    &bytes,
-                    &runtime,
-                    "POST",
-                    &target,
-                    "world",
-                    Path::new("unused"),
-                    Path::new("unused"),
-                    Path::new("unused"),
-                    &signer,
-                    None
-                )
-                .unwrap()
-            );
-            server.flush().unwrap();
-            drop(server);
-            let mut reply = String::new();
-            client.read_to_string(&mut reply).unwrap();
-            assert_eq!(
-                reply
-                    .split_whitespace()
-                    .nth(1)
+        for quote_path in [TASK_RECIPE_QUOTE_PATH, TASK_FACTORY_QUOTE_PATH] {
+            for (suffix, headers, expected) in [
+                ("?token=forbidden", "", 403),
+                ("", "Origin: https://example.invalid\r\n", 403),
+                ("", "", 503),
+            ] {
+                let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+                let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+                let (mut server, _) = listener.accept().unwrap();
+                let target = format!("{quote_path}{suffix}");
+                let bytes=format!("POST {target} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\n{headers}Content-Length: 2\r\n\r\n{{}}").into_bytes();
+                assert!(
+                    maybe_handle(
+                        &mut server,
+                        &bytes,
+                        &runtime,
+                        "POST",
+                        &target,
+                        "world",
+                        Path::new("unused"),
+                        Path::new("unused"),
+                        Path::new("unused"),
+                        &signer,
+                        None
+                    )
                     .unwrap()
-                    .parse::<u16>()
-                    .unwrap(),
-                expected
-            );
-            assert!(reply.contains("Cache-Control: no-store"));
-            assert!(!reply.contains("Access-Control-Allow-Origin"));
+                );
+                server.flush().unwrap();
+                drop(server);
+                let mut reply = String::new();
+                client.read_to_string(&mut reply).unwrap();
+                assert_eq!(
+                    reply
+                        .split_whitespace()
+                        .nth(1)
+                        .unwrap()
+                        .parse::<u16>()
+                        .unwrap(),
+                    expected
+                );
+                assert!(reply.contains("Cache-Control: no-store"));
+                assert!(!reply.contains("Access-Control-Allow-Origin"));
+            }
         }
     }
     #[test]

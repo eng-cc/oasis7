@@ -212,6 +212,8 @@ fn load_captured(
     Ok(output)
 }
 
+#[path = "world_service_private_factory_quote.rs"]
+mod factory_quote;
 #[path = "world_service_private_recipe_quote.rs"]
 mod recipe_quote;
 
@@ -224,6 +226,9 @@ pub(super) fn process(
 ) -> Result<Value, PrivateError> {
     if path == oasis7::world_service::task_recipe_quote::TASK_RECIPE_QUOTE_PATH {
         return recipe_quote::process(service, store, body, before_delivery);
+    }
+    if path == oasis7::world_service::task_factory_quote::TASK_FACTORY_QUOTE_PATH {
+        return factory_quote::process(service, store, body, before_delivery);
     }
     match path {
         TASK_SNAPSHOT_PATH => {
