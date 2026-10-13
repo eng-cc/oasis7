@@ -255,7 +255,7 @@ impl EmailAdapter {
         {
             self.delivered
                 .push((address.into(), subject.into(), body.into()));
-            return Ok(());
+            Ok(())
         }
         #[cfg(not(test))]
         {
@@ -305,6 +305,10 @@ fn constant_equal(a: &str, b: &str) -> bool {
             .fold(0u8, |acc, (x, y)| acc | (x ^ y))
             == 0
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "OTP verification independently binds purpose, owner, account, target and expiry within one transaction."
+)]
 pub(super) fn read_otp(
     tx: &IdentityTransaction<'_>,
     email: &EmailAdapter,
@@ -371,6 +375,10 @@ impl IdentityService {
         self.store
             .transaction(|tx| read_identity_receipt(tx, id, owner, request_digest))
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "OTP issuance retains distinct account, recovery target, owner and source quota bindings."
+    )]
     pub(super) fn issue_email_otp(
         &mut self,
         purpose: &str,
@@ -414,7 +422,7 @@ impl IdentityService {
         };
         otp.verifier = self.email.verifier(&otp, &code);
         let secret = self.config.session_key;
-        self.store.transaction(|tx|{consume_quota(tx,"email-source",&digest(&secret,"source",source),now,60_000,5)?;consume_quota(tx,"email-address",&lookup,now,60_000,1)?;consume_quota(tx,"email-total","deployment",now,60_000,300)?;if let Some(a)=account{if let Some(c)=tx.all::<CredentialRecord>("credential",Some(a))?.into_iter().map(|(_,v)|v.value).find(|c|c.state=="active"&&matches!(&c.public_material,CredentialMaterial::Email{lookup_hmac,..} if lookup_hmac==&lookup)){otp.credential_id=Some(c.credential_record_id);otp.credential_version=Some(c.version);}}tx.create(&format!("otp:{id}"),"email_otp",account,Some(otp.expires_at),&otp)})?;
+        self.store.transaction(|tx|{consume_quota(tx,"email-source",&digest(&secret,"source",source),now,60_000,5)?;consume_quota(tx,"email-address",&lookup,now,60_000,1)?;consume_quota(tx,"email-total","deployment",now,60_000,300)?;if let Some(a)=account&& let Some(c)=tx.all::<CredentialRecord>("credential",Some(a))?.into_iter().map(|(_,v)|v.value).find(|c|c.state=="active"&&matches!(&c.public_material,CredentialMaterial::Email{lookup_hmac,..} if lookup_hmac==&lookup)){otp.credential_id=Some(c.credential_record_id);otp.credential_version=Some(c.version);}tx.create(&format!("otp:{id}"),"email_otp",account,Some(otp.expires_at),&otp)})?;
         let delivered = self.email.send(
             &address,
             "Oasis7 验证码",
@@ -444,6 +452,10 @@ impl IdentityService {
             json!({"api_version":2,"ok":true,"challenge_id":id,"otp_id":id,"operation_id":id,"expires_at":otp.expires_at}),
         )
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Failure accounting must verify the same purpose, owner, account, target and time as OTP consumption."
+    )]
     pub(super) fn otp_precheck(
         &mut self,
         id: &str,
@@ -459,25 +471,24 @@ impl IdentityService {
             if read_otp(tx, email, id, code, purpose, owner, account, target, now).is_ok() {
                 return Ok(true);
             }
-            if let Some(mut otp) = tx.get::<EmailOtp>(&format!("otp:{id}"))? {
-                if otp.value.owner == owner
-                    && otp.value.purpose == purpose
-                    && otp.value.state == "pending"
-                {
-                    otp.value.failed_attempts += 1;
-                    if otp.value.failed_attempts >= 5 {
-                        otp.value.state = "exhausted".into();
-                        otp.value.verifier.clear();
-                    }
-                    tx.replace(
-                        &format!("otp:{id}"),
-                        otp.row_version,
-                        "email_otp",
-                        otp.value.account_id.as_deref(),
-                        Some(otp.value.expires_at),
-                        &otp.value,
-                    )?;
+            if let Some(mut otp) = tx.get::<EmailOtp>(&format!("otp:{id}"))?
+                && otp.value.owner == owner
+                && otp.value.purpose == purpose
+                && otp.value.state == "pending"
+            {
+                otp.value.failed_attempts += 1;
+                if otp.value.failed_attempts >= 5 {
+                    otp.value.state = "exhausted".into();
+                    otp.value.verifier.clear();
                 }
+                tx.replace(
+                    &format!("otp:{id}"),
+                    otp.row_version,
+                    "email_otp",
+                    otp.value.account_id.as_deref(),
+                    Some(otp.value.expires_at),
+                    &otp.value,
+                )?;
             }
             Ok(false)
         })?;
@@ -487,6 +498,10 @@ impl IdentityService {
             Err(reject("authentication_failed"))
         }
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The email route carries separate authenticated session, ceremony owner, source quota and time boundaries."
+    )]
     pub(super) fn email_route(
         &mut self,
         method: &str,

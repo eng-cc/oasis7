@@ -217,16 +217,14 @@ impl IdentityService {
                         }
                     })
                     .ok_or_else(|| reject("world_registration_pending"))?;
-                if fence.key.as_deref() != Some(current.public_key.as_str())
-                    || fence.epoch != current.world_epoch
-                {
-                    if !(route == "/world/release"
+                if (fence.key.as_deref() != Some(current.public_key.as_str())
+                    || fence.epoch != current.world_epoch)
+                    && !(route == "/world/release"
                         && (control.releasing || control.current.is_none())
                         && fence.key.is_none()
                         && fence.epoch == current.world_epoch.saturating_add(1))
-                    {
-                        return Err(reject("control_replaced"));
-                    }
+                {
+                    return Err(reject("control_replaced"));
                 }
                 if route == "/world/release" {
                     if control.current.is_some() {
@@ -429,10 +427,10 @@ fn prepare_join(
         }
         return Ok(());
     }
-    if let Some(pending) = &control.pending {
-        if now < pending.created_at.saturating_add(30_000) {
-            return Err(reject("operation_pending"));
-        }
+    if let Some(pending) = &control.pending
+        && now < pending.created_at.saturating_add(30_000)
+    {
+        return Err(reject("operation_pending"));
     }
     if fence.key.is_some() {
         if p["takeover"].as_bool() != Some(true) {

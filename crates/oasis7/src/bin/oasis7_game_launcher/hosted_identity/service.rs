@@ -67,17 +67,17 @@ pub(super) fn cookie_value<'a>(headers: &'a str, name: &str) -> Option<&'a str> 
         if line.is_empty() {
             break;
         }
-        if let Some((key, value)) = line.split_once(':') {
-            if key.eq_ignore_ascii_case("cookie") {
-                for item in value.split(';') {
-                    if let Some((k, v)) = item.trim().split_once('=') {
-                        if k == name {
-                            if result.is_some() {
-                                return None;
-                            }
-                            result = Some(v);
-                        }
+        if let Some((key, value)) = line.split_once(':')
+            && key.eq_ignore_ascii_case("cookie")
+        {
+            for item in value.split(';') {
+                if let Some((k, v)) = item.trim().split_once('=')
+                    && k == name
+                {
+                    if result.is_some() {
+                        return None;
                     }
+                    result = Some(v);
                 }
             }
         }
@@ -94,13 +94,13 @@ pub(crate) fn header<'a>(headers: &'a str, name: &str) -> Option<&'a str> {
         if line.is_empty() {
             break;
         }
-        if let Some((k, v)) = line.split_once(':') {
-            if k.eq_ignore_ascii_case(name) {
-                if result.is_some() {
-                    return None;
-                }
-                result = Some(v.trim());
+        if let Some((k, v)) = line.split_once(':')
+            && k.eq_ignore_ascii_case(name)
+        {
+            if result.is_some() {
+                return None;
             }
+            result = Some(v.trim());
         }
     }
     result
@@ -220,10 +220,10 @@ impl IdentityService {
                 Ok(v) => IdentityReply::ok(v),
                 Err(e) => {
                     let mut r = IdentityReply::error(e);
-                    if r.body["error_code"] == "control_elsewhere" {
-                        if let Some(epoch) = self.world_control_epoch(sid.as_deref()) {
-                            r.body["world_session_epoch"] = json!(epoch);
-                        }
+                    if r.body["error_code"] == "control_elsewhere"
+                        && let Some(epoch) = self.world_control_epoch(sid.as_deref())
+                    {
+                        r.body["world_session_epoch"] = json!(epoch);
                     }
                     r
                 }
@@ -549,7 +549,7 @@ impl IdentityService {
                             )
                             .map_err(|_| reject("authentication_failed"))
                     }
-                    _ => return Err(reject("authentication_failed")),
+                    _ => Err(reject("authentication_failed")),
                 }
             }
         })();

@@ -34,6 +34,10 @@ struct RecoveryContext {
     cancel_operation_id: Option<String>,
 }
 impl IdentityService {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Recovery routing preserves authenticated session, ceremony owner, source quota and authoritative time separately."
+    )]
     pub(super) fn recovery_route(
         &mut self,
         method: &str,
@@ -49,6 +53,10 @@ impl IdentityService {
         }
         Some(self.recovery_dispatch(method, path, sid, owner, p, source, now))
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Recovery dispatch must retain every route authentication and rate-limit binding without deriving one from another."
+    )]
     fn recovery_dispatch(
         &mut self,
         method: &str,
@@ -280,11 +288,100 @@ impl IdentityService {
         }
 
         let email = &self.email;
-        let response=self.store.transaction(|tx|{if let Some(value)=read_identity_receipt(tx,id,owner,&request_digest)?{return Ok(value);}let mut context=recovery_context(tx,context_id,owner,now)?;if context.value.operation_id.as_deref()!=Some(id){return Err(reject("invalid_request"));}if context.value.email_verified_at+300_000<=now{return Err(reject("reauth_required"));}let a=tx.get::<AccountRecord>(&format!("account:{}",context.value.account_id))?.ok_or(StoreError::Corrupt)?.value;check_context_account(&context.value,&a)?;let c=tx.get::<CredentialRecord>(&credential_key(&context.value.email_id))?.ok_or(StoreError::Corrupt)?.value;check_email_recovery(&a,&c,now)?;let cid=context.value.candidate_id.as_ref().ok_or_else(||reject("candidate_required"))?;let digest=context.value.candidate_digest.as_ref().ok_or(StoreError::Corrupt)?;if let Some(rid)=&context.value.recovery_id {if rid!=id{return Err(reject("state_changed"));}let existing=tx.get::<RecoveryRequest>(&format!("recovery:{id}"))?.ok_or(StoreError::Corrupt)?;return Ok(projection(&existing));}
-   if tx.all::<RecoveryRequest>("recovery",Some(&a.account_id))?.iter().any(|(_,r)|matches!(r.value.state.as_str(),"waiting"|"approved")&&r.value.expires_at>now){return Err(reject("recovery_in_progress"));}
-   consume_quota(tx,"recovery-source",&super::digest(&secret,"source",source),now,DAY,5)?;consume_quota(tx,"recovery-account",&a.account_id,now,DAY,2)?;
-   let r=RecoveryRequest{recovery_id:id.into(),account_id:a.account_id.clone(),email_credential_id:c.credential_record_id,email_credential_version:c.version,candidate_credential_id:cid.clone(),candidate_digest:digest.clone(),account_policy_version_at_start:a.policy_version,security_epoch_at_start:a.security_epoch,created_at:now,not_before:now+DAY,expires_at:now+7*DAY,state:"waiting".into(),approved_by:None,notification_accepted_at:None,result_ref:None};
-   tx.create(&format!("recovery:{id}"),"recovery",Some(&a.account_id),Some(r.expires_at),&r)?;context.value.recovery_id=Some(id.into());tx.replace(&format!("recovery_context:{context_id}"),context.row_version,"recovery_context",Some(&a.account_id),Some(context.value.expires_at),&context.value)?;tx.create(&format!("outbox:recovery-notice:{id}"),"recovery_notice",Some(&a.account_id),Some(now+90*DAY),&OutboxEvent{event_id:format!("recovery-notice:{id}"),account_id:a.account_id.clone(),event_type:"recovery_requested".into(),state_version:a.policy_version,safe_payload:json!({"recovery_id":id,"candidate_digest":digest}),attempts:0,delivery_state:"pending".into()})?;tx.create(&format!("receipt:{id}"),"receipt",Some(&a.account_id),Some(now+7*DAY),&OperationReceipt{operation_id:id.into(),kind:"recovery_create".into(),owner_context_digest:owner.into(),request_digest:request_digest.clone(),state:"committed".into(),result_ids:vec![a.account_id.clone(),id.into()],committed_at:now})?;audit(tx,&a,"recovery_requested",now)?;let _=email;Ok(json!({"api_version":2,"ok":true,"recovery_id":id,"state":"waiting","not_before":r.not_before,"expires_at":r.expires_at}))})?;
+        let response = self.store.transaction(|tx| {
+            if let Some(value) = read_identity_receipt(tx, id, owner, &request_digest)? {
+                return Ok(value);
+            }
+            let mut context = recovery_context(tx, context_id, owner, now)?;
+            if context.value.operation_id.as_deref() != Some(id) {
+                return Err(reject("invalid_request"));
+            }
+            if context.value.email_verified_at + 300_000 <= now {
+                return Err(reject("reauth_required"));
+            }
+            let a = tx
+                .get::<AccountRecord>(&format!("account:{}", context.value.account_id))?
+                .ok_or(StoreError::Corrupt)?
+                .value;
+            check_context_account(&context.value, &a)?;
+            let c = tx
+                .get::<CredentialRecord>(&credential_key(&context.value.email_id))?
+                .ok_or(StoreError::Corrupt)?
+                .value;
+            check_email_recovery(&a, &c, now)?;
+            let cid = context.value.candidate_id.as_ref()
+                .ok_or_else(|| reject("candidate_required"))?;
+            let digest = context.value.candidate_digest.as_ref().ok_or(StoreError::Corrupt)?;
+            if let Some(rid) = &context.value.recovery_id {
+                if rid != id {
+                    return Err(reject("state_changed"));
+                }
+                let existing = tx
+                    .get::<RecoveryRequest>(&format!("recovery:{id}"))?
+                    .ok_or(StoreError::Corrupt)?;
+                return Ok(projection(&existing));
+            }
+            if tx.all::<RecoveryRequest>("recovery", Some(&a.account_id))?
+                .iter().any(|(_, r)| {
+                    matches!(r.value.state.as_str(), "waiting" | "approved")
+                        && r.value.expires_at > now
+                })
+            {
+                return Err(reject("recovery_in_progress"));
+            }
+            consume_quota(tx, "recovery-source", &super::digest(&secret, "source", source), now, DAY, 5)?;
+            consume_quota(tx, "recovery-account", &a.account_id, now, DAY, 2)?;
+            let r = RecoveryRequest {
+                recovery_id: id.into(),
+                account_id: a.account_id.clone(),
+                email_credential_id: c.credential_record_id,
+                email_credential_version: c.version,
+                candidate_credential_id: cid.clone(),
+                candidate_digest: digest.clone(),
+                account_policy_version_at_start: a.policy_version,
+                security_epoch_at_start: a.security_epoch,
+                created_at: now,
+                not_before: now + DAY,
+                expires_at: now + 7 * DAY,
+                state: "waiting".into(),
+                approved_by: None,
+                notification_accepted_at: None,
+                result_ref: None,
+            };
+            tx.create(&format!("recovery:{id}"), "recovery", Some(&a.account_id), Some(r.expires_at), &r)?;
+            context.value.recovery_id = Some(id.into());
+            tx.replace(
+                &format!("recovery_context:{context_id}"), context.row_version,
+                "recovery_context", Some(&a.account_id), Some(context.value.expires_at), &context.value,
+            )?;
+            tx.create(
+                &format!("outbox:recovery-notice:{id}"), "recovery_notice", Some(&a.account_id), Some(now + 90 * DAY),
+                &OutboxEvent {
+                    event_id: format!("recovery-notice:{id}"),
+                    account_id: a.account_id.clone(),
+                    event_type: "recovery_requested".into(),
+                    state_version: a.policy_version,
+                    safe_payload: json!({"recovery_id": id, "candidate_digest": digest}),
+                    attempts: 0,
+                    delivery_state: "pending".into(),
+                },
+            )?;
+            tx.create(
+                &format!("receipt:{id}"), "receipt", Some(&a.account_id), Some(now + 7 * DAY),
+                &OperationReceipt {
+                    operation_id: id.into(),
+                    kind: "recovery_create".into(),
+                    owner_context_digest: owner.into(),
+                    request_digest: request_digest.clone(),
+                    state: "committed".into(),
+                    result_ids: vec![a.account_id.clone(), id.into()],
+                    committed_at: now,
+                },
+            )?;
+            audit(tx, &a, "recovery_requested", now)?;
+            let _ = email;
+            Ok(json!({"api_version": 2, "ok": true, "recovery_id": id, "state": "waiting", "not_before": r.not_before, "expires_at": r.expires_at}))
+        })?;
         // SMTP acceptance is recorded after the durable request, never before commit.
         let _ = self.send_recovery_notification(id, now);
         Ok(response)
@@ -601,20 +698,19 @@ impl IdentityService {
                 Some(r.value.expires_at),
                 &r.value,
             )?;
-            if decision == "cancel" {
-                if let Some(mut notice) =
+            if decision == "cancel"
+                && let Some(mut notice) =
                     tx.get::<OutboxEvent>(&format!("outbox:recovery-notice:{id}"))?
-                {
-                    notice.value.delivery_state = "cancelled".into();
-                    tx.replace(
-                        &format!("outbox:recovery-notice:{id}"),
-                        notice.row_version,
-                        "recovery_notice_done",
-                        Some(&a.account_id),
-                        Some(now + 90 * DAY),
-                        &notice.value,
-                    )?;
-                }
+            {
+                notice.value.delivery_state = "cancelled".into();
+                tx.replace(
+                    &format!("outbox:recovery-notice:{id}"),
+                    notice.row_version,
+                    "recovery_notice_done",
+                    Some(&a.account_id),
+                    Some(now + 90 * DAY),
+                    &notice.value,
+                )?;
             }
             tx.create(
                 &format!("receipt:{operation_id}"),

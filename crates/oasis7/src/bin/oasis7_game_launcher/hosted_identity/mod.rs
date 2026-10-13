@@ -65,15 +65,15 @@ pub(super) fn run_maintenance(
     runtime: std::sync::Arc<super::static_http::StaticHttpRuntimeConfig>,
 ) {
     while !stop.load(std::sync::atomic::Ordering::Acquire) {
-        if let Ok(mut identity) = runtime.identity.lock() {
-            if let Some(service) = identity.as_mut() {
-                let now = now_ms();
-                if service.clock.observe(now) {
-                    let _ = service.retry_recovery_notifications(now);
-                    let _ = service.store.cleanup_expired(now);
-                } else {
-                    service.email.clock_healthy = false;
-                }
+        if let Ok(mut identity) = runtime.identity.lock()
+            && let Some(service) = identity.as_mut()
+        {
+            let now = now_ms();
+            if service.clock.observe(now) {
+                let _ = service.retry_recovery_notifications(now);
+                let _ = service.store.cleanup_expired(now);
+            } else {
+                service.email.clock_healthy = false;
             }
         }
         for _ in 0..50 {
