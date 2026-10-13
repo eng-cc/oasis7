@@ -39,7 +39,18 @@ Launcher 构造参数并托管子进程；chain runtime 保持执行与持久化
 4. 探测失败撤销当前快照；启动宽限期内为 Starting，之后为 ConfigError/Unreachable。无可信证据不能继续显示旧 identity 为当前身份。
 5. 客户端状态刷新或控制请求失败同样撤销当前证据并标为 Unreachable；不能保留 Ready。停止请求、子进程退出或进程查询失败清除当前快照与 probe 时间。停止失败保留失败诊断，不把它声明为成功停止或世界回退。下一次启动重新执行上述流程。
 6. native/Web 状态轮询与控制响应携带客户端本地请求代次。控制操作开始时撤销旧快照并将 Ready 收窄为 Starting；开始及结束、证据失效时推进代次；控制请求在途时或代次已经过期的响应不应用，也不以旧失败覆盖新成功。代次只用于本地响应排序，不授予玩家权限，不改变 HTTP schema。托管控制面退出后，已排队的旧成功响应同样失效；只有新代次响应可重新验证。
-7. 陈旧状态仅在 DistributedValidationFailed 与 latest state-root mismatch 同时成立时分类；保留错误与非破坏性 fresh-node 建议。采用建议只是本次输入，仍须完整重新验证；不删除旧数据，不恢复旧权限或重放待决行动。
+7. 陈旧状态仅在当前 chain 启动尝试的 DistributedValidationFailed 与 latest state-root mismatch 同时成立时分类；日志归属见[当前尝试诊断](#current-attempt-diagnostics)。保留准确错误与非破坏性 fresh-node 建议。采用建议只是本次输入，仍须完整重新验证；不删除旧数据，不恢复旧权限或重放待决行动。
+
+<a id="current-attempt-diagnostics"></a>
+### 5.1.1 当前尝试诊断
+
+Launcher 在接受一次没有活动 chain 的新启动尝试时建立本地诊断上下文，绑定该尝试的配置与 chain 日志来源；清除上一次尝试的分类标记。日志接收时只在该上下文内累计两个 stale 标记，跨 poll 保留，进程退出时据此分类。全局显示日志、game 日志和以前的 chain 日志均不能为当前尝试补足标记。运行中的重复 Start 被拒绝，不替换活动上下文或托管句柄。
+
+上下文只解决本地日志归属，可复用已有进程/请求状态，不增加 HTTP 字段或持久化的身份协议。历史日志保留不等于当前 authority；新尝试失败时仍按自身的参数、端口或进程错误显示。无须修改、扫描或删除旧 execution-world。
+
+基准 `5e930face77dd284bbba6186fd997e7e63fa9164` 的 `oasis7_web_launcher/control_plane.rs::classify_stale_execution_world` 从共用 `state.logs` 最近 64 行和当次收到的 chain 日志一起查找标记，尚不足以保证上述归属；只改为退出时的 recent logs 又会丢失同次尝试早先 poll 的有效标记。这是 [#4406 L9](https://github.com/eng-cc/oasis7/issues/4406) 的实现与验证接点，不把文档补充声明为修复。
+
+对应 `control_plane/tests.rs` 的目标回归应独立覆盖：A stale 后 B 普通失败、A stale 后 B 成功再普通退出、同次 chain 的两个标记跨 poll、game 与不同旧尝试各有一个标记。核对当前分类和建议，并确认旧 execution-world 文件未变；状态序列化或直接构造最终分类不能替代完整日志消费时序。
 
 ### 5.2 Web 失败
 

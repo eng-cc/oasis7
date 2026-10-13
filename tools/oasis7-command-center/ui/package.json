@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "desktop:dev": "cd .. && tauri dev",
-    "desktop:build": "cd .. && tauri build --bundles app"
+    "desktop:build": "cd .. && ./scripts/build-desktop.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

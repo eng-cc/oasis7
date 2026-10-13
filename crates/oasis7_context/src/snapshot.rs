@@ -130,6 +130,13 @@ impl Snapshot {
     }
 }
 fn read_snapshot(input: &Path, passphrase: &[u8]) -> Result<(Snapshot, SnapshotSummary)> {
+    read_snapshot_frozen(input, passphrase, None)
+}
+fn read_snapshot_frozen(
+    input: &Path,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+) -> Result<(Snapshot, SnapshotSummary)> {
     let bytes = crate::fs::Directory::open(input.parent().ok_or_else(invalid)?)?.read(
         input
             .file_name()
@@ -137,6 +144,12 @@ fn read_snapshot(input: &Path, passphrase: &[u8]) -> Result<(Snapshot, SnapshotS
             .ok_or_else(invalid)?,
         oasis7_secure_envelope::MAX_ENVELOPE_BYTES,
     )?;
+    if expected_digest.is_some_and(|expected| digest(&bytes) != expected) {
+        return Err(ContextError::new(
+            "REVISION_CONFLICT",
+            "snapshot ciphertext changed before restore",
+        ));
+    }
     let plaintext = oasis7_secure_envelope::open(KIND, &bytes, passphrase)
         .map_err(|_| ContextError::new("CRYPTO_ERROR", "snapshot authentication failed"))?;
     if plaintext.len() > MAX_PLAINTEXT_BYTES {
@@ -150,6 +163,59 @@ fn read_snapshot(input: &Path, passphrase: &[u8]) -> Result<(Snapshot, SnapshotS
 pub fn inspect(input: &Path, passphrase: &[u8]) -> Result<SnapshotSummary> {
     read_snapshot(input, passphrase).map(|(_, s)| s)
 }
+/// Validated snapshot identity without returning private plaintext.
+pub fn inspect_revisions(
+    input: &Path,
+    passphrase: &[u8],
+) -> Result<(SnapshotSummary, Vec<(String, String)>)> {
+    let (snapshot, summary) = read_snapshot(input, passphrase)?;
+    let revisions = snapshot
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.id.clone(),
+                crate::format::revision(e.content_utf8.as_bytes()),
+            )
+        })
+        .collect();
+    Ok((summary, revisions))
+}
+pub fn inspect_revisions_frozen(
+    input: &Path,
+    passphrase: &[u8],
+    expected_digest: &str,
+) -> Result<(SnapshotSummary, Vec<(String, String)>)> {
+    let (snapshot, summary) = read_snapshot_frozen(input, passphrase, Some(expected_digest))?;
+    let revisions = snapshot
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.id.clone(),
+                crate::format::revision(e.content_utf8.as_bytes()),
+            )
+        })
+        .collect();
+    Ok((summary, revisions))
+}
+pub fn source_digest(
+    config: &StoreConfig,
+    entries: &[crate::model::EntrySnapshot],
+    selection: &[String],
+) -> String {
+    let mut chosen = selection.to_vec();
+    chosen.sort();
+    let mut revisions: Vec<_> = entries
+        .iter()
+        .filter(|e| chosen.is_empty() || chosen.contains(&e.entry.metadata.id))
+        .map(|e| (&e.entry.metadata.id, &e.revision))
+        .collect();
+    revisions.sort();
+    crate::format::digest(&crate::format::canonical_json(
+        &serde_json::json!({"config":config,"selection":chosen,"entries":revisions}),
+    ))
+}
 /// Collect under the store lock, then release it before serialization and KDF.
 pub fn export(
     root: &Path,
@@ -158,6 +224,16 @@ pub fn export(
     passphrase: &[u8],
     lock_timeout_ms: u64,
 ) -> Result<SnapshotSummary> {
+    export_frozen(root, output, selection, passphrase, lock_timeout_ms, None)
+}
+pub fn export_frozen(
+    root: &Path,
+    output: &Path,
+    selection: &[String],
+    passphrase: &[u8],
+    lock_timeout_ms: u64,
+    expected_digest: Option<&str>,
+) -> Result<SnapshotSummary> {
     if !output.is_absolute() {
         return Err(ContextError::new(
             "INVALID_INPUT",
@@ -165,10 +241,46 @@ pub fn export(
         ));
     }
     let store = crate::store::Store::open(root)?;
+    export_from_store(
+        &store,
+        output,
+        selection,
+        passphrase,
+        lock_timeout_ms,
+        expected_digest,
+    )
+}
+pub fn export_from_store(
+    store: &crate::store::Store,
+    output: &Path,
+    selection: &[String],
+    passphrase: &[u8],
+    lock_timeout_ms: u64,
+    expected_digest: Option<&str>,
+) -> Result<SnapshotSummary> {
     let output_parent_path = output.parent().ok_or_else(invalid)?;
     let output_directory = crate::fs::Directory::open(output_parent_path)?;
-    let output_parent = output_parent_path.canonicalize()?;
-    if output_parent.starts_with(root.canonicalize()?) {
+    export_to_directory(
+        store,
+        output,
+        selection,
+        passphrase,
+        lock_timeout_ms,
+        expected_digest,
+        &output_directory,
+    )
+}
+/// Encrypt and write into the original held output directory.
+pub fn export_to_directory(
+    store: &crate::store::Store,
+    output: &Path,
+    selection: &[String],
+    passphrase: &[u8],
+    lock_timeout_ms: u64,
+    expected_digest: Option<&str>,
+    output_directory: &crate::fs::Directory,
+) -> Result<SnapshotSummary> {
+    if output_directory.is_within(store.directory())? {
         return Err(ContextError::new(
             "INVALID_INPUT",
             "snapshot output must be outside store",
@@ -183,6 +295,14 @@ pub fn export(
         ));
     }
     let mut entries = store.read_all()?;
+    if expected_digest
+        .is_some_and(|expected| source_digest(&store.config, &entries, selection) != expected)
+    {
+        return Err(ContextError::new(
+            "REVISION_CONFLICT",
+            "snapshot source changed before export",
+        ));
+    }
     entries.sort_by(|a, b| a.entry.metadata.id.cmp(&b.entry.metadata.id));
     let mut chosen = selection.to_vec();
     chosen.sort();
@@ -255,6 +375,14 @@ pub fn export(
         &envelope,
         false,
     )?;
+    if !output_directory.matches_path(output.parent().ok_or_else(invalid)?)? {
+        let mut error = ContextError::new(
+            "PERSISTENCE_UNCERTAIN",
+            "encrypted snapshot published in original held directory; output parent path changed",
+        );
+        error.effect = "applied".into();
+        return Err(error);
+    }
     Ok(summary)
 }
 pub fn restore(
@@ -264,13 +392,139 @@ pub fn restore(
     expected_store_id: Option<&str>,
     passphrase: &[u8],
 ) -> Result<SnapshotSummary> {
+    restore_frozen(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        None,
+    )
+}
+pub fn restore_frozen(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+) -> Result<SnapshotSummary> {
+    let parent = target.parent().ok_or_else(invalid)?;
+    let parent_dir = crate::fs::Directory::open(parent)?;
+    restore_in_parent(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        &parent_dir,
+    )
+}
+
+/// All restore writes and publication stay relative to the caller's held parent.
+pub fn restore_in_parent(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+) -> Result<SnapshotSummary> {
+    restore_directory_in_parent(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        parent_dir,
+    )
+    .map(|(summary, _)| summary)
+}
+/// Return the published directory descriptor so callers never reopen the target.
+pub fn restore_directory_in_parent(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+) -> Result<(SnapshotSummary, crate::fs::Directory)> {
+    let stage = new_restore_stage();
+    restore_directory_with_stage(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        parent_dir,
+        &stage,
+    )
+}
+pub fn new_restore_stage() -> String {
+    format!(".context-stage-{}", crate::fs::random_id())
+}
+pub fn validate_restore_stage(stage: &str) -> Result<()> {
+    if !stage.strip_prefix(".context-stage-").is_some_and(|id| {
+        id.len() == 32
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    }) {
+        return Err(ContextError::new(
+            "INVALID_INPUT",
+            "invalid restore staging reference",
+        ));
+    }
+    Ok(())
+}
+#[allow(clippy::too_many_arguments)]
+pub fn restore_directory_with_stage(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+    stage: &str,
+) -> Result<(SnapshotSummary, crate::fs::Directory)> {
+    restore_staged(
+        input,
+        target,
+        expected_project,
+        expected_store_id,
+        passphrase,
+        expected_digest,
+        parent_dir,
+        stage,
+        |_, _| Ok(()),
+    )
+}
+#[allow(clippy::too_many_arguments)]
+fn restore_staged(
+    input: &Path,
+    target: &Path,
+    expected_project: Option<&str>,
+    expected_store_id: Option<&str>,
+    passphrase: &[u8],
+    expected_digest: Option<&str>,
+    parent_dir: &crate::fs::Directory,
+    stage: &str,
+    mut checkpoint: impl FnMut(&str, &crate::fs::Directory) -> Result<()>,
+) -> Result<(SnapshotSummary, crate::fs::Directory)> {
+    validate_restore_stage(stage)?;
     if !target.is_absolute() {
         return Err(ContextError::new(
             "INVALID_INPUT",
             "restore target must be absolute",
         ));
     }
-    let (snapshot, summary) = read_snapshot(input, passphrase)?;
+    let (snapshot, summary) = read_snapshot_frozen(input, passphrase, expected_digest)?;
     if expected_project.is_some_and(|p| snapshot.store.project_id != p) {
         return Err(ContextError::new(
             "PROJECT_MISMATCH",
@@ -289,16 +543,13 @@ pub fn restore(
             "restore target already exists",
         ));
     }
-    let parent = target.parent().ok_or_else(invalid)?;
     let name = target
         .file_name()
         .and_then(|s| s.to_str())
         .ok_or_else(invalid)?;
-    let stage = format!(".context-stage-{}", random_id()?);
-    let parent_dir = crate::fs::Directory::open(parent)?;
-    parent_dir.create_dir_new(&stage)?;
+    let dir = parent_dir.create_dir_new(stage)?;
     let result = (|| {
-        let dir = parent_dir.child(&stage)?;
+        checkpoint("staged", &dir)?;
         dir.create_dir("entries")?;
         dir.create_dir(".context-local")?;
         let entries = dir.child("entries")?;
@@ -310,6 +561,7 @@ pub fn restore(
                 false,
             )?;
         }
+        checkpoint("entries_written", &dir)?;
         entries.sync()?;
         dir.write_atomic(
             ".gitignore",
@@ -322,23 +574,23 @@ pub fn restore(
             &serde_json::to_vec_pretty(&snapshot.store).map_err(|_| invalid())?,
             false,
         )?;
+        checkpoint("before_sync", &dir)?;
         dir.sync()?;
-        parent_dir
-            .publish_new_directory(&stage, name)
-            .map_err(|e| {
-                if e.code == "ALREADY_EXISTS" {
-                    ContextError::new("RESTORE_TARGET_EXISTS", "restore target already exists")
-                } else {
-                    e
-                }
-            })?;
-        Ok(summary)
+        checkpoint("before_publish", &dir)?;
+        parent_dir.publish_new_directory(stage, name).map_err(|e| {
+            if e.code == "ALREADY_EXISTS" {
+                ContextError::new("RESTORE_TARGET_EXISTS", "restore target already exists")
+            } else {
+                e
+            }
+        })?;
+        Ok((summary, dir))
     })();
     // Leave private staging on failure: reopening its path could traverse a replaced parent.
-    result
-}
-fn random_id() -> Result<String> {
-    Ok(crate::fs::random_id())
+    result.map_err(|mut e: ContextError| {
+        e.effect = "applied".into();
+        e
+    })
 }
 #[cfg(test)]
 #[path = "snapshot_tests.rs"]

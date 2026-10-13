@@ -18,6 +18,13 @@ const MAX_STDERR_BYTES: usize = 64 * 1024;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.as_slice() == ["info", "--json"] {
+        println!(
+            "{}",
+            serde_json::json!({"schema_version":1,"tool_id":"oasis7_local_signer","version":env!("CARGO_PKG_VERSION"),"source_head_oid":option_env!("OASIS7_SOURCE_HEAD_OID"),"release_id":option_env!("OASIS7_RELEASE_ID"),"target":option_env!("OASIS7_BUILD_TARGET"),"protocol_schemas":["oasis7.local_signer_ipc.v1","oasis7.local_signer_job.v1"],"capabilities":[{"id":"file_ed25519_v1","supported":true,"unavailable_reason":null},{"id":"caller_jobs","supported":true,"unavailable_reason":null},{"id":"frozen_submit_v1","supported":true,"unavailable_reason":null},{"id":"general_upgrade","supported":false,"unavailable_reason":"No general upgrade contract"}]})
+        );
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "context") {
         std::process::exit(oasis7_context::cli::run(
             &args[1..],
@@ -65,9 +72,21 @@ fn run() -> Result<(), CliError> {
     }
     if all_args.as_slice() == ["--help"] {
         return print_json(
-            &serde_json::json!({"usage":["doctor", "prepare|submit|inspect --job-id ID", "file-payload --context ABSOLUTE --expected-context-sha256 SHA256 --file ABSOLUTE --expected-file-sha256 SHA256 --output ABSOLUTE", "context --help"], "file_payload":"No worker or installation access. Output is create-only in caller-owned 0700 directory; verify signatures over the exact envelope, not raw file bytes."}),
+            &serde_json::json!({"usage":["doctor", "prepare|submit|inspect --job-id ID", "submit --job-id ID --expected-request-sha256 SHA256", "file-payload --context ABSOLUTE --expected-context-sha256 SHA256 --file ABSOLUTE --expected-file-sha256 SHA256 --output ABSOLUTE", "context --help"], "file_payload":"No worker or installation access. Output is create-only in caller-owned 0700 directory; verify signatures over the exact envelope, not raw file bytes."}),
         );
     }
+    let mut all_args = all_args;
+    let expected_submission = if all_args.first().is_some_and(|arg| arg == "submit")
+        && all_args.len() == 5
+        && all_args[3] == "--expected-request-sha256"
+    {
+        let expected = all_args.pop().unwrap();
+        all_args.pop();
+        oasis7_local_signer::identity::parse_sha256_hex(&expected).map_err(CliError::signer)?;
+        Some(expected)
+    } else {
+        None
+    };
     let mut args = all_args.into_iter();
     let command = args
         .next()
@@ -130,7 +149,12 @@ fn run() -> Result<(), CliError> {
                 return Err(CliError::new("INVALID_INPUT", 2));
             }
             let prepared = job_dir.prepare().map_err(CliError::signer)?;
-            let outcome = invoke_worker(&installation, prepared.ipc_request())?;
+            let outcome = send_prepared(
+                &installation,
+                &prepared,
+                expected_submission.as_deref(),
+                invoke_worker,
+            )?;
             print_response(&outcome.response)?;
             match &outcome.response {
                 IpcResponse::Sign(result)
@@ -384,9 +408,87 @@ fn code_error(code: &str, status: ExitStatus) -> CliError {
     )
 }
 
+fn send_prepared(
+    installation: &InstallationConfig,
+    prepared: &oasis7_local_signer::job::PreparedJob,
+    expected: Option<&str>,
+    invoke: impl FnOnce(&InstallationConfig, IpcRequest) -> Result<WorkerOutcome, CliError>,
+) -> Result<WorkerOutcome, CliError> {
+    if let Some(expected) = expected {
+        if prepared
+            .submission_identity(installation)
+            .map_err(CliError::signer)?
+            != expected
+        {
+            return Err(CliError::new("REQUEST_IDENTITY_CHANGED", 2));
+        }
+    }
+    invoke(installation, prepared.ipc_request())
+}
+
 fn known_worker_exit(status: &ExitStatus) -> i32 {
     status
         .code()
         .filter(|code| (2..=12).contains(code))
         .unwrap_or(8)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn actual_send_boundary_rejects_replaced_request_and_release_before_worker() {
+        let installation: InstallationConfig = serde_json::from_value(serde_json::json!({
+            "schema_version":"installation","installation_id":"installation","deployment_id":"deployment",
+            "release_id":"release", "store_dir":"/store", "store_device_id":1,"store_inode":2,
+            "signer_uid":1,"signer_gid":1,"callers":[],"worker_executable":"/worker",
+            "worker_sha256":"00".repeat(32),"control_schema_version":"control"
+        })).unwrap();
+        let request = serde_json::from_value(serde_json::json!({
+            "schema_version":"job","installation_id":"installation","request_id":"request",
+            "purpose":"file_ed25519_v1","provider_id":null,"signer_id":"signer","grant_id":"grant",
+            "context":{"deployment_id":"deployment","network_id":"network","task_uid":"task",
+                "source_head_oid":"a".repeat(40),"protocol_context":{"authority_id":"authority",
+                "rollback_ticket":"ticket","receipt_id":"receipt","nonce":"nonce"}}
+        }))
+        .unwrap();
+        let original = oasis7_local_signer::job::PreparedJob {
+            request,
+            payload: b"original".to_vec(),
+        };
+        let expected = original.submission_identity(&installation).unwrap();
+        let mut replacement = original.clone();
+        replacement.payload = b"replacement".to_vec();
+        let error = send_prepared(&installation, &replacement, Some(&expected), |_, _| {
+            panic!("worker must not be invoked")
+        });
+        assert!(matches!(
+            error,
+            Err(CliError {
+                code: "REQUEST_IDENTITY_CHANGED",
+                ..
+            })
+        ));
+        let mut changed_release = installation.clone();
+        changed_release.release_id = "replacement-release".into();
+        let error = send_prepared(&changed_release, &original, Some(&expected), |_, _| {
+            panic!("worker must not be invoked")
+        });
+        assert!(matches!(
+            error,
+            Err(CliError {
+                code: "REQUEST_IDENTITY_CHANGED",
+                ..
+            })
+        ));
+        for expected in [Some(expected.as_str()), None] {
+            let mut called = false;
+            let _ = send_prepared(&installation, &original, expected, |_, sent| {
+                called = true;
+                assert_eq!(sent, original.ipc_request());
+                Err(CliError::new("TEST_WORKER", 2))
+            });
+            assert!(called);
+        }
+    }
 }

@@ -1,6 +1,7 @@
 mod actions;
 pub mod dto;
 mod lifecycle;
+mod privacy;
 mod protocol;
 mod store;
 mod transport;
@@ -176,6 +177,7 @@ impl Runtime {
             .get(&scope)
             .map(Transport::observation)
             .unwrap_or_else(|| (self.contexts[&scope].clone(), store::sequence()));
+        self.store.apply_private_sources(&scope, &mut snapshot)?;
         snapshot.operations = self.store.operations(&scope)?;
         for op in &mut snapshot.operations {
             if op.state == "awaiting"

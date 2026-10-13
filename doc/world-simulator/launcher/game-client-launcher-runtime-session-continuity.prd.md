@@ -26,10 +26,13 @@ Launcher 负责配置和受控进程编排；`oasis7_chain_runtime` 负责链执
 
 ### Stale execution world 与恢复
 
-- 仅当本地 chain runtime 退出日志同时表明 `DistributedValidationFailed` 与 latest state-root mismatch 时，Launcher 才把失败分类为 `stale_execution_world`；端口、参数、二进制或其他启动失败必须保持其原有错误语义。
+- 仅当**当前 chain 启动尝试**所属进程的日志同时表明 `DistributedValidationFailed` 与 latest state-root mismatch 时，Launcher 才把失败分类为 `stale_execution_world`；端口、参数、二进制或其他启动失败必须保持其原有错误语义。两个标记可以分属同次尝试的不同 poll，不能来自 game 日志或不同启动尝试。
+- 新启动尝试的诊断独立于历史日志。A 曾 stale 后，B 的 address-in-use、普通退出或先成功再退出都不能继承 A 的分类或恢复建议；拒绝重复 Start 时则保留仍在运行的原进程及其诊断归属。旧日志可以继续显示为历史，不能作为新尝试的当前失败证据。
 - 默认恢复建议是非破坏性的 fresh node id 与相应 status bind。它不修复、更改或删除旧执行世界。
 - 重置 execution world 属于破坏性操作，必须由明确确认的实现路径执行；本专题不授权按目录、时间或猜测自动清理运行时数据。
 - latest head、checkpoint、replay、GC、storage profile、pin set 与恢复一致性由 [运行态存储体积治理](../../world-runtime/runtime/runtime-storage-footprint-governance.prd.md) 定义。Launcher 只消费其已发布状态，不能替代该运行时合同。
+
+上述日志归属补齐 [#4406 L9](https://github.com/eng-cc/oasis7/issues/4406) 的目标合同。验收须实际经过跨尝试日志接收、poll 与退出分类；只预置状态或检查序列化不证明诊断隔离。它不改变恢复机制，也不授权清理 execution-world。
 
 ### Web/WASM 会话兼容
 

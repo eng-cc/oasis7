@@ -142,3 +142,21 @@ fn editor_conflict_retains_private_draft() {
             .contains("Human draft")
     );
 }
+
+#[test]
+fn info_is_read_only_and_does_not_require_a_store() {
+    let h = support::Harness::new(env!("CARGO_BIN_EXE_oasis7_context"), &[]);
+    let out = h.invoke(&["info", "--json"], None);
+    assert!(out.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(value["schema_version"], 1);
+    assert_eq!(value["tool_id"], "oasis7_context");
+    assert!(
+        value["capabilities"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "context.write" && c["supported"] == true)
+    );
+    assert!(!h.root.exists());
+}

@@ -6,7 +6,7 @@
 - module：`engineering`
 - 上游：[指挥客户端产品设计](command-center.prd.md)、[PRD-ENGINEERING-034](../prd.md#PRD-ENGINEERING-034)
 - 设计基线：`main@7039bc376882ab8f84f88ca014f6d7ce642539a8`；既有方案 `56a33562436ffa4b65a66d05e61f26a849b16728`
-- last_reviewed_at：2026-10-11
+- last_reviewed_at：2026-10-12
 - 文档交付与评审入口：[PR #4518](https://github.com/eng-cc/oasis7/pull/4518)
 
 本文把客户端形态、Rust 技术调研和架构方案收敛为一份系统设计。产品行为和验收由配对 PRD 主责；本文定义如何承接，不把目标状态写成已交付事实。通用授权、开发、验证和交付仍由 [workflow/source-of-truth](../workflow/source-of-truth.md) 主责，客户端内部状态不增加上游任务准入或审批门禁。
@@ -456,3 +456,7 @@ Rust 核心 + Solid满足本次“Rust 优先”偏好；UI 全 Rust 尚不是�
 若重选 Codex SDK、CLI 或其他集成，先核实历史读取、实时事件、反向请求与运行控制的能力差异，不把它们未经验证当作 app-server 的等价替换。升级连接器发布等级时同步 PRD 范围和对应验证；这只约束该产品能力，不增加仓库通用审批或交付门禁。
 
 本设计的外部事实均附官方或维护者链接；项目事实固定到基线提交。模块、命令、数据和状态属于本次设计决定。后续实现结果写回相应条款及真实 PR/CI 记录，Skill 只作为方法与导航入口，避免产生第二套架构主责。
+
+## 13. 本机工具集成增量
+
+本机资料、同包 CLI、已有 signer 的普通调用、后台操作与私有运行线程合同见[本机工具集成](local-tools.design.md)。资料由原 context 文件与历史主责，App 的内置能力和已安装 CLI 分别观察。Apple 签名及管理员助手已按用户要求暂停，未开放特权安装/管理；完整首装签名闭环尚未验收。

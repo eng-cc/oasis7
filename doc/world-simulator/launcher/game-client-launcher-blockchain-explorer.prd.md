@@ -58,6 +58,17 @@ native 与 Web 复用同一 launcher UI 与控制面语义；Web 经既有 `/api
 - action ID 命中但账户或状态不匹配时显示空结果，且 `items=[]`、`total=0`；全部匹配或仅填写 action ID 时保留正确返回。
 - 回显条件、结果、计数、排序及分页基于同一条件集。native/Web 完整保留组合参数，清空和重新筛选不引入隐式字段优先级。
 
+<a id="explorer-client-refresh-continuity"></a>
+## 客户端刷新与详情连续性
+
+以下补充 [#4406 Explorer E1–E3](https://github.com/eng-cc/oasis7/issues/4406) 的客户端目标，与上文后端查询一致性分别验收：
+
+- **空结果已加载**：成功返回的空 Blocks 或 filtered Txs 是正常加载结果，不能在每帧被解释为“从未请求”。非活动空列表不得持续占用调度，使 Search、Address 或其他当前 tab 的有效请求无法发出。显式刷新、过滤变化、当前 tab 的周期刷新及真实错误恢复仍可触发新请求。
+- **当前请求能被调度**：概览和当前 tab 各自的刷新需求不能互相覆盖。即使 overview 连续耗时约 1100ms，当前 tab 的待处理请求仍须在有限轮次发出并消费响应；不能只改超时、只设置 pending，或把快响应/切 tab 的通过当作慢 overview 通过。保持既有 in-flight 上限，避免逐帧请求风暴；不新增对外时延 SLA。
+- **列表与详情的含义分开**：周期刷新的一页列表不包含当前选中对象，不等于该对象不存在。Search 命中的页外旧 block 或不符合当前列表过滤的旧 tx，其详情应保留；页内同对象可按新返回更新。明确换对象、清空和当前对象的真正 detail not_found 继续改变详情。此条不定义尚未确定的主动翻页选择行为，也不允许旧详情冒充新组合筛选的命中结果。
+
+验收须走接收响应 → 清除 in-flight → 下一帧 → 实际调度 → 消费结果的完整链。E1、E2、E3 分别取证；后端通过、pending 标志或单次 reducer 调用都不能代替。具体接点见[客户端调度设计](game-client-launcher-blockchain-explorer.design.md#des-explorer-client-refresh-continuity)。
+
 ## 不作出的承诺
 
 - 历史专题里的 “public chain” 或 “mainnet-grade” 是当时查询范围或信息架构的名称，不构成 live mainnet、网络 readiness、公开发布或对外服务承诺。

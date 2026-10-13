@@ -74,3 +74,12 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace,
 footer { color: #647990; font-size: 10px; margin-top: 24px; }
 @media (max-width: 850px) { .shell { grid-template-columns: 155px minmax(0,1fr); } main { padding: 18px; } header { padding: 12px 18px; } .columns { grid-template-columns: 1fr; } .toolbar { flex-wrap: wrap; } .search { width: 100%; } }
 @media (max-width: 580px) { .shell { display: block; } aside { padding: 10px; border-bottom: 1px solid #293143; } nav { grid-template-columns: repeat(2,1fr); } .side-caption,.source-status { display: none; } .header-context { display: none; } .project-form { flex-wrap: wrap; } .project-form input { flex-basis: 100%; } .row { padding: 12px; gap: 8px; } }
+/* Private tool text remains inert and wraps inside narrow layouts. */
+.local-tools .tool-overview { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem; }
+.local-tools .tool-overview .tag { margin-left:.75rem; }
+.local-tools pre { overflow-wrap:anywhere;white-space:pre-wrap;max-height:28rem;overflow:auto; }
+.local-tools label { display:grid;gap:.4rem;margin-bottom:.7rem; }
+.local-tools input,.local-tools select,.local-tools textarea { min-width:0;width:100%;box-sizing:border-box; }
+.local-tools .actions { flex-wrap:wrap; }
+.local-tools .row > div { min-width:0;overflow-wrap:anywhere; }
+@media(max-width:760px) { .local-tools .tool-overview { grid-template-columns:1fr; } .local-tools .panel-title { flex-wrap:wrap;gap:.6rem; } }

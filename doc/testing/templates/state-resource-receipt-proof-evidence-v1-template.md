@@ -157,7 +157,7 @@ For a receipt proof, replace `proof_targets` with:
   `observed_head.receipts_root`.
 - Evidence packets are single-subject: use `proof_targets.state_or_query`
   for `resource_state` / `query_result` proofs, and use
-  `receipt_proof_targets.receipt` for receipt examples. Do not imply one
+  `proof_targets.receipt` for receipt examples. Do not imply one
   verifier summary proves unrelated state/query and receipt subjects at once.
 - `node_db_access_used`, `manual_checkpoint_or_data_copy_used`, and
   `privileged_internal_api_used` must be `false` for external/operator
