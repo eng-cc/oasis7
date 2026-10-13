@@ -1,6 +1,6 @@
 # oasis7: CI 测试分级细化到 Test Case
 
-- 对应设计文档: `doc/testing/ci/ci-testcase-tiering.design.md`
+- 对应设计文档: [CI 分级执行共享设计](ci-tiered-execution.design.md#ci-case-tier-design)；原同名 design 仅保留兼容入口。
 - 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 审计轮次: 4
@@ -19,6 +19,7 @@
   - SC-3: `scripts/ci-tests.sh` 不再依赖硬编码 `--test` 清单。
   - SC-4: 测试分级策略在文档、脚本、门禁三处保持一致。
 
+<a id="case-tier-requirements"></a>
 ## 2. User Experience & Functionality
 - User Personas:
   - CI 维护者：需要可维护的分级执行模型。

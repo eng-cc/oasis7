@@ -1,29 +1,28 @@
 # README 生产级缺口收口（二次）：默认 WASM 执行 + Replication RR + 分布式 Triad + 玩家节点身份（设计文档）设计
 
-- 对应需求文档: `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md`
-- 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用
+- 对应需求文档：[专题 PRD](readme-prod-gap1245-wasm-repl-topology-player.prd.md#historical-retention-and-routing)
+- 本文件仅为兼容入口，不维护独立设计正文或运行结论。
 
-## 1. 设计定位
-定义 README 生产级缺口二次收口设计，统一默认 WASM 执行、Replication RR、分布式 Triad 与玩家节点身份口径。
+<a id="1-设计定位"></a>
+<a id="2-设计结构"></a>
+<a id="3-关键接口--入口"></a>
+<a id="4-约束与边界"></a>
+<a id="5-设计演进计划"></a>
+<a id="compatibility-route"></a>
+## 当前去向与保留边界
 
-## 2. 设计结构
-- 默认执行层：说明生产默认 WASM 执行路径。
-- 复制拓扑层：统一 Replication RR 与分布式 Triad 说明。
-- 玩家身份层：解释玩家节点身份在生产拓扑中的角色。
-- README 收口层：把 Gap1/2/4/5 二次缺口统一回写。
+设计正文、失败边界与验证责任已由 [历史保留边界与现行去向](readme-prod-gap1245-wasm-repl-topology-player.prd.md#historical-retention-and-routing) 承接。读者直接进入该节；
+本文不要求重复实现或增加审批。旧 URL 暂留，核清全部引用、配对、动态/外部分发消费者与 corpus 后才可删除。
+[合并前原文](https://github.com/eng-cc/oasis7/blob/2adfc08706f1905c131adc0597a9ae5e99ceb2dd/doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md)保留历史来源，不作为当前操作或验收依据。
 
-## 3. 关键接口 / 入口
-- 默认 WASM 执行口径
-- Replication RR / Triad 拓扑
-- 玩家节点身份说明
-- README 校验项
+### 2.1 需求承接与分配表
 
-## 4. 约束与边界
-- 多个缺口口径需统一术语与主路径。
-- README 不能承载实现级配置细节。
-- 不在本专题扩展新的拓扑角色。
+| 上游要求 | 分配内容 | 本设计条款 | 主责 | 限制 |
+| --- | --- | --- | --- | --- |
+| [专题要求](readme-prod-gap1245-wasm-repl-topology-player.prd.md#historical-retention-and-routing) | 通过唯一接收章节定位完整设计 | [兼容路由](#compatibility-route) | 接收文档原 owner | 本文件不是第二份机制设计 |
 
-## 5. 设计演进计划
-- 先冻结二次收口范围。
-- 再统一执行/拓扑/身份表述。
-- 最后完成 README 回写。
+### 11.1 验证映射表
+
+| 上游要求 | 本设计条款 | 验收内容 | 验证来源 | 记录 | 限制 |
+| --- | --- | --- | --- | --- | --- |
+| [专题要求](readme-prod-gap1245-wasm-repl-topology-player.prd.md#historical-retention-and-routing) | [兼容路由](#compatibility-route) | 同候选链接到存在的接收节；接收节保有原职责与独立验证 | [文档检查](../../../scripts/doc-governance-check.sh)及接收节逐项映射审读 | 修改 diff、链接核对及实际检查输出 | 文档检查不证明领域运行或发布通过 |

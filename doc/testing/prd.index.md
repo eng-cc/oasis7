@@ -63,13 +63,13 @@ Manual convergence note: Web UI manual 当前按 driver / evidence mode 分流�
 - 手册、blocker、evidence 与 template 等 supporting / 审计材料继续保留可检索性，但不并入模块 PRD 三件套长表。
 
 ## 覆盖规则
-- 纳入规则：一般专题纳入 `doc/testing/**` 下所有 `*.prd.md` 及同名 `*.design.md` / PR、实际 CI 与评审记录（Issue 按需），继续遵守专题三件套治理；仅下方明确列出的、已经完成且当前设计与验收口径已并入 PRD 的 launcher 两个专题采用退休例外，其 design/project 拆解由 PR 与实际验证记录 与 Git 历史承接。
+- 纳入规则：列出 `doc/testing/**` 下专题 PRD、实际承接的设计及相关 PR、CI 与评审记录（Issue 按需）。本次 coverage 与 testcase-tiering 两份 PRD 共用 CI 分级执行设计的独立章节，不复制设计正文；下方 launcher 两个完成态专题保留既有退休例外，其历史拆解从 PR、实际验证记录与 Git 历史追溯。
 - 活跃补充：`testing-manual.md`、`*.manual.md` 与仍被当前模块 PRD / 项目态直接引用的 blocker/supporting spec，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**`、`doc/testing/evidence/**`、`doc/testing/templates/**` 与其他非 PRD 配对文档。
 - 按需进入：evidence、template、blocker、closure 说明与历史归档继续保留可检索性；除非它们重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
 
 ## 专题清单（含历史完成项，按文件名精确检索）
-本表用于互链可达性和 traceability，不代表每一行都是默认首读或当前活跃执行面；一般已完成规划三件套应先读其 redirect / historical status，再进入当前 canonical 手册或 topic 文档。launcher 两个已完成专题的退休例外仅用于本次明确收敛，不改变新建或其他现存专题的三件套规则。
+本表用于互链可达性和 traceability，不代表每一行都是默认首读或当前活跃执行面；一般已完成规划三件套应先读其 redirect / historical status，再进入当前 canonical 手册或 topic 文档。本表明确标记 CI 两专题的共享设计，以及 launcher 两专题的既有退休例外；不据此批量改变其他专题的组织方式。
 
 2026-07-15 governance note: 早期 launcher 专题三件套与已完成的 design/project 拆解已退役删除；当前 launcher / playtest / Web UI 闭环入口收敛到 `testing-manual.md`、`doc/testing/launcher/README.md`、两份 launcher 现行 PRD、Web UI manual、PR、实际 CI 与评审记录（Issue 按需） 与 Git 历史。
 
@@ -81,8 +81,8 @@ Builtin WASM CI 历史收口：早期 m1 independent multi-runner、required-che
 | --- | --- |
 | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md` | `doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md` |
 | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md` | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.design.md` |
-| `doc/testing/ci/ci-test-coverage.prd.md` | `doc/testing/ci/ci-test-coverage.design.md` |
-| `doc/testing/ci/ci-testcase-tiering.prd.md` | `doc/testing/ci/ci-testcase-tiering.design.md` |
+| `doc/testing/ci/ci-test-coverage.prd.md` | [CI 共享设计：独立承接](ci/ci-tiered-execution.design.md#ci-coverage-design) |
+| `doc/testing/ci/ci-testcase-tiering.prd.md` | [CI 共享设计：独立承接](ci/ci-tiered-execution.design.md#ci-case-tier-design) |
 | `doc/testing/ci/ci-tiered-execution.prd.md` | `doc/testing/ci/ci-tiered-execution.design.md` |
 | `doc/testing/governance/llm-skip-tick-ratio-metric.prd.md` | `doc/testing/governance/llm-skip-tick-ratio-metric.design.md` |
 | `doc/testing/prd.md`（Durable Playability Evidence Governance） | `testing-manual.md` 的 L4A/L4B/L5 operator steps | 已吸收的 2026-05 playability governance batch：Git history 与 PR 与实际验证记录 |
@@ -96,4 +96,4 @@ Builtin WASM CI 历史收口：早期 m1 independent multi-runner、required-che
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
-- 文档配对规则：新建及一般现存专题保持 `*.prd.md`、`*.design.md` 与相关 PR 和实际验证记录；本页明确标记的 launcher 完成态退休例外不作为后续建档模板。
+- 文档配对规则：一般专题保持需求、设计与交付记录分工；本页 CI 两专题通过精确章节链接共用设计，launcher 完成态保留既有退休例外。以上限定处置不作为全仓批量合并或删除授权。

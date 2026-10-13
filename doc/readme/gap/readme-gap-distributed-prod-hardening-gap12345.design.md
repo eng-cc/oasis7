@@ -1,29 +1,28 @@
 # README 分布式计算与存储生产级收口（Gap 1/2/3/4/5）设计文档
 
-- 对应需求文档: `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`
-- 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用
+- 对应需求文档：[专题 PRD](readme-gap-distributed-prod-hardening-gap12345.prd.md#historical-retention-and-routing)
+- 本文件仅为兼容入口，不维护独立设计正文或运行结论。
 
-## 1. 设计定位
-定义 README 中分布式计算与存储生产级收口设计，统一 Gap1~5 对外口径与主链路边界。
+<a id="1-设计定位"></a>
+<a id="2-设计结构"></a>
+<a id="3-关键接口--入口"></a>
+<a id="4-约束与边界"></a>
+<a id="5-设计演进计划"></a>
+<a id="compatibility-route"></a>
+## 当前去向与保留边界
 
-## 2. 设计结构
-- 缺口归并层：把分布式计算、存储与生产化差距归并到统一专题。
-- 主链路口径层：明确生产默认路径、兼容回退与关键依赖。
-- 治理回写层：把 README、PRD、Project 口径统一。
-- 验证层：检查专题引用、入口与范围说明保持一致。
+设计正文、失败边界与验证责任已由 [历史保留边界与现行去向](readme-gap-distributed-prod-hardening-gap12345.prd.md#historical-retention-and-routing) 承接。读者直接进入该节；
+本文不要求重复实现或增加审批。旧 URL 暂留，核清全部引用、配对、动态/外部分发消费者与 corpus 后才可删除。
+[合并前原文](https://github.com/eng-cc/oasis7/blob/2adfc08706f1905c131adc0597a9ae5e99ceb2dd/doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md)保留历史来源，不作为当前操作或验收依据。
 
-## 3. 关键接口 / 入口
-- README 主专题入口
-- 分布式生产链路清单
-- 兼容回退说明
-- 口径核验清单
+### 2.1 需求承接与分配表
 
-## 4. 约束与边界
-- 专题口径需覆盖 Gap1~5 的主问题。
-- 收口过程中不得引入新的对外承诺漂移。
-- 不在本专题展开实现细节重构。
+| 上游要求 | 分配内容 | 本设计条款 | 主责 | 限制 |
+| --- | --- | --- | --- | --- |
+| [专题要求](readme-gap-distributed-prod-hardening-gap12345.prd.md#historical-retention-and-routing) | 通过唯一接收章节定位完整设计 | [兼容路由](#compatibility-route) | 接收文档原 owner | 本文件不是第二份机制设计 |
 
-## 5. 设计演进计划
-- 先冻结 Gap1~5 主边界。
-- 再统一 README 与专题口径。
-- 最后固化治理校验。
+### 11.1 验证映射表
+
+| 上游要求 | 本设计条款 | 验收内容 | 验证来源 | 记录 | 限制 |
+| --- | --- | --- | --- | --- | --- |
+| [专题要求](readme-gap-distributed-prod-hardening-gap12345.prd.md#historical-retention-and-routing) | [兼容路由](#compatibility-route) | 同候选链接到存在的接收节；接收节保有原职责与独立验证 | [文档检查](../../../scripts/doc-governance-check.sh)及接收节逐项映射审读 | 修改 diff、链接核对及实际检查输出 | 文档检查不证明领域运行或发布通过 |

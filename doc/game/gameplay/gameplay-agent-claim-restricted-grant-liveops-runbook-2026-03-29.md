@@ -264,7 +264,7 @@ Lifecycle: current controlled operator procedure; the date is its establishment 
 - 当前 runtime 不支持原地延长 active grant；因此“延长期限”的补救只能通过 claim 收尾后重新 issue。
 
 ## 10. 回流与日志
-- 所有 issue / revoke / natural expiry incident 都要在当天 `doc/devlog/YYYY-MM-DD.md` 回写。
+- 所有 issue / revoke / natural expiry incident 仍须在本次获准的 incident 记录或相关 PR 中记录；Issue 按跟踪需要使用。不再新增 daily devlog，不恢复 `.pm` 或 Project 准入。下列审计字段、重复 incident 升级、权限/资金/expiry/revoke 边界全部保留。
 - 至少记录：
   - 时间
   - 角色：`liveops_community`

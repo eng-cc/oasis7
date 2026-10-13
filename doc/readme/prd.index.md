@@ -57,7 +57,7 @@
 - runbook、material 与 execution_log 仍保留可检索性，但默认不与模块 PRD 三件套一起暴露在首屏。
 
 ## 索引分层
-- `canonical`：正式 PRD / design / project 三件套，定义 README 与对外口径的当前权威源。
+- `canonical`：维护现行需求和设计的正式文档；Git、PR、实际 CI 与评审记录承载交付事实，Issue/Project 按需。历史专题不因成对文件仍在就自动成为当前权威。
 - `runbook`：已正式建档的运营 SOP，回答“运营同学今天应该怎么执行”。
 - `material`：帖子草案、邀请包、奖励包、轮播包等投放素材，回答“今天要发什么/给什么”。
 - `execution_log`：某轮真实执行记录，仅用于复盘与追溯。
@@ -72,10 +72,8 @@
 ## 当前默认活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` | `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-template-2026-03-11.md` | `doc/readme/governance/readme-remediation-log-template-2026-03-11.md` |
 | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | PR、实际 CI 与评审记录（Issue 按需） |
-| `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` |
 
 ## 当前活跃 PRD-only 治理专题
 
@@ -85,8 +83,10 @@
 | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger.md` |
 
 ## 历史压缩专题清单（保留原址与互链）
-| 专题 PRD | 专题设计文档 | 专题项目文档 | 压缩理由 |
+| 历史 PRD | 设计承接 | 执行来源 | 保留理由 |
 | --- | --- | --- | --- |
+| `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md` | [同文历史边界与现行去向](gap/readme-gap-distributed-prod-hardening-gap12345.prd.md#historical-retention-and-routing)；旧 design 仅兼容 | 原 Git / PR / CI / 评审 | 保留多样本、重试、审计与原失败；不是当前操作入口 |
+| `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | [同文历史边界与现行去向](production/readme-prod-gap1245-wasm-repl-topology-player.prd.md#historical-retention-and-routing)；旧 design 仅兼容 | 原 Git / PR / CI / 评审 | 保留 WASM、复制与玩家身份原合同；旧 Viewer 节点参数不再适用 |
 
 ## 已退役删除专题
 | 专题 | 当前承接 | 删除理由 |
@@ -129,7 +129,7 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与相关 PR 和实际验证记录。
-- ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
+- ROUND-002 的 Gap 主从关系仅作历史定位；当前节点、复制、WASM 和拓扑操作从两份历史 PRD 的“现行去向”进入专业文档。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
 - `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。
 - 已删除的 README 顶层链接检查与根 README 公开状态对齐一次性专题不再保留原址；当前分别由 `scripts/readme-link-check.sh`、根 `README.md`、`doc/readme/prd.md`、一致性 checklist、季度复核专题、release communication surfaces、git history 与 PR、实际 CI 与评审记录（Issue 按需） 追溯。
