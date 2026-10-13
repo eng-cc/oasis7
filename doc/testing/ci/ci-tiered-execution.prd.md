@@ -85,3 +85,29 @@ CodeQL 技术扫描见 [CodeQL 设计](codeql-integration.design.md)，实际 re
 **验收**：可比较的冷/热样本需具有一致的工具与平台范围，并说明 runner、网络和其他并发差异。没有足够样本时只报告观察值及限制，不设默认性能门槛或宣称稳定收益；Cargo cold/no-op 编译指标不能替代依赖准备和跨 tag 缓存量测。
 
 本次交付包含需求与系统设计的整理、Release archive 恢复与共享安装器接线；候选实现、本地合同验证、main 合入、hosted 构建、缓存 writer/reader 运行和冷/热收益分别以实际记录证明，不互相代替。apt 本次仅承接观察与条件实施要求，不宣称已改造或完成故障验收。结构检查、本地 fixture、旧绿色 CI 和文档状态不能证明未执行的 hosted 或量测结果。本节不新增通用检查名称、审批链或强制性能门禁。
+
+<a id="ci-real-coverage"></a>
+## 真实覆盖与执行结果合同
+
+本节是测试专业要求，不新增玩家产品承诺或另一条合入审批链。实施状态仍由实际候选与运行记录证明。
+
+**required/full 包含关系**：对同一 source、平台、features、target 和适用范围，`full` 的实际检查集合必须包含对应的 `required` 集合。不能仅因函数名为 full 或总测试数更多就视为满足；Clippy、独立 Viewer browser smoke 等 required 检查不能被另一项编译/测试成功替代。平台不适用项有明确原因及受支持平台入口，缺依赖、缺 target、命令未执行不是“不适用”。每个适用检查失败都传播到 suite 和已有最终汇总。
+
+**native/WASM**：稳定工具链 smoke、需要确定性工具链的真实 builtin 构建/hash 和容器接线测试分别取证。维护实际消费者到构建入口、产物和验证命令的映射；缺少必要 WASM target 或全局设置 `BUILD_STD=0` 不能把 required 验证变成空执行。fake Docker 只证明调用/参数合同，不证明真实容器编译、产物或 hash；已明确退役且没有消费者的旧 lane 不重新变成必跑现场。
+
+**构建 wrapper**：wrapper 保留被包装命令的退出结果、参数边界和有效 target 选择。子命令正常删除 target 并返回 0 后，退出记账不能为更新 `last_used` 等元数据重建 target 或制造失败；lease 释放和 GC 占用保护仍成立。多个互相冲突的 target-dir 必须归一为唯一有效值或明确拒绝，不能靠不同层解析出不同路径。原生 Windows 的跨进程等待/取消与 I/O 故障必须在原生 Windows 分别验证，WSL 或短于系统重试窗口的样本不能代签。
+
+**扫描与证据**：CodeQL 每种声称支持的语言及 default/extended 组合分别记录执行、分析上传和 finding 处置。结果集合不完整、API 后页失败、run/attempt/source/category/App 不匹配时保留未知，不以当前零条结果认定零 finding。具体扫描和启用仍归 [CodeQL 设计](codeql-integration.design.md)；本节不启用 observe、不增加 required check、不改变查询集合或超时。
+
+验收至少包含：故意从 full 漏掉一项 required 被识别；各选中命令返回非零使 suite 失败；真实消费者路径未执行时不能报通过；wrapper 删除 target/非零退出/带空格参数/`--` 应用参数/环境覆盖/原生 Windows 长等待与取消分别保持合同。已合入依赖升级只复核剩余兼容边界，不无条件重复历史版本或完整 fleet 验收。
+
+<a id="ci-advisory-baseline"></a>
+## RustSec 例外基线与到期处置
+
+依赖例外不是永久批准。`deny.toml` 与 [直接依赖基线](../../../scripts/rustsec-ignore-direct-dependency-baseline.json) 继续保存实际条目、owner、依赖范围、理由、验证方法及有效期；文档不得自动刷新日期、增加 advisory 或放宽直接依赖名单。每项到期前独立完成移除、替代或有明确证据和有限新期限的续验；不能被 CodeQL 或其他 CI 子项的排期推迟，也不能以相关文档合入视为续验完成。
+
+[基线检查器](../../../scripts/check-rustsec-ignore-baseline.sh) 必须检查 TOML 语义中完整的 `advisories.ignore` 集合，而非正则偶然识别的部分文本。所有实际启用的 advisory 与批准集合、元数据一一对应；未批准项、重复项、缺元数据/多余元数据以及无效类型/语法均被拒绝。单引号、引号表名、同行多个元素及注释不能导致条目漏检或将注释中的 ID 算作启用项。不支持的元数据布局可明确报错，但不能静默跳过相应 ignore。
+
+`reviewed_at`、`expires`、每条 expiry 和测试注入日期须以真实日历日期解析，再作现有有效期比较；匹配 `YYYY-MM-DD` 字符串不等于日期有效。保留既有到期日包含关系，不通过解析修复隐式提前或延后有效期。续验应重新核对实际依赖路径和 direct manifest 范围，不仅替换日期。
+
+验收必须覆盖不存在的日期、闰年边界、到期日及次日、各合法 TOML 字符串/表名形态、同行重复或隐藏未批准项、注释中的 advisory、空/坏配置和依赖范围漂移。解析/校验失败沿现有治理检查传播；不新设独立审批系统，也不将 report-only 扫描自动升级为另一项 required gate。
