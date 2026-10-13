@@ -94,7 +94,7 @@ UI 提供 tree/treeitem 语义、展开状态与层级；方向键导航与折�
 | queued/reading/validating → failed/cancelled | 超时、用户取消、并发变更或不可恢复解析/存储错误 | 终态、不改 current pointer；记录原因，不自动重扫或重放 |
 | current → stale → current | 当前刷新失败/partial 标 stale；后续 complete 成功可切换 current | stale 是最后成功数据的新鲜度，节点仍绑定原 snapshot；切换项目不取消源事实 |
 
-只有最新 generation 可提交 current pointer；旧请求完成或 UI 已取消时拒绝发布，保留取消原因。整个快照与 pointer 在一个 SQLite 事务提交，进程中断要么保留旧 pointer，要么看到完整新快照，不能出现一半节点和另一版关系。attempt ID 与快照摘要构成幂等键，重复读取结果可复用派生对象但不修改源；异常重开将非终态 attempt 标 abandoned/failed 并保留最后成功 pointer，用户选择刷新才新建 generation。已提交终态不重放。
+只有最新 generation 可提交 current pointer；旧请求完成或 UI 已取消时拒绝发布，保留取消原因。整个快照与 pointer 在一个 SQLite 事务提交，进程中断要么保留旧 pointer，要么看到完整新快照，不能出现一半节点和另一版关系。attempt ID 与快照摘要构成幂等键，重复读取结果可复用派生对象但不修改源；异常重开将非终态 attempt 标 failed，reason 为 abandoned_after_restart，按终态保留规则计入最近 20 条尝试，并保留最后成功 pointer，用户选择刷新才新建 generation。已提交终态不重放。
 
 源文件归仓库 owner，节点/关系/coverage/attempt 归可重建派生缓存，偏好及已有个人数据归用户存储。每项目保留 current、最近一次 partial 和最近 20 条终态尝试元信息，清理先确认未被当前读取引用；个人偏好不随缓存清理删除。被淘汰的 snapshot 查询返回 expired，原视图可按原路径修复定位。快照元信息只含文档路径、摘要、覆盖和错误码，不持久化凭据或私有会话。persisted 以事务成功为据，published 以 pointer 绑定为据，不代表文档语义正确或产品功能已实现。
 
