@@ -1,0 +1,468 @@
+{
+  "runtime": "attached_codex_subagent",
+  "profile": "prepared_world",
+  "isolation": "instruction_only/source_visible",
+  "candidate_source": "005415753b4158589575be8ca276301fa90f6faf",
+  "skill_read": {
+    "path": "skills/oasis7-play/SKILL.md",
+    "actual_read": true,
+    "provided_sha256": "1472bf483037445f7ba48c30d8b3cc601de80f67cd9ffba91295f1638dbcaf33",
+    "hash_independently_checked": false
+  },
+  "world": "w1",
+  "agent": "agent-a",
+  "goal_revision": "1",
+  "task_revision": "3",
+  "executor": "context-executor",
+  "steps": [
+    "--help",
+    "describe",
+    "task",
+    "capabilities",
+    "industry",
+    "context --operation formal-production-player-20261013-a",
+    "quote-schedule one iron_ingot batch",
+    "schedule identical one batch",
+    "lookup original action in separate CLI process",
+    "industry finished observation"
+  ],
+  "client_calls": 10,
+  "attempts": 1,
+  "context_operation": "formal-production-player-20261013-a",
+  "action": "native.schedule_recipe",
+  "factory": "production-factory",
+  "recipe": "recipe.smelter.iron_ingot",
+  "batches": 1,
+  "receipt": {
+    "action_id": "action:3",
+    "agent_id": "agent-a",
+    "agent_session_id": "task-session-20bef93c15cdd8f4088296aaa246e799333686ae866c46f81400842a152f9269",
+    "agent_turn_id": "task-turn-903cce1c40501855df90b5f3ea89fb4844c04af836059d389b9f4fa3802abc63",
+    "decision_request_id": "task-request-cb185ae9c1cab8c0ae94499ac2d8e0fe8ad1889f161cdce95c74085e55f3bb2d",
+    "envelope_digest": "blake3:c5704bc1b3137242025b9b34babf057786d6672e7061ffa58d7610f971d8177f",
+    "feedback_id": "blake3:aace71fc0828cc9601d1b6a1c8d24ca1c8c54e7c0203cb6a22a5a1fa9a1cbe80",
+    "receipt_digest": "blake3:28da7e128942a175f958f0b48fcdd3861d958125663e0d4758336e7b54a91743",
+    "receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+    "request_digest": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc",
+    "schema_version": "runtime-receipt-lineage.v1",
+    "status": "committed"
+  },
+  "canonical_status": "committed",
+  "lookup_same_receipt": true,
+  "lookup_new_process": true,
+  "finished_observation": {
+    "api_revision": 1,
+    "collection_limit": 128,
+    "industry": {
+      "factories": {
+        "count": 1,
+        "items": {
+          "production-factory": {
+            "builder_agent_id": "agent-a",
+            "built_at": 0,
+            "durability_ppm": 1000000,
+            "factory_id": "production-factory",
+            "input_ledger": "site:production-site",
+            "output_ledger": "site:production-site",
+            "production": {
+              "active_jobs": 0,
+              "completed_jobs": 1,
+              "last_completed_at": 45,
+              "last_completed_canonical_snapshot": {
+                "bottleneck_tags": [],
+                "byproducts": [
+                  {
+                    "amount": 1,
+                    "kind": "slag"
+                  }
+                ],
+                "consume": [
+                  {
+                    "amount": 1,
+                    "kind": "carbon_fuel"
+                  },
+                  {
+                    "amount": 4,
+                    "kind": "iron_ore"
+                  }
+                ],
+                "consume_ledger": "site:production-site",
+                "logistics_path_ids": [],
+                "logistics_route_ids": [],
+                "output_ledger": "site:production-site",
+                "power_required": 8,
+                "produce": [
+                  {
+                    "amount": 3,
+                    "kind": "iron_ingot"
+                  }
+                ],
+                "recipe_id": "recipe.smelter.iron_ingot"
+              },
+              "last_completed_recipe_id": "recipe.smelter.iron_ingot",
+              "last_started_at": 44,
+              "same_recipe_repeat_count": 1,
+              "status": "idle"
+            },
+            "site_id": "production-site",
+            "spec": {
+              "base_power_draw": 0,
+              "build_cost": [],
+              "build_time_ticks": 1,
+              "display_name": "Receiving depot",
+              "factory_id": "production-factory",
+              "maintenance_per_tick": 0,
+              "recipe_slots": 1,
+              "tags": [
+                "smelter"
+              ],
+              "throughput_bps": 10000,
+              "tier": 1
+            }
+          }
+        },
+        "truncated": false
+      },
+      "factory_profiles": {
+        "count": 1,
+        "items": {
+          "production-factory": {
+            "factory_id": "production-factory",
+            "recipe_slots": 1,
+            "tags": [
+              "smelter"
+            ],
+            "tier": 1
+          }
+        },
+        "truncated": false
+      },
+      "industry_progress": {
+        "count": 5,
+        "items": {
+          "completed_material_transits": 0,
+          "completed_recipe_jobs": 1,
+          "latest_market_quotes": {
+            "carbon_fuel": {
+              "effective_cost_index_ppm": 1050500,
+              "governance_tax_bps": 500,
+              "kind": "carbon_fuel",
+              "local_available_amount": 2,
+              "local_deficit_amount": 0,
+              "requested_amount": 1,
+              "transit_loss_bps": 5,
+              "world_available_amount": 0
+            },
+            "iron_ore": {
+              "effective_cost_index_ppm": 1050500,
+              "governance_tax_bps": 500,
+              "kind": "iron_ore",
+              "local_available_amount": 8,
+              "local_deficit_amount": 0,
+              "requested_amount": 4,
+              "transit_loss_bps": 5,
+              "world_available_amount": 0
+            }
+          },
+          "stage": "bootstrap",
+          "stage_updated_at": 0
+        },
+        "truncated": false
+      },
+      "logistics_routes": {
+        "count": 0,
+        "items": {},
+        "truncated": false
+      },
+      "material_ledgers": {
+        "count": 2,
+        "items": {
+          "site:production-site": {
+            "carbon_fuel": 1,
+            "iron_ingot": 3,
+            "iron_ore": 4,
+            "slag": 1
+          },
+          "world": {}
+        },
+        "truncated": false
+      },
+      "material_profiles": {
+        "count": 0,
+        "items": {},
+        "truncated": false
+      },
+      "materials": {
+        "count": 0,
+        "items": {},
+        "truncated": false
+      },
+      "pending_material_transits": {
+        "count": 0,
+        "items": {},
+        "truncated": false
+      },
+      "pending_recipe_jobs": {
+        "count": 0,
+        "items": {},
+        "truncated": false
+      },
+      "product_profiles": {
+        "count": 0,
+        "items": {},
+        "truncated": false
+      },
+      "recipe_profiles": {
+        "count": 0,
+        "items": {},
+        "truncated": false
+      }
+    },
+    "logical_tick": 45,
+    "read_version": {
+      "commit": {
+        "binding": {
+          "authority_generation": 0,
+          "branch_id": "main",
+          "finality_ref": "blake3:f90700d4abf0667688fc921f505f945dc493ef2e4c4be295df784c875c24626c",
+          "governing_manifest_ref": "blake3:6bb35bcd3204a154856806164c90b28d106523e8de7ea03a289ef2209bf2acf2",
+          "permission_generation": 0,
+          "provider_world_id": "w1",
+          "reorg_generation": 0
+        },
+        "execution_block_hash": "c4a80728a14a8a8fc9bf67d8d72a1e0d844977480b4d19c34dff69dcbbda0e79",
+        "position": 45,
+        "state_root_ref": "28b65d4f366746b07886b16d4cec95f5b2bc0cc19a938bbe4abcaba875267991",
+        "world": {
+          "genesis_digest": "fixture-genesis-v1",
+          "world_id": "w1"
+        }
+      },
+      "projection_revision": "blake3:a0753bf5050ccaa544d551126a55527a7d0e2c8a0b069cf41a3ce8237a998aea",
+      "visibility_scope": "agent:agent-a"
+    },
+    "scope": "authenticated public industry observation; no signed transfer quote is provided"
+  },
+  "original_schedule": {
+    "contract_version": 1,
+    "correlation": {
+      "key": {
+        "world": {
+          "world_id": "w1",
+          "genesis_digest": "fixture-genesis-v1"
+        },
+        "verified_subject": "772c8a442b7db06e166cfbc1ccbcbcde6f3eba76a4e98ef3ffc519502237d6ef",
+        "operation_domain": "cognition",
+        "nonce_scope": "agent_request",
+        "request_id_or_nonce": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc"
+      },
+      "payload_digest": "blake3:e411d0c8a71198aa06e95011d4390c008b30b85cf198e3c5ab8f10712bd90591"
+    },
+    "outcome": {
+      "status": "committed",
+      "commit": {
+        "world": {
+          "world_id": "w1",
+          "genesis_digest": "fixture-genesis-v1"
+        },
+        "binding": {
+          "provider_world_id": "w1",
+          "branch_id": "main",
+          "finality_ref": "blake3:f90700d4abf0667688fc921f505f945dc493ef2e4c4be295df784c875c24626c",
+          "reorg_generation": 0,
+          "governing_manifest_ref": "blake3:6bb35bcd3204a154856806164c90b28d106523e8de7ea03a289ef2209bf2acf2",
+          "authority_generation": 0,
+          "permission_generation": 0
+        },
+        "position": 44,
+        "execution_block_hash": "462a21e459924a63cbefc9deb3b7354280cfe31be659f4eead922ef1bcada667",
+        "state_root_ref": "24febdbe21725e0c0086d031f385b166da5d6415b35acd8d1ab6960fba1c73b2"
+      },
+      "receipt": {
+        "commit_record": {
+          "abort_reason": null,
+          "action_id": "action:3",
+          "agent_id": "agent-a",
+          "agent_session_id": "task-session-20bef93c15cdd8f4088296aaa246e799333686ae866c46f81400842a152f9269",
+          "agent_turn_id": "task-turn-903cce1c40501855df90b5f3ea89fb4844c04af836059d389b9f4fa3802abc63",
+          "branch_id": "main",
+          "cognition_journal_seq": 6,
+          "commit_id": "blake3:4822047252183634dfa2d2401abf57788d3477237749401cdcacd7e7b57c549b",
+          "decision_request_id": "task-request-cb185ae9c1cab8c0ae94499ac2d8e0fe8ad1889f161cdce95c74085e55f3bb2d",
+          "envelope_digest": "blake3:c5704bc1b3137242025b9b34babf057786d6672e7061ffa58d7610f971d8177f",
+          "envelope_idempotency_key": "blake3:408cab996af07f819c449ef0a00127db0c949eb4246949692fc1ab3eafb1fecf",
+          "feedback_id": "blake3:aace71fc0828cc9601d1b6a1c8d24ca1c8c54e7c0203cb6a22a5a1fa9a1cbe80",
+          "finality_binding_digest": "blake3:0cef7e7a0bd115cdad39fa1f2832c59a4f94b3dbdddc3697850f7f17aa3f1e55",
+          "finality_block_hash": "blake3:c781b5bd782e97555788592b3012710ace4029789a57d646a69ad871be4e0e49",
+          "finality_epoch": 0,
+          "finality_status": "verified",
+          "parent_tick": 43,
+          "parent_world_hash": "14d01619ac9261db56b089305b701d2aeb2d824cff6a7f6148e717384dff37f7",
+          "receipt_digest": "blake3:28da7e128942a175f958f0b48fcdd3861d958125663e0d4758336e7b54a91743",
+          "receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+          "reorg_epoch": 0,
+          "request_digest": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc",
+          "response_artifact_digest": "blake3:a88cf643ab39a9c9637cb9937029def88416c1ed0ba8de758a8033f89c199b6e",
+          "response_context_discriminator": "oasis7.continuous-agent-context",
+          "response_context_version": 1,
+          "response_retry_seq": 1,
+          "runtime_manifest_hash": "cd30451bf6b068a2875701c43fb9b46e193ea2668c3da8a36a1bddbbada5e9cf",
+          "schema_version": "world-commit-record.v1",
+          "staged_event_root": "blake3:6a11099df58e2a58cf54c074d09c7cbbf72c268de540f8373d8fe8b3aa52f105",
+          "staged_state_root": "5e050dcef2ac111b0044eef78d51eed178c246e7b8e8a489fda236fb0199e889",
+          "status": "committed",
+          "transport_attempt": 1,
+          "world_id": "w1"
+        },
+        "feedback": {
+          "agent_session_id": "task-session-20bef93c15cdd8f4088296aaa246e799333686ae866c46f81400842a152f9269",
+          "agent_subject": "agent-a",
+          "agent_turn_id": "task-turn-903cce1c40501855df90b5f3ea89fb4844c04af836059d389b9f4fa3802abc63",
+          "candidate_action_id": 3,
+          "decision_request_id": "task-request-cb185ae9c1cab8c0ae94499ac2d8e0fe8ad1889f161cdce95c74085e55f3bb2d",
+          "envelope_digest": "blake3:c5704bc1b3137242025b9b34babf057786d6672e7061ffa58d7610f971d8177f",
+          "feedback_id": "blake3:aace71fc0828cc9601d1b6a1c8d24ca1c8c54e7c0203cb6a22a5a1fa9a1cbe80",
+          "feedback_seq": 1,
+          "provenance": "runtime_authoritative",
+          "request_digest": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc",
+          "runtime_receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+          "status": "committed"
+        },
+        "lineage": {
+          "action_id": "action:3",
+          "agent_id": "agent-a",
+          "agent_session_id": "task-session-20bef93c15cdd8f4088296aaa246e799333686ae866c46f81400842a152f9269",
+          "agent_turn_id": "task-turn-903cce1c40501855df90b5f3ea89fb4844c04af836059d389b9f4fa3802abc63",
+          "decision_request_id": "task-request-cb185ae9c1cab8c0ae94499ac2d8e0fe8ad1889f161cdce95c74085e55f3bb2d",
+          "envelope_digest": "blake3:c5704bc1b3137242025b9b34babf057786d6672e7061ffa58d7610f971d8177f",
+          "feedback_id": "blake3:aace71fc0828cc9601d1b6a1c8d24ca1c8c54e7c0203cb6a22a5a1fa9a1cbe80",
+          "receipt_digest": "blake3:28da7e128942a175f958f0b48fcdd3861d958125663e0d4758336e7b54a91743",
+          "receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+          "request_digest": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc",
+          "schema_version": "runtime-receipt-lineage.v1",
+          "status": "committed"
+        }
+      }
+    }
+  },
+  "original_lookup": {
+    "contract_version": 1,
+    "correlation": {
+      "key": {
+        "world": {
+          "world_id": "w1",
+          "genesis_digest": "fixture-genesis-v1"
+        },
+        "verified_subject": "772c8a442b7db06e166cfbc1ccbcbcde6f3eba76a4e98ef3ffc519502237d6ef",
+        "operation_domain": "cognition",
+        "nonce_scope": "agent_request",
+        "request_id_or_nonce": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc"
+      },
+      "payload_digest": "blake3:e411d0c8a71198aa06e95011d4390c008b30b85cf198e3c5ab8f10712bd90591"
+    },
+    "outcome": {
+      "status": "committed",
+      "commit": {
+        "world": {
+          "world_id": "w1",
+          "genesis_digest": "fixture-genesis-v1"
+        },
+        "binding": {
+          "provider_world_id": "w1",
+          "branch_id": "main",
+          "finality_ref": "blake3:f90700d4abf0667688fc921f505f945dc493ef2e4c4be295df784c875c24626c",
+          "reorg_generation": 0,
+          "governing_manifest_ref": "blake3:6bb35bcd3204a154856806164c90b28d106523e8de7ea03a289ef2209bf2acf2",
+          "authority_generation": 0,
+          "permission_generation": 0
+        },
+        "position": 44,
+        "execution_block_hash": "462a21e459924a63cbefc9deb3b7354280cfe31be659f4eead922ef1bcada667",
+        "state_root_ref": "24febdbe21725e0c0086d031f385b166da5d6415b35acd8d1ab6960fba1c73b2"
+      },
+      "receipt": {
+        "commit_record": {
+          "abort_reason": null,
+          "action_id": "action:3",
+          "agent_id": "agent-a",
+          "agent_session_id": "task-session-20bef93c15cdd8f4088296aaa246e799333686ae866c46f81400842a152f9269",
+          "agent_turn_id": "task-turn-903cce1c40501855df90b5f3ea89fb4844c04af836059d389b9f4fa3802abc63",
+          "branch_id": "main",
+          "cognition_journal_seq": 6,
+          "commit_id": "blake3:4822047252183634dfa2d2401abf57788d3477237749401cdcacd7e7b57c549b",
+          "decision_request_id": "task-request-cb185ae9c1cab8c0ae94499ac2d8e0fe8ad1889f161cdce95c74085e55f3bb2d",
+          "envelope_digest": "blake3:c5704bc1b3137242025b9b34babf057786d6672e7061ffa58d7610f971d8177f",
+          "envelope_idempotency_key": "blake3:408cab996af07f819c449ef0a00127db0c949eb4246949692fc1ab3eafb1fecf",
+          "feedback_id": "blake3:aace71fc0828cc9601d1b6a1c8d24ca1c8c54e7c0203cb6a22a5a1fa9a1cbe80",
+          "finality_binding_digest": "blake3:0cef7e7a0bd115cdad39fa1f2832c59a4f94b3dbdddc3697850f7f17aa3f1e55",
+          "finality_block_hash": "blake3:c781b5bd782e97555788592b3012710ace4029789a57d646a69ad871be4e0e49",
+          "finality_epoch": 0,
+          "finality_status": "verified",
+          "parent_tick": 43,
+          "parent_world_hash": "14d01619ac9261db56b089305b701d2aeb2d824cff6a7f6148e717384dff37f7",
+          "receipt_digest": "blake3:28da7e128942a175f958f0b48fcdd3861d958125663e0d4758336e7b54a91743",
+          "receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+          "reorg_epoch": 0,
+          "request_digest": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc",
+          "response_artifact_digest": "blake3:a88cf643ab39a9c9637cb9937029def88416c1ed0ba8de758a8033f89c199b6e",
+          "response_context_discriminator": "oasis7.continuous-agent-context",
+          "response_context_version": 1,
+          "response_retry_seq": 1,
+          "runtime_manifest_hash": "cd30451bf6b068a2875701c43fb9b46e193ea2668c3da8a36a1bddbbada5e9cf",
+          "schema_version": "world-commit-record.v1",
+          "staged_event_root": "blake3:6a11099df58e2a58cf54c074d09c7cbbf72c268de540f8373d8fe8b3aa52f105",
+          "staged_state_root": "5e050dcef2ac111b0044eef78d51eed178c246e7b8e8a489fda236fb0199e889",
+          "status": "committed",
+          "transport_attempt": 1,
+          "world_id": "w1"
+        },
+        "feedback": {
+          "agent_session_id": "task-session-20bef93c15cdd8f4088296aaa246e799333686ae866c46f81400842a152f9269",
+          "agent_subject": "agent-a",
+          "agent_turn_id": "task-turn-903cce1c40501855df90b5f3ea89fb4844c04af836059d389b9f4fa3802abc63",
+          "candidate_action_id": 3,
+          "decision_request_id": "task-request-cb185ae9c1cab8c0ae94499ac2d8e0fe8ad1889f161cdce95c74085e55f3bb2d",
+          "envelope_digest": "blake3:c5704bc1b3137242025b9b34babf057786d6672e7061ffa58d7610f971d8177f",
+          "feedback_id": "blake3:aace71fc0828cc9601d1b6a1c8d24ca1c8c54e7c0203cb6a22a5a1fa9a1cbe80",
+          "feedback_seq": 1,
+          "provenance": "runtime_authoritative",
+          "request_digest": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc",
+          "runtime_receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+          "status": "committed"
+        },
+        "lineage": {
+          "action_id": "action:3",
+          "agent_id": "agent-a",
+          "agent_session_id": "task-session-20bef93c15cdd8f4088296aaa246e799333686ae866c46f81400842a152f9269",
+          "agent_turn_id": "task-turn-903cce1c40501855df90b5f3ea89fb4844c04af836059d389b9f4fa3802abc63",
+          "decision_request_id": "task-request-cb185ae9c1cab8c0ae94499ac2d8e0fe8ad1889f161cdce95c74085e55f3bb2d",
+          "envelope_digest": "blake3:c5704bc1b3137242025b9b34babf057786d6672e7061ffa58d7610f971d8177f",
+          "feedback_id": "blake3:aace71fc0828cc9601d1b6a1c8d24ca1c8c54e7c0203cb6a22a5a1fa9a1cbe80",
+          "receipt_digest": "blake3:28da7e128942a175f958f0b48fcdd3861d958125663e0d4758336e7b54a91743",
+          "receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+          "request_digest": "blake3:10c2e9c99327bfa9ef9daf4801ec3ee4b22ec7dcd0d6e19b54014ea3123769cc",
+          "schema_version": "runtime-receipt-lineage.v1",
+          "status": "committed"
+        }
+      }
+    }
+  },
+  "rejections": [],
+  "unknown_results": [],
+  "recovery": "Separate CLI lookup recovered the exact committed action receipt. No replacement action or second production was submitted.",
+  "elapsed_seconds": 347,
+  "cost": "Model cost unknown; quoted electricity 8, before 100 and after 92. No purchase.",
+  "experience_issues": [
+    "JSON output is dense; recipe profiles are empty, so one-batch quantity was learned from signed quote."
+  ],
+  "stop_reason": "Observed completed_jobs=1, pending jobs=0 and exactly three iron ingots in destination ledger; original receipt recovered. Stopped upon detecting time budget overrun at report time.",
+  "uncovered": [
+    "Cold entry",
+    "OpenClaw integration",
+    "Transport loss or unknown result injection",
+    "Rejection and expiry recovery",
+    "Revocation/Stop",
+    "Multiple batches or factories"
+  ],
+  "budget_deviation": "Report-time wall clock was 347 seconds, exceeding authorized 240 seconds. No further client action taken. Exact action completion wall clock was not recorded, so timing compliance cannot be established."
+}

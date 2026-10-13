@@ -1,0 +1,40 @@
+{
+  "profile": "prepared_world/attached_codex_subagent",
+  "isolation": "instruction_only/source_visible",
+  "skill_read": "skills/oasis7-play/SKILL.md",
+  "client_invocations": 8,
+  "goal_revision": "1",
+  "context": "production-first-20261013",
+  "factory": "production-factory",
+  "recipe": "recipe.smelter.iron_ingot",
+  "batches": 1,
+  "quote": {
+    "produce_iron_ingot": 3,
+    "power": 8,
+    "duration_ticks": 1
+  },
+  "original_result": {
+    "status": "committed",
+    "action_id": "action:3",
+    "position": 52,
+    "receipt_id": "blake3:3f94fc539d70abc6650ccfbad1c7b9b123596bfd404b1bfb28ccab7893c0e109"
+  },
+  "restart_recovery": "identical schedule in separate CLI process returned same original receipt and position",
+  "observation": {
+    "tick": 55,
+    "iron_ingot_at_production_site": 3,
+    "completed_jobs": 1,
+    "pending_jobs": 0,
+    "iron_ore": 4,
+    "carbon_fuel": 1,
+    "slag": 1
+  },
+  "blockers": [
+    "bare help refused config requirement",
+    "config followed by help returned unknown command"
+  ],
+  "unknown_result": false,
+  "stop_reason": "requested finished amount observed and original receipt recovered; no further client calls",
+  "cost": "real currency and inference cost unknown; signed quote electricity 8",
+  "uncovered": "cold entry, OpenClaw, transport loss, concurrent changes, grants expiry"
+}

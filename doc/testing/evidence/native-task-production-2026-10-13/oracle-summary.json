@@ -1,0 +1,36 @@
+{
+  "scope": "targeted first-product and original-result recovery at source 005415753b4158589575be8ca276301fa90f6faf",
+  "functional_verdict": "passed",
+  "timing_verdict": "inconclusive_budget_overrun",
+  "overall_live_verdict": "inconclusive",
+  "client_calls": 10,
+  "report_elapsed_seconds": 347,
+  "permitted_seconds": 240,
+  "actual_action_completion_wall_time": "not_recorded",
+  "action_id": 3,
+  "job_id": 3,
+  "recipe_started_tick": 44,
+  "recipe_completed_tick": 45,
+  "recipe_started_event": 26,
+  "recipe_completed_event": 28,
+  "single_cognition_row": true,
+  "receipt_id": "blake3:911f48b80f3a43a0068640b801b4c691c05731458d5a62904b2219c4e11ceca7",
+  "original_lookup_same_lineage": true,
+  "delta": {
+    "iron_ore": -4,
+    "carbon_fuel": -1,
+    "iron_ingot": 3,
+    "slag": 1,
+    "electricity": -8
+  },
+  "pending_jobs": 0,
+  "current_dependency_candidate_live_verdict": "not_executed",
+  "retained_gaps": [
+    "cold entry",
+    "complete starter chain",
+    "OpenClaw",
+    "two-runtime parity",
+    "deployment",
+    "budget compliant live run"
+  ]
+}

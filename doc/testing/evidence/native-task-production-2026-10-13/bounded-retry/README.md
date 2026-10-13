@@ -1,0 +1,11 @@
+# Bounded independent production retry
+
+Owner role: qa_engineer. This is the explicitly authorized second attempt, using a fresh disposable prepared world and the shipped client/Skill at source `7959443225200c9d3595bbcb47365662e88df787`. It retains the first attempt's budget failure in the parent evidence directory; it does not rewrite that result.
+
+The independent attached Codex player completed first-product production and recovered the byte-identical original response in another CLI process. Parent readback joins one Cognition/action 3, job 3, RecipeStarted at tick 52 and RecipeCompleted at tick 53. Exactly four ore, one fuel and eight electricity were consumed; three iron ingots and one slag were produced; pending jobs were empty. This is targeted prepared-world production, not full starter-chain or two-runtime acceptance.
+
+The user explicitly approved at most ten client calls and 240 seconds. The guard records seven actual shipped-client calls, all complete by 207.94 seconds. The player reports eight entry invocations including a bare-help refusal before forwarding. Its report was written at 233.34 seconds: file mtime relative to the initial witness independently agrees with wall/monotonic clock correlation within 0.02 seconds. The independent hard deadline requested service shutdown at 240 seconds. No deadline extension or replacement production occurred. One help refusal came from the test guard; configured --help was also rejected by the ordinary CLI, while the normal player commands remained usable.
+
+Canonical Stop at height 62 and delegation revocation at 63 succeeded. The host exited and its owned realm, keys, private goals and operation cache were removed. Raw context/quote outputs remain excluded from this public record and were removed locally after hash collection. Model fees are unknown; no paid external Runtime or production deployment was used.
+
+At the tested source, required-gate, Rust baseline/required tests, all three document platforms and m1/m4/m5 WASM determinism passed. Subsequent evidence/document changes require their own current-head CI. Source/build/Skill hashes and trace response hashes preserve the actual tested identity; no new runtime claim is derived from a documentation commit.

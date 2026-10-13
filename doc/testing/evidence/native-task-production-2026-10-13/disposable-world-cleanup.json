@@ -1,0 +1,9 @@
+{
+  "pid": 67795,
+  "host_exited": true,
+  "canonical_stop_height": 76,
+  "canonical_delegation_revocation_height": 77,
+  "owned_world_removed": true,
+  "keys_private_goals_client_cache_removed": true,
+  "scope": "only ready-identified owned disposable production realm"
+}
