@@ -29,6 +29,15 @@
 - `bridge-db`
   - 保存 bridge binding、route、pricing、`bridge_ledger`、LetAI user/project/token 映射与 operator 审计日志。
 
+### 2.1 需求承接与分配表
+
+| 上游要求 | 承接与分配 | 本设计条款 | 主责与消费方 | 边界 |
+| --- | --- | --- | --- | --- |
+| [SC-2/4：稳定用户、项目与审计链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 在外部副作用前持久保存恢复身份，未知结果沿用原身份 | [首次绑定恢复](#bridge-identity-recovery) | runtime_engineer；bridge-core/store/provider | 保留身份不等于映射就绪，不假设跨服务事务 |
+| [SC-2：每笔入账的完整对账链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 完整消费相关分页，去重并区分未完成扫描 | [扫描完整性](#bridge-scan-completeness) | runtime_engineer；chain-watcher/Explorer | 不用头页计数证明完整，不启用账号池并发复用 |
+| [SC-2：唯一订单与幂等对账](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 串行提交或 fencing 保护文件、内存和人工终态 | [有效处理权](#bridge-reconcile-ownership) | runtime_engineer；reconcile/store/operator | 并发处理权不代替跨重启恢复 |
+| [SC-1/2：topup 与 query 验证链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | 持久成功事实与尝试分离，receipt 驱动 verification-only | [持久业务阶段](#bridge-recovery-state) | runtime_engineer；ledger/reconcile/provider | 未知外部结果按原订单核对，不无条件跳过 topup |
+
 ## 3. 最小数据模型
 - `bridge_user_binding`
   - `provider_id`
@@ -277,3 +286,16 @@ A 成功提交 Reconciled 后 B 的延迟失败只能成为该过期尝试的诊
 | AC-4/6：入账与核对分阶段 | Credited 后恢复 user/project 临时失败、下一轮成功；期间再次重启/保存失败 | receipt/订单与成功事实保留，topup 总次数仍为一；真正未入账记录仍按原订单处理 |
 
 四项分别验收；并发测试不能代替重启测试，外部幂等不能代替本地身份稳定，查询成功不能证明分页完整。可使用有真实分页和持久故障语义的离线 mock，不调用真实付费服务、不改账号、汇率、额度、凭据或链上资金。现有实现、mock 验收和真实 operator-managed 部署结果分别记录；本设计不声称已发生重复扣费、资金损失或凭据泄漏，也不以文档合入关闭实现待办。
+
+## 11. 验证
+
+### 11.1 验证映射表
+
+| 上游要求 | 本设计条款 | 机制与场景 | 验证来源 | 执行证据 | 未覆盖与状态 |
+| --- | --- | --- | --- | --- | --- |
+| [SC-2/4：稳定用户、项目与审计链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [首次绑定恢复](#bridge-identity-recovery) | §10 的丢回复、保存失败与重启；mock 远端项目数及未就绪消费分别断言 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的身份故障用例 | source、外部 ID、项目数、本地重载及命令退出码 | planned；现有创建前失败用例不能代签未知副作用 |
+| [SC-2：每笔入账的完整对账链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [扫描完整性](#bridge-scan-completeness) | §10 的 201/401 条、后页、转出占头页、新增头部、坏 cursor 与后页错误 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的真实分页 mock | source、请求 cursor、完整/未完成结果、去重账项和退出码 | planned；返回所有交易的单页 mock 不能代签分页 |
+| [SC-2：唯一订单与幂等对账](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [有效处理权](#bridge-reconcile-ownership) | §10 的 barrier 固定双尝试、延迟失败、双成功与处理者退出 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的并发故障用例 | source、受控时序、内存/文件/重载终态、计数和退出码 | planned；部署支持的并发范围单独说明 |
+| [SC-1/2：topup 与 query 验证链](mainchain-token-newapi-quota-bridge.prd.md#1-executive-summary) | [持久业务阶段](#bridge-recovery-state) | §10 的 Credited 后查询失败、重启与再次保存失败；保留真正未入账正例 | [测试手册](../../../testing-manual.md)；下述 Bridge binary suite 的持久阶段故障用例 | source、receipt/order、重载阶段、topup 调用数和退出码 | planned；并发回归不能代签跨重启恢复 |
+
+现有测试入口为 `crates/oasis7/src/bin/oasis7_newapi_bridge_service/tests.rs`，分页替身在同目录 `tests_support.rs`；在这些已有入口补充 §10 的故障语义，按 `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_newapi_bridge_service` 执行并记录实际结果。手册/测试入口存在不表示新增场景已实现或执行；本次文档不运行真实 topup、模型调用或 operator 部署，也不以测试计划代替四项独立验收。
