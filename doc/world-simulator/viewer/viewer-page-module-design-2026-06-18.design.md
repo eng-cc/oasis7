@@ -73,7 +73,7 @@ columns competing with the Player stage.
 Desktop first viewport:
 
 1. Compact stage identity and current objective.
-2. Command strip with Objective, Next Move, and Player Leverage.
+2. Command strip with a primary Next Move region and supporting Objective / Player Leverage context.
 3. Pixel World Board/Canvas.
 4. Action Receipt.
 5. Edge dock routes for Targets and Command; Search stays inside Targets and
@@ -86,7 +86,7 @@ Mobile reading order:
 1. Edge/mobile rail: `World / Targets / Command`, with Search inside Targets and
    Diagnostics secondary.
 2. Compact stage identity.
-3. Command strip in one column.
+3. Command strip with Next Move on the first row and supporting context on the second row.
 4. World Board/Canvas.
 5. Action Receipt.
 6. Targets, Command, Gameplay Details, Diagnostics through anchors or tabs.
@@ -106,11 +106,12 @@ The page should behave as a command-table shell:
 The command band and receipt may bracket the board, but they must not compress
 the board into a secondary widget.
 
-The current fullscreen Player default renders the command strip as three compact
-cards on desktop (`Objective / Next Move / Player Leverage`). At mobile width,
-`Objective` and `Player Leverage` share the first compact row and `Next Move` spans
-the second row. `More / Diagnostics` remains a reachable secondary route rather
-than a competing primary column.
+The [shell's current implementation boundary](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary)
+owns HUD placement: one primary Next Move region and subordinate Objective /
+Player Leverage context. Narrow screens place Next Move first and supporting
+context second. The previous three-peer-card layout and Next Move second row
+are superseded, not an alternative current default. `More / Diagnostics` remains
+a reachable secondary route rather than a competing primary column.
 
 ### 2.5 Responsive Route
 Player desktop, tablet, and mobile preserve one conceptual route: stage first,
@@ -122,15 +123,17 @@ preserve keyboard focus, close/`Escape`, CJK labels, no-overflow, and honest
 empty/unavailable contracts at every width.
 
 ### 2.6 Target wireframes (ASCII; implementation handoff)
-These wireframes describe the target Player shell, not a screenshot or shipped
-layout. Director may expose a denser tool arrangement only after the explicit,
+These wireframes illustrate the world-first hierarchy under the shell contract
+above, not pixel placement, a screenshot, or new shipped-layout evidence. HUD
+regions follow the canonical primary/context order; they are not three peer
+cards. Director may expose a denser tool arrangement only after the explicit,
 capability-gated action described by the paired PRD.
 
 Desktop (world-first, 1280px+):
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ world / stage identity       Objective · Next Move · Player Leverage          │
+│ world / stage identity       Next Move [primary] · supporting context        │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  ┌───────────────────────────────────────────────┐  ┌──────────────────────┐  │
@@ -151,9 +154,8 @@ Mobile (390x844; sticky rail, one route at a time):
 ├──────────────────────────────┤
 │ World  Targets  Command  More │  ← sticky rail; Search is inside Targets
 ├──────────────────────────────┤
-│ Objective                    │
-│ Next Move                    │
-│ Player Leverage              │
+│ Next Move [primary]          │
+│ Objective / Player Leverage  │
 ├──────────────────────────────┤
 │                              │
 │       PIXEL WORLD BOARD      │
@@ -269,18 +271,18 @@ State handling:
   the board text below readability.
 
 ### 3.3 Command Strip
-Current anchors: `.pixel-world-command-strip`,
-`.pixel-world-command-cell--objective`, `.pixel-world-command-cell--next`,
-`.pixel-world-command-cell--leverage`.
+Current anchors: `.pixel-world-command-strip`, `.pixel-world-command-cell--next`,
+`[data-shell-region="next-move-primary"]`, and
+`[data-shell-region="supporting-context"]`.
 
 Role:
-- one-row command summary above the board on desktop;
-- one-column pre-board summary on mobile;
+- one primary action region with subordinate context over the world-first board;
+- Next Move first and supporting context second on narrow screens;
 - tells the player current objective, next move, and why player action matters.
 
 Design contract:
-- Objective, Next Move, and Player Leverage are peers, but Next Move receives
-  the strongest action affordance;
+- Next Move owns the primary action affordance; Objective and Player Leverage
+  explain it as supporting context, not equally weighted peer cards;
 - `Go to Command` may be used as a conservative route when direct execution has
   not been verified by `viewer_engineer`;
 - do not imply a direct runtime action unless an existing published action is
@@ -675,3 +677,17 @@ pass, then implement in small slices. Existing implementation hooks can support
 the compact HUD, collapsed gameplay details, command proximity, and diagnostics
 demotion goals, but real screenshot gap notes against the Image2 target and
 module-state verification are still required before any completion claim.
+
+## Current shell layout traceability
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | 单一 Next Move 主区、Objective / Player Leverage 从属上下文；窄屏主区第一行 | [本设计布局条款](#33-command-strip) | viewer_engineer；game_visual_interaction_designer | 不新增布局决策、DTO、玩法或发布承诺；未扩展 target 合同 |
+
+### 11.1 验证映射表
+
+| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | [本设计布局条款](#33-command-strip) | 当前操作条款与主合同一致，不能要求恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 [host](../../../crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx)、[窄屏 CSS](../../../crates/oasis7_viewer/viewer_terminal_shell.css) 做静态对照；未来可见改动另按 [视觉矩阵](viewer-brand-system-2026-06-05.design.md#6-screenshot-and-visual-evidence-matrix)取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |

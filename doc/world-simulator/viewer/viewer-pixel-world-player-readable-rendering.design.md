@@ -27,12 +27,14 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 未覆盖范围 |
 | --- | --- | --- | --- | --- |
+| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | 单一 Next Move 主区、Objective / Player Leverage 从属上下文；窄屏主区第一行 | [本设计布局条款](#ui-layout) | viewer_engineer；game_visual_interaction_designer | 不新增布局决策、DTO、玩法或发布承诺；未扩展 target 合同 |
 | [产业图谱目标](viewer-pixel-world-player-readable-rendering.prd.md#industry-detail-requirements) | 受支持产业 projection 的节点、流向/吞吐/损耗、层级/阶段/状态、根因定位及分层可见集 | [产业与细节目标](viewer-pixel-world-player-readable-rendering.design.md#industry-detail-target) | Runtime 数据 authority；game_visual_interaction_designer 可读性；QA 验收 | 不新增协议/资产导入；不声明完整产业图谱或 semantic zoom 已实现 |
 
 ### 11.1 验证映射表
 
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | [本设计布局条款](#ui-layout) | 当前操作条款与主合同一致，不能要求恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 [host](../../../crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx)、[窄屏 CSS](../../../crates/oasis7_viewer/viewer_terminal_shell.css) 做静态对照；未来可见改动另按 [视觉矩阵](viewer-brand-system-2026-06-05.design.md#6-screenshot-and-visual-evidence-matrix)取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |
 | [产业图谱目标](viewer-pixel-world-player-readable-rendering.prd.md#industry-detail-requirements) | [产业与细节目标](viewer-pixel-world-player-readable-rendering.design.md#industry-detail-target) | 未来支持产业数据时验证分层节点/流/状态与目标定位、推断/未知及负载边界 | [Viewer 手册验收入口](viewer-manual.manual.md#industry-detail-acceptance)：同候选/权威数据下 external headed desktop+narrow 验证 World/Region/Node 主次信息、符号/根因/定位、未知和拥塞密度；未执行 | 未来 state/权威来源对账、console、桌面/窄屏截图、可见集和负载证据 | 当前 routes/HUD/热点不替代产业图谱或 semantic zoom 通过；本文仅映射验收方法 |
 
 ## DTO Shape
@@ -81,13 +83,14 @@ no-progress result. Missing authoritative feedback renders `No action receipt ye
 
 ## UI Layout
 - `pixel-world-host__summary`: product title and current objective detail.
-- `pixel-world-command-strip`: three compact status cells for objective, next move and player leverage.
+- `pixel-world-command-strip`: maps the objective, next move and player-leverage DTO fields into the [canonical Player shell layout](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary), not three peer cards.
 - `pixel-world-canvas`: terrain/routes/entities/callouts.
 - `pixel-world-render-diagnostics`: collapsed details with counts, renderer status, camera state, control buttons and raw DTO.
-- In the default fullscreen Player HUD, desktop keeps the command strip as three compact
-  cards in one row: `Objective`, `Next Move`, and `Player Leverage`. On mobile the
-  `Objective` and `Player Leverage` cards share the compact first row, while `Next Move`
-  occupies the second row. `More`/`Diagnostics` remains reachable as the secondary route.
+- The shell authority owns placement: one `Next Move` primary region and subordinate
+  `Objective / Player Leverage` supporting context; narrow screens put the primary
+  region first and supporting context second. `More`/`Diagnostics` remains reachable.
+  The retired three-card / Next-Move-second-row layout is not an active requirement.
+  This source/document alignment does not provide new S6 or player-experience evidence.
 
 ## Terminal shell relationship
 Pixel World is the world-board implementation surface for the target shell defined
@@ -152,6 +155,6 @@ browser or screenshot evidence in this design file; task evidence records GPU-en
 WebGL2 ready and GPU-disabled explicit unavailable fallback separately.
 
 ## Follow-up Brainstorm
-- `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md` defines the next design direction after this first commercial HUD slice.
-- The recommended sequence is command lens first, production pulse second, pixel moment theater after causality and production contracts are stable.
-- Any implementation of production readability should create a new `.pm` task because it likely changes runtime snapshot contract and viewer interaction behavior.
+- `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md` retains the original design exploration; it is not a second current shell/layout authority.
+- Evaluate its command-lens, production-pulse and pixel-moment ideas against the current PRD and the industry-detail target above. Keep unaccepted goals traceable; existing HUD/feed implementation does not prove all brainstorm slices delivered.
+- A future runtime snapshot or interaction change updates the responsible contracts and applicable PR/test evidence under the [development workflow](../../engineering/workflow/source-of-truth.md); Issue/Project tracking is optional and no retired `.pm` task is required.

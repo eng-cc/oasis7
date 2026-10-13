@@ -1,219 +1,189 @@
 ---
 name: oasis7
-description: Public raw Markdown for the oasis7 Local Provider real-play workflow. Use it when you need the current repo-backed commands for downloading a release bundle, starting the local provider bridge, launching gameplay, or running parity smoke without relying on the deleted repo-local skill wrapper.
+description: Public raw Markdown for the oasis7 Local Provider real-play workflow. Use it to choose the Rust-direct LetAI preset, a legacy provider diagnostic, or a release-bundle launcher path, and to run scoped parity smoke.
 ---
 
 # Oasis7
 
 ## Overview
 
-`oasis7` is the public raw workflow for running a real Local Provider-backed oasis7 session.
-Use it for bundle-first试玩、repo-backed bridge/bootstrap、`player_parity` vs `headless_agent` execution lanes, and first-line debugging of the local `provider_loopback_http` path.
+`oasis7` is the public, repo-backed workflow for Local Provider gameplay. This
+copy is self-contained and does not require the deleted private skill wrapper.
+Choose one entry path before installing components or probing services; the
+Rust-direct default does not use the legacy Gateway or runtime-agent workspace.
 
-This public copy is intentionally self-contained.
-It does not depend on any private repo-local skill bundle, and all commands below are repo-native commands that remain valid after that internal helper surface is removed.
+These are operating instructions, not evidence that a fresh machine, a release
+bundle, or a real provider has passed acceptance. Match commands to the source
+revision or installed bundle being tested and record the actual result.
 
 ## When To Use
 
-Use this skill when the task involves any of these:
-
-- Configure a real Local Provider gameplay run instead of mock provider tests
-- Download a playable oasis7 release bundle
-- Install or refresh the lightweight Local Provider runtime agent
-- Start or debug `oasis7_provider_local_bridge`
-- Launch `oasis7_game_launcher` in `provider_loopback_http` mode
-- Run `P0-001` parity smoke and inspect Local Provider failures
-- Explain current Local Provider execution-lane or chain-runtime safety boundaries
-
-Do not use this skill for:
-
-- Generic LLM provider work unrelated to Local Provider
-- Editing third-party Local Provider source under `third_party/`
-- Viewer-only styling work with no Local Provider runtime involvement
+Use this skill to configure real Local Provider gameplay, start or diagnose
+`oasis7_provider_local_bridge`, launch `oasis7_game_launcher`, or run `P0-001`
+parity smoke. Do not use it for unrelated provider work, changes to read-only
+`third_party/` code, or Viewer-only styling.
 
 ## Execution Lanes
 
-Read `oasis7` with one product rule in mind: Local Provider real-play can run without a Viewer.
+Local Provider real-play can run without a Viewer:
 
-- `headless_agent`: default for smoke, CI, servers, low-spec machines, and no-UI regression
-- `player_parity`: use when producer/QA wants a player-feel run
+- `headless_agent`: smoke, CI, servers, low-spec machines, and no-UI regression.
+- `player_parity`: player-feel runs for producers and QA.
 
-The Viewer is optional and is not the authority execution path.
+The Viewer is optional and is not the authority execution path. A headless pass
+does not prove graphical interaction or parity between the two lanes.
 
 ## Core Workflow
 
-### 1. Verify local prerequisites
+### 1. Choose the entry path and its prerequisites
 
-Check these first:
+| Entry | Use it for | Required prerequisites | Not a prerequisite |
+| --- | --- | --- | --- |
+| Rust-direct LetAI preset | Normal local real-play from a source checkout / compatible existing build | Repo scripts, usable build or build toolchain, authorized LetAI configuration, available local ports | Provider CLI, `127.0.0.1:18789`, `setup-provider-oasis7-runtime.sh` |
+| Legacy CLI diagnostics | Explicit compatibility investigation | The selected CLI/adapter and its own configuration; see section 4 | A Gateway or installed runtime-agent workspace unless that selected CLI actually consumes them |
+| Release-bundle launcher | Inspect an installed bundle's launcher wiring | A compatible bundle containing `run-game.sh`, plus a separately configured and healthy provider bridge | Repo build tooling merely to invoke `run-game.sh`; a bundle does not itself prove that the bridge/preset is installed |
 
-- the provider CLI configured by `OASIS7_PROVIDER_CLI_BIN` is callable
-- Local Provider Gateway is live on `127.0.0.1:18789`
-- the oasis7 bridge is or can be made available on `127.0.0.1:5841`
-- `cargo` is required for repo-backed bridge startup, source-tree launch, and direct smoke
-- cargo commands use `env -u RUSTC_WRAPPER cargo ...`
+Use `cargo` only when the selected repo-backed path builds/runs from source.
+Canonical Cargo commands use `env -u RUSTC_WRAPPER cargo ...`; follow the repo's
+development wrapper and target preparation rules for local compilation.
+The normal local preset uses `48420/48421/48422`; manual bridge examples below
+use `127.0.0.1:5841`. Use the selected entry's actual ready output when probing.
 
-Useful probes:
+### 2. Start Local LetAI Real-Play
 
-```bash
-provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-openclaw}"
-"$provider_cli_bin" --version
-curl -sS http://127.0.0.1:18789/health
-```
-
-### 2. Download a playable release bundle
-
-Use the release bundle as the default operator entry:
-
-```bash
-release_tag="${OASIS7_RELEASE_TAG:-latest}"
-platform="${OASIS7_RELEASE_PLATFORM:-linux-x64}"
-download_dir="${OASIS7_RELEASE_DIR:-$HOME/.cache/oasis7/releases/$release_tag/$platform}"
-mkdir -p "$download_dir"
-echo "Download the ${platform} installer asset for tag ${release_tag} from:"
-echo "https://github.com/eng-cc/oasis7/releases"
-echo "Then extract/install it so you have a bundle directory containing run-game.sh."
-echo "Recommended bundle dir: $download_dir/bundle"
-```
-
-Current public distribution truth:
-
-- release assets come from `eng-cc/oasis7` GitHub Releases
-- the usable bundle must contain `run-game.sh`
-- bundle-first is the preferred operator path when you do not want repo-local bootstrap logic
-
-### 3. Install the lightweight runtime agent
-
-For real gameplay or parity, prefer the repo-owned lightweight agent instead of the user’s default Local Provider workspace.
-
-```bash
-bash scripts/setup-provider-oasis7-runtime.sh
-```
-
-Defaults:
-
-- agent id: `oasis7_provider_agent`
-- workspace: `tools/provider/oasis7_provider_workspace`
-- model: `custom-right-codes/gpt-5.4`
-
-### 4. Start Local LetAI Real-Play
-
-For normal local real LetAI gameplay, always start from the one-command wrapper:
+For normal local real LetAI gameplay, start with the one-command preset:
 
 ```bash
 ./scripts/run-local-letai-game-test.sh --local-world-playtest
 ```
 
-Use this wrapper for every local real-play run unless you are deliberately doing
-low-level diagnostics. The preset normalizes platform credentials into a
-temporary project token config, forwards auto-topup and platform user/key
-environment, starts the Rust direct LetAI provider bridge, launches the local
-runtime/viewer/local-standalone-chain stack, and reserves the daily playtest
-ports `48420/48421/48422`. It does not connect to formal/public testnet.
+The preset normalizes platform credentials into a temporary project token
+config, forwards platform user/key and auto-topup configuration, starts the
+Rust-direct LetAI provider bridge, and launches the runtime/Viewer/local
+standalone chain stack. It does not connect to formal/public testnet. This
+path depends on the checkout/build and provider configuration being available;
+these instructions do not certify unattended cold-start on a clean machine.
 
-Directly running `oasis7_provider_local_bridge`, `oasis7_game_launcher`, or an
-already-built binary is not the canonical local playtest path. If you do that
-for debugging, you must manually mirror the wrapper's LetAI token,
-`OASIS7_REMOTE_LLM_PLATFORM_KEY`, `OASIS7_REMOTE_LLM_PLATFORM_USER_ID`, and
-`OASIS7_REMOTE_LLM_AUTO_TOPUP_USD` environment; otherwise auto-topup, token
-binding, or provider-backed behavior may differ from the real local flow.
-
-Pass extra launcher flags after `--` only for low-level diagnostics:
+Pass extra launcher flags after `--` only for diagnostics:
 
 ```bash
 ./scripts/run-local-letai-game-test.sh --local-world-playtest -- --viewer-port 4174 --json-ready
+./scripts/run-local-letai-game-test.sh --help-all
 ```
 
-Use `./scripts/run-local-letai-game-test.sh --help-all` to see the full
-advanced/debug option list.
+Direct bridge/launcher binaries are not substitutes for this preset's token,
+platform identity, auto-topup, and local-world setup. Manual runs must preserve
+the applicable configuration instead of assuming equivalent behavior.
 
-### 5. Start the bridge manually for diagnostics
+### 3. Credentials, billing, and manual Rust-direct bridge diagnostics
 
-Run the local bridge that exposes world-simulator provider endpoints:
+Prefer an explicit `OASIS7_LETAI_CONFIG_PATH` for the authorized local config.
+The wrapper also has local fallback locations and token-config inputs; inspect
+the selected revision's wrapper for precedence rather than copying another
+operator's private filesystem paths.
 
-```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-agent oasis7_provider_agent
-```
+A project `token_key` / `api_key` authorizes inference. A platform management
+`Key` is not that project token; a documentation `Doc` URL is not a model
+endpoint. When only platform credentials are available, use the preset or
+`ensure-letai-local-token-config.sh` to normalize them first. Generated token
+files such as `letai-local-token.env` are secrets: never attach them to public
+PRs, evidence, screenshots, or logs.
 
-For no-quota/no-billing local plumbing tests, start the deterministic mock bridge
-instead. It exposes the same loopback HTTP contract, does not call provider CLI
-or an LLM, and must not be used as real LLM/playability evidence:
+Real provider calls can incur charges. The local Rust bridge defaults to an
+`--auto-topup-usd` amount of `0.1`; on `insufficient_user_quota` it can top up
+once per quota-failed chat request, followed by bounded delayed retries. This
+requires both `OASIS7_REMOTE_LLM_PLATFORM_KEY` and
+`OASIS7_REMOTE_LLM_PLATFORM_USER_ID`; otherwise the quota error remains visible.
+Confirm the authorized budget and resolved auto-topup setting before real calls.
 
-```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --mode mock
-```
-
-For direct builtin-LLM local runs, `with-letai-llm-config.sh` only works with a
-config that already contains a chat-completions/Responses-compatible
-`token_key` / `api_key`. Do not point this direct wrapper at a platform-only
-`Key` file and expect inference to work:
-
-```bash
-./scripts/with-letai-llm-config.sh -- ./scripts/check-active-llm-provider.sh --pretty
-./scripts/with-letai-llm-config.sh -- ./scripts/run-launcher-stack.sh --agent-decision-source builtin_llm
-```
-
-If the local file only contains a documentation `Doc` URL plus a management
-platform `Key`, use `run-local-letai-game-test.sh` or
-`ensure-letai-local-token-config.sh` so the platform key is normalized into a
-temporary project token config first. The doc URL is not used as the model
-endpoint, and generated `letai-local-token.env` files are secrets.
-
-LetAI's provider bridge path uses chat completions, not the builtin OpenAI
-Responses preflight. For low-level bridge plumbing, start a local real provider
-bridge in another terminal or in the background, then validate it with the
-provider contract smoke. The game still connects to `http://127.0.0.1:5841`;
-the bridge process runs in the foreground and calls LetAI upstream through the
-default Rust direct adapter:
+For a deliberate low-level bridge diagnostic:
 
 ```bash
 ./scripts/run-local-letai-provider-bridge.sh
-# In another terminal, or after backgrounding the bridge:
+# In another terminal; use the actual bind address if overridden:
 ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh --base-url http://127.0.0.1:5841
 ./scripts/run-launcher-stack.sh --agent-provider-lane local
 ```
 
-`./scripts/check-letai-chat-completions.sh` remains available for legacy Python
-adapter compatibility diagnostics or token-only comparison, but it is not the
-normal local gameplay preflight.
+The default backend is `rust-direct-letai`. It calls LetAI's chat-completions
+API, not the builtin OpenAI Responses preflight. It does not require a provider
+CLI, local Gateway, or runtime-agent installation. The bridge runs in the
+foreground; the game connects to the loopback bridge, not directly to a Gateway.
 
-The wrapper prefers `OASIS7_LETAI_CONFIG_PATH`, then
-`/Users/scc/Documents/keys/letai.txt`, then `OASIS7_LETAI_TOKEN_CONFIG_PATH` or
-`/Users/scc/Documents/keys/letai-token-local.txt`. A generated token config must
-contain a real project `token_key`; the platform `Key` from `letai.txt` is only
-for management APIs and dynamic token provisioning.
-
-By default the wrapper keeps `OASIS7_RUNTIME_AGENT_CHAT_ECHO` disabled so local
-playtest follows the real provider-backed path. Use `--chat-echo` only for
-low-level receipt/debug checks where it is acceptable to show a
-`[local-mock-receipt]` message instead of a real Agent reply.
-
-For local real-provider runs, the LetAI wrapper can automatically top up quota
-when the upstream returns `insufficient_user_quota`. The local Rust bridge
-defaults to `--auto-topup-usd 0.1`. This is paid real-provider behavior: the
-bridge may top up once per quota-failed chat request, then use bounded delayed
-retries so LetAI's balance update can become visible. The top-up only runs when
-the environment also provides `OASIS7_REMOTE_LLM_PLATFORM_KEY` and
-`OASIS7_REMOTE_LLM_PLATFORM_USER_ID`; otherwise quota errors remain visible.
-Do not attach generated token config files such as `letai-local-token.env` to
-public evidence or logs.
-
-Expected local provider URL:
-
-- `http://127.0.0.1:5841`
-
-Health probes:
+Inspect the manual bridge with:
 
 ```bash
 curl -sS http://127.0.0.1:5841/v1/provider/info | jq .
 curl -sS http://127.0.0.1:5841/v1/provider/health | jq .
 ```
 
-### 6. Advanced manual launcher path
+For builtin-LLM diagnostics only, the direct config wrapper requires a config
+that already contains an inference-compatible project token:
 
-For normal local real LetAI gameplay, use `./scripts/run-local-letai-game-test.sh`
-above. The commands below are lower-level manual launcher paths for operators
-who have already started and verified the local provider bridge and need to
-debug source or bundle launcher wiring directly.
+```bash
+./scripts/with-letai-llm-config.sh -- ./scripts/check-active-llm-provider.sh --pretty
+./scripts/with-letai-llm-config.sh -- ./scripts/run-launcher-stack.sh --agent-decision-source builtin_llm
+```
+
+Do not point that direct wrapper at a platform-only `Key` file. When bypassing
+the preset, preserve its project token and the applicable
+`OASIS7_REMOTE_LLM_PLATFORM_KEY`, `OASIS7_REMOTE_LLM_PLATFORM_USER_ID`, and
+`OASIS7_REMOTE_LLM_AUTO_TOPUP_USD` values without exposing them.
+
+The preset leaves `OASIS7_RUNTIME_AGENT_CHAT_ECHO` disabled. `--chat-echo` is a
+receipt/debug option only: a `[local-mock-receipt]` reply is not a real Agent reply.
+
+### 4. Legacy provider diagnostics: select the actual adapter
+
+**LetAI Python adapter compatibility** uses this explicit branch:
+
+```bash
+./scripts/run-local-letai-provider-bridge.sh --provider-backend legacy-cli
+```
+
+That script selects `scripts/provider-remote-https/letai_provider_cli.py` and
+LetAI configuration. It does not turn `127.0.0.1:18789` or an OpenClaw workspace
+into prerequisites. `./scripts/check-letai-chat-completions.sh` is available for
+this adapter/token-only comparison, not the normal real-play preflight.
+
+**Gateway-backed provider CLI compatibility** is a different diagnostic path.
+Only when the selected CLI actually uses the local Gateway and agent workspace,
+check/install those components:
+
+```bash
+provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-openclaw}"
+"$provider_cli_bin" --version
+curl -sS http://127.0.0.1:18789/health
+bash scripts/setup-provider-oasis7-runtime.sh
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-agent oasis7_provider_agent
+```
+
+The repo-owned lightweight agent defaults are `oasis7_provider_agent`, workspace
+`tools/provider/oasis7_provider_workspace`, and model `custom-right-codes/gpt-5.4`.
+Prefer that isolated workspace to the user's default workspace for this legacy
+route. Match CLI selection to the actual bridge configuration. Gateway health
+only diagnoses this route; it is not a general Rust-direct readiness gate.
+
+For no-quota/no-billing plumbing tests, use the deterministic mock instead:
+
+```bash
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --mode mock
+```
+
+The mock exposes the loopback HTTP contract without calling a provider CLI or
+LLM. It cannot supply real LLM, gameplay, or player-parity evidence.
+
+### 5. Release bundle and advanced manual launcher path
+
+For bundle-first operators, obtain the installer asset for the intended tag and
+platform from `https://github.com/eng-cc/oasis7/releases`, then install/extract it.
+Verify that the chosen bundle contains `run-game.sh`. Do not treat `latest`, an
+asset name, or these instructions as proof of a usable build for every platform.
+The bundle is an alternative launcher entry, not a prerequisite of section 2.
+
+Start and verify the selected provider bridge separately before these manual
+launcher diagnostics. Preserve the preset's applicable credential and billing
+configuration; repo bridge/smoke scripts are not implied to be in the bundle.
 
 Repo source path:
 
@@ -241,16 +211,13 @@ Release bundle path:
   --agent-execution-lane player_parity
 ```
 
-Required real-play settings:
+Use the bridge's actual URL if overridden. The manual examples use
+`provider_loopback_http`, a `15000` ms connect timeout, and profile
+`oasis7_p0_low_freq_npc`; confirm support in the selected source/bundle.
 
-- `agent_provider_mode=provider_loopback_http`
-- `agent_provider_url=http://127.0.0.1:5841`
-- `agent_provider_connect_timeout_ms=15000`
-- `agent_provider_profile=oasis7_p0_low_freq_npc`
+### 6. Run scoped parity smoke
 
-### 5.1 Choose execution lane
-
-Default no-UI regression lane:
+The no-UI regression lane is:
 
 ```bash
 bash scripts/provider-parity-p0.sh \
@@ -264,88 +231,65 @@ bash scripts/provider-parity-p0.sh \
   --execution-mode headless_agent
 ```
 
-Player-feel / producer / QA run from source tree:
+The `P0-001` sample target is `status=passed`, `goal_completed=true`, and
+`invalid_action_count=0`. Record the tested source/build/Skill, selected provider
+backend, execution lane, environment, actual artifacts, and uncovered scope.
+A passing sample is not full builtin/Local Provider parity, a graphical player
+run, or a release go decision. Missing prerequisites remain blocked/unknown;
+legacy results do not certify a new candidate. Gameplay self-test requirements
+remain in `doc/testing/manual/agent-runtime-self-playtest.manual.md`.
 
-```bash
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_game_launcher -- \
-  --scenario llm_bootstrap \
-  --with-llm \
-  --agent-provider-mode provider_loopback_http \
-  --agent-provider-url http://127.0.0.1:5841 \
-  --agent-provider-connect-timeout-ms 15000 \
-  --agent-provider-profile oasis7_p0_low_freq_npc \
-  --agent-execution-lane player_parity
-```
+### 7. Chain key safety
 
-### 5.2 Chain Key Safety
+Outside the local preset, manual Local Provider launchers use their configured
+chain startup path unless `--chain-disable` is explicitly selected. Confirm the
+actual profile before starting; prefer disposable local trial state and do not
+connect a diagnostic run to a formal/public network unintentionally.
 
-Current Local Provider real-play still uses the product default chain startup path unless you explicitly pass `--chain-disable`.
-That means:
-
-- node private key is sensitive and must never be written to git, issues, devlogs, screenshots, shared shell history, or CI logs
-- node public key is not secret, but it is still environment identity material and should be labeled by environment
-- local trial runs should prefer disposable `chain storage profile` state
-
-### 6. Run parity smoke
-
-Use this as the fastest real verification path:
-
-```bash
-bash scripts/provider-parity-p0.sh \
-  --provider-only \
-  --samples 1 \
-  --ticks 4 \
-  --timeout-ms 15000 \
-  --agent-provider-url http://127.0.0.1:5841 \
-  --agent-provider-connect-timeout-ms 15000 \
-  --agent-provider-profile oasis7_p0_low_freq_npc \
-  --execution-mode headless_agent
-```
-
-Primary success target today:
-
-- `P0-001`
-- `status=passed`
-- `goal_completed=true`
-- `invalid_action_count=0`
+Node private keys must never enter Git, issues, evidence, screenshots, shared
+shell history, or CI logs. Public keys are environment identity material, not
+secrets; label them by environment. Preserve recovery and cleanup boundaries for
+the selected chain storage profile.
 
 ## Debug Checklist
 
-If the run fails, inspect in this order:
+First identify the route, source/build, configured backend, and actual bind URL.
+Then inspect the applicable branch:
 
-1. Gateway health: `http://127.0.0.1:18789/health`
-2. Bridge health: `http://127.0.0.1:5841/v1/provider/health`
-3. Wrong provider mode or missing profile
-4. Bundle missing `run-game.sh` or wrong extracted directory
-5. Runtime agent not installed with `bash scripts/setup-provider-oasis7-runtime.sh`
-6. Parity artifacts under `output/provider_parity/*`
+1. **Rust-direct preset:** inspect preset readiness/errors, resolved sanitized
+   configuration, bridge `/v1/provider/info` and `/v1/provider/health`, then
+   inference-token, upstream quota, and billing errors. Do not install or probe
+   the legacy Gateway as a repair for this route.
+2. **Legacy CLI:** inspect the selected adapter and its configuration. Probe
+   `127.0.0.1:18789/health` and check the runtime-agent installation only for a
+   Gateway/workspace-backed CLI, not the LetAI Python adapter.
+3. **Manual bundle/launcher:** verify `run-game.sh` / executable identity,
+   provider mode, URL, profile, timeout, and the separately started bridge.
+4. **Parity:** inspect `output/provider_parity/*`, exit status, lane, and actual
+   world/receipt results; retain failed attempts and distinguish mock output.
 
-Current known reality:
-
-- correctness is largely working for `P0-001`
-- builtin/Local Provider parity is still not the final fully-passed public claim boundary
-- `headless_agent` is the regression lane; `player_parity` is the player-feel lane
-- `agent_chat` and `prompt_control` are still not end-to-end player-authority paths in current Local Provider mode
+No health probe alone proves player authority, `agent_chat`, `prompt_control`,
+end-to-end playability, or a fresh acceptance window. Use the current dual-mode
+contract and matching evidence to decide what the tested candidate proves.
+Changing the onboarding route does not establish `agent_chat` or `prompt_control`
+as end-to-end player-authority paths or lift their existing contract limitations.
 
 ## Repo Anchors
 
-Use these files as the source of truth:
-
-- bridge entry: `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`
-- launcher entry: `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-- runtime workspace installer: `scripts/setup-provider-oasis7-runtime.sh`
-- parity harness: `scripts/provider-parity-p0.sh`
-- runtime workspace policy: `tools/provider/oasis7_provider_workspace/AGENTS.md`
-- module tracker: GitHub task issue evidence comments
-- dual-mode contract/verdict: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` and `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`
-- parity rollout verdict: `doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md`
+- Normal local preset: `scripts/run-local-letai-game-test.sh`.
+- Rust-direct / legacy adapter selection: `scripts/run-local-letai-provider-bridge.sh`.
+- Bridge: `crates/oasis7/src/bin/oasis7_provider_local_bridge.rs`.
+- Launcher: `crates/oasis7/src/bin/oasis7_game_launcher.rs`.
+- Legacy workspace installer/policy: `scripts/setup-provider-oasis7-runtime.sh` and `tools/provider/oasis7_provider_workspace/AGENTS.md`.
+- Parity harness: `scripts/provider-parity-p0.sh`.
+- Dual-mode contract/verdict: `doc/world-simulator/llm/provider-agent-dual-mode.prd.md` and `doc/world-simulator/llm/provider-agent-dual-mode-contract.md`.
+- Historical parity provenance: `doc/testing/provider-agent-parity-p0-t4-closure-2026-03-17.md`; not a current candidate's verdict.
+- Delivery facts: the applicable PR, actual CI/review and test records; Issue/Project tracking is optional under the repository workflow.
 
 ## Output Expectations
 
-When using this skill:
-
-- prefer exact commands over abstract advice
-- state which process provides `127.0.0.1:18789` and which provides `127.0.0.1:5841`
-- distinguish runtime agent workspace/profile from repo documentation surfaces
-- distinguish downloaded release bundle from repo-backed bridge/smoke tooling
-- distinguish deterministic `provider_local_mock` evidence from real `provider_local_bridge` LLM evidence
+Give exact commands for the chosen route. State which process supplies each
+actual port; mention `18789` only when the selected legacy route consumes it.
+Distinguish source builds from bundles, workspace/profile from documentation,
+mock from real LLM evidence, and a bounded smoke from current gameplay/release
+acceptance. Never expose credentials or turn unknown results into PASS.
