@@ -49,6 +49,21 @@ pub struct PreparedJob {
 }
 
 impl PreparedJob {
+    /// Bind the actual IPC request and release read by the caller before sending.
+    pub fn submission_identity(
+        &self,
+        installation: &InstallationConfig,
+    ) -> Result<String, SignerError> {
+        Ok(crate::identity::sha256_hex(
+            &crate::identity::canonical_json(&(
+                &installation.installation_id,
+                &installation.deployment_id,
+                &installation.release_id,
+                self.ipc_request(),
+            ))?,
+        ))
+    }
+
     pub fn ipc_request(&self) -> IpcRequest {
         IpcRequest::Sign {
             schema_version: crate::protocol::IPC_SCHEMA.to_owned(),

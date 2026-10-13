@@ -165,23 +165,42 @@ agent-browser --version
 agent-browser doctor --offline --quick --json
 AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer-manual)"
 export AB_SESSION
-cleanup() {
-  local status=$?
-  trap - EXIT INT TERM
-  agent-browser --session "$AB_SESSION" close >/dev/null 2>&1 || true
-  exit "$status"
-}
-trap cleanup EXIT INT TERM
 mkdir -p output/playwright/viewer
+VIEWER_EVIDENCE_DIR="$(mktemp -d "output/playwright/viewer/${AB_SESSION}.XXXXXX")"
+cleanup() {
+  local main_status=$?
+  local close_status=0
+  trap - EXIT INT TERM
+  if agent-browser --session "$AB_SESSION" close >"$VIEWER_EVIDENCE_DIR/close.log" 2>&1; then
+    close_status=0
+  else
+    close_status=$?
+  fi
+  if (( close_status != 0 )); then
+    printf 'cleanup blocker: close_status=%s; see %s/close.log\n' "$close_status" "$VIEWER_EVIDENCE_DIR" >&2
+  fi
+  if ! printf 'main_status=%s\nclose_status=%s\n' "$main_status" "$close_status" >"$VIEWER_EVIDENCE_DIR/cleanup.status"; then
+    printf 'could not write cleanup status\n' >&2
+  fi
+  if (( main_status != 0 )); then
+    exit "$main_status"
+  fi
+  exit "$close_status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
 agent-browser --session "$AB_SESSION" wait --load domcontentloaded
 agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
-agent-browser --session "$AB_SESSION" session info --json | tee output/playwright/viewer/session-info.json
+agent-browser --session "$AB_SESSION" session info --json | tee "$VIEWER_EVIDENCE_DIR/session-info.json"
 agent-browser --session "$AB_SESSION" snapshot -i
-agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)" | tee output/playwright/viewer/state.json
-agent-browser --session "$AB_SESSION" console | tee output/playwright/viewer/console.log
-agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer-web.png
+agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)" | tee "$VIEWER_EVIDENCE_DIR/state.json"
+agent-browser --session "$AB_SESSION" console | tee "$VIEWER_EVIDENCE_DIR/console.log"
+agent-browser --session "$AB_SESSION" screenshot "$VIEWER_EVIDENCE_DIR/viewer-web.png"
 ```
+
+本次采样失败保留原退出码；采样成功而 close 失败则返回 close 的非零码。`close.log` 与 `cleanup.status` 保存主动作和收尾诊断，close 失败标为 cleanup blocker；非零只证明关闭命令失败，不能单凭它断言进程仍活着。只关闭本次 session，不全局清理或无界重试。
 
 ## 推荐回归脚本
 - 主入口 contract：
@@ -198,6 +217,9 @@ agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer
 ```
 
 ## 最小通过标准
+
+本节只描述本次选定 surface 的最小采样。按 [S6 renderer/目的分流](../../../testing-manual.md#testing-software-renderer-scope)记录实际 renderer、renderMode 与验证目标；软件 viewer/compat DOM 通过不代签 Bevy/WASM/GPU、完整视觉、producer 或发布可玩性。真实图形 fatal 仍阻断受影响范围。
+
 - `snapshot -i` 可见交互树，主视区正常加载。
 - `state.json` 中 `renderMode=viewer`（compat 专项可接受 `software_safe` alias）。
 - `connectionStatus=connected`，或页面显式返回可追溯 blocker。

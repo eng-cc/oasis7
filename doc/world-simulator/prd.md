@@ -36,7 +36,16 @@
 
 后续若改变该字段的结算作用，须明确付款主体、成本符号、拒绝与原子性、事件/replay 和旧消费者兼容方案，并同步需求、设计与相应行为验证。本条补回现有边界，不新增成本生效或资源结算功能。实现解释与验证关系见 [设计条款](design.md#kernel-rule-cost-boundary)。
 
+<a id="runner-metrics-action-window-contract"></a>
+### RunnerMetrics 的动作与统计窗口
+
+`RunnerMetrics.total_actions`、`actions_per_tick` 与 `success_rate` 必须解释 Agent 动作，不能以 journal 事件数冒充动作数。同一动作的 admission、业务结果和后续派生事件只对应一个动作；`ActionAccepted` 的 `accepted_for_gameplay_processing` 不等于最终成功。系统自行产生的事件不增加动作分母或成功分子。
+
+统计按同一世界和受支持 action identity 去重，以权威最终动作结果区分成功/拒绝；等待裁决或结果不可确认的动作不能计成功。动作接受后异步 job 的后续事件不再增加动作数，也不能把动作成功解释为 job 已完成。报告必须说明累计范围或 retained window，并对计数和 tick 分母使用同一范围；恢复、截断或缺终态不能静默重置为全历史统计。
+
+空样本的兼容数值 `0` 不代表测得 0% 成功率；消费者必须能够区分未测、部分窗口与有效测量。现行 numeric wire 尚缺充分的范围/可用性表达时，明确标注统计不可用于验收，实施时同步兼容消费者，不能凭文档假设字段已存在。该目标补齐 [#4575](https://github.com/eng-cc/oasis7/issues/4575) 所承接的 #4478；当前 runtime-live 的事件计数和普通 simulator 的成功率占位均不构成目标完成证据。详见[指标设计与验证](design.md#runner-metrics-action-window-design)。
 ## 接口 / 数据
+
 - PRD 主入口: `doc/world-simulator/prd.md`
 - 文档 landing: `doc/world-simulator/README.md`
 - 设计总览: `doc/world-simulator/design.md`

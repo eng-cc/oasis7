@@ -273,9 +273,26 @@ Observation、memory、goal、capability schema 等大字段以已经验证的 c
 - transport retry 保持 session/turn/request id 和所有 canonical inputs 不变，`transport_attempt` 单独递增；
 - semantic retry 必须递增 `retry_seq`，创建新的 turn/request，并保留对旧 turn/request 的 causal reference；
 - adapter cache/dedupe 以 `provider_invocation_key` 保存终态或稳定 failure；
-- same key/same digest 返回原结果；same request id/different digest 生成 `request_identity_collision`，并使该 turn fail closed；
+- same key/same digest 且结果已确定时返回原逻辑结果/稳定失败；未决 attempt 只按原预算恢复；same request id/different digest 生成 `request_identity_collision`，并使该 turn fail closed；
 - 新 observation、runtime head、profile revision、goal/memory/capability digest 或 budget contract 变化必须开新 turn/request；
 - 不允许再使用 `{session_key}-{timeout}` 作为最终 identity，timeout 变化也不能遮蔽逻辑 request 的其他输入。
+
+<a id="harness-retryable-attempt-design"></a>
+#### Attempt、结果缓存与反馈关联
+
+承接 [PRD 的 retryable attempt 合同](continuous-agent-harness.prd.md#harness-retryable-attempt-outcome)。缓存应分别表达请求身份、未决尝试信息与可重放逻辑结果；下表是内部状态语义，不新增 HTTP wire enum。
+
+| 内部语义 | 写入与读回 | 下次同 identity 请求 |
+| --- | --- | --- |
+| 未决 attempt | 保存已校验请求关联、原预算消耗和有界错误诊断；可计算本次响应摘要，但不得把它当作不可变最终摘要 | 校验全部原 canonical inputs，仅在 retryable 且预算尚余时允许下一个 attempt |
+| 逻辑结果确定 | 合法 Wait/candidate 或稳定失败与其现行 v2 语义摘要一起固定；后续 Runtime receipt 仍是另一条权威结果 | 返回已固定结果；不再次调用上游，若外来结果语义不同则拒绝为 `response_identity_collision` |
+| Harness/Runtime 已终结 | 取消、失效、不可重试或预算耗尽的 disposition 与原请求保持关联 | 不复活原 turn；按既有终态/迟到响应合同处理 |
+
+`provider_error.retryable` 必须结合请求是否仍未决与剩余预算解释。含 retryable 错误的 fallback Wait 不能被误认成正常 Wait 的最终结果；没有 provider error 的合法 Wait 则不能被误认成尚待完成的 attempt。保留 `cognition_response_digest` 的现行 v2 算法及成功碰撞保护，不排除 `provider_error` 字段，也不扩大预算来掩盖错误→成功的恢复路径。
+
+请求关联须能覆盖未决 attempt 到最终结果的演进，不能依赖先冻结暂态错误摘要才能接受后续 feedback。只有匹配的 Runtime feedback 能影响 context/memory/continuation；attempt 错误本身只作诊断。配置反馈持久化时，请求状态、最终结果及关联的更新应按同一持久化边界发布；失败保留可重试的旧状态并给出明确错误，重启不得丢失已确定结果或重置预算。旧持久化 schema 的处理继续服从 §3.2 的显式版本规则，不通过猜测旧摘要重建逻辑结果。
+
+离线验收通过真实 HTTP bridge 与 adapter、隔离 mock invoker：第一次可重试错误，第二次分别返回合法 Wait 和 Act；session/turn/request/request_digest 不变，仅 `transport_attempt` 增长，不能得到 collision/400。另证不可重试和耗尽停止、终态重放无新 invocation、不同成功语义仍碰撞，以及配置持久化后的 attempt 重启和最终反馈关联。这些样例不调用真实 provider。
 
 ### 4.3 C0 request-bound call budget
 
@@ -464,6 +481,25 @@ feedback_partition[(agent_subject, agent_session_id)]
 不进入 prompt；缺口超过 retention boundary 返回 `feedback_sequence_gap`，关闭当前 feedback
 projection 但不按到达时间重排。相同 sequence+digest 是幂等 duplicate；相同 sequence+不同
 digest 是 `feedback_identity_collision`，fail closed。
+
+<a id="harness-feedback-watermark-design"></a>
+### 7.1 摘要容量与 session 序列生命周期
+
+承接 [PRD 的有效 session 水位合同](continuous-agent-harness.prd.md#harness-feedback-session-watermark)。以 `(agent_subject, agent_session_id)` 为相同隔离键，区分三类保留责任：
+
+| 状态 | 淘汰或关闭边界 |
+| --- | --- |
+| bounded `recent`、transcript 与已完成 turn 摘要 | 可依既有容量策略淘汰；不回退连续消费水位、不改变 held，也不授权重放旧反馈 |
+| 仍有效 session 的连续消费水位、必要去重/tombstone、projection 状态 | 跨 turn 保留；不能随 recent partition 或 accepted-request cache 一起清零 |
+| 已关闭 session | 拒绝新 turn，并保留足以识别迟到/重试的关闭事实；释放内容遵守已声明 retention。只有 host 颁发的新 session 才能开始新序列 |
+
+新 turn 的准入、请求反馈关联和 projection 可用性必须在同一个生命周期判断下成立。容量不足以保存新 session 时，保留原有效 session 并拒绝/背压新的准入，或按受支持流程显式关闭选定 projection；不能先成功接纳 turn，再因被淘汰的水位将正常下一 seq 永久 held。关闭结果必须让 host 可区分并停止旧 session 的新工作；重建用新 session 身份，不从“这个 key 当前不存在”推断旧 session 已获重新开始许可。
+
+真正 seq gap 仍进入 bounded held，补齐缺失 seq 后按 Runtime 顺序连续释放；相同 id/seq/digest 的重复不能二次投影，held duplicate 的成功 ACK 只表示已保留该消息，不能伪造已经进入 recent。缺口超 retention 或无法证明原水位时显式关闭 projection，不能接受任意更大的 seq 跳过事实。Runtime 已 ACK 的旧消息可能不再存在于 outbox，容量策略不得依赖它们自动重送。
+
+持久化状态应包含上述连续水位/关闭事实、held 与仍需关联的请求；更新失败不得对外承诺已完成投影。accepted-request cache 可独立有界淘汰，但不能删除仍需反馈的关联或使有效 session 水位归零；无法保留的请求按显式关闭/拒绝处理，不把新请求的正常反馈归为永久未知。重启加载沿现有 schema 兼容边界校验，不能把缺失水位当作 0。
+
+行为回归必须覆盖 A seq1 已 ACK，其他合法 subject/session 累计引发容量压力，再以 A 原 session 新 turn 产生 seq2 并重试。无须假设大量并发 Agent；其他 Agent 依次关闭/开启 session 即可形成该压力。预期只能是 seq2 正确连续投影，或 A 新 turn 在调用 provider 前收到明确关闭/重建结果；同时覆盖重启、真正乱序补洞、duplicate、旧 session 关闭、新 session/跨 Agent 隔离，以及 accepted cache 与摘要独立淘汰。只检查 65 个 partition 的数量或加载成功不能证明该合同。
 
 检查失败的 feedback 只生成 bounded diagnostic (`late_feedback`、`unknown_feedback`、`cross_agent_feedback` 或 `duplicate_feedback`)。它不会进入 prompt、memory、continuation，也不会被全局 recent buffer 复用。多 Agent 交错 fixture 必须验证在相同到达顺序和不同到达顺序下，双方 context 仍只包含自己的反馈。
 

@@ -1,9 +1,29 @@
 use oasis7_command_center_core::codex::*;
+use oasis7_command_center_core::context::*;
 use oasis7_command_center_core::domain::*;
 use oasis7_command_center_core::github::{Check, GitHubSnapshot, PullRequest};
+use oasis7_command_center_core::tools::jobs::ToolJob;
+use oasis7_command_center_core::tools::*;
 use ts_rs::TS;
 fn main() {
     let declarations = [
+        ContextBinding::decl(),
+        ContextEntry::decl(),
+        ContextSummary::decl(),
+        ContextQuery::decl(),
+        ContextSaveRequest::decl(),
+        ContextSnapshotRestoreSource::decl(),
+        ContextRestoreIdentity::decl(),
+        ToolObservation::decl(),
+        FileSignInput::decl(),
+        FileSignPrepared::decl(),
+        FilePrepareRecovery::decl(),
+        FilePrepareEffect::decl(),
+        FilePrepareError::decl(),
+        ToolJob::decl(),
+        oasis7_command_center_core::tools::cli::CliInstallation::decl(),
+        PrivateInputRef::decl(),
+        PrivateInputPreview::decl(),
         Project::decl(),
         SourceStatus::decl(),
         DocumentLifecycle::decl(),
@@ -32,7 +52,10 @@ fn main() {
         "// Generated from Rust DTOs by cargo run -p oasis7-command-center-core --example export_types\n{}\n",
         declarations
             .iter()
-            .map(|s| format!("export {s}"))
+            .map(|s| format!(
+                "export {}",
+                s.lines().map(str::trim_end).collect::<Vec<_>>().join("\n")
+            ))
             .collect::<Vec<_>>()
             .join("\n")
     );

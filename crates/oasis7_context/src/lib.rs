@@ -1,3 +1,4 @@
+pub mod application;
 pub mod cli;
 mod cli_input;
 pub mod config;

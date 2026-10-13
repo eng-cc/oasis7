@@ -246,12 +246,15 @@ oasis7_wasm_router        |
 - `call_wall_ms_buckets`
 
 其中 `router` 至少包括：
-- `prepare_subscriptions_ms_total`
-- `match_filters_ms_total`
+- `prepare_ms_total`
+- `match_ms_total`
 - `regex_compile_ms_total`
 - `prepared_hits`
 - `parse_fallbacks`
-- `match_wall_ms_buckets`
+- `prepare_ms_buckets`
+- `match_ms_buckets`
+
+上述为 `WasmRouterMetricsSnapshot` 当前字段，单位仍为毫秒；旧文中的 `prepare_subscriptions_ms_total`、`match_filters_ms_total`、`match_wall_ms_buckets` 分别是当前 `prepare_ms_total`、`match_ms_total`、`match_ms_buckets` 的历史说明名称，不是并存 JSON 字段或已支持别名。未来 `WasmObservationWindowV1` target 仍按本文目标/现状边界处理；不因此修改 producer、endpoint、互斥 bucket、nearest-rank 或 reset/no-traffic 规则。
 
 ### 5.4 Executor Instrumentation Points
 `oasis7_wasm_executor` 的关键埋点：

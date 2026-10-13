@@ -10,6 +10,7 @@
   - SC-2: 输出 `summary.json`、`summary.md`、截图，并在 gate fail 时返回非零退出。
   - SC-3: 核心指标统计与 gate 判定有 Vitest 覆盖。
   - SC-4: `testing-manual.md` 不再把历史 `viewer-owr4-stress` 作为当前活跃 Viewer 性能入口。
+  - SC-5: 可选 interaction p95 在统计、gate 与 Markdown 中一致区分缺样本和有效 `0 ms`，按下文缺样本合同验收。
 
 ## 范围
 - In scope:
@@ -45,6 +46,18 @@
   - `load_event_ms`
   - `interaction_p95_ms`
 
+### 可选交互指标的缺样本语义
+
+以下为 [#3425 D-G4](https://github.com/eng-cc/oasis7/issues/3425)（原 [#4429](https://github.com/eng-cc/oasis7/issues/4429)）的待实现验收合同；本节补齐不代表实现修复或回归验收已完成。`summarizeViewerPerformance → evaluateViewerPerformance → buildViewerPerformanceMarkdown` 必须保留同一语义，不能在数值转换时把缺失值 `null` 变成 `0`。
+
+| 原始 `interactionLatencies` | `metrics.interactionSamples` / `metrics.interactionP95Ms` | `interaction_p95_ms` gate 的 `actual` / `status` | Markdown 判读 |
+| --- | --- | --- | --- |
+| 缺失或 `[]` | `0` / `null` | `null` / `skip` | 指标和 gate actual 显示未采样或缺值占位，gate 保留 `skip`，不得显示为 `0 ms` 或该项 `pass` |
+| 有效 `[0]` | `1` / `0` | `0` / 按既有阈值判定 | 显示有效 `0 ms` 与相应判定，不得当作缺样本 |
+| 有效非空样本且 p95 超过既有阈值 | 实际样本数 / 实际 p95 | 实际 p95 / `fail` | 显示实际值与失败判定，不得跳过 |
+
+交互延迟仍是 optional 指标；该项 `skip` 本身不使整体报告 `fail`，整体 `pass` 也不能充当已采集交互性能的证据。其他 gate 继续按既有规则判定和聚合；CI 的 report-only 包装与 runtime/source/canvas/fallback、缺失或无效产物的处理保持[性能补测矩阵](performance-coverage-gap-matrix-2026-06-09.md)的现有边界。本合同不新增采样要求、阈值或 blocking gate。
+
 ## 里程碑
 - VCPH-1: 新增当前 `crates/oasis7_viewer` 可执行浏览器性能 probe。
 - VCPH-2: 新增核心指标统计与 gate 判定单测。
@@ -58,6 +71,7 @@
 - Long Task support depends on browser `PerformanceObserver`; missing support should not be treated as a pass for frame timing gates.
 
 ## 验证
+- SC-5 定向回归（待补）：在既有 `crates/oasis7_viewer/software_safe_src/performance_metrics.test.js`（`npm --prefix crates/oasis7_viewer run test:perf-harness`）中，分别用省略输入、`[]`、`[0]` 和超阈值有效样本串联统计、评估与 Markdown，核对上表及 optional `skip` 的整体判定边界。
 - Required narrow checks:
   - `npm --prefix crates/oasis7_viewer run test:ui -- performance_metrics`
   - `./scripts/viewer-performance-probe.sh --profile smoke --duration-ms 1000 --min-frame-samples 20 --min-fps 20`

@@ -9,6 +9,12 @@
 采样、门禁、chaos/feedback 注入和证据归档分层。测试层消费 runtime、
 network、consensus 与 DistFS 的专业合同，不复制或改写这些实现权威。
 
+### 2.1 需求承接与分配表
+
+| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Reward 时间线](p2p-longrun-soak-and-chaos.prd.md#reward-timeline-source-contract) | 原始计数、零分母与缺失值逐列一致 | [导出设计](#reward-timeline-source-design) | QA / reward-runtime 维护者 | 不修改奖励与门禁，不代签真实节点 |
+
 ## 数据流
 
 1. 解析 profile、duration、topology、threshold、chaos 与 feedback 参数，
@@ -56,3 +62,18 @@ network、consensus 与 DistFS 的专业合同，不复制或改写这些实现�
 本设计只定义可重复的测试与证据解释。它不把任何 local/proxy/short-window
 结果升级为生产拓扑、长期 endurance、public-testnet、mainnet 或 release
 就绪，也不把流量注入成功升级为业务服务 SLA。
+
+<a id="reward-timeline-source-design"></a>
+## Reward 时间线导出
+
+采样层将同一 node/time 的 reward 计数传给 exporter，按固定 header 写入 `total_checks`、`failed_checks` 和比率；S10 还传 settlement attempts/failures。正分母用实际计数计算比率，已知 0/0 保留零计数与空比率，缺失指标保留空数值并回链同次 unavailable 告警。CSV 解析须区分空值与 0，不以独立 aggregate/gate 正确为逐行正确的证明。
+
+本节为 exporter 和消费者应共同满足的设计，不声称当前脚本已修复；不改变 reward 计算、结算、累计摘要聚合或既有门禁。验收按列回读 5/0、5/1、0/0、missing 和 S10 8/1 的离线 fixture，不启动节点。
+
+## 11. 验证设计与可追溯性
+
+### 11.1 验证映射表
+
+| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Reward 时间线](p2p-longrun-soak-and-chaos.prd.md#reward-timeline-source-contract) | [导出设计](#reward-timeline-source-design) | 同次样本、header、分母、空值一致 | 候选版本[现有验证入口](../../../testing-manual.md)，补充逐行 5/0、5/1、0/0、missing、S10 8/1 fixture；原有 summary 断言不代签新 exporter 回归 | 实施 PR 的输入、CSV、解析断言与实际退出结果 | 本次文档修订不表示回归已运行，不证明真实长跑或结算 |

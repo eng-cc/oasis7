@@ -369,12 +369,16 @@ Must-pass checks:
 - mobile preserves the same main route as desktop;
 - diagnostics do not dominate Player mode.
 
-Escalate to human or owner review when:
+<a id="visual-review-escalation-design"></a>
+
+Apply the [canonical verdict/confidence table](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract). Only `pass + high` without an independent escalation condition can replace routine human visual review. Escalate to human or owner review when:
 - visual direction, interaction feel, or player screen flow is disputed;
-- model confidence is low;
+- model confidence is `medium` or `low`;
 - screenshot evidence lacks a key viewport;
 - the verdict affects release notes, public claims, or user promises;
-- the same issue remains `watch` after two rounds.
+- the verdict is `watch`, `block`, or `human_escalation`, including the first `watch`.
+
+Record the owner decision and preserve prior cards. Public/release approval, direction decisions, required review, and L5 remain separate obligations; a model visual pass does not fulfill them.
 
 Pixel-world specific blockers:
 - Agent is less visible than Fragment terrain.
@@ -433,3 +437,18 @@ or release-readiness claim.
   marketing identity, or external art-production pipeline.
 - It does not replace `viewer_engineer` feasibility judgment, `qa_engineer`
   release-blocking judgment, or `liveops_community` public messaging ownership.
+
+
+## Visual review traceability
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 四入口 verdict/confidence 一致；首轮 watch、medium/low 及独立条件升级 | [本设计条款](#visual-review-escalation-design) | QA 与视觉 owner；实际截图和自动化摘要由对应执行者提供 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [本设计条款](#visual-review-escalation-design) | 同修订文档对相同证据与 verdict/confidence 给出同一处置 | 按 [SOP 判定表](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)离线审读无截图有 DOM、缺视口、首轮/连续 watch、high/medium/low、block、公开/内部与方向争议 fixture；实际视觉改动另采本候选截图 | 文档 fixture 的条件、预期处置与交叉引用；执行后另留真实截图/card | 本次规则审读不生成浏览器运行、视觉通过或发布证据 |
