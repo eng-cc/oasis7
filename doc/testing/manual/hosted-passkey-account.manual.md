@@ -86,6 +86,8 @@ node scripts/hosted-passkey-world-runtime-smoke.mjs \
 <a id="release-gates"></a>
 ## 迁移、性能与放量
 
+已有 v2 数据后，暂停注册须保留 `OASIS7_HOSTED_IDENTITY_V2_ENABLED=1`，关闭 `OASIS7_HOSTED_ACCOUNT_REGISTRATION_ENABLED`。关闭或遗漏 v2 开关时，当前 launcher 对已存在的显式 SQLite 路径（含无法检查路径的错误）或已配置的 v2 表拒绝启动，不能降回旧邮箱 broker。清除存储配置或运行旧 binary 不受这项启动检查保护，部署仍须隔离旧 writer。
+
 旧 writer 必须实际停止并撤去写权限，生成一致性来源快照，再显式导入和逐条核对账号、因子、player 映射。operator 的 fenced/history 声明不等于外部撤销历史已经恢复。灾备恢复先隔离，对账撤销/恢复终态，再单调提升外部 epoch；旧 RP、旧 signer 或缺历史的 credential 不能因可读备份自动恢复。
 
 两种对外宣称支持的后端分别完成 10,000 账号、30,000 凭证、20 并发、5 次/秒持续十分钟的认证/登记负载，并记录硬件、P95、错误率及隔离限流 profile。不能用 store-only 或 loopback 协议耗时代替完整有效认证。首次用户观察至少 20 人，账号创建和世界等待分开计时。

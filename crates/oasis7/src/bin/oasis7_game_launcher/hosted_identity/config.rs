@@ -12,6 +12,10 @@ pub(crate) struct IdentityConfig {
     pub tablestore: Option<super::store::tablestore::TablestoreConfig>,
     pub trusted_proxy_loopback: bool,
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod config_tests;
 impl IdentityConfig {
     pub fn from_env() -> Result<Option<Self>, String> {
         if env::var("OASIS7_HOSTED_IDENTITY_V2_ENABLED")
@@ -19,6 +23,23 @@ impl IdentityConfig {
             .as_deref()
             != Some("1")
         {
+            const ROLLBACK_BOUNDARY: &str = "identity v2 storage prevents legacy startup; keep identity v2 enabled and close registration instead";
+            if let Some(path) =
+                env::var_os("OASIS7_HOSTED_IDENTITY_SQLITE_PATH").filter(|path| !path.is_empty())
+            {
+                match PathBuf::from(path).try_exists() {
+                    Ok(false) => {}
+                    Ok(true) | Err(_) => return Err(ROLLBACK_BOUNDARY.into()),
+                }
+            }
+            if env::var_os("OASIS7_HOSTED_IDENTITY_TABLE_V2").is_some_and(|table| {
+                table
+                    .to_str()
+                    .map(|value| !value.trim().is_empty())
+                    .unwrap_or(true)
+            }) {
+                return Err(ROLLBACK_BOUNDARY.into());
+            }
             return Ok(None);
         }
         fn required(key: &str) -> Result<String, String> {
