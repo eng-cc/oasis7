@@ -186,8 +186,11 @@ fn run_prepared_world_service_scenario(
         cleanup_after_height,
         drop_first_cleanup_submit,
         cleanup_budget,
-        logistics,
-        false,
+        if logistics {
+            PreparedWorldKind::Logistics
+        } else {
+            PreparedWorldKind::Movement
+        },
         cleanup_admission_delay,
     )
 }
@@ -202,13 +205,17 @@ fn run_prepared_world_service_kind(
     cleanup_after_height: Option<u64>,
     drop_first_cleanup_submit: bool,
     cleanup_budget: Duration,
-    logistics: bool,
-    production: bool,
+    kind: PreparedWorldKind,
     cleanup_admission_delay: Duration,
 ) -> std::path::PathBuf {
     assert!(ready.is_absolute());
     assert!(!ready.exists());
-    let (dir, mut driver, world, owner, owner_public) = if production {
+    let logistics = matches!(kind, PreparedWorldKind::Logistics);
+    let production = matches!(kind, PreparedWorldKind::Production);
+    let starter_chain = matches!(kind, PreparedWorldKind::StarterChain);
+    let (dir, mut driver, world, owner, owner_public) = if starter_chain {
+        production_playtest::fixture_kind(true)
+    } else if production {
         production_playtest::fixture()
     } else if logistics {
         logistics_playtest::fixture()
@@ -222,7 +229,9 @@ fn run_prepared_world_service_kind(
         .unwrap();
     let private = dir.canonicalize().unwrap().join("private-goals");
     let store = PrivateGoalStore::open(&private, [7; 32]).unwrap();
-    let content = if production {
+    let content = if starter_chain {
+        starter_chain_playtest::goal()
+    } else if production {
         production_playtest::goal()
     } else if logistics {
         logistics_playtest::goal()
@@ -443,7 +452,7 @@ fn run_prepared_world_service_kind(
                             std::thread::sleep(cleanup_admission_delay);
                         }
                         bytes.extend(body);
-                        let handled = crate::world_service_api::private_goal::maybe_handle(
+                        let response = crate::world_service_api::private_goal::maybe_handle(
                             &mut stream,
                             &bytes,
                             &node,
@@ -455,8 +464,17 @@ fn run_prepared_world_service_kind(
                             &root.join("store"),
                             &signer,
                             Some(&store),
-                        )
-                        .unwrap();
+                        );
+                        let handled = match response {
+                            Ok(handled) => handled,
+                            Err(error) if error == "private response write failed" => {
+                                // A disconnected peer did not receive an outcome. Keep serving
+                                // so the client can retry its original signed operation.
+                                println!("TASK_PRIVATE_RESPONSE_PEER_DISCONNECTED");
+                                continue;
+                            }
+                            Err(error) => panic!("private handler failed: {error}"),
+                        };
                         if !handled {
                             assert!(
                                 crate::world_service_api::maybe_handle(
@@ -506,6 +524,7 @@ fn run_prepared_world_service_kind(
             let position = pinned.world.state().agents["agent-a"].state.pos;
             if !logistics
                 && !production
+                && !starter_chain
                 && position == oasis7::GeoPos::new(200, 0, 0)
                 && control.active_goal_revision == DecimalU64(1)
                 && goal2_submission.is_none()
@@ -557,7 +576,7 @@ fn run_prepared_world_service_kind(
             let node_snapshot = node.lock().unwrap().snapshot();
             write_public_json(
                 &root.join("task-playtest-witness.json"),
-                &serde_json::json!({"schema":"oasis7/task-prepared-world-witness/v1","commit":pinned.commit,"task_revision":control.task_revision,"goal_revision":control.active_goal_revision,"executor_epoch":control.executor_epoch,"executor_binding":control.executor_binding,"position":position,"logistics":logistics.then(||logistics_playtest::witness(&pinned.world)),"production":production.then(||production_playtest::witness(&pinned.world)),"canonical_effect_receipts":effects,"goal2_public_submission":goal2_submission,"node":{"node_id":node_snapshot.node_id,"running":node_snapshot.running,"tick_count":node_snapshot.tick_count,"last_error":node_snapshot.last_error},"scope":"actual immutable canonical pin; setup owner only changes goals; player actions use native submitted intents"}),
+                &serde_json::json!({"schema":"oasis7/task-prepared-world-witness/v1","commit":pinned.commit,"task_revision":control.task_revision,"goal_revision":control.active_goal_revision,"executor_epoch":control.executor_epoch,"executor_binding":control.executor_binding,"position":position,"logistics":logistics.then(||logistics_playtest::witness(&pinned.world)),"production":production.then(||production_playtest::witness(&pinned.world)),"starter_chain":starter_chain.then(||starter_chain_playtest::witness(&pinned.world)),"canonical_effect_receipts":effects,"goal2_public_submission":goal2_submission,"node":{"node_id":node_snapshot.node_id,"running":node_snapshot.running,"tick_count":node_snapshot.tick_count,"last_error":node_snapshot.last_error},"scope":"actual immutable canonical pin; setup owner only changes goals; player actions use native submitted intents"}),
             );
             std::thread::sleep(Duration::from_millis(250));
         }
@@ -826,3 +845,33 @@ mod logistics_playtest;
 
 #[path = "world_service_task_production_playtest.rs"]
 mod production_playtest;
+
+#[derive(Clone, Copy)]
+enum PreparedWorldKind {
+    Movement,
+    Logistics,
+    Production,
+    StarterChain,
+}
+#[path = "world_service_task_starter_chain_playtest.rs"]
+mod starter_chain_playtest;
+
+pub(super) fn retry_private<T>(
+    mut read: impl FnMut() -> Result<T, oasis7::world_service::client::WorldServiceClientError>,
+    deadline: Instant,
+) -> T {
+    loop {
+        assert!(
+            Instant::now() < deadline,
+            "private original read deadline exhausted"
+        );
+        match read() {
+            Ok(value) => return value,
+            Err(
+                oasis7::world_service::client::WorldServiceClientError::Transport(_)
+                | oasis7::world_service::client::WorldServiceClientError::Cooldown { .. },
+            ) => std::thread::sleep(Duration::from_millis(100)),
+            Err(e) => panic!("private original read failed: {e}"),
+        }
+    }
+}

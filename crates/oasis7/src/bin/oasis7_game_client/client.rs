@@ -1,3 +1,6 @@
+#[path = "client_build.rs"]
+mod client_build;
+
 use oasis7::runtime as crate_action;
 use oasis7::world_service::{
     client::{RemoteWorldServiceClient, WorldServiceClientConfig, WorldServicePort},
@@ -135,6 +138,7 @@ impl Client {
             json!({"api_revision":1,"read_version":view.version(),"logical_tick":view.logical_tick(),
                 "task_control":projection.game_task_control,
                 "proposal_forms":[
+                    {"action_ref":"native.build_factory","arguments":{"site":"authorized ready site ID","factory":"new factory ID","kind":"factory.smelter.mk1|factory.assembler.mk1"},"signed_quote_required":true,"admission_required":true},
                     {"action_ref":"native.move_agent","arguments":{"to":"three signed i64 centimeter coordinates x,y,z"},"admission_required":true},
                     {"action_ref":"native.schedule_recipe","arguments":{"factory":"factory ID","recipe":"exact built-in recipe ID","batches":"positive u32"},"signed_quote_required":true,"admission_required":true},
                     {"action_ref":"native.transfer_material","arguments":{"from":"ledger ID","to":"ledger ID","material":"kind","amount":"positive i64","distance_km":"nonnegative i64","priority":"standard|urgent","routes":"ordered route IDs or direct"},"admission_required":true}
@@ -164,6 +168,12 @@ impl Client {
             "product_profiles",
             "pending_material_transits",
             "pending_recipe_jobs",
+            "pending_factory_builds",
+            "agents",
+            "agent_location_authorities",
+            "location_anchors",
+            "factory_site_authorities",
+            "factory_construction_power_profiles",
             "industry_progress",
         ] {
             fields.insert(
