@@ -5,7 +5,7 @@
 
 **当前判断：项目仍处于受限可玩技术预览。**
 主线是同一持久世界中的首产物、阻塞恢复和回访接续；代码前置持续交付，正式开放与真人闭环尚未验收。
-实际部署继续按已有用户决定暂缓。来源：[公开阶段](../../../README.md#项目状态)、[当前里程碑](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 最新进展](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+正式持久世界仍未开放；2026-10-14 的独立 ECS 技术预览目前只完成部署准备，运行包安装与邀测验收未通过，见[本轮部署记录](../../testing/evidence/ecs-hosted-preview-deploy-2026-10-13.md)。来源：[公开阶段](../../../README.md#项目状态)、[当前里程碑](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 最新进展](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
 | 想了解什么 | 入口 |
 | --- | --- |
@@ -17,6 +17,8 @@
 <a id="cc-status-baseline"></a>
 
 ## 核验基线与覆盖范围
+
+局部环境核验（2026-10-14，仅重置 ECS 技术预览）：固定源 `f69c8a666024fa564e52314965025b019fa42d4c`，已核对空机资源、DNS、HTTPS 维护页、私有服务配置及 SMTP 认证；原生包首次构建被 SIGTERM 终止，同源重试仍待结果。没有恢复原测试网身份、正式 profile、独立故障域或自主首局的新验收；其他环境时点不刷新。[部署记录](../../testing/evidence/ecs-hosted-preview-deploy-2026-10-13.md)
 
 文档局部收敛（2026-10-12，仅 #4363）：以 `main@e01e29064517f4bf375767a19a09802335828249` 核对首局、首次绑定/首聊及持久权威合同，本次变更补齐下文第 1、2 项的目标设计与验收映射。新增目标尚待实现及适用验收；未取得新的部署或真人结果，其他条目的核验时点不变。
 
@@ -72,7 +74,7 @@ Smelter 合法建成 → 铁锭生产 cycle → owner-bound output ledger 实际
 
 已有 manifest、journal/replica、离线 activation verifier、受保护本地工程执行等前置交付。
 正式 initial activation 与普通消费者接线、不完整候选崩溃恢复、独立故障域保留/恢复、旧写者隔离和人工交接仍待完成。
-下一步先在已有代码与验证范围内收口缺口；实际部署暂缓，不能把本地双目录当成独立硬件故障域。
+下一步先在已有代码与验证范围内收口缺口；正式 profile 尚未部署验收，不能把本地双目录当成独立硬件故障域。
 来源：[基础设施当前阶段](../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[#4363 当前剩余条件](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
 2026-10-12 目标设计收敛：[原候选恢复](../../p2p/design.md#des-p2p-original-candidate-recovery-v1) 固定执行前完整材料与原请求重放；[正式权威 v1](../../p2p/design.md#des-p2p-formal-controlled-authority-v1) 和 [epoch 接管](../../p2p/design.md#des-p2p-controlled-epoch-takeover-v1) 明确激活、普通证明消费者及旧写者隔离顺序。下一步按这些主责合同实现与验证；现有工程证明、离线 verifier 和本地双目录仍不足以完成正式开放。
