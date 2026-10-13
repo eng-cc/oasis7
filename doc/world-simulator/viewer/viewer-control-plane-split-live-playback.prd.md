@@ -33,6 +33,46 @@
 - legacy `Control` 仅是兼容桥接；若旧调用方仍向 live handler 发送 seek，handler 只记录并忽略该请求，世界保持单调前进。
 - live 禁止 seek 只适用于 live 服务，不改变非 live 的历史浏览/回放语义。
 
+<a id="playback-step-progress"></a>
+### 离线 Step 的进展与回执
+
+离线 TCP playback 的 `Step` 以本次请求实际写出的 Event 数判断是否 `Advanced`。Seek 后即使
+发出的事件与目标 snapshot 处于同一 tick，或 sequence 小于 Seek 前历史最大值，只要本次确实
+发出事件，就不能报无进展/timeout。Seek 更新后续 Step 的位置基准；`delta_logical_time` 和
+`delta_event_seq` 依真实 Seek 后基准计算，允许 delta 为零，不伪造时间推进以凑出 Advanced。
+completion ACK 保留本次 `request_id`；无事件的 EOF/空 journal 按既有无进展结果返回。
+重复 Seek、过滤器及首次 Step 分别验证。此合同不增加 Web Seek 入口，不改变 live 无 Seek。
+
+<a id="viewer-client-request-lifecycle"></a>
+### 客户端请求、等待和迟到结果
+
+本节承接 [#3425](https://github.com/eng-cc/oasis7/issues/3425) R1–R6 的客户端边界；
+服务器的 PromptControl identity、去重、隐藏和应用 scope 仍由下文定义。
+
+- 每次用户意图绑定原目标、玩家/会话/连接上下文、请求身份与等待阶段。签名/注册中尚未发送
+  的新操作不能被旧 ACK 终结；当前在途操作只能由可关联到它的结果改变 ID、timer、状态和历史。
+- Prompt response 与 error 使用相同相关性校验；带旧 request ID 的错误不改写新请求，
+  包括新请求尚在签名期、旧请求已超时和不同 Agent 的场景。真实当前 error/control_lost
+  仍按安全隐藏规则处理，不能通过忽略全部错误达到“稳定”。
+- AgentChat receipt 先匹配原意图及已发送请求，再结束等待或追加历史。canonical goal 的
+  transport pending 与已提交的 accepted intent 继续按 [Cognition 合同](../../world-runtime/runtime/agent-cognition-lifecycle.design.md)
+  区分；accepted goal 不是 Agent 已执行目标，且不扩大 Prompt profile 的持久化范围。
+- quote 与普通 gameplay action 各自拥有等待状态。quote error 只结束对应 quote，不能清除
+  无关 action 的 ACK timer；展示延迟不是 ACK 截止时间。断连终止旧连接 quote 的本地等待，
+  新连接恢复后可重新报价；同连接普通 snapshot 不取消仍在途报价，旧连接结果不污染新报价。
+- 已接纳的工业报价在消息到达后立即刷新可读结果，不等待下一次 snapshot。普通 snapshot
+  不无条件清空已收到的 `power_survival` 报价；相关输入改变时明确标记 stale/失效，并保留
+  解释。保留报价不表示可执行旧报价，数值与执行资格继续消费[工业资源流合同](../m4/industrial-resource-flow-contract.prd.md)。
+- 注销/释放的异步结果只可清理发起该退出的会话。A 的 release 成功、HTTP 失败或网络失败
+  迟到时，不清除随后登录 B 的 auth/cache/注册/刷新状态；此客户端隔离不改变服务端撤销语义。
+- legacy 缺 `request_id`/seq 的响应不冒充增强相关性：正常、唯一可关联的已发送请求可沿原
+  合同消费；超时重试或代次重叠导致归属不明时保留“结果未知”及权威刷新/恢复路径，不按
+  “同 Agent”强行完成新操作，也不静默升级协议保证。缺字段的诊断不得被猜成某条成功回执。
+
+验收必须走真实 handler→state→panel 的受控时序，先验证旧结果无副作用，再验证当前正确
+ACK/error 仍能完成；只加双击锁、延长超时或执行全套绿色测试不替代这些断言。具体场景与
+接点见[客户端生命周期设计](viewer-control-plane-split-live-playback.design.md#viewer-client-request-lifecycle-design)。
+
 <a id="prompt-control-authority-contract"></a>
 ### PromptControl authority contract
 

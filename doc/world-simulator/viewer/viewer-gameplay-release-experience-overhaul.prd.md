@@ -24,28 +24,13 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 边界已经落地；真实受信 issuer 尚未接入，因此生产环境的 Director 成功进入仍为
 `capability_blocked`。
 
-- **Player shell（默认）**：全舞台世界棋盘、紧凑且只读的权威 HUD、低存在感
-  的边缘 dock，以及按需打开的 contextual console。世界是首屏最大视觉主体。
-- **Director（显式选择）**：仅供操作员/调试使用的模式，可保留密集的三列工具，
-  但只改变可见性和工具密度，不改变玩法语义、进度或回执因果。入口先请求
-  `/api/public/director/capability`，只有服务端返回可验证、短时 grant 才开放；端点
-  当前在无可信 issuer 时明确返回不可用。
-- **Dock 路由**：`World / Targets / Command` 是主路径；`Search` 是 Targets
-  dock 内的 `#entity-search` 兼容过滤能力，`Diagnostics` 为次级路径。
-  Search 只过滤当前权威列表中的可见目标，不执行动作，也不声称提供独立快照查询。
-  选择对象只负责居中、高亮并打开上下文，不能直接执行动作。
-- **Contextual console**：打开后的顺序固定为 primary command/chat、selected
-  context、gameplay details、diagnostics/raw state。它是按需展开的行动/解释层，
-  不是常驻的监控面板。
-- **Fullscreen HUD**：默认 Player 桌面以三个紧凑卡片并列呈现 `Objective`、
-  `Next Move`、`Player Leverage`；移动端将 `Objective` 与 `Player Leverage` 放在
-  第一紧凑行，`Next Move` 放在第二行。`More / Diagnostics` 保持可达的次级入口。
-- **因果与权威**：`Action Receipt` 是唯一的玩家因果反馈面；World Feed v1 是已实现
-  的环境上下文投影，不能暗示玩家成功，也不能替代缺失的 receipt。HUD 只能格式化
-  权威的 commercial/runtime projection，不得合成进度、指标、阻塞、receipt 或动作可行性。
-- **跨屏与可访问性**：桌面、平板、移动端保持同一概念路径；键盘焦点、关闭/
-  `Escape`、CJK 和长文本必须可读且无横向溢出。空、不可用和加载状态必须诚实地
-  给出原因与下一步。
+- **Player shell（默认）**：全舞台世界棋盘、紧凑且只读的权威 HUD、低存在感 的边缘 dock，以及按需打开的 contextual console。世界是首屏最大视觉主体。
+- **Director（显式选择）**：仅供操作员/调试使用的模式，可保留密集的三列工具， 但只改变可见性和工具密度，不改变玩法语义、进度或回执因果。入口先请求 `/api/public/director/capability`，只有服务端返回可验证、短时 grant 才开放；端点 当前在无可信 issuer 时明确返回不可用。
+- **Dock 路由**：`World / Targets / Command` 是主路径；`Search` 是 Targets dock 内的 `#entity-search` 兼容过滤能力，`Diagnostics` 为次级路径。 Search 只过滤当前权威列表中的可见目标，不执行动作，也不声称提供独立快照查询。 选择对象只负责居中、高亮并打开上下文，不能直接执行动作。
+- **Contextual console**：打开后的顺序固定为 primary command/chat、selected context、gameplay details、diagnostics/raw state。它是按需展开的行动/解释层， 不是常驻的监控面板。
+- **Fullscreen HUD**：默认 Player 以一个主导性的 `Next Move` 动作区承载主 CTA 与内联 blocker；`Objective`、`Player Leverage` 和当前 Agent 合为从属上下文区。桌面两区并列， 窄屏先显示 `Next Move`、再显示上下文，DOM 与键盘阅读顺序相容。 `More / Diagnostics` 保持可达的次级入口；不恢复旧三张等权卡片。
+- **因果与权威**：`Action Receipt` 是唯一的玩家因果反馈面；World Feed v1 是已实现 的环境上下文投影，不能暗示玩家成功，也不能替代缺失的 receipt。HUD 只能格式化 权威的 commercial/runtime projection，不得合成进度、指标、阻塞、receipt 或动作可行性。
+- **跨屏与可访问性**：桌面、平板、移动端保持同一概念路径；键盘焦点、关闭/ `Escape`、CJK 和长文本必须可读且无横向溢出。空、不可用和加载状态必须诚实地 给出原因与下一步。
 
 ### Staged implementation boundary
 本轮把目标命名为 **World-native Player**，是当前 fullscreen world-first shell 的渐进升级，
@@ -64,6 +49,22 @@ Player shell、World Feed v1 DTO/anchor，以及 Director 的服务端核验与 
 
 文档决定不是运行时或发行放行证明；每阶段只在对应 owner 的实现、自动化和 headed QA 证据
 齐备后才可宣称完成。
+
+### Shell 局部交互与恢复合同
+
+以下条款承接 [#3425](https://github.com/eng-cc/oasis7/issues/3425) 当前 S3–S5、S7 与 G3，
+补足既有 shell 的可判定边界；它们是实现/验收要求，不是本次文档修改已修复行为的声明。
+
+| 场景 | 必须保持的玩家结果 | 验收边界 |
+| --- | --- | --- |
+| More/Diagnostics → World、Back/Forward，以及 Targets/Command → World | route、受管理 disclosure 的 open/aria、fixed 浮层可见性及焦点同步；回到 World 后舞台可以操作。Escape 先处理实际打开的局部面，IME composition 不被误关。 | 核实际 geometry、computed visibility 和 focus；只核 hash 不足。非受管理的普通 disclosure 不被全局重置。 |
+| 同一 Agent 再次选择 | 更新 selected-object 的最新允许信息，保留该 Agent 未提交的 systemPrompt、shortTermGoal、longTermGoal、dirty 与编辑基准版本；重选不发送请求。 | clean snapshot、成功 Apply 后权威刷新、用户明确 reload、跨对象及 control-lost/stale 各按原合同处理；保留草稿不表示旧授权仍有效。 |
+| Targets 关键词过滤 | 只裁剪当前可见目标列表，世界实体、地点碎片和设施 anchor 继续来自未被关键词裁剪的权威集合。 | 后续 snapshot 仍保持列表/舞台隔离；真实删除和会话可见性仍生效，不用缓存保留已不可见实体。 |
+| Feed 已有事件后收到同 world/epoch/cursor 的 empty 增量页 | 保留当前窗口已展示的事件；可说明没有新事件，不能把整个 Feed/HUD 写成 NO EVENTS。 | 多页 replay 追平、首次真正空 Feed、gap/reorg、unavailable 与 freshness 分别判断；有卡片或收到空页都不自动表示 LIVE。 |
+| WASM 初次获取/初始化失败后页面内 Retry | 对允许重试的失败重新获取并按原 manifest 校验后初始化；成功后可复用，持续失败仍显示真实 unavailable。 | 同一模块实例先 503 后正确 bytes；不靠整页刷新或测试 reset；并发重试仍 single-flight，不绕过完整性校验，不承诺补出 WebGL2 能力。 |
+
+验证复用配对设计的[交互与恢复场景](viewer-gameplay-release-experience-overhaul.design.md#shell-interaction-recovery)；
+每个独立行为只宣称实际覆盖结果，不要求重建旧工作区或重跑所有历史组合。
 
 ### P1-A Agent Context Lite（源码与聚焦自动化已完成；headed 证据部分完成）
 
@@ -88,11 +89,12 @@ Inspector（Agent 之外的 Location、Facility、Territory、Organization、Dep
 - `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx` 的 `PixelWorldCommercialHud`
   继续拥有世界舞台上的 Objective、Next Move、Player Leverage 和唯一 `Action Receipt`。
   Agent Context 不得复制第二个 causal receipt；最多引用该现有回执锚点。
-- 为避免继续扩大 `main.jsx`，P1-A 的 canonical extraction 固定为两个尚不存在的目标源码
+- 为避免继续扩大 `main.jsx`，P1-A 的 canonical extraction 使用两个已存在的源码
   边界：`crates/oasis7_viewer/software_safe_src/viewer_agent_context_display_model.js`
   负责纯 display-model，`crates/oasis7_viewer/software_safe_src/agent_context_lite.jsx`
   负责只接收 display inputs/callbacks 的组件；`InteractionPanel` 只做组合和既有 control
-  boundary 委托，不在组件体内继续堆叠 derivation。它们是实现目标命名，不是当前文件存在声明。
+  boundary 委托，不在组件体内继续堆叠 derivation。文件存在和源码接线只证明实现边界，
+  不单独证明所有浏览器、渲染与可访问性场景已验收。
 
 #### P1-A 可见内容与验收边界
 
@@ -205,20 +207,10 @@ journal identity/source、opaque canonical crisis subtype、显式 freshness/per
 ### Current implementation boundary
 - 当前 Web 保留 focus/right-panel 兼容 hooks，Targets 过滤仍以 `#entity-search`
   为实现入口；它们是实现基线/债务，不是另一个产品模式。
-- 当前 `main` 已交付的 Player shell 是 fullscreen、world-first 的单舞台：世界棋盘
-  覆盖首屏，HUD 以 `Objective / Next Move / Player Leverage` 三张紧凑卡片叠加，
-  `World / Targets / Command` 通过按需 drawer 进入。旧的“左侧/中间/右侧”三栏
-  Player IA 不属于当前默认入口；密集三栏只保留给显式、能力门控的 Director 工具视图，
-  不能与 Player shell 混写。
-- 当前反馈投影仍包括 `player_gameplay.recent_feedback`、本地 gameplay feedback、
-  `last_world_change` 与页面的 Recent Events/Feedback；Action Receipt 继续只读这些
-  因果字段。独立的 `world_feed/v1` 已由 runtime journal → Viewer transport/panel
-  实现，稳定 anchor 为 `#viewer-world-feed`；两类投影不得混用，`receipt_ref` 没有
-  runtime 明确因果身份时保持 `null`，绝不从文本、时间或 delta 推断。
-- Director 的 Viewer state machine、`#viewer-director-entry` / `#viewer-director-exit`
-  anchors、服务端验证入口与 runtime fail-closed 校验已经实现。当前 launcher 端点
-  会返回明确的 `director_capability_unavailable`，因为尚无可信 issuer 能绑定当前
-  `session_epoch`；这属于能力阻断，不是安全边界缺失。
+- 当前 `main` 已交付的 Player shell 是 fullscreen、world-first 的单舞台：世界棋盘 覆盖首屏，HUD 以单一 `Next Move` 主动作区与从属 `Objective / Player Leverage` 上下文区叠加， `World / Targets / Command` 通过按需 drawer 进入。旧的“左侧/中间/右侧”三栏 Player IA 不属于当前默认入口；密集三栏只保留给显式、能力门控的 Director 工具视图， 不能与 Player shell 混写。
+- 2026-10-12 源码核对基准 `5e930face77dd284bbba6186fd997e7e63fa9164`： `pixel_world_host.jsx` 已按主动作、从属上下文组织；`viewer_terminal_shell.css` 的窄屏 规则将它们分别放在第一、第二行；P1-A 的 display-model 与组件文件均存在。历史 “三卡/Next Move 第二行/目标文件尚不存在”由当前语义实现吸收，不能据旧文案倒改布局。 历史 #3624/#3638/#3668 的实际证据按原候选和范围复用；本次源码/文档回读不构成新 S6 验收，未覆盖的 ready renderer、Cinematic、输入或可访问性组合仍须按实际影响记录。
+- 当前反馈投影仍包括 `player_gameplay.recent_feedback`、本地 gameplay feedback、 `last_world_change` 与页面的 Recent Events/Feedback；Action Receipt 继续只读这些 因果字段。独立的 `world_feed/v1` 已由 runtime journal → Viewer transport/panel 实现，稳定 anchor 为 `#viewer-world-feed`；两类投影不得混用，`receipt_ref` 没有 runtime 明确因果身份时保持 `null`，绝不从文本、时间或 delta 推断。
+- Director 的 Viewer state machine、`#viewer-director-entry` / `#viewer-director-exit` anchors、服务端验证入口与 runtime fail-closed 校验已经实现。当前 launcher 端点 会返回明确的 `director_capability_unavailable`，因为尚无可信 issuer 能绑定当前 `session_epoch`；这属于能力阻断，不是安全边界缺失。
 - WebGL2 runtime 已纳入 canonical build/dist。GPU 可用环境有 `ready` 证据；GPU
   不可用或 `canvas.getContext("webgl2")` 失败时，页面明确进入 `Renderer Unavailable`
   状态并保留可诊断原因，不把空白画布当作成功。
@@ -409,6 +401,11 @@ current Recent Events/Feedback fields, which remain separate compatibility proje
 | `kind`, `summary`, `detail` | canonical event presentation fields | ambient context only; text cannot create causality |
 | `receipt_ref` | nullable explicit runtime causal identity (the player-facing receipt link) | current runtime projection emits `null`; render a link only when an explicit identity is supplied; never infer from time/text/delta |
 | `status` | `loading`, `ready`, `empty`, `replay`, `gap`, or `unavailable` | each state has distinct copy and recovery route |
+
+`status=empty` 的增量响应只说明本次页没有事件，不必然说明合并后的 Feed 为空。同一 world/epoch
+且有效连续 cursor 下，消费者先合并/去重，再按保留集合及 replay/recovery 状态决定可见文案；
+`events=[]` 的首次完整空结果才呈现真正空 Feed。gap、reorg 和权限/来源不可用仍走原失效边界，
+不得为了保卡片串接旧世界或旧 epoch。Wire `status` 不改名，HUD 与 panel 消费同一派生状态。
 
 The wire contract serializes `reorg_epoch` and `event_seq` as exact decimal strings
 to prevent JavaScript precision loss. Deserializers accept legacy numeric input for
