@@ -81,6 +81,19 @@
 | 选择自行管理登录密钥的玩家 | 使用受保护的本地密钥，并能加密备份和导入 | 客户端阶段；首次配置、迁移和恢复时 |
 | 测试与运营人员 | 看清注册失败、资格不足、容量不足、凭证丢失的区别 | 测试验收、故障处理与滥用调查时 |
 
+<a id="prd-keyauth-001"></a>
+<a id="prd-keyauth-002"></a>
+<a id="prd-keyauth-003"></a>
+<a id="prd-keyauth-004"></a>
+<a id="prd-keyauth-005"></a>
+<a id="prd-keyauth-006"></a>
+<a id="prd-keyauth-007"></a>
+<a id="prd-keyauth-008"></a>
+<a id="prd-keyauth-009"></a>
+<a id="prd-keyauth-010"></a>
+<a id="prd-keyauth-011"></a>
+<a id="prd-keyauth-012"></a>
+
 ### 2.2 User Stories｜需求索引
 
 | PRD-ID | 用户故事 | 阶段 |

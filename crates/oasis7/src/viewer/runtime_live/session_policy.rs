@@ -37,6 +37,9 @@ impl RuntimeSessionRegistrationPlan {
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub(super) struct RuntimeSessionPolicy {
+    /// Never restore a cached identity authorization from a recovery snapshot.
+    #[serde(skip)]
+    hosted_authorizations: BTreeMap<String, super::super::auth::HostedAuthContextV2>,
     active_pubkey_by_player: BTreeMap<String, String>,
     revoked_pubkeys_by_player: BTreeMap<String, BTreeSet<String>>,
     session_epoch_by_player: BTreeMap<String, u64>,
@@ -100,7 +103,12 @@ impl RuntimeSessionPolicy {
                     player_id, active, public_key
                 ));
             }
-            None => (None, 1),
+            None => (
+                None,
+                self.session_epoch_by_player
+                    .get(player_id)
+                    .map_or(1, |epoch| epoch.saturating_add(1).max(1)),
+            ),
         };
 
         Ok(RuntimeSessionRegistrationPlan {
@@ -163,7 +171,66 @@ impl RuntimeSessionPolicy {
                 ));
             }
         }
+        if super::super::auth::hosted_identity_v2_enabled() {
+            self.validate_hosted_authorization_at(
+                player_id,
+                public_key,
+                super::super::auth::now_unix_ms(),
+            )?;
+        }
         Ok(self.session_epoch(player_id))
+    }
+
+    fn validate_hosted_authorization_at(
+        &self,
+        player: &str,
+        public_key: &str,
+        now: u64,
+    ) -> Result<(), String> {
+        let context = self
+            .hosted_authorizations
+            .get(player)
+            .ok_or("hosted_authorization_required: identity must renew authorization")?;
+        context.validate_at(now)?;
+        if context.player_id != player
+            || context.session_public_key != public_key
+            || context.world_session_epoch != self.session_epoch(player)
+        {
+            return Err("hosted_authorization_binding_mismatch".into());
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_authorization_registration(
+        &self,
+        context: &super::super::auth::HostedAuthContextV2,
+        planned_epoch: u64,
+    ) -> Result<(), String> {
+        context.validate_at(super::super::auth::now_unix_ms())?;
+        if context.world_session_epoch != planned_epoch {
+            return Err("hosted_authorization_world_epoch_mismatch".into());
+        }
+        if let Some(old) = self.hosted_authorizations.get(&context.player_id)
+            && old.session_public_key == context.session_public_key
+            && (old.account_id != context.account_id
+                || old.account_session_id != context.account_session_id
+                || old.device_session_id != context.device_session_id
+                || old.credential_record_id != context.credential_record_id
+                || old.credential_version != context.credential_version
+                || old.account_security_epoch != context.account_security_epoch
+                || old.checked_at > context.checked_at)
+        {
+            return Err("hosted_authorization_renewal_binding_mismatch".into());
+        }
+        Ok(())
+    }
+
+    pub(super) fn commit_hosted_authorization(
+        &mut self,
+        context: super::super::auth::HostedAuthContextV2,
+    ) {
+        self.hosted_authorizations
+            .insert(context.player_id.clone(), context);
     }
 
     pub(super) fn validate_and_consume_director_capability_grant(
@@ -292,11 +359,139 @@ impl RuntimeSessionPolicy {
         Ok(next_epoch)
     }
 
-    fn session_epoch(&self, player_id: &str) -> u64 {
+    pub(super) fn session_epoch(&self, player_id: &str) -> u64 {
         self.session_epoch_by_player
             .get(player_id)
             .copied()
             .unwrap_or(0)
+    }
+}
+
+#[cfg(test)]
+mod hosted_authorization_tests {
+    use super::*;
+    use crate::viewer::auth::test_hosted_authorization_context;
+
+    #[test]
+    fn opened_session_stops_accepting_new_operations_after_identity_deadline() {
+        let context = test_hosted_authorization_context();
+        let mut policy = RuntimeSessionPolicy::default();
+        policy
+            .register_session(&context.player_id, &context.session_public_key)
+            .unwrap();
+        policy.commit_hosted_authorization(context.clone());
+        assert!(
+            policy
+                .validate_hosted_authorization_at(
+                    &context.player_id,
+                    &context.session_public_key,
+                    30_999
+                )
+                .is_ok()
+        );
+        assert!(
+            policy
+                .validate_hosted_authorization_at(
+                    &context.player_id,
+                    &context.session_public_key,
+                    31_000
+                )
+                .is_err()
+        );
+        assert!(
+            policy
+                .validate_hosted_authorization_at(&context.player_id, "another-key", 2_000)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn recovery_does_not_restore_cached_identity_authority() {
+        let context = test_hosted_authorization_context();
+        let mut policy = RuntimeSessionPolicy::default();
+        policy
+            .register_session(&context.player_id, &context.session_public_key)
+            .unwrap();
+        policy.commit_hosted_authorization(context.clone());
+        let bytes = serde_json::to_vec(&policy).unwrap();
+        let restored: RuntimeSessionPolicy = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            restored.active_session_public_key(&context.player_id),
+            Some(context.session_public_key.as_str())
+        );
+        assert!(
+            restored
+                .validate_hosted_authorization_at(
+                    &context.player_id,
+                    &context.session_public_key,
+                    2_000
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn replaced_or_revoked_world_epoch_cannot_reuse_old_identity_authority() {
+        let context = test_hosted_authorization_context();
+        let mut policy = RuntimeSessionPolicy::default();
+        policy
+            .register_session(&context.player_id, &context.session_public_key)
+            .unwrap();
+        policy.commit_hosted_authorization(context.clone());
+        policy.revoke_session(&context.player_id, None).unwrap();
+        assert!(
+            policy
+                .validate_hosted_authorization_at(
+                    &context.player_id,
+                    &context.session_public_key,
+                    2_000
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn renewal_cannot_change_parent_session_or_security_versions_for_existing_key() {
+        let mut context = test_hosted_authorization_context();
+        let now = crate::viewer::auth::now_unix_ms();
+        context.checked_at = now;
+        context.issued_at = now;
+        context.expires_at = now + 30_000;
+        let mut policy = RuntimeSessionPolicy::default();
+        policy
+            .register_session(&context.player_id, &context.session_public_key)
+            .unwrap();
+        policy.commit_hosted_authorization(context.clone());
+        assert!(
+            policy
+                .validate_authorization_registration(&context, 1)
+                .is_ok()
+        );
+        assert!(
+            policy
+                .validate_authorization_registration(&context, 2)
+                .is_err()
+        );
+        for field in [
+            "account_session",
+            "device_session",
+            "credential",
+            "security_epoch",
+        ] {
+            let mut changed = context.clone();
+            match field {
+                "account_session" => changed.account_session_id = "another-session".into(),
+                "device_session" => changed.device_session_id = "another-device-session".into(),
+                "credential" => changed.credential_version += 1,
+                _ => changed.account_security_epoch += 1,
+            }
+            assert!(
+                policy
+                    .validate_authorization_registration(&changed, 1)
+                    .is_err(),
+                "{field}"
+            );
+        }
     }
 }
 
@@ -318,6 +513,15 @@ pub(super) fn session_revoke_metadata_key(
 }
 
 pub(super) fn map_session_policy_error_code(message: &str) -> &'static str {
+    if message.contains("hosted_authorization_expired") {
+        return "hosted_authorization_expired";
+    }
+    if message.contains("hosted_authorization_required") {
+        return "hosted_authorization_required";
+    }
+    if message.contains("hosted_authorization") {
+        return "hosted_authorization_invalid";
+    }
     if message.contains("session_revoked") {
         return "session_revoked";
     }

@@ -1,6 +1,60 @@
 use super::*;
 
 impl ViewerRuntimeLiveServer {
+    pub(super) fn release_hosted_session(
+        &mut self,
+        request: crate::viewer::HostedSessionReleaseRequest,
+    ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
+        if !crate::viewer::hosted_identity_v2_enabled() {
+            return Err(recovery_error(
+                "hosted_identity_v2_required",
+                "hosted release requires identity v2",
+                None,
+                None,
+                None,
+            ));
+        }
+        let context =
+            crate::viewer::auth::verify_hosted_release_grant(&request.authorization_grant)
+                .map_err(|_| {
+                    recovery_error(
+                        "hosted_authorization_invalid",
+                        "hosted release authorization rejected",
+                        None,
+                        None,
+                        None,
+                    )
+                })?;
+        if self
+            .session_policy
+            .active_session_public_key(&context.player_id)
+            != Some(context.session_public_key.as_str())
+            || self.session_policy.session_epoch(&context.player_id) != context.world_session_epoch
+        {
+            return Err(recovery_error(
+                "state_changed",
+                "hosted world control changed",
+                None,
+                Some(context.player_id),
+                None,
+            ));
+        }
+        self.session_policy
+            .validate_authorization_registration(&context, context.world_session_epoch)
+            .map_err(|message| {
+                self.recovery_error_from_session_policy(
+                    message,
+                    context.player_id.clone(),
+                    Some(context.session_public_key.clone()),
+                )
+            })?;
+        self.revoke_session_key(AuthoritativeSessionRevokeRequest {
+            player_id: context.player_id,
+            session_pubkey: Some(context.session_public_key),
+            revoke_reason: "account_world_release".into(),
+            revoked_by: Some("hosted_identity_v2".into()),
+        })
+    }
     #[expect(
         clippy::result_large_err,
         reason = "Recovery protocol errors preserve the stable typed error envelope"
@@ -20,7 +74,7 @@ impl ViewerRuntimeLiveServer {
             ));
         }
 
-        let session_pubkey = request
+        let mut session_pubkey = request
             .session_pubkey
             .as_deref()
             .map(str::trim)
@@ -42,6 +96,16 @@ impl ViewerRuntimeLiveServer {
                 }
             };
             session_epoch = Some(epoch);
+        }
+        if session_pubkey.is_none() && crate::viewer::hosted_identity_v2_enabled() {
+            // Public key/epoch are fencing metadata, never a bearer capability.
+            // Identity's loopback adapter needs the actual CAS version even
+            // after its prior short authorization has expired.
+            session_pubkey = self
+                .session_policy
+                .active_session_public_key(&player_id)
+                .map(str::to_owned);
+            session_epoch = Some(self.session_policy.session_epoch(&player_id));
         }
 
         let cursor = self.current_recovery_cursor().map_err(|err| {

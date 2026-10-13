@@ -84,7 +84,7 @@ export function createViewerHostedAuthStateModule({
   }
 
   function persistHostedPlayerSession(auth) {
-    if (!auth?.available || !auth?.playerId || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
+    if (!auth?.available || !auth?.playerId || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE || auth.source === "hosted_account_cookie") {
       return;
     }
     try {
