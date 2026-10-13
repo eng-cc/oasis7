@@ -14,7 +14,10 @@ pub struct Store {
 }
 impl Store {
     pub fn open(root: &Path) -> Result<Self> {
-        let dir = Directory::open(root)?;
+        Self::open_directory(root, Directory::open(root)?)
+    }
+    /// Open metadata from the original held directory, never reopen its pathname.
+    pub fn open_directory(root: &Path, dir: Directory) -> Result<Self> {
         let config: StoreConfig =
             format::strict_json(&dir.read("context.json", MAX_METADATA_BYTES)?)?;
         config.validate()?;
@@ -36,6 +39,19 @@ impl Store {
         &self.dir
     }
     pub fn init(root: &Path, project: &str, display_name: &str) -> Result<Self> {
+        if root.exists() {
+            Self::init_directory(root, Directory::open(root)?, project, display_name)
+        } else {
+            let parent = root
+                .parent()
+                .ok_or_else(|| ContextError::new("UNSAFE_PATH", "root needs parent"))?;
+            Self::init_in_parent(root, &Directory::open(parent)?, project, display_name)
+        }
+    }
+    fn new_config(root: &Path, project: &str, display_name: &str) -> Result<StoreConfig> {
+        if !root.is_absolute() {
+            return Err(ContextError::new("UNSAFE_PATH", "root must be absolute"));
+        }
         validate_id(project)?;
         let config = StoreConfig {
             schema_version: "oasis7.context_store.v1".into(),
@@ -44,57 +60,115 @@ impl Store {
             name: display_name.into(),
         };
         config.validate()?;
-        if !root.is_absolute() {
-            return Err(ContextError::new("UNSAFE_PATH", "root must be absolute"));
-        }
-        if root.exists() {
-            let d = Directory::open(root)?;
-            match d.read("context.json", MAX_METADATA_BYTES) {
-                Ok(_) => {
-                    let store = Self::open(root)?;
-                    if store.config.project_id != project {
-                        return Err(ContextError::new(
-                            "INVALID_INPUT",
-                            "project differs from existing store",
-                        ));
-                    }
-                    d.create_dir(".context-local")?;
-                    return Ok(store);
+        Ok(config)
+    }
+    pub fn init_directory(
+        root: &Path,
+        dir: Directory,
+        project: &str,
+        display_name: &str,
+    ) -> Result<Self> {
+        Self::init_directory_expected(root, dir, project, display_name, None)
+    }
+    /// `None` means the prepared directory had no store; never adopt one initialized later.
+    pub fn init_directory_frozen(
+        root: &Path,
+        dir: Directory,
+        project: &str,
+        display_name: &str,
+        expected_store_id: Option<&str>,
+    ) -> Result<Self> {
+        Self::init_directory_expected(root, dir, project, display_name, Some(expected_store_id))
+    }
+    fn init_directory_expected(
+        root: &Path,
+        dir: Directory,
+        project: &str,
+        display_name: &str,
+        expected_store_id: Option<Option<&str>>,
+    ) -> Result<Self> {
+        let config = Self::new_config(root, project, display_name)?;
+        match dir.read("context.json", MAX_METADATA_BYTES) {
+            Ok(_) => {
+                let store = Self::open_directory(root, dir)?;
+                if expected_store_id
+                    .is_some_and(|expected| expected != Some(store.config.store_id.as_str()))
+                {
+                    return Err(ContextError::new(
+                        "REVISION_CONFLICT",
+                        "store initialized or changed after preparation",
+                    ));
                 }
-                Err(e) if e.code == "ENTRY_NOT_FOUND" => (),
-                Err(e) => return Err(e),
+                if store.config.project_id != project {
+                    return Err(ContextError::new(
+                        "INVALID_INPUT",
+                        "project differs from existing store",
+                    ));
+                }
+                store.dir.create_dir(".context-local")?;
+                return Ok(store);
             }
-            validate_initialization(&d)?;
-            let _lock = d.lock(0)?;
-            validate_initialization(&d).map_err(|mut e| {
+            Err(e) if e.code == "ENTRY_NOT_FOUND" => (),
+            Err(e) => return Err(e),
+        }
+        if expected_store_id.flatten().is_some() {
+            return Err(ContextError::new(
+                "REVISION_CONFLICT",
+                "prepared store configuration disappeared",
+            ));
+        }
+        validate_initialization(&dir)?;
+        let lock = dir.lock(0)?;
+        validate_initialization(&dir).map_err(|mut e| {
+            e.code = "INIT_INCOMPLETE".into();
+            e.effect = "applied".into();
+            e
+        })?;
+        Self::initialize(&dir, &config).map_err(|mut e| {
+            if e.code != "PERSISTENCE_UNCERTAIN" {
                 e.code = "INIT_INCOMPLETE".into();
                 e.effect = "applied".into();
-                e
-            })?;
-            Self::initialize(&d, &config).map_err(|mut e| {
-                if e.code != "PERSISTENCE_UNCERTAIN" {
-                    e.code = "INIT_INCOMPLETE".into();
-                    e.effect = "applied".into();
-                }
-                e
-            })?;
-            Self::open(root)
-        } else {
-            let parent = root
-                .parent()
-                .ok_or_else(|| ContextError::new("UNSAFE_PATH", "root needs parent"))?;
-            let target = root
-                .file_name()
-                .and_then(|x| x.to_str())
-                .ok_or_else(|| ContextError::new("UNSAFE_PATH", "invalid root filename"))?;
-            let d = Directory::open(parent)?;
-            let stage = format!(".context-stage-{}", crate::fs::random_id());
-            let s = d.create_dir_new(&stage)?;
-            Self::initialize(&s, &config)?;
-            s.sync()?;
-            d.publish_new_directory(&stage, target)?;
-            Self::open(root)
-        }
+            }
+            e
+        })?;
+        drop(lock);
+        Self::open_directory(root, dir)
+    }
+    pub fn init_in_parent(
+        root: &Path,
+        parent: &Directory,
+        project: &str,
+        display_name: &str,
+    ) -> Result<Self> {
+        Self::init_in_parent_with(root, parent, project, display_name, |_, _| Ok(()))
+    }
+    fn init_in_parent_with(
+        root: &Path,
+        parent: &Directory,
+        project: &str,
+        display_name: &str,
+        mut checkpoint: impl FnMut(&str, &Directory) -> Result<()>,
+    ) -> Result<Self> {
+        let config = Self::new_config(root, project, display_name)?;
+        let target = root
+            .file_name()
+            .and_then(|x| x.to_str())
+            .ok_or_else(|| ContextError::new("UNSAFE_PATH", "invalid root filename"))?;
+        let stage = format!(".context-stage-{}", crate::fs::random_id());
+        let dir = parent.create_dir_new(&stage)?;
+        let result = (|| {
+            checkpoint("staged", &dir)?;
+            Self::initialize_with(&dir, &config, |phase| checkpoint(phase, &dir))?;
+            checkpoint("before_sync", &dir)?;
+            dir.sync()?;
+            checkpoint("before_publish", &dir)?;
+            parent.publish_new_directory(&stage, target)?;
+            Self::open_directory(root, dir)
+        })();
+        result.map_err(|mut e: ContextError| {
+            e.effect = "applied".into();
+            e
+        })
     }
     fn initialize(d: &Directory, c: &StoreConfig) -> Result<()> {
         Self::initialize_with(d, c, |_| Ok(()))
@@ -389,7 +463,7 @@ impl Store {
                 Err(_) => warnings.push("invalid local state directory".into()),
             }
         }
-        let history = match crate::git::status(&self.root) {
+        let history = match crate::git::status_pinned(&self.root, self.directory()) {
             Ok(s) => serde_json::to_value(s).unwrap(),
             Err(e) => serde_json::json!({"available":false,"code":e.code}),
         };
@@ -507,6 +581,61 @@ fn validate_initialization(d: &Directory) -> Result<()> {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+    #[test]
+    fn new_initialization_faults_keep_staging_and_report_applied() {
+        for phase in [
+            "staged",
+            "before_configuration",
+            "before_sync",
+            "before_publish",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let parent = Directory::open(temp.path()).unwrap();
+            let target = temp.path().join("new-store");
+            let error =
+                Store::init_in_parent_with(&target, &parent, "test", "Test", |current, _| {
+                    if current == phase {
+                        return Err(std::io::Error::from_raw_os_error(libc::ENOSPC).into());
+                    }
+                    Ok(())
+                })
+                .err()
+                .unwrap();
+            assert_eq!(error.effect, "applied");
+            assert_eq!(error.code, "IO_ERROR");
+            assert!(!target.exists());
+            let stages: Vec<_> = std::fs::read_dir(temp.path())
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .collect();
+            assert_eq!(stages.len(), 1);
+            assert!(
+                stages[0]
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .starts_with(".context-stage-")
+            );
+            if phase == "before_sync" || phase == "before_publish" {
+                assert!(stages[0].join("context.json").is_file());
+            }
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let parent = Directory::open(temp.path()).unwrap();
+        let target = temp.path().join("conflicting-store");
+        let error = Store::init_in_parent_with(&target, &parent, "test", "Test", |phase, _| {
+            if phase == "before_publish" {
+                std::fs::create_dir(&target)?;
+            }
+            Ok(())
+        })
+        .err()
+        .unwrap();
+        assert_eq!(error.effect, "applied");
+        assert_eq!(error.code, "ALREADY_EXISTS");
+        assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+    }
     #[test]
     fn interrupted_initialization_retries_and_preserves_auxiliary_content() {
         let temp = tempfile::tempdir().unwrap();

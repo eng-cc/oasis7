@@ -170,7 +170,30 @@ impl Directory {
         if unsafe { libc::mkdirat(self.file.as_raw_fd(), c.as_ptr(), 0o700) } < 0 {
             return Err(last());
         }
-        self.child(n)
+        self.child(n).map_err(|mut e| {
+            e.effect = "applied".into();
+            e
+        })
+    }
+    /// Observe a single entry relative to this held parent without following links.
+    pub fn contains(&self, n: &str) -> Result<bool> {
+        let n = name(n)?;
+        let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
+        if unsafe {
+            libc::fstatat(
+                self.file.as_raw_fd(),
+                n.as_ptr(),
+                metadata.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        } == 0
+        {
+            return Ok(true);
+        }
+        if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT) {
+            return Ok(false);
+        }
+        Err(last())
     }
     pub fn remove_dir(&self, n: &str) -> Result<()> {
         let n = name(n)?;
@@ -184,6 +207,63 @@ impl Directory {
         let a = self.file.metadata()?;
         let b = other.file.metadata()?;
         Ok(a.dev() == b.dev() && a.ino() == b.ino())
+    }
+    /// Compare held ancestor identities without resolving mutable pathnames.
+    pub fn is_within(&self, ancestor: &Self) -> Result<bool> {
+        let expected = ancestor.identity()?;
+        let mut current = Self {
+            file: self.file.try_clone()?,
+        };
+        loop {
+            let identity = current.identity()?;
+            if identity == expected {
+                return Ok(true);
+            }
+            let fd = unsafe {
+                libc::openat(
+                    current.file.as_raw_fd(),
+                    c"..".as_ptr(),
+                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                )
+            };
+            if fd < 0 {
+                return Err(last());
+            }
+            let parent = Self {
+                file: unsafe { File::from_raw_fd(fd) },
+            };
+            if parent.identity()? == identity {
+                return Ok(false);
+            }
+            current = parent;
+        }
+    }
+    /// Identity of the held directory, independent of later pathname replacement.
+    pub fn identity(&self) -> Result<(u64, u64)> {
+        let metadata = self.file.metadata()?;
+        Ok((metadata.dev(), metadata.ino()))
+    }
+    pub fn try_clone(&self) -> Result<Self> {
+        Ok(Self {
+            file: self.file.try_clone()?,
+        })
+    }
+    /// Pin a child's working directory to this held descriptor, never its mutable pathname.
+    pub fn pin_command_cwd(&self, command: &mut std::process::Command) -> Result<()> {
+        use std::os::unix::process::CommandExt;
+        let directory = self.file.try_clone()?;
+        // SAFETY: the closure owns the duplicated descriptor through spawn. After fork it
+        // performs only fchdir and errno retrieval; no allocation or lock acquisition.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::fchdir(directory.as_raw_fd()) != 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            });
+        }
+        Ok(())
     }
     pub fn file_private_permissions(&self, n: &str) -> Result<bool> {
         let c = name(n)?;

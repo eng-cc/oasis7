@@ -339,6 +339,7 @@ mod contract_tests {
             owned: true,
             background_state: "unknown".into(),
             restorable_history: false,
+            private_sources: vec![],
         });
         let frame = json!({"id":1,"method":"item/commandExecution/requestApproval","params":{"threadId":"t","turnId":"u","itemId":"item","startedAtMs":1,"reason":"Need a test","command":"actual command","cwd":"/scope"}});
         let request = server_request(&frame, &snapshot).unwrap();

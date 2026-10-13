@@ -9,7 +9,7 @@ import { runtimeBridge } from './bridge';
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false, invoke: vi.fn() }));
 afterEach(cleanup);
 const project: Project = {id:'repo',path:'/repo',gitCommonDir:'/repo/.git',head:'head',branch:'work',environment:'local'};
-const session: RuntimeSession = {purpose:'验证修复',scope:'受控测试目录',model:null,basisRevision:'head',threadId:'thread-1',instanceId:'instance-1',turnId:'turn-1',state:'active',owned:true,backgroundState:'clear',restorableHistory:false};
+const session: RuntimeSession = {purpose:'验证修复',scope:'受控测试目录',model:null,basisRevision:'head',threadId:'thread-1',instanceId:'instance-1',turnId:'turn-1',state:'active',owned:true,backgroundState:'clear',restorableHistory:false,privateSources:[]};
 function snapshot(overrides: Partial<RuntimeSnapshot> = {}): RuntimeSnapshot {
   return {projectId:'repo',environment:'local',enabled:true,experimental:true,state:'ready',version:'codex test',instanceId:'instance-1',capabilities:['createSession','continueSession','startTurn','steerTurn','interruptTurn','answerRequest'],coverage:'本客户端明确建立的实例',error:null,sessions:[session],requests:[],operations:[],logs:[],logsTruncated:false,exitWaiting:false,...overrides};
 }
@@ -31,6 +31,27 @@ function fakeApi(initial: RuntimeSnapshot) {
   return {api, setSnapshot:(next:RuntimeSnapshot) => { current = next; }};
 }
 const subscribe = vi.fn(async () => () => {});
+
+it('freezes original request replies during exit and preserves the draft until exit is cancelled', async () => {
+  const request = {requestId:'original',instanceId:'instance-1',threadId:'thread-1',turnId:'turn-1',method:'input',state:'pending',summary:'退出期间请求',questions:[{id:'q',header:'输入',question:'必要答案',options:[],isSecret:false}],allowedDecisions:[]};
+  const {api,setSnapshot} = fakeApi(snapshot({requests:[request]}));
+  render(() => <RuntimePanel project={project} view="attention" api={api} subscribe={subscribe} />);
+  const input=await screen.findByLabelText('回答 q');
+  fireEvent.input(input,{target:{value:'保留原请求答案'}});
+  const submit=screen.getByRole('button',{name:'向原请求回复一次'});
+  expect(submit).toBeEnabled();
+  setSnapshot(snapshot({requests:[request],exitWaiting:true}));
+  fireEvent.click(screen.getByRole('button',{name:'只读核对状态'}));
+  await waitFor(()=>expect(submit).toBeDisabled());
+  fireEvent.click(submit); expect(api.answer).not.toHaveBeenCalled();
+  expect(input).toHaveValue('保留原请求答案');
+  setSnapshot(snapshot({requests:[request],exitWaiting:false}));
+  fireEvent.click(screen.getByRole('button',{name:'只读核对状态'}));
+  await waitFor(()=>expect(submit).toBeEnabled());
+  fireEvent.click(submit);
+  await waitFor(()=>expect(api.answer).toHaveBeenCalledTimes(1));
+  expect(api.answer).toHaveBeenCalledWith({requestId:'original',target:{instanceId:'instance-1',threadId:'thread-1',turnId:'turn-1'},decision:null,answers:{q:['保留原请求答案']}});
+});
 
 it('allows one genuine original request answer after an unrelated lost acknowledgement', async () => {
   const {api,setSnapshot} = fakeApi(snapshot());
@@ -84,6 +105,7 @@ it('keeps exact instance, thread and turn identity; rejects unknown sends while 
   const pending = snapshot({sessions:[{...session,state:'completed'}],operations:[{id:'op',instanceId:'instance-1',threadId:'thread-1',turnId:'turn-1',method:'turn/start',state:'unknown',fingerprint:'f',createdAt:'1',error:null}]});
   expect(canStart(pending,pending.sessions[0])).toBe(false);
   expect(canInterrupt(snapshot({enabled:false}),session)).toBe(true);
+  expect(canInterrupt(snapshot({exitWaiting:true}),session)).toBe(false);
   expect(canInterrupt(snapshot({enabled:false,state:'degraded'}),session)).toBe(true);
   expect(canSteer(snapshot({state:'degraded'}),session)).toBe(false);
   expect(canInterrupt(snapshot({operations:[{...pending.operations[0],method:'turn/interrupt',state:'confirmed'}]}),session)).toBe(false);
@@ -180,4 +202,20 @@ it('keeps exit diagnostics available when the optional runtime source fails', as
   expect(await screen.findByText('旧自管工作状态未知，请保留数据库')).toBeInTheDocument();
   expect(screen.getByText('未确认可以安全退出')).toBeInTheDocument();
   expect(api.start).not.toHaveBeenCalled();
+});
+
+it.each(['合计输入超限；尚未发送，草稿保留', '资料绑定项目与会话项目不匹配；尚未发送，草稿保留'])('keeps correctable no-effect input rejection editable: %s', async (message) => {
+  const {api}=fakeApi(snapshot());
+  api.steer.mockRejectedValueOnce({effect:'none',message});
+  render(() => <RuntimePanel project={project} view="execution" api={api} subscribe={subscribe} />);
+  const input=await screen.findByLabelText('向此原始会话发送明确输入');
+  fireEvent.input(input,{target:{value:'保留待缩小草稿'}});
+  const send=screen.getByRole('button',{name:'追加到当前运行'});
+  fireEvent.click(send);
+  await screen.findByText(message);
+  await waitFor(()=>expect(send).toBeEnabled());
+  expect(input).toHaveValue('保留待缩小草稿');
+  expect(screen.queryByText(/结果核对前发送入口保持关闭/)).toBeNull();
+  fireEvent.click(send);
+  await waitFor(()=>expect(api.steer).toHaveBeenCalledTimes(2));
 });
