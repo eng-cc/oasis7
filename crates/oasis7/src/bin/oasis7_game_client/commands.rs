@@ -5,7 +5,7 @@ use oasis7::world_service::{
 };
 use serde_json::json;
 use std::{collections::BTreeMap, path::Path};
-const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  quote-schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
+const HELP: &str = "oasis7_game_client --config <device.json> <command> [options]\nCommands:\n  describe\n  task\n  capabilities\n  industry\n  context --operation <stable-prepare-id>\n  move --context <prepare-id> --to <x,y,z>\n  transfer --context <prepare-id> --from <ledger> --to <ledger> --material <kind> --amount <positive-i64> --distance-km <nonnegative-i64> --priority <standard|urgent> --routes <route-id,...|direct>\n  quote-build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  build --context <prepare-id> --site <site-id> --factory <factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>\n  quote-schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  schedule --context <prepare-id> --factory <factory-id> --recipe <canonical-recipe-id> --batches <positive-u32>\n  outcome --context <prepare-id> --reason <executor_aborted|provider_failed|transport_exhausted>\n  lookup --context <prepare-id> --kind <prefix|action|outcome>\nConfiguration: endpoint, world_id, genesis_digest, agent_id, service_public_key, signer_file, state_directory.\nThe signer is an operator-owned mode-0600 raw 32-byte file; state_directory is a private encrypted operation cache.\nHTTP loopback requires all local listening processes to be trusted. Use authenticated TLS for untrusted multi-user hosts.";
 
 pub fn run(args: Vec<String>) -> Result<(), String> {
     if args.is_empty() || args == ["--help"] {
@@ -18,6 +18,7 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
     let command = &args[2];
     let allowed: &[&str] = match command.as_str() {
         "describe" | "task" | "capabilities" | "industry" => &[],
+        "quote-build" | "build" => &["--context", "--site", "--factory", "--kind"],
         "quote-schedule" | "schedule" => &["--context", "--factory", "--recipe", "--batches"],
         "transfer" => &[
             "--context",
@@ -105,6 +106,15 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
             let action = transfer_action(&client.agent, &options)?;
             print(&client.submit_action(operation, action)?)
         }
+        "quote-build" | "build" => {
+            let operation = required("--context")?;
+            let (site, factory, kind) = build_selection(&options)?;
+            if command == "quote-build" {
+                print(&client.quote_build(operation, site, factory, kind)?)
+            } else {
+                print(&client.build(operation, site, factory, kind)?)
+            }
+        }
         "quote-schedule" | "schedule" => {
             let operation = required("--context")?;
             let (factory, recipe, batches) = schedule_selection(&options)?;
@@ -165,6 +175,26 @@ pub fn run(args: Vec<String>) -> Result<(), String> {
         }
         _ => unreachable!(),
     }
+}
+
+fn build_selection<'a>(
+    options: &BTreeMap<&str, &'a str>,
+) -> Result<(&'a str, &'a str, &'a str), String> {
+    let required = |key| {
+        options
+            .get(key)
+            .copied()
+            .ok_or_else(|| format!("missing {key}"))
+    };
+    let site = required("--site")?;
+    let factory = required("--factory")?;
+    let kind = required("--kind")?;
+    bounded_id(site)?;
+    bounded_id(factory)?;
+    if oasis7::runtime::builtin_factory_spec(kind, factory).is_none() {
+        return Err("factory kind requires an exact built-in ID".into());
+    }
+    Ok((site, factory, kind))
 }
 
 fn schedule_selection<'a>(
@@ -270,6 +300,58 @@ fn bounded_id(value: &str) -> Result<(), String> {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn factory_commands_reject_injected_authority_and_costs_before_configuration() {
+        for command in ["quote-build", "build"] {
+            for option in [
+                "--spec",
+                "--grant",
+                "--cost",
+                "--power",
+                "--builder",
+                "--action",
+                "--authorization",
+            ] {
+                let args = [
+                    "--config",
+                    "/nonexistent-config",
+                    command,
+                    option,
+                    "injected",
+                ]
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+                assert_eq!(
+                    super::run(args).unwrap_err(),
+                    "unsupported or duplicate option"
+                );
+            }
+        }
+    }
+    #[test]
+    fn factory_selection_requires_exact_kind_and_bounded_business_ids() {
+        let mut options = std::collections::BTreeMap::from([
+            ("--site", "ready-site"),
+            ("--factory", "new-factory"),
+            ("--kind", "factory.smelter.mk1"),
+        ]);
+        assert_eq!(
+            super::build_selection(&options).unwrap(),
+            ("ready-site", "new-factory", "factory.smelter.mk1")
+        );
+        for kind in ["smelter", "factory.custom", "FACTORY.SMELTER.MK1"] {
+            options.insert("--kind", kind);
+            assert!(super::build_selection(&options).is_err());
+        }
+        options.insert("--kind", "factory.assembler.mk1");
+        assert!(super::build_selection(&options).is_ok());
+        for (key, value) in [("--site", ""), ("--site", "bad site"), ("--factory", "a,b")] {
+            let mut invalid = options.clone();
+            invalid.insert(key, value);
+            assert!(super::build_selection(&invalid).is_err());
+        }
+    }
     #[test]
     fn recipe_commands_reject_raw_plan_grant_and_cost_before_configuration() {
         for command in ["quote-schedule", "schedule"] {

@@ -94,7 +94,7 @@
   - AC-5: 文档级 `审计轮次` 仅可对应已落档的正式 ROUND 台账；在 `ROUND-NNN` 正式启动文件落档前，不得保留脱离台账的 `审计轮次 > NNN` 标记。
   - AC-6: core PRD 明确列出当前阶段 `P0/P1/P2` 收口项、对应 owner、输入、输出、验收标准与阻断条件。
   - AC-7: 全局 P0 按当前路径、连续性和必要验证缺口准入，首次开放按当前里程碑退出条件验收。
-  - AC-8: 工作包明确启动条件、依赖与退出条件，后续扩展不自动阻断受控试玩。
+  - AC-8: 工作包 明确启动条件、依赖与退出条件，后续扩展不自动阻断受控试玩。
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
   - AC-10: `PRD-CORE-004` 可映射到 GitHub task issue evidence 中的任务与 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
@@ -134,7 +134,11 @@
 
 首次开放核验合法身份/profile、原子效果与幂等、独立故障域恢复、工业结算、Agency/回访和服务状态。具体合同由[基础设施](../product/world-infrastructure/prd.md)、[首局合同](../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)和专业模块拥有。文档通过不能替代运行开放，BFT 未验收不阻止已验收的受控单权威阶段。
 
-技术正确性与授权连续性是硬约束；操作量、动作族、内容量、时长与等待是诊断；样例因果、选择、恢复和继续理由只证明结构，真人动机与自发回访依赖真人记录。状态、阻断、候选 OID 与结果由 GitHub PR/Issue/Project 和实际证据承载，core 不建立并行台账。当前多里程碑实施与剩余验收由 [Issue #4363](https://github.com/eng-cc/oasis7/issues/4363) 承接；历史 closure 只供追溯。
+技术正确性与授权连续性是硬约束；操作量、动作族、内容量、时长与等待是诊断；样例因果、选择、恢复和继续理由只证明结构，真人动机与自发回访依赖真人记录。状态、阻断、候选 OID 与结果由 Git、PR、实际 CI 和评审记录承载，Issue/Project 按需使用，core 不建立并行台账。
+
+当前多里程碑的需求与验收依据由[基础设施当前阶段](../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[首局合同](../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)和[会话恢复组合验收](../product/player-entry-distribution/prd.md#player-session-unknown-outcome-acceptance)承接；正式激活、原请求恢复及写权接管分别进入[P2P 系统设计](../p2p/design.md#des-p2p-formal-controlled-authority-v1)与[Runtime 提交和恢复设计](../world-runtime/design.md#runtime-authority-commit-recovery-target)。专业 owner 与退出条件仍以上表及对应规范为准，不因停止某个 Issue 的跟踪而撤销。
+
+[Issue #4363 的文档承接后关闭决定](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6126245617)仅作历史来源，已替代“继续由该 Issue 独立跟踪”的旧组织安排；不自动重开或创建替代 Issue。文档合入、Issue 关闭不表示实现完成、运行验收通过或可以邀测，也不解除已有部署限制；正式世界开放、独立故障域恢复和真人观察仍须分别取得适用授权与实际证据。
 
 ### 项目模块地图（Design Map）
 产品信息架构由 `doc/product/README.md` 统一导航，固定为“世界规则与玩法系统 / 权威世界基础设施 / 智能体、世界模拟与交互 / 玩家接入与发行”四个入口。`core` 仍是项目级设计总览与跨模块治理基线，不是第五个产品模块；下表继续表达工程实现与治理模块地图。

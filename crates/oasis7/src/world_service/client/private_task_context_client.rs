@@ -110,3 +110,34 @@ impl RemoteWorldServiceClient {
         Ok(response.payload)
     }
 }
+
+impl RemoteWorldServiceClient {
+    pub fn quote_task_factory(
+        &self,
+        original: &SignedReadRequest<
+            crate::world_service::task_factory_quote::TaskFactoryQuoteRequestV1,
+        >,
+    ) -> Result<crate::world_service::task_factory_quote::TaskFactoryQuoteV1, WorldServiceClientError>
+    {
+        use crate::world_service::task_factory_quote::*;
+        verify_factory_quote_request(original).map_err(assurance)?;
+        self.task_scope(&original.request.context_proof.request.context.fence)?;
+        let response: SignedServiceResponse<TaskFactoryQuoteV1> = self.private_call_bounded(
+            TASK_FACTORY_QUOTE_PATH,
+            original,
+            MAX_PRIVATE_CONTEXT_BYTES,
+        )?;
+        verify_private_reply(
+            TASK_FACTORY_QUOTE_PATH,
+            original,
+            &response,
+            &self.config.trusted_service_public_key,
+        )
+        .map_err(assurance)?;
+        response
+            .payload
+            .validate_against(original)
+            .map_err(assurance)?;
+        Ok(response.payload)
+    }
+}

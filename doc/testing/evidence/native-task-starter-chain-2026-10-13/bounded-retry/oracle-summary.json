@@ -1,0 +1,79 @@
+{
+  "source": "52c136a7b0c628b551ab169594a19b0b55198d0b",
+  "runtime_source": "0a97ad641440f11306076319f405b0f94cc5d1d1",
+  "overall": "passed targeted prepared-world construction-feed-first-production",
+  "calls": 19,
+  "first_call_started_elapsed": 43.68245000002207,
+  "last_call_finished_elapsed": 219.7179852090194,
+  "report_elapsed_estimate": 253.54787421226501,
+  "report_before_deadline": true,
+  "original_build_response_byte_equal": true,
+  "original_response_sha256": "9d17c6e9b6ccbe736f5eb675280b77f8b25ec66aa284bb3f29bbb600eb08ff33",
+  "event_ticks": [
+    [
+      "FactoryBuildStarted",
+      27
+    ],
+    [
+      "FactoryBuilt",
+      28
+    ],
+    [
+      "RecipeStarted",
+      45
+    ],
+    [
+      "RecipeCompleted",
+      46
+    ]
+  ],
+  "agent_ledger": {},
+  "site_ledger": {
+    "carbon_fuel": 1,
+    "iron_ingot": 3,
+    "iron_ore": 4,
+    "slag": 1
+  },
+  "electricity": 86,
+  "applied_actions": [
+    {
+      "id": 3,
+      "kind": "BuildFactory",
+      "cost": 6,
+      "grant": "starter-build"
+    },
+    {
+      "id": 4,
+      "kind": "TransferMaterial",
+      "cost": 0,
+      "grant": "starter-ore"
+    },
+    {
+      "id": 5,
+      "kind": "TransferMaterial",
+      "cost": 0,
+      "grant": "starter-fuel"
+    },
+    {
+      "id": 6,
+      "kind": "ScheduleRecipe",
+      "cost": 8,
+      "grant": "starter-recipe"
+    }
+  ],
+  "milestone": {
+    "factory_id": "factory.smelter.mk1",
+    "output_ledger": "site:starter-site",
+    "profile_id": "starter-industrial-smelter-to-assembler-v1",
+    "profile_revision": 1,
+    "recipe_id": "recipe.smelter.iron_ingot",
+    "settled_at": 46,
+    "settlement_job_id": 6
+  },
+  "cleanup_committed_heights": [
+    66,
+    67
+  ],
+  "host_exit": 0,
+  "scope": "prepared-world, instruction-only independent Codex; no cold entry/full multi-factory stable chain/OpenClaw/deployment claim"
+}

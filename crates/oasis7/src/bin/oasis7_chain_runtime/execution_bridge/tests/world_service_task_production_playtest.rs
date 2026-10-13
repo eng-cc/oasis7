@@ -8,6 +8,17 @@ pub(super) fn fixture() -> (
     String,
     String,
 ) {
+    fixture_kind(false)
+}
+pub(super) fn fixture_kind(
+    starter_chain: bool,
+) -> (
+    PathBuf,
+    NodeRuntimeExecutionDriver,
+    WorldIdentity,
+    String,
+    String,
+) {
     let verified_authority = true;
     let dir = temp_dir("world-service-owner-chat");
     let owner = hex::encode([7u8; 32]);
@@ -18,7 +29,11 @@ pub(super) fn fixture() -> (
         world_id: "w1".into(),
         genesis_digest: "fixture-genesis-v1".into(),
     };
-    let mut world = RuntimeWorld::new_with_state(initial_state());
+    let mut world = RuntimeWorld::new_with_state(if starter_chain {
+        super::starter_chain_playtest::initial_state()
+    } else {
+        initial_state()
+    });
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-a".into(),
         pos: oasis7::GeoPos::new(0, 0, 0),
@@ -61,38 +76,42 @@ pub(super) fn fixture() -> (
     world
         .provision_cognition_for_agent("agent-a", "provision-a", "owner-a", 100)
         .unwrap();
-    world
-        .install_test_native_delegation_grant(oasis7::runtime::AgentDelegationGrantV1 {
-            grant_id: "production-recipe-budget".into(),
-            source_id: format!(
-                "starter_claim:agent-a:{}",
-                world.state().starter_oc_claims["agent-a"].claimed_at
-            ),
-            issuer_id: "owner-a".into(),
-            owner_id: "owner-a".into(),
-            organization_id: None,
-            agent_id: "agent-a".into(),
-            object_id: "production-factory".into(),
-            action_kinds: vec!["ScheduleRecipe".into()],
-            revision: 1,
-            period_id: "production-playtest".into(),
-            valid_from_tick: 0,
-            valid_until_tick: 1000,
-            limit_units: 16,
-            resource_kind: "electricity".into(),
-            revoked: false,
-        })
-        .unwrap();
-    let quote = world
-        .builtin_recipe_quote(
-            "agent-a",
-            "production-factory",
-            "recipe.smelter.iron_ingot",
-            1,
-        )
-        .unwrap();
-    assert!(quote.rejection.is_none());
-    assert_eq!(quote.authorization.cost_units, 8);
+    if starter_chain {
+        super::starter_chain_playtest::authorize(&mut world);
+    } else {
+        world
+            .install_test_native_delegation_grant(oasis7::runtime::AgentDelegationGrantV1 {
+                grant_id: "production-recipe-budget".into(),
+                source_id: format!(
+                    "starter_claim:agent-a:{}",
+                    world.state().starter_oc_claims["agent-a"].claimed_at
+                ),
+                issuer_id: "owner-a".into(),
+                owner_id: "owner-a".into(),
+                organization_id: None,
+                agent_id: "agent-a".into(),
+                object_id: "production-factory".into(),
+                action_kinds: vec!["ScheduleRecipe".into()],
+                revision: 1,
+                period_id: "production-playtest".into(),
+                valid_from_tick: 0,
+                valid_until_tick: 1000,
+                limit_units: 16,
+                resource_kind: "electricity".into(),
+                revoked: false,
+            })
+            .unwrap();
+        let quote = world
+            .builtin_recipe_quote(
+                "agent-a",
+                "production-factory",
+                "recipe.smelter.iron_ingot",
+                1,
+            )
+            .unwrap();
+        assert!(quote.rejection.is_none());
+        assert_eq!(quote.authorization.cost_units, 8);
+    }
     let context_hash = super::super::super::execution_hash::execution_resource_context_hash("w1");
     world
         .save_to_dir_with_chain_resource_context(
@@ -211,8 +230,7 @@ fn private_task_production_prepared_world_live_service() {
         None,
         false,
         Duration::from_secs(30),
-        false,
-        true,
+        super::PreparedWorldKind::Production,
         Duration::ZERO,
     );
 }
@@ -251,8 +269,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                 None,
                 false,
                 Duration::from_secs(30),
-                false,
-                true,
+                super::PreparedWorldKind::Production,
                 Duration::ZERO,
             )
         });
@@ -377,7 +394,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                 &delegate,
             )
             .unwrap();
-            let mut captured = client.read_task_context(&get).unwrap();
+            let mut captured = retry_private(|| client.read_task_context(&get), deadline);
             let (quoted, quote_proof) =
                 verified_quote(&client, &delegate, &get, &mut captured, deadline);
             if !forced_action_rejection {
@@ -682,11 +699,7 @@ fn verified_quote(
     SignedReadRequest<oasis7::world_service::task_recipe_quote::TaskRecipeQuoteRequestV1>,
 ) {
     use oasis7::world_service::task_recipe_quote::*;
-    for _ in 0..8 {
-        assert!(
-            Instant::now() < deadline,
-            "bounded quote read deadline exhausted"
-        );
+    while Instant::now() < deadline {
         let proof = sign_read_request(
             TASK_RECIPE_QUOTE_PATH,
             TaskRecipeQuoteRequestV1 {
@@ -725,9 +738,9 @@ fn verified_quote(
         }
         // A quote read reserves nothing. An explicit base conflict permits a
         // fresh read of the same captured identity; no action has been submitted.
-        *captured = client.read_task_context(get).unwrap();
+        *captured = retry_private(|| client.read_task_context(get), deadline);
     }
-    panic!("maximum quote base refreshes exhausted");
+    panic!("production chain deadline exhausted during quote refresh");
 }
 fn private_http(endpoint: &str, body: &serde_json::Value) -> (u16, serde_json::Value) {
     use oasis7::world_service::task_recipe_quote::TASK_RECIPE_QUOTE_PATH;

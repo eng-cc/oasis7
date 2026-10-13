@@ -8,6 +8,8 @@ use serde_json::json;
 
 #[path = "agent_delegation/dissent.rs"]
 mod dissent;
+#[path = "agent_delegation/factory.rs"]
+mod factory;
 
 fn fixture() -> World {
     let mut world = World::new();

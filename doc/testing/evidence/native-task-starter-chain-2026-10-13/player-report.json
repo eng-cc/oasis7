@@ -1,0 +1,55 @@
+{
+  "goal_revision": "1",
+  "task_revision": "3",
+  "status": "partial",
+  "completed": false,
+  "profile": "prepared-world attached-agent playtest",
+  "isolation": "instruction-only",
+  "client_calls_attempted": 10,
+  "goal": "Build Smelter MK1 at starter-site and finish first three iron ingots; verify products and starter industrial milestone",
+  "actions": [
+    {
+      "kind": "build",
+      "context": "starter-chain-player-20261013-a",
+      "factory": "starter-player-smelter",
+      "result": "quote HTTP 403; no replacement action created",
+      "effect": "none"
+    },
+    {
+      "kind": "build",
+      "context": "starter-chain-player-20261013-a",
+      "factory": "factory.smelter.mk1",
+      "site": "starter-site",
+      "result": "committed",
+      "action_id": "action:3",
+      "commit_position": 63,
+      "effect": "industry tick 68 verified built_at 64, idle factory, construction inventory consumed, electricity 94"
+    }
+  ],
+  "original_recovery": {
+    "context": "starter-chain-player-20261013-a",
+    "kind": "action",
+    "result": "committed",
+    "action_id": "action:3",
+    "commit_position": 63,
+    "receipt_id": "blake3:7fd3700690c109a6d9817c95eba1b4bf6bb354d4c728e27a5cdd998d9a0873bb"
+  },
+  "observed_products": {
+    "iron_ingots": 0,
+    "agent_iron_ore": 8,
+    "agent_carbon_fuel": 2,
+    "completed_recipe_jobs": 0,
+    "stage": "bootstrap",
+    "pending_factory_builds": 0
+  },
+  "failures_unknown": [
+    "First context response original result query unavailable; same operation recovered full goal and committed context",
+    "Initial arbitrary factory ID quote rejected HTTP 403; capabilities showed object scope factory.smelter.mk1",
+    "New context b returned original result query unavailable; retry stopped with hard playtest budget exhausted, original prefix result unknown",
+    "No feedstock transfer or production submitted; finished products and milestone not completed",
+    "No help/describe/task commands run; complete real task came from context"
+  ],
+  "stop_reason": "hard playtest budget exhausted",
+  "client_calls_accepted_wrapper": 9,
+  "report_written_after_deadline": true
+}

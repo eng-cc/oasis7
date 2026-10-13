@@ -1,0 +1,124 @@
+{
+  "status": "completed",
+  "profile": "prepared-world attached-agent",
+  "isolation": "instruction-only",
+  "goal_revision": "1",
+  "task_revision": "3",
+  "goal": "Build a Smelter MK1 at starter-site, finish the first three iron ingots using starting inventory, and verify the starter industrial milestone.",
+  "actions": [
+    {
+      "kind": "build",
+      "context": "final-play-context-1",
+      "factory": "factory.smelter.mk1",
+      "site": "starter-site",
+      "canonical_status": "committed",
+      "action_id": "action:3",
+      "commit_position": 27,
+      "observed_built_at": 28
+    },
+    {
+      "kind": "transfer",
+      "context": "final-play-context-3",
+      "material": "iron_ore",
+      "amount": 8,
+      "from": "agent:agent-a",
+      "to": "site:starter-site",
+      "canonical_status": "committed",
+      "action_id": "action:4",
+      "commit_position": 37
+    },
+    {
+      "kind": "transfer",
+      "context": "final-play-context-4",
+      "material": "carbon_fuel",
+      "amount": 2,
+      "from": "agent:agent-a",
+      "to": "site:starter-site",
+      "canonical_status": "committed",
+      "action_id": "action:5",
+      "commit_position": 41
+    },
+    {
+      "kind": "schedule",
+      "context": "final-play-context-5",
+      "factory": "factory.smelter.mk1",
+      "recipe": "recipe.smelter.iron_ingot",
+      "batches": 1,
+      "canonical_status": "committed",
+      "action_id": "action:6",
+      "commit_position": 45
+    }
+  ],
+  "world_effect": {
+    "observed_tick": 47,
+    "completed_recipe_jobs": 1,
+    "factory_active_jobs": 0,
+    "site_ledger": {
+      "carbon_fuel": 1,
+      "iron_ingot": 3,
+      "iron_ore": 4,
+      "slag": 1
+    },
+    "electricity": 86,
+    "pending_factory_builds": 0,
+    "pending_recipe_jobs": 0,
+    "starter_industrial_milestone": {
+      "factory_id": "factory.smelter.mk1",
+      "recipe_id": "recipe.smelter.iron_ingot",
+      "output_ledger": "site:starter-site",
+      "profile_id": "starter-industrial-smelter-to-assembler-v1",
+      "profile_revision": 1,
+      "settled_at": 46,
+      "settlement_job_id": 6
+    }
+  },
+  "recovery": {
+    "context": "final-play-context-1",
+    "kind": "action",
+    "status": "committed",
+    "action_id": "action:3",
+    "commit_position": 27,
+    "receipt_id": "blake3:2e47b4d29fea016d5e1e49194903a31e982a3124e0fd3bd843c189cbc5c822cb",
+    "same_original_result": true
+  },
+  "calls": 19,
+  "failures": [
+    {
+      "operation": "build first-smelter",
+      "result": "factory quote rejected HTTP 403; no replacement action created",
+      "resolution": "Used factory ID matching observed native grant object factory.smelter.mk1 in same context before any action existed."
+    },
+    {
+      "operation": "lookup action before action cached",
+      "result": "original operation is not in this device cache"
+    },
+    {
+      "operation": "context final-play-context-2",
+      "result": "canonical rejected conflict, usable_context false",
+      "resolution": "Preserved rejection; fresh context final-play-context-3 succeeded."
+    }
+  ],
+  "unknown_results": [],
+  "duplicate_construction_or_production": false,
+  "client_call_sequence": [
+    "task",
+    "capabilities",
+    "industry",
+    "context-1",
+    "build first-smelter quote 403",
+    "lookup context-1 no cache",
+    "industry",
+    "build factory.smelter.mk1",
+    "lookup original build",
+    "industry pending build",
+    "industry built",
+    "context-2 rejected",
+    "context-3",
+    "transfer ore",
+    "context-4",
+    "transfer fuel",
+    "context-5",
+    "schedule one batch",
+    "industry completed"
+  ]
+}

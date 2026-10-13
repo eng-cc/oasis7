@@ -5,7 +5,7 @@ description: Execute an authorized Oasis7 native task through the signed game cl
 
 # Oasis7 native task play
 
-This profile uses the ordinary `oasis7_game_client` executable and an operator-provided device configuration. It supports task discovery, complete private goal/context capture, `native.move_agent`, `native.transfer_material`, built-in `native.schedule_recipe` with a signed quote, authenticated industry observation, original result lookup and terminal provider outcomes. It does not provide cold world entry, token pairing, social operations or the full Game HTTP write catalog.
+This profile uses the ordinary `oasis7_game_client` executable and an operator-provided device configuration. It supports task discovery, complete private goal/context capture, `native.move_agent`, `native.transfer_material`, built-in `native.build_factory` and `native.schedule_recipe` with signed quotes, authenticated industry observation, original result lookup and terminal provider outcomes. It does not provide cold world entry, token pairing, social operations or the full Game HTTP write catalog.
 
 Use only the supplied executable and device configuration. Do not inspect owner keys, server storage, fixture source or other players' state. Never print signer files or copy private goal content into public action reasons. Keep full goals and observations inside the authorized model context.
 
@@ -48,6 +48,17 @@ Ledger IDs are `world`, `agent:<id>`, `site:<id>` or `factory:<id>`. Routes are 
 
 `capabilities` separates local CLI proposal forms, the module command catalog and native action/object electricity grants. Inspect grant status, action kinds, object scope and remaining units. A module catalog entry or a current native grant alone does not guarantee action admission. Agent signer delegation is a separate identity boundary. Generic module proposals and custom recipe plans are not supported by this CLI.
 
+For a factory-construction goal, read `industry` and choose a ready site authorized for the configured Agent at its current authorized location. Inspect the site's location anchor, construction electricity profile, Agent material ledger and power. Collection truncation means omitted entries are unknown. Only `factory.smelter.mk1` and `factory.assembler.mk1` are supported factory kinds; the builder is always the configured Agent.
+
+```text
+<client> --config <device.json> quote-build --context <context-id> --site <site-id> --factory <new-factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>
+<client> --config <device.json> build --context <context-id> --site <site-id> --factory <new-factory-id> --kind <factory.smelter.mk1|factory.assembler.mk1>
+```
+
+Read the signed quote's rejection or construction preview, material ledger/costs, power requirements and duration. A quote checks current admission without reserving inventory, power or delegation budget. `build` obtains a verified quote on its first submission and uses the authoritative factory spec and same returned public context. Do not inject a spec, costs, power obligation or grant. Committed admission or a pending construction job does not mean the factory is ready: after world progress, reread `industry` and verify the completed `FactoryBuilt` result and actual factory before transfer or scheduling. Capture a new context for that next decision.
+
+Both build commands recover a cached original Action before any fresh context or quote: the same site, factory ID and canonical kind must match. Unknown/pending results freeze that exact signed operation, including after a process restart. Recover with `lookup --context <context-id> --kind action`; do not replace it with a new build or recipe. This profile assumes an already claimed and configured Agent with an authorized site. Factory construction does not establish cold entry, claiming, token pairing, bootstrap or full AC-EXT-010 coverage.
+
 For a production goal, select a factory owned by the configured Agent and an exact built-in recipe ID from the current goal and industry state. The eleven IDs are `recipe.smelter.iron_ingot`, `recipe.smelter.copper_wire`, `recipe.smelter.polymer_resin`, `recipe.smelter.alloy_plate`, `recipe.assembler.gear`, `recipe.assembler.control_chip`, `recipe.assembler.motor_mk1`, `recipe.assembler.logistics_drone`, `recipe.assembler.sensor_pack`, `recipe.assembler.module_rack` and `recipe.assembler.factory_core`.
 
 ```sh
@@ -60,7 +71,7 @@ Read the signed quote's rejection or start preview, input/output ledgers, materi
 
 If `schedule` or `quote-schedule` finds an original cached action, it checks the same factory, recipe and batches and queries that original result before reading another context or requesting another quote. Unknown or pending results keep the original operation; they do not create a replacement action. This lookup also works after a process restart. Use `lookup --kind action` to recover a lost submission response.
 
-Each context has one original action shared by movement, transfer and production. Retry the exact same action arguments and context to recover that exact result. Changing the action kind, route order, ledgers, amount or other arguments conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
+Each context has one original action shared by movement, transfer, construction and production. Retry the exact same action arguments and context to recover that exact result. Changing the action kind, route order, ledgers, amount or other arguments conflicts and leaves the original intact. After a committed action, capture a new context with a new operation ID before another decision.
 
 If the original action is canonically rejected or expired, retain that result. Rejection does not necessarily release its active context: obtain a committed terminal outcome or wait for the context's bounded lease to expire before capturing a new decision context. Never treat rejection as an effect or create a replacement operation while the original outcome is unknown.
 
