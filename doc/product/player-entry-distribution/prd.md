@@ -37,6 +37,7 @@
 
 当前升级只支持重新下载最新主包并手动覆盖安装/替换；用户须先备份 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/`。这不是应用内更新、自动迁移或跨目录状态保留承诺。Windows codesigning trust chain 与 macOS 签名/notarization 未完成前，不得把技术预览资产、单主 CTA 或手动安装路径表述为普通用户广泛发行已就绪。
 
+<a id="download-integrity-and-upgrade"></a>
 ### 下载完整性失败边界
 
 玩家可以在开始安装前核对推荐资产的版本、平台、发布来源与 checksum；若该核对缺失、无法完成或不匹配，产品只能明确停止该资产的安装/覆盖路径，并让玩家保留或重新取得与当前发布来源绑定的候选。玩家可以查看预期与实际核对结果、选择重新下载、改用同一候选中明确受支持的正确平台资产，或进入支持/恢复路径；不能把“文件已下载”“曾经可用的旧 checksum”“浏览器/操作系统未报警”或第三方镜像的自述当作验证通过，也不能被引导绕过核对继续覆盖既有状态。
@@ -116,6 +117,15 @@ Agent 离线工作是否继续，只由其独立且仍有效的授权范围、�
 | SC-8 | producer_system_designer / viewer_engineer / runtime_engineer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-020 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_RUNTIME-014 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 真实发行资产覆盖兼容继续、写入前失败且可验证回退、未知或可能写入时阻止降级三类样例，并核对版本、平台、primary mode、候选资产、备份来源与权威状态非回退边界 | test_tier_full |
 | SC-9 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / blockchain_ops_engineer / qa_engineer | PRD-P2P-004 / PRD-P2P-023 / PRD-P2P-029 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-003 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md`; `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`; `doc/product/world-infrastructure/prd.md`; `doc/product/world-rules-core-gameplay/prd.md` | 资源影响 intent 在提交后会话失效、finality 恢复、重新认证与重复重试的组合样例，以及 Agent 授权先于或晚于会话失效的组合；断言单次效果、无越权新提交、无自动续权，并核对 Viewer 玩家可读状态、`pure_api` 结构化状态与 receipt 语义一致 | test_tier_full |
 | SC-10 | viewer_engineer / runtime_engineer / qa_engineer | PRD-WORLD_SIMULATOR-039 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 每个受支持平台上的错误 checksum、缺失/不可完成核对与重新取得正确候选的安装前负例；核对结果、可用恢复路径，以及不改写本地状态、不恢复世界 authority/receipt 的组合核对 | test_tier_required |
+
+### 5.2 首写与升级的系统设计承接
+
+SC-8 / SC-10 的平台预检、状态清点、首写边界与三类恢复结论由
+[手动升级首写设计](../../site/design.md#manual-upgrade-first-write)组合承接，具体
+[平台验证映射](../../site/design.md#manual-upgrade-validation)分别覆盖 Windows、macOS 与 Linux 的实际受支持入口。
+[包来源与发行安全](../../engineering/workflow/package-source-security.md#final-artifact-freshness)
+继续拥有最终资产身份/新鲜度与成功后的版本保留；原状态格式/代际及世界恢复仍由 runtime 主责。
+这些链接补齐实施与验证责任，不改变 SC-8 / SC-10 的产品结果，也不表示预检、迁移或平台验收已完成。
 
 ## 6. Non-Goals
 
