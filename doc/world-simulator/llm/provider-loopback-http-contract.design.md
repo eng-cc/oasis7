@@ -15,6 +15,14 @@
 - 观测层：viewer 与 launcher 展示 provider 连接状态、最近延迟、最后错误、最近动作与 trace 摘要。
 - 测试层：用 mock local HTTP server 替代真实 `Local Provider`，保证 required 回归可离线执行。
 
+### 2.1 需求承接与分配表
+
+| 上游要求 | 承接与分配 | 本设计条款 | 主责与消费方 | 边界 |
+| --- | --- | --- | --- | --- |
+| [Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | target/legacy 路由、身份与 Runtime 裁决保持独立 | [Harness 对齐](#41-harness-contract-alignment) | runtime_engineer、agent_engineer；HTTP adapter | 本地 callback 不替代完整 Runtime/Game API |
+| [Flow-OC-LOCAL-001/002/004、AC-1/5](provider-loopback-http-contract.prd.md#local-provider-user-flows) | 共享产物选择、有效配置和自有进程停止 | [交付与生命周期](#local-provider-delivery-contract) | 启动脚本与 Launcher；runtime_engineer、QA | 不停止独立 Provider，不撤销世界已接受请求 |
+| [Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | 同请求重试、模型 SSE 完成及 URL/许可分离 | [HTTP 边界](#local-provider-http-boundaries) | adapter、模型桥接器；agent_engineer、QA | Rust/Python 分别验证，不新增自动降级 |
+
 ## 3. 关键接口 / 入口
 - `GET /v1/provider/info`
 - `GET /v1/provider/health`
@@ -118,3 +126,15 @@ transport 与 adapter 使用一致的 retryable 分类。对现有允许重试�
 | URL | 方括号 IPv6、默认/显式端口与 path 一致 | 坏括号、裸 IPv6、非法/零端口拒绝；语法通过不绕过端点许可 |
 
 产物、配置、HTTP 与进程测试按各自层次记录。HTTP/config 回归可使用假 key 和离线 mock；进程停止必须观察真实生成的本地子进程，不能用返回 0 的替身代签。上述结果均不代替玩家 Claim、完整生产首局、真实付费 Provider、公开发行或部署验收。实际实现状态和测试结果留在 PR/Issue 中，不因本设计合入勾选整项完成。
+
+## 11. 验证
+
+### 11.1 验证映射表
+
+| 上游要求 | 本设计条款 | 机制与场景 | 验证来源 | 执行证据 | 未覆盖与状态 |
+| --- | --- | --- | --- | --- | --- |
+| [Flow-OC-LOCAL-003、AC-2/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [Harness 对齐](#41-harness-contract-alignment) | target outer/feedback correlation 与 legacy 隔离；沿用 mock 合同，真实 Runtime 单独验收 | [测试手册](../../../testing-manual.md)；按其中 provider/Agent 合同入口执行 | 实际 source、命令、退出码和失败反例，记录在 PR/Issue | 本次只建立映射，未执行；mock 不证明真实首局 |
+| [Flow-OC-LOCAL-001/002/004、AC-1/5](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [交付与生命周期](#local-provider-delivery-contract) | §8 的产物、配置、Ready 前/后 TERM 与 HUP 独立反例；扩展已有 shell 回归 | [本地 LetAI 回归](../../../scripts/run-local-letai-game-test.test.sh) | source、选中产物、净化配置、真实自有子树退出和端口释放 | planned；现有测试入口不表示这些新增用例已实现或通过 |
+| [Flow-OC-LOCAL-004、AC-2/6/7](provider-loopback-http-contract.prd.md#local-provider-user-flows) | [HTTP 边界](#local-provider-http-boundaries) | §8 的同请求两次尝试、DONE 后保持连接/禁止额外读取和 IPv6 反例 | [测试手册](../../../testing-manual.md)；按 provider HTTP/mock 与对应 Rust/Python suite 分别扩展执行 | source、客户端类型、尝试/读取计数、结果和命令退出码 | planned；不以 shell 通过或任一客户端结果代签全部 HTTP 验收 |
+
+新增场景与已存在测试入口明确区分。实现任务须把本表场景落实到对应测试并记录真实结果；本表不构造已通过证据，也不以通用手册引用免除 §8 的逐项验收。
