@@ -155,7 +155,7 @@ provider_cli_bin="${OASIS7_PROVIDER_CLI_BIN:-openclaw}"
 "$provider_cli_bin" --version
 curl -sS http://127.0.0.1:18789/health
 bash scripts/setup-provider-oasis7-runtime.sh
-env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-agent oasis7_provider_agent
+env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_provider_local_bridge -- --provider-backend legacy-cli --provider-cli-bin "$provider_cli_bin" --provider-agent oasis7_provider_agent
 ```
 
 The repo-owned lightweight agent defaults are `oasis7_provider_agent`, workspace
