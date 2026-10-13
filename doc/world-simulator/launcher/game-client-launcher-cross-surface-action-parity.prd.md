@@ -20,10 +20,12 @@
 - 设置、反馈与转账在当前 authority 支持时应显示 `executable`、`blocked` 或 `result`，并在失败时给出真实恢复下一步；浏览器存储失败、控制面不可达或 runtime 拒绝必须可诊断，不得伪装为成功。
 - Web 控制面可代理受支持动作到 runtime；代理可达不等于授权。浏览器本地存储和控制面代理是 Launcher 适配，不是 WASM ABI、manifest、metering、permission 或 lifecycle authority。
 
+<a id="llm-settings-reload-result"></a>
 ### LLM 设置的本地存储与读回边界
 
 - native 表面将当前 LLM 设置读写到本地 launcher 配置的 `[llm]` 字段（`api_key`、`base_url`、`model`）；保存后重载应以实际读回或明确错误呈现，空值移除仅适用字段。配置缺失、解析、读取或写入失败必须保留失败结果和修复入口，不得显示为已保存。
 - Web 表面以浏览器本地存储适配当前 LLM 设置；保存后的读回只说明当前浏览器本地状态。存储不可用、读取或写入失败必须可诊断，且不应把旧值、草稿或缺省值伪装为新设置已持久化。
+- Reload 的最终可见状态取决于本次读取和解析结果。native 的无效 TOML / I/O 错误、Web 的无效 JSON / storage 错误必须保留原可编辑草稿并显示 Failed；按钮 handler 不得在 loader 失败后覆盖为 Success。来源修复后，成功重载才替换草稿并显示 Success；既有 NotFound、空文件/空值和缺 key 的默认回退保持。重载本身不写回或启动 provider。
 - 任一表面的保存/读回不证明 provider 可用、鉴权成功、控制面或 runtime 已取得凭据，亦不承诺跨浏览器 profile、隐私模式、设备、重启或清理后的持久性。`api_key` 等 secret 不得出现在 launcher 状态、GUI-agent、反馈/错误文本、截图或任务证据中；本专题不对本地存储的加密、安全性、轮换或 secret-management 作出承诺。
 
 ## 受控动作
@@ -34,6 +36,15 @@
 | 反馈 | 由当前表面和控制面支持时可提交；未就绪时应阻断 | 结构化接受、拒绝或代理失败 | 不承诺提交必达、持久账本或人工答复 |
 | 转账提交 | 由当前 runtime/account/chain 前置决定；可经 Web 控制面提交 | 接受/拒绝/失败及结构化原因；接受可返回 action 标识 | submit acceptance 或 action ID 不等于 settlement、最终确认或成功 |
 | 最近历史与状态 | 仅展示当前可用的进程内/接口结果 | 有界、可诊断的近期记录 | 不承诺完整、持久、重启安全或可审计总账 |
+
+<a id="transfer-current-action"></a>
+### 转账窗口的当前 action
+
+- 新转账 B 被受理并返回 action ID 时，窗口在一次状态更新中切换当前追踪身份，清除 A 的状态与轮询完成标记，为 B 安排状态查询。B 的 acceptance 只证明提交阶段受理。
+- 在途查询的成功、错误和终态只影响其所属的当前 action。A 的迟到响应不能把 B 的追踪身份改回 A，也不能让 A 的 confirmed 停止 B 的轮询。
+- B 首次状态查询失败时仍追踪 B，显示本次查询失败或结果待查并保留后续查询能力；只有 B 的有效终态才能按既有规则结束 B 的自动查询。B 的 pending/confirmed/failed、正常提交拒绝和已有近期历史各自保持原语义。
+
+本节和 Reload 补充承接 [#4406 C3 与转账窗口子包](https://github.com/eng-cc/oasis7/issues/4406)。验收分别覆盖真实按钮 handler 的最终状态，以及 A confirmed → B accepted → B 首查失败、A 查询在途 → B 受理 → A 迟到两条完整时序。转账可使用 state/reducer 与受控 transport，并用非空 accounts/history 隔离其他空态调度；不需要真实资金转移。具体接点见[跨表面设计](game-client-launcher-cross-surface-action-parity.design.md#action-result-continuity)。
 
 ## 接口 / 数据
 
