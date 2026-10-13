@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/engineering/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "b7adf0434678e46d8d6724f4f1c87c7fb3f7a497eb816f06c94c33117ff7627d",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "design",
+    "path": "doc/engineering/command-center/document-tree.design.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "engineering-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "repository_health_engineer",
+    "structural_owner": "repository_health_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

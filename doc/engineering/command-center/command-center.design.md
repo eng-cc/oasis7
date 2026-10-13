@@ -46,6 +46,7 @@
 | [REQ-CC-013](command-center.prd.md#REQ-CC-013) | 首页聚合重点、成果、真实请求及返回工作，三场景可用 | [DES-CC-013](#DES-CC-013) | producer_system_designer；主责文档/状态摘要与来源适配器 | 不随刷新运行模型或伪造排序、事实时间 |
 | [REQ-CC-014](command-center.prd.md#REQ-CC-014) | 明确关联复用、失效修复、统一详情及已有现场接续 | [DES-CC-014](#DES-CC-014) | application/domain、UI与受支持原工具定位 | 不从分支名移交运行控制，不自动合并个人/私有数据 |
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | 本机工具作为独立辅助入口接续原工作 | [DES-CC-015](#DES-CC-015) | 本机工具设计、context与既有 signer | 原暂停和私有隔离合同继续约束；工具不成为全部工作的前置 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | 文档全局树、配对与覆盖透明 | [DES-CC-016](#DES-CC-016) | Rust 索引、文档 owner、Solid UI / QA | 本次仅设计；不推断完成状态 |
 
 ## 3. 初始设计基线、目标状态与差距
 
@@ -455,6 +456,7 @@ Codex 连接记录实际验证版本与 schema；未启用时执行视图仍可�
 | [REQ-CC-013](command-center.prd.md#REQ-CC-013) | [DES-CC-013](#DES-CC-013) | AC-CC-013；三场景及局部冲突/过期仍可行动 | 按 [来源核对手册](command-center.manual.md#cc-maintenance-delivery)及项目状态样本核对首页投影；增加排序/冲突/成果去重反例，再按 PRD代表性项目执行真实 App 三场景；当前仅有原文首页测试 | 实现 PR source/build、样本范围、任务耗时/额外操作及结果 | 本轮只验证文档；首页与整体验收待实现 |
 | [REQ-CC-014](command-center.prd.md#REQ-CC-014) | [DES-CC-014](#DES-CC-014) | AC-CC-014；关系复用/修复、外部只读入口；启用自管时验证输入预览和结果反馈 | 复用 [关联 UI测试](../../../tools/oasis7-command-center/ui/src/association.test.tsx) 及后继/runtime反例，后续补失效关系、错误环境、建会话未知与输入失败不重复创建；真实 App 验证原工具往返 | 实现 PR 原工作/关系版本、目标身份与交互结果 | 当前手工关联和自管操作不证明完整接续 |
 | [REQ-CC-015](command-center.prd.md#REQ-CC-015) | [DES-CC-015](#DES-CC-015) | AC-CC-015；辅助动作返回原工作且保持私有隔离/暂停范围 | 复用 [资料隔离测试](../../../tools/oasis7-command-center/core/tests/context.rs) 及本机工具验收方法，补工作详情往返及普通首页不出现私有来源的反例 | 实现 PR 工具/工作身份和真实环境结果 | 完整关联往返待证明；特权能力保持用户暂停 |
+| [REQ-CC-016](command-center.prd.md#REQ-CC-016) | [DES-CC-016](#DES-CC-016) | 产品/设计树与覆盖反馈 | 按专题验证映射承接；扩展 [foundation tests](../../../tools/oasis7-command-center/core/tests/foundation.rs)，实施后执行真实 App 定位与恢复 | 实现 PR source/build 与实际结果 | 当前仅文档，无树 UI 或桌面验收 |
 
 ### 11.2 实施时的验证层与关键反例
 
@@ -520,3 +522,9 @@ Rust 核心 + Solid满足本次“Rust 优先”偏好；UI 全 Rust 尚不是�
 本机资料、同包 CLI、已有 signer 的普通调用、后台操作与私有运行线程合同见[本机工具集成](local-tools.design.md)。资料由原 context 文件与历史主责，App 的内置能力和已安装 CLI 分别观察。Apple 签名及管理员助手已按用户要求暂停，未开放特权安装/管理；完整首装签名闭环尚未验收。
 
 辅助工具入口复用 §5.7 的工作引用和返回位置。工具结果保留原 operation/job 与来源范围，返回工作只更新真实有关结果；工具安装、资料保存或签名准备不使工作/PR/目标自动完成。私有资料与其派生线程仍只在受控工具/运行界面展示，不进入普通首页或共享工作投影。
+
+<a id="DES-CC-016"></a>
+
+## 文档全局阅读增量
+
+[REQ-CC-016](command-center.prd.md#REQ-CC-016) 的产品/系统设计树与目录查漏由[专题系统设计](document-tree.design.md)承接。核对 `main@b7e21b23bf0edfe86f302bb7186aab77e57b26c3` 的已有章节索引后，新增文件级清单、关系投影、覆盖诊断与树 UI 的目标合同；本次仅文档设计，尚未实现或验收，不改变既有 §11 的验证结论。
