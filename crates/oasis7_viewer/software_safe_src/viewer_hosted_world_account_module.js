@@ -12,6 +12,7 @@ export function createHostedWorldAccount({ state, generateKeypair, register, ren
   function disableLegacy() {
     clearLegacy();
     if (state.auth.source === "hosted_browser_storage") clearSession(state, { source: "guest_only", registrationStatus: "guest", runtimeStatus: "guest" });
+    if (state.auth.source !== "hosted_account_cookie") { state.auth.error = null; state.auth.rebindNotice = null; render(); }
   }
   function join(account, { takeover = false, expectedEpoch } = {}) {
     if(state.auth.hostedAccountId&&state.auth.hostedAccountId!==account.account_id)invalidate();

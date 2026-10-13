@@ -2660,6 +2660,11 @@ function createHostedWorldAccount({ state, generateKeypair, register, render, cl
 			registrationStatus: "guest",
 			runtimeStatus: "guest"
 		});
+		if (state.auth.source !== "hosted_account_cookie") {
+			state.auth.error = null;
+			state.auth.rebindNotice = null;
+			render();
+		}
 	}
 	function join(account, { takeover = false, expectedEpoch } = {}) {
 		if (state.auth.hostedAccountId && state.auth.hostedAccountId !== account.account_id) invalidate();
@@ -21691,6 +21696,17 @@ function PasskeyAccountSurface(props) {
 	})();
 }
 //#endregion
+//#region software_safe_src/viewer_modal_focus.js
+function keepFocusInDialog(getDialog) {
+	function guard(event) {
+		const dialog = getDialog();
+		if (!dialog?.isConnected || dialog.contains(event.target)) return;
+		(dialog.querySelector("input:not([disabled]),button:not([disabled]),[tabindex=\"0\"]") || dialog).focus();
+	}
+	document.addEventListener("focusin", guard);
+	return () => document.removeEventListener("focusin", guard);
+}
+//#endregion
 //#region software_safe_src/agent_context_lite.jsx
 var _tmpl$$1 = /*#__PURE__*/ template(`<div class=agent-context-lite__field><div class=metric__label></div><div class=agent-context-lite__value>`);
 var _tmpl$2$1 = /*#__PURE__*/ template(`<div class=feedback-detail>`);
@@ -23197,13 +23213,16 @@ function HostedLoginGate() {
 	const locale = () => uiLocale();
 	let dialogRef;
 	let previousFocus = null;
+	let releaseFocusGuard = () => {};
 	onMount(() => {
 		previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		releaseFocusGuard = keepFocusInDialog(() => dialogRef);
 		queueMicrotask(() => {
 			((dialogRef ? focusableElements(dialogRef)[0] : null) || dialogRef)?.focus();
 		});
 	});
 	onCleanup(() => {
+		releaseFocusGuard();
 		if (previousFocus && document.contains(previousFocus)) previousFocus.focus();
 	});
 	const trapDialogFocus = (event) => {

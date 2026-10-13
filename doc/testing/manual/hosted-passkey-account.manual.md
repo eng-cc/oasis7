@@ -50,6 +50,23 @@ node scripts/hosted-passkey-virtual-authenticator-smoke.mjs --url https://localh
 
 脚本通过真实 `navigator.credentials.create/get` 和两个独立虚拟认证器验证 resident/UV required、注册、清 Cookie 后原账号登录、响应重试不重发 Cookie、备用凭证、撤销后旧凭证签名被拒、CSRF 和退出登录。测试不保存或打印私钥、Cookie、OTP 或完整标准响应。UI 取消和未知提交须保留原尝试；只有服务器确认取消、耗尽或未提交后才新建仪式。
 
+## 真实诊断 runtime 授权合同
+
+同候选构建 `oasis7_viewer_live` 与 launcher 测试 binary 后，可运行隔离协议验证：
+
+```bash
+node scripts/hosted-passkey-world-runtime-smoke.mjs \
+  --runtime-bin <same-candidate-viewer-live> \
+  --fixture-bin <same-candidate-launcher-test-binary> \
+  --url https://localhost:8449/
+```
+
+脚本先确认 4179/5023 空闲，启动只监听 loopback 的 `minimal --no-llm` 诊断 runtime 与真实身份 HTTP handler。沿用上一节受控 TLS 代理；测试密钥、数据库和日志仅留在新建的 0700 临时目录，环境密钥文件为 0600。结果记录实际 binary SHA256；不得把旧 binary 的记录改成新候选通过。
+
+必须观察真实注册 ack、超过 35 秒的续期、停止续期后的授权过期、第二设备仅登录不接管、明确接管隔离旧 key、旧 release 不影响新控制者、当前 release 提升 epoch 并撤销 runtime 控制。脚本有界关闭自己启动的进程；可选 `--hold-ms` 最多 180000，只用于浏览器采样。
+
+此诊断世界关闭玩法，不使用付费模型，也不证明 DevLocal 链集成或正式 Skill 自主游玩。完整 Agent 游戏验收仍按 [自测手册](agent-runtime-self-playtest.manual.md) 选择场景、独立派工并核对权威世界结果。
+
 <a id="real-device"></a>
 ## 真实设备、可访问性与邮箱
 

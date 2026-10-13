@@ -64,6 +64,15 @@ afterEach(() => {
 });
 
 describe("hosted account world bridge contracts", () => {
+  it("clears legacy bootstrap errors after v2 detection while preserving active v2 control errors", () => {
+    const guest = fixture({ source: "guest_only", error: "viewer auth bootstrap is unavailable", rebindNotice: "legacy" });
+    guest.module.disableLegacy();
+    expect(guest.state.auth).toMatchObject({ error: null, rebindNotice: null });
+    expect(guest.render).toHaveBeenCalledOnce();
+    const active = fixture({ source: "hosted_account_cookie", error: "session_revoked" });
+    active.module.disableLegacy();
+    expect(active.state.auth.error).toBe("session_revoked");
+  });
   it("does not turn an existing account login into an automatic world join", async () => {
     const { module, generateKeypair, register } = fixture({
       available: true, source: "hosted_account_cookie", hostedAccountId: account.account_id,

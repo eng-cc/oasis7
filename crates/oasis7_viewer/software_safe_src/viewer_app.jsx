@@ -24,6 +24,7 @@ import { AgentIntentSurface } from "./agent_intent_surface.jsx";
 import { FactoryProductionFailureDispositionCard } from "./factory_production_failure_disposition_card.jsx";
 import { ControlProofPanel } from "./control_proof_panel.jsx";
 import { PasskeyAccountSurface } from "./viewer_passkey_account_surface.jsx";
+import { keepFocusInDialog } from "./viewer_modal_focus.js";
 import { AgentContextLite } from "./agent_context_lite.jsx";
 import { buildAgentContextDisplayModel } from "./viewer_agent_context_display_model.js";
 import { pixelWorldBlockerPresentation, pixelWorldConnectionPresentation } from "./pixel_world_presentation.js";
@@ -727,9 +728,11 @@ function HostedLoginGate() {
   const locale = () => uiLocale();
   let dialogRef;
   let previousFocus = null;
+  let releaseFocusGuard = () => {};
 
   onMount(() => {
     previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    releaseFocusGuard = keepFocusInDialog(() => dialogRef);
     queueMicrotask(() => {
       const firstFocusable = dialogRef ? focusableElements(dialogRef)[0] : null;
       (firstFocusable || dialogRef)?.focus();
@@ -737,6 +740,7 @@ function HostedLoginGate() {
   });
 
   onCleanup(() => {
+    releaseFocusGuard();
     if (previousFocus && document.contains(previousFocus)) {
       previousFocus.focus();
     }
