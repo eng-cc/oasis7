@@ -95,7 +95,7 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 ### 4. 受控真人两次会话
 
-2026-10-14 局部候选核验：[#4669](https://github.com/eng-cc/oasis7/pull/4669) 正在实现 Web Passkey 多凭证账号，邮箱可选，账号登录与世界控制分开。当前分支的 launcher 合同、签名授权及虚拟认证器验证已有通过记录；尚未合入或部署。真实设备、真实云事务、完整世界试玩与首次用户观察仍待验收；ECS 技术预览不能代签正式邀请资格。来源：[账号设计](../../p2p/blockchain/hosted-public-join-key-based-onboarding.design.md)、[验收手册](../../testing/manual/hosted-passkey-account.manual.md)。其他主线基线不变。
+Web Passkey 多凭证账号把账号登录与世界控制分开，邮箱为可选凭证。实现与代码验证见 [#4669](https://github.com/eng-cc/oasis7/pull/4669)，部署进度及交付阻断项见 [#4671](https://github.com/eng-cc/oasis7/issues/4671)。协议边界由 [账号设计](../../p2p/blockchain/hosted-public-join-key-based-onboarding.design.md) 和 [验收手册](../../testing/manual/hosted-passkey-account.manual.md) 承接；技术预览不代签正式邀请资格。
 
 目标和观察口径已定义；持久世界与实际体验满足首次开放条件后，才开展目标玩家两次会话观察。
 本轮未取得真人完成证据。届时需区分独立完成、提示、代操作、未完成和未覆盖，并区分安排的第二次会话与自发回访。
