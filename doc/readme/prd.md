@@ -241,6 +241,8 @@
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
+
+旧 TASK-README 列仅定位各素材编制窗口，不是当前制作/发布队列。素材资产、长期渠道/审核与禁语合同保留；尚未核对唯一原 Task 的一次性操作仍按原版本保留，不全塞入 #1584。
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-README-001 | TASK-README-001/002/005 | `test_tier_required` | 入口结构与导航可达检查 | 新人入项与外部阅读体验 |
@@ -283,11 +285,11 @@
 | PRD-README-038 | TASK-README-060 | `test_tier_required` | 小红书第十一篇素材包明确“做游戏的人去开封，看见的是一套低门槛实景RPG”的标题、正文、封面文案、互动问题、关键词与 HTML/PNG 封面资产，并把判断收口到“最吸引人的不是看景，是进剧情 / 世界要能快速接住人 / 入戏门槛越低越容易形成代入” | 渠道内容从求职判断继续切回游戏设计观察，用现实里的真人 NPC 玩法解释为什么一个世界最重要的不是堆多少内容，而是能不能很快把人拉进剧情 |
 | PRD-README-039 | TASK-README-061/062/063 | `test_tier_required` | Moltbook 下一条 follow-up 素材包明确 `repair certification` 题眼的推荐标题、主贴、首评、CTA 与禁语边界，并在后续收成单一可直接发布版与真实发帖执行记录，持续落回现有草案包与 PM 执行追踪 | 渠道内容顺着已验证的 `trust repair / shared truth / inspectable residue` 主线继续推进，把讨论从“修复该不该贵”收口到“修复到底该由谁验收、什么证据才算数”，同时保持技术预览口径稳定 |
 | PRD-README-040 | TASK-README-064 | `test_tier_required` | 小红书第十二篇素材包明确“AI来得这么快，怎么穿越周期”的标题、正文、短版备选、互动问题、关键词与“先别盯岗位名，先看岗位里哪部分已经会被 AI 压缩 / 要把自己往问题定义、流程重构、结果负责这一层移动”的表达边界 | 渠道内容从现实体验与求职判断继续推进到 AI 时代已有岗位的人如何调整自己的不可替代性结构，把讨论收口到工作内容分层、判断权和结果责任，而不是泛化成宏观趋势分析 |
-| PRD-README-041 | TASK-README-065 | `test_tier_required` | 第十二篇补齐独立封面 HTML/PNG，明确 `穿越周期` 题眼、`AI改写的不是岗位 / 是你那层工作` 封面钩子与 editorial 判断海报方向 | 第十二篇从文案包扩展到可直接发布的单图首屏资产，同时保持主题锚点、手机端读感与表达边界不漂移 |
-| PRD-README-042 | TASK-README-066 | `test_tier_required` | 第十二篇补齐独立轮播版素材包，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用暖纸面 editorial 诊断卡 + 层级上移提示的发布视觉 | 第十二篇从长文版与单图封面进一步扩展到更适合小红书滑读、停留和评论的 4 页轮播版，同时保持“先别盯岗位名，先看岗位里哪层工作在变”的判断主线 |
+| PRD-README-041 | TASK-README-065 | `test_tier_required` | 第十二篇独立封面 HTML/PNG 素材要求，明确 `穿越周期` 题眼、`AI改写的不是岗位 / 是你那层工作` 封面钩子与 editorial 判断海报方向 | 第十二篇从文案包扩展到可直接发布的单图首屏资产，同时保持主题锚点、手机端读感与表达边界不漂移 |
+| PRD-README-042 | TASK-README-066 | `test_tier_required` | 第十二篇独立轮播版素材要求，明确 4 页逐页文案、HTML、逐页 PNG 与评论区收束页，并沿用暖纸面 editorial 诊断卡 + 层级上移提示的发布视觉 | 第十二篇从长文版与单图封面进一步扩展到更适合小红书滑读、停留和评论的 4 页轮播版，同时保持“先别盯岗位名，先看岗位里哪层工作在变”的判断主线 |
 | PRD-README-043 | TASK-README-067 | `test_tier_required` | 小红书博主 / 微信公众号绿洲币激励包明确两类对象的计分维度、固定 `300 / 800 / 1500 OC` 档位、证据字段、审批链、发放回填、反作弊与禁语边界，并把宣传方定义为生态参与者与受益者而不是按流量买量对象 | 两类重点宣传渠道激励的执行性、风控性与口径稳定性 |
 | PRD-README-044 | TASK-README-070 | `test_tier_required` | merged PR reward round scan 脚本支持按时间窗批量扫描、离线 smoke 输入、状态汇总与 ledger-ready row 输出，并与单 PR intake contract 保持一致 | reward review 周期性归集与首轮台账准备效率 |
-| PRD-README-045 | TASK-README-080 | `test_tier_required` | 将第十三篇推荐版从所有权讨论继续收口到“开发者、玩家和认真把项目讲出去的人一起参与把游戏做起来”的主题，并补齐可直接发布的封面 HTML/PNG 与 4 页轮播 HTML/PNG，同时保留非现行法律股权、链上投票权或自动奖励承诺边界 | 第十三篇从“你该被算进去”继续收口到更具体的关系图景，并扩展成可直接发布的单图首屏资产和滑读轮播资产，让“人人都是游戏builder / 一起把游戏做起来”的关系图景先于制度词被看见 |
+| PRD-README-045 | [Task #1584 历史来源](https://github.com/eng-cc/oasis7/issues/1584#issuecomment-6162412349) | `test_tier_required` | 第十三篇素材要求：表达“开发者、玩家和认真讲述项目的人一起参与把游戏做起来”，提供可读正文、封面与轮播资产，并保留非现行法律股权、链上投票权或自动奖励承诺边界 | 第十三篇从“你该被算进去”继续收口到更具体的关系图景，并扩展成可直接发布的单图首屏资产和滑读轮播资产，让“人人都是游戏builder / 一起把游戏做起来”的关系图景先于制度词被看见 |
 | PRD-README-046 | game-positioning-alignment | `test_tier_required` | 根 README、世界规则入口与站点首页中英文首页统一把 `oasis7` 的公开主定位收口为“文明模拟游戏 / civilization simulation game”，同时保留 `limited playable technical preview` 且非 closed beta / public launch 的边界 | 仓库首读入口、规则入口与公开站点不再把项目分别写成系统、引擎和游戏 |
 | PRD-README-047 | xiaohongshu-token-usage-post-pack | `test_tier_required` | 小红书第十四篇素材包明确“项目累计 token 用量”的推荐标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG、事实基线与禁滑坡边界，并把这组真实账单收口为“AI 进入长期项目后会变成研发流程参与成本”的判断 | 小红书内容链路从关系和参与讨论继续推进到真实项目成本结构，让读者看到 AI 成本主要消耗在长期迭代而不是单次生成炫技 |
 | PRD-README-048 | whitepaper-style-overview | `test_tier_required` | 新增一份白皮书式项目总览，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前访问面与技术预览边界，并把它接入根 README 与 readme/governance 导航 | 第一次接触仓库的读者可以先用一份解释型总览建立全貌，再按正式真值源继续下钻 |

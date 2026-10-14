@@ -5,7 +5,7 @@
         "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
         "backlink": "doc/testing/evidence/native-task-logistics-2026-10-12/README.md",
         "claim_boundary": "targeted_native_logistics_candidate_history_not_full_first_session_or_deployment",
-        "content_sha256": "50305c2817c29db3bd268353d01cf1474424a6ffc83f96a0b487e51fe73f335e",
+        "content_sha256": "8defa0aa034d3196f05187d8f62b9d6375b84f767a3e328a3edb32489ab800b7",
         "disposition": "retain",
         "domain_owner": "qa_engineer",
         "evidence_window": "2026-10-12-native-logistics-candidate",
@@ -182,7 +182,7 @@
         "semantic_role": "native_task_logistics_history"
       }
     ],
-    "group_sha256": "d542aa83e8fbfd0de88a09060b67a40a5b1795b4feccc13741bcd9021e886d52",
+    "group_sha256": "8045021ee6215c0473ce545bf5477d26fdf0635eb7b6319a6fb025a5d5376a8f",
     "id": "native-task-logistics-2026-10-12"
   },
   "schema": "oasis7.document-evidence-group/v1"

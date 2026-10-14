@@ -108,13 +108,13 @@
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 模板按实际需要使用，不要求传递协议 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
 - Acceptance Criteria:
   - AC-1: engineering PRD 明确文件约束、脚本约束、测试分层约束。
-  - AC-2: engineering project 文档维护任务拆解与状态。
+  - AC-2: 普通变更由 PR 描述、实际 CI 与评审承载交付事实；Issue/Project 按需使用，不维护本地 project 状态副本。
   - AC-3: 与 `doc/scripts/precommit/pre-commit.prd.md`、`testing-manual.md` 的口径一致。
-  - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界，并进入主项目追踪。
+  - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界；复杂协调按需使用 Issue/Project，不作为普通 PR 准入。
   - AC-6: 文档治理脚本校验 `doc/.governance/*-allowlist.txt`，可拦截 `doc/*.md` 与 `doc/<module>/*.md` 的非预期新增。
   - AC-8: 每次迁移任务需附“原文关键约束点 -> 新文档章节”对照，确保内容不丢失。
   - AC-9: 并行治理按实际修改范围避免重叠并保留必要交接；旧迁移分工表、冻结批次和每日燃尽不作为当前交付条件。
-  - AC-11: 文档治理门禁必须校验专题 PRD/project 双向互链；缺失即失败。
+  - AC-11: 专题需求、设计和当前导航应能互相追溯；适用检查以现行文档治理入口为准，不恢复 PRD/project 双向互链门禁。
   - AC-13: 文档治理门禁必须校验活跃文档 `doc/...*.md` 引用路径可达；断链必须阻断并修复。
   - AC-14: 2026-03 全量 PRD 审读留痕必须可通过 historical round logs / deleted snapshot prose 追溯；当前不再要求存在旧 checklist 目录活跃清单面。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
@@ -217,7 +217,9 @@
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
+
+旧 TASK-ENGINEERING 编号、Owner-B 115 篇与旧迁移/aftercare 记录只作原版本来源，不是当前队列或完成证明；未定位原 Task 的过程保留在固定 Git 历史与本表，不批量代配到总体治理 Task。当前验证仍按有效方法列及 workflow source of truth 选择。
+| PRD-ID | 历史来源或验证入口 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-001 | TASK-ENGINEERING-001/005/006/007 | `test_tier_required` | 文档结构检查、平铺治理脚本执行 | 文档组织一致性、工程可维护性 |
 | PRD-ENGINEERING-002 | TASK-ENGINEERING-002/003/007 | `test_tier_required` + `test_tier_full` | `commit` baseline 与 required/full CI 门禁联动校验 | 提交流程稳定性、回归拦截能力 |
@@ -227,8 +229,8 @@
 | PRD-ENGINEERING-006 | TASK-ENGINEERING-011/012/013/013A/013B/013C/013D/014 | historical-only | 迁移批次已退役；保留完成态 trace | legacy migration closure |
 | PRD-ENGINEERING-007 | TASK-ENGINEERING-015 | historical-only | 全量迁移收尾复核已退役；保留完成态 trace | legacy migration closure |
 | PRD-ENGINEERING-008 | TASK-ENGINEERING-016 | `test_tier_required` | 12 模块文件级索引覆盖扫描、入口可达性检查 | 文档树可达性与导航一致性 |
-| PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | `doc-governance-check` 双向互链门禁验证 | PRD/project 追溯完整性 |
-| PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 模块主项目任务项 tier 显式标注检查 | 任务到测试分层可审计性 |
+| PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | 现行 `doc-governance-check` 的入口/引用核验，不恢复 project 投影 | PRD/project 追溯完整性 |
+| PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 适用 PR 的实际测试范围、tier 和 CI 结果核对；Issue 按需 | 任务到测试分层可审计性 |
 | PRD-ENGINEERING-011 | TASK-ENGINEERING-019 | `test_tier_required` | 活跃文档引用路径可达性门禁与断链修复验证 | 文档树引用完整性与迁移稳定性 |
 | PRD-ENGINEERING-012 | TASK-ENGINEERING-020/024 | `test_tier_required` | 历史审读留痕与入口文档已读率检查 | PRD 审读可追溯性 |
 | PRD-ENGINEERING-013 | TASK-ENGINEERING-021/022 | `test_tier_required` | 代码一致性抽样与偏差回写核验 | 文档行为与实现一致性 |

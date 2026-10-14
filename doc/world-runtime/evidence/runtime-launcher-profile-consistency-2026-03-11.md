@@ -1,5 +1,7 @@
 # Runtime Launcher Profile Consistency Evidence（2026-03-11）
 
+以下是 2026-03-11 的 T7.4 wrapper/profile 历史证据与当时 T7.5 交接。原 Task 和旧 `.tmp` 原始输出未唯一核实，原内容保留；不声称当前 wrapper 已复跑、当前发行放行或恢复旧收尾义务。
+
 审计轮次: 1
 
 ## Meta

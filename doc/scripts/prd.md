@@ -213,7 +213,9 @@ unknown ignored 文件、真实 target 目录、改动 config 均保留；已识
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
+
+旧 TASK-SCRIPTS 编号只定位历史建档/实施范围，不恢复当前排期或必建 Issue 要求；未匹配的原过程保留固定 Git 来源。脚本参数、失败/恢复语义、并行隔离与下列验证方法继续有效。
+| PRD-ID | 历史来源或验证入口 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-SCRIPTS-001 | TASK-SCRIPTS-001/002/005/009/011 | `test_tier_required` | 脚本分层与入口清单核验 | 日常开发链路稳定性 |
 | PRD-SCRIPTS-002 | TASK-SCRIPTS-002/003/005/viewer-software-safe-step-regression-smoke | `test_tier_required` + `test_tier_full` | 参数契约与失败语义回归、`viewer-software-safe-step-regression-smoke.sh` fixture-driven browser smoke | CI 稳定性与故障定位效率 |
