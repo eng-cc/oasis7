@@ -123,6 +123,11 @@ impl RestoreContentCache {
     pub(super) fn record_outcome(&mut self, success: bool) {
         self.outcome = if success { "success" } else { "error" };
     }
+
+    #[cfg(test)]
+    pub(super) fn source_reads(&self) -> usize {
+        self.source_reads
+    }
 }
 
 impl Drop for RestoreContentCache {

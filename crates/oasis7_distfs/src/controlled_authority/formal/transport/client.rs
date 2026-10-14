@@ -23,6 +23,8 @@ pub struct RemoteFormalEndpoint {
     last_checkpoint: Option<fencing::EndpointCheckpointBindingV1>,
     last_native_context: Option<VerifiedNativeRpcContextV1>,
     archive_read_grant: Option<SignedArchiveReadGrantV1>,
+    #[cfg(test)]
+    last_native_restore_source_reads: usize,
 }
 impl RemoteFormalEndpoint {
     pub fn new(
@@ -90,6 +92,8 @@ impl RemoteFormalEndpoint {
             last_checkpoint: None,
             last_native_context: None,
             archive_read_grant,
+            #[cfg(test)]
+            last_native_restore_source_reads: 0,
         })
     }
     /// Bound a multi-RPC operation by one absolute deadline. The configured

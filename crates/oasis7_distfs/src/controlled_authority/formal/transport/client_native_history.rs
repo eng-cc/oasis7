@@ -180,9 +180,18 @@ impl RemoteFormalEndpoint {
             Ok(restored)
         })();
         local_cache.record_outcome(result.is_ok());
+        #[cfg(test)]
+        {
+            self.last_native_restore_source_reads = local_cache.source_reads();
+        }
         drop(local_cache);
         self.operation_deadline = previous_deadline;
         result
+    }
+
+    #[cfg(test)]
+    pub(crate) fn last_native_restore_source_reads(&self) -> usize {
+        self.last_native_restore_source_reads
     }
 }
 

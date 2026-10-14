@@ -3,6 +3,10 @@
 use super::*;
 use crate::controlled_authority::formal::transport::VerifiedNativeRpcContextV1;
 use crate::controlled_authority::replicated_protocol::ClosedRecord;
+use std::collections::BTreeMap;
+
+const MAX_EMBEDDED_BUSINESS_NODES: usize = 4096;
+const MAX_EMBEDDED_BUSINESS_BYTES: usize = 16 * 1024 * 1024;
 
 pub struct VerifiedNativeHistoricalRestoreV1 {
     commit: VerifiedFormalCommitV1,
@@ -150,6 +154,15 @@ pub(crate) fn restore_native_position(
     {
         return Err(invalid("historical exact candidate/proof/canonical head"));
     }
+    verify_record_material(&proof.decision.record, &candidate.material)?;
+    // Profile 2 result envelopes already carry their immutable node writes.
+    // Keep these verified bytes local for the following sparse-index replay;
+    // any node outside the two closed records still uses the authenticated
+    // transport loader below.
+    let mut embedded_business_nodes = EmbeddedBusinessNodes::default();
+    if historical_authority.definition().profile_version == 2 {
+        embedded_business_nodes.include_material(&proof.decision.record, &candidate.material)?;
+    }
     if Store::lookup_from_root(body.index.as_deref(), &node.request, &mut load)?.as_deref()
         != Some(node.entry.as_str())
     {
@@ -157,7 +170,6 @@ pub(crate) fn restore_native_position(
             "historical authenticated permanent request inclusion",
         ));
     }
-    verify_record_material(&proof.decision.record, &candidate.material)?;
     match (&candidate.frozen, &candidate.frozen_material) {
         (Some(cert), Some(material)) => verify_frozen_material(&cert.reservation.body, material)?,
         (None, None) if proof.decision.record.kind == FormalRecordKindV1::InitialActivation => {}
@@ -172,17 +184,31 @@ pub(crate) fn restore_native_position(
         if parent_node.head != link.head {
             return Err(invalid("historical parent node identity"));
         }
-        let FormalRequestStateV1::Qualified { proof: parent, .. } =
-            object(&parent_node.entry, &mut load)?
+        let FormalRequestStateV1::Qualified {
+            candidate: parent_candidate,
+            proof: parent,
+        } = object(&parent_node.entry, &mut load)?
         else {
             return Err(invalid("historical parent not Qualified"));
         };
-        if parent.decision.record.record_id() != Ok(link.head.record_id.clone())
+        let profile2 = historical_authority.definition().profile_version == 2;
+        if (profile2
+            && (parent_candidate.candidate.record != parent.decision.record
+                || parent_candidate.candidate.writer_signature_hex
+                    != parent.decision.writer_signature_hex
+                || parent_candidate.branch != parent.decision.branch
+                || parent_candidate.frozen != parent.decision.frozen))
+            || parent.decision.record.record_id() != Ok(link.head.record_id.clone())
             || parent.decision.record.position != link.head.position
             || parent.decision.primary.body.finalizing_authority_id
                 != parent.decision.replica.body.finalizing_authority_id
         {
             return Err(invalid("historical parent canonical/finalizer context"));
+        }
+        if historical_authority.definition().profile_version == 2 {
+            verify_record_material(&parent.decision.record, &parent_candidate.material)?;
+            embedded_business_nodes
+                .include_material(&parent.decision.record, &parent_candidate.material)?;
         }
         business_parent = Some(VerifiedFormalBusinessParentV1::from_authenticated_parent(
             &CheckpointParent {
@@ -230,6 +256,7 @@ pub(crate) fn restore_native_position(
     {
         let reader = HistoryBusinessReader {
             load: std::cell::RefCell::new(&mut load),
+            embedded: &embedded_business_nodes,
         };
         if let Some(verified) = super::super::business_material::verify_formal_business_material(
             historical_authority,
@@ -263,13 +290,92 @@ pub(crate) fn restore_native_position(
         checkpoint: context.checkpoint().clone(),
     })
 }
+/// A bounded byte cache only. `BusinessIndexNodeReader` still validates each
+/// fetched digest and canonical node depth before the bytes influence a root.
+#[derive(Default)]
+struct EmbeddedBusinessNodes {
+    nodes: BTreeMap<String, Vec<u8>>,
+    bytes: usize,
+}
+impl EmbeddedBusinessNodes {
+    fn include_material(
+        &mut self,
+        record: &CanonicalRecordV1,
+        material: &ClosedRecord,
+    ) -> Result<(), FormalError> {
+        let result_root = material
+            .roots
+            .get(&crate::controlled_authority::replicated_protocol::ArtifactRole::Result)
+            .ok_or_else(|| invalid("historical business Result role missing"))?;
+        let result = material
+            .objects
+            .iter()
+            .find(|object| &object.content_hash == result_root)
+            .ok_or_else(|| invalid("historical business Result bytes missing"))?;
+        let envelope =
+            super::super::business_material::FormalBusinessResultEnvelopeV1::decode(&result.bytes)?;
+        if record.result_root != envelope.delta.new_root {
+            return Err(invalid("historical embedded business root mismatch"));
+        }
+        for write in envelope.delta.node_writes.iter().chain(
+            envelope
+                .retained_history_delta
+                .iter()
+                .flat_map(|delta| delta.node_writes.iter()),
+        ) {
+            self.insert_write(&write.digest, &write.bytes)?;
+        }
+        Ok(())
+    }
+
+    fn insert_write(&mut self, digest: &str, bytes: &[u8]) -> Result<(), FormalError> {
+        hash_hex(digest)?;
+        if blake3::hash(bytes).to_hex().as_str() != digest {
+            return Err(invalid("historical embedded business node checksum"));
+        }
+        if let Some(existing) = self.nodes.get(digest) {
+            if existing.as_slice() != bytes {
+                return Err(invalid("historical embedded business node collision"));
+            }
+            return Ok(());
+        }
+        let Some(next_bytes) = self.bytes.checked_add(bytes.len()) else {
+            return Ok(());
+        };
+        if self.nodes.len() >= MAX_EMBEDDED_BUSINESS_NODES
+            || next_bytes > MAX_EMBEDDED_BUSINESS_BYTES
+        {
+            return Ok(());
+        }
+        self.nodes.insert(digest.to_owned(), bytes.to_vec());
+        self.bytes = next_bytes;
+        Ok(())
+    }
+}
+impl super::super::business_index::BusinessIndexNodeReader for EmbeddedBusinessNodes {
+    fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
+        hash_hex(digest).map_err(|error| error.to_string())?;
+        let Some(bytes) = self.nodes.get(digest) else {
+            return Ok(None);
+        };
+        if blake3::hash(bytes).to_hex().as_str() != digest {
+            return Err("historical embedded business node checksum".into());
+        }
+        Ok(Some(bytes.clone()))
+    }
+}
+
 struct HistoryBusinessReader<'a, F> {
     load: std::cell::RefCell<&'a mut F>,
+    embedded: &'a EmbeddedBusinessNodes,
 }
 impl<F: FnMut(&str) -> Result<Vec<u8>, FormalError>>
     super::super::business_index::BusinessIndexNodeReader for HistoryBusinessReader<'_, F>
 {
     fn read_node(&self, id: &str) -> Result<Option<Vec<u8>>, String> {
+        if let Some(bytes) = self.embedded.read_node(id)? {
+            return Ok(Some(bytes));
+        }
         (self.load.borrow_mut())(id)
             .map(Some)
             .map_err(|error| error.to_string())

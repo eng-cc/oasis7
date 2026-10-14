@@ -196,6 +196,10 @@ fn delegated_historical_material_rpc_reads_below_native_minimum_without_rewindin
             None,
         )
         .unwrap();
+    assert!(
+        client.last_native_restore_source_reads() < 64,
+        "hash-closed target and parent deltas should avoid one RPC per embedded business node"
+    );
     assert_eq!(historical.proof(), &second);
     assert_eq!(historical.current_head(), &second_commit.head());
     let restored = client.restore_committed_historical_cut(&cut).unwrap();

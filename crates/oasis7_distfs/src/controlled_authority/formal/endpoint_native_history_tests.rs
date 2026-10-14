@@ -1,5 +1,22 @@
 use super::*;
 use std::collections::BTreeMap;
+
+#[test]
+fn embedded_business_node_cache_rejects_corrupt_bytes() {
+    use crate::controlled_authority::formal::business_index::BusinessIndexNodeReader;
+
+    let mut cache = EmbeddedBusinessNodes::default();
+    let bytes = b"canonical node bytes";
+    let digest = blake3::hash(bytes).to_hex().to_string();
+    cache.insert_write(&digest, bytes).unwrap();
+    assert_eq!(cache.read_node(&digest).unwrap(), Some(bytes.to_vec()));
+    assert!(cache.insert_write(&"ab".repeat(32), b"bad bytes").is_err());
+    cache
+        .nodes
+        .insert(digest.clone(), b"tampered bytes".to_vec());
+    assert!(cache.read_node(&digest).is_err());
+}
+
 fn put<T: serde::Serialize>(objects: &mut BTreeMap<String, Vec<u8>>, value: &T) -> String {
     let bytes = serde_cbor::to_vec(value).unwrap();
     let id = blake3::hash(&bytes).to_hex().to_string();
