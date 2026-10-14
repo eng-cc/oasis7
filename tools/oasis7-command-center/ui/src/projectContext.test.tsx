@@ -87,9 +87,10 @@ it('preserves the current project inputs when opening fails or the picker is can
 
 it('keeps a search-only selected goal visible and removable after returning to the project', async () => {
   const goal = {...snapshot('A').sections[0],id:'doc/product/design.md#clause',title:'容量合同'};
+  let omitGoal = false;
   let current = {...snapshot('A'),sections:[goal]};
   mock.invoke.mockImplementation(async (command: string, args?: {path?: string}) => {
-    if (command === 'open_project') current = args!.path === '/A' ? {...snapshot('A'),sections:[goal]} : snapshot('B');
+    if (command === 'open_project') current = args!.path === '/A' ? {...snapshot('A'),sections:omitGoal ? [] : [goal]} : snapshot('B');
     if (command === 'query_view' || command === 'open_project') return current;
     if (command === 'search_rules') return [goal];
     return github;
@@ -104,6 +105,12 @@ it('keeps a search-only selected goal visible and removable after returning to t
   await open('B');
   await open('A');
   expect(screen.getByLabelText('容量合同')).toBeChecked();
-  fireEvent.click(screen.getByLabelText('容量合同'));
+  await open('B');
+  omitGoal = true;
+  await open('A');
+  const unresolved = screen.getByLabelText('原章节未读取或已变化 · doc/product/design.md#clause');
+  expect(unresolved).toBeChecked();
   expect(screen.getByRole('button',{name:'保存已确认关联'})).toBeDisabled();
-});
+  fireEvent.click(unresolved);
+  expect(screen.getByRole('button',{name:'保存已确认关联'})).toBeDisabled();
+}, 15000);
