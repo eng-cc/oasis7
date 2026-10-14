@@ -84,3 +84,26 @@ it('preserves the current project inputs when opening fails or the picker is can
   await waitFor(() => expect(screen.getByRole('button',{name:'打开项目'})).toBeEnabled());
   expect(screen.getByLabelText('决定内容')).toHaveValue('尚未保存');
 });
+
+it('keeps a search-only selected goal visible and removable after returning to the project', async () => {
+  const goal = {...snapshot('A').sections[0],id:'doc/product/design.md#clause',title:'容量合同'};
+  let current = {...snapshot('A'),sections:[goal]};
+  mock.invoke.mockImplementation(async (command: string, args?: {path?: string}) => {
+    if (command === 'open_project') current = args!.path === '/A' ? {...snapshot('A'),sections:[goal]} : snapshot('B');
+    if (command === 'query_view' || command === 'open_project') return current;
+    if (command === 'search_rules') return [goal];
+    return github;
+  });
+  render(() => <App />);
+  await waitFor(() => expect(screen.getByRole('button',{name:'打开项目'})).toBeEnabled());
+  fireEvent.input(screen.getByLabelText('搜索规范、标题、路径或条款 ID'),{target:{value:'容量'}});
+  fireEvent.click(screen.getByRole('button',{name:'搜索'}));
+  await waitFor(() => expect(screen.getByLabelText('容量合同')).toBeInTheDocument());
+  fireEvent.click(screen.getByLabelText('容量合同'));
+  fireEvent.input(screen.getByLabelText('关联工作 PR 地址'),{target:{value:'https://github.com/eng-cc/oasis7/pull/1'}});
+  await open('B');
+  await open('A');
+  expect(screen.getByLabelText('容量合同')).toBeChecked();
+  fireEvent.click(screen.getByLabelText('容量合同'));
+  expect(screen.getByRole('button',{name:'保存已确认关联'})).toBeDisabled();
+});
