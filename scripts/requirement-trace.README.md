@@ -52,13 +52,17 @@ conflict diagnostics remain data in a successful query, so this is not a gate.
   cell. Tables may instead use `Trace ID` / `Trace refs` column headings.
   Inline-code values and inline-code labels are supported. Multiple refs can be
   comma-, semicolon- or whitespace-separated. A declaration lists one ID.
-- Whole inline-code fields, fenced/indented code, blockquotes, HTML comments,
+- Whole inline-code fields, fenced code, all lines indented by four spaces or
+  a tab, blockquotes, HTML comments,
   example/template/sample sections and descendants are excluded. Directories
   named `templates`, `examples`, or `fixtures`, and GitHub's named Issue/PR
   template files are excluded from formal interpretation. A filename merely
   containing `templates` is not excluded. A descriptive document-level title
   ending in “模板” does not exclude its formal explanatory prose; a standalone
-  `# Template` / `# 示例` heading does. Unlabelled examples cannot always be
+  `# Template` / `# 示例` heading does. Four-space indentation can also denote
+  ordinary nested Markdown lists, not just code; formal fields in those nested
+  lists are currently unsupported and skipped. This is a bounded parser, not a
+  general Markdown block parser. Unlabelled examples cannot always be
   recognized: unsupported field positions and lifecycle wording are flagged
   for human review, never promoted from substring search.
 - Paragraph records preserve their section text; table records preserve their
@@ -74,7 +78,10 @@ conflict diagnostics remain data in a successful query, so this is not a gate.
   Setext heading anchors and unusual escapes require manual verification.
   An unrecognized anchor is reported within this parser's scope, not silently
   repaired. External/blob-version links remain unverified rather than falsely
-  equated with the current checkout.
+  equated with the current checkout. Malformed URLs, uninspectable local paths
+  and symlink targets produce per-link diagnostics without discarding the other
+  relationships. Local path components are inspected without following symlinks,
+  including symlink directories before a `..` component.
 
 ## Coverage, versions and diagnostics
 

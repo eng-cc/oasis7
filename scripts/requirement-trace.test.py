@@ -106,6 +106,11 @@ Trace refs: {OTHER}
         self.assertEqual(self.ids(result, 'reference'), [ID])
         self.assertEqual(self.ids(result, 'declaration'), [])
 
+    def test_four_space_nested_list_fields_are_currently_unsupported(self):
+        text = f'- Parent item\n    - Trace refs: {OTHER}\n\nTrace ID: {ID}\n'
+        result = self.parse(text)
+        self.assertEqual(self.ids(result), [ID])
+
     def test_table_many_to_many_preserves_row_context(self):
         result = self.parse(f'| Requirement | Scope |\n| --- | --- |\n| Trace refs: {ID}, {OTHER} | only rendering |\n')
         self.assertEqual(set(self.ids(result)), {ID, OTHER})
@@ -191,6 +196,56 @@ class IndexTests(Base):
         serialized = json.dumps(one)
         self.assertIn('a' * 40, serialized)
         self.assertIn(REPO, serialized)
+
+    def test_malformed_url_isolated_from_valid_relations_and_links(self):
+        self.put('req.md', f'# Existing\nTrace ID: {ID}\n')
+        self.put('design.md', f'Trace refs: {ID}\n[source](https://[broken) [good](req.md#existing)\n')
+        result = self.build()
+        refs = [r for r in result['records'] if r['role'] == 'reference']
+        self.assertEqual([r['id'] for r in refs], [ID])
+        self.assertEqual([c['status'] for c in refs[0]['link_checks']],
+                         ['invalid_url', 'resolved_in_working_tree'])
+        self.assertIn('unverifiable_locator', json.dumps(result['diagnostics']))
+
+    def test_self_referencing_symlink_link_is_not_followed(self):
+        self.put('req.md', f'# Existing\nTrace ID: {ID}\n')
+        (self.root / 'loop.md').symlink_to('loop.md')
+        self.put('design.md', f'Trace refs: {ID}\n[loop](loop.md#anchor) [good](req.md#existing)\n')
+        result = self.build()
+        record = next(r for r in result['records'] if r['role'] == 'reference')
+        self.assertEqual([c['status'] for c in record['link_checks']],
+                         ['unverifiable_symlink_not_followed', 'resolved_in_working_tree'])
+        self.assertEqual(self.ids(result, 'declaration'), [ID])
+        self.assertIn('unverifiable_locator', json.dumps(result['diagnostics']))
+
+    def test_symlink_directory_before_parent_component_is_not_normalized_away(self):
+        self.put('req.md', f'# Existing\nTrace ID: {ID}\n')
+        with tempfile.TemporaryDirectory() as outside:
+            (self.root / 'redirect').symlink_to(outside, target_is_directory=True)
+            self.put('design.md', f'Trace refs: {ID}\n[redirect](redirect/../req.md#existing)\n')
+            record = next(r for r in self.build()['records'] if r['role'] == 'reference')
+            self.assertEqual(record['link_checks'][0]['status'], 'unverifiable_symlink_not_followed')
+
+    def test_invalid_local_path_isolated_from_other_links(self):
+        self.put('req.md', f'# Existing\nTrace ID: {ID}\n')
+        self.put('design.md', f'Trace refs: {ID}\n[bad](invalid%00.md) [good](req.md#existing)\n')
+        result = self.build()
+        record = next(r for r in result['records'] if r['role'] == 'reference')
+        self.assertEqual([c['status'] for c in record['link_checks']],
+                         ['unverifiable_local_path', 'resolved_in_working_tree'])
+        self.assertIn('unverifiable_locator', json.dumps(result['diagnostics']))
+
+    def test_parent_component_after_file_is_not_normalized_into_valid_link(self):
+        self.put('req.md', f'# Existing\nTrace ID: {ID}\n')
+        self.put('design.md', f'Trace refs: {ID}\n[bad](req.md/../req.md#existing)\n')
+        record = next(r for r in self.build()['records'] if r['role'] == 'reference')
+        self.assertEqual(record['link_checks'][0]['status'], 'unverifiable_local_path')
+
+    def test_ordinary_relative_parent_link_still_resolves(self):
+        self.put('req.md', f'# Existing\nTrace ID: {ID}\n')
+        self.put('design/section.md', f'Trace refs: {ID}\n[good](../req.md#existing)\n')
+        record = next(r for r in self.build()['records'] if r['role'] == 'reference')
+        self.assertEqual(record['link_checks'][0]['status'], 'resolved_in_working_tree')
 
     def test_broken_anchor_and_dangling_ref_diagnostics(self):
         self.put('req.md', f'# Existing\nTrace ID: {ID}\n')

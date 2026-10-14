@@ -12,6 +12,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -195,6 +196,63 @@ def snapshot_freshness(snapshot, max_age=24):
         return dict(fetched_at=fetched, age_seconds=None, status='unknown', max_age_hours=max_age)
 
 
+def check_link(link, record, root, documents):
+    """Check one locator in isolation, never following a local symlink.
+
+    Walk lexical path components with lstat, including before '..', so a symlink
+    cannot be hidden by normalization or redirect inspection outside the corpus.
+    """
+    check = dict(link=link, status='unverified_external')
+    try:
+        parsed = urlsplit(link)
+    except (ValueError, TypeError):
+        check['status'] = 'invalid_url'
+        return check
+    if parsed.scheme or parsed.netloc or record['source']['kind'] != 'document':
+        return check
+    try:
+        target = ((root / record['source']['path']).parent / unquote(parsed.path)
+                  if parsed.path else root / record['source']['path'])
+        try:
+            parts = target.relative_to(root).parts
+        except ValueError:
+            check['status'] = 'outside_scope'
+            return check
+        cursor = root
+        for position, part in enumerate(parts):
+            if part == '..':
+                if cursor == root:
+                    check['status'] = 'outside_scope'
+                    return check
+                cursor = cursor.parent
+                continue
+            cursor = cursor / part
+            try:
+                mode = cursor.lstat().st_mode
+            except FileNotFoundError:
+                check['status'] = 'path_not_found_in_working_tree'
+                return check
+            if stat.S_ISLNK(mode):
+                check['status'] = 'unverifiable_symlink_not_followed'
+                return check
+            if position < len(parts) - 1 and not stat.S_ISDIR(mode):
+                check['status'] = 'unverifiable_local_path'
+                return check
+        rel = cursor.relative_to(root).as_posix()
+        check['target'] = rel
+        if rel not in documents:
+            check['status'] = 'unverified_outside_document_scope'
+        elif parsed.fragment and unquote(parsed.fragment) not in documents[rel]:
+            check['status'] = 'anchor_not_found_in_supported_markdown'
+        else:
+            check['status'] = 'resolved_in_working_tree'
+    except (OSError, RuntimeError, ValueError):
+        # A bad URL, path, permission, loop or filesystem error affects this link
+        # only. Do not expose arbitrary exception text or discard formal records.
+        check['status'] = 'unverifiable_local_path'
+    return check
+
+
 def build_index(root, github=None, repository=None, revision=None):
     root = Path(root).resolve()
     if not root.is_dir():
@@ -268,24 +326,11 @@ def build_index(root, github=None, repository=None, revision=None):
         record['locator'] = (record['source'].get('url') or record['source'].get('path', '')) + ('#' + record['anchor'] if record['anchor'] else '')
         record['link_checks'] = []
         for link in record['links']:
-            parsed = urlsplit(link)
-            check = dict(link=link, status='unverified_external')
-            if not parsed.scheme and not parsed.netloc and record['source']['kind'] == 'document':
-                target = (root / record['source']['path']).parent / unquote(parsed.path) if parsed.path else root / record['source']['path']
-                try:
-                    rel = target.resolve().relative_to(root).as_posix()
-                except ValueError:
-                    check['status'] = 'outside_scope'
-                else:
-                    check['target'] = rel
-                    if rel not in documents:
-                        check['status'] = 'unverified_outside_document_scope' if target.exists() else 'path_not_found_in_working_tree'
-                    elif parsed.fragment and unquote(parsed.fragment) not in documents[rel]:
-                        check['status'] = 'anchor_not_found_in_supported_markdown'
-                    else:
-                        check['status'] = 'resolved_in_working_tree'
-                    if check['status'] in ('path_not_found_in_working_tree', 'anchor_not_found_in_supported_markdown'):
-                        diagnostics.append(diagnostic('broken_locator', check['status'] + ': ' + link, record['source'], record['line'], 'within_local_scope'))
+            check = check_link(link, record, root, documents)
+            if check['status'] in ('path_not_found_in_working_tree', 'anchor_not_found_in_supported_markdown'):
+                diagnostics.append(diagnostic('broken_locator', check['status'] + ': ' + link, record['source'], record['line'], 'within_local_scope'))
+            elif check['status'] in ('invalid_url', 'unverifiable_local_path', 'unverifiable_symlink_not_followed'):
+                diagnostics.append(diagnostic('unverifiable_locator', check['status'] + ': ' + link, record['source'], record['line']))
             record['link_checks'].append(check)
     for trace_id, matches in sorted(by_id.items()):
         declarations = [r for r in matches if r['role'] == 'declaration']
