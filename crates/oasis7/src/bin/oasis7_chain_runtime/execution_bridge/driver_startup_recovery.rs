@@ -21,8 +21,7 @@ use super::driver_observability::{
     execution_record_recovery_ref_count,
 };
 use super::driver_persistence::{
-    execution_world_persistence_files_missing, persist_execution_bridge_state,
-    persist_execution_world_with_chain_resource_context,
+    persist_execution_bridge_state, persist_execution_world_with_chain_resource_context,
 };
 use super::execution_hash::ExecutionHashPayload;
 use super::simulator_mirror::persist_simulator_execution_world;
@@ -166,7 +165,6 @@ impl NodeRuntimeExecutionDriver {
         snapshot: &RuntimeSnapshot,
         journal: &RuntimeJournal,
         checkpoint_manifest: Option<&ExecutionCheckpointManifest>,
-        allow_legacy_cache_recovery: bool,
     ) -> Result<(), String> {
         if record.height == 0 || record.world_id.trim().is_empty() {
             return Err(format!(
@@ -174,9 +172,7 @@ impl NodeRuntimeExecutionDriver {
                 record.height, record.world_id
             ));
         }
-        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
-            && !allow_legacy_cache_recovery
-        {
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3 {
             let checkpoint_install_record = record.checkpoint_ref.is_some()
                 && record.proposer_id.is_none()
                 && record.action_root.is_none();
@@ -213,9 +209,7 @@ impl NodeRuntimeExecutionDriver {
         let checkpoint_install_record = record.checkpoint_ref.is_some()
             && record.proposer_id.is_none()
             && record.action_root.is_none();
-        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
-            && !allow_legacy_cache_recovery
-            && !checkpoint_install_record
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3 && !checkpoint_install_record
         {
             let proof_ref = record.world_head_proof_ref.as_deref().ok_or_else(|| {
                 format!(
@@ -391,11 +385,7 @@ impl NodeRuntimeExecutionDriver {
                 )
             })?
             .to_string();
-        let allow_legacy_cache_recovery = record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V3
-            && target_height < self.state.last_applied_committed_height
-            && !execution_world_persistence_files_missing(self.world_dir.as_path());
         if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
-            && !allow_legacy_cache_recovery
             && (record.latest_state_ref.as_deref() != Some(snapshot_ref.as_str())
                 || record.snapshot_ref.as_deref() != Some(snapshot_ref.as_str())
                 || record.journal_ref.as_deref().is_none_or(str::is_empty))
@@ -488,7 +478,6 @@ impl NodeRuntimeExecutionDriver {
             &snapshot,
             &journal,
             checkpoint_manifest.as_ref(),
-            allow_legacy_cache_recovery,
         )?;
         let decode_ms = runtime_decode_started_at.elapsed();
 

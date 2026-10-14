@@ -179,6 +179,7 @@ pub enum Capability {
     MinimumCommit,
     FixedHistoricalView,
     BoundedChanges,
+    GovernanceMembership,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -206,6 +207,8 @@ pub struct WorldAvailability {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DescribeWorldResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_profile: Option<FormalReadProfileV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_evidence_scope: Option<String>,
     pub contract_version: u32,
@@ -284,6 +287,8 @@ pub enum IntentOutcome<T> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IntentResponse<T> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_profile: Option<FormalReadProfileV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_evidence_scope: Option<String>,
     pub contract_version: u32,
     pub correlation: RequestCorrelation,
@@ -316,6 +321,12 @@ pub enum SubmitObservation<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadWorldViewRequest {
+    /// Fresh authenticated observation challenge for the formal read profile.
+    /// Omitted legacy requests retain their original signing bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation_nonce: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_anchor: Option<FormalReadAnchorRefV1>,
     pub contract_version: u32,
     pub world: WorldIdentity,
     pub scope_id: String,
@@ -324,10 +335,48 @@ pub struct ReadWorldViewRequest {
     pub deadline_unix_ms: Option<u64>,
 }
 impl ReadWorldViewRequest {
+    /// Structural validation only. Formal ancestry and minimum bindings must
+    /// additionally be established by an independently anchored proof consumer.
+    pub fn validate_formal_shape(&self) -> Result<(), ContractError> {
+        if self.observation_nonce.as_ref().is_none_or(|nonce| {
+            nonce.len() != 64
+                || !nonce
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }) {
+            return Err(ContractError(
+                "formal read requires bounded observation nonce",
+            ));
+        }
+        if self.formal_anchor.is_none() {
+            return Err(ContractError("formal read requires caller anchor"));
+        }
+        let mut shape = self.clone();
+        shape.min_commit = None;
+        shape.validate()?;
+        if let Some(minimum) = &self.min_commit {
+            minimum.validate()?;
+            if minimum.world != self.world {
+                return Err(ContractError("read world mismatch"));
+            }
+        }
+        Ok(())
+    }
     pub fn validate(&self) -> Result<(), ContractError> {
+        if self.observation_nonce.as_ref().is_some_and(|nonce| {
+            nonce.len() != 64
+                || !nonce
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        }) {
+            return Err(ContractError("invalid read observation nonce"));
+        }
         validate_version(self.contract_version)?;
         self.world.validate()?;
         required(&self.scope_id)?;
+        if let Some(anchor) = &self.formal_anchor {
+            anchor.validate()?;
+        }
         for commit in [&self.min_commit, &self.fixed_commit].into_iter().flatten() {
             commit.validate()?;
             if commit.world != self.world {
@@ -345,6 +394,10 @@ impl ReadWorldViewRequest {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadWorldViewResponse<T> {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_profile: Option<FormalReadProfileV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_proof: Option<FormalReadSidecarV1>,
     pub contract_version: u32,
     /// Signed engineering evidence claim; absent retains the ordinary wire contract.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -409,6 +462,8 @@ pub struct WorldChange<T> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadWorldChangesResponse<T> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_profile: Option<FormalReadProfileV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_evidence_scope: Option<String>,
     pub contract_version: u32,
     pub changes: Vec<WorldChange<T>>,
@@ -468,3 +523,16 @@ fn validate_projection(version: &ProjectionVersion) -> Result<(), ContractError>
     required(&version.projection_revision)?;
     required(&version.visibility_scope)
 }
+
+#[path = "world_service_membership.rs"]
+mod membership;
+pub use membership::*;
+#[path = "world_service_formal_governance.rs"]
+mod formal_governance;
+pub use formal_governance::*;
+#[path = "world_service_formal.rs"]
+mod formal;
+pub use formal::*;
+#[path = "world_service_formal_result.rs"]
+mod formal_result;
+pub use formal_result::*;

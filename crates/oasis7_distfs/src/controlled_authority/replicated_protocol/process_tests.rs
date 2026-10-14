@@ -97,7 +97,15 @@ fn concurrent_expected_parent_allows_only_one_irrevocable_decision() {
     let a = proposal("a", &genesis);
     let b = proposal("b", &genesis);
     let ra = r.prepare(&a).unwrap();
-    let rb = r.prepare(&b).unwrap();
+    assert!(r.prepare(&b).is_err());
+    let rb = crypto::sign_receipt(
+        &trust(),
+        EndpointRole::Replica,
+        ReceiptStage::Prepared,
+        crypto::verify_proposal(&b, &trust()).unwrap(),
+        &key(3),
+    )
+    .unwrap();
     let service = std::sync::Arc::new(std::sync::Mutex::new(p));
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
     let workers = [(a, ra), (b, rb)]
@@ -166,6 +174,7 @@ fn prepared_and_primary_only_anchors_cannot_be_restored_as_qualified() {
     .unwrap();
     let rr = r.decide_replica(&a, &prep, &pr).unwrap();
     let e = DurabilityEvidence {
+        frozen_certificate: None,
         proposal: a,
         replica_prepare: prep,
         primary_receipt: pr,
@@ -175,7 +184,7 @@ fn prepared_and_primary_only_anchors_cannot_be_restored_as_qualified() {
     r.finalize(&e).unwrap();
     let anchor = p.head();
     drop((p, r));
-    let saved = std::fs::read(root.join("p/replicated-endpoint.json")).unwrap();
+    let saved = serde_json::to_vec(&serde_json::json!({"schema_version":1,"trust":trust(),"role":EndpointRole::Primary,"prepared":[],"decisions":[{"proposal":e.proposal,"replica_prepare":e.replica_prepare,"primary_receipt":e.primary_receipt,"replica_receipt":e.replica_receipt,"published":true}]})).unwrap();
     std::fs::remove_dir_all(root.join("p")).unwrap();
     assert!(
         FileEndpoint::open(

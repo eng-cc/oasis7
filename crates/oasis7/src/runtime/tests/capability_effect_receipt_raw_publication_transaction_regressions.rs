@@ -12,6 +12,9 @@ fn captured_closure() -> (World, CapabilityAuthorizationEvent) {
     let start = world.journal().events.len();
     world
         .ingest_receipt(EffectReceipt {
+            birth_era: None,
+            world: None,
+            intent_payload_digest: None,
             intent_id: intent.intent_id,
             status: "ok".into(),
             payload: json!({"closed": true}),

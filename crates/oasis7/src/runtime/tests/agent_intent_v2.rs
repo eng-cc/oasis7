@@ -654,6 +654,7 @@ fn live_completion_api_requires_matching_committed_receipt_and_replays() {
         time: 7,
         caused_by: None,
         body: WorldEventBody::EffectQueued(EffectIntent {
+            birth_era: None,
             intent_id: "effect-live-complete".to_string(),
             kind: "test_effect".to_string(),
             params: serde_json::json!({}),
@@ -668,6 +669,9 @@ fn live_completion_api_requires_matching_committed_receipt_and_replays() {
             intent_id: "effect-live-complete".to_string(),
         }),
         body: WorldEventBody::ReceiptAppended(EffectReceipt {
+            birth_era: None,
+            world: None,
+            intent_payload_digest: None,
             intent_id: "effect-live-complete".to_string(),
             status: "ok".to_string(),
             payload: serde_json::json!({"ok": true}),
@@ -1143,6 +1147,7 @@ fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit(
                 time: 7,
                 caused_by: None,
                 body: WorldEventBody::EffectQueued(EffectIntent {
+                    birth_era: None,
                     intent_id: "effect-receipt-committed".to_string(),
                     kind: "test_effect".to_string(),
                     params: serde_json::json!({}),
@@ -1155,6 +1160,9 @@ fn canonical_world_replay_accepts_completion_only_after_matching_receipt_commit(
                 time: 7,
                 caused_by: None,
                 body: WorldEventBody::ReceiptAppended(EffectReceipt {
+                    birth_era: None,
+                    world: None,
+                    intent_payload_digest: None,
                     intent_id: "effect-receipt-committed".to_string(),
                     status: "ok".to_string(),
                     payload: serde_json::json!({}),

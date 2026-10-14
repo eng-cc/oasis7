@@ -21,14 +21,20 @@ impl ReadEvidencePolicy {
     }
 }
 
-/// Constructible only by the authenticated transport, after request-bound
-/// service signature and structural validation. This is a service assertion,
-/// not independent consensus-proof verification.
+/// Authenticated scoped observation. Legacy reads carry service assertions;
+/// formal reads additionally hold an independently verified qualified commit
+/// and its authorized history anchor. These assurance levels stay distinct.
 #[derive(Debug, Clone)]
 pub struct VerifiedWorldView {
     response: ReadWorldViewResponse<WorldServiceProjection>,
     read_authority_identity: Option<String>,
     evidence_policy: ReadEvidencePolicy,
+    formal_commit: Option<oasis7_distfs::controlled_authority::formal::VerifiedFormalCommitV1>,
+    formal_minimum: Option<oasis7_client_api::world_service::CommitRef>,
+    formal_verifier: Option<Box<super::formal_read::FormalReadVerifier>>,
+    formal_read_anchor:
+        Option<oasis7_distfs::controlled_authority::formal::VerifiedFormalReadAnchorV1>,
+    formal_history_page: Option<super::formal_read::FormalReadHistoryPageV1>,
 }
 
 impl VerifiedWorldView {
@@ -44,11 +50,32 @@ impl VerifiedWorldView {
         request: &ReadWorldViewRequest,
         evidence_policy: ReadEvidencePolicy,
     ) -> Result<Self, String> {
+        if response.formal_profile.is_some() || response.formal_proof.is_some() {
+            return Err(
+                "formal advertised reads require configured external proof verification".into(),
+            );
+        }
         if !evidence_policy.accepts(response.execution_evidence_scope.as_deref()) {
             return Err(
                 "read execution evidence scope is unknown or not explicitly allowed".into(),
             );
         }
+        Self::validate_contents(&response, request)?;
+        Ok(Self {
+            response,
+            read_authority_identity: None,
+            evidence_policy,
+            formal_commit: None,
+            formal_minimum: None,
+            formal_verifier: None,
+            formal_read_anchor: None,
+            formal_history_page: None,
+        })
+    }
+    pub(crate) fn validate_contents(
+        response: &ReadWorldViewResponse<WorldServiceProjection>,
+        request: &ReadWorldViewRequest,
+    ) -> Result<(), String> {
         response.validate(request).map_err(|e| e.to_string())?;
         if response.view.state.time != response.logical_tick {
             return Err("projection tick differs from declared logical tick".into());
@@ -97,11 +124,72 @@ impl VerifiedWorldView {
         {
             return Err("Agent observation differs from authorized visibility scope".into());
         }
-        Ok(Self {
-            response,
-            read_authority_identity: None,
-            evidence_policy,
-        })
+        Ok(())
+    }
+    pub(crate) fn new_formal_verified(
+        mut response: ReadWorldViewResponse<WorldServiceProjection>,
+        request: &ReadWorldViewRequest,
+        observation: super::formal_read::VerifiedFormalProjectionV1,
+    ) -> Result<Self, String> {
+        observation.matches(&response, request)?;
+        let profile = response.formal_profile.take();
+        let sidecar = response.formal_proof.take();
+        let mut shape_request = request.clone();
+        shape_request.min_commit = None;
+        let mut verified = Self::new(response, &shape_request)?;
+        verified.response.formal_profile = profile;
+        verified.response.formal_proof = sidecar;
+        verified.formal_commit = Some(observation.commit().clone());
+        verified.formal_minimum = request.min_commit.clone();
+        verified.formal_verifier = Some(Box::new(observation.verifier().clone()));
+        verified.formal_read_anchor = Some(observation.read_anchor().clone());
+        verified.formal_history_page = observation.history_page().cloned();
+        Ok(verified)
+    }
+    pub(crate) fn formal_verifier(&self) -> Option<&super::formal_read::FormalReadVerifier> {
+        self.formal_verifier.as_deref()
+    }
+    /// Bounded history page accepted by the formal verifier for this view.
+    /// The page is useful only when replayed from the configured external pin.
+    pub fn formal_history_page(&self) -> Option<&super::formal_read::FormalReadHistoryPageV1> {
+        self.formal_history_page.as_ref()
+    }
+    /// Consistency cursor derived from this view's private verifier state.
+    /// It is not a standalone trust anchor.
+    pub fn formal_replay_cursor(
+        &self,
+    ) -> Result<Option<super::formal_read::FormalReadReplayCursorV1>, String> {
+        self.formal_verifier
+            .as_deref()
+            .map(super::formal_read::FormalReadVerifier::replay_cursor)
+            .transpose()
+    }
+    pub fn formal_commit(
+        &self,
+    ) -> Option<&oasis7_distfs::controlled_authority::formal::VerifiedFormalCommitV1> {
+        self.formal_commit.as_ref()
+    }
+    /// Exact prior projection ancestry certified during this formal read.
+    /// Neither a larger height nor a service assertion supplies this relation.
+    pub(crate) fn formally_satisfies_view(&self, previous: &Self) -> bool {
+        self.formal_commit.is_some()
+            && previous.formal_commit.is_some()
+            && self.read_authority_identity.is_some()
+            && self.read_authority_identity == previous.read_authority_identity
+            && (self.version().commit == previous.version().commit
+                || self.formal_minimum.as_ref() == Some(&previous.version().commit))
+    }
+    pub(crate) fn formal_minimum_matches(
+        &self,
+        minimum: &oasis7_client_api::world_service::CommitRef,
+    ) -> bool {
+        self.formal_commit.is_some()
+            && (&self.version().commit == minimum || self.formal_minimum.as_ref() == Some(minimum))
+    }
+    pub fn formal_read_anchor(
+        &self,
+    ) -> Option<&oasis7_distfs::controlled_authority::formal::VerifiedFormalReadAnchorV1> {
+        self.formal_read_anchor.as_ref()
     }
     pub(crate) fn bind_read_authority(mut self, identity: String) -> Self {
         self.read_authority_identity = Some(identity);
@@ -162,6 +250,8 @@ mod tests {
             state_root_ref: "root".into(),
         };
         let request = ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             world: identity,
             scope_id: "public".into(),
@@ -172,6 +262,8 @@ mod tests {
         let mut projection = WorldServiceProjection::from_world(&world, None).unwrap();
         projection.runtime_binding = None;
         let response = ReadWorldViewResponse {
+            formal_profile: None,
+            formal_proof: None,
             execution_evidence_scope: None,
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             version: ProjectionVersion {

@@ -47,6 +47,8 @@ fn correlation() -> RequestCorrelation {
 }
 fn read_request() -> ReadWorldViewRequest {
     ReadWorldViewRequest {
+        observation_nonce: None,
+        formal_anchor: None,
         contract_version: 1,
         world: world(),
         scope_id: "agent-a".into(),
@@ -115,6 +117,7 @@ fn existing_transfer_signing_bytes_survive_typed_envelope_round_trip() {
 #[test]
 fn capabilities_default_unavailable_and_unknown_version_fails() {
     let response = DescribeWorldResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         world: world(),
@@ -141,6 +144,7 @@ fn capabilities_default_unavailable_and_unknown_version_fails() {
 #[test]
 fn missing_terminal_material_and_unknown_status_fail_deserialization() {
     let response = IntentResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         correlation: correlation(),
@@ -164,6 +168,7 @@ fn missing_terminal_material_and_unknown_status_fail_deserialization() {
 #[test]
 fn correlation_digest_conflict_and_wrong_world_are_rejected() {
     let mut response = IntentResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         correlation: correlation(),
@@ -186,6 +191,8 @@ fn correlation_digest_conflict_and_wrong_world_are_rejected() {
 #[test]
 fn view_axes_are_distinct_and_view_cursor_must_match() {
     let mut response = ReadWorldViewResponse {
+        formal_profile: None,
+        formal_proof: None,
         execution_evidence_scope: None,
         contract_version: 1,
         version: ProjectionVersion {
@@ -252,6 +259,7 @@ fn changes_are_bounded_ordered_and_scope_era_bound() {
         max_bytes: 4096,
     };
     let mut response = ReadWorldChangesResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         changes: vec![WorldChange {
@@ -331,6 +339,7 @@ fn describe_and_lookup_full_wire_samples_are_pinned() {
         visibility_scope: "agent-a".into(),
     };
     let describe = DescribeWorldResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         world: world(),
@@ -366,6 +375,7 @@ fn describe_and_lookup_full_wire_samples_are_pinned() {
         "verified_subject":"key-a","operation_domain":"gameplay","nonce_scope":"player-key","request_id_or_nonce":"12"});
     assert_wire(&lookup, json!({"contract_version":1,"key":key}));
     let response = IntentResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         correlation: correlation(),
@@ -390,6 +400,8 @@ fn view_and_changes_full_wire_samples_are_pinned() {
         "scope_id":"agent-a","min_commit":commit_wire(),"fixed_commit":null,"deadline_unix_ms":null}),
     );
     let view = ReadWorldViewResponse {
+        formal_profile: None,
+        formal_proof: None,
         execution_evidence_scope: None,
         contract_version: 1,
         version: ProjectionVersion {
@@ -419,6 +431,7 @@ fn view_and_changes_full_wire_samples_are_pinned() {
         json!({"contract_version":1,"cursor":cursor_wire(10),"max_items":1,"max_bytes":4096}),
     );
     let response = ReadWorldChangesResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         changes: vec![WorldChange {
@@ -466,6 +479,7 @@ fn every_operation_rejects_unsupported_request_and_response_versions() {
         );
         assert!(
             ReadWorldViewRequest {
+                formal_anchor: None,
                 contract_version: version,
                 ..read_request()
             }
@@ -488,6 +502,7 @@ fn every_operation_rejects_unsupported_request_and_response_versions() {
         );
         assert!(
             DescribeWorldResponse {
+                formal_profile: None,
                 execution_evidence_scope: None,
                 contract_version: version,
                 world: world(),
@@ -508,6 +523,7 @@ fn every_operation_rejects_unsupported_request_and_response_versions() {
         // Submit and Lookup share the same response contract.
         assert!(
             IntentResponse {
+                formal_profile: None,
                 execution_evidence_scope: None,
                 contract_version: version,
                 correlation: correlation(),
@@ -518,6 +534,8 @@ fn every_operation_rejects_unsupported_request_and_response_versions() {
         );
         assert!(
             ReadWorldViewResponse {
+                formal_profile: None,
+                formal_proof: None,
                 execution_evidence_scope: None,
                 contract_version: version,
                 version: ProjectionVersion {
@@ -554,6 +572,7 @@ fn changes_reject_over_max_items_with_otherwise_valid_continuation() {
         max_bytes: 4096,
     };
     let mut response = ReadWorldChangesResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: 1,
         changes: (11..=13)

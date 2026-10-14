@@ -37,6 +37,8 @@ mod persistence_tick_consensus;
 use self::persistence_support::{
     distfs_world_id, now_unix_ms, persist_sidecar_generation_index, write_distfs_recovery_audit,
 };
+#[path = "persistence_format.rs"]
+mod persistence_format;
 use persistence_tick_consensus::{
     TickConsensusArchiveFile, hydrate_tick_consensus_snapshot_from_archive,
     hydrate_tick_consensus_snapshot_from_archived_records,
@@ -398,8 +400,8 @@ impl World {
             runtime_memory_limits: self.runtime_memory_limits.clone(),
             runtime_backpressure_stats: self.runtime_backpressure_stats.clone(),
             tick_consensus_records: self.tick_consensus_records.clone(),
-            tick_consensus_total_record_count: self.tick_consensus_records.len(),
-            tick_consensus_archived_record_count: 0,
+            tick_consensus_total_record_count: self.tick_consensus_record_count(),
+            tick_consensus_archived_record_count: self.formal_archived_tick_consensus_count,
             tick_consensus_hot_from_tick: self
                 .tick_consensus_records
                 .first()
@@ -470,6 +472,10 @@ impl World {
         dir: &Path,
         snapshot: Snapshot,
     ) -> Result<(), WorldError> {
+        // Publish the selector before touching any snapshot, journal, sidecar,
+        // or module bytes. An older runtime that implements this selector
+        // must fail closed before decoding data written by a newer format.
+        persistence_format::write_selector_before_payloads(dir)?;
         let (persisted_snapshot, tick_consensus_archive) =
             split_tick_consensus_snapshot_for_persistence(&snapshot);
         let journal_path = dir.join(JOURNAL_FILE);
@@ -515,6 +521,7 @@ impl World {
 
     pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Self, WorldError> {
         let dir = dir.as_ref();
+        persistence_format::validate_selector_before_load(dir)?;
         if let Some((mut snapshot, journal)) = Self::try_load_from_distfs_sidecar(dir)? {
             let has_indexed_generation = Self::has_indexed_sidecar_generation(dir)?;
             if !has_indexed_generation
@@ -659,6 +666,65 @@ impl World {
         journal: Journal,
         observer: bool,
     ) -> Result<Self, WorldError> {
+        Self::from_snapshot_mode_with_history(snapshot, journal, observer, None)
+    }
+
+    /// Restore only an exact qualified formal checkpoint. Its authenticated
+    /// cold reader is attached before Tick validation; no queues/journal are
+    /// trimmed and no extra journal suffix is replayed.
+    pub fn from_verified_formal_snapshot(
+        snapshot: Snapshot,
+        journal: Journal,
+        parent: crate::runtime::VerifiedFormalRetainedHistoryParentV1,
+        reader:Arc<dyn oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexNodeReader + Send + Sync>,
+    ) -> Result<Self, WorldError> {
+        Self::from_snapshot_mode_with_history(snapshot, journal, true, Some((parent, reader)))
+    }
+
+    fn from_snapshot_mode_with_history(
+        snapshot: Snapshot,
+        journal: Journal,
+        observer: bool,
+        history:Option<(crate::runtime::VerifiedFormalRetainedHistoryParentV1,Arc<dyn oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexNodeReader + Send + Sync>)>,
+    ) -> Result<Self, WorldError> {
+        if snapshot.tick_consensus_archived_record_count > 0
+            && snapshot.tick_consensus_records.is_empty()
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "Tick prefix must retain a nonempty hot tail".into(),
+            });
+        }
+        if history.is_none() && snapshot.tick_consensus_archived_record_count > 0 {
+            return Err(WorldError::DistributedValidationFailed { reason: "qualified Tick prefix requires typed history reader (legacy sidecar must hydrate first)".into() });
+        }
+        if (snapshot.tick_consensus_total_record_count != 0
+            || snapshot.tick_consensus_archived_record_count != 0)
+            && snapshot
+                .tick_consensus_archived_record_count
+                .checked_add(snapshot.tick_consensus_records.len() as u64)
+                != Some(snapshot.tick_consensus_total_record_count)
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "Tick Snapshot count mismatch".into(),
+            });
+        }
+        if let Some((parent, _)) = &history {
+            let bytes = serde_cbor::to_vec(&snapshot).map_err(|e| {
+                WorldError::DistributedValidationFailed {
+                    reason: e.to_string(),
+                }
+            })?;
+            if blake3::hash(&bytes).to_hex().as_str() != parent.after_snapshot_root()
+                || snapshot.state.retained_history_root.as_ref() != Some(parent.root())
+                || parent
+                    .logical_tick()
+                    .is_some_and(|tick| snapshot.state.time != tick)
+            {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: "formal snapshot differs from verified retained-history parent".into(),
+                });
+            }
+        }
         if observer && snapshot.journal_len != journal.len() {
             return Err(WorldError::DistributedValidationFailed {
                 reason: "RecoveryRequired: observer needs a complete checkpoint".to_string(),
@@ -680,6 +746,12 @@ impl World {
             }
         }
         snapshot.rollback_authority_registry.validate()?;
+        if let Some(root) = snapshot.state.retained_history_root.as_ref() {
+            root.validate()
+                .map_err(|reason| WorldError::DistributedValidationFailed {
+                    reason: format!("invalid retained-history snapshot descriptor: {reason}"),
+                })?;
+        }
 
         let mut world = Self::new_with_state(snapshot.state);
         world.rollback_authority_registry = snapshot.rollback_authority_registry;
@@ -786,6 +858,7 @@ impl World {
         world.scheduler_cursor = snapshot.scheduler_cursor;
         world.runtime_memory_limits = snapshot.runtime_memory_limits;
         world.runtime_backpressure_stats = snapshot.runtime_backpressure_stats;
+        world.formal_archived_tick_consensus_count = snapshot.tick_consensus_archived_record_count;
         world.tick_consensus_records = snapshot.tick_consensus_records;
         world.tick_consensus_authority_source =
             snapshot.tick_consensus_authority_source.trim().to_string();
@@ -837,6 +910,11 @@ impl World {
             world.enforce_inflight_effect_limit();
             world.replay_from(snapshot.journal_len)?;
             world.enforce_journal_event_limit();
+        }
+        if let Some((parent, reader)) = history {
+            world
+                .attach_verified_formal_history(parent, reader)
+                .map_err(|reason| WorldError::DistributedValidationFailed { reason })?;
         }
         world.verify_tick_consensus_chain()?;
         Ok(world)

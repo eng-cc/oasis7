@@ -1,0 +1,1127 @@
+//! Production constructor and lifecycle owner for the formal single-authority
+//! Node profile. It consumes existing configuration/keys and restores only
+//! through endpoint-authenticated native evidence or an exact approved initial
+//! publication.
+use super::{
+    execution_bridge::{
+        formal_node_hook::FormalNodeHook, formal_package, formal_writer::FormalWriter,
+    },
+    formal_live_config::{FormalLiveConfigV1, ValidatedFormalLiveConfigV1},
+    formal_live_service::{
+        FormalHttpServer, FormalLiveHistoryResolver, FormalLiveService, FormalLiveState,
+        PublishedReadState,
+    },
+};
+use ed25519_dalek::SigningKey;
+use oasis7_client_api::world_service::WorldIdentity;
+use oasis7_distfs::controlled_authority::{
+    formal::{
+        SignedNormalDurableSetTransitionV1, VerifiedAuthorityV1,
+        business_index::{BusinessIndexNodeReader, BusinessIndexNodeWriteV1},
+        coordinator::FormalDurabilityEndpoint,
+        transport::RemoteFormalEndpoint,
+    },
+    replicated_protocol::EndpointRole,
+};
+use oasis7_node::{NodeConfig, NodeNetworkPolicy, NodeRole, NodeRuntime};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::Path,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+#[path = "formal_live_runtime_quiesce.rs"]
+mod quiesce;
+
+pub(crate) const BUSINESS_NODE_CACHE_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const BUSINESS_NODE_CACHE_ENTRIES: usize = 16_384;
+
+#[cfg(unix)]
+#[path = "formal_live_runtime_owner.rs"]
+mod owner;
+#[cfg(unix)]
+pub(crate) use owner::{
+    DurableSetControlRequestV1, control_durable_set_transition,
+    control_prepare_durable_set_transition,
+};
+#[cfg(unix)]
+pub(crate) use owner::{FormalRuntimeInstanceV1, FormalRuntimeOwnerSnapshotV1};
+
+#[cfg(test)]
+#[path = "formal_live_runtime_tests.rs"]
+mod tests;
+
+/// Opened, but not yet running, formal Node. Construction performs all trust,
+/// policy, endpoint and bootstrap checks before starting an ingress listener.
+pub(crate) struct FormalLiveRuntime {
+    validated: ValidatedFormalLiveConfigV1,
+    active_authority: VerifiedAuthorityV1,
+    world: WorldIdentity,
+    node_signer: SigningKey,
+    runtime: Arc<Mutex<NodeRuntime>>,
+    published: Arc<PublishedReadState>,
+    history: Arc<dyn FormalLiveHistoryResolver>,
+    state: FormalLiveState,
+    admission_gate: Arc<Mutex<()>>,
+    durable_set_arm:
+        Arc<super::execution_bridge::formal_durable_set_arm::FormalDurableSetArmControlV1>,
+    server: Option<FormalHttpServer>,
+    stop_worker: Option<PendingNodeStop>,
+    effect_delivery: Option<super::formal_live_effect_delivery::FormalEffectDeliveryRuntime>,
+    started: bool,
+}
+
+struct PendingNodeStop {
+    result: std::sync::mpsc::Receiver<Result<(), String>>,
+    worker: std::thread::JoinHandle<Result<(), String>>,
+}
+
+/// Read-only CAS adapter for the profile-2 business tree. Every cache entry
+/// was fetched from both signed replicas and checked against its content hash;
+/// absence is deliberately not cached because a later qualified commit may
+/// introduce that immutable object.
+pub(crate) struct RemoteBusinessIndexReader {
+    primary: Mutex<RemoteFormalEndpoint>,
+    replica: Mutex<RemoteFormalEndpoint>,
+    cache: Mutex<BoundedBusinessNodeCache>,
+}
+
+impl RemoteBusinessIndexReader {
+    pub(crate) fn new(
+        primary: RemoteFormalEndpoint,
+        replica: RemoteFormalEndpoint,
+        max_bytes: usize,
+        max_entries: usize,
+    ) -> Self {
+        Self {
+            primary: Mutex::new(primary),
+            replica: Mutex::new(replica),
+            cache: Mutex::new(BoundedBusinessNodeCache::new(max_bytes, max_entries)),
+        }
+    }
+
+    pub(crate) fn seed_verified_writes(
+        &self,
+        writes: Vec<BusinessIndexNodeWriteV1>,
+    ) -> Result<(), String> {
+        // Validate the complete batch before mutating the shared cache. Startup
+        // history prewarming stages an all-or-nothing verified suffix, so a
+        // malformed later write must not leave earlier bytes installed.
+        for node in &writes {
+            validate_business_node_digest(&node.digest)?;
+            if hex::encode(blake3::hash(&node.bytes).as_bytes()) != node.digest {
+                return Err(format!(
+                    "verified formal business node {} hash mismatch",
+                    node.digest
+                ));
+            }
+        }
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| "formal business node cache poisoned")?;
+        for node in writes {
+            cache.insert(node.digest, node.bytes);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+fn seed_verified_business_writes(
+    cache: &mut BoundedBusinessNodeCache,
+    writes: Vec<BusinessIndexNodeWriteV1>,
+) -> Result<(), String> {
+    for node in writes {
+        validate_business_node_digest(&node.digest)?;
+        if hex::encode(blake3::hash(&node.bytes).as_bytes()) != node.digest {
+            return Err(format!(
+                "verified formal business node {} hash mismatch",
+                node.digest
+            ));
+        }
+        cache.insert(node.digest, node.bytes);
+    }
+    Ok(())
+}
+
+impl BusinessIndexNodeReader for RemoteBusinessIndexReader {
+    fn cache_content_node(&self, digest: &str, bytes: &[u8]) -> Result<(), String> {
+        self.seed_verified_writes(vec![BusinessIndexNodeWriteV1 {
+            digest: digest.to_owned(),
+            bytes: bytes.to_vec(),
+        }])
+    }
+    fn read_cached_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
+        validate_business_node_digest(digest)?;
+        Ok(self
+            .cache
+            .lock()
+            .map_err(|_| "formal business node cache poisoned")?
+            .get(digest))
+    }
+    fn read_node(&self, digest: &str) -> Result<Option<Vec<u8>>, String> {
+        validate_business_node_digest(digest)?;
+        if let Some(bytes) = self
+            .cache
+            .lock()
+            .map_err(|_| "formal business node cache poisoned")?
+            .get(digest)
+        {
+            return Ok(Some(bytes));
+        }
+
+        let primary = self
+            .primary
+            .lock()
+            .map_err(|_| "formal primary business reader poisoned")?
+            .archive_object(digest)
+            .map_err(|error| format!("formal primary business node {digest}: {error}"))?;
+        let replica = self
+            .replica
+            .lock()
+            .map_err(|_| "formal replica business reader poisoned")?
+            .archive_object(digest)
+            .map_err(|error| format!("formal replica business node {digest}: {error}"))?;
+        let Some(bytes) = verify_dual_business_node(digest, primary, replica)? else {
+            return Ok(None);
+        };
+        self.cache
+            .lock()
+            .map_err(|_| "formal business node cache poisoned")?
+            .insert(digest.to_owned(), bytes.clone());
+        Ok(Some(bytes))
+    }
+}
+
+struct BoundedBusinessNodeCache {
+    entries: HashMap<String, Vec<u8>>,
+    insertion_order: VecDeque<String>,
+    bytes: usize,
+    max_bytes: usize,
+    max_entries: usize,
+}
+
+impl BoundedBusinessNodeCache {
+    fn new(max_bytes: usize, max_entries: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            insertion_order: VecDeque::new(),
+            bytes: 0,
+            max_bytes,
+            max_entries,
+        }
+    }
+
+    fn get(&self, digest: &str) -> Option<Vec<u8>> {
+        self.entries.get(digest).cloned()
+    }
+
+    fn insert(&mut self, digest: String, bytes: Vec<u8>) {
+        if self.max_entries == 0
+            || bytes.len() > self.max_bytes
+            || self.entries.contains_key(&digest)
+        {
+            return;
+        }
+        while self.bytes.saturating_add(bytes.len()) > self.max_bytes
+            || self.entries.len() >= self.max_entries
+        {
+            let Some(oldest) = self.insertion_order.pop_front() else {
+                break;
+            };
+            if let Some(evicted) = self.entries.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(evicted.len());
+            }
+        }
+        if bytes.len() <= self.max_bytes.saturating_sub(self.bytes) {
+            self.bytes += bytes.len();
+            self.insertion_order.push_back(digest.clone());
+            self.entries.insert(digest, bytes);
+        }
+    }
+}
+
+fn validate_business_node_digest(digest: &str) -> Result<(), String> {
+    let decoded = hex::decode(digest).map_err(|_| "formal business node digest is not hex")?;
+    if decoded.len() != 32 || hex::encode(decoded) != digest {
+        return Err("formal business node digest is not canonical BLAKE3 hex".into());
+    }
+    Ok(())
+}
+
+fn verify_dual_business_node(
+    digest: &str,
+    primary: Option<Vec<u8>>,
+    replica: Option<Vec<u8>>,
+) -> Result<Option<Vec<u8>>, String> {
+    match (primary, replica) {
+        (None, None) => Ok(None),
+        (Some(bytes), Some(replica_bytes)) => {
+            if bytes != replica_bytes {
+                return Err(format!(
+                    "formal business node {digest} differs between signed replicas"
+                ));
+            }
+            if hex::encode(blake3::hash(&bytes).as_bytes()) != digest {
+                return Err(format!(
+                    "formal business node {digest} content hash mismatch"
+                ));
+            }
+            Ok(Some(bytes))
+        }
+        _ => Err(format!(
+            "formal business node {digest} is missing from only one signed replica"
+        )),
+    }
+}
+
+impl FormalLiveRuntime {
+    /// Load and validate the operator profile once, then construct both the
+    /// native history resolver and writer around one shared verified CAS
+    /// reader. This prevents resolver and writer endpoints from observing
+    /// different config-file contents across a replacement race.
+    #[cfg(test)]
+    pub(crate) fn open_with_native_history(config_path: &Path) -> Result<Self, String> {
+        Self::open_from_validated_with_native_history(FormalLiveConfigV1::load(config_path)?)
+    }
+
+    pub(crate) fn open_from_validated_with_native_history(
+        validated: ValidatedFormalLiveConfigV1,
+    ) -> Result<Self, String> {
+        let business_reader = business_reader_for(&validated)?;
+        let (history, startup) = super::formal_live_history::from_validated_for_runtime(
+            &validated,
+            business_reader.clone(),
+        )?;
+        Self::open_validated_with_startup(validated, history, business_reader, Some(startup))
+    }
+
+    fn open_validated_with_startup(
+        validated: ValidatedFormalLiveConfigV1,
+        history: Arc<dyn FormalLiveHistoryResolver>,
+        business_reader: Arc<RemoteBusinessIndexReader>,
+        startup: Option<super::formal_live_history::FormalLiveStartupAnchorV1>,
+    ) -> Result<Self, String> {
+        validate_loaded_execution_policy(&validated)?;
+        // Seed only content-addressed bytes from the exact configured initial
+        // closure. Native restore still verifies the protected current state,
+        // inclusion, proof and typed material beneath the external pin.
+        if let Some(initial) = &validated.approved_initial {
+            business_reader.seed_verified_writes(
+                super::execution_bridge::formal_writer::initial_business_nodes(&initial.candidate)?,
+            )?;
+        }
+        let world = WorldIdentity {
+            world_id: validated.anchor.head().record().world.world_id.clone(),
+            genesis_digest: validated
+                .anchor
+                .head()
+                .record()
+                .world
+                .genesis_digest
+                .clone(),
+        };
+        world.validate().map_err(|error| error.to_string())?;
+        let node_signer = existing_node_signer(&validated)?;
+        let node_id = validated.config.node_id.clone();
+        let primary_address = validated.config.primary;
+        let replica_address = validated.config.replica;
+        let timeout = validated.timeout;
+        let writer_key = validated.writer_key.clone();
+        let startup_anchor = startup
+            .as_ref()
+            .map_or(&validated.anchor, |startup| &startup.anchor);
+        let authority = startup
+            .as_ref()
+            .and_then(|startup| startup.activation.as_ref())
+            .map_or_else(
+                || validated.active_authority().clone(),
+                |activation| activation.successor().clone(),
+            );
+        let minimum = startup_anchor.head().head().clone();
+
+        let primary = RemoteFormalEndpoint::new(
+            primary_address,
+            timeout,
+            authority.clone(),
+            EndpointRole::Primary,
+            writer_key.clone(),
+            minimum.clone(),
+        )
+        .map_err(|error| format!("formal primary endpoint: {error}"))?;
+        let replica = RemoteFormalEndpoint::new(
+            replica_address,
+            timeout,
+            authority.clone(),
+            EndpointRole::Replica,
+            writer_key.clone(),
+            minimum.clone(),
+        )
+        .map_err(|error| format!("formal replica endpoint: {error}"))?;
+
+        prewarm_from_matching_native_heads(
+            &validated,
+            startup_anchor,
+            &authority,
+            &*history,
+            &*business_reader,
+        )?;
+
+        let writer_root = validated.config.writer_directory.clone();
+        let release_policy = validated.release_policy.clone();
+        // Approved initial material does not reset an existing writer to C0.
+        // Every open starts from both protected native heads beneath the same
+        // external origin, including the first already-qualified activation.
+        let writer = {
+            // The request carries the original trusted authority. A signed
+            // raw head or endpoint checkpoint is never used as a new pin.
+            let dual = if let Some(activation) = startup
+                .as_ref()
+                .and_then(|startup| startup.activation.as_ref())
+            {
+                if validated.recovery.is_some() {
+                    return Err(
+                        "formal healthy durable-set startup cannot combine with recovery bootstrap"
+                            .into(),
+                    );
+                }
+                super::formal_live_reconcile::restore_dual_native_with_durable_set(
+                    primary,
+                    replica,
+                    activation.predecessor(),
+                    activation,
+                    &*business_reader,
+                )?
+            } else {
+                super::formal_live_reconcile::restore_dual_native(
+                    primary,
+                    replica,
+                    validated
+                        .recovery
+                        .as_ref()
+                        .map_or(&authority, |p| p.original_authority()),
+                    validated.recovery.as_ref().map(|p| p.recovery()),
+                    validated.recovery.as_ref().map(|p| p.cut()),
+                    &*business_reader,
+                )?
+            };
+            let primary_restore = dual.primary;
+            let replica_restore = dual.replica;
+            if let Some(initial) = validated.approved_initial.as_ref()
+                && primary_restore.1.commit().record().position == 1
+                && (primary_restore.1.candidate() != &initial.candidate
+                    || primary_restore.1.proof() != &initial.proof)
+            {
+                return Err(
+                    "native initial publication differs from exact approved closure".into(),
+                );
+            }
+            if startup
+                .as_ref()
+                .and_then(|startup| startup.activation.as_ref())
+                .is_some()
+            {
+                FormalWriter::open_native(
+                    writer_root,
+                    writer_key,
+                    release_policy,
+                    startup_anchor.clone(),
+                    &primary_restore.1,
+                    &replica_restore.1,
+                    writer_endpoint(primary_restore.0, EndpointRole::Primary),
+                    writer_endpoint(replica_restore.0, EndpointRole::Replica),
+                    business_reader.clone(),
+                )
+            } else if let Some(permission) = validated.recovery.as_ref() {
+                FormalWriter::open_native_recovery(
+                    writer_root,
+                    writer_key,
+                    release_policy,
+                    permission.external_anchor().clone(),
+                    permission,
+                    &primary_restore.1,
+                    &replica_restore.1,
+                    writer_endpoint(primary_restore.0, EndpointRole::Primary),
+                    writer_endpoint(replica_restore.0, EndpointRole::Replica),
+                    business_reader.clone(),
+                )
+            } else {
+                FormalWriter::open_native(
+                    writer_root,
+                    writer_key,
+                    release_policy,
+                    validated.anchor.clone(),
+                    &primary_restore.1,
+                    &replica_restore.1,
+                    writer_endpoint(primary_restore.0, EndpointRole::Primary),
+                    writer_endpoint(replica_restore.0, EndpointRole::Replica),
+                    business_reader.clone(),
+                )
+            }
+            .map_err(|error| format!("open restored formal native writer: {error}"))?
+        }
+        .with_business_reader(business_reader.clone())
+        .map_err(|error| format!("open formal profile-2 business reader: {error}"))?;
+        let active_authority = writer.anchor().authority().clone();
+        history
+            .prewarm_qualified_business_history(writer.anchor(), business_reader.as_ref())
+            .map_err(|error| format!("prewarm verified formal business history: {error}"))?;
+        let committed_business_nodes = writer
+            .committed_business_nodes()
+            .map_err(|error| format!("read exact qualified formal business nodes: {error}"))?;
+        business_reader.seed_verified_writes(committed_business_nodes)?;
+
+        let published = Arc::new(PublishedReadState::default());
+        let (effect_delivery, sink): (
+            _,
+            Arc<dyn super::execution_bridge::formal_node_hook::FormalPublicationSink>,
+        ) = if let Some(config) = &validated.config.effect_delivery {
+            let (delivery, sink) =
+                super::formal_live_effect_delivery::FormalEffectDeliveryRuntime::open(
+                    config,
+                    &validated.config.writer_directory,
+                    node_signer.clone(),
+                    published.clone(),
+                    history.clone(),
+                )?;
+            (Some(delivery), sink)
+        } else {
+            (None, published.clone())
+        };
+        let admission_gate = Arc::new(Mutex::new(()));
+        let durable_set_arm = Arc::new(
+            super::execution_bridge::formal_durable_set_arm::FormalDurableSetArmControlV1::new(
+                validated.config.writer_directory.clone(),
+                false,
+            )?,
+        );
+        let hook = FormalNodeHook::new(writer)?
+            .with_durable_set_arm(Arc::clone(&durable_set_arm), Arc::clone(&admission_gate))?
+            .with_publication_sink(sink)?;
+        let node_config = local_single_authority_node_config(&node_id, &world.world_id)?;
+        let genesis = hook.genesis_bootstrap()?;
+        let mut runtime = NodeRuntime::new(node_config);
+        if let Some(genesis) = genesis {
+            runtime = runtime.with_local_execution_genesis_bootstrap(genesis);
+        } else {
+            let bootstrap = hook.bootstrap()?;
+            runtime = runtime.with_local_execution_bootstrap(bootstrap);
+        }
+        runtime = runtime.with_execution_hook(hook);
+
+        Ok(Self {
+            validated,
+            active_authority,
+            world,
+            node_signer,
+            runtime: Arc::new(Mutex::new(runtime)),
+            published,
+            history,
+            state: FormalLiveState::default(),
+            admission_gate,
+            durable_set_arm,
+            server: None,
+            stop_worker: None,
+            effect_delivery,
+            started: false,
+        })
+    }
+
+    pub(crate) fn active_authority(&self) -> &VerifiedAuthorityV1 {
+        &self.active_authority
+    }
+
+    /// Arm the exact next healthy durable-set boundary for the currently
+    /// running owner. This only persists old-writer-signed intent; it does not
+    /// execute a boundary, seal endpoints, or activate a successor authority.
+    pub(crate) fn arm_durable_set_transition(
+        &self,
+        operation_id: &str,
+        transition: SignedNormalDurableSetTransitionV1,
+    ) -> Result<super::execution_bridge::formal_durable_set_arm::DurableSetArmStatusV1, String>
+    {
+        let _admission = self
+            .admission_gate
+            .lock()
+            .map_err(|_| "formal Node admission gate poisoned")?;
+        if !self.started || !self.state.ready.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("formal runtime is not ready to admit a durable-set arm".into());
+        }
+        let cut = self.published.current()?;
+        self.durable_set_arm
+            .arm(operation_id, transition, &cut.anchor)
+    }
+
+    /// Select and sign the next boundary under the same gate as public submit.
+    pub(crate) fn prepare_durable_set_transition(
+        &self,
+        operation_id: &str,
+        mut replica: oasis7_distfs::controlled_authority::formal::EndpointSignerBindingV1,
+        timeout: Duration,
+    ) -> Result<SignedNormalDurableSetTransitionV1, String> {
+        use ed25519_dalek::Signer;
+        use oasis7_distfs::controlled_authority::formal::{
+            NormalDurableSetTransitionBodyV1, normal_durable_set_transition_signing_bytes,
+        };
+        if timeout.is_zero() || timeout > Duration::from_secs(60) {
+            return Err("durable-set preparation timeout in (0,60s]".into());
+        }
+        let deadline =
+            std::time::Instant::now() + timeout.saturating_sub(Duration::from_millis(100));
+        {
+            let _admission = quiesce::acquire_for_idempotency_read(&self.admission_gate, deadline)?;
+            let cut = self.published.current()?;
+            if let Some(existing) = self
+                .durable_set_arm
+                .existing_for_operation(operation_id, &cut.anchor)?
+            {
+                replica.instance.authority_epoch = existing.body.successor.epoch;
+                if existing.body.successor.replica != replica {
+                    return Err("Conflict: original durable-set replica target differs".into());
+                }
+                return Ok(existing);
+            }
+        }
+        let _admission = quiesce::acquire_after_pending_clear(
+            &self.admission_gate,
+            || self.durable_set_arm.pending_open(),
+            deadline,
+        )?;
+        let cut = self.published.current()?;
+        if let Some(existing) = self
+            .durable_set_arm
+            .existing_for_operation(operation_id, &cut.anchor)?
+        {
+            replica.instance.authority_epoch = existing.body.successor.epoch;
+            if existing.body.successor.replica != replica {
+                return Err("Conflict: original durable-set replica target differs".into());
+            }
+            return Ok(existing);
+        }
+        if !self.started || !self.state.ready.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("formal runtime is not ready to prepare a durable-set arm".into());
+        }
+        let authority = cut.anchor.authority();
+        let mut successor = authority.definition().clone();
+        let boundary = cut
+            .anchor
+            .head()
+            .record()
+            .position
+            .checked_add(1)
+            .ok_or("durable-set boundary overflow")?;
+        successor.epoch = successor
+            .epoch
+            .checked_add(1)
+            .ok_or("durable-set epoch overflow")?;
+        successor.valid_from_position = boundary
+            .checked_add(1)
+            .ok_or("durable-set valid position overflow")?;
+        successor.predecessor_authority_id =
+            Some(authority.authority_id().map_err(|e| e.to_string())?);
+        successor.primary.instance.authority_epoch = successor.epoch;
+        replica.instance.authority_epoch = successor.epoch;
+        successor.replica = replica;
+        let mut body = NormalDurableSetTransitionBodyV1 {
+            schema_version: 1,
+            world: successor.world.clone(),
+            predecessor_authority_id: authority.authority_id().map_err(|e| e.to_string())?,
+            predecessor: cut.anchor.head().head(),
+            boundary_position: boundary,
+            operation_id: operation_id.to_owned(),
+            successor,
+            independent_closure_root: "0".repeat(64),
+        };
+        body.independent_closure_root = body.copy_contract_digest().map_err(|e| e.to_string())?;
+        let transition = SignedNormalDurableSetTransitionV1 {
+            writer_signature_hex: hex::encode(
+                self.validated
+                    .writer_key
+                    .sign(
+                        &normal_durable_set_transition_signing_bytes(&body)
+                            .map_err(|e| e.to_string())?,
+                    )
+                    .to_bytes(),
+            ),
+            body,
+        };
+        quiesce::arm_before_deadline(deadline, || {
+            self.durable_set_arm
+                .arm(operation_id, transition.clone(), &cut.anchor)
+        })?;
+        Ok(transition)
+    }
+
+    /// Read the durable arm status against the exact currently published
+    /// opaque anchor. Local arm bytes never count as a qualified commit or
+    /// activation proof.
+    pub(crate) fn query_durable_set_transition(
+        &self,
+        operation_id: &str,
+        boundary_position: u64,
+    ) -> Result<
+        Option<super::execution_bridge::formal_durable_set_arm::DurableSetArmStatusV1>,
+        String,
+    > {
+        let _admission = self
+            .admission_gate
+            .lock()
+            .map_err(|_| "formal Node admission gate poisoned")?;
+        let cut = self.published.current()?;
+        self.durable_set_arm
+            .query(operation_id, boundary_position, &cut.anchor)
+    }
+
+    pub(crate) fn start(&mut self) -> Result<(), String> {
+        if self.started {
+            return Err("formal live runtime is already started".into());
+        }
+        // Bind first so a listener failure cannot leave a running Node without
+        // its required operator status surface.
+        let service = Arc::new(FormalLiveService::new(
+            self.validated.config.node_id.clone(),
+            self.world.clone(),
+            self.node_signer.clone(),
+            Arc::clone(&self.runtime),
+            Arc::clone(&self.published),
+            self.validated.trust.clone(),
+            Arc::clone(&self.history),
+            self.state.clone(),
+            Arc::clone(&self.admission_gate),
+        ));
+        let _admission = self
+            .admission_gate
+            .lock()
+            .map_err(|_| "formal Node admission gate poisoned")?;
+        let server = service.serve_loopback(self.validated.config.status_bind)?;
+        if let Some(delivery) = &mut self.effect_delivery
+            && let Err(error) = delivery.start(self.state.clone())
+        {
+            let mut server = server;
+            let _ = server.stop();
+            return Err(error);
+        }
+        let start_result = match self.runtime.lock() {
+            Ok(mut runtime) => runtime
+                .start()
+                .map_err(|error| format!("formal NodeRuntime start: {error:?}")),
+            Err(_) => Err("formal Node runtime lock poisoned".into()),
+        };
+        if let Err(error) = start_result {
+            drop(_admission);
+            let mut server = server;
+            let _ = server.stop();
+            return Err(error);
+        }
+        let tick_count = match self.runtime.lock() {
+            Ok(runtime) => runtime.snapshot().tick_count,
+            Err(_) => {
+                drop(_admission);
+                let mut server = server;
+                let _ = server.stop();
+                return Err("formal Node runtime lock poisoned after start".into());
+            }
+        };
+        self.state
+            .node_running
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.state
+            .tick_count
+            .store(tick_count, std::sync::atomic::Ordering::Release);
+        self.state
+            .stopping
+            .store(false, std::sync::atomic::Ordering::Release);
+        if let Ok(mut last_error) = self.state.last_error.lock() {
+            *last_error = None;
+        }
+        self.state
+            .ready
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.server = Some(server);
+        self.started = true;
+        Ok(())
+    }
+
+    /// Graceful stop waits at most the supplied interval for the Node and the
+    /// loopback server. A timeout keeps the owner alive and leaves status at
+    /// `stopping`; callers can poll status and retry the same stop operation.
+    pub(crate) fn stop(&mut self, timeout: Duration) -> Result<(), String> {
+        let deadline = std::time::Instant::now() + timeout;
+        if let Some(delivery) = &self.effect_delivery {
+            delivery.request_stop();
+        }
+        {
+            let _admission = self
+                .admission_gate
+                .lock()
+                .map_err(|_| "formal Node admission gate poisoned")?;
+            self.state
+                .ready
+                .store(false, std::sync::atomic::Ordering::Release);
+            self.state
+                .stopping
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+        if self.started && self.stop_worker.is_none() {
+            let runtime = Arc::clone(&self.runtime);
+            let state = self.state.clone();
+            let (send, receive) = std::sync::mpsc::sync_channel(1);
+            let worker = std::thread::Builder::new()
+                .name("oasis7-formal-stop".into())
+                .spawn(move || {
+                    let result = match runtime.lock() {
+                        Ok(mut runtime) => runtime
+                            .stop()
+                            .map_err(|error| format!("formal NodeRuntime stop: {error:?}")),
+                        Err(_) => Err("formal Node runtime lock poisoned".into()),
+                    };
+                    if result.is_ok() {
+                        state
+                            .node_running
+                            .store(false, std::sync::atomic::Ordering::Release);
+                    } else if let Ok(mut last_error) = state.last_error.lock() {
+                        *last_error = result.as_ref().err().cloned();
+                    }
+                    let _ = send.send(result.clone());
+                    result
+                });
+            let worker = match worker {
+                Ok(worker) => worker,
+                Err(error) => {
+                    self.state
+                        .stopping
+                        .store(false, std::sync::atomic::Ordering::Release);
+                    if let Ok(mut last_error) = self.state.last_error.lock() {
+                        *last_error = Some(format!("formal Node stop worker: {error}"));
+                    }
+                    return Err(format!("formal Node stop worker: {error}"));
+                }
+            };
+            self.stop_worker = Some(PendingNodeStop {
+                result: receive,
+                worker,
+            });
+        }
+        if let Some(pending) = self.stop_worker.as_ref() {
+            match pending
+                .result
+                .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+            {
+                Ok(result) => {
+                    let pending = self.stop_worker.take().expect("stop worker exists");
+                    let worker_result = pending
+                        .worker
+                        .join()
+                        .map_err(|_| "formal Node stop worker panicked".to_owned())?;
+                    if worker_result != result {
+                        return Err("formal Node stop channel/worker result mismatch".into());
+                    }
+                    if let Err(error) = result {
+                        if let Ok(runtime) = self.runtime.lock() {
+                            if runtime.snapshot().running {
+                                return Err(error);
+                            }
+                        }
+                        if let Ok(mut last_error) = self.state.last_error.lock() {
+                            *last_error = Some(error.clone());
+                        }
+                        self.state
+                            .node_running
+                            .store(false, std::sync::atomic::Ordering::Release);
+                        self.state
+                            .stopping
+                            .store(false, std::sync::atomic::Ordering::Release);
+                        self.started = false;
+                        if let Some(mut server) = self.server.take() {
+                            server.stop()?;
+                        }
+                        return Err(error);
+                    }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    self.state
+                        .stopping
+                        .store(true, std::sync::atomic::Ordering::Release);
+                    return Err("formal Node stop is still pending; runtime remains owned".into());
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    if let Some(pending) = self.stop_worker.take() {
+                        let _ = pending.worker.join();
+                    }
+                    return Err("formal Node stop result channel closed".into());
+                }
+            }
+        }
+        if let Some(delivery) = &mut self.effect_delivery {
+            delivery.stop(deadline.saturating_duration_since(std::time::Instant::now()))?;
+        }
+        if let Some(mut server) = self.server.take() {
+            server.stop()?;
+        }
+        self.state
+            .stopping
+            .store(false, std::sync::atomic::Ordering::Release);
+        self.started = false;
+        Ok(())
+    }
+}
+
+/// Separate probes keep the restore clients' original external minimum intact.
+/// A protected head locates bytes; only canonical C0 replay authorizes seeding.
+fn prewarm_from_matching_native_heads(
+    validated: &ValidatedFormalLiveConfigV1,
+    minimum_anchor: &oasis7_distfs::controlled_authority::formal::VerifiedFormalReadAnchorV1,
+    authority: &oasis7_distfs::controlled_authority::formal::VerifiedAuthorityV1,
+    history: &dyn FormalLiveHistoryResolver,
+    reader: &dyn BusinessIndexNodeReader,
+) -> Result<(), String> {
+    let probe = |address, role| {
+        let mut endpoint = RemoteFormalEndpoint::new(
+            address,
+            validated.timeout,
+            authority.clone(),
+            role,
+            validated.writer_key.clone(),
+            minimum_anchor.head().head().clone(),
+        )
+        .map_err(|error| format!("formal prewarm endpoint: {error}"))?;
+        match endpoint.head() {
+            Ok(head) => Ok(Some(head)),
+            Err(oasis7_distfs::controlled_authority::formal::FormalError::Io(_)) => Ok(None),
+            Err(error) => Err(format!("formal prewarm protected head: {error}")),
+        }
+    };
+    let Some(primary) = probe(validated.config.primary, EndpointRole::Primary)? else {
+        return Ok(());
+    };
+    let Some(replica) = probe(validated.config.replica, EndpointRole::Replica)? else {
+        return Ok(());
+    };
+    if primary != replica {
+        return Ok(());
+    }
+    let hint = oasis7_client_api::world_service::FormalReadAnchorRefV1 {
+        position: primary.position,
+        record_id: primary.record_id,
+        active_authority_id: authority
+            .authority_id()
+            .map_err(|error| error.to_string())?,
+    };
+    history.prewarm_qualified_business_history_hint(&hint, reader)
+}
+
+/// Production CLI entry. It accepts only the formal profile path; history
+/// resolution is built from that same operator configuration by the native
+/// storage adapter, with no unavailable or synthetic fallback.
+pub(crate) fn run(config_path: &Path) -> Result<(), String> {
+    owner::run_standalone(config_path)
+}
+
+#[cfg(unix)]
+#[cfg(test)]
+pub(crate) fn run_operation_owner_worker(
+    config_path: &Path,
+    operation_id: &str,
+    request_digest: &str,
+    expected_config_digest: &str,
+) -> Result<(), String> {
+    owner::run_operation_worker(
+        config_path,
+        operation_id,
+        request_digest,
+        expected_config_digest,
+    )
+}
+
+#[cfg(unix)]
+pub(crate) fn query_operation_owner(
+    config_path: &Path,
+    operation_id: &str,
+    request_digest: &str,
+    expected_config_digest: &str,
+    expected_incarnation: Option<&str>,
+) -> Result<Option<FormalRuntimeOwnerSnapshotV1>, String> {
+    owner::query_operation(
+        config_path,
+        operation_id,
+        request_digest,
+        expected_config_digest,
+        expected_incarnation,
+    )
+}
+
+#[cfg(unix)]
+pub(crate) fn current_operation_owner(
+    config_path: &Path,
+) -> Result<FormalRuntimeOwnerSnapshotV1, String> {
+    owner::current_operation(config_path)
+}
+
+#[cfg(unix)]
+pub(crate) fn stop_operation_owner(
+    config_path: &Path,
+    instance: &FormalRuntimeInstanceV1,
+    timeout: Duration,
+) -> Result<FormalRuntimeOwnerSnapshotV1, String> {
+    owner::stop_operation(config_path, instance, timeout)
+}
+
+#[cfg(unix)]
+pub(crate) fn launch_operation_owner(
+    config_path: &Path,
+    operation_id: &str,
+    request_digest: &str,
+    expected_config_digest: &str,
+    timeout: Duration,
+) -> Result<FormalRuntimeOwnerSnapshotV1, String> {
+    owner::launch_operation(
+        config_path,
+        operation_id,
+        request_digest,
+        expected_config_digest,
+        timeout,
+    )
+}
+
+fn validate_loaded_execution_policy(validated: &ValidatedFormalLiveConfigV1) -> Result<(), String> {
+    let (_policy_material, executable_digest, policy_digest) =
+        formal_package::execution_policy_material(&validated.release_policy)?;
+    if executable_digest.trim().is_empty() {
+        return Err("formal loaded executable digest is empty".into());
+    }
+    validated.require_execution_policy_digest(&policy_digest)
+}
+
+pub(crate) fn business_reader_for(
+    validated: &ValidatedFormalLiveConfigV1,
+) -> Result<Arc<RemoteBusinessIndexReader>, String> {
+    let authority = validated.active_authority().clone();
+    let minimum = validated.anchor.head().head().clone();
+    let primary = RemoteFormalEndpoint::new(
+        validated.config.primary,
+        validated.timeout,
+        authority.clone(),
+        EndpointRole::Primary,
+        validated.writer_key.clone(),
+        minimum.clone(),
+    )
+    .map_err(|error| format!("formal primary business reader: {error}"))?;
+    let replica = RemoteFormalEndpoint::new(
+        validated.config.replica,
+        validated.timeout,
+        authority,
+        EndpointRole::Replica,
+        validated.writer_key.clone(),
+        minimum,
+    )
+    .map_err(|error| format!("formal replica business reader: {error}"))?;
+    Ok(Arc::new(RemoteBusinessIndexReader::new(
+        primary,
+        replica,
+        BUSINESS_NODE_CACHE_BYTES,
+        BUSINESS_NODE_CACHE_ENTRIES,
+    )))
+}
+
+#[cfg(all(test, unix))]
+fn writer_endpoint(
+    endpoint: RemoteFormalEndpoint,
+    role: EndpointRole,
+) -> super::formal_live_crash_endpoint::CrashBoundaryFormalEndpoint {
+    super::formal_live_crash_endpoint::CrashBoundaryFormalEndpoint::new(endpoint, role)
+}
+#[cfg(not(all(test, unix)))]
+fn writer_endpoint(endpoint: RemoteFormalEndpoint, _: EndpointRole) -> RemoteFormalEndpoint {
+    endpoint
+}
+
+fn local_single_authority_node_config(node_id: &str, world_id: &str) -> Result<NodeConfig, String> {
+    let mut config = NodeConfig::new(node_id, world_id, NodeRole::Sequencer)
+        .map_err(|error| format!("formal local Node configuration: {error:?}"))?;
+    config.network_policy = NodeNetworkPolicy::for_runtime_role(NodeRole::Sequencer);
+    config.allow_local_proposals = true;
+    config.auto_attest_all_validators = false;
+    config.require_execution_on_commit = true;
+    config.require_peer_execution_hashes = false;
+    config.gossip = None;
+    config.replication = None;
+    config.feedback_p2p = None;
+    if config.auto_attest_all_validators
+        || !config.allow_local_proposals
+        || config.network_policy != NodeNetworkPolicy::for_runtime_role(NodeRole::Sequencer)
+        || config.gossip.is_some()
+        || config.replication.is_some()
+        || config.feedback_p2p.is_some()
+    {
+        return Err("formal runtime local-authority Node profile is not closed".into());
+    }
+    Ok(config)
+}
+
+fn existing_node_signer(validated: &ValidatedFormalLiveConfigV1) -> Result<SigningKey, String> {
+    let bytes = hex::decode(&validated.node_keypair.private_key_hex)
+        .map_err(|_| "existing Node private key encoding invalid")?;
+    let secret: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| "existing Node private key length invalid")?;
+    let signer = SigningKey::from_bytes(&secret);
+    if hex::encode(signer.verifying_key().to_bytes()) != validated.node_keypair.public_key_hex {
+        return Err("existing Node signer keypair mismatch".into());
+    }
+    Ok(signer)
+}
+
+#[cfg(unix)]
+pub(crate) fn launch_operation_owner_with_fixed_trust(
+    config: &Path,
+    operation: &str,
+    request: &str,
+    config_digest: &str,
+    expected_trust: &str,
+    timeout: Duration,
+) -> Result<FormalRuntimeOwnerSnapshotV1, String> {
+    owner::launch_operation_with_fixed_trust(
+        config,
+        operation,
+        request,
+        config_digest,
+        Some(expected_trust),
+        timeout,
+    )
+}
+#[cfg(unix)]
+pub(crate) fn query_operation_owner_with_fixed_trust(
+    config: &Path,
+    operation: &str,
+    request: &str,
+    config_digest: &str,
+    incarnation: Option<&str>,
+    expected_trust: &str,
+) -> Result<Option<FormalRuntimeOwnerSnapshotV1>, String> {
+    owner::query_operation_with_fixed_trust(
+        config,
+        operation,
+        request,
+        config_digest,
+        incarnation,
+        expected_trust,
+    )
+}
+#[cfg(unix)]
+pub(crate) fn run_operation_owner_worker_with_fixed_trust(
+    config: &Path,
+    operation: &str,
+    request: &str,
+    config_digest: &str,
+    expected_trust: Option<&str>,
+) -> Result<(), String> {
+    owner::run_operation_worker_with_fixed_trust(
+        config,
+        operation,
+        request,
+        config_digest,
+        expected_trust,
+    )
+}

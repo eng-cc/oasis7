@@ -12,6 +12,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[path = "membership_operations.rs"]
+mod membership_operations;
 #[path = "world_service_operations.rs"]
 mod operations;
 
@@ -183,6 +185,7 @@ pub(super) fn maybe_handle_with_guarded(
         LOOKUP_PATH,
         VIEW_PATH,
         CHANGES_PATH,
+        MEMBERSHIP_PATH,
     ]
     .contains(&path)
     {
@@ -219,6 +222,7 @@ pub(super) fn maybe_handle_with_guarded(
             LOOKUP_PATH => operations::lookup(&service, parse(body)?),
             VIEW_PATH => operations::view(&service, parse(body)?),
             CHANGES_PATH => operations::changes(&service, parse(body)?),
+            MEMBERSHIP_PATH => membership_operations::read(&service, parse(body)?),
             _ => unreachable!(),
         }
     })();

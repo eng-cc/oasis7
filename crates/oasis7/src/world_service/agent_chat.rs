@@ -54,7 +54,10 @@ pub fn validate_fresh(world: &World, request: &AgentChatRequest) -> Result<(), S
         .auth
         .as_ref()
         .ok_or("canonical chat proof required")?;
-    if world.capability_revocation_state().world_service_results.values().any(|value| {
+    let retained_nonce =
+        super::retained_queries::owner_chat_nonce_high_water(world, &proof.public_key)?;
+    if retained_nonce.is_some_and(|nonce| nonce >= proof.nonce)
+        || world.capability_revocation_state().world_service_results.values().any(|value| {
         serde_json::from_value::<super::CanonicalIntentResultV1>(value.clone()).is_ok_and(|result| {
             matches!(&result.request.signed_payload, super::WorldServicePayloadV1::AgentChat(old)
                 if old.auth.as_ref().is_some_and(|auth| auth.public_key == proof.public_key && auth.nonce >= proof.nonce))
@@ -171,10 +174,10 @@ pub fn owner_view(
         .map(|intent| intent.intent_id.clone());
     let mut goal = None;
     if let Some(intent) = current {
-        for (key, value) in &world.capability_revocation_state().world_service_results {
-            super::correlation::validate_result(key, value)?;
-            let result: super::CanonicalIntentResultV1 =
-                serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        for result in
+            super::retained_queries::agent_chat_goal_results(world, agent, &intent.intent_id)?
+                .into_values()
+        {
             if result.rejected.is_some()
                 || result
                     .receipt

@@ -24,12 +24,15 @@ mod cognition_scheduler;
 mod cognition_validation;
 mod cognition_wake;
 mod consensus;
+pub mod development_node_config;
 mod effect;
 mod error;
 mod events;
+mod formal_retained_history;
 mod gameplay;
 mod gameplay_state;
 mod governance;
+mod governance_membership;
 mod m1_builtin_wasm_artifact;
 mod m4_builtin_wasm_artifact;
 mod m5_builtin_wasm_artifact;
@@ -99,6 +102,16 @@ pub use effect::{
 
 // Error
 pub use error::WorldError;
+
+// Authenticated compacted history committed by an anchored Snapshot.
+pub(crate) use formal_retained_history::{
+    AgentChatIntentLookupV1, FeedbackPublicationLookupV1, GameTaskControlLookupV1,
+    digest_text as retained_history_digest_text,
+};
+pub use formal_retained_history::{
+    FormalRetainedHistoryRootV1, RetainedHistoryReadError, VerifiedFormalRetainedHistoryParentV1,
+};
+pub use world::{FormalTickConsensusArchivePlanV1, FormalWorldRetentionPlanV1};
 
 // Consensus
 pub use consensus::{
@@ -382,3 +395,6 @@ pub use major_world_event::{
 pub use world_event::{
     CapabilityAuthorizationEvent, ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody,
 };
+
+// Committed governance queries and explicit runtime adoption status.
+pub use governance_membership::{RuntimeMembershipApplicationView, WorldGovernanceMembershipView};

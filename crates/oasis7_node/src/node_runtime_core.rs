@@ -245,6 +245,7 @@ impl NodeRuntime {
         Self {
             config,
             local_execution_bootstrap: None,
+            local_execution_genesis_bootstrap: None,
             replication_network: None,
             replication_network_consensus_enabled: true,
             gossip_endpoint: None,
@@ -295,6 +296,17 @@ impl NodeRuntime {
         bootstrap: crate::NodeExecutionBootstrap,
     ) -> Self {
         self.local_execution_bootstrap = Some(bootstrap);
+        self
+    }
+
+    /// Seed a fresh local Node from a hook-issued, qualified InitialActivation
+    /// capability. Ordinary callers and hooks cannot use the positive-height
+    /// bootstrap API to bypass this genesis-specific boundary.
+    pub fn with_local_execution_genesis_bootstrap(
+        mut self,
+        bootstrap: crate::NodeExecutionGenesisBootstrap,
+    ) -> Self {
+        self.local_execution_genesis_bootstrap = Some(bootstrap);
         self
     }
 

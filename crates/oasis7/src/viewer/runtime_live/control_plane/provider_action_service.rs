@@ -59,6 +59,8 @@ impl ViewerRuntimeLiveServer {
         self.verified_world_view = Some(
             client
                 .read_view(ReadWorldViewRequest {
+                    observation_nonce: None,
+                    formal_anchor: None,
                     contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                     world: client.config().expected_world.clone(),
                     scope_id: client.config().scope_id.clone(),
@@ -91,6 +93,8 @@ impl ViewerRuntimeLiveServer {
             .ok_or("test requires actual service client")?;
         let view = client
             .read_view(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: client.config().expected_world.clone(),
                 scope_id: client.config().scope_id.clone(),
@@ -322,6 +326,8 @@ impl ViewerRuntimeLiveServer {
             })?;
         let view = client
             .read_view(ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: WORLD_SERVICE_CONTRACT_VERSION,
                 world: client.config().expected_world.clone(),
                 scope_id: client.config().scope_id.clone(),

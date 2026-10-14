@@ -570,10 +570,17 @@ impl ViewerRuntimeLiveServer {
         self.config
             .world_service
             .clone()
-            .map(|config| {
-                crate::world_service::client::RemoteWorldServiceClient::new(config)
-                    .map(|client| client.with_query_state(self.world_service_query_state.clone()))
-            })
+            .map(
+                |config| -> Result<_, crate::world_service::client::WorldServiceClientError> {
+                    let formal = config.formal_read_trust.is_some();
+                    let client =
+                        crate::world_service::client::RemoteWorldServiceClient::new(config)?;
+                    if formal && let Some(view) = &self.verified_world_view {
+                        client.resume_formal_view(view)?;
+                    }
+                    Ok(client.with_query_state(self.world_service_query_state.clone()))
+                },
+            )
             .transpose()
             .map_err(|error| ViewerRuntimeLiveServerError::Init(error.to_string()))
     }

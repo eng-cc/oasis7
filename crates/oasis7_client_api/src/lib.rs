@@ -9,6 +9,7 @@ pub mod config;
 pub mod provider;
 pub mod signing;
 pub mod world_service;
+pub mod world_service_full_sync;
 
 pub use bootstrap::{
     BootstrapConfig, ChainBootstrapConfig, ClientBootstrapConfig, DEFAULT_CHAIN_NETWORK_TIER,

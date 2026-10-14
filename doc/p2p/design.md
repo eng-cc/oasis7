@@ -171,7 +171,7 @@ Ordinary process regression seals an isolated engineering fixture before invocat
 
 #### des-p2p-guarded-local-initial-execution-prerequisite
 
-Deployment is deferred by the user. The explicit `--guarded-initial-config <external-json>` engineering branch installs the existing NodeRuntime execution hook and existing signed WorldService HTTP protocol. It does not activate the planned manifest-v2 formal profile, claim independent hardware fault domains, create an issuer/world/genesis identity, or enable Viewer/production-launcher consumption. Ordinary startup and ordinary client assurance retain their existing fail-closed boundaries.
+Deployment is deferred by the user. The explicit `dev guarded-world --config <external-json>` engineering command installs the existing NodeRuntime execution hook and existing signed WorldService HTTP protocol. It does not activate the planned manifest-v2 formal profile, claim independent hardware fault domains, create an issuer/world/genesis identity, or enable Viewer/production-launcher consumption. Ordinary startup and ordinary client assurance retain their existing fail-closed boundaries.
 
 Strict configuration version 1 has scope `guarded_local_execution_prerequisite`, `node_id`, existing private `node_keypair_directory`, private `records_directory`, loopback `status_bind`, `node_tick_ms` (1–60000), `trusted_bootstrap_config`, original `activation_evidence`, P/R directory paths, existing writer/P/R key-file paths, and an independently supplied `minimum_runtime_head`. Relative artifact paths resolve against the external configuration directory; the provisioned node-key directory must resolve to an absolute protected path. Existing activation/bootstrap verification runs before ordinary startup mutation. On Unix, P/R and node-key directories require current-user ownership and mode 0700; existing signing key files require current-user ownership, regular non-symlink files and mode 0600. Unsupported platforms reject this branch; it never generates keys or changes permissions of operator inputs. This config is independently authenticated operator trust input, not issuer authorization proof. The branch rejects external transport/provider/consensus overrides, constructs no libp2p/gossip/discovery/replication network, uses the existing single-local-validator decision machinery, and admits only existing authenticated WorldService routes on loopback. Public CAS/checkpoint/observer and legacy submit handlers are absent from this branch.
 
@@ -339,3 +339,22 @@ Ordinary immutable-record reads may reuse a successful detached `World::from_sna
 The cache does not select or authenticate a head. Every request still loads its actual record, reads and hashes all three CAS artifacts, decodes Snapshot/Journal/proof, checks their complete root/boundary/record/proof bindings, and derives the current runtime binding and exact requested CommitRef. Deleted or corrupt records/CAS objects, GC, conflicting fixed references, and changed heads cannot be satisfied by an earlier cache entry. Authorization and projection run after pinning under their existing checks. Guarded prerequisite reads retain their separate complete history verification and captured publication fence; they do not use this cache. No wire, assurance scope, startup gate or deployment behavior changes.
 
 Concurrent cold reads of an admitted identical key share one in-flight restore. Each caller completes the same record/CAS/proof checks before joining and receives an independent clone of the successful detached original. At most two active keys and 16 MiB of active source-byte weight are admitted separately from the retained FIFO budget; an existing key remains joinable when admission is full. Distinct keys at saturation and oversized inputs bypass coalescing and restore normally, so this is not a bound on all concurrent restores. Decoded inputs, waiting callers, transient result Arcs and World clones are outside those source-weight budgets. The global cache mutex protects only selection and bookkeeping; expensive restore and cloning occur outside it. Attached waiters may share their leader's exact error, but no negative result remains cached. Leader cleanup removes only its own marker and wakes waiters on error or unwind; abandoned work is retried iteratively. Poisoned cache, flight or retained-original locks fall back to the original restore path.
+
+### 工程节点配置入口
+
+工程启动使用 `oasis7_chain_runtime dev node --config PATH`。配置合同为
+`oasis7.development-node/v1`，包含绝对 `working_directory`、强类型 `runtime`
+及可选 `local_provider`；所有层级拒绝未知字段。`dev local-provider --config PATH`
+必须提供完整 provider 材料，且仅允许 `DevLocal`。托管 mock funding lane 仍要求
+明确的 hosted session、test-tier 构建与 standalone 模式。配置不接受 manifest、
+原始 argv 或正式 authority。synthetic auto-attest 仅属于工程计数，不能作为正式共识验收。
+
+已有工程 wrapper 可通过 `dev prepare-config --output PATH -- source-options`
+先验证并生成同一合同，再启动明确的 dev 命令；失败时不启动节点。相对材料和存储路径
+在准备时按原 cwd 固定。launcher、S9/S10 和 longrun 的实际启动采用该流程。
+网络 manifest 启动拒绝 synthetic auto-attest，并从已核验 World 的治理 registry 获取
+validator signer；缺远端 signer 时拒绝启动，不为它派生本机 root 公钥。
+
+离线核验入口为 `inspect bootstrap`、`inspect history`、`inspect rebuild-proof`，
+参数仍由原有 verifier 核验；旧 `verify-*` 拼写仅为兼容别名。help 和非法参数解析
+不启动节点，也不创建世界或身份材料。

@@ -60,33 +60,16 @@ use super::{
 use crate::{
     EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
 };
-pub(crate) struct NodeRuntimeExecutionDriver {
-    pub(super) state_path: std::path::PathBuf,
-    pub(super) world_dir: std::path::PathBuf,
-    pub(super) records_dir: std::path::PathBuf,
-    pub(super) simulator_world_dir: std::path::PathBuf,
-    pub(super) execution_store: LocalCasStore,
-    pub(super) state: ExecutionBridgeState,
-    pub(super) execution_world: RuntimeWorld,
-    pub(super) simulator_mirror: WorldKernel,
-    pub(super) execution_sandbox: Box<dyn ModuleSandbox + Send>,
-    pub(super) hot_window_heights: u64,
-    pub(super) checkpoint_interval_heights: u64,
-    pub(super) checkpoint_keep_latest: usize,
-    pub(super) retention_reconcile_pending: bool,
-    pub(super) retention_reconcile_next_height: Option<u64>,
-    /// Host-side continuation marker for a staged product-validation intent.
-    /// It is deliberately outside the runtime state root and is cleared after
-    /// the authoritative per-height record is published.
-    pub(super) pending_product_validation_intent: Option<ProductValidationIntentMarkerV1>,
-    pub(super) local_execution_bootstrap: Option<NodeExecutionBootstrap>,
-    pub(super) controlled_capture_enabled: bool,
-    pub(super) guarded_trust:
-        Option<oasis7_distfs::controlled_authority::replicated_protocol::FixedTrust>,
-}
+#[path = "driver_state.rs"]
+mod state;
+pub(crate) use state::{ExecutionResourceIdentity, NodeRuntimeExecutionDriver};
 
 #[path = "driver_construction.rs"]
 mod construction;
+#[path = "driver_formal_retention.rs"]
+mod formal_retention;
+#[path = "driver_formal_tick.rs"]
+mod formal_tick;
 
 impl NodeRuntimeExecutionDriver {
     pub(super) fn new_with_storage_profile_and_local_bootstrap(
@@ -241,7 +224,13 @@ impl NodeRuntimeExecutionDriver {
             pending_product_validation_intent: None,
             local_execution_bootstrap: None,
             controlled_capture_enabled: false,
-            guarded_trust: None,
+            formal_retention_enabled: false,
+            formal_retention_delta: None,
+            formal_new_results: Vec::new(),
+            formal_event_root: None,
+            formal_unpruned_journal: None,
+            formal_journal_cursors: Vec::new(),
+            resource_identity: None,
         }
     }
 
@@ -626,6 +615,23 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 }
             };
         }
+        let committed_tick_context = RuntimeCommittedTickContext {
+            height: context.height,
+            slot: context.slot,
+            epoch: context.epoch,
+            node_block_hash: if self.formal_retention_enabled {
+                context.node_block_hash.clone()
+            } else {
+                String::new()
+            },
+            action_root: context.action_root.clone(),
+            authority_node_id: context.node_id.clone(),
+            committed_at_unix_ms: context.committed_at_unix_ms,
+        };
+        rollback_on_error!(self.begin_formal_tick(
+            &committed_tick_context,
+            resume_after_product_validation_intent
+        ));
         if let Some(authorities) = replicated_provider_backed_bootstrap.as_deref() {
             rollback_on_error!(self.apply_provider_backed_bootstrap(authorities));
         }
@@ -671,15 +677,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 }
             }
         }
-        let committed_tick_context = RuntimeCommittedTickContext {
-            height: context.height,
-            slot: context.slot,
-            epoch: context.epoch,
-            node_block_hash: String::new(),
-            action_root: context.action_root.clone(),
-            authority_node_id: context.node_id.clone(),
-            committed_at_unix_ms: context.committed_at_unix_ms,
-        };
         if resume_after_product_validation_intent {
             rollback_on_error!(
                 self.execution_world
@@ -756,6 +753,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             &mut self.execution_world,
             service_results
         ));
+        rollback_on_error!(self.finish_formal_tick(&committed_tick_context, service_admin_only));
+        if self.formal_retention_enabled {
+            rollback_on_error!(self.capture_formal_retention(&previous_execution_world));
+        }
         let simulator_step_started_at = Instant::now();
         let (simulator_mirror, simulator_observation) = rollback_on_error!(
             self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())
@@ -767,13 +768,13 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let runtime_resource_context = ChainResourceDerivationContext {
             world_id: context.world_id.as_str(),
             chain_id: self
-                .guarded_trust
+                .resource_identity
                 .as_ref()
                 .map_or(context.world_id.as_str(), |t| t.chain_id.as_str()),
             genesis_ref: self
-                .guarded_trust
+                .resource_identity
                 .as_ref()
-                .map(|t| t.genesis_digest.as_str()),
+                .map(|t| t.genesis_ref.as_str()),
             created_at_height: execution_resource_created_at_height(context.height),
             manifest_height: context.height,
             commit_block_hash: Some(runtime_resource_commit_hash.as_str()),
@@ -931,12 +932,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             ));
         }
         let checkpoint_started_at = Instant::now();
-        record.checkpoint_ref = rollback_on_error!(maybe_persist_execution_checkpoint_for_record(
-            self.records_dir.as_path(),
-            &record,
-            self.checkpoint_interval_heights,
-            self.checkpoint_keep_latest,
-        ));
+        record.checkpoint_ref = rollback_on_error!(self.persist_local_checkpoint(&record));
         let checkpoint_ms = checkpoint_started_at.elapsed();
         let checkpoint_manifest = rollback_on_error!(
             record

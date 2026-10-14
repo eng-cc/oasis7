@@ -356,6 +356,8 @@ fn canonical_owner_goal_http_view_excludes_public_and_registered_delegate() {
         let signed = sign_read_request(
             VIEW_PATH,
             ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: 1,
                 world: identity.clone(),
                 scope_id: scope.into(),

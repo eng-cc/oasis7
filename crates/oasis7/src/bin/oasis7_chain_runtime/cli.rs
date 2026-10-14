@@ -1,3 +1,10 @@
+#[path = "cli_contract.rs"]
+pub(super) mod cli_contract;
+use cli_contract::parse_required_value;
+#[path = "cli_provider_validation.rs"]
+mod provider_validation;
+use provider_validation::validate_local_test_provider_options;
+
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
@@ -21,8 +28,10 @@ use sha2::{Digest, Sha256};
 use super::distfs_probe_runtime::{DistfsProbeRuntimeConfig, parse_distfs_probe_runtime_option};
 
 #[path = "cli_help.rs"]
-mod cli_help;
+pub(super) mod cli_help;
 pub(super) use cli_help::print_help;
+#[path = "cli_default.rs"]
+mod cli_default;
 
 pub(super) const DEFAULT_NODE_ID: &str = "viewer-live-node";
 pub(super) const DEFAULT_WORLD_ID: &str = "oasis7-unified-world-v1";
@@ -80,7 +89,8 @@ pub(super) struct CliOptions {
     pub world_id: String,
     pub status_bind: String,
     pub guarded_initial_config: Option<PathBuf>,
-    pub guarded_read_authority: Option<super::controlled_live_config::GuardedReadAuthority>,
+    pub formal_live_config: Option<PathBuf>,
+    pub development_runtime: bool,
     pub storage_profile: StorageProfile,
     pub traffic_profile: TrafficProfile,
     pub node_role: NodeRole,
@@ -109,7 +119,7 @@ pub(super) struct CliOptions {
     pub node_gossip_peers: Vec<SocketAddr>,
     pub replication_network_listen_addrs: Vec<String>,
     pub replication_network_bootstrap_peers: Vec<String>,
-    pub replication_remote_writer_public_keys: Vec<String>,
+    pub replication_fetch_requester_public_keys: Vec<String>,
     pub network_tier_manifest_path: Option<PathBuf>,
     pub loaded_network_tier_manifest: Option<LoadedNetworkTierManifest>,
     pub genesis_validator_registry_path: Option<PathBuf>,
@@ -143,7 +153,6 @@ pub(super) struct CliOptions {
     pub reward_runtime_auto_redeem: bool,
     pub reward_initial_reserve_power_units: i64,
     pub reward_distfs_probe_config: DistfsProbeRuntimeConfig,
-    pub p2p_user_mode_explicit: bool,
     pub p2p_detected_reachability_explicit: bool,
     pub p2p_detected_hole_punch_viability_explicit: bool,
     pub p2p_detected_relay_available_explicit: bool,
@@ -152,94 +161,18 @@ pub(super) struct CliOptions {
     pub p2p_node_role_explicit: bool,
 }
 
-impl Default for CliOptions {
-    fn default() -> Self {
-        let pos_defaults = chain_pos_defaults::defaults();
-        Self {
-            node_id: DEFAULT_NODE_ID.to_string(),
-            world_id: DEFAULT_WORLD_ID.to_string(),
-            status_bind: DEFAULT_STATUS_BIND.to_string(),
-            guarded_initial_config: None,
-            guarded_read_authority: None,
-            storage_profile: StorageProfile::DevLocal,
-            traffic_profile: TrafficProfile::Default,
-            node_role: NodeRole::Sequencer,
-            p2p_user_mode: NodeUserMode::AutoJoin,
-            p2p_accept_public_entry: false,
-            p2p_detected_reachability: None,
-            p2p_detected_hole_punch_viability: NodeHolePunchViability::Unknown,
-            p2p_detected_relay_available: false,
-            p2p_detected_probe_stable: false,
-            p2p_deployment_mode: PeerDeploymentMode::Private,
-            p2p_node_role: PeerNodeRole::ValidatorCore,
-            p2p_source_operator: None,
-            p2p_source_asn: None,
-            p2p_max_ipv4_subnet_active_peers: None,
-            node_tick_ms: DEFAULT_NODE_TICK_MS,
-            pos_slot_duration_ms: pos_defaults.slot_duration_ms,
-            pos_ticks_per_slot: pos_defaults.ticks_per_slot,
-            pos_proposal_tick_phase: pos_defaults.proposal_tick_phase,
-            pos_adaptive_tick_scheduler_enabled: false,
-            pos_slot_clock_genesis_unix_ms: None,
-            pos_max_past_slot_lag: pos_defaults.max_past_slot_lag,
-            node_auto_attest_all_validators: false,
-            node_validators: Vec::new(),
-            node_validator_signer_public_keys: BTreeMap::new(),
-            node_gossip_bind: None,
-            node_gossip_peers: Vec::new(),
-            replication_network_listen_addrs: Vec::new(),
-            replication_network_bootstrap_peers: Vec::new(),
-            replication_remote_writer_public_keys: Vec::new(),
-            network_tier_manifest_path: None,
-            loaded_network_tier_manifest: None,
-            genesis_validator_registry_path: None,
-            deployment_inventory_path: None,
-            config_path: DEFAULT_CONFIG_FILE.to_string(),
-            runtime_root: None,
-            execution_bridge_state_path: None,
-            execution_world_dir: None,
-            execution_records_dir: None,
-            capture_schedule_recipe_history: false,
-            provider_backed_bootstrap_authority_paths: Vec::new(),
-            local_test_provider_authority_path: None,
-            local_test_provider_wasm_path: None,
-            local_test_provider_metadata_path: None,
-            local_test_provider_agent_id: DEFAULT_LOCAL_TEST_PROVIDER_AGENT_ID.to_string(),
-            local_test_provider_owner_binding: DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING
-                .to_string(),
-            local_test_provider_finality_block_hash: None,
-            local_test_provider_session_mode: DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE.to_string(),
-            chain_local_standalone_test: false,
-            agent_decision_source: None,
-            agent_provider_backend: None,
-            agent_provider_contract: None,
-            agent_provider_transport: None,
-            agent_execution_lane: None,
-            storage_root: None,
-            replication_root: None,
-            reward_runtime_enabled: true,
-            reward_runtime_signer_node_id: None,
-            reward_runtime_epoch_duration_secs: None,
-            reward_points_per_credit: RewardAssetConfig::default().points_per_credit,
-            reward_runtime_auto_redeem: false,
-            reward_initial_reserve_power_units: DEFAULT_REWARD_RUNTIME_RESERVE_UNITS,
-            reward_distfs_probe_config: DistfsProbeRuntimeConfig::default(),
-            p2p_user_mode_explicit: false,
-            p2p_detected_reachability_explicit: false,
-            p2p_detected_hole_punch_viability_explicit: false,
-            p2p_detected_relay_available_explicit: false,
-            p2p_detected_probe_stable_explicit: false,
-            p2p_deployment_mode_explicit: false,
-            p2p_node_role_explicit: false,
-        }
-    }
-}
-
 pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
     let mut options = CliOptions::default();
     let mut iter = args.peekable();
+    let mut seen = std::collections::BTreeSet::new();
+    let mut explicit = std::collections::BTreeSet::new();
 
     while let Some(arg) = iter.next() {
+        let spec = cli_contract::option(arg)?;
+        explicit.insert(spec.name);
+        cli_contract::check_option_occurrence(spec, &mut seen)?;
+        cli_contract::check_required_value(spec, iter.peek().copied())?;
+        let arg = spec.name;
         match arg {
             "--node-id" => options.node_id = parse_required_value(&mut iter, "--node-id")?,
             "--world-id" => options.world_id = parse_required_value(&mut iter, "--world-id")?,
@@ -247,6 +180,12 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options.guarded_initial_config = Some(PathBuf::from(parse_required_value(
                     &mut iter,
                     "--guarded-initial-config",
+                )?));
+            }
+            "--formal-live-config" => {
+                options.formal_live_config = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--formal-live-config",
                 )?));
             }
             "--status-bind" => {
@@ -272,7 +211,6 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--p2p-user-mode" => {
                 let raw = parse_required_value(&mut iter, "--p2p-user-mode")?;
                 options.p2p_user_mode = raw.parse::<NodeUserMode>()?;
-                options.p2p_user_mode_explicit = true;
             }
             "--p2p-accept-public-entry" => {
                 options.p2p_accept_public_entry = true;
@@ -401,14 +339,31 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             }
             "--node-validator" => {
                 let raw = parse_required_value(&mut iter, "--node-validator")?;
-                options
+                let validator = parse_validator_spec(raw.as_str())?;
+                if options
                     .node_validators
-                    .push(parse_validator_spec(raw.as_str())?);
+                    .iter()
+                    .any(|existing| existing.validator_id == validator.validator_id)
+                {
+                    return Err(format!(
+                        "duplicate validator identity: {}",
+                        validator.validator_id
+                    ));
+                }
+                options.node_validators.push(validator);
             }
             "--node-validator-signer-public-key" => {
                 let raw = parse_required_value(&mut iter, "--node-validator-signer-public-key")?;
                 let (validator_id, public_key_hex) =
                     parse_validator_signer_public_key_spec(raw.as_str())?;
+                if options
+                    .node_validator_signer_public_keys
+                    .contains_key(&validator_id)
+                {
+                    return Err(format!(
+                        "duplicate validator signer binding: {validator_id}"
+                    ));
+                }
                 options
                     .node_validator_signer_public_keys
                     .insert(validator_id, public_key_hex);
@@ -434,10 +389,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 let raw = parse_required_value(&mut iter, "--replication-network-peer")?;
                 options.replication_network_bootstrap_peers.push(raw);
             }
-            "--replication-remote-writer-public-key" => {
+            "--replication-fetch-requester-public-key" => {
                 let raw =
-                    parse_required_value(&mut iter, "--replication-remote-writer-public-key")?;
-                options.replication_remote_writer_public_keys.push(raw);
+                    parse_required_value(&mut iter, "--replication-fetch-requester-public-key")?;
+                options.replication_fetch_requester_public_keys.push(raw);
             }
             "--network-tier-manifest" => {
                 let raw = parse_required_value(&mut iter, "--network-tier-manifest")?;
@@ -598,6 +553,66 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         }
     }
 
+    if let Some(option) = options
+        .formal_live_config
+        .as_ref()
+        .and_then(|_| seen.iter().find(|option| option.as_str() != "--live-mode"))
+    {
+        return Err(format!(
+            "{option} cannot be combined with --formal-live-config; runtime settings come from the formal profile"
+        ));
+    }
+
+    if options.guarded_initial_config.is_some() {
+        if let Some(flag) = explicit
+            .iter()
+            .find(|flag| !["--guarded-initial-config", "--reward-runtime-disable"].contains(flag))
+        {
+            return Err(format!(
+                "{flag} is inapplicable to guarded engineering; use dev guarded-world --config PATH"
+            ));
+        }
+    }
+
+    let provider_explicit = explicit
+        .iter()
+        .any(|flag| flag.starts_with("--local-test-provider-") || flag.starts_with("--agent-"));
+    if provider_explicit && options.local_test_provider_authority_path.is_none() {
+        return Err("explicit local-provider/agent engineering options require complete provider setup; use dev local-provider --config PATH".into());
+    }
+    validate_effective_options(&options)?;
+    if options.network_tier_manifest_path.is_some() && options.node_auto_attest_all_validators {
+        return Err("formal network-tier startup rejects synthetic auto-attestation; use dev node --config for engineering fixtures".into());
+    }
+    if let Some(manifest_path) = options.network_tier_manifest_path.as_ref() {
+        let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path())?;
+        loaded.validate_runtime_support()?;
+        validate_current_runtime_hash_against_network_tier_bundle(
+            manifest_path.as_path(),
+            &loaded,
+        )?;
+        options.loaded_network_tier_manifest = Some(loaded);
+    }
+
+    if options.local_test_provider_authority_path.is_some()
+        || options.node_auto_attest_all_validators
+        || options.capture_schedule_recipe_history
+        || options.chain_local_standalone_test
+        || (options.network_tier_manifest_path.is_none()
+            && options.formal_live_config.is_none()
+            && options.guarded_initial_config.is_none()
+            && options.genesis_validator_registry_path.is_none()
+            && options.deployment_inventory_path.is_none())
+    {
+        let typed = super::development_runtime::from_options(&options)?;
+        super::development_runtime::into_options(typed, false)?;
+        options.development_runtime = true;
+        return Ok(options);
+    }
+    Ok(options)
+}
+
+pub(super) fn validate_effective_options(options: &CliOptions) -> Result<(), String> {
     parse_host_port(options.status_bind.as_str(), "--status-bind")?;
     if options.node_id.trim().is_empty() {
         return Err("--node-id requires a non-empty value".to_string());
@@ -628,128 +643,16 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     {
         return Err("history capture requires an execution-materializing node role".into());
     }
-    validate_local_test_provider_options(&options)?;
-    if let Some(manifest_path) = options.network_tier_manifest_path.as_ref() {
-        let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path())?;
-        loaded.validate_runtime_support()?;
-        validate_current_runtime_hash_against_network_tier_bundle(
-            manifest_path.as_path(),
-            &loaded,
-        )?;
-        options.loaded_network_tier_manifest = Some(loaded);
-    }
-
-    Ok(options)
-}
-
-fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), String> {
-    let any_setup_option = options.local_test_provider_authority_path.is_some()
-        || options.local_test_provider_wasm_path.is_some()
-        || options.local_test_provider_metadata_path.is_some()
-        || options.local_test_provider_finality_block_hash.is_some()
-        || options.local_test_provider_agent_id != DEFAULT_LOCAL_TEST_PROVIDER_AGENT_ID
-        || options.local_test_provider_owner_binding != DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING
-        || options.local_test_provider_session_mode != DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE;
-    if !any_setup_option {
-        if provider_tuple_requested(options) {
-            return Err(
-                "provider tuple admission requires local test provider authority setup".to_string(),
-            );
-        }
-        return Ok(());
-    }
-    if options.storage_profile != StorageProfile::DevLocal {
-        return Err("local test authority setup requires --storage-profile dev_local".to_string());
-    }
-    if options.network_tier_manifest_path.is_some() {
-        return Err("local test authority setup cannot use --network-tier-manifest".to_string());
-    }
-    let required = [
-        (
-            "--local-test-provider-authority",
-            options.local_test_provider_authority_path.is_some(),
-        ),
-        (
-            "--local-test-provider-wasm",
-            options.local_test_provider_wasm_path.is_some(),
-        ),
-        (
-            "--local-test-provider-metadata",
-            options.local_test_provider_metadata_path.is_some(),
-        ),
-        (
-            "--local-test-provider-finality-block-hash",
-            options.local_test_provider_finality_block_hash.is_some(),
-        ),
-    ];
-    for (flag, present) in required {
-        if !present {
-            return Err(format!(
-                "{flag} is required when local test authority setup is enabled"
-            ));
-        }
-    }
-    if options.local_test_provider_agent_id.trim().is_empty() {
-        return Err("--local-test-provider-agent-id requires a non-empty value".to_string());
-    }
-    if options.local_test_provider_owner_binding.trim().is_empty() {
-        return Err("--local-test-provider-owner-binding requires a non-empty value".to_string());
-    }
-    if !matches!(
-        options.local_test_provider_session_mode.as_str(),
-        "hosted_public_join" | "loopback"
-    ) {
-        return Err(
-            "--local-test-provider-session-mode must be hosted_public_join or loopback".to_string(),
-        );
-    }
-    let finality = options
-        .local_test_provider_finality_block_hash
-        .as_deref()
-        .unwrap_or_default();
-    if !valid_blake3_digest(finality) {
-        return Err(
-            "--local-test-provider-finality-block-hash must be blake3:<64 lowercase hex characters>"
-                .to_string(),
-        );
-    }
-    if provider_tuple_requested(options) {
-        if !hosted_local_mock_provider_tuple(options) {
-            return Err(
-                "Hosted local-mock funding requires the exact provider_backed/provider_local_mock/worldsim_provider_v1/loopback_http/player_parity tuple"
-                    .to_string(),
-            );
-        }
-        if !cfg!(feature = "test_tier_required") {
-            return Err(
-                "Hosted local-mock funding requires a binary built with feature test_tier_required"
-                    .to_string(),
-            );
-        }
-        if !options.chain_local_standalone_test {
-            return Err(
-                "Hosted local-mock funding requires --chain-local-standalone-test".to_string(),
-            );
-        }
+    validate_local_test_provider_options(options)?;
+    if options.node_tick_ms == 0
+        || options.pos_slot_duration_ms == 0
+        || options.pos_ticks_per_slot == 0
+        || options.reward_runtime_epoch_duration_secs == Some(0)
+        || options.p2p_max_ipv4_subnet_active_peers == Some(0)
+    {
+        return Err("runtime timing/budget fields must be positive".into());
     }
     Ok(())
-}
-
-fn provider_tuple_requested(options: &CliOptions) -> bool {
-    options.agent_decision_source.is_some()
-        || options.agent_provider_backend.is_some()
-        || options.agent_provider_contract.is_some()
-        || options.agent_provider_transport.is_some()
-        || options.agent_execution_lane.is_some()
-}
-
-fn hosted_local_mock_provider_tuple(options: &CliOptions) -> bool {
-    options.agent_decision_source.as_deref() == Some("provider_backed")
-        && options.agent_provider_backend.as_deref() == Some("provider_local_mock")
-        && options.agent_provider_contract.as_deref() == Some("worldsim_provider_v1")
-        && options.agent_provider_transport.as_deref() == Some("loopback_http")
-        && options.agent_execution_lane.as_deref() == Some("player_parity")
-        && options.local_test_provider_session_mode == "hosted_public_join"
 }
 
 fn valid_blake3_digest(value: &str) -> bool {
@@ -790,10 +693,76 @@ struct NetworkTierArtifactRef {
     total_bytes: Option<u64>,
 }
 
+/// Inspect declared attachment integrity for preserving backups. This does not
+/// establish chain authority or change the runtime bundle's interpretation.
+pub(crate) fn inspect_network_tier_bundle_attachments(
+    bundle_path: &Path,
+) -> Result<Vec<(String, PathBuf)>, String> {
+    let bundle: NetworkTierReleaseCandidateBundle =
+        serde_json::from_slice(&fs::read(bundle_path).map_err(|error| error.to_string())?)
+            .map_err(|error| format!("invalid release bundle: {error}"))?;
+    let mut attachments = Vec::new();
+    for (label, artifact, kind) in [
+        (
+            "generated_world_sidecar",
+            bundle.generated_world_sidecar.as_ref(),
+            "directory",
+        ),
+        (
+            "world_generation_provenance",
+            bundle.world_generation_provenance.as_ref(),
+            "file",
+        ),
+    ] {
+        if let Some(artifact) = artifact {
+            let path = Path::new(&artifact.resolved_path);
+            if !path.is_absolute() {
+                return Err(format!(
+                    "release bundle {label}.resolved_path must be absolute"
+                ));
+            }
+            validate_network_tier_bundle_artifact(bundle_path, label, artifact, kind)?;
+            attachments.push((label.to_owned(), path.to_path_buf()));
+        }
+    }
+    Ok(attachments)
+}
+
 fn validate_current_runtime_hash_against_network_tier_bundle(
     manifest_path: &Path,
     loaded: &LoadedNetworkTierManifest,
 ) -> Result<(), String> {
+    let (bundle_path, expected_sha256) =
+        approved_runtime_sha256_for_network_tier_bundle(manifest_path, loaded)?;
+    let current_exe = std::env::current_exe()
+        .map_err(|err| format!("resolve current runtime executable path failed: {err}"))?;
+    let actual_sha256 = sha256_file_hex(current_exe.as_path()).map_err(|err| {
+        format!(
+            "hash current runtime executable {} failed: {err}",
+            current_exe.display()
+        )
+    })?;
+    if actual_sha256 != expected_sha256 {
+        return Err(format!(
+            "network tier runtime bundle hash mismatch: executable={} actual_sha256={} bundle_path={} expected_sha256={}",
+            current_exe.display(),
+            actual_sha256,
+            bundle_path.display(),
+            expected_sha256
+        ));
+    }
+    Ok(())
+}
+
+/// Return the executable digest from the exact manifest-bound runtime bundle
+/// after applying the same attachment integrity checks used by normal startup.
+/// Package admission uses this to reject a binary replacement before it stops
+/// the currently valid runtime; callers must still preserve the original chain
+/// manifest pin when no candidate-authority transaction is present.
+pub(super) fn approved_runtime_sha256_for_network_tier_bundle(
+    manifest_path: &Path,
+    loaded: &LoadedNetworkTierManifest,
+) -> Result<(PathBuf, String), String> {
     let bundle_path = resolve_network_tier_runtime_ref_path(
         manifest_path,
         loaded
@@ -853,24 +822,7 @@ fn validate_current_runtime_hash_against_network_tier_bundle(
         ));
     }
 
-    let current_exe = std::env::current_exe()
-        .map_err(|err| format!("resolve current runtime executable path failed: {err}"))?;
-    let actual_sha256 = sha256_file_hex(current_exe.as_path()).map_err(|err| {
-        format!(
-            "hash current runtime executable {} failed: {err}",
-            current_exe.display()
-        )
-    })?;
-    if actual_sha256 != expected_sha256 {
-        return Err(format!(
-            "network tier runtime bundle hash mismatch: executable={} actual_sha256={} bundle_path={} expected_sha256={}",
-            current_exe.display(),
-            actual_sha256,
-            bundle_path.display(),
-            expected_sha256
-        ));
-    }
-    Ok(())
+    Ok((bundle_path, expected_sha256))
 }
 
 fn validate_network_tier_bundle_artifact(
@@ -1085,23 +1037,6 @@ pub(super) fn p2p_auto_detection_from_options(
     }
 }
 
-fn parse_required_value<'a, I>(
-    iter: &mut std::iter::Peekable<I>,
-    flag: &str,
-) -> Result<String, String>
-where
-    I: Iterator<Item = &'a str>,
-{
-    let Some(value) = iter.next() else {
-        return Err(format!("{flag} requires a value"));
-    };
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(format!("{flag} requires a non-empty value"));
-    }
-    Ok(value.to_string())
-}
-
 fn parse_socket_addr(raw: &str, label: &str) -> Result<SocketAddr, String> {
     raw.parse::<SocketAddr>()
         .map_err(|_| format!("{label} requires <addr:port>"))
@@ -1138,7 +1073,7 @@ fn parse_peer_reachability_class(raw: &str) -> Result<PeerReachabilityClass, Str
     }
 }
 
-fn normalize_p2p_metadata_label(raw: &str, flag: &str) -> Result<String, String> {
+pub(super) fn normalize_p2p_metadata_label(raw: &str, flag: &str) -> Result<String, String> {
     let normalized = raw.trim().to_ascii_lowercase();
     if normalized.is_empty() {
         return Err(format!("{flag} requires a non-empty value"));
@@ -1184,7 +1119,7 @@ pub(super) fn parse_validator_signer_public_key_spec(
     Ok((validator_id.to_string(), public_key_hex.to_string()))
 }
 
-fn default_p2p_node_role(node_role: NodeRole) -> PeerNodeRole {
+pub(super) fn default_p2p_node_role(node_role: NodeRole) -> PeerNodeRole {
     match node_role {
         NodeRole::Sequencer => PeerNodeRole::ValidatorCore,
         NodeRole::Storage => PeerNodeRole::FullStorage,

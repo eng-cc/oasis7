@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use storage::{Fault, Phase};
 
-fn key(n: u8) -> SigningKey {
+pub(super) fn key(n: u8) -> SigningKey {
     SigningKey::from_bytes(&[n; 32])
 }
-fn trust() -> FixedTrust {
+pub(super) fn trust() -> FixedTrust {
     FixedTrust {
         world_id: "world-test".into(),
         chain_id: "chain-test".into(),
@@ -21,7 +21,7 @@ fn trust() -> FixedTrust {
         replica_key: hex::encode(key(3).verifying_key().to_bytes()),
     }
 }
-fn request(id: &str) -> LocalRequestIdentity {
+pub(super) fn request(id: &str) -> LocalRequestIdentity {
     LocalRequestIdentity {
         verified_subject: "player-test".into(),
         operation_domain: "recipe".into(),
@@ -29,7 +29,7 @@ fn request(id: &str) -> LocalRequestIdentity {
         request_id: id.into(),
     }
 }
-fn record() -> ClosedRecord {
+pub(super) fn record() -> ClosedRecord {
     let roles = [
         ArtifactRole::Input,
         ArtifactRole::Result,
@@ -62,7 +62,7 @@ fn record() -> ClosedRecord {
         objects,
     }
 }
-fn proposal(id: &str, parent: &HeadAnchor) -> SignedProposal {
+pub(super) fn proposal(id: &str, parent: &HeadAnchor) -> SignedProposal {
     crypto::sign_proposal(
         ProposalBody {
             schema_version: 1,
@@ -72,13 +72,14 @@ fn proposal(id: &str, parent: &HeadAnchor) -> SignedProposal {
             parent_hash: parent.decision_hash.clone(),
             request: request(id),
             record: record(),
+            frozen_input_digest: None,
         },
         &key(1),
     )
     .unwrap()
 }
 static SERIAL: AtomicU64 = AtomicU64::new(0);
-fn root() -> PathBuf {
+pub(super) fn root() -> PathBuf {
     loop {
         let p = std::env::temp_dir().join(format!(
             "oasis7-replicated-{}-{}",
@@ -92,7 +93,7 @@ fn root() -> PathBuf {
         }
     }
 }
-fn endpoints(
+pub(super) fn endpoints(
     root: &std::path::Path,
     p_min: &HeadAnchor,
     r_min: &HeadAnchor,
@@ -116,12 +117,12 @@ fn endpoints(
         .unwrap(),
     )
 }
-fn coordinator(root: &std::path::Path) -> ReplicatedCoordinator {
+pub(super) fn coordinator(root: &std::path::Path) -> ReplicatedCoordinator {
     let genesis = trust().genesis_anchor().unwrap();
     let (p, r) = endpoints(root, &genesis, &genesis);
     ReplicatedCoordinator::new(p, r, key(1)).unwrap()
 }
-fn qualified(o: ProtocolOutcome) -> DurabilityEvidence {
+pub(super) fn qualified(o: ProtocolOutcome) -> DurabilityEvidence {
     match o {
         ProtocolOutcome::DurabilityQualified(e) => *e,
         other => panic!("not qualified: {other:?}"),
@@ -210,7 +211,9 @@ fn prepare_only_does_not_qualify_and_competing_parent_has_one_decision() {
     let b = proposal("b", &genesis);
     p.prepare(&a).unwrap();
     let ra = r.prepare(&a).unwrap();
-    let rb = r.prepare(&b).unwrap();
+    assert!(p.prepare(&b).is_err());
+    assert!(r.prepare(&b).is_err());
+    let rb = ra.clone();
     assert!(matches!(
         p.lookup(&request("a")).unwrap(),
         EndpointStatus::Prepared(_)
@@ -223,6 +226,7 @@ fn prepare_only_does_not_qualify_and_competing_parent_has_one_decision() {
     ));
     let rr = r.decide_replica(&a, &ra, &pr).unwrap();
     let e = DurabilityEvidence {
+        frozen_certificate: None,
         proposal: a.clone(),
         replica_prepare: ra.clone(),
         primary_receipt: pr,
@@ -236,7 +240,7 @@ fn prepare_only_does_not_qualify_and_competing_parent_has_one_decision() {
     assert!(r.decide_replica(&b, &rb, &e.primary_receipt).is_err());
     assert!(matches!(
         r.lookup(&request("b")).unwrap(),
-        EndpointStatus::Prepared(_)
+        EndpointStatus::NotRecorded
     ));
     drop((p, r));
     std::fs::remove_dir_all(root).unwrap();

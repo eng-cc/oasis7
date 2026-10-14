@@ -12,13 +12,21 @@ use std::io::Read;
 use std::time::Duration;
 #[path = "client_cooldown.rs"]
 mod cooldown;
+#[path = "client_formal.rs"]
+mod formal;
+#[path = "client_formal_changes.rs"]
+mod formal_changes;
+#[path = "client_formal_operations.rs"]
+mod formal_operations;
 pub use cooldown::WorldServiceQueryState;
+pub use formal::FormalReadTrustConfigV1;
 #[cfg(test)]
 #[path = "client_cooldown_tests.rs"]
 mod cooldown_tests;
 
 #[derive(Clone)]
 pub struct WorldServiceClientConfig {
+    pub formal_read_trust: Option<FormalReadTrustConfigV1>,
     pub endpoint: String,
     pub trusted_service_public_key: String,
     pub expected_world: WorldIdentity,
@@ -100,6 +108,31 @@ impl WorldServiceClientConfig {
             return Ok(None);
         };
         let required = |name: &str| std::env::var(name).map_err(|_| format!("missing {name}"));
+        let formal_read_trust = match std::env::var("OASIS7_WORLD_SERVICE_FORMAL_TRUST_FILE") {
+            Ok(path) => {
+                use std::io::Read;
+                let file = std::fs::File::open(&path)
+                    .map_err(|error| format!("formal trust file: {error}"))?;
+                let mut bytes = Vec::new();
+                file.take(4 * 1024 * 1024 + 1)
+                    .read_to_end(&mut bytes)
+                    .map_err(|error| format!("formal trust file: {error}"))?;
+                if bytes.len() > 4 * 1024 * 1024 {
+                    return Err("formal trust file exceeds bound".into());
+                }
+                let trust: FormalReadTrustConfigV1 = serde_json::from_slice(&bytes)
+                    .map_err(|error| format!("formal trust file: {error}"))?;
+                trust.verified_anchor()?;
+                Some(trust)
+            }
+            Err(std::env::VarError::NotPresent) => None,
+            Err(error) => return Err(format!("formal trust file: {error}")),
+        };
+        let max_response_bytes = if formal_read_trust.is_some() {
+            16 * 1024 * 1024
+        } else {
+            1_048_576
+        };
         Ok(Some(Self {
             endpoint,
             trusted_service_public_key: required("OASIS7_WORLD_SERVICE_PUBLIC_KEY")?,
@@ -110,7 +143,8 @@ impl WorldServiceClientConfig {
             scope_id: required("OASIS7_WORLD_SERVICE_SCOPE")?,
             read_private_key_hex: required("OASIS7_WORLD_SERVICE_READ_PRIVATE_KEY")?,
             timeout: Duration::from_millis(1500),
-            max_response_bytes: 1_048_576,
+            max_response_bytes,
+            formal_read_trust,
         }))
     }
 }
@@ -153,6 +187,8 @@ pub trait WorldServicePort {
 
 #[derive(Clone)]
 pub struct RemoteWorldServiceClient {
+    formal_read: Option<std::sync::Arc<std::sync::Mutex<super::formal_read::FormalReadVerifier>>>,
+    formal_trust_identity: Option<String>,
     evidence_policy: ReadEvidencePolicy,
     config: WorldServiceClientConfig,
     http: reqwest::blocking::Client,
@@ -160,12 +196,32 @@ pub struct RemoteWorldServiceClient {
 }
 impl RemoteWorldServiceClient {
     pub fn new(config: WorldServiceClientConfig) -> Result<Self, WorldServiceClientError> {
+        if let Some(formal) = config.formal_read_trust.clone() {
+            let anchor = formal
+                .verified_anchor()
+                .map_err(WorldServiceClientError::Configuration)?;
+            return Self::new_formal(config, formal.initial_trust, anchor);
+        }
         Self::new_with_evidence_policy(config, ReadEvidencePolicy::Ordinary)
     }
 
     /// The controlled prerequisite policy must be deliberately configured by
     /// the caller. It permits one exact signed engineering scope only.
     pub fn new_with_evidence_policy(
+        config: WorldServiceClientConfig,
+        evidence_policy: ReadEvidencePolicy,
+    ) -> Result<Self, WorldServiceClientError> {
+        if config.formal_read_trust.is_some() {
+            if evidence_policy != ReadEvidencePolicy::Ordinary {
+                return Err(WorldServiceClientError::Configuration(
+                    "formal trust and engineering evidence policy cannot be combined".into(),
+                ));
+            }
+            return Self::new(config);
+        }
+        Self::new_base_with_evidence_policy(config, evidence_policy)
+    }
+    fn new_base_with_evidence_policy(
         config: WorldServiceClientConfig,
         evidence_policy: ReadEvidencePolicy,
     ) -> Result<Self, WorldServiceClientError> {
@@ -209,11 +265,78 @@ impl RemoteWorldServiceClient {
             .build()
             .map_err(|e| WorldServiceClientError::Configuration(e.to_string()))?;
         Ok(Self {
+            formal_read: None,
+            formal_trust_identity: None,
             evidence_policy,
             config,
             http,
             query_state: WorldServiceQueryState::default(),
         })
+    }
+    /// Formal membership is read from the independently proved public projection;
+    /// engineering membership retains its explicit signed diagnostic capability.
+    pub fn read_membership(
+        &self,
+        request: ReadMembershipRequest,
+    ) -> Result<super::membership::AuthenticatedMembershipObservation, WorldServiceClientError>
+    {
+        if self.formal_read.is_none() {
+            request
+                .validate()
+                .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
+        }
+        if request.world != self.config.expected_world || self.config.scope_id != "public" {
+            return Err(WorldServiceClientError::Assurance(
+                "membership requires configured public world scope".into(),
+            ));
+        }
+        if self.formal_read.is_some() {
+            let view = self.read_view(ReadWorldViewRequest {
+                observation_nonce: None,
+                contract_version: request.contract_version,
+                formal_anchor: None,
+                world: request.world.clone(),
+                scope_id: "public".into(),
+                min_commit: request.min_commit.clone(),
+                fixed_commit: request.fixed_commit.clone(),
+                deadline_unix_ms: None,
+            })?;
+            return super::membership::AuthenticatedMembershipObservation::from_formal_view(
+                &view, &request,
+            )
+            .map_err(WorldServiceClientError::Assurance);
+        }
+        let description = self.describe()?;
+        if !description
+            .capabilities
+            .contains(&Capability::GovernanceMembership)
+        {
+            return Err(WorldServiceClientError::Assurance(
+                "authenticated governance membership capability is unsupported".into(),
+            ));
+        }
+        let mut nonce = [0u8; 32];
+        getrandom::fill(&mut nonce).map_err(|_| {
+            WorldServiceClientError::Configuration(
+                "membership observation randomness is unavailable".into(),
+            )
+        })?;
+        let envelope = MembershipReadEnvelope {
+            query: request.clone(),
+            observation_nonce: hex::encode(nonce),
+        };
+        let response: ReadMembershipResponse = self.signed_call(MEMBERSHIP_PATH, envelope)?;
+        if response.execution_evidence_scope != description.execution_evidence_scope {
+            return Err(WorldServiceClientError::Assurance(
+                "membership scope differs from service description".into(),
+            ));
+        }
+        super::membership::AuthenticatedMembershipObservation::from_signed_transport(
+            response,
+            &request,
+            self.evidence_policy,
+        )
+        .map_err(WorldServiceClientError::Assurance)
     }
     pub fn with_query_state(mut self, state: WorldServiceQueryState) -> Self {
         self.query_state = state;
@@ -230,6 +353,9 @@ impl RemoteWorldServiceClient {
     }
     pub fn read_authority_identity(&self) -> Result<String, String> {
         let identity = self.config.read_authority_identity()?;
+        if let Some(formal) = &self.formal_trust_identity {
+            return authority::request_digest("local-formal-read-authority", &(identity, formal));
+        }
         if self.evidence_policy == ReadEvidencePolicy::Ordinary {
             Ok(identity)
         } else {
@@ -250,10 +376,13 @@ impl RemoteWorldServiceClient {
         &self,
         signed: SignedReadRequest<ReadWorldViewRequest>,
     ) -> Result<VerifiedWorldView, WorldServiceClientError> {
-        signed
-            .request
-            .validate()
-            .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
+        self.check_signed_formal_anchor(&signed.request)?;
+        (if self.formal_read.is_some() {
+            signed.request.validate_formal_shape()
+        } else {
+            signed.request.validate()
+        })
+        .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
         if signed.request.world != self.config.expected_world
             || signed.request.scope_id != self.config.scope_id
         {
@@ -265,8 +394,7 @@ impl RemoteWorldServiceClient {
             .map_err(WorldServiceClientError::Assurance)?;
         let response: ReadWorldViewResponse<WorldServiceProjection> =
             self.call(VIEW_PATH, &signed)?;
-        VerifiedWorldView::new(response, &signed.request)
-            .map_err(WorldServiceClientError::Assurance)
+        self.finish_view(response, &signed.request, &signed.subject_public_key)
     }
 
     fn call<Q: Serialize, R: Serialize + DeserializeOwned>(
@@ -288,7 +416,19 @@ impl RemoteWorldServiceClient {
             ))
             .json(request)
             .send()
-            .map_err(|e| WorldServiceClientError::Transport(e.to_string()))?;
+            .map_err(|error| {
+                let mut message = error.to_string();
+                let mut source = std::error::Error::source(&error);
+                for _ in 0..4 {
+                    let Some(cause) = source else {
+                        break;
+                    };
+                    message.push_str(": ");
+                    message.push_str(&cause.to_string());
+                    source = cause.source();
+                }
+                WorldServiceClientError::Transport(message)
+            })?;
         let status = response.status().as_u16();
         if let Some(retry_after) = self.query_state.observe(
             status,
@@ -314,10 +454,26 @@ impl RemoteWorldServiceClient {
             ));
         }
         if status != 200 {
-            return Err(WorldServiceClientError::Rejected {
-                status,
-                message: "service rejected request".into(),
-            });
+            let message = serde_json::from_slice::<SignedServiceResponse<Value>>(&bytes)
+                .ok()
+                .filter(|reply| {
+                    authority::verify_service_response(
+                        path,
+                        &digest,
+                        reply,
+                        &self.config.trusted_service_public_key,
+                    )
+                    .is_ok()
+                })
+                .and_then(|reply| {
+                    reply
+                        .payload
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .map(|message| message.chars().take(1024).collect::<String>())
+                })
+                .unwrap_or_else(|| "service rejected request".into());
+            return Err(WorldServiceClientError::Rejected { status, message });
         }
         let signed: SignedServiceResponse<R> = serde_json::from_slice(&bytes)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -340,6 +496,7 @@ impl RemoteWorldServiceClient {
                 "owner read helper is unavailable for engineering evidence policy".into(),
             ));
         }
+        self.check_signed_formal_anchor(&signed.request)?;
         authority::verify_read_request(VIEW_PATH, &signed)
             .map_err(WorldServiceClientError::Assurance)?;
         if signed.request.world != self.config.expected_world {
@@ -348,8 +505,7 @@ impl RemoteWorldServiceClient {
             ));
         }
         let response = self.call(VIEW_PATH, &signed)?;
-        VerifiedWorldView::new(response, &signed.request)
-            .map_err(WorldServiceClientError::Assurance)
+        self.finish_view(response, &signed.request, &signed.subject_public_key)
     }
     fn signed_call<Q: Serialize, R: Serialize + DeserializeOwned>(
         &self,
@@ -373,6 +529,17 @@ impl WorldServicePort for RemoteWorldServiceClient {
             },
         )?;
         self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
+        if self.formal_read.is_some() {
+            if response.formal_profile.as_ref() != Some(&FormalReadProfileV1::controlled()) {
+                return Err(WorldServiceClientError::Assurance(
+                    "configured formal service did not advertise the pinned formal profile".into(),
+                ));
+            }
+        } else if response.formal_profile.is_some() {
+            return Err(WorldServiceClientError::Assurance(
+                "formal profile requires configured external proof trust".into(),
+            ));
+        }
         response
             .validate(&self.config.expected_world)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -382,6 +549,10 @@ impl WorldServicePort for RemoteWorldServiceClient {
         &self,
         request: SubmitIntentRequest<WorldServicePayloadV1>,
     ) -> Result<SubmitObservation<Value>, WorldServiceClientError> {
+        if self.formal_read.is_some() {
+            return self.submit_formal(request);
+        }
+        self.require_unproved_operation_profile(None)?;
         if request.correlation.key.world != self.config.expected_world {
             return Err(WorldServiceClientError::Assurance(
                 "intent world differs from configuration".into(),
@@ -393,6 +564,9 @@ impl WorldServicePort for RemoteWorldServiceClient {
         let correlation = request.correlation.clone();
         match self.call::<_, IntentResponse<Value>>(SUBMIT_PATH, &request) {
             Ok(response) => {
+                if response.formal_profile.is_some() {
+                    return Ok(SubmitObservation::OutcomeUnknown(correlation));
+                }
                 self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
                 response
                     .validate(&correlation)
@@ -413,6 +587,10 @@ impl WorldServicePort for RemoteWorldServiceClient {
         request: LookupIntentRequest,
         original: WorldServicePayloadV1,
     ) -> Result<IntentResponse<Value>, WorldServiceClientError> {
+        if self.formal_read.is_some() {
+            return self.lookup_formal(request, original);
+        }
+        self.require_unproved_operation_profile(None)?;
         request
             .validate()
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -426,6 +604,7 @@ impl WorldServicePort for RemoteWorldServiceClient {
         let response: IntentResponse<Value> =
             self.call(LOOKUP_PATH, &AuthenticatedLookup { request, original })?;
         self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
+        self.require_unproved_operation_profile(response.formal_profile.as_ref())?;
         response
             .validate(&expected)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -435,32 +614,37 @@ impl WorldServicePort for RemoteWorldServiceClient {
         &self,
         request: ReadWorldViewRequest,
     ) -> Result<VerifiedWorldView, WorldServiceClientError> {
-        request
-            .validate()
-            .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
+        let request = self.prepare_read_view_request(request)?;
+        (if self.formal_read.is_some() {
+            request.validate_formal_shape()
+        } else {
+            request.validate()
+        })
+        .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
         if request.world != self.config.expected_world || request.scope_id != self.config.scope_id {
             return Err(WorldServiceClientError::Assurance(
                 "read scope/world differs from configuration".into(),
             ));
         }
+        let signed = authority::sign_read_request(
+            VIEW_PATH,
+            request.clone(),
+            &self.config.read_private_key_hex,
+        )
+        .map_err(WorldServiceClientError::Assurance)?;
         let response: ReadWorldViewResponse<WorldServiceProjection> =
-            self.signed_call(VIEW_PATH, request.clone())?;
+            self.call(VIEW_PATH, &signed)?;
         let identity = self
             .read_authority_identity()
             .map_err(WorldServiceClientError::Assurance)?;
-        let verified = if self.evidence_policy == ReadEvidencePolicy::Ordinary {
-            VerifiedWorldView::new(response, &request)
-        } else {
-            VerifiedWorldView::new_with_evidence_policy(response, &request, self.evidence_policy)
-        };
-        verified
+        self.finish_view(response, &request, &signed.subject_public_key)
             .map(|view| view.bind_read_authority(identity))
-            .map_err(WorldServiceClientError::Assurance)
     }
     fn read_changes(
         &self,
         request: ReadWorldChangesRequest,
     ) -> Result<ReadWorldChangesResponse<Value>, WorldServiceClientError> {
+        self.require_unproved_operation_profile(None)?;
         request
             .validate()
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -474,6 +658,7 @@ impl WorldServicePort for RemoteWorldServiceClient {
         let response: ReadWorldChangesResponse<Value> =
             self.signed_call(CHANGES_PATH, request.clone())?;
         self.check_evidence_scope(response.execution_evidence_scope.as_deref())?;
+        self.require_unproved_operation_profile(response.formal_profile.as_ref())?;
         response
             .validate(&request)
             .map_err(|e| WorldServiceClientError::Assurance(e.to_string()))?;
@@ -498,6 +683,7 @@ mod tests {
     fn config(endpoint: String) -> WorldServiceClientConfig {
         let key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]);
         WorldServiceClientConfig {
+            formal_read_trust: None,
             endpoint,
             trusted_service_public_key: hex::encode(key.verifying_key().to_bytes()),
             expected_world: WorldIdentity {
@@ -574,6 +760,8 @@ mod tests {
         let signed = authority::sign_read_request(
             VIEW_PATH,
             ReadWorldViewRequest {
+                observation_nonce: None,
+                formal_anchor: None,
                 contract_version: 1,
                 world: config.expected_world.clone(),
                 scope_id: config.scope_id.clone(),

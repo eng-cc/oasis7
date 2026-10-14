@@ -224,7 +224,7 @@ impl World {
             message.trim(),
             &authority,
         );
-        let Some(recorded) = self.state.agent_intent_ledger.get(&intent_id) else {
+        let Some(recorded) = self.agent_intent_record_for_replay(&intent_id)? else {
             return Ok(None);
         };
         if recorded.actor_id == player_id
@@ -237,7 +237,7 @@ impl World {
             && recorded.reorg_epoch == authority.reorg_epoch
             && recorded.authority_scope == authority.authority_scope
         {
-            return Ok(Some(recorded.into()));
+            return Ok(Some((&recorded).into()));
         }
         Err(invalid_agent_intent(format!(
             "intent_id {} conflicts with its durable request digest",
@@ -427,7 +427,7 @@ impl World {
         let intent_id = derive_agent_chat_intent_id(player_id, agent_id, intent_seq);
         let request_digest =
             derive_agent_chat_request_digest(player_id, agent_id, intent_seq, message, &authority);
-        if let Some(recorded) = self.state.agent_intent_ledger.get(&intent_id) {
+        if let Some(recorded) = self.agent_intent_record_for_replay(&intent_id)? {
             if recorded.actor_id == player_id
                 && recorded.request_digest == request_digest
                 && recorded.agent_id == agent_id
@@ -630,5 +630,20 @@ impl World {
         Ok(AgentIntentRecordOutcome::Accepted {
             event_seq: actual_event_seq,
         })
+    }
+
+    fn agent_intent_record_for_replay(
+        &self,
+        intent_id: &str,
+    ) -> Result<Option<AgentIntentV2>, WorldError> {
+        if let Some(recorded) = self.state.agent_intent_ledger.get(intent_id) {
+            return Ok(Some(recorded.clone()));
+        }
+        if self.state.retained_history_root.is_some() {
+            return Ok(self
+                .read_retained_agent_intent(intent_id)?
+                .map(|record| record.intent));
+        }
+        Ok(None)
     }
 }

@@ -1,6 +1,8 @@
 use super::*;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -25,7 +27,7 @@ pub(super) enum Fault {
     Exit(Phase),
 }
 impl Fault {
-    fn check(self, _phase: Phase) -> Result<(), ProtocolError> {
+    pub(super) fn check(self, _phase: Phase) -> Result<(), ProtocolError> {
         match self {
             Self::None => Ok(()),
             #[cfg(test)]
@@ -39,7 +41,7 @@ impl Fault {
         }
     }
 }
-fn no_symlink(path: &Path) -> Result<(), ProtocolError> {
+pub(super) fn no_symlink(path: &Path) -> Result<(), ProtocolError> {
     match fs::symlink_metadata(path) {
         Ok(m) if m.file_type().is_symlink() => Err(invalid("symlink in endpoint storage")),
         Ok(_) => Ok(()),
@@ -52,7 +54,10 @@ pub(super) fn lock(path: &Path) -> Result<File, ProtocolError> {
         return Err(ProtocolError::UnsupportedPlatform);
     }
     no_symlink(path)?;
-    match fs::create_dir(path) {
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    builder.mode(0o700);
+    match builder.create(path) {
         Ok(()) => {
             sync_dir(path)?;
             sync_dir(
@@ -70,20 +75,18 @@ pub(super) fn lock(path: &Path) -> Result<File, ProtocolError> {
     }
     let lock = path.join(".replicated-endpoint.lock");
     no_symlink(&lock)?;
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(lock)
-        .map_err(io)?;
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let file = options.open(lock).map_err(io)?;
     if !file.metadata().map_err(io)?.is_file() {
         return Err(invalid("lock is not regular file"));
     }
     file.try_lock().map_err(|_| ProtocolError::Locked)?;
     Ok(file)
 }
-pub(super) fn read(path: &Path) -> Result<Option<Vec<u8>>, ProtocolError> {
+pub(super) fn read_legacy(path: &Path) -> Result<Option<Vec<u8>>, ProtocolError> {
     let p = path.join(FILE);
     no_symlink(&p)?;
     // Reject FIFOs before open. This operator-controlled path contract excludes
@@ -112,43 +115,18 @@ pub(super) fn read(path: &Path) -> Result<Option<Vec<u8>>, ProtocolError> {
     }
     Ok(Some(bytes))
 }
-pub(super) fn sync(path: &Path) -> Result<(), ProtocolError> {
-    no_symlink(&path.join(FILE))?;
-    File::open(path.join(FILE))
-        .and_then(|f| f.sync_all())
-        .map_err(io)?;
-    sync_dir(path)
-}
-pub(super) fn persist(path: &Path, bytes: &[u8], fault: Fault) -> Result<(), ProtocolError> {
-    if bytes.len() > MAX_FILE {
-        return Err(invalid("endpoint file limit"));
-    }
-    no_symlink(&path.join(FILE))?;
-    let (temp, mut file) = temp(path)?;
-    let result = (|| {
-        fault.check(Phase::TempCreated)?;
-        file.write_all(bytes).map_err(io)?;
-        fault.check(Phase::Written)?;
-        file.sync_all().map_err(io)?;
-        fault.check(Phase::Synced)?;
-        fs::rename(&temp, path.join(FILE)).map_err(io)?;
-        fault.check(Phase::Renamed)?;
-        sync_dir(path)?;
-        fault.check(Phase::DirectorySynced)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temp);
-    }
-    result
-}
-fn temp(path: &Path) -> Result<(PathBuf, File), ProtocolError> {
+pub(super) fn temp(path: &Path) -> Result<(PathBuf, File), ProtocolError> {
     loop {
         let p = path.join(format!(
             ".replicated-pending-{}-{}",
             std::process::id(),
             TEMP.fetch_add(1, Ordering::Relaxed)
         ));
-        match OpenOptions::new().write(true).create_new(true).open(&p) {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        match options.open(&p) {
             Ok(file) => return Ok((p, file)),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(io(e)),
@@ -156,10 +134,31 @@ fn temp(path: &Path) -> Result<(PathBuf, File), ProtocolError> {
     }
 }
 #[cfg(unix)]
-fn sync_dir(path: &Path) -> Result<(), ProtocolError> {
+pub(super) fn sync_dir(path: &Path) -> Result<(), ProtocolError> {
     File::open(path).and_then(|f| f.sync_all()).map_err(io)
 }
 #[cfg(not(unix))]
-fn sync_dir(_: &Path) -> Result<(), ProtocolError> {
+pub(super) fn sync_dir(_: &Path) -> Result<(), ProtocolError> {
     Err(ProtocolError::UnsupportedPlatform)
+}
+
+#[cfg(test)]
+pub(super) fn read(path: &Path) -> Result<Option<Vec<u8>>, ProtocolError> {
+    super::journal::read(path, read_legacy(path)?)
+}
+#[cfg(test)]
+pub(super) fn persist(path: &Path, bytes: &[u8], fault: Fault) -> Result<(), ProtocolError> {
+    super::journal::persist(path, bytes, fault)
+}
+
+pub(super) fn private_dir(path: &Path) -> Result<(), ProtocolError> {
+    no_symlink(path)?;
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    builder.mode(0o700);
+    match builder.create(path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && path.is_dir() => Ok(()),
+        Err(e) => Err(io(e)),
+    }
 }

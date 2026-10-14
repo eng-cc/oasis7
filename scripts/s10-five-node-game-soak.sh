@@ -49,7 +49,7 @@ Options:
   --max-distfs-failure-ratio <r>   gate threshold for distfs failure ratio (default: 0.25)
   --max-settlement-apply-failure-ratio <r>
                                    gate threshold for settlement apply failure ratio (default: 0)
-  --node-auto-attest-all           enable local auto-attesting all validators on all nodes
+  --engineering-auto-attest-all    synthetic dev counting; not independent validator signatures
   --node-no-auto-attest-all        disable local auto-attesting all validators on all nodes
   --node-auto-attest-sequencer-only
                                    enable auto-attest only on sequencer (default)
@@ -288,7 +288,7 @@ while [[ $# -gt 0 ]]; do
       max_settlement_apply_failure_ratio=${2:-}
       shift 2
       ;;
-    --node-auto-attest-all)
+    --engineering-auto-attest-all|--node-auto-attest-all)
       node_auto_attest_mode=2
       shift
       ;;
@@ -672,7 +672,12 @@ prepare_node_command() {
     cmd+=(--replication-network-peer "$(node_replication_listen_addr "$peer_idx")")
   done
 
-  prepared_cmd=("${cmd[@]}")
+  local dev_config="$run_dir/${node_id}-development-node.json"
+  prepared_source_cmd=("$chain_bin" dev prepare-config --output "$dev_config" -- "${cmd[@]:1}")
+  if [[ "$dry_run" -ne 1 ]]; then
+    "${prepared_source_cmd[@]}" > "$dev_config.prepare.log"
+  fi
+  prepared_cmd=("$chain_bin" dev node --config "$dev_config")
 }
 
 isolate_node_state_dirs() {
@@ -1558,7 +1563,9 @@ if [[ "$dry_run" -eq 1 ]]; then
     cmd_txt="$node_dir/command.txt"
     run mkdir -p "$node_dir"
     prepare_node_command "$idx"
-    printf '%q ' "${prepared_cmd[@]}" > "$cmd_txt"
+    printf '%q ' "${prepared_source_cmd[@]}" > "$cmd_txt"
+    printf '\n' >> "$cmd_txt"
+    printf '%q ' "${prepared_cmd[@]}" >> "$cmd_txt"
     printf '\n' >> "$cmd_txt"
     echo "+ dry-run command[$node_name]: ${prepared_cmd[*]}"
   done

@@ -12,6 +12,7 @@ use oasis7::runtime::LocalCasStore;
 use oasis7_distfs::controlled_authority::replicated_protocol::{
     ClosedRecord, EndpointRole, EndpointStatus, FileEndpoint, ProtocolOutcome,
     ReplicatedCoordinator,
+    transport::{DurableEndpoint, RemoteEndpoint},
 };
 use oasis7_node::{
     NodeExecutionBootstrap, NodeExecutionCommitContext, NodeExecutionCommitOutcome,
@@ -24,6 +25,8 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PendingTransaction {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    frozen_certificate_ref: Option<String>,
     schema_version: u32,
     configuration_digest: String,
     continuation: NodeLocalExecutionContinuation,
@@ -35,16 +38,20 @@ pub(crate) struct GuardedExecutionDriver {
     records: PathBuf,
     read_authority: GuardedReadAuthority,
     private_store: LocalCasStore,
-    coordinator: ReplicatedCoordinator,
+    coordinator: ReplicatedCoordinator<Box<dyn DurableEndpoint>>,
     pending: Option<PendingTransaction>,
     fresh_execution: bool,
+    #[cfg(all(test, unix))]
+    kill_before_execution: bool,
+    #[cfg(all(test, unix))]
+    kill_before_candidate_save: bool,
     continuation_consumed: bool,
 }
 fn pending_path(records: &Path) -> PathBuf {
     records.join("controlled-local-continuation.cbor")
 }
 #[cfg(unix)]
-fn private_directory(path: &Path) -> Result<(), String> {
+pub(super) fn private_directory(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     for component in path.ancestors() {
         match std::fs::symlink_metadata(component) {
@@ -73,7 +80,7 @@ fn private_directory(path: &Path) -> Result<(), String> {
     }
 }
 #[cfg(not(unix))]
-fn private_directory(_: &Path) -> Result<(), String> {
+pub(super) fn private_directory(_: &Path) -> Result<(), String> {
     Err("guarded private storage requires Unix".into())
 }
 impl GuardedExecutionDriver {
@@ -81,14 +88,16 @@ impl GuardedExecutionDriver {
         if !cfg!(unix) || !cfg!(feature = "wasmtime") {
             return Err("guarded engineering execution requires Unix and real wasmtime".into());
         }
-        crate::controlled_live_config::require_private_owned(
-            &authority.config.primary_directory,
-            true,
-        )?;
-        crate::controlled_live_config::require_private_owned(
-            &authority.config.replica_directory,
-            true,
-        )?;
+        if authority.config.remote_endpoints.is_none() {
+            crate::controlled_live_config::require_private_owned(
+                &authority.config.primary_directory,
+                true,
+            )?;
+            crate::controlled_live_config::require_private_owned(
+                &authority.config.replica_directory,
+                true,
+            )?;
+        }
         // Read and verify all existing publication before any directory creation.
         let current = history::load_head(&authority, &records, None)?;
         let pending = match crate::controlled_history_cli::read_bounded(
@@ -118,22 +127,49 @@ impl GuardedExecutionDriver {
         {
             return Err("guarded durable published checkpoint tail is missing or changed".into());
         }
-        let mut primary = FileEndpoint::open(
-            &authority.config.primary_directory,
-            authority.policy.trust.clone(),
-            EndpointRole::Primary,
-            read_existing_signing_key(&authority.config.primary_key_file)?,
-            &current.head,
-        )
-        .map_err(|e| e.to_string())?;
-        let mut replica = FileEndpoint::open(
-            &authority.config.replica_directory,
-            authority.policy.trust.clone(),
-            EndpointRole::Replica,
-            read_existing_signing_key(&authority.config.replica_key_file)?,
-            &current.head,
-        )
-        .map_err(|e| e.to_string())?;
+        let writer = read_existing_signing_key(&authority.config.writer_key_file)?;
+        let (mut primary, mut replica): (Box<dyn DurableEndpoint>, Box<dyn DurableEndpoint>) =
+            if let Some(remote) = &authority.config.remote_endpoints {
+                let timeout = std::time::Duration::from_millis(remote.timeout_ms);
+                let p = RemoteEndpoint::connect(
+                    remote.primary,
+                    authority.policy.trust.clone(),
+                    EndpointRole::Primary,
+                    writer.clone(),
+                    current.head.clone(),
+                    timeout,
+                )
+                .map_err(|e| e.to_string())?;
+                let r = RemoteEndpoint::connect(
+                    remote.replica,
+                    authority.policy.trust.clone(),
+                    EndpointRole::Replica,
+                    writer.clone(),
+                    current.head.clone(),
+                    timeout,
+                )
+                .map_err(|e| e.to_string())?;
+                (Box::new(p), Box::new(r))
+            } else {
+                let p = FileEndpoint::open(
+                    &authority.config.primary_directory,
+                    authority.policy.trust.clone(),
+                    EndpointRole::Primary,
+                    read_existing_signing_key(&authority.config.primary_key_file)?,
+                    &current.head,
+                )
+                .map_err(|e| e.to_string())?;
+                let r = FileEndpoint::open(
+                    &authority.config.replica_directory,
+                    authority.policy.trust.clone(),
+                    EndpointRole::Replica,
+                    read_existing_signing_key(&authority.config.replica_key_file)?,
+                    &current.head,
+                )
+                .map_err(|e| e.to_string())?;
+                (Box::new(p), Box::new(r))
+            };
+        let mut recovered_candidate = None;
         if let Some(original) = pending.as_ref() {
             let previous = history::load_at_height(
                 &authority,
@@ -141,20 +177,25 @@ impl GuardedExecutionDriver {
                 original.continuation.predecessor_committed_height,
             )?;
             let private_store = LocalCasStore::new(records.join("controlled-private-cas"));
-            let retained = capture::load_package(
-                &private_store,
-                original
-                    .candidate_ref
-                    .as_deref()
-                    .ok_or("guarded incomplete candidate cannot recover write authority")?,
-            )?;
-            package::verify_package(
-                &retained,
-                &authority.policy.trust,
-                &original.continuation,
-                &previous.record.execution_block_hash,
-                &authority.release_policy,
-            )?;
+            let retained = match original.candidate_ref.as_deref() {
+                Some(reference) => {
+                    let retained = capture::load_package(&private_store, reference)?;
+                    package::verify_package(
+                        &retained,
+                        &authority.policy.trust,
+                        &original.continuation,
+                        &previous.record.execution_block_hash,
+                        &authority.release_policy,
+                    )?;
+                    Some(retained)
+                }
+                None if authority.config.schema_version == 2 => None,
+                None => {
+                    return Err(
+                        "guarded incomplete candidate cannot recover write authority".into(),
+                    );
+                }
+            };
             let request = history::request(&original.continuation)?;
             for endpoint in [&mut primary, &mut replica] {
                 let status = endpoint.lookup(&request).map_err(|e| e.to_string())?;
@@ -167,7 +208,9 @@ impl GuardedExecutionDriver {
                 };
                 let head = endpoint.head();
                 if let Some(proposal) = proposal
-                    && (proposal.body.record != retained
+                    && (retained
+                        .as_ref()
+                        .is_some_and(|r| &proposal.body.record != r)
                         || proposal.body.request != request
                         || proposal.body.parent_hash != previous.head.decision_hash
                         || proposal.body.position
@@ -178,6 +221,26 @@ impl GuardedExecutionDriver {
                                 .ok_or("guarded position overflow")?)
                 {
                     return Err("guarded endpoint original candidate binding changed".into());
+                }
+                if retained.is_none()
+                    && let Some(proposal) = proposal
+                {
+                    package::verify_package(
+                        &proposal.body.record,
+                        &authority.policy.trust,
+                        &original.continuation,
+                        &previous.record.execution_block_hash,
+                        &authority.release_policy,
+                    )?;
+                    if recovered_candidate
+                        .as_ref()
+                        .is_some_and(|r| r != &proposal.body.record)
+                    {
+                        return Err(
+                            "endpoints disagree about the original retained candidate".into()
+                        );
+                    }
+                    recovered_candidate = Some(proposal.body.record.clone());
                 }
                 let retained_decision = matches!(
                     &status,
@@ -196,12 +259,8 @@ impl GuardedExecutionDriver {
                 }
             }
         }
-        let coordinator = ReplicatedCoordinator::new(
-            primary,
-            replica,
-            read_existing_signing_key(&authority.config.writer_key_file)?,
-        )
-        .map_err(|e| e.to_string())?;
+        let coordinator =
+            ReplicatedCoordinator::new(primary, replica, writer).map_err(|e| e.to_string())?;
         let (p, r) = coordinator.heads();
         if pending.is_none() && (p != current.head || r != current.head) {
             return Err("guarded endpoint has an untracked original decision".into());
@@ -213,7 +272,7 @@ impl GuardedExecutionDriver {
             current.head.clone(),
             authority.configuration_digest.clone(),
         );
-        let driver = Self {
+        let mut driver = Self {
             authority,
             records,
             read_authority,
@@ -221,9 +280,40 @@ impl GuardedExecutionDriver {
             coordinator,
             pending,
             fresh_execution: false,
+            #[cfg(all(test, unix))]
+            kill_before_execution: false,
+            #[cfg(all(test, unix))]
+            kill_before_candidate_save: false,
             continuation_consumed: false,
         };
-        if let Some(pending) = driver.pending.as_ref() {
+        if let Some(candidate) = recovered_candidate {
+            let reference =
+                capture::persist_capture_bytes(&driver.private_store, &to_cbor(&candidate)?)?;
+            let mut original = driver
+                .pending
+                .as_ref()
+                .ok_or("missing original candidate identity")?
+                .clone();
+            original.candidate_ref = Some(reference);
+            driver.persist_pending(&original)?;
+            driver.pending = Some(original);
+        }
+        if driver
+            .pending
+            .as_ref()
+            .is_some_and(|p| p.candidate_ref.is_none())
+            && driver.authority.config.schema_version == 2
+        {
+            if !driver.freeze_original()? {
+                return Err("original frozen input outcome is unknown; no executor replay".into());
+            }
+            driver.fresh_execution = true;
+        }
+        if let Some(pending) = driver
+            .pending
+            .as_ref()
+            .filter(|p| p.candidate_ref.is_some())
+        {
             let package = driver.original_candidate(pending)?;
             let previous = history::load_at_height(
                 &driver.authority,
@@ -276,6 +366,18 @@ impl GuardedExecutionDriver {
             "guarded execution interrupted before complete candidate; no automatic reexecution or repair")?)
     }
     fn execute_once(&mut self) -> Result<(), String> {
+        #[cfg(test)]
+        let execution_started = std::time::Instant::now();
+        #[cfg(test)]
+        eprintln!("guarded execution started");
+        #[cfg(all(test, unix))]
+        if self.kill_before_execution {
+            // SAFETY: test-only crash injection kills this isolated subprocess.
+            unsafe {
+                libc::raise(libc::SIGKILL);
+            }
+            unreachable!("SIGKILL crash injection returned");
+        }
         if !self.fresh_execution {
             return Err("guarded original candidate unavailable; executor replay forbidden".into());
         }
@@ -285,6 +387,9 @@ impl GuardedExecutionDriver {
             .as_ref()
             .ok_or("guarded original continuation missing")?
             .clone();
+        if self.authority.config.schema_version == 2 {
+            self.retained_frozen(&pending)?;
+        }
         let c = &pending.continuation.context;
         let before = history::load_head(&self.authority, &self.records, None)?;
         if before.record.height != pending.continuation.predecessor_committed_height {
@@ -293,6 +398,21 @@ impl GuardedExecutionDriver {
         let candidate_root = self
             .records
             .join(format!("controlled-candidate-{}", c.height));
+        let candidate_root = if candidate_root.exists() && self.authority.config.schema_version == 2
+        {
+            self.retained_frozen(&pending)?;
+            let suffix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_nanos();
+            self.records.join(format!(
+                "controlled-replay-{}-{}-{suffix}",
+                c.height,
+                std::process::id()
+            ))
+        } else {
+            candidate_root
+        };
         if candidate_root.exists() {
             return Err(
                 "guarded original candidate directory already exists; reexecution forbidden".into(),
@@ -315,6 +435,21 @@ impl GuardedExecutionDriver {
             last_execution_state_root: Some(before.record.execution_state_root.clone()),
             last_node_block_hash: before.record.node_block_hash.clone(),
         };
+        let sandbox = if self.authority.config.schema_version == 2 {
+            self.authority.execution_policy.executor()?
+        } else {
+            WasmExecutor::new(WasmExecutorConfig::default()).map_err(|e| e.to_string())?
+        };
+        let (hot_heights, checkpoint_interval, checkpoint_keep) =
+            if self.authority.config.schema_version == 2 {
+                (
+                    self.authority.execution_policy.hot_head_heights,
+                    self.authority.execution_policy.checkpoint_interval,
+                    self.authority.execution_policy.checkpoint_keep,
+                )
+            } else {
+                (32, 32, 4)
+            };
         let mut candidate = NodeRuntimeExecutionDriver::new_with_sandbox(
             candidate_root.join("state.json"),
             world_dir,
@@ -322,15 +457,23 @@ impl GuardedExecutionDriver {
             candidate_root.join("storage"),
             state,
             before.world(&self.authority.release_policy)?,
-            Box::new(WasmExecutor::new(WasmExecutorConfig::default()).map_err(|e| e.to_string())?),
-            32,
-            32,
-            4,
+            Box::new(sandbox),
+            hot_heights,
+            checkpoint_interval,
+            checkpoint_keep,
         );
-        candidate.guarded_trust = Some(self.authority.policy.trust.clone());
+        candidate.resource_identity = Some(super::driver::ExecutionResourceIdentity {
+            chain_id: self.authority.policy.trust.chain_id.clone(),
+            genesis_ref: self.authority.policy.trust.genesis_digest.clone(),
+        });
         // Only this private candidate executor runs. It cannot become a public
         // checkpoint, mutable live world, read cursor or external-effect source.
         candidate.on_commit(c.clone())?;
+        #[cfg(test)]
+        eprintln!(
+            "guarded executor finished after {:?}",
+            execution_started.elapsed()
+        );
         let mut record = super::checkpoint::load_execution_bridge_record(
             &super::checkpoint::execution_bridge_record_path(&candidate.records_dir, c.height),
         )?;
@@ -378,11 +521,34 @@ impl GuardedExecutionDriver {
             &effect,
             &self.authority.release_policy,
         )?;
+        #[cfg(test)]
+        eprintln!(
+            "guarded closed candidate built after {:?}",
+            execution_started.elapsed()
+        );
+        #[cfg(all(test, unix))]
+        if self.kill_before_candidate_save {
+            // Keep only a test oracle, never a candidate consumed by recovery.
+            durable_transaction::write_file_durable(
+                &self.records.join("test-interrupted-candidate-digest"),
+                oasis7::runtime::blake3_hex(&to_cbor(&closed)?).as_bytes(),
+            )?;
+            // SAFETY: this test-only boundary runs in an isolated subprocess.
+            unsafe {
+                libc::raise(libc::SIGKILL);
+            }
+            unreachable!("SIGKILL crash injection returned");
+        }
         let reference = capture::persist_capture_bytes(&self.private_store, &to_cbor(&closed)?)?;
         let mut complete = pending;
         complete.candidate_ref = Some(reference);
         self.persist_pending(&complete)?;
         self.pending = Some(complete);
+        #[cfg(test)]
+        eprintln!(
+            "guarded candidate saved after {:?}",
+            execution_started.elapsed()
+        );
         Ok(())
     }
     fn resume_original(
@@ -431,6 +597,8 @@ impl GuardedExecutionDriver {
             &self.authority.release_policy,
         )?;
         let request = history::request(&pending.continuation)?;
+        #[cfg(test)]
+        let reconciliation_started = std::time::Instant::now();
         let outcome = self
             .coordinator
             .submit(
@@ -440,7 +608,17 @@ impl GuardedExecutionDriver {
                 original.clone(),
             )
             .map_err(|e| e.to_string())?;
+        #[cfg(test)]
+        eprintln!(
+            "guarded reconciliation finished after {:?}",
+            reconciliation_started.elapsed()
+        );
         let ProtocolOutcome::DurabilityQualified(evidence) = outcome else {
+            #[cfg(test)]
+            eprintln!(
+                "guarded original protocol deferred: {:?}",
+                self.coordinator.last_reconciliation_error()
+            );
             return Ok(NodeExecutionCommitOutcome::Deferred);
         };
         if evidence.proposal.body.record != original {
@@ -529,6 +707,7 @@ impl NodeExecutionHook for GuardedExecutionDriver {
             return Err("guarded original node policy mismatch".into());
         }
         let p = PendingTransaction {
+            frozen_certificate_ref: None,
             schema_version: 1,
             configuration_digest: self.authority.configuration_digest.clone(),
             continuation: continuation.clone(),
@@ -537,6 +716,9 @@ impl NodeExecutionHook for GuardedExecutionDriver {
         };
         self.persist_pending(&p)?;
         self.pending = Some(p);
+        if self.authority.config.schema_version == 2 && !self.freeze_original()? {
+            return Err("original frozen inputs not confirmed at both endpoints".into());
+        }
         self.fresh_execution = true;
         self.continuation_consumed = false;
         Ok(())
@@ -550,6 +732,10 @@ impl NodeExecutionHook for GuardedExecutionDriver {
         let Some(p) = self.pending.as_ref() else {
             return Ok(None);
         };
+        if p.candidate_ref.is_none() && self.authority.config.schema_version == 2 {
+            self.retained_frozen(p)?;
+            return Ok(Some(p.continuation.clone()));
+        }
         let package = self.original_candidate(p)?;
         let previous = history::load_at_height(
             &self.authority,
@@ -606,3 +792,6 @@ impl NodeExecutionHook for GuardedExecutionDriver {
 #[cfg(test)]
 #[path = "tests/controlled_live.rs"]
 mod tests;
+
+#[path = "controlled_live_frozen.rs"]
+mod frozen;

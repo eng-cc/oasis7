@@ -1,0 +1,281 @@
+//! Bounded historical restoration beneath a fresh protected native checkpoint.
+//! A caller's historical reference is a lookup target, never a new trust pin.
+use super::*;
+use crate::controlled_authority::formal::transport::VerifiedNativeRpcContextV1;
+use crate::controlled_authority::replicated_protocol::ClosedRecord;
+
+pub struct VerifiedNativeHistoricalRestoreV1 {
+    commit: VerifiedFormalCommitV1,
+    authority: VerifiedAuthorityV1,
+    candidate: FormalCandidateMaterialV1,
+    proof: FormalQualifiedCommitProofV1,
+    current_head: FormalHeadRefV1,
+    minimum: FormalHeadRefV1,
+    checkpoint: fencing::EndpointCheckpointBindingV1,
+}
+impl VerifiedNativeHistoricalRestoreV1 {
+    pub fn reference(&self) -> FormalHeadRefV1 {
+        self.commit.head()
+    }
+    pub fn commit(&self) -> &VerifiedFormalCommitV1 {
+        &self.commit
+    }
+    pub fn authority(&self) -> &VerifiedAuthorityV1 {
+        &self.authority
+    }
+    pub fn candidate(&self) -> &FormalCandidateMaterialV1 {
+        &self.candidate
+    }
+    pub fn material(&self) -> &ClosedRecord {
+        &self.candidate.material
+    }
+    pub fn proof(&self) -> &FormalQualifiedCommitProofV1 {
+        &self.proof
+    }
+    pub fn current_head(&self) -> &FormalHeadRefV1 {
+        &self.current_head
+    }
+    pub fn minimum(&self) -> &FormalHeadRefV1 {
+        &self.minimum
+    }
+    pub fn checkpoint(&self) -> &fencing::EndpointCheckpointBindingV1 {
+        &self.checkpoint
+    }
+}
+fn object<T: serde::de::DeserializeOwned>(
+    id: &str,
+    load: &mut impl FnMut(&str) -> Result<Vec<u8>, FormalError>,
+) -> Result<T, FormalError> {
+    hash_hex(id)?;
+    let bytes = load(id)?;
+    if bytes.len() > 64 * 1024 * 1024 || blake3::hash(&bytes).to_hex().as_str() != id {
+        return Err(invalid("historical native referenced CAS checksum/bound"));
+    }
+    serde_cbor::from_slice(&bytes).map_err(|error| invalid(error.to_string()))
+}
+fn descend(
+    body: &HotBody,
+    position: u64,
+    record_id: Option<&str>,
+    load: &mut impl FnMut(&str) -> Result<Vec<u8>, FormalError>,
+) -> Result<HistoryNode, FormalError> {
+    if let Some(id) = record_id {
+        hash_hex(id)?;
+    }
+    if position == 0 || position > body.head.position {
+        return Err(invalid("HistoryUnavailable: historical qualified position"));
+    }
+    let mut id = body
+        .head_node
+        .as_ref()
+        .or(body.imported_head_node.as_ref())
+        .ok_or_else(|| invalid("HistoryUnavailable: native history root"))?
+        .clone();
+    let mut expected = body.head.clone();
+    // Each hop removes its largest available power of two. With 64-bit positions
+    // this is bounded independently of total historical record count.
+    for _ in 0..=64 {
+        let node: HistoryNode = object(&id, load)?;
+        if node.head != expected || node.ancestors.len() > 64 {
+            return Err(invalid("historical authenticated node/head/skip bound"));
+        }
+        if node.head.position == position {
+            if record_id.is_some_and(|id| node.head.record_id != id) {
+                return Err(invalid("historical exact canonical reference/fork"));
+            }
+            return Ok(node);
+        }
+        let distance = node
+            .head
+            .position
+            .checked_sub(position)
+            .ok_or_else(|| invalid("historical ancestry position"))?;
+        let wanted = (63 - distance.leading_zeros()) as usize;
+        let level = wanted.min(
+            node.ancestors
+                .len()
+                .checked_sub(1)
+                .ok_or_else(|| invalid("HistoryUnavailable: absent historical skip link"))?,
+        );
+        let link = &node.ancestors[level];
+        let step = 1u64
+            .checked_shl(level as u32)
+            .ok_or_else(|| invalid("historical skip overflow"))?;
+        if node.head.position.checked_sub(step) != Some(link.head.position)
+            || link.head.position < position
+        {
+            return Err(invalid("historical authenticated skip distance"));
+        }
+        hash_hex(&link.node)?;
+        hash_hex(&link.head.record_id)?;
+        id = link.node.clone();
+        expected = link.head.clone();
+    }
+    Err(invalid("historical skip traversal bound"))
+}
+pub(crate) fn restore_native_position(
+    context: VerifiedNativeRpcContextV1,
+    position: u64,
+    record_id: Option<&str>,
+    historical_authority: &VerifiedAuthorityV1,
+    original: &VerifiedAuthorityV1,
+    recovery: Option<&VerifiedRecovery>,
+    mut load: impl FnMut(&str) -> Result<Vec<u8>, FormalError>,
+) -> Result<VerifiedNativeHistoricalRestoreV1, FormalError> {
+    let body = Store::verify_public(context.checkpoint_bytes(), context.endpoint_public_key())?;
+    if historical_authority.policy() != context.authority().policy()
+        || historical_authority.activation_ref() != context.authority().activation_ref()
+        || historical_authority.definition().world != context.authority().definition().world
+        || historical_authority.definition().profile != context.authority().definition().profile
+        || historical_authority.definition().profile_version
+            != context.authority().definition().profile_version
+    {
+        return Err(invalid("historical legal authority world/profile context"));
+    }
+    let node = descend(&body, position, record_id, &mut load)?;
+    let target = &node.head;
+    let entry: FormalRequestStateV1 = object(&node.entry, &mut load)?;
+    let FormalRequestStateV1::Qualified { candidate, proof } = entry else {
+        return Err(invalid(
+            "HistoryUnavailable: historical entry not Qualified",
+        ));
+    };
+    if candidate.candidate.record != proof.decision.record
+        || proof.decision.record.record_id() != Ok(target.record_id.clone())
+        || proof.decision.record.position != target.position
+        || node.request != proof.decision.record.request_digest
+        || candidate.candidate.writer_signature_hex != proof.decision.writer_signature_hex
+        || candidate.branch != proof.decision.branch
+        || candidate.frozen != proof.decision.frozen
+    {
+        return Err(invalid("historical exact candidate/proof/canonical head"));
+    }
+    if Store::lookup_from_root(body.index.as_deref(), &node.request, &mut load)?.as_deref()
+        != Some(node.entry.as_str())
+    {
+        return Err(invalid(
+            "historical authenticated permanent request inclusion",
+        ));
+    }
+    verify_record_material(&proof.decision.record, &candidate.material)?;
+    match (&candidate.frozen, &candidate.frozen_material) {
+        (Some(cert), Some(material)) => verify_frozen_material(&cert.reservation.body, material)?,
+        (None, None) if proof.decision.record.kind == FormalRecordKindV1::InitialActivation => {}
+        _ => return Err(invalid("historical original frozen material closure")),
+    }
+    let mut business_parent = None;
+    let parent = if let Some(link) = node.ancestors.first() {
+        if link.head.position.checked_add(1) != Some(target.position) {
+            return Err(invalid("historical immediate parent distance"));
+        }
+        let parent_node: HistoryNode = object(&link.node, &mut load)?;
+        if parent_node.head != link.head {
+            return Err(invalid("historical parent node identity"));
+        }
+        let FormalRequestStateV1::Qualified { proof: parent, .. } =
+            object(&parent_node.entry, &mut load)?
+        else {
+            return Err(invalid("historical parent not Qualified"));
+        };
+        if parent.decision.record.record_id() != Ok(link.head.record_id.clone())
+            || parent.decision.record.position != link.head.position
+            || parent.decision.primary.body.finalizing_authority_id
+                != parent.decision.replica.body.finalizing_authority_id
+        {
+            return Err(invalid("historical parent canonical/finalizer context"));
+        }
+        business_parent = Some(VerifiedFormalBusinessParentV1::from_authenticated_parent(
+            &CheckpointParent {
+                record: parent.decision.record.clone(),
+                finalizing_authority_id: parent
+                    .decision
+                    .primary
+                    .body
+                    .finalizing_authority_id
+                    .clone(),
+            },
+            parent.clone(),
+        )?);
+        Some(CheckpointParent {
+            record: parent.decision.record,
+            finalizing_authority_id: parent.decision.primary.body.finalizing_authority_id,
+        })
+    } else if target.position == 1 {
+        None
+    } else {
+        return Err(invalid(
+            "HistoryUnavailable: historical immediate parent closure",
+        ));
+    };
+    let verdict = NativeCheckpointVerdictV1 {
+        proof: proof.clone(),
+        parent: parent.clone(),
+        head: target.clone(),
+        authority_id: historical_authority.authority_id()?,
+    };
+    let origin = if proof.decision.branch == FormalCompletionBranchV1::Normal {
+        historical_authority
+    } else {
+        original
+    };
+    let recovery =
+        if proof.decision.branch == FormalCompletionBranchV1::Normal {
+            None
+        } else {
+            Some(recovery.ok_or_else(|| {
+                invalid("HistoryUnavailable: verified historical recovery context")
+            })?)
+        };
+    let commit = restore_formal_commit_from_checkpoint(&proof, origin, recovery, &verdict)?;
+    {
+        let reader = HistoryBusinessReader {
+            load: std::cell::RefCell::new(&mut load),
+        };
+        if let Some(verified) = super::super::business_material::verify_formal_business_material(
+            historical_authority,
+            &proof.decision.record,
+            &candidate.material,
+            business_parent.as_ref(),
+            candidate.frozen_material.as_ref(),
+            &reader,
+        )? {
+            use super::super::business_index::BusinessIndexNodeReader;
+            for write in verified
+                .node_writes()
+                .iter()
+                .chain(verified.retained_node_writes())
+            {
+                if reader.read_node(&write.digest).map_err(invalid)?.as_deref()
+                    != Some(write.bytes.as_slice())
+                {
+                    return Err(invalid("historical business node missing/corrupt"));
+                }
+            }
+        }
+    }
+    Ok(VerifiedNativeHistoricalRestoreV1 {
+        commit,
+        authority: historical_authority.clone(),
+        candidate,
+        proof,
+        current_head: body.head,
+        minimum: context.minimum().clone(),
+        checkpoint: context.checkpoint().clone(),
+    })
+}
+struct HistoryBusinessReader<'a, F> {
+    load: std::cell::RefCell<&'a mut F>,
+}
+impl<F: FnMut(&str) -> Result<Vec<u8>, FormalError>>
+    super::super::business_index::BusinessIndexNodeReader for HistoryBusinessReader<'_, F>
+{
+    fn read_node(&self, id: &str) -> Result<Option<Vec<u8>>, String> {
+        (self.load.borrow_mut())(id)
+            .map(Some)
+            .map_err(|error| error.to_string())
+    }
+}
+
+#[cfg(test)]
+#[path = "endpoint_native_history_tests.rs"]
+mod tests;

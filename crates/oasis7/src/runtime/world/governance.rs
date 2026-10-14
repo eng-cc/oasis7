@@ -658,7 +658,7 @@ impl World {
                 reason: "injected append_event failure after publication preparation".to_string(),
             });
         }
-        Ok(prepared.install(self))
+        prepared.install(self)
     }
 
     pub(super) fn validate_governance_execution_policy(

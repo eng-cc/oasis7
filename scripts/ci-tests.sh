@@ -123,6 +123,9 @@ PY_VIEWER
 )"
   rm -f "$viewer_manifest"
   PRE2_VIEWER_BINARY="$viewer_binary" run_cargo test -p oasis7 --tests --features test_tier_required
+  case "$(uname -s)" in
+    Linux|Darwin) run ./scripts/formal-live-local-tests.sh "$repo_root" ;;
+  esac
 }
 
 run_scenario_regression_tests() {
@@ -146,11 +149,11 @@ run_oasis7_consensus_clippy() {
 }
 
 run_oasis7_distfs_tests() {
-  run_cargo test -p oasis7_distfs --lib
+  run_cargo test -p oasis7_distfs --lib --bin oasis7_durability_endpoint
 }
 
 run_oasis7_distfs_clippy() {
-  run_cargo_clippy -p oasis7_distfs --lib
+  run_cargo_clippy -p oasis7_distfs --lib --bin oasis7_durability_endpoint
 }
 
 run_oasis7_node_tests() {
@@ -313,6 +316,7 @@ run_operational_node_contract_tests() {
   run bash ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh
   run bash ./scripts/p2p-public-testnet-service-readback.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade.test.sh
+  run bash ./scripts/p2p-public-testnet-package-node-operation-transaction.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-health.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-order.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-rollback-contract.test.sh

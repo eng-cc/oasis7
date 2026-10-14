@@ -89,7 +89,16 @@ IFS="," read -r -a legacy_validator_signers <<< "${NODE_VALIDATOR_SIGNERS_CSV:-}
 IFS="," read -r -a peers <<< "${NODE_GOSSIP_PEERS_CSV:-}"
 IFS="," read -r -a replication_listens <<< "${REPLICATION_NETWORK_LISTEN_ADDRS_CSV:-}"
 IFS="," read -r -a replication_peers <<< "${REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV:-}"
-IFS="," read -r -a replication_remote_writers <<< "${REPLICATION_REMOTE_WRITERS_CSV:-}"
+# Compatibility for existing deployed node.env files; this grants fetch access only.
+if [[ ${REPLICATION_REMOTE_WRITERS_CSV+x} ]]; then
+  if [[ ${REPLICATION_FETCH_REQUESTERS_CSV+x} && "$REPLICATION_FETCH_REQUESTERS_CSV" != "$REPLICATION_REMOTE_WRITERS_CSV" ]]; then
+    echo "conflicting REPLICATION_FETCH_REQUESTERS_CSV and deprecated REPLICATION_REMOTE_WRITERS_CSV" >&2
+    exit 1
+  fi
+  echo "deprecated REPLICATION_REMOTE_WRITERS_CSV: use REPLICATION_FETCH_REQUESTERS_CSV (fetch permission only)" >&2
+  REPLICATION_FETCH_REQUESTERS_CSV=${REPLICATION_FETCH_REQUESTERS_CSV:-$REPLICATION_REMOTE_WRITERS_CSV}
+fi
+IFS="," read -r -a replication_fetch_requesters <<< "${REPLICATION_FETCH_REQUESTERS_CSV:-}"
 
 if [[ -n "$network_tier_manifest_path" && "${ALLOW_NETWORK_TIER_REPLICATION_PEER_ENV_OVERRIDE:-0}" != "1" ]]; then
   replication_peers=()
@@ -150,6 +159,10 @@ if [[ -n "${POS_SLOT_CLOCK_GENESIS_UNIX_MS:-}" ]]; then
 fi
 
 if [[ -n "${NODE_AUTO_ATTEST_FLAG:-}" ]]; then
+  if [[ "$NODE_AUTO_ATTEST_FLAG" == "--node-auto-attest-all" ]] && { [[ -n "$network_tier_manifest_path" ]] || [[ -n "$deployment_inventory_path" ]]; }; then
+    echo "formal/authority-bound startup rejects synthetic auto-attestation; use explicit dev node configuration" >&2
+    exit 2
+  fi
   cmd+=("$NODE_AUTO_ATTEST_FLAG")
 fi
 
@@ -221,8 +234,8 @@ for peer in "${replication_peers[@]-}"; do
   [[ -n "$peer" ]] && cmd+=(--replication-network-peer "$peer")
 done
 
-for writer in "${replication_remote_writers[@]-}"; do
-  [[ -n "$writer" ]] && cmd+=(--replication-remote-writer-public-key "$writer")
+for writer in "${replication_fetch_requesters[@]-}"; do
+  [[ -n "$writer" ]] && cmd+=(--replication-fetch-requester-public-key "$writer")
 done
 
 traffic_profile="${TRAFFIC_PROFILE:-}"
@@ -239,7 +252,7 @@ if [[ -n "$genesis_validator_registry_path" ]]; then
   # physical registry path too so macOS /var -> /private/var aliases cannot
   # make an installed-beside-manifest authority appear detached.
   cmd+=(--genesis-validator-registry "$(canonical_runtime_path "$genesis_validator_registry_path")")
-elif [[ -z "$network_tier_manifest_path" || "${ALLOW_LEGACY_NODE_VALIDATORS_CSV:-0}" == "1" ]]; then
+elif [[ -z "$network_tier_manifest_path" ]]; then
   for validator in "${legacy_validators[@]-}"; do
     [[ -n "$validator" ]] && cmd+=(--node-validator "$validator")
   done
@@ -268,6 +281,18 @@ startup_log="$APP_ROOT/logs/startup.log"
 last_command_file="$APP_ROOT/logs/last-command.sh"
 monitor_command_file="$APP_ROOT/logs/last-traffic-monitor-command.sh"
 monitor_supervisor_log="$APP_ROOT/logs/traffic-monitor-supervisor.log"
+
+if [[ -z "$network_tier_manifest_path" && -z "$deployment_inventory_path" ]]; then
+  development_config="$APP_ROOT/logs/development-node.json"
+  if [[ "${OASIS7_NODE_START_DRY_RUN:-0}" == "1" ]]; then
+    printf 'development config preparation (not executed):\n'
+    printf '  %q' "$BIN" dev prepare-config --output "$development_config" -- "${cmd[@]:1}"
+    printf '\n'
+  else
+    "$BIN" dev prepare-config --output "$development_config" -- "${cmd[@]:1}" > "$APP_ROOT/logs/development-config-prepare.log"
+  fi
+  cmd=("$BIN" dev node --config "$development_config")
+fi
 
 printf '%s\n' "$(iso_now) starting $NODE_ROLE node $NODE_ID" >> "$startup_log"
 printf '%q ' "${cmd[@]}" > "$last_command_file"

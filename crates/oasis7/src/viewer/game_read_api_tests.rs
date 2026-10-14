@@ -6,6 +6,7 @@ use std::{net::TcpListener, thread};
 fn client(endpoint: String) -> RemoteWorldServiceClient {
     let service = authority::sign_read_request("key", (), &hex::encode([9; 32])).unwrap();
     RemoteWorldServiceClient::new(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint,
         trusted_service_public_key: service.subject_public_key,
         expected_world: WorldIdentity {
@@ -23,6 +24,8 @@ fn proof(client: &RemoteWorldServiceClient) -> SignedReadRequest<ReadWorldViewRe
     authority::sign_read_request(
         VIEW_PATH,
         ReadWorldViewRequest {
+            observation_nonce: None,
+            formal_anchor: None,
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             world: client.config().expected_world.clone(),
             scope_id: "agent:a".into(),
@@ -86,6 +89,8 @@ fn response(request: &ReadWorldViewRequest) -> ReadWorldViewResponse<WorldServic
         state_root_ref: "root".into(),
     };
     ReadWorldViewResponse {
+        formal_profile: None,
+        formal_proof: None,
         execution_evidence_scope: None,
         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
         version: ProjectionVersion {

@@ -51,7 +51,7 @@ fn committed_receipt_tuple(
     let RuntimeWorldEventBody::ReceiptAppended(receipt) = &receipt_event.body else {
         return None;
     };
-    if receipt.intent_id != effect_intent_id || receipt.status.trim().is_empty() {
+    if receipt.identity_key() != effect_intent_id || receipt.status.trim().is_empty() {
         return None;
     }
     Some(serde_json::json!({
@@ -677,6 +677,9 @@ mod tests {
                 time: 8,
                 caused_by: None,
                 body: RuntimeWorldEventBody::ReceiptAppended(EffectReceipt {
+                    birth_era: None,
+                    world: None,
+                    intent_payload_digest: None,
                     intent_id: "effect-intent-v2:test".to_string(),
                     status: "ok".to_string(),
                     payload: serde_json::json!({"ok": true}),

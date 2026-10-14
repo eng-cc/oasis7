@@ -87,10 +87,7 @@ pub(super) fn validate_result(result: &CanonicalIntentResultV1) -> Result<(), St
 /// Returns current owner/history control only; malformed or ambiguous authority fails closed.
 pub fn current_control(world: &World, agent_id: &str) -> Result<Option<GameTaskControlV1>, String> {
     let mut current = None;
-    for (key, value) in &world.capability_revocation_state().world_service_results {
-        correlation::validate_result(key, value)?;
-        let result: CanonicalIntentResultV1 =
-            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+    for result in super::retained_queries::game_task_results(world, agent_id)?.into_values() {
         let WorldServicePayloadV1::GameTaskCreate(signed) = &result.request.signed_payload else {
             continue;
         };

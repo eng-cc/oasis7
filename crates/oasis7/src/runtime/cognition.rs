@@ -656,16 +656,13 @@ fn validate_runtime_identity(
         }
     }
 
-    let intent_reorg_epochs: BTreeSet<u64> = world
-        .state()
-        .agent_intent_ledger
-        .values()
-        .filter_map(|intent| intent.reorg_epoch)
-        .collect();
-    if intent_reorg_epochs.len() > 1 {
+    let intent_reorg_epochs = world
+        .read_retained_reorg_epoch_summary()
+        .map_err(|_| CognitionValidationError::new("recovery_pending"))?;
+    if intent_reorg_epochs.has_multiple() {
         return Err(CognitionValidationError::new("recovery_pending"));
     }
-    if let Some(&reorg_epoch) = intent_reorg_epochs.iter().next()
+    if let Some(reorg_epoch) = intent_reorg_epochs.single_epoch()
         && reorg_epoch != envelope.reorg_epoch
     {
         return Err(CognitionValidationError::new("reorg_invalidated"));
@@ -764,16 +761,13 @@ fn validate_base_head(
         return Err(CognitionValidationError::new("stale_base"));
     }
     // Classify an old-fork response before recomputing its visible root.
-    let intent_reorg_epochs: BTreeSet<u64> = world
-        .state()
-        .agent_intent_ledger
-        .values()
-        .filter_map(|intent| intent.reorg_epoch)
-        .collect();
-    if intent_reorg_epochs.len() > 1 {
+    let intent_reorg_epochs = world
+        .read_retained_reorg_epoch_summary()
+        .map_err(|_| CognitionValidationError::new("recovery_pending"))?;
+    if intent_reorg_epochs.has_multiple() {
         return Err(CognitionValidationError::new("recovery_pending"));
     }
-    if let Some(&authoritative_reorg_epoch) = intent_reorg_epochs.iter().next()
+    if let Some(authoritative_reorg_epoch) = intent_reorg_epochs.single_epoch()
         && authoritative_reorg_epoch != envelope.reorg_epoch
     {
         return Err(CognitionValidationError::new("reorg_invalidated"));
@@ -961,11 +955,9 @@ fn resolve_precondition_value(
         "world.logical_tick" => Ok(JsonValue::from(world.state().time)),
         "world.reorg_epoch" => Ok(JsonValue::from(
             world
-                .state()
-                .agent_intent_ledger
-                .values()
-                .filter_map(|intent| intent.reorg_epoch)
-                .max()
+                .read_retained_reorg_epoch_summary()
+                .map_err(|_| CognitionValidationError::new("recovery_pending"))?
+                .max_epoch()
                 .unwrap_or(0),
         )),
         "world.state_root" => {

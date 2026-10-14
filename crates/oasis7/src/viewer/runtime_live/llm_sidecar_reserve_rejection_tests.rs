@@ -45,6 +45,7 @@ fn verified_pre_effect_reserve_rejection_retires_original_without_replacing_chec
         genesis_digest: "fixture-genesis".into(),
     };
     let service_config = crate::world_service::client::WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint: "http://127.0.0.1:1".into(),
         trusted_service_public_key: "11".repeat(32),
         expected_world: world_identity.clone(),
@@ -114,6 +115,7 @@ fn verified_pre_effect_reserve_rejection_retires_original_without_replacing_chec
     };
     server.llm_sidecar.hosted_service_inflight = Some(token.clone());
     let response = IntentResponse {
+        formal_profile: None,
         execution_evidence_scope: None,
         contract_version: WORLD_SERVICE_CONTRACT_VERSION,
         correlation: pending.correlation.clone(),

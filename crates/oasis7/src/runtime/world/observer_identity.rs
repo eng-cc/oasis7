@@ -69,6 +69,12 @@ impl Serialize for AuthorityView<'_> {
             &world.runtime_backpressure_stats,
         )?;
         map.serialize_entry("tick_consensus_records", &world.tick_consensus_records)?;
+        if world.formal_archived_tick_consensus_count > 0 {
+            map.serialize_entry(
+                "formal_archived_tick_consensus_count",
+                &world.formal_archived_tick_consensus_count,
+            )?;
+        }
         map.serialize_entry(
             "tick_consensus_authority_source",
             &world.tick_consensus_authority_source,

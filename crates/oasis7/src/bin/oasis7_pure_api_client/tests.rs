@@ -374,6 +374,7 @@ fn pure_api_negotiates_canonical_chat_with_shipped_viewer() {
     let mut config = ViewerRuntimeLiveServerConfig::new(oasis7::simulator::WorldScenario::Minimal);
     config.world_id = "canonical-cli-fixture".into();
     config.world_service = Some(WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint: "http://127.0.0.1:9".into(),
         trusted_service_public_key: derive_public_key_hex(&private).unwrap(),
         expected_world: WorldIdentity {

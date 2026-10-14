@@ -41,6 +41,18 @@ pub(super) fn apply_intents(
             }
             continue;
         }
+        if world.state().retained_history_root.is_some()
+            && let Some(existing) = world
+                .read_retained_world_service_result(&key)
+                .map_err(|error| error.to_string())?
+        {
+            if existing.request.correlation != correlation {
+                return Err("retained canonical service idempotency conflict".into());
+            }
+            // Authenticated archival presence retains the first execution.
+            // Missing CAS is an error above, never a license to repeat it.
+            continue;
+        }
         // Within-height duplicates also resolve to one canonical execution.
         if let Some(existing) = staged
             .iter()

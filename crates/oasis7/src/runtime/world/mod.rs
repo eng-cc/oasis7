@@ -52,6 +52,19 @@ mod effect_publication_transaction_regressions;
 mod effects;
 mod event_processing;
 mod factory_authority;
+mod formal_execution_tick;
+mod formal_retention;
+mod formal_tick_consensus;
+pub use formal_tick_consensus::FormalTickConsensusArchivePlanV1;
+mod formal_retention_candidate_restore;
+mod formal_retention_tick;
+mod formal_retention_tick_reads;
+mod runtime_support;
+pub use formal_retention::FormalWorldRetentionPlanV1;
+#[cfg(test)]
+use oasis7_wasm_router::PreparedSubscription;
+use runtime_support::PreparedSubscriptionCacheEntry;
+pub(crate) use runtime_support::SharedFormalHistoryReader;
 mod gameplay_layer;
 mod gameplay_loop;
 mod governance;
@@ -188,9 +201,6 @@ use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::{cell::RefCell, path::PathBuf, sync::Arc};
 
-#[cfg(test)]
-use oasis7_wasm_router::PreparedSubscription;
-
 use super::CrisisStatus;
 use super::capability_authorization::{
     CapabilityAuthorizationAuditReceipt, CapabilityAuthorizationNonceRecord,
@@ -209,8 +219,6 @@ use super::governance::{
 };
 use super::main_token::main_token_account_id_from_node_public_key;
 use super::manifest::Manifest;
-#[cfg(test)]
-use super::modules::ModuleSubscription;
 use super::modules::{ModuleCache, ModuleLimits, ModuleRegistry};
 use super::policy::PolicySet;
 use super::signer::ReceiptSigner;
@@ -219,16 +227,6 @@ use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 use crate::simulator::ModuleVisualEntity;
-
-#[derive(Debug, Clone)]
-pub(super) struct PreparedSubscriptionCacheEntry {
-    #[cfg(test)]
-    pub(super) subscriptions: Vec<ModuleSubscription>,
-    pub(super) _subscription_fingerprint: String,
-    #[cfg(test)]
-    pub(super) prepared: Arc<[PreparedSubscription]>,
-}
-
 const DEFAULT_MAX_PENDING_ACTIONS: usize = 8_192;
 const DEFAULT_MAX_PENDING_EFFECTS: usize = 8_192;
 const DEFAULT_MAX_INFLIGHT_EFFECTS: usize = 8_192;
@@ -442,6 +440,10 @@ pub struct World {
     #[serde(default)]
     latest_chain_resource_delta: Option<ChainResourceDelta>,
     state: WorldState,
+    /// Process-local authenticated CAS access. It is intentionally absent from
+    /// snapshots and survives only in-memory World clones.
+    #[serde(skip, default)]
+    formal_history_reader: Option<formal_retention::AttachedFormalHistory>,
     journal: Journal,
     next_event_id: WorldEventId,
     #[serde(default)]
@@ -501,6 +503,10 @@ pub struct World {
     threat_heatmap: BTreeMap<String, i64>,
     #[serde(default)]
     tick_consensus_records: Vec<TickConsensusRecord>,
+    #[serde(skip)]
+    formal_archived_tick_consensus_count: u64,
+    #[serde(skip)]
+    formal_execution_tick: Option<(super::RuntimeCommittedTickContext, bool)>,
     #[serde(default = "default_tick_consensus_authority_source")]
     tick_consensus_authority_source: String,
     #[serde(default)]
@@ -626,6 +632,7 @@ impl World {
             chain_resource_manifest: ChainResourceManifest::default(),
             latest_chain_resource_delta: None,
             state,
+            formal_history_reader: None,
             journal: Journal::new(),
             next_event_id: 1,
             next_event_id_era: 0,
@@ -659,6 +666,8 @@ impl World {
             logistics_sla_metrics: LogisticsSlaMetrics::default(),
             threat_heatmap: BTreeMap::new(),
             tick_consensus_records: Vec::new(),
+            formal_archived_tick_consensus_count: 0,
+            formal_execution_tick: None,
             tick_consensus_authority_source: default_tick_consensus_authority_source(),
             tick_consensus_rejection_audit_events: Vec::new(),
             governance_execution_policy: GovernanceExecutionPolicy::default(),
@@ -814,10 +823,6 @@ impl World {
         &self.threat_heatmap
     }
 
-    pub fn tick_consensus_records(&self) -> &[TickConsensusRecord] {
-        self.tick_consensus_records.as_slice()
-    }
-
     pub fn tick_consensus_authority_source(&self) -> &str {
         self.tick_consensus_authority_source.as_str()
     }
@@ -899,10 +904,6 @@ impl World {
             .min(10_000) as u16;
         }
         stats
-    }
-
-    pub fn builtin_release_manifest(&self) -> &BuiltinReleaseManifestState {
-        &self.builtin_release_manifest
     }
 
     pub fn release_security_policy(&self) -> &ReleaseSecurityPolicy {
@@ -1075,7 +1076,7 @@ impl World {
             && !self.pending_effects.iter().any(|pending| {
                 !self
                     .capability_effect_receipt_links
-                    .contains_key(&pending.intent_id)
+                    .contains_key(&pending.identity_key())
             })
         {
             // An authorization-linked intent represents a durable budget debit;
@@ -1125,7 +1126,7 @@ impl World {
             let Some(eviction_index) = self.pending_effects.iter().position(|intent| {
                 !self
                     .capability_effect_receipt_links
-                    .contains_key(&intent.intent_id)
+                    .contains_key(&intent.identity_key())
             }) else {
                 // Keep linked effects durable below a lowered limit; a real
                 // provider receipt can still close them after restart.
@@ -1196,3 +1197,4 @@ impl World {
         self.enforce_journal_event_limit();
     }
 }
+mod effect_birth;

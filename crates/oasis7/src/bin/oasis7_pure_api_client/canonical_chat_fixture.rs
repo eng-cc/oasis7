@@ -187,6 +187,8 @@ pub(super) fn canonical_fixture(recover_after_timeout: bool, key_format: Option<
                 .unwrap();
                 projection.runtime_binding = None;
                 serde_json::to_value(ReadWorldViewResponse {
+                    formal_profile: None,
+                    formal_proof: None,
                     execution_evidence_scope: None,
                     contract_version: 1,
                     version: ProjectionVersion {
@@ -265,6 +267,7 @@ pub(super) fn canonical_fixture(recover_after_timeout: bool, key_format: Option<
                         .unwrap();
                     committed = Some(
                         serde_json::to_value(IntentResponse {
+                            formal_profile: None,
                             execution_evidence_scope: None,
                             contract_version: 1,
                             correlation: request.correlation.clone(),
@@ -301,6 +304,7 @@ pub(super) fn canonical_fixture(recover_after_timeout: bool, key_format: Option<
     );
     config.world_id = identity.world_id.clone();
     config.world_service = Some(client::WorldServiceClientConfig {
+        formal_read_trust: None,
         endpoint,
         trusted_service_public_key: service_key,
         expected_world: identity,

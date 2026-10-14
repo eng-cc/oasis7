@@ -87,7 +87,7 @@ fn parse_options_defaults() {
     );
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
-    assert!(options.replication_remote_writer_public_keys.is_empty());
+    assert!(options.replication_fetch_requester_public_keys.is_empty());
     assert!(options.provider_backed_bootstrap_authority_paths.is_empty());
     assert!(options.deployment_inventory_path.is_none());
     assert!(options.runtime_root.is_none());
@@ -406,12 +406,12 @@ fn parse_options_reads_replication_network_addresses() {
 }
 
 #[test]
-fn parse_options_reads_replication_remote_writer_public_keys() {
+fn parse_options_reads_replication_fetch_requester_public_keys() {
     let options = parse_options(
         [
-            "--replication-remote-writer-public-key",
+            "--replication-fetch-requester-public-key",
             "deadbeef",
-            "--replication-remote-writer-public-key",
+            "--replication-fetch-requester-public-key",
             "cafebabe",
         ]
         .into_iter(),
@@ -419,7 +419,7 @@ fn parse_options_reads_replication_remote_writer_public_keys() {
     .expect("parse should succeed");
 
     assert_eq!(
-        options.replication_remote_writer_public_keys,
+        options.replication_fetch_requester_public_keys,
         vec!["deadbeef".to_string(), "cafebabe".to_string()]
     );
 }
@@ -1135,3 +1135,6 @@ fn build_replication_fetch_requester_allowlist_combines_validator_and_explicit_k
 
 #[path = "oasis7_chain_runtime_tests_network.rs"]
 mod network_tests;
+
+#[path = "cli_contract_tests.rs"]
+mod cli_contract_tests;

@@ -186,6 +186,18 @@
     },
     {
       "match": [
+        "scripts/formal-live-local-tests.sh",
+        "scripts/local-node-lifecycle.test.sh"
+      ],
+      "groups": [
+        "oasis7_required",
+        "distfs",
+        "node"
+      ],
+      "reason": "formal_runtime_and_native_node_composition"
+    },
+    {
+      "match": [
         "doc/world-simulator/scenario/**",
         "crates/oasis7/scenarios/**",
         "crates/oasis7/src/simulator/scenario.rs",

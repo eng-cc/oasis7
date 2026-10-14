@@ -170,6 +170,137 @@ pub(super) fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<Strin
     args
 }
 
+/// Actual spawn path. Engineering capabilities are serialized through the
+/// same strict shared contract used by `dev node/local-provider`.
+pub(super) fn prepare_oasis7_chain_runtime_args(
+    options: &CliOptions,
+) -> Result<Vec<String>, String> {
+    use oasis7::runtime::development_node_config::*;
+    super::cli::validate_chain_node_id(&options.chain_node_id)?;
+    if !options.chain_network_tier_manifest.trim().is_empty() {
+        if options.chain_node_auto_attest_all_validators
+            || options.local_test_provider_authority_path.is_some()
+            || options.chain_local_standalone_test
+        {
+            return Err("formal network-tier launch rejects engineering auto-attestation/local-provider/standalone capabilities".into());
+        }
+        return Ok(build_oasis7_chain_runtime_args(options));
+    }
+    let mut runtime = DevelopmentRuntimeConfigV1 {
+        node_id: options.chain_node_id.clone(),
+        world_id: chain_world_id(options),
+        status_bind: Some(
+            options
+                .chain_status_bind
+                .parse()
+                .map_err(|_| "engineering chain status bind requires an IP socket")?,
+        ),
+        storage_profile: Some(options.chain_storage_profile),
+        config_path: Some(chain_config_path(&options.chain_node_id).into()),
+        execution_world_dir: Some(resolved_chain_execution_world_dir(options).into()),
+        node_tick_ms: Some(options.chain_node_tick_ms),
+        pos_slot_duration_ms: Some(options.chain_pos_slot_duration_ms),
+        pos_ticks_per_slot: Some(options.chain_pos_ticks_per_slot),
+        pos_proposal_tick_phase: Some(options.chain_pos_proposal_tick_phase),
+        pos_adaptive_tick_scheduler_enabled: Some(
+            options.chain_pos_adaptive_tick_scheduler_enabled,
+        ),
+        pos_max_past_slot_lag: Some(options.chain_pos_max_past_slot_lag),
+        pos_slot_clock_genesis_unix_ms: options.chain_pos_slot_clock_genesis_unix_ms,
+        node_auto_attest_all_validators: Some(options.chain_node_auto_attest_all_validators),
+        chain_local_standalone_test: Some(options.chain_local_standalone_test),
+        p2p_accept_public_entry: Some(options.chain_p2p_accept_public_entry),
+        replication_network_bootstrap_peers: options.chain_replication_bootstrap_peers.clone(),
+        provider_backed_bootstrap_authority_paths: if options.chain_enabled {
+            options
+                .provider_bootstrap_authority_paths
+                .iter()
+                .map(PathBuf::from)
+                .collect()
+        } else {
+            Vec::new()
+        },
+        ..Default::default()
+    };
+    runtime.node_role = Some(match options.chain_node_role.as_str() {
+        "sequencer" => DevelopmentNodeRoleV1::Sequencer,
+        "storage" => DevelopmentNodeRoleV1::Storage,
+        "observer" => DevelopmentNodeRoleV1::Observer,
+        _ => return Err("invalid engineering node role".into()),
+    });
+    runtime.p2p_user_mode = Some(match options.chain_p2p_user_mode.as_str() {
+        "auto_join" => DevelopmentUserModeV1::AutoJoin,
+        "private_safe" => DevelopmentUserModeV1::PrivateSafe,
+        "public_entry" => DevelopmentUserModeV1::PublicEntry,
+        _ => return Err("invalid engineering P2P user mode".into()),
+    });
+    for raw in &options.chain_node_validators {
+        let (id, stake) = raw
+            .rsplit_once(':')
+            .ok_or("invalid engineering validator binding")?;
+        runtime.node_validators.push(DevelopmentValidatorV1 {
+            validator_id: id.into(),
+            stake: stake
+                .parse()
+                .map_err(|_| "invalid engineering validator stake")?,
+        });
+    }
+    let local_provider = if options.chain_enabled {
+        options.local_test_provider_authority_path.as_ref().map(|authority|Ok::<_,String>(DevelopmentLocalProviderV1{
+            authority_path:authority.into(),wasm_path:options.local_test_provider_wasm_path.as_ref().ok_or("provider WASM missing")?.into(),
+            metadata_path:options.local_test_provider_metadata_path.as_ref().ok_or("provider metadata missing")?.into(),
+            agent_id:options.local_test_provider_agent_id.clone(),owner_binding:options.local_test_provider_owner_binding.clone(),
+            finality_block_hash:options.local_test_provider_finality_block_hash.clone().ok_or("provider finality missing")?,
+            session_mode:match options.local_test_provider_session_mode.as_str(){"hosted_public_join"=>DevelopmentProviderSessionV1::HostedPublicJoin,"loopback"=>DevelopmentProviderSessionV1::Loopback,_=>return Err("invalid provider session".into())},
+            funding_lane:if options.agent_decision_source=="provider_backed" {
+                if options.agent_provider_backend!="provider_local_mock" || options.agent_provider_contract!="worldsim_provider_v1"
+                    || options.agent_provider_transport!="loopback_http" || options.agent_execution_lane.as_str()!="player_parity"
+                    || options.local_test_provider_session_mode!="hosted_public_join" || !options.chain_local_standalone_test {
+                    return Err("hosted local mock requires exact tuple/session/standalone admission".into());
+                }
+                Some(DevelopmentFundingLaneV1::HostedLocalMock)
+            }else{None},
+        })).transpose()?
+    } else {
+        None
+    };
+    let command = if local_provider.is_some() {
+        "local-provider"
+    } else {
+        "node"
+    };
+    let config = DevelopmentNodeConfigV1 {
+        api_version: "oasis7.development-node/v1".into(),
+        working_directory: std::env::current_dir().map_err(|e| e.to_string())?,
+        runtime,
+        local_provider,
+    };
+    let output = config
+        .working_directory
+        .join("output/chain-runtime")
+        .join(&options.chain_node_id)
+        .join("development-node.json");
+    std::fs::create_dir_all(output.parent().ok_or("engineering config parent missing")?)
+        .map_err(|e| e.to_string())?;
+    let temporary = output.with_extension(format!("{}.tmp", std::process::id()));
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|e| e.to_string())?;
+    file.write_all(&serde_json::to_vec_pretty(&config).map_err(|e| e.to_string())?)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| e.to_string())?;
+    std::fs::rename(&temporary, &output).map_err(|e| e.to_string())?;
+    Ok(vec![
+        "dev".into(),
+        command.into(),
+        "--config".into(),
+        output.to_string_lossy().into_owned(),
+    ])
+}
+
 fn observer_registry_path_from_manifest(manifest_path: &str, chain_role: &str) -> Option<String> {
     if chain_role != "observer" {
         return None;
@@ -288,3 +419,7 @@ mod observer_registry_launcher_tests {
         assert!(!args.iter().any(|arg| arg == "--genesis-validator-registry"));
     }
 }
+
+#[cfg(test)]
+#[path = "chain_command_typed_tests.rs"]
+mod typed_adapter_tests;
