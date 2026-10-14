@@ -1,6 +1,6 @@
 # Site 使用手册静态化（CN/EN）设计文档
 
-- 对应设计文档: `doc/site/manual/site-manual-static-docs.design.md`
+- 对应设计文档: [Site 静态手册共享设计](../design.md#static-manual-design)；原同名 design 仅保留兼容入口。
 - 执行记录: Git、PR、实际 CI 和评审记录；Issue 与 Project 按需使用
 
 审计轮次: 5
@@ -15,6 +15,7 @@
 - 将现有 Viewer 用户手册整理为站内可访问内容，形成“首页 -> 文档目录 -> 手册正文”的闭环。
 - 保持当前纯静态部署模式（无需新增构建系统）。
 
+<a id="static-manual-requirements"></a>
 ## 范围
 - 范围内
   - 新增文档目录页（CN/EN）与基础布局框架。
@@ -42,14 +43,17 @@
   - `doc/world-simulator/viewer/viewer-manual.manual.md`（中文原稿）
 
 ## 里程碑
-- M1：文档与任务拆解
-  - 新增本设计文档与GitHub Issue/Project task truth。
-- M2：文档框架上线
-  - 完成 `site/doc/cn|en` 目录页与导航基础能力。
-- M3：手册内容整理
-  - 完成 CN/EN 手册正文接入与链接互通。
-- M4：验证收口
-  - 完成静态链接自检、`cargo check`、项目文档回写与 devlog。
+
+以下为原静态化迁移阶段的历史规划，不要求再次迁移或恢复 Project／daily devlog。
+
+- M1：需求、设计与原任务拆解。
+- M2：CN/EN 目录页与导航基础能力。
+- M3：两种语言的正文接入与互链。
+- M4：原迁移的链接、构建与记录收尾；其命令和结果只代表原窗口。
+
+当前维护按共享设计同步原稿、双语镜像与受影响入口，使用现行测试手册的适用检查；
+Git、PR、实际 CI 与评审承载本次交付事实，不以旧计划或旧 cargo 记录证明当前通过。
+原阶段说明可从本文件合并前 Git 版本追溯。
 
 ## 风险
 - 风险：CN/EN 内容漂移。

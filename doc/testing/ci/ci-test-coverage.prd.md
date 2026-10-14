@@ -1,6 +1,6 @@
 # oasis7: 测试覆盖与 CI 扩展
 
-- 对应设计文档: `doc/testing/ci/ci-test-coverage.design.md`
+- 对应设计文档: [CI 分级执行共享设计](ci-tiered-execution.design.md#ci-coverage-design)；原同名 design 仅保留兼容入口。
 - 可变任务状态与历史: PR、实际 CI 与评审记录（Issue 按需）
 
 审计轮次: 4
@@ -19,6 +19,7 @@
   - SC-3: `egui_kittest` 无 `wgpu` snapshot 降级目前是历史/目标口径；只有找到可运行的 snapshot 实现并链接对应 CI/gate 证据后，才可把它列为当前覆盖。
   - SC-4: 文档、任务、验证结果可追溯到同一专题闭环。
 
+<a id="coverage-requirements"></a>
 ## 2. User Experience & Functionality
 - User Personas:
   - CI 维护者：需要可控且可复现的覆盖清单。

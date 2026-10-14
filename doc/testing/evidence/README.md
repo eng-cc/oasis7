@@ -3,7 +3,7 @@
 更新时间: 2026-08-02
 
 ## 从这里开始
-- 想确认当前 release readiness 或测试层级：先读 [`../testing-manual.md`](../testing-manual.md) 与 [`../README.md`](../README.md)；`release-evidence-bundle-task-game-018-2026-03-10.md`、`closed-beta-candidate-release-gate-2026-03-22.md` 和 `gameplay-ten-minute-trust-gate-2026-04-09.md` 仅作为对应窗口的历史/待领域复核证据
+- 想确认当前 release readiness 或测试层级：先读 [`../../../testing-manual.md`](../../../testing-manual.md) 与 [`../README.md`](../README.md)；`release-evidence-bundle-task-game-018-2026-03-10.md`、`closed-beta-candidate-release-gate-2026-03-22.md` 和 `gameplay-ten-minute-trust-gate-2026-04-09.md` 仅作为对应窗口的历史/待领域复核证据
 - 想确认当前 hosted access、托管身份与签名安全边界：先读 [`../../p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md`](../../p2p/blockchain/hosted-public-join-managed-identity-custody.prd.md) 与 [`../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`](../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md)；2026-03 的 hosted/browser/mainchain 文件仅作历史验证窗口
 - 想确认当前 public-testnet 机制与 readiness：先读 [`../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md`](../../p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md)，再把 `public-testnet-current-required-lanes-2026-07-03.md` 与 `public-testnet-claims-boundary-review-2026-07-06.md` 作为其采集窗口观测；candidate、triad、shared-network 和 incident 文件只作为历史 provenance
 - 想确认当前治理与 finality 合同：先读 [`../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md`](../../p2p/blockchain/p2p-mainnet-security-governance-readiness.prd.md) 与 [`../../world-runtime/runtime/chain-pos-control-plane.prd.md`](../../world-runtime/runtime/chain-pos-control-plane.prd.md)；2026-03-24 的 governance registry/live-world drill 文件只作为历史 diagnostic provenance
@@ -39,7 +39,7 @@
 - 适合问题:
   - closed beta / trust gate 的历史判定留痕在哪
   - 某个旧 evidence bundle 在其采集窗口记录了什么
-  - 当前 release readiness 必须回到 `../testing-manual.md` 与 `../README.md`，不得由本簇旧文件单独推出
+  - 当前 release readiness 必须回到 `../../../testing-manual.md` 与 `../README.md`，不得由本簇旧文件单独推出
 
 ### 2. Hosted access、浏览器与 Web surface 历史验证
 - 当前 authority:
@@ -113,7 +113,7 @@
   - `provider-agent-dual-mode-recertification-evidence-2026-04-07.md`
   - `software-safe-primary-web-entry-evidence-2026-04-07.md`
   - `post-onboarding-headless-smoke-2026-03-19.md`
-  - `p2p-user-mode-launcher-ux-2026-04-07.md`（历史 P2PARCH-9 UX 自动化证据；当前行为回到 `../../p2p/network/mainnet-private-reachability-architecture.prd.md` 与 `../testing-manual.md` S9C）
+  - `p2p-user-mode-launcher-ux-2026-04-07.md`（历史 P2PARCH-9 UX 自动化证据；当前行为回到 `../../p2p/network/mainnet-private-reachability-architecture.prd.md` 与 `../../../testing-manual.md` S9C）
 - 适合问题:
   - provider dual-mode、旧 `software_safe` alias、headless smoke 或 launcher UX 的历史验证在哪
   - 某条 evidence 是局部 supporting artifact 还是历史 provenance

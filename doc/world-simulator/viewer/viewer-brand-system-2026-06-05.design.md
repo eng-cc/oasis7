@@ -50,10 +50,12 @@ is the single terminal shell authority. The brand contribution is visual: keep
 the world board first, use a quiet dock and on-demand console, keep command and
 Action Receipt legible, and demote diagnostics. The implemented World Feed v1 must
 remain visually distinct from causality and appear as a compact collapsed top-right
-edge overlay/ambient chip until explicitly opened. Desktop fullscreen HUD keeps
-Objective / Next Move / Player Leverage as compact cards; mobile groups Objective /
-Player Leverage first and places Next Move on the second row. Current focus/right-
-panel hooks and `#entity-search` are implementation references, not brand modes.
+edge overlay/ambient chip until explicitly opened. HUD placement follows the
+[shell's current implementation boundary](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary):
+Next Move is the primary region; Objective / Player Leverage are supporting
+context. Narrow screens put that primary region first, not below the context.
+This brand spec does not retain a parallel three-peer-card layout. Current
+focus/right-panel hooks and `#entity-search` are implementation references, not brand modes.
 
 ### 2.4 Voice and Labels
 Player-facing copy uses action verbs and concrete state. Diagnostics may use
@@ -275,10 +277,12 @@ A visual-system task is done only when:
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
+| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | 单一 Next Move 主区、Objective / Player Leverage 从属上下文；窄屏主区第一行 | [本设计布局条款](#23-terminal-shell-brand-summary) | viewer_engineer；game_visual_interaction_designer | 不新增布局决策、DTO、玩法或发布承诺；未扩展 target 合同 |
 | [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | 截图为必要输入；DOM/smoke 为补充；按风险最小行集且允许一图覆盖多行 | [本设计条款](#visual-evidence-matrix-design) | QA 与视觉 owner；实际截图和自动化摘要由对应执行者提供 | 不替代 required review、发布放行、方向决策或 L5；不重写历史卡 |
 
 ### 11.1 验证映射表
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
+| [Player shell 当前布局](viewer-gameplay-release-experience-overhaul.prd.md#current-implementation-boundary) | [本设计布局条款](#23-terminal-shell-brand-summary) | 当前操作条款与主合同一致，不能要求恢复三张平级卡片或 Next Move 第二行 | 对同候选主合同与 `crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx`、`crates/oasis7_viewer/viewer_terminal_shell.css` 做静态对照；未来可见改动另按 [Viewer S6 手册](../../testing/manual/web-ui-agent-browser-closure-manual.manual.md) 的视觉矩阵取得真实桌面/窄屏及输入证据 | 本 PR 的 source/diff 与限定静态核对；没有新增浏览器证据 | 源码接线不证明新 S6、真实玩家体验、完整 renderer/a11y 或发布通过 |
 | [QA visual review contract](../../testing/prd.md#visual-review-product-contract) | [本设计条款](#visual-evidence-matrix-design) | 同修订文档对相同证据与 verdict/confidence 给出同一处置 | 按 [SOP 判定表](../../testing/manual/model-visual-review-sop-2026-05-29.manual.md#visual-review-decision-contract)离线审读无截图有 DOM、缺视口、首轮/连续 watch、high/medium/low、block、公开/内部与方向争议 fixture；实际视觉改动另采本候选截图 | 文档 fixture 的条件、预期处置与交叉引用；执行后另留真实截图/card | 本次规则审读不生成浏览器运行、视觉通过或发布证据 |
