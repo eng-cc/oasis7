@@ -187,6 +187,123 @@ fn key_owner(path: &Path) -> Result<u32, String> {
         Err("preview initializer requires Linux or macOS".into())
     }
 }
+#[derive(Serialize, Deserialize)]
+struct InitialCommitEnvelope {
+    version: u8,
+    world_id: String,
+    node_id: String,
+    record: oasis7_distfs::FileReplicationRecord,
+    payload: Vec<u8>,
+    public_key_hex: Option<String>,
+    signature_hex: Option<String>,
+}
+#[derive(Serialize)]
+struct InitialCommitSigningPayload<'a> {
+    version: u8,
+    world_id: &'a str,
+    node_id: &'a str,
+    record: &'a oasis7_distfs::FileReplicationRecord,
+    payload: &'a [u8],
+    public_key_hex: Option<&'a str>,
+}
+fn verify_signed_initial_commit(root: &Path, options: &Options, height: u64) -> Result<(), String> {
+    let (key, _) = super::node_keypair_config::read_existing_node_keypair_in_secure_config_dir(
+        &options.key_dir,
+    )?;
+    let expected = super::derive_node_consensus_signer_keypair(&options.node_id, &key)?;
+    let envelope: InitialCommitEnvelope = serde_json::from_slice(&files::read_bounded(
+        &root
+            .join("replication/replication_commit_messages")
+            .join(format!("{height:020}.json")),
+        16 * 1024 * 1024,
+    )?)
+    .map_err(|_| "initial consensus envelope invalid")?;
+    let message: Value = serde_json::from_slice(&envelope.payload)
+        .map_err(|_| "initial consensus commit invalid")?;
+    if envelope.version != 1
+        || envelope.world_id != options.world_id
+        || envelope.node_id != options.node_id
+        || message["world_id"] != options.world_id
+        || message["node_id"] != options.node_id
+        || message["height"] != height
+        || envelope.public_key_hex.as_deref() != Some(expected.public_key_hex.as_str())
+        || envelope.record.writer_id != expected.public_key_hex
+    {
+        return Err("initial consensus signer or world binding rejected".into());
+    }
+    let record: Value = serde_json::from_slice(&files::read_bounded(
+        &root.join("records").join(format!("{height:020}.json")),
+        1024 * 1024,
+    )?)
+    .map_err(|_| "initial execution record invalid")?;
+    if envelope.record.world_id != options.world_id
+        || envelope.record.content_hash != blake3_hex(&envelope.payload)
+        || envelope.record.size_bytes != envelope.payload.len() as u64
+        || message["execution_block_hash"] != record["execution_block_hash"]
+        || message["execution_state_root"] != record["execution_state_root"]
+        || message["block_hash"] != record["node_block_hash"]
+        || message["action_root"] != record["action_root"]
+    {
+        return Err("initial signed consensus commit differs from pinned execution record".into());
+    }
+    let signed = InitialCommitSigningPayload {
+        version: envelope.version,
+        world_id: &envelope.world_id,
+        node_id: &envelope.node_id,
+        record: &envelope.record,
+        payload: &envelope.payload,
+        public_key_hex: envelope.public_key_hex.as_deref(),
+    };
+    let public: [u8; 32] = hex::decode(&expected.public_key_hex)
+        .map_err(|_| "initial consensus key invalid")?
+        .try_into()
+        .map_err(|_| "initial consensus key invalid")?;
+    let signature = Signature::from_slice(
+        &hex::decode(
+            envelope
+                .signature_hex
+                .as_deref()
+                .ok_or("initial consensus signature missing")?,
+        )
+        .map_err(|_| "initial consensus signature invalid")?,
+    )
+    .map_err(|_| "initial consensus signature invalid")?;
+    VerifyingKey::from_bytes(&public)
+        .map_err(|_| "initial consensus key invalid")?
+        .verify_strict(
+            &serde_json::to_vec(&signed).map_err(|_| "initial consensus encoding invalid")?,
+            &signature,
+        )
+        .map_err(|_| "initial consensus signature rejected".into())
+}
+fn preview_node_config(
+    options: &Options,
+    key: &super::node_keypair_config::NodeKeypairConfig,
+    replication_root: &Path,
+) -> Result<NodeConfig, String> {
+    let mut config = NodeConfig::new(&options.node_id, &options.world_id, NodeRole::Sequencer)
+        .and_then(|c| c.with_tick_interval(Duration::from_millis(50)))
+        .map_err(|_| "preview node configuration failed")?;
+    let bindings = super::build_validator_signer_public_keys(
+        &config.pos_config.validators,
+        key,
+        &std::collections::BTreeMap::new(),
+    )?;
+    config.pos_config = config
+        .pos_config
+        .with_validator_signer_public_keys(bindings)
+        .map_err(|_| "preview provisioned validator signer binding failed")?;
+    let replication = super::build_node_replication_config(
+        &options.node_id,
+        replication_root,
+        key,
+        &StorageProfileConfig::default(),
+        &[],
+        &[],
+        false,
+    )?;
+    Ok(config.with_replication(replication))
+}
 fn initialize(options: &Options) -> Result<Receipt, String> {
     if !cfg!(any(target_os = "linux", target_os = "macos")) {
         return Err(
@@ -277,9 +394,7 @@ fn initialize(options: &Options) -> Result<Receipt, String> {
         &StorageProfileConfig::default(),
         bootstrap.clone(),
     )?;
-    let config = NodeConfig::new(&options.node_id, &options.world_id, NodeRole::Sequencer)
-        .and_then(|c| c.with_tick_interval(Duration::from_millis(50)))
-        .map_err(|_| "preview node configuration failed")?;
+    let config = preview_node_config(options, &node_key, &stage.path.join("replication"))?;
     let mut node = NodeRuntime::new(config)
         .with_execution_hook(driver)
         .with_local_execution_bootstrap(bootstrap);
@@ -440,6 +555,7 @@ fn verify_at(
     let original: oasis7::world_service::CommitRef =
         serde_json::from_value(receipt.published_commit.clone())
             .map_err(|_| "preview original commit invalid")?;
+    verify_signed_initial_commit(root, options, original.position)?;
     let _ = bridge::world_service_read::pin(
         &root.join("records"),
         &root.join("store"),

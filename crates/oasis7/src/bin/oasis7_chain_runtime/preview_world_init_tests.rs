@@ -308,3 +308,68 @@ fn stored_receipt_source_schema_and_signature_mismatch_fail_closed() {
     }
     initialize(&o).unwrap();
 }
+
+#[test]
+fn initial_commit_validator_binding_uses_provisioned_node_identity() {
+    let root = Directory::new();
+    let o = root.options();
+    let (key, _) =
+        super::super::node_keypair_config::read_existing_node_keypair_in_secure_config_dir(
+            &o.key_dir,
+        )
+        .unwrap();
+    let expected = super::super::derive_node_consensus_signer_keypair(&o.node_id, &key).unwrap();
+    let config = preview_node_config(&o, &key, &root.0.join("replication")).unwrap();
+    assert_eq!(config.pos_config.validator_signer_public_keys.len(), 1);
+    assert_eq!(
+        config.pos_config.validator_signer_public_keys[&o.node_id],
+        expected.public_key_hex
+    );
+    let receipt = initialize(&o).unwrap();
+    let height = receipt.published_commit["position"].as_u64().unwrap();
+    let envelope: Value = serde_json::from_slice(
+        &fs::read(
+            o.root
+                .join("replication/replication_commit_messages")
+                .join(format!("{height:020}.json")),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(envelope["public_key_hex"], expected.public_key_hex);
+    verify_signed_initial_commit(&o.root, &o, height).unwrap();
+}
+
+#[test]
+fn corrupted_initial_consensus_signature_rejected_before_rerun() {
+    let root = Directory::new();
+    let o = root.options();
+    let receipt = initialize(&o).unwrap();
+    let height = receipt.published_commit["position"].as_u64().unwrap();
+    let path = o
+        .root
+        .join("replication/replication_commit_messages")
+        .join(format!("{height:020}.json"));
+    let mut envelope: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    envelope["signature_hex"] = json!("00".repeat(64));
+    fs::write(&path, serde_json::to_vec(&envelope).unwrap()).unwrap();
+    assert!(initialize(&o).err().unwrap().contains("signature rejected"));
+}
+
+#[test]
+fn valid_same_signer_commit_from_other_initialization_cannot_replace_pin() {
+    let root = Directory::new();
+    let o = root.options();
+    let receipt = initialize(&o).unwrap();
+    let other_root = Directory::new();
+    let mut other = o.clone();
+    other.root = other_root.0.join("world-root");
+    other.genesis_nonce = "44".repeat(32);
+    let other_receipt = initialize(&other).unwrap();
+    let height = receipt.published_commit["position"].as_u64().unwrap();
+    let other_height = other_receipt.published_commit["position"].as_u64().unwrap();
+    assert_eq!(height, other_height);
+    let relative = format!("replication/replication_commit_messages/{height:020}.json");
+    fs::copy(other.root.join(&relative), o.root.join(&relative)).unwrap();
+    assert!(initialize(&o).is_err());
+}
