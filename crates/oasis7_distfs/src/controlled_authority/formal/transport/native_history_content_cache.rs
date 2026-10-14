@@ -3,15 +3,50 @@ use super::*;
 use std::collections::{HashMap, VecDeque};
 const MAX_OBJECTS: usize = 512;
 const MAX_BYTES: usize = 16 * 1024 * 1024;
-#[derive(Default)]
 pub(super) struct RestoreContentCache {
     objects: HashMap<String, Vec<u8>>,
     order: VecDeque<String>,
     bytes: usize,
+    started: std::time::Instant,
+    source_reads: usize,
+    source_failures: usize,
+    source_bytes: usize,
+    source_us: u128,
+    external_cache_hits: usize,
+    hits: usize,
+    misses: usize,
+    inserts: usize,
+    evictions: usize,
+    oversized: usize,
+    restore_us: u128,
+    outcome: &'static str,
+}
+
+impl Default for RestoreContentCache {
+    fn default() -> Self {
+        Self {
+            objects: HashMap::new(),
+            order: VecDeque::new(),
+            bytes: 0,
+            started: std::time::Instant::now(),
+            source_reads: 0,
+            source_failures: 0,
+            source_bytes: 0,
+            source_us: 0,
+            external_cache_hits: 0,
+            hits: 0,
+            misses: 0,
+            inserts: 0,
+            evictions: 0,
+            oversized: 0,
+            restore_us: 0,
+            outcome: "in_progress",
+        }
+    }
 }
 impl RestoreContentCache {
     pub(super) fn get_checked(
-        &self,
+        &mut self,
         id: &str,
         mut check_deadline: impl FnMut() -> Result<(), FormalError>,
     ) -> Result<Option<Vec<u8>>, FormalError> {
@@ -20,14 +55,16 @@ impl RestoreContentCache {
         check_deadline()?;
         Ok(result)
     }
-    fn get(&self, id: &str) -> Result<Option<Vec<u8>>, FormalError> {
+    fn get(&mut self, id: &str) -> Result<Option<Vec<u8>>, FormalError> {
         hash_hex(id)?;
         if let Some(bytes) = self.objects.get(id) {
             if blake3::hash(bytes).to_hex().as_str() != id {
                 return Err(invalid("historical operation cache checksum"));
             }
+            self.hits += 1;
             return Ok(Some(bytes.clone()));
         }
+        self.misses += 1;
         Ok(None)
     }
     pub(super) fn insert(&mut self, id: &str, bytes: &[u8]) -> Result<(), FormalError> {
@@ -35,7 +72,11 @@ impl RestoreContentCache {
         if blake3::hash(bytes).to_hex().as_str() != id {
             return Err(invalid("historical operation cache checksum"));
         }
-        if self.objects.contains_key(id) || bytes.len() > MAX_BYTES {
+        if self.objects.contains_key(id) {
+            return Ok(());
+        }
+        if bytes.len() > MAX_BYTES {
+            self.oversized += 1;
             return Ok(());
         }
         while self.objects.len() >= MAX_OBJECTS || self.bytes > MAX_BYTES - bytes.len() {
@@ -48,11 +89,67 @@ impl RestoreContentCache {
                 .remove(&oldest)
                 .ok_or_else(|| invalid("historical operation cache order"))?;
             self.bytes -= removed.len();
+            self.evictions += 1;
         }
         self.bytes += bytes.len();
         self.order.push_back(id.to_owned());
         self.objects.insert(id.to_owned(), bytes.to_vec());
+        self.inserts += 1;
         Ok(())
+    }
+
+    pub(super) fn record_external_cache_hit(&mut self) {
+        self.external_cache_hits += 1;
+    }
+
+    pub(super) fn record_source_read(
+        &mut self,
+        elapsed: std::time::Duration,
+        bytes: Option<&[u8]>,
+        failed: bool,
+    ) {
+        self.source_reads += 1;
+        self.source_us = self.source_us.saturating_add(elapsed.as_micros());
+        self.source_bytes = self
+            .source_bytes
+            .saturating_add(bytes.map_or(0, <[u8]>::len));
+        self.source_failures += usize::from(failed);
+    }
+
+    pub(super) fn record_restore_elapsed(&mut self, elapsed: std::time::Duration) {
+        self.restore_us = elapsed.as_micros();
+    }
+
+    pub(super) fn record_outcome(&mut self, success: bool) {
+        self.outcome = if success { "success" } else { "error" };
+    }
+}
+
+impl Drop for RestoreContentCache {
+    fn drop(&mut self) {
+        if std::env::var_os("OASIS7_HEALTHY_NATIVE_TRACE").is_none() {
+            return;
+        }
+        let restore_local_us = self.restore_us.saturating_sub(self.source_us);
+        eprintln!(
+            "native-history-restore result={} source_reads={} source_failures={} source_bytes={} source_us={} memo_hits={} memo_misses={} external_cache_hits={} memo_inserts={} memo_evictions={} memo_oversized={} memo_entries={} memo_bytes={} restore_us={} restore_nonfetch_us={} operation_us={}",
+            self.outcome,
+            self.source_reads,
+            self.source_failures,
+            self.source_bytes,
+            self.source_us,
+            self.hits,
+            self.misses,
+            self.external_cache_hits,
+            self.inserts,
+            self.evictions,
+            self.oversized,
+            self.objects.len(),
+            self.bytes,
+            self.restore_us,
+            restore_local_us,
+            self.started.elapsed().as_micros(),
+        );
     }
 }
 #[cfg(test)]

@@ -84,6 +84,7 @@ impl RemoteFormalEndpoint {
         if previous_deadline.is_none() {
             self.set_operation_deadline(Instant::now() + self.timeout);
         }
+        let mut local_cache = content_cache::RestoreContentCache::default();
         let result = (|| {
             self.complete(Command::Head)?;
             let context = self
@@ -92,7 +93,7 @@ impl RemoteFormalEndpoint {
                 .ok_or_else(|| invalid("historical missing authenticated native context"))?;
             let start = context.clone();
 
-            let mut local_cache = content_cache::RestoreContentCache::default();
+            let restore_started = Instant::now();
             let restored = super::super::super::endpoint::restore_native_position(
                 context,
                 position,
@@ -125,12 +126,32 @@ impl RemoteFormalEndpoint {
                             self.operation_deadline
                                 .ok_or_else(|| invalid("historical deadline absent"))?,
                         )?;
+                        local_cache.record_external_cache_hit();
                         local_cache.insert(id, &bytes)?;
                         return Ok(bytes);
                     }
-                    let bytes = self.fetch_hash_object(id)?.ok_or_else(|| {
-                        invalid("HistoryUnavailable: historical referenced object missing")
-                    })?;
+                    let fetch_started = Instant::now();
+                    let fetched = self.fetch_hash_object(id);
+                    let bytes = match fetched {
+                        Ok(Some(bytes)) => {
+                            local_cache.record_source_read(
+                                fetch_started.elapsed(),
+                                Some(&bytes),
+                                false,
+                            );
+                            bytes
+                        }
+                        Ok(None) => {
+                            local_cache.record_source_read(fetch_started.elapsed(), None, true);
+                            return Err(invalid(
+                                "HistoryUnavailable: historical referenced object missing",
+                            ));
+                        }
+                        Err(error) => {
+                            local_cache.record_source_read(fetch_started.elapsed(), None, true);
+                            return Err(error);
+                        }
+                    };
                     if let Some(cache) = cache {
                         cache.cache_content_node(id, &bytes).map_err(invalid)?;
                     }
@@ -141,7 +162,9 @@ impl RemoteFormalEndpoint {
                     )?;
                     Ok(bytes)
                 },
-            )?;
+            );
+            local_cache.record_restore_elapsed(restore_started.elapsed());
+            let restored = restored?;
             self.complete(Command::Head)?;
             let finish = self
                 .last_native_context
@@ -156,6 +179,8 @@ impl RemoteFormalEndpoint {
             )?;
             Ok(restored)
         })();
+        local_cache.record_outcome(result.is_ok());
+        drop(local_cache);
         self.operation_deadline = previous_deadline;
         result
     }

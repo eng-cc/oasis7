@@ -56,6 +56,7 @@ const MAX_HTTP_HEADER: usize = 8 * 1024;
 const MAX_HTTP_REPLY: usize = 8 * 1024 * 1024;
 const MAX_NODE_ERROR_CHARS: usize = 384;
 const HTTP_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
+const FORMAL_HTTP_THREAD_STACK_BYTES: usize = 8 * 1024 * 1024;
 const SERVICE_READINESS_PATH: &str = "/healthz";
 const CHAIN_STATUS_PATH: &str = "/v1/chain/status";
 
@@ -350,6 +351,10 @@ impl FormalLiveService {
         let service = Arc::clone(&self);
         let join = thread::Builder::new()
             .name("oasis7-formal-http".into())
+            // Formal proof/history validation and signed page construction
+            // run inline on this single bounded HTTP worker. Use a fixed
+            // stack budget rather than the platform default for spawned threads.
+            .stack_size(FORMAL_HTTP_THREAD_STACK_BYTES)
             .spawn(move || {
                 while !thread_stop.load(Ordering::Acquire) {
                     match listener.accept() {

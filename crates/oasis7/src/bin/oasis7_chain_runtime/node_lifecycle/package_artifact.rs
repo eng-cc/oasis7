@@ -432,7 +432,7 @@ pub(crate) fn validate_progress(
             || rollback.request_digest != stage.request_digest
             || rollback.stage != *stage
             || rollback.promotion != *promotion
-            || rollback.promotion_receipt_sha256 != canonical_digest(promotion)?
+            || rollback.promotion_receipt_sha256 != promotion_receipt_digest(promotion)?
             || rollback.stop_action_id != promotion.stop_action_id
             || rollback.stop_receipt_sha256 != promotion.stop_receipt_sha256
             || rollback.failed_start_action_id != format!("op:{operation_id}:start")
@@ -814,14 +814,32 @@ pub(super) fn require_digest(value: &str) -> Result<(), String> {
     }
 }
 
-fn canonical_digest<T: Serialize>(value: &T) -> Result<String, String> {
-    let value = serde_json::to_value(value).map_err(|error| error.to_string())?;
+fn promotion_receipt_digest<T: Serialize>(value: &T) -> Result<String, String> {
+    let mut value = serde_json::to_value(value).map_err(|error| error.to_string())?;
+    let object = value
+        .as_object_mut()
+        .ok_or("package promotion receipt is not an object")?;
+    // The shell helper's canonical receipt digest is computed over its JSON
+    // object, which writes these optional fields explicitly as null. Rust's
+    // typed receipt omits `None` during serialization, so restore those null
+    // keys before hashing to keep the shared receipt contract byte-equivalent.
+    for field in [
+        "candidate_chain_plan_sha256",
+        "candidate_node_config_digest",
+        "candidate_binding_digest",
+        "candidate_anchor_digest",
+    ] {
+        object
+            .entry(field.to_owned())
+            .or_insert(serde_json::Value::Null);
+    }
     io::digest(&value)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::candidate_chain_plan_digest_matches;
+    use super::{candidate_chain_plan_digest_matches, promotion_receipt_digest};
+    use serde::Serialize;
 
     #[test]
     fn promotion_must_retain_the_exact_staged_candidate_plan_digest() {
@@ -839,5 +857,41 @@ mod tests {
             Some(&other_digest)
         ));
         assert!(!candidate_chain_plan_digest_matches(None, Some(&digest)));
+    }
+
+    #[test]
+    fn promotion_receipt_digest_retains_explicit_null_candidate_fields() {
+        #[derive(Serialize)]
+        struct Receipt {
+            schema_version: &'static str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            candidate_chain_plan_sha256: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            candidate_node_config_digest: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            candidate_binding_digest: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            candidate_anchor_digest: Option<String>,
+        }
+
+        let receipt = Receipt {
+            schema_version: "oasis7.package_upgrade_promotion_receipt.v1",
+            candidate_chain_plan_sha256: None,
+            candidate_node_config_digest: None,
+            candidate_binding_digest: None,
+            candidate_anchor_digest: None,
+        };
+        let helper_shape = serde_json::json!({
+            "schema_version": "oasis7.package_upgrade_promotion_receipt.v1",
+            "candidate_chain_plan_sha256": null,
+            "candidate_node_config_digest": null,
+            "candidate_binding_digest": null,
+            "candidate_anchor_digest": null,
+        });
+
+        assert_eq!(
+            promotion_receipt_digest(&receipt).unwrap(),
+            super::super::super::local_io::digest(&helper_shape).unwrap()
+        );
     }
 }
