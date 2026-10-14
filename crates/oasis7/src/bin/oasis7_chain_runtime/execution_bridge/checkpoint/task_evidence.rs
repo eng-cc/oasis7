@@ -225,14 +225,17 @@ pub(super) fn refresh(
                     return Err("live task historical receipt mismatch".into());
                 }
             }
+            // protected_heights already checked every existing shard's exact
+            // record-derived pins and verified CAS/proof binding. Re-publishing
+            // that same semantic set adds durable I/O without changing retention.
+            store
+                .replace_pin_scope_shard(
+                    SCOPE,
+                    &format!("record-{height:020}"),
+                    &required_refs(&record)?,
+                )
+                .map_err(|_| "live task dependency pin failed")?;
         }
-        store
-            .replace_pin_scope_shard(
-                SCOPE,
-                &format!("record-{height:020}"),
-                &required_refs(&record)?,
-            )
-            .map_err(|_| "live task dependency pin failed")?;
     }
     let wanted = wanted.keys().copied().collect::<BTreeSet<_>>();
     let hot_start = latest.saturating_sub(hot.max(1).saturating_sub(1));

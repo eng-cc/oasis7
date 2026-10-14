@@ -144,6 +144,46 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
         commit(&mut driver, height, create.clone());
     }
     let cas = LocalCasStore::new(dir.join("store"));
+    // An unchanged, fully verified task dependency must not be re-published.
+    // A historical mtime distinguishes reuse from atomic rewriting without
+    // depending on filesystem timestamp granularity or execution speed.
+    let shard = dir
+        .join("store/pin_scopes/execution_bridge_live_tasks_v1/record-00000000000000000004.json");
+    let sentinel = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1);
+    std::fs::File::options()
+        .write(true)
+        .open(&shard)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(sentinel))
+        .unwrap();
+    let retained_bytes = std::fs::read(&shard).unwrap();
+    for _ in 0..3 {
+        super::super::super::checkpoint::refresh_live_task_read_evidence(
+            &dir.join("records"),
+            &cas,
+            &driver.execution_world,
+            2,
+        )
+        .unwrap();
+        assert_eq!(std::fs::read(&shard).unwrap(), retained_bytes);
+        assert_eq!(
+            std::fs::metadata(&shard).unwrap().modified().unwrap(),
+            sentinel,
+            "unchanged validated task shard was rewritten"
+        );
+    }
+    // Reuse must still reject a parseable shard with the wrong semantic set.
+    std::fs::write(&shard, br#"{"pins":[]}"#).unwrap();
+    assert!(
+        super::super::super::checkpoint::refresh_live_task_read_evidence(
+            &dir.join("records"),
+            &cas,
+            &driver.execution_world,
+            2,
+        )
+        .is_err()
+    );
+    std::fs::write(&shard, &retained_bytes).unwrap();
     super::super::super::checkpoint::run_execution_bridge_retention_maintenance(
         &dir.join("records"),
         &cas,
