@@ -41,7 +41,19 @@ class WarningTests(unittest.TestCase):
         self.assertEqual(p.returncode,0,p.stdout+p.stderr)
         self.assertIn('missing-status-field',p.stdout)
         self.assertIn('including legacy REQ blocks',p.stdout)
-        self.assertNotEqual(self.invoke('doc-core-content-check.py','--full-corpus').returncode,0)
+        default = self.invoke('doc-core-content-check.py', '--full-corpus')
+        self.assertEqual(default.returncode, 0, default.stdout + default.stderr)
+        self.assertIn('::warning::', default.stdout)
+        self.assertIn('missing-status-field', default.stdout)
+        # Historical mode is advisory by default; changed content is still strict.
+        path = self.root / fixture.TOPIC
+        path.write_text(path.read_text() + '\nNew product obligation.\n')
+        strict = self.scoped('doc-core-content-check.py')
+        self.assertNotEqual(strict.returncode, 0, strict.stdout + strict.stderr)
+        self.assertIn('missing-status-field', strict.stdout)
+        advisory = self.invoke('doc-core-content-check.py', '--base', self.base,
+                               '--head', self.head, '--worktree', '--warn-only')
+        self.assertEqual(advisory.returncode, 0, advisory.stdout + advisory.stderr)
     def test_system_findings_warn(self):
         file = self.root/'doc/system/broken.design.md'
         file.parent.mkdir()
@@ -49,13 +61,25 @@ class WarningTests(unittest.TestCase):
         p = self.invoke('system-design-traceability-check.py','--base',self.base,'--head',self.head,'--worktree','--warn-only')
         self.assertEqual(p.returncode,0,p.stdout+p.stderr)
         self.assertIn('::warning::system-design-traceability:',p.stdout)
+        default = self.invoke('system-design-traceability-check.py', '--full-corpus')
+        self.assertEqual(default.returncode, 0, default.stdout + default.stderr)
+        self.assertIn('::warning::system-design-traceability:', default.stdout)
+        self.assertNotEqual(self.scoped('system-design-traceability-check.py').returncode, 0)
     def test_invalid_range_is_error(self):
         for name in ('product-doc-content-check.py','system-design-traceability-check.py','doc-core-content-check.py'):
             self.assertNotEqual(self.invoke(name,'--base','not-a-sha','--head',self.head,'--warn-only').returncode,0)
+            for flags in (('--base', self.base), ('--head', self.head), ('--worktree',)):
+                with self.subTest(checker=name, flags=flags):
+                    self.assertNotEqual(self.invoke(name, '--full-corpus', '--warn-only', *flags).returncode, 0)
     def test_unreadable_utf8_is_error(self):
         (self.root/fixture.TOPIC).write_bytes(b'\xff')
-        for name in ('product-doc-content-check.py','doc-core-content-check.py'):
-            self.assertNotEqual(self.invoke(name,'--full-corpus','--warn-only').returncode,0)
+        professional = self.root / 'doc/system/unreadable.design.md'
+        professional.parent.mkdir()
+        professional.write_bytes(b'\xff')
+        for name in ('product-doc-content-check.py', 'doc-core-content-check.py', 'system-design-traceability-check.py'):
+            for flags in ((), ('--warn-only',)):
+                with self.subTest(checker=name, flags=flags):
+                    self.assertNotEqual(self.invoke(name, '--full-corpus', *flags).returncode, 0)
     def test_symlink_corpus_still_fails(self):
         link = self.root/'doc/product/world-rules-core-gameplay/link.prd.md'
         link.symlink_to(self.root/fixture.TOPIC)
@@ -140,8 +164,25 @@ class WarningTests(unittest.TestCase):
         text=(HERE/'doc-governance-check.sh').read_text()
         self.assertIn('scripts/product-doc-governance-check.py --enforce-changed',text)
         self.assertIn('scripts/system-design-traceability-check.py \\',text)
-        self.assertEqual(text.count('scripts/product-doc-content-check.py --warn-only'),1)
-        self.assertEqual(text.count('scripts/doc-core-content-check.py --warn-only'),1)
+        # The shared historical loop covers each checker once without range
+        # arguments, only after both scoped strict gates have recorded failures.
+        scoped_product = text.index('if ! run_product_doc_content_check; then')
+        scoped_system = text.index('if ! run_system_design_traceability_check; then')
+        full_loop = text.index('for checker in product-doc-content-check doc-core-content-check system-design-traceability-check; do')
+        verdict = text.index('if ((failures > 0)); then')
+        self.assertLess(scoped_product, full_loop)
+        self.assertLess(scoped_system, full_loop)
+        self.assertLess(full_loop, verdict)
+        historical = text[full_loop:verdict]
+        self.assertIn('"scripts/${checker}.py" --warn-only', historical)
+        self.assertIn('--repo-root "$repo_root" --full-corpus', historical)
+        for flag in ('--base', '--head', '--worktree'):
+            self.assertNotIn(flag, historical)
+        self.assertIn('fail "${checker} full-corpus check failed"', historical)
+        self.assertNotIn('failures=0', historical)
+        self.assertNotIn('|| true', historical)
+        self.assertIn('scripts/product-doc-content-check.py \\', text)
+        self.assertIn('scripts/doc-core-content-check.py \\', text)
         self.assertIn('document-corpus-inventory-check.py" --repo-root',text)
         self.assertNotIn('continue-on-error',text)
 

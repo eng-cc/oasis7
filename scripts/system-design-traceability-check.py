@@ -12,9 +12,13 @@ from __future__ import annotations
 
 import argparse
 from doc_content_warnings import report_findings
+from collections import deque
 from collections.abc import Callable
+from functools import lru_cache
 from dataclasses import dataclass
 import html
+import os
+import stat
 import posixpath
 from pathlib import Path
 import re
@@ -25,6 +29,7 @@ from urllib.parse import unquote
 
 try:
     from product_doc_markdown import parse_markdown_blocks, parse_markdown_html, parse_markdown_links
+    from markdown_it import MarkdownIt
 except RuntimeError as exc:
     print(f"system-design-traceability: error: {exc}", file=sys.stderr)
     raise SystemExit(2) from exc
@@ -115,25 +120,21 @@ def is_system_design_path(path: str) -> bool:
     """
     normalized = Path(path).as_posix()
     return (
-        normalized.endswith(DESIGN_SUFFIX)
+        (normalized.endswith(DESIGN_SUFFIX) or (is_module_design_overview(normalized) and full_corpus_design_path(normalized)))
         and not normalized.startswith(f"{PRODUCT_ROOT.as_posix()}/")
         and normalized not in DESIGN_STANDARD_EXCLUSIONS
     )
 
 
 def is_traceability_authority_path(path: str) -> bool:
-    """Return whether a changed document can be consumed as an authority.
+    """Changed documentation may host a feature, Trace ID or professional clause.
 
-    This is deliberately a path-level classification, not a caller-provided
-    review class.  Product PRDs and professional design/PRD documents are
-    the only bounded authority endpoints considered by reverse selection.
+    Reverse selection still follows exact links from structured consumers and
+    only new relation breakage is blocking; an unrelated Markdown edit does not
+    bring historical prose into the strict gate.
     """
     normalized = Path(path).as_posix()
-    return (
-        normalized.startswith("doc/")
-        and (normalized.endswith(AUTHORITY_SUFFIXES) or Path(normalized).name in AUTHORITY_ROOT_BASENAMES)
-        and normalized not in DESIGN_STANDARD_EXCLUSIONS
-    )
+    return normalized.startswith("doc/") and normalized.endswith(".md")
 
 
 def parse_name_status(output: str) -> dict[str, str]:
@@ -246,6 +247,24 @@ def committed_target_text(root: Path, commit: str, target: Path) -> str | None:
             return None
         current = candidate
     return None
+
+
+def previous_design_text(root: Path, base: str, head: str, path: str,
+                         include_worktree: bool = False) -> str | None:
+    """Follow Git-detected rename origins before reading the trusted baseline."""
+    current = path
+    ranges = []
+    if include_worktree:
+        ranges.extend([("diff", "--name-status", "-M", "--"),
+                       ("diff", "--cached", "--name-status", "-M", head, "--")])
+    ranges.append(("diff", "--name-status", "-M", base, head, "--"))
+    for arguments in ranges:
+        for line in run_git(root, *arguments).splitlines():
+            fields = line.split("\t")
+            if len(fields) >= 3 and fields[0].startswith(("R", "C")) and fields[2] == current:
+                current = fields[1]
+                break
+    return git_text(root, base, current)
 
 
 def worktree_file_text(root: Path, checkout_head: str, path: str) -> str | None:
@@ -372,7 +391,7 @@ def changed_authority_paths(
     head: str,
     include_worktree: bool,
 ) -> list[str]:
-    """Select changed authority endpoints, preserving both rename endpoints."""
+    """Select changed relation endpoints, preserving both rename endpoints."""
     base_oid = resolve_commit(root, base, "base")
     head_oid = resolve_commit(root, head, "head")
     source_base = run_git(root, "merge-base", base_oid, head_oid).strip()
@@ -386,20 +405,10 @@ def changed_authority_paths(
         checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
         changed.update(worktree_authority_overlay(root, checkout_head))
 
-    selected: list[str] = []
-    for path, status in sorted(changed.items()):
-        if not is_traceability_authority_path(path):
-            continue
-        old_text = git_text(root, source_base, path)
-        if status.startswith("D"):
-            selected.append(path)
-            continue
-        new_text = worktree_file_text(root, checkout_head, path) if include_worktree else git_text(root, head_oid, path)
-        if new_text is None:
-            selected.append(path)
-        elif status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):
-            selected.append(path)
-    return selected
+    # Candidates include test/manual validation sources as well as requirement
+    # documents. Do not decode unrelated changed binary files: exact consumer
+    # links and newly introduced diagnostics bound the reverse check later.
+    return sorted(changed)
 
 
 def current_design_paths(root: Path, head: str, include_worktree: bool, checkout_head: str) -> list[Path]:
@@ -407,13 +416,13 @@ def current_design_paths(root: Path, head: str, include_worktree: bool, checkout
     paths = {
         line.strip()
         for line in run_git(root, "ls-tree", "-r", "--name-only", head).splitlines()
-        if line.strip() and line.strip().endswith(DESIGN_SUFFIX)
+        if line.strip() and (line.strip().endswith(DESIGN_SUFFIX) or is_module_design_overview(line.strip()))
     }
     if include_worktree:
         paths.update(
             path
             for path, status in worktree_authority_overlay(root, checkout_head).items()
-            if not status.startswith("D") and path.endswith(DESIGN_SUFFIX)
+            if not status.startswith("D") and (path.endswith(DESIGN_SUFFIX) or is_module_design_overview(path))
         )
     return [root / path for path in sorted(paths) if is_system_design_path(path)]
 
@@ -435,6 +444,7 @@ def references_authority(
     authority_paths: set[str],
     *,
     follow_symlinks: bool,
+    read_target: TargetTextReader | None = None,
 ) -> bool:
     """Match exact repository-relative link endpoints, including deleted ones."""
     for node in parse_markdown_links(without_html_comments(text)):
@@ -450,6 +460,15 @@ def references_authority(
             continue
         if relative in authority_paths:
             return True
+        if _fragment and read_target is not None and is_requirement_authority(relative):
+            target_text = read_target(resolved)
+            if target_text is not None:
+                dependencies: set[str] = set()
+                resolved_requirement_context(root, resolved, target_text, _fragment,
+                                             read_target, follow_symlinks,
+                                             dependencies=dependencies)
+                if dependencies.intersection(authority_paths):
+                    return True
     return False
 
 
@@ -469,7 +488,7 @@ def authority_impacted_design_paths(
         return impacted
     for design in current_design_paths(root, head, include_worktree, checkout_head):
         text = read_target(design)
-        if text is None or not is_traceability_consumer(text):
+        if text is None or not (is_traceability_consumer(text) or has_traceability_heading(text)):
             continue
         if references_authority(
             root,
@@ -477,6 +496,7 @@ def authority_impacted_design_paths(
             text,
             changed,
             follow_symlinks=include_worktree,
+            read_target=read_target,
         ):
             impacted.append(design)
     return impacted
@@ -603,6 +623,317 @@ def fragment_occurrences(text: str, fragment: str) -> int:
         if match and github_heading_slug(match.group(1)) == wanted:
             heading_occurrences += 1
     return anchor_occurrences + heading_occurrences
+
+
+GLOBAL_TRACE_RE = re.compile(r"(?<![A-Za-z0-9_-])O7-REQ-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![A-Za-z0-9_-])")
+
+
+def formal_trace_fields(text: str):
+    """Recognize existing paragraph/list/cell/column Trace syntax, not mentions."""
+    lines = visible_lines(text)
+    table = {}
+    headings = []
+    for index, (_, line) in enumerate(lines):
+        heading = re.match(r"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$", line)
+        if heading:
+            level, title = len(heading[1]), heading[2]
+            while headings and headings[-1][0] >= level:
+                headings.pop()
+            headings.append((level, title))
+            table = {}
+        if any(re.search(r"示例|模板|样例|\b(?:examples?|templates?|samples?)\b", re.sub(r"(?:REQ|SC|AC)-[A-Z0-9_-]+", "", title, flags=re.I), re.I)
+               and (level > 1 or re.fullmatch(r"(?:examples?|templates?|samples?|示例|模板|样例)", title, re.I))
+               for level, title in headings):
+            continue
+        if not line.strip() or line.lstrip().startswith('>'):
+            table = {}
+            continue
+        cells = tuple(cell.strip() for cell in line.strip().strip("|").split("|")) if "|" in line else ()
+        if cells and index + 1 < len(lines) and is_separator(lines[index + 1][1]):
+            table = {i: match[1] for i, cell in enumerate(cells)
+                     if (match := re.fullmatch(r"Trace (ID|refs)\s*[:：]?", cell.strip('`* ')))}
+            continue
+        if is_separator(line):
+            continue
+        if table and cells:
+            for i, role in table.items():
+                if i < len(cells):
+                    yield role, cells[i]
+        candidates = cells or (re.sub(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?", "", line),)
+        for cell in candidates:
+            cell = re.sub(r"^`(Trace (?:ID|refs)\s*[:：])`\s*", r"\1 ", cell.strip())
+            match = re.match(r"^Trace (ID|refs)\s*[:：]\s*(.*)$", cell)
+            if match:
+                yield match[1], match[2]
+
+
+def parse_trace_payload(payload: str) -> tuple[set[str], set[str]]:
+    payload = re.sub(r"\[(O7-REQ-[A-Za-z0-9_-]+)\]\([^)]*\)", r"\1", payload).strip()
+    valid, invalid = set(), set()
+    remaining = payload
+    while remaining:
+        token = re.match(r"`?(O7-REQ-[A-Za-z0-9_-]+)`?", remaining)
+        if not token:
+            if not valid:
+                invalid.add(remaining or '<empty>')
+            break
+        identifier = token[1]
+        (valid if GLOBAL_TRACE_RE.fullmatch(identifier) else invalid).add(identifier)
+        remaining = remaining[token.end():]
+        separator = re.match(r"\s*[,;，；、]\s*|\s+(?=`?O7-REQ-)", remaining)
+        if separator is None:
+            break
+        remaining = remaining[separator.end():]
+    if not payload:
+        invalid.add('<empty>')
+    return valid, invalid
+
+
+def trace_reference_ids(text: str) -> tuple[set[str], set[str]]:
+    valid, invalid = set(), set()
+    for role, payload in formal_trace_fields(text):
+        if role == 'refs':
+            found, bad = parse_trace_payload(payload)
+            valid.update(found)
+            invalid.update(bad)
+    return valid, invalid
+
+
+def upstream_label_identities(cell: str) -> set[str]:
+    identities = set()
+    for block in MarkdownIt('commonmark').parse(cell):
+        inside = False
+        for node in block.children or []:
+            if node.type == 'link_open':
+                inside = True
+            elif node.type == 'link_close':
+                inside = False
+            elif inside:
+                identities.update(GLOBAL_TRACE_RE.findall(node.content))
+                identities.update(re.findall(r"(?<![\w-])(?:REQ|SC|AC)-[A-Z0-9][A-Z0-9_-]*", node.content))
+    return identities
+
+
+def declared_trace_ids(text: str) -> set[str]:
+    result = set()
+    for role, payload in formal_trace_fields(text):
+        if role == 'ID':
+            identifiers, invalid = parse_trace_payload(payload)
+            if len(identifiers) == 1 and not invalid:
+                result.update(identifiers)
+    return result
+
+
+def fragment_section(text: str, fragment: str) -> str | None:
+    """Return only the addressed heading/anchor section, excluding child clauses.
+
+    An explicit anchor immediately before its heading belongs to that heading.
+    A broad overview link must not acquire identities from nested features.
+    """
+    if fragment_occurrences(text, fragment) != 1:
+        return None
+    lines = visible_lines(text)
+    start = None
+    heading_index = None
+    for index, (_, line) in enumerate(lines):
+        heading = re.match(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
+        anchors = re.findall(r"<a\s+[^>]*\bid\s*=\s*[\"']([^\"']+)[\"'][^>]*>", line, re.I)
+        if (heading and github_heading_slug(heading[1]) == fragment.casefold()) or any(a.casefold() == fragment.casefold() for a in anchors):
+            start = index
+            if heading:
+                heading_index = index
+            else:
+                following = next((j for j in range(index + 1, len(lines)) if lines[j][1].strip()), None)
+                if following is not None and HEADING_RE.match(lines[following][1]):
+                    heading_index = following
+            break
+    if start is None:
+        return None
+    content_start = heading_index if heading_index is not None else start
+    end = next((j for j in range(content_start + 1, len(lines)) if HEADING_RE.match(lines[j][1])), len(lines))
+    # A standalone anchor immediately before the next heading belongs to that
+    # next feature, not the preceding feature's declaration/relationship scope.
+    if end < len(lines):
+        while end > content_start + 1 and (not lines[end - 1][1].strip() or re.fullmatch(r"\s*<a\s+[^>]*\bid\s*=[^>]*>\s*</a>\s*", lines[end - 1][1], re.I)):
+            end -= 1
+    return "\n".join(line for _, line in lines[start:end])
+
+
+def section_requirement_identity(section: str) -> set[str]:
+    identifiers = declared_trace_ids(section)
+    for _, line in visible_lines(section):
+        heading = re.match(r"^ {0,3}#{1,6}\s+(?:[0-9.]+\s+)?((?:REQ|SC|AC)-[A-Z0-9][A-Z0-9_-]*)(?:\b|$)", line, re.I)
+        if heading:
+            identifiers.add(heading[1].upper())
+    return identifiers
+
+
+def requirement_identity(text: str, fragment: str) -> set[str]:
+    section = fragment_section(text, fragment)
+    return section_requirement_identity(section) if section is not None else set()
+
+
+def resolved_requirement_context(root: Path, source: Path, text: str, fragment: str,
+                                 read_target: TargetTextReader, follow_symlinks: bool = False,
+                                 visited: frozenset[tuple[str, str]] = frozenset(),
+                                 diagnostics: list[str] | None = None,
+                                 dependencies: set[str] | None = None) -> tuple[set[str], bool]:
+    """Resolve one snapshot's precise clause graph without re-expanding diamonds.
+
+    Parsing/reads are shared only inside this call. Evaluation memo keys retain
+    remaining depth and every active ancestor reachable from the current node:
+    acyclic converging branches share results, while cyclic/deep contexts never
+    reuse an incompatible result. Cached diagnostics and dependencies are replayed.
+    """
+    initial = (source.relative_to(root).as_posix(), fragment)
+    budget = 32 - len(visited)
+    # Node: own identities, explicit refs, product origin, outgoing clause keys,
+    # and direct paths read (including missing endpoints). Keep every edge.
+    graph = {}
+    pending = deque([(source, text, fragment, 0)])
+    queued = {initial}
+    texts = {source: text}
+    while pending:
+        current_source, current_text, current_fragment, distance = pending.popleft()
+        relative = current_source.relative_to(root).as_posix()
+        key = (relative, current_fragment)
+        if key in visited or distance >= budget:
+            continue
+        section = fragment_section(current_text, current_fragment)
+        direct_paths = {relative}
+        if section is None:
+            graph[key] = (set(), set(), False, (), direct_paths)
+            continue
+        own = section_requirement_identity(section)
+        refs, _ = trace_reference_ids(section)
+        product_origin = bool(relative.startswith('doc/product/') and own
+                              and (relative.endswith(AUTHORITY_SUFFIXES)
+                                   or current_source.name in AUTHORITY_ROOT_BASENAMES))
+        edges = []
+        # Explicit refs define a multi-hop requirement chain. Without them a
+        # professional clause may identify itself and directly cite a product
+        # feature, but ordinary professional navigation is not a chain. A
+        # product heading without its own identity/refs is not a relay either.
+        if refs or not relative.startswith('doc/product/'):
+            for node in parse_markdown_links(section):
+                raw_path, next_fragment = split_link_target(node.target)
+                if not next_fragment or external_target(raw_path):
+                    continue
+                target = current_source if not raw_path else resolve_target(
+                    root, current_source, raw_path, follow_symlinks=follow_symlinks)
+                if target is None or not is_requirement_authority(target.relative_to(root).as_posix()):
+                    continue
+                target_relative = target.relative_to(root).as_posix()
+                if not refs and not (target_relative.startswith('doc/product/')
+                                     and (target_relative.endswith(AUTHORITY_SUFFIXES)
+                                          or target.name in AUTHORITY_ROOT_BASENAMES)):
+                    continue
+                direct_paths.add(target_relative)
+                if target not in texts:
+                    texts[target] = read_target(target)
+                target_text = texts[target]
+                if target_text is None:
+                    continue
+                child = (target_relative, next_fragment)
+                edges.append(child)
+                # BFS first reaches each clause by its shortest available path;
+                # evaluation below still enforces depth on *each* calling path.
+                if child not in queued:
+                    queued.add(child)
+                    pending.append((target, target_text, next_fragment, distance + 1))
+        graph[key] = (own, refs, product_origin, tuple(edges), direct_paths)
+
+    @lru_cache(maxsize=None)
+    def reachable(key):
+        found = set()
+        stack = [key]
+        while stack:
+            current = stack.pop()
+            if current in found:
+                continue
+            found.add(current)
+            node = graph.get(current)
+            if node is not None:
+                stack.extend(node[3])
+        return frozenset(found)
+
+    memo = {}
+    def evaluate(key, active):
+        relative, current_fragment = key
+        if key in active or len(active) >= 32:
+            reason = 'cycle' if key in active else 'depth limit (32)'
+            return (frozenset(), False, frozenset({relative}),
+                    frozenset({f'requirement chain {reason}: {relative}#{current_fragment}'}))
+        memo_key = (key, 32 - len(active), frozenset(active.intersection(reachable(key))))
+        if memo_key in memo:
+            return memo[memo_key]
+        own, refs, product_origin, edges, direct_paths = graph[key]
+        identities, has_product = set(own), product_origin
+        paths, issues = set(direct_paths), set()
+        for child in edges:
+            child_ids, child_product, child_paths, child_issues = evaluate(child, active | {key})
+            matching = refs.intersection(child_ids)
+            identities.update(matching)
+            if child_product and (matching or not refs):
+                has_product = True
+            paths.update(child_paths)
+            issues.update(child_issues)
+        result = (frozenset(identities), has_product, frozenset(paths), frozenset(issues))
+        memo[memo_key] = result
+        return result
+
+    identities, has_product, paths, issues = evaluate(initial, visited)
+    if dependencies is not None:
+        dependencies.update(paths)
+    if diagnostics is not None:
+        diagnostics.extend(sorted(issues))
+    return set(identities), has_product
+
+
+def engineering_only_disposition(text: str) -> bool:
+    """Explicit product-layer N/A with concrete reason and bounded scope."""
+    for _, line in visible_lines(text):
+        if not re.search(r"(?:产品|product).*?(?:N/A|不适用)", line, re.I):
+            continue
+        values = [re.search(rf"(?:{label})\s*[:：=]\s*([^;；|]+)", line, re.I)
+                  for label in ("reason|理由", "scope|范围")]
+        if all(m and m[1].strip(' `。') not in {'', '-', 'N/A', '无', '待补'} for m in values):
+            return True
+    return False
+
+
+def is_requirement_authority(path: str) -> bool:
+    # Professional acceptance may live in a manual, rule or defect clause.
+    # Its authority/semantics need review; precise clauses and explicit product
+    # non-applicability are checked at each allocation relation below.
+    return path.startswith("doc/") and path.endswith(".md")
+
+
+def check_declared_trace_references(root: Path, source: Path, text: str,
+                                    read_target: TargetTextReader, follow_symlinks: bool) -> list[str]:
+    references, invalid = trace_reference_ids(text)
+    errors = [f"system-design-traceability: trace-id-invalid: {source.relative_to(root).as_posix()}: "
+              f"repair malformed explicit Trace refs ID: {identifier}" for identifier in sorted(invalid)]
+    if not references:
+        return errors
+    located = declared_trace_ids(text)
+    chain_diagnostics = []
+    for node in parse_markdown_links(without_html_comments(text)):
+        raw_path, fragment = split_link_target(node.target)
+        if not fragment or external_target(raw_path):
+            continue
+        target = source if not raw_path else resolve_target(root, source, raw_path, follow_symlinks=follow_symlinks)
+        if target is None or not is_requirement_authority(target.relative_to(root).as_posix()):
+            continue
+        target_text = read_target(target)
+        if target_text is not None:
+            section = fragment_section(target_text, fragment)
+            if section is not None:
+                located.update(resolved_requirement_context(root, target, target_text, fragment, read_target, follow_symlinks, diagnostics=chain_diagnostics)[0])
+    return errors + [f"system-design-traceability: trace-id-unresolved: {source.relative_to(root).as_posix()}: "
+            f"Trace refs ID must link its addressed Trace ID declaration: {identifier}"
+            + ("; " + "; ".join(sorted(set(chain_diagnostics))) if chain_diagnostics else "")
+            for identifier in sorted(references - located)]
 
 
 def resolve_target(root: Path, source: Path, target: str, *, follow_symlinks: bool) -> Path | None:
@@ -776,6 +1107,31 @@ def relation_from_demand_row(
     )
     if upstream_path is None or upstream_fragment is None or local_path is None or local_fragment is None:
         return None
+    upstream_relative = upstream_path.relative_to(root).as_posix()
+    upstream_text = read_target(upstream_path)
+    if not is_requirement_authority(upstream_relative) or (upstream_relative.startswith("doc/product/") and not (upstream_relative.endswith(AUTHORITY_SUFFIXES) or Path(upstream_relative).name in AUTHORITY_ROOT_BASENAMES)):
+        fail(errors, "trace-upstream-authority-invalid", row_path, "upstream must be a repository documentation clause; product authority must be a PRD/design feature, while professional acceptance requires explicit product N/A")
+        return None
+    row_trace_ids, _ = trace_reference_ids(" | ".join(cells))
+    labels = upstream_label_identities(cells[0])
+    identities, product_chain = resolved_requirement_context(root, upstream_path, upstream_text or "", upstream_fragment, read_target, follow_symlinks)
+    if labels - identities:
+        fail(errors, "trace-upstream-label-mismatch", row_path, "repair explicit upstream label IDs not declared by the addressed feature: " + ", ".join(sorted(labels - identities)))
+        return None
+    target_ids = {identifier for identifier in identities if identifier.startswith("O7-REQ-")}
+    if row_trace_ids - target_ids:
+        fail(errors, "trace-row-id-mismatch", row_path, "row Trace refs must match the addressed upstream declaration: " + ", ".join(sorted(row_trace_ids - target_ids)))
+        return None
+    if upstream_relative.startswith("doc/product/"):
+        if upstream_text is None or not requirement_identity(upstream_text, upstream_fragment):
+            fail(errors, "trace-upstream-feature-invalid", row_path, "product fragment must address a REQ/SC/AC clause or its Trace ID declaration; a generic heading or unrelated nested feature is insufficient")
+            return None
+    elif not product_chain:
+        local_text = read_target(source) or ""
+        local_section = fragment_section(local_text, local_fragment) or ""
+        if not engineering_only_disposition(" | ".join(cells) + "\n" + local_section):
+            fail(errors, "trace-product-na-incomplete", row_path, "upstream without a resolvable product requirement chain requires explicit product N/A with reason and scope in the allocation row or local design clause")
+            return None
     if upstream_path.resolve() == source.resolve():
         fail(errors, "trace-upstream-missing", row_path, "upstream relation must name another exact Markdown path#fragment; repair the first cell")
         return None
@@ -800,7 +1156,7 @@ def na_is_complete(value: str) -> bool:
             value,
             re.IGNORECASE,
         )
-        if not match or not match.group("value").strip():
+        if not match or match.group("value").strip().strip("` 。").casefold() in {"", "无", "待补", "待定", "n/a", "none", "tbd", "-"}:
             return False
     return True
 
@@ -857,7 +1213,7 @@ def check_design_content(
     *,
     follow_symlinks: bool,
 ) -> list[str]:
-    errors: list[str] = []
+    errors: list[str] = check_declared_trace_references(root, source, text, read_target, follow_symlinks)
     relative = source.relative_to(root).as_posix()
     demand = table_after_heading(text, DEMAND_HEADING)
     validation = table_after_heading(text, VALIDATION_HEADING)
@@ -930,6 +1286,13 @@ def check_design_content(
             read_target=read_target,
         )
         if upstream_path is None or upstream_fragment is None or local_path is None or local_fragment is None:
+            continue
+        upstream_text = read_target(upstream_path) or ""
+        labels = upstream_label_identities(cells[0])
+        ids, _ = trace_reference_ids(" | ".join(cells))
+        resolved_ids, _ = resolved_requirement_context(root, upstream_path, upstream_text, upstream_fragment, read_target, follow_symlinks)
+        if labels - resolved_ids or ids - {identifier for identifier in resolved_ids if identifier.startswith("O7-REQ-")}:
+            fail(errors, "trace-validation-identity-mismatch", row_path, "repair validation row label/Trace refs IDs to match its addressed upstream clause")
             continue
         if local_path.resolve() != source.resolve():
             fail(errors, "trace-validation-missing", row_path, "local design validation mapping must point to this file#fragment; repair the second cell")
@@ -1030,15 +1393,155 @@ def check_system_design(path: Path) -> list[str]:
     )
 
 
+def is_module_design_overview(path: str) -> bool:
+    """Module roots have an overview/navigation role, unlike topic contracts."""
+    parts = Path(path).parts
+    return len(parts) == 3 and parts[0] == "doc" and parts[-1] == "design.md"
+
+
+def has_traceability_heading(text: str) -> bool:
+    """An explicit mapping heading opts a root into the full relation contract.
+
+    Count even an empty/malformed table; requiring existing valid rows would
+    silently hide broken contracts. Comment/code examples are not adoption.
+    """
+    return any(DEMAND_HEADING.match(line) or VALIDATION_HEADING.match(line)
+               for _, line in visible_lines(text))
+
+
+def design_requires_traceability(path: str, text: str, previous_text: str | None = None) -> bool:
+    if not is_module_design_overview(path):
+        return True
+    def adopted(value: str) -> bool:
+        if has_traceability_heading(value):
+            return True
+        # Renaming/removing a title must not disguise an existing mapping table.
+        lines = visible_lines(value)
+        for index, (number, line) in enumerate(lines[:-1]):
+            headers = table_cells(line)
+            if headers and is_separator(lines[index + 1][1]):
+                table = Table(number, number, headers, ())
+                if is_demand_table(table) or is_validation_table(table):
+                    return True
+        return False
+    return adopted(text) or (previous_text is not None and adopted(previous_text))
+
+
+def full_corpus_design_path(path: str) -> bool:
+    """Bound inventory to professional documentation, reusing overlay exclusions.
+
+    Keep the legacy incremental selector unchanged. Product experience and
+    fiction are separate genres, not professional technical design contracts.
+    """
+    parts = Path(path).parts
+    return (len(parts) > 1 and parts[0] == "doc"
+            and not set(parts[1:-1]).intersection({"product", ".governance", "novel", "novels", "fiction"})
+            and (path.endswith(DESIGN_SUFFIX) or is_module_design_overview(path))
+            and path not in DESIGN_STANDARD_EXCLUSIONS)
+
+
+def full_corpus_read(root: Path, target: Path, *, required: bool = False) -> str | None:
+    """Fail closed on unsafe/nonregular paths and actual read failures.
+
+    A missing relation target is a documentation finding. A missing selected
+    document, unsafe symlink or unreadable existing target is an execution error.
+    """
+    try:
+        target.relative_to(root)
+        resolved = target.resolve(strict=False)
+        resolved.relative_to(root)
+    except (ValueError, RuntimeError) as exc:
+        raise OSError(f"unsafe corpus target: {target}") from exc
+    try:
+        mode = resolved.stat().st_mode
+    except FileNotFoundError:
+        if required or target.is_symlink():
+            raise OSError(f"unreadable corpus target: {target}")
+        return None
+    if not stat.S_ISREG(mode):
+        raise OSError(f"nonregular corpus target: {target}")
+    return resolved.read_text(encoding="utf-8")
+
+
+def collect_full_corpus(root: Path) -> list[tuple[str, str]]:
+    """Read every current professional design, including legacy missing tables.
+
+    No Git-diff or structured-consumer prefilter is used. All lifecycle values
+    remain included, matching the existing professional selector's contract.
+    """
+    documents = []
+    doc_root = root / "doc"
+    if doc_root.is_symlink():
+        raise OSError("symlink-not-allowed: doc")
+    if not doc_root.exists():
+        return documents
+    def walk_error(error):
+        raise error
+    for directory, dirs, files in os.walk(doc_root, followlinks=False, onerror=walk_error):
+        parent = Path(directory)
+        for name in sorted(dirs[:]):
+            path = parent / name
+            if name in {"product", ".governance", "novel", "novels", "fiction"}:
+                dirs.remove(name)
+            elif path.is_symlink():
+                raise OSError(f"symlink-not-allowed: {path.relative_to(root)}")
+        for name in sorted(files):
+            path = parent / name
+            relative = path.relative_to(root).as_posix()
+            if not full_corpus_design_path(relative):
+                continue
+            if path.is_symlink():
+                raise OSError(f"symlink-not-allowed: {relative}")
+            documents.append((relative, full_corpus_read(root, path, required=True)))
+    return sorted(documents)
+
+
+def check_full_corpus(root: Path) -> int:
+    head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
+    documents = collect_full_corpus(root)
+    read_target = lru_cache(maxsize=None)(lambda target: full_corpus_read(root, target))
+    errors = []
+    roots = sum(is_module_design_overview(path) for path, _ in documents)
+    root_contracts = sum(is_module_design_overview(path) and design_requires_traceability(path, text, previous_design_text(root, head, head, path, True))
+                         for path, text in documents)
+    for relative, text in documents:
+        if is_module_design_overview(relative) and not design_requires_traceability(relative, text, previous_design_text(root, head, head, relative, True)):
+            print(f"::notice::system-design-traceability: module-overview: {relative}: "
+                  "inventoried; topic 2.1/11.1 tables are not imposed on module navigation; "
+                  "overview headings are checked by doc-core-content, relation semantics require human review")
+            continue
+        if is_module_design_overview(relative):
+            print(f"::notice::system-design-traceability: module-contract: {relative}: "
+                  "current or baseline mapping contract requires complete relation checks")
+        errors.extend(check_design_content(
+            root, root / relative, text,
+            read_target, follow_symlinks=False,
+        ))
+    print(f"system-design-traceability: full-corpus inventoried {len(documents)} professional designs; "
+          f"topic-contracts={len(documents) - roots} module-overviews={roots - root_contracts} "
+          f"module-contracts={root_contracts}; "
+          "all lifecycles included; product/fiction/normative overlays excluded; historical findings are warnings")
+    return report_findings(errors, True) if errors else 0
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Strict changed-design gate or advisory current-tree professional inventory")
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--base")
     parser.add_argument("--head")
     parser.add_argument("--worktree", action="store_true")
+    parser.add_argument("--full-corpus", action="store_true", help="Inventory current doc/ topic *.design.md and module-root design.md separately (all lifecycles); historical findings warn, execution errors fail; incompatible with base/head/worktree")
     parser.add_argument("--warn-only", action="store_true", help="Report documentation findings without blocking; execution errors still fail")
     args = parser.parse_args()
     root = args.repo_root.resolve()
+    if args.full_corpus:
+        if args.base is not None or args.head is not None or args.worktree:
+            parser.error("--full-corpus cannot be combined with base/head/worktree")
+        try:
+            return check_full_corpus(root)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"system-design-traceability: error: {exc}", file=sys.stderr)
+            return 2
     if args.worktree and not (args.base and args.head):
         print("system-design-traceability: error: --worktree requires explicit --base and --head commit OIDs")
         return 2
@@ -1046,11 +1549,14 @@ def main() -> int:
         base = resolve_commit(root, args.base, "base")
         head = resolve_commit(root, args.head, "head")
         selected = changed_system_design_paths(root, base, head, args.worktree)
+        directly_changed = set(selected)
+        source_base = run_git(root, "merge-base", base, head).strip()
         checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip() if args.worktree else ""
     except ValueError as exc:
         print(f"system-design-traceability: error: {exc}")
         return 2
 
+    @lru_cache(maxsize=None)
     def read_target(target: Path) -> str | None:
         if args.worktree:
             try:
@@ -1084,21 +1590,28 @@ def main() -> int:
         print("system-design-traceability: checked 0: reason=no new or substantive system-design changes in selected range")
         return 0
 
+    read_previous_target = lru_cache(maxsize=None)(lambda target: committed_target_text(root, source_base, target))
     errors: list[str] = []
     for path in selected:
         text = read_target(path)
         if text is None:
             fail(errors, "trace-ref-unresolved", path.relative_to(root).as_posix(), "design content is missing; repair the selected head/worktree file")
             continue
-        errors.extend(
-            check_design_content(
-                root,
-                path,
-                text,
-                read_target,
-                follow_symlinks=args.worktree,
-            )
-        )
+        previous = previous_design_text(root, source_base, head, path.relative_to(root).as_posix(), args.worktree)
+        if not design_requires_traceability(path.relative_to(root).as_posix(), text, previous):
+            print(f"system-design-traceability: module-overview: {path.relative_to(root).as_posix()}: selected; core checks overview duties")
+            continue
+        findings = check_design_content(root, path, text, read_target, follow_symlinks=args.worktree)
+        if path not in directly_changed and previous is not None:
+            # Only new breakage in an unchanged reverse consumer is strict;
+            # touching its authority does not promote unrelated historical debt.
+            old_findings = set(check_design_content(
+                root, path, previous,
+                read_previous_target,
+                follow_symlinks=False,
+            ))
+            findings = [finding for finding in findings if finding not in old_findings]
+        errors.extend(findings)
     if errors:
         return report_findings(errors, args.warn_only)
     print(f"system-design-traceability: OK (checked {len(selected)} changed/new system designs)")

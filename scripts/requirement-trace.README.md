@@ -150,6 +150,71 @@ adds the failed refresh coverage to the result. Initial partial fetches can be
 cached with their partial scope. Rebuild always re-reads the local corpus and
 prints a derived index to stdout; redirecting that output is the caller's choice.
 
+## Separate full-corpus content checks
+
+This Trace ID query remains read-only and non-gating. To inspect historical
+professional design trace tables or core document structure, use the separate
+content checkers from a real repository working tree:
+
+```sh
+python3 scripts/system-design-traceability-check.py --repo-root . --full-corpus
+python3 scripts/doc-core-content-check.py --repo-root . --full-corpus
+OASIS7_PRODUCT_DOC_BASE=<base-ref> OASIS7_PRODUCT_DOC_HEAD=<head-ref> ./scripts/doc-governance-check.sh --full-corpus
+```
+
+The professional inventory selects applicable `doc/**/*.design.md` without a
+Git-diff or existing-trace-table prefilter. Product, fiction/novel, `.governance`
+directories and the existing normative-overlay exclusions are outside that
+professional selection. All remaining professional lifecycle values are
+included. Core inventory covers both product documents and professional designs.
+Module roots `doc/<module>/design.md` are also inventoried separately from topic
+contracts. Every root path is reported. Pure module overviews are checked by core
+content against their architecture/component/flow/navigation duties, without
+imposing topic 2.1/11.1 mapping tables. A root with either standard mapping heading
+adopts the complete traceability contract, even if its table is empty or malformed;
+comment/code examples do not opt in. Counts distinguish topic contracts, module
+overviews, and module contracts. Module roots are also checked incrementally; a
+root that adopted the contract in the comparison base cannot evade it by deleting
+or renaming mapping headings. Current mapping tables also retain the contract.
+
+Product features and professional designs relate many-to-many through applicable
+requirements and Trace IDs, never by matching file counts. The content checkers
+validate recognizable exact upstream/local links, explicit Trace refs against
+linked declarations, and positive product design-state links against the relevant
+allocation relation. Existing paragraph/list/table-column/table-cell Trace fields,
+inline-code labels/values and multiple refs are supported. AC and professional
+intermediate clauses may reference the original declaration through exact
+fragment links; they need not redeclare or mint another ID. Bounded traversal
+rejects unresolved cyclic/over-depth chains and does not borrow identities from
+unrelated neighboring sections. Without explicit Trace refs, a professional clause
+keeps its own identity and direct exact product-clause links; ordinary professional
+navigation is not recursively treated as product allocation. Multi-hop allocation
+uses explicit refs to the same existing ID and exact links, without minting or
+redeclaring IDs for historical clauses. A directly linked product AC with explicit
+refs can still resolve its original requirement declaration.
+A product-to-professional-to-design chain is
+valid; only engineering-only relations need an explicit product N/A reason and
+scope. Undesigned or partially covered features remain legitimate;
+checks must not encourage invented designs. Design coverage and implementation
+status are separate, so implementation gaps may remain when design is covered.
+The scoped core checker also compares unchanged product PRDs against the
+merge-base snapshot: newly invalid positive design links or newly missing
+feature-allocation relations fail even if only the target design changed.
+Pre-existing identical relation errors and unrelated legacy status-field gaps
+are not promoted to blockers by that differential check. It is bounded to those
+recognizable relation failures, not arbitrary semantic changes.
+Actual semantic coverage and a complete feature inventory still require human
+review. These content checks do not change the query CLI's non-gating behavior.
+
+These two standalone full-corpus modes default to historical warnings and reject
+`--base`, `--head` or `--worktree` combinations. Input, read, unsafe-path and
+execution errors still fail. The aggregate shell entry first preserves scoped
+strict checks, then runs separate historical warning checks; full-corpus output
+never masks an incremental failure. See the
+[maintenance instructions](../doc/engineering/doc-governance/documentation-governance.manual.md#40-全量历史内容与专业设计扫描)
+for scope and usage. These checks do not infer design completeness, implementation
+status or acceptance, and do not turn this query CLI into a CI gate.
+
 ## Tests and implementation boundaries
 
 Run the independent standard-library test suite supplied with this change:
