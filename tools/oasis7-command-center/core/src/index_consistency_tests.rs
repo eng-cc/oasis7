@@ -91,3 +91,21 @@ fn unrelated_source_edits_do_not_invalidate_document_indexing() {
         .is_ok()
     );
 }
+
+#[test]
+fn governance_json_changes_do_not_invalidate_markdown_indexing() {
+    let (tmp, _) = fixture();
+    let file = tmp.path().join("doc/metadata.json");
+    std::fs::write(&file, "{}").unwrap();
+    git(tmp.path(), &["add", "."]).unwrap();
+    git(tmp.path(), &["commit", "-m", "metadata"]).unwrap();
+    let project = super::project(tmp.path()).unwrap();
+    assert!(
+        read_candidate(&project, || {
+            std::fs::write(&file, "{\"changed\":true}").unwrap();
+            std::fs::write(tmp.path().join("doc/new.json"), "{}").unwrap();
+            git(tmp.path(), &["add", "doc/new.json"]).unwrap();
+        })
+        .is_ok()
+    );
+}

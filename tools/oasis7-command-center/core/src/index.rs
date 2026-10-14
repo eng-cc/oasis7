@@ -179,6 +179,7 @@ fn dirty_paths(root: &Path) -> Result<Vec<u8>> {
         ],
         root,
     )
+    .map(markdown_paths)
 }
 fn document_list(root: &Path) -> Result<Vec<u8>> {
     run(
@@ -193,6 +194,18 @@ fn document_list(root: &Path) -> Result<Vec<u8>> {
         ],
         root,
     )
+    .map(markdown_paths)
+}
+fn markdown_paths(paths: Vec<u8>) -> Vec<u8> {
+    let mut result = Vec::new();
+    for path in paths
+        .split(|b| *b == 0)
+        .filter(|path| path.ends_with(b".md"))
+    {
+        result.extend_from_slice(path);
+        result.push(0);
+    }
+    result
 }
 fn document_sections(
     path: &str,
