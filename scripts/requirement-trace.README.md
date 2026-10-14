@@ -150,6 +150,32 @@ adds the failed refresh coverage to the result. Initial partial fetches can be
 cached with their partial scope. Rebuild always re-reads the local corpus and
 prints a derived index to stdout; redirecting that output is the caller's choice.
 
+## Separate full-corpus content checks
+
+This Trace ID query remains read-only and non-gating. To inspect historical
+professional design trace tables or core document structure, use the separate
+content checkers from a real repository working tree:
+
+```sh
+python3 scripts/system-design-traceability-check.py --repo-root . --full-corpus
+python3 scripts/doc-core-content-check.py --repo-root . --full-corpus
+OASIS7_PRODUCT_DOC_BASE=<base-ref> OASIS7_PRODUCT_DOC_HEAD=<head-ref> ./scripts/doc-governance-check.sh --full-corpus
+```
+
+The professional inventory selects applicable `doc/**/*.design.md` without a
+Git-diff or existing-trace-table prefilter. Product, fiction/novel, `.governance`
+directories and the existing normative-overlay exclusions are outside that
+professional selection. All remaining professional lifecycle values are
+included. Core inventory covers both product documents and professional designs.
+These two standalone full-corpus modes default to historical warnings and reject
+`--base`, `--head` or `--worktree` combinations. Input, read, unsafe-path and
+execution errors still fail. The aggregate shell entry first preserves scoped
+strict checks, then runs separate historical warning checks; full-corpus output
+never masks an incremental failure. See the
+[maintenance instructions](../doc/engineering/doc-governance/documentation-governance.manual.md#40-全量历史内容与专业设计扫描)
+for scope and usage. These checks do not infer design completeness, implementation
+status or acceptance, and do not turn this query CLI into a CI gate.
+
 ## Tests and implementation boundaries
 
 Run the independent standard-library test suite supplied with this change:

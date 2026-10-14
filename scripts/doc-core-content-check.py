@@ -128,20 +128,35 @@ def main():
     parser.add_argument('--base')
     parser.add_argument('--head')
     parser.add_argument('--worktree', action='store_true')
-    parser.add_argument('--full-corpus', action='store_true', help='Scan all product PRD/design documents, including legacy blocks; professional system designs remain scoped')
+    parser.add_argument('--full-corpus', action='store_true', help='Inventory current product PRD/design and professional system designs; historical findings warn, execution errors fail')
     parser.add_argument('--warn-only', action='store_true')
     args = parser.parse_args()
     root = args.repo_root.resolve()
-    if args.full_corpus and (args.base or args.head or args.worktree):
+    if args.full_corpus and (args.base is not None or args.head is not None or args.worktree):
         parser.error('--full-corpus cannot be combined with range/worktree')
     try:
         if args.full_corpus:
             product.run_git(root, 'rev-parse', '--verify', 'HEAD^{commit}')
+            # Validate directory traversal before the product collector can read files.
+            product_root = root / 'doc/product'
+            for parent in (root / 'doc', product_root):
+                if parent.is_symlink():
+                    raise OSError(f'symlink-not-allowed: {parent.relative_to(root)}')
+            def walk_error(error):
+                raise error
+            for directory, dirs, _ in (system.os.walk(product_root, followlinks=False, onerror=walk_error) if product_root.exists() else []):
+                for name in dirs:
+                    path = Path(directory) / name
+                    if path.is_symlink():
+                        raise OSError(f'symlink-not-allowed: {path.relative_to(root)}')
             documents, hard_errors = product.collect_full_corpus(root)
             if hard_errors:
                 print('\n'.join(hard_errors))
                 return 2
             selected = [(d.path, d.new_text) for d in documents]
+            professional = system.collect_full_corpus(root)
+            selected.extend(professional)
+            print(f"doc-core-content: full-corpus selected product={len(documents)} professional={len(professional)}; professional designs include all lifecycles")
         else:
             base = product.resolve_commit(root, args.base, 'base')
             head = product.resolve_commit(root, args.head, 'head')
@@ -167,7 +182,7 @@ def main():
             if path.startswith('doc/product/') and (path.endswith('.prd.md') or path.endswith('/prd.md')):
                 errors.extend(check_status(path, text))
         print(f'doc-core-content: checked {len(selected)} documents; selected documents scanned in full, including legacy REQ blocks; unrecognized feature prose and evidence truth require human review')
-        return report_findings(errors, args.warn_only) if errors else 0
+        return report_findings(errors, args.warn_only or args.full_corpus) if errors else 0
     except (OSError, ValueError) as exc:
         print(f'doc-core-content: error: {exc}', file=sys.stderr)
         return 2

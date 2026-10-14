@@ -11,6 +11,8 @@
 
 本文是已落位的内容规范。它规定系统设计应表达什么、如何把上游要求交给专业设计、如何把设计条款映射到验证。本文不新增 workflow 状态、任务台账、权限模型、运行服务或产品承诺。内容/结构规范检查按[增量检查边界](product-documentation-standard.design.md#advisory-content-checks)执行：PR 新增或实质修改的适用设计文档规范 finding 阻断 CI，未触达历史不强制整改，历史提示使用 `--warn-only`；输入、Git 范围、读取/执行异常及其他完整性检查仍失败。十二段视图按下文适用性与裁剪规则维护，不强制所有小编辑补写无关段落。
 
+专业系统设计的历史盘点使用 `python3 scripts/system-design-traceability-check.py --full-corpus`；核心章节盘点使用 `python3 scripts/doc-core-content-check.py --full-corpus`，后者同时报告产品与专业范围。两者读取当前工作树而非变更列表，不以已有追踪表作为入选前提；专业范围限定 `doc/` 下适用 `.design.md`，排除产品体验、小说/fiction 目录及既有规范 overlay。专业设计沿用现有选择器的生命周期边界，`retired`/`superseded` 也计入历史盘点，不据此恢复历史交付义务。全量内容缺口只发 warning，读取、遍历、依赖与不安全 symlink 等执行错误仍失败；全量与 base/head/worktree 互斥。聚合入口先保留 PR 增量严格检查，再独立报告全量历史，历史 warning 不覆盖增量失败。
+
 产品 PRD 拥有产品价值、范围、玩家承诺和端到端结果；专业域 PRD 与 design 拥有该域的规则和技术合同；Git、PR、实际 CI 和评审记录承载交付事实，Issue/Project 按需展示范围、依赖和进度；workflow source of truth 拥有生命周期、权限和门禁。发生冲突时，在当前 PR 与实际验证记录 中记录冲突和裁决，不在本文静默覆盖其他 authority。
 
 本文中的规范关键词具有以下强度：MUST/必须表示适用时的强制要求；MUST NOT/不得表示禁止行为；SHOULD/应表示默认要求，偏离时必须记录理由、影响和残余风险；MAY/可以表示在边界内的可选做法。普通评论、模板省略或作者声明不能豁免 MUST/MUST NOT。记录的例外必须写明受影响条款、理由、范围、批准 owner、失效/复核触发，并且不能覆盖上级产品、专业域或 workflow authority，也不能绕过门禁或权限。

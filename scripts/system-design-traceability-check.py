@@ -15,6 +15,8 @@ from doc_content_warnings import report_findings
 from collections.abc import Callable
 from dataclasses import dataclass
 import html
+import os
+import stat
 import posixpath
 from pathlib import Path
 import re
@@ -1030,15 +1032,106 @@ def check_system_design(path: Path) -> list[str]:
     )
 
 
+def full_corpus_design_path(path: str) -> bool:
+    """Bound inventory to professional documentation, reusing overlay exclusions.
+
+    Keep the legacy incremental selector unchanged. Product experience and
+    fiction are separate genres, not professional technical design contracts.
+    """
+    parts = Path(path).parts
+    return (len(parts) > 1 and parts[0] == "doc"
+            and not set(parts[1:-1]).intersection({"product", ".governance", "novel", "novels", "fiction"})
+            and is_system_design_path(path))
+
+
+def full_corpus_read(root: Path, target: Path, *, required: bool = False) -> str | None:
+    """Fail closed on unsafe/nonregular paths and actual read failures.
+
+    A missing relation target is a documentation finding. A missing selected
+    document, unsafe symlink or unreadable existing target is an execution error.
+    """
+    try:
+        target.relative_to(root)
+        resolved = target.resolve(strict=False)
+        resolved.relative_to(root)
+    except (ValueError, RuntimeError) as exc:
+        raise OSError(f"unsafe corpus target: {target}") from exc
+    try:
+        mode = resolved.stat().st_mode
+    except FileNotFoundError:
+        if required or target.is_symlink():
+            raise OSError(f"unreadable corpus target: {target}")
+        return None
+    if not stat.S_ISREG(mode):
+        raise OSError(f"nonregular corpus target: {target}")
+    return resolved.read_text(encoding="utf-8")
+
+
+def collect_full_corpus(root: Path) -> list[tuple[str, str]]:
+    """Read every current professional design, including legacy missing tables.
+
+    No Git-diff or structured-consumer prefilter is used. All lifecycle values
+    remain included, matching the existing professional selector's contract.
+    """
+    documents = []
+    doc_root = root / "doc"
+    if doc_root.is_symlink():
+        raise OSError("symlink-not-allowed: doc")
+    if not doc_root.exists():
+        return documents
+    def walk_error(error):
+        raise error
+    for directory, dirs, files in os.walk(doc_root, followlinks=False, onerror=walk_error):
+        parent = Path(directory)
+        for name in sorted(dirs[:]):
+            path = parent / name
+            if name in {"product", ".governance", "novel", "novels", "fiction"}:
+                dirs.remove(name)
+            elif path.is_symlink():
+                raise OSError(f"symlink-not-allowed: {path.relative_to(root)}")
+        for name in sorted(files):
+            path = parent / name
+            relative = path.relative_to(root).as_posix()
+            if not full_corpus_design_path(relative):
+                continue
+            if path.is_symlink():
+                raise OSError(f"symlink-not-allowed: {relative}")
+            documents.append((relative, full_corpus_read(root, path, required=True)))
+    return sorted(documents)
+
+
+def check_full_corpus(root: Path) -> int:
+    run_git(root, "rev-parse", "--verify", "HEAD^{commit}")
+    documents = collect_full_corpus(root)
+    errors = []
+    for relative, text in documents:
+        errors.extend(check_design_content(
+            root, root / relative, text,
+            lambda target: full_corpus_read(root, target), follow_symlinks=False,
+        ))
+    print(f"system-design-traceability: full-corpus checked {len(documents)} professional designs; "
+          "all lifecycles included; product/fiction/normative overlays excluded; historical findings are warnings")
+    return report_findings(errors, True) if errors else 0
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Strict changed-design gate or advisory current-tree professional inventory")
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--base")
     parser.add_argument("--head")
     parser.add_argument("--worktree", action="store_true")
+    parser.add_argument("--full-corpus", action="store_true", help="Inventory all current doc/ professional designs (all lifecycles); historical findings warn, execution errors fail; incompatible with base/head/worktree")
     parser.add_argument("--warn-only", action="store_true", help="Report documentation findings without blocking; execution errors still fail")
     args = parser.parse_args()
     root = args.repo_root.resolve()
+    if args.full_corpus:
+        if args.base is not None or args.head is not None or args.worktree:
+            parser.error("--full-corpus cannot be combined with base/head/worktree")
+        try:
+            return check_full_corpus(root)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"system-design-traceability: error: {exc}", file=sys.stderr)
+            return 2
     if args.worktree and not (args.base and args.head):
         print("system-design-traceability: error: --worktree requires explicit --base and --head commit OIDs")
         return 2

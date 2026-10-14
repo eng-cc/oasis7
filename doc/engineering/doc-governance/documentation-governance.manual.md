@@ -63,6 +63,25 @@ python3 scripts/product-doc-content-check.py \
 2. 运行 `./scripts/doc-governance-check.sh`、`bash ./scripts/doc-governance-check.test.sh`、`./scripts/readme-link-check.sh` 与 `./scripts/doc-inventory-report.sh`。
 3. 任一检查失败时，不用 allowlist 或例外描述掩盖问题；先修正分类、入口或过期措辞，再复跑。
 
+### 4.0 全量历史内容与专业设计扫描
+
+需要查看存量缺口时，在真实仓库工作树运行：
+
+```bash
+# 保留当前变更严格检查，再独立报告历史内容缺口：
+OASIS7_PRODUCT_DOC_BASE=<base-ref> \
+OASIS7_PRODUCT_DOC_HEAD=<head-ref> \
+./scripts/doc-governance-check.sh --full-corpus
+
+# 仅查看专业设计追踪或产品/专业核心结构的全量历史报告：
+python3 scripts/system-design-traceability-check.py --repo-root <worktree-path> --full-corpus
+python3 scripts/doc-core-content-check.py --repo-root <worktree-path> --full-corpus
+```
+
+专业设计扫描覆盖当前 `doc/` 下适用的 `*.design.md`，不要求文件已经具有追踪表格，也不依赖 Git diff。产品、小说/fiction、`.governance` 目录和既有规范类 overlay 排除；其余适用专业设计的各生命周期均参与核对，不因此自动恢复旧义务或修改正文。core 全量模式同时覆盖产品文档和这些专业设计；产品身份与生命周期规则仍由产品 checker 维护。
+
+这两个单独的 `--full-corpus` 入口默认将历史内容缺口报告为可定位警告，且与 `--base`、`--head`、`--worktree` 互斥。聚合入口中的 base/head 环境变量只交给前置严格变更检查，历史调用不带范围参数；全量报告不能覆盖或吞掉增量失败。输入不合法、Git 范围/仓库身份错误、依赖缺失、实际读取失败及不安全路径等仍是硬失败，不可用 `|| true` 吞掉。报告为零只说明已扫描范围内未发现适用机械问题，不代表设计完备、实现完成或验收通过；只读 Trace ID 查询工具也不代替这些内容检查。
+
 ### 4.1 歧义裁决记录
 
 遇到目录归属、产品/专业权威或例外存续歧义时，在当前 PR 与实际验证记录 中记录：观察到的路径/段落、候选分类与理由、涉及的专业权威、建议裁决、裁决 owner、同步文件集、验证命令和 residual risk。领域语义由对应 domain owner 裁决；`repository_health_engineer` 裁定结构一致性；负责人整合实际结果。
