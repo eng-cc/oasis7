@@ -27,7 +27,7 @@ Do not use an old world's ID or overwrite a partial old root. Stop/fence any old
 
 ## Generated materials
 
-The command creates the actual canonical Runtime initial state and journal, binds the new world identity, and publishes real bounded node/execution commits into CAS. Its domain-separated genesis digest binds versioned initial material, explicit initialization inputs and the derived service public key. Retained initial bytes permit recomputation; an arbitrary genesis label or a hash of a directory path is insufficient.
+The command creates the actual canonical Runtime initial state and journal, binds the new world identity, and publishes real bounded node/execution commits into CAS. The initial commit must use the provisioned node's derived consensus signer and matching validator public-key binding; verify its actual signature separately from the service-signed initialization receipt. Its domain-separated genesis digest binds versioned initial material, explicit initialization inputs and the derived service public key. Retained initial bytes permit recomputation; an arbitrary genesis label or a hash of a directory path is insufficient.
 
 Public material contains the world identity, initialization receipt, genesis material commitments, service public-key pin and immutable initial publication references. The service key is the node's derived feedback-submit signing identity, not an arbitrary node public key. Independent public-read credentials and Viewer configuration remain in private 0600 files; public receipts and CAS must not contain signing seeds.
 
