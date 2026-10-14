@@ -283,7 +283,7 @@ doc/<module>/<topic>/
 - PRD 已经开始承载“怎么实现”的细节。
 
 ### 4.3 什么时候可以暂不写 `*.design.md`
-只有当专题同时满足以下条件时，可以短暂只保留 PRD + Git、PR 与实际 CI 记录：
+当专题同时满足以下条件时，可以只更新适用的既有 PRD 条款并使用 PR 与实际验证记录；没有独立长期要求的简单编辑无需新建 PRD：
 - 范围很小；
 - 没有新增结构设计；
 - 没有独立接口或状态机；
@@ -345,11 +345,10 @@ doc/README.md
   -> 可选 Issue（跟踪）
 ```
 
-专题级文档最少应满足：
-- PRD 指向 Git、PR 与实际 CI 记录；
-- PRD 推荐指向 Design；
-- Git、PR 与实际 CI 记录 指向 PRD；
-- Design 指向 PRD 与 Git、PR 与实际 CI 记录。
+专题级文档与实际执行记录按适用关系关联：
+- PRD 推荐指向适用 Design；Design 回链真实上游条款。
+- 涉及新增或实质修改的跨层要求时，按[全局要求追踪](cross-layer-requirements-traceability.design.md)在原条款声明 Trace ID，设计和 Task 引用同一 ID 并保留准确路径/锚点。
+- Task 可以直接是 PR，链接实际要求、适用设计与验证结果；尚无任务或设计时如实说明，不制造占位记录或要求规范正文镜像每次交付状态。
 
 注：交付事实使用 Git、PR、实际 CI 和评审记录，Issue/Project 按需使用，不要求额外台账。
 

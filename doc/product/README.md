@@ -2,7 +2,7 @@
 
 本页是产品信息架构的唯一总入口。它按玩家价值组织产品，不完全替代 `doc/README.md` 的工程模块矩阵；四大模块的产品真值与设计将逐步迁移到本目录下的文档树，散落在外部各专业模块的相关产品文档也将随语义归拢逐步清理、删除。
 
-本目录的文档树以 PRD 为主，并可按需包含同名配对的 design：PRD 承载产品真值、产品承诺、组合关系和跨域验收；design 承载产品设计。迁移与交付追踪、任务状态和过程证据只由 GitHub Issue / GitHub Project-backed task truth 承载，不创建本地 project ledger。
+本目录的文档树以 PRD 为主，并可按需包含同名配对的 design：PRD 承载产品真值、产品承诺、组合关系和跨域验收；design 承载产品设计。迁移与交付事实由 Git、PR、实际 CI 与评审记录承载；Issue/Project 按需使用，不创建本地 project ledger。
 
 产品文档规范与可复用模板：[`product-documentation-standard.prd.md`](../engineering/doc-governance/product-documentation-standard.prd.md)、[`product-documentation-standard.design.md`](../engineering/doc-governance/product-documentation-standard.design.md)、[`product-documentation-standard.templates.md`](../engineering/doc-governance/product-documentation-standard.templates.md)。
 
@@ -20,6 +20,8 @@
 四域是不要求规模相等的职责域，不新增第五模块；`core`、`game`、`world-runtime`、`world-simulator`、`p2p`、`testing`、`engineering` 与 `site` 继续作为专业或治理域。产品语义可以跨域组合，但每一条规范性要求必须有一个主责条款；“主题出现在哪个模块”不等于“该模块拥有主题的全部语义”。
 
 ### 条款级唯一主责与跨模块引用
+
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；新增或实质修改的跨层要求按[全局要求追踪](../engineering/doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace)在主责原文声明一次，设计和任务复用同一 ID。既有 Product PRD-ID、局部 REQ/AC/SC 与真实路径/锚点保留；未触达存量和历史证据不批量回填。
 
 以下拆分是长期归属规则。每一行的“主责条款”拥有规范性条件、成本/权利/失败含义；其他模块只能保留必要摘要、消费主责结果，或提出自己的组合验收条件，不得再次立法：
 
@@ -91,4 +93,4 @@
 - 智能体、世界模拟与交互 → [`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 - 玩家接入与发行 → [根 `README.md`](../../README.md)、[`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 
-专业规则、实现合同、专业 PRD-ID 和测试机制由对应专业模块的 PRD 承载；技术 How 与工程实现由 design 承载；测试/运维由对应专业文档承载；任务、状态与过程证据只由 GitHub task issue evidence 承载。
+专业规则、实现合同、专业 PRD-ID 和测试机制由对应专业模块的 PRD 承载；技术 How 与工程实现由 design 承载；测试/运维由对应专业文档承载；任务说明可以直接使用 PR；实际版本、状态与过程证据由 Git、PR、实际 CI 与评审记录承载，Issue/Project 按需使用。

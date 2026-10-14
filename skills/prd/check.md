@@ -221,6 +221,10 @@
 
 * [ ] 是否可从本 PRD 追溯到系统总览？
 * [ ] 是否标注版本号？
+* [ ] oasis7 新增或实质修改的稳定要求是否按[跨层要求与验证映射](../../doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md#global-requirement-trace)复用唯一声明的全局 Trace ID，并保留本地条款 ID 和真实链接？
+* [ ] 是否能人工追到适用系统设计与已有 Task/PR 的本次范围和实际证据；尚未形成或确实不适用的层级是否如实说明？不要求为此新建 Issue、回填未触达存量或增加准入/合入门禁。
+
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；以上核对消费既有全局要求追踪规范，不代表已实现自动聚合或唯一性检查。
 
 理想结构：
 
