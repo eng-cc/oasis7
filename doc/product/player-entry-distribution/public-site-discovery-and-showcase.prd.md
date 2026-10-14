@@ -58,7 +58,7 @@ Trace ID: O7-REQ-4544302c-40be-4aa3-a557-21fe6f475c19
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-ENTRY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-entry)，含旧锚点与无脚本入口。
 - 实现状态：已实现待验证
-- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由[实施 PR #4697](https://github.com/eng-cc/oasis7/pull/4697)承接。
 - 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
 - 剩余范围：陌生访客理解观察；当前页面变化不证明游戏可玩或线上更新。
 
@@ -72,7 +72,7 @@ Trace ID: O7-REQ-4b01d2d4-ec3a-4dbb-90f8-fca0c4b0a822
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-EVIDENCE](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-evidence)，含来源校验、失效与竞态隔离。
 - 实现状态：已实现待验证
-- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由[实施 PR #4697](https://github.com/eng-cc/oasis7/pull/4697)承接。
 - 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
 - 剩余范围：可公开真实运行材料的选择与来源核对；本候选只交付明确说明性示例，不声称 runtime_capture。
 
@@ -86,7 +86,7 @@ Trace ID: O7-REQ-2c62937a-f257-4112-a04e-4044662d1b04
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-PUBLISHING](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-publishing)，含静态来源、排序、RSS 与撤回。
 - 实现状态：已实现待验证
-- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由[实施 PR #4697](https://github.com/eng-cc/oasis7/pull/4697)承接。
 - 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
 - 剩余范围：可公开世界运行记录；本候选提供真实空列表及首篇双语站点开发说明，不承诺更新频率或留存。
 
@@ -100,7 +100,7 @@ Trace ID: O7-REQ-d23033f5-0d4d-40b6-8745-1374374af0c3
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-DOWNLOAD](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-download)，消费现行下载与升级 authority。
 - 实现状态：已实现待验证
-- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由[实施 PR #4697](https://github.com/eng-cc/oasis7/pull/4697)承接。
 - 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
 - 剩余范围：真人复述参与成本/安装限制；当前浏览器验证不代签发布资产、安装器或平台兼容性。
 
@@ -114,7 +114,7 @@ Trace ID: O7-REQ-ee159d08-7998-44e2-bac5-930b7fa8a0ae
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-STORY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-story)，复用阅读器恢复合同。
 - 实现状态：已实现待验证
-- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由[实施 PR #4697](https://github.com/eng-cc/oasis7/pull/4697)承接。
 - 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
 - 剩余范围：更多正文内容与小说质量；中文 reader 不提供英文正文，不将具身叙事变成玩法承诺。
 
@@ -128,7 +128,7 @@ Trace ID: O7-REQ-de38c7a9-3a48-418d-be60-2c527bc1e8eb
 - 系统设计状态：已覆盖
 - 系统设计依据：[DES-SITE-ACCESSIBILITY](../../site/github-pages/public-site-discovery-and-showcase.design.md#des-site-accessibility)，含响应式、语言与降级验证。
 - 实现状态：已实现待验证
-- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由实施 PR 承接。
+- 实现与验证依据：[固定实现](https://github.com/eng-cc/oasis7/tree/cde5a650e0aca7cb444b92699cbe5aff4e9ed17d/site)、[浏览器回归方法](../../../scripts/site-discovery-browser.test.cjs)与[静态派生检查](../../../scripts/site-discovery-check.py)；完整验收和未覆盖项由[实施 PR #4697](https://github.com/eng-cc/oasis7/pull/4697)承接。
 - 核对日期与基线：2026-10-15；本专题要求；实现 `cde5a650e0aca7cb444b92699cbe5aff4e9ed17d`；本地静态服务器与外部 Google Chrome；本功能 AC 的静态页面范围。
 - 剩余范围：完整无障碍与性能测量；既有桌面/窄屏/键盘/无脚本与故障场景的实际结果只覆盖已记录范围。
 
