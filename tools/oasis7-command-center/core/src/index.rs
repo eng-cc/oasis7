@@ -45,24 +45,20 @@ pub fn safe_path(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
     Ok(path)
 }
 pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
+    read_candidate(project, || {})
+}
+fn read_candidate(
+    project: &Project,
+    after_read: impl FnOnce(),
+) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
     let root = Path::new(&project.path);
-    let files = run(
-        "git",
-        &[
-            "ls-files",
-            "-z",
-            "--",
-            "doc",
-            "AGENTS.md",
-            "skills/oasis7-command-center/references/project-map.md",
-        ],
-        root,
-    )?;
-    let changed = run("git", &["diff", "HEAD", "--name-only", "-z", "--"], root)?;
+    let files = document_list(root)?;
+    let changed = dirty_paths(root)?;
     let changed: std::collections::HashSet<&[u8]> = changed.split(|b| *b == 0).collect();
     let mut sections = Vec::new();
     let mut metadata = std::collections::HashMap::new();
     let mut total = 0;
+    let mut observed = Vec::new();
     let mut names: Vec<&[u8]> = files
         .split(|b| *b == 0)
         .filter(|b| b.ends_with(b".md"))
@@ -103,6 +99,7 @@ pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
         }
         let dirty = changed.contains(name.as_bytes());
         let revision = digest(content.as_bytes());
+        observed.push((name.to_owned(), revision.clone()));
         metadata.insert(name.to_owned(), lifecycle_metadata::parse(name, &content));
         sections.extend(document_sections(name, &content, &revision, dirty, project));
     }
@@ -114,29 +111,101 @@ pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
     for section in &mut sections {
         section.lifecycle = metadata.get(&section.path).cloned().flatten();
     }
-    let current_head = git(root, &["rev-parse", "HEAD"])?;
-    if current_head != project.head {
+    after_read();
+    let snapshot = GitSnapshot {
+        status: String::from_utf8_lossy(&run(
+            "git",
+            &["status", "--porcelain=v2", "-z", "--branch"],
+            root,
+        )?)
+        .into(),
+        worktrees: String::from_utf8_lossy(&run(
+            "git",
+            &["worktree", "list", "--porcelain", "-z"],
+            root,
+        )?)
+        .into(),
+    };
+    // HEAD alone cannot detect edits to already-dirty files or index-only additions.
+    // Reject the candidate instead of publishing sections from different observations.
+    let current_changed = dirty_paths(root)?;
+    let current_changed: std::collections::HashSet<&[u8]> =
+        current_changed.split(|b| *b == 0).collect();
+    if document_list(root)? != files || current_changed != changed {
+        return Err(Error::Invalid(
+            "document list or dirty state changed during indexing; refresh again".into(),
+        ));
+    }
+    for (name, revision) in observed {
+        let matches = safe_path(root, &name)
+            .and_then(|path| {
+                // Keep verification within the same per-file budget as source reading.
+                if std::fs::metadata(&path)?.len() > 1024 * 1024 {
+                    return Ok(false);
+                }
+                use std::io::Read;
+                let mut bytes = Vec::new();
+                std::fs::File::open(path)?
+                    .take(1024 * 1024 + 1)
+                    .read_to_end(&mut bytes)?;
+                Ok(bytes.len() <= 1024 * 1024 && digest(&bytes) == revision)
+            })
+            .unwrap_or(false);
+        if !matches {
+            return Err(Error::Invalid(
+                "document content changed during indexing; refresh again".into(),
+            ));
+        }
+    }
+    if git(root, &["rev-parse", "HEAD"])? != project.head {
         return Err(Error::Invalid(
             "HEAD changed during indexing; refresh again".into(),
         ));
     }
-    Ok((
-        sections,
-        GitSnapshot {
-            status: String::from_utf8_lossy(&run(
-                "git",
-                &["status", "--porcelain=v2", "-z", "--branch"],
-                root,
-            )?)
-            .into(),
-            worktrees: String::from_utf8_lossy(&run(
-                "git",
-                &["worktree", "list", "--porcelain", "-z"],
-                root,
-            )?)
-            .into(),
-        },
-    ))
+    Ok((sections, snapshot))
+}
+fn dirty_paths(root: &Path) -> Result<Vec<u8>> {
+    run(
+        "git",
+        &[
+            "diff",
+            "HEAD",
+            "--name-only",
+            "-z",
+            "--",
+            "doc",
+            "AGENTS.md",
+            "skills/oasis7-command-center/references/project-map.md",
+        ],
+        root,
+    )
+    .map(markdown_paths)
+}
+fn document_list(root: &Path) -> Result<Vec<u8>> {
+    run(
+        "git",
+        &[
+            "ls-files",
+            "-z",
+            "--",
+            "doc",
+            "AGENTS.md",
+            "skills/oasis7-command-center/references/project-map.md",
+        ],
+        root,
+    )
+    .map(markdown_paths)
+}
+fn markdown_paths(paths: Vec<u8>) -> Vec<u8> {
+    let mut result = Vec::new();
+    for path in paths
+        .split(|b| *b == 0)
+        .filter(|path| path.ends_with(b".md"))
+    {
+        result.extend_from_slice(path);
+        result.push(0);
+    }
+    result
 }
 fn document_sections(
     path: &str,
@@ -276,3 +345,7 @@ fn make_section(
         lifecycle: None,
     }
 }
+
+#[cfg(test)]
+#[path = "index_consistency_tests.rs"]
+mod consistency_tests;
