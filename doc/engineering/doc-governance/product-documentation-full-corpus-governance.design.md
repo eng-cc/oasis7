@@ -84,7 +84,7 @@
 
 每个 `doc/product/` 外候选文件按段落分成四类：产品承诺、专业合同、历史过程、未迁移语义。
 
-每个跨文件消费条款必须记录 canonical repository `eng-cc/oasis7`、repository-relative path 和实际条款的 stable fragment，并在接收文档中匹配该身份。裸 token、可变 URL、本地摘要或未带 fragment 的泛化路径不能替代 consumed-clause identity。
+Trace refs: O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6；本节承接[全局要求追踪](cross-layer-requirements-traceability.design.md#global-requirement-trace)。新增或实质修改的跨层要求以主责原文的稳定 Trace ID 关联设计和任务；canonical repository `eng-cc/oasis7`、repository-relative path 与实际条款的 stable fragment 继续负责准确定位，固定证据另保留提交版本。路径或锚点迁移不改变同一要求的 Trace ID；裸 token、本地摘要或无 fragment 的泛化路径不能替代真实条款链接。不要求重写未触达存量或历史证据，也不新增 typed refs、任务身份或传递回执。
 
 - 产品承诺迁入对应模块根 PRD 或稳定专题，并建立旧条款到新 REQ/SC 的映射。
 - 专业合同留在原专业域；产品文档只说明它支持或限制的产品结果并链接准确 fragment。

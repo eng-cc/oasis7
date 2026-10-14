@@ -15,7 +15,7 @@
 
 ## 范围
 - 规定 `doc/` 下一级模块、专题目录、分册目录的推荐组织形式。
-- 规定 `prd.md`、`*.prd.md`、`*.design.md`、GitHub Issue（任务与证据）、`*.runbook.md`、`*.manual.md` 的职责边界。
+- 规定 `prd.md`、`*.prd.md`、`*.design.md`、PR 与实际验证记录（Issue 按需）、`*.runbook.md`、`*.manual.md` 的职责边界。
 - 规定模块级固定入口、专题级 PRD/Design 文档、阅读顺序、引用关系与命名规则。
 - 不包含历史文档迁移计划、批量改名策略与脚本实施细节。
 
@@ -62,16 +62,16 @@
 - User Stories:
   - PRD-ENGINEERING-015-001: As a 文档作者, I want one directory-and-suffix rule, so that I can create new docs without guessing where detailed design belongs.
   - PRD-ENGINEERING-015-002: As a 模块负责人, I want fixed module-level entry files, so that readers always know where to start.
-  - PRD-ENGINEERING-015-003: As a 评审者, I want topic docs to use the same basename across PRD/Design 与 Git、PR 与实际 CI 记录, so that related documents are discoverable at a glance.
+  - PRD-ENGINEERING-015-003: As a 评审者, I want topic docs to use the same basename for paired PRD/Design and link actual PR/CI records, so that related documents are discoverable at a glance.
   - PRD-ENGINEERING-015-004: As a 运维/测试人员, I want runbook/manual to be separated from design, so that operational steps do not overwrite technical rationale.
   - PRD-ENGINEERING-015-005: As a 读者, I want README and legacy redirect pages to stay thin, so that I can reach canonical docs without rereading shared governance boilerplate.
 - Critical User Flows:
   1. Flow-DOC-001（模块级建档）:
-     `确定需求所属模块 -> 进入 doc/<module>/ -> 阅读 prd.md / design.md / GitHub Issue（任务与证据） -> 决定是否新增专题目录`
+     `确定需求所属模块 -> 进入 doc/<module>/ -> 阅读 prd.md / design.md / PR 与实际验证记录（Issue 按需） -> 决定是否新增专题目录`
   2. Flow-DOC-002（专题级建档）:
      `先核对已有长期主题 -> 按需维护或新增配套 PRD/Design -> 同步实际受影响入口；Issue 按跟踪需要使用`
   3. Flow-DOC-003（评审阅读）:
-     `先读模块 prd.md -> 再读模块 design.md -> 下钻 topic 文档；任务态查 GitHub Issue`
+     `先读模块 prd.md -> 再读模块 design.md -> 下钻 topic 文档；任务态查 PR 与实际记录，Issue 按需`
   4. Flow-DOC-004（角色裁定）:
      `作者准备写内容 -> 先判断是 Why/What/Done 还是 How/Structure/Contract 还是 How/When/Who -> 分别落到 PRD/Design 与 Git、PR 与实际 CI 记录`
   5. Flow-DOC-005（操作文档建档）:
@@ -83,7 +83,7 @@
 | 对象/能力 | 字段定义 | 动作/行为 | 状态转换 | 排序/归类规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 模块主入口 | `README.md`、`prd.md`、`design.md`、`prd.index.md` | 建立模块总入口与导航 | `missing -> present -> maintained` | 固定落位于 `doc/<module>/` | 模块维护者可更新，所有贡献者可读 |
-| 专题PRD/Design 最小文档集 | `<topic>.prd.md`、`<topic>.design.md`、GitHub Issue（任务与证据） | 对单一专题分别承载需求、设计、执行 | `draft -> active -> completed` | 同目录、同 basename、后缀区分职责 | 专题作者创建，评审者审核 |
+| 专题PRD/Design 最小文档集 | `<topic>.prd.md`、按需配对的 `<topic>.design.md`；执行事实另见 PR 与实际验证记录 | 对单一专题分别承载需求、设计、执行 | `draft -> active -> completed` | 同目录、同 basename、后缀区分职责 | 专题作者创建，评审者审核 |
 | 设计正文 | 架构、组件、接口、状态机、异常、NFR | 解释系统如何工作 | `implicit -> explicit` | `*.design.md` 为首选正式载体 | 设计 owner 维护，相关模块 reviewer 复核 |
 | 操作文档 | 使用步骤或值班剧本 | 区分 `manual` 与 `runbook` | `ad-hoc -> standardized` | 使用/测试走 `manual`，发布/故障走 `runbook` | 操作 owner 维护，执行者可读 |
 | 目录分层 | 模块 / 专题 / 分册 | 根据对象大小决定是否拆层 | `flat -> topicized -> partitioned` | 优先模块级，再专题级，最后分册级 | 作者提议，评审者裁定例外 |
@@ -131,10 +131,10 @@
   - `doc/README.md`
   - `doc/<module>/README.md`
   - `doc/<module>/prd.md`
-  - GitHub Issue（任务与证据）
+  - PR 与实际验证记录（Issue 按需）
   - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - Edge Cases & Error Handling:
-  - 极小主题：若只有短期任务且无结构设计内容，可仅建 `*.prd.md` 与 GitHub Issue（任务与证据），但一旦涉及组件/接口/状态机即补 `*.design.md`。
+  - 极小主题：若只是短期工作且没有独立长期要求或结构设计，可直接使用 PR 说明；涉及稳定要求或组件/接口/状态机时更新适用的既有 PRD/design，不为形式新建文档。
   - 超大专题：允许在专题目录下继续拆 `design/` 或 `parts/` 分册，但保留一个总入口 `*.design.md`。
   - 纯操作文档：若目标仅是“怎么执行”，应直接使用 `*.manual.md` 或 `*.runbook.md`，不要伪装成设计文档。
   - 模块总设计缺失：不阻断本规范成立，但后续新模块应优先补 `doc/<module>/design.md`。
