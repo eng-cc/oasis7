@@ -141,3 +141,69 @@ fn rejects_repaired_omitted_dirty_document_before_publication() {
         "old omission must not publish after the source becomes readable"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn linked_documents_and_ancestors_are_omitted_without_reading_targets() {
+    use std::os::unix::fs::symlink;
+    for ancestor in [false, true] {
+        let (tmp, project) = fixture();
+        let private = tmp.path().join("private");
+        std::fs::create_dir(&private).unwrap();
+        std::fs::write(private.join("prd.md"), "# Private secret\n").unwrap();
+        if ancestor {
+            std::fs::remove_file(tmp.path().join("doc/prd.md")).unwrap();
+            std::fs::remove_dir(tmp.path().join("doc")).unwrap();
+            symlink(&private, tmp.path().join("doc")).unwrap();
+        } else {
+            std::fs::remove_file(tmp.path().join("doc/prd.md")).unwrap();
+            symlink(private.join("prd.md"), tmp.path().join("doc/prd.md")).unwrap();
+        }
+        let (sections, _, coverage, partial) = read(&project).unwrap();
+        assert!(
+            sections.is_empty(),
+            "linked target must not enter the index"
+        );
+        assert!(partial);
+        assert!(coverage.contains("symlink 1"), "{coverage}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn replacing_read_document_with_identical_link_rejects_candidate_and_source_open() {
+    use std::os::unix::fs::symlink;
+    let (tmp, project) = fixture();
+    let file = tmp.path().join("doc/prd.md");
+    let target = tmp.path().join("private.md");
+    std::fs::write(&file, "# Dirty before\n").unwrap();
+    std::fs::write(&target, "# Dirty before\n").unwrap();
+    let result = read_candidate(&project, || {
+        std::fs::remove_file(&file).unwrap();
+        symlink(&target, &file).unwrap();
+    });
+    assert!(result.is_err());
+    assert!(safe_path(Path::new(&project.path), "doc/prd.md").is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn external_and_dangling_links_are_classified_without_target_reads() {
+    use std::os::unix::fs::symlink;
+    let (tmp, project) = fixture();
+    let external = tempfile::tempdir().unwrap();
+    let target = external.path().join("secret.md");
+    std::fs::write(&target, "# External secret\n").unwrap();
+    let file = tmp.path().join("doc/prd.md");
+    std::fs::remove_file(&file).unwrap();
+    symlink(&target, &file).unwrap();
+    for deleted in [false, true] {
+        if deleted {
+            std::fs::remove_file(&target).unwrap();
+        }
+        let (sections, _, coverage, partial) = read(&project).unwrap();
+        assert!(sections.is_empty());
+        assert!(partial);
+        assert!(coverage.contains("symlink 1"), "{coverage}");
+    }
+}

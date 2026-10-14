@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, io::Read, path::Path};
+#[cfg(test)]
+use std::path::Path;
+use std::{collections::BTreeMap, io::Read};
 
 const FILE_BYTES: usize = 1024 * 1024;
 const OMITTED_SAMPLE: usize = 20;
@@ -52,6 +54,7 @@ impl Coverage {
     }
 }
 
+#[cfg(test)]
 pub(super) fn read_document(path: &Path, remaining: usize) -> Result<String, &'static str> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true);
@@ -66,6 +69,13 @@ pub(super) fn read_document(path: &Path, remaining: usize) -> Result<String, &'s
         std::io::ErrorKind::PermissionDenied => "permission_denied",
         _ => "read_error",
     })?;
+    read_open_document(file, remaining)
+}
+
+pub(super) fn read_open_document(
+    file: std::fs::File,
+    remaining: usize,
+) -> Result<String, &'static str> {
     let metadata = file.metadata().map_err(|_| "read_error")?;
     if !metadata.is_file() {
         return Err("not_regular_file");

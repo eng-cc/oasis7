@@ -1,9 +1,11 @@
 #[path = "index_coverage.rs"]
 mod coverage;
+#[path = "document_read.rs"]
+mod document_read;
 #[path = "lifecycle_metadata.rs"]
 mod lifecycle_metadata;
 use crate::{Error, Result, domain::*, process::run};
-use coverage::{Coverage, read_document};
+use coverage::Coverage;
 use sha2::{Digest, Sha256};
 use std::path::Path;
 pub fn digest(bytes: &[u8]) -> String {
@@ -41,7 +43,17 @@ pub fn safe_path(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
     {
         return Err(Error::Invalid("document path must be relative".into()));
     }
-    let path = root.join(rel).canonicalize()?;
+    let mut candidate = root.to_path_buf();
+    for component in rel.components() {
+        candidate.push(component);
+        if std::fs::symlink_metadata(&candidate)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(Error::Invalid("document path contains a symlink".into()));
+        }
+    }
+    let path = candidate.canonicalize()?;
     if !path.starts_with(root) {
         return Err(Error::Invalid("document escapes project".into()));
     }
@@ -145,13 +157,8 @@ fn read_candidate(
         ));
     }
     for (name, revision) in observed {
-        let matches = safe_path(root, &name)
-            .map(|path| {
-                // Reuse the bounded, non-blocking reader during consistency verification too.
-                read_document(&path, 1024 * 1024)
-                    .is_ok_and(|content| digest(content.as_bytes()) == revision)
-            })
-            .unwrap_or(false);
+        let matches = read_source(root, &name, 1024 * 1024)
+            .is_ok_and(|content| digest(content.as_bytes()) == revision);
         if !matches {
             return Err(Error::Invalid(
                 "document content changed during indexing; refresh again".into(),
@@ -182,14 +189,7 @@ fn read_source(
     name: &str,
     remaining: usize,
 ) -> std::result::Result<String, &'static str> {
-    let path = safe_path(root, name).map_err(|error| match error {
-        Error::Io(error) if error.kind() == std::io::ErrorKind::NotFound => "deleted",
-        Error::Io(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
-            "permission_denied"
-        }
-        _ => "path_unavailable",
-    })?;
-    read_document(&path, remaining)
+    document_read::read(root, name, remaining)
 }
 fn dirty_paths(root: &Path) -> Result<Vec<u8>> {
     run(
