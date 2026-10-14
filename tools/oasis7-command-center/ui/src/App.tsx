@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onMount, Show } from 'solid-js';
+import { batch, createMemo, createSignal, For, onMount, Show } from 'solid-js';
 import { acceptsEnter, bridge, connected, errorMessage, observedTime, statusLabel } from './bridge';
 import type { DecisionDraft, DocumentSection, GitHubSnapshot, Snapshot } from './types';
 import RuntimePanel from './RuntimePanel';
@@ -27,6 +27,8 @@ export default function App() {
   const [composing, setComposing] = createSignal(false);
   const [workUrl, setWorkUrl] = createSignal('');
   const [goalIds, setGoalIds] = createSignal<string[]>([]);
+  // Session-only inputs: switching projects never persists or sends their contents.
+  const projectInputs = new Map<string, { draft: DecisionDraft; workUrl: string; goalIds: string[]; query: string }>();
   let searchGeneration = 0;
   let sourceDetail: HTMLElement | undefined;
   let sourceOrigin: HTMLElement | undefined;
@@ -37,7 +39,26 @@ export default function App() {
     try { await action(); } catch (error) { setMessage(errorMessage(error)); }
     finally { setBusy(false); }
   }
-  function apply(next: Snapshot) { setSnapshot(next); setPath(next.project?.path ?? next.preferences.projectPath ?? ''); }
+  function apply(next: Snapshot) {
+    const previousId = snapshot()?.project?.id;
+    const nextId = next.project?.id;
+    batch(() => {
+      if (previousId !== nextId) {
+        if (previousId) projectInputs.set(previousId, { draft: { ...draft() }, workUrl: workUrl(), goalIds: [...goalIds()], query: query() });
+        const inputs = nextId ? projectInputs.get(nextId) : undefined;
+        ++searchGeneration;
+        setResults(null);
+        setSelected(undefined);
+        sourceOrigin = undefined;
+        setDraft(inputs?.draft ?? blankDraft());
+        setWorkUrl(inputs?.workUrl ?? '');
+        setGoalIds(inputs?.goalIds ?? []);
+        setQuery(inputs?.query ?? '');
+      }
+      setSnapshot(next);
+      setPath(next.project?.path ?? next.preferences.projectPath ?? '');
+    });
+  }
   onMount(() => { if (connected()) void run(async () => {
     const next = await bridge.snapshot(); apply(next);
     if (views.some(([key]) => key === next.preferences.view)) setView(next.preferences.view);
