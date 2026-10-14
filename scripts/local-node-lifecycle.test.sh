@@ -61,6 +61,35 @@ wait_ready() {
   done
   cat "$lifecycle_tmp/node/logs/runtime.log" >&2; return 1
 }
+node_execution_closure_digest() {
+  python3 - "$1" <<'PYTHON'
+import hashlib,json,os,pathlib,stat,sys
+state=pathlib.Path(sys.argv[1])
+entries=[]
+for name in ('world','records','cas'):
+    root=state/name
+    if not os.path.lexists(root):
+        entries.append([name,'missing'])
+        continue
+    pending=[root]
+    while pending:
+        path=pending.pop()
+        relative=path.relative_to(state).as_posix()
+        metadata=path.lstat()
+        if stat.S_ISLNK(metadata.st_mode):
+            entries.append([relative,'symlink',os.readlink(path)])
+        elif stat.S_ISDIR(metadata.st_mode):
+            entries.append([relative,'directory'])
+            pending.extend(sorted(path.iterdir(),reverse=True))
+        elif stat.S_ISREG(metadata.st_mode):
+            digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            entries.append([relative,'file',metadata.st_size,digest])
+        else:
+            raise SystemExit(f'unexpected node execution-closure entry type: {path}')
+encoded=json.dumps(sorted(entries),separators=(',',':')).encode()
+print(hashlib.sha256(encoded).hexdigest())
+PYTHON
+}
 wait_ready 1
 "$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/status.json"
 python3 - "$lifecycle_tmp/status.json" <<'PYTHON'
@@ -123,10 +152,11 @@ python3 - "$lifecycle_tmp/recovered-stop.json" "$lifecycle_tmp/recovered-stop-re
 import json,sys
 recovered,repeated,current=(json.load(open(p)) for p in sys.argv[1:]);assert recovered['recovered'] and recovered['state']=='succeeded';assert recovered['results'][0]['target']['generation']==3;assert repeated['results'][0]['target']['generation']==3;assert current['instance']['generation']==4 and current['instance']['state']=='running'
 PYTHON
-# Exercise the real local-native package adapter against this host's compiled
-# runtime. The appended identity trailer changes the artifact hash while
-# preserving the actual Mach-O/ELF image. A candidate manifest and bundle bind
-# that exact runtime before the OperationRecord can stage it.
+# Build a different-SHA package candidate bound to this executable. This local
+# compatibility-observer fixture has no committed execution record/CAS closure,
+# so package admission must refuse before writing an OperationRecord or stopping
+# the running owner. A successful different-SHA package upgrade still needs a
+# genuinely qualified execution-history fixture; this case must not simulate it.
 native_package_root="$lifecycle_tmp/native-package"
 native_artifact_dir="$lifecycle_tmp/native-artifact"
 native_runtime="$native_artifact_dir/oasis7_chain_runtime"
@@ -245,74 +275,151 @@ request={
 json.dump(request,open(sys.argv[15],'w'),sort_keys=True,separators=(',',':'))
 PYTHON
 # Package compatibility admission binds current_exe() to the exact release
-# selected by node_root/current. Invoke the prior artifact by its canonical
-# release path instead of the external Cargo/build artifact used by this test
-# harness for general node management commands.
-"$native_prior_runtime" op plan --request "$lifecycle_tmp/package-upgrade-request.json" >"$lifecycle_tmp/package-upgrade-plan.json"
-"$native_prior_runtime" op submit --request "$lifecycle_tmp/package-upgrade-request.json" --store "$lifecycle_tmp/domain" >"$lifecycle_tmp/package-upgrade-submitted.json"
-"$native_prior_runtime" op resume --store "$lifecycle_tmp/domain" --id local-native-package-upgrade --revision 1 >"$lifecycle_tmp/package-upgrade-result.json"
-python3 - "$lifecycle_tmp/package-upgrade-result.json" <<'PYTHON'
+# selected by node_root/current. Planning is deliberately pure and can describe
+# this candidate without probing runtime compatibility. The real refusal occurs
+# at stage, before the helper writes a package transaction or the owner is stopped.
+native_selected_release=$(cd -P "$native_package_root/current" && pwd)
+native_selected_runtime="$native_selected_release/bin/oasis7_chain_runtime"
+[[ "$native_selected_runtime" == "$native_prior_runtime" ]]
+[[ -x "$native_selected_runtime" ]]
+"$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/before-package-admission.json"
+package_config_sha256=$(shasum -a 256 "$lifecycle_tmp/node/node.json" | awk '{print $1}')
+package_binding_sha256=$(shasum -a 256 "$lifecycle_tmp/node/node-binding.json" | awk '{print $1}')
+package_current_target=$(readlink "$native_package_root/current")
+package_prior_runtime_sha256=$(shasum -a 256 "$native_prior_runtime" | awk '{print $1}')
+package_prior_buildinfo_sha256=$(shasum -a 256 "$native_package_root/releases/old/BUILDINFO" | awk '{print $1}')
+cp "$lifecycle_tmp/domain/operations.json" "$lifecycle_tmp/package-domain-before.json"
+package_execution_closure_before=$(node_execution_closure_digest "$lifecycle_tmp/node/state")
+"$native_selected_runtime" op plan --request "$lifecycle_tmp/package-upgrade-request.json" \
+  >"$lifecycle_tmp/package-upgrade-plan.json"
+"$native_selected_runtime" op submit --request "$lifecycle_tmp/package-upgrade-request.json" \
+  --store "$lifecycle_tmp/domain" >"$lifecycle_tmp/package-upgrade-submitted.json"
+package_submit_revision=$(python3 - "$lifecycle_tmp/package-upgrade-submitted.json" <<'PYTHON'
 import json,sys
-result=json.load(open(sys.argv[1]))
-if result['state'] != 'succeeded':
-    raise SystemExit(f"package upgrade unresolved: state={result['state']} stage={result['stage']} blocker={result.get('blocker')}")
+record=json.load(open(sys.argv[1]))
+assert record['request']['operation_id']=='local-native-package-upgrade'
+assert record['state']=='queued' and record['stage']=='prepared'
+assert record['revision']==1
+print(record['revision'])
 PYTHON
-wait_ready 5
-"$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/package-upgrade-status.json"
-python3 - "$lifecycle_tmp/package-upgrade-result.json" "$lifecycle_tmp/package-upgrade-status.json" \
-  "$native_runtime_sha256" "$native_package_version" "$native_commit" "$native_source_sha256" \
-  "$lifecycle_tmp/after-recovery.json" <<'PYTHON'
+)
+"$native_selected_runtime" op resume --store "$lifecycle_tmp/domain" \
+  --id local-native-package-upgrade --revision "$package_submit_revision" \
+  >"$lifecycle_tmp/package-upgrade-result.json"
+python3 - "$lifecycle_tmp/package-upgrade-plan.json" "$lifecycle_tmp/package-upgrade-result.json" \
+  "$lifecycle_tmp/package-upgrade-request.json" <<'PYTHON'
 import json,sys
-operation,status=(json.load(open(path)) for path in sys.argv[1:3])
-before=json.load(open(sys.argv[7]))
-assert operation['state']=='succeeded',operation.get('blocker')
-assert operation['stage']=='package_promoted_and_started'
-progress=operation['package_upgrade_progress']
-assert progress['promotion_receipt']['profile']=='local_native_package_v1'
-assert progress['stage_receipt']['candidate_runtime_sha256']==sys.argv[3]
-assert progress['stage_receipt']['candidate_runtime_sha256']!=sys.argv[6]
-assert progress['stage_receipt']['prior_node_config_digest']==before['config_digest']
-assert progress['promotion_receipt']['candidate_node_config_digest']==status['config_digest']
-assert progress['promotion_receipt']['candidate_anchor_digest']!=progress['stage_receipt']['prior_anchor_digest']
-artifact=operation['results'][-1]['runtime_artifact']
-assert artifact['profile']=='local_native_package_v1'
-assert artifact['runtime_sha256']==sys.argv[3]
-assert artifact['package_version']==sys.argv[4] and artifact['commit']==sys.argv[5]
-assert artifact['runtime_path'].endswith('/releases/'+sys.argv[4]+'/bin/oasis7_chain_runtime')
-assert status['instance']['state']=='running' and status['instance']['generation']==5
-assert status['config_digest']!=before['config_digest']
-assert status['instance']['runtime_pid'] is not None
+plan,result,request=(json.load(open(path)) for path in sys.argv[1:4])
+assert plan['state']=='queued' and plan['stage']=='prepared'
+assert plan['request']['operation_id']==request['operation_id']
+assert result['request']['operation_id']==request['operation_id']
+assert result['state']=='reconciling'
+assert result['stage']=='package_stage_unresolved'
+blocker=result.get('blocker') or ''
+assert blocker.startswith('ORIGINAL_OUTCOME_UNKNOWN: '),blocker
+assert 'materialized World has no exact latest execution record and CAS root; compatibility is unproven' in blocker,blocker
+progress=result['package_upgrade_progress']
+assert progress.get('stage_receipt') is None
+assert progress.get('promotion_receipt') is None
+assert progress.get('rollback_receipt') is None
+assert result['results']==[]
+assert result['action_attempts']==['op:local-native-package-upgrade:stage']
 PYTHON
+"$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/after-package-admission-refusal.json"
+package_execution_closure_after=$(node_execution_closure_digest "$lifecycle_tmp/node/state")
+python3 - "$lifecycle_tmp/before-package-admission.json" "$lifecycle_tmp/after-package-admission-refusal.json" \
+  "$lifecycle_tmp/package-domain-before.json" "$lifecycle_tmp/domain/operations.json" \
+  "$lifecycle_tmp/package-upgrade-request.json" <<'PYTHON'
+import json,sys
+before,after=(json.load(open(path)) for path in sys.argv[1:3])
+assert before['instance']['state']=='running' and before['instance']['runtime_pid'] is not None
+assert before['instance']==after['instance']
+assert before['local_generation']==after['local_generation']
+assert before['config_digest']==after['config_digest']
+assert before['chain']==after['chain']
+before_store,after_store=(json.load(open(path)) for path in sys.argv[3:5])
+request=json.load(open(sys.argv[5]))
+before_records={record['request']['operation_id']:record for record in before_store['records']}
+after_records={record['request']['operation_id']:record for record in after_store['records']}
+operation_id=request['operation_id']
+assert operation_id not in before_records
+assert set(after_records)==set(before_records)|{operation_id}
+for old_id,old_record in before_records.items():
+    assert after_records[old_id]==old_record,old_id
+new_record=after_records[operation_id]
+assert new_record['request']==request
+assert new_record['state']=='reconciling'
+assert new_record['stage']=='package_stage_unresolved'
+assert new_record['package_upgrade_progress'].get('stage_receipt') is None
+assert new_record['package_upgrade_progress'].get('promotion_receipt') is None
+assert new_record['package_upgrade_progress'].get('rollback_receipt') is None
+assert new_record['results']==[]
+assert new_record['action_attempts']==['op:local-native-package-upgrade:stage']
+PYTHON
+assert_preimage_same() {
+  local label=$1 expected=$2 actual=$3
+  if [[ "$expected" != "$actual" ]]; then
+    printf 'package stage refusal changed %s (expected=%q actual=%q)\n' \
+      "$label" "$expected" "$actual" >&2
+    return 1
+  fi
+}
+assert_path_absent() {
+  local label=$1 path=$2
+  if [[ -e "$path" ]]; then
+    printf 'package stage refusal unexpectedly created %s: %s\n' "$label" "$path" >&2
+    return 1
+  fi
+}
+assert_preimage_same 'node config SHA256' "$package_config_sha256" \
+  "$(shasum -a 256 "$lifecycle_tmp/node/node.json" | awk '{print $1}')"
+assert_preimage_same 'node binding SHA256' "$package_binding_sha256" \
+  "$(shasum -a 256 "$lifecycle_tmp/node/node-binding.json" | awk '{print $1}')"
+assert_preimage_same 'current symlink target' "$package_current_target" \
+  "$(readlink "$native_package_root/current")"
+assert_preimage_same 'prior runtime SHA256' "$package_prior_runtime_sha256" \
+  "$(shasum -a 256 "$native_prior_runtime" | awk '{print $1}')"
+assert_preimage_same 'prior BUILDINFO SHA256' "$package_prior_buildinfo_sha256" \
+  "$(shasum -a 256 "$native_package_root/releases/old/BUILDINFO" | awk '{print $1}')"
+assert_preimage_same 'World/records/CAS closure digest' "$package_execution_closure_before" \
+  "$package_execution_closure_after"
+assert_path_absent 'package operation directory' \
+  "$native_package_root/package-upgrade-operations/local-native-package-upgrade"
+assert_path_absent 'stage receipt' \
+  "$native_package_root/package-upgrade-operations/local-native-package-upgrade/stage-receipt.json"
+assert_path_absent 'promotion receipt' \
+  "$native_package_root/package-upgrade-operations/local-native-package-upgrade/promotion-receipt.json"
+assert_path_absent 'runtime compatibility receipt' \
+  "$lifecycle_tmp/node/state/package-runtime-compatibility/local-native-package-upgrade.json"
 
-# Prepare a second, different-SHA candidate whose actual executable exits
-# immediately. Its candidate manifest is still fully valid and operator-pinned,
-# so the real Node lifecycle must promote, observe the failed start, restore the
-# exact prior config/binding/current, then start the old runtime.
-failed_runtime="$native_artifact_dir/oasis7_chain_runtime-fails-on-start"
+# Build a synthetic planning-only candidate to confirm the request can carry a
+# distinct operator-pinned artifact identity. It exits if executed and is not
+# runtime-compatibility or failed-start evidence.
+failed_runtime="$native_artifact_dir/oasis7_chain_runtime-plan-smoke"
 cat >"$failed_runtime" <<'SH'
 #!/bin/sh
 exit 42
 SH
 chmod 755 "$failed_runtime"
 failed_runtime_sha256=$(shasum -a 256 "$failed_runtime" | awk '{print $1}')
-failed_buildinfo="$native_artifact_dir/BUILDINFO-failed"
-failed_package_version='0.0.0+local-native-failed-start.1'
+failed_buildinfo="$native_artifact_dir/BUILDINFO-plan-smoke"
+failed_package_version='0.0.0+local-native-plan-smoke.1'
 failed_commit='abcdef0123456789abcdef0123456789abcdef02'
 cat >"$failed_buildinfo" <<EOF
 workflow=Local Native Package
 commit=$failed_commit
 package_version=$failed_package_version
-run_id=local-native-failed-start
+run_id=local-native-plan-smoke
 platform=local-native
 runtime_sha256=$failed_runtime_sha256
 EOF
 failed_buildinfo_sha256=$(shasum -a 256 "$failed_buildinfo" | awk '{print $1}')
-failed_candidate_bundle="$lifecycle_tmp/candidate-failed-bundle.json"
-failed_candidate_manifest="$lifecycle_tmp/candidate-failed-manifest.json"
-failed_candidate_chain="$lifecycle_tmp/candidate-failed-chain.json"
+failed_candidate_bundle="$lifecycle_tmp/candidate-plan-smoke-bundle.json"
+failed_candidate_manifest="$lifecycle_tmp/candidate-plan-smoke-manifest.json"
+failed_candidate_chain="$lifecycle_tmp/candidate-plan-smoke-chain.json"
 python3 - "$native_candidate_chain" "$native_candidate_manifest" "$native_candidate_bundle" \
   "$failed_runtime" "$failed_runtime_sha256" "$failed_package_version" "$failed_commit" \
-  'local-native-failed-start' "$failed_candidate_bundle" "$failed_candidate_manifest" "$failed_candidate_chain" <<'PYTHON'
+  'local-native-plan-smoke' "$failed_candidate_bundle" "$failed_candidate_manifest" "$failed_candidate_chain" <<'PYTHON'
 import copy,hashlib,json,pathlib,sys
 chain_path,manifest_path,bundle_path=map(pathlib.Path,sys.argv[1:4])
 runtime=pathlib.Path(sys.argv[4]);runtime_sha,version,commit,run_id=sys.argv[5:9]
@@ -336,41 +443,23 @@ chain['manifest_sha256']=sha(manifest_out)
 chain_out.write_text(json.dumps(chain,indent=2,sort_keys=True)+'\n')
 PYTHON
 failed_candidate_chain_sha256=$(shasum -a 256 "$failed_candidate_chain" | awk '{print $1}')
-# Verify the previously promoted release before building the invalid-candidate
-# refusal case below.
-python3 - "$native_package_root/current" "$native_package_version" "$native_commit" "$native_runtime_sha256" <<'PYTHON'
-import hashlib,pathlib,sys
-release=pathlib.Path(sys.argv[1]).resolve(strict=True)
-fields={}
-for line in (release/'BUILDINFO').read_text().splitlines():
-    key,value=line.split('=',1)
-    assert key not in fields,key
-    fields[key]=value
-runtime=release/'bin/oasis7_chain_runtime'
-assert fields['platform']=='local-native'
-assert fields['package_version']==sys.argv[2]
-assert fields['commit']==sys.argv[3]
-assert fields['runtime_sha256']==sys.argv[4]
-assert hashlib.sha256(runtime.read_bytes()).hexdigest()==sys.argv[4]
-PYTHON
 # Each package operation must be planned and advanced by the exact runtime
-# selected when that operation began. The current symlink now selects the
-# first promoted package, so do not reuse either the initial prior artifact or
-# the external lifecycle binary.
+# selected when that operation began. The current symlink still selects the
+# original prior release because the first candidate was refused during stage.
 native_selected_release=$(cd -P "$native_package_root/current" && pwd)
 native_selected_runtime="$native_selected_release/bin/oasis7_chain_runtime"
 [[ -x "$native_selected_runtime" ]]
-"$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/before-failed-package.json"
-python3 - "$lifecycle_tmp/before-failed-package.json" "$lifecycle_tmp/node/node.json" "$native_package_root" \
+"$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/before-plan-smoke.json"
+python3 - "$lifecycle_tmp/before-plan-smoke.json" "$lifecycle_tmp/node/node.json" "$native_package_root" \
   "$lifecycle_root/scripts/p2p-public-testnet-package-node-upgrade.sh" "$native_helper_sha256" \
   "$failed_runtime" "$failed_runtime_sha256" "$failed_buildinfo" "$failed_buildinfo_sha256" \
   "$failed_package_version" "$failed_commit" "$failed_candidate_chain" "$failed_candidate_chain_sha256" \
-  "$lifecycle_tmp/failed-package-upgrade-request.json" <<'PYTHON'
+  "$lifecycle_tmp/plan-smoke-package-upgrade-request.json" <<'PYTHON'
 import json,sys
 status=json.load(open(sys.argv[1]))
 request={
   'api_version':'oasis7.local-operation/v1',
-  'operation_id':'local-native-package-failed-start',
+  'operation_id':'local-native-package-plan-smoke',
   'world_id':status['chain']['world_id'],
   'chain_id':status['chain']['chain_id'],
   'kind':'package_upgrade',
@@ -397,13 +486,13 @@ request={
     },
     'package_version':sys.argv[10],
     'commit':sys.argv[11],
-    'run_id':'local-native-failed-start',
+    'run_id':'local-native-plan-smoke',
     'artifact_ref':None,
   },
 }
 json.dump(request,open(sys.argv[14],'w'),sort_keys=True,separators=(',',':'))
 PYTHON
-python3 - "$lifecycle_tmp/failed-package-upgrade-request.json" "$lifecycle_tmp/refused-package-upgrade-request.json" <<'PYTHON'
+python3 - "$lifecycle_tmp/plan-smoke-package-upgrade-request.json" "$lifecycle_tmp/refused-package-upgrade-request.json" <<'PYTHON'
 import json,sys
 request=json.load(open(sys.argv[1]))
 request['operation_id']='local-native-package-refused-candidate'
@@ -411,13 +500,20 @@ request['package_upgrade']['candidate_chain_config']['sha256']='0'*64
 json.dump(request,open(sys.argv[2],'w'),sort_keys=True,separators=(',',':'))
 PYTHON
 if "$native_selected_runtime" op plan --request "$lifecycle_tmp/refused-package-upgrade-request.json" \
-  >"$lifecycle_tmp/refused-package-upgrade-plan.json" 2>"$lifecycle_tmp/refused-package-upgrade-plan.stderr"; then
+  >"$lifecycle_tmp/refused-package-upgrade-plan.stdout" 2>"$lifecycle_tmp/refused-package-upgrade-plan.stderr"; then
   echo 'candidate chain config with a mismatched operator pin unexpectedly passed planning' >&2
   exit 1
 fi
-grep -F 'operator-pinned candidate chain config SHA256 mismatch' "$lifecycle_tmp/refused-package-upgrade-plan.stderr" >/dev/null
+if ! grep -Fq 'operator-pinned candidate chain config SHA256 mismatch' \
+  "$lifecycle_tmp/refused-package-upgrade-plan.stdout" \
+  "$lifecycle_tmp/refused-package-upgrade-plan.stderr"; then
+  echo 'candidate-chain pin refusal diagnostic missing from stdout and stderr' >&2
+  cat "$lifecycle_tmp/refused-package-upgrade-plan.stdout" \
+    "$lifecycle_tmp/refused-package-upgrade-plan.stderr" >&2
+  exit 1
+fi
 "$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/after-refused-package.json"
-python3 - "$lifecycle_tmp/before-failed-package.json" "$lifecycle_tmp/after-refused-package.json" \
+python3 - "$lifecycle_tmp/before-plan-smoke.json" "$lifecycle_tmp/after-refused-package.json" \
   "$native_package_root/current" "$native_package_root/package-upgrade-operations/local-native-package-refused-candidate" <<'PYTHON'
 import json,pathlib,sys
 before,after=(json.load(open(path)) for path in sys.argv[1:3])
@@ -430,17 +526,29 @@ assert not pathlib.Path(sys.argv[4]).exists()
 assert not pathlib.Path(sys.argv[3]+'/package-upgrade-operations/local-native-package-refused-candidate').exists()
 PYTHON
 
-# The synthetic exit-42 shell file has no runtime compatibility descriptor.
-# It must be refused before OperationRecord submission, stop, or package
-# promotion; it cannot stand in for a real failed-start rollback test.
-if "$native_selected_runtime" op plan --request "$lifecycle_tmp/failed-package-upgrade-request.json" \
-  >"$lifecycle_tmp/failed-package-upgrade-plan.json" 2>"$lifecycle_tmp/failed-package-upgrade-plan.stderr"; then
-  echo 'non-runtime candidate unexpectedly passed compatibility planning' >&2
+# This synthetic exit-42 file is only a planning smoke: planning binds the
+# operator-pinned request but does not execute candidate compatibility probes.
+# Do not submit/resume it or count this as descriptor or failed-start evidence.
+package_domain_ledger_before_fake_plan=$(shasum -a 256 "$lifecycle_tmp/domain/operations.json" | awk '{print $1}')
+if ! "$native_selected_runtime" op plan --request "$lifecycle_tmp/plan-smoke-package-upgrade-request.json" \
+  >"$lifecycle_tmp/plan-smoke-package-upgrade-plan.stdout" 2>"$lifecycle_tmp/plan-smoke-package-upgrade-plan.stderr"; then
+  cat "$lifecycle_tmp/plan-smoke-package-upgrade-plan.stdout" "$lifecycle_tmp/plan-smoke-package-upgrade-plan.stderr" >&2
+  echo 'synthetic candidate planning smoke failed before producing its pure plan' >&2
   exit 1
 fi
-grep -F 'executable compatibility probe failed' "$lifecycle_tmp/failed-package-upgrade-plan.stderr" >/dev/null
-"$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/after-failed-package-refusal.json"
-python3 - "$lifecycle_tmp/before-failed-package.json" "$lifecycle_tmp/after-failed-package-refusal.json" \
+python3 - "$lifecycle_tmp/plan-smoke-package-upgrade-plan.stdout" \
+  "$lifecycle_tmp/plan-smoke-package-upgrade-request.json" <<'PYTHON'
+import json,sys
+plan=json.load(open(sys.argv[1]));request=json.load(open(sys.argv[2]))
+assert plan['state']=='queued' and plan['stage']=='prepared'
+assert plan['request']['operation_id']==request['operation_id']
+assert plan['package_upgrade_progress'].get('stage_receipt') is None
+assert plan['package_upgrade_progress'].get('promotion_receipt') is None
+assert plan.get('action_attempts',[])==[]
+assert plan.get('results',[])==[]
+PYTHON
+"$lifecycle_bin" node status --data-dir "$lifecycle_tmp/node" >"$lifecycle_tmp/after-plan-smoke.json"
+python3 - "$lifecycle_tmp/before-plan-smoke.json" "$lifecycle_tmp/after-plan-smoke.json" \
   "$native_package_root" "$native_package_version" <<'PYTHON'
 import json,pathlib,sys
 before,after=(json.load(open(path)) for path in sys.argv[1:3])
@@ -450,9 +558,16 @@ assert after['instance']['state']=='running'
 assert before['config_digest']==after['config_digest']
 root=pathlib.Path(sys.argv[3])
 assert (root/'current').is_symlink()
-assert (root/'current').resolve(strict=True)==root/'releases'/sys.argv[4]
-assert not (root/'package-upgrade-operations/local-native-package-failed-start').exists()
+assert (root/'current').resolve(strict=True)==root/'releases'/'old'
+assert not (root/'package-upgrade-operations/local-native-package-plan-smoke').exists()
 PYTHON
+assert_preimage_same 'operation ledger SHA256 after plan smoke' \
+  "$package_domain_ledger_before_fake_plan" \
+  "$(shasum -a 256 "$lifecycle_tmp/domain/operations.json" | awk '{print $1}')"
+assert_preimage_same 'World/records/CAS closure digest after plan smoke' \
+  "$package_execution_closure_before" \
+  "$(node_execution_closure_digest "$lifecycle_tmp/node/state")"
 "$lifecycle_bin" node stop --data-dir "$lifecycle_tmp/node" --timeout-ms 5000 >"$lifecycle_tmp/final-stop.json"
-[[ "$key_before" == "$(shasum -a 256 "$lifecycle_tmp/node/keys/node-keypair.toml")" ]]
-echo 'ok: native node lifecycle + recovery, different-SHA package promotion, and pre-stop refusal of a non-runtime candidate'
+assert_preimage_same 'node keypair SHA256' "$key_before" \
+  "$(shasum -a 256 "$lifecycle_tmp/node/keys/node-keypair.toml")"
+echo 'ok: native node lifecycle + recovery, stage-time refusal for unqualified package history, wrong-pin refusal, and pure-plan candidate smoke; qualified different-SHA upgrade remains TODO'

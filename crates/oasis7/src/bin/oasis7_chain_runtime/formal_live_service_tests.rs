@@ -26,6 +26,7 @@ struct CurrentOnlyResolver {
     world: Mutex<World>,
     anchor: VerifiedFormalReadAnchorV1,
     fixed: Mutex<Option<CommitRef>>,
+    business_reads: std::sync::atomic::AtomicUsize,
 }
 impl CurrentOnlyResolver {
     fn new(world: World, anchor: VerifiedFormalReadAnchorV1) -> Self {
@@ -33,6 +34,7 @@ impl CurrentOnlyResolver {
             world: Mutex::new(world),
             anchor,
             fixed: Mutex::new(None),
+            business_reads: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
@@ -41,6 +43,29 @@ impl CurrentOnlyResolver {
     }
 }
 impl FormalLiveHistoryResolver for CurrentOnlyResolver {
+    fn business_result_for_publication(
+        &self,
+        cut: FormalReadPublication,
+        _correlation: &oasis7_client_api::world_service::RequestCorrelation,
+        _scope: &str,
+        _reader: &str,
+    ) -> Result<
+        Option<(
+            oasis7_client_api::world_service::FormalBusinessResultProofV1,
+            Option<String>,
+        )>,
+        String,
+    > {
+        assert!(same_anchor(cut.anchor(), &self.anchor)?);
+        assert_eq!(
+            cut.world().snapshot(),
+            self.world.lock().unwrap().snapshot()
+        );
+        self.business_reads.fetch_add(1, Ordering::SeqCst);
+        // This fixture has no business result. It proves exact-cut selection
+        // without fabricating a qualified outcome or an absence proof.
+        Err("test exact fixed publication selected; business proof unavailable".into())
+    }
     fn origin_publication(
         &self,
         request: &FormalReadAnchorRefV1,
@@ -705,5 +730,65 @@ fn formal_http_fragmented_body_on_nonblocking_accepted_stream_reaches_grant_reje
     let error: SignedServiceResponse<FormalServiceErrorV1> =
         serde_json::from_slice(&response[split..]).unwrap();
     assert_eq!(error.payload.code, "read_grant_rejected");
+    stop_test_node(&node);
+}
+
+#[test]
+fn fixed_formal_lookup_selects_exact_publication_and_rejects_identity_or_signature_drift() {
+    use oasis7::world_service::wire::FormalAuthenticatedLookupV1;
+    let (world, trust, anchor) = fixture_trust();
+    let resolver = Arc::new(CurrentOnlyResolver::new(world.clone(), anchor.clone()));
+    let node = live_node(&anchor.head().record().world.world_id);
+    let (service, _, _) = live_service(
+        world.clone(),
+        anchor.clone(),
+        trust,
+        resolver.clone(),
+        Arc::clone(&node),
+        published(world.clone(), anchor.clone()),
+    );
+    let fixed = fixtures::commit_ref(&anchor, &fixtures::projection(&world));
+    let original = valid_submit(&fixtures::key(7));
+    let reader = hex::encode(fixtures::key(92).to_bytes());
+    let request = FormalAuthenticatedLookupV1 {
+        schema_version: 1,
+        lookup: AuthenticatedLookup {
+            request: LookupIntentRequest {
+                contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+                key: original.correlation.key.clone(),
+            },
+            original: original.signed_payload,
+        },
+        read: read_request(&anchor, &reader, Some(fixed.clone())),
+    };
+    let reply = service.handle("POST", LOOKUP_PATH, &serde_json::to_vec(&request).unwrap());
+    assert_eq!(reply.status, 503);
+    assert!(
+        String::from_utf8_lossy(&reply.body)
+            .contains("test exact fixed publication selected; business proof unavailable")
+    );
+    assert_eq!(resolver.business_reads.load(Ordering::SeqCst), 1);
+    for variant in 0..3 {
+        let mut invalid = request.clone();
+        match variant {
+            0 => {
+                let mut wrong = fixed.clone();
+                wrong.position += 1;
+                invalid.read = read_request(&anchor, &reader, Some(wrong));
+            }
+            1 => invalid.read.signature_hex = "00".repeat(64),
+            _ => invalid.lookup.request.key.verified_subject = fixtures::public(8),
+        }
+        let reply = service.handle("POST", LOOKUP_PATH, &serde_json::to_vec(&invalid).unwrap());
+        assert_eq!(reply.status, 503);
+        assert!(
+            !String::from_utf8_lossy(&reply.body).contains("test exact fixed publication selected")
+        );
+        assert_eq!(
+            resolver.business_reads.load(Ordering::SeqCst),
+            1,
+            "invalid lookup must not resolve business material"
+        );
+    }
     stop_test_node(&node);
 }

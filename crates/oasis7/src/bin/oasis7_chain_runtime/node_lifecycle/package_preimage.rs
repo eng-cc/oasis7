@@ -40,6 +40,7 @@ pub(super) fn validate(request: &PackageUpgradeV1) -> Result<(), String> {
 /// direct-release target. The rest of the path is inspected through the
 /// captured canonical release path so `io::regular` rejects any internal
 /// symlink without resolving `current` a second time.
+#[cfg(test)]
 pub(super) fn current_runtime_path(request: &PackageUpgradeV1) -> Result<PathBuf, String> {
     validated_current_runtime(request).map(|snapshot| snapshot.path)
 }

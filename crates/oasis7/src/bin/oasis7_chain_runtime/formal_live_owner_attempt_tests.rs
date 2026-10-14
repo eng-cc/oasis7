@@ -211,3 +211,35 @@ fn attempt_history_cap_rejects_without_dropping_old_failure_receipts() {
     assert_eq!(fs::read(&path).unwrap(), owner_before);
     assert_eq!(fs::read(&history_path).unwrap(), history_before);
 }
+
+#[test]
+fn restored_successor_attempt_binds_first_receipt_and_rejects_later_identity_drift() {
+    let scratch = Scratch::new();
+    let path = scratch.owner_path();
+    let mut restored = snapshot(std::process::id(), "restored-attempt", &"33".repeat(32));
+    restored.instance.authority_epoch = 2;
+    restored.instance.authority_id = "77".repeat(32);
+    restored.state = "starting".into();
+    write_new_owner_attempt(
+        &path,
+        restored.clone(),
+        1,
+        "birth-one".into(),
+        empty_history_digest().unwrap(),
+    )
+    .unwrap();
+    restored.state = "ready".into();
+    write_owner_record(&path, restored.clone()).unwrap();
+    assert_eq!(
+        read_owner_record(&path).unwrap().unwrap().snapshot.instance,
+        restored.instance
+    );
+    let before = fs::read(&path).unwrap();
+    restored.instance.authority_epoch = 1;
+    assert!(
+        write_owner_record(&path, restored)
+            .unwrap_err()
+            .contains("changed exact attempt identity")
+    );
+    assert_eq!(fs::read(&path).unwrap(), before);
+}

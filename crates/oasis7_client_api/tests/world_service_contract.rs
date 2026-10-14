@@ -217,6 +217,117 @@ fn view_axes_are_distinct_and_view_cursor_must_match() {
 }
 
 #[test]
+fn formal_result_page_accepts_exact_fixed_head_and_rejects_tampering() {
+    let from_anchor = FormalReadAnchorRefV1 {
+        position: 1,
+        record_id: "a".repeat(64),
+        active_authority_id: "b".repeat(64),
+    };
+    let mut target_commit = commit(2);
+    target_commit.execution_block_hash = "c".repeat(64);
+    target_commit.state_root_ref = "d".repeat(64);
+    let target_anchor = FormalReadAnchorRefV1 {
+        position: target_commit.position,
+        record_id: target_commit.execution_block_hash.clone(),
+        active_authority_id: from_anchor.active_authority_id.clone(),
+    };
+    let request = ReadWorldViewRequest {
+        observation_nonce: Some("0".repeat(64)),
+        formal_anchor: Some(from_anchor.clone()),
+        contract_version: 1,
+        world: world(),
+        scope_id: "agent-a".into(),
+        min_commit: None,
+        fixed_commit: Some(target_commit.clone()),
+        deadline_unix_ms: None,
+    };
+    let response = ReadWorldViewResponse {
+        formal_profile: Some(FormalReadProfileV1::controlled()),
+        formal_proof: Some(FormalReadSidecarV1 {
+            schema_version: 1,
+            profile: FormalReadProfileV1::controlled(),
+            anchor: from_anchor.clone(),
+            history_cbor_hex: String::new(),
+            projection: FormalProjectionInclusionV1 {
+                schema_version: 1,
+                audience: FormalProjectionAudienceV1 {
+                    scope_id: "agent-a".into(),
+                    reader_public_key: None,
+                },
+                leaf_index: 0,
+                leaf_count: 1,
+                siblings: vec![],
+            },
+        }),
+        execution_evidence_scope: None,
+        contract_version: 1,
+        version: ProjectionVersion {
+            commit: target_commit.clone(),
+            projection_revision: "projection-v1".into(),
+            visibility_scope: "agent-a".into(),
+        },
+        logical_tick: 2,
+        continuation: EventCursor {
+            stream_id: "events".into(),
+            scope_id: "agent-a".into(),
+            era: 3,
+            sequence: 0,
+            commit: target_commit.clone(),
+        },
+        view: json!({}),
+    };
+    let page = FormalBusinessOutcomePageV1 {
+        schema_version: FORMAL_BUSINESS_RESULT_SCHEMA_V1,
+        requested_correlation: correlation(),
+        from_anchor: from_anchor.clone(),
+        target_request: request,
+        target_view: response,
+        result: None,
+        historical_cbor_hex: None,
+        continuation_anchor: Some(target_anchor),
+    };
+
+    page.validate().unwrap();
+
+    let mut tampered = page.clone();
+    let mut other_head = target_commit;
+    other_head.position += 1;
+    other_head.execution_block_hash = "e".repeat(64);
+    other_head.state_root_ref = "f".repeat(64);
+    tampered.target_view.version.commit = other_head.clone();
+    tampered.target_view.continuation.commit = other_head.clone();
+    tampered.continuation_anchor = Some(FormalReadAnchorRefV1 {
+        position: other_head.position,
+        record_id: other_head.execution_block_hash,
+        active_authority_id: from_anchor.active_authority_id,
+    });
+    assert_eq!(
+        tampered.validate().unwrap_err().to_string(),
+        "fixed view mismatch"
+    );
+
+    let mut wrong_proof_anchor = page.clone();
+    wrong_proof_anchor
+        .target_view
+        .formal_proof
+        .as_mut()
+        .unwrap()
+        .anchor
+        .position += 1;
+    assert_eq!(
+        wrong_proof_anchor.validate().unwrap_err().to_string(),
+        "formal result page request/head binding"
+    );
+
+    let mut with_minimum = page;
+    with_minimum.target_request.min_commit = Some(commit(1));
+    assert_eq!(
+        with_minimum.validate().unwrap_err().to_string(),
+        "formal result page request/head binding"
+    );
+}
+
+#[test]
 fn history_and_fixed_version_constraints_fail_closed() {
     let base = commit(7);
     for field in [
@@ -552,6 +663,7 @@ fn every_operation_rejects_unsupported_request_and_response_versions() {
         );
         assert!(
             ReadWorldChangesResponse::<Value> {
+                formal_profile: None,
                 execution_evidence_scope: None,
                 contract_version: version,
                 changes: vec![],

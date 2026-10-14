@@ -423,11 +423,10 @@ fn run_descriptor(
             .output()
             .map_err(|error| format!("run executable compatibility descriptor: {error}"))?;
         if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!(
                 "executable compatibility probe failed ({}): {}",
                 output.status,
-                stderr.trim().chars().take(1024).collect::<String>()
+                descriptor_failure_diagnostic(&output.stderr, &output.stdout)
             ));
         }
         serde_json::from_slice(&output.stdout)
@@ -968,8 +967,38 @@ fn safe_token(value: &str) -> Result<&str, String> {
     Ok(value)
 }
 
+fn descriptor_failure_diagnostic(stderr: &[u8], stdout: &[u8]) -> String {
+    let stderr = String::from_utf8_lossy(stderr);
+    let stdout = String::from_utf8_lossy(stdout);
+    let combined = format!("{}\n{}", stderr.trim(), stdout.trim());
+    let mut diagnostic = String::new();
+    for character in combined.trim().chars() {
+        if diagnostic.len() + character.len_utf8() > 1024 {
+            break;
+        }
+        diagnostic.push(character);
+    }
+    diagnostic
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn failed_descriptor_reports_stdout_and_bounds_both_streams() {
+        assert_eq!(
+            super::descriptor_failure_diagnostic(b"", b"unproven World"),
+            "unproven World"
+        );
+        assert_eq!(
+            super::descriptor_failure_diagnostic(b"stderr", b"stdout"),
+            "stderr\nstdout"
+        );
+        let large = "世".repeat(2048);
+        let bounded = super::descriptor_failure_diagnostic(large.as_bytes(), b"stdout");
+        assert!(bounded.len() <= 1024);
+        assert!(!bounded.is_empty());
+    }
+
     use super::*;
     use oasis7_client_api::world_service::WorldIdentity;
 

@@ -12,6 +12,7 @@ trap 'if [[ -n "${stage_pid:-}" ]]; then kill -KILL "$stage_pid" 2>/dev/null || 
 # stop before a valid runtime descriptor can be admitted.
 python3 - "$SCRIPT" <<'PY'
 import ast
+import subprocess
 import sys
 from pathlib import Path
 
@@ -42,6 +43,36 @@ binding_index = parameters.index("current_binding")
 assert len(calls[0].args) > binding_index and isinstance(calls[0].args[binding_index], ast.Name) and calls[0].args[binding_index].id == "current_binding", (
     "request_for must pass its exact validated current_binding into the plan validator"
 )
+
+probe_runner = functions["run_compatibility_descriptor"]
+detail_calls = [
+    node
+    for node in ast.walk(probe_runner)
+    if isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Name)
+    and node.func.id == "compatibility_probe_failure_detail"
+]
+assert len(detail_calls) == 1, "failed descriptor probes must preserve bounded stdout and stderr"
+detail_function = functions["compatibility_probe_failure_detail"]
+namespace = {"subprocess": subprocess}
+exec(
+    compile(ast.Module(body=[detail_function], type_ignores=[]), "<probe-detail-test>", "exec"),
+    namespace,
+)
+
+class ProbeResult:
+    def __init__(self, stdout: bytes, stderr: bytes) -> None:
+        self.stdout = stdout
+        self.stderr = stderr
+
+detail = namespace["compatibility_probe_failure_detail"](
+    ProbeResult(b"materialized World has no exact latest execution record", b"probe exit")
+)
+assert "stdout: materialized World has no exact latest execution record" in detail
+assert "stderr: probe exit" in detail
+assert namespace["compatibility_probe_failure_detail"](ProbeResult(b"x" * 4096, b"y" * 4096))
+assert len(namespace["compatibility_probe_failure_detail"](ProbeResult(b"x" * 4096, b"y" * 4096))) <= 1024
+assert namespace["compatibility_probe_failure_detail"](ProbeResult(b"", b"")) == "(no stdout or stderr)"
 PY
 
 FAKE_BIN="$TMP_DIR/fake-bin"

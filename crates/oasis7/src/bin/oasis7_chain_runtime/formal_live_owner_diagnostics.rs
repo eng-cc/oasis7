@@ -3,33 +3,40 @@ use std::{
     io::Read,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
 const STDERR_LIMIT: usize = 16 * 1024;
-/// A bounded tail of the real worker stderr. The pipe is continuously drained
+/// A shared bounded tail of real worker stdout and stderr. Both pipes are continuously drained
 /// so a verbose worker cannot block on a full pipe, while retained diagnostics
 /// remain bounded for the local operation result.
 #[derive(Clone)]
 pub(super) struct WorkerDiagnostics {
     tail: Arc<Mutex<VecDeque<u8>>>,
-    exited: Arc<AtomicBool>,
+    exited: Arc<AtomicUsize>,
 }
 
 impl WorkerDiagnostics {
-    pub(super) fn drain(stderr: impl Read + Send + 'static) -> Result<Self, String> {
+    pub(super) fn drain(
+        stdout: impl Read + Send + 'static,
+        stderr: impl Read + Send + 'static,
+    ) -> Result<Self, String> {
         let tail = Arc::new(Mutex::new(VecDeque::with_capacity(STDERR_LIMIT)));
-        let exited = Arc::new(AtomicBool::new(false));
-        let reader_tail = Arc::clone(&tail);
-        let reader_exited = Arc::clone(&exited);
-        std::thread::Builder::new()
-            .name("formal-owner-stderr".into())
+        let exited = Arc::new(AtomicUsize::new(2));
+        for (channel, stream) in [
+            ("stdout", Box::new(stdout) as Box<dyn Read + Send>),
+            ("stderr", Box::new(stderr) as Box<dyn Read + Send>),
+        ] {
+            let reader_tail = Arc::clone(&tail);
+            let reader_exited = Arc::clone(&exited);
+            std::thread::Builder::new()
+            .name(format!("formal-owner-{channel}"))
             .spawn(move || {
-                let mut stderr = stderr;
+                let mut stream = stream;
                 let mut chunk = [0u8; 2048];
                 loop {
-                    match stderr.read(&mut chunk) {
+                    match stream.read(&mut chunk) {
                         Ok(0) | Err(_) => break,
                         Ok(count) => {
                             let Ok(mut tail) = reader_tail.lock() else {
@@ -44,18 +51,19 @@ impl WorkerDiagnostics {
                         }
                     }
                 }
-                reader_exited.store(true, Ordering::Release);
+                reader_exited.fetch_sub(1, Ordering::Release);
             })
             .map_err(|error| {
                 format!(
-                    "ORIGINAL_OUTCOME_UNKNOWN: owner worker started but stderr reader could not start: {error}"
+                    "ORIGINAL_OUTCOME_UNKNOWN: owner worker started but output reader could not start: {error}"
                 )
             })?;
+        }
         Ok(Self { tail, exited })
     }
 
     fn stderr_closed(&self) -> bool {
-        self.exited.load(Ordering::Acquire)
+        self.exited.load(Ordering::Acquire) == 0
     }
 
     pub(super) fn wait_for_stderr_close(&self, timeout: Duration) {
@@ -82,7 +90,7 @@ impl WorkerDiagnostics {
 
 pub(super) fn append_worker_diagnostic(message: &str, diagnostics: &WorkerDiagnostics) -> String {
     match diagnostics.text() {
-        Some(stderr) => format!("{message}; worker stderr: {stderr}"),
+        Some(stderr) => format!("{message}; worker stdout/stderr: {stderr}"),
         None => message.to_owned(),
     }
 }

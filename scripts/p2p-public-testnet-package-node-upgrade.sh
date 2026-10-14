@@ -1072,6 +1072,17 @@ def read_named_release_snapshot(
         os.close(root_fd)
 
 
+def compatibility_probe_failure_detail(result: subprocess.CompletedProcess[bytes]) -> str:
+    """Keep bounded diagnostics from both streams; the runtime logger may use stdout."""
+    parts: list[str] = []
+    for label, raw in (("stdout", result.stdout), ("stderr", result.stderr)):
+        text = raw.decode("utf-8", errors="replace").strip()
+        if text:
+            parts.append(f"{label}: {text[:480]}")
+    detail = " | ".join(parts)
+    return detail[:1024] if detail else "(no stdout or stderr)"
+
+
 def run_compatibility_descriptor(
     binary: Path,
     config_path: Path,
@@ -1140,8 +1151,11 @@ def run_compatibility_descriptor(
     if digest_file(config_path) != config_file_sha256:
         fail("node config changed while an executable compatibility probe was running")
     if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", errors="replace").strip()[:1024]
-        fail(f"executable compatibility probe failed for {binary}: {detail}")
+        detail = compatibility_probe_failure_detail(result)
+        fail(
+            f"executable compatibility probe failed for {binary} "
+            f"(exit status: {result.returncode}): {detail}"
+        )
     try:
         value = json.loads(result.stdout)
     except Exception as exc:

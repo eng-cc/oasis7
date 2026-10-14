@@ -553,11 +553,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         }
     }
 
-    if let Some(option) = options
-        .formal_live_config
-        .as_ref()
-        .and_then(|_| seen.iter().find(|option| option.as_str() != "--live-mode"))
-    {
+    if let Some(option) = options.formal_live_config.as_ref().and_then(|_| {
+        seen.iter()
+            .find(|option| option.as_str() != "--formal-live-config")
+    }) {
         return Err(format!(
             "{option} cannot be combined with --formal-live-config; runtime settings come from the formal profile"
         ));

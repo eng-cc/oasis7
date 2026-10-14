@@ -16,7 +16,6 @@ impl FormalLiveService {
                 correlation::derive_correlation(self.world.clone(), &request.lookup.original)?;
             if request.schema_version != 1
                 || correlation.key != request.lookup.request.key
-                || request.read.request.fixed_commit.is_some()
                 || request.read.request.min_commit.is_some()
             {
                 return Err("formal lookup identity/request binding".into());

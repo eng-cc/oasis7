@@ -6,12 +6,14 @@ use super::{
     execution_bridge::{
         formal_node_hook::FormalNodeHook, formal_package, formal_writer::FormalWriter,
     },
-    formal_live_config::{FormalLiveConfigV1, ValidatedFormalLiveConfigV1},
+    formal_live_config::ValidatedFormalLiveConfigV1,
     formal_live_service::{
         FormalHttpServer, FormalLiveHistoryResolver, FormalLiveService, FormalLiveState,
         PublishedReadState,
     },
 };
+#[cfg(test)]
+use crate::formal_live_config::FormalLiveConfigV1;
 use ed25519_dalek::SigningKey;
 use oasis7_client_api::world_service::WorldIdentity;
 use oasis7_distfs::controlled_authority::{

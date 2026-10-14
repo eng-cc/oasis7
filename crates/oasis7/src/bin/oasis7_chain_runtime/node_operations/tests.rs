@@ -471,11 +471,15 @@ fn critical_replica_removal_is_refused_before_any_operation_is_admitted() {
     let concurrent = {
         let mut second = request.clone();
         second.operation_id = "critical-remove-two".into();
+        // Even the formal request shape must fail without replacement authority.
+        second.expected_instance = None;
         std::thread::spawn(move || planner::plan(second))
     };
     let first = planner::plan(request).unwrap_err();
     let second = concurrent.join().unwrap().unwrap_err();
-    assert!(first.contains("DURABILITY_WOULD_DROP"));
+    assert!(
+        first.contains("healthy durable-set replacement is an exact local formal-owner operation")
+    );
     assert!(second.contains("DURABILITY_WOULD_DROP"));
     assert_eq!(
         actions::inspect(&binding.data_dir).unwrap()["instance"]["state"],

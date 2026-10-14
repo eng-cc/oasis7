@@ -18,7 +18,43 @@ impl RemoteWorldServiceClient {
             contract_version: WORLD_SERVICE_CONTRACT_VERSION,
             key: original.correlation.key.clone(),
         };
-        self.lookup_formal_with_original(request, original.signed_payload.clone(), Some(&original))
+        self.lookup_formal_with_original(
+            request,
+            original.signed_payload.clone(),
+            Some(&original),
+            None,
+        )
+    }
+
+    /// Recover an original envelope at an explicitly selected qualified cut.
+    /// The selector grants no trust; the normal signed lineage/result proof
+    /// and exact original-envelope checks still apply.
+    pub fn lookup_formal_original_at(
+        &self,
+        original: SubmitIntentRequest<WorldServicePayloadV1>,
+        fixed: CommitRef,
+    ) -> Result<IntentResponse<Value>, WorldServiceClientError> {
+        original
+            .validate()
+            .map_err(|error| WorldServiceClientError::Assurance(error.to_string()))?;
+        fixed
+            .validate()
+            .map_err(|error| WorldServiceClientError::Assurance(error.to_string()))?;
+        if fixed.world != self.config.expected_world {
+            return Err(WorldServiceClientError::Assurance(
+                "formal lookup fixed cut belongs to another world".into(),
+            ));
+        }
+        let request = LookupIntentRequest {
+            contract_version: WORLD_SERVICE_CONTRACT_VERSION,
+            key: original.correlation.key.clone(),
+        };
+        self.lookup_formal_with_original(
+            request,
+            original.signed_payload.clone(),
+            Some(&original),
+            Some(&fixed),
+        )
     }
 
     pub(super) fn lookup_formal(
@@ -26,7 +62,7 @@ impl RemoteWorldServiceClient {
         request: LookupIntentRequest,
         original: WorldServicePayloadV1,
     ) -> Result<IntentResponse<Value>, WorldServiceClientError> {
-        self.lookup_formal_with_original(request, original, None)
+        self.lookup_formal_with_original(request, original, None, None)
     }
 
     fn lookup_formal_with_original(
@@ -34,6 +70,7 @@ impl RemoteWorldServiceClient {
         request: LookupIntentRequest,
         original: WorldServicePayloadV1,
         expected_envelope: Option<&SubmitIntentRequest<WorldServicePayloadV1>>,
+        fixed: Option<&CommitRef>,
     ) -> Result<IntentResponse<Value>, WorldServiceClientError> {
         if self.formal_read.is_none() {
             return Err(WorldServiceClientError::Configuration(
@@ -61,7 +98,7 @@ impl RemoteWorldServiceClient {
                 scope_id: self.config.scope_id.clone(),
                 formal_anchor: None,
                 min_commit: None,
-                fixed_commit: None,
+                fixed_commit: fixed.cloned(),
                 deadline_unix_ms: None,
             })?;
             let read =

@@ -257,7 +257,6 @@ impl<T> FormalBusinessOutcomePageV1<T> {
             || self.target_view.formal_profile.as_ref() != Some(&FormalReadProfileV1::controlled())
             || self.target_view.execution_evidence_scope.is_some()
             || self.requested_correlation.key.world != self.target_request.world
-            || self.target_request.fixed_commit.is_some()
             || self.target_request.min_commit.is_some()
         {
             return Err(ContractError("formal result page request/head binding"));

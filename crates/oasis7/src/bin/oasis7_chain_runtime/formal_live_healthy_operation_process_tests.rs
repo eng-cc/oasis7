@@ -1,5 +1,7 @@
 //! Shipping-binary owner IPC and OperationStore CLI composition. Test-only
 //! monotonic oracles simulate custody; no remote deployment is performed.
+#[path = "formal_live_healthy_fixed_lookup_tests.rs"]
+mod fixed_lookup;
 use super::durable_set_tests::{HealthySetCase, ManagedEndpointChild};
 use super::*;
 use crate::{formal_live_runtime, node_lifecycle::local_io as io};
@@ -171,6 +173,34 @@ pub(super) fn exercise_with_fault(
     if cancelled["state"] != "cancelled" || cancelled["dispatched"] != false {
         return Err("before-arm CLI cancellation dispatched a native effect".into());
     }
+    let owner_client = RemoteWorldServiceClient::new(case.owner_client_config.clone())
+        .map_err(|e| e.to_string())?;
+    assert_volatile_admission(
+        owner_client
+            .submit(case.owner_request.clone())
+            .map_err(|e| e.to_string())?,
+        &case.owner_request.correlation,
+    )?;
+    // Commit the original request while the old owner can still publish Normal
+    // records. Arming H freezes that cut; later admission alone is volatile.
+    let original_deadline = Instant::now() + Duration::from_secs(20);
+    let before_arm_commit = loop {
+        match lookup_original_commit(&owner_client, &case.owner_request) {
+            Ok(commit) => break commit,
+            Err(error) if Instant::now() >= original_deadline => {
+                return Err(format!(
+                    "original request was not committed before arm: {error}"
+                ));
+            }
+            Err(_) => thread::sleep(Duration::from_millis(100)),
+        }
+    };
+    case.scenario_deadline
+        .report_stage("original request committed before arm")?;
+    // The history-page resume API intentionally starts from a fresh C0 cache.
+    // Keep the proven original receipt above and replay H using unchanged C0 trust.
+    let owner_client = RemoteWorldServiceClient::new(case.owner_client_config.clone())
+        .map_err(|e| e.to_string())?;
     request["operation_id"] = serde_json::json!("healthy-cli-operation");
     io::write(&request_path, &request)?;
     let planned = cli(
@@ -279,14 +309,6 @@ pub(super) fn exercise_with_fault(
         ],
         "CANCELLATION_AFTER_ARM",
     )?;
-    let owner_client = RemoteWorldServiceClient::new(case.owner_client_config.clone())
-        .map_err(|e| e.to_string())?;
-    assert_volatile_admission(
-        owner_client
-            .submit(case.owner_request.clone())
-            .map_err(|e| e.to_string())?,
-        &case.owner_request.correlation,
-    )?;
     let mut original_commit = None;
     let mut original_outcome = None;
     let _successor_cleanup = ExactOwnerCleanup {
@@ -313,16 +335,32 @@ pub(super) fn exercise_with_fault(
             &record,
         )?;
         if record["healthy_durable_set_progress"]["stage"] == "stopping_old_owner" {
-            original_commit = Some(lookup_original_commit(&owner_client, &case.owner_request)?);
-            original_outcome = Some(
-                serde_json::to_value(
-                    owner_client
-                        .lookup_formal_original(case.owner_request.clone())
-                        .map_err(|e| e.to_string())?
-                        .outcome,
-                )
-                .map_err(|e| e.to_string())?,
-            );
+            let fixed = fixed_lookup::boundary_selector(
+                &case,
+                signed.body.boundary_position,
+                &owner_client,
+            )?;
+            let response = owner_client
+                .lookup_formal_original_at(case.owner_request.clone(), fixed)
+                .map_err(|error| format!("exact H signed original lookup: {error}"))?;
+            if response.correlation != case.owner_request.correlation
+                || response.formal_profile.as_ref()
+                    != Some(&oasis7_client_api::world_service::FormalReadProfileV1::controlled())
+                || response.execution_evidence_scope.is_some()
+            {
+                return Err("exact H original lookup profile/correlation mismatch".into());
+            }
+            let oasis7_client_api::world_service::IntentOutcome::Committed { commit, .. } =
+                &response.outcome
+            else {
+                return Err("exact H lookup did not prove original committed outcome".into());
+            };
+            if **commit != before_arm_commit {
+                return Err("exact H lookup changed the pre-arm original CommitRef".into());
+            }
+            original_commit = Some((**commit).clone());
+            original_outcome =
+                Some(serde_json::to_value(response.outcome).map_err(|e| e.to_string())?);
             if fault_mode == Some(HealthyOwnerFaultMode::OldOwnerSigkillAfterH)
                 && !old_owner_sigkill_injected
             {
@@ -333,13 +371,10 @@ pub(super) fn exercise_with_fault(
                         h,
                     )?
                     .ok_or("SIGKILL fixture requires the actual qualified H proof")?;
-                let boundary = verify_formal_qualified(
-                    &boundary_proof,
-                    &case.authority,
-                    Some(case.initial_anchor.head()),
-                    None,
-                )
-                .map_err(|error| format!("verify actual SIGKILL boundary H: {error}"))?;
+                let boundary =
+                    fixed_lookup::qualified_lineage(&case, &signed, &owner_client, &boundary_proof)
+                        .map_err(|error| format!("select actual SIGKILL boundary H: {error}"))?
+                        .boundary;
                 if boundary.head().position != h
                     || boundary_proof
                         .decision
@@ -465,22 +500,17 @@ pub(super) fn exercise_with_fault(
         signed.body.boundary_position,
     )?
     .ok_or("H proof missing")?;
-    let boundary = verify_formal_qualified(
-        &proof,
-        &case.authority,
-        Some(case.initial_anchor.head()),
-        None,
-    )
-    .map_err(|e| e.to_string())?;
+    let lineage = fixed_lookup::qualified_lineage(&case, &signed, &owner_client, &proof)
+        .map_err(|error| format!("select provision qualified H: {error}"))?;
+    let boundary = lineage.boundary;
+    let predecessor = lineage.predecessor;
+    let higher_anchor = lineage.anchor;
     // A different lawful checkpoint under the SAME authority is still a
     // different external origin. A config.json SHA alone must not admit it.
     let validated = crate::formal_live_config::FormalLiveConfigV1::load(&case.runtime_config_path)?;
     let trust_file = validated.config.formal_read_trust_file.clone();
     let trust_bytes = std::fs::read(&trust_file).map_err(|e| e.to_string())?;
-    let higher_anchor = case
-        .initial_anchor
-        .after_verified_commit(case.authority.clone(), boundary.clone())
-        .map_err(|e| e.to_string())?;
+
     let mut changed_trust = validated.trust.clone();
     changed_trust.checkpoint = higher_anchor.checkpoint();
     changed_trust.checkpoint_digest = changed_trust
@@ -488,27 +518,33 @@ pub(super) fn exercise_with_fault(
         .digest()
         .map_err(|e| e.to_string())?;
     changed_trust.verified_anchor()?;
-    oracle_support::write_private(
+    replace_private_fixture_bytes(
+        &case.root,
         &trust_file,
         &serde_json::to_vec(&changed_trust).map_err(|e| e.to_string())?,
     )?;
     let before_pin_change = record["healthy_durable_set_progress"].clone();
-    record = cli_revision(
+    let changed_pin_result = cli_revision(
         &runtime_binary,
         &case.root,
         "resume",
         &store,
         "healthy-cli-operation",
         &record,
-    )?;
-    oracle_support::write_private(&trust_file, &trust_bytes)?;
-    if record["blocker"]
-        .as_str()
-        .is_none_or(|reason| !reason.contains("external C0 trust/checkpoint dependency changed"))
-        || record["healthy_durable_set_progress"]["stage"] != before_pin_change["stage"]
+    );
+    // Restore the exact captured bytes even if the negative CLI call fails.
+    replace_private_fixture_bytes(&case.root, &trust_file, &trust_bytes)?;
+    record = changed_pin_result?;
+    if !matches!(
+        record["blocker"].as_str(),
+        Some("approved initial publication differs from exact pinned initial activation")
+            | Some("healthy immutable external C0 trust/checkpoint dependency changed")
+    ) || record["healthy_durable_set_progress"]["stage"] != before_pin_change["stage"]
         || record["healthy_durable_set_progress"]["transition"] != before_pin_change["transition"]
     {
-        return Err("mutable referenced trust silently replaced admitted original C0".into());
+        return Err(format!(
+            "changed external trust was not refused without progress mutation: {record}"
+        ));
     }
     let seals = &record["healthy_durable_set_progress"]["old_seals"];
     let evidence = DurableSetSealedEvidenceV1 {
@@ -517,15 +553,12 @@ pub(super) fn exercise_with_fault(
         replica_seal: serde_json::from_value(seals[1].clone()).map_err(|e| e.to_string())?,
     };
     let sealed = Arc::new(
-        verify_sealed_durable_set_transition(
-            &evidence,
-            &case.authority,
-            case.initial_anchor.head(),
-            &boundary,
-        )
-        .map_err(|e| e.to_string())?,
+        verify_sealed_durable_set_transition(&evidence, &case.authority, &predecessor, &boundary)
+            .map_err(|error| format!("verify original P/R seals at exact H: {error}"))?,
     );
-    case.primary_provision.provision(sealed.clone())?;
+    case.primary_provision
+        .provision(sealed.clone())
+        .map_err(|error| format!("provision successor primary protected oracle: {error}"))?;
     let resource = case
         .authority
         .policy()
@@ -537,13 +570,14 @@ pub(super) fn exercise_with_fault(
         sealed.clone(),
         new_replica_directory.clone(),
         resource,
-    )?;
+    )
+    .map_err(|error| format!("provision successor replica protected oracle: {error}"))?;
     let lineage_directory = case.root.join("operation-lineage");
     oracle_support::private_directory(&lineage_directory)?;
     let page = HealthyEndpointLineagePageV1 {
         schema_version: 1,
         from: case.initial_anchor.head().head(),
-        steps: vec![HealthyEndpointLineageStepV1::Commit(Box::new(proof))],
+        steps: lineage.steps,
         to: boundary.head(),
     };
     oracle_support::write_private(
@@ -576,8 +610,8 @@ pub(super) fn exercise_with_fault(
         case.replica_address,
         &replica_bootstrap,
     )?;
-    let new_primary = ManagedEndpointChild::start(&case.endpoint_binary, &pconfig)?;
-    let new_replica = ManagedEndpointChild::start(&case.endpoint_binary, &rconfig)?;
+    let mut new_primary = ManagedEndpointChild::start(&case.endpoint_binary, &pconfig)?;
+    let mut new_replica = ManagedEndpointChild::start(&case.endpoint_binary, &rconfig)?;
     new_primary.wait_management(primary_management, Duration::from_secs(20))?;
     new_replica.wait_management(replica_management, Duration::from_secs(20))?;
     let mut old_replica_stopped = false;
@@ -1121,4 +1155,37 @@ impl Drop for ExactOwnerCleanup {
             );
         }
     }
+}
+
+fn replace_private_fixture_bytes(root: &Path, path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    crate::controlled_live_config::require_private_owned(root, true)?;
+    let resolved = io::regular(path)?;
+    if path.parent() != Some(root) || resolved != path {
+        return Err("trust overwrite must name a direct private fixture file".into());
+    }
+    let original = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    if !original
+        .metadata()
+        .map_err(|error| error.to_string())?
+        .is_file()
+    {
+        return Err("trust overwrite target is not a regular private fixture file".into());
+    }
+    crate::controlled_live_config::require_private_owned(path, false)?;
+    let temporary = root.join(format!(".fixture-trust-{}", io::random_id()?));
+    let result = (|| {
+        oracle_support::write_private(&temporary, bytes)?;
+        io::reject_symlinks(path)?;
+        std::fs::rename(&temporary, path).map_err(|error| error.to_string())?;
+        io::sync_dir(root)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
 }

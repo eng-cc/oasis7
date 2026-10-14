@@ -1,11 +1,12 @@
 //! Bounded framing for private formal-owner IPC.
-use super::{MAX_CONTROL_BYTES, configure_control_stream};
+use super::MAX_CONTROL_BYTES;
+#[cfg(test)]
+use super::configure_control_stream;
 use serde::{Serialize, de::DeserializeOwned};
+use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
-use std::{
-    io::{Read, Write},
-    time::Duration,
-};
+#[cfg(test)]
+use std::time::Duration;
 
 pub(super) fn write_message<T: Serialize>(
     stream: &mut UnixStream,

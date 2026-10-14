@@ -400,3 +400,113 @@ fn lookup_preserves_signed_service_unavailable_reason() {
             if message == "native business CAS read failed"
     ));
 }
+
+#[test]
+fn fixed_original_lookup_signs_exact_selector_and_rejects_substitution_without_cache_advance() {
+    for substitute in [false, true] {
+        let (world, trust, anchor, _) = actual_world_initial_fixture();
+        let fixed = commit_ref(&anchor, &projection(&world));
+        let original = delegation_request(fixed.world.clone());
+        let checkpoint = anchor.checkpoint();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let config = WorldServiceClientConfig {
+            formal_read_trust: Some(FormalReadTrustConfigV1 {
+                initial_trust: trust,
+                checkpoint_digest: checkpoint.digest().unwrap(),
+                checkpoint,
+            }),
+            endpoint: format!("http://{}", listener.local_addr().unwrap()),
+            trusted_service_public_key: public(9),
+            expected_world: fixed.world.clone(),
+            scope_id: "public".into(),
+            read_private_key_hex: h(7),
+            timeout: std::time::Duration::from_secs(10),
+            max_response_bytes: 4 * 1024 * 1024,
+        };
+        let expected_fixed = fixed.clone();
+        let task = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(10)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let (start, len) = loop {
+                let mut chunk = [0; 1024];
+                let count = stream.read(&mut chunk).unwrap();
+                assert!(count > 0);
+                bytes.extend_from_slice(&chunk[..count]);
+                if let Some(end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&bytes[..end]).to_lowercase();
+                    let len = head
+                        .lines()
+                        .find_map(|line| line.strip_prefix("content-length:"))
+                        .unwrap()
+                        .trim()
+                        .parse::<usize>()
+                        .unwrap();
+                    if bytes.len() >= end + 4 + len {
+                        break (end + 4, len);
+                    }
+                }
+            };
+            let message: FormalAuthenticatedLookupV1 =
+                serde_json::from_slice(&bytes[start..start + len]).unwrap();
+            authority::verify_read_request(VIEW_PATH, &message.read).unwrap();
+            assert_eq!(
+                message.read.request.fixed_commit.as_ref(),
+                Some(&expected_fixed)
+            );
+            let (status, payload) = if substitute {
+                let correlation = crate::world_service::derive_correlation(
+                    message.read.request.world.clone(),
+                    &message.lookup.original,
+                )
+                .unwrap();
+                let mut page =
+                    progress_page(&world, &anchor, message.read.request.clone(), correlation);
+                page.target_request
+                    .fixed_commit
+                    .as_mut()
+                    .unwrap()
+                    .state_root_ref = h(231);
+                ("200 OK", serde_json::to_value(page).unwrap())
+            } else {
+                (
+                    "503 Service Unavailable",
+                    serde_json::json!({"message": "exact fixed selector observed"}),
+                )
+            };
+            let signed = authority::sign_service_response(
+                LOOKUP_PATH,
+                authority::request_digest(LOOKUP_PATH, &message).unwrap(),
+                payload,
+                &h(9),
+            )
+            .unwrap();
+            let body = serde_json::to_vec(&signed).unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+        });
+        let client = RemoteWorldServiceClient::new(config).unwrap();
+        let before = client.formal_checkpoint().unwrap();
+        let error = client
+            .lookup_formal_original_at(original, fixed)
+            .unwrap_err();
+        task.join().unwrap();
+        if substitute {
+            assert!(
+                matches!(error, WorldServiceClientError::Assurance(message) if message == "formal lookup response differs from the signed read request")
+            );
+        } else {
+            assert!(
+                matches!(error, WorldServiceClientError::Rejected { status: 503, message } if message == "exact fixed selector observed")
+            );
+        }
+        assert_eq!(client.formal_checkpoint().unwrap(), before);
+    }
+}

@@ -609,7 +609,7 @@ pub(crate) fn launch_operation_with_fixed_trust(
     }
     let mut child = command
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| format!("formal runtime owner spawn outcome unknown: {error}"))?;
@@ -617,7 +617,11 @@ pub(crate) fn launch_operation_with_fixed_trust(
         .stderr
         .take()
         .ok_or("formal runtime owner stderr pipe unavailable")?;
-    let diagnostics = WorkerDiagnostics::drain(stderr)?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("formal runtime owner stdout pipe unavailable")?;
+    let diagnostics = WorkerDiagnostics::drain(stdout, stderr)?;
     // Retain the exact Child handle to detect worker exit during startup. It is
     // used only for wait status, never for process control; lifecycle control
     // remains through the private authenticated socket.
@@ -890,14 +894,21 @@ fn run_owner_with_fixed_trust(
     if validated.anchor.authority().definition().profile_version != 2 {
         return Err("UNSUPPORTED_ROLE_OR_PROFILE: formal runtime owner requires profile 2".into());
     }
-    let active = validated.active_authority();
-    let mut instance = FormalRuntimeInstanceV1 {
+    let initial_authority = validated.active_authority().clone();
+    let node_id = validated.config.node_id.clone();
+    // Restore and verify lineage before binding the immutable attempt identity.
+    // An open runtime does not serve until the receipt and socket are ready.
+    let restored = FormalLiveRuntime::open_from_validated_with_native_history(validated);
+    let active = restored
+        .as_ref()
+        .map_or(&initial_authority, |runtime| runtime.active_authority());
+    let instance = FormalRuntimeInstanceV1 {
         api_version: OWNER_API.into(),
         operation_id: operation_id.into(),
         request_digest: request_digest.into(),
         incarnation: super::super::node_lifecycle::local_io::random_id()?,
         config_digest: config_digest_value,
-        node_id: validated.config.node_id.clone(),
+        node_id,
         world_id: active.definition().world.world_id.clone(),
         chain_id: active.definition().world.chain_id.clone(),
         authority_id: active.authority_id().map_err(|error| error.to_string())?,
@@ -964,7 +975,7 @@ fn run_owner_with_fixed_trust(
         .set_nonblocking(true)
         .map_err(|error| error.to_string())?;
 
-    let mut runtime = match FormalLiveRuntime::open_from_validated_with_native_history(validated) {
+    let mut runtime = match restored {
         Ok(runtime) => runtime,
         Err(error) => {
             snapshot.state = "failed".into();
@@ -973,14 +984,6 @@ fn run_owner_with_fixed_trust(
             return Err(error);
         }
     };
-    let restored_authority = runtime.active_authority();
-    instance.authority_id = restored_authority
-        .authority_id()
-        .map_err(|error| error.to_string())?;
-    instance.authority_epoch = restored_authority.definition().epoch;
-    instance.profile_version = restored_authority.definition().profile_version;
-    snapshot.instance = instance.clone();
-    write_owner_record(&state_path, snapshot.clone())?;
     if let Err(error) = runtime.start() {
         snapshot.state = "failed".into();
         snapshot.last_error = Some(bounded_reason(&error));

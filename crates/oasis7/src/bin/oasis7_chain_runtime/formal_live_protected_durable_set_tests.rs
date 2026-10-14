@@ -15,15 +15,7 @@ use oasis7_distfs::controlled_authority::formal::{
     verify_durable_set_activation, verify_formal_qualified, verify_normal_durable_set_transition,
     verify_sealed_durable_set_transition,
 };
-use std::{
-    io::{BufRead, BufReader},
-    net::TcpStream,
-    path::PathBuf,
-    process::{Child, Command, Stdio},
-    sync::Arc,
-    sync::mpsc::{self, Receiver},
-    time::Duration,
-};
+use std::{net::TcpStream, path::PathBuf, sync::Arc, time::Duration};
 
 #[test]
 #[ignore = "actual Node and protected endpoint processes; requires OASIS7_FORMAL_ENDPOINT_TEST_BIN"]
@@ -388,8 +380,10 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
         case.replica_address,
         &replica_bootstrap,
     )?;
-    let new_primary = ManagedEndpointChild::start(&case.endpoint_binary, &primary_healthy_config)?;
-    let new_replica = ManagedEndpointChild::start(&case.endpoint_binary, &replica_healthy_config)?;
+    let mut new_primary =
+        ManagedEndpointChild::start(&case.endpoint_binary, &primary_healthy_config)?;
+    let mut new_replica =
+        ManagedEndpointChild::start(&case.endpoint_binary, &replica_healthy_config)?;
     case.scenario_deadline
         .report_stage("successor P/R management children started")?;
     new_primary
@@ -397,7 +391,7 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
         .map_err(|error| {
             format!(
                 "healthy primary management readiness pid={} config={}: {error}",
-                new_primary.child.id(),
+                new_primary.id(),
                 primary_healthy_config.display()
             )
         })?;
@@ -406,7 +400,7 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
         .map_err(|error| {
             format!(
                 "healthy replica management readiness pid={} config={}: {error}",
-                new_replica.child.id(),
+                new_replica.id(),
                 replica_healthy_config.display()
             )
         })?;
@@ -1077,104 +1071,6 @@ fn exercise_successor_long_history(
     Ok(runtime)
 }
 
-pub(super) struct ManagedEndpointChild {
-    child: Child,
-    lines: Receiver<String>,
-    reader: Option<thread::JoinHandle<()>>,
-}
-impl ManagedEndpointChild {
-    pub(super) fn start(binary: &std::ffi::OsStr, config: &Path) -> Result<Self, String> {
-        let mut child = Command::new(binary)
-            .arg("--config")
-            .arg(config)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|error| format!("start healthy protected endpoint: {error}"))?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or("healthy endpoint stdout unavailable")?;
-        let (sender, lines) = mpsc::channel();
-        let reader = thread::Builder::new()
-            .name("healthy-endpoint-readiness".into())
-            .spawn(move || {
-                for line in BufReader::new(stdout).lines() {
-                    match line {
-                        Ok(line) => {
-                            if sender.send(line).is_err() {
-                                break;
-                            }
-                        }
-                        Err(_) => break,
-                    }
-                }
-            })
-            .map_err(|error| error.to_string())?;
-        Ok(Self {
-            child,
-            lines,
-            reader: Some(reader),
-        })
-    }
-    pub(super) fn wait_management(
-        &self,
-        expected: std::net::SocketAddr,
-        timeout: Duration,
-    ) -> Result<(), String> {
-        self.wait_address("formal_endpoint_awaiting_management=", expected, timeout)
-    }
-    pub(super) fn wait_ordinary(
-        &self,
-        expected: std::net::SocketAddr,
-        timeout: Duration,
-    ) -> Result<(), String> {
-        self.wait_address("formal_endpoint_listening=", expected, timeout)
-    }
-    fn wait_address(
-        &self,
-        prefix: &str,
-        expected: std::net::SocketAddr,
-        timeout: Duration,
-    ) -> Result<(), String> {
-        let deadline = Instant::now() + timeout;
-        let mut seen = Vec::new();
-        loop {
-            let remaining = deadline
-                .checked_duration_since(Instant::now())
-                .filter(|value| !value.is_zero())
-                .ok_or_else(|| format!("endpoint did not emit {prefix}; output={seen:?}"))?;
-            match self.lines.recv_timeout(remaining) {
-                Ok(line) if line.starts_with(prefix) => {
-                    let address = line[prefix.len()..]
-                        .parse::<std::net::SocketAddr>()
-                        .map_err(|error| format!("parse endpoint readiness {line:?}: {error}"))?;
-                    if address != expected {
-                        return Err(format!(
-                            "endpoint readiness address {address} differs from expected {expected}"
-                        ));
-                    }
-                    return Ok(());
-                }
-                Ok(line) => seen.push(line),
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    return Err(format!(
-                        "endpoint timed out before {prefix}; output={seen:?}"
-                    ));
-                }
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    return Err(format!("endpoint exited before {prefix}; output={seen:?}"));
-                }
-            }
-        }
-    }
-}
-impl Drop for ManagedEndpointChild {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        if let Some(reader) = self.reader.take() {
-            let _ = reader.join();
-        }
-    }
-}
+#[path = "formal_live_protected_durable_set_tests/managed_endpoint.rs"]
+mod managed_endpoint;
+pub(super) use managed_endpoint::ManagedEndpointChild;
