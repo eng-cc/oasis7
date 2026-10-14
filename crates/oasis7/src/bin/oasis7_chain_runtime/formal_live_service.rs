@@ -935,6 +935,12 @@ impl FormalLiveService {
 fn validate_payload(world: &World, payload: &WorldServicePayloadV1) -> Result<(), String> {
     match payload {
         WorldServicePayloadV1::GameTaskCreate(signed) => game_task::validate_owner(world, signed),
+        WorldServicePayloadV1::GameGoalPublish(signed) => {
+            game_task::validate_publish_owner(world, signed)
+        }
+        WorldServicePayloadV1::GameExecutorControl(signed) => {
+            game_task::validate_executor_owner(world, signed)
+        }
         WorldServicePayloadV1::GameplayJson(bytes) => {
             gameplay::authenticated_action(world, bytes).map(|_| ())
         }

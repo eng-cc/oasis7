@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    os::unix::fs::{MetadataExt, OpenOptionsExt},
+    os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -101,6 +101,27 @@ fn package_runtime_child_entry() {
 
 #[test]
 fn package_operation_manager_child_entry() {
+    if std::env::var_os(MANAGER_REQUEST_ENV).is_none()
+        || std::env::var_os(MANAGER_STORE_ENV).is_none()
+        || std::env::var_os(MANAGER_OPERATION_ENV).is_none()
+        || std::env::var_os(MANAGER_PRIOR_RUNTIME_ENV).is_none()
+    {
+        return;
+    }
+    // The shipping CLI runs this operation on the OS main thread. libtest
+    // dispatches test bodies on its smaller worker stack, so move only the
+    // manager child body to a stack matching the usual native main-thread
+    // budget instead of changing production stack policy.
+    std::thread::Builder::new()
+        .name("package-operation-manager".into())
+        .stack_size(8 * 1024 * 1024)
+        .spawn(package_operation_manager_child_run)
+        .expect("spawn package manager test body with CLI-sized stack")
+        .join()
+        .expect("package manager test body did not panic");
+}
+
+fn package_operation_manager_child_run() {
     let (Some(request_path), Some(store_path), Some(operation_id), Some(prior_runtime)) = (
         std::env::var_os(MANAGER_REQUEST_ENV),
         std::env::var_os(MANAGER_STORE_ENV),
@@ -288,6 +309,8 @@ fn package_operation_manager_child_entry() {
 /// OperationRecord, the selected prior image stages the exact durable request
 /// while the original owner is live; the test checks that stage leaves its
 /// incarnation, generation, config, and current release unchanged.
+/// This is a test-image transaction proof; shipping-binary different-SHA
+/// compatibility and upgrade behavior remain covered by the package script.
 #[test]
 fn package_failed_candidate_start_rolls_back_and_restarts_exact_prior_image() {
     let mut fixture = PackageFixture::new();
@@ -594,10 +617,35 @@ impl PackageFixture {
             ),
         )
         .unwrap();
-        let helper = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let production_helper = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../scripts/p2p-public-testnet-package-node-upgrade.sh")
             .canonicalize()
             .unwrap();
+        let descriptor_runner = self.root.join("package-test-descriptor-runner.py");
+        write_private_executable(
+            &descriptor_runner,
+            include_str!("package_test_descriptor_runner.py"),
+        );
+        let helper = self.root.join("package-test-upgrade-helper.sh");
+        let production_source = fs::read_to_string(&production_helper).unwrap();
+        let command_prefix = "command = [\n        str(binary),";
+        assert_eq!(
+            production_source.matches(command_prefix).count(),
+            1,
+            "test helper adaptation must target exactly the descriptor invocation"
+        );
+        let descriptor_runner_literal =
+            serde_json::to_string(&descriptor_runner.to_string_lossy()).unwrap();
+        let adapted_source = production_source.replacen(
+            command_prefix,
+            &format!("command = [\n        {descriptor_runner_literal},\n        str(binary),"),
+            1,
+        );
+        // The copied helper changes only how libtest is asked to run the
+        // real compatibility decoder. The production helper/CLI remains
+        // untouched; the child still reports its actual loaded image and
+        // decoded World/CAS state to the helper's normal validators.
+        write_private_executable(&helper, &adapted_source);
         json!({
             "api_version": "oasis7.local-package-upgrade-request/v1",
             "profile": "local_native_package_v1",
@@ -621,6 +669,19 @@ impl PackageFixture {
             "artifact_ref": "test-harness-runtime-image"
         })
     }
+}
+
+fn write_private_executable(path: &Path, contents: &str) {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true).mode(0o700);
+    let mut file = options
+        .open(path)
+        .expect("create private executable fixture");
+    file.write_all(contents.as_bytes())
+        .expect("write private executable fixture");
+    file.sync_all().expect("sync private executable fixture");
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+        .expect("set private executable fixture mode");
 }
 
 fn wait_running_instance(data_dir: &Path) -> Instance {

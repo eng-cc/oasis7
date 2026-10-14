@@ -396,6 +396,7 @@ fn run_prepared_world_service_kind(
         scope_id: "agent:agent-a".into(),
         read_private_key_hex: owner.clone(),
         timeout: Duration::from_secs(5),
+        formal_read_trust: None,
         max_response_bytes: 2 * 1024 * 1024,
     })
     .unwrap();

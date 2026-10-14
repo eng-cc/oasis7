@@ -32,10 +32,10 @@
 | World 初始激活 CLI | `1581`：实际 Prepare 中断后原请求重试、重复激活及签名冲突拒绝通过，40.98 秒 | 通过该场景 |
 | Full-state sync CLI | 原 C0 加入/重开、移动 head、死 seed 转独立固定信任 alternate 三项实际通过；`v4`：合法 epoch 更新后停止、安装新 grant、从不变 C0 重开通过，6.81 秒 | 四项分别通过，完整脚本待验 |
 | 单副本失联只读 | `v2`：SIGKILL R 后新提交暂停，签名状态报告 degraded；指定原已发布切面可读，未指定切面请求拒绝。R 原目录重开后原请求恰好一次提交，24.15 秒 | 通过该场景 |
-| 健康集合转换及原生安装 | canonical `healthy_` 业务 pack 收窄后 `v2`：15 项通过，16.04 秒；另 257 层 canonical 哈希等价测试通过。含 native H 复制/读回、context 重验、权限边界、Awaiting 禁签禁追加、旧 P 封禁、安装/激活丢回复重开及首个 Normal。provider 为本机受保护签名协议模拟 | 原生库组合通过；实际基线 `v8` 读回 8233 ms（重复空哈希 7825 ms）；优化后 `v9` P 激活读回 386 ms、表构建一次，R 因 1054 个独立 inode 的同步仍耗时 4775 ms，最终激活 RPC 未完成。保持原 5000 ms 期限；R pack 修复后的 `v10` 在 arm 前因背景 Tick 原请求 pending 而拒绝，尚未取得切换成功结论 |
+| 健康集合转换及原生安装 | Native 闭包补齐后的 focused 8 项通过；实际 v12 已完成 arm、P/R 安装与激活读回（约 0.4–0.65 秒，原 5 秒期限），随后发现 checkpoint 中间节点缺失并修复。实际 v13 在恢复初始 C0 时发现任务 reducer 先于 qualified reader 挂接执行；已修复完整规范空根判断及生产 reader 挂接顺序，最新实际组合待重测 | 尚未获得最新源码完整切换成功结论，仍阻断合入 |
 | 健康集合 RPC 边界恢复 | native install `v3`：1 项通过，3.50 秒；真实 TCP 受保护 checkpoint/CAS 恢复激活后的 H，旧恢复入口缺健康凭证拒绝，新入口核对 typed activation、C0、exact H 与 successor context；canonical all-targets clippy `v5` 通过，4.82 秒 | 原生 TCP 组合通过，管理安装 RPC 待接入 |
 | 健康集合普通读取 | `healthy_durable_set_read_` `v3`：3 项通过，0.33 秒；验证 Qualified H/H-1、双 seal/双安装、inventory 一致、首个 Normal 和固定 C0 的 V2 重放；清除旧资格缓存后从当前签名索引恢复原结果，C0 引用保持恒定 | 读取协议夹具通过，完整实际进程组合待验 |
-| Package upgrade 事务 | 旧本机脚本 `v10` 通过同 SHA 基线及不同 SHA 缺 chain 配置提前拒绝；发布链接及精确 selected-prior 调用已修复；当前 preimage 六项测试通过。实际失败启动回滚 fixture `v2` 在 stage 阶段失败，79.73 秒；prior/candidate 描述子进程均 exit 0，helper 的 `validate_runtime_compatibility_plan` 报 `current_binding` 未定义，尚未进入启动失败和回滚阶段。日志 `/tmp/oasis7-lifecycle-package-actual-fixture-20261014-v2.log` | 最新完整升级及失败回滚尚未通过 |
+| Package upgrade 事务 | 修复 helper 配置绑定、无候选链配置校验分支及测试进程描述子适配。实际失败启动 fixture v9 在 49.11 秒内完成 stage/stop/promote，因 promotion receipt 缺少 typed candidate_chain_plan_sha256 而进入 reconciling；正在补齐字段与冻结 stage 摘要的精确校验。测试使用真实 OS 子进程，但属于测试映像故障注入，不能代签不同正式版本升级 | 最新完整升级及失败回滚尚未通过，仍阻断合入 |
 | 旧目录迁移 | `v16`：12 项迁移单元测试通过；实际脚本 `v2` 使用 128 MiB reward 数据并 SIGKILL 迁移进程后原请求续做通过，核对身份、原 head、历史、CAS、replication、pending/outbox。验证读取原始 persisted World，保留可选 simulator mirror 语义 | 通过该构建组合，最新完整源码待验 |
 | 健康闭包读回复核 | canonical `healthy_copy_` 两项、`registered_` 三项通过；真实 walker 拒绝同一 Index 对象第二条路径上的非法深度，权限测试拒绝可被其他用户写入的目录/CAS，同时允许旧 0755/0644 读取 | 定向回归通过，完整安装进程待验 |
 | 普通节点兼容生命周期 | `local-node-lifecycle.test.sh`：真实 start/restart、原动作重试、query-only 账本恢复通过；Node canonical clippy 通过，4.19 秒 | 通过上述验证 |
@@ -65,6 +65,12 @@
 - TODO：将本机诊断日志整理为可复用的操作故障排查步骤，保留阶段及原 operation 身份，避免仅凭超时判断故障原因。
 - TODO：补齐 main 新增的 `GameGoalPublish` / `GameExecutorControl` 冷查询索引及保护记录的整体容量规划。当前两类记录保留在热状态，不删除前驱；原 32 条及字节上限保持，超限明确拒绝且保留世界状态。由于 planner 只计算可归档后缀，可能保守拒绝；验收应证明合法长链完整查询、热容量有界与原控制身份不变，不能靠扩大上限或删除控制记录解决。
 - TODO（ST-02/ST-04，blocked）：验证正式玩家 Skill 支持的私有 Formal Game API 与 attached executor binding 后，组织独立 Agent 对 retained task/nonce/control 的目标、问答、断连回读和恢复自主试玩。现有普通合同测试不代签；当前 delivered Skill 指向 LocalProvider/LetAI，不能证明本轮 formal 消费者。本次仍交付最初定义的本机持久化与管理基础设施，不开放完整 formal 玩法。
+
+## 合入收口评审（2026-10-14）
+
+- CI 入口由独立 `merge_scope_review` 审阅；新增 owner fault 测试漏选的 P1 已补入 `healthy_durable_set_owner_ --ignored`，复审通过。入口 SHA-256：`56b892772b773d33780b9cd87ac34bc89941489d536d4bffe04569882f2c5081`。
+- `formal_business` 独立复审 `wasm_review` 的 healthy closure 修复：完整纳入 normal/retained delta 的签名中间写入，hash、深度、预算和权限校验保留，无 P0/P1。copy/helper SHA-256：`e5ae0dc9b2841f2ecdc871cb8e125ad2358e25ee046aabafd0560c0737fde7b4`；回归 SHA-256：`e5fbe8eaa40f7cdcf72fa1cf407f9d22cf2cbbb3de732d29ed5a2ab857686629`。wrapper 定向八项通过，3.64 秒；不代签实际激活。
+- `wasm_review` 独立复审 dev/test 的 `sha2@0.11.0` 单包优化：没有修改 release/packaging、算法、features、锁文件或映像校验；无 P0/P1。Cargo.toml SHA-256：`18001c0ac9ad770c82a0c93ab7f424e1ce1449b2341fb0a81bbb1be810535caf`。实际回滚耗时仍待验证。
 
 ## 本轮独立源码评审（2026-10-13）
 

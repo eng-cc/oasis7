@@ -194,7 +194,17 @@ fn collect<'a>(
     staged: impl IntoIterator<Item = &'a CanonicalIntentResultV1>,
 ) -> Result<Vec<CanonicalIntentResultV1>, String> {
     let mut retained = super::retained_queries::hot_results(world)?;
-    if world.state().retained_history_root.is_some() {
+    let canonical_empty = crate::runtime::FormalRetainedHistoryRootV1::from_index_root(
+        oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexRootV1::empty()?,
+    )?;
+    // Exact canonical empty commitment proves there are no cold task results.
+    // Nonempty or malformed descriptors still require authenticated CAS access.
+    if world
+        .state()
+        .retained_history_root
+        .as_ref()
+        .is_some_and(|root| root != &canonical_empty)
+    {
         for agent in world.capability_revocation_state().agent_identities.keys() {
             for (key, result) in super::retained_queries::game_task_results(world, agent)? {
                 if let Some(previous) = retained.get(&key) {

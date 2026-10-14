@@ -225,21 +225,10 @@ pub use module_tick_runtime::{
     ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
     ModuleTickRoutingMetricsSnapshot,
 };
-#[cfg(test)]
-use oasis7_wasm_router::PreparedSubscription;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::{cell::RefCell, path::PathBuf, sync::Arc};
-
-#[derive(Debug, Clone)]
-pub(super) struct PreparedSubscriptionCacheEntry {
-    #[cfg(test)]
-    pub(super) subscriptions: Vec<ModuleSubscription>,
-    pub(super) _subscription_fingerprint: String,
-    #[cfg(test)]
-    pub(super) prepared: Arc<[PreparedSubscription]>,
-}
 
 const DEFAULT_MAX_PENDING_ACTIONS: usize = 8_192;
 const DEFAULT_MAX_PENDING_EFFECTS: usize = 8_192;
@@ -252,18 +241,7 @@ pub(super) const BUILTIN_MODULE_SIGNER_PUBLIC_KEY_HEX: &str =
 pub(super) const TEST_MODULE_SIGNER_NODE_ID: &str = "test.module.release.signer";
 
 #[cfg(any(test, feature = "test_tier_required", feature = "test_tier_full"))]
-fn test_module_signer_public_key_hex() -> String {
-    use ed25519_dalek::SigningKey;
-
-    let seed = crate::runtime::util::sha256_hex(b"oasis7-test-module-artifact-signer-v1");
-    let seed_bytes = hex::decode(seed).expect("decode test module signing seed");
-    let private_key_bytes: [u8; 32] = seed_bytes
-        .as_slice()
-        .try_into()
-        .expect("test module signing seed is 32 bytes");
-    let signing_key = SigningKey::from_bytes(&private_key_bytes);
-    hex::encode(signing_key.verifying_key().to_bytes())
-}
+use runtime_support::test_module_signer_public_key_hex;
 
 fn default_next_governance_identity_penalty_id() -> u64 {
     1

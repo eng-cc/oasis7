@@ -345,7 +345,19 @@ mod legacy_retirement;
 
 #[test]
 fn game_executor_retention_overflow_preserves_revision_chain_and_fails_closed() {
-    let (mut world, owner, delegate, _) = boot();
+    let (mut world, owner) = fixture_with_formal_history(true);
+    let create = result(&world, request(&owner, "retention-create"));
+    let initial = create_control(&create.request).unwrap();
+    world.record_world_service_result(create).unwrap();
+    let publish = goal_result(
+        &world,
+        goal_request(&owner, &initial, "retention-goal"),
+        &[],
+        2,
+    );
+    world.record_world_service_result(publish).unwrap();
+    let delegate = hex::encode([72; 32]);
+    delegated(&mut world, &owner, 1, 1, &delegate);
     for revision in 0..40 {
         let control = current_control(&world, "agent").unwrap().unwrap();
         let accepted = execute(
@@ -362,7 +374,6 @@ fn game_executor_retention_overflow_preserves_revision_chain_and_fails_closed() 
         world.record_world_service_result(accepted).unwrap();
     }
     let expected = current_control(&world, "agent").unwrap().unwrap();
-    world.initialize_empty_formal_history().unwrap();
     let before = world.snapshot();
     let error = world.prepare_formal_retention_candidate().unwrap_err();
     assert!(error.contains("WorldService history cannot fit the hot count/byte budget"));

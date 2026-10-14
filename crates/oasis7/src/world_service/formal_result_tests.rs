@@ -250,6 +250,7 @@ fn changes_context(
         }),
     };
     let projection = WorldServiceProjection {
+        native_delegation_authorizations: Vec::new(),
         formal_commit_header: Some(header),
         canonical_agent_owner: None,
         canonical_agent_chat: None,

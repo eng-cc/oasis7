@@ -386,6 +386,10 @@ pub(crate) fn validate_progress(
             || promotion.commit != stage.commit
             || promotion.prepared_bundle_sha256 != stage.prepared_bundle_sha256
             || !is_digest(&promotion.promoted_config_digest)
+            || !candidate_chain_plan_digest_matches(
+                stage.candidate_chain_plan_sha256.as_deref(),
+                promotion.candidate_chain_plan_sha256.as_deref(),
+            )
             || promotion.candidate_node_config_digest != stage.candidate_node_config_digest
             || promotion.candidate_binding_digest != stage.candidate_binding_digest
             || promotion.candidate_anchor_digest != stage.candidate_anchor_digest
@@ -457,6 +461,36 @@ pub(crate) fn validate_progress(
         }
     }
     Ok(())
+}
+
+fn candidate_chain_plan_digest_matches(
+    stage_digest: Option<&str>,
+    promotion_digest: Option<&str>,
+) -> bool {
+    stage_digest == promotion_digest
+}
+
+#[cfg(test)]
+mod tests {
+    use super::candidate_chain_plan_digest_matches;
+
+    #[test]
+    fn promotion_must_retain_the_exact_staged_candidate_plan_digest() {
+        let digest = "a".repeat(64);
+        let other_digest = "b".repeat(64);
+
+        assert!(candidate_chain_plan_digest_matches(None, None));
+        assert!(candidate_chain_plan_digest_matches(
+            Some(&digest),
+            Some(&digest)
+        ));
+        assert!(!candidate_chain_plan_digest_matches(Some(&digest), None));
+        assert!(!candidate_chain_plan_digest_matches(
+            Some(&digest),
+            Some(&other_digest)
+        ));
+        assert!(!candidate_chain_plan_digest_matches(None, Some(&digest)));
+    }
 }
 
 pub(super) fn run_helper(
@@ -692,6 +726,14 @@ pub(super) fn validate_stage_binding(
             {
                 return Err("package stage receipt does not bind the operator-pinned candidate chain config".into());
             }
+            if stage.prior_node_config_digest.as_deref()
+                != Some(stage.expected_config_digest.as_str())
+            {
+                return Err(
+                    "package stage candidate plan does not bind the exact prior node config digest"
+                        .into(),
+                );
+            }
         }
         None => {
             if stage.candidate_chain_config_path.is_some()
@@ -703,11 +745,6 @@ pub(super) fn validate_stage_binding(
                 );
             }
         }
-    }
-    if stage.prior_node_config_digest.as_deref() != Some(stage.expected_config_digest.as_str()) {
-        return Err(
-            "package stage candidate plan does not bind the exact prior node config digest".into(),
-        );
     }
     require_digest(&stage.request_digest)?;
     require_digest(&stage.prepared_bundle_sha256)?;

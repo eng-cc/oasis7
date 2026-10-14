@@ -427,6 +427,8 @@ pub(crate) struct PackagePromotionReceiptV1 {
     pub promoted_config_digest: String,
     pub rollback_transaction: PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_chain_plan_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_node_config_digest: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub candidate_binding_digest: Option<String>,

@@ -830,8 +830,6 @@ impl World {
             crate::world_service::correlation::validate_result(key, result)
                 .map_err(|reason| super::capability_authorization::deny(&reason))?;
         }
-        crate::world_service::game_task::validate_history(&world)
-            .map_err(|reason| super::capability_authorization::deny(&reason))?;
         world.capability_nonce_records = snapshot.capability_nonce_records;
         world.capability_authorization_receipts = snapshot.capability_authorization_receipts;
         world.capability_invocation_contexts = snapshot.capability_invocation_contexts;
@@ -895,6 +893,15 @@ impl World {
             }
             world.verify_capability_authority_finality_proof(record, proof)?;
         }
+        // Hydrate the complete checkpoint before checking the exact qualified
+        // parent. Task-chain validation may need cold predecessors immediately.
+        if let Some((parent, reader)) = history {
+            world
+                .attach_verified_formal_history(parent, reader)
+                .map_err(|reason| WorldError::DistributedValidationFailed { reason })?;
+        }
+        crate::world_service::game_task::validate_history(&world)
+            .map_err(|reason| super::capability_authorization::deny(&reason))?;
         if observer {
             let limits = &world.runtime_memory_limits;
             if world.pending_actions.len() > limits.max_pending_actions.max(1)
@@ -917,11 +924,6 @@ impl World {
             crate::world_service::game_task::validate_history(&world)
                 .map_err(|reason| super::capability_authorization::deny(&reason))?;
             world.enforce_journal_event_limit();
-        }
-        if let Some((parent, reader)) = history {
-            world
-                .attach_verified_formal_history(parent, reader)
-                .map_err(|reason| WorldError::DistributedValidationFailed { reason })?;
         }
         world.verify_tick_consensus_chain()?;
         Ok(world)
