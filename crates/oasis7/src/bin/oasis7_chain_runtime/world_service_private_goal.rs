@@ -357,9 +357,26 @@ pub(crate) fn maybe_handle(
         |stage| {
             tracing::warn!(stage, "private task context operation rejected");
             #[cfg(test)]
-            eprintln!("TASK_PRIVATE_CONTEXT_REJECT stage={stage}");
+            eprintln!(
+                "TASK_PRIVATE_CONTEXT_REJECT route={} stage={stage}",
+                private_route_tag(target)
+            );
         },
     )
+}
+
+#[cfg(test)]
+fn private_route_tag(target: &str) -> &'static str {
+    match target.split('?').next().unwrap_or(target) {
+        PREPARE_PATH => "goal_prepare",
+        CURRENT_PATH => "goal_current",
+        TASK_SNAPSHOT_PATH => "task_snapshot",
+        TASK_CONTEXT_PREPARE_PATH => "task_context_prepare",
+        TASK_CONTEXT_READ_PATH => "task_context_read",
+        TASK_RECIPE_QUOTE_PATH => "task_recipe_quote",
+        TASK_FACTORY_QUOTE_PATH => "task_factory_quote",
+        _ => "other",
+    }
 }
 /// Returns bounded errors only; never prints body, signatures, keys or paths.
 #[expect(
@@ -395,6 +412,10 @@ pub(crate) fn maybe_handle_with_delivery_hook(
     {
         return Ok(false);
     }
+    #[cfg(test)]
+    let route = private_route_tag(path);
+    #[cfg(test)]
+    let started = std::time::Instant::now();
     let result: Result<Value, PrivateError> = (|| {
         if method != "POST"
             || target.contains('?')
@@ -480,11 +501,33 @@ pub(crate) fn maybe_handle_with_delivery_hook(
         },
         body.len()
     );
-    stream
+    let write_result = stream
         .write_all(response.as_bytes())
-        .and_then(|_| stream.write_all(&body))
-        .map_err(|_| "private response write failed")?;
+        .and_then(|_| stream.write_all(&body));
+    #[cfg(test)]
+    if route != "other" {
+        let outcome = match &write_result {
+            Ok(()) => "response_written",
+            Err(error) if is_peer_disconnect(error) => "peer_disconnected",
+            Err(_) => "write_failed",
+        };
+        eprintln!(
+            "TASK_PRIVATE_HTTP route={route} status={status} outcome={outcome} elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
+    }
+    write_result.map_err(|_| "private response write failed")?;
     Ok(true)
+}
+
+#[cfg(test)]
+fn is_peer_disconnect(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::BrokenPipe
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+    )
 }
 
 #[cfg(test)]

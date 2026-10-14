@@ -461,6 +461,13 @@ fn run_prepared_world_service_kind(
                         let Some(path) = first.next().map(str::to_owned) else {
                             continue;
                         };
+                        let route = task_private_route_tag(&path);
+                        if route != "other" {
+                            eprintln!(
+                                "TASK_PRIVATE_FIXTURE fixture={} route={route} outcome=accepted",
+                                kind.tag()
+                            );
+                        }
                         let length = headers
                             .split("\r\n")
                             .filter_map(|line| line.split_once(':'))
@@ -481,6 +488,7 @@ fn run_prepared_world_service_kind(
                             std::thread::sleep(cleanup_admission_delay);
                         }
                         bytes.extend(body);
+                        let handler_started = Instant::now();
                         let response = crate::world_service_api::private_goal::maybe_handle(
                             &mut stream,
                             &bytes,
@@ -494,6 +502,19 @@ fn run_prepared_world_service_kind(
                             &signer,
                             Some(&store),
                         );
+                        if route != "other" {
+                            let outcome = match &response {
+                                Ok(true) => "completed",
+                                Ok(false) => "unhandled",
+                                Err(error) if error == "private response write failed" => "write_failed",
+                                Err(_) => "handler_failed",
+                            };
+                            eprintln!(
+                                "TASK_PRIVATE_FIXTURE fixture={} route={route} outcome={outcome} elapsed_ms={}",
+                                kind.tag(),
+                                handler_started.elapsed().as_millis()
+                            );
+                        }
                         let handled = match response {
                             Ok(handled) => handled,
                             Err(error) if error == "private response write failed" => {
@@ -881,6 +902,30 @@ enum PreparedWorldKind {
     Logistics,
     Production,
     StarterChain,
+}
+impl PreparedWorldKind {
+    const fn tag(self) -> &'static str {
+        match self {
+            Self::Movement => "movement",
+            Self::Logistics => "logistics",
+            Self::Production => "production",
+            Self::StarterChain => "starter_chain",
+        }
+    }
+}
+fn task_private_route_tag(path: &str) -> &'static str {
+    match path.split('?').next().unwrap_or(path) {
+        oasis7::world_service::private_task_context::TASK_CONTEXT_PREPARE_PATH => {
+            "task_context_prepare"
+        }
+        oasis7::world_service::private_task_context::TASK_CONTEXT_READ_PATH => "task_context_read",
+        oasis7::world_service::private_task_context::TASK_SNAPSHOT_PATH => "task_snapshot",
+        oasis7::world_service::task_recipe_quote::TASK_RECIPE_QUOTE_PATH => "task_recipe_quote",
+        oasis7::world_service::task_factory_quote::TASK_FACTORY_QUOTE_PATH => "task_factory_quote",
+        oasis7::world_service::private_goal_read::GOAL_PREPARE_PATH => "goal_prepare",
+        oasis7::world_service::private_goal_read::GOAL_CURRENT_PATH => "goal_current",
+        _ => "other",
+    }
 }
 #[path = "world_service_task_starter_chain_playtest.rs"]
 mod starter_chain_playtest;
