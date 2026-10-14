@@ -1,6 +1,9 @@
+#[path = "index_coverage.rs"]
+mod coverage;
 #[path = "lifecycle_metadata.rs"]
 mod lifecycle_metadata;
 use crate::{Error, Result, domain::*, process::run};
+use coverage::{Coverage, read_document};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 pub fn digest(bytes: &[u8]) -> String {
@@ -44,13 +47,13 @@ pub fn safe_path(root: &Path, relative: &str) -> Result<std::path::PathBuf> {
     }
     Ok(path)
 }
-pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
+pub fn read(project: &Project) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
     read_candidate(project, || {})
 }
 fn read_candidate(
     project: &Project,
     after_read: impl FnOnce(),
-) -> Result<(Vec<DocumentSection>, GitSnapshot)> {
+) -> Result<(Vec<DocumentSection>, GitSnapshot, String, bool)> {
     let root = Path::new(&project.path);
     let files = document_list(root)?;
     let changed = dirty_paths(root)?;
@@ -59,6 +62,7 @@ fn read_candidate(
     let mut metadata = std::collections::HashMap::new();
     let mut total = 0;
     let mut observed = Vec::new();
+    let mut omissions = Vec::new();
     let mut names: Vec<&[u8]> = files
         .split(|b| *b == 0)
         .filter(|b| b.ends_with(b".md"))
@@ -79,24 +83,28 @@ fn read_candidate(
         };
         (priority, name.into_owned())
     });
-    for name in names.into_iter().take(3000) {
+    let mut coverage = Coverage::new(names.len());
+    for (position, name) in names.into_iter().enumerate() {
         let name = std::str::from_utf8(name)
             .map_err(|_| Error::Invalid("non UTF-8 document path".into()))?;
         if !name.ends_with(".md") {
             continue;
         }
-        let path = match safe_path(root, name) {
-            Ok(path) => path,
-            Err(_) => continue,
-        };
-        if std::fs::metadata(&path)?.len() > 1024 * 1024 {
+        if position >= 3000 {
+            coverage.omit(name, "file_count_budget");
             continue;
         }
-        let content = std::fs::read_to_string(path)?;
+        let remaining = 16 * 1024 * 1024 - total;
+        let content = match read_source(root, name, remaining) {
+            Ok(content) => content,
+            Err(reason) => {
+                coverage.omit(name, reason);
+                omissions.push((name.to_owned(), reason, remaining));
+                continue;
+            }
+        };
         total += content.len();
-        if total > 16 * 1024 * 1024 {
-            break;
-        }
+        coverage.read += 1;
         let dirty = changed.contains(name.as_bytes());
         let revision = digest(content.as_bytes());
         observed.push((name.to_owned(), revision.clone()));
@@ -138,17 +146,10 @@ fn read_candidate(
     }
     for (name, revision) in observed {
         let matches = safe_path(root, &name)
-            .and_then(|path| {
-                // Keep verification within the same per-file budget as source reading.
-                if std::fs::metadata(&path)?.len() > 1024 * 1024 {
-                    return Ok(false);
-                }
-                use std::io::Read;
-                let mut bytes = Vec::new();
-                std::fs::File::open(path)?
-                    .take(1024 * 1024 + 1)
-                    .read_to_end(&mut bytes)?;
-                Ok(bytes.len() <= 1024 * 1024 && digest(&bytes) == revision)
+            .map(|path| {
+                // Reuse the bounded, non-blocking reader during consistency verification too.
+                read_document(&path, 1024 * 1024)
+                    .is_ok_and(|content| digest(content.as_bytes()) == revision)
             })
             .unwrap_or(false);
         if !matches {
@@ -157,12 +158,38 @@ fn read_candidate(
             ));
         }
     }
+    for (name, reason, remaining) in omissions {
+        if read_source(root, &name, remaining).err() != Some(reason) {
+            return Err(Error::Invalid(
+                "document omission changed during indexing; refresh again".into(),
+            ));
+        }
+    }
     if git(root, &["rev-parse", "HEAD"])? != project.head {
         return Err(Error::Invalid(
             "HEAD changed during indexing; refresh again".into(),
         ));
     }
-    Ok((sections, snapshot))
+    Ok((
+        sections,
+        snapshot,
+        coverage.summary(total),
+        coverage.has_omissions(),
+    ))
+}
+fn read_source(
+    root: &Path,
+    name: &str,
+    remaining: usize,
+) -> std::result::Result<String, &'static str> {
+    let path = safe_path(root, name).map_err(|error| match error {
+        Error::Io(error) if error.kind() == std::io::ErrorKind::NotFound => "deleted",
+        Error::Io(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+            "permission_denied"
+        }
+        _ => "path_unavailable",
+    })?;
+    read_document(&path, remaining)
 }
 fn dirty_paths(root: &Path) -> Result<Vec<u8>> {
     run(

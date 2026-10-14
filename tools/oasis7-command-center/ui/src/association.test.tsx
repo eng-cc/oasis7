@@ -44,3 +44,18 @@ it('offers summary chapters on the home view and opens their original revision w
   fireEvent.click(screen.getByRole('button', {name:'关闭详情'}));
   expect(entry).toHaveFocus();
 });
+
+it('shows local omission counts and paths even when no sections were readable', async () => {
+  const coverage = '候选 1，已读 0，遗漏 1; 遗漏原因: invalid_utf8 1; 路径样本（前 1 / 1）: invalid_utf8: doc/prd.md';
+  const snapshot: Snapshot = {
+    project:{id:'project',path:'/repo',gitCommonDir:'/repo/.git',branch:'work',head:'head',environment:'local'},
+    preferences:{projectPath:'/repo',view:'direction',query:''},sections:[],
+    associations:[],decisions:[],readingPositions:[],git:{status:'',worktrees:''},
+    sources:[{kind:'local',state:'partial',lastAttempt:'123',lastSuccess:'123',sourceRevision:'head',generation:'1',coverage,error:null}],
+  };
+  mock.invoke.mockImplementation(async (command: string) => command === 'query_view' ? snapshot : {state:'unconnected',repository:null,account:null,observedAt:null,lastAttempt:null,coverage:'未接入',error:null,pulls:[]});
+  render(() => <App />);
+  await waitFor(() => expect(screen.getByText('local · 部分读取')).toBeInTheDocument());
+  expect(document.body.textContent).toContain(coverage);
+  expect(document.body.textContent).not.toContain('local · 读取成功 · 空');
+});
