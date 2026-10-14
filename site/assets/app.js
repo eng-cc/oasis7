@@ -1288,9 +1288,9 @@
     const panels = Array.from(root.querySelectorAll("[data-decision-panel]"));
     const select = (id) => {
       buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.decisionStep === id)));
-      panels.forEach((panel) => { panel.hidden = panel.dataset.decisionPanel !== id; });
+      panels.forEach((panel) => { panel.classList.toggle("is-active", panel.dataset.decisionPanel === id); });
     };
-    buttons.forEach((button) => { button.hidden = false; button.addEventListener("click", () => select(button.dataset.decisionStep)); });
+    buttons.forEach((button) => { button.hidden = false; button.disabled = false; button.addEventListener("click", () => select(button.dataset.decisionStep)); });
     select("0");
   });
   document.querySelectorAll(".proof-figure img").forEach((img) => {

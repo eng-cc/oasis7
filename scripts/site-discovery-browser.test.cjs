@@ -31,7 +31,7 @@ const origin=process.env.OASIS7_SITE_QA_URL || 'http://127.0.0.1:48760';
  }
  {
   const c=await context({viewport:{width:390,height:844}});await c.route('https://api.github.com/**',r=>r.abort());const p=await c.newPage();await p.goto(origin+'/');
-  for(let i=0;i<4;i++){await p.locator(`[data-decision-step="${i}"]`).focus();await p.keyboard.press('Enter');assert.equal(await p.locator('[data-decision-panel]:visible').count(),1);assert.equal(await p.locator(`[data-decision-panel="${i}"]`).isVisible(),true);}
+  for(let i=0;i<4;i++){await p.locator(`[data-decision-step="${i}"]`).focus();await p.keyboard.press('Enter');assert.equal(await p.locator('[data-decision-panel]:visible').count(),4);assert.equal(await p.locator(`[data-decision-panel="${i}"]`).getAttribute('class'),'is-active');}
   await p.locator('[data-menu-toggle]').click();assert.equal(await p.locator('.topbar .nav a:visible').count(),4);await p.keyboard.press('Escape');assert.equal(await p.locator('[data-menu-toggle]').getAttribute('aria-expanded'),'false');
   await p.locator('#proof').scrollIntoViewIfNeeded();await p.screenshot({path:path.join(out,'keyboard-proof-390.png')});
   await p.evaluate(()=>document.documentElement.style.fontSize='200%');assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth),390);
