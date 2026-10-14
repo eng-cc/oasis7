@@ -5,7 +5,7 @@
         "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
         "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/README.md",
         "claim_boundary": "independent_construction_passed_full_chain_inconclusive_not_first_session_or_deployment",
-        "content_sha256": "97d1ac741c52636a55898ed1a2415cc648bb1945c6bd77598701c3d1b8f7b652",
+        "content_sha256": "76394520b04b0176df8011db67c4ea3f924c4562c3cd903140a625130990bca0",
         "disposition": "retain",
         "domain_owner": "qa_engineer",
         "evidence_window": "2026-10-13-native-starter-chain-bounded-attempt",
@@ -25,7 +25,7 @@
         "authority": "doc/world-simulator/llm/external-agent-game-api.design.md",
         "backlink": "doc/testing/evidence/native-task-starter-chain-2026-10-13/bounded-retry/README.md",
         "claim_boundary": "bounded_targeted_prepared_construction_feed_first_production_not_full_first_session_or_deployment",
-        "content_sha256": "14a45f9680e9d4176d616686569e9bd3e58e880510c92188cdc130bb1e0f8fdd",
+        "content_sha256": "edd429b87774fa5603523d0685d3345ab5bfa91243365d3e7a11dcbf59f57f91",
         "disposition": "retain",
         "domain_owner": "qa_engineer",
         "evidence_window": "2026-10-13-native-starter-chain-final-retry",
@@ -322,7 +322,7 @@
         "semantic_role": "native_task_starter_chain_bounded_history"
       }
     ],
-    "group_sha256": "ec5b825a9d31bcc84c65d7940b8bab69aef448287a6b3c4da557e6b0aa254cd2",
+    "group_sha256": "b803b2577822cb9ea9e392a25cfa4455f4294bef1e19269f59e3d8494895e036",
     "id": "native-task-starter-chain-2026-10-13"
   },
   "schema": "oasis7.document-evidence-group/v1"

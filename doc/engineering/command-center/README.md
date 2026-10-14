@@ -5,7 +5,7 @@
 
 **当前判断：项目仍处于受限可玩技术预览。**
 主线是同一持久世界中的首产物、阻塞恢复和回访接续；代码前置持续交付，正式开放与真人闭环尚未验收。
-实际部署继续按已有用户决定暂缓。来源：[公开阶段](../../../README.md#项目状态)、[当前里程碑](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 最新进展](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+实际部署继续按已有用户决定暂缓。来源：[公开阶段](../../../README.md#项目状态)、[当前里程碑](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 历史进展](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
 | 想了解什么 | 入口 |
 | --- | --- |
@@ -22,7 +22,7 @@
 
 局部增量（2026-10-12，仅 Cargo 拆分）：[#4626](https://github.com/eng-cc/oasis7/pull/4626) 已合入 `133d70e45b71bd062032a734d68be1e290692b2c`，统一生产 cognition memory/continuation 核心并保留 Runtime authority；对应 main Rust [38212520926](https://github.com/eng-cc/oasis7/actions/runs/38212520926) 已成功。本分支正在补支持包 profile 选测隔离，尚未合入或完成 V0。用户确认提速收益已验证；实际自主试玩明确不在此次 Cargo V0 验收范围，不据此宣称实玩通过。该增量不刷新下面其他项目/部署事实的核验时间。
 
-局部文档更新（2026-10-12，仅 [#4438](https://github.com/eng-cc/oasis7/issues/4438)）：以 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 核对 L4 工具链，补齐[构建/驱动、实际 Hosted 会话及结果合同](../../testing/prd.md#l4-build-driver)与[事实/体验判定边界](../../testing/prd.md#l4-evidence-judgment)，同步旧试玩入口。runner 与 scaffold 的实现修复和实际验收仍由该 issue 承接；本次没有新试玩或部署结论，不刷新其他条目的核验时间。
+局部文档更新（2026-10-12，仅 [#4438](https://github.com/eng-cc/oasis7/issues/4438)）：以 `27db6f894bd106e9a4fee9ee3062cd8fd86e1056` 核对 L4 工具链，补齐[构建/驱动、实际 Hosted 会话及结果合同](../../testing/prd.md#l4-build-driver)与[事实/体验判定边界](../../testing/prd.md#l4-evidence-judgment)，同步旧试玩入口。该 Issue 已以 `not_planned` 关闭，作为历史文档承接来源，不再承担新的 runner/scaffold 修复或验收义务；本次没有新试玩或部署结论，不刷新其他条目的核验时间。
 
 | 来源 | 本轮基线 |
 | --- | --- |
@@ -65,7 +65,7 @@ Smelter 合法建成 → 铁锭生产 cycle → owner-bound output ledger 实际
 ## 当前主线与进展
 
 以下主线消费既有里程碑和实际交付记录，不在这里重新排序或建立一套任务状态。
-当前多里程碑剩余义务由 [#4363](https://github.com/eng-cc/oasis7/issues/4363) 承接；正文复选框与最新评论需一起读。
+[#4363](https://github.com/eng-cc/oasis7/issues/4363) 已以 `not_planned` 关闭，只是历史规划/文档来源；当前能力和限制回到对应主责文档与实际 PR/验证记录，不恢复旧 Issue 的剩余义务。
 “已有代码”“适用验证通过”“正式开放”“真人接受”分别表达，不用 PR 数量换算项目完成率。
 
 ### 1. 持久单权威与同世界恢复
@@ -73,7 +73,7 @@ Smelter 合法建成 → 铁锭生产 cycle → owner-bound output ledger 实际
 已有 manifest、journal/replica、离线 activation verifier、受保护本地工程执行等前置交付。
 正式 initial activation 与普通消费者接线、不完整候选崩溃恢复、独立故障域保留/恢复、旧写者隔离和人工交接仍待完成。
 下一步先在已有代码与验证范围内收口缺口；实际部署暂缓，不能把本地双目录当成独立硬件故障域。
-来源：[基础设施当前阶段](../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[#4363 当前剩余条件](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+来源：[基础设施当前阶段](../../product/world-infrastructure/prd.md#world-infrastructure-current-stage)、[#4363 历史条件](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
 2026-10-12 目标设计收敛：[原候选恢复](../../p2p/design.md#des-p2p-original-candidate-recovery-v1) 固定执行前完整材料与原请求重放；[正式权威 v1](../../p2p/design.md#des-p2p-formal-controlled-authority-v1) 和 [epoch 接管](../../p2p/design.md#des-p2p-controlled-epoch-takeover-v1) 明确激活、普通证明消费者及旧写者隔离顺序。下一步按这些主责合同实现与验证；现有工程证明、离线 verifier 和本地双目录仍不足以完成正式开放。
 
@@ -97,19 +97,19 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 目标和观察口径已定义；持久世界与实际体验满足首次开放条件后，才开展目标玩家两次会话观察。
 本轮未取得真人完成证据。届时需区分独立完成、提示、代操作、未完成和未覆盖，并区分安排的第二次会话与自发回访。
-来源：[core 受控真人验证工作包](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 验收义务](https://github.com/eng-cc/oasis7/issues/4363)。
+来源：[core 受控真人验证工作包](../../core/prd.md#当前阶段收口优先级stage-closure-backlog)、[#4363 历史验收范围](https://github.com/eng-cc/oasis7/issues/4363)。
 
 ### 5. BFT 与同世界交接
 
 顶层合同允许 BFT 与受控单权威路径并行研发，先验证同一历史，再按 H/H+1 交接转移写权。
 独立验证者协议、持久证书与同世界交接尚未验收；它不自动成为已满足条件的受控单权威试玩前置。
-来源：[基础设施路线图](../../product/world-infrastructure/prd.md#4-路线图)、[#4363 当前记录](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+来源：[基础设施路线图](../../product/world-infrastructure/prd.md#4-路线图)、[#4363 历史记录](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
 ### 6. 外部游戏 Runtime 的 owner 目标控制前置
 
-本项局部核验于 2026-10-12：[#4625](https://github.com/eng-cc/oasis7/pull/4625) 已合入 `19e4309b`，交付私有目标准备、单记录重试/重启、公开 canonical 发布和授权当前正文回读。最终 SDK 29、私有 library 22、任务链 8、原生 World Service 29 项回归通过；journal tail 缺前驱恢复缺口已修复，合入源 CI 全部通过。此段只刷新本项，不刷新前述全局或环境核验基线。
+局部摘要核对于 2026-10-14，仅本项：owner 私有目标控制、原生 fenced 执行、物流、权威配方及 prepared claimed Agent 建厂到首产物的代码切片已交付。实际游玩仍限定各自候选与 prepared-world 场景；失败、超时、cleanup 和普通 CI 修复分别回到 [执行 PR](https://github.com/eng-cc/oasis7/pull/4628#issuecomment-6162407180)、[物流 PR](https://github.com/eng-cc/oasis7/pull/4634#issuecomment-6162407791)、[生产 PR](https://github.com/eng-cc/oasis7/pull/4650#issuecomment-6162408442)、[建厂链 PR](https://github.com/eng-cc/oasis7/pull/4662#issuecomment-6162409087)。不将这些 targeted 结果提升为完整首局、两 Runtime parity、GUI 或生产部署验收。
 
-2026-10-12 续核验：[#4628](https://github.com/eng-cc/oasis7/pull/4628) 已合入 `065b8b5d`，交付原生 executor 控制、完整私有 Context 捕获、task-fenced 行动、普通客户端及正式 Skill；独立附着 Codex 在候选 `b59d0105` 完成两个目标版本的移动与原结果恢复，最终源 `cd2976b7` 通过普通回归、独立评审和 required CI。该实玩记录保留一次失败 cleanup，不代签完整首局。下一批集中补齐原生物流观察、委托范围发现、转运行动及到账核验；物流候选 `326189ecd` 的 66/6/35 项 library/client/native 回归、严格 Clippy 和独立权限评审通过；独立附着 Codex 通过正式 Skill 完成一次实际转运与到账，已核对 canonical 回执和运输事件。2026-10-13 局部核验：[#4634](https://github.com/eng-cc/oasis7/pull/4634) 已于当日 00:25（Asia/Shanghai）完成必要 CI 并合入 `5e930fac`，物流试玩保留原候选来源。[#4650](https://github.com/eng-cc/oasis7/pull/4650) 的共享权威配方、签名报价和 typed 排产已通过最终必要 CI 并合入 `dbe03eda`；有界独立 Skill 复测在原候选 `795944322` 用七次调用、233.34 秒核对首产物和原结果恢复。下一批整合 canonical 建厂报价、typed 建设与已有转运/生产，实现 prepared claimed Agent 从无工厂到首批产物，普通连续链路及独立代码评审通过；本批有界独立试玩真实建成一座工厂并恢复原回执，但未执行投料/生产且报告晚于截止，整链结果 inconclusive，Stop/revoke 与世界清理完成。另获授权的最后复测在源 `52c136a7b` 用十九次调用完成整条建厂、投料、首产物链路，报告在 360 秒许可内写入，父侧已核对唯一事件、精确余额及原回应恢复，清理完成。当前 HEAD 的 CI 和合入仍待完成。完整协作 TaskSnapshot、两 Runtime 自主首局和公开 Game HTTP 写入口尚未验收。来源：[Game API 当前实施候选](../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)、[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。
+完整协作 TaskSnapshot、身份注册/配对及公开 Game HTTP 写入口尚未由这些切片证明；部署暂停继续有效。支持范围与证据入口见 [Game API 专业合同](../../world-simulator/llm/external-agent-game-api.design.md#当前实施候选原生任务执行链)和[协作与私有目标合同](../../world-runtime/runtime/player-runtime-collaboration.design.md#6-接口与数据合同)。本次不刷新全局和环境核验基线。
 
 <a id="cc-status-changes"></a>
 
@@ -135,7 +135,7 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 ### 本次候选增量（2026-10-12）
 
-[PR #4624](https://github.com/eng-cc/oasis7/pull/4624) 仍是未合入候选，新增内置私有资料、同构建可选 CLI、兼容既有 signer 的文件签名接入，以及显式私有开发会话输入；普通本机工具边界见[当前设计](local-tools.design.md)。
+2026-10-14 局部摘要：[PR #4624](https://github.com/eng-cc/oasis7/pull/4624) 已合入，新增内置私有资料、同构建可选 CLI、兼容既有 signer 的文件签名接入，以及显式私有开发会话输入；普通本机工具边界见[当前设计](local-tools.design.md)。
 本次在 `affa7d1` 的 macOS arm64 同包原生 App 核对了真实建库、条件保存冲突后的草稿保留和 CLI 安装。
 这些结果只覆盖该候选与所列场景，不计入 main 已交付变化，也不证明部署、公共发行或全部本机工具验收。
 
@@ -161,7 +161,7 @@ starter 候选、owner 目标持久化等前置已有代码；Web guest 启动/�
 
 在本轮已读取的范围内，没有发现新增且已核实的即时待批准事项；当前 CI 等待和普通修复继续由原负责人推进。
 后续若改变阶段目标、正式开放范围或部署安排，应回到对应主责条款和已有操作入口形成具体决定。
-这里记录真实问题，不把正常 CI、文档刷新或已有授权工作包装成新的许可请求。来源：[开发流程边界](../workflow/source-of-truth.md#1-适用范围与规则边界)、[#4363 当前安排](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
+这里记录真实问题，不把正常 CI、文档刷新或已有授权工作包装成新的许可请求。来源：[开发流程边界](../workflow/source-of-truth.md#1-适用范围与规则边界)、[#4363 历史安排](https://github.com/eng-cc/oasis7/issues/4363#issuecomment-6107216860)。
 
 ### 待补事实
 

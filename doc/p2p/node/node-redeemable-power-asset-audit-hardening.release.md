@@ -1,5 +1,7 @@
 # oasis7 Runtime：可兑现节点资产与电力兑换闭环（二期审计与签名加固，发布说明）
 
+本发布说明按既有 [Task #2655 保留决定](https://github.com/eng-cc/oasis7/issues/2655#issuecomment-5088835783)继续保留 AHA provenance、接口和兼容边界；原 AHA 执行 Task 未唯一核实，不把后续整理 Task 当成原实现者。回归和工作区格式化观察仅属于原发布窗口，不表示今日运行入口、PASS 或待办。
+
 审计轮次: 5
 ## 发布范围
 - 设计/项目文档：
@@ -44,5 +46,5 @@
 
 ## 已知事项
 - `mintsig:v1` 仍为可重算摘要语义，不等同于真实私钥签名；后续可平滑升级到硬签名方案（如 `mintsig:v2`）。
-- 工作区仍存在无关格式化漂移：`crates/oasis7/src/runtime/node_points.rs`，本轮未回退。
+- 原发布窗口曾记录无关格式化漂移（不是今日工作区状态）：`crates/oasis7/src/runtime/node_points.rs`，本轮未回退。
 - 历史 `oasis7_viewer_live` 命令与 flags 不再构成当前运行入口；现行证据以 chain-runtime CLI、runtime root 与 report artifacts 为准。

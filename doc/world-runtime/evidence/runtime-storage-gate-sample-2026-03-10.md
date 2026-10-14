@@ -1,5 +1,7 @@
 # Runtime Storage Gate 实测样本（2026-03-10）
 
+历史窗口：正文的 T7.2 阻塞诊断、派工和 T7.3～T7.5 交接均发生于 2026-03-10～11，需按先失败、后修复复验的顺序读。原 Task 未唯一定位，`.tmp` 原始输出的长期可取回性未核实，源内容完整保留；不表示今日仍阻塞、重新派工或当前 release approval。
+
 审计轮次: 4
 
 ## Meta
@@ -24,13 +26,13 @@
 - `feedback_submit` 存在 `10 / 60s` 限流；错误签名为 `DistributedValidationFailed(rate limit exceeded ...)`。
 - `orphan_blob_count=0`、`last_gc_result=success`、`degraded_reason=null`。
 
-## 当前结论
+## 修复前的历史诊断
 - 本轮真实 `oasis7_chain_runtime` 样本已成功接入 `scripts/oasis7-runtime-storage-gate.sh`。
 - 先前把失败简单解释为“`release_default` 样本尚未达到 `64`”是不充分的；扩展实测显示 `checkpoint_count` 会在 `height=32` 左右出现。
 - 根因已收敛为：`/v1/chain/status.storage.effective_budget` 报告的是 `release_default.execution_checkpoint_interval=64`，但 `oasis7_chain_runtime` 实际执行桥接仍在使用硬编码 `32/4` 默认值。
 - 因此 T7.2 当前阻塞不再是“需要把样本推进到 64”，而是“需要把 execution bridge retention/checkpoint cadence 真正绑定到 storage profile 后再复跑 gate”。
 
-## 后续动作
+## 修复前的历史派工
 - 由 `runtime_engineer` 修复 execution bridge 对 `StorageProfileConfig` 的实际透传，使 hot window / checkpoint interval / checkpoint keep 与 status budget 一致。
 - 由 `qa_engineer` 在修复后复跑真实 runtime 样本与 `scripts/oasis7-runtime-storage-gate.sh`，确认 `release_default` 在 `<64` 不再提前出现 checkpoint，且 `height=64` 时生成首个 checkpoint。
 
@@ -57,3 +59,7 @@
 ### QA 结论
 - `runtime_engineer` 的 profile 透传修复已生效：真实 `release_default` 样本的 execution bridge cadence 与 status `effective_budget.execution_checkpoint_interval=64` 对齐。
 - `TASK-WORLD_RUNTIME-033 / T7.2` 的“真实 runtime storage gate 接线 + cadence 一致性验证”可视为完成，后续应继续推进 T7.3~T7.5。
+
+<!-- Historical section locators; execution details are in the linked original Task/PR. -->
+<a id="当前结论"></a>
+<a id="后续动作"></a>

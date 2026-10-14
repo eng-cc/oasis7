@@ -841,8 +841,8 @@ Observer 只接收带不可变 generation index 的 checkpoint。capability read
 - 索引入口：`doc/world-runtime/prd.index.md`
 
 ## 设计演进计划
-- M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
-- M2: 按专题继续补齐高复杂度主题的 `*.design.md`。
+- 历史建档（2026-03-09，ROUND-006）：模块级 `design.md` 入口来源；原 Task 未唯一定位，记录保留，不作为当前排期。
+- 持续结构要求：高复杂度专题在对应 `*.design.md` 维护细化合同；不恢复旧 M2 任务。
 
 Alliance/war raw publication uses a full-body-bound sparse projector. It prepares touched
 alliances, wars, participants, reputation, and compatibility materials, derives the canonical

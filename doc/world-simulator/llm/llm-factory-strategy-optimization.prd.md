@@ -1,5 +1,7 @@
 # LLM 工厂闭环策略稳定性优化（llm_bootstrap）
 
+历史计划边界：LFO0–4、LFO7/9/11 的里程碑是 2026-02 旧实施规划，原 Task 未唯一定位，过程原件保留作固定来源，不作为当前执行队列或验收通过。Recovery Policy、统计字段、typed turn、parse/guardrail/decision_rewrite 与兼容/验证方法仍是本专题的专业内容；当前输入边界服从 builtin 输入合同。
+
 - 对应设计文档: `doc/world-simulator/llm/llm-factory-strategy-optimization.design.md`
 - 专题入口与权威边界: `doc/world-simulator/llm/README.md`
 

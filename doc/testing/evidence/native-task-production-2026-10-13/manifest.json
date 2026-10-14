@@ -54,8 +54,8 @@
   "artifacts": [
     {
       "path": "README.md",
-      "byte_length": 2573,
-      "sha256": "79c5091c9dc4745f7f4177c1859c2f6fc474fed2b063fe45197bcd75b29ed2b4",
+      "byte_length": 2447,
+      "sha256": "050eaa029e2275d05cd7f379680aad1d4dd99b4c401c8eed1f8a4d71023a26ca",
       "collector": "parent readback"
     },
     {

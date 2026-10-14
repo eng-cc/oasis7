@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "408e889b4ab59378ad2c3ecc092ac769ff8ebcd366b5c6f8fe0b04c2c9f5c074",
+    "content_sha256": "96074f8d5f1e80f293c7ae1d468101ec8674777f03e714ba4072f972b393e9ea",
     "current_authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
     "decision_owner": "producer_system_designer",
     "disposition": "retain_mixed_contract_snapshot",

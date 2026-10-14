@@ -1,6 +1,6 @@
 {
   "record": {
-    "content_sha256": "2f753f244af1a6ec0668b15ec1f6f5a21a19939943e833a29c6f353a6a047979",
+    "content_sha256": "37593409d0fdcd77023db780d3c51f12c02eaef4e6cb548065c9523ff32015c0",
     "current_authority": "doc/testing/prd.md",
     "decision_owner": "qa_engineer",
     "disposition": "retain_current_authority",

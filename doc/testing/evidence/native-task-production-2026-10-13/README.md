@@ -8,6 +8,7 @@ The independent attached Codex child used the shipped Skill and client at source
 
 Canonical Stop at height 76 and signer delegation revocation at 77 succeeded. The host exited; its owned realm, signing material, private goals and operation cache were removed after evidence preservation. No user world or paid external worker was used. Model fees remain unknown.
 
-Ordinary regression results and failures are retained separately. The new DTO hash fixture and unused lint expectation were corrected, then retested. The unrelated local M5 war test lacked its canonical WASM asset and Docker; it remains locally unverified and must be covered by actual final CI. Initial PR CI also exposed five quinn-proto advisories; the dependency fix preserves the security gate. None of these later changes relabel the original live source/build/Skill identity.
-
 Cold entry, complete starter construction/chain, stable production, delivery, OpenClaw, full collaboration, model-process restart, GUI, deployment and budget-compliant current-candidate play remain unverified. This directory preserves actual result evidence and known limitations; it is not an acceptance certificate.
+
+
+Delivery, ordinary test failures/repairs, integration and CI history are archived in [the original delivery PR](https://github.com/eng-cc/oasis7/pull/4650#issuecomment-6162408442). They do not change this run's actual source/build/Skill, verdict, budget, oracle or cleanup facts. No current delivery obligation is maintained in this historical run report.

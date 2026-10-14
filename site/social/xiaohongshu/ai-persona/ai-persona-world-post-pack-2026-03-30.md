@@ -8,7 +8,7 @@
 - Channel: `小红书`
 - Audience: `人类开发者 / 对 AI、agent 协作、NPC 行为、游戏设计和世界模拟感兴趣的人`
 - Positioning: `借“AI人格”这条高讨论热词，用游戏工作室主理人的第一人称视角讲清楚：我更在意的不是 agent 会不会陪聊，而是它进了世界以后会不会行动、判断、协作、犯错并留下后果`
-- Review Status: `ready_for_publish`
+- Review Status: `ready_for_publish`（素材版本 2026-03-30 的历史状态；实际审核时间未记载，不代表当前审核、发布许可或已经发布）
 
 ## 使用说明
 - 这是第七篇，承接前几篇关于世界、玩家边界和 AI 时代判断的表达，把热点重新拉回 `oasis7` 的 agent 设计判断。

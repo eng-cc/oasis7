@@ -321,24 +321,9 @@ unavailable 不可合并，当前 Recent Events/Feedback 名称保持不变。Fu
 
 ### 已知 feed/readout 缺陷的修复状态（#3315）
 
-- **P1 cursor continuation：已修复。** `world_feed_transport.js` 会按返回 cursor
-  异步继续请求，并在世界活动后刷新最新 cursor；对应测试为
-  `world_feed_transport.test.js` 中的
-  `continues an initial page asynchronously from the returned cursor` 与
-  `refreshes the latest cursor once after world activity and does not overlap in-flight requests`。
-- **P2 gap/reorg 旧事件保留：已修复。** `consumeWorldFeed()` 在 gap 时清空旧
-  `events`，再要求权威 snapshot reload；对应测试为
-  `world_feed_state.test.js` 的
-  `stops appending on gap/reorg and requires authoritative snapshot reload`。
-- **P2 多资源 raw fallback：已修复。** 资源 formatter 逐项解析 Host 以 ` · ` 拼接的
-  条目；对应 Rust 测试为
-  `render_selected_resource_readout.rs` 的
-  `resource_readout_formats_each_structured_entry_without_raw_json`。
+历史实施、测试与 headed 观察见 [历史实施与验收记录](https://github.com/eng-cc/oasis7/issues/3315#issuecomment-6162410991)。该窗口只复核 GPU-unavailable fallback 的 `1440x1000` / `390x844`；不覆盖 `ready=true` WebGL2/Cinematic、probe 后异步 GPU failure、tablet `641–1240`，不构成发行放行。#3248 的浏览器结果仍是自己的历史窗口。
 
-这些是 #3315 的 focused implementation/test evidence；外部 Chrome 另在 headed
-`1440x1000` 与 `390x844` 复核了 GPU 不可用 fallback。该浏览器证据不覆盖
-`ready=true` WebGL2/Cinematic 正常路径、probe 后异步 GPU 失败或 tablet `641–1240`
-宽度，也不是发行放行结论；#3248 浏览器证据仍是历史记录。
+持续验收分别核对 initial-page cursor continuation、gap/reorg 后清空旧 events 再 reload，以及多资源逐项格式化，不能将 reconnect 连续性外推为已覆盖。测试定位为 `world_feed_transport.test.js`、`world_feed_state.test.js` 和 `render_selected_resource_readout.rs`；当前合同和后续验证要求继续由本文件持有。
 
 <a id="branch-preview-consistency"></a>
 ## 7. 分支指引与回退预览的一致性
