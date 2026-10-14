@@ -321,7 +321,7 @@ pub(super) fn remove_stale_socket_after_confirmed_exit(
 }
 
 #[cfg(target_os = "linux")]
-fn process_start_identity(pid: u32) -> Result<Option<String>, String> {
+pub(super) fn process_start_identity(pid: u32) -> Result<Option<String>, String> {
     let pid: libc::pid_t = pid.try_into().map_err(|_| "owner PID exceeds pid_t")?;
     let stat_path = PathBuf::from(format!("/proc/{pid}/stat"));
     let stat = match fs::read_to_string(&stat_path) {
@@ -367,7 +367,7 @@ fn linux_pid_exists(pid: libc::pid_t) -> Result<bool, String> {
 }
 
 #[cfg(target_os = "macos")]
-fn process_start_identity(pid: u32) -> Result<Option<String>, String> {
+pub(super) fn process_start_identity(pid: u32) -> Result<Option<String>, String> {
     let pid: libc::pid_t = pid.try_into().map_err(|_| "owner PID exceeds pid_t")?;
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let returned = unsafe {
@@ -398,8 +398,42 @@ fn process_start_identity(pid: u32) -> Result<Option<String>, String> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-fn process_start_identity(_: u32) -> Result<Option<String>, String> {
+pub(super) fn process_start_identity(_: u32) -> Result<Option<String>, String> {
     Err("formal owner retry requires Linux or macOS process start identity".into())
+}
+
+fn receipt_matches_spawn(
+    receipt_pid: u32,
+    receipt_birth: Option<&str>,
+    child_pid: u32,
+    child_birth: Option<&str>,
+) -> bool {
+    receipt_pid == child_pid && receipt_birth.is_some() && receipt_birth == child_birth
+}
+
+pub(super) fn filter_spawn_receipt(
+    snapshot: Option<FormalRuntimeOwnerSnapshotV1>,
+    state_path: &Path,
+    child_pid: u32,
+    child_birth: Option<&str>,
+) -> Result<Option<FormalRuntimeOwnerSnapshotV1>, String> {
+    let Some(snapshot) = snapshot else {
+        return Ok(None);
+    };
+    let record = read_owner_record(state_path)?;
+    let birth = process_start_identity(child_pid)?;
+    Ok(record
+        .filter(|record| {
+            record.snapshot.instance == snapshot.instance
+                && birth.as_deref() == child_birth
+                && receipt_matches_spawn(
+                    record.snapshot.instance.process_id,
+                    record.process_start_identity.as_deref(),
+                    child_pid,
+                    birth.as_deref(),
+                )
+        })
+        .map(|_| snapshot))
 }
 
 #[cfg(test)]

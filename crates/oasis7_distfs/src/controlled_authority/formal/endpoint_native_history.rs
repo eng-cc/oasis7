@@ -117,6 +117,10 @@ fn descend(
     }
     Err(invalid("historical skip traversal bound"))
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "historical restoration binds target, original and active authorities, optional recovery and durable activation, and authenticated loader"
+)]
 pub(crate) fn restore_native_position(
     context: VerifiedNativeRpcContextV1,
     position: u64,
@@ -124,6 +128,7 @@ pub(crate) fn restore_native_position(
     historical_authority: &VerifiedAuthorityV1,
     original: &VerifiedAuthorityV1,
     recovery: Option<&VerifiedRecovery>,
+    durable_set: Option<&VerifiedDurableSetActivationV1>,
     mut load: impl FnMut(&str) -> Result<Vec<u8>, FormalError>,
 ) -> Result<VerifiedNativeHistoricalRestoreV1, FormalError> {
     let body = Store::verify_public(context.checkpoint_bytes(), context.endpoint_public_key())?;
@@ -135,6 +140,19 @@ pub(crate) fn restore_native_position(
             != context.authority().definition().profile_version
     {
         return Err(invalid("historical legal authority world/profile context"));
+    }
+    if let Some(activation) = durable_set
+        && (recovery.is_some()
+            || activation.successor().context_digest()? != context.authority().context_digest()?
+            || historical_authority.context_digest()? != activation.successor().context_digest()?
+            || activation.predecessor().definition().world != original.definition().world
+            || activation.boundary().head().position.checked_add(1) != Some(position)
+            || body.durable_set.as_ref().is_none_or(|binding| {
+                binding.transition_digest != activation.transition_digest()
+                    || binding.activation_digest.as_deref() != Some(activation.activation_digest())
+            }))
+    {
+        return Err(invalid("historical exact healthy successor activation"));
     }
     let node = descend(&body, position, record_id, &mut load)?;
     let target = &node.head;
@@ -233,6 +251,19 @@ pub(crate) fn restore_native_position(
             "HistoryUnavailable: historical immediate parent closure",
         ));
     };
+    if let Some(activation) = durable_set
+        && (proof.decision.branch != FormalCompletionBranchV1::Normal
+            || proof.decision.record.kind != FormalRecordKindV1::Execution
+            || parent.as_ref().is_none_or(|parent| {
+                parent.record != *activation.boundary().record()
+                    || parent.finalizing_authority_id
+                        != activation.boundary().finalizing_authority_id()
+            }))
+    {
+        return Err(invalid(
+            "historical healthy first Normal exact boundary parent",
+        ));
+    }
     let verdict = NativeCheckpointVerdictV1 {
         proof: proof.clone(),
         parent: parent.clone(),

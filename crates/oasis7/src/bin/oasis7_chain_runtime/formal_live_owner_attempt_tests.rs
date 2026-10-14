@@ -243,3 +243,27 @@ fn restored_successor_attempt_binds_first_receipt_and_rejects_later_identity_dri
     );
     assert_eq!(fs::read(&path).unwrap(), before);
 }
+
+#[test]
+fn retry_launch_receipt_rejects_old_generation_and_requires_exact_birth() {
+    assert!(!receipt_matches_spawn(
+        100,
+        Some("old-birth"),
+        200,
+        Some("new-birth")
+    ));
+    assert!(!receipt_matches_spawn(
+        200,
+        Some("old-birth"),
+        200,
+        Some("new-birth")
+    ));
+    assert!(!receipt_matches_spawn(200, None, 200, None));
+    assert!(!receipt_matches_spawn(200, Some("new-birth"), 200, None));
+    assert!(receipt_matches_spawn(
+        200,
+        Some("new-birth"),
+        200,
+        Some("new-birth")
+    ));
+}

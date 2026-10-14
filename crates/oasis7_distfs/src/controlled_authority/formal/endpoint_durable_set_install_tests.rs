@@ -244,7 +244,7 @@ fn native_healthy_install_awaiting_reopen_dual_activate_and_first_normal() {
     let p = verify_candidate_management_rpc(pc, sealed.clone(), pi.clone(), ri.clone());
     let r = rc.activate(&activation, pi.clone(), ri.clone()).unwrap();
     assert_eq!(p.parent.as_ref().unwrap().head(), boundary.head());
-    verify_remote_activated_boundary(p, &fixture, &activation);
+    verify_remote_activated_boundary(p, &fixture, &activation, false);
     drop(r);
     // Protected activation can have completed while local publication/reply was
     // lost. Reopen exact transition obtains the same active checkpoint.
@@ -295,6 +295,20 @@ fn native_healthy_install_awaiting_reopen_dual_activate_and_first_normal() {
         3
     );
     assert_eq!(next.submit(candidate).unwrap(), child);
+    let first =
+        verify_formal_qualified(&child, activation.successor(), Some(&boundary), None).unwrap();
+    let (mut freeze, material) = fixture.frozen(&first, 63);
+    freeze.body.authority_id = activation.successor().authority_id().unwrap();
+    freeze.body.epoch = 2;
+    freeze.signature_hex = signed(frozen_signing_bytes(&freeze.body).unwrap(), 4);
+    let executable = next.freeze(freeze, material).unwrap();
+    let mut candidate = fixture.candidate(&executable);
+    candidate.candidate.record.original_epoch = 2;
+    candidate.candidate.writer_signature_hex = signed(
+        canonical_candidate_signing_bytes(&candidate.candidate.record).unwrap(),
+        4,
+    );
+    next.submit(candidate).unwrap();
     drop(next);
     let mut reopened = FileFormalEndpoint::open_durable_set_active(
         &fixture.pdir,
@@ -305,7 +319,7 @@ fn native_healthy_install_awaiting_reopen_dual_activate_and_first_normal() {
         64 * 1024 * 1024,
     )
     .unwrap();
-    assert_eq!(reopened.head().unwrap().position, 3);
+    assert_eq!(reopened.head().unwrap().position, 4);
     let FormalQueryOutcomeV1::Recorded(old) = reopened
         .query(&fixture.initial.candidate.record.request_digest)
         .unwrap()
@@ -313,12 +327,14 @@ fn native_healthy_install_awaiting_reopen_dual_activate_and_first_normal() {
         panic!("permanent old result missing");
     };
     assert!(matches!(*old, FormalRequestStateV1::Qualified { .. }));
+    verify_remote_activated_boundary(reopened, &fixture, &activation, true);
 }
 
 fn verify_remote_activated_boundary(
     endpoint: FileFormalEndpoint,
     fixture: &Fixture,
     activation: &VerifiedDurableSetActivationV1,
+    first_normal: bool,
 ) {
     use crate::controlled_authority::formal::transport::{
         FormalEndpointServer, RemoteFormalEndpoint,
@@ -349,6 +365,48 @@ fn verify_remote_activated_boundary(
             activation.boundary().head(),
         )
         .unwrap();
+        if first_normal {
+            let first = client
+                .restore_first_normal_with_durable_set(&fixture.authority, activation, None)
+                .unwrap();
+            assert_eq!(first.reference().position, 3);
+            assert_eq!(first.current_head().position, 4);
+            assert_eq!(
+                first.proof().decision.branch,
+                FormalCompletionBranchV1::Normal
+            );
+            assert_eq!(first.commit().record().kind, FormalRecordKindV1::Execution);
+            let exact = client
+                .restore_first_normal_with_durable_set(
+                    &fixture.authority,
+                    activation,
+                    Some(&first.reference()),
+                )
+                .unwrap();
+            assert_eq!(exact.proof(), first.proof());
+            let mut wrong = first.reference();
+            wrong.record_id = "ff".repeat(32);
+            assert!(
+                client
+                    .restore_first_normal_with_durable_set(
+                        &fixture.authority,
+                        activation,
+                        Some(&wrong)
+                    )
+                    .is_err()
+            );
+            wrong.position = 4;
+            assert!(
+                client
+                    .restore_first_normal_with_durable_set(
+                        &fixture.authority,
+                        activation,
+                        Some(&wrong)
+                    )
+                    .is_err()
+            );
+            return;
+        }
         assert!(
             client
                 .restore_native_current(&fixture.authority, None, None)

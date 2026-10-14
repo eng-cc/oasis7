@@ -103,3 +103,52 @@ pub(super) fn copy_objects(source: &Path, target: &Path) -> Result<(), String> {
     }
     io::sync_dir(&target)
 }
+
+pub(super) fn replace_private_fixture_bytes(
+    root: &Path,
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt;
+    crate::controlled_live_config::require_private_owned(root, true)?;
+    let resolved = io::regular(path)?;
+    if path.parent() != Some(root) || resolved != path {
+        return Err("trust overwrite must name a direct private fixture file".into());
+    }
+    let original = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|error| error.to_string())?;
+    if !original
+        .metadata()
+        .map_err(|error| error.to_string())?
+        .is_file()
+    {
+        return Err("trust overwrite target is not a regular private fixture file".into());
+    }
+    crate::controlled_live_config::require_private_owned(path, false)?;
+    let temporary = root.join(format!(".fixture-trust-{}", io::random_id()?));
+    let result = (|| {
+        super::oracle_support::write_private(&temporary, bytes)?;
+        io::reject_symlinks(path)?;
+        std::fs::rename(&temporary, path).map_err(|error| error.to_string())?;
+        io::sync_dir(root)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+pub(super) fn reject_exited_retry(record: &serde_json::Value) -> Result<(), String> {
+    if let Some(reason) = record["blocker"].as_str()
+        && (reason.contains("owner worker exited before a durable owner receipt appeared")
+            || reason.contains("owner worker exited while owner state could not be queried"))
+    {
+        return Err(format!(
+            "retry worker exited before its exact receipt: {reason}"
+        ));
+    }
+    Ok(())
+}

@@ -626,6 +626,7 @@ pub(crate) fn launch_operation_with_fixed_trust(
     // used only for wait status, never for process control; lifecycle control
     // remains through the private authenticated socket.
 
+    let child_birth = attempt::process_start_identity(child.id())?;
     let deadline = Instant::now() + timeout.min(Duration::from_secs(60));
     loop {
         let query = query_operation(
@@ -635,6 +636,11 @@ pub(crate) fn launch_operation_with_fixed_trust(
             expected_config_digest,
             None,
         );
+        // The previous attempt remains durable until the new child publishes
+        // its own receipt. It cannot report this child's readiness or failure.
+        let query = query.and_then(|snapshot| {
+            attempt::filter_spawn_receipt(snapshot, &state_path, child.id(), child_birth.as_deref())
+        });
         let worker_exit = child
             .try_wait()
             .ok()
@@ -894,7 +900,8 @@ fn run_owner_with_fixed_trust(
     if validated.anchor.authority().definition().profile_version != 2 {
         return Err("UNSUPPORTED_ROLE_OR_PROFILE: formal runtime owner requires profile 2".into());
     }
-    let initial_authority = validated.active_authority().clone();
+    let initial_authority =
+        super::super::formal_live_history::verified_startup_authority(&validated)?;
     let node_id = validated.config.node_id.clone();
     // Restore and verify lineage before binding the immutable attempt identity.
     // An open runtime does not serve until the receipt and socket are ready.

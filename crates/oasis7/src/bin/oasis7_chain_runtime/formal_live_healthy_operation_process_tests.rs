@@ -520,7 +520,7 @@ pub(super) fn exercise_with_fault(
         .digest()
         .map_err(|e| e.to_string())?;
     changed_trust.verified_anchor()?;
-    replace_private_fixture_bytes(
+    raw_seed::replace_private_fixture_bytes(
         &case.root,
         &trust_file,
         &serde_json::to_vec(&changed_trust).map_err(|e| e.to_string())?,
@@ -535,7 +535,7 @@ pub(super) fn exercise_with_fault(
         &record,
     );
     // Restore the exact captured bytes even if the negative CLI call fails.
-    replace_private_fixture_bytes(&case.root, &trust_file, &trust_bytes)?;
+    raw_seed::replace_private_fixture_bytes(&case.root, &trust_file, &trust_bytes)?;
     record = changed_pin_result?;
     if !matches!(
         record["blocker"].as_str(),
@@ -766,6 +766,44 @@ pub(super) fn exercise_with_fault(
                 "healthy-cli-operation",
                 &record,
             )?;
+            for _ in 0..24 {
+                raw_seed::reject_exited_retry(&record)?;
+                if record["healthy_durable_set_progress"]["stage"]
+                    == "waiting_first_normal_qualified"
+                {
+                    break;
+                }
+                let observed = formal_live_runtime::query_operation_owner_with_fixed_trust(
+                    &case.runtime_config_path,
+                    &successor_operation,
+                    request_digest,
+                    successor_config_digest,
+                    None,
+                    fixed_trust_digest,
+                )?
+                .ok_or("retry successor owner receipt missing")?;
+                eprintln!(
+                    "writer-lock retry owner state={} last_error={:?}",
+                    observed.state, observed.last_error
+                );
+                if (observed.state == "failed"
+                    && observed.instance.incarnation != failed_instance.incarnation)
+                    || record["healthy_durable_set_progress"]["stage"] != "reopening_original_c0"
+                    || record["healthy_durable_set_progress"]["transition"] != original_transition
+                {
+                    return Err(format!(
+                        "retry changed original transition or failed: {observed:?}"
+                    ));
+                }
+                record = cli_revision(
+                    &runtime_binary,
+                    &case.root,
+                    "resume",
+                    &store,
+                    "healthy-cli-operation",
+                    &record,
+                )?;
+            }
             if record["state"] == "succeeded"
                 || record["healthy_durable_set_progress"]["stage"]
                     != "waiting_first_normal_qualified"
@@ -883,7 +921,7 @@ pub(super) fn exercise_with_fault(
         &case.writer_directory,
         signed.body.boundary_position,
         &case.authority,
-        case.initial_anchor.head(),
+        &predecessor,
         &boundary,
     )?;
     let public_owner = RemoteWorldServiceClient::new(case.owner_client_config.clone())
@@ -1158,37 +1196,4 @@ impl Drop for ExactOwnerCleanup {
             );
         }
     }
-}
-
-fn replace_private_fixture_bytes(root: &Path, path: &Path, bytes: &[u8]) -> Result<(), String> {
-    use std::os::unix::fs::OpenOptionsExt;
-    crate::controlled_live_config::require_private_owned(root, true)?;
-    let resolved = io::regular(path)?;
-    if path.parent() != Some(root) || resolved != path {
-        return Err("trust overwrite must name a direct private fixture file".into());
-    }
-    let original = std::fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(path)
-        .map_err(|error| error.to_string())?;
-    if !original
-        .metadata()
-        .map_err(|error| error.to_string())?
-        .is_file()
-    {
-        return Err("trust overwrite target is not a regular private fixture file".into());
-    }
-    crate::controlled_live_config::require_private_owned(path, false)?;
-    let temporary = root.join(format!(".fixture-trust-{}", io::random_id()?));
-    let result = (|| {
-        oracle_support::write_private(&temporary, bytes)?;
-        io::reject_symlinks(path)?;
-        std::fs::rename(&temporary, path).map_err(|error| error.to_string())?;
-        io::sync_dir(root)
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temporary);
-    }
-    result
 }

@@ -19,6 +19,7 @@ impl RemoteFormalEndpoint {
             original,
             recovery,
             None,
+            None,
         )
     }
     pub fn locate_native_position(
@@ -34,6 +35,7 @@ impl RemoteFormalEndpoint {
             historical_authority,
             original,
             recovery,
+            None,
             None,
         )
     }
@@ -51,6 +53,7 @@ impl RemoteFormalEndpoint {
             historical_authority,
             original,
             recovery,
+            None,
             Some(cache),
         )
     }
@@ -68,9 +71,41 @@ impl RemoteFormalEndpoint {
             historical_authority,
             original,
             recovery,
+            None,
             Some(cache),
         )
     }
+    /// Returns immutable first-Normal historical evidence beneath a fresh
+    /// protected successor prefix; never creates a reader's current trust pin.
+    pub fn restore_first_normal_with_durable_set(
+        &mut self,
+        original: &VerifiedAuthorityV1,
+        activation: &VerifiedDurableSetActivationV1,
+        exact: Option<&FormalHeadRefV1>,
+    ) -> Result<VerifiedNativeHistoricalRestoreV1, FormalError> {
+        let position = activation
+            .boundary()
+            .head()
+            .position
+            .checked_add(1)
+            .ok_or_else(|| invalid("healthy first Normal position overflow"))?;
+        if exact.is_some_and(|head| head.position != position) {
+            return Err(invalid("healthy first Normal exact selector position"));
+        }
+        self.restore_native_position(
+            position,
+            exact.map(|head| head.record_id.as_str()),
+            activation.successor(),
+            original,
+            None,
+            Some(activation),
+            None,
+        )
+    }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "historical restoration binds target and authority contexts, optional verified recovery or durable activation, and bounded content cache"
+    )]
     fn restore_native_position(
         &mut self,
         position: u64,
@@ -78,6 +113,7 @@ impl RemoteFormalEndpoint {
         historical_authority: &VerifiedAuthorityV1,
         original: &VerifiedAuthorityV1,
         recovery: Option<&VerifiedRecovery>,
+        durable_set: Option<&VerifiedDurableSetActivationV1>,
         cache: Option<&dyn super::super::super::business_index::BusinessIndexNodeReader>,
     ) -> Result<VerifiedNativeHistoricalRestoreV1, FormalError> {
         let previous_deadline = self.operation_deadline;
@@ -101,6 +137,7 @@ impl RemoteFormalEndpoint {
                 historical_authority,
                 original,
                 recovery,
+                durable_set,
                 &mut |id: &str| {
                     self.remaining_timeout(
                         self.operation_deadline

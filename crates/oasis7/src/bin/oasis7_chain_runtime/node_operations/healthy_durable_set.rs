@@ -268,6 +268,47 @@ pub(super) fn fresh_normal_readback(
     };
     let mut primary = make(validated.config.primary, EndpointRole::Primary)?;
     let mut replica = make(validated.config.replica, EndpointRole::Replica)?;
+    if require_new_normal_execution {
+        let p = primary
+            .restore_first_normal_with_durable_set(validated.anchor.authority(), activation, None)
+            .map_err(|e| format!("fresh successor primary first Normal historical read: {e}"))?;
+        let r = replica
+            .restore_first_normal_with_durable_set(
+                validated.anchor.authority(),
+                activation,
+                Some(&p.reference()),
+            )
+            .map_err(|e| {
+                format!("fresh successor replica exact first Normal historical read: {e}")
+            })?;
+        if p.commit().record() != r.commit().record()
+            || p.proof() != r.proof()
+            || p.authority().context_digest().map_err(|e| e.to_string())?
+                != activation
+                    .successor()
+                    .context_digest()
+                    .map_err(|e| e.to_string())?
+            || r.authority().context_digest().map_err(|e| e.to_string())?
+                != activation
+                    .successor()
+                    .context_digest()
+                    .map_err(|e| e.to_string())?
+        {
+            return Err("dual fresh endpoints disagree on exact first Normal qualified cut".into());
+        }
+        return Ok(HealthyNormalReadbackV1 {
+            position: p.commit().record().position,
+            record_id: p.reference().record_id,
+            after_state_root: p.commit().record().after_state_root.clone(),
+            authority_id: activation
+                .successor()
+                .authority_id()
+                .map_err(|e| e.to_string())?,
+            primary_checkpoint_digest: io::digest(p.checkpoint())?,
+            replica_checkpoint_digest: io::digest(r.checkpoint())?,
+            qualified_evidence_digest: io::digest(p.proof())?,
+        });
+    }
     let p = primary
         .restore_native_current_with_durable_set(validated.anchor.authority(), activation, None)
         .map_err(|e| format!("fresh successor primary native read: {e}"))?;

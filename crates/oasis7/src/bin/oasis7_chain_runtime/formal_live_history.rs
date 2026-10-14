@@ -132,6 +132,20 @@ fn resolver_from_validated(
     })
 }
 
+/// Resolve the immutable owner authority from the same fixed-origin proof
+/// replay used by runtime startup, before acquiring the writer lease.
+pub(crate) fn verified_startup_authority(
+    validated: &ValidatedFormalLiveConfigV1,
+) -> Result<VerifiedAuthorityV1, String> {
+    let reader = super::formal_live_runtime::business_reader_for(validated)?;
+    let resolver = resolver_from_validated(validated, reader)?;
+    let startup = resolver.startup_anchor(validated)?;
+    Ok(startup.activation.as_ref().map_or_else(
+        || validated.active_authority().clone(),
+        |activation| activation.successor().clone(),
+    ))
+}
+
 /// Local publication proofs are replay inputs, never a replacement trust root.
 /// This resolves an operation selector from fixed external C0 without requiring
 /// the old endpoint to remain online after its sealed store has been handed off.
