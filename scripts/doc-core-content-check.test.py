@@ -125,6 +125,21 @@ class FeatureRelationTests(unittest.TestCase):
         self.docs['doc/product/global.prd.md'] = '## Global requirement\n- Trace ID: ' + trace
         self.assertEqual(self.check(self.card() + '\n- Trace refs: ' + trace), [])
 
+    def test_indirect_trace_reference_chain_requires_the_same_declared_identity(self):
+        trace = 'O7-REQ-123e4567-e89b-42d3-a456-426614174000'
+        self.docs[self.DESIGN] = self.design(upstream='../rules/runtime.prd.md#sc-runtime-001')
+        self.docs['doc/rules/runtime.prd.md'] = ('## SC-RUNTIME-001\n- Trace refs: ' + trace +
+            '\n上游：[原始功能](../product/demo.prd.md#req-demo-001)\n')
+        self.assertEqual(self.check(self.card() + '\n- Trace ID: ' + trace), [])
+        self.docs['doc/rules/runtime.prd.md'] = self.docs['doc/rules/runtime.prd.md'].replace(trace, 'O7-REQ-123e4567-e89b-42d3-a456-426614174001')
+        self.assertTrue(any('design-feature-relation-missing' in error for error in self.check(self.card() + '\n- Trace ID: ' + trace)))
+
+    def test_table_trace_declaration_and_reference_are_supported(self):
+        trace = 'O7-REQ-123e4567-e89b-42d3-a456-426614174000'
+        self.docs[self.DESIGN] = self.design(upstream='../product/global.prd.md#global-requirement')
+        self.docs['doc/product/global.prd.md'] = ('## Global requirement\n| Trace ID | 说明 |\n| --- | --- |\n| ' + trace + ' | 功能 |\n')
+        self.assertEqual(self.check(self.card() + '\n| Trace refs | 说明 |\n| --- | --- |\n| ' + trace + ' | 本功能 |\n'), [])
+
     def test_not_applicable_placeholders_are_rejected(self):
         self.assertTrue(any('not-applicable-missing-reason' in error for error in self.check(self.card(status='不适用', evidence='理由：无；范围：无'))))
 
@@ -312,6 +327,28 @@ class FullCorpusTests(unittest.TestCase):
         for name in ('system-design-traceability-check', 'doc-core-content-check'):
             p = self.run_checker(name, '--base', head, '--head', new_head)
             self.assertEqual(p.returncode, 1 if name == 'doc-core-content-check' else 0, p.stdout + p.stderr)
+
+    def test_renamed_root_cannot_downgrade_by_removing_contract_headings(self):
+        old_path, new_path = 'doc/system/design.md', 'doc/runtime/design.md'
+        overview = '\n'.join('## ' + heading + '\n' + ('保留模块架构正文与职责描述。' * 12)
+            for heading in ('架构总览', '组件职责', '主链路', '数据流与状态流', '专题导航'))
+        self.put(old_path, overview + '\n### 2.1 需求承接与分配表\n### 11.1 验证映射表\n')
+        base = self.commit()
+        self.put(new_path, overview)
+        (self.root / old_path).unlink()
+        self.git('add', '.')
+        self.assertRegex(self.git('diff', '--cached', '--name-status', '-M', base), r'R\d+\s+doc/system/design.md\s+doc/runtime/design.md')
+        p = self.run_checker('doc-core-content-check', '--base', base, '--head', base, '--worktree')
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn('missing-core-section: ' + new_path, p.stdout)
+        full = self.run_checker('doc-core-content-check', '--full-corpus')
+        self.assertEqual(full.returncode, 0, full.stdout + full.stderr)
+        self.assertIn('module-contracts=1', full.stdout)
+        self.assertIn('missing-core-section: ' + new_path, full.stdout)
+        head = self.commit()
+        p = self.run_checker('doc-core-content-check', '--base', base, '--head', head)
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn('missing-core-section: ' + new_path, p.stdout)
 
     def test_root_with_empty_mapping_heading_gets_complete_contract(self):
         self.put('doc/system/design.md', '# Root contract\n### 2.1 需求承接与分配表\n')

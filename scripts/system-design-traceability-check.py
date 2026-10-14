@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from doc_content_warnings import report_findings
 from collections.abc import Callable
+from functools import lru_cache
 from dataclasses import dataclass
 import html
 import os
@@ -247,6 +248,24 @@ def committed_target_text(root: Path, commit: str, target: Path) -> str | None:
     return None
 
 
+def previous_design_text(root: Path, base: str, head: str, path: str,
+                         include_worktree: bool = False) -> str | None:
+    """Follow Git-detected rename origins before reading the trusted baseline."""
+    current = path
+    ranges = []
+    if include_worktree:
+        ranges.extend([("diff", "--name-status", "-M", "--"),
+                       ("diff", "--cached", "--name-status", "-M", head, "--")])
+    ranges.append(("diff", "--name-status", "-M", base, head, "--"))
+    for arguments in ranges:
+        for line in run_git(root, *arguments).splitlines():
+            fields = line.split("\t")
+            if len(fields) >= 3 and fields[0].startswith(("R", "C")) and fields[2] == current:
+                current = fields[1]
+                break
+    return git_text(root, base, current)
+
+
 def worktree_file_text(root: Path, checkout_head: str, path: str) -> str | None:
     """Read the effective worktree content, preserving staged-only changes.
 
@@ -371,7 +390,7 @@ def changed_authority_paths(
     head: str,
     include_worktree: bool,
 ) -> list[str]:
-    """Select changed authority endpoints, preserving both rename endpoints."""
+    """Select changed relation endpoints, preserving both rename endpoints."""
     base_oid = resolve_commit(root, base, "base")
     head_oid = resolve_commit(root, head, "head")
     source_base = run_git(root, "merge-base", base_oid, head_oid).strip()
@@ -385,20 +404,10 @@ def changed_authority_paths(
         checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
         changed.update(worktree_authority_overlay(root, checkout_head))
 
-    selected: list[str] = []
-    for path, status in sorted(changed.items()):
-        if not is_traceability_authority_path(path):
-            continue
-        old_text = git_text(root, source_base, path)
-        if status.startswith("D"):
-            selected.append(path)
-            continue
-        new_text = worktree_file_text(root, checkout_head, path) if include_worktree else git_text(root, head_oid, path)
-        if new_text is None:
-            selected.append(path)
-        elif status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):
-            selected.append(path)
-    return selected
+    # Candidates include test/manual validation sources as well as requirement
+    # documents. Do not decode unrelated changed binary files: exact consumer
+    # links and newly introduced diagnostics bound the reverse check later.
+    return sorted(changed)
 
 
 def current_design_paths(root: Path, head: str, include_worktree: bool, checkout_head: str) -> list[Path]:
@@ -434,6 +443,7 @@ def references_authority(
     authority_paths: set[str],
     *,
     follow_symlinks: bool,
+    read_target: TargetTextReader | None = None,
 ) -> bool:
     """Match exact repository-relative link endpoints, including deleted ones."""
     for node in parse_markdown_links(without_html_comments(text)):
@@ -449,6 +459,15 @@ def references_authority(
             continue
         if relative in authority_paths:
             return True
+        if _fragment and read_target is not None and is_requirement_authority(relative):
+            target_text = read_target(resolved)
+            if target_text is not None:
+                dependencies: set[str] = set()
+                resolved_requirement_context(root, resolved, target_text, _fragment,
+                                             read_target, follow_symlinks,
+                                             dependencies=dependencies)
+                if dependencies.intersection(authority_paths):
+                    return True
     return False
 
 
@@ -476,6 +495,7 @@ def authority_impacted_design_paths(
             text,
             changed,
             follow_symlinks=include_worktree,
+            read_target=read_target,
         ):
             impacted.append(design)
     return impacted
@@ -607,20 +627,74 @@ def fragment_occurrences(text: str, fragment: str) -> int:
 GLOBAL_TRACE_RE = re.compile(r"(?<![A-Za-z0-9_-])O7-REQ-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?![A-Za-z0-9_-])")
 
 
+def formal_trace_fields(text: str):
+    """Recognize existing paragraph/list/cell/column Trace syntax, not mentions."""
+    lines = visible_lines(text)
+    table = {}
+    headings = []
+    for index, (_, line) in enumerate(lines):
+        heading = re.match(r"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$", line)
+        if heading:
+            level, title = len(heading[1]), heading[2]
+            while headings and headings[-1][0] >= level:
+                headings.pop()
+            headings.append((level, title))
+            table = {}
+        if any(re.search(r"示例|模板|样例|\b(?:examples?|templates?|samples?)\b", re.sub(r"(?:REQ|SC|AC)-[A-Z0-9_-]+", "", title, flags=re.I), re.I)
+               and (level > 1 or re.fullmatch(r"(?:examples?|templates?|samples?|示例|模板|样例)", title, re.I))
+               for level, title in headings):
+            continue
+        if not line.strip() or line.lstrip().startswith('>'):
+            table = {}
+            continue
+        cells = tuple(cell.strip() for cell in line.strip().strip("|").split("|")) if "|" in line else ()
+        if cells and index + 1 < len(lines) and is_separator(lines[index + 1][1]):
+            table = {i: match[1] for i, cell in enumerate(cells)
+                     if (match := re.fullmatch(r"Trace (ID|refs)\s*[:：]?", cell.strip('`* ')))}
+            continue
+        if is_separator(line):
+            continue
+        if table and cells:
+            for i, role in table.items():
+                if i < len(cells):
+                    yield role, cells[i]
+        candidates = cells or (re.sub(r"^\s*(?:[-*+]\s+|\d+[.)]\s+)?", "", line),)
+        for cell in candidates:
+            cell = re.sub(r"^`(Trace (?:ID|refs)\s*[:：])`\s*", r"\1 ", cell.strip())
+            match = re.match(r"^Trace (ID|refs)\s*[:：]\s*(.*)$", cell)
+            if match:
+                yield match[1], match[2]
+
+
+def parse_trace_payload(payload: str) -> tuple[set[str], set[str]]:
+    payload = re.sub(r"\[(O7-REQ-[A-Za-z0-9_-]+)\]\([^)]*\)", r"\1", payload).strip()
+    valid, invalid = set(), set()
+    remaining = payload
+    while remaining:
+        token = re.match(r"`?(O7-REQ-[A-Za-z0-9_-]+)`?", remaining)
+        if not token:
+            if not valid:
+                invalid.add(remaining or '<empty>')
+            break
+        identifier = token[1]
+        (valid if GLOBAL_TRACE_RE.fullmatch(identifier) else invalid).add(identifier)
+        remaining = remaining[token.end():]
+        separator = re.match(r"\s*[,;，；、]\s*|\s+(?=`?O7-REQ-)", remaining)
+        if separator is None:
+            break
+        remaining = remaining[separator.end():]
+    if not payload:
+        invalid.add('<empty>')
+    return valid, invalid
+
+
 def trace_reference_ids(text: str) -> tuple[set[str], set[str]]:
     valid, invalid = set(), set()
-    for _, line in visible_lines(text):
-        # Only a field or table-cell field declares refs. Ordinary prose that
-        # mentions the syntax (including inline-code examples) is not a claim.
-        values = [match[1] for cell in line.split('|')
-                  if (match := re.match(r"^\s*(?:-\s*)?Trace refs[:：]\s*(.*)$", cell))]
-        for value in values:
-            value = re.split(r"[;；]", value, maxsplit=1)[0].strip()
-            tokens = re.findall(r"O7-REQ-[A-Za-z0-9_-]+", value)
-            if not tokens:
-                invalid.add(value or '<empty>')
-            for token in tokens:
-                (valid if GLOBAL_TRACE_RE.fullmatch(token) else invalid).add(token)
+    for role, payload in formal_trace_fields(text):
+        if role == 'refs':
+            found, bad = parse_trace_payload(payload)
+            valid.update(found)
+            invalid.update(bad)
     return valid, invalid
 
 
@@ -640,9 +714,13 @@ def upstream_label_identities(cell: str) -> set[str]:
 
 
 def declared_trace_ids(text: str) -> set[str]:
-    return {match.group(0) for _, line in visible_lines(text)
-            if re.match(r"^\s*(?:-\s*)?Trace ID\s*[:：]", line)
-            for match in GLOBAL_TRACE_RE.finditer(line)}
+    result = set()
+    for role, payload in formal_trace_fields(text):
+        if role == 'ID':
+            identifiers, invalid = parse_trace_payload(payload)
+            if len(identifiers) == 1 and not invalid:
+                result.update(identifiers)
+    return result
 
 
 def fragment_section(text: str, fragment: str) -> str | None:
@@ -692,6 +770,52 @@ def requirement_identity(text: str, fragment: str) -> set[str]:
     return identifiers
 
 
+def resolved_requirement_context(root: Path, source: Path, text: str, fragment: str,
+                                 read_target: TargetTextReader, follow_symlinks: bool = False,
+                                 visited: frozenset[tuple[str, str]] = frozenset(),
+                                 diagnostics: list[str] | None = None,
+                                 dependencies: set[str] | None = None) -> tuple[set[str], bool]:
+    relative = source.relative_to(root).as_posix()
+    if dependencies is not None:
+        dependencies.add(relative)
+    key = (relative, fragment)
+    if key in visited or len(visited) >= 32:
+        if diagnostics is not None:
+            reason = "cycle" if key in visited else "depth limit (32)"
+            diagnostics.append(f"requirement chain {reason}: {relative}#{fragment}")
+        return set(), False
+    section = fragment_section(text, fragment)
+    if section is None:
+        return set(), False
+    own = requirement_identity(text, fragment)
+    product_authority = (relative.startswith('doc/product/')
+                         and (relative.endswith(AUTHORITY_SUFFIXES) or source.name in AUTHORITY_ROOT_BASENAMES))
+    refs, _ = trace_reference_ids(section)
+    resolved = set(own)
+    has_product = bool(product_authority and own)
+    if has_product and not refs:
+        return resolved, True
+    for node in parse_markdown_links(section):
+        raw_path, next_fragment = split_link_target(node.target)
+        if not next_fragment or external_target(raw_path):
+            continue
+        target = source if not raw_path else resolve_target(root, source, raw_path, follow_symlinks=follow_symlinks)
+        if target is None or not is_requirement_authority(target.relative_to(root).as_posix()):
+            continue
+        if dependencies is not None:
+            dependencies.add(target.relative_to(root).as_posix())
+        target_text = read_target(target)
+        if target_text is None:
+            continue
+        child_ids, child_product = resolved_requirement_context(
+            root, target, target_text, next_fragment, read_target, follow_symlinks, visited | {key}, diagnostics, dependencies)
+        matching = refs.intersection(child_ids)
+        resolved.update(matching)
+        if child_product and (matching or not refs):
+            has_product = True
+    return resolved, has_product
+
+
 def engineering_only_disposition(text: str) -> bool:
     """Explicit product-layer N/A with concrete reason and bounded scope."""
     for _, line in visible_lines(text):
@@ -719,6 +843,7 @@ def check_declared_trace_references(root: Path, source: Path, text: str,
     if not references:
         return errors
     located = declared_trace_ids(text)
+    chain_diagnostics = []
     for node in parse_markdown_links(without_html_comments(text)):
         raw_path, fragment = split_link_target(node.target)
         if not fragment or external_target(raw_path):
@@ -730,9 +855,10 @@ def check_declared_trace_references(root: Path, source: Path, text: str,
         if target_text is not None:
             section = fragment_section(target_text, fragment)
             if section is not None:
-                located.update(declared_trace_ids(section))
+                located.update(resolved_requirement_context(root, target, target_text, fragment, read_target, follow_symlinks, diagnostics=chain_diagnostics)[0])
     return errors + [f"system-design-traceability: trace-id-unresolved: {source.relative_to(root).as_posix()}: "
             f"Trace refs ID must link its addressed Trace ID declaration: {identifier}"
+            + ("; " + "; ".join(sorted(set(chain_diagnostics))) if chain_diagnostics else "")
             for identifier in sorted(references - located)]
 
 
@@ -914,11 +1040,11 @@ def relation_from_demand_row(
         return None
     row_trace_ids, _ = trace_reference_ids(" | ".join(cells))
     labels = upstream_label_identities(cells[0])
-    identities = requirement_identity(upstream_text or "", upstream_fragment)
+    identities, product_chain = resolved_requirement_context(root, upstream_path, upstream_text or "", upstream_fragment, read_target, follow_symlinks)
     if labels - identities:
         fail(errors, "trace-upstream-label-mismatch", row_path, "repair explicit upstream label IDs not declared by the addressed feature: " + ", ".join(sorted(labels - identities)))
         return None
-    target_ids = declared_trace_ids(fragment_section(upstream_text or "", upstream_fragment) or "")
+    target_ids = {identifier for identifier in identities if identifier.startswith("O7-REQ-")}
     if row_trace_ids - target_ids:
         fail(errors, "trace-row-id-mismatch", row_path, "row Trace refs must match the addressed upstream declaration: " + ", ".join(sorted(row_trace_ids - target_ids)))
         return None
@@ -926,11 +1052,11 @@ def relation_from_demand_row(
         if upstream_text is None or not requirement_identity(upstream_text, upstream_fragment):
             fail(errors, "trace-upstream-feature-invalid", row_path, "product fragment must address a REQ/SC/AC clause or its Trace ID declaration; a generic heading or unrelated nested feature is insufficient")
             return None
-    else:
+    elif not product_chain:
         local_text = read_target(source) or ""
         local_section = fragment_section(local_text, local_fragment) or ""
         if not engineering_only_disposition(" | ".join(cells) + "\n" + local_section):
-            fail(errors, "trace-product-na-incomplete", row_path, "professional-only upstream requires explicit product N/A with reason and scope in the allocation row or local design clause")
+            fail(errors, "trace-product-na-incomplete", row_path, "upstream without a resolvable product requirement chain requires explicit product N/A with reason and scope in the allocation row or local design clause")
             return None
     if upstream_path.resolve() == source.resolve():
         fail(errors, "trace-upstream-missing", row_path, "upstream relation must name another exact Markdown path#fragment; repair the first cell")
@@ -1090,7 +1216,8 @@ def check_design_content(
         upstream_text = read_target(upstream_path) or ""
         labels = upstream_label_identities(cells[0])
         ids, _ = trace_reference_ids(" | ".join(cells))
-        if labels - requirement_identity(upstream_text, upstream_fragment) or ids - declared_trace_ids(fragment_section(upstream_text, upstream_fragment) or ""):
+        resolved_ids, _ = resolved_requirement_context(root, upstream_path, upstream_text, upstream_fragment, read_target, follow_symlinks)
+        if labels - resolved_ids or ids - {identifier for identifier in resolved_ids if identifier.startswith("O7-REQ-")}:
             fail(errors, "trace-validation-identity-mismatch", row_path, "repair validation row label/Trace refs IDs to match its addressed upstream clause")
             continue
         if local_path.resolve() != source.resolve():
@@ -1298,12 +1425,13 @@ def collect_full_corpus(root: Path) -> list[tuple[str, str]]:
 def check_full_corpus(root: Path) -> int:
     head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
     documents = collect_full_corpus(root)
+    read_target = lru_cache(maxsize=None)(lambda target: full_corpus_read(root, target))
     errors = []
     roots = sum(is_module_design_overview(path) for path, _ in documents)
-    root_contracts = sum(is_module_design_overview(path) and design_requires_traceability(path, text, git_text(root, head, path))
+    root_contracts = sum(is_module_design_overview(path) and design_requires_traceability(path, text, previous_design_text(root, head, head, path, True))
                          for path, text in documents)
     for relative, text in documents:
-        if is_module_design_overview(relative) and not design_requires_traceability(relative, text, git_text(root, head, relative)):
+        if is_module_design_overview(relative) and not design_requires_traceability(relative, text, previous_design_text(root, head, head, relative, True)):
             print(f"::notice::system-design-traceability: module-overview: {relative}: "
                   "inventoried; topic 2.1/11.1 tables are not imposed on module navigation; "
                   "overview headings are checked by doc-core-content, relation semantics require human review")
@@ -1313,7 +1441,7 @@ def check_full_corpus(root: Path) -> int:
                   "current or baseline mapping contract requires complete relation checks")
         errors.extend(check_design_content(
             root, root / relative, text,
-            lambda target: full_corpus_read(root, target), follow_symlinks=False,
+            read_target, follow_symlinks=False,
         ))
     print(f"system-design-traceability: full-corpus inventoried {len(documents)} professional designs; "
           f"topic-contracts={len(documents) - roots} module-overviews={roots - root_contracts} "
@@ -1354,6 +1482,7 @@ def main() -> int:
         print(f"system-design-traceability: error: {exc}")
         return 2
 
+    @lru_cache(maxsize=None)
     def read_target(target: Path) -> str | None:
         if args.worktree:
             try:
@@ -1387,13 +1516,14 @@ def main() -> int:
         print("system-design-traceability: checked 0: reason=no new or substantive system-design changes in selected range")
         return 0
 
+    read_previous_target = lru_cache(maxsize=None)(lambda target: committed_target_text(root, source_base, target))
     errors: list[str] = []
     for path in selected:
         text = read_target(path)
         if text is None:
             fail(errors, "trace-ref-unresolved", path.relative_to(root).as_posix(), "design content is missing; repair the selected head/worktree file")
             continue
-        previous = git_text(root, source_base, path.relative_to(root).as_posix())
+        previous = previous_design_text(root, source_base, head, path.relative_to(root).as_posix(), args.worktree)
         if not design_requires_traceability(path.relative_to(root).as_posix(), text, previous):
             print(f"system-design-traceability: module-overview: {path.relative_to(root).as_posix()}: selected; core checks overview duties")
             continue
@@ -1403,7 +1533,7 @@ def main() -> int:
             # touching its authority does not promote unrelated historical debt.
             old_findings = set(check_design_content(
                 root, path, previous,
-                lambda target: committed_target_text(root, source_base, target),
+                read_previous_target,
                 follow_symlinks=False,
             ))
             findings = [finding for finding in findings if finding not in old_findings]

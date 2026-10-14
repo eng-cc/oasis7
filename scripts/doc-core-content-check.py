@@ -90,9 +90,8 @@ def check_design_evidence(path, number, block, evidence, root, read_target):
     errors = []
     source = root / path
     identities = system.declared_trace_ids(block)
-    for _, line in product.visible_lines(block):
-        if re.match(r'^\s*(?:-\s*)?Trace refs\s*[:：]', line, re.I):
-            identities.update(match.group(0) for match in system.GLOBAL_TRACE_RE.finditer(line))
+    trace_refs, _invalid_refs = system.trace_reference_ids(block)
+    identities.update(trace_refs)
     for _, line in product.visible_lines(block):
         match = re.match(r'^ {0,3}#{1,6}\s+((?:REQ|SC|AC)-[A-Z0-9_-]+)\b', line, re.I)
         if match:
@@ -126,8 +125,12 @@ def check_design_evidence(path, number, block, evidence, root, read_target):
                 upstream = read_target(root / relation.upstream_path)
                 if relation.upstream_path == path and system.fragment_occurrences(block, relation.upstream_fragment) == 1:
                     matched = True
-                elif upstream is not None and {identity for identity in identities if relation.upstream_path == path or identity.startswith('O7-REQ-')}.intersection(system.requirement_identity(upstream, relation.upstream_fragment)):
-                    matched = True
+                elif upstream is not None:
+                    upstream_ids, _product_chain = system.resolved_requirement_context(
+                        root, root / relation.upstream_path, upstream, relation.upstream_fragment, read_target, follow_symlinks=False)
+                    eligible_ids = {identity for identity in identities if relation.upstream_path == path or identity.startswith('O7-REQ-')}
+                    if eligible_ids.intersection(upstream_ids):
+                        matched = True
         if not matched:
             errors.append(finding(path, number, 'design-feature-relation-missing', f'设计条款须有指向本功能或其明确 Trace ID 的需求承接关系：{raw}'))
     return errors
@@ -249,11 +252,13 @@ def main():
             if hard_errors:
                 print('\n'.join(hard_errors))
                 return 2
-            read_target = lambda target: system.full_corpus_read(root, target)
+            @lru_cache(maxsize=None)
+            def read_target(target):
+                return system.full_corpus_read(root, target)
             selected = [(d.path, d.new_text) for d in documents]
             professional = system.collect_full_corpus(root)
             selected.extend(professional)
-            previous.update((path, product.git_text(root, corpus_head, path)) for path, _ in professional if system.is_module_design_overview(path))
+            previous.update((path, system.previous_design_text(root, corpus_head, corpus_head, path, include_worktree=True)) for path, _ in professional if system.is_module_design_overview(path))
             roots = sum(system.is_module_design_overview(path) for path, _ in professional)
             root_contracts = sum(system.is_module_design_overview(path) and system.design_requires_traceability(path, text, previous.get(path)) for path, text in professional)
             print(f"doc-core-content: full-corpus selected product={len(documents)} professional={len(professional)} (topic-contracts={len(professional) - roots} module-overviews={roots - root_contracts} module-contracts={root_contracts}); professional designs include all lifecycles")
@@ -278,7 +283,7 @@ def main():
                 if text is None:
                     raise OSError(f'selected document cannot be read: {relative}')
                 selected.append((relative, text))
-                previous[relative] = product.git_text(root, source_base, relative)
+                previous[relative] = system.previous_design_text(root, source_base, head, relative, include_worktree=args.worktree)
         errors = []
         if not args.full_corpus:
             errors.extend(newly_broken_status_relations(root, source_base, head, args.worktree, {path for path, _ in selected}, read_target))

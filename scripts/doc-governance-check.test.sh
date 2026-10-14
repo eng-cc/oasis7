@@ -2,6 +2,10 @@
 # Cross-platform test contract: large doc scans must avoid Windows argv limits while preserving Linux/macOS results.
 set -euo pipefail
 
+# This suite creates its own Git history. Hosted CI's real-repository range
+# must not leak into fixture calls; individual range-error cases set their own.
+unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMPDIR="$(mktemp -d)"
@@ -559,5 +563,20 @@ if (
   exit 1
 fi
 grep -Fq 'active documentation references retired project ledgers or legacy project-management documents' "$TMPDIR/false-task-truth-link.out"
+
+# Exercise the complete suite under foreign, well-formed CI OIDs as well.
+# The child must still forward its own fixture HEAD, as asserted above. The
+# guard limits this regression to one child, including when CI is already set.
+if [[ "${OASIS7_DOC_GOVERNANCE_TEST_ENV_CHILD:-}" != 1 ]]; then
+  if ! OASIS7_DOC_GOVERNANCE_TEST_ENV_CHILD=1 \
+    OASIS7_PRODUCT_DOC_BASE=1111111111111111111111111111111111111111 \
+    OASIS7_PRODUCT_DOC_HEAD=2222222222222222222222222222222222222222 \
+    bash "$SCRIPT_DIR/doc-governance-check.test.sh" >"$TMPDIR/foreign-ci-range.out" 2>&1; then
+    echo "doc-governance-check.test: inherited CI range isolation failed" >&2
+    cat "$TMPDIR/foreign-ci-range.out" >&2
+    exit 1
+  fi
+  grep -Fxq 'doc-governance-check.test: OK' "$TMPDIR/foreign-ci-range.out"
+fi
 
 echo "doc-governance-check.test: OK"

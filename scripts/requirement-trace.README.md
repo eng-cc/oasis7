@@ -181,8 +181,14 @@ Product features and professional designs relate many-to-many through applicable
 requirements and Trace IDs, never by matching file counts. The content checkers
 validate recognizable exact upstream/local links, explicit Trace refs against
 linked declarations, and positive product design-state links against the relevant
-allocation relation. Engineering-only relations need an explicit product N/A
-reason and scope. Undesigned or partially covered features remain legitimate;
+allocation relation. Existing paragraph/list/table-column/table-cell Trace fields,
+inline-code labels/values and multiple refs are supported. AC and professional
+intermediate clauses may reference the original declaration through exact
+fragment links; they need not redeclare or mint another ID. Bounded traversal
+rejects unresolved cyclic/over-depth chains and does not borrow identities from
+unrelated neighboring sections. A product-to-professional-to-design chain is
+valid; only engineering-only relations need an explicit product N/A reason and
+scope. Undesigned or partially covered features remain legitimate;
 checks must not encourage invented designs. Design coverage and implementation
 status are separate, so implementation gaps may remain when design is covered.
 The scoped core checker also compares unchanged product PRDs against the
