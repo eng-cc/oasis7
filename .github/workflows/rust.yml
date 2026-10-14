@@ -124,12 +124,18 @@ jobs:
           python-version: '3.12'
       - name: Install Markdown runtime
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
+      - name: Resolve tested product-document range
+        shell: bash
+        run: |
+          python3 scripts/resolve-product-doc-ci-range.py \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --event-name "$GITHUB_EVENT_NAME" \
+            --event-path "$GITHUB_EVENT_PATH" \
+            --tested-oid "$GITHUB_SHA" >>"$GITHUB_ENV"
       - name: Execute selected group
         shell: bash
         env:
           CI_VERBOSE: "1"
-          OASIS7_PRODUCT_DOC_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
-          OASIS7_PRODUCT_DOC_HEAD: ${{ github.sha }}
         run: bash ./scripts/ci-tests.sh required --group "baseline" --repo-root "$GITHUB_WORKSPACE"
 
   rust-baseline:

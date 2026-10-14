@@ -32,6 +32,8 @@ python3 scripts/product-doc-content-check.py \
   --worktree
 ```
 
+GitHub PR baseline CI 检查实际测试的合并快照时，先校验 checkout HEAD 等于本次测试 SHA、恰好有两个 parent 且第二 parent 等于事件 PR head，再使用实际第一 parent → 测试 merge 作为文档检查与该 baseline 的 diff 检查范围，避免把事件后 main 独有变化归入本 PR；push 保留事件 before/after，缺失或零身份不静默回退。此 CI 调用方解析不改普通 CLI 显式提供的 base/head，也不改 trusted 选组基线。
+
 上面的显式参数是作者提交、CI 和 PR-prep 的准入合同。普通本地维护若完全没有这些 env 且没有 CI 事件输入，旧的 `doc-governance-check.sh` 可以为兼容性推导 `base=merge-base(HEAD, main)`、`head=HEAD`；显式参数只缺一项，或 CI 事件缺失/部分/格式错误，必须失败，不能借此回退到本地推导。
 
 准入会对新增、复制、重命名和去除空白行/行尾空白/HTML 注释后仍有内容差异的修改运行检查；纯空白/HTML 注释差异按同一机械规则排除，行首缩进变化仍是实质内容，其他修改没有格式豁免。比较范围是 `merge-base(base, head)...head`：`base` 为集成目标、`head` 为待集成源，target-only 变化不进入源范围；`--worktree` 还纳入 staged、unstaged 和 untracked 产品文档。作者/CI/PR-prep 合同中的 base/head/event 缺失、部分存在或格式错误时必须失败，不得静默退回另一个范围。作者必须修复所有失败项：文档类 metadata 与最低内容、真实 authority 路径及 fragment、显式 REQ/AC 引用、局部 ID/HTML anchor 唯一性与可达性。fenced code block 会先从正文剔除，仅作示例，不计入声明或引用；REQ/AC 块和追踪表格的每个关联必须解析到本地声明/anchor 或带路径和 fragment 的真实跨文件 Markdown 链接，不能用其他位置偶然出现的 token 替代。通过门禁不代替语义评审；负责人按实际复杂度、风险和专业问题安排适用评审，不要求所有角色逐一签收。
