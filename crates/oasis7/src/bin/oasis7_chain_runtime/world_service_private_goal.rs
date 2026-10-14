@@ -354,7 +354,11 @@ pub(crate) fn maybe_handle(
         signer,
         store,
         || {},
-        |stage| tracing::warn!(stage, "private task context operation rejected"),
+        |stage| {
+            tracing::warn!(stage, "private task context operation rejected");
+            #[cfg(test)]
+            eprintln!("TASK_PRIVATE_CONTEXT_REJECT stage={stage}");
+        },
     )
 }
 /// Returns bounded errors only; never prints body, signatures, keys or paths.

@@ -494,3 +494,25 @@ fn private_task_context_read_reports_expiry_at_capture_and_delivery() {
     assert!(body.get("payload").is_none());
     assert_eq!(stage, Some("delivery_capture_expired"));
 }
+
+#[test]
+fn private_task_context_http_service_emits_stage_without_tracing_subscriber() {
+    let mut fixture = active_context_read_fixture();
+    advance_past_context_deadline(&mut fixture);
+    let get = fixture.get.clone();
+    let result = consumer(
+        &fixture.dir,
+        &fixture.runtime,
+        &fixture.signer,
+        &fixture.store,
+        &fixture.world,
+        |client| client.read_task_context(&get),
+    );
+    assert!(matches!(
+        result,
+        Err(oasis7::world_service::client::WorldServiceClientError::Rejected {
+            status: 409,
+            message,
+        }) if message == "private goal request rejected"
+    ));
+}
