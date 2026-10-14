@@ -88,7 +88,7 @@ Release 元数据 -> 现有下载刷新层 -> 同候选版本/资产展示
 <a id="des-site-publishing"></a>
 ### DES-SITE-PUBLISHING：编辑、发布与纠正
 
-每条内容的详情 HTML 是公开正文与元数据的唯一编辑源。发布正文放在唯一 `data-content-body` 区域；撤回必须移除此区域并提供 `data-content-correction`，同 GUID 的 RSS 描述与纠正正文一致。首页/列表/RSS 保留必要摘要，作为派生副本，在同一变更中同步并由检查核对 id、标题、类型、日期、语言、版本、链接及状态；不在 PRD 中另存文章台账。静态派生一致性检查消费 `scripts/site-discovery-check.py`，负例覆盖 `scripts/site-discovery-check.test.py`；当前不引入生成器依赖，未来批量化再单独决定。
+每条内容的详情 HTML 是公开正文与元数据的唯一编辑源。发布正文放在唯一 `data-content-body` 区域；撤回必须移除此区域并提供 `data-content-correction`，同 GUID 的 RSS 描述与纠正正文一致；关联的 CN/EN 内容必须在同一变更中撤回并同步状态，不能让另一语言继续发布旧正文。首页/列表/RSS 保留必要摘要，作为派生副本，在同一变更中同步并由检查核对 id、标题、类型、日期、语言、版本、链接及状态；不在 PRD 中另存文章台账。静态派生一致性检查消费 `scripts/site-discovery-check.py`，负例覆盖 `scripts/site-discovery-check.test.py`；当前不引入生成器依赖，未来批量化再单独决定。
 
 发布顺序为核对上游事实与可公开性、编写详情、同步 CN/EN 与摘要、运行适用检查、沿现有 Pages 发布链部署。文档通过、合入和部署是不同事实。
 

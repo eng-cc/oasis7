@@ -50,9 +50,16 @@ with tempfile.TemporaryDirectory() as tmp:
   p=root/rel;p.write_text(re.sub(r'<article[^>]*data-content-summary="removed".*?</article>','',p.read_text(),flags=re.S))
  p=detail;s=p.read_text();s=re.sub(r'<article data-content-body>.*?</article>','<p data-content-correction>Record withdrawn; read the current project statement.</p>',s,flags=re.S);p.write_text(s)
  feed=root/'feed.xml';tree=module.ET.parse(feed);tree.find('channel/item/description').text='Record withdrawn; read the current project statement.';tree.write(feed,encoding='unicode')
+ assert any('paired publication status differs' in e for e in module.check(root)),module.check(root)
+ # Same-GUID correction must be applied to the translated copy as well.
+ p=root/'en/devlog/discovery-first/index.html';s=p.read_text().replace('data-content-status="published"','data-content-status="withdrawn"')
+ s=re.sub(r'<article data-content-body>.*?</article>','<p data-content-correction>Record withdrawn; read the current project statement.</p>',s,flags=re.S);p.write_text(s)
+ for rel in ['en/index.html','en/devlog/index.html']:
+  p=root/rel;p.write_text(re.sub(r'<article[^>]*data-content-summary="discovery-first".*?</article>','',p.read_text(),flags=re.S))
+ feed=root/'en/feed.xml';tree=module.ET.parse(feed);tree.find('channel/item/description').text='Record withdrawn; read the current project statement.';tree.write(feed,encoding='unicode')
  assert not module.check(root),module.check(root)
  # Canonical description and locale set drift cannot be published silently.
- p=root/'en/devlog/discovery-first/index.html';p.write_text(p.read_text().replace('A clearer role, an honest example, and a choice to keep reading.','Different summary.'))
+ p=root/'en/devlog/discovery-first/index.html';p.write_text((module.ROOT/'en/devlog/discovery-first/index.html').read_text().replace('A clearer role, an honest example, and a choice to keep reading.','Different summary.'))
  assert any('canonical summary' in e for e in module.check(root))
  p.unlink();assert any('locale sets differ' in e for e in module.check(root))
 # Two legitimate same-date items must be checked per record, sorted by slug.
@@ -87,4 +94,32 @@ with tempfile.TemporaryDirectory() as tmp:
    p=root/prefix/rel;p.write_text(re.sub(r'<article[^>]*data-content-summary="discovery-first".*?</article>','',p.read_text(),flags=re.S))
   feed=root/prefix/'feed.xml';tree=module.ET.parse(feed);channel=tree.getroot().find('channel');channel.remove(channel.find('item'));tree.write(feed,encoding='unicode')
  assert not module.check(root),module.check(root)
-print('site-discovery-check.test: OK (negative cases, zero/one/multiple and safe withdrawal)')
+# Observations share the identity/derivative contract and add provenance checks.
+with tempfile.TemporaryDirectory() as tmp:
+ root=Path(tmp)
+ for file in files:
+  target=root/file;target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(module.ROOT/file,target)
+ for prefix in ['', 'en/']:
+  source=root/prefix/'devlog/discovery-first/index.html';p=root/prefix/'observations/energy-example/index.html';p.parent.mkdir(parents=True)
+  label='illustrative example' if prefix else '说明性示例'
+  text=source.read_text().replace('discovery-first','energy-example').replace('data-content-kind="devlog"','data-content-kind="observation"').replace('data-content-status="published"','data-content-status="published" data-provenance="illustrative"').replace('<article data-content-body>','<p data-content-provenance-label>'+label+'</p><article data-content-body>')
+  p.write_text(text)
+  home=root/prefix/'index.html';row=re.search(r'<article[^>]*data-content-summary="discovery-first".*?</article>',home.read_text(),re.S).group().replace('discovery-first','energy-example').replace('devlog/energy-example/','observations/energy-example/')
+  home_text=home.read_text();at=home_text.index('</section>',home_text.index('<section id="world"'));home.write_text(home_text[:at]+row+home_text[at:])
+  listing=root/prefix/'observations/index.html';listing.write_text(listing.read_text().replace('</main>',row+'</main>'))
+  feed=root/prefix/'feed.xml';tree=module.ET.parse(feed);channel=tree.getroot().find('channel');item=copy.deepcopy(channel.find('item'))
+  for field in ['guid','link']:item.find(field).text=item.find(field).text.replace('devlog/discovery-first','observations/energy-example')
+  channel.insert(0,item);tree.write(feed,encoding='unicode')
+ assert not module.check(root),module.check(root)
+ p=root/'observations/energy-example/index.html';source=p.read_text()
+ for old,new in [('data-provenance="illustrative"','data-provenance="runtime_capture"'),('data-content-status="published"','data-content-status="draft"'),('data-content-id="energy-example"','data-content-id="other"'),('data-provenance="illustrative"','data-provenance="live"')]:
+  p.write_text(source.replace(old,new));assert module.check(root),(old,new)
+ p.write_text(source)
+ # A structurally complete runtime fixture is not a claim about real material.
+ for prefix in ['', 'en/']:
+  p=root/prefix/'observations/energy-example/index.html';s=p.read_text().replace('data-provenance="illustrative"','data-provenance="runtime_capture" data-source-build="fixture-build" data-runtime-profile="fixture" data-source-scenario="fixture-energy" data-source-window="fixture-window" data-source-url="https://github.com/eng-cc/oasis7/blob/b216610f117d044c20ff9aad2d73485c7c9f3174/README.md"')
+  s=s.replace('data-content-provenance-label>'+('illustrative example' if prefix else '说明性示例'),'data-content-provenance-label>'+('runtime capture' if prefix else '真实运行记录'))
+  s=s.replace('</article>','<a href="https://github.com/eng-cc/oasis7/blob/b216610f117d044c20ff9aad2d73485c7c9f3174/README.md">Fixture source</a></article>',1);p.write_text(s)
+ assert not module.check(root),module.check(root)
+ p=root/'observations/energy-example/index.html';s=p.read_text();p.write_text(s.replace('data-runtime-profile="fixture"','data-runtime-profile="unknown"'));assert any('incomplete runtime provenance' in e for e in module.check(root))
+print('site-discovery-check.test: OK (paired families, zero/one/multiple, runtime fields and withdrawals)')
