@@ -2,6 +2,8 @@
 
 ## 文档身份
 
+- 结构裁剪：理由：稳定锚点和连接状态共同表达阅读与恢复体验；范围：响应式、文本和行动反馈表面；风险：表现恢复不能代签权限或世界结果；映射：[目标与设计命题](#1-稳定阅读锚点)、[代表性体验流程](#4-连接状态)
+
 - 配对产品 PRD：[`doc/product/agents-world-simulation/player-readable-surface-continuity.prd.md`](player-readable-surface-continuity.prd.md)
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
@@ -96,8 +98,8 @@ This design delegates product requirements and acceptance semantics to its paire
 
 | PRD requirement | PRD acceptance |
 | --- | --- |
-| [REQ-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#req-agent-surface-001) | [AC-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#ac-agent-surface-001) |
-| [REQ-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#req-agent-surface-002) | [AC-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#ac-agent-surface-002) |
-| [REQ-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#req-agent-surface-003) | [AC-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#ac-agent-surface-003) |
-| [REQ-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#req-agent-surface-004) | [AC-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#ac-agent-surface-004) |
-| [REQ-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#req-agent-surface-005) | [AC-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#ac-agent-surface-005) |
+| Trace refs: O7-REQ-20b49f66-b663-41ed-9b52-253ce76ed1ef；[REQ-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#req-agent-surface-001) | [AC-AGENT-SURFACE-001](player-readable-surface-continuity.prd.md#ac-agent-surface-001) |
+| Trace refs: O7-REQ-d7081137-94a9-4524-b08a-fc3fbfcb9f64；[REQ-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#req-agent-surface-002) | [AC-AGENT-SURFACE-002](player-readable-surface-continuity.prd.md#ac-agent-surface-002) |
+| Trace refs: O7-REQ-41b03765-cccf-4a1f-814c-7b498dc975f6；[REQ-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#req-agent-surface-003) | [AC-AGENT-SURFACE-003](player-readable-surface-continuity.prd.md#ac-agent-surface-003) |
+| Trace refs: O7-REQ-e3a70494-b3f3-4220-a654-6c9f07cdb8a4；[REQ-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#req-agent-surface-004) | [AC-AGENT-SURFACE-004](player-readable-surface-continuity.prd.md#ac-agent-surface-004) |
+| Trace refs: O7-REQ-e393156d-2326-4d75-a0cb-ffba6ed74e5d；[REQ-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#req-agent-surface-005) | [AC-AGENT-SURFACE-005](player-readable-surface-continuity.prd.md#ac-agent-surface-005) |

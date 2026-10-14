@@ -51,6 +51,8 @@ N/A: 本专题不新增 Agent 推理、provider observation 或公共 action sch
 <a id="industrial-quote-ledger-semantics"></a>
 ### 报价账本、净缺口与转移失败边界
 
+Trace refs: O7-REQ-b99516b0-4b36-4aa1-84e4-efc07837cd95; O7-REQ-9a0630f6-b261-420b-85a1-1dd426cf3b48；产品适用承接：[REQ-FIRST-INDUSTRIAL-002](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-002)、[REQ-FIRST-INDUSTRIAL-005](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md#req-first-industrial-005)。 本产品承接限于首局工业链适用时的同一实际输入/消费口径、提交重验与重复无副作用；本节其余专业报价规则继续按原范围独立适用，不由这两项首局要求代替或证明完成。
+
 以下条款补齐现有报价的领域解释与实现验收目标，保持 simulator 的 `Electricity | Data` 与 Runtime 的 `MaterialLedgerId` 两条权威边界，不引入旧 ResourceKind，也不让一条 lane 的公式覆盖另一条。
 
 - **精炼前后余额：** simulator 的 `hardware_shortfall_before` 从动作前真正可用于当前 BuildFactory 目标的 Data 余额计算；after 从执行相同精炼转换后的净 Data 余额计算。旧字段名 `compound_mass_g`/`hardware_output` 不构成两份独立库存或“未精炼 Data 不可建厂”的资格。现行产率上限使产出不大于投入，净 Data 不增加，建厂缺口不能缩小；当前模型不得产生 `enough_to_advance` / `partial_progress` 的目标进展判定，也不要求这两类不可达正例。合法转换成功仍须按 `poor_power_tradeoff` 说明无改善或净损失，推荐量必须与同一净变化一致。

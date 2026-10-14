@@ -119,27 +119,39 @@ OC 与世界资格分离现在有明确的 active 产品接收边界：工业/�
 
 ## 8. 专业验收
 
-### <a id="ac-game-018-01"></a>AC-GAME-018-01：工业创建阶段形成可恢复的玩家循环
+<a id="ac-game-018-01"></a>
+### AC-GAME-018-01：工业创建阶段形成可恢复的玩家循环
 
 给定一项新工业能力机会，玩家能够依次读取可审计提案、确定性模拟、受限原型/试点和治理准入的差异，比较继续、补证、缩小范围、延期、停止和既有路线；任一阶段均不自动取得世界能力。输入缺失、模拟不一致、试点失败、准入拒绝或条件漂移时，结果保留原因、投入/损失、scope、下一复查和安全替代，不产生第二次世界效果。
 
-### <a id="ac-game-018-02"></a>AC-GAME-018-02：许可和开放奖励受范围、期限与公共边界约束
+<a id="ac-game-018-02"></a>
+### AC-GAME-018-02：许可和开放奖励受范围、期限与公共边界约束
 
 给定一个获准工业能力，玩家能看到用途/区域、期限、版税/收益、维护、撤销/争议与到期/开放条件，并在继续许可、续期、开放、替代路线之间作出有机会成本的选择。到期或开放条件达到后按规则开放；许可不能永久封锁、覆盖玩家独立资产/身份或扩大到未准入范围。重复、旧缓存和待决请求不延长、复制或追溯改写许可。
 
-### <a id="ac-game-018-03"></a>AC-GAME-018-03：OC 转让与世界资格保持双向语义隔离
+<a id="ac-game-018-03"></a>
+### AC-GAME-018-03：OC 转让与世界资格保持双向语义隔离
 
 给定 OC 链上转让、世界资源/信用、工业准入或区域资格的任一组合，玩家能分辨各自的成功、失败、条件和下一步；OC 持有/转让不自动取得世界资格，世界资格也不自动铸造、转让或兑换 OC。任一侧失败都不抹掉另一侧已确认的 receipt，不产生绕过资格、治理、竞争或外部价值承诺的旁路。
 
-### <a id="ac-game-018-04"></a>AC-GAME-018-04：市场发现、报价和物理交付有新鲜度与状态切线
+<a id="ac-game-018-04"></a>
+### AC-GAME-018-04：市场发现、报价和物理交付有新鲜度与状态切线
+
+Trace refs: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2；产品适用承接：[REQ-SC31-009](../../product/world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#req-sc31-009)。 本条与该产品要求的关联仅覆盖跨区情报、物流/接收、escrow 及对应读面；工业创建、许可准入、OC 资格与其他 progression 义务仍按原专业条款独立适用，不由该关联代签。
 
 给定跨区供给/需求，玩家能看到情报来源、时间戳/新鲜度、不确定性、报价/合同、路线、时间、损耗、目的地准入与容量，并区分发现、承诺、出发、在途、到达、存储和用途。陈旧或私有情报不会伪装成实时事实；前序状态不能表示货物已到达、需求已满足或最终结算。
 
-### <a id="ac-game-018-05"></a>AC-GAME-018-05：Escrow 里程碑和争议可恢复且 exactly-once
+<a id="ac-game-018-05"></a>
+### AC-GAME-018-05：Escrow 里程碑和争议可恢复且 exactly-once
+
+Trace refs: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2；产品适用承接：[REQ-SC31-009](../../product/world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#req-sc31-009)。 本条与该产品要求的关联仅覆盖跨区情报、物流/接收、escrow 及对应读面；工业创建、许可准入、OC 资格与其他 progression 义务仍按原专业条款独立适用，不由该关联代签。
 
 给定一项带 escrow 的跨区合同，玩家能看到每个里程碑的物理/接收条件、可释放或保留的资金、证据窗口、争议状态和下一步。只有绑定事实满足时才产生一次里程碑结算；延误、损耗、拒收、争议、重连、重试、并发到达和 replay 不重复释放、扣款、发奖、减少需求或改写已结算历史，并保留合法的补救、退回、改道、重谈或安全停止路径。
 
-### <a id="ac-game-018-06"></a>AC-GAME-018-06：跨 surface 玩家语义和 progression 边界一致
+<a id="ac-game-018-06"></a>
+### AC-GAME-018-06：跨 surface 玩家语义和 progression 边界一致
+
+Trace refs: O7-REQ-7737ac31-a377-46ec-b912-9aadc0ac7fd2；产品适用承接：[REQ-SC31-009](../../product/world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#req-sc31-009)。 本条与该产品要求的关联仅覆盖跨区情报、物流/接收、escrow 及对应读面；工业创建、许可准入、OC 资格与其他 progression 义务仍按原专业条款独立适用，不由该关联代签。
 
 同一权威快照下，Viewer、pure API 和 Agent 对提案阶段、准入范围、许可状态、OC/世界资格、情报新鲜度、物流/escrow 状态、primary blocker、机会成本、`next_action`、`next_recheck` 和 `progression_effect` 给出等义解释。推荐不能替玩家创建新能力、改道、争议或完成结算；缺 authority 时统一返回 `incomplete / unknown / blocked`，不能用默认值补齐。
 

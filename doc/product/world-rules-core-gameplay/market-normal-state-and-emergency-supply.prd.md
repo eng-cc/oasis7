@@ -19,6 +19,8 @@
 - 历史设计判定 Issue：#3680。
 - 设计适用性理由：本 PRD 只定义常态/紧急分界、冻结批次、结果类别和退出边界；分配算法与界面由专业 authority 决定。配套专业系统设计承接授权有效性、冻结批次、跨授权去重、物理结算与恢复；本项仅豁免独立产品交互 design，不豁免专业技术设计。
 - 历史设计判定记录：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+本节的产品体验设计豁免不等于专业系统设计不适用；各要求的技术覆盖与实现证据分别按下列状态摘要核对。
+
 ## 1. 产品目标
 
 市场常态由玩家、Agent、合约、供需和物理物流共同形成。价格波动、区域差异、局部故障和一般竞争是常态市场需要吸收的信号，不应被治理方随意改写为紧急状态。
@@ -67,7 +69,8 @@
 
 这项边界使紧急措施保持 world-first：是否继续由当前权威授权和 receipt 决定，而非客户端队列或历史标签；保持 emergence-first：玩家、Agent 与组织只能在当前共同规则下重新规划，不能从授权切换中取得套利路径；保持 persistent / auditable：旧请求、新请求、授权与结果之间的因果可追溯；保持 extensible：未来可增加介入类别或授权形态，但不得让待决状态跨越已失效或改变范围的授权。
 
-## 5. 玩家可读的保供状态与恢复路径
+<a id="5-玩家可读的保供状态与恢复路径"></a>
+## 5. 玩家体验：可读的保供状态与恢复路径
 
 紧急保供的制度状态不能只存在于治理记录或后台执行中。受影响玩家、组织和 Agent 必须能区分以下结果，并据此决定继续常态交易、等待、申诉或重新规划；具体文案、布局、状态字段和通知机制由 runtime 与正式玩家 surface 的专业 authority 拥有。
 
@@ -83,12 +86,23 @@
 <a id="req-wr-es-001"></a>
 ### REQ-WR-ES-001：常态市场与紧急保供必须按证据分界
 
+Trace ID: O7-REQ-918d9050-5f73-40ad-b9d4-aba87233bdd1
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-001](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-001)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：危机政策、优先规则、seed 来源、wire/schema、容量与保留窗口仍由专业 owner 冻结；正式读面与跨节点组合验证未完成。
+
 - 要求：普通价格波动、局部故障和暂时短缺维持常态市场；只有预声明的系统性必需品危机具备证据、范围、授权来源、起止时间、介入方式和复核入口的最小授权包时，才可产生紧急世界效果。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)
 - 验收：[AC-WR-ES-001](#ac-wr-es-001)
 
 <a id="ac-wr-es-001"></a>
 ### AC-WR-ES-001：缺失授权包不改变常态交易
+
+Trace refs: O7-REQ-918d9050-5f73-40ad-b9d4-aba87233bdd1；声明：[REQ-WR-ES-001](#req-wr-es-001)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-ES-001
 - 给定：一个普通价格波动、局部设施故障或证据完整的系统性必需品危机。
@@ -98,12 +112,23 @@
 <a id="req-wr-es-002"></a>
 ### REQ-WR-ES-002：稀缺分配必须依据冻结快照并可确定回放
 
+Trace ID: O7-REQ-18fe18ca-4920-4fe0-aad3-69b5fc7b80a7
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-002](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-002)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：危机政策、优先规则、seed 来源、wire/schema、容量与保留窗口仍由专业 owner 冻结；正式读面与跨节点组合验证未完成。
+
 - 要求：同一授权批次必须冻结资格、需求、范围、资源和政策快照，使用已声明的优先依据与 tie resolution；快照漂移只能原子拒绝或形成新批次，不能以隐藏到达顺序追溯重排。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-ES-002](#ac-wr-es-002)
 
 <a id="ac-wr-es-002"></a>
 ### AC-WR-ES-002：重复投递不改变冻结批次结果
+
+Trace refs: O7-REQ-18fe18ca-4920-4fe0-aad3-69b5fc7b80a7；声明：[REQ-WR-ES-002](#req-wr-es-002)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-ES-002
 - 给定：一个供给不足且已冻结快照的授权批次，包含多个等资格请求。
@@ -113,12 +138,23 @@
 <a id="req-wr-es-003"></a>
 ### REQ-WR-ES-003：紧急授权到期后恢复常态且不迁移待决请求
 
+Trace ID: O7-REQ-51922b18-cc1e-4894-9c12-66c0a6def6d1
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-003](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-003)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：危机政策、优先规则、seed 来源、wire/schema、容量与保留窗口仍由专业 owner 冻结；正式读面与跨节点组合验证未完成。
+
 - 要求：紧急授权到期、撤销或范围改变时，未确认的请求不能自动跨入新授权；未使用资格失效，已确认 receipt 与历史结果保留，玩家可见常态替代、补证、申诉或重新规划路径。
 - 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-ES-003](#ac-wr-es-003)
 
 <a id="ac-wr-es-003"></a>
 ### AC-WR-ES-003：授权边界切换不制造第二次保供结果
+
+Trace refs: O7-REQ-51922b18-cc1e-4894-9c12-66c0a6def6d1；声明：[REQ-WR-ES-003](#req-wr-es-003)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-ES-003
 - 给定：一个旧授权下登记、排队或在途但未取得最终 receipt 的采购或配给请求。
@@ -128,12 +164,23 @@
 <a id="req-wr-es-004"></a>
 ### REQ-WR-ES-004：紧急保供必须是有证据、有界且可退出的市场例外
 
+Trace ID: O7-REQ-c17942de-f8ae-44fe-8525-88560dccf0a3
+
+- 系统设计状态：部分覆盖
+- 实现状态：未核实
+- 系统设计依据：[emergency-supply-authorization-and-settlement.design / des-wr-es-004](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-004)。已承接：授权、冻结分配、退出或物理结算中本条对应的 runtime 合同与验证场景。
+- 实现与验证依据：尚未核清支持本条全部适用验收的固定实现候选、环境、入口和 Task/PR 结果；[本轮规范化任务](https://github.com/eng-cc/oasis7/issues/4698)只记录文档修复，不是运行证据。
+- 核对日期与基线：2026-10-14；需求/设计文档基线 `7f8a77069c9f7d316500dce11c6ab65da5ac36b3`；实现候选、运行环境与端到端验收未核定。
+- 剩余范围：危机政策、优先规则、seed 来源、wire/schema、容量与保留窗口仍由专业 owner 冻结；正式读面与跨节点组合验证未完成。
+
 - 要求：正常价格、供需、竞争和局部故障继续由市场、合约与物流形成；只有预声明的系统性必需品危机并具备事实证据、品类、受影响范围、授权来源、开始/到期时间、介入方式、补偿/公开分配、复核和申诉入口的最小授权包，才可产生紧急世界效果。介入不得变成常态限价、永久配给、任意没收、可转让/可叠加资格或绕过路线、到达、存储、合同结算、世界资格与 receipt 的旁路。
 - 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-05)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-ES-004](#ac-wr-es-004)
 
 <a id="ac-wr-es-004"></a>
 ### AC-WR-ES-004：正常市场与紧急保供区分且退出后恢复常态
+
+Trace refs: O7-REQ-c17942de-f8ae-44fe-8525-88560dccf0a3；声明：[REQ-WR-ES-004](#req-wr-es-004)；适用范围沿用本 AC 原覆盖条件。
 
 - 覆盖要求：REQ-WR-ES-004
 - 给定：普通价格波动、局部故障、暂时短缺，以及一项具备完整授权包的系统性必需品危机和一项缺少证据、范围、期限、授权、复核或申诉任一项的对照样例。
@@ -185,3 +232,9 @@
 | [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[DES-WR-ES-002](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-002) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[DES-WR-ES-003](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-003) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-ES-004](#req-wr-es-004) / [AC-WR-ES-004](#ac-wr-es-004) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-05)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[DES-WR-ES-004](../../world-runtime/runtime/emergency-supply-authorization-and-settlement.design.md#des-wr-es-004) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_full` |
+
+## 未决问题与证据边界
+
+危机阈值、优先规则、冻结窗口与 seed 来源仍由玩法/治理 authority 确定，容量、wire 兼容与保留窗口由 runtime/QA 核对；已有系统设计不证明保供已实现或上线。
+
+核对责任由本文 Owner role 联合所列专业 owner 承担；解除触发是相应功能进入实现或对外 claim 评审前，按本条 REQ/AC 核定专业承接、固定候选与实际证据。未核清前保留上列缺口，不用结构检查推导完成。
