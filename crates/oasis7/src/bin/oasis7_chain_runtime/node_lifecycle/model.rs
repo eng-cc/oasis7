@@ -92,9 +92,9 @@ pub(super) struct FormalFullStateSyncChainAnchorV3 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub(super) enum ChainAnchor {
-    Compatibility(CompatibilityChainAnchor),
-    FormalPublicObserver(FormalPublicObserverChainAnchorV2),
-    FormalFullStateSync(FormalFullStateSyncChainAnchorV3),
+    Compatibility(Box<CompatibilityChainAnchor>),
+    FormalPublicObserver(Box<FormalPublicObserverChainAnchorV2>),
+    FormalFullStateSync(Box<FormalFullStateSyncChainAnchorV3>),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -228,7 +228,7 @@ impl ChainConfig {
         if registry_document["semantic_sha256"].as_str() != Some(semantic.as_str()) {
             return Err("manifest registry semantic SHA256 mismatch".into());
         }
-        Ok(ChainAnchor::Compatibility(anchor))
+        Ok(ChainAnchor::Compatibility(Box::new(anchor)))
     }
     fn load_formal_public_observer(bytes: &[u8]) -> Result<ChainAnchor, String> {
         let source: FormalPublicObserverChainConfigV2 =
@@ -239,14 +239,14 @@ impl ChainConfig {
             return Err("unsupported chain/runtime profile".into());
         }
         super::formal_observer::validate(&source.formal_observer)?;
-        Ok(ChainAnchor::FormalPublicObserver(
+        Ok(ChainAnchor::FormalPublicObserver(Box::new(
             FormalPublicObserverChainAnchorV2 {
                 runtime_profile: source.runtime_profile,
                 world_id: source.formal_observer.world_id.clone(),
                 chain_id: source.formal_observer.chain_id.clone(),
                 formal_observer: source.formal_observer,
             },
-        ))
+        )))
     }
     fn load_formal_full_state_sync(bytes: &[u8]) -> Result<ChainAnchor, String> {
         let source: FormalFullStateSyncChainConfigV3 =
@@ -258,14 +258,14 @@ impl ChainConfig {
             return Err("full-state sync chain config must use its profile and receive its grant after local key creation".into());
         }
         source.formal_full_sync.validate()?;
-        Ok(ChainAnchor::FormalFullStateSync(
+        Ok(ChainAnchor::FormalFullStateSync(Box::new(
             FormalFullStateSyncChainAnchorV3 {
                 runtime_profile: source.runtime_profile,
                 world_id: source.formal_full_sync.world_id.clone(),
                 chain_id: source.formal_full_sync.chain_id.clone(),
                 formal_full_sync: source.formal_full_sync,
             },
-        ))
+        )))
     }
 }
 impl ChainAnchor {

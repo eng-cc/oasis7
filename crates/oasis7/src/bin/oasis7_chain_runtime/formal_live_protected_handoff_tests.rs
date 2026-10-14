@@ -706,6 +706,10 @@ fn recovery_hot_body(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Recovery process fixture keeps independently pinned endpoint, trust, certificate, and archive inputs explicit."
+)]
 fn write_recovery_endpoint_config(
     path: &Path,
     data_dir: &Path,

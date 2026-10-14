@@ -563,15 +563,14 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
         ));
     }
 
-    if options.guarded_initial_config.is_some() {
-        if let Some(flag) = explicit
+    if options.guarded_initial_config.is_some()
+        && let Some(flag) = explicit
             .iter()
             .find(|flag| !["--guarded-initial-config", "--reward-runtime-disable"].contains(flag))
-        {
-            return Err(format!(
-                "{flag} is inapplicable to guarded engineering; use dev guarded-world --config PATH"
-            ));
-        }
+    {
+        return Err(format!(
+            "{flag} is inapplicable to guarded engineering; use dev guarded-world --config PATH"
+        ));
     }
 
     let provider_explicit = explicit

@@ -153,10 +153,6 @@ impl NodeRuntimeExecutionDriver {
         Ok(())
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
-    )]
     fn validate_recovered_execution_record(
         &self,
         record: &ExecutionBridgeRecord,

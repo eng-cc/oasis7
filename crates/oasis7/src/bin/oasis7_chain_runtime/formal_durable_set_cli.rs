@@ -64,7 +64,7 @@ fn run_native<'a>(mut args: impl Iterator<Item = &'a str>) -> Result<(), String>
         }
         DurableSetControlRequestV1::Arm {
             operation_id: operation_id.clone(),
-            transition,
+            transition: Box::new(transition),
         }
     } else {
         if options.contains_key("--transition") {

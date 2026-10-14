@@ -2,7 +2,7 @@ use super::*;
 
 #[cfg(unix)]
 #[path = "formal_live_protected_process_tests.rs"]
-mod protected_process_tests;
+pub(crate) mod protected_process_tests;
 
 #[test]
 fn local_formal_node_profile_disables_network_attestation_and_requires_execution() {

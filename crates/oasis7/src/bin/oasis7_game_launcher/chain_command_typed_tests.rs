@@ -3,16 +3,17 @@ use oasis7::runtime::development_node_config::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 fn options() -> CliOptions {
-    let mut options = CliOptions::default();
-    options.chain_node_id = format!(
-        "typed-launcher-test-{}-{}",
-        std::process::id(),
-        SEQUENCE.fetch_add(1, Ordering::Relaxed)
-    );
-    options.chain_enabled = true;
-    options.chain_network_tier_manifest.clear();
-    options.chain_node_auto_attest_all_validators = false;
-    options
+    CliOptions {
+        chain_node_id: format!(
+            "typed-launcher-test-{}-{}",
+            std::process::id(),
+            SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ),
+        chain_enabled: true,
+        chain_network_tier_manifest: Default::default(),
+        chain_node_auto_attest_all_validators: false,
+        ..CliOptions::default()
+    }
 }
 fn read_config(args: &[String]) -> DevelopmentNodeConfigV1 {
     assert_eq!(args.len(), 4);

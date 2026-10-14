@@ -2,15 +2,21 @@ use super::*;
 use crate::runtime::{GovernanceValidatorAdmissionRecord, World, WorldState};
 
 fn fixture() -> (ReadMembershipRequest, ReadMembershipResponse) {
-    let mut state = WorldState::default();
-    state.governance_finality_signer_registry =
-        Some(crate::runtime::GovernanceFinalitySignerRegistry {
-            slot_id: "finality".into(),
-            threshold: 1,
-            threshold_bps: 0,
-            signer_bindings: std::collections::BTreeMap::from([("seed".into(), "22".repeat(32))]),
-            validator_stakes: std::collections::BTreeMap::from([("seed".into(), 100)]),
-        });
+    let mut state = WorldState {
+        governance_finality_signer_registry: Some(
+            crate::runtime::GovernanceFinalitySignerRegistry {
+                slot_id: "finality".into(),
+                threshold: 1,
+                threshold_bps: 0,
+                signer_bindings: std::collections::BTreeMap::from([(
+                    "seed".into(),
+                    "22".repeat(32),
+                )]),
+                validator_stakes: std::collections::BTreeMap::from([("seed".into(), 100)]),
+            },
+        ),
+        ..Default::default()
+    };
     state.governance_validator_admissions.insert(
         "candidate".into(),
         GovernanceValidatorAdmissionRecord {

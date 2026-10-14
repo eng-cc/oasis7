@@ -36,8 +36,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-#[path = "../../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 
 #[derive(Clone)]
 struct FullSyncCutFixture {
@@ -433,20 +432,22 @@ fn full_sync_fixture() -> (
     (world, formal_trust, anchor, material, proof)
 }
 
-fn start_live_service(
-    world: World,
-    trust: oasis7::world_service::client::FormalReadTrustConfigV1,
-    anchor: VerifiedFormalReadAnchorV1,
-    material: ClosedRecord,
-    proof: FormalQualifiedCommitProofV1,
-) -> (
+type LiveServiceFixture = (
     crate::formal_live_service::FormalHttpServer,
     String,
     String,
     Arc<Mutex<oasis7_node::NodeRuntime>>,
     Arc<PublishedReadState>,
     Arc<FullSyncResolver>,
-) {
+);
+
+fn start_live_service(
+    world: World,
+    trust: oasis7::world_service::client::FormalReadTrustConfigV1,
+    anchor: VerifiedFormalReadAnchorV1,
+    material: ClosedRecord,
+    proof: FormalQualifiedCommitProofV1,
+) -> LiveServiceFixture {
     let mut node_config = NodeConfig::new(
         "formal-full-sync-test-node",
         &anchor.head().record().world.world_id,

@@ -87,7 +87,7 @@ impl Store {
                     && r.request.chain_id == record.request.chain_id)
                     || reserved_config_paths(&r.request)
                         .iter()
-                        .any(|path| requested_paths.iter().any(|requested| *path == *requested)))
+                        .any(|path| requested_paths.contains(path)))
         }) {
             return Err(
                 "operating-domain world or target resource reserved by unresolved operation".into(),
@@ -280,8 +280,8 @@ fn validate_record(record: &Record) -> Result<(), String> {
                 .migration
                 .as_ref()
                 .ok_or("migration request missing")?;
-            if let Some(receipt) = &record.migration_receipt {
-                if receipt.api_version != "oasis7.local-data-migration-receipt/v1"
+            if let Some(receipt) = &record.migration_receipt
+                && (receipt.api_version != "oasis7.local-data-migration-receipt/v1"
                     || receipt.operation_id != record.request.operation_id
                     || receipt.request_digest != record.request_digest
                     || receipt.source_data_dir != migration.source
@@ -290,10 +290,9 @@ fn validate_record(record: &Record) -> Result<(), String> {
                     || receipt.chain_id != record.request.chain_id
                     || receipt.node_id.is_empty()
                     || receipt.root_public_key.is_empty()
-                    || receipt.peer_id.is_empty()
-                {
-                    return Err("migration receipt differs from exact operation request".into());
-                }
+                    || receipt.peer_id.is_empty())
+            {
+                return Err("migration receipt differs from exact operation request".into());
             }
         } else if record.migration_receipt.is_some() {
             return Err("non-migration operation contains migration receipt".into());

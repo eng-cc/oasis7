@@ -81,59 +81,6 @@ impl CursorJournal {
     }
 }
 
-#[cfg(test)]
-mod budget_tests {
-    use super::*;
-
-    #[test]
-    fn cursor_budget_exhaustion_retains_prior_frames_and_refuses_new_cut_export() {
-        let (world, trust, anchor, _) =
-            super::super::tests::fixtures::actual_world_initial_fixture();
-        let (mut request, mut reply) = super::super::tests::response(
-            &world,
-            &anchor,
-            FormalReadHistoryV1 {
-                schema_version: 1,
-                steps: vec![],
-            },
-        );
-        let mut verifier = FormalReadVerifier::new(&trust, anchor).unwrap();
-        for index in 0..MAX_FORMAL_CURSOR_FRAMES {
-            request.observation_nonce = Some(format!("{index:064x}"));
-            reply.version.projection_revision = format!("budget-{index}");
-            verifier.cursor.record(&request, &reply).unwrap();
-        }
-        let old = verifier.cursor.frames.clone();
-        request.observation_nonce = Some("ff".repeat(32));
-        reply.version.projection_revision = "new-cut".into();
-        verifier.cursor.record(&request, &reply).unwrap();
-        assert!(
-            verifier
-                .export_cursor()
-                .unwrap_err()
-                .contains("budget exhausted")
-        );
-        assert_eq!(
-            serde_json::to_value(&verifier.cursor.frames).unwrap(),
-            serde_json::to_value(&old).unwrap()
-        );
-        assert_eq!(verifier.cursor.frames.len(), MAX_FORMAL_CURSOR_FRAMES);
-
-        let mut byte_journal = CursorJournal::new(&verifier.current).unwrap();
-        byte_journal.record(&request, &reply).unwrap();
-        let old = byte_journal.frames.clone();
-        byte_journal.bytes = MAX_FORMAL_CURSOR_BYTES;
-        request.observation_nonce = Some("ee".repeat(32));
-        reply.version.projection_revision = "another-cut".into();
-        byte_journal.record(&request, &reply).unwrap();
-        assert!(byte_journal.unavailable);
-        assert_eq!(
-            serde_json::to_value(&byte_journal.frames).unwrap(),
-            serde_json::to_value(&old).unwrap()
-        );
-        assert_eq!(byte_journal.bytes, MAX_FORMAL_CURSOR_BYTES);
-    }
-}
 impl FormalReadVerifier {
     pub(crate) fn adopt_rebased_cursor(
         &mut self,
@@ -281,5 +228,59 @@ impl FormalReadVerifier {
             return Err("formal cursor final binding differs from replay-verified frames".into());
         }
         Ok(next)
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    #[test]
+    fn cursor_budget_exhaustion_retains_prior_frames_and_refuses_new_cut_export() {
+        let (world, trust, anchor, _) =
+            super::super::tests::fixtures::actual_world_initial_fixture();
+        let (mut request, mut reply) = super::super::tests::response(
+            &world,
+            &anchor,
+            FormalReadHistoryV1 {
+                schema_version: 1,
+                steps: vec![],
+            },
+        );
+        let mut verifier = FormalReadVerifier::new(&trust, anchor).unwrap();
+        for index in 0..MAX_FORMAL_CURSOR_FRAMES {
+            request.observation_nonce = Some(format!("{index:064x}"));
+            reply.version.projection_revision = format!("budget-{index}");
+            verifier.cursor.record(&request, &reply).unwrap();
+        }
+        let old = verifier.cursor.frames.clone();
+        request.observation_nonce = Some("ff".repeat(32));
+        reply.version.projection_revision = "new-cut".into();
+        verifier.cursor.record(&request, &reply).unwrap();
+        assert!(
+            verifier
+                .export_cursor()
+                .unwrap_err()
+                .contains("budget exhausted")
+        );
+        assert_eq!(
+            serde_json::to_value(&verifier.cursor.frames).unwrap(),
+            serde_json::to_value(&old).unwrap()
+        );
+        assert_eq!(verifier.cursor.frames.len(), MAX_FORMAL_CURSOR_FRAMES);
+
+        let mut byte_journal = CursorJournal::new(&verifier.current).unwrap();
+        byte_journal.record(&request, &reply).unwrap();
+        let old = byte_journal.frames.clone();
+        byte_journal.bytes = MAX_FORMAL_CURSOR_BYTES;
+        request.observation_nonce = Some("ee".repeat(32));
+        reply.version.projection_revision = "another-cut".into();
+        byte_journal.record(&request, &reply).unwrap();
+        assert!(byte_journal.unavailable);
+        assert_eq!(
+            serde_json::to_value(&byte_journal.frames).unwrap(),
+            serde_json::to_value(&old).unwrap()
+        );
+        assert_eq!(byte_journal.bytes, MAX_FORMAL_CURSOR_BYTES);
     }
 }

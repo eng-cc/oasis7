@@ -154,13 +154,11 @@ impl EffectScenario {
             &ctx.owner_request.correlation,
         )?;
         let deadline = Instant::now() + Duration::from_secs(60);
-        if !self.blocked_without_contract {
-            if !self.receiver.wait_for_execution(deadline) {
-                return Err(format!(
-                    "C13 receiver execution deadline: {:?}",
-                    self.receiver.last_error()
-                ));
-            }
+        if !self.blocked_without_contract && !self.receiver.wait_for_execution(deadline) {
+            return Err(format!(
+                "C13 receiver execution deadline: {:?}",
+                self.receiver.last_error()
+            ));
         }
         if self.blocked_without_contract {
             // No POST is allowed; wait for the ordinary externally verified

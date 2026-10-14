@@ -379,10 +379,10 @@ pub(in super::super) fn run(
             exact_effect = Some(effect);
         }
         let record = publication.anchor().head().record();
-        if let Some(candidate) = &original_candidate {
-            if record != &candidate.record {
-                return Err("survivor rewrote prepared canonical record".into());
-            }
+        if let Some(candidate) = &original_candidate
+            && record != &candidate.record
+        {
+            return Err("survivor rewrote prepared canonical record".into());
         }
         if reopen == 0 {
             original_ref = Some(reference.clone());

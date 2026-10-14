@@ -1,6 +1,5 @@
 use super::*;
-#[path = "../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 use oasis7::world_service::{
     formal_read::FormalReadVerifier, formal_read_service::FormalReadPublication,
 };

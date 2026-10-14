@@ -4,6 +4,61 @@ use super::super::super::endpoint::{
     FORMAL_ARCHIVE_CHUNK_LIMIT, FORMAL_ARCHIVE_OBJECT_LIMIT, VerifiedNativeCheckpointRestoreV1,
 };
 use super::*;
+const MAX_RESTORE_MEMO_ENTRIES: usize = 4096;
+const MAX_RESTORE_MEMO_BYTES: usize = 16 * 1024 * 1024;
+
+#[derive(Default)]
+struct RestoreMemo {
+    objects: std::collections::BTreeMap<String, Vec<u8>>,
+    bytes: usize,
+    fetches: usize,
+    hits: usize,
+}
+impl RestoreMemo {
+    fn get(&mut self, id: &str) -> Result<Option<Vec<u8>>, FormalError> {
+        hash_hex(id)?;
+        let Some(bytes) = self.objects.get(id) else {
+            return Ok(None);
+        };
+        if blake3::hash(bytes).to_hex().as_str() != id {
+            return Err(invalid("native restore memo CAS hash mismatch"));
+        }
+        self.hits += 1;
+        Ok(Some(bytes.clone()))
+    }
+    fn insert(&mut self, id: &str, bytes: &[u8]) -> Result<(), FormalError> {
+        hash_hex(id)?;
+        if blake3::hash(bytes).to_hex().as_str() != id {
+            return Err(invalid("native restore memo CAS hash mismatch"));
+        }
+        if self.objects.contains_key(id) {
+            return Ok(());
+        }
+        let Some(next_bytes) = self.bytes.checked_add(bytes.len()) else {
+            return Ok(());
+        };
+        if self.objects.len() >= MAX_RESTORE_MEMO_ENTRIES || next_bytes > MAX_RESTORE_MEMO_BYTES {
+            return Ok(());
+        }
+        self.objects.insert(id.to_owned(), bytes.to_vec());
+        self.bytes = next_bytes;
+        Ok(())
+    }
+}
+impl Drop for RestoreMemo {
+    fn drop(&mut self) {
+        if std::env::var_os("OASIS7_HEALTHY_NATIVE_TRACE").is_some() {
+            eprintln!(
+                "healthy-native-restore memo_fetches={} memo_hits={} memo_entries={} memo_bytes={}",
+                self.fetches,
+                self.hits,
+                self.objects.len(),
+                self.bytes
+            );
+        }
+    }
+}
+
 impl RemoteFormalEndpoint {
     pub fn archive_chunk(
         &mut self,
@@ -92,6 +147,7 @@ impl RemoteFormalEndpoint {
         if previous_deadline.is_none() {
             self.set_operation_deadline(std::time::Instant::now() + self.timeout);
         }
+        let mut memo = RestoreMemo::default();
         let result = (|| {
             self.complete(Command::Head)?;
             let context = self
@@ -109,6 +165,17 @@ impl RemoteFormalEndpoint {
                 imported_cut,
                 durable_set,
                 &mut |id: &str| {
+                    self.remaining_timeout(
+                        self.operation_deadline
+                            .ok_or_else(|| invalid("native deadline absent"))?,
+                    )?;
+                    if let Some(bytes) = memo.get(id)? {
+                        self.remaining_timeout(
+                            self.operation_deadline
+                                .ok_or_else(|| invalid("native deadline absent"))?,
+                        )?;
+                        return Ok(bytes);
+                    }
                     if let Some(cache) = cache
                         && let Some(bytes) = cache.read_cached_node(id).map_err(invalid)?
                     {
@@ -120,14 +187,17 @@ impl RemoteFormalEndpoint {
                             self.operation_deadline
                                 .ok_or_else(|| invalid("native deadline absent"))?,
                         )?;
+                        memo.insert(id, &bytes)?;
                         return Ok(bytes);
                     }
+                    memo.fetches += 1;
                     let bytes = self
                         .fetch_hash_object(id)?
                         .ok_or_else(|| invalid("formal native referenced object missing"))?;
                     if let Some(cache) = cache {
                         cache.cache_content_node(id, &bytes).map_err(invalid)?;
                     }
+                    memo.insert(id, &bytes)?;
                     Ok(bytes)
                 },
             )?;
@@ -147,3 +217,7 @@ impl RemoteFormalEndpoint {
         result
     }
 }
+
+#[cfg(test)]
+#[path = "client_native_memo_tests.rs"]
+mod memo_tests;

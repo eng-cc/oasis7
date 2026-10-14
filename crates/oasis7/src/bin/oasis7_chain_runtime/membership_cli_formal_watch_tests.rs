@@ -1,8 +1,7 @@
 //! Actual validator CLI children consume real signed HTTP formal publications.
 //! Test-authority fixtures grant no deployment/key-custody qualification.
 use super::watch_tcp::{CHILD_ENV, CHILD_FILTER, observations, receive, send};
-#[path = "../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 use fixtures::*;
 use oasis7::world_service::{
     SignedReadRequest, authority,

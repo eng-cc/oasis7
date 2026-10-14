@@ -160,7 +160,7 @@ pub(super) fn prepare_plan(request: &Request) -> Result<ProtectedSignerHandoffPl
         predecessor_input_bundle_digest,
         predecessor_recovery_digest: recovery_permission_digest(&predecessor_inputs)?,
         predecessor_writer_directory,
-        predecessor_instance: predecessor.clone(),
+        predecessor_instance: predecessor.as_ref().clone(),
         successor_config_file,
         successor_config_digest,
         successor_input_bundle_digest,
@@ -279,7 +279,7 @@ pub(super) fn validate_persisted_plan(
         || request.config != plan.predecessor_config_file
         || successor_config != &plan.successor_config_file
         || signer != &plan.target_signer_public_key
-        || predecessor != &plan.predecessor_instance
+        || predecessor.as_ref() != &plan.predecessor_instance
         || plan.predecessor_instance.api_version != "oasis7.formal-runtime-owner/v1"
         || plan.predecessor_instance.operation_id.is_empty()
         || !is_owner_incarnation(&plan.predecessor_instance.incarnation)
@@ -925,22 +925,37 @@ pub(super) fn validate_persisted_record(record: &Record) -> Result<(), String> {
             "protected handoff contains unrelated local, remote, or migration evidence".into(),
         );
     }
-    let state_stage_valid = match (
-        record.state.as_str(),
-        record.stage.as_str(),
-        record.dispatched,
-        record.formal_handoff.is_some(),
-    ) {
+    let state_stage_valid = matches!(
+        (
+            record.state.as_str(),
+            record.stage.as_str(),
+            record.dispatched,
+            record.formal_handoff.is_some(),
+        ),
         ("queued", "prepared", false, false)
-        | ("blocked", "prepared", false, false)
-        | ("cancelled", "prepared_cancelled", false, false)
-        | ("running" | "reconciling", "predecessor_stopping", true, false)
-        | ("running" | "reconciling", "successor_preflight", true, false)
-        | ("running" | "reconciling", "successor_starting", true, false)
-        | ("running" | "reconciling", "successor_running", true, false)
-        | ("succeeded", "successor_qualified_readback_verified", true, true) => true,
-        _ => false,
-    };
+            | ("blocked", "prepared", false, false)
+            | ("cancelled", "prepared_cancelled", false, false)
+            | (
+                "running" | "reconciling",
+                "predecessor_stopping",
+                true,
+                false
+            )
+            | (
+                "running" | "reconciling",
+                "successor_preflight",
+                true,
+                false
+            )
+            | ("running" | "reconciling", "successor_starting", true, false)
+            | ("running" | "reconciling", "successor_running", true, false)
+            | (
+                "succeeded",
+                "successor_qualified_readback_verified",
+                true,
+                true
+            )
+    );
     if !state_stage_valid {
         return Err("protected handoff state/stage does not match its durable transition".into());
     }

@@ -35,15 +35,18 @@ fn watch_cli_child_entry() {
         .unwrap_or_else(|error| panic!("watch child exited: {error}"));
 }
 fn committed(position: u64, signer: u8) -> ReadMembershipResponse {
-    let mut state = WorldState::default();
-    state.governance_finality_signer_registry =
-        Some(oasis7::runtime::GovernanceFinalitySignerRegistry {
-            slot_id: "watch-slot".into(),
-            threshold: 1,
-            threshold_bps: 0,
-            signer_bindings: BTreeMap::from([("node".into(), public(signer))]),
-            validator_stakes: BTreeMap::from([("node".into(), 100)]),
-        });
+    let state = WorldState {
+        governance_finality_signer_registry: Some(
+            oasis7::runtime::GovernanceFinalitySignerRegistry {
+                slot_id: "watch-slot".into(),
+                threshold: 1,
+                threshold_bps: 0,
+                signer_bindings: BTreeMap::from([("node".into(), public(signer))]),
+                validator_stakes: BTreeMap::from([("node".into(), 100)]),
+            },
+        ),
+        ..WorldState::default()
+    };
     let mut world = World::new_with_state(state);
     world
         .bind_cognition_runtime("watch-world", "main", 0, None, "pending", 0)

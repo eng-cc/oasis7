@@ -974,16 +974,28 @@ pub(crate) fn promote(
     Ok(receipt)
 }
 
+pub(crate) struct RollbackContext<'a> {
+    pub(crate) operation_id: &'a str,
+    pub(crate) operation_request_digest: &'a str,
+    pub(crate) expected: &'a LocalInstance,
+    pub(crate) stage: &'a PackageStageReceiptV1,
+    pub(crate) promotion: &'a PackagePromotionReceiptV1,
+    pub(crate) failed_start: &'a LocalActionRecord,
+}
+
 pub(crate) fn rollback(
     config_path: &Path,
     request: &PackageUpgradeV1,
-    operation_id: &str,
-    operation_request_digest: &str,
-    expected: &LocalInstance,
-    stage: &PackageStageReceiptV1,
-    promotion: &PackagePromotionReceiptV1,
-    failed_start: &LocalActionRecord,
+    context: RollbackContext<'_>,
 ) -> Result<PackageRollbackReceiptV1, String> {
+    let RollbackContext {
+        operation_id,
+        operation_request_digest,
+        expected,
+        stage,
+        promotion,
+        failed_start,
+    } = context;
     request.validate_staged()?;
     if request.profile != LOCAL_NATIVE_PROFILE {
         return Err("operation-record rollback requires an executable-bound compatibility probe; the Linux/systemd adapter has no verified rollback probe input".into());

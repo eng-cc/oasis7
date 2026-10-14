@@ -102,7 +102,7 @@ fn gc_keeps_history_and_new_loaded_closure_and_removes_old_orphans() {
         &new_journal,
     ] {
         assert!(
-            store.has(&retained).expect("check retained blob"),
+            store.has(retained).expect("check retained blob"),
             "{retained}"
         );
     }
@@ -200,10 +200,7 @@ fn post_rename_directory_sync_failure_is_classified_as_uncertain() {
         &candidate_pins,
         |temporary, target| {
             std::fs::rename(temporary, target)?;
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "simulated ambiguous rename failure",
-            ))
+            Err(std::io::Error::other("simulated ambiguous rename failure"))
         },
         |_| Ok(()),
     )

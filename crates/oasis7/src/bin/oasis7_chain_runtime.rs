@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../world_service/formal_read_fixtures.rs"]
+mod formal_read_fixtures;
+
 use std::collections::BTreeMap;
 use std::env;
 use std::io::{Read, Write};
@@ -87,6 +91,9 @@ mod formal_live_history;
 #[cfg(unix)]
 #[path = "oasis7_chain_runtime/formal_live_reconcile.rs"]
 mod formal_live_reconcile;
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/formal_live_recovery_test_support.rs"]
+mod formal_live_recovery_test_support;
 #[cfg(unix)]
 #[path = "oasis7_chain_runtime/formal_live_runtime.rs"]
 mod formal_live_runtime;

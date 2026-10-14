@@ -335,26 +335,24 @@ pub(super) fn run<'a>(args: impl Iterator<Item = &'a str>) -> Result<(), String>
             .node_id
             .as_deref()
             .is_some_and(|node| reached(response, node, &options.state));
-        if options.command != "wait" || matched {
-            if options.command != "watch" || changed {
-                let mut value = output(
-                    response,
-                    options.node_id.as_deref(),
-                    first_observed.as_ref().unwrap(),
+        if (options.command != "wait" || matched) && (options.command != "watch" || changed) {
+            let mut value = output(
+                response,
+                options.node_id.as_deref(),
+                first_observed.as_ref().unwrap(),
+            );
+            if let Some(cursor) = &formal_cursor {
+                value["assurance"] = json!(
+                    "independently_verified_formal_public_projection_not_runtime_application"
                 );
-                if let Some(cursor) = &formal_cursor {
-                    value["assurance"] = json!(
-                        "independently_verified_formal_public_projection_not_runtime_application"
-                    );
-                    value["source_freshness"] = json!("unknown");
-                    value["formal_cursor"] =
-                        serde_json::to_value(cursor).map_err(|error| error.to_string())?;
-                }
-                println!(
-                    "{}",
-                    serde_json::to_string(&value).map_err(|e| e.to_string())?
-                );
+                value["source_freshness"] = json!("unknown");
+                value["formal_cursor"] =
+                    serde_json::to_value(cursor).map_err(|error| error.to_string())?;
             }
+            println!(
+                "{}",
+                serde_json::to_string(&value).map_err(|e| e.to_string())?
+            );
         }
         if ["list", "status"].contains(&options.command.as_str())
             || (options.command == "wait" && matched)

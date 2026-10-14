@@ -266,15 +266,15 @@ impl NativeHistoryResolver {
         &self,
         restored: &VerifiedNativeHistoricalRestoreV1,
     ) -> Result<VerifiedFormalReadAnchorV1, String> {
-        if let Some(permission) = &self.permission {
-            if restored.commit().head() == permission.cut().head() {
-                if restored.commit().record() != permission.cut().record()
-                    || restored.minimum() != &self.trusted.head().head()
-                {
-                    return Err("historical imported cut differs from checked recovery".into());
-                }
-                return Ok(self.trusted.clone());
+        if let Some(permission) = &self.permission
+            && restored.commit().head() == permission.cut().head()
+        {
+            if restored.commit().record() != permission.cut().record()
+                || restored.minimum() != &self.trusted.head().head()
+            {
+                return Err("historical imported cut differs from checked recovery".into());
             }
+            return Ok(self.trusted.clone());
         }
         VerifiedFormalReadAnchorV1::from_native_historical_service_restore(&self.trusted, restored)
             .map_err(|e| e.to_string())

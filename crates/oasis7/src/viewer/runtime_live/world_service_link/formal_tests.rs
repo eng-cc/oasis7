@@ -1,6 +1,5 @@
 use super::*;
-#[path = "../../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::world_service::formal_read_fixtures as fixtures;
 use crate::world_service::{
     SignedReadRequest, authority,
     client::FormalReadTrustConfigV1,

@@ -333,18 +333,18 @@ fn validate_agent_request(request: &AgentRequestV1) -> Result<(), String> {
             instance.generation != request.expected_generation
                 || instance.config_digest != request.expected_config_digest
         })
-        || action_digest(
-            &request.operation_request_digest,
-            &request.operation_id,
-            &request.action_id,
-            &request.world_id,
-            &request.chain_id,
-            &request.target,
-            request.step,
-            request.expected_generation,
-            &request.expected_config_digest,
-            &request.expected_instance,
-        )? != request.request_digest
+        || action_digest(ActionDigestV1 {
+            operation_request_digest: &request.operation_request_digest,
+            operation_id: &request.operation_id,
+            action_id: &request.action_id,
+            world_id: &request.world_id,
+            chain_id: &request.chain_id,
+            target: &request.target,
+            step: request.step,
+            expected_generation: request.expected_generation,
+            expected_config_digest: &request.expected_config_digest,
+            expected_instance: request.expected_instance.as_ref(),
+        })? != request.request_digest
     {
         return Err("invalid remote operation agent request".into());
     }
@@ -381,11 +381,14 @@ fn validate_original_request_binding(request: &AgentRequestV1) -> Result<(), Str
     {
         return Err("remote action target differs from original managed target".into());
     }
-    let step_matches_kind = match (request.step, original.kind) {
-        (RemoteStepV1::Start, Kind::Start | Kind::Restart) => true,
-        (RemoteStepV1::Stop, Kind::Stop | Kind::Restart | Kind::MaintenanceStop) => true,
-        _ => false,
-    };
+    let step_matches_kind = matches!(
+        (request.step, original.kind),
+        (RemoteStepV1::Start, Kind::Start | Kind::Restart)
+            | (
+                RemoteStepV1::Stop,
+                Kind::Stop | Kind::Restart | Kind::MaintenanceStop
+            )
+    );
     if !step_matches_kind {
         return Err("remote action step is not part of original operation kind".into());
     }
@@ -579,11 +582,11 @@ fn validate_action_target(request: &AgentRequestV1) -> Result<(), String> {
 }
 
 fn verify_systemd_unit(target: &AgentTargetV1) -> Result<(), String> {
-    for (property, expected) in [("LoadState", "loaded")] {
-        let value = systemctl_output(&["show", "--property", property, "--value", &target.unit])?;
-        if value.trim() != expected {
-            return Err("systemd target unit is not loaded".into());
-        }
+    let property = "LoadState";
+    let expected = "loaded";
+    let value = systemctl_output(&["show", "--property", property, "--value", &target.unit])?;
+    if value.trim() != expected {
+        return Err("systemd target unit is not loaded".into());
     }
     let fragment = systemctl_output(&[
         "show",

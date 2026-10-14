@@ -95,7 +95,7 @@ pub(super) enum ReplayFailure {
     LocalPublicationMissing,
     DeadlineExceeded,
     TargetMismatch,
-    UnqualifiedPendingRecoveryTarget(FormalReadCheckpointV1),
+    UnqualifiedPendingRecoveryTarget(Box<FormalReadCheckpointV1>),
     Invalid(String),
 }
 
@@ -315,9 +315,9 @@ pub(super) fn replay_exact_origin_after_verified_with_activation_policy(
                     let pending = cursor
                         .with_pending_recovery(permission.recovery())
                         .map_err(|error| ReplayFailure::Invalid(error.to_string()))?;
-                    return Err(ReplayFailure::UnqualifiedPendingRecoveryTarget(
+                    return Err(ReplayFailure::UnqualifiedPendingRecoveryTarget(Box::new(
                         pending.checkpoint(),
-                    ));
+                    )));
                 }
             }
             if target_policy == ReplayTargetPolicy::ProtectedHeadHint {

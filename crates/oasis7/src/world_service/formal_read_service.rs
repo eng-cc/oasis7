@@ -334,8 +334,7 @@ fn committed_reference(
 }
 
 #[cfg(test)]
-#[path = "formal_read_fixtures.rs"]
-mod fixtures;
+use crate::world_service::formal_read_fixtures as fixtures;
 
 #[cfg(test)]
 mod tests {

@@ -310,6 +310,10 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
     }
     /// Both live endpoints must independently restore the same qualified head.
     /// The supplied anchor remains the external origin of this read lineage.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Native opening binds independent trust, replica restores, endpoint handles, and an authenticated reader."
+    )]
     pub(crate) fn open_native(
         root: PathBuf,
         writer: SigningKey,
@@ -335,6 +339,10 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
         )
     }
     #[cfg(test)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The initialization fixture supplies the complete signed activation and endpoint pair explicitly."
+    )]
     pub(crate) fn open_initial(
         root: PathBuf,
         writer: SigningKey,
@@ -377,6 +385,10 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             }),
         )
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Writer construction keeps key, policy, qualified anchor, endpoint pair, and optional publication distinct."
+    )]
     fn open_inner(
         root: PathBuf,
         writer: SigningKey,
@@ -501,16 +513,12 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
                     );
                 }
                 if let (Some(local), Some(remote_candidate)) = (&local.candidate, &remote.candidate)
-                {
-                    if local.candidate != remote_candidate.candidate
+                    && (local.candidate != remote_candidate.candidate
                         || local.material != remote_candidate.material
                         || local.frozen != remote_candidate.frozen
-                        || local.frozen_material != remote_candidate.frozen_material
-                    {
-                        return Err(
-                            "native writer cache conflicts with authenticated candidate".into()
-                        );
-                    }
+                        || local.frozen_material != remote_candidate.frozen_material)
+                {
+                    return Err("native writer cache conflicts with authenticated candidate".into());
                 }
             }
             // Native pending fixes the immutable original and its tail rank.
@@ -538,38 +546,35 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
                 &to_cbor(pending.as_ref().unwrap())?,
             )?;
         }
-        if let (Some(local), Some(native)) = (pending.as_mut(), native.as_ref()) {
-            if local.original.body.request_digest
+        if let (Some(local), Some(native)) = (pending.as_mut(), native.as_ref())
+            && local.original.body.request_digest
                 == native.publication.candidate.candidate.record.request_digest
+        {
+            if let Some(candidate) = &local.candidate
+                && !recovery_runtime::same_candidate_payload(
+                    candidate,
+                    &native.publication.candidate,
+                )
             {
-                if let Some(candidate) = &local.candidate {
-                    if !recovery_runtime::same_candidate_payload(
-                        candidate,
-                        &native.publication.candidate,
-                    ) {
-                        return Err(
-                            "terminal native publication conflicts with cached signed candidate"
-                                .into(),
-                        );
-                    }
-                }
-                if native
-                    .publication
-                    .candidate
-                    .frozen
-                    .as_ref()
-                    .is_none_or(|cert| cert.reservation != local.original)
-                    || native.publication.candidate.frozen_material.as_ref()
-                        != Some(&local.material)
-                {
-                    return Err(
-                        "terminal native publication conflicts with cached Frozen input".into(),
-                    );
-                }
-                local.candidate = Some(native.publication.candidate.clone());
-                local.frozen_certificate = native.publication.candidate.frozen.clone();
-                durable_transaction::write_private_file_durable(&path, &to_cbor(local)?)?;
+                return Err(
+                    "terminal native publication conflicts with cached signed candidate".into(),
+                );
             }
+            if native
+                .publication
+                .candidate
+                .frozen
+                .as_ref()
+                .is_none_or(|cert| cert.reservation != local.original)
+                || native.publication.candidate.frozen_material.as_ref() != Some(&local.material)
+            {
+                return Err(
+                    "terminal native publication conflicts with cached Frozen input".into(),
+                );
+            }
+            local.candidate = Some(native.publication.candidate.clone());
+            local.frozen_certificate = native.publication.candidate.frozen.clone();
+            durable_transaction::write_private_file_durable(&path, &to_cbor(local)?)?;
         }
         if let Some(pending) = &pending {
             if pending.schema_version != 1 {
@@ -947,8 +952,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             }
             #[cfg(all(test, unix))]
             super::formal_crash_test_boundary::stop_after("pending_durable")?;
-        } else {
-            let pending = self.pending.as_ref().unwrap();
+        } else if let Some(pending) = self.pending.as_ref() {
             let captured: formal_package::FormalExecutionManifestV1 =
                 capture::decode_role(&pending.material, ArtifactRole::ExecutionManifest)?;
             if &captured.continuation != original {

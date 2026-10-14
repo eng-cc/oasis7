@@ -672,8 +672,7 @@ fn package_plan_rejects_non_symlink_current_before_operation_admission() {
 
 #[test]
 fn operation_result_binds_verified_formal_read_to_exact_operation_and_instance() {
-    #[path = "../../../world_service/formal_read_fixtures.rs"]
-    mod fixtures;
+    use crate::formal_read_fixtures as fixtures;
     use oasis7::world_service::{
         authority,
         client::{
@@ -960,7 +959,7 @@ fn protected_handoff_admission_persists_exact_plan_in_shared_result() {
         authorization: Some(OperationAuthorizationV1::ProtectedSignerTransfer {
             formal_live_config_file: std::path::PathBuf::from("/private/new/formal.json"),
             target_signer_public_key: "d".repeat(64),
-            expected_predecessor_instance: Some(predecessor.clone()),
+            expected_predecessor_instance: Some(Box::new(predecessor.clone())),
         }),
         package_upgrade: None,
     };

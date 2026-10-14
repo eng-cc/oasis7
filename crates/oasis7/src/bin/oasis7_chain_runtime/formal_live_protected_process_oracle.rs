@@ -188,7 +188,11 @@ impl PrivateRoot {
 }
 impl Drop for PrivateRoot {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        if std::env::var_os("OASIS7_KEEP_FORMAL_FIXTURE").is_some() {
+            eprintln!("preserved formal fixture root={}", self.0.display());
+        } else {
+            let _ = fs::remove_dir_all(&self.0);
+        }
     }
 }
 
@@ -301,8 +305,7 @@ mod handoff_tests;
 #[path = "formal_live_protected_survivor_tests.rs"]
 pub(super) mod survivor_tests;
 
-#[path = "formal_live_recovery_test_support.rs"]
-pub(super) mod recovery_test_support;
+use crate::formal_live_recovery_test_support as recovery_test_support;
 
 #[path = "formal_live_protected_durable_set_oracle.rs"]
 pub(super) mod durable_set_oracle;

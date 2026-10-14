@@ -1,7 +1,6 @@
 use super::super::local_io as io;
 use super::*;
-#[path = "../../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 use fixtures::*;
 use oasis7::world_service::{
     SignedReadRequest, authority,
@@ -389,12 +388,17 @@ fn schema2_process_hook_reports_verified_public_readiness_and_stops_cleanly() {
         ready["formal_public_observer"]["read_state"],
         "qualified_public_read"
     );
-    assert_eq!(ready["formal_public_observer"]["read_ready"], true);
-    assert_eq!(ready["formal_public_observer"]["can_propose"], false);
-    assert_eq!(
-        ready["formal_public_observer"]["public_projection"].is_object(),
-        true
+    assert!(
+        ready["formal_public_observer"]["read_ready"]
+            .as_bool()
+            .unwrap()
     );
+    assert!(
+        !ready["formal_public_observer"]["can_propose"]
+            .as_bool()
+            .unwrap()
+    );
+    assert!(ready["formal_public_observer"]["public_projection"].is_object());
     assert_eq!(ready["verified_sync_readiness"], serde_json::Value::Null);
     assert_eq!(ready["can_propose"], false);
     assert_eq!(ready["blocker"], serde_json::Value::Null);

@@ -314,14 +314,11 @@ fn validate_protected_operation(request: &Request) -> Result<(), String> {
         target_signer_public_key,
         ..
     } = auth
+        && target_signer_public_key != &validated.active_authority().definition().writer_public_key
     {
-        if target_signer_public_key != &validated.active_authority().definition().writer_public_key
-        {
-            return Err(
-                "FENCING_UNPROVEN: requested signer differs from verified recovery successor"
-                    .into(),
-            );
-        }
+        return Err(
+            "FENCING_UNPROVEN: requested signer differs from verified recovery successor".into(),
+        );
     }
     let _verified_permission: &oasis7_distfs::controlled_authority::formal::VerifiedRecoveryBootstrapV1 = recovery;
     match request.kind {

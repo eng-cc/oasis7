@@ -794,7 +794,7 @@ fn verify_test_request(
                 request.body.intent.as_ref().unwrap(),
                 &request.body.payload_digest,
                 &request.body.target_id,
-                &contract_digest,
+                contract_digest,
             )
             .unwrap()
         );

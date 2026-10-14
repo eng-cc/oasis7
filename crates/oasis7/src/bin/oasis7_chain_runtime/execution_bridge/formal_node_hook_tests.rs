@@ -102,7 +102,7 @@ impl FormalNodeWriter for FakeWriter {
 
     fn committed_execution(&self) -> Result<CommittedExecutionEvidence, String> {
         match &self.head {
-            CurrentHeadEvidence::Execution(evidence) => Ok(evidence.clone()),
+            CurrentHeadEvidence::Execution(evidence) => Ok(evidence.as_ref().clone()),
             CurrentHeadEvidence::InitialActivation(_) => {
                 Err("fake writer has no committed execution".into())
             }
@@ -114,6 +114,10 @@ fn snapshot_root(world: &World) -> String {
     blake3_hex(&to_cbor(world.snapshot()).expect("encode world snapshot"))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the test builds one exact execution receipt from independently varied fields"
+)]
 fn execution_evidence(
     world: &World,
     height: u64,
@@ -142,13 +146,13 @@ fn execution_evidence(
         1,
     );
     result.schema_version = schema_version;
-    CurrentHeadEvidence::Execution(CommittedExecutionEvidence {
+    CurrentHeadEvidence::Execution(Box::new(CommittedExecutionEvidence {
         world_id: WORLD_ID.to_string(),
         canonical_after_state_root: root.clone(),
         world_snapshot_root: root,
         formal_record_id: formal_record_id.to_string(),
         result,
-    })
+    }))
 }
 
 fn initial_activation_evidence(bootstrap: NodeExecutionBootstrap) -> CurrentHeadEvidence {

@@ -4,6 +4,10 @@
 use ed25519_dalek::{Signer, SigningKey};
 use oasis7_distfs::controlled_authority::{fencing::*, formal::*};
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the fixture mirrors the complete signed recovery authorization inputs"
+)]
 pub(super) fn permission_for_sealed_endpoints(
     external: &VerifiedFormalReadAnchorV1,
     trust: &InitialActivationTrustV1,
@@ -30,7 +34,10 @@ pub(super) fn permission_for_sealed_endpoints(
         independent_floor,
     )
 }
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the fixture mirrors the complete signed recovery authorization inputs"
+)]
 pub(super) fn permission_for_fencing(
     external: &VerifiedFormalReadAnchorV1,
     trust: &InitialActivationTrustV1,

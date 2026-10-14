@@ -21,8 +21,7 @@ use std::{
     thread,
 };
 
-#[path = "formal_read_fixtures.rs"]
-mod fixtures;
+use crate::world_service::formal_read_fixtures as fixtures;
 use fixtures::*;
 
 fn delegation_request(world: WorldIdentity) -> SubmitIntentRequest<WorldServicePayloadV1> {

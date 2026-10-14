@@ -9,8 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[path = "../../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 

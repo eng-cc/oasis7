@@ -216,7 +216,7 @@ fn finish_prewarm_result(
         ) => return Ok(()),
         Err(super::ReplayFailure::TargetMismatch) if is_head_hint => return Ok(()),
         Err(super::ReplayFailure::UnqualifiedPendingRecoveryTarget(expected)) => {
-            if is_head_hint || exact_checkpoint.as_ref() == Some(&expected) {
+            if is_head_hint || exact_checkpoint.as_ref() == Some(expected.as_ref()) {
                 return Ok(());
             }
             return Err(

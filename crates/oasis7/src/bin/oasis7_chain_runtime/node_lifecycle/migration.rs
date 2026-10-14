@@ -617,6 +617,10 @@ fn capacity_outcome(
 }
 
 #[cfg(unix)]
+#[allow(
+    clippy::unnecessary_cast,
+    reason = "statvfs integer widths differ across supported Unix ABIs"
+)]
 fn available_bytes(path: &Path) -> Result<u64, String> {
     use std::os::unix::ffi::OsStrExt;
     let canonical = fs::canonicalize(path).map_err(|error| error.to_string())?;
@@ -631,8 +635,8 @@ fn available_bytes(path: &Path) -> Result<u64, String> {
         ));
     }
     let stats = unsafe { stats.assume_init() };
-    let blocks = u64::try_from(stats.f_bavail).map_err(|_| "invalid available block count")?;
-    let block_size = u64::try_from(stats.f_frsize).map_err(|_| "invalid filesystem block size")?;
+    let blocks = stats.f_bavail as u64;
+    let block_size = stats.f_frsize as u64;
     blocks
         .checked_mul(block_size)
         .ok_or_else(|| "migration destination free-space estimate overflow".into())

@@ -1,7 +1,6 @@
 //! Writer failure tests use in-memory signers, never qualify deployment durability.
 use super::*;
-#[path = "../../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 use oasis7_distfs::controlled_authority::{formal::endpoint::*, replicated_protocol::EndpointRole};
 use std::{
     collections::BTreeMap,
@@ -149,10 +148,10 @@ impl FormalDurabilityEndpoint for Endpoint {
         let request = candidate.candidate.record.request_digest.clone();
         verify_record_material(&candidate.candidate.record, &candidate.material)?;
         let context = m.context(&candidate)?;
-        if let Some(old) = m.entries.get(&request).and_then(|e| e.candidate()) {
-            if old != &candidate {
-                return invalid();
-            }
+        if let Some(old) = m.entries.get(&request).and_then(|e| e.candidate())
+            && old != &candidate
+        {
+            return invalid();
         }
         let body = FormalPrepareReceiptBodyV1 {
             final_receipt: context.receipt_body(m.role)?,

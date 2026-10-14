@@ -67,6 +67,10 @@ pub(super) fn execute_recovery_replay(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Execution binds each verified authority, parent, storage, and read capability explicitly."
+)]
 fn execute_with_business_reader(
     frozen: &ExecutableFormalFrozenV1,
     authority: &VerifiedAuthorityV1,

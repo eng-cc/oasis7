@@ -710,16 +710,12 @@ impl FormalFullSyncSession {
             })
             .map_err(|error| format!("independent current formal read: {error}"))?;
         let anchor = verified_anchor(&view, &self.config)?;
-        if let Err(error) =
-            self.history
-                .persist_verified_view(&self.config, &self.client, &view, &anchor)
-        {
-            // An endpoint-specific view can be validly rejected by the local
-            // durable-cursor checks. Another provider must start from a fresh
-            // verifier replayed from the unchanged durable chain. Persistence
-            // uncertainty itself marks the history poisoned in the writer.
-            return Err(error);
-        }
+        // An endpoint-specific view can be validly rejected by the local
+        // durable-cursor checks. Another provider must start from a fresh
+        // verifier replayed from the unchanged durable chain. Persistence
+        // uncertainty itself marks the history poisoned in the writer.
+        self.history
+            .persist_verified_view(&self.config, &self.client, &view, &anchor)?;
         Ok(view)
     }
 

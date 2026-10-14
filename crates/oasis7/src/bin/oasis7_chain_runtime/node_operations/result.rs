@@ -374,8 +374,8 @@ impl OperationResultV1 {
                 "operation result does not match its request, action receipts or state".into(),
             );
         }
-        if let Some(protocol) = &self.protocol {
-            if protocol.operation_id != self.operation_id
+        if let Some(protocol) = &self.protocol
+            && (protocol.operation_id != self.operation_id
                 || protocol.request_digest != self.request_digest
                 || protocol.target_id != self.target_id
                 || Some(&protocol.operation_instance) != self.instance.as_ref()
@@ -387,12 +387,11 @@ impl OperationResultV1 {
                 || protocol
                     .artifact_roots
                     .values()
-                    .any(|root| !is_digest(root))
-            {
-                return Err(
-                    "operation result has invalid verified protocol observation binding".into(),
-                );
-            }
+                    .any(|root| !is_digest(root)))
+        {
+            return Err(
+                "operation result has invalid verified protocol observation binding".into(),
+            );
         }
         if self
             .protocol_unavailable_reason

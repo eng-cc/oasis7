@@ -1,10 +1,9 @@
-use super::*;
-#[path = "formal_read_fixtures.rs"]
-pub(super) mod fixtures;
 use super::super::{
     authority,
     formal_projection::{ProjectionAudienceV1, ProjectionCommitmentsV1},
 };
+use super::*;
+pub(super) use crate::world_service::formal_read_fixtures as fixtures;
 use ed25519_dalek::Signer;
 use fixtures::*;
 use oasis7_distfs::controlled_authority::{
@@ -258,6 +257,10 @@ fn epoch_seal(
     receipt
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Recovery proof fixture keeps independently pinned predecessor, cut, authority, witness, and issuer inputs explicit."
+)]
 fn recovery_step(
     predecessor: &VerifiedAuthorityV1,
     cut: &VerifiedFormalCommitV1,

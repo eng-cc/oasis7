@@ -12,16 +12,16 @@ impl FormalFullSyncSession {
         let mut failures = Vec::with_capacity(provider_count);
         for offset in 0..provider_count {
             let provider_index = (starting_provider + offset) % provider_count;
-            if offset > 0 {
-                if let Err(error) = self.activate_provider(provider_index) {
-                    // Replaying a saved proof chain is local verification, not
-                    // a provider read. A failure here is global to this fixed
-                    // C0 history and must not be bypassed by another endpoint.
-                    self.history.poison();
-                    return Err(format!(
-                        "HistoryUnavailable: cannot replay the fixed external history for provider {provider_index}: {error}"
-                    ));
-                }
+            if offset > 0
+                && let Err(error) = self.activate_provider(provider_index)
+            {
+                // Replaying a saved proof chain is local verification, not
+                // a provider read. A failure here is global to this fixed
+                // C0 history and must not be bypassed by another endpoint.
+                self.history.poison();
+                return Err(format!(
+                    "HistoryUnavailable: cannot replay the fixed external history for provider {provider_index}: {error}"
+                ));
             }
             match self.sync_latest_inner() {
                 Ok(restored) => return Ok(restored),

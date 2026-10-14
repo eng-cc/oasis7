@@ -225,25 +225,23 @@ impl FormalDurableSetArmControlV1 {
             if position.len() != 20 || !position.bytes().all(|byte| byte.is_ascii_digit()) {
                 continue;
             }
-            if let Some(intent) = read_intent(&path)? {
-                if intent.operation_id == operation_id {
-                    if matched
-                        .as_ref()
-                        .is_some_and(|transition| transition != &intent.transition)
-                    {
-                        return Err(
-                            "Conflict: operation has multiple durable-set transitions".into()
-                        );
-                    }
-                    let status = status_for(&intent, current);
-                    if status.phase == DurableSetArmPhaseV1::Unknown {
-                        return Err(
-                            "original durable-set arm cannot be reconciled against current anchor"
-                                .into(),
-                        );
-                    }
-                    matched = Some(intent.transition);
+            if let Some(intent) = read_intent(&path)?
+                && intent.operation_id == operation_id
+            {
+                if matched
+                    .as_ref()
+                    .is_some_and(|transition| transition != &intent.transition)
+                {
+                    return Err("Conflict: operation has multiple durable-set transitions".into());
                 }
+                let status = status_for(&intent, current);
+                if status.phase == DurableSetArmPhaseV1::Unknown {
+                    return Err(
+                        "original durable-set arm cannot be reconciled against current anchor"
+                            .into(),
+                    );
+                }
+                matched = Some(intent.transition);
             }
         }
         Ok(matched)
@@ -390,7 +388,7 @@ fn verify_persisted_transition_signature(
 fn arm_digest(intent: &DurableSetArmIntentV1) -> Result<String, String> {
     validate_intent_fields(intent)?;
     let transition_digest = intent.transition.body.digest().map_err(|e| e.to_string())?;
-    let bytes = to_cbor(&(
+    let bytes = to_cbor((
         ARM_DOMAIN,
         1u32,
         &intent.operation_id,

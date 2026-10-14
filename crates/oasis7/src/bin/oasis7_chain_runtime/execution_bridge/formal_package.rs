@@ -123,6 +123,10 @@ pub(super) fn freeze_material_with_durable_set_transition(
         Some(transition.clone()),
     )
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Frozen input construction keeps independently verified transition and predecessor evidence explicit."
+)]
 pub(super) fn freeze_material_with_business_and_durable_set_transition(
     authority: &VerifiedAuthorityV1,
     parent: &VerifiedFormalCommitV1,
@@ -148,6 +152,10 @@ pub(super) fn freeze_material_with_business_and_durable_set_transition(
         Some(transition.clone()),
     )
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "This private encoder assembles the exact signed Frozen closure from distinct typed inputs."
+)]
 fn freeze_material_inner(
     authority: &VerifiedAuthorityV1,
     parent: &VerifiedFormalCommitV1,
@@ -519,6 +527,10 @@ pub(super) struct FormalRetainedExecutionOutputs {
     pub delta:
         Option<oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexDeltaV1>,
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Candidate construction receives exact execution outputs and authenticated inputs from separate verified stages."
+)]
 pub(super) fn candidate_with_business_reader(
     frozen: &ExecutableFormalFrozenV1,
     authority: &VerifiedAuthorityV1,

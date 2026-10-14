@@ -508,8 +508,7 @@ pub(super) fn exercise_with_fault(
         .authority
         .policy()
         .authorized_fencing_resource_bindings
-        .iter()
-        .next()
+        .first()
         .cloned()
         .ok_or("fencing resource missing")?;
     let successor_oracle = oracle_support::durable_set_oracle::start_healthy_replica_oracle(
@@ -978,10 +977,9 @@ fn wait_owner(
     loop {
         if let Ok(Some(owner)) =
             formal_live_runtime::query_operation_owner(config, operation, request, digest, None)
+            && owner.state == "ready"
         {
-            if owner.state == "ready" {
-                return Ok(owner);
-            }
+            return Ok(owner);
         }
         if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
             return Err(format!("shipping owner exited before readiness: {status}"));
@@ -1085,14 +1083,14 @@ impl Drop for ExactOwnerCleanup {
             &self.request_digest,
             &self.config_digest,
             None,
-        ) {
-            if owner.state != "stopped" && owner.state != "failed" {
-                let _ = formal_live_runtime::stop_operation_owner(
-                    &self.config,
-                    &owner.instance,
-                    Duration::from_secs(10),
-                );
-            }
+        ) && owner.state != "stopped"
+            && owner.state != "failed"
+        {
+            let _ = formal_live_runtime::stop_operation_owner(
+                &self.config,
+                &owner.instance,
+                Duration::from_secs(10),
+            );
         }
     }
 }

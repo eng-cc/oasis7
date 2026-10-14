@@ -531,12 +531,9 @@ fn reconstruct_remote(request: Request, digest: String) -> Result<Record, String
         package_upgrade_progress: None,
     };
     for step in steps {
-        match super::provider::query_record(&record, step)? {
-            Some(receipt) => {
-                record.action_attempts.push(receipt.action_id.clone());
-                record.remote_results.push(receipt);
-            }
-            None => {}
+        if let Some(receipt) = super::provider::query_record(&record, step)? {
+            record.action_attempts.push(receipt.action_id.clone());
+            record.remote_results.push(receipt);
         }
     }
     if record.remote_results.is_empty() {

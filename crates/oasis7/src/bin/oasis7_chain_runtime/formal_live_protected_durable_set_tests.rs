@@ -392,8 +392,24 @@ pub(super) fn exercise(mut case: HealthySetCase) -> Result<(), String> {
     let new_replica = ManagedEndpointChild::start(&case.endpoint_binary, &replica_healthy_config)?;
     case.scenario_deadline
         .report_stage("successor P/R management children started")?;
-    new_primary.wait_management(primary_management, Duration::from_secs(20))?;
-    new_replica.wait_management(replica_management, Duration::from_secs(20))?;
+    new_primary
+        .wait_management(primary_management, Duration::from_secs(20))
+        .map_err(|error| {
+            format!(
+                "healthy primary management readiness pid={} config={}: {error}",
+                new_primary.child.id(),
+                primary_healthy_config.display()
+            )
+        })?;
+    new_replica
+        .wait_management(replica_management, Duration::from_secs(20))
+        .map_err(|error| {
+            format!(
+                "healthy replica management readiness pid={} config={}: {error}",
+                new_replica.child.id(),
+                replica_healthy_config.display()
+            )
+        })?;
     case.scenario_deadline
         .report_stage("successor P/R report Awaiting management")?;
 

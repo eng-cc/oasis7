@@ -62,6 +62,7 @@
 
 - TODO：在明确获准的真实部署环境验证 P/R 物理故障域、受保护 signer/HSM、服务管理器与部署回退。验收为原 C0/身份不变、故障后原请求恰好一次恢复及独立资格读回；本机协议模拟不代签。
 - TODO：补充 macOS 以外平台的 executable-image/no-follow 路径与真实不同版本产物升级矩阵。验收为合法 prior/candidate 通过、错误加载映像及不兼容持久格式在停止前拒绝；shell stub 不代签真实升级。
+- TODO：验证首启 bootstrap 已写入 seed World、但尚未提交 execution record/CAS 时的中断恢复。当前兼容性探针明确拒绝该未证明切面；本轮失败启动回滚测试限于 bootstrap 写入前，不代签该后续场景。验收须绑定获批 seed 与冻结原配置，不能放宽未知 World 的兼容性拒绝。
 - TODO：将本机诊断日志整理为可复用的操作故障排查步骤，保留阶段及原 operation 身份，避免仅凭超时判断故障原因。
 - TODO：补齐 main 新增的 `GameGoalPublish` / `GameExecutorControl` 冷查询索引及保护记录的整体容量规划。当前两类记录保留在热状态，不删除前驱；原 32 条及字节上限保持，超限明确拒绝且保留世界状态。由于 planner 只计算可归档后缀，可能保守拒绝；验收应证明合法长链完整查询、热容量有界与原控制身份不变，不能靠扩大上限或删除控制记录解决。
 - TODO（ST-02/ST-04，blocked）：验证正式玩家 Skill 支持的私有 Formal Game API 与 attached executor binding 后，组织独立 Agent 对 retained task/nonce/control 的目标、问答、断连回读和恢复自主试玩。现有普通合同测试不代签；当前 delivered Skill 指向 LocalProvider/LetAI，不能证明本轮 formal 消费者。本次仍交付最初定义的本机持久化与管理基础设施，不开放完整 formal 玩法。

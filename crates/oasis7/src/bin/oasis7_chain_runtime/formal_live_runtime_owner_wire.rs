@@ -7,25 +7,6 @@ use std::{
     time::Duration,
 };
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn accepts_delayed_frame_on_inherited_nonblocking_stream() {
-        let (mut accepted, mut client) = UnixStream::pair().unwrap();
-        accepted.set_nonblocking(true).unwrap();
-        configure_control_stream(&accepted).unwrap();
-        let sender = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(25));
-            write_message(&mut client, &serde_json::json!({"action": "query"})).unwrap();
-        });
-        let frame: serde_json::Value = read_message(&mut accepted).unwrap();
-        assert_eq!(frame, serde_json::json!({"action": "query"}));
-        sender.join().unwrap();
-    }
-}
-
 pub(super) fn write_message<T: Serialize>(
     stream: &mut UnixStream,
     value: &T,
@@ -62,4 +43,23 @@ pub(super) fn bounded_reason(error: &str) -> String {
         .filter(|character| !character.is_control())
         .take(1024)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_delayed_frame_on_inherited_nonblocking_stream() {
+        let (mut accepted, mut client) = UnixStream::pair().unwrap();
+        accepted.set_nonblocking(true).unwrap();
+        configure_control_stream(&accepted).unwrap();
+        let sender = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(25));
+            write_message(&mut client, &serde_json::json!({"action": "query"})).unwrap();
+        });
+        let frame: serde_json::Value = read_message(&mut accepted).unwrap();
+        assert_eq!(frame, serde_json::json!({"action": "query"}));
+        sender.join().unwrap();
+    }
 }

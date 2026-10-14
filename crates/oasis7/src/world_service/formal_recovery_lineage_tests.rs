@@ -2,12 +2,11 @@ use super::*;
 use crate::world_service::formal_read::{
     FormalReadHistoryV1, FormalReadReplayCursorV1, FormalReadStepV1,
 };
+use crate::world_service::formal_read_fixtures as fixtures;
 use oasis7_distfs::controlled_authority::{
     formal::*,
     replicated_protocol::{ArtifactRole, EndpointRole},
 };
-#[path = "formal_read_fixtures.rs"]
-mod fixtures;
 fn normal_execution_proof(
     authority: &VerifiedAuthorityV1,
     parent: &VerifiedFormalCommitV1,

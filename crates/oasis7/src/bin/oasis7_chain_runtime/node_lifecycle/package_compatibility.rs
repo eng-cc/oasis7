@@ -226,16 +226,13 @@ fn inspect_pair(
     {
         return Err("package runtime path changed while compatibility was being probed".into());
     }
-    if let (Some(cut), Some(file)) = (&minimum_full_sync_cut, &minimum_cut_file) {
-        if candidate_descriptor["minimum_full_sync_cut_sha256"] != file.sha256
+    if let (Some(cut), Some(file)) = (&minimum_full_sync_cut, &minimum_cut_file)
+        && (candidate_descriptor["minimum_full_sync_cut_sha256"] != file.sha256
             || candidate_descriptor["stored_state_probe"]["minimum_cut_verified"] != true
             || candidate_descriptor["stored_state_probe"]["current_cut"]
-                != serde_json::to_value(cut).map_err(|error| error.to_string())?
-        {
-            return Err(
-                "candidate executable did not verify the exact staged full-sync cut".into(),
-            );
-        }
+                != serde_json::to_value(cut).map_err(|error| error.to_string())?)
+    {
+        return Err("candidate executable did not verify the exact staged full-sync cut".into());
     }
     let mut prior_probe = prior_descriptor["stored_state_probe"].clone();
     let mut candidate_probe = candidate_descriptor["stored_state_probe"].clone();
@@ -766,7 +763,7 @@ fn require_descriptor_reads_its_probe(descriptor: &Value) -> Result<(), String> 
                 let history_verified = probe["execution_history_verified"]
                     .as_bool()
                     .ok_or("verified runtime probe omitted its execution-history result")?;
-                if history_verified != !probe["execution_head"].is_null() {
+                if history_verified == probe["execution_head"].is_null() {
                     return Err("runtime probe execution-head presence differs from its verification result".into());
                 }
             }

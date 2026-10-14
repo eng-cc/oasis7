@@ -505,18 +505,18 @@ pub(super) fn start_with_action_using_runtime(
     drop(admission);
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        if let Some(current) = read_instance(data)? {
-            if current.incarnation == intent.target.incarnation {
-                if let Ok(current) = control(data, &current, "query") {
-                    return status_value(&config, Some(current), None);
-                }
-                if matches!(current.state.as_str(), "failed" | "stopped") {
-                    return status_value(
-                        &config,
-                        Some(current),
-                        Some("runtime ended before local start completed".into()),
-                    );
-                }
+        if let Some(current) = read_instance(data)?
+            && current.incarnation == intent.target.incarnation
+        {
+            if let Ok(current) = control(data, &current, "query") {
+                return status_value(&config, Some(current), None);
+            }
+            if matches!(current.state.as_str(), "failed" | "stopped") {
+                return status_value(
+                    &config,
+                    Some(current),
+                    Some("runtime ended before local start completed".into()),
+                );
             }
         }
         if Instant::now() >= deadline {
@@ -824,10 +824,7 @@ pub(super) fn supervise(path: &Path, incarnation: &str) -> Result<(), String> {
     if let Some(observer) = config.identity.chain.formal_observer() {
         return supervise_formal_public_observer(&config, &mut intent, ownership, observer);
     }
-    let arguments = match config.runtime_args().and_then(|args| {
-        super::bootstrap::prepare(&config, incarnation)?;
-        Ok(args)
-    }) {
+    let arguments = match config.runtime_args() {
         Ok(args) => args,
         Err(error) => {
             intent.target.state = "failed".into();
@@ -837,6 +834,10 @@ pub(super) fn supervise(path: &Path, incarnation: &str) -> Result<(), String> {
         }
     };
     #[cfg(test)]
+    // Keep this injected failure before bootstrap's first durable world copy.
+    // The package test stages an uninitialized node; materializing its seed
+    // World and then pretending startup failed would leave an unqualified
+    // World without execution history, which correctly blocks rollback.
     if intent.runtime_artifact.is_some()
         && std::env::var(package_failed_start_tests::FAIL_ACTION_ENV)
             .ok()
@@ -852,6 +853,12 @@ pub(super) fn supervise(path: &Path, incarnation: &str) -> Result<(), String> {
             "test-only exact package startup failure for action {}",
             intent.action_id
         ));
+    }
+    if let Err(error) = super::bootstrap::prepare(&config, incarnation) {
+        intent.target.state = "failed".into();
+        write_instance(data, &intent.target)?;
+        save_action(data, &intent)?;
+        return Err(error);
     }
     let signal_stop = Arc::new(AtomicBool::new(false));
     let flag = signal_stop.clone();
@@ -953,22 +960,21 @@ fn supervise_command(
                 socket
                     .set_write_timeout(Some(Duration::from_secs(1)))
                     .map_err(|e| e.to_string())?;
-                if let Ok(request) = read_line::<ControlRequest>(&mut socket) {
-                    if request.incarnation == intent.target.incarnation
-                        && request.generation == intent.target.generation
-                        && request.config_digest == intent.target.config_digest
-                    {
-                        if request.operation == "stop" {
-                            begin_stop(data, &mut intent.target, &mut child)?;
-                        }
-                        if matches!(request.operation.as_str(), "query" | "stop") {
-                            let _ = write_line(
-                                &mut socket,
-                                &ControlResponse {
-                                    instance: intent.target.clone(),
-                                },
-                            );
-                        }
+                if let Ok(request) = read_line::<ControlRequest>(&mut socket)
+                    && request.incarnation == intent.target.incarnation
+                    && request.generation == intent.target.generation
+                    && request.config_digest == intent.target.config_digest
+                {
+                    if request.operation == "stop" {
+                        begin_stop(data, &mut intent.target, &mut child)?;
+                    }
+                    if matches!(request.operation.as_str(), "query" | "stop") {
+                        let _ = write_line(
+                            &mut socket,
+                            &ControlResponse {
+                                instance: intent.target.clone(),
+                            },
+                        );
                     }
                 }
             }

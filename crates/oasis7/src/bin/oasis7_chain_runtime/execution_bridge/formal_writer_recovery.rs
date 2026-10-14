@@ -1,5 +1,9 @@
 use super::*;
 impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R> {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Recovery opening validates the original pin, permission, dual restores, endpoint pair, and authenticated reader independently."
+    )]
     pub(crate) fn open_native_recovery(
         root: PathBuf,
         writer: SigningKey,
@@ -25,6 +29,10 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
             reader,
         )
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The restore context preserves independently verified recovery and dual-endpoint evidence."
+    )]
     pub(super) fn open_native_context(
         root: PathBuf,
         writer: SigningKey,
@@ -129,10 +137,10 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalWriter<P, R
                 pending = Some(other);
             }
         }
-        if let Some(permission) = permission {
-            if let Some(pending) = pending.as_mut() {
-                fill_original_certificate(pending, permission)?;
-            }
+        if let Some(permission) = permission
+            && let Some(pending) = pending.as_mut()
+        {
+            fill_original_certificate(pending, permission)?;
         }
         Self::open_inner(
             root,

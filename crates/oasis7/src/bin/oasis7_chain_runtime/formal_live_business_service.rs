@@ -70,11 +70,13 @@ impl FormalLiveService {
     }
 }
 
+type ClassifiedLookup<T> = (Option<T>, Option<String>, Option<FormalReadAnchorRefV1>);
+
 pub(super) fn classify_lookup_result<T>(
     result: Result<Option<(T, Option<String>)>, String>,
     can_continue: bool,
     next_anchor: impl FnOnce() -> Result<FormalReadAnchorRefV1, String>,
-) -> Result<(Option<T>, Option<String>, Option<FormalReadAnchorRefV1>), String> {
+) -> Result<ClassifiedLookup<T>, String> {
     match result {
         Ok(Some((proof, history))) => Ok((Some(proof), history, None)),
         Ok(None) if can_continue => Ok((None, None, Some(next_anchor()?))),

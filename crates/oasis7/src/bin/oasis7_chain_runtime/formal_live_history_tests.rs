@@ -23,11 +23,9 @@ use std::{
 #[cfg(unix)]
 static TEMP_PROOF_PAGES: AtomicU64 = AtomicU64::new(0);
 
-#[path = "../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 
-#[path = "formal_live_recovery_test_support.rs"]
-mod recovery_test_support;
+use crate::formal_live_recovery_test_support as recovery_test_support;
 
 fn normal_execution_proof(
     authority: &VerifiedAuthorityV1,
@@ -747,7 +745,7 @@ fn only_exact_verified_pending_recovery_target_is_optional_for_prewarm() {
     assert!(matches!(
         exact,
         Err(ReplayFailure::UnqualifiedPendingRecoveryTarget(expected))
-            if expected == pending_target.checkpoint()
+            if expected.as_ref() == &pending_target.checkpoint()
     ));
 
     let forged_target = FormalReadAnchorRefV1 {

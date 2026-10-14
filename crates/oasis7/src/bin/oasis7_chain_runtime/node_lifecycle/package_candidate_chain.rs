@@ -606,7 +606,9 @@ fn validate_runtime_build_metadata(
             && Path::new(value).is_absolute()
         {
             let candidate_runtime = package.node_root.join("current/bin/oasis7_chain_runtime");
-            if PathBuf::from(value) != actual_runtime && PathBuf::from(value) != candidate_runtime {
+            if Path::new(value) != actual_runtime.as_path()
+                && Path::new(value) != candidate_runtime.as_path()
+            {
                 return Err(format!(
                     "candidate runtime_build.{name} is not the candidate artifact or future current runtime path"
                 ));

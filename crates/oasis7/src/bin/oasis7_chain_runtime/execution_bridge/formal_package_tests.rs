@@ -1,8 +1,7 @@
 use super::*;
 #[path = "formal_checkpoint_attempt_tests.rs"]
 mod checkpoint_attempt_tests;
-#[path = "../../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 #[path = "formal_wasm_fixture.rs"]
 mod wasm_fixture;
 use oasis7_distfs::controlled_authority::{

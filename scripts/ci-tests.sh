@@ -91,7 +91,7 @@ prepare_local_cargo_target() {
 run_cargo() {
   prepare_local_cargo_target
   if [[ "${CI_VERBOSE:-}" == "1" ]]; then
-    run env -u RUSTC_WRAPPER cargo "$@" --verbose
+    run env -u RUSTC_WRAPPER cargo --verbose "$@"
   else
     run env -u RUSTC_WRAPPER cargo "$@"
   fi

@@ -6,8 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[path = "../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 
 struct TempRoot(PathBuf);
 impl TempRoot {

@@ -365,14 +365,14 @@ fn validate_transition_inner(
             formal_worlds.ok_or("formal validation lost actual authenticated Worlds")?
         };
     let full_journal = unpruned.unwrap_or(&after_journal);
-    if let Some(full) = unpruned {
-        if before.state.retained_history_root.is_none()
+    if let Some(full) = unpruned
+        && (before.state.retained_history_root.is_none()
             || after.state.retained_history_root.is_none()
             || after_journal.events.len() > full.events.len()
-            || full.events[full.events.len() - after_journal.events.len()..] != after_journal.events
-        {
-            return Err("formal hot journal is not the exact executed suffix".into());
-        }
+            || full.events[full.events.len() - after_journal.events.len()..]
+                != after_journal.events)
+    {
+        return Err("formal hot journal is not the exact executed suffix".into());
     }
     if to_cbor(before_world.snapshot())? != before_snapshot_bytes
         || continuation.predecessor_execution_state_root.as_deref()

@@ -893,7 +893,8 @@ fn historical_normal_lookup_survives_qualification_cache_eviction() {
             &projection_root,
         );
         let step = FormalReadStepV1::Commit(Box::new(proof));
-        live.replay_history_steps(&[step.clone()]).unwrap();
+        live.replay_history_steps(std::slice::from_ref(&step))
+            .unwrap();
         page_steps.push(step);
         if page_steps.len() == MAX_FORMAL_HISTORY_STEPS || position == 130 {
             let page = FormalReadHistoryPageV1 {

@@ -66,9 +66,11 @@ pub(super) fn into_options(
             return Err("engineering runtime path must not be empty".into());
         }
     }
-    let mut o = CliOptions::default();
-    o.node_id = r.node_id;
-    o.world_id = r.world_id;
+    let mut o = CliOptions {
+        node_id: r.node_id,
+        world_id: r.world_id,
+        ..CliOptions::default()
+    };
     if let Some(value) = r.storage_profile {
         o.storage_profile = value;
     }
@@ -383,11 +385,11 @@ pub(super) fn from_options(o: &CliOptions) -> Result<DevelopmentNodeConfigV1, St
     r.reward_initial_reserve_power_units = Some(o.reward_initial_reserve_power_units);
     r.p2p_source_operator = o.p2p_source_operator.clone();
     r.p2p_source_asn = o.p2p_source_asn.clone();
-    r.p2p_max_ipv4_subnet_active_peers = o.p2p_max_ipv4_subnet_active_peers.clone();
-    r.pos_slot_clock_genesis_unix_ms = o.pos_slot_clock_genesis_unix_ms.clone();
+    r.p2p_max_ipv4_subnet_active_peers = o.p2p_max_ipv4_subnet_active_peers;
+    r.pos_slot_clock_genesis_unix_ms = o.pos_slot_clock_genesis_unix_ms;
     r.reward_runtime_signer_node_id = o.reward_runtime_signer_node_id.clone();
-    r.reward_runtime_epoch_duration_secs = o.reward_runtime_epoch_duration_secs.clone();
-    r.node_gossip_bind = o.node_gossip_bind.clone();
+    r.reward_runtime_epoch_duration_secs = o.reward_runtime_epoch_duration_secs;
+    r.node_gossip_bind = o.node_gossip_bind;
     r.runtime_root = o.runtime_root.clone();
     r.execution_bridge_state_path = o.execution_bridge_state_path.clone();
     r.execution_world_dir = o.execution_world_dir.clone();

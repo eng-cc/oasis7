@@ -71,8 +71,8 @@ impl GuardedAuthority {
             .parent()
             .ok_or("guarded configuration parent unavailable")?;
         let remote = config.remote_endpoints.as_ref();
-        if let Some(remote) = remote {
-            if config.schema_version != 2
+        if let Some(remote) = remote
+            && (config.schema_version != 2
                 || !remote.primary.ip().is_loopback()
                 || !remote.replica.ip().is_loopback()
                 || remote.primary == remote.replica
@@ -84,10 +84,9 @@ impl GuardedAuthority {
                     &config.replica_key_file,
                 ]
                 .iter()
-                .any(|p| !p.as_os_str().is_empty())
-            {
-                return Err("remote guarded endpoints require v2, distinct loopback tunnels and no local endpoint paths/keys".into());
-            }
+                .any(|p| !p.as_os_str().is_empty()))
+        {
+            return Err("remote guarded endpoints require v2, distinct loopback tunnels and no local endpoint paths/keys".into());
         }
         let mut paths = vec![
             &mut config.node_keypair_directory,

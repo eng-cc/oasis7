@@ -20,8 +20,7 @@ use std::{
     time::Duration,
 };
 
-#[path = "../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 
 struct CurrentOnlyResolver {
     world: Mutex<World>,

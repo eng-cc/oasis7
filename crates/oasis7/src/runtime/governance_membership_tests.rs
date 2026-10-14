@@ -22,19 +22,21 @@ fn candidate(
     }
 }
 fn world(epoch: u64, candidates: Vec<GovernanceValidatorAdmissionRecord>) -> World {
-    let mut state = WorldState::default();
-    state.time = epoch * 10;
-    state.governance_finality_signer_registry = Some(GovernanceFinalitySignerRegistry {
-        slot_id: "finality".into(),
-        threshold: 1,
-        signer_bindings: BTreeMap::from([("seed".into(), "11".repeat(32))]),
-        validator_stakes: BTreeMap::from([("seed".into(), 100)]),
+    let state = WorldState {
+        time: epoch * 10,
+        governance_finality_signer_registry: Some(GovernanceFinalitySignerRegistry {
+            slot_id: "finality".into(),
+            threshold: 1,
+            signer_bindings: BTreeMap::from([("seed".into(), "11".repeat(32))]),
+            validator_stakes: BTreeMap::from([("seed".into(), 100)]),
+            ..Default::default()
+        }),
+        governance_validator_admissions: candidates
+            .into_iter()
+            .map(|r| (r.candidate_id.clone(), r))
+            .collect(),
         ..Default::default()
-    });
-    state.governance_validator_admissions = candidates
-        .into_iter()
-        .map(|r| (r.candidate_id.clone(), r))
-        .collect();
+    };
     let mut world = World::new_with_state(state);
     world
         .set_governance_execution_policy(crate::runtime::GovernanceExecutionPolicy {

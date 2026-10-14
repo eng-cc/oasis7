@@ -91,18 +91,17 @@ fn refs(value: &Value, cas: &Path) -> Result<(), String> {
         "world_head_proof_ref",
         "controlled_capture_ref",
     ] {
-        if let Some(reference) = value[name].as_str() {
-            if reference.len() != 64
+        if let Some(reference) = value[name].as_str()
+            && (reference.len() != 64
                 || !reference.bytes().all(|b| b.is_ascii_hexdigit())
                 || !cas
                     .join("blobs")
                     .join(format!("{reference}.blob"))
-                    .is_file()
-            {
-                return Err(format!(
-                    "execution record {name} has unavailable CAS material"
-                ));
-            }
+                    .is_file())
+        {
+            return Err(format!(
+                "execution record {name} has unavailable CAS material"
+            ));
         }
     }
     Ok(())
@@ -172,12 +171,11 @@ fn verify_physical_mirror(
     // fallback must never manufacture genesis material during migration.
     let snapshot: oasis7::simulator::WorldSnapshot = io::read(&dir.join("snapshot.json"))?;
     let journal: oasis7::simulator::WorldJournal = io::read(&dir.join("journal.json"))?;
-    if let Some(height) = latest_height {
-        if snapshot.chain_resource_manifest.manifest_height != height
-            || snapshot.chain_resource_manifest.world_id != world_id
-        {
-            return Err("physical simulator mirror latest recorded anchor mismatch".into());
-        }
+    if let Some(height) = latest_height
+        && (snapshot.chain_resource_manifest.manifest_height != height
+            || snapshot.chain_resource_manifest.world_id != world_id)
+    {
+        return Err("physical simulator mirror latest recorded anchor mismatch".into());
     }
     let physical = oasis7::simulator::WorldKernel::from_snapshot(snapshot, journal)
         .map_err(|e| format!("physical simulator mirror rebuild: {e:?}"))?;

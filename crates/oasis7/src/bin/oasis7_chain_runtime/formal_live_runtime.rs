@@ -50,7 +50,7 @@ pub(crate) use owner::{FormalRuntimeInstanceV1, FormalRuntimeOwnerSnapshotV1};
 
 #[cfg(test)]
 #[path = "formal_live_runtime_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 /// Opened, but not yet running, formal Node. Construction performs all trust,
 /// policy, endpoint and bootstrap checks before starting an ingress listener.
@@ -819,10 +819,10 @@ impl FormalLiveRuntime {
                         return Err("formal Node stop channel/worker result mismatch".into());
                     }
                     if let Err(error) = result {
-                        if let Ok(runtime) = self.runtime.lock() {
-                            if runtime.snapshot().running {
-                                return Err(error);
-                            }
+                        if let Ok(runtime) = self.runtime.lock()
+                            && runtime.snapshot().running
+                        {
+                            return Err(error);
                         }
                         if let Ok(mut last_error) = self.state.last_error.lock() {
                             *last_error = Some(error.clone());

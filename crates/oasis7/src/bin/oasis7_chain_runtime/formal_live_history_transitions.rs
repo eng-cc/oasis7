@@ -59,6 +59,10 @@ fn append_recovery_read_step(
 /// completion; schema-2 successors use the opaque retained context and the
 /// immediately preceding checked permission. A cursor already at a verified
 /// successor can carry that predecessor context without repeating its step.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Recovery replay carries independently checked cursor, permission, and page-bound state."
+)]
 pub(super) fn apply_ready_recoveries(
     cursor: &mut VerifiedFormalReadAnchorV1,
     permissions: &[VerifiedRecoveryBootstrapV1],
@@ -82,7 +86,10 @@ pub(super) fn apply_ready_recoveries(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The bounded page replay keeps each cursor, permission, and stop condition explicit."
+)]
 pub(super) fn apply_ready_recoveries_until(
     cursor: &mut VerifiedFormalReadAnchorV1,
     permissions: &[VerifiedRecoveryBootstrapV1],
@@ -123,10 +130,10 @@ pub(super) fn apply_ready_recoveries_until(
                     .authority_id()
                     .map_err(|error| error.to_string())?;
             *pending_permission = None;
-            if let Some(target) = stop_at {
-                if requested_anchor_matches(cursor, target)? {
-                    return Ok(());
-                }
+            if let Some(target) = stop_at
+                && requested_anchor_matches(cursor, target)?
+            {
+                return Ok(());
             }
             continue;
         }
@@ -170,10 +177,10 @@ pub(super) fn apply_ready_recoveries_until(
                         // predecessor context for a same-cut schema-2 step.
                         *previous_emitted_in_page = true;
                         *pending_permission = None;
-                        if let Some(target) = stop_at {
-                            if requested_anchor_matches(cursor, target)? {
-                                return Ok(());
-                            }
+                        if let Some(target) = stop_at
+                            && requested_anchor_matches(cursor, target)?
+                        {
+                            return Ok(());
                         }
                         continue;
                     }
@@ -221,10 +228,10 @@ pub(super) fn apply_ready_recoveries_until(
         *next_permission += 1;
         *previous_permission = Some(index);
         *previous_emitted_in_page = true;
-        if let Some(target) = stop_at {
-            if requested_anchor_matches(cursor, target)? {
-                return Ok(());
-            }
+        if let Some(target) = stop_at
+            && requested_anchor_matches(cursor, target)?
+        {
+            return Ok(());
         }
     }
     Ok(())

@@ -343,15 +343,14 @@ impl PersistedFormalReadHistoryV1 {
             .then(|| cut_from_anchor(anchor))
             .transpose()?;
         validate_head(&next, config, &self.trust_identity_digest)?;
-        if next_history_pins != self.history_pins {
-            if let Err(error) =
+        if next_history_pins != self.history_pins
+            && let Err(error) =
                 super::cas_lifecycle::replace_history_pins(&self.cas, &next_history_pins)
-            {
-                if error.outcome_unknown() {
-                    self.poisoned = true;
-                }
-                return Err(error.to_string());
+        {
+            if error.outcome_unknown() {
+                self.poisoned = true;
             }
+            return Err(error.to_string());
         }
         if let Err(error) = super::super::local_io::write(&self.head_path, &next) {
             // The head writer may have renamed the new file before its

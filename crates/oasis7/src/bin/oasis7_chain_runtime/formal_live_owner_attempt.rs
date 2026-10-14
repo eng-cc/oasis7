@@ -29,7 +29,7 @@ fn first_attempt() -> u64 {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Journal {
+pub(super) struct Journal {
     api_version: String,
     attempts: Vec<OwnerAttemptReceiptV1>,
 }

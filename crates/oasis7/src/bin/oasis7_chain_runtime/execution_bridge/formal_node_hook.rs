@@ -35,7 +35,7 @@ pub(crate) struct CommittedExecutionEvidence {
 #[derive(Clone)]
 pub(crate) enum CurrentHeadEvidence {
     InitialActivation(NodeExecutionBootstrap),
-    Execution(CommittedExecutionEvidence),
+    Execution(Box<CommittedExecutionEvidence>),
 }
 
 pub(crate) trait FormalNodeWriter: Send {
@@ -117,13 +117,15 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalNodeWriter
             FormalRecordKindV1::Execution => {
                 let result = self.committed_execution_record()?;
                 let snapshot_root = blake3_hex(&to_cbor(self.world().snapshot())?);
-                Ok(CurrentHeadEvidence::Execution(CommittedExecutionEvidence {
-                    world_id: canonical.world.world_id.clone(),
-                    canonical_after_state_root: canonical.after_state_root.clone(),
-                    world_snapshot_root: snapshot_root,
-                    formal_record_id: anchor.head().head().record_id.clone(),
-                    result,
-                }))
+                Ok(CurrentHeadEvidence::Execution(Box::new(
+                    CommittedExecutionEvidence {
+                        world_id: canonical.world.world_id.clone(),
+                        canonical_after_state_root: canonical.after_state_root.clone(),
+                        world_snapshot_root: snapshot_root,
+                        formal_record_id: anchor.head().head().record_id.clone(),
+                        result,
+                    },
+                )))
             }
         }
     }
@@ -183,7 +185,7 @@ impl<P: FormalDurabilityEndpoint, R: FormalDurabilityEndpoint> FormalNodeWriter
 
     fn committed_execution(&self) -> Result<CommittedExecutionEvidence, String> {
         match self.current_head_evidence()? {
-            CurrentHeadEvidence::Execution(evidence) => Ok(evidence),
+            CurrentHeadEvidence::Execution(evidence) => Ok(*evidence),
             CurrentHeadEvidence::InitialActivation(_) => {
                 Err("formal InitialActivation has no committed Node execution result".into())
             }
@@ -304,44 +306,41 @@ impl<W: FormalNodeWriter> FormalNodeHook<W> {
     }
 
     pub(crate) fn bootstrap(&self) -> Result<NodeExecutionBootstrap, String> {
-        if self.consumed_terminal.is_none() {
-            if let Some(continuation) = self.writer.pending_continuation()? {
-                match self.writer.current_head_evidence()? {
-                    CurrentHeadEvidence::Execution(evidence)
-                        if evidence.result.height == continuation.context.height =>
-                    {
-                        result_for_continuation(&continuation, &evidence)?;
-                        let bootstrap = self.pending_predecessor_bootstrap(&continuation)?;
-                        self.validate_continuation(&continuation, &bootstrap)?;
-                        return Ok(bootstrap);
-                    }
-                    CurrentHeadEvidence::Execution(evidence)
-                        if evidence.result.height > continuation.context.height =>
-                    {
+        if self.consumed_terminal.is_none()
+            && let Some(continuation) = self.writer.pending_continuation()?
+        {
+            match self.writer.current_head_evidence()? {
+                CurrentHeadEvidence::Execution(evidence)
+                    if evidence.result.height == continuation.context.height =>
+                {
+                    result_for_continuation(&continuation, &evidence)?;
+                    let bootstrap = self.pending_predecessor_bootstrap(&continuation)?;
+                    self.validate_continuation(&continuation, &bootstrap)?;
+                    return Ok(bootstrap);
+                }
+                CurrentHeadEvidence::Execution(evidence)
+                    if evidence.result.height > continuation.context.height =>
+                {
+                    return Err(
+                        "formal pending continuation is behind the qualified execution head".into(),
+                    );
+                }
+                CurrentHeadEvidence::InitialActivation(bootstrap)
+                    if continuation.predecessor_committed_height == 0 && bootstrap.height == 0 =>
+                {
+                    let genesis = self
+                        .genesis_bootstrap()?
+                        .ok_or("formal pending genesis continuation lacks its InitialActivation")?;
+                    self.validate_continuation(&continuation, genesis.boundary())?;
+                    return Ok(genesis.boundary().clone());
+                }
+                _ => {
+                    if continuation.context.world_id != self.writer.world_id() {
                         return Err(
-                            "formal pending continuation is behind the qualified execution head"
-                                .into(),
+                            "formal pending continuation world differs from writer anchor".into(),
                         );
                     }
-                    CurrentHeadEvidence::InitialActivation(bootstrap)
-                        if continuation.predecessor_committed_height == 0
-                            && bootstrap.height == 0 =>
-                    {
-                        let genesis = self.genesis_bootstrap()?.ok_or(
-                            "formal pending genesis continuation lacks its InitialActivation",
-                        )?;
-                        self.validate_continuation(&continuation, genesis.boundary())?;
-                        return Ok(genesis.boundary().clone());
-                    }
-                    _ => {
-                        if continuation.context.world_id != self.writer.world_id() {
-                            return Err(
-                                "formal pending continuation world differs from writer anchor"
-                                    .into(),
-                            );
-                        }
-                        return bootstrap_from_pending(&continuation);
-                    }
+                    return bootstrap_from_pending(&continuation);
                 }
             }
         }

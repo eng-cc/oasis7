@@ -1,7 +1,6 @@
 //! Actual module fixture for formal runtime replay; test authorities only.
 use super::*;
-#[path = "../../../../tests/common/mod.rs"]
-mod common;
+use crate::formal_live_runtime::tests::protected_process_tests::common;
 use oasis7::runtime::{
     Manifest, ModuleAbiContract, ModuleActivation, ModuleChangeSet, ModuleKind, ModuleLimits,
     ModuleManifest, ModuleRole, ModuleSubscription, ModuleSubscriptionStage, PolicySet,

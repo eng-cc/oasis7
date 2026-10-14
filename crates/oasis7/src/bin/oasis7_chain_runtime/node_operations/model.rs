@@ -78,7 +78,7 @@ pub(super) struct DataDirectoryMigrationV1 {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum OperationAuthorizationV1 {
     HealthyDurableSet {
-        authorization: super::healthy_durable_set::HealthyDurableSetAuthorizationV1,
+        authorization: Box<super::healthy_durable_set::HealthyDurableSetAuthorizationV1>,
     },
     FormalRecoveryBootstrap {
         formal_live_config_file: PathBuf,
@@ -90,7 +90,7 @@ pub(super) enum OperationAuthorizationV1 {
         /// Omitted only by historical requests that were never executable.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         expected_predecessor_instance:
-            Option<super::super::formal_live_runtime::FormalRuntimeInstanceV1>,
+            Option<Box<super::super::formal_live_runtime::FormalRuntimeInstanceV1>>,
     },
 }
 

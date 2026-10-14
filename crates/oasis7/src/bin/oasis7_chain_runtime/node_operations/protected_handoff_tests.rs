@@ -5,8 +5,7 @@ use oasis7_distfs::controlled_authority::{
     replicated_protocol::{ArtifactObject, ArtifactRole, ClosedRecord, EndpointRole},
 };
 
-#[path = "../../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 
 fn normal_execution_commit(
     authority: &VerifiedAuthorityV1,
@@ -241,7 +240,7 @@ fn request(predecessor: &FormalRuntimeInstanceV1) -> Request {
         authorization: Some(OperationAuthorizationV1::ProtectedSignerTransfer {
             formal_live_config_file: PathBuf::from("/private/new/formal.json"),
             target_signer_public_key: "d".repeat(64),
-            expected_predecessor_instance: Some(predecessor.clone()),
+            expected_predecessor_instance: Some(Box::new(predecessor.clone())),
         }),
         package_upgrade: None,
     }

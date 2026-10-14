@@ -176,6 +176,10 @@ pub(super) fn verify_exact(
     }
     Ok(())
 }
+#[allow(
+    clippy::unnecessary_cast,
+    reason = "statvfs integer widths differ across supported Unix ABIs"
+)]
 pub(super) fn require_capacity(entries: &[Entry], stage: &Path) -> Result<(), String> {
     let parent = stage.parent().ok_or("stage parent missing")?;
     let path = std::ffi::CString::new(parent.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
@@ -184,7 +188,9 @@ pub(super) fn require_capacity(entries: &[Entry], stage: &Path) -> Result<(), St
         return Err(std::io::Error::last_os_error().to_string());
     }
     let stat = unsafe { stat.assume_init() };
-    let available = (stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64);
+    let available_blocks = stat.f_bavail as u64;
+    let block_size = stat.f_frsize as u64;
+    let available = available_blocks.saturating_mul(block_size);
     let mut required = 64u64 * 1024 * 1024;
     for entry in entries {
         if stage.join(&entry.target).exists() {

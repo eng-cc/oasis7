@@ -140,14 +140,13 @@ impl HealthyDurableSetProgressV1 {
         {
             return Err("healthy operation stage lacks dual install evidence".into());
         }
-        if let Some(owner) = &self.successor_owner {
-            if owner.incarnation == plan.authorization.expected_owner.incarnation
+        if let Some(owner) = &self.successor_owner
+            && (owner.incarnation == plan.authorization.expected_owner.incarnation
                 || owner.config_digest != plan.successor_config_digest
                 || owner.world_id != plan.authorization.expected_owner.world_id
-                || owner.chain_id != plan.authorization.expected_owner.chain_id
-            {
-                return Err("healthy operation reopened owner identity mismatch".into());
-            }
+                || owner.chain_id != plan.authorization.expected_owner.chain_id)
+        {
+            return Err("healthy operation reopened owner identity mismatch".into());
         }
         Ok(())
     }
@@ -349,7 +348,9 @@ pub(super) fn plan(request: super::model::Request) -> Result<super::model::Recor
         );
     }
     let authorization = match &request.authorization {
-        Some(OperationAuthorizationV1::HealthyDurableSet { authorization }) => authorization.clone(),
+        Some(OperationAuthorizationV1::HealthyDurableSet { authorization }) => {
+            authorization.as_ref().clone()
+        }
         _ => return Err("DURABILITY_WOULD_DROP: remove-critical-replica requires typed HealthyDurableSet replacement authorization".into()),
     };
     if request.world_id != authorization.expected_owner.world_id
@@ -405,7 +406,7 @@ pub(super) fn validate_record(record: &super::model::Record) -> Result<(), Strin
             .as_ref()
             .map(|auth| match auth {
                 super::model::OperationAuthorizationV1::HealthyDurableSet { authorization } => {
-                    authorization == &plan.authorization
+                    authorization.as_ref() == &plan.authorization
                 }
                 _ => false,
             })

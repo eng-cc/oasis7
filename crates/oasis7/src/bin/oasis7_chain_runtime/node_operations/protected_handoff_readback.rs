@@ -255,7 +255,7 @@ fn read_successor_execution_after_cut(
                 .authority_id()
                 .map_err(|error| error.to_string())?
                 != authority_id
-            || &record.world != &authority.definition().world
+            || record.world != authority.definition().world
             || record.after_state_root.is_empty()
             || target.position != record.position
             || target.record_id != record_id

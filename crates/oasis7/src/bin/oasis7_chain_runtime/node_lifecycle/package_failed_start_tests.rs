@@ -301,6 +301,9 @@ fn package_operation_manager_child_run() {
 
 /// Real local OperationRecord/package-manager regression. Only the runtime's
 /// startup entry is faulted, and only for the exact `op:<id>:start` action.
+/// The injected error follows runtime-argument validation but precedes
+/// `bootstrap::prepare`, so the failed candidate does not materialize an
+/// unqualified seed World between the staged descriptor and prior recheck.
 /// The candidate descriptor, prior descriptor, package bytes, helper state
 /// machine, stop receipt, rollback helper, and restored-runtime OS child are
 /// all exercised through their normal production paths. The runtime child is
@@ -462,6 +465,7 @@ struct PackageFixture {
     node_root: PathBuf,
     prior_release: PathBuf,
     prior_runtime: PathBuf,
+    test_runtime_image: PathBuf,
     candidate_runtime: PathBuf,
     candidate_buildinfo: PathBuf,
     image_sha256: String,
@@ -480,14 +484,16 @@ impl PackageFixture {
             .unwrap()
             .canonicalize()
             .unwrap();
-        let image = fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
-        let image_sha256 = io::sha256(&image).unwrap();
+        let source_image = fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        let test_runtime_image = root.join("package-test-runtime-image");
+        let image_sha256 = prepare_private_test_runtime_image(&source_image, &test_runtime_image);
         Self {
             fixture,
             root: root.clone(),
             node_root: root.join("package-root"),
             prior_release: root.join("package-root/releases/prior-v1"),
             prior_runtime: root.join("package-root/releases/prior-v1/bin/oasis7_chain_runtime"),
+            test_runtime_image,
             candidate_runtime: root.join("candidate-runtime"),
             candidate_buildinfo: root.join("candidate-BUILDINFO"),
             image_sha256,
@@ -570,18 +576,17 @@ impl PackageFixture {
 
     fn install_package_artifacts(&self) -> Value {
         fs::create_dir_all(self.prior_release.join("bin")).unwrap();
-        // These test artifacts intentionally have the same immutable bytes.
-        // Hard-linking preserves the real executable path/inode checks while
-        // avoiding two extra copies of the large libtest image.
-        let test_image = fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
-        let image_metadata = fs::symlink_metadata(&test_image).unwrap();
+        // Strip a private copy once, then give the prior and candidate runtime
+        // paths hard links to that immutable test image. The production
+        // verifier still hashes and opens both selected paths normally.
+        let image_metadata = fs::symlink_metadata(&self.test_runtime_image).unwrap();
         assert!(image_metadata.is_file());
         assert_ne!(
             image_metadata.mode() & 0o111,
             0,
             "test image must be executable"
         );
-        fs::hard_link(&test_image, &self.prior_runtime)
+        fs::hard_link(&self.test_runtime_image, &self.prior_runtime)
             .expect("link prior fixture to the immutable test image");
         let prior_metadata = fs::metadata(&self.prior_runtime).unwrap();
         assert_eq!(prior_metadata.dev(), image_metadata.dev());
@@ -590,14 +595,14 @@ impl PackageFixture {
         fs::create_dir_all(&self.node_root).unwrap();
         #[cfg(unix)]
         std::os::unix::fs::symlink(&self.prior_release, self.node_root.join("current")).unwrap();
-        let prior_sha = io::sha256(&self.prior_runtime).unwrap();
+        let prior_sha = &self.image_sha256;
         let prior_buildinfo = format!(
             "workflow=Local Native Package\ncommit=prior-commit\npackage_version=prior-v1\nrun_id=prior-run\nplatform=local-native\nruntime_sha256={prior_sha}\n"
         );
         fs::write(self.prior_release.join("BUILDINFO"), &prior_buildinfo).unwrap();
         fs::write(self.node_root.join("CURRENT_VERSION"), "prior-v1\n").unwrap();
         fs::write(self.node_root.join("DEPLOYED_BUILDINFO"), &prior_buildinfo).unwrap();
-        fs::hard_link(&test_image, &self.candidate_runtime)
+        fs::hard_link(&self.test_runtime_image, &self.candidate_runtime)
             .expect("link candidate fixture to the immutable test image");
         let candidate_metadata = fs::metadata(&self.candidate_runtime).unwrap();
         assert_eq!(candidate_metadata.dev(), image_metadata.dev());
@@ -606,7 +611,7 @@ impl PackageFixture {
             candidate_metadata.mode() & 0o777,
             image_metadata.mode() & 0o777
         );
-        let candidate_sha = io::sha256(&self.candidate_runtime).unwrap();
+        let candidate_sha = &self.image_sha256;
         let commit = "0123456789abcdef0123456789abcdef01234567";
         let package_version = "candidate-v2";
         let run_id = "package-failed-start-run";
@@ -669,6 +674,61 @@ impl PackageFixture {
             "artifact_ref": "test-harness-runtime-image"
         })
     }
+}
+
+fn prepare_private_test_runtime_image(source: &Path, destination: &Path) -> String {
+    let source_size = fs::metadata(source)
+        .expect("inspect original test image")
+        .len();
+    fs::copy(source, destination).expect("copy test runtime into its private package fixture");
+
+    let strip_program = match std::env::consts::OS {
+        "macos" => Path::new("/usr/bin/strip"),
+        "linux" => Path::new("strip"),
+        other => panic!("package fixture does not support private image stripping on {other}"),
+    };
+    let strip = Command::new(strip_program)
+        .arg(destination)
+        .output()
+        .expect("run platform strip on the private test image");
+    assert!(
+        strip.status.success(),
+        "strip failed for private test image: {}",
+        String::from_utf8_lossy(&strip.stderr)
+    );
+
+    let metadata = fs::symlink_metadata(destination).expect("inspect stripped test image");
+    assert!(
+        metadata.file_type().is_file(),
+        "stripped test image is not a regular file"
+    );
+    assert!(
+        metadata.len() <= source_size,
+        "platform strip increased the private test image size"
+    );
+    assert_ne!(
+        metadata.mode() & 0o111,
+        0,
+        "stripped test image lost executable permissions"
+    );
+    let listing = Command::new(destination)
+        .arg("--list")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("run the stripped test image list smoke check");
+    assert!(
+        listing.status.success(),
+        "stripped test image cannot run its test harness: {}",
+        String::from_utf8_lossy(&listing.stderr)
+    );
+
+    // CI may already supply a fully stripped input; retain its exact bytes.
+    eprintln!(
+        "package-test-image source_bytes={source_size} stripped_bytes={}",
+        metadata.len()
+    );
+    io::sha256(destination).expect("hash the immutable stripped test image")
 }
 
 fn write_private_executable(path: &Path, contents: &str) {

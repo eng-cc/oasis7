@@ -470,29 +470,6 @@ fn candidate_chain_plan_digest_matches(
     stage_digest == promotion_digest
 }
 
-#[cfg(test)]
-mod tests {
-    use super::candidate_chain_plan_digest_matches;
-
-    #[test]
-    fn promotion_must_retain_the_exact_staged_candidate_plan_digest() {
-        let digest = "a".repeat(64);
-        let other_digest = "b".repeat(64);
-
-        assert!(candidate_chain_plan_digest_matches(None, None));
-        assert!(candidate_chain_plan_digest_matches(
-            Some(&digest),
-            Some(&digest)
-        ));
-        assert!(!candidate_chain_plan_digest_matches(Some(&digest), None));
-        assert!(!candidate_chain_plan_digest_matches(
-            Some(&digest),
-            Some(&other_digest)
-        ));
-        assert!(!candidate_chain_plan_digest_matches(None, Some(&digest)));
-    }
-}
-
 pub(super) fn run_helper(
     request: &PackageUpgradeV1,
     operation_args: &[String],
@@ -840,4 +817,27 @@ pub(super) fn require_digest(value: &str) -> Result<(), String> {
 fn canonical_digest<T: Serialize>(value: &T) -> Result<String, String> {
     let value = serde_json::to_value(value).map_err(|error| error.to_string())?;
     io::digest(&value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::candidate_chain_plan_digest_matches;
+
+    #[test]
+    fn promotion_must_retain_the_exact_staged_candidate_plan_digest() {
+        let digest = "a".repeat(64);
+        let other_digest = "b".repeat(64);
+
+        assert!(candidate_chain_plan_digest_matches(None, None));
+        assert!(candidate_chain_plan_digest_matches(
+            Some(&digest),
+            Some(&digest)
+        ));
+        assert!(!candidate_chain_plan_digest_matches(Some(&digest), None));
+        assert!(!candidate_chain_plan_digest_matches(
+            Some(&digest),
+            Some(&other_digest)
+        ));
+        assert!(!candidate_chain_plan_digest_matches(None, Some(&digest)));
+    }
 }

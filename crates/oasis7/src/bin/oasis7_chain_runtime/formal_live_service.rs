@@ -69,6 +69,7 @@ pub(crate) struct PublishedReadCut {
 /// state-sync session. The byte budget counts canonical serialized closure
 /// bytes; the number of opaque anchors and their metadata is independently
 /// capped by `MAX_FULL_SYNC_CACHE_ENTRIES`.
+#[derive(Default)]
 pub(crate) struct FullSyncMaterialCache {
     pub(crate) entries: VecDeque<FullSyncMaterialCacheEntry>,
     pub(crate) serialized_bytes: usize,
@@ -83,15 +84,6 @@ pub(crate) struct FullSyncMaterialCacheEntry {
     pub(crate) qualified_head: VerifiedFormalReadAnchorV1,
     pub(crate) serialized_material: Arc<[u8]>,
     pub(crate) last_used: Instant,
-}
-
-impl Default for FullSyncMaterialCache {
-    fn default() -> Self {
-        Self {
-            entries: VecDeque::new(),
-            serialized_bytes: 0,
-        }
-    }
 }
 
 /// Atomic publication sink shared by the formal hook and read service.

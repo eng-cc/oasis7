@@ -1,12 +1,11 @@
 //! Real signed profile-2 parent enables formal birth; no synthetic scope token.
 use super::*;
 use crate::runtime::{CapabilityGrant, EffectOrigin, ReceiptSigner, RuntimeCommittedTickContext};
+use crate::world_service::formal_read_fixtures as fixtures;
 use oasis7_distfs::controlled_authority::formal::business_index::BusinessIndexNodeReader;
 use oasis7_distfs::controlled_authority::formal::*;
 use oasis7_distfs::controlled_authority::replicated_protocol::ArtifactRole;
 use std::{collections::BTreeMap, sync::Arc};
-#[path = "../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
 struct Empty;
 impl BusinessIndexNodeReader for Empty {
     fn read_node(&self, _: &str) -> Result<Option<Vec<u8>>, String> {

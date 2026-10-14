@@ -200,7 +200,7 @@ impl Arguments {
     fn path(&self, flag: &str) -> Result<&Path, String> {
         self.values
             .get(flag)
-            .map(|value| Path::new(value))
+            .map(Path::new)
             .ok_or_else(|| format!("{} requires {flag}", self.command))
     }
     fn timeout_ms(&self) -> Result<u64, String> {

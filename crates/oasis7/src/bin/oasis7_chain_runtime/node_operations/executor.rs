@@ -285,14 +285,11 @@ pub(super) fn cancel(
     // Native local start/termination cannot be retracted once dispatched.
     // Query the original receiver; cancellation never targets another instance
     // or claims to undo a signal, world decision or a broadcast transaction.
-    let step = if record
-        .results
-        .iter()
-        .any(|r| r.kind == "stop" && matches!(r.target.state.as_str(), "stopped" | "failed"))
-        && record.request.kind == Kind::Restart
-    {
-        "start"
-    } else if record.request.kind == Kind::Start {
+    let step = if record.request.kind == Kind::Start
+        || (record.request.kind == Kind::Restart
+            && record.results.iter().any(|r| {
+                r.kind == "stop" && matches!(r.target.state.as_str(), "stopped" | "failed")
+            })) {
         "start"
     } else {
         "stop"
@@ -740,12 +737,14 @@ fn resume_package_rollback(
         let rollback = super::super::node_lifecycle::package::rollback(
             &record.request.config,
             request,
-            &operation_id,
-            &operation_digest,
-            expected,
-            stage,
-            promotion,
-            failed_start,
+            super::super::node_lifecycle::package::RollbackContext {
+                operation_id: &operation_id,
+                operation_request_digest: &operation_digest,
+                expected,
+                stage,
+                promotion,
+                failed_start,
+            },
         );
         let receipt = match rollback {
             Ok(receipt) => receipt,

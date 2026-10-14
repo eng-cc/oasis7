@@ -46,7 +46,7 @@ use std::{
 #[path = "formal_live_protected_availability_tests.rs"]
 mod availability_tests;
 #[path = "../../../tests/common/mod.rs"]
-mod common;
+pub(crate) mod common;
 #[path = "formal_live_protected_crash_tests.rs"]
 mod crash_tests;
 #[path = "formal_live_protected_durable_set_tests.rs"]
@@ -55,8 +55,7 @@ mod durable_set_tests;
 mod effect_tests;
 #[path = "formal_live_first_agent_test_effect.rs"]
 mod first_agent_test_effect;
-#[path = "../../world_service/formal_read_fixtures.rs"]
-mod fixtures;
+use crate::formal_read_fixtures as fixtures;
 #[path = "formal_live_protected_healthy_fault_process_tests.rs"]
 mod healthy_fault_tests;
 #[path = "formal_live_healthy_operation_process_tests.rs"]

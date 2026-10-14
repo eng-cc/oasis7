@@ -93,11 +93,12 @@ struct ControlRequest {
 pub(crate) enum DurableSetControlRequestV1 {
     PrepareArm {
         operation_id: String,
-        replica: oasis7_distfs::controlled_authority::formal::EndpointSignerBindingV1,
+        replica: Box<oasis7_distfs::controlled_authority::formal::EndpointSignerBindingV1>,
     },
     Arm {
         operation_id: String,
-        transition: oasis7_distfs::controlled_authority::formal::SignedNormalDurableSetTransitionV1,
+        transition:
+            Box<oasis7_distfs::controlled_authority::formal::SignedNormalDurableSetTransitionV1>,
     },
     Query {
         operation_id: String,
@@ -266,10 +267,10 @@ fn send_control_on_stream(
         &instance.config_digest,
         Some(&instance.incarnation),
     )?;
-    if let Some(record) = read_owner_record(&state_path)? {
-        if record.snapshot != reply.snapshot {
-            return Err("formal runtime owner durable/live status mismatch".into());
-        }
+    if let Some(record) = read_owner_record(state_path)?
+        && record.snapshot != reply.snapshot
+    {
+        return Err("formal runtime owner durable/live status mismatch".into());
     }
     Ok(reply.snapshot)
 }
@@ -302,7 +303,7 @@ pub(crate) fn control_prepare_durable_set_transition(
         instance,
         DurableSetControlRequestV1::PrepareArm {
             operation_id: operation_id.to_owned(),
-            replica: replica.clone(),
+            replica: Box::new(replica.clone()),
         },
         timeout,
     )?;
@@ -863,21 +864,12 @@ fn run_owner_with_fixed_trust(
         }
         let fixed_trust_path = operation_root.join(fixed_trust::FILE);
         if fixed_trust_path.exists() {
-            if prior.is_none() {
-                fixed_trust::check(
-                    &operation_root,
-                    request_digest,
-                    expected_config_digest,
-                    expected,
-                )?;
-            } else {
-                fixed_trust::check(
-                    &operation_root,
-                    request_digest,
-                    expected_config_digest,
-                    expected,
-                )?;
-            }
+            fixed_trust::check(
+                &operation_root,
+                request_digest,
+                expected_config_digest,
+                expected,
+            )?;
         } else if prior.is_some() {
             return Err("formal owner retry is missing its original fixed read trust".into());
         } else {
@@ -1056,7 +1048,7 @@ fn run_owner_with_fixed_trust(
                                 } => {
                                     let transition = runtime.prepare_durable_set_transition(
                                         operation_id,
-                                        replica.clone(),
+                                        replica.as_ref().clone(),
                                         Duration::from_millis(request.timeout_ms),
                                     )?;
                                     let status = runtime.query_durable_set_transition(
@@ -1071,7 +1063,7 @@ fn run_owner_with_fixed_trust(
                                     transition,
                                 } => Some(runtime.arm_durable_set_transition(
                                     operation_id,
-                                    transition.clone(),
+                                    transition.as_ref().clone(),
                                 )?),
                                 DurableSetControlRequestV1::Query {
                                     operation_id,

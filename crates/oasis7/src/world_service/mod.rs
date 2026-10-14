@@ -8,6 +8,8 @@ mod formal_governance;
 pub mod formal_projection;
 mod formal_projection_header;
 pub mod formal_read;
+#[cfg(test)]
+pub(crate) mod formal_read_fixtures;
 pub mod formal_read_service;
 pub mod formal_recovery_lineage;
 pub mod formal_result;
