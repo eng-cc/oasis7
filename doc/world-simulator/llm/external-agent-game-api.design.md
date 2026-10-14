@@ -71,6 +71,7 @@ Owner 使用 `game_executor_control/v1` 签署 `GameExecutorControlV1`，经原 
 
 `industry` 复用已经授权的公共物料账本、线路、工厂和 transit 投影，每个集合最多显示 128 项，并报告总量与截断、真实读取版本和 tick。它不提供签名转运报价，不能把读取库存等同于预留容量或物料。canonical cognition 可能只创建在途转运；实际成功必须按原行动回执与后续目标账本到账核对。[历史实施与验收记录](https://github.com/eng-cc/oasis7/pull/4634#issuecomment-6162407791) 与[物流证据](../../testing/evidence/native-task-logistics-2026-10-12/README.md)分别承载交付过程和实际试玩候选。配对、完整 Game HTTP 写路由、完整首局及客户端自动 stale-context abort 刷新缺口继续保留；部署暂停。
 
+<a id="当前实施候选原生权威配方报价与排产"></a>
 ### 已实施切片：原生权威配方报价与排产
 
 普通客户端的 `quote-schedule` / `schedule` 只接收当前 Context、工厂、规范 built-in recipe ID 和正 u32 批次。共享目录提供十一种内置配方的完整计划；native grant-backed `ScheduleRecipe` admission 按 ID 与批次重算并比较完整计划，预算使用规范电费。trusted 无 native grant 与模块生成的自定义计划保留既有路径，历史回执不按当前目录重算。
