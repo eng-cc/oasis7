@@ -3661,3 +3661,68 @@ main:has(.landing-chapter) {
     border-bottom: 0;
   }
 }
+
+/* Discovery: quiet editorial sections, with one focused decision at a time. */
+.discovery-page .hero h1 { font-size: clamp(2.5rem, 4.5vw, 4.4rem); line-height: 1.12; letter-spacing: -.04em; }
+.discovery-page .hero .subtitle { max-width: 34rem; font-size: 1.18rem; line-height: 1.65; }
+.hero-entry-note { color: #b4c2c7; font-size: .88rem; max-width: 34rem; }
+.discovery-page .hero-grid { grid-template-columns: 1.05fr 1fr; gap: 3rem; }
+.discovery-page .hero-figure img { object-fit: cover; min-height: 340px; }
+.decision-walkthrough { margin: 2rem 0; padding: clamp(1.2rem,3vw,2.5rem); border: 1px solid #354a48; border-radius: 20px; background: linear-gradient(135deg,#102624,#0b141e); }
+.decision-walkthrough h3 { font-size: clamp(1.35rem,2.6vw,2rem); margin: .6rem 0 1.4rem; }
+.decision-controls { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .5rem; }
+.decision-controls button { padding: .85rem; min-height: 52px; background: #0b181c; border: 1px solid #4e6767; border-radius: 8px; color: #dce7e7; text-align: left; cursor: pointer; font: inherit; }
+.decision-controls button span { display: block; color: #99c7be; font-size: .8rem; margin-bottom: .3rem; }
+.decision-controls button[aria-pressed="true"] { background: #b7f1d8; border-color: #b7f1d8; color: #10221e; }
+.decision-controls button[aria-pressed="true"] span { color: #244b3b; }
+.decision-panels article { padding: 1.6rem 0; max-width: 46rem; min-height: 190px; }
+.decision-panels article h4 { font-size: 1.5rem; margin: .5rem 0; }
+.decision-panels p { line-height: 1.85; }
+.decision-number { color: #9bc9be; font-size: .8rem; letter-spacing: .16em; }
+.text-link { color: #b7f1d8; text-decoration: underline; text-underline-offset: .3em; display: inline-block; padding-block: .6rem; }
+.reference-details { border-top: 1px solid #354541; padding-block: 1.3rem; }
+.reference-details > summary { min-height: 44px; cursor: pointer; color: #c2d5cf; font-size: 1rem; }
+.reference-details[open] > summary { margin-bottom: 1.5rem; }
+.discovery-page .landing-laws { padding-block: 1rem; }
+.empty-records { margin-top: 1.7rem; max-width: 54rem; padding: 2rem 0; border-block: 1px solid #344843; }
+.empty-records p { color: #b8c8c6; line-height: 1.85; max-width: 42rem; }
+.empty-orbit { display: block; color: #90baad; font-size: 2.4rem; }
+.editorial-row { display: flex; justify-content: space-between; align-items: center; gap: 2rem; border-block: 1px solid #344843; margin-top: 2rem; padding-block: 1.8rem; }
+.editorial-row h3, .editorial-row h2 { font-size: 1.45rem; margin-block: .7rem; }
+.editorial-row a { color: #d9eee5; }
+.editorial-row .text-link { flex-shrink: 0; }
+.preview-quickfacts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem 2rem; margin: 2rem 0; }
+.preview-quickfacts > div { border-top: 1px solid #3c514d; padding-top: 1rem; }
+.preview-quickfacts dt { color: #d2e6de; font-weight: 700; }
+.preview-quickfacts dd { margin: .5rem 0 0; line-height: 1.8; color: #b8c8c6; }
+.release-status { color: #ffd296; }
+a[aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1.2rem; }
+.footer-links a { color: #bad8cc; padding-block: .6rem; }
+.content-main { max-width: 780px; margin: 4rem auto 5rem; padding-inline: 1.5rem; }
+.content-main h1 { font-size: clamp(2.2rem,4vw,3.8rem); line-height: 1.2; margin-block: 1rem 1.8rem; }
+.content-main h2 { margin-top: 2.6rem; font-size: 1.55rem; }
+.content-main p { line-height: 1.9; }
+.content-lead { font-size: 1.15rem; color: #d4e6e0; }
+.content-meta, .content-source { color: #a3bdb4; font-size: .88rem; }
+.content-source { border-top: 1px solid #40524d; padding-top: 1.5rem; margin-top: 2.5rem; }
+.media-error { color: #ffd296; padding: .8rem; }
+.discovery-page [hidden] { display: none !important; }
+@media (max-width: 760px) {
+  .discovery-page .hero-grid { grid-template-columns: 1fr; gap: 1.5rem; }
+  .discovery-page .hero-figure img { min-height: 0; }
+  .decision-controls { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .decision-panels article { min-height: 230px; }
+  .editorial-row { flex-direction: column; align-items: flex-start; gap: .5rem; }
+  .preview-quickfacts { grid-template-columns: 1fr; }
+  .content-main { margin-top: 2.5rem; }
+  .content-page .topbar { flex-wrap: wrap; }
+  .content-page .nav { display: flex !important; position: static; flex-wrap: wrap; width: 100%; gap: .9rem; }
+}
+.discovery-page .hero h1, .content-main h1 { max-width: none; }
+html[lang="zh-CN"] .discovery-page .hero h1 { font-size: clamp(1.9rem,3.5vw,3.2rem); }
+.discovery-page .landing-laws { min-height: auto; margin-block: 1.5rem; }
+.discovery-page .landing-world { margin-top: 3rem; }
+.discovery-page .landing-download { margin-top: 3rem; }
+.reader-recovery { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin: .8rem 0; }
+.reader-recovery button { min-height: 44px; padding: .5rem 1rem; cursor: pointer; }
