@@ -810,7 +810,11 @@ def resolved_requirement_context(root: Path, source: Path, text: str, fragment: 
                               and (relative.endswith(AUTHORITY_SUFFIXES)
                                    or current_source.name in AUTHORITY_ROOT_BASENAMES))
         edges = []
-        if not (product_origin and not refs):
+        # Explicit refs define a multi-hop requirement chain. Without them a
+        # professional clause may identify itself and directly cite a product
+        # feature, but ordinary professional navigation is not a chain. A
+        # product heading without its own identity/refs is not a relay either.
+        if refs or not relative.startswith('doc/product/'):
             for node in parse_markdown_links(section):
                 raw_path, next_fragment = split_link_target(node.target)
                 if not next_fragment or external_target(raw_path):
@@ -820,6 +824,10 @@ def resolved_requirement_context(root: Path, source: Path, text: str, fragment: 
                 if target is None or not is_requirement_authority(target.relative_to(root).as_posix()):
                     continue
                 target_relative = target.relative_to(root).as_posix()
+                if not refs and not (target_relative.startswith('doc/product/')
+                                     and (target_relative.endswith(AUTHORITY_SUFFIXES)
+                                          or target.name in AUTHORITY_ROOT_BASENAMES)):
+                    continue
                 direct_paths.add(target_relative)
                 if target not in texts:
                     texts[target] = read_target(target)

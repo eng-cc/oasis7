@@ -186,7 +186,13 @@ inline-code labels/values and multiple refs are supported. AC and professional
 intermediate clauses may reference the original declaration through exact
 fragment links; they need not redeclare or mint another ID. Bounded traversal
 rejects unresolved cyclic/over-depth chains and does not borrow identities from
-unrelated neighboring sections. A product-to-professional-to-design chain is
+unrelated neighboring sections. Without explicit Trace refs, a professional clause
+keeps its own identity and direct exact product-clause links; ordinary professional
+navigation is not recursively treated as product allocation. Multi-hop allocation
+uses explicit refs to the same existing ID and exact links, without minting or
+redeclaring IDs for historical clauses. A directly linked product AC with explicit
+refs can still resolve its original requirement declaration.
+A product-to-professional-to-design chain is
 valid; only engineering-only relations need an explicit product N/A reason and
 scope. Undesigned or partially covered features remain legitimate;
 checks must not encourage invented designs. Design coverage and implementation

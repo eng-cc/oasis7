@@ -1022,8 +1022,49 @@ def scenario_clause_graph_preserves_depth_cycle_and_ref_contexts() -> None:
     assert paths == {'doc/system/root.prd.md', 'doc/system/cycle.prd.md', 'doc/product/feature.prd.md'}, paths
 
 
+def scenario_plain_navigation_is_not_a_requirement_chain() -> None:
+    module = load_checker()
+    identifier = 'O7-REQ-276983b3-3187-405e-8453-e2785f01c5e6'
+    own_identifier = 'O7-REQ-7b97fe34-2be1-4b6c-9e8a-54fb03b52c16'
+    root = Path('/virtual-explicit-chain')
+    source = root / 'doc/system/rules.prd.md'
+    bridge = root / 'doc/system/navigation.prd.md'
+    product = root / 'doc/product/feature.prd.md'
+    documents = {source: '# Rules\n## Rule\nTrace ID: ' + own_identifier + '\n[navigation](navigation.prd.md#bridge)',
+                 bridge: '# Navigation\n## Bridge\nTrace refs: ' + identifier + '\n[product](../product/feature.prd.md#req-actual-001)',
+                 product: '# Product\n## REQ-ACTUAL-001\nTrace ID: ' + identifier + '\n'}
+    reads, dependencies = [], set()
+    def reader(path):
+        reads.append(path)
+        return documents.get(path)
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader, dependencies=dependencies)
+    assert ids == {own_identifier} and not has_product
+    assert not reads, 'no-refs professional navigation must not read its recursive neighborhood'
+    assert dependencies == {'doc/system/rules.prd.md'}, dependencies
+    # A direct precise product citation remains sufficient; no invented ID or
+    # repeated declaration is needed for this existing local relationship.
+    documents[source] = '# Rules\n## Rule\n[product](../product/feature.prd.md#req-actual-001)'
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert ids == set() and has_product
+    # Direct AC may itself explicitly reference its unique REQ declaration.
+    documents[product] += '\n## Acceptance\nTrace refs: ' + identifier + '\n[requirement](#req-actual-001)'
+    documents[source] = '# Rules\n## Rule\n[acceptance](../product/feature.prd.md#acceptance)'
+    _, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert has_product
+    # A product generic heading with only ordinary navigation is not a relay.
+    documents[product] += '\n## Overview\n[requirement](#req-actual-001)'
+    documents[source] = '# Rules\n## Rule\n[overview](../product/feature.prd.md#overview)'
+    _, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert not has_product
+    # Adding an actual same-ID field establishes the intended multi-hop chain.
+    documents[source] = '# Rules\n## Rule\nTrace refs: ' + identifier + '\n[rule](navigation.prd.md#bridge)'
+    ids, has_product = module.resolved_requirement_context(root, source, documents[source], 'rule', reader)
+    assert ids == {identifier} and has_product
+
+
 def main() -> None:
     scenarios = (
+        scenario_plain_navigation_is_not_a_requirement_chain,
         scenario_clause_graph_diamonds_are_parsed_once_per_call,
         scenario_clause_graph_preserves_depth_cycle_and_ref_contexts,
         scenario_validation_source_reverse_selection,
