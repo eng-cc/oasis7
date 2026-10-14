@@ -154,17 +154,10 @@ fn read_candidate(
     }
     for (name, revision) in observed {
         let matches = safe_path(root, &name)
-            .and_then(|path| {
-                // Keep verification within the same per-file budget as source reading.
-                if std::fs::metadata(&path)?.len() > 1024 * 1024 {
-                    return Ok(false);
-                }
-                use std::io::Read;
-                let mut bytes = Vec::new();
-                std::fs::File::open(path)?
-                    .take(1024 * 1024 + 1)
-                    .read_to_end(&mut bytes)?;
-                Ok(bytes.len() <= 1024 * 1024 && digest(&bytes) == revision)
+            .map(|path| {
+                // Reuse the bounded, non-blocking reader during consistency verification too.
+                read_document(&path, 1024 * 1024)
+                    .is_ok_and(|content| digest(content.as_bytes()) == revision)
             })
             .unwrap_or(false);
         if !matches {

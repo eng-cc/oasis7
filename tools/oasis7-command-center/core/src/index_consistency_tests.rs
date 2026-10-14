@@ -109,3 +109,21 @@ fn governance_json_changes_do_not_invalidate_markdown_indexing() {
         .is_ok()
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn rejects_dirty_document_replaced_with_fifo_during_verification() {
+    use std::os::unix::ffi::OsStrExt;
+    let (tmp, project) = fixture();
+    let file = tmp.path().join("doc/prd.md");
+    std::fs::write(&file, "# Dirty before\n").unwrap();
+    let result = read_candidate(&project, || {
+        std::fs::remove_file(&file).unwrap();
+        let name = std::ffi::CString::new(file.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+    });
+    assert!(
+        result.is_err(),
+        "replacement must reject rather than wait for a writer"
+    );
+}
