@@ -1,5 +1,7 @@
 //! Isolated bootstrap production world; no live owner-generated player actions.
 use super::*;
+#[path = "world_service_task_production_quote_retry.rs"]
+mod quote_retry;
 use std::path::PathBuf;
 pub(super) fn fixture() -> (
     PathBuf,
@@ -406,6 +408,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                     &quote_proof,
                     &quoted,
                     &captured,
+                    deadline,
                 );
             }
             captured.current_public_context = quoted.current_public_context.clone();
@@ -427,7 +430,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
             );
             match settle_cleanup_original(&client, &original, deadline, &mut categories) {
                 Ok(first) => {
-                    committed = Some((captured, original, first));
+                    committed = Some((captured, original, first, quote_proof, quoted));
                     break;
                 }
                 Err("canonical cleanup rejected") => {
@@ -513,7 +516,8 @@ fn private_task_production_signed_quote_first_product_and_restart() {
             forced_action_rejection,
             "forced stale action must settle rejected"
         );
-        let (captured, original, first) = committed.expect("maximum eight task attempts exhausted");
+        let (captured, original, first, quote_proof, quoted) =
+            committed.expect("maximum eight task attempts exhausted");
         let duplicate = settle_cleanup_original(
             &client,
             &original,
@@ -613,6 +617,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
         let finishes=delivered.world.journal().events.iter().filter(|e|matches!(&e.body,oasis7::runtime::WorldEventBody::Domain(oasis7::runtime::DomainEvent::RecipeCompleted {requester_agent_id,..}) if requester_agent_id=="agent-a")).count();
         assert_eq!(starts, 1);
         assert_eq!(finishes, 1);
+        quote_retry::assert_delayed_quote_retry_reuses_original(&quote_proof, &quoted, &delegate);
         drop(stop_host);
         assert_eq!(host.join().unwrap(), root);
         let bootstrap =
@@ -761,6 +766,10 @@ fn private_http(endpoint: &str, body: &serde_json::Value) -> (u16, serde_json::V
         serde_json::from_str(body).unwrap(),
     )
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Keeps the original quote proof and bounded task deadline explicit"
+)]
 fn check_quote_read_contract(
     client: &RemoteWorldServiceClient,
     delegate: &str,
@@ -769,6 +778,7 @@ fn check_quote_read_contract(
     proof: &SignedReadRequest<oasis7::world_service::task_recipe_quote::TaskRecipeQuoteRequestV1>,
     quoted: &oasis7::world_service::task_recipe_quote::TaskRecipeQuoteV1,
     captured: &oasis7::world_service::private_task_context::CapturedTaskContextV1,
+    deadline: Instant,
 ) {
     use oasis7::world_service::task_recipe_quote::*;
     let config: serde_json::Value =
@@ -784,7 +794,10 @@ fn check_quote_read_contract(
         .unwrap()
     };
     let before = pin();
-    match client.quote_task_recipe(proof) {
+    let repeated = retry_same_signed_recipe_quote_until(proof, deadline, |original| {
+        client.quote_task_recipe(original)
+    });
+    match repeated {
         Ok(repeated) => {
             // A canonical commit can advance without changing the runtime base.
             // The repeated read must report its actual pin, while every quote
@@ -887,4 +900,116 @@ fn check_quote_read_contract(
         pin().world.state().pending_recipe_jobs.is_empty(),
         "quotes must not reserve production jobs"
     );
+}
+
+pub(super) fn retry_same_signed_recipe_quote_until<Q, T>(
+    original: &SignedReadRequest<Q>,
+    deadline: Instant,
+    mut read: impl FnMut(
+        &SignedReadRequest<Q>,
+    ) -> Result<T, oasis7::world_service::client::WorldServiceClientError>,
+) -> Result<T, oasis7::world_service::client::WorldServiceClientError> {
+    use oasis7::world_service::client::WorldServiceClientError;
+
+    loop {
+        if Instant::now() >= deadline {
+            return Err(WorldServiceClientError::Transport(
+                "private quote retry deadline elapsed".into(),
+            ));
+        }
+        match read(original) {
+            Err(error)
+                if matches!(
+                    &error,
+                    WorldServiceClientError::Transport(_)
+                        | WorldServiceClientError::Cooldown { .. }
+                ) =>
+            {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Err(error);
+                }
+                std::thread::sleep(Duration::from_millis(100).min(remaining));
+                if Instant::now() >= deadline {
+                    return Err(error);
+                }
+            }
+            result => return result,
+        }
+    }
+}
+
+#[test]
+fn repeated_recipe_quote_retries_same_signed_read_within_original_deadline() {
+    use oasis7::world_service::client::WorldServiceClientError;
+
+    #[derive(serde::Serialize)]
+    struct PinnedReadRequest {
+        original_pin: u64,
+    }
+
+    let proof = sign_read_request(
+        "read-only-recipe-quote-fixture",
+        PinnedReadRequest { original_pin: 17 },
+        &hex::encode([73; 32]),
+    )
+    .unwrap();
+    let original_wire = serde_json::to_vec(&proof).unwrap();
+    let original_pin = proof.request.original_pin;
+    let original_address = &proof as *const _;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut calls = 0;
+    let repeated = retry_same_signed_recipe_quote_until(&proof, deadline, |observed| {
+        calls += 1;
+        assert!(std::ptr::eq(original_address, observed));
+        assert_eq!(observed.request.original_pin, original_pin);
+        assert!(
+            serde_json::to_vec(observed).unwrap() == original_wire,
+            "retry must retain the exact original signed request and pin"
+        );
+        if calls == 1 {
+            std::thread::sleep(Duration::from_millis(20));
+            Err(WorldServiceClientError::Transport(
+                "private transport timed out".into(),
+            ))
+        } else {
+            Ok(42)
+        }
+    });
+    assert_eq!(repeated.unwrap(), 42);
+    assert_eq!(calls, 2);
+    assert!(Instant::now() < deadline);
+
+    let expired_deadline = Instant::now() + Duration::from_millis(10);
+    let mut expired_calls = 0;
+    let expired = retry_same_signed_recipe_quote_until(&proof, expired_deadline, |_| {
+        expired_calls += 1;
+        std::thread::sleep(Duration::from_millis(20));
+        Err::<(), _>(WorldServiceClientError::Transport(
+            "private transport timed out".into(),
+        ))
+    });
+    assert!(matches!(
+        expired,
+        Err(WorldServiceClientError::Transport(_))
+    ));
+    assert_eq!(expired_calls, 1);
+
+    let mut conflict_calls = 0;
+    let conflict = retry_same_signed_recipe_quote_until(
+        &proof,
+        Instant::now() + Duration::from_secs(1),
+        |_| {
+            conflict_calls += 1;
+            Err::<(), _>(WorldServiceClientError::Rejected {
+                status: 409,
+                message: "private goal request rejected".into(),
+            })
+        },
+    );
+    assert!(matches!(
+        conflict,
+        Err(WorldServiceClientError::Rejected { status: 409, .. })
+    ));
+    assert_eq!(conflict_calls, 1);
 }

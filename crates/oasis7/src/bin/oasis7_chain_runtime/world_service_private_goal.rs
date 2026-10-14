@@ -85,6 +85,7 @@ enum PrivateError {
     Invalid,
     Forbidden,
     Conflict,
+    TaskContextReadConflict(task_context::ReadConflictStage),
     Recovery,
     Unavailable,
 }
@@ -353,7 +354,29 @@ pub(crate) fn maybe_handle(
         signer,
         store,
         || {},
+        |stage| {
+            tracing::warn!(stage, "private task context operation rejected");
+            #[cfg(test)]
+            eprintln!(
+                "TASK_PRIVATE_CONTEXT_REJECT route={} stage={stage}",
+                private_route_tag(target)
+            );
+        },
     )
+}
+
+#[cfg(test)]
+fn private_route_tag(target: &str) -> &'static str {
+    match target.split('?').next().unwrap_or(target) {
+        PREPARE_PATH => "goal_prepare",
+        CURRENT_PATH => "goal_current",
+        TASK_SNAPSHOT_PATH => "task_snapshot",
+        TASK_CONTEXT_PREPARE_PATH => "task_context_prepare",
+        TASK_CONTEXT_READ_PATH => "task_context_read",
+        TASK_RECIPE_QUOTE_PATH => "task_recipe_quote",
+        TASK_FACTORY_QUOTE_PATH => "task_factory_quote",
+        _ => "other",
+    }
 }
 /// Returns bounded errors only; never prints body, signatures, keys or paths.
 #[expect(
@@ -373,6 +396,7 @@ pub(crate) fn maybe_handle_with_delivery_hook(
     signer: &FeedbackSubmitSigner,
     store: Option<&PrivateGoalStore>,
     before_delivery: impl FnOnce(),
+    mut on_read_conflict: impl FnMut(&'static str),
 ) -> Result<bool, String> {
     let path = target.split('?').next().unwrap_or(target);
     if ![
@@ -388,6 +412,10 @@ pub(crate) fn maybe_handle_with_delivery_hook(
     {
         return Ok(false);
     }
+    #[cfg(test)]
+    let route = private_route_tag(path);
+    #[cfg(test)]
+    let started = std::time::Instant::now();
     let result: Result<Value, PrivateError> = (|| {
         if method != "POST"
             || target.contains('?')
@@ -442,19 +470,25 @@ pub(crate) fn maybe_handle_with_delivery_hook(
             )
         }
     })();
-    let (status, value) = match result {
-        Ok(value) => (200, value),
+    let (status, value, read_conflict_stage) = match result {
+        Ok(value) => (200, value, None),
         Err(error) => {
-            let (status, code) = match error {
-                PrivateError::Invalid => (400, "invalid_private_goal_request"),
-                PrivateError::Forbidden => (403, "private_goal_forbidden"),
-                PrivateError::Conflict => (409, "private_goal_conflict"),
-                PrivateError::Recovery => (503, "private_goal_recovery_required"),
-                PrivateError::Unavailable => (503, "private_goal_unavailable"),
+            let (status, code, stage) = match error {
+                PrivateError::Invalid => (400, "invalid_private_goal_request", None),
+                PrivateError::Forbidden => (403, "private_goal_forbidden", None),
+                PrivateError::Conflict => (409, "private_goal_conflict", None),
+                PrivateError::TaskContextReadConflict(stage) => {
+                    (409, "private_goal_conflict", Some(stage.as_str()))
+                }
+                PrivateError::Recovery => (503, "private_goal_recovery_required", None),
+                PrivateError::Unavailable => (503, "private_goal_unavailable", None),
             };
-            (status, json!({"error":code}))
+            (status, json!({"error":code}), stage)
         }
     };
+    if let Some(stage) = read_conflict_stage {
+        on_read_conflict(stage);
+    }
     let body = serde_json::to_vec(&value).map_err(|_| "private response encoding failed")?;
     let response = format!(
         "HTTP/1.1 {status} {}\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nPragma: no-cache\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -467,11 +501,33 @@ pub(crate) fn maybe_handle_with_delivery_hook(
         },
         body.len()
     );
-    stream
+    let write_result = stream
         .write_all(response.as_bytes())
-        .and_then(|_| stream.write_all(&body))
-        .map_err(|_| "private response write failed")?;
+        .and_then(|_| stream.write_all(&body));
+    #[cfg(test)]
+    if route != "other" {
+        let outcome = match &write_result {
+            Ok(()) => "response_written",
+            Err(error) if is_peer_disconnect(error) => "peer_disconnected",
+            Err(_) => "write_failed",
+        };
+        eprintln!(
+            "TASK_PRIVATE_HTTP route={route} status={status} outcome={outcome} elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
+    }
+    write_result.map_err(|_| "private response write failed")?;
     Ok(true)
+}
+
+#[cfg(test)]
+fn is_peer_disconnect(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::BrokenPipe
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::ConnectionReset
+    )
 }
 
 #[cfg(test)]

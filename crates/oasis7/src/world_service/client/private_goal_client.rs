@@ -7,6 +7,7 @@ use crate::world_service::{
     private_goal_prepare::SignedGoalPrepareV1, private_goal_read::*,
     private_goal_store::PreparedGoalReceiptV1,
 };
+
 impl RemoteWorldServiceClient {
     fn private_connection(&self) -> Result<reqwest::blocking::Client, WorldServiceClientError> {
         let endpoint = reqwest::Url::parse(&self.config.endpoint).map_err(|_| {
@@ -101,7 +102,20 @@ impl RemoteWorldServiceClient {
             ))
             .json(request)
             .send()
-            .map_err(|_| WorldServiceClientError::Transport("private transport failed".into()))?;
+            .map_err(|error| {
+                let category = if error.is_timeout() {
+                    "timed out"
+                } else if error.is_connect() {
+                    "connection failed"
+                } else if error.is_body() {
+                    "request body failed"
+                } else if error.is_request() {
+                    "request failed"
+                } else {
+                    "send failed"
+                };
+                WorldServiceClientError::Transport(format!("private transport {category}"))
+            })?;
         let status = response.status().as_u16();
         if status != 200 {
             return Err(WorldServiceClientError::Rejected {
@@ -288,6 +302,51 @@ mod tests {
         assert!(
             matches!(result,Err(WorldServiceClientError::Assurance(ref reason)) if reason=="private response exceeds bound")
         );
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn private_send_diagnostic_distinguishes_timeout_from_peer_close() {
+        fn client_for(listener: &std::net::TcpListener) -> RemoteWorldServiceClient {
+            let key = authority::sign_read_request("fixture", (), &hex::encode([7; 32]))
+                .unwrap()
+                .subject_public_key;
+            let mut config = config(
+                format!("http://{}", listener.local_addr().unwrap()),
+                key,
+                65536,
+            );
+            config.timeout = Duration::from_millis(100);
+            RemoteWorldServiceClient::new(config).unwrap()
+        }
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = client_for(&listener);
+        let server = std::thread::spawn(move || {
+            let (_stream, _) = listener.accept().unwrap();
+            std::thread::sleep(Duration::from_millis(250));
+        });
+        let result = client.private_call::<_, Value>(GOAL_PREPARE_PATH, &());
+        assert!(matches!(
+            result,
+            Err(WorldServiceClientError::Transport(ref reason))
+                if reason == "private transport timed out"
+        ));
+        server.join().unwrap();
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let client = client_for(&listener);
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            drop(stream);
+        });
+        let result = client.private_call::<_, Value>(GOAL_PREPARE_PATH, &());
+        assert!(matches!(
+            result,
+            Err(WorldServiceClientError::Transport(ref reason))
+                if reason != "private transport timed out"
+                    && reason.starts_with("private transport ")
+        ));
         server.join().unwrap();
     }
 }

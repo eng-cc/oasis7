@@ -3,6 +3,157 @@ use super::*;
 use oasis7::world_service::private_goal_store::PrivateTaskContextError;
 use oasis7::world_service::private_task_context::*;
 use oasis7_agent_api::game::{GameTaskFenceV1, TaskContextIdentityV1};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ReadConflictStage {
+    InitialCaptureExpired,
+    InitialCaptureExceedsAuthorityExpiry,
+    InitialCaptureMissingPrefix,
+    InitialCaptureInactive,
+    InitialCaptureValidation,
+    InitialStoredContextConflict,
+    InitialRecordExpired,
+    InitialCapabilityAuthorizationRootChanged,
+    InitialAuthorityContextHashChanged,
+    InitialCapabilitySnapshotHashChanged,
+    DeliveryBindingChanged,
+    DeliveryCaptureExpired,
+    DeliveryCaptureExceedsAuthorityExpiry,
+    DeliveryCaptureMissingPrefix,
+    DeliveryCaptureInactive,
+    DeliveryCaptureValidation,
+    DeliveryRecordExpired,
+    DeliveryCapabilityAuthorizationRootChanged,
+    DeliveryAuthorityContextHashChanged,
+    DeliveryCapabilitySnapshotHashChanged,
+}
+
+impl ReadConflictStage {
+    pub(super) const fn as_str(self) -> &'static str {
+        match self {
+            Self::InitialCaptureExpired => "initial_capture_expired",
+            Self::InitialCaptureExceedsAuthorityExpiry => {
+                "initial_capture_exceeds_authority_expiry"
+            }
+            Self::InitialCaptureMissingPrefix => "initial_capture_missing_prefix",
+            Self::InitialCaptureInactive => "initial_capture_inactive",
+            Self::InitialCaptureValidation => "initial_capture_validation_failed",
+            Self::InitialStoredContextConflict => "initial_stored_context_conflict",
+            Self::InitialRecordExpired => "initial_record_expired",
+            Self::InitialCapabilityAuthorizationRootChanged => {
+                "initial_capability_authorization_root_changed"
+            }
+            Self::InitialAuthorityContextHashChanged => "initial_authority_context_hash_changed",
+            Self::InitialCapabilitySnapshotHashChanged => {
+                "initial_capability_snapshot_hash_changed"
+            }
+            Self::DeliveryBindingChanged => "delivery_binding_changed",
+            Self::DeliveryCaptureExpired => "delivery_capture_expired",
+            Self::DeliveryCaptureExceedsAuthorityExpiry => {
+                "delivery_capture_exceeds_authority_expiry"
+            }
+            Self::DeliveryCaptureMissingPrefix => "delivery_capture_missing_prefix",
+            Self::DeliveryCaptureInactive => "delivery_capture_inactive",
+            Self::DeliveryCaptureValidation => "delivery_capture_validation_failed",
+            Self::DeliveryRecordExpired => "delivery_record_expired",
+            Self::DeliveryCapabilityAuthorizationRootChanged => {
+                "delivery_capability_authorization_root_changed"
+            }
+            Self::DeliveryAuthorityContextHashChanged => "delivery_authority_context_hash_changed",
+            Self::DeliveryCapabilitySnapshotHashChanged => {
+                "delivery_capability_snapshot_hash_changed"
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum RecordLiveConflict {
+    Expired,
+    CapabilityAuthorizationRootChanged,
+    AuthorityContextHashChanged,
+    CapabilitySnapshotHashChanged,
+}
+
+#[derive(Clone, Copy)]
+enum ReadCheckPoint {
+    Initial,
+    Delivery,
+}
+
+fn read_conflict(stage: ReadConflictStage) -> PrivateError {
+    PrivateError::TaskContextReadConflict(stage)
+}
+
+fn record_live_conflict(
+    point: Option<ReadCheckPoint>,
+    conflict: RecordLiveConflict,
+) -> PrivateError {
+    let Some(point) = point else {
+        return PrivateError::Conflict;
+    };
+    let stage = match (point, conflict) {
+        (ReadCheckPoint::Initial, RecordLiveConflict::Expired) => {
+            ReadConflictStage::InitialRecordExpired
+        }
+        (ReadCheckPoint::Initial, RecordLiveConflict::CapabilityAuthorizationRootChanged) => {
+            ReadConflictStage::InitialCapabilityAuthorizationRootChanged
+        }
+        (ReadCheckPoint::Initial, RecordLiveConflict::AuthorityContextHashChanged) => {
+            ReadConflictStage::InitialAuthorityContextHashChanged
+        }
+        (ReadCheckPoint::Initial, RecordLiveConflict::CapabilitySnapshotHashChanged) => {
+            ReadConflictStage::InitialCapabilitySnapshotHashChanged
+        }
+        (ReadCheckPoint::Delivery, RecordLiveConflict::Expired) => {
+            ReadConflictStage::DeliveryRecordExpired
+        }
+        (ReadCheckPoint::Delivery, RecordLiveConflict::CapabilityAuthorizationRootChanged) => {
+            ReadConflictStage::DeliveryCapabilityAuthorizationRootChanged
+        }
+        (ReadCheckPoint::Delivery, RecordLiveConflict::AuthorityContextHashChanged) => {
+            ReadConflictStage::DeliveryAuthorityContextHashChanged
+        }
+        (ReadCheckPoint::Delivery, RecordLiveConflict::CapabilitySnapshotHashChanged) => {
+            ReadConflictStage::DeliveryCapabilitySnapshotHashChanged
+        }
+    };
+    read_conflict(stage)
+}
+
+fn capture_validation_conflict(
+    world: &oasis7::runtime::World,
+    context: &TaskContextIdentityV1,
+    point: ReadCheckPoint,
+    error: &str,
+) -> PrivateError {
+    let expired_context = error == "task context expired or exceeds canonical grant expiry"
+        && world.state().time > context.valid_until_tick.0;
+    let exceeds_authority_expiry =
+        error == "task context expired or exceeds canonical grant expiry" && !expired_context;
+    let missing_prefix = error == "task context has no canonical prefix";
+    let inactive_context = error == "task context is not active";
+    let stage = match point {
+        ReadCheckPoint::Initial if expired_context => ReadConflictStage::InitialCaptureExpired,
+        ReadCheckPoint::Initial if exceeds_authority_expiry => {
+            ReadConflictStage::InitialCaptureExceedsAuthorityExpiry
+        }
+        ReadCheckPoint::Initial if missing_prefix => ReadConflictStage::InitialCaptureMissingPrefix,
+        ReadCheckPoint::Initial if inactive_context => ReadConflictStage::InitialCaptureInactive,
+        ReadCheckPoint::Initial => ReadConflictStage::InitialCaptureValidation,
+        ReadCheckPoint::Delivery if expired_context => ReadConflictStage::DeliveryCaptureExpired,
+        ReadCheckPoint::Delivery if exceeds_authority_expiry => {
+            ReadConflictStage::DeliveryCaptureExceedsAuthorityExpiry
+        }
+        ReadCheckPoint::Delivery if missing_prefix => {
+            ReadConflictStage::DeliveryCaptureMissingPrefix
+        }
+        ReadCheckPoint::Delivery if inactive_context => ReadConflictStage::DeliveryCaptureInactive,
+        ReadCheckPoint::Delivery => ReadConflictStage::DeliveryCaptureValidation,
+    };
+    read_conflict(stage)
+}
+
 fn pinned(
     service: &Service<'_>,
     fence: &GameTaskFenceV1,
@@ -95,9 +246,10 @@ fn task_error(error: PrivateTaskContextError) -> PrivateError {
 fn check_record_live(
     pinned: &PinnedWorld,
     record: &PreparedTaskContextV1,
+    point: Option<ReadCheckPoint>,
 ) -> Result<(), PrivateError> {
     if pinned.world.state().time > record.valid_until_tick.0 {
-        return Err(PrivateError::Conflict);
+        return Err(record_live_conflict(point, RecordLiveConflict::Expired));
     }
     let current = oasis7::viewer::ViewerRuntimeLiveServer::canonical_agent_service_context(
         &pinned.world,
@@ -108,12 +260,25 @@ fn check_record_live(
             .snapshot
             .provider_authority
             .capability_authorization_root
-        || current.authority_context_hash
-            != record.snapshot.provider_authority.authority_context_hash
-        || current.capability_snapshot_hash
-            != record.snapshot.provider_authority.capability_snapshot_hash
     {
-        return Err(PrivateError::Conflict);
+        return Err(record_live_conflict(
+            point,
+            RecordLiveConflict::CapabilityAuthorizationRootChanged,
+        ));
+    }
+    if current.authority_context_hash != record.snapshot.provider_authority.authority_context_hash {
+        return Err(record_live_conflict(
+            point,
+            RecordLiveConflict::AuthorityContextHashChanged,
+        ));
+    }
+    if current.capability_snapshot_hash
+        != record.snapshot.provider_authority.capability_snapshot_hash
+    {
+        return Err(record_live_conflict(
+            point,
+            RecordLiveConflict::CapabilitySnapshotHashChanged,
+        ));
     }
     Ok(())
 }
@@ -148,7 +313,7 @@ fn capture_result(
             return Err(PrivateError::Recovery);
         }
     }
-    selected.ok_or(PrivateError::Conflict)
+    selected.ok_or_else(|| read_conflict(ReadConflictStage::InitialCaptureMissingPrefix))
 }
 fn load_captured(
     service: &Service<'_>,
@@ -162,7 +327,14 @@ fn load_captured(
         &proof.request.context,
         &proof.subject_public_key,
     )
-    .map_err(|_| PrivateError::Conflict)?;
+    .map_err(|error| {
+        capture_validation_conflict(
+            &pinned.world,
+            &proof.request.context,
+            ReadCheckPoint::Initial,
+            &error,
+        )
+    })?;
     let result = capture_result(pinned, &proof.request.context, &proof.subject_public_key)?;
     let historical = service
         .pin_at_height(result.committed_height)
@@ -177,8 +349,13 @@ fn load_captured(
     {
         return Err(PrivateError::Recovery);
     }
-    let record = store.get_task_context(proof).map_err(task_error)?;
-    check_record_live(pinned, &record)?;
+    let record = store.get_task_context(proof).map_err(|error| match error {
+        PrivateTaskContextError::Conflict => {
+            read_conflict(ReadConflictStage::InitialStoredContextConflict)
+        }
+        other => task_error(other),
+    })?;
+    check_record_live(pinned, &record, Some(ReadCheckPoint::Initial))?;
     let output = CapturedTaskContextV1 {
         schema_revision: 1,
         prepared: record,
@@ -275,7 +452,7 @@ pub(super) fn process(
                     )
                     .map_err(task_error)?,
             };
-            check_record_live(&pinned, &record)?;
+            check_record_live(&pinned, &record, None)?;
             before_delivery();
             let fresh = pinned_check(
                 service,
@@ -283,7 +460,7 @@ pub(super) fn process(
                 &proof.subject_public_key,
                 true,
             )?;
-            check_record_live(&fresh, &record)?;
+            check_record_live(&fresh, &record, None)?;
             service
                 .signed(path, &proof, record)
                 .map_err(PrivateError::from)
@@ -307,15 +484,22 @@ pub(super) fn process(
                 true,
             )?;
             if fresh.commit.binding != pinned.commit.binding {
-                return Err(PrivateError::Conflict);
+                return Err(read_conflict(ReadConflictStage::DeliveryBindingChanged));
             }
             game_task::validate_task_context_capture(
                 &fresh.world,
                 &proof.request.context,
                 &proof.subject_public_key,
             )
-            .map_err(|_| PrivateError::Conflict)?;
-            check_record_live(&fresh, &output.prepared)?;
+            .map_err(|error| {
+                capture_validation_conflict(
+                    &fresh.world,
+                    &proof.request.context,
+                    ReadCheckPoint::Delivery,
+                    &error,
+                )
+            })?;
+            check_record_live(&fresh, &output.prepared, Some(ReadCheckPoint::Delivery))?;
             service
                 .signed(path, &proof, output)
                 .map_err(PrivateError::from)
@@ -531,7 +715,7 @@ mod diagnostic_tests {
             );
             if let Some(prepared) = prepared {
                 assert!(
-                    check_record_live(&pin, &prepared).is_ok(),
+                    check_record_live(&pin, &prepared, None).is_ok(),
                     "diagnostic unchanged live authority"
                 );
                 assert!(

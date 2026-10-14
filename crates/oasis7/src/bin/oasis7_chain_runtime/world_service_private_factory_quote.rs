@@ -53,7 +53,7 @@ pub(super) fn process(
         &proof.subject_public_key,
     )
     .map_err(|_| PrivateError::Conflict)?;
-    check_record_live(&fresh, &captured.prepared)?;
+    check_record_live(&fresh, &captured.prepared, None)?;
     service
         .signed(TASK_FACTORY_QUOTE_PATH, &proof, output)
         .map_err(PrivateError::from)
