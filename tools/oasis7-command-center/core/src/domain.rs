@@ -40,6 +40,14 @@ pub struct DocumentSection {
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentLifecycle {
+    /// Original declaration, including code delimiters and notes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub raw_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub category: Option<String>,
+    /// Compatibility projection used by older clients; not a normalized category.
     pub status: Option<String>,
     pub successor_declaration: Option<String>,
     pub successor_targets: Vec<String>,
