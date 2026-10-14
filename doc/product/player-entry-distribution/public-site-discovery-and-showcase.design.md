@@ -131,7 +131,7 @@
 
 ## 8. 验收与证据
 
-[PRD AC-001–006](public-site-discovery-and-showcase.prd.md#验收与证据)分别判定理解、证据性质、内容纠正、预览选择、小说区分和可访问性。实际锚点以各 AC 的显式定位为准，完整技术矩阵见[系统设计验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)。
+[PRD AC-001–006](public-site-discovery-and-showcase.prd.md#ac-site-discovery-001)分别判定理解、证据性质、内容纠正、预览选择、小说区分和可访问性。实际锚点以各 AC 的显式定位为准，完整技术矩阵见[系统设计验证](../../site/github-pages/public-site-discovery-and-showcase.design.md#verification)。
 
 评审检查主动作真实去向、关键限制是否贴近决策点、截图标签是否清楚、错误是否可恢复和各语言是否等价。真人观察记录访客原话及误解；生成稿审查只回答信息层级与视觉方向，不宣布理解测试、响应式、性能或游戏邀测通过。
 

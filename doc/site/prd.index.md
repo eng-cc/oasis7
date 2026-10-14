@@ -2,7 +2,7 @@
 
 审计轮次: 7
 
-更新时间：2026-07-24
+更新时间：2026-10-14
 
 ## 入口
 - 模块 PRD：`doc/site/prd.md`
@@ -31,7 +31,7 @@
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
-- `doc/site/prd.md`：站点主叙事、docs hub、下载链路、质量门禁、镜像与公开版本说明的当前 authority。
+- `doc/site/prd.md`：站点主叙事、docs hub、下载链路、质量门禁、镜像、公开版本说明的当前 authority。
 - 当前站点任务、验证状态与历史追溯：Git、PR、实际 CI 与评审记录；Issue/Project 按需，PRD 不承载可变台账。
 - `doc/site/manual/README.md`：静态 docs hub、Viewer 手册镜像与 canonical/manual 映射的首读入口；再分流到主专题或已完成增量记录。
 - `doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md`：首页页面级层级基线；它是 Image2 设计证据，不是新的 visual-designer signoff。
@@ -48,7 +48,7 @@
 ## 覆盖规则
 - 纳入规则：列出适用专题 PRD、实际承接的独立或共享设计及相关交付记录；本次 manual 专题直接使用 root design 的静态手册章节，不要求复制同名设计正文。
 - 活跃补充：仍承担当前公开边界判断职责的高频专题，可在“活跃补充文档”区定向列出，但不再替代完整清单。
-- 历史压缩：已完成、无下一步、由模块 project 或后续主专题覆盖当前真值的专题，可先从默认活跃清单降级；当入口、task evidence 与 git history 足以追溯时，继续删除旧专题文件并转入“已退役删除的旧专题”。
+- 历史压缩：已完成、无下一步、由模块 project 或后续主专题覆盖当前真值的专题，可先从默认活跃清单降级；当当前入口、task evidence 与 git history 足以追溯时，继续删除旧专题文件并转入“已退役删除的旧专题”。
 - 排除规则：`site/**` 下的公开 HTML 页面、同步脚本与镜像产物不并入专题三件套长表，只在补充入口中定向说明。
 - 按需进入：当 `README.md` 与 PR、实际 CI 与评审记录（Issue 按需） 已能完成首读分流时，本页只承担精确检索与补充路由职责。
 
@@ -83,7 +83,7 @@
 | `github-pages-game-first-home-2026-02-25` | 该完成态首页游戏优先重排三件套已删除；当前公开首页语义与状态边界以 `doc/site/prd.md`、`doc/site/prd.md`、`site/index.html` 与 `site/en/index.html` 为准，任务过程以 GitHub task #2515 evidence comments 与 git history 追溯。 |
 | `github-pages-showcase` | 该完成态首版对外展示站三件套已删除；当前公开站点结构、双语入口与状态边界以 `doc/site/prd.md`、`doc/site/prd.md`、`site/index.html` 与 `site/en/index.html` 为准，任务过程以 GitHub task #2515 evidence comments 与 git history 追溯。 |
 | `github-pages-dated-batch-2026-02-to-03` | game-engine reposition、home conversion、radical redesign、quality/SEO、release/download 与 user-perspective 六个完成态三件套已删除；当前站点/下载/镜像 authority 以 `doc/site/prd.md`、`doc/site/design.md` 与 `doc/site/prd.md` 为准，玩家发行体验以 `doc/product/player-entry-distribution/prd.md` 为准；历史细节从 GitHub task #2563 evidence comments 与 git history 追溯。 |
-| `github-pages-architecture-svg-refresh`、`github-pages-benchmark-polish-v3`、`github-pages-hero-motion-layer`、`github-pages-hero-pointer-interaction`、`github-pages-lean-tech-refresh`、`github-pages-hero-pointer-interaction` | 五组完成态微专题三件套已删除；当前 Canvas/指针/时间线/SVG、双语响应式和无障碍约束以 `doc/site/design.md` 与 `doc/site/prd.md` 为准，任务过程以 GitHub task #2702 evidence comments 与 git history 追溯。 |
+| `github-pages-architecture-svg-refresh`、`github-pages-benchmark-polish-v3`、`github-pages-hero-motion-layer`、`github-pages-hero-pointer-interaction`、`github-pages-lean-tech-refresh` | 五组完成态微专题三件套已删除；当前 Canvas/指针/时间线/SVG、双语响应式和无障碍约束以 `doc/site/design.md` 与 `doc/site/prd.md` 为准，任务过程以 GitHub task #2702 evidence comments 与 git history 追溯。 |
 | `github-pages-cinematic-consequence-visual-review-card-2026-07-19`、`page-design-coverage-2026-06-19` | dated review/coverage 文件已删除；前者的冻结评审与残余风险以 GitHub task #2449 evidence comments 与 git history 追溯，后者的 site 页面覆盖/fixture 路由已回填 `doc/site/design.md`，跨模块页面继续由各自专业设计 authority 承担。 |
 
 ## 说明
