@@ -53,11 +53,12 @@ impl Drop for NodeStopOnDrop {
         let _ = node.stop();
     }
 }
-#[derive(Default, serde::Serialize)]
+#[derive(Clone, Copy, Default, serde::Serialize)]
 struct CleanupCategories {
     submit_response: u64,
     submit_unknown: u64,
     submit_transport: u64,
+    submit_http_503: u64,
     lookup_unknown: u64,
     lookup_pending: u64,
     lookup_received: u64,
@@ -111,6 +112,14 @@ fn settle_cleanup_original(
                 Err(oasis7::world_service::client::WorldServiceClientError::Cooldown {
                     ..
                 }) => categories.cooldown += 1,
+                Err(oasis7::world_service::client::WorldServiceClientError::Rejected {
+                    status: 503,
+                    ..
+                }) => {
+                    categories.submit_http_503 += 1;
+                    // The unsigned service boundary does not establish whether this exact
+                    // original was admitted. Keep its identity and query its canonical result.
+                }
                 Err(error) => {
                     report_cleanup_boundary("submit", &error, categories);
                     return Err("cleanup submit boundary rejected");
@@ -236,6 +245,34 @@ fn run_prepared_world_service_kind(
     cleanup_budget: Duration,
     kind: PreparedWorldKind,
     cleanup_admission_delay: Duration,
+) -> std::path::PathBuf {
+    run_prepared_world_service_kind_with_cognition_503(
+        ready,
+        tick_interval,
+        immediate_cleanup,
+        cleanup_after_height,
+        drop_first_cleanup_submit,
+        cleanup_budget,
+        kind,
+        cleanup_admission_delay,
+        false,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Explicit isolated prepared world and fault controls"
+)]
+fn run_prepared_world_service_kind_with_cognition_503(
+    ready: std::path::PathBuf,
+    tick_interval: Duration,
+    immediate_cleanup: bool,
+    cleanup_after_height: Option<u64>,
+    drop_first_cleanup_submit: bool,
+    cleanup_budget: Duration,
+    kind: PreparedWorldKind,
+    cleanup_admission_delay: Duration,
+    reject_first_cognition_submit_503: bool,
 ) -> std::path::PathBuf {
     assert!(ready.is_absolute());
     assert!(!ready.exists());
@@ -431,6 +468,10 @@ fn run_prepared_world_service_kind(
     let stop = AtomicBool::new(false);
     let first_cleanup_drop = AtomicBool::new(drop_first_cleanup_submit);
     let first_cleanup_slow = AtomicBool::new(!cleanup_admission_delay.is_zero());
+    let first_cognition_submit_503 = AtomicBool::new(reject_first_cognition_submit_503);
+    let injected_cognition_submit_503 = AtomicBool::new(false);
+    let exact_cognition_retry_seen = AtomicBool::new(false);
+    let original_cognition_submit_body = Mutex::new(None::<Vec<u8>>);
     std::thread::scope(|scope| {
         let _listener_stop = ListenerStopOnDrop(&stop);
         let server = scope.spawn(|| {
@@ -480,6 +521,46 @@ fn run_prepared_world_service_kind(
                         let mut body = vec![0; length];
                         if stream.read_exact(&mut body).is_err() {
                             continue;
+                        }
+                        let is_cognition_submit = method == "POST"
+                            && path == SUBMIT_PATH
+                            && serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(
+                                &body,
+                            )
+                            .is_ok_and(|request| {
+                                matches!(request.signed_payload, WorldServicePayloadV1::Cognition(_))
+                            });
+                        if is_cognition_submit
+                            && first_cognition_submit_503.swap(false, Ordering::SeqCst)
+                        {
+                            *original_cognition_submit_body
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                                Some(body);
+                            injected_cognition_submit_503.store(true, Ordering::SeqCst);
+                            eprintln!("TASK_CLEANUP_FAULT injected_cognition_submit_503=1");
+                            write!(
+                                stream,
+                                "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            )
+                            .unwrap();
+                            continue;
+                        }
+                        if is_cognition_submit
+                            && reject_first_cognition_submit_503
+                            && injected_cognition_submit_503.load(Ordering::SeqCst)
+                            && !exact_cognition_retry_seen.load(Ordering::SeqCst)
+                        {
+                            let original = original_cognition_submit_body
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            if let Some(original) = original.as_ref() {
+                                assert!(
+                                    original == &body,
+                                    "cleanup must retry the byte-identical signed cognition request"
+                                );
+                                exact_cognition_retry_seen.store(true, Ordering::SeqCst);
+                            }
                         }
                         let drop_original=path==SUBMIT_PATH&&serde_json::from_slice::<SubmitIntentRequest<WorldServicePayloadV1>>(&body).is_ok_and(|request|matches!(request.signed_payload,WorldServicePayloadV1::GameExecutorControl(signed) if signed.request.client_operation_id=="playtest-cleanup-stop"));
                         if drop_original&&first_cleanup_drop.swap(false,Ordering::SeqCst){println!("TASK_CLEANUP_FAULT original Stop connection closed before admission");continue;}

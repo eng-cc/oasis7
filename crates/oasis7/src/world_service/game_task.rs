@@ -340,13 +340,13 @@ fn reduce(results: Vec<CanonicalIntentResultV1>) -> Result<BTreeMap<String, Redu
     }
     Ok(tasks)
 }
-fn select_current(
+fn select_current<'a>(
     world: &World,
     agent: &str,
-    tasks: BTreeMap<String, ReducedTask>,
-) -> Result<Option<ReducedTask>, String> {
+    tasks: &'a BTreeMap<String, ReducedTask>,
+) -> Result<Option<&'a ReducedTask>, String> {
     let relevant = tasks
-        .into_values()
+        .values()
         .filter(|task| task.control.agent_id == agent)
         .collect::<Vec<_>>();
     if relevant.is_empty() {
@@ -390,15 +390,161 @@ pub fn validate_history(world: &World) -> Result<(), String> {
     Ok(())
 }
 pub fn current_control(world: &World, agent: &str) -> Result<Option<GameTaskControlV1>, String> {
-    Ok(select_current(world, agent, reduce(collect(world, [])?)?)?.map(|task| task.control))
+    let tasks = reduce(collect(world, [])?)?;
+    Ok(select_current(world, agent, &tasks)?.map(|task| task.control.clone()))
 }
 /// Exact authoritative publication used to prove the historical activation cut.
 pub fn active_publish(
     world: &World,
     agent: &str,
 ) -> Result<Option<CanonicalIntentResultV1>, String> {
-    Ok(select_current(world, agent, reduce(collect(world, [])?)?)?.and_then(|task| task.publish))
+    let tasks = reduce(collect(world, [])?)?;
+    Ok(select_current(world, agent, &tasks)?.and_then(|task| task.publish.clone()))
 }
+
+/// One immutable, fully validated view used by checkpoint live-task retention.
+/// The hidden public boundary is required because the chain runtime is a separate
+/// crate target; private fields and the World borrow prevent caller-supplied or
+/// cross-world validation state.
+#[doc(hidden)]
+pub struct ValidatedRetentionHistory<'a> {
+    world: &'a World,
+    tasks: BTreeMap<String, ReducedTask>,
+    prefixes: Vec<CanonicalIntentResultV1>,
+    prefix_keys: std::collections::BTreeSet<(String, Vec<u8>)>,
+}
+
+/// Validate canonical world-service results once for one retention refresh.
+#[doc(hidden)]
+pub fn validate_retention_history(world: &World) -> Result<ValidatedRetentionHistory<'_>, String> {
+    validate_retention_history_results(
+        world,
+        &world.capability_revocation_state().world_service_results,
+    )
+}
+
+fn validate_retention_history_results<'a>(
+    world: &'a World,
+    results: &BTreeMap<String, serde_json::Value>,
+) -> Result<ValidatedRetentionHistory<'a>, String> {
+    let mut history = Vec::new();
+    let mut prefixes = Vec::new();
+    let mut prefix_keys = std::collections::BTreeSet::new();
+    for (key, value) in results {
+        let result = correlation::validate_result_record(key, value)?;
+        if matches!(
+            result.request.signed_payload,
+            WorldServicePayloadV1::GameTaskCreate(_)
+                | WorldServicePayloadV1::GameGoalPublish(_)
+                | WorldServicePayloadV1::GameExecutorControl(_)
+        ) {
+            history.push(result.clone());
+        }
+        if result.rejected.is_none()
+            && matches!(
+                &result.request.signed_payload,
+                WorldServicePayloadV1::Scheduler(signed)
+                    if matches!(
+                        &signed.request.operation,
+                        SchedulerOperationV1::TaskProviderPrefix { .. }
+                    )
+            )
+        {
+            let WorldServicePayloadV1::Scheduler(signed) = &result.request.signed_payload else {
+                unreachable!("prefix predicate requires scheduler payload")
+            };
+            let SchedulerOperationV1::TaskProviderPrefix { context } = &signed.request.operation
+            else {
+                unreachable!("prefix predicate requires task prefix")
+            };
+            prefix_keys.insert((
+                signed.subject_public_key.clone(),
+                serde_json::to_vec(context).map_err(|e| e.to_string())?,
+            ));
+            prefixes.push(result);
+        }
+    }
+    let tasks = if world.state().agents.is_empty() && prefixes.is_empty() {
+        BTreeMap::new()
+    } else {
+        reduce(history)?
+    };
+    Ok(ValidatedRetentionHistory {
+        world,
+        tasks,
+        prefixes,
+        prefix_keys,
+    })
+}
+
+impl ValidatedRetentionHistory<'_> {
+    fn contains_prefix(
+        &self,
+        context: &oasis7_agent_api::game::TaskContextIdentityV1,
+        subject: &str,
+    ) -> Result<bool, String> {
+        let context = serde_json::to_vec(context).map_err(|e| e.to_string())?;
+        Ok(self.prefix_keys.contains(&(subject.to_owned(), context)))
+    }
+
+    fn validate_cognition_fence(
+        &self,
+        agent: &str,
+        fence: Option<&oasis7_agent_api::game::GameTaskFenceV1>,
+        subject: &str,
+        generation: u64,
+    ) -> Result<(), String> {
+        executor::validate_cognition_fence_against_tasks(
+            self.world,
+            agent,
+            fence,
+            subject,
+            generation,
+            &self.tasks,
+        )
+    }
+
+    /// The current publication after reducing this view's complete task history.
+    #[doc(hidden)]
+    pub fn active_publish(&self, agent: &str) -> Result<Option<CanonicalIntentResultV1>, String> {
+        Ok(select_current(self.world, agent, &self.tasks)?.and_then(|task| task.publish.clone()))
+    }
+
+    /// Canonical non-rejected prefix candidates; validate each capture against
+    /// current authority with `validate_prefix_capture` before retaining it.
+    #[doc(hidden)]
+    pub fn retained_prefixes(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &CanonicalIntentResultV1,
+            &oasis7_agent_api::game::TaskContextIdentityV1,
+            &str,
+        ),
+    > + '_ {
+        self.prefixes.iter().filter_map(|result| {
+            let WorldServicePayloadV1::Scheduler(signed) = &result.request.signed_payload else {
+                return None;
+            };
+            let SchedulerOperationV1::TaskProviderPrefix { context } = &signed.request.operation
+            else {
+                return None;
+            };
+            Some((result, context, signed.subject_public_key.as_str()))
+        })
+    }
+
+    /// Repeat live context, fence, expiry, signer, and cognition checks against this view.
+    #[doc(hidden)]
+    pub fn validate_prefix_capture(
+        &self,
+        context: &oasis7_agent_api::game::TaskContextIdentityV1,
+        subject: &str,
+    ) -> Result<(), String> {
+        task_context::validate_context_capture_for_retention(self, context, subject)
+    }
+}
+
 pub fn prepare_create<'a>(
     world: &World,
     request: &SubmitIntentRequest<WorldServicePayloadV1>,
@@ -418,13 +564,8 @@ pub fn prepare_create<'a>(
     if current_control(world, &signed.request.agent_id)?.is_some() {
         return Err("task already exists".into());
     }
-    if select_current(
-        world,
-        &signed.request.agent_id,
-        reduce(collect(world, staged)?)?,
-    )?
-    .is_some()
-    {
+    let tasks = reduce(collect(world, staged)?)?;
+    if select_current(world, &signed.request.agent_id, &tasks)?.is_some() {
         return Err("task already exists within block".into());
     }
     serde_json::to_value(create_control(request)?).map_err(|e| e.to_string())
@@ -446,12 +587,9 @@ pub fn prepare_publish<'a>(
     {
         return Err("goal publish correlation mismatch".into());
     }
-    let current = select_current(
-        world,
-        &signed.request.agent_id,
-        reduce(collect(world, staged)?)?,
-    )?
-    .ok_or("goal publish canonical task unavailable")?;
+    let tasks = reduce(collect(world, staged)?)?;
+    let current = select_current(world, &signed.request.agent_id, &tasks)?
+        .ok_or("goal publish canonical task unavailable")?;
     if !matches_control(&signed.request, &current.control) {
         return Err("goal publish expected control mismatch".into());
     }

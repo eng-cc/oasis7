@@ -1,8 +1,6 @@
 //! Derived live-task read dependencies. This scope is a GC cache, never authority.
 use super::*;
-use oasis7::world_service::{
-    CanonicalIntentResultV1, SchedulerOperationV1, WorldServicePayloadV1, correlation, game_task,
-};
+use oasis7::world_service::{CanonicalIntentResultV1, correlation, game_task};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -162,35 +160,22 @@ pub(super) fn protected_heights(
 fn live_results(
     world: &oasis7::runtime::World,
 ) -> Result<BTreeMap<u64, Vec<CanonicalIntentResultV1>>, String> {
+    let history = game_task::validate_retention_history(world)?;
     let mut selected: BTreeMap<u64, Vec<CanonicalIntentResultV1>> = BTreeMap::new();
     for agent in world.state().agents.keys() {
-        if let Some(publication) = game_task::active_publish(world, agent)? {
+        if let Some(publication) = history.active_publish(agent)? {
             selected
                 .entry(publication.committed_height)
                 .or_default()
                 .push(publication);
         }
     }
-    for (key, value) in &world.capability_revocation_state().world_service_results {
-        correlation::validate_result(key, value)?;
-        let result: CanonicalIntentResultV1 = serde_json::from_value(value.clone())
-            .map_err(|_| "invalid canonical task retention result")?;
-        if result.rejected.is_some() {
-            continue;
-        }
-        let WorldServicePayloadV1::Scheduler(signed) = &result.request.signed_payload else {
-            continue;
-        };
-        let SchedulerOperationV1::TaskProviderPrefix { context } = &signed.request.operation else {
-            continue;
-        };
-        if game_task::validate_task_context_capture(world, context, &signed.subject_public_key)
-            .is_ok()
-        {
+    for (result, context, subject) in history.retained_prefixes() {
+        if history.validate_prefix_capture(context, subject).is_ok() {
             selected
                 .entry(result.committed_height)
                 .or_default()
-                .push(result);
+                .push(result.clone());
         }
     }
     Ok(selected)

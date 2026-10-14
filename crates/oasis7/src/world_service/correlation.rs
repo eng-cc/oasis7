@@ -5,6 +5,13 @@ pub fn key_digest(key: &RequestKey) -> Result<String, String> {
 }
 
 pub fn validate_result(key: &str, value: &serde_json::Value) -> Result<(), String> {
+    validate_result_record(key, value).map(|_| ())
+}
+
+pub(super) fn validate_result_record(
+    key: &str,
+    value: &serde_json::Value,
+) -> Result<CanonicalIntentResultV1, String> {
     let result: CanonicalIntentResultV1 =
         serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
     result.request.validate().map_err(|e| e.to_string())?;
@@ -18,7 +25,7 @@ pub fn validate_result(key: &str, value: &serde_json::Value) -> Result<(), Strin
         return Err("invalid canonical intent result identity".into());
     }
     super::game_task::validate_result(&result)?;
-    Ok(())
+    Ok(result)
 }
 
 /// Derives identity from verified signed material; server additionally checks

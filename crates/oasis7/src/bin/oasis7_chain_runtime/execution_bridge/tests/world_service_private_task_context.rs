@@ -108,7 +108,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
                         fence: GameTaskFenceV1::from_control(&c),
                         operation: GameExecutorOperationV1::Bind {
                             executor_id: "context-executor".into(),
-                            executor_public_key: delegate_public,
+                            executor_public_key: delegate_public.clone(),
                             delegation_generation: DecimalU64(1),
                         },
                     },
@@ -124,7 +124,7 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
     let fence = GameTaskFenceV1::from_control(&c);
     let signer = crate::feedback_submit_api::FeedbackSubmitSigner {
         private_key_hex: owner.clone(),
-        public_key_hex: owner_public,
+        public_key_hex: owner_public.clone(),
     };
     let runtime = Arc::new(Mutex::new(oasis7_node::NodeRuntime::new(
         oasis7_node::NodeConfig::new("node-a", "w1", NodeRole::Sequencer).unwrap(),
@@ -723,6 +723,135 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .rejected
             .is_none()
     );
+    {
+        let history = game_task::validate_retention_history(&driver.execution_world).unwrap();
+        let expiry_recorded = game_task_tests::recorded(&driver, &expiry_prefix);
+        assert_eq!(
+            history.active_publish("agent-a").unwrap(),
+            game_task::active_publish(&driver.execution_world, "agent-a").unwrap(),
+            "batched active publication must match the canonical single-agent API"
+        );
+        let prefixes = history.retained_prefixes().collect::<Vec<_>>();
+        assert!(prefixes.iter().any(|(result, context, signer)| {
+            *result == &expiry_recorded
+                && *context == &expiry.identity
+                && *signer == delegate_public.as_str()
+        }));
+        let mut canonical_selected = Vec::new();
+        let mut batched_selected = Vec::new();
+        for (result, context, signer) in prefixes {
+            let canonical =
+                game_task::validate_task_context_capture(&driver.execution_world, context, signer);
+            let batched = history.validate_prefix_capture(context, signer);
+            assert_eq!(canonical.is_ok(), batched.is_ok());
+            if canonical.is_ok() {
+                canonical_selected.push(result.committed_height);
+            }
+            if batched.is_ok() {
+                batched_selected.push(result.committed_height);
+            }
+        }
+        assert_eq!(canonical_selected, batched_selected);
+        let mut substituted = expiry.identity.clone();
+        substituted.agent_turn_id.push_str("-substituted");
+        let canonical = game_task::validate_task_context_capture(
+            &driver.execution_world,
+            &substituted,
+            &delegate_public,
+        );
+        let batched = history.validate_prefix_capture(&substituted, &delegate_public);
+        assert_eq!(canonical.is_ok(), batched.is_ok());
+        assert!(canonical.is_err());
+        let canonical = game_task::validate_task_context_capture(
+            &driver.execution_world,
+            &expiry.identity,
+            &owner_public,
+        );
+        let batched = history.validate_prefix_capture(&expiry.identity, &owner_public);
+        assert_eq!(canonical.is_ok(), batched.is_ok());
+        assert!(canonical.is_err());
+    }
+    let mut stopped_world = driver.execution_world.clone();
+    assert!(expiry.valid_until_tick.0 >= stopped_world.state().time);
+    let canonical = game_task::validate_task_context_capture(
+        &stopped_world,
+        &expiry.identity,
+        &delegate_public,
+    );
+    let before_stop_history = game_task::validate_retention_history(&stopped_world).unwrap();
+    let batched = before_stop_history.validate_prefix_capture(&expiry.identity, &delegate_public);
+    assert_eq!(canonical.is_ok(), batched.is_ok());
+    assert!(canonical.is_ok(), "fresh context must pass before Stop");
+    let stop_request = request(
+        &world,
+        WorldServicePayloadV1::GameExecutorControl(
+            sign_read_request(
+                GAME_EXECUTOR_CONTROL_DOMAIN,
+                GameExecutorControlV1 {
+                    api_rev: 1,
+                    client_operation_id: "retention-stop-fence".into(),
+                    fence: expiry.identity.fence.clone(),
+                    operation: GameExecutorOperationV1::Stop,
+                },
+                &owner,
+            )
+            .unwrap(),
+        ),
+    );
+    let stop_height = game_task_tests::recorded(&driver, &expiry_prefix).committed_height + 1;
+    let stop_record = CanonicalIntentResultV1 {
+        receipt: game_task::prepare_executor_control(&stopped_world, &stop_request, []).unwrap(),
+        request: stop_request,
+        action_id: stop_height,
+        committed_height: stop_height,
+        rejected: None,
+    };
+    stopped_world
+        .record_world_service_result(stop_record)
+        .unwrap();
+    assert!(expiry.valid_until_tick.0 >= stopped_world.state().time);
+    let stopped_history = game_task::validate_retention_history(&stopped_world).unwrap();
+    let canonical = game_task::validate_task_context_capture(
+        &stopped_world,
+        &expiry.identity,
+        &delegate_public,
+    );
+    let batched = stopped_history.validate_prefix_capture(&expiry.identity, &delegate_public);
+    assert_eq!(canonical.is_ok(), batched.is_ok());
+    assert!(canonical.is_err(), "Stop must reject a still-live context");
+    let mut revoked_world = driver.execution_world.clone();
+    revoked_world
+        .apply_agent_signer_delegation(
+            &sign_read_request(
+                "delegation",
+                AgentSignerDelegationChangeV1 {
+                    world_id: "w1".into(),
+                    branch_id: "main".into(),
+                    agent_id: "agent-a".into(),
+                    owner_binding: "owner-a".into(),
+                    agent_identity_generation: 1,
+                    delegate_public_key: delegate_public.clone(),
+                    generation: 2,
+                    revoked: true,
+                    nonce: 2,
+                },
+                &owner,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    let revoked_history = game_task::validate_retention_history(&revoked_world).unwrap();
+    let canonical = game_task::validate_task_context_capture(
+        &revoked_world,
+        &expiry.identity,
+        &delegate_public,
+    );
+    let batched = revoked_history.validate_prefix_capture(&expiry.identity, &delegate_public);
+    assert_eq!(canonical.is_ok(), batched.is_ok());
+    assert!(
+        canonical.is_err(),
+        "revoked delegation must fail in both paths"
+    );
     let expiry_get = sign_read_request(
         TASK_CONTEXT_READ_PATH,
         TaskContextGetV1 {
@@ -755,6 +884,20 @@ fn private_task_context_native_complete_prepare_capture_read_action_and_restart(
             .unwrap();
     }
     assert!(driver.execution_world.state().time > expiry.valid_until_tick.0);
+    {
+        let history = game_task::validate_retention_history(&driver.execution_world).unwrap();
+        let canonical = game_task::validate_task_context_capture(
+            &driver.execution_world,
+            &expiry.identity,
+            &delegate_public,
+        );
+        let batched = history.validate_prefix_capture(&expiry.identity, &delegate_public);
+        assert_eq!(canonical.is_ok(), batched.is_ok());
+        assert!(
+            canonical.is_err(),
+            "expired context must fail closed in both paths"
+        );
+    }
     assert_eq!(
         http(
             &dir,

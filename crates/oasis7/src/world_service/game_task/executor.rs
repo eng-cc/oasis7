@@ -169,12 +169,9 @@ pub fn prepare_executor_control<'a>(
     {
         return Err("executor correlation mismatch".into());
     }
-    let current = select_current(
-        world,
-        &signed.request.fence.agent_id,
-        reduce(collect(world, staged)?)?,
-    )?
-    .ok_or("executor task unavailable")?;
+    let tasks = reduce(collect(world, staged)?)?;
+    let current = select_current(world, &signed.request.fence.agent_id, &tasks)?
+        .ok_or("executor task unavailable")?;
     if GameTaskFenceV1::from_control(&current.control) != signed.request.fence {
         return Err("executor expected task fence mismatch".into());
     }
@@ -248,13 +245,24 @@ pub fn validate_cognition_fence_staged<'a>(
     generation: u64,
     staged: impl IntoIterator<Item = &'a CanonicalIntentResultV1>,
 ) -> Result<(), String> {
-    let current =
-        select_current(world, agent, reduce(collect(world, staged)?)?)?.map(|t| t.control);
+    let tasks = reduce(collect(world, staged)?)?;
+    validate_cognition_fence_against_tasks(world, agent, fence, subject, generation, &tasks)
+}
+
+pub(super) fn validate_cognition_fence_against_tasks(
+    world: &World,
+    agent: &str,
+    fence: Option<&GameTaskFenceV1>,
+    subject: &str,
+    generation: u64,
+    tasks: &BTreeMap<String, ReducedTask>,
+) -> Result<(), String> {
+    let current = select_current(world, agent, tasks)?.map(|t| &t.control);
     match fence {
         Some(f) => {
             f.validate()?;
             let c = current.ok_or("task unavailable")?;
-            if f.agent_id != agent || GameTaskFenceV1::from_control(&c) != *f {
+            if f.agent_id != agent || GameTaskFenceV1::from_control(c) != *f {
                 return Err("task control fence changed".into());
             }
             if f.task_status != GameTaskStatusV1::Active || f.active_goal_reference.is_none() {

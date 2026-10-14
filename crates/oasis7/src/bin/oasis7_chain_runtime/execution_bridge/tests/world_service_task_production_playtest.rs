@@ -264,7 +264,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
     let deadline = Instant::now() + Duration::from_secs(300);
     std::thread::scope(|scope| {
         let host = scope.spawn(|| {
-            super::run_prepared_world_service_kind(
+            super::run_prepared_world_service_kind_with_cognition_503(
                 ready.clone(),
                 cadence,
                 false,
@@ -273,6 +273,7 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                 Duration::from_secs(30),
                 super::PreparedWorldKind::Production,
                 Duration::ZERO,
+                true,
             )
         });
         let until = Instant::now() + Duration::from_secs(15);
@@ -428,12 +429,22 @@ fn private_task_production_signed_quote_first_product_and_restart() {
                     sign_read_request("cognition", intent, &delegate).unwrap(),
                 ),
             );
+            let cleanup_before_original = categories;
             match settle_cleanup_original(&client, &original, deadline, &mut categories) {
                 Ok(first) => {
                     committed = Some((captured, original, first, quote_proof, quoted));
                     break;
                 }
                 Err("canonical cleanup rejected") => {
+                    assert_eq!(
+                        categories.submit_http_503 - cleanup_before_original.submit_http_503,
+                        1,
+                        "the exact stale cognition original must exercise one HTTP 503"
+                    );
+                    assert!(
+                        categories.lookup_unknown > cleanup_before_original.lookup_unknown,
+                        "the exact original must be looked up after the unsigned 503"
+                    );
                     retain_terminal_original(&client, &original, "action", &root, &mut attempts);
                     forced_action_rejection = true;
                     assert_eq!(
