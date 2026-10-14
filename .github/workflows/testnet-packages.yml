@@ -356,6 +356,7 @@ jobs:
           for file in \
             oasis7-windows-x64.exe \
             windows-x64-BUILDINFO \
+            windows-x64-SOURCEPLAN.json \
             windows-x64-bundle-manifest.json \
             windows-x64-entrypoint-validation.log \
             oasis7-windows-x64-ops-tools.tar.gz; do
@@ -385,6 +386,7 @@ jobs:
             files=(
               "${{ matrix.asset_name }}"
               "${{ matrix.platform }}-BUILDINFO"
+              "${{ matrix.platform }}-SOURCEPLAN.json"
               "${{ matrix.platform }}-bundle-manifest.json"
               "${{ matrix.platform }}-entrypoint-validation.log"
               "oasis7-${{ matrix.platform }}-ops-tools.tar.gz"
@@ -419,6 +421,7 @@ jobs:
           path: |
             output/testnet-packages/assets/${{ matrix.asset_name }}
             output/testnet-packages/assets/${{ matrix.platform }}-BUILDINFO
+            output/testnet-packages/assets/${{ matrix.platform }}-SOURCEPLAN.json
             output/testnet-packages/assets/${{ matrix.platform }}-SHA256SUMS
             output/testnet-packages/assets/${{ matrix.platform }}-bundle-manifest.json
             output/testnet-packages/assets/${{ matrix.platform }}-entrypoint-validation.log
